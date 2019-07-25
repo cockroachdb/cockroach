@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/logtags"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -1440,6 +1441,56 @@ func TestVersionCheckBidirectional(t *testing.T) {
 				t.Errorf("unexpected error: %s", err)
 			}
 		})
+	}
+}
+
+// TestGRPCDialClass ensures that distinct connections are constructed when
+// dialing the same target with different classes.
+func TestGRPCDialClass(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+	serverCtx := newTestContext(uuid.MakeV4(), clock, stopper)
+	const serverNodeID = 1
+	serverCtx.NodeID.Set(context.TODO(), serverNodeID)
+	s := newTestServer(t, serverCtx)
+	RegisterHeartbeatServer(s, &HeartbeatService{
+		clock:              clock,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+		clusterID:          &serverCtx.ClusterID,
+		nodeID:             &serverCtx.NodeID,
+		version:            serverCtx.version,
+	})
+
+	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+	require.Nil(t, err)
+	remoteAddr := ln.Addr().String()
+
+	// Ensure the client ctx gets a new fresh cluster ID so it becomes
+	// different from the server's.
+	clientCtx := newTestContext(serverCtx.ClusterID.Get(), clock, stopper)
+
+	def1 := clientCtx.GRPCDialNodeClass(remoteAddr, 1, DefaultClass)
+	sys1 := clientCtx.GRPCDialNodeClass(remoteAddr, 1, SystemClass)
+	require.False(t, sys1 == def1,
+		"expected connections dialed with different classes to the same target to differ")
+	defConn1, err := def1.Connect(context.TODO())
+	require.Nil(t, err, "expected successful connection")
+	sysConn1, err := sys1.Connect(context.TODO())
+	require.Nil(t, err, "expected successful connection")
+	require.False(t, sysConn1 == defConn1, "expected connections dialed with "+
+		"different classes to the sametarget to have separate underlying gRPC connections")
+	def2 := clientCtx.GRPCDialNodeClass(remoteAddr, 1, DefaultClass)
+	require.True(t, def1 == def2, "expected connections dialed with the same "+
+		"class to the same target to be the same")
+	sys2 := clientCtx.GRPCDialNodeClass(remoteAddr, 1, SystemClass)
+	require.True(t, sys1 == sys2, "expected connections dialed with the same "+
+		"class to the same target to be the same")
+	for _, c := range []*Connection{def2, sys2} {
+		require.Nil(t, c.Health(), "expected connections to be healthy")
 	}
 }
 
