@@ -45,6 +45,13 @@ type UnorderedSynchronizer struct {
 	// lastReadInputIdx is the index of the input whose batch we last returned.
 	// Used so that on the next call to Next, we can resume the input.
 	lastReadInputIdx int
+	// batch is the batch that was read last.
+	batch coldata.Batch
+	// ctx is the context used to get batches from inputs.
+	ctx context.Context
+	// nextBatch is a slice of functions each of which obtains a next batch from
+	// the corresponding to it input.
+	nextBatch []func()
 
 	initialized bool
 	done        bool
@@ -70,6 +77,7 @@ func NewUnorderedSynchronizer(
 	return &UnorderedSynchronizer{
 		inputs:        inputs,
 		readNextBatch: readNextBatch,
+		nextBatch:     make([]func(), len(inputs)),
 		zeroBatch:     zeroBatch,
 		wg:            wg,
 		batchCh:       make(chan *unorderedSynchronizerMsg, len(inputs)),
@@ -82,8 +90,11 @@ func NewUnorderedSynchronizer(
 
 // Init is part of the Operator interface.
 func (s *UnorderedSynchronizer) Init() {
-	for _, input := range s.inputs {
+	for i, input := range s.inputs {
 		input.Init()
+		s.nextBatch[i] = func() {
+			s.batch = input.Next(s.ctx)
+		}
 	}
 }
 
@@ -97,6 +108,7 @@ func (s *UnorderedSynchronizer) Init() {
 // affected by slow inputs.
 func (s *UnorderedSynchronizer) init(ctx context.Context) {
 	ctx, s.cancelFn = contextutil.WithCancel(ctx)
+	s.ctx = ctx
 	for i, input := range s.inputs {
 		s.wg.Add(1)
 		// TODO(asubiotto): Most inputs are Inboxes, and these have handler
@@ -113,8 +125,7 @@ func (s *UnorderedSynchronizer) init(ctx context.Context) {
 				inputIdx: inputIdx,
 			}
 			for {
-				var b coldata.Batch
-				if err := CatchVectorizedRuntimeError(func() { b = input.Next(ctx) }); err != nil {
+				if err := CatchVectorizedRuntimeError(s.nextBatch[i]); err != nil {
 					select {
 					// Non-blocking write to errCh, if an error is present the main
 					// goroutine will use that and cancel all inputs.
@@ -123,10 +134,10 @@ func (s *UnorderedSynchronizer) init(ctx context.Context) {
 					}
 					return
 				}
-				if b.Length() == 0 {
+				if s.batch.Length() == 0 {
 					return
 				}
-				msg.b = b
+				msg.b = s.batch
 				select {
 				case <-ctx.Done():
 					select {

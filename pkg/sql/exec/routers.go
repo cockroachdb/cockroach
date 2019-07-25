@@ -252,6 +252,10 @@ type HashRouter struct {
 	ht hashTable
 	// hashCols is a slice of indices of the columns used for hashing.
 	hashCols []int
+	// ctx is the context to use when processing next batch from the input.
+	ctx context.Context
+	// done indicates whether the input is done.
+	done bool
 
 	// One output for each stream.
 	outputs []routerOutput
@@ -324,6 +328,7 @@ func newHashRouterWithOutputs(
 // early.
 func (r *HashRouter) Run(ctx context.Context) {
 	r.input.Init()
+	r.ctx = ctx
 	cancelOutputs := func(err error) {
 		r.bufferedMeta = append(r.bufferedMeta, distsqlpb.ProducerMetadata{Err: err})
 		for _, o := range r.outputs {
@@ -362,14 +367,11 @@ func (r *HashRouter) Run(ctx context.Context) {
 			}
 		}
 
-		var done bool
-		if err := CatchVectorizedRuntimeError(func() {
-			done = r.processNextBatch(ctx)
-		}); err != nil {
+		if err := CatchVectorizedRuntimeError(r.processNextBatch); err != nil {
 			cancelOutputs(err)
 			return
 		}
-		if done {
+		if r.done {
 			// The input was done and we have notified the routerOutputs that there
 			// is no more data.
 			return
@@ -377,22 +379,24 @@ func (r *HashRouter) Run(ctx context.Context) {
 	}
 }
 
-// processNextBatch reads the next batch from its input, hashes it and adds each
-// column to its corresponding output, returning whether the input is done.
-func (r *HashRouter) processNextBatch(ctx context.Context) bool {
+// processNextBatch reads the next batch from its input, hashes it and adds
+// each column to its corresponding output. When the input is done, r.done is
+// updated.
+func (r *HashRouter) processNextBatch() {
 	r.ht.initHash(r.scratch.buckets, uint64(len(r.scratch.buckets)))
-	b := r.input.Next(ctx)
+	b := r.input.Next(r.ctx)
 	if b.Length() == 0 {
 		// Done. Push an empty batch to outputs to tell them the data is done as
 		// well.
 		for _, o := range r.outputs {
 			o.addBatch(b, nil)
 		}
-		return true
+		r.done = true
+		return
 	}
 
 	for _, i := range r.hashCols {
-		r.ht.rehash(ctx, r.scratch.buckets, i, r.types[i], b.ColVec(i), uint64(b.Length()), b.Selection())
+		r.ht.rehash(r.ctx, r.scratch.buckets, i, r.types[i], b.ColVec(i), uint64(b.Length()), b.Selection())
 	}
 
 	// Reset selections.
@@ -423,7 +427,6 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 			r.numBlockedOutputs++
 		}
 	}
-	return false
 }
 
 // reset resets the HashRouter for a benchmark run.
@@ -431,6 +434,7 @@ func (r *HashRouter) reset() {
 	if i, ok := r.input.(resetter); ok {
 		i.reset()
 	}
+	r.done = false
 	r.numBlockedOutputs = 0
 	for moreToRead := true; moreToRead; {
 		select {

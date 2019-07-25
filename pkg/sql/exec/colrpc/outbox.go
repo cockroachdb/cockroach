@@ -40,6 +40,10 @@ type flowStreamClient interface {
 type Outbox struct {
 	input exec.Operator
 	typs  []types.T
+	// batch is the last batch received from the input.
+	batch coldata.Batch
+	// ctx is the context to be used to get the next batch from the input.
+	ctx context.Context
 
 	converter  *colserde.ArrowBatchConverter
 	serializer *colserde.RecordBatchSerializer
@@ -167,6 +171,10 @@ func (o *Outbox) moveToDraining(ctx context.Context) {
 	}
 }
 
+func (o *Outbox) nextBatch() {
+	o.batch = o.input.Next(o.ctx)
+}
+
 // sendBatches reads from the Outbox's input in a loop and sends the
 // coldata.Batches over the stream. A boolean is returned, indicating whether
 // execution completed gracefully (either received a zero-length batch or a
@@ -187,22 +195,23 @@ func (o *Outbox) moveToDraining(ctx context.Context) {
 //    will be called in this case.
 func (o *Outbox) sendBatches(
 	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
-) (bool, error) {
+) (terminatedGracefully bool, _ error) {
+	o.ctx = ctx
 	for {
 		if atomic.LoadUint32(&o.draining) == 1 {
 			return true, nil
 		}
-		var b coldata.Batch
-		if err := exec.CatchVectorizedRuntimeError(func() { b = o.input.Next(ctx) }); err != nil {
+
+		if err := exec.CatchVectorizedRuntimeError(o.nextBatch); err != nil {
 			log.Errorf(ctx, "Outbox Next error: %+v", err)
 			return false, err
 		}
-		if b.Length() == 0 {
+		if o.batch.Length() == 0 {
 			return true, nil
 		}
 
 		o.scratch.buf.Reset()
-		d, err := o.converter.BatchToArrow(b)
+		d, err := o.converter.BatchToArrow(o.batch)
 		if err != nil {
 			log.Errorf(ctx, "Outbox BatchToArrow data serialization error: %+v", err)
 			return false, err
@@ -231,13 +240,11 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 	if errToSend != nil {
 		msg.Data.Metadata = append(
 			msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, distsqlpb.ProducerMetadata{Err: errToSend}),
-			// TODO(yuzefovich): obtain and release producer metadata from the pool.
 		)
 	}
 	for _, src := range o.metadataSources {
 		for _, meta := range src.DrainMeta(ctx) {
 			msg.Data.Metadata = append(msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, meta))
-			// TODO(yuzefovich): release meta object to the pool.
 		}
 	}
 	if len(msg.Data.Metadata) == 0 {
@@ -246,7 +253,7 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 	return stream.Send(msg)
 }
 
-// runwWithStream should be called after sending the ProducerHeader on the
+// runWithStream should be called after sending the ProducerHeader on the
 // stream. It implements the behavior described in Run.
 func (o *Outbox) runWithStream(
 	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
@@ -268,6 +275,9 @@ func (o *Outbox) runWithStream(
 				log.VEventf(ctx, 2, "Outbox received handshake: %v", msg.Handshake)
 			case msg.DrainRequest != nil:
 				o.moveToDraining(ctx)
+				// TODO(yuzefovich): why are we not exiting this goroutine here?
+				// TODO(yuzefovich): should we check msg.SetupFlowRequest and panic if
+				// it's non-nil?
 			}
 		}
 		close(waitCh)
