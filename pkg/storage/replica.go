@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
@@ -421,6 +422,9 @@ type Replica struct {
 		// transfers due to a lease change will be attempted even if the target does
 		// not have all the log entries.
 		draining bool
+
+		// connectionClass controls the ConnectionClass used to send raft messages.
+		connectionClass rpc.ConnectionClass
 	}
 
 	rangefeedMu struct {
@@ -1677,6 +1681,12 @@ func (r *Replica) GetLeaseHistory() []roachpb.Lease {
 	}
 
 	return r.leaseHistory.get()
+}
+
+func (r *Replica) getConnectionClass() rpc.ConnectionClass {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.connectionClass
 }
 
 // EnableLeaseHistory turns on the lease history for testing purposes. Returns

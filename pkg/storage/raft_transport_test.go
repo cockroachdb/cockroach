@@ -205,7 +205,7 @@ func (rttc *raftTransportTestContext) Send(
 		ToReplica:   to,
 		FromReplica: from,
 	}
-	return rttc.transports[from.NodeID].SendAsync(req)
+	return rttc.transports[from.NodeID].SendAsync(req, rpc.DefaultClass)
 }
 
 func TestSendAndReceive(t *testing.T) {
@@ -287,7 +287,7 @@ func TestSendAndReceive(t *testing.T) {
 				req := baseReq
 				req.Message.Type = messageType
 
-				if !transports[fromNodeID].SendAsync(&req) {
+				if !transports[fromNodeID].SendAsync(&req, rpc.DefaultClass) {
 					t.Errorf("unable to send %s from %d to %d", req.Message.Type, fromNodeID, toNodeID)
 				}
 				messageTypeCounts[toStoreID][req.Message.Type]++
@@ -355,7 +355,7 @@ func TestSendAndReceive(t *testing.T) {
 			ReplicaID: replicaIDs[toStoreID],
 		},
 	}
-	if !transports[storeNodes[fromStoreID]].SendAsync(expReq) {
+	if !transports[storeNodes[fromStoreID]].SendAsync(expReq, rpc.DefaultClass) {
 		t.Errorf("unable to send message from %d to %d", fromStoreID, toStoreID)
 	}
 	// NB: proto.Equal will panic here since it doesn't know about `gogoproto.casttype`.
