@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -146,8 +147,8 @@ type RaftTransport struct {
 
 	stopper *stop.Stopper
 
-	queues   syncutil.IntMap // map[roachpb.NodeID]*chan *RaftMessageRequest
-	stats    syncutil.IntMap // map[roachpb.NodeID]*raftTransportStats
+	queues   [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*chan *RaftMessageRequest
+	stats    [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*chan *RaftMessageRequest
 	dialer   *nodedialer.Dialer
 	handlers syncutil.IntMap // map[roachpb.StoreID]*RaftMessageHandler
 }
@@ -181,7 +182,13 @@ func NewRaftTransport(
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
 	}
-
+	// statsMap is used to associate a queue with its raftTransportStats.
+	statsMap := make(map[roachpb.NodeID]*raftTransportStats)
+	clearStatsMap := func() {
+		for k := range statsMap {
+			delete(statsMap, k)
+		}
+	}
 	if t.stopper != nil && log.V(1) {
 		ctx := t.AnnotateCtx(context.Background())
 		t.stopper.RunWorker(ctx, func(ctx context.Context) {
@@ -194,20 +201,28 @@ func NewRaftTransport(
 				select {
 				case <-ticker.C:
 					stats = stats[:0]
-					t.stats.Range(func(k int64, v unsafe.Pointer) bool {
+					getStats := func(k int64, v unsafe.Pointer) bool {
 						s := (*raftTransportStats)(v)
 						// Clear the queue length stat. Note that this field is only
 						// mutated by this goroutine.
 						s.queue = 0
 						stats = append(stats, s)
+						statsMap[roachpb.NodeID(k)] = s
 						return true
-					})
-
-					t.queues.Range(func(k int64, v unsafe.Pointer) bool {
+					}
+					setQueueLength := func(k int64, v unsafe.Pointer) bool {
 						ch := *(*chan *RaftMessageRequest)(v)
-						t.getStats((roachpb.NodeID)(k)).queue += len(ch)
+						if s, ok := statsMap[roachpb.NodeID(k)]; ok {
+							s.queue += len(ch)
+						}
 						return true
-					})
+					}
+					for c := range t.stats {
+						clearStatsMap()
+						t.stats[c].Range(getStats)
+						t.queues[c].Range(setQueueLength)
+					}
+					clearStatsMap() // no need to hold on to references to stats
 
 					now := timeutil.Now()
 					elapsed := now.Sub(lastTime).Seconds()
@@ -252,11 +267,14 @@ func NewRaftTransport(
 
 func (t *RaftTransport) queuedMessageCount() int64 {
 	var n int64
-	t.queues.Range(func(k int64, v unsafe.Pointer) bool {
+	addLength := func(k int64, v unsafe.Pointer) bool {
 		ch := *(*chan *RaftMessageRequest)(v)
 		n += int64(len(ch))
 		return true
-	})
+	}
+	for class := range t.queues {
+		t.queues[class].Range(addLength)
+	}
 	return n
 }
 
@@ -296,11 +314,14 @@ func newRaftMessageResponse(req *RaftMessageRequest, pErr *roachpb.Error) *RaftM
 	return resp
 }
 
-func (t *RaftTransport) getStats(nodeID roachpb.NodeID) *raftTransportStats {
-	value, ok := t.stats.Load(int64(nodeID))
+func (t *RaftTransport) getStats(
+	nodeID roachpb.NodeID, class rpc.ConnectionClass,
+) *raftTransportStats {
+	statsMap := &t.stats[class]
+	value, ok := statsMap.Load(int64(nodeID))
 	if !ok {
 		stats := &raftTransportStats{nodeID: nodeID}
-		value, _ = t.stats.LoadOrStore(int64(nodeID), unsafe.Pointer(stats))
+		value, _ = statsMap.LoadOrStore(int64(nodeID), unsafe.Pointer(stats))
 	}
 	return (*raftTransportStats)(value)
 }
@@ -327,7 +348,8 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 						}
 
 						if stats == nil {
-							stats = t.getStats(batch.Requests[0].FromReplica.NodeID)
+							class := rpc.ConnectionClassForRange(batch.Requests[0].RangeID)
+							stats = t.getStats(batch.Requests[0].FromReplica.NodeID, class)
 						}
 
 						for i := range batch.Requests {
@@ -483,11 +505,14 @@ func (t *RaftTransport) processQueue(
 
 // getQueue returns the queue for the specified node ID and a boolean
 // indicating whether the queue already exists (true) or was created (false).
-func (t *RaftTransport) getQueue(nodeID roachpb.NodeID) (chan *RaftMessageRequest, bool) {
-	value, ok := t.queues.Load(int64(nodeID))
+func (t *RaftTransport) getQueue(
+	nodeID roachpb.NodeID, class rpc.ConnectionClass,
+) (chan *RaftMessageRequest, bool) {
+	queuesMap := &t.queues[class]
+	value, ok := queuesMap.Load(int64(nodeID))
 	if !ok {
 		ch := make(chan *RaftMessageRequest, raftSendBufferSize)
-		value, ok = t.queues.LoadOrStore(int64(nodeID), unsafe.Pointer(&ch))
+		value, ok = queuesMap.LoadOrStore(int64(nodeID), unsafe.Pointer(&ch))
 	}
 	return *(*chan *RaftMessageRequest)(value), ok
 }
@@ -496,8 +521,9 @@ func (t *RaftTransport) getQueue(nodeID roachpb.NodeID) (chan *RaftMessageReques
 // returns false if the outgoing queue is full and calls s.onError when the
 // recipient closes the stream.
 func (t *RaftTransport) SendAsync(req *RaftMessageRequest) (sent bool) {
+	class := rpc.ConnectionClassForRange(req.RangeID)
 	toNodeID := req.ToReplica.NodeID
-	stats := t.getStats(toNodeID)
+	stats := t.getStats(toNodeID, class)
 	defer func() {
 		if !sent {
 			atomic.AddInt64(&stats.clientDropped, 1)
@@ -515,15 +541,15 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) (sent bool) {
 		panic("snapshots must be sent using SendSnapshot")
 	}
 
-	if !t.dialer.GetCircuitBreaker(toNodeID).Ready() {
+	if !t.dialer.GetCircuitBreakerClass(toNodeID, class).Ready() {
 		return false
 	}
 
-	ch, existingQueue := t.getQueue(toNodeID)
+	ch, existingQueue := t.getQueue(toNodeID, class)
 	if !existingQueue {
 		// Note that startProcessNewQueue is in charge of deleting the queue,
 		// no matter what it returns.
-		if !t.startProcessNewQueue(ctx, toNodeID, stats) {
+		if !t.startProcessNewQueue(ctx, toNodeID, stats, class) {
 			return false
 		}
 	}
@@ -547,23 +573,26 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) (sent bool) {
 //
 // Returns whether the worker was started (the queue is deleted either way).
 func (t *RaftTransport) startProcessNewQueue(
-	ctx context.Context, toNodeID roachpb.NodeID, stats *raftTransportStats,
+	ctx context.Context,
+	toNodeID roachpb.NodeID,
+	stats *raftTransportStats,
+	class rpc.ConnectionClass,
 ) bool {
-	conn, err := t.dialer.Dial(ctx, toNodeID)
+	conn, err := t.dialer.DialClass(ctx, toNodeID, class)
 	if err != nil {
 		// DialNode already logs sufficiently, so just return after deleting the
 		// queue.
-		t.queues.Delete(int64(toNodeID))
+		t.queues[class].Delete(int64(toNodeID))
 		return false
 	}
 	worker := func(ctx context.Context) {
-		defer t.queues.Delete(int64(toNodeID))
+		defer t.queues[class].Delete(int64(toNodeID))
 
 		client := NewMultiRaftClient(conn)
 		batchCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		ch, existingQueue := t.getQueue(toNodeID)
+		ch, existingQueue := t.getQueue(toNodeID, class)
 		if !existingQueue {
 			log.Fatalf(t.AnnotateCtx(context.Background()), "queue for n%d does not exist", toNodeID)
 		}
@@ -600,7 +629,7 @@ func (t *RaftTransport) startProcessNewQueue(
 		func(ctx context.Context) {
 			t.stopper.RunWorker(ctx, worker)
 		}) != nil {
-		t.queues.Delete(int64(toNodeID))
+		t.queues[class].Delete(int64(toNodeID))
 		return false
 	}
 	return true
