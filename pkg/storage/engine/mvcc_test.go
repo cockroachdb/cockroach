@@ -2636,6 +2636,62 @@ func TestMVCCReverseScanFirstKeyInFuture(t *testing.T) {
 	}
 }
 
+// Exposes a bug where the reverse MVCC scan can get stuck in an infinite loop until we OOM.
+//
+// The bug happened in this scenario.
+// (1) reverse scan is positioned at the range's smallest key and calls `prevKey()`
+// (2) `prevKey()` peeks and sees newer versions of the same logical key
+//     `iters_before_seek_-1` times, moving the iterator backwards each time
+// (3) on the `iters_before_seek_`th peek, there are no previous keys found
+//
+// Then, the problem was `prevKey()` treated finding no previous key as if it had found a
+// new logical key with the empty string. It would use `backwardLatestVersion()` to find
+// the latest version of this empty string logical key. Due to condition (3),
+// `backwardLatestVersion()` would go directly to its seeking optimization rather than
+// trying to incrementally move backwards (if it had tried moving incrementally backwards,
+// it would've noticed it's out of bounds). The seek optimization would then seek to "\0",
+// which is the empty logical key with zero timestamp. Since we set RocksDB iterator lower
+// bound to be the lower bound of the range scan, this seek actually lands back at the
+// range's smallest key. It thinks it found a new key so it adds it to the result, and then
+// this whole process repeats ad infinitum.
+func TestMVCCReverseScanStopAtSmallestKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	run := func(numPuts int, ts int64) {
+		ctx := context.Background()
+		engine := createTestEngine()
+		defer engine.Close()
+
+		for i := 1; i <= numPuts; i++ {
+			if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: int64(i)}, value1, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		kvs, _, _, err := MVCCReverseScan(ctx, engine, testKey1, testKey3, math.MaxInt64,
+			hlc.Timestamp{WallTime: ts}, true, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(kvs) != 1 ||
+			!bytes.Equal(kvs[0].Key, testKey1) ||
+			!bytes.Equal(kvs[0].Value.RawBytes, value1.RawBytes) {
+			t.Fatal("unexpected scan results")
+		}
+	}
+	// Satisfying (2) and (3) is incredibly intricate because of how `iters_before_seek_`
+	// is incremented/decremented heuristically. For example, at the time of writing, the
+	// infinitely looping cases are `numPuts == 6 && ts == 2`, `numPuts == 7 && ts == 3`,
+	// `numPuts == 8 && ts == 4`, `numPuts == 9 && ts == 5`, and `numPuts == 10 && ts == 6`.
+	// Tying our test case to the `iters_before_seek_` setting logic seems brittle so let's
+	// just brute force test a wide range of cases.
+	for numPuts := 1; numPuts <= 10; numPuts++ {
+		for ts := 1; ts <= 10; ts++ {
+			run(numPuts, int64(ts))
+		}
+	}
+
+}
+
 func TestMVCCResolveTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	engine := createTestEngine()
