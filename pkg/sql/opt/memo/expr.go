@@ -204,6 +204,31 @@ func (n FiltersExpr) OuterCols(mem *Memo) opt.ColSet {
 	return colSet
 }
 
+// AddFilters adds items to n such that it contains all the FiltersItems
+// in other as well.
+func (n *FiltersExpr) AddFilters(other FiltersExpr) {
+	result := make(FiltersExpr, 0, len(*n)+len(other))
+	for _, filter := range *n {
+		result = append(result, filter)
+	}
+
+	// Only add it if it hasn't already been added.
+	for _, otherFilter := range other {
+		found := false
+		for _, filter := range *n {
+			if filter.Condition == otherFilter.Condition {
+				found = true
+				break
+			}
+		}
+		if !found {
+			result = append(result, otherFilter)
+		}
+	}
+
+	*n = result
+}
+
 // RetainCommonFilters retains only the filters found in n and other.
 func (n *FiltersExpr) RetainCommonFilters(other FiltersExpr) {
 	// TODO(ridwanmsharif): Faster intersection using a map

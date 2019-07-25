@@ -343,10 +343,27 @@ func (c *CustomFuncs) inPartitionFilters(
 	return likelySatisfied
 }
 
-// partitionValuesFilter constructs a filter with the purpose of
+// constructOr constructs an expression that is an OR between all the
+// provided conditions
+func (c *CustomFuncs) constructOr(conditions memo.ScalarListExpr) opt.ScalarExpr {
+	if len(conditions) == 0 {
+		return c.e.f.ConstructFalse()
+	}
+
+	orExpr := c.e.f.ConstructOr(conditions[0], c.e.f.ConstructFalse())
+	for i := 1; i < len(conditions); i++ {
+		orExpr = c.e.f.ConstructOr(conditions[i], orExpr)
+	}
+
+	return orExpr
+}
+
+// partitionValuesFilters constructs filters with the purpose of
 // constraining an index scan using the partition values similar to
 // the filters added from the check constraints (see
-// checkConstraintFilters).
+// checkConstraintFilters). It returns two sets of filters, one to
+// create the partition spans, and one to create the spans for all
+// the in between ranges that are not part of any partitions.
 //
 // For example consider the following table and partitioned index:
 //
@@ -383,31 +400,28 @@ func (c *CustomFuncs) inPartitionFilters(
 //  └── aggregations
 //       └── sum
 //            └── variable: total
-func (c *CustomFuncs) partitionValuesFilter(tabID opt.TableID, index cat.Index) memo.FiltersExpr {
-	var partitionFilter memo.FiltersExpr
+//
+func (c *CustomFuncs) partitionValuesFilters(
+	tabID opt.TableID, index cat.Index,
+) (partitionFilter, inBetweenFilter memo.FiltersExpr) {
 
 	// Find all the partition values
 	partitionValues := index.PartitionByListPrefixes()
 	if len(partitionValues) == 0 {
-		return partitionFilter
+		return partitionFilter, inBetweenFilter
 	}
 
 	// Get the in partition filters.
-	likelySatisfied := c.inPartitionFilters(tabID, index, partitionValues)
+	inPartition := c.inPartitionFilters(tabID, index, partitionValues)
 
 	// Get the in between filters.
-	likelyNotSatisfied := c.inBetweenFilters(tabID, index, partitionValues)
+	inBetween := c.inBetweenFilters(tabID, index, partitionValues)
 
-	// Construct the Likely expression and populate the
-	// partitionFilter with this as the filter condition.
-	likelyExpr := memo.LikelyExpr{
-		LikelySatisfied:    likelySatisfied,
-		LikelyNotSatisfied: likelyNotSatisfied,
-	}
+	// Construct the partition and in between filters.
+	partitionFilter = memo.FiltersExpr{{Condition: c.constructOr(inPartition)}}
+	inBetweenFilter = memo.FiltersExpr{{Condition: c.constructOr(inBetween)}}
 
-	partitionFilter = memo.FiltersExpr{{Condition: &likelyExpr}}
-
-	return partitionFilter
+	return partitionFilter, inBetweenFilter
 }
 
 // GenerateConstrainedScans enumerates all secondary indexes on the Scan
@@ -470,7 +484,9 @@ func (c *CustomFuncs) partitionValuesFilter(tabID opt.TableID, index cat.Index) 
 //
 // GenerateConstrainedScans will further constrain the enumerated index scans
 // by trying to use the check constraints that apply to the table being
-// scanned.
+// scanned and the partitioning defined for the index. See comments above
+// checkColumnFilters and partitionValuesFilters respectively for more
+// detail.
 func (c *CustomFuncs) GenerateConstrainedScans(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, explicitFilters memo.FiltersExpr,
 ) {
@@ -491,7 +507,8 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	for iter.next() {
 		var isIndexPartitioned bool
 		indexColumns := tabMeta.IndexKeyColumns(iter.indexOrdinal)
-		filterColumns := c.filterOuterCols(filters)
+		filterColumns := c.FilterOuterCols(filters)
+		var constrainedInBetweenFilters memo.FiltersExpr
 
 		// We only consider the partition values when a particular index can otherwise
 		// not be constrained. For indexes that are constrained, the partitioned values
@@ -500,7 +517,13 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		// index columns), using the partition values add no benefit.
 		if indexColumns.Intersects(filterColumns) && !c.canMaybeConstrainIndex(filters, scanPrivate.Table, iter.indexOrdinal) {
 			// Add any partition filters if appropriate.
-			partitionFilters := c.partitionValuesFilter(scanPrivate.Table, iter.index)
+			partitionFilters, inBetweenFilters := c.partitionValuesFilters(scanPrivate.Table, iter.index)
+
+			// We must add the filters so when we generate the inBetween spans, they are
+			// also constrained. This is also needed so the remaining filters are generated
+			// correctly using the in between spans (some remaining filters may be blown
+			// by the partition constraints).
+			constrainedInBetweenFilters = append(inBetweenFilters, filters...)
 			filters = append(filters, partitionFilters...)
 			if len(partitionFilters) > 0 {
 				isIndexPartitioned = true
@@ -508,10 +531,68 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		}
 
 		// Check whether the filter can constrain the index.
-		constraintFilters, remainingFilters, ok := c.tryConstrainIndex(
+		constraint, remainingFilters, ok := c.tryConstrainIndex(
 			filters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */)
 		if !ok {
 			continue
+		}
+
+		// If the index is partitioned (by list), then the constraints above only
+		// contain spans within the partition ranges. For correctness, we must
+		// also add the spans for the in between ranges. Consider the following index
+		// and its partition:
+		//
+		// CREATE INDEX orders_by_created_at
+		//     ON orders (region, created_at, id)
+		//     STORING (total)
+		//     PARTITION BY LIST (region)
+		//         (
+		//             PARTITION us_east1 VALUES IN ('us-east1'),
+		//             PARTITION us_west1 VALUES IN ('us-west1'),
+		//             PARTITION europe_west2 VALUES IN ('europe-west2')
+		//         )
+		//
+		// The constraint generated for the query:
+		// SELECT sum(total) FROM orders WHERE created_at >= '2019-05-04' AND created_at < '2019-05-05'
+		// is:
+		//
+		// [/'europe-west2'/'2019-05-04 00:00:00+00:00' - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] [/'us-east1'/'2019-05-04 00:00:00+00:00' - /'us-east1'/'2019-05-04 23:59:59.999999+00:00'] [/'us-west1'/'2019-05-04 00:00:00+00:00' - /'us-west1'/'2019-05-04 23:59:59.999999+00:00']
+		//
+		// You'll notice that the spans before europe-west2, after us-west1 and in between
+		// the defined partitions are missing. We must add these spans now, appropriately
+		// constrained using the filters.
+		//
+		// It is important that we add these spans after the partition spans are generated
+		// because otherwise these spans would merge with the partition spans and would
+		// disallow the partition spans (and the in between ones) to be constrained further.
+		// Using the partitioning example and the query above, if we added the in between
+		// spans at the same time as the partitioned ones, we would end up with a span that
+		// looked like:
+		//
+		// [ - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] ...
+		//
+		// However, allowing the partition spans to be constrained further and then adding the
+		// spans give us a more constrained index scan as shown below:
+		//
+		// [ - /'europe-west2') [/'europe-west2'/'2019-05-04 00:00:00+00:00' - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] ...
+		//
+		// Notice how we 'skip' all the europe-west2 values that satisfy (created_at < '2019-05-04')
+		if isIndexPartitioned {
+			inBetweenConstraint, inBetweenRemainingFilters, ok := c.tryConstrainIndex(
+				constrainedInBetweenFilters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */)
+			if !ok {
+				panic(errors.AssertionFailedf("constraining index should not failed with the in between filters"))
+			}
+
+			constraint.UnionWith(c.e.evalCtx, inBetweenConstraint)
+
+			// Even though the partitioned constrains and the inBetween constraints
+			// were consolidated, we must make sure their Union is as well.
+			constraint.ConsolidateSpans(c.e.evalCtx)
+
+			// Add all remaining filters that need to be present in the
+			// inBetween spans.
+			remainingFilters.AddFilters(inBetweenRemainingFilters)
 		}
 
 		// If a check constraint filter or a partition filter wasn't able to
@@ -531,7 +612,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		// Construct new constrained ScanPrivate.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = iter.indexOrdinal
-		newScanPrivate.Constraint = constraintFilters
+		newScanPrivate.Constraint = constraint
 
 		// If the alternate index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
@@ -704,16 +785,6 @@ func (c *CustomFuncs) allInvIndexConstraints(
 	}
 
 	return constraints, true
-}
-
-// filterOuterCols returns all the outer cols of the filter expression.
-func (c *CustomFuncs) filterOuterCols(filters memo.FiltersExpr) opt.ColSet {
-	var outer opt.ColSet
-	for i := range filters {
-		outer.UnionWith(filters[i].ScalarProps(c.e.mem).OuterCols)
-	}
-
-	return outer
 }
 
 // canMaybeConstrainIndex performs two checks that can quickly rule out the
