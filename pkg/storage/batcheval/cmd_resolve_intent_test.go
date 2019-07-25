@@ -74,6 +74,9 @@ func (m *mockEvalCtx) GetTxnWaitQueue() *txnwait.Queue {
 func (m *mockEvalCtx) NodeID() roachpb.NodeID {
 	panic("unimplemented")
 }
+func (m *mockEvalCtx) GetNodeLocality() roachpb.Locality {
+	panic("unimplemented")
+}
 func (m *mockEvalCtx) StoreID() roachpb.StoreID {
 	return m.storeID
 }

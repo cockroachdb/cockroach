@@ -59,6 +59,7 @@ type EvalContext interface {
 	NodeID() roachpb.NodeID
 	StoreID() roachpb.StoreID
 	GetRangeID() roachpb.RangeID
+	GetNodeLocality() roachpb.Locality
 
 	IsFirstRange() bool
 	GetFirstIndex() (uint64, error)
