@@ -786,9 +786,7 @@ func (c *CustomFuncs) SortFilters(f memo.FiltersExpr) memo.FiltersExpr {
 		fi := f.Child(i).(*memo.FiltersItem)
 		result[i] = *fi
 	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Child(0).(opt.ScalarExpr).ID() < result[j].Child(0).(opt.ScalarExpr).ID()
-	})
+	result.Sort()
 	return result
 }
 

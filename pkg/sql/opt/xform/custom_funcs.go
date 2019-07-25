@@ -195,33 +195,30 @@ func (c *CustomFuncs) checkConstraintFilters(tabID opt.TableID) memo.FiltersExpr
 // comparison type of the filter should be a Lt, Eq or Gt.
 func (c *CustomFuncs) columnComparison(
 	tabID opt.TableID, index cat.Index, values tree.Datums, comp int,
-) memo.FiltersExpr {
-	var filterExpr memo.FiltersExpr
-	colTypes := make([]types.T, 0, len(values))
+) opt.ScalarExpr {
+	colTypes := make([]types.T, len(values))
 	for i := range values {
-		colTypes = append(colTypes, *values[i].ResolvedType())
+		colTypes[i] = *values[i].ResolvedType()
 	}
 
-	var columnVariables memo.ScalarListExpr
-	var scalarValues memo.ScalarListExpr
+	columnVariables := make(memo.ScalarListExpr, len(values))
+	scalarValues := make(memo.ScalarListExpr, len(values))
 
 	for i, val := range values {
 		colID := tabID.ColumnID(index.Column(i).Ordinal)
-		columnVariables = append(columnVariables, c.e.f.ConstructVariable(colID))
-		scalarValues = append(scalarValues, c.e.f.ConstructConstVal(val, val.ResolvedType()))
+		columnVariables[i] = c.e.f.ConstructVariable(colID)
+		scalarValues[i] = c.e.f.ConstructConstVal(val, val.ResolvedType())
 	}
 
 	colsTuple := c.e.f.ConstructTuple(columnVariables, types.MakeTuple(colTypes))
 	valsTuple := c.e.f.ConstructTuple(scalarValues, types.MakeTuple(colTypes))
 	if comp == 0 {
-		filterExpr = memo.FiltersExpr{{Condition: c.e.f.ConstructEq(colsTuple, valsTuple)}}
+		return c.e.f.ConstructEq(colsTuple, valsTuple)
 	} else if comp > 0 {
-		filterExpr = memo.FiltersExpr{{Condition: c.e.f.ConstructGt(colsTuple, valsTuple)}}
-	} else {
-		filterExpr = memo.FiltersExpr{{Condition: c.e.f.ConstructLt(colsTuple, valsTuple)}}
+		return c.e.f.ConstructGt(colsTuple, valsTuple)
 	}
 
-	return filterExpr
+	return c.e.f.ConstructLt(colsTuple, valsTuple)
 }
 
 // isPrefixOf returns whether pre is a prefix of other.
@@ -246,11 +243,11 @@ func (c *CustomFuncs) isPrefixOf(pre []tree.Datum, other []tree.Datum) bool {
 // these spans.
 func (c *CustomFuncs) inBetweenFilters(
 	tabID opt.TableID, index cat.Index, partitionValues []tree.Datums,
-) memo.ScalarListExpr {
+) memo.FiltersExpr {
 	var inBetween memo.ScalarListExpr
 
 	if len(partitionValues) == 0 {
-		return inBetween
+		return memo.EmptyFiltersExpr
 	}
 
 	// Sort the partitionValues lexicographically.
@@ -260,11 +257,11 @@ func (c *CustomFuncs) inBetweenFilters(
 
 	// Add the beginning span.
 	beginExpr := c.columnComparison(tabID, index, partitionValues[0], -1)
-	inBetween = append(inBetween, &beginExpr)
+	inBetween = append(inBetween, beginExpr)
 
 	// Add the end span.
 	endExpr := c.columnComparison(tabID, index, partitionValues[len(partitionValues)-1], 1)
-	inBetween = append(inBetween, &endExpr)
+	inBetween = append(inBetween, endExpr)
 
 	// Add the in-between spans.
 	for i := 1; i < len(partitionValues); i++ {
@@ -273,7 +270,7 @@ func (c *CustomFuncs) inBetweenFilters(
 
 		// The between spans will be greater than the lower partition but smaller
 		// than the higher partition.
-		var largerThanLower memo.FiltersExpr
+		var largerThanLower opt.ScalarExpr
 		if c.isPrefixOf(lowerPartition, higherPartition) {
 
 			// Since the lower partition is a prefix of the higher partition, the span
@@ -288,22 +285,23 @@ func (c *CustomFuncs) inBetweenFilters(
 		smallerThanHigher := c.columnComparison(tabID, index, higherPartition, -1)
 
 		// Add the in-between span to the list of inBetween spans.
-		betweenExpr := append(largerThanLower, smallerThanHigher...)
-		inBetween = append(inBetween, &betweenExpr)
+		betweenExpr := c.e.f.ConstructAnd(largerThanLower, smallerThanHigher)
+		inBetween = append(inBetween, betweenExpr)
 	}
 
-	return inBetween
+	// Return an Or expression between all the expressions.
+	return memo.FiltersExpr{{Condition: c.constructOr(inBetween)}}
 }
 
-// inPartitionFilters returns a set of filters that are required to cover
+// inPartitionFilters returns a FiltersExpr that is required to cover
 // all the partition spans. For each partition defined, inPartitionFilters
-// will return a scalar expression that restricts the index columns by
+// will contain a FilterItem that restricts the index columns by
 // the partition values. Use inBetweenFilters to generate filters that
 // cover all the spans that the partitions don't cover.
 func (c *CustomFuncs) inPartitionFilters(
 	tabID opt.TableID, index cat.Index, partitionValues []tree.Datums,
-) memo.ScalarListExpr {
-	var likelySatisfied memo.ScalarListExpr
+) memo.FiltersExpr {
+	var partitions memo.ScalarListExpr
 
 	// Sort the partition values so the most selective ones are first.
 	sort.Slice(partitionValues, func(i, j int) bool {
@@ -328,25 +326,43 @@ func (c *CustomFuncs) inPartitionFilters(
 			}
 		}
 
-		// This partition has a more selective partition and so, will be taken care
-		// of by the in-between partitions.
+		// This partition is a prefix of a more selective partition and so,
+		// will be taken care of by the in-between partitions.
 		if partitionSeen {
 			continue
 		}
 
-		// Get a filter that restricts the values of the index to the
+		// Get an expression that restricts the values of the index to the
 		// partition values.
-		inPartitionFilter := c.columnComparison(tabID, index, partition, 0)
-		likelySatisfied = append(likelySatisfied, &inPartitionFilter)
+		inPartition := c.columnComparison(tabID, index, partition, 0)
+		partitions = append(partitions, inPartition)
 	}
 
-	return likelySatisfied
+	// Return an Or expression between all the expressions.
+	return memo.FiltersExpr{{Condition: c.constructOr(partitions)}}
 }
 
-// partitionValuesFilter constructs a filter with the purpose of
+// constructOr constructs an expression that is an OR between all the
+// provided conditions
+func (c *CustomFuncs) constructOr(conditions memo.ScalarListExpr) opt.ScalarExpr {
+	if len(conditions) == 0 {
+		return c.e.f.ConstructFalse()
+	}
+
+	orExpr := conditions[0]
+	for i := 1; i < len(conditions); i++ {
+		orExpr = c.e.f.ConstructOr(conditions[i], orExpr)
+	}
+
+	return orExpr
+}
+
+// partitionValuesFilters constructs filters with the purpose of
 // constraining an index scan using the partition values similar to
 // the filters added from the check constraints (see
-// checkConstraintFilters).
+// checkConstraintFilters). It returns two sets of filters, one to
+// create the partition spans, and one to create the spans for all
+// the in between ranges that are not part of any partitions.
 //
 // For example consider the following table and partitioned index:
 //
@@ -383,31 +399,24 @@ func (c *CustomFuncs) inPartitionFilters(
 //  └── aggregations
 //       └── sum
 //            └── variable: total
-func (c *CustomFuncs) partitionValuesFilter(tabID opt.TableID, index cat.Index) memo.FiltersExpr {
-	var partitionFilter memo.FiltersExpr
+//
+func (c *CustomFuncs) partitionValuesFilters(
+	tabID opt.TableID, index cat.Index,
+) (partitionFilter, inBetweenFilter memo.FiltersExpr) {
 
 	// Find all the partition values
 	partitionValues := index.PartitionByListPrefixes()
 	if len(partitionValues) == 0 {
-		return partitionFilter
+		return partitionFilter, inBetweenFilter
 	}
 
-	// Get the in partition filters.
-	likelySatisfied := c.inPartitionFilters(tabID, index, partitionValues)
+	// Get the in partition expressions.
+	inPartition := c.inPartitionFilters(tabID, index, partitionValues)
 
-	// Get the in between filters.
-	likelyNotSatisfied := c.inBetweenFilters(tabID, index, partitionValues)
+	// Get the in between expressions.
+	inBetween := c.inBetweenFilters(tabID, index, partitionValues)
 
-	// Construct the Likely expression and populate the
-	// partitionFilter with this as the filter condition.
-	likelyExpr := memo.LikelyExpr{
-		LikelySatisfied:    likelySatisfied,
-		LikelyNotSatisfied: likelyNotSatisfied,
-	}
-
-	partitionFilter = memo.FiltersExpr{{Condition: &likelyExpr}}
-
-	return partitionFilter
+	return inPartition, inBetween
 }
 
 // GenerateConstrainedScans enumerates all secondary indexes on the Scan
@@ -470,7 +479,9 @@ func (c *CustomFuncs) partitionValuesFilter(tabID opt.TableID, index cat.Index) 
 //
 // GenerateConstrainedScans will further constrain the enumerated index scans
 // by trying to use the check constraints that apply to the table being
-// scanned.
+// scanned and the partitioning defined for the index. See comments above
+// checkColumnFilters and partitionValuesFilters respectively for more
+// detail.
 func (c *CustomFuncs) GenerateConstrainedScans(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, explicitFilters memo.FiltersExpr,
 ) {
@@ -491,16 +502,24 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	for iter.next() {
 		var isIndexPartitioned bool
 		indexColumns := tabMeta.IndexKeyColumns(iter.indexOrdinal)
-		filterColumns := c.filterOuterCols(filters)
+		filterColumns := c.FilterOuterCols(filters)
+		firstIndexCol := scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)
+		var constrainedInBetweenFilters memo.FiltersExpr
 
 		// We only consider the partition values when a particular index can otherwise
 		// not be constrained. For indexes that are constrained, the partitioned values
 		// add no benefit as they don't really constrain anything.
 		// Furthermore, if the filters don't take advantage of the index (use any of the
 		// index columns), using the partition values add no benefit.
-		if indexColumns.Intersects(filterColumns) && !c.canMaybeConstrainIndex(filters, scanPrivate.Table, iter.indexOrdinal) {
+		if !filterColumns.Contains(firstIndexCol) && indexColumns.Intersects(filterColumns) {
 			// Add any partition filters if appropriate.
-			partitionFilters := c.partitionValuesFilter(scanPrivate.Table, iter.index)
+			partitionFilters, inBetweenFilters := c.partitionValuesFilters(scanPrivate.Table, iter.index)
+
+			// We must add the filters so when we generate the inBetween spans, they are
+			// also constrained. This is also needed so the remaining filters are generated
+			// correctly using the in between spans (some remaining filters may be blown
+			// by the partition constraints).
+			constrainedInBetweenFilters = append(inBetweenFilters, filters...)
 			filters = append(filters, partitionFilters...)
 			if len(partitionFilters) > 0 {
 				isIndexPartitioned = true
@@ -508,10 +527,71 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		}
 
 		// Check whether the filter can constrain the index.
-		constraintFilters, remainingFilters, ok := c.tryConstrainIndex(
+		constraint, remainingFilters, ok := c.tryConstrainIndex(
 			filters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */)
 		if !ok {
 			continue
+		}
+
+		// If the index is partitioned (by list), then the constraints above only
+		// contain spans within the partition ranges. For correctness, we must
+		// also add the spans for the in between ranges. Consider the following index
+		// and its partition:
+		//
+		// CREATE INDEX orders_by_created_at
+		//     ON orders (region, created_at, id)
+		//     STORING (total)
+		//     PARTITION BY LIST (region)
+		//         (
+		//             PARTITION us_east1 VALUES IN ('us-east1'),
+		//             PARTITION us_west1 VALUES IN ('us-west1'),
+		//             PARTITION europe_west2 VALUES IN ('europe-west2')
+		//         )
+		//
+		// The constraint generated for the query:
+		// SELECT sum(total) FROM orders WHERE created_at >= '2019-05-04' AND created_at < '2019-05-05'
+		// is:
+		//
+		// [/'europe-west2'/'2019-05-04 00:00:00+00:00' - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] [/'us-east1'/'2019-05-04 00:00:00+00:00' - /'us-east1'/'2019-05-04 23:59:59.999999+00:00'] [/'us-west1'/'2019-05-04 00:00:00+00:00' - /'us-west1'/'2019-05-04 23:59:59.999999+00:00']
+		//
+		// You'll notice that the spans before europe-west2, after us-west1 and in between
+		// the defined partitions are missing. We must add these spans now, appropriately
+		// constrained using the filters.
+		//
+		// It is important that we add these spans after the partition spans are generated
+		// because otherwise these spans would merge with the partition spans and would
+		// disallow the partition spans (and the in between ones) to be constrained further.
+		// Using the partitioning example and the query above, if we added the in between
+		// spans at the same time as the partitioned ones, we would end up with a span that
+		// looked like:
+		//
+		// [ - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] ...
+		//
+		// However, allowing the partition spans to be constrained further and then adding the
+		// spans give us a more constrained index scan as shown below:
+		//
+		// [ - /'europe-west2') [/'europe-west2'/'2019-05-04 00:00:00+00:00' - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] ...
+		//
+		// Notice how we 'skip' all the europe-west2 values that satisfy (created_at < '2019-05-04')
+		if isIndexPartitioned {
+			inBetweenConstraint, inBetweenRemainingFilters, ok := c.tryConstrainIndex(
+				constrainedInBetweenFilters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */)
+			if !ok {
+				panic(errors.AssertionFailedf("constraining index should not failed with the in between filters"))
+			}
+
+			constraint.UnionWith(c.e.evalCtx, inBetweenConstraint)
+
+			// Even though the partitioned constrains and the inBetween constraints
+			// were consolidated, we must make sure their Union is as well.
+			constraint.ConsolidateSpans(c.e.evalCtx)
+
+			// Add all remaining filters that need to be present in the
+			// inBetween spans. Some of the remaining filters are common
+			// between them, so we must deduplicate them.
+			remainingFilters = c.ConcatFilters(remainingFilters, inBetweenRemainingFilters)
+			remainingFilters.Sort()
+			remainingFilters.Deduplicate()
 		}
 
 		// If a check constraint filter or a partition filter wasn't able to
@@ -531,7 +611,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		// Construct new constrained ScanPrivate.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = iter.indexOrdinal
-		newScanPrivate.Constraint = constraintFilters
+		newScanPrivate.Constraint = constraint
 
 		// If the alternate index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
@@ -704,16 +784,6 @@ func (c *CustomFuncs) allInvIndexConstraints(
 	}
 
 	return constraints, true
-}
-
-// filterOuterCols returns all the outer cols of the filter expression.
-func (c *CustomFuncs) filterOuterCols(filters memo.FiltersExpr) opt.ColSet {
-	var outer opt.ColSet
-	for i := range filters {
-		outer.UnionWith(filters[i].ScalarProps(c.e.mem).OuterCols)
-	}
-
-	return outer
 }
 
 // canMaybeConstrainIndex performs two checks that can quickly rule out the

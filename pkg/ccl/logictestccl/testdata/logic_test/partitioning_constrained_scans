@@ -5,11 +5,21 @@ statement ok
 CREATE TABLE abc (a INT8, b INT8, c INT8, PRIMARY KEY (a, b, c))
     PARTITION BY LIST (a, b) (PARTITION small VALUES IN ((1, 1), (2, 2), (3, 3)))
 
-# Insert one value in a partition and one value out of all partitions.
+# Insert one value in a partition, one value out of all partitions
+# and one that doesn't satisfy the condition.
 statement ok
-INSERT INTO abc VALUES (1, 2, 4), (1, 1, 4)
+INSERT INTO abc VALUES (1, 2, 4), (1, 1, 4), (0, 0, 0)
 
-# Make sure both values can be seen even when the partition constraints are used.
+query III rowsort
+SELECT * FROM abc
+----
+0  0  0
+1  1  4
+1  2  4
+
+# Make sure 2 values can be seen even when the partition constraints are used.
+# The (0, 0, 0) value should not be seen because the remaining filters
+# will be applied properly.
 query III rowsort
 SELECT * FROM abc where c = 4
 ----
@@ -18,48 +28,47 @@ SELECT * FROM abc where c = 4
 
 # Use the partition values to constrain the scan.
 query T
-EXPLAIN (OPT, VERBOSE) SELECT * FROM abc where c = 4
+EXPLAIN (OPT) SELECT * FROM abc where c = 4
 ----
 select
- ├── columns: a:1 b:2 c:3
- ├── stats: [rows=10, distinct(1)=9.5617925, null(1)=0, distinct(2)=9.5617925, null(2)=0, distinct(3)=1, null(3)=0]
- ├── cost: 41.8718519
- ├── key: (1,2)
- ├── fd: ()-->(3)
- ├── prune: (1,2)
  ├── scan abc
- │    ├── columns: a:1 b:2 c:3
- │    ├── constraint: /1/2/3: [ - /1/0/4] [/1/1/4 - /1/1/4] [/1/2/4 - /2/1/4] [/2/2/4 - /2/2/4] [/2/3/4 - /3/2/4] [/3/3/4 - /3/3/4] [/3/4/4 - ]
- │    ├── stats: [rows=37.037037, distinct(1)=33.3333333, null(1)=0, distinct(2)=33.3333333, null(2)=0, distinct(3)=33.3333333, null(3)=0]
- │    ├── cost: 41.4914815
- │    └── key: (1-3)
+ │    └── constraint: /1/2/3: [ - /1/0/4] [/1/1/4 - /1/1/4] [/1/2/4 - /2/1/4] [/2/2/4 - /2/2/4] [/2/3/4 - /3/2/4] [/3/3/4 - /3/3/4] [/3/4/4 - ]
  └── filters
-      └── c = 4 [outer=(3), constraints=(/3: [/4 - /4]; tight), fd=()-->(3)]
+      └── c = 4
+
+# Each partition has multiple spans.
+query T
+EXPLAIN (OPT) SELECT * FROM abc where c = 4 OR c = 6
+----
+select
+ ├── scan abc
+ │    └── constraint: /1/2/3: [ - /1/0/6] [/1/1/4 - /1/1/4] [/1/1/6 - /1/1/6] [/1/2/4 - /2/1/6] [/2/2/4 - /2/2/4] [/2/2/6 - /2/2/6] [/2/3/4 - /3/2/6] [/3/3/4 - /3/3/4] [/3/3/6 - /3/3/6] [/3/4/4 - ]
+ └── filters
+      └── (c = 4) OR (c = 6)
+
+# The partition spans and the in between spans both can't simplify all filters
+# and so we have the ((c % 2) = 1) filter remaining. This tests that the filter
+# still remains but is also not duplicated.
+query T
+EXPLAIN (OPT) SELECT * FROM abc where (c > 0 AND c < 10) AND (c % 2 = 1)
+----
+select
+ ├── scan abc
+ │    └── constraint: /1/2/3: [ - /1/0/9] [/1/1/1 - /1/1/9] [/1/2/1 - /2/1/9] [/2/2/1 - /2/2/9] [/2/3/1 - /3/2/9] [/3/3/1 - /3/3/9] [/3/4/1 - ]
+ └── filters
+      ├── (c % 2) = 1
+      └── (c > 0) AND (c < 10)
 
 # Perhaps an unintuitive example. The partition constraints don't really help
 # constrain the index. None of the spans created by the partitioning are constrained
 # and so this is equivalent to an unconstrained scan.
-# TODO(ridwanmsharif): We can detect this case when deciding to use the partitioning
-# values by checking if a suffix of the index, not part of the partition values is used
-# by the filters.
 query T
-EXPLAIN (OPT, VERBOSE) SELECT * FROM abc where b = 3
+EXPLAIN (OPT) SELECT * FROM abc where b = 3
 ----
 select
- ├── columns: a:1 b:2 c:3
- ├── stats: [rows=10, distinct(1)=9.5617925, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=9.5617925, null(3)=0]
- ├── cost: 1130.03
- ├── key: (1,3)
- ├── fd: ()-->(2)
- ├── prune: (1,3)
  ├── scan abc
- │    ├── columns: a:1 b:2 c:3
- │    ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(2)=100, null(2)=0, distinct(3)=100, null(3)=0]
- │    ├── cost: 1120.02
- │    ├── key: (1-3)
- │    └── prune: (1-3)
  └── filters
-      └── b = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+      └── b = 3
 
 # The orders example that inspired the partitioning index scan.
 statement ok
@@ -161,38 +170,19 @@ jupiter  titan  red spot  8
 mars     ·      ·         5
 
 query T
-EXPLAIN (OPT, VERBOSE) select * from solar_system where val = 8
+EXPLAIN (OPT) select * from solar_system where val = 8
 ----
 select
- ├── columns: planet:1 region:2 subregion:3 val:4
- ├── stats: [rows=10, distinct(1)=9.5617925, null(1)=0, distinct(2)=9.5617925, null(2)=0, distinct(3)=9.5617925, null(3)=0, distinct(4)=1, null(4)=0]
- ├── cost: 390.02
- ├── key: (1-3)
- ├── fd: ()-->(4)
- ├── prune: (1-3)
  ├── scan solar_system
- │    ├── columns: planet:1 region:2 subregion:3 val:4
- │    ├── constraint: /1/2/3/4: [ - /'earth'/'eu') [/'earth'/'eu' - /'earth'/'us'/'cali') [/'earth'/'us'/'cali'/8 - /'earth'/'us'/'cali'/8] [/'earth'/'us'/e'cali\x00'/8 - /'earth'/'us'/'seatle') [/'earth'/'us'/'seatle'/8 - /'earth'/'us'/'seatle'/8] [/'earth'/'us'/e'seatle\x00'/8 - /'jupiter'/'titan'/'red spot') [/'jupiter'/'titan'/'red spot'/8 - /'jupiter'/'titan'/'red spot'/8] [/'jupiter'/'titan'/e'red spot\x00'/8 - /'mars') [/'mars' - ]
- │    ├── stats: [rows=333.333333, distinct(1)=33.3333333, null(1)=0, distinct(2)=100, null(2)=0, distinct(3)=100, null(3)=0, distinct(4)=100, null(4)=0]
- │    ├── cost: 386.676667
- │    └── key: (1-4)
+ │    └── constraint: /1/2/3/4: [ - /'earth'/'us'/'cali') [/'earth'/'us'/'cali'/8 - /'earth'/'us'/'cali'/8] [/'earth'/'us'/e'cali\x00'/8 - /'earth'/'us'/'seatle') [/'earth'/'us'/'seatle'/8 - /'earth'/'us'/'seatle'/8] [/'earth'/'us'/e'seatle\x00'/8 - /'jupiter'/'titan'/'red spot') [/'jupiter'/'titan'/'red spot'/8 - /'jupiter'/'titan'/'red spot'/8] [/'jupiter'/'titan'/e'red spot\x00'/8 - ]
  └── filters
-      └── val = 8 [outer=(4), constraints=(/4: [/8 - /8]; tight), fd=()-->(4)]
+      └── val = 8
 
 query T
-EXPLAIN (OPT, VERBOSE) select * from solar_system where val > 6 AND val < 9
+EXPLAIN (OPT) select * from solar_system where val > 6 AND val < 9
 ----
 select
- ├── columns: planet:1 region:2 subregion:3 val:4
- ├── stats: [rows=20, distinct(1)=18.2927193, null(1)=0, distinct(2)=18.2927193, null(2)=0, distinct(3)=18.2927193, null(3)=0, distinct(4)=2, null(4)=0]
- ├── cost: 390.02
- ├── key: (1-4)
- ├── prune: (1-3)
  ├── scan solar_system
- │    ├── columns: planet:1 region:2 subregion:3 val:4
- │    ├── constraint: /1/2/3/4: [ - /'earth'/'eu') [/'earth'/'eu' - /'earth'/'us'/'cali') [/'earth'/'us'/'cali'/7 - /'earth'/'us'/'cali'/8] [/'earth'/'us'/e'cali\x00'/7 - /'earth'/'us'/'seatle') [/'earth'/'us'/'seatle'/7 - /'earth'/'us'/'seatle'/8] [/'earth'/'us'/e'seatle\x00'/7 - /'jupiter'/'titan'/'red spot') [/'jupiter'/'titan'/'red spot'/7 - /'jupiter'/'titan'/'red spot'/8] [/'jupiter'/'titan'/e'red spot\x00'/7 - /'mars') [/'mars' - ]
- │    ├── stats: [rows=333.333333, distinct(1)=33.3333333, null(1)=0, distinct(2)=100, null(2)=0, distinct(3)=100, null(3)=0, distinct(4)=100, null(4)=0]
- │    ├── cost: 386.676667
- │    └── key: (1-4)
+ │    └── constraint: /1/2/3/4: [ - /'earth'/'us'/'cali') [/'earth'/'us'/'cali'/7 - /'earth'/'us'/'cali'/8] [/'earth'/'us'/e'cali\x00'/7 - /'earth'/'us'/'seatle') [/'earth'/'us'/'seatle'/7 - /'earth'/'us'/'seatle'/8] [/'earth'/'us'/e'seatle\x00'/7 - /'jupiter'/'titan'/'red spot') [/'jupiter'/'titan'/'red spot'/7 - /'jupiter'/'titan'/'red spot'/8] [/'jupiter'/'titan'/e'red spot\x00'/7 - ]
  └── filters
-      └── (val > 6) AND (val < 9) [outer=(4), constraints=(/4: [/7 - /8]; tight)]
+      └── (val > 6) AND (val < 9)

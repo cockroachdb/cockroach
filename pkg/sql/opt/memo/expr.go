@@ -12,6 +12,7 @@ package memo
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -202,6 +203,35 @@ func (n FiltersExpr) OuterCols(mem *Memo) opt.ColSet {
 		colSet.UnionWith(n[i].ScalarProps(mem).OuterCols)
 	}
 	return colSet
+}
+
+// Sort sorts the FilterItems in n by the IDs of the expression.
+func (n *FiltersExpr) Sort() {
+	sort.Slice(*n, func(i, j int) bool {
+		return (*n)[i].Condition.(opt.ScalarExpr).ID() < (*n)[j].Condition.(opt.ScalarExpr).ID()
+	})
+}
+
+// Deduplicate removes all the duplicate filters from n.
+func (n *FiltersExpr) Deduplicate() {
+	dedup := (*n)[:0]
+
+	// Only add it if it hasn't already been added.
+	for i, filter := range *n {
+		found := false
+		for j := i - 1; j >= 0; j-- {
+			previouslySeenFilter := (*n)[j]
+			if previouslySeenFilter.Condition == filter.Condition {
+				found = true
+				break
+			}
+		}
+		if !found {
+			dedup = append(dedup, filter)
+		}
+	}
+
+	*n = dedup
 }
 
 // RetainCommonFilters retains only the filters found in n and other.
