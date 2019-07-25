@@ -2739,11 +2739,11 @@ func (dsp *DistSQLPlanner) createPlanForOrdinality(
 	}
 
 	plan.PlanToStreamColMap = append(plan.PlanToStreamColMap, len(plan.ResultTypes))
-	plan.ResultTypes = append(plan.ResultTypes, *types.Int)
+	outputTypes := append(plan.ResultTypes, *types.Int)
 
 	// WITH ORDINALITY never gets distributed so that the gateway node can
 	// always number each row in order.
-	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, ordinalitySpec, distsqlpb.PostProcessSpec{}, plan.ResultTypes)
+	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, ordinalitySpec, distsqlpb.PostProcessSpec{}, outputTypes)
 
 	return plan, nil
 }
