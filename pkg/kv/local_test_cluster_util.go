@@ -94,9 +94,10 @@ func NewDistSenderForLocalTestCluster(
 			TransportFactory: func(
 				opts SendOptions,
 				nodeDialer *nodedialer.Dialer,
+				class rpc.ConnectionClass,
 				replicas ReplicaSlice,
 			) (Transport, error) {
-				transport, err := senderTransportFactory(opts, nodeDialer, replicas)
+				transport, err := senderTransportFactory(opts, nodeDialer, class, replicas)
 				if err != nil {
 					return nil, err
 				}

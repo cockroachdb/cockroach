@@ -1648,7 +1648,8 @@ func (ds *DistSender) sendToReplicas(
 	cachedLeaseHolder roachpb.ReplicaDescriptor,
 	withCommit bool,
 ) (*roachpb.BatchResponse, error) {
-	transport, err := ds.transportFactory(opts, nodeDialer, replicas)
+	class := rpc.ConnectionClassForRange(rangeID)
+	transport, err := ds.transportFactory(opts, nodeDialer, class, replicas)
 	if err != nil {
 		return nil, err
 	}

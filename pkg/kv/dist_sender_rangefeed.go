@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -227,8 +228,9 @@ func (ds *DistSender) singleRangeFeed(
 	// would still work if we had `All` here.
 	replicas := NewReplicaSlice(ds.gossip, desc.Replicas().Voters())
 	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), latencyFn)
-
-	transport, err := ds.transportFactory(SendOptions{}, ds.nodeDialer, replicas)
+	// The RangeFeed is not used for system critical traffic so use a DefaultClass
+	// connection regardless of the range.
+	transport, err := ds.transportFactory(SendOptions{}, ds.nodeDialer, rpc.DefaultClass, replicas)
 	if err != nil {
 		return args.Timestamp, roachpb.NewError(err)
 	}

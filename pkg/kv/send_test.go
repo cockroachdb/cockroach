@@ -162,6 +162,7 @@ func TestComplexScenarios(t *testing.T) {
 			func(
 				_ SendOptions,
 				_ *nodedialer.Dialer,
+				_ rpc.ConnectionClass,
 				replicas ReplicaSlice,
 			) (Transport, error) {
 				return &firstNErrorTransport{
