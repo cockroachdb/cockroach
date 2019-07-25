@@ -659,6 +659,11 @@ func (r *Replica) NodeID() roachpb.NodeID {
 	return r.store.nodeDesc.NodeID
 }
 
+// GetNodeLocality returns the locality of the node this replica belongs to.
+func (r *Replica) GetNodeLocality() roachpb.Locality {
+	return r.store.nodeDesc.Locality
+}
+
 // ClusterSettings returns the node's ClusterSettings.
 func (r *Replica) ClusterSettings() *cluster.Settings {
 	return r.store.cfg.Settings
