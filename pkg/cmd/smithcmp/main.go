@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/jackc/pgx/pgtype"
@@ -108,7 +109,6 @@ func main() {
 	for i := 0; true; i++ {
 		fmt.Printf("stmt: %d\n", i)
 		stmt := smither.Generate()
-		fmt.Println("executing...")
 		if opts.Postgres {
 			// TODO(mjibson): move these into sqlsmith.
 			stmt = strings.Replace(stmt, ":::", "::", -1)
@@ -133,10 +133,13 @@ func main() {
 
 		// Make sure the servers are alive.
 		for name, conn := range conns {
+			start := timeutil.Now()
+			fmt.Printf("pinging %s...", name)
 			if err := conn.Ping(); err != nil {
-				fmt.Printf("%s: ping failure: %v\nprevious SQL:\n%s;\n", name, err, stmt)
+				fmt.Printf("\n%s: ping failure: %v\nprevious SQL:\n%s;\n", name, err, stmt)
 				os.Exit(1)
 			}
+			fmt.Printf(" %s\n", timeutil.Since(start))
 		}
 	}
 }
@@ -147,11 +150,20 @@ func compareConns(stmt string, smitherName string, conns map[string]*Conn) error
 	g, ctx := errgroup.WithContext(ctx)
 	vvs := map[string][][]interface{}{}
 	var lock syncutil.Mutex
+	fmt.Println("executing...")
 	for name := range conns {
 		name := name
 		g.Go(func() error {
+			defer func() {
+				if err := recover(); err != nil {
+					fmt.Printf("panic sql on %s:\n%s;\n", name, stmt)
+					panic(err)
+				}
+			}()
 			conn := conns[name]
+			executeStart := timeutil.Now()
 			vals, err := conn.Values(ctx, stmt)
+			fmt.Printf("executed %s in %s\n", name, timeutil.Since(executeStart))
 			if err != nil {
 				return errors.Wrap(err, name)
 			}
@@ -167,15 +179,20 @@ func compareConns(stmt string, smitherName string, conns map[string]*Conn) error
 			return nil
 		})
 	}
-	if err := g.Wait(); err != nil {
-		fmt.Printf("SQL:\n%s;\nERR: %s\n\n", stmt, err)
+	err := g.Wait()
+	if err != nil {
+		// We don't care about SQL errors because sqlsmith sometimes
+		// produces bogus queries.
 		return nil
 	}
 	first := vvs[smitherName]
+	fmt.Println(len(first), "rows")
 	for name, vals := range vvs {
 		if name == smitherName {
 			continue
 		}
+		compareStart := timeutil.Now()
+		fmt.Printf("comparing %s to %s...", smitherName, name)
 		if err := compareVals(first, vals); err != nil {
 			fmt.Printf("SQL:\n%s;\nerr:\n%s\n",
 				stmt,
@@ -183,8 +200,36 @@ func compareConns(stmt string, smitherName string, conns map[string]*Conn) error
 			)
 			os.Exit(1)
 		}
+		fmt.Printf(" %s\n", timeutil.Since(compareStart))
 	}
 	return nil
+}
+
+func lessVal(a, b interface{}) bool {
+	if a == nil {
+		return true
+	}
+	if b == nil {
+		return false
+	}
+	switch a := a.(type) {
+	case float64:
+		return a < b.(float64)
+	case int64:
+		return a < b.(int64)
+	case uint32:
+		return a < b.(uint32)
+	case []pgtype.Value:
+		b := b.([]pgtype.Value)
+		for i := range a {
+			if lessVal(a[i], b[i]) {
+				return true
+			}
+		}
+		return false
+	default:
+		return fmt.Sprint(a) < fmt.Sprint(b)
+	}
 }
 
 // sortVals sorts from right to left.
@@ -196,22 +241,7 @@ func sortVals(vals [][]interface{}) {
 	for col := cols - 1; col >= 0; col-- {
 		sort.SliceStable(vals, func(i, j int) bool {
 			a, b := vals[i][col], vals[j][col]
-			if a == nil {
-				return true
-			}
-			if b == nil {
-				return false
-			}
-			switch a := a.(type) {
-			case float64:
-				return a < b.(float64)
-			case int64:
-				return a < b.(int64)
-			case uint32:
-				return a < b.(uint32)
-			default:
-				return fmt.Sprint(a) < fmt.Sprint(b)
-			}
+			return lessVal(a, b)
 		})
 	}
 }
@@ -264,6 +294,14 @@ var (
 				case *pgtype.TimestampArray:
 					if t.Status == pgtype.Present && len(t.Elements) == 0 {
 						v = &pgtype.TimestampArray{}
+					}
+				case *pgtype.BoolArray:
+					if t.Status == pgtype.Present && len(t.Elements) == 0 {
+						v = &pgtype.BoolArray{}
+					}
+				case *pgtype.DateArray:
+					if t.Status == pgtype.Present && len(t.Elements) == 0 {
+						v = &pgtype.BoolArray{}
 					}
 				case *pgtype.Bit:
 					vb := pgtype.Varbit(*t)
