@@ -149,15 +149,16 @@ func (v virtualSchemaView) initVirtualTableDesc(
 
 	create := stmt.AST.(*tree.CreateView)
 
-	mutDesc, err := MakeViewTableDesc(
-		create,
-		v.resultColumns,
-		0,
+	mutDesc, err := makeViewTableDesc(
+		create.Name.Table(),
+		tree.AsStringWithFlags(create.AsSource, tree.FmtParsable),
+		create.ColumnNames,
+		0, /* parentID */
 		id,
-		hlc.Timestamp{},
+		v.resultColumns,
+		hlc.Timestamp{}, /* creationTime */
 		publicSelectPrivileges,
-		nil, // semaCtx
-		nil, // evalCtx
+		nil, /* semaCtx */
 	)
 	return mutDesc.TableDescriptor, err
 }
