@@ -1439,7 +1439,7 @@ func (s *adminServer) DecommissionStatus(
 					if err := row.ValueProto(&rangeDesc); err != nil {
 						return errors.Wrapf(err, "%s: unable to unmarshal range descriptor", row.Key)
 					}
-					for _, r := range rangeDesc.Replicas().Unwrap() {
+					for _, r := range rangeDesc.Replicas().All() {
 						if _, ok := replicaCounts[r.NodeID]; ok {
 							replicaCounts[r.NodeID]++
 						}
@@ -1608,7 +1608,7 @@ func (s *adminServer) DataDistribution(
 				return err
 			}
 
-			for _, replicaDesc := range rangeDesc.Replicas().Unwrap() {
+			for _, replicaDesc := range rangeDesc.Replicas().All() {
 				tableInfo, ok := tableInfosByTableID[tableID]
 				if !ok {
 					// This is a database, skip.

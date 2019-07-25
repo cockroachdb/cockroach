@@ -2075,23 +2075,23 @@ func (s *Store) IsDraining() bool {
 // range ID and returns a RangeDescriptor whose Replicas are a copy
 // of the supplied replicas slice, with appropriate ReplicaIDs assigned.
 func (s *Store) NewRangeDescriptor(
-	ctx context.Context, start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor,
+	ctx context.Context, start, end roachpb.RKey, replicas roachpb.ReplicaDescriptors,
 ) (*roachpb.RangeDescriptor, error) {
 	id, err := s.rangeIDAlloc.Allocate(ctx)
 	if err != nil {
 		return nil, err
 	}
-	replicas = append([]roachpb.ReplicaDescriptor(nil), replicas...)
-	for i := range replicas {
-		replicas[i].ReplicaID = roachpb.ReplicaID(i + 1)
+	repls := append([]roachpb.ReplicaDescriptor(nil), replicas.All()...)
+	for i := range repls {
+		repls[i].ReplicaID = roachpb.ReplicaID(i + 1)
 	}
 	desc := &roachpb.RangeDescriptor{
 		RangeID:       roachpb.RangeID(id),
 		StartKey:      start,
 		EndKey:        end,
-		NextReplicaID: roachpb.ReplicaID(len(replicas) + 1),
+		NextReplicaID: roachpb.ReplicaID(len(repls) + 1),
 	}
-	desc.SetReplicas(roachpb.MakeReplicaDescriptors(&replicas))
+	desc.SetReplicas(roachpb.MakeReplicaDescriptors(&repls))
 	return desc, nil
 }
 
