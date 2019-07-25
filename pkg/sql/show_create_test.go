@@ -44,7 +44,7 @@ func TestStandAloneShowCreateTable(t *testing.T) {
 	desc.Indexes[0].Interleave.Ancestors = []sqlbase.InterleaveDescriptor_Ancestor{{TableID: 51, IndexID: 10, SharedPrefixLen: 1}}
 
 	name := tree.Name(desc.Name)
-	got, err := ShowCreateTable(context.TODO(), &name, "", &desc, nil, false)
+	got, err := ShowCreateTable(context.TODO(), &name, "", &desc, nil, false, map[string]string{})
 	if err != nil {
 		t.Fatal(err)
 	}

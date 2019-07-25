@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	yaml "gopkg.in/yaml.v2"
 )
 
 const crdbInternalName = "crdb_internal"
@@ -1124,6 +1125,45 @@ CREATE TABLE crdb_internal.create_statements (
 		typeTable := tree.NewDString("table")
 		typeSequence := tree.NewDString("sequence")
 
+		zoneConstraintsMap := make(map[string]string)
+		// The create_statements table is used at times where other internal
+		// tables have not been created, or are unaccessible (perhaps during
+		// certain tests (TestDumpAsOf in pkg/cli/dump_test.go)). So if something
+		// goes wrong querying this table, proceed without any constraint data.
+		zoneConstraintRows, _ := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+			ctx, "zone-constraints-for-show-create-table", p.txn,
+			`SELECT zone_name, config_yaml from crdb_internal.zones`)
+
+		// Perform this encode -> decode to guarantee we easily get
+		// readable constraint output.
+		for _, row := range zoneConstraintRows {
+			var zoneConfig config.ZoneConfig
+			if row[0] == tree.DNull || row[1] == tree.DNull {
+				continue
+			}
+			id := string(tree.MustBeDString(row[0]))
+			yamlString := string(tree.MustBeDString(row[1]))
+			err := yaml.UnmarshalStrict([]byte(yamlString), &zoneConfig)
+			if err != nil {
+				return err
+			}
+			if len(zoneConfig.Constraints) > 0 {
+				var buf bytes.Buffer
+				e := yaml.NewEncoder(&buf)
+				e.UseStyle(yaml.FlowStyle)
+				toEnc := config.ConstraintsList{
+					Constraints: zoneConfig.Constraints,
+				}
+				if err := e.Encode(toEnc); err != nil {
+					return err
+				}
+				if err := e.Close(); err != nil {
+					return err
+				}
+				zoneConstraintsMap[id] = buf.String()
+			}
+		}
+
 		return forEachTableDescWithTableLookupInternal(ctx, p, dbContext, virtualOnce, true, /*allowAdding*/
 			func(db *DatabaseDescriptor, scName string, table *TableDescriptor, lCtx tableLookupFn) error {
 				parentNameStr := tree.DNull
@@ -1146,7 +1186,7 @@ CREATE TABLE crdb_internal.create_statements (
 				} else {
 					descType = typeTable
 					tn := (*tree.Name)(&table.Name)
-					createNofk, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, true /* ignoreFKs */)
+					createNofk, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, true /* ignoreFKs */, zoneConstraintsMap)
 					if err != nil {
 						return err
 					}
@@ -1178,7 +1218,8 @@ CREATE TABLE crdb_internal.create_statements (
 							}
 						}
 					}
-					stmt, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, false /* ignoreFKs */)
+
+					stmt, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, false /* ignoreFKs */, zoneConstraintsMap)
 				}
 				if err != nil {
 					return err

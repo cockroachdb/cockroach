@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -136,6 +137,7 @@ func ShowCreateTable(
 	desc *sqlbase.TableDescriptor,
 	lCtx *internalLookupCtx,
 	ignoreFKs bool,
+	zoneConstraintMap map[string]string,
 ) (string, error) {
 	a := &sqlbase.DatumAlloc{}
 
@@ -186,7 +188,7 @@ func ShowCreateTable(
 				return "", err
 			}
 			if err := ShowCreatePartitioning(
-				a, desc, idx, &idx.Partitioning, &f.Buffer, 1 /* indent */, 0, /* colOffset */
+				a, dbPrefix, desc, idx, &idx.Partitioning, &f.Buffer, 1 /* indent */, 0 /* colOffset */, zoneConstraintMap,
 			); err != nil {
 				return "", err
 			}
@@ -219,13 +221,29 @@ func ShowCreateTable(
 		f.WriteString(")")
 	}
 
+	// Make a zoneSpecifier for the table, in order
+	// to look up its ID in the zoneConstraintMap
+	zoneSpecifier := tree.ZoneSpecifier{
+		TableOrIndex: tree.TableIndexName{
+			Table: tree.MakeTableName(tree.Name(dbPrefix), tree.Name(desc.Name)),
+		},
+	}
+	id := config.CLIZoneSpecifier(&zoneSpecifier)
+
+	if val, ok := zoneConstraintMap[id]; ok {
+		f.WriteString("\n\t")
+		f.WriteString("/* table zone constraints: ")
+		f.WriteString(strings.TrimSpace(val))
+		f.WriteString(" */")
+	}
+
 	f.WriteString("\n)")
 
 	if err := showCreateInterleave(ctx, &desc.PrimaryIndex, &f.Buffer, dbPrefix, lCtx); err != nil {
 		return "", err
 	}
 	if err := ShowCreatePartitioning(
-		a, desc, &desc.PrimaryIndex, &desc.PrimaryIndex.Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
+		a, dbPrefix, desc, &desc.PrimaryIndex, &desc.PrimaryIndex.Partitioning, &f.Buffer, 0 /* indent */, 0 /* colOffset */, zoneConstraintMap,
 	); err != nil {
 		return "", err
 	}
@@ -299,17 +317,18 @@ func showCreateInterleave(
 // index, if applicable.
 func ShowCreatePartitioning(
 	a *sqlbase.DatumAlloc,
+	dbPrefix string,
 	tableDesc *sqlbase.TableDescriptor,
 	idxDesc *sqlbase.IndexDescriptor,
 	partDesc *sqlbase.PartitioningDescriptor,
 	buf *bytes.Buffer,
 	indent int,
 	colOffset int,
+	zoneConstraintMap map[string]string,
 ) error {
 	if partDesc.NumColumns == 0 {
 		return nil
 	}
-
 	// We don't need real prefixes in the DecodePartitionTuple calls because we
 	// only use the tree.Datums part of the output.
 	fakePrefixDatums := make([]tree.Datum, colOffset)
@@ -358,9 +377,28 @@ func ShowCreatePartitioning(
 			buf.WriteString(tuple.String())
 		}
 		buf.WriteString(`)`)
+
+		// Make a zoneSpecifier for our partition, in order
+		// to look up its ID in the zoneConstraintMap
+		zoneSpecifier := tree.ZoneSpecifier{
+			TableOrIndex: tree.TableIndexName{
+				Table: tree.MakeTableName(tree.Name(dbPrefix), tree.Name(tableDesc.Name)),
+				Index: tree.UnrestrictedName(idxDesc.Name),
+			},
+			Partition: tree.Name(part.Name),
+		}
+
+		id := config.CLIZoneSpecifier(&zoneSpecifier)
+
+		if val, ok := zoneConstraintMap[id]; ok {
+			buf.WriteString(" /* zone constraints: ")
+			buf.WriteString(strings.TrimSpace(val))
+			buf.WriteString(" */")
+		}
+
 		if err := ShowCreatePartitioning(
-			a, tableDesc, idxDesc, &part.Subpartitioning, buf, indent+1,
-			colOffset+int(partDesc.NumColumns),
+			a, dbPrefix, tableDesc, idxDesc, &part.Subpartitioning, buf, indent+1,
+			colOffset+int(partDesc.NumColumns), zoneConstraintMap,
 		); err != nil {
 			return err
 		}
@@ -387,6 +425,24 @@ func ShowCreatePartitioning(
 			return err
 		}
 		buf.WriteString(toTuple.String())
+
+		// Make a zoneSpecifier for our partition, in order
+		// to look up its ID in the zoneConstraintMap
+		zoneSpecifier := tree.ZoneSpecifier{
+			TableOrIndex: tree.TableIndexName{
+				Table: tree.MakeTableName(tree.Name(dbPrefix), tree.Name(tableDesc.Name)),
+				Index: tree.UnrestrictedName(idxDesc.Name),
+			},
+			Partition: tree.Name(part.Name),
+		}
+
+		id := config.CLIZoneSpecifier(&zoneSpecifier)
+
+		if val, ok := zoneConstraintMap[id]; ok {
+			buf.WriteString(" /* zone constraints: ")
+			buf.WriteString(strings.TrimSpace(val))
+			buf.WriteString(" */")
+		}
 	}
 	buf.WriteString("\n")
 	buf.WriteString(indentStr)
