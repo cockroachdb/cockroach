@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"gopkg.in/yaml.v2"
 )
 
 const crdbInternalName = "crdb_internal"
@@ -1100,17 +1101,18 @@ var crdbInternalCreateStmtsTable = virtualSchemaTable{
 	comment: `CREATE and ALTER statements for all tables accessible by current user in current database (KV scan)`,
 	schema: `
 CREATE TABLE crdb_internal.create_statements (
-  database_id         INT,
-  database_name       STRING,
-  schema_name         STRING NOT NULL,
-  descriptor_id       INT,
-  descriptor_type     STRING NOT NULL,
-  descriptor_name     STRING NOT NULL,
-  create_statement    STRING NOT NULL,
-  state               STRING NOT NULL,
-  create_nofks        STRING NOT NULL,
-  alter_statements    STRING[] NOT NULL,
-  validate_statements STRING[] NOT NULL
+  database_id         					INT,
+  database_name       					STRING,
+  schema_name         					STRING NOT NULL,
+  descriptor_id       					INT,
+  descriptor_type     					STRING NOT NULL,
+  descriptor_name     					STRING NOT NULL,
+  create_statement    					STRING NOT NULL,
+  state               					STRING NOT NULL,
+  create_nofks        					STRING NOT NULL,
+  alter_statements    					STRING[] NOT NULL,
+  validate_statements 					STRING[] NOT NULL,
+  zone_configuration_statements STRING[] NOT NULL
 )
 `,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -1123,6 +1125,47 @@ CREATE TABLE crdb_internal.create_statements (
 		typeView := tree.NewDString("view")
 		typeTable := tree.NewDString("table")
 		typeSequence := tree.NewDString("sequence")
+
+		// Hold the configuration statements for each table
+		zoneConfigStmts := make(map[string][]string)
+		// Prepare a query used to see zones configuations on this table.
+		configStmtsQuery := `
+			SELECT
+				table_name, config_yaml, config_sql
+			FROM
+				crdb_internal.zones
+			WHERE
+				database_name = '%[1]s'
+				AND table_name IS NOT NULL
+				AND config_yaml IS NOT NULL
+				AND config_sql IS NOT NULL
+			ORDER BY
+				database_name, table_name, index_name, partition_name
+		`
+		// The create_statements table is used at times where other internal
+		// tables have not been created, or are unaccessible (perhaps during
+		// certain tests (TestDumpAsOf in pkg/cli/dump_test.go)). So if something
+		// goes wrong querying this table, proceed without any constraint data.
+		zoneConstraintRows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+			ctx, "zone-constraints-for-show-create-table", p.txn,
+			fmt.Sprintf(configStmtsQuery, contextName))
+		if err != nil {
+			log.VEventf(ctx, 1, "%q", err)
+		} else {
+			for _, row := range zoneConstraintRows {
+				tableName := string(tree.MustBeDString(row[0]))
+				var zoneConfig config.ZoneConfig
+				yamlString := string(tree.MustBeDString(row[1]))
+				err := yaml.UnmarshalStrict([]byte(yamlString), &zoneConfig)
+				if err != nil {
+					return err
+				}
+				if len(zoneConfig.Constraints) > 0 {
+					sqlString := string(tree.MustBeDString(row[2]))
+					zoneConfigStmts[tableName] = append(zoneConfigStmts[tableName], sqlString)
+				}
+			}
+		}
 
 		return forEachTableDescWithTableLookupInternal(ctx, p, dbContext, virtualOnce, true, /*allowAdding*/
 			func(db *DatabaseDescriptor, scName string, table *TableDescriptor, lCtx tableLookupFn) error {
@@ -1184,6 +1227,15 @@ CREATE TABLE crdb_internal.create_statements (
 					return err
 				}
 
+				zoneRows := tree.NewDArray(types.String)
+				if val, ok := zoneConfigStmts[table.Name]; ok {
+					for _, s := range val {
+						if err := zoneRows.Append(tree.NewDString(s)); err != nil {
+							return err
+						}
+					}
+				}
+
 				descID := tree.NewDInt(tree.DInt(table.ID))
 				dbDescID := tree.NewDInt(tree.DInt(table.GetParentID()))
 				if createNofk == "" {
@@ -1201,6 +1253,7 @@ CREATE TABLE crdb_internal.create_statements (
 					tree.NewDString(createNofk),
 					alterStmts,
 					validateStmts,
+					zoneRows,
 				)
 			})
 	},
