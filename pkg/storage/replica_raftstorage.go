@@ -947,23 +947,23 @@ func (r *Replica) applySnapshot(
 		var stats struct {
 			unreplicatedClear      time.Time
 			unreplicatedState      time.Time
+			subsumedReplicas       time.Time
 			unreplicatedLogEntries time.Time
-			unreplicatedWrite      time.Time
 			ingestion              time.Time
 		}
 		log.Infof(ctx, "applying %s snapshot at index %d "+
 			"(id=%s, %d SSTables, %d log entries)",
 			snapType, snap.Metadata.Index, inSnap.SnapUUID.Short(),
-			len(ss.sss.ssts)+1, len(ss.logEntries))
+			len(ss.sss.SSTs())+1, len(ss.logEntries))
 		defer func(start time.Time) {
 			now := timeutil.Now()
-			log.Infof(ctx, "applied %s snapshot in %0.0fms [unreplicatedClear=%0.0fms unreplicatedState=%0.0fms unreplicatedLogEntries=%0.0fms unreplicatedWrite=%0.0fms ingestion=%0.0fms]",
+			log.Infof(ctx, "applied %s snapshot in %0.0fms [unreplicatedClear=%0.0fms unreplicatedState=%0.0fms subsumedReplicas=%0.0fms unreplicatedLogEntries=%0.0fms ingestion=%0.0fms]",
 				snapType, now.Sub(start).Seconds()*1000,
 				stats.unreplicatedClear.Sub(start).Seconds()*1000,
 				stats.unreplicatedState.Sub(stats.unreplicatedClear).Seconds()*1000,
-				stats.unreplicatedLogEntries.Sub(stats.unreplicatedState).Seconds()*1000,
-				stats.unreplicatedWrite.Sub(stats.unreplicatedLogEntries).Seconds()*1000,
-				stats.ingestion.Sub(stats.unreplicatedWrite).Seconds()*1000)
+				stats.subsumedReplicas.Sub(stats.unreplicatedState).Seconds()*1000,
+				stats.unreplicatedLogEntries.Sub(stats.subsumedReplicas).Seconds()*1000,
+				stats.ingestion.Sub(stats.unreplicatedLogEntries).Seconds()*1000)
 		}(timeutil.Now())
 
 		unreplicatedSST, err := engine.MakeRocksDBSstFileWriter()
@@ -1001,27 +1001,63 @@ func (r *Replica) applySnapshot(
 			}
 		}
 
-		// Handle subsumed replicas. Deleting this data does not have to be atomic
-		// with applying the snapshot, since this replica is stale anyways. We do
-		// this deletion in a separate batch. REVIEW(jeffreyxiao): Is this safe?
-		batch := r.store.Engine().NewWriteOnlyBatch()
-		defer batch.Close()
+		stats.unreplicatedState = timeutil.Now()
+
+		// Handle subsumed replicas. We create a separate SSTs with range deletion
+		// tombstones to delete the data of subsumed replicas.
+		keyRanges := rditer.MakeAllKeyRanges(s.Desc)[1:]
+		var totalKeyRanges [2]rditer.KeyRange
+		copy(totalKeyRanges[:], keyRanges)
 		for _, sr := range subsumedRepls {
-			if err := clearRangeData(ctx, sr.Desc(), r.store.Engine(), batch, true /* destroyData */); err != nil {
+			srKeyRanges := rditer.MakeAllKeyRanges(sr.Desc())
+
+			// We have to create an SST for the subsumed replica's range-id local keys.
+			subsumedReplSST, err := createAndClearSST(srKeyRanges[0].Start, srKeyRanges[0].End)
+			if err != nil {
 				return err
 			}
 			tombstoneKey := keys.RaftTombstoneKey(sr.RangeID)
 			tombstone := &roachpb.RaftTombstone{
 				NextReplicaID: subsumedNextReplicaID,
 			}
-			if err := engine.MVCCBlindPutProto(ctx, &unreplicatedSST, nil /* ms */, tombstoneKey, hlc.Timestamp{}, tombstone, nil /* txn */); err != nil {
-				return errors.Wrapf(err, "unable to write RaftTombstoneKey to unreplicated SST writer")
+			if err := engine.MVCCBlindPutProto(ctx, &subsumedReplSST, nil /* ms */, tombstoneKey, hlc.Timestamp{}, tombstone, nil /* txn */); err != nil {
+				return errors.Wrapf(err, "unable to write RaftTombstoneKey to subsumed replica SST")
+			}
+			ss.sss.WriteAll(ctx, subsumedReplSST)
+
+			// Compute the total key space covered by the current replica and all
+			// subsumed replicas.
+			for i := range srKeyRanges[1:] {
+				if srKeyRanges[i].Start.Key.Compare(totalKeyRanges[i].Start.Key) < 0 {
+					totalKeyRanges[i].Start = srKeyRanges[i].Start
+				}
+				if srKeyRanges[i].End.Key.Compare(totalKeyRanges[i].End.Key) > 0 {
+					totalKeyRanges[i].End = srKeyRanges[i].End
+				}
 			}
 		}
-		if err := batch.Commit(true); err != nil {
-			return err
+
+		// We might have to create SSTs for the range local keys and data keys
+		// depending on if the subsumed replicas are not fully contained by the
+		// descriptor in our snapshot.
+		for i := range keyRanges {
+			if totalKeyRanges[i].End.Key.Compare(keyRanges[i].End.Key) > 0 {
+				subsumedReplSST, err := createAndClearSST(keyRanges[i].End, totalKeyRanges[i].End)
+				if err != nil {
+					return err
+				}
+				ss.sss.WriteAll(ctx, subsumedReplSST)
+			}
+			if totalKeyRanges[i].End.Key.Compare(keyRanges[i].End.Key) > 0 {
+				subsumedReplSST, err := createAndClearSST(keyRanges[i].End, totalKeyRanges[i].End)
+				if err != nil {
+					return err
+				}
+				ss.sss.WriteAll(ctx, subsumedReplSST)
+			}
 		}
-		stats.unreplicatedState = timeutil.Now()
+
+		stats.subsumedReplicas = timeutil.Now()
 
 		// Update Raft entries.
 		if len(ss.logEntries) > 0 {
@@ -1068,26 +1104,12 @@ func (r *Replica) applySnapshot(
 		r.store.raftEntryCache.Drop(r.RangeID)
 		stats.unreplicatedLogEntries = timeutil.Now()
 
-		// Create a new file to write SST into.
-		unreplicatedSSTFile, err := ss.sss.CreateFile()
-		if err != nil {
-			return errors.Wrapf(err, "error creating new SST file")
-		}
-		data, err := unreplicatedSST.Finish()
-		if err != nil {
-			unreplicatedSSTFile.Close()
-			return errors.Wrapf(err, "error finishing SST file writer")
-		}
-		err = ss.sss.Write(ctx, unreplicatedSSTFile, data)
-		unreplicatedSSTFile.Close()
-		if err != nil {
-			return errors.Wrapf(err, "error writing SST data to file")
-		}
-		stats.unreplicatedWrite = timeutil.Now()
+		ss.sss.WriteAll(ctx, unreplicatedSST)
 
 		// Ingest all SSTs atomically.
-		if err := r.store.engine.IngestExternalFiles(ctx, ss.sss.ssts, true /* skipWritingSeqNo */, true /* modify */); err != nil {
-			return errors.Wrapf(err, "while ingesting %s", ss.sss.ssts)
+		log.Infof(ctx, "ingesting %d SSTables", ss.sss.SSTs())
+		if err := r.store.engine.IngestExternalFiles(ctx, ss.sss.SSTs(), true /* skipWritingSeqNo */, true /* modify */); err != nil {
+			return errors.Wrapf(err, "while ingesting %s", ss.sss.SSTs())
 		}
 		stats.ingestion = timeutil.Now()
 		// REVIEW(jeffreyxiao): Should there be a compaction suggestion here? A
@@ -1181,6 +1203,17 @@ func (r *Replica) applySnapshot(
 	}
 
 	return nil
+}
+
+func createAndClearSST(start, end engine.MVCCKey) (engine.RocksDBSstFileWriter, error) {
+	sst, err := engine.MakeRocksDBSstFileWriter()
+	if err != nil {
+		return sst, err
+	}
+	if err := sst.ClearRange(start, end); err != nil {
+		return sst, err
+	}
+	return sst, nil
 }
 
 type raftCommandEncodingVersion byte

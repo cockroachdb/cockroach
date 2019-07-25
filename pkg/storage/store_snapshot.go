@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -258,7 +257,7 @@ type sstSnapshotStrategy struct {
 	status  string
 
 	// Storage for the sst files being created.
-	sss *SstSnapshotStorage
+	sss *SSTSnapshotStorage
 	// The Raft log entries for this snapshot.
 	logEntries [][]byte
 
@@ -273,12 +272,9 @@ func (sstSS *sstSnapshotStrategy) Receive(
 ) (IncomingSnapshot, error) {
 	assertStrategy(ctx, header, SnapshotRequest_SST)
 
-	var currSST *os.File
 	defer func() {
-		if currSST != nil {
-			if err := currSST.Close(); err != nil {
-				log.Warningf(ctx, "error closing SST file %s: %v", currSST.Name(), err)
-			}
+		if err := sstSS.sss.Close(); err != nil {
+			log.Warningf(ctx, "error closing SST file: %v", err)
 		}
 	}()
 
@@ -298,35 +294,28 @@ func (sstSS *sstSnapshotStrategy) Receive(
 		}
 
 		if req.SSTChunk != nil {
-			if currSST == nil {
-				currSST, err = sstSS.sss.CreateFile()
-				if err != nil {
-					err = errors.Wrap(err, "error creating new SST file")
-					return noSnap, sendSnapshotError(stream, err)
+			if !sstSS.sss.HasActiveFile() {
+				if err := sstSS.sss.NewFile(); err != nil {
+					return noSnap, err
 				}
 			}
-			if err := sstSS.sss.Write(ctx, currSST, req.SSTChunk); err != nil {
-				err = errors.Wrapf(err, "error writing to %s", currSST.Name())
-				return noSnap, sendSnapshotError(stream, err)
+			if err := sstSS.sss.Write(ctx, req.SSTChunk); err != nil {
+				err = errors.Wrapf(err, "error writing to SST file")
+				return noSnap, err
 			}
 		}
 		if req.SSTFinal {
-			if currSST == nil {
-				err = errors.Wrap(err, "client error: sent SSTFinal flag, but no in-progress SST")
-				return noSnap, sendSnapshotError(stream, err)
+			if err := sstSS.sss.Close(); err != nil {
+				err = errors.Wrapf(err, "error closing SST file")
+				return noSnap, err
 			}
-			if err := currSST.Close(); err != nil {
-				err = errors.Wrapf(err, "error closing %s", currSST.Name())
-				return noSnap, sendSnapshotError(stream, err)
-			}
-			currSST = nil
 		}
 		if req.LogEntries != nil {
 			sstSS.logEntries = append(sstSS.logEntries, req.LogEntries...)
 		}
 		if req.Final {
-			if currSST != nil {
-				err = errors.Wrap(err, "client error: sent Final flag, but in-progress SST exists")
+			if sstSS.sss.HasActiveFile() {
+				err = errors.Wrap(err, "client error: sent Final flag, but in-progress SST file exists")
 				return noSnap, sendSnapshotError(stream, err)
 			}
 			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
@@ -397,11 +386,9 @@ func (sstSS *sstSnapshotStrategy) Send(
 		if err != nil {
 			return err
 		}
-
 		if err := sstSS.sendSSTData(ctx, stream, chunk, true /* final */); err != nil {
 			return err
 		}
-
 		sst.Close()
 		curRange++
 		return nil
@@ -447,7 +434,6 @@ func (sstSS *sstSnapshotStrategy) Send(
 		newDataSize := sst.DataSize - lastSizeCheck
 		if newDataSize >= sstSS.batchSize {
 			lastSizeCheck = sst.DataSize
-
 			chunk, err := sst.Truncate()
 			if err != nil {
 				return err
@@ -463,12 +449,12 @@ func (sstSS *sstSnapshotStrategy) Send(
 	// with the other SSTs that we've already sent. We could create an SST using
 	// these entries and send that instead, but there are a few reasons why that
 	// approach is difficult:
-	// 1. we would need to handle sideloaded entries separately. This would be a
+	// 1. We would need to handle sideloaded entries separately. This would be a
 	//    good change in the long run, but for now it doesn't get us anything.
-	// 2. the receiver will have a HardState key that it needs to include in an
+	// 2. The receiver will have a HardState key that it needs to include in an
 	//    SST. We don't know what that HardState is in advance because it is
 	//    handled inside of Raft.
-	// 3. the receiver wants to track some stats about the log entries, like
+	// 3. The receiver wants to track some stats about the log entries, like
 	//    lastTerm and raftLogSize. Putting them into an SST on the sender side
 	//    makes this more difficult.
 	logEntries, err := getLogEntries(ctx, header, snap, sstSS.raftCfg.RaftLogTruncationThreshold)
@@ -936,7 +922,7 @@ func (s *Store) receiveSnapshot(
 		}
 		ss = &sstSnapshotStrategy{
 			raftCfg: &s.cfg.RaftConfig,
-			sss: newSstSnapshotStorage(s.cfg.Settings, header.State.Desc.RangeID, snapUUID,
+			sss: NewSSTSnapshotStorage(header.State.Desc.RangeID, snapUUID,
 				s.engine.GetAuxiliaryDir(), s.limiters.BulkIOWriteRate, s.engine),
 		}
 	default:
