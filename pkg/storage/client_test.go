@@ -502,7 +502,7 @@ type multiTestContextKVTransport struct {
 }
 
 func (m *multiTestContext) kvTransportFactory(
-	_ kv.SendOptions, _ *nodedialer.Dialer, replicas kv.ReplicaSlice,
+	_ kv.SendOptions, _ *nodedialer.Dialer, _ rpc.ConnectionClass, replicas kv.ReplicaSlice,
 ) (kv.Transport, error) {
 	t := &multiTestContextKVTransport{
 		mtc:      m,

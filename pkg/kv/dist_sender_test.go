@@ -127,6 +127,7 @@ func adaptSimpleTransport(fn simpleSendFn) TransportFactory {
 	return func(
 		opts SendOptions,
 		nodeDialer *nodedialer.Dialer,
+		class rpc.ConnectionClass,
 		replicas ReplicaSlice,
 	) (Transport, error) {
 		return &simpleTransportAdapter{
@@ -2577,7 +2578,7 @@ func TestSenderTransport(t *testing.T) {
 			) (r *roachpb.BatchResponse, e *roachpb.Error) {
 				return
 			},
-		))(SendOptions{}, &nodedialer.Dialer{}, ReplicaSlice{{}})
+		))(SendOptions{}, &nodedialer.Dialer{}, rpc.DefaultClass, ReplicaSlice{{}})
 	if err != nil {
 		t.Fatal(err)
 	}

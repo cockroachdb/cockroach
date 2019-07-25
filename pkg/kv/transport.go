@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -51,7 +51,9 @@ type batchClient struct {
 //
 // TODO(bdarnell): clean up this crufty interface; it was extracted
 // verbatim from the non-abstracted code.
-type TransportFactory func(SendOptions, *nodedialer.Dialer, ReplicaSlice) (Transport, error)
+type TransportFactory func(
+	SendOptions, *nodedialer.Dialer, rpc.ConnectionClass, ReplicaSlice,
+) (Transport, error)
 
 // Transport objects can send RPCs to one or more replicas of a range.
 // All calls to Transport methods are made from a single thread, so
@@ -91,7 +93,7 @@ type Transport interface {
 // During race builds, we wrap this to hold on to and read all obtained
 // requests in a tight loop, exposing data races; see transport_race.go.
 func grpcTransportFactoryImpl(
-	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas ReplicaSlice,
+	opts SendOptions, nodeDialer *nodedialer.Dialer, class rpc.ConnectionClass, replicas ReplicaSlice,
 ) (Transport, error) {
 	clients := make([]batchClient, 0, len(replicas))
 	for _, replica := range replicas {
@@ -108,6 +110,7 @@ func grpcTransportFactoryImpl(
 	return &grpcTransport{
 		opts:           opts,
 		nodeDialer:     nodeDialer,
+		class:          class,
 		orderedClients: clients,
 	}, nil
 }
@@ -115,6 +118,7 @@ func grpcTransportFactoryImpl(
 type grpcTransport struct {
 	opts           SendOptions
 	nodeDialer     *nodedialer.Dialer
+	class          rpc.ConnectionClass
 	clientIndex    int
 	orderedClients []batchClient
 }
@@ -222,7 +226,7 @@ func (gt *grpcTransport) NextInternalClient(
 ) (context.Context, roachpb.InternalClient, error) {
 	client := gt.orderedClients[gt.clientIndex]
 	gt.clientIndex++
-	return gt.nodeDialer.DialInternalClient(ctx, client.replica.NodeID)
+	return gt.nodeDialer.DialInternalClient(ctx, client.replica.NodeID, gt.class)
 }
 
 func (gt *grpcTransport) NextReplica() roachpb.ReplicaDescriptor {
@@ -300,7 +304,7 @@ func (h byHealth) Less(i, j int) bool { return h[i].healthy && !h[j].healthy }
 // without a full RPC stack.
 func SenderTransportFactory(tracer opentracing.Tracer, sender client.Sender) TransportFactory {
 	return func(
-		_ SendOptions, _ *nodedialer.Dialer, replicas ReplicaSlice,
+		_ SendOptions, _ *nodedialer.Dialer, _ rpc.ConnectionClass, replicas ReplicaSlice,
 	) (Transport, error) {
 		// Always send to the first replica.
 		replica := replicas[0].ReplicaDescriptor
