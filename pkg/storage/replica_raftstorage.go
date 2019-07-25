@@ -686,14 +686,6 @@ func clearRangeData(
 		keyRanges = keyRanges[:1]
 	}
 	for _, keyRange := range keyRanges {
-		// RocksDBSstFileWriter does not support ClearIterRange, so we must use
-		// ClearRange in this case.
-		if _, isSstWriter := writer.(*engine.RocksDBSstFileWriter); isSstWriter {
-			if err := writer.ClearRange(keyRange.Start, keyRange.End); err != nil {
-				return err
-			}
-			continue
-		}
 		// Peek into the range to see whether it's large enough to justify
 		// ClearRange. Note that the work done here is bounded by
 		// clearRangeMinKeys, so it will be fairly cheap even for large
@@ -976,8 +968,7 @@ func (r *Replica) applySnapshot(
 		unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(r.RangeID)
 		unreplicatedStart := engine.MakeMVCCMetadataKey(unreplicatedPrefixKey)
 		unreplicatedEnd := engine.MakeMVCCMetadataKey(unreplicatedPrefixKey.PrefixEnd())
-		err = unreplicatedSST.ClearRange(unreplicatedStart, unreplicatedEnd)
-		if err != nil {
+		if err = unreplicatedSST.ClearRange(unreplicatedStart, unreplicatedEnd); err != nil {
 			return errors.Wrapf(err, "error clearing range of unreplicated SST writer")
 		}
 		stats.unreplicatedClear = timeutil.Now()
@@ -1012,18 +1003,27 @@ func (r *Replica) applySnapshot(
 			srKeyRanges := rditer.MakeAllKeyRanges(sr.Desc())
 
 			// We have to create an SST for the subsumed replica's range-id local keys.
-			subsumedReplSST, err := createAndClearSST(srKeyRanges[0].Start, srKeyRanges[0].End)
-			if err != nil {
-				return err
+			if sr.Desc().RangeID != s.Desc.RangeID {
+				subsumedReplSST, err := engine.MakeRocksDBSstFileWriter()
+				if err != nil {
+					return err
+				}
+				if err := subsumedReplSST.ClearRange(srKeyRanges[0].Start, srKeyRanges[0].End); err != nil {
+					subsumedReplSST.Close()
+					return err
+				}
+				tombstoneKey := keys.RaftTombstoneKey(sr.RangeID)
+				tombstone := &roachpb.RaftTombstone{
+					NextReplicaID: subsumedNextReplicaID,
+				}
+				if err := engine.MVCCBlindPutProto(ctx, &subsumedReplSST, nil /* ms */, tombstoneKey, hlc.Timestamp{}, tombstone, nil /* txn */); err != nil {
+					subsumedReplSST.Close()
+					return errors.Wrapf(err, "unable to write RaftTombstoneKey to subsumed replica SST")
+				}
+				if err := ss.sss.WriteAll(ctx, &subsumedReplSST); err != nil {
+					return err
+				}
 			}
-			tombstoneKey := keys.RaftTombstoneKey(sr.RangeID)
-			tombstone := &roachpb.RaftTombstone{
-				NextReplicaID: subsumedNextReplicaID,
-			}
-			if err := engine.MVCCBlindPutProto(ctx, &subsumedReplSST, nil /* ms */, tombstoneKey, hlc.Timestamp{}, tombstone, nil /* txn */); err != nil {
-				return errors.Wrapf(err, "unable to write RaftTombstoneKey to subsumed replica SST")
-			}
-			ss.sss.WriteAll(ctx, subsumedReplSST)
 
 			// Compute the total key space covered by the current replica and all
 			// subsumed replicas.
@@ -1042,18 +1042,30 @@ func (r *Replica) applySnapshot(
 		// descriptor in our snapshot.
 		for i := range keyRanges {
 			if totalKeyRanges[i].End.Key.Compare(keyRanges[i].End.Key) > 0 {
-				subsumedReplSST, err := createAndClearSST(keyRanges[i].End, totalKeyRanges[i].End)
+				subsumedReplSST, err := engine.MakeRocksDBSstFileWriter()
 				if err != nil {
 					return err
 				}
-				ss.sss.WriteAll(ctx, subsumedReplSST)
+				if err := subsumedReplSST.ClearRange(keyRanges[i].End, totalKeyRanges[i].End); err != nil {
+					subsumedReplSST.Close()
+					return err
+				}
+				if err := ss.sss.WriteAll(ctx, &subsumedReplSST); err != nil {
+					return err
+				}
 			}
 			if totalKeyRanges[i].End.Key.Compare(keyRanges[i].End.Key) > 0 {
-				subsumedReplSST, err := createAndClearSST(keyRanges[i].End, totalKeyRanges[i].End)
+				subsumedReplSST, err := engine.MakeRocksDBSstFileWriter()
 				if err != nil {
 					return err
 				}
-				ss.sss.WriteAll(ctx, subsumedReplSST)
+				if err := subsumedReplSST.ClearRange(totalKeyRanges[i].Start, keyRanges[i].Start); err != nil {
+					subsumedReplSST.Close()
+					return err
+				}
+				if err := ss.sss.WriteAll(ctx, &subsumedReplSST); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -1104,10 +1116,13 @@ func (r *Replica) applySnapshot(
 		r.store.raftEntryCache.Drop(r.RangeID)
 		stats.unreplicatedLogEntries = timeutil.Now()
 
-		ss.sss.WriteAll(ctx, unreplicatedSST)
+		if err := ss.sss.WriteAll(ctx, &unreplicatedSST); err != nil {
+			return err
+		}
+		unreplicatedSST.Close()
 
 		// Ingest all SSTs atomically.
-		log.Infof(ctx, "ingesting %d SSTables", ss.sss.SSTs())
+		log.Infof(ctx, "ingesting %d SSTables", len(ss.sss.SSTs()))
 		if err := r.store.engine.IngestExternalFiles(ctx, ss.sss.SSTs(), true /* skipWritingSeqNo */, true /* modify */); err != nil {
 			return errors.Wrapf(err, "while ingesting %s", ss.sss.SSTs())
 		}
@@ -1203,17 +1218,6 @@ func (r *Replica) applySnapshot(
 	}
 
 	return nil
-}
-
-func createAndClearSST(start, end engine.MVCCKey) (engine.RocksDBSstFileWriter, error) {
-	sst, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return sst, err
-	}
-	if err := sst.ClearRange(start, end); err != nil {
-		return sst, err
-	}
-	return sst, nil
 }
 
 type raftCommandEncodingVersion byte

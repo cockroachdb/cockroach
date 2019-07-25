@@ -110,21 +110,21 @@ func (sss *SSTSnapshotStorage) Write(ctx context.Context, contents []byte) error
 }
 
 // WriteAll writes an entire RocksDBSstFileWriter to a file. There must be no
-// active files.
+// active file when calling WriteAll.
 func (sss *SSTSnapshotStorage) WriteAll(
-	ctx context.Context, sst engine.RocksDBSstFileWriter,
+	ctx context.Context, sst *engine.RocksDBSstFileWriter,
 ) error {
+	defer sst.Close()
 	if err := sss.NewFile(); err != nil {
 		return err
 	}
-	chunk, err := sst.Finish()
+	data, err := sst.Finish()
 	if err != nil {
 		return err
 	}
-	if err := sss.Write(ctx, chunk); err != nil {
+	if err := sss.Write(ctx, data); err != nil {
 		return err
 	}
-	sst.Close()
 	return sss.Close()
 }
 
@@ -153,9 +153,11 @@ func (sss *SSTSnapshotStorage) Close() error {
 		return errors.New("closing an empty file")
 	}
 	if sss.currFile != nil {
-		return sss.currFile.Close()
+		err := sss.currFile.Close()
+		sss.currFile = nil
+		sss.activeFile = false
+		return err
 	}
-	sss.activeFile = false
 	return nil
 }
 
