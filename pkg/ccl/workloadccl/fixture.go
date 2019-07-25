@@ -358,7 +358,7 @@ func ImportFixture(
 	var bytesAtomic int64
 	g := ctxgroup.WithContext(ctx)
 	tables := gen.Tables()
-	if injectStats && len(tables) > 0 && len(tables[0].Stats) > 0 {
+	if injectStats && tablesHaveStats(tables) {
 		// Turn off automatic stats temporarily so we don't trigger stats creation
 		// after the IMPORT. We will inject stats inside importFixtureTable.
 		// TODO(rytaft): It would be better if the automatic statistics code would
@@ -402,12 +402,7 @@ func importFixtureTable(
 	start := timeutil.Now()
 	var buf bytes.Buffer
 	var params []interface{}
-	var qualifiedTableName string
-	if dbName != `` {
-		qualifiedTableName = fmt.Sprintf(`"%s"."%s"`, dbName, table.Name)
-	} else {
-		qualifiedTableName = fmt.Sprintf(`"%s"`, table.Name)
-	}
+	qualifiedTableName := makeQualifiedTableName(dbName, &table)
 	fmt.Fprintf(&buf, `IMPORT TABLE %s %s CSV DATA (`, qualifiedTableName, table.Schema)
 	// Generate $1,...,$N-1, where N is the number of csv paths.
 	for _, path := range paths {
@@ -446,6 +441,17 @@ func importFixtureTable(
 	}
 
 	return tableBytes, nil
+}
+
+// tablesHaveStats returns whether any of the provided tables have associated
+// table statistics to inject.
+func tablesHaveStats(tables []workload.Table) bool {
+	for _, t := range tables {
+		if len(t.Stats) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // disableAutoStats disables automatic stats if they are enabled and returns
@@ -494,14 +500,33 @@ func injectStatistics(qualifiedTableName string, table *workload.Table, sqlDB *g
 	return err
 }
 
+// makeQualifiedTableName constructs a qualified table name from the specified
+// database name and table.
+func makeQualifiedTableName(dbName string, table *workload.Table) string {
+	if dbName == "" {
+		return fmt.Sprintf(`"%s"`, table.Name)
+	}
+	return fmt.Sprintf(`"%s"."%s"`, dbName, table.Name)
+}
+
 // RestoreFixture loads a fixture into a CockroachDB cluster. An enterprise
 // license is required to have been set in the cluster.
 func RestoreFixture(
-	ctx context.Context, sqlDB *gosql.DB, fixture Fixture, database string,
+	ctx context.Context, sqlDB *gosql.DB, fixture Fixture, database string, injectStats bool,
 ) (int64, error) {
 	var bytesAtomic int64
 	g := ctxgroup.WithContext(ctx)
 	genName := fixture.Generator.Meta().Name
+	tables := fixture.Generator.Tables()
+	if injectStats && tablesHaveStats(tables) {
+		// Turn off automatic stats temporarily so we don't trigger stats creation
+		// after the RESTORE.
+		// TODO(rytaft): It would be better if the automatic statistics code would
+		// just trigger a no-op if there are new stats available so we wouldn't
+		// have to disable and re-enable automatic stats here.
+		enableFn := disableAutoStats(ctx, sqlDB)
+		defer enableFn()
+	}
 	for _, table := range fixture.Tables {
 		table := table
 		g.GoCtx(func(ctx context.Context) error {
@@ -524,6 +549,17 @@ func RestoreFixture(
 	}
 	if err := g.Wait(); err != nil {
 		return 0, err
+	}
+	if injectStats {
+		for i := range tables {
+			t := &tables[i]
+			if len(t.Stats) > 0 {
+				qualifiedTableName := makeQualifiedTableName(genName, t)
+				if err := injectStatistics(qualifiedTableName, t, sqlDB); err != nil {
+					return 0, err
+				}
+			}
+		}
 	}
 	return atomic.LoadInt64(&bytesAtomic), nil
 }
