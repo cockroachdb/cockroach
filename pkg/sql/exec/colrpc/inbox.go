@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync/atomic"
 
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/colserde"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // flowStreamServer is a utility interface used to mock out the RPC layer.
@@ -48,18 +50,11 @@ type Inbox struct {
 	converter  *colserde.ArrowBatchConverter
 	serializer *colserde.RecordBatchSerializer
 
-	// initialized and done prevent double initialization/closing. Should not be
-	// used by the RunWithStream goroutine.
-	initialized bool
-	done        bool
-	// stream is the RPC stream. It is set when RunWithStream is called but only
-	// the Next goroutine may access it.
-	stream flowStreamServer
 	// streamCh is the channel over which the stream is passed from the stream
 	// handler to the reader goroutine.
 	streamCh chan flowStreamServer
 	// contextCh is the channel over which the reader goroutine passes the first
-	// context to the stream handler, so that it can listen for context
+	// context to the stream handler so that it can listen for context
 	// cancellation.
 	contextCh chan context.Context
 
@@ -73,15 +68,38 @@ type Inbox struct {
 	// from a stream.Recv.
 	errCh chan error
 
-	// bufferedMeta buffers any metadata found in Next when reading from the
-	// stream and is returned by DrainMeta.
-	bufferedMeta []distsqlpb.ProducerMetadata
+	// readerBlockedOnRecv indicates whether the reader goroutine is blocked on
+	// Recv'ing from the stream. This information needs to be known by DrainMeta
+	// goroutine without holding the mutex. This must be accessed atomically.
+	readerBlockedOnRecv uint32
+
+	mu struct {
+		syncutil.Mutex
+		// initialized prevents double initialization. Should not be used by the
+		// RunWithStream goroutine.
+		initialized bool
+		// done prevents double closing and used as a signal from DrainMeta
+		// goroutine to Next goroutine that the latter should finish. Should not be
+		// used by the RunWithStream goroutine.
+		done bool
+		// stream is the RPC stream. It is set when RunWithStream is called but
+		// only the Next and DrainMeta goroutines may access it.
+		stream flowStreamServer
+		// bufferedMeta buffers any metadata found in Next when reading from the
+		// stream and is returned by DrainMeta.
+		bufferedMeta []distsqlpb.ProducerMetadata
+	}
 
 	scratch struct {
 		data []*array.Data
 		b    coldata.Batch
 	}
 }
+
+const (
+	notBlockedOnRecv = 0
+	blockedOnRecv    = 1
+)
 
 var _ exec.Operator = &Inbox{}
 var _ exec.StaticMemoryOperator = &Inbox{}
@@ -97,19 +115,19 @@ func NewInbox(typs []types.T) (*Inbox, error) {
 		return nil, err
 	}
 	i := &Inbox{
-		typs:         typs,
-		zeroBatch:    coldata.NewMemBatchWithSize(typs, 0),
-		converter:    c,
-		serializer:   s,
-		streamCh:     make(chan flowStreamServer, 1),
-		contextCh:    make(chan context.Context, 1),
-		timeoutCh:    make(chan error, 1),
-		errCh:        make(chan error, 1),
-		bufferedMeta: make([]distsqlpb.ProducerMetadata, 0),
+		typs:       typs,
+		zeroBatch:  coldata.NewMemBatchWithSize(typs, 0),
+		converter:  c,
+		serializer: s,
+		streamCh:   make(chan flowStreamServer, 1),
+		contextCh:  make(chan context.Context, 1),
+		timeoutCh:  make(chan error, 1),
+		errCh:      make(chan error, 1),
 	}
 	i.zeroBatch.SetLength(0)
 	i.scratch.data = make([]*array.Data, len(typs))
 	i.scratch.b = coldata.NewMemBatch(typs)
+	i.mu.bufferedMeta = make([]distsqlpb.ProducerMetadata, 0)
 	return i, nil
 }
 
@@ -118,29 +136,31 @@ func (i *Inbox) EstimateStaticMemoryUsage() int {
 	return exec.EstimateBatchSizeBytes(i.typs, coldata.BatchSize)
 }
 
-// maybeInit calls Inbox.init if the inbox is not initialized and returns an
-// error if the initialization was not successful. Usually this is because the
-// given context is canceled before the remote stream arrives.
-func (i *Inbox) maybeInit(ctx context.Context) error {
-	if !i.initialized {
-		if err := i.init(ctx); err != nil {
+// maybeInitLocked calls Inbox.initLocked if the inbox is not initialized and
+// returns an error if the initialization was not successful. Usually this is
+// because the given context is canceled before the remote stream arrives.
+// NOTE: i.mu *must* be held when calling this function.
+func (i *Inbox) maybeInitLocked(ctx context.Context) error {
+	if !i.mu.initialized {
+		if err := i.initLocked(ctx); err != nil {
 			return err
 		}
-		i.initialized = true
+		i.mu.initialized = true
 	}
 	return nil
 }
 
-// init initializes the Inbox for operation by blocking until RunWithStream
-// sets the stream to read from. ctx ownership is retained until the stream
-// arrives (to allow for unblocking the wait for a stream), at which point
-// ownership is transferred to RunWithStream. This should only be called from
-// the reader goroutine when it needs a stream.
-func (i *Inbox) init(ctx context.Context) error {
+// initLocked initializes the Inbox for operation by blocking until
+// RunWithStream sets the stream to read from. ctx ownership is retained until
+// the stream arrives (to allow for unblocking the wait for a stream), at which
+// point ownership is transferred to RunWithStream. This should only be called
+// from the reader goroutine when it needs a stream.
+// NOTE: i.mu *must* be held when calling this function.
+func (i *Inbox) initLocked(ctx context.Context) error {
 	// Wait for the stream to be initialized. We're essentially waiting for the
 	// remote connection.
 	select {
-	case i.stream = <-i.streamCh:
+	case i.mu.stream = <-i.streamCh:
 	case err := <-i.timeoutCh:
 		i.errCh <- fmt.Errorf("%s: remote stream arrived too late", err)
 		return err
@@ -152,11 +172,12 @@ func (i *Inbox) init(ctx context.Context) error {
 	return nil
 }
 
-// close closes the inbox, ensuring that any call to RunWithStream will return
-// immediately. close is idempotent.
-func (i *Inbox) close() {
-	if !i.done {
-		i.done = true
+// closeLocked closes the inbox, ensuring that any call to RunWithStream will
+// return immediately. closeLocked is idempotent.
+// NOTE: i.mu *must* be held when calling this function.
+func (i *Inbox) closeLocked(ctx context.Context) {
+	if !i.mu.done {
+		i.mu.done = true
 		close(i.errCh)
 	}
 }
@@ -182,7 +203,7 @@ func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer
 
 	// Now wait for one of the events described in the method comment. If a
 	// cancellation is encountered, nothing special must be done to cancel the
-	// reader goroutine, as returning from the handler will close the stream.
+	// reader goroutine as returning from the handler will close the stream.
 	select {
 	case err := <-i.errCh:
 		// nil will be read from errCh when the channel is closed.
@@ -209,33 +230,48 @@ func (i *Inbox) Init() {}
 // For simplicity, the Inbox will only listen for cancellation of the context
 // passed in to the first Next call.
 func (i *Inbox) Next(ctx context.Context) coldata.Batch {
-	if i.done {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.mu.done {
 		return i.zeroBatch
 	}
 
+	// Note that unlocking defer from above will execute after this defer because
+	// the unlocking one will be pushed below on the stack, so we still will have
+	// the lock when this one is executed.
 	defer func() {
 		// Catch any panics that occur and close the errCh in order to not leak the
 		// goroutine listening for context cancellation. errCh must still be closed
 		// during normal termination.
 		if err := recover(); err != nil {
-			i.close()
+			i.closeLocked(ctx)
 			panic(err)
 		}
 	}()
 
 	// NOTE: It is very important to close i.errCh only when execution terminates
-	// ungracefully. DrainMeta will use the stream to read any remaining metadata
+	// ungracefully or when DrainMeta has been called (which indicates a graceful
+	// termination). DrainMeta will use the stream to read any remaining metadata
 	// after Next returns a zero-length batch during normal execution.
-	if err := i.maybeInit(ctx); err != nil {
+	if err := i.maybeInitLocked(ctx); err != nil {
 		panic(err)
 	}
 
 	for {
-		m, err := i.stream.Recv()
+		// It is possible that DrainMeta has been called concurrently in which case
+		// we should finish without closing errCh since DrainMeta goroutine still
+		// might need the stream.
+		if i.mu.done {
+			return i.zeroBatch
+		}
+
+		atomic.CompareAndSwapUint32(&i.readerBlockedOnRecv, notBlockedOnRecv, blockedOnRecv)
+		m, err := i.mu.stream.Recv()
+		atomic.CompareAndSwapUint32(&i.readerBlockedOnRecv, blockedOnRecv, notBlockedOnRecv)
 		if err != nil {
 			if err == io.EOF {
 				// Done.
-				i.close()
+				i.closeLocked(ctx)
 				return i.zeroBatch
 			}
 			i.errCh <- err
@@ -247,14 +283,13 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 				if !ok {
 					continue
 				}
-				i.bufferedMeta = append(i.bufferedMeta, meta)
+				i.mu.bufferedMeta = append(i.mu.bufferedMeta, meta)
 			}
 			// Continue until we get the next batch or EOF.
 			continue
 		}
 		if len(m.Data.RawBytes) == 0 {
 			// Protect against Deserialization panics by skipping empty messages.
-			// TODO(asubiotto): I don't think we're using NumEmptyRows, right?
 			continue
 		}
 		i.scratch.data = i.scratch.data[:0]
@@ -268,28 +303,52 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-// DrainMeta is part of the MetadataGenerator interface. DrainMeta may not be
+// DrainMeta is part of the MetadataGenerator interface. DrainMeta may be
 // called concurrently with Next.
+// Note: when DrainMeta is called, it updates done field of Inbox which will
+// cause Next goroutine to finish.
 func (i *Inbox) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
-	allMeta := i.bufferedMeta
-	i.bufferedMeta = i.bufferedMeta[:0]
+	drainSignalSent := false
+	if atomic.CompareAndSwapUint32(&i.readerBlockedOnRecv, blockedOnRecv, blockedOnRecv) {
+		// The reader is holding the mutex while being blocked on Recv'ing from the
+		// stream (which has been successfully initialized). We need to send a
+		// drain request to the Outbox which will start draining and will unblock
+		// the reader.
+		log.VEvent(ctx, 2, "Inbox sending drain signal to Outbox")
+		if err := i.mu.stream.Send(&distsqlpb.ConsumerSignal{DrainRequest: &distsqlpb.DrainRequest{}}); err != nil {
+			log.Warningf(ctx, "Inbox unable to send drain signal to Outbox: %+v", err)
+			// TODO(yuzefovich): do we want to grab i.mu.bufferedMeta here without
+			// holding i.mu since we know that the reader is blocked anyway?
+			return nil
+		}
+		drainSignalSent = true
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	allMeta := i.mu.bufferedMeta
+	i.mu.bufferedMeta = i.mu.bufferedMeta[:0]
 
-	if i.done {
+	if i.mu.done {
 		return allMeta
 	}
 
-	defer i.close()
-	if err := i.maybeInit(ctx); err != nil {
+	// Note that unlocking defer from above will execute after this defer because
+	// the unlocking one will be pushed below on the stack, so we still will have
+	// the lock when this one is executed.
+	defer i.closeLocked(ctx)
+	if err := i.maybeInitLocked(ctx); err != nil {
 		log.Warningf(ctx, "Inbox unable to initialize stream while draining metadata: %+v", err)
 		return allMeta
 	}
-	log.VEvent(ctx, 2, "Inbox sending drain signal to Outbox")
-	if err := i.stream.Send(&distsqlpb.ConsumerSignal{DrainRequest: &distsqlpb.DrainRequest{}}); err != nil {
-		log.Warningf(ctx, "Inbox unable to send drain signal to Outbox: %+v", err)
-		return allMeta
+	if !drainSignalSent {
+		log.VEvent(ctx, 2, "Inbox sending drain signal to Outbox")
+		if err := i.mu.stream.Send(&distsqlpb.ConsumerSignal{DrainRequest: &distsqlpb.DrainRequest{}}); err != nil {
+			log.Warningf(ctx, "Inbox unable to send drain signal to Outbox: %+v", err)
+			return allMeta
+		}
 	}
 	for {
-		msg, err := i.stream.Recv()
+		msg, err := i.mu.stream.Recv()
 		if err != nil {
 			if err == io.EOF {
 				break

@@ -13,7 +13,9 @@ package exec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/pkg/errors"
 )
 
 // BatchBuffer exposes a buffer of coldata.Batches through an Operator
@@ -114,3 +116,24 @@ func (o *CallbackOperator) Init() {}
 func (o *CallbackOperator) Next(ctx context.Context) coldata.Batch {
 	return o.NextCb(ctx)
 }
+
+// VectorizedDummyMetadataSource is a wrapper around an Operator that on every
+// DrainMeta call will always produce exactly one non-nil metadata object with
+// Err field containing the id.
+type VectorizedDummyMetadataSource struct {
+	Operator
+
+	id int
+}
+
+// NewVectorizedDummyMetadataSource returns new VectorizedDummyMetadataSource.
+func NewVectorizedDummyMetadataSource(input Operator, id int) Operator {
+	return &VectorizedDummyMetadataSource{Operator: input, id: id}
+}
+
+// DrainMeta is a part of distsqlpb.MetadataSource interface.
+func (s *VectorizedDummyMetadataSource) DrainMeta(context.Context) []distsqlpb.ProducerMetadata {
+	return []distsqlpb.ProducerMetadata{{Err: errors.Errorf("%d", s.id)}}
+}
+
+var _ distsqlpb.MetadataSource = &VectorizedDummyMetadataSource{}
