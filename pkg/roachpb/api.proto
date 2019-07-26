@@ -297,13 +297,6 @@ message ClearRangeResponse {
 // A RevertRangeRequest specifies a range of keys in which to clear all MVCC
 // revisions more recent than some TargetTime from the underlying engine, thus
 // reverting the range (from the perspective of an MVCC scan) to that time.
-//
-// Note: if a more recent MVCC revision of a key has caused an earlier revision
-// to be GC'ed, it is no longer possible to revert to that earlier revision and
-// instead clearing the more recent revision would simply delete that key. It is
-// up to the caller to consider if this is applicable to their usage and if so,
-// take steps to avoid it. Some future work could add the concept of a
-// gc.revert_ttl to prevent GC until the newer revision meets an age threshold.
 message RevertRangeRequest {
   option (gogoproto.equal) = true;
 
