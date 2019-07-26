@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/tracker"
@@ -28,7 +29,9 @@ import (
 // available proposal quota.
 const MaxQuotaReplicaLivenessDuration = 10 * time.Second
 
-func (r *Replica) maybeAcquireProposalQuota(ctx context.Context, quota int64) error {
+func (r *Replica) maybeAcquireProposalQuota(
+	ctx context.Context, quota uint64,
+) (*quotapool.IntAlloc, error) {
 	r.mu.RLock()
 	quotaPool := r.mu.proposalQuota
 	desc := *r.mu.state.Desc
@@ -46,22 +49,26 @@ func (r *Replica) maybeAcquireProposalQuota(ctx context.Context, quota int64) er
 	// through, for otherwise a follower could never request the lease.
 
 	if quotaPool == nil {
-		return nil
+		return nil, nil
 	}
 
 	if !quotaPoolEnabledForRange(desc) {
-		return nil
+		return nil, nil
 	}
 
 	// Trace if we're running low on available proposal quota; it might explain
 	// why we're taking so long.
 	if log.HasSpanOrEvent(ctx) {
-		if q := quotaPool.approximateQuota(); q < quotaPool.maxQuota()/10 {
+		if q := quotaPool.ApproximateQuota(); q < quotaPool.Capacity()/10 {
 			log.Eventf(ctx, "quota running low, currently available ~%d", q)
 		}
 	}
-
-	return quotaPool.acquire(ctx, quota)
+	alloc, err := quotaPool.Acquire(ctx, quota)
+	// Let quotapool errors due to being closed pass through.
+	if _, isClosed := err.(*quotapool.ErrClosed); isClosed {
+		err = nil
+	}
+	return alloc, err
 }
 
 func quotaPoolEnabledForRange(desc roachpb.RangeDescriptor) bool {
@@ -94,7 +101,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	// destroyed.
 	if r.mu.destroyStatus.Removed() {
 		if r.mu.proposalQuota != nil {
-			r.mu.proposalQuota.close()
+			r.mu.proposalQuota.Close("destroyed")
 		}
 		r.mu.proposalQuota = nil
 		r.mu.lastUpdateTimes = nil
@@ -123,7 +130,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			// through the code paths where we acquire quota from the pool. To
 			// offset this we reset the quota pool whenever leadership changes
 			// hands.
-			r.mu.proposalQuota = newQuotaPool(r.store.cfg.RaftProposalQuota)
+			r.mu.proposalQuota = quotapool.NewIntPool(r.rangeStr.String(), uint64(r.store.cfg.RaftProposalQuota))
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
 			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().All(), timeutil.Now())
 		} else if r.mu.proposalQuota != nil {
@@ -131,7 +138,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 
 			// We unblock all ongoing and subsequent quota acquisition
 			// goroutines (if any).
-			r.mu.proposalQuota.close()
+			r.mu.proposalQuota.Close("leader change")
 			r.mu.proposalQuota = nil
 			r.mu.lastUpdateTimes = nil
 			r.mu.quotaReleaseQueue = nil
@@ -229,13 +236,25 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		// entries locally since last we checked, so we are able to release the
 		// difference back to the quota pool.
 		numReleases := minIndex - r.mu.proposalQuotaBaseIndex
-		sum := int64(0)
+		if qLen := uint64(len(r.mu.quotaReleaseQueue)); qLen < numReleases {
+			numReleases = qLen
+		}
+		var toRelease *quotapool.IntAlloc
 		for _, rel := range r.mu.quotaReleaseQueue[:numReleases] {
-			sum += rel
+			if rel == nil || !rel.From(r.mu.proposalQuota) {
+				continue
+			}
+			if toRelease == nil {
+				toRelease = rel
+			} else {
+				toRelease.Merge(rel)
+			}
 		}
 		r.mu.proposalQuotaBaseIndex += numReleases
 		r.mu.quotaReleaseQueue = r.mu.quotaReleaseQueue[numReleases:]
-		r.mu.proposalQuota.add(sum)
+		if toRelease != nil {
+			toRelease.Release()
+		}
 	}
 	// Assert the sanity of the base index and the queue. Queue entries should
 	// correspond to applied entries. It should not be possible for the base
