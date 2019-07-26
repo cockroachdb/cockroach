@@ -391,6 +391,16 @@ type Factory interface {
 	// statement.
 	ConstructCreateTable(input Node, schema cat.Schema, ct *tree.CreateTable) (Node, error)
 
+	// ConstructCreateView returns a node that implements a CREATE VIEW
+	// statement.
+	ConstructCreateView(
+		schema cat.Schema,
+		viewName string,
+		viewQuery string,
+		columns sqlbase.ResultColumns,
+		deps opt.ViewDeps,
+	) (Node, error)
+
 	// ConstructSequenceSelect creates a node that implements a scan of a sequence
 	// as a data source.
 	ConstructSequenceSelect(sequence cat.Sequence) (Node, error)
