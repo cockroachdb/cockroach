@@ -79,6 +79,7 @@ func wrapRowSource(
 			nil, /* output */
 			nil, /* metadataSourcesQueue */
 			nil, /* outputStatsToTrace */
+			nil, /* cancelFlow */
 		)
 		if err != nil {
 			return nil, err
@@ -964,6 +965,8 @@ type flowCreatorHelper interface {
 	accumulateAsyncComponent(runFn)
 	// addMaterializer adds a materializer to the flow.
 	addMaterializer(*materializer)
+	// getCancelFlowFn returns a flow cancellation function.
+	getCancelFlowFn() context.CancelFunc
 }
 
 // vectorizedFlowCreator performs all the setup of vectorized flows. Depending
@@ -1010,7 +1013,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	stream *distsqlpb.StreamEndpointSpec,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
 ) error {
-	outbox, err := colrpc.NewOutbox(op, outputTyps, metadataSourcesQueue)
+	outbox, err := colrpc.NewOutbox(op, outputTyps, metadataSourcesQueue, nil /* outboxRegistry */)
 	if err != nil {
 		return err
 	}
@@ -1267,6 +1270,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				// further appends without overwriting.
 				append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
 				outputStatsToTrace,
+				s.getCancelFlowFn(),
 			)
 			if err != nil {
 				return nil, err
@@ -1446,6 +1450,10 @@ func (r *vectorizedFlowCreatorHelper) addMaterializer(m *materializer) {
 	r.f.processors[0] = m
 }
 
+func (r *vectorizedFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
+	return r.f.ctxCancel
+}
+
 func (f *Flow) setupVectorizedFlow(ctx context.Context, acc *mon.BoundAccount) error {
 	recordingStats := false
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
@@ -1487,8 +1495,9 @@ func (r *noopFlowCreatorHelper) checkInboundStreamID(sid distsqlpb.StreamID) err
 
 func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 
-func (r *noopFlowCreatorHelper) addMaterializer(m *materializer) {
-}
+func (r *noopFlowCreatorHelper) addMaterializer(*materializer) {}
+
+func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc { return nil }
 
 // SupportsVectorized checks whether flow is supported by the vectorized engine
 // and returns an error if it isn't. Note that it does so by setting up the

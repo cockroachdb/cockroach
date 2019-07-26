@@ -212,7 +212,7 @@ func TestOutboxInbox(t *testing.T) {
 		}
 		input := exec.NewRandomDataOp(rng, args)
 
-		outbox, err := NewOutbox(input, typs, nil)
+		outbox, err := NewOutbox(input, typs, nil, nil /* outboxRegistry */)
 		require.NoError(t, err)
 
 		inbox, err := NewInbox(typs)
@@ -292,8 +292,9 @@ func TestOutboxInbox(t *testing.T) {
 		// Verify expected state.
 		switch cancellationScenario {
 		case noCancel:
-			// Verify that the Outbox terminated gracefully (did not cancel its flow).
-			require.True(t, atomic.LoadUint32(&canceled) == 0)
+			// Verify that the Outbox canceled the flow since it is the last one on
+			// this node.
+			require.True(t, atomic.LoadUint32(&canceled) == 1)
 			// And the Inbox did as well.
 			require.NoError(t, streamHandlerErr)
 			require.NoError(t, readerErr)
@@ -442,6 +443,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 						},
 					},
 				},
+				nil, /* outboxRegistry */
 			)
 			require.NoError(t, err)
 
@@ -464,9 +466,9 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 
 			wg.Wait()
 			require.NoError(t, <-streamHanderErrCh)
-			// Require that the outbox did not cancel the flow, this is a graceful
-			// drain.
-			require.True(t, atomic.LoadUint32(&canceled) == 0)
+			// Require that the outbox canceled the flow because even though it is a
+			// graceful drain, the outbox is the last one on this node.
+			require.True(t, atomic.LoadUint32(&canceled) == 1)
 
 			// Verify that we received the expected metadata.
 			require.True(t, len(meta) == 1)
@@ -503,7 +505,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 
 	input := exec.NewRepeatableBatchSource(batch)
 
-	outbox, err := NewOutbox(input, typs, nil /* metadataSources */)
+	outbox, err := NewOutbox(input, typs, nil /* metadataSources */, nil /* outboxRegistry */)
 	require.NoError(b, err)
 
 	inbox, err := NewInbox(typs)

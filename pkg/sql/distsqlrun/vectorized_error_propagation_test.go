@@ -60,6 +60,7 @@ func TestVectorizedErrorPropagation(t *testing.T) {
 		nil, /* output */
 		nil, /* metadataSourceQueue */
 		nil, /* outputStatsToTrace */
+		nil, /* cancelFlow */
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -120,6 +121,7 @@ func TestNonVectorizedErrorPropagation(t *testing.T) {
 		nil, /* output */
 		nil, /* metadataSourceQueue */
 		nil, /* outputStatsToTrace */
+		nil, /* cancelFlow */
 	)
 	if err != nil {
 		t.Fatal(err)

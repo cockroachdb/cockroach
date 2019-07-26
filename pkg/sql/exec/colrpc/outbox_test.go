@@ -34,7 +34,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 		typs     = []types.T{types.Int64}
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
-	outbox, err := NewOutbox(input, typs, nil)
+	outbox, err := NewOutbox(input, typs, nil, nil /* outboxRegistry */)
 	require.NoError(t, err)
 
 	// This test relies on the fact that BatchBuffer panics when there are no
@@ -94,6 +94,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 					},
 				},
 			},
+			nil, /* outboxRegistry */
 		)
 		if err != nil {
 			return nil, nil, err
