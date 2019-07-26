@@ -20,10 +20,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -512,9 +514,19 @@ func registerKVRangeLookups(r *testRegistry) {
 		cpus  = 8
 	)
 
+	queryRanges := func(conn *gosql.DB) (int, error) {
+		var ranges int
+		if err := conn.QueryRow(
+			`SELECT count(*) FROM crdb_internal.ranges_no_leases`,
+		).Scan(&ranges); err != nil {
+			return 0, err
+		}
+		return ranges, nil
+	}
+
 	runRangeLookups := func(ctx context.Context, t *test, c *cluster, workers int, workloadType rangeLookupWorkloadType, maximumRangeLookupsPerSec float64) {
 		nodes := c.spec.NodeCount - 1
-		doneInit := make(chan struct{})
+		splits := 1000
 		doneWorkload := make(chan struct{})
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
@@ -533,19 +545,21 @@ func registerKVRangeLookups(r *testRegistry) {
 		}()
 		waitForFullReplication(t, conns[0])
 
+		initialRanges, err := queryRanges(conns[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			defer close(doneWorkload)
-			cmd := fmt.Sprintf("./workload init kv {pgurl:1-%d}", nodes)
-			c.Run(ctx, c.Node(nodes+1), cmd)
-			close(doneInit)
 			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
-			splits := " --splits=1000"
+			splits := " --splits=" + fmt.Sprint(splits)
 			duration := " --duration=" + ifLocal("10s", "10m")
 			readPercent := " --read-percent=50"
 			// We run kv with --tolerate-errors, since the relocate workload is
 			// expected to create `result is ambiguous (removing replica)` errors.
-			cmd = fmt.Sprintf("./workload run kv --tolerate-errors"+
+			cmd := fmt.Sprintf("./workload run kv --init --tolerate-errors"+
 				concurrency+splits+duration+readPercent+
 				" {pgurl:1-%d}", nodes)
 			start := timeutil.Now()
@@ -555,7 +569,21 @@ func registerKVRangeLookups(r *testRegistry) {
 			return nil
 		})
 
-		<-doneInit
+		// We only start running the workers when the initial splits have been
+		// created. The relocate worker will fail with "cannot add placeholder,
+		// have an existing placeholder" if there concurrent splits happening.
+		retryOpts := base.DefaultRetryOptions()
+		for retryable := retry.StartWithCtx(ctx, retryOpts); retryable.Next(); {
+			currRanges, err := queryRanges(conns[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if currRanges > initialRanges+splits {
+				break
+			}
+		}
+
+		t.l.Printf("starting workers")
 		for i := 0; i < workers; i++ {
 			m.Go(func(ctx context.Context) error {
 				for {
