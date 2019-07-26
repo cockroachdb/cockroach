@@ -222,6 +222,9 @@ type Writer interface {
 	// (exclusive). Similar to Clear, this method actually removes entries from
 	// the storage engine.
 	//
+	// Note that when used on batches, subsequent reads may not reflect the result
+	// of the ClearRange.
+	//
 	// It is safe to modify the contents of the arguments after ClearRange
 	// returns.
 	ClearRange(start, end MVCCKey) error
