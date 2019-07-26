@@ -71,6 +71,8 @@ type Optimizer struct {
 	// by calling SetCoster.
 	coster Coster
 
+	optState optState
+
 	// stateMap allocates temporary storage that's used to speed up optimization.
 	// This state could be discarded once optimization is complete.
 	stateMap   map[groupStateKey]*groupState
@@ -100,7 +102,7 @@ func (o *Optimizer) Init(evalCtx *tree.EvalContext) {
 	o.explorer.init(o)
 	o.defaultCoster.Init(evalCtx, o.mem, evalCtx.TestingKnobs.OptimizerCostPerturbation)
 	o.coster = &o.defaultCoster
-	o.stateMap = make(map[groupStateKey]*groupState)
+	o.optState.init(int(evalCtx.SessionData.OptimizerAlternate))
 	o.matchedRule = nil
 	o.appliedRule = nil
 	if evalCtx.TestingKnobs.DisableOptimizerRuleProbability > 0 {
@@ -209,8 +211,9 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 
 	// Walk the tree from the root, updating child pointers so that the memo
 	// root points to the lowest cost tree by default (rather than the normalized
-	// tree by default.
-	root = o.setLowestCostTree(root, rootProps).(memo.RelExpr)
+	// tree by default). If an alternate plan is requested then, an alternate
+	// expression tree is returned.
+	root = o.setExprTree(root, rootProps).(memo.RelExpr)
 	o.mem.SetRoot(root, rootProps)
 
 	// Validate there are no dangling references.
@@ -414,7 +417,7 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 
 	// If this group is already fully optimized, then return the already prepared
 	// best expression (won't ever get better than this).
-	state := o.ensureOptState(grp, required)
+	state := o.optState.ensureOptState(grp, required)
 	if state.fullyOptimized {
 		return state
 	}
@@ -500,7 +503,7 @@ func (o *Optimizer) optimizeGroupMember(
 
 		// Check whether this is the new lowest cost expression.
 		cost += o.coster.ComputeCost(member, required)
-		o.ratchetCost(state, member, cost)
+		o.optState.ratchetCost(state, member, cost)
 	}
 
 	return fullyOptimized
@@ -632,7 +635,7 @@ func (o *Optimizer) optimizeEnforcer(
 	// Check whether this is the new lowest cost expression with the enforcer
 	// added.
 	cost := innerState.cost + o.coster.ComputeCost(enforcer, enforcerProps)
-	o.ratchetCost(state, enforcer, cost)
+	o.optState.ratchetCost(state, enforcer, cost)
 
 	// Enforcer expression is fully optimized if its input expression is fully
 	// optimized.
@@ -643,6 +646,20 @@ func (o *Optimizer) optimizeEnforcer(
 // calls that will not recurse via a call from enforceProps.
 func (o *Optimizer) shouldExplore(required *physical.Required) bool {
 	return required.Ordering.Any()
+}
+
+// setExprTree traverses the memo and recursively updates child pointers
+// so that they point to the appropriate tree.
+// If no alternate plan is requested (default case) we use the lowest
+// cost expression (see comment above setLowestCostTree). Otherwise,
+// we find the requested alternate plan and update the pointers
+// appropriately.
+func (o *Optimizer) setExprTree(parent opt.Expr, parentProps *physical.Required) opt.Expr {
+	if o.optState.alternate == 0 {
+		return o.setLowestCostTree(parent, parentProps, true /* bestPlan */)
+	}
+
+	return o.setAlternateExprTree(parent, parentProps, o.optState.alternate)
 }
 
 // setLowestCostTree traverses the memo and recursively updates child pointers
@@ -676,13 +693,16 @@ func (o *Optimizer) shouldExplore(required *physical.Required) bool {
 // because there is never a case where a relational expression is referenced
 // multiple times in the final tree, but with different physical properties
 // required by each of those references.
-func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Required) opt.Expr {
+func (o *Optimizer) setLowestCostTree(
+	parent opt.Expr, parentProps *physical.Required, bestPlan bool,
+) opt.Expr {
 	var relParent memo.RelExpr
 	var relCost memo.Cost
 	switch t := parent.(type) {
 	case memo.RelExpr:
-		state := o.lookupOptState(t.FirstExpr(), parentProps)
-		relParent, relCost = state.best, state.cost
+		state := o.optState.lookupOptState(t.FirstExpr(), parentProps)
+		relParent = state.bestExpr()
+		relCost = state.bestCost()
 		parent = relParent
 
 	case memo.ScalarPropsExpr:
@@ -706,7 +726,7 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 			childProps = BuildChildPhysicalPropsScalar(o.mem, parent, i)
 		}
 
-		after := o.setLowestCostTree(before, childProps)
+		after := o.setLowestCostTree(before, childProps, bestPlan)
 		if after != before {
 			if mutable == nil {
 				mutable = parent.(opt.MutableExpr)
@@ -720,40 +740,18 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 		// BuildProvided relies on ProvidedPhysical() being set in the children, so
 		// it must run after the recursive calls on the children.
 		provided.Ordering = ordering.BuildProvided(relParent, &parentProps.Ordering)
-		o.mem.SetBestProps(relParent, parentProps, &provided, relCost)
+
+		if !bestPlan {
+			// We have to recompute the cost of the expression because of the new
+			// composition of the expression
+			relCost = o.recomputeCostImpl(relParent, parentProps, o.coster)
+			o.mem.ForceSetBestProps(relParent, parentProps, &provided, relCost)
+		} else {
+			o.mem.SetBestProps(relParent, parentProps, &provided, relCost)
+		}
 	}
 
 	return parent
-}
-
-// ratchetCost computes the cost of the candidate expression, and then checks
-// whether it's lower than the cost of the existing best expression in the
-// group. If so, then the candidate becomes the new lowest cost expression.
-func (o *Optimizer) ratchetCost(state *groupState, candidate memo.RelExpr, cost memo.Cost) {
-	if state.best == nil || cost.Less(state.cost) {
-		state.best = candidate
-		state.cost = cost
-	}
-}
-
-// lookupOptState looks up the state associated with the given group and
-// properties. If no state exists yet, then lookupOptState returns nil.
-func (o *Optimizer) lookupOptState(grp memo.RelExpr, required *physical.Required) *groupState {
-	return o.stateMap[groupStateKey{group: grp, required: required}]
-}
-
-// ensureOptState looks up the state associated with the given group and
-// properties. If none is associated yet, then ensureOptState allocates new
-// state and returns it.
-func (o *Optimizer) ensureOptState(grp memo.RelExpr, required *physical.Required) *groupState {
-	key := groupStateKey{group: grp, required: required}
-	state, ok := o.stateMap[key]
-	if !ok {
-		state = o.stateAlloc.allocate()
-		state.required = required
-		o.stateMap[key] = state
-	}
-	return state
 }
 
 // optimizeRootWithProps tries to simplify the root operator based on the
@@ -813,91 +811,6 @@ func (o *Optimizer) optimizeRootWithProps() {
 			}
 		}
 	}
-}
-
-// groupStateKey associates groupState with a group that is being optimized with
-// respect to a set of physical properties.
-type groupStateKey struct {
-	group    memo.RelExpr
-	required *physical.Required
-}
-
-// groupState is temporary storage that's associated with each group that's
-// optimized (or same group with different sets of physical properties). The
-// optimizer stores various flags and other state here that allows it to do
-// quicker lookups and short-circuit already traversed parts of the expression
-// tree.
-type groupState struct {
-	// best identifies the lowest cost expression in the memo group for a given
-	// set of physical properties.
-	best memo.RelExpr
-
-	// required is the set of physical properties that must be provided by this
-	// lowest cost expression. An expression that cannot provide these properties
-	// cannot be the best expression, no matter how low its cost.
-	required *physical.Required
-
-	// cost is the estimated execution cost for this expression. The best
-	// expression for a given group and set of physical properties is the
-	// expression with the lowest cost.
-	cost memo.Cost
-
-	// fullyOptimized is set to true once the lowest cost expression has been
-	// found for a memo group, with respect to the required properties. A lower
-	// cost expression will never be found, no matter how many additional
-	// optimization passes are made.
-	fullyOptimized bool
-
-	// fullyOptimizedExprs contains the set of ordinal positions of each member
-	// expression in the group that has been fully optimized for the required
-	// properties. These never need to be recosted, no matter how many additional
-	// optimization passes are made.
-	fullyOptimizedExprs util.FastIntSet
-
-	// explore is used by the explorer to store intermediate state so that
-	// redundant work is minimized.
-	explore exploreState
-}
-
-// isMemberFullyOptimized returns true if the group member at the given ordinal
-// position has been fully optimized for the required properties. The expression
-// never needs to be recosted, no matter how many additional optimization passes
-// are made.
-func (os *groupState) isMemberFullyOptimized(ord int) bool {
-	return os.fullyOptimizedExprs.Contains(ord)
-}
-
-// markMemberAsFullyOptimized marks the group member at the given ordinal
-// position as fully optimized for the required properties. The expression never
-// needs to be recosted, no matter how many additional optimization passes are
-// made.
-func (os *groupState) markMemberAsFullyOptimized(ord int) {
-	if os.fullyOptimized {
-		panic(errors.AssertionFailedf("best expression is already fully optimized"))
-	}
-	if os.isMemberFullyOptimized(ord) {
-		panic(errors.AssertionFailedf("memo expression is already fully optimized for required physical properties"))
-	}
-	os.fullyOptimizedExprs.Add(ord)
-}
-
-// groupStateAlloc allocates pages of groupState structs. This is preferable to
-// a slice of groupState structs because pointers are not invalidated when a
-// resize occurs, and because there's no need to retain a stable index.
-type groupStateAlloc struct {
-	page []groupState
-}
-
-// allocate returns a pointer to a new, empty groupState struct. The pointer is
-// stable, meaning that its location won't change as other groupState structs
-// are allocated.
-func (a *groupStateAlloc) allocate() *groupState {
-	if len(a.page) == 0 {
-		a.page = make([]groupState, 8)
-	}
-	state := &a.page[0]
-	a.page = a.page[1:]
-	return state
 }
 
 // disableRules disables rules with the given probability for testing.

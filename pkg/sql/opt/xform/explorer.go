@@ -197,13 +197,13 @@ func (e *explorer) exploreGroup(grp memo.RelExpr) *exploreState {
 // lookupExploreState returns the optState struct associated with the memo
 // group.
 func (e *explorer) lookupExploreState(grp memo.RelExpr) *exploreState {
-	return &e.o.lookupOptState(grp, physical.MinRequired).explore
+	return &e.o.optState.lookupOptState(grp, physical.MinRequired).explore
 }
 
 // ensureExploreState allocates the exploration state in the optState struct
 // associated with the memo group, with respect to the min physical props.
 func (e *explorer) ensureExploreState(grp memo.RelExpr) *exploreState {
-	return &e.o.ensureOptState(grp, physical.MinRequired).explore
+	return &e.o.optState.ensureOptState(grp, physical.MinRequired).explore
 }
 
 // ----------------------------------------------------------------------

@@ -1812,6 +1812,10 @@ func (m *sessionDataMutator) SetVectorizeRowCountThreshold(val uint64) {
 	m.data.VectorizeRowCountThreshold = val
 }
 
+func (m *sessionDataMutator) SetOptimizerAlternate(val sessiondata.OptimizerAlternate) {
+	m.data.OptimizerAlternate = val
+}
+
 func (m *sessionDataMutator) SetOptimizerFKs(val bool) {
 	m.data.OptimizerFKs = val
 }
