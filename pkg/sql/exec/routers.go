@@ -252,6 +252,8 @@ type HashRouter struct {
 	ht hashTable
 	// hashCols is a slice of indices of the columns used for hashing.
 	hashCols []int
+	// done indicates whether the input is done.
+	done bool
 
 	// One output for each stream.
 	outputs []routerOutput
@@ -262,7 +264,10 @@ type HashRouter struct {
 	unblockedEventsChan <-chan struct{}
 	numBlockedOutputs   int
 
-	bufferedMeta []distsqlpb.ProducerMetadata
+	mu struct {
+		syncutil.Mutex
+		bufferedMeta []distsqlpb.ProducerMetadata
+	}
 
 	scratch struct {
 		// buckets is scratch space for the computed hash value of a group of columns
@@ -325,10 +330,17 @@ func newHashRouterWithOutputs(
 func (r *HashRouter) Run(ctx context.Context) {
 	r.input.Init()
 	cancelOutputs := func(err error) {
-		r.bufferedMeta = append(r.bufferedMeta, distsqlpb.ProducerMetadata{Err: err})
+		if err != nil {
+			r.mu.Lock()
+			r.mu.bufferedMeta = append(r.mu.bufferedMeta, distsqlpb.ProducerMetadata{Err: err})
+			r.mu.Unlock()
+		}
 		for _, o := range r.outputs {
 			o.cancel()
 		}
+	}
+	processNextBatch := func() {
+		r.processNextBatch(ctx)
 	}
 	for {
 		// Check for cancellation.
@@ -362,14 +374,11 @@ func (r *HashRouter) Run(ctx context.Context) {
 			}
 		}
 
-		var done bool
-		if err := CatchVectorizedRuntimeError(func() {
-			done = r.processNextBatch(ctx)
-		}); err != nil {
+		if err := CatchVectorizedRuntimeError(processNextBatch); err != nil {
 			cancelOutputs(err)
 			return
 		}
-		if done {
+		if r.done {
 			// The input was done and we have notified the routerOutputs that there
 			// is no more data.
 			return
@@ -377,9 +386,10 @@ func (r *HashRouter) Run(ctx context.Context) {
 	}
 }
 
-// processNextBatch reads the next batch from its input, hashes it and adds each
-// column to its corresponding output, returning whether the input is done.
-func (r *HashRouter) processNextBatch(ctx context.Context) bool {
+// processNextBatch reads the next batch from its input, hashes it and adds
+// each column to its corresponding output. When the input is done, r.done is
+// updated.
+func (r *HashRouter) processNextBatch(ctx context.Context) {
 	r.ht.initHash(r.scratch.buckets, uint64(len(r.scratch.buckets)))
 	b := r.input.Next(ctx)
 	if b.Length() == 0 {
@@ -388,7 +398,8 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 		for _, o := range r.outputs {
 			o.addBatch(b, nil)
 		}
-		return true
+		r.done = true
+		return
 	}
 
 	for _, i := range r.hashCols {
@@ -423,7 +434,6 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 			r.numBlockedOutputs++
 		}
 	}
-	return false
 }
 
 // reset resets the HashRouter for a benchmark run.
@@ -431,6 +441,7 @@ func (r *HashRouter) reset() {
 	if i, ok := r.input.(resetter); ok {
 		i.reset()
 	}
+	r.done = false
 	r.numBlockedOutputs = 0
 	for moreToRead := true; moreToRead; {
 		select {
@@ -446,7 +457,9 @@ func (r *HashRouter) reset() {
 
 // DrainMeta is part of the MetadataGenerator interface.
 func (r *HashRouter) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
-	meta := r.bufferedMeta
-	r.bufferedMeta = r.bufferedMeta[:0]
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	meta := r.mu.bufferedMeta
+	r.mu.bufferedMeta = r.mu.bufferedMeta[:0]
 	return meta
 }

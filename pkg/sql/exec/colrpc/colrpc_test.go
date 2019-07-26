@@ -226,7 +226,7 @@ func TestOutboxInbox(t *testing.T) {
 		)
 		wg.Add(1)
 		go func() {
-			outbox.runWithStream(streamCtx, clientStream, func() { atomic.StoreUint32(&canceled, 1) })
+			outbox.runWithStream(streamCtx, nil /* conn */, clientStream, func() { atomic.StoreUint32(&canceled, 1) })
 			wg.Done()
 		}()
 
@@ -454,7 +454,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			)
 			wg.Add(1)
 			go func() {
-				outbox.runWithStream(ctx, clientStream, func() { atomic.StoreUint32(&canceled, 1) })
+				outbox.runWithStream(ctx, nil /* conn */, clientStream, func() { atomic.StoreUint32(&canceled, 1) })
 				wg.Done()
 			}()
 
@@ -512,7 +512,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		outbox.runWithStream(ctx, clientStream, nil /* cancelFn */)
+		outbox.runWithStream(ctx, nil /* conn */, clientStream, nil /* cancelFn */)
 		wg.Done()
 	}()
 

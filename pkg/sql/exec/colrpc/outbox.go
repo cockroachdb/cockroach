@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/logtags"
+	"google.golang.org/grpc"
 )
 
 // flowStreamClient is a utility interface used to mock out the RPC layer.
@@ -34,12 +34,21 @@ type flowStreamClient interface {
 	CloseSend() error
 }
 
+// Dialer is used for dialing based on node IDs. It extracts out the single
+// method that Outbox.Run needs from nodedialer.Dialer so that we can mock it
+// in tests outside of this package.
+type Dialer interface {
+	Dial(context.Context, roachpb.NodeID) (*grpc.ClientConn, error)
+}
+
 // Outbox is used to push data from local flows to a remote endpoint. Run may
 // be called with the necessary information to establish a connection to a
 // given remote endpoint.
 type Outbox struct {
 	input exec.Operator
 	typs  []types.T
+	// batch is the last batch received from the input.
+	batch coldata.Batch
 
 	converter  *colserde.ArrowBatchConverter
 	serializer *colserde.RecordBatchSerializer
@@ -98,13 +107,17 @@ func NewOutbox(
 //    remote reader. Refer to tests for expected behavior.
 // 3) A drain signal was received from the server (consumer). In this case, the
 //    Outbox goes through the same steps as 1).
+//
+// shouldCloseConn indicates whether the connection obtained by dialing the
+// node should be closed. It should be set to true only in tests.
 func (o *Outbox) Run(
 	ctx context.Context,
-	dialer *nodedialer.Dialer,
+	dialer Dialer,
 	nodeID roachpb.NodeID,
 	flowID distsqlpb.FlowID,
 	streamID distsqlpb.StreamID,
 	cancelFn context.CancelFunc,
+	shouldCloseConn bool,
 ) {
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
 
@@ -144,7 +157,10 @@ func (o *Outbox) Run(
 	}
 
 	log.VEvent(ctx, 2, "Outbox starting normal operation")
-	o.runWithStream(ctx, stream, cancelFn)
+	if !shouldCloseConn {
+		conn = nil
+	}
+	o.runWithStream(ctx, conn, stream, cancelFn)
 }
 
 // handleStreamErr is a utility method used to handle an error when calling
@@ -187,22 +203,25 @@ func (o *Outbox) moveToDraining(ctx context.Context) {
 //    will be called in this case.
 func (o *Outbox) sendBatches(
 	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
-) (bool, error) {
+) (terminatedGracefully bool, _ error) {
+	nextBatch := func() {
+		o.batch = o.input.Next(ctx)
+	}
 	for {
 		if atomic.LoadUint32(&o.draining) == 1 {
 			return true, nil
 		}
-		var b coldata.Batch
-		if err := exec.CatchVectorizedRuntimeError(func() { b = o.input.Next(ctx) }); err != nil {
+
+		if err := exec.CatchVectorizedRuntimeError(nextBatch); err != nil {
 			log.Errorf(ctx, "Outbox Next error: %+v", err)
 			return false, err
 		}
-		if b.Length() == 0 {
+		if o.batch.Length() == 0 {
 			return true, nil
 		}
 
 		o.scratch.buf.Reset()
-		d, err := o.converter.BatchToArrow(b)
+		d, err := o.converter.BatchToArrow(o.batch)
 		if err != nil {
 			log.Errorf(ctx, "Outbox BatchToArrow data serialization error: %+v", err)
 			return false, err
@@ -231,13 +250,11 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 	if errToSend != nil {
 		msg.Data.Metadata = append(
 			msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, distsqlpb.ProducerMetadata{Err: errToSend}),
-			// TODO(yuzefovich): obtain and release producer metadata from the pool.
 		)
 	}
 	for _, src := range o.metadataSources {
 		for _, meta := range src.DrainMeta(ctx) {
 			msg.Data.Metadata = append(msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, meta))
-			// TODO(yuzefovich): release meta object to the pool.
 		}
 	}
 	if len(msg.Data.Metadata) == 0 {
@@ -246,11 +263,15 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 	return stream.Send(msg)
 }
 
-// runwWithStream should be called after sending the ProducerHeader on the
-// stream. It implements the behavior described in Run.
+// runWithStream should be called after sending the ProducerHeader on the
+// stream. It implements the behavior described in Run. conn will be closed
+// upon return from this method (if it is non-nil).
 func (o *Outbox) runWithStream(
-	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
+	ctx context.Context, conn *grpc.ClientConn, stream flowStreamClient, cancelFn context.CancelFunc,
 ) {
+	if conn != nil {
+		defer conn.Close()
+	}
 	o.input.Init()
 
 	waitCh := make(chan struct{})

@@ -484,7 +484,8 @@ func TestHashRouterComputesDestination(t *testing.T) {
 	}
 
 	r := newHashRouterWithOutputs(in, []types.T{types.Int64}, []int{0}, nil /* ch */, outputs)
-	for r.processNextBatch(ctx) {
+	for !r.done {
+		r.processNextBatch(ctx)
 	}
 
 	if len(valsYetToSee) != 0 {
