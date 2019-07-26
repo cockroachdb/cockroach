@@ -36,7 +36,9 @@ func testNotifyQueue(t testing.TB, N int) {
 	b, _ := t.(*testing.B)
 	var q notifyQueue
 	initializeNotifyQueue(&q)
-	assert.Nil(t, q.dequeue())
+	n := q.peek()
+	assert.Nil(t, n)
+	q.dequeue()
 	assert.Equal(t, 0, int(q.len))
 	chans := make([]chan struct{}, N)
 	for i := 0; i < N; i++ {
@@ -66,21 +68,23 @@ func testNotifyQueue(t testing.TB, N int) {
 		case dequeue:
 			// Only test Peek if we're not benchmarking.
 			if b == nil {
-				if c := q.peek(); c != nil {
-					out = append(out, c)
-					assert.Equal(t, c, q.dequeue())
+				if n := q.peek(); n != nil {
+					out = append(out, n.c)
+					q.dequeue()
 					l--
 					assert.Equal(t, l, int(q.len))
 				}
 			} else {
-				if c := q.dequeue(); c != nil {
-					out = append(out, c)
+				if n := q.peek(); n != nil {
+					out = append(out, n.c)
+					q.dequeue()
 				}
 			}
 		}
 	}
-	for c := q.dequeue(); c != nil; c = q.dequeue() {
-		out = append(out, c)
+	for n := q.peek(); n != nil; n = q.peek() {
+		out = append(out, n.c)
+		q.dequeue()
 	}
 	if b != nil {
 		b.StopTimer()
