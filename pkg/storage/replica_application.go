@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
@@ -188,7 +189,7 @@ func (r *Replica) retrieveLocalProposals(ctx context.Context, b *cmdAppBatch) {
 	}
 	for ok := it.init(&b.cmdBuf); ok; ok = it.next() {
 		cmd := it.cur()
-		toRelease := int64(0)
+		var toRelease *quotapool.IntAlloc
 		if cmd.proposedLocally() {
 			// Delete the proposal from the proposals map. There may be reproposals
 			// of the proposal in the pipeline, but those will all have the same max
@@ -202,7 +203,8 @@ func (r *Replica) retrieveLocalProposals(ctx context.Context, b *cmdAppBatch) {
 			// when reproposals from the same proposal end up in the same entry
 			// application batch.
 			delete(r.mu.proposals, cmd.idKey)
-			toRelease = cmd.proposal.quotaSize
+			toRelease = cmd.proposal.quotaAlloc
+			cmd.proposal.quotaAlloc = nil
 		}
 		// At this point we're not guaranteed to have proposalQuota initialized,
 		// the same is true for quotaReleaseQueues. Only queue the proposal's

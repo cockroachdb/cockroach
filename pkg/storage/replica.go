@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -291,8 +292,8 @@ type Replica struct {
 		// but which have not yet applied.
 		//
 		// The *ProposalData in the map are "owned" by it. Elements from the
-		// map must only be referenced while Replica.mu is held, except if the
-		// element is removed from the map first.
+		// map must only be modified while both Replica.raftMu is held, except
+		// if the element is removed from the map first.
 		//
 		// Due to Raft reproposals, multiple in-flight Raft entries can have
 		// the same CmdIDKey, all corresponding to the same KV request. However,
@@ -394,7 +395,7 @@ type Replica struct {
 		// until quota is made available to the pool.
 		// Acquired quota for a given command is only released when all the
 		// replicas have persisted the corresponding entry into their logs.
-		proposalQuota *quotaPool
+		proposalQuota *quotapool.IntPool
 
 		// The base index is the index up to (including) which quota was already
 		// released. That is, the first element in quotaReleaseQueue below is
@@ -405,7 +406,7 @@ type Replica struct {
 		// size of the associated command to a queue of quotas we have yet to
 		// release back to the quota pool. We only do so when all replicas have
 		// persisted the corresponding entry into their logs.
-		quotaReleaseQueue []int64
+		quotaReleaseQueue []*quotapool.IntAlloc
 
 		// Counts calls to Replica.tick()
 		ticks int
@@ -583,19 +584,24 @@ func (r *Replica) cleanupFailedProposal(p *ProposalData) {
 }
 
 // cleanupFailedProposalLocked is like cleanupFailedProposal, but requires
-// the Replica mutex to be exclusively held.
+// the Replica mutex to be exclusively held. If the proposal being cleaned up
+// has been proposed to raft (i.e. appears in the replica's proposal map) it
+// must be the case that the raftMu is also held. It is not safe to modify
+// proposals which have been proposed to raft without holding the raftMu.
 func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
-	// Clear the proposal from the proposals map. May be a no-op if the
-	// proposal has not yet been inserted into the map.
-	delete(r.mu.proposals, p.idKey)
+	// Clear the proposal from the proposals map. If it exists in the proposals
+	// map it must be the case that we hold the raftMu. This synchronization
+	// allows us to safely modify the proposal below.
+	if _, exists := r.mu.proposals[p.idKey]; exists {
+		r.raftMu.AssertHeld()
+		delete(r.mu.proposals, p.idKey)
+	}
+
 	// Release associated quota pool resources if we have been tracking
 	// this command.
-	//
-	// NB: We may be double free-ing here in cases where proposals are
-	// duplicated. To counter this our quota pool is capped at the initial
-	// quota size.
-	if r.mu.proposalQuota != nil {
-		r.mu.proposalQuota.add(p.quotaSize)
+	if p.quotaAlloc != nil {
+		p.quotaAlloc.Release()
+		p.quotaAlloc = nil
 	}
 }
 
@@ -910,9 +916,12 @@ func (r *Replica) State() storagepb.RangeInfo {
 	ri.RaftLogSizeTrusted = r.mu.raftLogSizeTrusted
 	ri.NumDropped = uint64(r.mu.droppedMessages)
 	if r.mu.proposalQuota != nil {
-		ri.ApproximateProposalQuota = r.mu.proposalQuota.approximateQuota()
+		ri.ApproximateProposalQuota = int64(r.mu.proposalQuota.ApproximateQuota())
 		ri.ProposalQuotaBaseIndex = int64(r.mu.proposalQuotaBaseIndex)
-		ri.ProposalQuotaReleaseQueue = append([]int64(nil), r.mu.quotaReleaseQueue...)
+		ri.ProposalQuotaReleaseQueue = make([]int64, len(r.mu.quotaReleaseQueue))
+		for i, a := range r.mu.quotaReleaseQueue {
+			ri.ProposalQuotaReleaseQueue[i] = int64(a.Acquired())
+		}
 	}
 	ri.RangeMaxBytes = *r.mu.zone.RangeMaxBytes
 	if desc := ri.ReplicaState.Desc; desc != nil {

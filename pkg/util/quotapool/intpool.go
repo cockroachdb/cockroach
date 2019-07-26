@@ -41,6 +41,11 @@ type IntAlloc struct {
 	p     *IntPool
 }
 
+// From returns true if this IntAlloc is from p.
+func (ia *IntAlloc) From(p *IntPool) bool {
+	return ia.p == p
+}
+
 // Release releases an IntAlloc back into the IntPool.
 func (ia *IntAlloc) Release() {
 	ia.p.qp.Add((*intAlloc)(ia))

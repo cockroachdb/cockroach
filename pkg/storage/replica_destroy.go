@@ -151,7 +151,10 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	return nil
 }
 
+// cancelPendingCommandsLocked cancels all outstanding proposals.
+// It requires that both mu and raftMu are heled.
 func (r *Replica) cancelPendingCommandsLocked() {
+	r.raftMu.AssertHeld()
 	r.mu.AssertHeld()
 	r.mu.proposalBuf.FlushLockedWithoutProposing()
 	for _, p := range r.mu.proposals {
