@@ -196,13 +196,14 @@ func (r *Replica) evalAndPropose(
 	// closed timestamp tracker is acquired. This is better anyway; right now many
 	// commands can evaluate but then be blocked on quota, which has worse memory
 	// behavior.
-	proposal.quotaSize = int64(proposal.command.Size())
-	if maxSize := MaxCommandSize.Get(&r.store.cfg.Settings.SV); proposal.quotaSize > maxSize {
+	quotaSize := uint64(proposal.command.Size())
+	if maxSize := uint64(MaxCommandSize.Get(&r.store.cfg.Settings.SV)); quotaSize > maxSize {
 		return nil, nil, 0, roachpb.NewError(errors.Errorf(
-			"command is too large: %d bytes (max: %d)", proposal.quotaSize, maxSize,
+			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
 	}
-	if err := r.maybeAcquireProposalQuota(ctx, proposal.quotaSize); err != nil {
+	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, quotaSize)
+	if err != nil {
 		return nil, nil, 0, roachpb.NewError(err)
 	}
 	// Make sure we clean up the proposal if we fail to insert it into the

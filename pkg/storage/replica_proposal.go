@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -78,7 +79,7 @@ type ProposalData struct {
 	// quotaSize is the encoded size of command that was used to acquire
 	// proposal quota. command.Size can change slightly as the object is
 	// mutated, so it's safer to record the exact value used here.
-	quotaSize int64
+	quotaAlloc *quotapool.IntAlloc
 
 	// tmpFooter is used to avoid an allocation.
 	tmpFooter storagepb.RaftCommandFooter

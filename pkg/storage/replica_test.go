@@ -6506,18 +6506,26 @@ func TestReplicaDestroy(t *testing.T) {
 
 	repl.setDesc(ctx, newDesc)
 	expectedErr := "replica descriptor's ID has changed"
-	if err := tc.store.removeReplicaImpl(ctx, tc.repl, origDesc.NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); !testutils.IsError(err, expectedErr) {
-		t.Fatalf("expected error %q but got %v", expectedErr, err)
-	}
+	func() {
+		tc.repl.raftMu.Lock()
+		defer tc.repl.raftMu.Unlock()
+		if err := tc.store.removeReplicaImpl(ctx, tc.repl, origDesc.NextReplicaID, RemoveOptions{
+			DestroyData: true,
+		}); !testutils.IsError(err, expectedErr) {
+			t.Fatalf("expected error %q but got %v", expectedErr, err)
+		}
+	}()
 
 	// Now try a fresh descriptor and succeed.
-	if err := tc.store.removeReplicaImpl(ctx, tc.repl, repl.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	func() {
+		tc.repl.raftMu.Lock()
+		defer tc.repl.raftMu.Unlock()
+		if err := tc.store.removeReplicaImpl(ctx, tc.repl, repl.Desc().NextReplicaID, RemoveOptions{
+			DestroyData: true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	iter := rditer.NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(), false /* replicatedOnly */)
 	defer iter.Close()
@@ -6559,13 +6567,13 @@ func TestQuotaPoolReleasedOnFailedProposal(t *testing.T) {
 	}
 
 	type magicKey struct{}
-	var minQuotaSize int64
+	var minQuotaSize uint64
 	propErr := errors.New("proposal error")
 
 	tc.repl.mu.Lock()
 	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64, _ error) {
 		if v := p.ctx.Value(magicKey{}); v != nil {
-			minQuotaSize = tc.repl.mu.proposalQuota.approximateQuota() + p.quotaSize
+			minQuotaSize = tc.repl.mu.proposalQuota.ApproximateQuota() + p.quotaAlloc.Acquired()
 			return 0, propErr
 		}
 		return 0, nil
@@ -6601,11 +6609,15 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 	}
 
 	ctx := repl.AnnotateCtx(context.Background())
-	if err := tc.store.removeReplicaImpl(ctx, repl, repl.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	func() {
+		tc.repl.raftMu.Lock()
+		defer tc.repl.raftMu.Unlock()
+		if err := tc.store.removeReplicaImpl(ctx, repl, repl.Desc().NextReplicaID, RemoveOptions{
+			DestroyData: true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	if _, _, err := repl.handleRaftReady(ctx, noSnap); err != nil {
 		t.Fatal(err)
@@ -8528,9 +8540,11 @@ func TestCancelPendingCommands(t *testing.T) {
 	default:
 	}
 
+	tc.repl.raftMu.Lock()
 	tc.repl.mu.Lock()
 	tc.repl.cancelPendingCommandsLocked()
 	tc.repl.mu.Unlock()
+	tc.repl.raftMu.Unlock()
 
 	pErr := <-errChan
 	if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
