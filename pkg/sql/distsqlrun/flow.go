@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // FlowCtx encompasses the contexts needed for various flow components.
@@ -497,6 +497,8 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 
 func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
+	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
+	f.ctxDone = ctx.Done()
 
 	if f.EvalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
 		log.VEventf(ctx, 1, "setting up vectorize flow %d with setting %s", f.id, f.EvalCtx.SessionData.Vectorize)
@@ -530,8 +532,10 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 		ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
 	)
 
-	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
-	f.ctxDone = ctx.Done()
+	if f.ctxCancel == nil {
+		ctx, f.ctxCancel = contextutil.WithCancel(ctx)
+		f.ctxDone = ctx.Done()
+	}
 
 	// Only register the flow if there will be inbound stream connections that
 	// need to look up this flow in the flow registry.

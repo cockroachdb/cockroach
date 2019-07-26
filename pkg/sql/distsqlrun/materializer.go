@@ -51,8 +51,16 @@ type materializer struct {
 	// adapter.
 	outputRow      sqlbase.EncDatumRow
 	outputMetadata *distsqlpb.ProducerMetadata
+
+	// cancelFlow will cancel the context that is passed to input (which will
+	// pass it down further). This allows for the full flow cancellation to occur
+	// when materializer is closed.
+	cancelFlow context.CancelFunc
 }
 
+// cancelFlow is the context cancellation function that cancels the context of
+// the flow (i.e. Flow.ctxCancel). It should only be non-nil in case of a root
+// materializer (i.e. not when we're wrapping a row source).
 func newMaterializer(
 	flowCtx *FlowCtx,
 	processorID int32,
@@ -63,6 +71,7 @@ func newMaterializer(
 	output RowReceiver,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
 	outputStatsToTrace func(),
+	cancelFlow context.CancelFunc,
 ) (*materializer, error) {
 	m := &materializer{
 		input:               input,
@@ -84,6 +93,7 @@ func newMaterializer(
 				for _, src := range metadataSourcesQueue {
 					trailingMeta = append(trailingMeta, src.DrainMeta(ctx)...)
 				}
+				m.InternalClose()
 				return trailingMeta
 			},
 		},
@@ -91,13 +101,19 @@ func newMaterializer(
 		return nil, err
 	}
 	m.finishTrace = outputStatsToTrace
+	m.cancelFlow = cancelFlow
 	return m, nil
 }
 
 func (m *materializer) Start(ctx context.Context) context.Context {
 	m.input.Init()
-	m.Ctx = ctx
-	return ctx
+	m.origCtx = ctx
+	if m.cancelFlow == nil {
+		m.Ctx, m.cancelFlow = context.WithCancel(ctx)
+	} else {
+		m.Ctx = ctx
+	}
+	return m.Ctx
 }
 
 // nextAdapter calls next() and saves the returned results in m. For internal
@@ -157,9 +173,21 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 	return m.outputRow, m.outputMetadata
 }
 
+func (m *materializer) InternalClose() bool {
+	if m.ProcessorBase.InternalClose() {
+		m.cancelFlow()
+		return true
+	}
+	return false
+}
+
+func (m *materializer) ConsumerDone() {
+	// Materializer will move into 'draining' state, and after all the metadata
+	// has been drained - as part of TrailingMetaCallback - InternalClose() will
+	// be called which will cancel the flow.
+	m.MoveToDraining(nil /* err */)
+}
+
 func (m *materializer) ConsumerClosed() {
-	// TODO(yuzefovich): this seems like a hack to me, but in order to close an
-	// Inbox, we need to drain it.
-	m.trailingMetaCallback(m.Ctx)
 	m.InternalClose()
 }
