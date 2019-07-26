@@ -180,6 +180,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"OpaqueMetadata": {fullName: "opt.OpaqueMetadata", isPointer: true},
 		"JobCommand":     {fullName: "tree.JobCommand", passByVal: true},
 		"IndexOrdinal":   {fullName: "cat.IndexOrdinal", passByVal: true},
+		"ViewDeps":       {fullName: "opt.ViewDeps", passByVal: true},
 	}
 
 	// Add types of generated op and private structs.
