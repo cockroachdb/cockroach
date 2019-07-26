@@ -1774,6 +1774,7 @@ func (ef *execFactory) ConstructDeleteRange(
 	}, nil
 }
 
+// ConstructCreateTable is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCreateTable(
 	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
@@ -1782,6 +1783,47 @@ func (ef *execFactory) ConstructCreateTable(
 		nd.sourcePlan = input.(planNode)
 	}
 	return nd, nil
+}
+
+// ConstructCreateView is part of the exec.Factory interface.
+func (ef *execFactory) ConstructCreateView(
+	schema cat.Schema,
+	viewName string,
+	viewQuery string,
+	columns sqlbase.ResultColumns,
+	deps opt.ViewDeps,
+) (exec.Node, error) {
+
+	planDeps := make(planDependencies, len(deps))
+	for _, d := range deps {
+		desc, err := getDescForDataSource(d.DataSource)
+		if err != nil {
+			return nil, err
+		}
+		var ref sqlbase.TableDescriptor_Reference
+		if d.SpecificIndex {
+			idx := d.DataSource.(cat.Table).Index(d.Index)
+			ref.IndexID = idx.(*optIndex).desc.ID
+		}
+		if !d.ColumnOrdinals.Empty() {
+			ref.ColumnIDs = make([]sqlbase.ColumnID, 0, d.ColumnOrdinals.Len())
+			d.ColumnOrdinals.ForEach(func(ord int) {
+				ref.ColumnIDs = append(ref.ColumnIDs, desc.Columns[ord].ID)
+			})
+		}
+		entry := planDeps[desc.ID]
+		entry.desc = desc
+		entry.deps = append(entry.deps, ref)
+		planDeps[desc.ID] = entry
+	}
+
+	return &createViewNode{
+		viewName:  tree.Name(viewName),
+		viewQuery: viewQuery,
+		dbDesc:    schema.(*optSchema).desc,
+		columns:   columns,
+		planDeps:  planDeps,
+	}, nil
 }
 
 // ConstructSequenceSelect is part of the exec.Factory interface.

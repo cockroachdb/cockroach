@@ -156,7 +156,7 @@ func (tc *Catalog) ResolveDataSource(
 
 // ResolveDataSourceByID is part of the cat.Catalog interface.
 func (tc *Catalog) ResolveDataSourceByID(
-	ctx context.Context, id cat.StableID,
+	ctx context.Context, flags cat.Flags, id cat.StableID,
 ) (cat.DataSource, error) {
 	for _, ds := range tc.testSchema.dataSources {
 		if ds.ID() == id {
@@ -490,6 +490,11 @@ func (tv *View) Name() tree.Name {
 // fqName is part of the dataSource interface.
 func (tv *View) fqName() cat.DataSourceName {
 	return tv.ViewName
+}
+
+// IsSystemView is part of the cat.View interface.
+func (tv *View) IsSystemView() bool {
+	return false
 }
 
 // Query is part of the cat.View interface.

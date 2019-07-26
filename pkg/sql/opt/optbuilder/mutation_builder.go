@@ -786,7 +786,7 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 		// referenced columns on the right.
 
 		refID := fk.ReferencedTableID()
-		ref, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, refID)
+		ref, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, refID)
 		if err != nil {
 			panic(err)
 		}
@@ -937,7 +937,7 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 		// origin columns on the right.
 
 		origID := fk.OriginTableID()
-		orig, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, origID)
+		orig, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, origID)
 		if err != nil {
 			panic(err)
 		}

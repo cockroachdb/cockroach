@@ -1248,6 +1248,10 @@ func (b *logicalPropsBuilder) buildCreateTableProps(ct *CreateTableExpr, rel *pr
 	BuildSharedProps(b.mem, ct, &rel.Shared)
 }
 
+func (b *logicalPropsBuilder) buildCreateViewProps(cv *CreateViewExpr, rel *props.Relational) {
+	BuildSharedProps(b.mem, cv, &rel.Shared)
+}
+
 func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *props.Scalar) {
 	BuildSharedProps(b.mem, item.Condition, &scalar.Shared)
 

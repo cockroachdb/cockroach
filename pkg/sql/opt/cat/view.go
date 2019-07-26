@@ -34,6 +34,10 @@ type View interface {
 	// ColumnNames returns the name of the column at the ith ordinal position
 	// within the view, where i < ColumnNameCount.
 	ColumnName(i int) tree.Name
+
+	// IsSystemView returns true if this view is a system view (like
+	// crdb_internal.ranges).
+	IsSystemView() bool
 }
 
 // FormatView nicely formats a catalog view using a treeprinter for debugging
