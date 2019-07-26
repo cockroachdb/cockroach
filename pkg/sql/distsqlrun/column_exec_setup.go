@@ -108,6 +108,10 @@ func newColOperator(
 
 	core := &spec.Core
 	post := &spec.Post
+	// Some operators (like hash joiner and merge joiner) take care of the
+	// projection themselves, and they will set ignoreProjection to true in order
+	// not to plan a redundant projection operator.
+	ignoreProjection := false
 
 	// Planning additional operators for the PostProcessSpec (filters and render
 	// expressions) requires knowing the operator's output column types. Currently
@@ -304,10 +308,6 @@ func newColOperator(
 			return result, err
 		}
 
-		columnTypes = make([]semtypes.T, len(leftTypes)+len(rightTypes))
-		copy(columnTypes, spec.Input[0].ColumnTypes)
-		copy(columnTypes[len(leftTypes):], spec.Input[1].ColumnTypes)
-
 		nLeftCols := uint32(len(leftTypes))
 		nRightCols := uint32(len(rightTypes))
 
@@ -322,11 +322,11 @@ func newColOperator(
 					rightOutCols = append(rightOutCols, col-nLeftCols)
 				}
 			}
+			ignoreProjection = true
 		} else {
 			for i := uint32(0); i < nLeftCols; i++ {
 				leftOutCols = append(leftOutCols, i)
 			}
-
 			for i := uint32(0); i < nRightCols; i++ {
 				rightOutCols = append(rightOutCols, i)
 			}
@@ -345,6 +345,15 @@ func newColOperator(
 			core.HashJoiner.LeftEqColumnsAreKey || core.HashJoiner.RightEqColumnsAreKey,
 			core.HashJoiner.Type,
 		)
+
+		columnTypes = make([]semtypes.T, nLeftCols+nRightCols)
+		copy(columnTypes, spec.Input[0].ColumnTypes)
+		if core.HashJoiner.Type != sqlbase.JoinType_LEFT_SEMI {
+			// TODO(yuzefovich): update this conditional once LEFT ANTI is supported.
+			copy(columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
+		} else {
+			columnTypes = columnTypes[:nLeftCols]
+		}
 
 	case core.MergeJoiner != nil:
 		if err := checkNumIn(inputs, 2); err != nil {
@@ -379,21 +388,17 @@ func newColOperator(
 			for _, col := range post.OutputColumns {
 				if col < nLeftCols {
 					leftOutCols = append(leftOutCols, col)
-				} else if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI &&
-					core.MergeJoiner.Type != sqlbase.JoinType_LEFT_ANTI {
+				} else {
 					rightOutCols = append(rightOutCols, col-nLeftCols)
 				}
 			}
+			ignoreProjection = true
 		} else {
 			for i := uint32(0); i < nLeftCols; i++ {
 				leftOutCols = append(leftOutCols, i)
 			}
-
-			if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI &&
-				core.MergeJoiner.Type != sqlbase.JoinType_LEFT_ANTI {
-				for i := uint32(0); i < nRightCols; i++ {
-					rightOutCols = append(rightOutCols, i)
-				}
+			for i := uint32(0); i < nRightCols; i++ {
+				rightOutCols = append(rightOutCols, i)
 			}
 		}
 
@@ -593,7 +598,7 @@ func newColOperator(
 			result.op = exec.NewSimpleProjectOp(result.op, outputColumns)
 		}
 	}
-	if post.Projection {
+	if post.Projection && !ignoreProjection {
 		result.op = exec.NewSimpleProjectOp(result.op, post.OutputColumns)
 		// Update output columnTypes.
 		newTypes := make([]semtypes.T, 0, len(post.OutputColumns))
