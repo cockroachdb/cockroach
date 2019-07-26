@@ -290,10 +290,6 @@ func newColOperator(
 			return result, err
 		}
 
-		if !core.HashJoiner.OnExpr.Empty() {
-			return result, errors.Newf("can't plan hash join with on expressions")
-		}
-
 		var leftTypes, rightTypes []types.T
 		leftTypes, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
@@ -345,6 +341,16 @@ func newColOperator(
 			core.HashJoiner.LeftEqColumnsAreKey || core.HashJoiner.RightEqColumnsAreKey,
 			core.HashJoiner.Type,
 		)
+		if err != nil {
+			return result, err
+		}
+
+		if !core.HashJoiner.OnExpr.Empty() {
+			if core.HashJoiner.Type != sqlbase.JoinType_INNER {
+				return result, errors.Newf("can't plan non-inner hash join with on expressions")
+			}
+			columnTypes, err = result.planFilterExpr(flowCtx, core.HashJoiner.OnExpr, columnTypes)
+		}
 
 	case core.MergeJoiner != nil:
 		if err := checkNumIn(inputs, 2); err != nil {
@@ -575,7 +581,9 @@ func newColOperator(
 	}
 
 	if !post.Filter.Empty() {
-		columnTypes, err = result.planFilterExpr(flowCtx, post.Filter, columnTypes)
+		if columnTypes, err = result.planFilterExpr(flowCtx, post.Filter, columnTypes); err != nil {
+			return result, err
+		}
 	}
 	if post.Projection {
 		result.op = exec.NewSimpleProjectOp(result.op, len(columnTypes), post.OutputColumns)
