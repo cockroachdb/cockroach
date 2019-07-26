@@ -337,3 +337,13 @@ func (f *stubFactory) ConstructCancelQueries(input exec.Node, ifExists bool) (ex
 func (f *stubFactory) ConstructCancelSessions(input exec.Node, ifExists bool) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructCreateView(
+	schema cat.Schema,
+	viewName string,
+	viewQuery string,
+	columns sqlbase.ResultColumns,
+	deps opt.ViewDeps,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}

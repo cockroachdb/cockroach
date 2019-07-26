@@ -156,7 +156,7 @@ func (tc *Catalog) ResolveDataSource(
 
 // ResolveDataSourceByID is part of the cat.Catalog interface.
 func (tc *Catalog) ResolveDataSourceByID(
-	ctx context.Context, id cat.StableID,
+	ctx context.Context, flags cat.Flags, id cat.StableID,
 ) (cat.DataSource, error) {
 	for _, ds := range tc.testSchema.dataSources {
 		if ds.ID() == id {
