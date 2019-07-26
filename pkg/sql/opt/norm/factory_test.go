@@ -36,7 +36,8 @@ func TestSimplifyFilters(t *testing.T) {
 	if _, err := cat.ExecuteDDL("CREATE TABLE a (x INT PRIMARY KEY, y INT)"); err != nil {
 		t.Fatal(err)
 	}
-	a := f.Metadata().AddTable(cat.Table(tree.NewTableName("t", "a")))
+	tn := tree.NewTableName("t", "a")
+	a := f.Metadata().AddTable(cat.Table(tn), tn)
 	ax := a.ColumnID(0)
 
 	variable := f.ConstructVariable(ax)

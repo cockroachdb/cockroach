@@ -26,7 +26,7 @@ import (
 // These statements show the ranges corresponding to the given table or index,
 // along with the list of replicas and the lease holder.
 func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, error) {
-	idx, err := cat.ResolveTableIndex(
+	idx, _, err := cat.ResolveTableIndex(
 		d.ctx, d.catalog, cat.Flags{AvoidDescriptorCaches: true}, &n.TableOrIndex,
 	)
 	if err != nil {

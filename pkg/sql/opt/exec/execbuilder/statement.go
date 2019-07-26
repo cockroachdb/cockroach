@@ -76,7 +76,7 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 			// TODO(radu): add views, sequences
 		}
 
-		f := memo.MakeExprFmtCtx(fmtFlags, b.mem)
+		f := memo.MakeExprFmtCtx(fmtFlags, b.mem, b.catalog)
 		f.FormatExpr(explain.Input)
 		planText.WriteString(f.Buffer.String())
 

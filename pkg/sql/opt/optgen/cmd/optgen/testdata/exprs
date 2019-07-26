@@ -94,7 +94,7 @@ func (e *ProjectExpr) Private() interface{} {
 }
 
 func (e *ProjectExpr) String() string {
-	f := MakeExprFmtCtx(ExprFmtHideQualifications, e.Memo())
+	f := MakeExprFmtCtx(ExprFmtHideQualifications, e.Memo(), nil)
 	f.FormatExpr(e)
 	return f.Buffer.String()
 }
@@ -214,7 +214,7 @@ func (e *ProjectionsExpr) Private() interface{} {
 }
 
 func (e *ProjectionsExpr) String() string {
-	f := MakeExprFmtCtx(ExprFmtHideQualifications, nil)
+	f := MakeExprFmtCtx(ExprFmtHideQualifications, nil, nil)
 	f.FormatExpr(e)
 	return f.Buffer.String()
 }
@@ -262,7 +262,7 @@ func (e *ProjectionsItem) Private() interface{} {
 }
 
 func (e *ProjectionsItem) String() string {
-	f := MakeExprFmtCtx(ExprFmtHideQualifications, nil)
+	f := MakeExprFmtCtx(ExprFmtHideQualifications, nil, nil)
 	f.FormatExpr(e)
 	return f.Buffer.String()
 }
@@ -320,7 +320,7 @@ func (e *SortExpr) Private() interface{} {
 }
 
 func (e *SortExpr) String() string {
-	f := MakeExprFmtCtx(ExprFmtHideQualifications, e.Memo())
+	f := MakeExprFmtCtx(ExprFmtHideQualifications, e.Memo(), nil)
 	f.FormatExpr(e)
 	return f.Buffer.String()
 }

@@ -506,7 +506,7 @@ func (p *planner) getTableAndIndex(
 	catalog.init(p)
 	catalog.reset()
 
-	idx, err := cat.ResolveTableIndex(
+	idx, _, err := cat.ResolveTableIndex(
 		ctx, &catalog, cat.Flags{AvoidDescriptorCaches: true}, tableWithIndex,
 	)
 	if err != nil {

@@ -52,28 +52,28 @@ func ExpandDataSourceGlob(
 // ResolveTableIndex resolves a TableIndexName.
 func ResolveTableIndex(
 	ctx context.Context, catalog Catalog, flags Flags, name *tree.TableIndexName,
-) (Index, error) {
+) (Index, DataSourceName, error) {
 	if name.Table.TableName != "" {
-		ds, _, err := catalog.ResolveDataSource(ctx, flags, &name.Table)
+		ds, tn, err := catalog.ResolveDataSource(ctx, flags, &name.Table)
 		if err != nil {
-			return nil, err
+			return nil, DataSourceName{}, err
 		}
 		table, ok := ds.(Table)
 		if !ok {
-			return nil, pgerror.Newf(
+			return nil, DataSourceName{}, pgerror.Newf(
 				pgcode.WrongObjectType, "%q is not a table", name.Table.TableName,
 			)
 		}
 		if name.Index == "" {
 			// Return primary index.
-			return table.Index(0), nil
+			return table.Index(0), tn, nil
 		}
 		for i := 0; i < table.IndexCount(); i++ {
 			if idx := table.Index(i); idx.Name() == tree.Name(name.Index) {
-				return idx, nil
+				return idx, tn, nil
 			}
 		}
-		return nil, pgerror.Newf(
+		return nil, DataSourceName{}, pgerror.Newf(
 			pgcode.UndefinedObject, "index %q does not exist", name.Index,
 		)
 	}
@@ -81,17 +81,18 @@ func ResolveTableIndex(
 	// We have to search for a table that has an index with the given name.
 	schema, _, err := catalog.ResolveSchema(ctx, flags, &name.Table.TableNamePrefix)
 	if err != nil {
-		return nil, err
+		return nil, DataSourceName{}, err
 	}
 	dsNames, err := schema.GetDataSourceNames(ctx)
 	if err != nil {
-		return nil, err
+		return nil, DataSourceName{}, err
 	}
 	var found Index
+	var foundTabName DataSourceName
 	for i := range dsNames {
-		ds, _, err := catalog.ResolveDataSource(ctx, flags, &dsNames[i])
+		ds, tn, err := catalog.ResolveDataSource(ctx, flags, &dsNames[i])
 		if err != nil {
-			return nil, err
+			return nil, DataSourceName{}, err
 		}
 		table, ok := ds.(Table)
 		if !ok {
@@ -101,21 +102,22 @@ func ResolveTableIndex(
 		for i := 0; i < table.IndexCount(); i++ {
 			if idx := table.Index(i); idx.Name() == tree.Name(name.Index) {
 				if found != nil {
-					return nil, pgerror.Newf(pgcode.AmbiguousParameter,
+					return nil, DataSourceName{}, pgerror.Newf(pgcode.AmbiguousParameter,
 						"index name %q is ambiguous (found in %s and %s)",
-						name.Index, table.Name().String(), found.Table().Name().String())
+						name.Index, tn.String(), foundTabName.String())
 				}
 				found = idx
+				foundTabName = tn
 				break
 			}
 		}
 	}
 	if found == nil {
-		return nil, pgerror.Newf(
+		return nil, DataSourceName{}, pgerror.Newf(
 			pgcode.UndefinedObject, "index %q does not exist", name.Index,
 		)
 	}
-	return found, nil
+	return found, foundTabName, nil
 }
 
 // FindTableColumnByName returns the ordinal of the non-mutation column having
@@ -132,7 +134,7 @@ func FindTableColumnByName(tab Table, name tree.Name) int {
 // FormatTable nicely formats a catalog table using a treeprinter for debugging
 // and testing.
 func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
-	child := tp.Childf("TABLE %s", tab.Name().TableName)
+	child := tp.Childf("TABLE %s", tab.Name())
 	if tab.IsVirtualTable() {
 		child.Child("virtual table")
 	}
@@ -240,13 +242,13 @@ func formatCols(tab Table, numCols int, colOrdinal func(tab Table, i int) int) s
 // formatCatalogFKRef nicely formats a catalog foreign key reference using a
 // treeprinter for debugging and testing.
 func formatCatalogFKRef(
-	cat Catalog, inbound bool, fkRef ForeignKeyConstraint, tp treeprinter.Node,
+	catalog Catalog, inbound bool, fkRef ForeignKeyConstraint, tp treeprinter.Node,
 ) {
-	originDS, err := cat.ResolveDataSourceByID(context.TODO(), fkRef.OriginTableID())
+	originDS, err := catalog.ResolveDataSourceByID(context.TODO(), fkRef.OriginTableID())
 	if err != nil {
 		panic(err)
 	}
-	refDS, err := cat.ResolveDataSourceByID(context.TODO(), fkRef.ReferencedTableID())
+	refDS, err := catalog.ResolveDataSourceByID(context.TODO(), fkRef.ReferencedTableID())
 	if err != nil {
 		panic(err)
 	}
