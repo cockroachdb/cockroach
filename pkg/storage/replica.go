@@ -396,6 +396,9 @@ type Replica struct {
 		// replicas have persisted the corresponding entry into their logs.
 		proposalQuota *quotaPool
 
+		// The base index is the index up to (including) which quota was already
+		// released. That is, the first element in quotaReleaseQueue below is
+		// released as the base index moves up by one, etc.
 		proposalQuotaBaseIndex uint64
 
 		// Once the leader observes a proposal come 'out of Raft', we add the
@@ -908,6 +911,8 @@ func (r *Replica) State() storagepb.RangeInfo {
 	ri.NumDropped = uint64(r.mu.droppedMessages)
 	if r.mu.proposalQuota != nil {
 		ri.ApproximateProposalQuota = r.mu.proposalQuota.approximateQuota()
+		ri.ProposalQuotaBaseIndex = int64(r.mu.proposalQuotaBaseIndex)
+		ri.ProposalQuotaReleaseQueue = append([]int64(nil), r.mu.quotaReleaseQueue...)
 	}
 	ri.RangeMaxBytes = *r.mu.zone.RangeMaxBytes
 	if desc := ri.ReplicaState.Desc; desc != nil {

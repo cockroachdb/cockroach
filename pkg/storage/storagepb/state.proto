@@ -97,6 +97,12 @@ message RangeInfo {
   bool raft_log_size_trusted = 10;
   // Approximately the amount of quota available.
   int64 approximate_proposal_quota = 7;
+  // Index for which quota has already been released.
+  int64 proposal_quota_base_index = 14;
+  // Quota amounts for commands which the leader has applied but for which we're
+  // still waiting for followers to ack the corresponding entries. First entry
+  // corresponds to base_index+1 above.
+  repeated int64 proposal_quota_release_queue = 15;
   // The max size the range can grow to before it will be split.
   int64 range_max_bytes = 8;
   reserved 9;
