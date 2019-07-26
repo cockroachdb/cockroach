@@ -15,10 +15,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+// IndexOrdinal identifies an index (in the context of a Table).
+type IndexOrdinal = int
+
 // PrimaryIndex selects the primary index of a table when calling the
 // Table.Index method. Every table is guaranteed to have a unique primary
 // index, even if it meant adding a hidden unique rowid column.
-const PrimaryIndex = 0
+const PrimaryIndex IndexOrdinal = 0
 
 // Index is an interface to a database index, exposing only the information
 // needed by the query optimizer. Every index is treated as unique by the
@@ -181,6 +184,6 @@ type IndexColumn struct {
 
 // IsMutationIndex is a convenience function that returns true if the index at
 // the given ordinal position is a mutation index.
-func IsMutationIndex(table Table, ord int) bool {
+func IsMutationIndex(table Table, ord IndexOrdinal) bool {
 	return ord >= table.IndexCount()
 }

@@ -720,7 +720,7 @@ func (ot *optTable) DeletableIndexCount() int {
 }
 
 // Index is part of the cat.Table interface.
-func (ot *optTable) Index(i int) cat.Index {
+func (ot *optTable) Index(i cat.IndexOrdinal) cat.Index {
 	return &ot.indexes[i]
 }
 

@@ -113,9 +113,9 @@ define AlterTableSplitPrivate {
     Table TableID
 
     # Index identifies the index to scan (whether primary or secondary). It
-    # can be passed to the cat.Table.Index(i int) method in order to fetch the
+    # can be passed to the cat.Table.Index() method in order to fetch the
     # cat.Index metadata.
-    Index int
+    Index IndexOrdinal
 
     # Props stores the required physical properties for the input expression.
     Props PhysProps
