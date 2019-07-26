@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"math/rand"
 	"reflect"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -3049,6 +3051,84 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
+	storeCfg.TestingKnobs.BeforeSnapshotSSTIngestion = func(
+		inSnap storage.IncomingSnapshot,
+		snapType storage.SnapshotRequest_Type,
+		sstNames []string,
+	) error {
+		// Only verify the snapshot of type RAFT and on the range under exercise.
+		// Note that the range local keys are not verified because there are too
+		// many keys and the user keys aren't verified because they are checked
+		// later in the test.
+		if snapType == storage.SnapshotRequest_RAFT && inSnap.State.Desc.RangeID == roachpb.RangeID(2) {
+			if len(sstNames) != 8 {
+				return errors.Errorf("expected to ingest 8 SSTs, got %d SSTs", len(sstNames))
+			}
+
+			// Only verify the SSTs of the subsumed replicas (the last four SSTs).
+			var expectedSSTs [][]byte
+			sstNames = sstNames[4:]
+
+			// Range-id local ranges of subsumed replicas.
+			for _, rangeID := range []roachpb.RangeID{roachpb.RangeID(3), roachpb.RangeID(4)} {
+				sst, err := engine.MakeRocksDBSstFileWriter()
+				if err != nil {
+					return err
+				}
+				defer sst.Close()
+				r := rditer.MakeRangeIDLocalKeyRange(&roachpb.RangeDescriptor{RangeID: rangeID}, true)
+				if err := sst.ClearRange(r.Start, r.End); err != nil {
+					return err
+				}
+				tombstoneKey := keys.RaftTombstoneKey(rangeID)
+				tombstoneValue := &roachpb.RaftTombstone{NextReplicaID: math.MaxInt32}
+				if err := engine.MVCCBlindPutProto(context.TODO(), &sst, nil, tombstoneKey, hlc.Timestamp{}, tombstoneValue, nil); err != nil {
+					return err
+				}
+				expectedSST, err := sst.Finish()
+				if err != nil {
+					return err
+				}
+				expectedSSTs = append(expectedSSTs, expectedSST)
+			}
+
+			desc := roachpb.RangeDescriptor{
+				StartKey: roachpb.RKey("d"),
+				EndKey:   roachpb.RKeyMax,
+			}
+			// Range local range and user key range of subsumed replicas.
+			for _, fn := range []func(*roachpb.RangeDescriptor) rditer.KeyRange{
+				rditer.MakeRangeLocalKeyRange,
+				rditer.MakeUserKeyRange,
+			} {
+				sst, err := engine.MakeRocksDBSstFileWriter()
+				if err != nil {
+					return err
+				}
+				defer sst.Close()
+				r := fn(&desc)
+				if err := sst.ClearRange(r.Start, r.End); err != nil {
+					return err
+				}
+				expectedSST, err := sst.Finish()
+				if err != nil {
+					return err
+				}
+				expectedSSTs = append(expectedSSTs, expectedSST)
+			}
+
+			for i := range sstNames {
+				actualSST, err := ioutil.ReadFile(sstNames[i])
+				if err != nil {
+					return err
+				}
+				if !bytes.Equal(actualSST, expectedSSTs[i]) {
+					return errors.Errorf("contents of %s were unexpected", sstNames[i])
+				}
+			}
+		}
+		return nil
+	}
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
 		// This test was written before the multiTestContext started creating many

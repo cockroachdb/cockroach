@@ -10,7 +10,13 @@
 
 package engine
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"context"
+	"io/ioutil"
+	"os"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
 
 // InMem wraps RocksDB and configures it for in-memory only storage.
 type InMem struct {
@@ -36,6 +42,30 @@ func NewInMem(attrs roachpb.Attributes, cacheSize int64) InMem {
 	}
 	db := InMem{RocksDB: rdb}
 	return db
+}
+
+// IngestExternalFiles for an in-memory RocksDB first loads each file into
+// memory, then ingests them (again, in memory). This implementation is
+// provided solely to make tests work.
+func (db InMem) IngestExternalFiles(
+	ctx context.Context, paths []string, skipWritingSeqNo, allowFileModifications bool,
+) error {
+	for _, file := range paths {
+		data, err := ioutil.ReadFile(file)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// The file may already be in the correct in-memory env. Ignore
+				// the error, it will be caught by IngestExternalFiles if the
+				// file truly is missing.
+				continue
+			}
+			return err
+		}
+		if err := db.RocksDB.WriteFile(file, data); err != nil {
+			return err
+		}
+	}
+	return db.RocksDB.IngestExternalFiles(ctx, paths, skipWritingSeqNo, allowFileModifications)
 }
 
 var _ Engine = InMem{}

@@ -152,6 +152,10 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 		return err
 	}
 
+	// Remove the SSTs of any previous snapshots. Nothing actionable if removing
+	// directory fails.
+	_ = r.store.sss.Clear(r.mu.state.Desc.RangeID)
+
 	r.assertStateLocked(ctx, r.store.Engine())
 	return nil
 }

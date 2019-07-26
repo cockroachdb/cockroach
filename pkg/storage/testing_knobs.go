@@ -192,6 +192,10 @@ type StoreTestingKnobs struct {
 	// This ensures the `*Replica` will be materialized on the Store when it
 	// returns.
 	ReplicaAddStopAfterLearnerSnapshot func() bool
+
+	// BeforeSnapshotSSTIngestion is run just before the data SSTs are ingested
+	// when applying a snapshot
+	BeforeSnapshotSSTIngestion func(IncomingSnapshot, SnapshotRequest_Type, []string) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
