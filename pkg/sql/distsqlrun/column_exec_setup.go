@@ -927,7 +927,7 @@ func (f *Flow) setupVectorizedRemoteOutputStream(
 				wg.Add(1)
 			}
 			go func() {
-				outbox.Run(ctx, f.nodeDialer, stream.TargetNodeID, f.id, stream.StreamID, cancelFn)
+				outbox.Run(ctx, f.nodeDialer, stream.TargetNodeID, f.id, stream.StreamID, cancelFn, false /* shouldCloseConn */)
 				if wg != nil {
 					wg.Done()
 				}

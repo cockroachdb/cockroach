@@ -50,7 +50,7 @@ func verifyColOperator(
 	defer diskMonitor.Stop(ctx)
 	flowCtx := &FlowCtx{
 		EvalCtx:     &evalCtx,
-		Settings:    cluster.MakeTestingClusterSettings(),
+		Settings:    st,
 		TempStorage: tempEngine,
 		diskMonitor: diskMonitor,
 	}
