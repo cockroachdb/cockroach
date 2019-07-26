@@ -1015,7 +1015,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 		return err
 	}
 	run := func(ctx context.Context, cancelFn context.CancelFunc) {
-		outbox.Run(ctx, s.nodeDialer, stream.TargetNodeID, s.flowID, stream.StreamID, cancelFn)
+		outbox.Run(ctx, s.nodeDialer, stream.TargetNodeID, s.flowID, stream.StreamID, cancelFn, false /* shouldCloseConn */)
 	}
 	s.accumulateAsyncComponent(run)
 	return nil
