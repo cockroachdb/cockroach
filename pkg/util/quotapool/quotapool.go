@@ -90,10 +90,6 @@ type QuotaPool struct {
 	// acquistions or slow acqusitions.
 	name string
 
-	// chanSyncPool is used to pool allocations of the channels used to notify
-	// goroutines waiting in Acquire.
-	chanSyncPool sync.Pool
-
 	// Ongoing acquisitions listen on done which is closed when the quota
 	// pool is closed (see QuotaPool.Close).
 	done chan struct{}
@@ -136,9 +132,6 @@ func New(name string, initialResource Resource, options ...Option) *QuotaPool {
 	qp := &QuotaPool{
 		name: name,
 		done: make(chan struct{}),
-		chanSyncPool: sync.Pool{
-			New: func() interface{} { return make(chan struct{}, 1) },
-		},
 	}
 	for _, o := range options {
 		o.apply(&qp.config)
@@ -204,6 +197,12 @@ func (qp *QuotaPool) addLocked(r Resource) {
 		default:
 		}
 	}
+}
+
+// chanSyncPool is used to pool allocations of the channels used to notify
+// goroutines waiting in Acquire.
+var chanSyncPool = sync.Pool{
+	New: func() interface{} { return make(chan struct{}, 1) },
 }
 
 // Acquire attempts to fulfill the Request with Resource from the qp.
@@ -278,7 +277,7 @@ func (qp *QuotaPool) acquireFastPath(
 			return true, nil, nil
 		}
 	}
-	c := qp.chanSyncPool.Get().(chan struct{})
+	c := chanSyncPool.Get().(chan struct{})
 	return false, qp.mu.q.enqueue(c), nil
 }
 
@@ -290,7 +289,7 @@ func (qp *QuotaPool) tryAcquireOnNotify(
 	// it has been released back to the notifyQueue.
 	defer func(nc chan struct{}) {
 		if fulfilled {
-			qp.chanSyncPool.Put(nc)
+			chanSyncPool.Put(nc)
 		}
 	}(n.c)
 
@@ -314,7 +313,7 @@ func (qp *QuotaPool) cleanupOnCancel(n *notifyee) {
 	// No matter what, we're going to want to put our notify channel back in to
 	// the sync pool. Note that this defer call evaluates n.c here and is not
 	// affected by later code that sets n.c to nil.
-	defer qp.chanSyncPool.Put(n.c)
+	defer chanSyncPool.Put(n.c)
 
 	qp.mu.Lock()
 	defer qp.mu.Unlock()
