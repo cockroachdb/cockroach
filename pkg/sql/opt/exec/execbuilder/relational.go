@@ -246,6 +246,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.CreateTableExpr:
 		ep, err = b.buildCreateTable(t)
 
+	case *memo.CreateViewExpr:
+		ep, err = b.buildCreateView(t)
+
 	case *memo.WithExpr:
 		ep, err = b.buildWith(t)
 

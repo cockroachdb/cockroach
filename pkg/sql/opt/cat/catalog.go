@@ -107,7 +107,7 @@ type Catalog interface {
 	//
 	// NOTE: The returned data source must be immutable after construction, and
 	// so can be safely copied or used across goroutines.
-	ResolveDataSourceByID(ctx context.Context, id StableID) (DataSource, error)
+	ResolveDataSourceByID(ctx context.Context, flags Flags, id StableID) (DataSource, error)
 
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.

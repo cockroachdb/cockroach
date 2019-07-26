@@ -180,8 +180,15 @@ func (oc *optCatalog) ResolveDataSource(
 
 // ResolveDataSourceByID is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveDataSourceByID(
-	ctx context.Context, dataSourceID cat.StableID,
+	ctx context.Context, flags cat.Flags, dataSourceID cat.StableID,
 ) (cat.DataSource, error) {
+	if flags.AvoidDescriptorCaches {
+		defer func(prev bool) {
+			oc.planner.avoidCachedDescriptors = prev
+		}(oc.planner.avoidCachedDescriptors)
+		oc.planner.avoidCachedDescriptors = true
+	}
+
 	tableLookup, err := oc.planner.LookupTableByID(ctx, sqlbase.ID(dataSourceID))
 
 	if err != nil || tableLookup.IsAdding {
@@ -195,7 +202,7 @@ func (oc *optCatalog) ResolveDataSourceByID(
 	return oc.dataSourceForDesc(ctx, cat.Flags{}, tableLookup.Desc, &tree.TableName{})
 }
 
-func (oc *optCatalog) getDescForObject(o cat.Object) (sqlbase.DescriptorProto, error) {
+func getDescForCatalogObject(o cat.Object) (sqlbase.DescriptorProto, error) {
 	switch t := o.(type) {
 	case *optSchema:
 		return t.desc, nil
@@ -212,9 +219,24 @@ func (oc *optCatalog) getDescForObject(o cat.Object) (sqlbase.DescriptorProto, e
 	}
 }
 
+func getDescForDataSource(o cat.DataSource) (*sqlbase.ImmutableTableDescriptor, error) {
+	switch t := o.(type) {
+	case *optTable:
+		return t.desc, nil
+	case *optVirtualTable:
+		return t.desc, nil
+	case *optView:
+		return t.desc, nil
+	case *optSequence:
+		return t.desc, nil
+	default:
+		return nil, errors.AssertionFailedf("invalid object type: %T", o)
+	}
+}
+
 // CheckPrivilege is part of the cat.Catalog interface.
 func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
-	desc, err := oc.getDescForObject(o)
+	desc, err := getDescForCatalogObject(o)
 	if err != nil {
 		return err
 	}
@@ -223,7 +245,7 @@ func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv pri
 
 // CheckAnyPrivilege is part of the cat.Catalog interface.
 func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
-	desc, err := oc.getDescForObject(o)
+	desc, err := getDescForCatalogObject(o)
 	if err != nil {
 		return err
 	}
@@ -250,17 +272,17 @@ func (oc *optCatalog) FullyQualifiedName(
 		return vt.name, nil
 	}
 
-	desc, err := oc.getDescForObject(ds)
+	desc, err := getDescForDataSource(ds)
 	if err != nil {
 		return cat.DataSourceName{}, err
 	}
 
-	dbID := desc.(*sqlbase.ImmutableTableDescriptor).ParentID
+	dbID := desc.ParentID
 	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, oc.planner.Txn(), dbID)
 	if err != nil {
 		return cat.DataSourceName{}, err
 	}
-	return tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.GetName())), nil
+	return tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name)), nil
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
@@ -399,6 +421,11 @@ func (ov *optView) Equals(other cat.Object) bool {
 // Name is part of the cat.View interface.
 func (ov *optView) Name() tree.Name {
 	return tree.Name(ov.desc.Name)
+}
+
+// IsVirtualView is part of the cat.View interface.
+func (ov *optView) IsSystemView() bool {
+	return ov.desc.IsVirtualTable()
 }
 
 // Query is part of the cat.View interface.
