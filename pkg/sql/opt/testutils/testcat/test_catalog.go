@@ -592,7 +592,7 @@ func (tt *Table) DeletableIndexCount() int {
 }
 
 // Index is part of the cat.Table interface.
-func (tt *Table) Index(i int) cat.Index {
+func (tt *Table) Index(i cat.IndexOrdinal) cat.Index {
 	return tt.Indexes[i]
 }
 
