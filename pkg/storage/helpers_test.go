@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
@@ -263,7 +264,7 @@ func (r *Replica) LastAssignedLeaseIndex() uint64 {
 // a given quota. Additionally it initializes the replica's quota release queue
 // and its command sizes map. Only safe to call on the replica that is both
 // lease holder and raft leader.
-func (r *Replica) InitQuotaPool(quota int64) error {
+func (r *Replica) InitQuotaPool(quota uint64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var appliedIndex uint64
@@ -277,19 +278,19 @@ func (r *Replica) InitQuotaPool(quota int64) error {
 
 	r.mu.proposalQuotaBaseIndex = appliedIndex
 	if r.mu.proposalQuota != nil {
-		r.mu.proposalQuota.close()
+		r.mu.proposalQuota.Close("re-creating")
 	}
-	r.mu.proposalQuota = newQuotaPool(quota)
+	r.mu.proposalQuota = quotapool.NewIntPool(r.rangeStr.String(), quota)
 	r.mu.quotaReleaseQueue = nil
 	return nil
 }
 
 // QuotaAvailable returns the quota available in the replica's quota pool. Only
 // safe to call on the replica that is both lease holder and raft leader.
-func (r *Replica) QuotaAvailable() int64 {
+func (r *Replica) QuotaAvailable() uint64 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mu.proposalQuota.approximateQuota()
+	return r.mu.proposalQuota.ApproximateQuota()
 }
 
 func (r *Replica) QuotaReleaseQueueLen() int {

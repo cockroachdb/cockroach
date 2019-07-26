@@ -2509,6 +2509,7 @@ func (s *Store) RemoveReplica(
 func (s *Store) removeReplicaImpl(
 	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
 ) error {
+	rep.raftMu.AssertHeld()
 	// We check both rep.mu.ReplicaID and rep.mu.state.Desc's replica ID because
 	// they can differ in cases when a replica's ID is increased due to an
 	// incoming raft message (see #14231 for background).
@@ -3462,20 +3463,27 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 				return nil
 			}
 
+			// Grab the raftMu in addition to the replica mu because
+			// cancelFailedProposalsLocked below requires it.
+			repl.raftMu.Lock()
+			defer repl.raftMu.Unlock()
 			repl.mu.Lock()
+			defer repl.mu.Unlock()
+
 			// If the replica ID in the error does not match then we know
 			// that the replica has been removed and re-added quickly. In
 			// that case, we don't want to add it to the replicaGCQueue.
 			if tErr.ReplicaID != repl.mu.replicaID {
-				repl.mu.Unlock()
 				log.Infof(ctx, "replica too old response with old replica ID: %s", tErr.ReplicaID)
 				return nil
 			}
+
 			// If the replica ID in the error does match, we know the replica
 			// will be removed and we can cancel any pending commands. This is
 			// sometimes necessary to unblock PushTxn operations that are
 			// necessary for the replica GC to succeed.
 			repl.cancelPendingCommandsLocked()
+
 			// The replica will be garbage collected soon (we are sure
 			// since our replicaID is definitely too old), but in the meantime we
 			// already want to bounce all traffic from it. Note that the replica
@@ -3485,7 +3493,6 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 				storeID := repl.store.StoreID()
 				repl.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(repl.RangeID, storeID), destroyReasonRemovalPending)
 			}
-			repl.mu.Unlock()
 
 			s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityRemoved)
 		case *roachpb.RaftGroupDeletedError:
