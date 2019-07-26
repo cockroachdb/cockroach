@@ -42,9 +42,9 @@ define ScanPrivate {
     Table TableID
 
     # Index identifies the index to scan (whether primary or secondary). It
-    # can be passed to the cat.Table.Index(i int) method in order to fetch the
+    # can be passed to the cat.Table.Index() method in order to fetch the
     # cat.Index metadata.
-    Index int
+    Index IndexOrdinal
 
     # Cols specifies the set of columns that the scan operator projects. This
     # may be a subset of the columns that the table/index contains.
@@ -278,9 +278,9 @@ define LookupJoinPrivate {
     Table TableID
 
     # Index identifies the index to do lookups in (whether primary or secondary).
-    # It can be passed to the cat.Table.Index(i int) method in order to fetch the
+    # It can be passed to the cat.Table.Index() method in order to fetch the
     # cat.Index metadata.
-    Index int
+    Index IndexOrdinal
 
     # KeyCols are the columns (produced by the input) used to create lookup keys.
     # The key columns must be non-empty, and are listed in the same order as the
@@ -368,10 +368,10 @@ define ZigzagJoinPrivate {
     RightTable TableID
 
     # LeftIndex and RightIndex identifies the index to do lookups in (whether
-    # primary or secondary). It can be passed to the cat.Table.Index(i int)
-    # method in order to fetch the cat.Index metadata.
-    LeftIndex int
-    RightIndex int
+    # primary or secondary). It can be passed to the cat.Table.Index() method in
+    # order to fetch the cat.Index metadata.
+    LeftIndex IndexOrdinal
+    RightIndex IndexOrdinal
 
     # LeftEqCols and RightEqCols contains lists of columns on the left and
     # right sides that are being equated. Both lists must be of equal length.
