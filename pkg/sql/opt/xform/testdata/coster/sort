@@ -14,13 +14,13 @@ SELECT f FROM a ORDER BY f DESC
 ----
 sort
  ├── columns: f:2(float!null)
- ├── stats: [rows=1000]
- ├── cost: 1269.34569
+ ├── stats: [rows=1000000]
+ ├── cost: 1468631.4
  ├── ordering: -2
  └── scan a
       ├── columns: f:2(float!null)
-      ├── stats: [rows=1000]
-      └── cost: 1050.02
+      ├── stats: [rows=1000000]
+      └── cost: 1050000.02
 
 # Test sort on 0 rows.
 opt
@@ -52,13 +52,13 @@ SELECT * FROM abc ORDER BY b, c, a
 ----
 sort
  ├── columns: a:1(int) b:2(int) c:3(int)
- ├── stats: [rows=1000]
- ├── cost: 1301.40805
+ ├── stats: [rows=1000000]
+ ├── cost: 1511656.13
  ├── ordering: +2,+3,+1
  └── scan abc
       ├── columns: a:1(int) b:2(int) c:3(int)
-      ├── stats: [rows=1000]
-      └── cost: 1070.02
+      ├── stats: [rows=1000000]
+      └── cost: 1070000.02
 
 # The sort ordering has a common prefix with the ordering provided with index ab
 opt
@@ -66,13 +66,13 @@ SELECT * FROM abc ORDER BY a, b, c
 ----
 sort (segmented)
  ├── columns: a:1(int) b:2(int) c:3(int)
- ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=19.9]
- ├── cost: 1090.43
+ ├── stats: [rows=1000000, distinct(1,2)=1000000, null(1,2)=19900]
+ ├── cost: 1090400.03
  ├── ordering: +1,+2,+3
  └── scan abc@ab
       ├── columns: a:1(int) b:2(int) c:3(int)
-      ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=19.9]
-      ├── cost: 1070.02
+      ├── stats: [rows=1000000, distinct(1,2)=1000000, null(1,2)=19900]
+      ├── cost: 1070000.02
       └── ordering: +1,+2
 
 # The sort ordering has a common prefix with the ordering provided with index cb
@@ -81,13 +81,13 @@ SELECT * FROM abc ORDER BY c, b, a
 ----
 sort (segmented)
  ├── columns: a:1(int) b:2(int) c:3(int)
- ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=19.9]
- ├── cost: 1090.43
+ ├── stats: [rows=1000000, distinct(2,3)=1000000, null(2,3)=19900]
+ ├── cost: 1090400.03
  ├── ordering: +3,+2,+1
  └── scan abc@cb
       ├── columns: a:1(int) b:2(int) c:3(int)
-      ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=19.9]
-      ├── cost: 1070.02
+      ├── stats: [rows=1000000, distinct(2,3)=1000000, null(2,3)=19900]
+      ├── cost: 1070000.02
       └── ordering: +3,+2
 
 # Testing segmented sort cost with only one common prefix column (c).
@@ -96,13 +96,13 @@ SELECT * FROM abc ORDER BY c, a, b
 ----
 sort (segmented)
  ├── columns: a:1(int) b:2(int) c:3(int)
- ├── stats: [rows=1000, distinct(3)=100, null(3)=10]
- ├── cost: 1161.00049
+ ├── stats: [rows=1000000, distinct(3)=100000, null(3)=10000]
+ ├── cost: 1160970.52
  ├── ordering: +3,+1,+2
  └── scan abc@cb
       ├── columns: a:1(int) b:2(int) c:3(int)
-      ├── stats: [rows=1000, distinct(3)=100, null(3)=10]
-      ├── cost: 1070.02
+      ├── stats: [rows=1000000, distinct(3)=100000, null(3)=10000]
+      ├── cost: 1070000.02
       └── ordering: +3
 
 # Reduce the number of segments/chunks.

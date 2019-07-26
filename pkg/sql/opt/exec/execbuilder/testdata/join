@@ -326,7 +326,9 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 3   ·              equality   (refobjid) = (oid)
 4   hash-join      ·          ·
 4   ·              type       inner
-4   ·              equality   (oid) = (objid)
+4   ·              equality   (objid) = (oid)
+5   virtual table  ·          ·
+5   ·              source     ·
 5   hash-join      ·          ·
 5   ·              type       inner
 5   ·              pred       (attnum = confkey[generate_series]) AND (attnum = conkey[generate_series])
@@ -370,8 +372,6 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 6   project set    ·          ·
 6   ·              render 0   generate_series(1, 32)
 7   emptyrow       ·          ·
-5   virtual table  ·          ·
-5   ·              source     ·
 4   filter         ·          ·
 4   ·              filter     relkind = 'i'
 5   virtual table  ·          ·

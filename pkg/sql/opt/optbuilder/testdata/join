@@ -973,43 +973,45 @@ sort
 build
 SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) ORDER BY 1 LIMIT 1
 ----
-limit
+sort
  ├── columns: x:1(int!null) x:3(int!null) y:4(int) b:6(int!null) d:8(int!null) e:9(int)
- ├── internal-ordering: +1
  ├── ordering: +1
- ├── sort
- │    ├── columns: onecolumn.x:1(int!null) twocolumn.x:3(int!null) y:4(int) b:6(int!null) d:8(int!null) e:9(int)
- │    ├── ordering: +1
- │    └── project
- │         ├── columns: onecolumn.x:1(int!null) twocolumn.x:3(int!null) y:4(int) b:6(int!null) d:8(int!null) e:9(int)
- │         └── inner-join (hash)
- │              ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) y:4(int) twocolumn.rowid:5(int!null) b:6(int!null) a.rowid:7(int!null) d:8(int!null) e:9(int) c.rowid:10(int!null)
- │              ├── inner-join (hash)
- │              │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) y:4(int) twocolumn.rowid:5(int!null) b:6(int!null) a.rowid:7(int!null)
- │              │    ├── inner-join (hash)
- │              │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
- │              │    │    ├── scan onecolumn
- │              │    │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
- │              │    │    ├── scan twocolumn
- │              │    │    │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
- │              │    │    └── filters (true)
- │              │    ├── scan a
- │              │    │    └── columns: b:6(int) a.rowid:7(int!null)
- │              │    └── filters
- │              │         └── eq [type=bool]
- │              │              ├── variable: b [type=int]
- │              │              └── variable: twocolumn.x [type=int]
- │              ├── scan c
- │              │    └── columns: d:8(int) e:9(int) c.rowid:10(int!null)
- │              └── filters
- │                   └── and [type=bool]
- │                        ├── eq [type=bool]
- │                        │    ├── variable: b [type=int]
- │                        │    └── variable: d [type=int]
- │                        └── eq [type=bool]
- │                             ├── variable: d [type=int]
- │                             └── variable: onecolumn.x [type=int]
- └── const: 1 [type=int]
+ └── limit
+      ├── columns: onecolumn.x:1(int!null) twocolumn.x:3(int!null) y:4(int) b:6(int!null) d:8(int!null) e:9(int)
+      ├── internal-ordering: +1
+      ├── sort
+      │    ├── columns: onecolumn.x:1(int!null) twocolumn.x:3(int!null) y:4(int) b:6(int!null) d:8(int!null) e:9(int)
+      │    ├── ordering: +1
+      │    └── project
+      │         ├── columns: onecolumn.x:1(int!null) twocolumn.x:3(int!null) y:4(int) b:6(int!null) d:8(int!null) e:9(int)
+      │         └── inner-join (hash)
+      │              ├── columns: onecolumn.x:1(int!null) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) y:4(int) twocolumn.rowid:5(int!null) b:6(int!null) a.rowid:7(int!null) d:8(int!null) e:9(int) c.rowid:10(int!null)
+      │              ├── inner-join (hash)
+      │              │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int!null) y:4(int) twocolumn.rowid:5(int!null) b:6(int!null) a.rowid:7(int!null)
+      │              │    ├── inner-join (hash)
+      │              │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
+      │              │    │    ├── scan onecolumn
+      │              │    │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+      │              │    │    ├── scan twocolumn
+      │              │    │    │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
+      │              │    │    └── filters (true)
+      │              │    ├── scan a
+      │              │    │    └── columns: b:6(int) a.rowid:7(int!null)
+      │              │    └── filters
+      │              │         └── eq [type=bool]
+      │              │              ├── variable: b [type=int]
+      │              │              └── variable: twocolumn.x [type=int]
+      │              ├── scan c
+      │              │    └── columns: d:8(int) e:9(int) c.rowid:10(int!null)
+      │              └── filters
+      │                   └── and [type=bool]
+      │                        ├── eq [type=bool]
+      │                        │    ├── variable: b [type=int]
+      │                        │    └── variable: d [type=int]
+      │                        └── eq [type=bool]
+      │                             ├── variable: d [type=int]
+      │                             └── variable: onecolumn.x [type=int]
+      └── const: 1 [type=int]
 
 # Check sub-queries in ON conditions.
 build

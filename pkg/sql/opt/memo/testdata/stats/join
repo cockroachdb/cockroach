@@ -582,15 +582,15 @@ SELECT * FROM (SELECT * FROM uvw WHERE w=1) JOIN (SELECT * FROM xyz WHERE x=10) 
 ----
 inner-join (hash)
  ├── columns: u:1(int!null) v:2(int) w:3(int!null) x:5(int!null) y:6(int) z:7(int)
- ├── stats: [rows=10.3490885, distinct(1)=1, null(1)=0, distinct(3)=0.999982217, null(3)=0, distinct(5)=1, null(5)=0]
+ ├── stats: [rows=9.90044105, distinct(1)=1, null(1)=0, distinct(3)=0.999970671, null(3)=0, distinct(5)=1, null(5)=0]
  ├── fd: ()-->(1,3,5), (1)==(5), (5)==(1)
  ├── select
  │    ├── columns: u:1(int) v:2(int) w:3(int!null)
- │    ├── stats: [rows=9.9, distinct(1)=9.47039924, null(1)=0.099, distinct(3)=1, null(3)=0]
+ │    ├── stats: [rows=9.9, distinct(1)=9.89955897, null(1)=0.099, distinct(3)=1, null(3)=0]
  │    ├── fd: ()-->(3)
  │    ├── scan uvw
  │    │    ├── columns: u:1(int) v:2(int) w:3(int)
- │    │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(3)=100, null(3)=10]
+ │    │    └── stats: [rows=1000000, distinct(1)=100000, null(1)=10000, distinct(3)=100000, null(3)=10000]
  │    └── filters
  │         └── w = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
  ├── select
@@ -599,7 +599,7 @@ inner-join (hash)
  │    ├── fd: ()-->(5)
  │    ├── scan xyz
  │    │    ├── columns: x:5(int) y:6(int) z:7(int)
- │    │    └── stats: [rows=1000, distinct(5)=100, null(5)=10]
+ │    │    └── stats: [rows=1000000, distinct(5)=100000, null(5)=10000]
  │    └── filters
  │         └── x = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
  └── filters
@@ -610,20 +610,20 @@ SELECT * FROM (SELECT * FROM uvw WHERE w=1) JOIN xyz ON u=x AND x=10
 ----
 inner-join (hash)
  ├── columns: u:1(int!null) v:2(int) w:3(int!null) x:5(int!null) y:6(int) z:7(int)
- ├── stats: [rows=10.4536248, distinct(1)=1, null(1)=0, distinct(3)=0.999971315, null(3)=0, distinct(5)=1, null(5)=0]
+ ├── stats: [rows=10.0004455, distinct(1)=1, null(1)=0, distinct(3)=0.999954621, null(3)=0, distinct(5)=1, null(5)=0]
  ├── fd: ()-->(1,3,5), (1)==(5), (5)==(1)
  ├── select
  │    ├── columns: u:1(int) v:2(int) w:3(int!null)
- │    ├── stats: [rows=9.9, distinct(1)=9.47039924, null(1)=0.099, distinct(3)=1, null(3)=0]
+ │    ├── stats: [rows=9.9, distinct(1)=9.89955897, null(1)=0.099, distinct(3)=1, null(3)=0]
  │    ├── fd: ()-->(3)
  │    ├── scan uvw
  │    │    ├── columns: u:1(int) v:2(int) w:3(int)
- │    │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(3)=100, null(3)=10]
+ │    │    └── stats: [rows=1000000, distinct(1)=100000, null(1)=10000, distinct(3)=100000, null(3)=10000]
  │    └── filters
  │         └── w = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
  ├── scan xyz
  │    ├── columns: x:5(int) y:6(int) z:7(int)
- │    └── stats: [rows=1000, distinct(5)=100, null(5)=10]
+ │    └── stats: [rows=1000000, distinct(5)=100000, null(5)=10000]
  └── filters
       ├── u = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       └── x = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
@@ -1101,13 +1101,13 @@ SELECT (
 ----
 project
  ├── columns: "?column?":16(int)
- ├── stats: [rows=1000]
+ ├── stats: [rows=1000000]
  ├── left-join-apply
  │    ├── columns: t0.col1:2(bool) "?column?":15(int)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000000]
  │    ├── scan t0
  │    │    ├── columns: t0.col1:2(bool)
- │    │    └── stats: [rows=1000]
+ │    │    └── stats: [rows=1000000]
  │    ├── max1-row
  │    │    ├── columns: "?column?":15(int!null)
  │    │    ├── outer: (2)
@@ -1118,13 +1118,13 @@ project
  │    │    └── project
  │    │         ├── columns: "?column?":15(int!null)
  │    │         ├── outer: (2)
- │    │         ├── stats: [rows=1000]
+ │    │         ├── stats: [rows=1000000]
  │    │         ├── fd: ()-->(15)
  │    │         ├── left-join (hash)
  │    │         │    ├── outer: (2)
- │    │         │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+ │    │         │    ├── stats: [rows=1000000, distinct(2)=1, null(2)=0]
  │    │         │    ├── scan table1
- │    │         │    │    └── stats: [rows=1000]
+ │    │         │    │    └── stats: [rows=1000000]
  │    │         │    ├── values
  │    │         │    │    ├── cardinality: [0 - 0]
  │    │         │    │    ├── stats: [rows=0]

@@ -12,27 +12,27 @@ SELECT k, x FROM a INNER JOIN b ON k=x WHERE d=1.0
 project
  ├── columns: k:1(int!null) x:5(int!null)
  ├── stats: [rows=100]
- ├── cost: 2124.745
+ ├── cost: 2122502.24
  ├── fd: (1)==(5), (5)==(1)
  └── inner-join (hash)
       ├── columns: k:1(int!null) d:4(decimal!null) x:5(int!null)
       ├── stats: [rows=100, distinct(1)=10, null(1)=0, distinct(4)=1, null(4)=0, distinct(5)=10, null(5)=0]
-      ├── cost: 2123.735
+      ├── cost: 2122501.23
       ├── fd: ()-->(4), (1)==(5), (5)==(1)
       ├── scan b
       │    ├── columns: x:5(int)
-      │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
-      │    └── cost: 1040.02
+      │    ├── stats: [rows=1000000, distinct(5)=100000, null(5)=10000]
+      │    └── cost: 1040000.02
       ├── select
       │    ├── columns: k:1(int!null) d:4(decimal!null)
       │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(4)=1, null(4)=0]
-      │    ├── cost: 1070.03
+      │    ├── cost: 1070000.03
       │    ├── key: (1)
       │    ├── fd: ()-->(4)
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) d:4(decimal!null)
-      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(4)=100, null(4)=0]
-      │    │    ├── cost: 1060.02
+      │    │    ├── stats: [rows=1000000, distinct(1)=1000000, null(1)=0, distinct(4)=100000, null(4)=0]
+      │    │    ├── cost: 1060000.02
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(4)
       │    └── filters
@@ -49,24 +49,24 @@ inner-join (merge)
  ├── flags: no-lookup-join;no-hash-join
  ├── left ordering: +1
  ├── right ordering: +5
- ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(5)=100, null(5)=0]
- ├── cost: 2339.37569
+ ├── stats: [rows=1000000, distinct(1)=100000, null(1)=0, distinct(5)=100000, null(5)=0]
+ ├── cost: 2538631.43
  ├── fd: (1)==(5), (5)==(1)
  ├── scan a
  │    ├── columns: k:1(int!null)
- │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
- │    ├── cost: 1050.02
+ │    ├── stats: [rows=1000000, distinct(1)=1000000, null(1)=0]
+ │    ├── cost: 1050000.02
  │    ├── key: (1)
  │    └── ordering: +1
  ├── sort
  │    ├── columns: x:5(int)
- │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
- │    ├── cost: 1259.34569
+ │    ├── stats: [rows=1000000, distinct(5)=100000, null(5)=10000]
+ │    ├── cost: 1458631.4
  │    ├── ordering: +5
  │    └── scan b
  │         ├── columns: x:5(int)
- │         ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
- │         └── cost: 1040.02
+ │         ├── stats: [rows=1000000, distinct(5)=100000, null(5)=10000]
+ │         └── cost: 1040000.02
  └── filters (true)
 
 # Verify that we pick lookup join if we force it. Note that lookup join is only
@@ -78,13 +78,13 @@ inner-join (lookup a)
  ├── columns: k:4(int!null) x:1(int!null)
  ├── flags: no-merge-join;no-hash-join
  ├── key columns: [1] = [4]
- ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(4)=100, null(4)=0]
- ├── cost: 7090.03
+ ├── stats: [rows=1000000, distinct(1)=100000, null(1)=0, distinct(4)=100000, null(4)=0]
+ ├── cost: 7090000.03
  ├── fd: (1)==(4), (4)==(1)
  ├── scan b
  │    ├── columns: x:1(int)
- │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    └── cost: 1040.02
+ │    ├── stats: [rows=1000000, distinct(1)=100000, null(1)=10000]
+ │    └── cost: 1040000.02
  └── filters (true)
 
 
@@ -96,18 +96,18 @@ SELECT k, x FROM a INNER LOOKUP JOIN b ON k=x
 inner-join (hash)
  ├── columns: k:1(int!null) x:5(int!null)
  ├── flags: no-merge-join;no-hash-join
- ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(5)=100, null(5)=0]
+ ├── stats: [rows=1000000, distinct(1)=100000, null(1)=0, distinct(5)=100000, null(5)=0]
  ├── cost: 1e+100
  ├── fd: (1)==(5), (5)==(1)
  ├── scan a
  │    ├── columns: k:1(int!null)
- │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
- │    ├── cost: 1050.02
+ │    ├── stats: [rows=1000000, distinct(1)=1000000, null(1)=0]
+ │    ├── cost: 1050000.02
  │    └── key: (1)
  ├── scan b
  │    ├── columns: x:5(int)
- │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
- │    └── cost: 1040.02
+ │    ├── stats: [rows=1000000, distinct(5)=100000, null(5)=10000]
+ │    └── cost: 1040000.02
  └── filters
       └── k = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 

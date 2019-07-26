@@ -32,7 +32,7 @@ inner-join (lookup abcd)
  ├── inner-join (lookup abcd@secondary)
  │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) abcd.rowid:7(int!null)
  │    ├── key columns: [1] = [4]
- │    ├── stats: [rows=100, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0, distinct(7)=95.617925, null(7)=0]
+ │    ├── stats: [rows=100, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0, distinct(7)=99.9955001, null(7)=0]
  │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
@@ -53,7 +53,7 @@ inner-join (lookup abcd)
  ├── inner-join (lookup abcd@secondary)
  │    ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int) abcd.rowid:7(int!null)
  │    ├── key columns: [1] = [4]
- │    ├── stats: [rows=33, distinct(1)=3.3, null(1)=0, distinct(2)=0.333333333, null(2)=0, distinct(4)=3.3, null(4)=0, distinct(7)=32.6221433, null(7)=0]
+ │    ├── stats: [rows=33, distinct(1)=3.3, null(1)=0, distinct(2)=0.333333333, null(2)=0, distinct(4)=3.3, null(4)=0, distinct(7)=32.9996205, null(7)=0]
  │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
  │    ├── select
  │    │    ├── columns: m:1(int) n:2(int!null)
@@ -74,12 +74,12 @@ SELECT * FROM small JOIN abcd ON a=m WHERE b > 2
 inner-join (lookup abcd)
  ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) c:6(int)
  ├── key columns: [7] = [7]
- ├── stats: [rows=33.6127051, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0, distinct(5)=21.2357454, null(5)=0]
+ ├── stats: [rows=33.6127051, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0, distinct(5)=33.5959346, null(5)=0]
  ├── fd: (1)==(4), (4)==(1)
  ├── inner-join (lookup abcd@secondary)
  │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
  │    ├── key columns: [1] = [4]
- │    ├── stats: [rows=33.3333333, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0, distinct(5)=33.3333333, null(5)=0, distinct(7)=32.837752, null(7)=0]
+ │    ├── stats: [rows=33.3333333, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0, distinct(5)=33.3333333, null(5)=0, distinct(7)=33.3328333, null(7)=0]
  │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
@@ -95,12 +95,12 @@ SELECT * FROM small JOIN abcd ON a=m WHERE c>2
 inner-join (lookup abcd)
  ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) c:6(int!null)
  ├── key columns: [7] = [7]
- ├── stats: [rows=33.6127051, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0, distinct(6)=21.2357454, null(6)=0]
+ ├── stats: [rows=33.6127051, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0, distinct(6)=33.5959346, null(6)=0]
  ├── fd: (1)==(4), (4)==(1)
  ├── inner-join (lookup abcd@secondary)
  │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) abcd.rowid:7(int!null)
  │    ├── key columns: [1] = [4]
- │    ├── stats: [rows=100, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0, distinct(7)=95.617925, null(7)=0]
+ │    ├── stats: [rows=100, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0, distinct(7)=99.9955001, null(7)=0]
  │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
@@ -116,12 +116,12 @@ SELECT * FROM small JOIN abcd ON a=m AND b=n WHERE c>2
 inner-join (lookup abcd)
  ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) c:6(int!null)
  ├── key columns: [7] = [7]
- ├── stats: [rows=0.342367862, distinct(1)=0.342367862, null(1)=0, distinct(2)=0.342367862, null(2)=0, distinct(4)=0.342367862, null(4)=0, distinct(5)=0.342367862, null(5)=0, distinct(6)=0.340633209, null(6)=0]
+ ├── stats: [rows=0.000342367862, distinct(1)=0.000342367862, null(1)=0, distinct(2)=0.000342367862, null(2)=0, distinct(4)=0.000342367862, null(4)=0, distinct(5)=0.000342367862, null(5)=0, distinct(6)=0.000342367704, null(6)=0]
  ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2)
  ├── inner-join (lookup abcd@secondary)
  │    ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
  │    ├── key columns: [1 2] = [4 5]
- │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(4)=1, null(4)=0, distinct(5)=1, null(5)=0, distinct(7)=0.99955012, null(7)=0]
+ │    ├── stats: [rows=0.001, distinct(1)=0.001, null(1)=0, distinct(2)=0.001, null(2)=0, distinct(4)=0.001, null(4)=0, distinct(5)=0.001, null(5)=0, distinct(7)=0.001, null(7)=0]
  │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1), (2)==(5), (5)==(2)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)

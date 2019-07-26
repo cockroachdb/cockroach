@@ -229,32 +229,32 @@ render                   ·       ·
 query TTT
 EXPLAIN SHOW COLUMNS FROM foo
 ----
-render                                       ·            ·
- └── group                                   ·            ·
-      │                                      aggregate 0  column_name
-      │                                      aggregate 1  ordinal_position
-      │                                      aggregate 2  column_default
-      │                                      aggregate 3  is_nullable
-      │                                      aggregate 4  generation_expression
-      │                                      aggregate 5  is_hidden
-      │                                      aggregate 6  crdb_sql_type
-      │                                      aggregate 7  array_agg(index_name)
-      │                                      group by     column_name, ordinal_position, column_default, is_nullable, generation_expression, is_hidden, crdb_sql_type
-      │                                      ordered      +ordinal_position
-      └── render                             ·            ·
-           └── sort                          ·            ·
-                │                            order        +ordinal_position
-                └── hash-join                ·            ·
-                     │                       type         left outer
-                     │                       equality     (column_name) = (column_name)
-                     ├── filter              ·            ·
-                     │    │                  filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
-                     │    └── virtual table  ·            ·
-                     │                       source       ·
-                     └── filter              ·            ·
-                          │                  filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
-                          └── virtual table  ·            ·
-·                                            source       ·
+render                                            ·            ·
+ └── sort                                         ·            ·
+      │                                           order        +ordinal_position
+      └── render                                  ·            ·
+           └── group                              ·            ·
+                │                                 aggregate 0  column_name
+                │                                 aggregate 1  ordinal_position
+                │                                 aggregate 2  column_default
+                │                                 aggregate 3  is_nullable
+                │                                 aggregate 4  generation_expression
+                │                                 aggregate 5  is_hidden
+                │                                 aggregate 6  crdb_sql_type
+                │                                 aggregate 7  array_agg(index_name)
+                │                                 group by     column_name, ordinal_position, column_default, is_nullable, generation_expression, is_hidden, crdb_sql_type
+                └── render                        ·            ·
+                     └── hash-join                ·            ·
+                          │                       type         left outer
+                          │                       equality     (column_name) = (column_name)
+                          ├── filter              ·            ·
+                          │    │                  filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+                          │    └── virtual table  ·            ·
+                          │                       source       ·
+                          └── filter              ·            ·
+                               │                  filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+                               └── virtual table  ·            ·
+·                                                 source       ·
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW GRANTS ON foo] WHERE field != 'size'
@@ -740,20 +740,20 @@ TABLE t
       └── k int not null
 inner-join (hash)
  ├── columns: a:1 b:2 k:4 v:5
- ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(4)=100, null(4)=0]
- ├── cost: 2220.05
+ ├── stats: [rows=1000000, distinct(1)=100000, null(1)=0, distinct(4)=100000, null(4)=0]
+ ├── cost: 2220000.05
  ├── fd: (4)-->(5), (1)==(4), (4)==(1)
  ├── prune: (2,5)
  ├── scan tc
  │    ├── columns: a:1 b:2
- │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    ├── cost: 1100.02
+ │    ├── stats: [rows=1000000, distinct(1)=100000, null(1)=10000]
+ │    ├── cost: 1100000.02
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
  ├── scan t
  │    ├── columns: k:4 v:5
- │    ├── stats: [rows=1000, distinct(4)=1000, null(4)=0]
- │    ├── cost: 1080.02
+ │    ├── stats: [rows=1000000, distinct(4)=1000000, null(4)=0]
+ │    ├── cost: 1080000.02
  │    ├── key: (4)
  │    ├── fd: (4)-->(5)
  │    ├── prune: (4,5)
@@ -778,28 +778,28 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 ----
 sort
  ├── columns: a:1 b:2  [hidden: column4:4]
- ├── stats: [rows=333.333333]
- ├── cost: 1179.25548
+ ├── stats: [rows=333333.333]
+ ├── cost: 1245644.09
  ├── fd: (1,2)-->(4)
  ├── ordering: +4
  ├── prune: (1,2,4)
  ├── interesting orderings: (+1)
  └── project
       ├── columns: column4:4 a:1 b:2
-      ├── stats: [rows=333.333333]
-      ├── cost: 1116.70667
+      ├── stats: [rows=333333.333]
+      ├── cost: 1116666.71
       ├── fd: (1,2)-->(4)
       ├── prune: (1,2,4)
       ├── interesting orderings: (+1)
       ├── select
       │    ├── columns: a:1 b:2
-      │    ├── stats: [rows=333.333333]
-      │    ├── cost: 1110.03
+      │    ├── stats: [rows=333333.333]
+      │    ├── cost: 1110000.03
       │    ├── interesting orderings: (+1)
       │    ├── scan tc
       │    │    ├── columns: a:1 b:2
-      │    │    ├── stats: [rows=1000]
-      │    │    ├── cost: 1100.02
+      │    │    ├── stats: [rows=1000000]
+      │    │    ├── cost: 1100000.02
       │    │    ├── prune: (1,2)
       │    │    └── interesting orderings: (+1)
       │    └── filters
@@ -812,28 +812,28 @@ EXPLAIN (OPT, TYPES) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 ----
 sort
  ├── columns: a:1(int) b:2(int)  [hidden: column4:4(int)]
- ├── stats: [rows=333.333333]
- ├── cost: 1179.25548
+ ├── stats: [rows=333333.333]
+ ├── cost: 1245644.09
  ├── fd: (1,2)-->(4)
  ├── ordering: +4
  ├── prune: (1,2,4)
  ├── interesting orderings: (+1)
  └── project
       ├── columns: column4:4(int) a:1(int) b:2(int)
-      ├── stats: [rows=333.333333]
-      ├── cost: 1116.70667
+      ├── stats: [rows=333333.333]
+      ├── cost: 1116666.71
       ├── fd: (1,2)-->(4)
       ├── prune: (1,2,4)
       ├── interesting orderings: (+1)
       ├── select
       │    ├── columns: a:1(int) b:2(int)
-      │    ├── stats: [rows=333.333333]
-      │    ├── cost: 1110.03
+      │    ├── stats: [rows=333333.333]
+      │    ├── cost: 1110000.03
       │    ├── interesting orderings: (+1)
       │    ├── scan tc
       │    │    ├── columns: a:1(int) b:2(int)
-      │    │    ├── stats: [rows=1000]
-      │    │    ├── cost: 1100.02
+      │    │    ├── stats: [rows=1000000]
+      │    │    ├── cost: 1100000.02
       │    │    ├── prune: (1,2)
       │    │    └── interesting orderings: (+1)
       │    └── filters

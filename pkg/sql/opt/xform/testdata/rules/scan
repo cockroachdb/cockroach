@@ -63,10 +63,10 @@ memo (optimized, ~3KB, required=[presentation: k:1,f:3] [ordering: -1])
  ├── G2: (scan a,cols=(1,3)) (scan a@s_idx,cols=(1,3))
  │    ├── [ordering: -1]
  │    │    ├── best: (scan a,rev,cols=(1,3))
- │    │    └── cost: 1169.68
+ │    │    └── cost: 1269315.71
  │    └── []
  │         ├── best: (scan a@s_idx,cols=(1,3))
- │         └── cost: 1060.02
+ │         └── cost: 1060000.02
  └── G3: (const 10)
 
 
@@ -152,10 +152,10 @@ memo (optimized, ~2KB, required=[presentation: k:1] [ordering: +1])
  └── G1: (scan a,cols=(1)) (scan a@s_idx,cols=(1)) (scan a@si_idx,cols=(1))
       ├── [presentation: k:1] [ordering: +1]
       │    ├── best: (scan a,cols=(1))
-      │    └── cost: 1060.02
+      │    └── cost: 1060000.02
       └── []
            ├── best: (scan a@s_idx,cols=(1))
-           └── cost: 1050.02
+           └── cost: 1050000.02
 
 # Scan of secondary index is lowest cost.
 opt
@@ -174,10 +174,10 @@ memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: +4,+1])
  └── G1: (scan a,cols=(1-4)) (scan a@s_idx,cols=(1-4))
       ├── [presentation: s:4,i:2,f:3] [ordering: +4,+1]
       │    ├── best: (scan a@s_idx,cols=(1-4))
-      │    └── cost: 1080.02
+      │    └── cost: 1080000.02
       └── []
            ├── best: (scan a@s_idx,cols=(1-4))
-           └── cost: 1080.02
+           └── cost: 1080000.02
 
 # No index-join should be generated for a@si_idx, since it is not constrained.
 exploretrace rule=GenerateIndexScans
@@ -266,10 +266,10 @@ memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: +3])
  └── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
       ├── [presentation: s:4,i:2,f:3] [ordering: +3]
       │    ├── best: (sort G1)
-      │    └── cost: 1289.35
+      │    └── cost: 1488631.40
       └── []
            ├── best: (scan a@s_idx,cols=(2-4))
-           └── cost: 1070.02
+           └── cost: 1070000.02
 
 memo
 SELECT s, i, f FROM a ORDER BY s DESC, i
@@ -278,13 +278,13 @@ memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: -4,+2])
  └── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
       ├── [presentation: s:4,i:2,f:3] [ordering: -4,+2]
       │    ├── best: (sort G1="[ordering: -4]")
-      │    └── cost: 1256.33
+      │    └── cost: 1355954.28
       ├── [ordering: -4]
       │    ├── best: (scan a@s_idx,rev,cols=(2-4))
-      │    └── cost: 1169.68
+      │    └── cost: 1269315.71
       └── []
            ├── best: (scan a@s_idx,cols=(2-4))
-           └── cost: 1070.02
+           └── cost: 1070000.02
 
 memo
 SELECT s, i, f FROM a WHERE s='foo' ORDER BY s DESC, i
@@ -300,10 +300,10 @@ memo (optimized, ~5KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)
  ├── G2: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
  │    ├── [ordering: +2 opt(4)]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1289.35
+ │    │    └── cost: 1488631.40
  │    └── []
  │         ├── best: (scan a@s_idx,cols=(2-4))
- │         └── cost: 1070.02
+ │         └── cost: 1070000.02
  ├── G3: (filters G5)
  ├── G4: (scan a@si_idx,cols=(1,2,4),constrained)
  │    ├── [ordering: +2 opt(4)]
@@ -351,14 +351,14 @@ memo (optimized, ~3KB, required=[presentation: d:4] [ordering: +5])
  ├── G1: (project G2 G3 d)
  │    ├── [presentation: d:4] [ordering: +5]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1289.36
+ │    │    └── cost: 1488631.41
  │    └── []
  │         ├── best: (project G2 G3 d)
- │         └── cost: 1070.03
+ │         └── cost: 1070000.03
  ├── G2: (scan abc,cols=(4))
  │    └── []
  │         ├── best: (scan abc,cols=(4))
- │         └── cost: 1050.02
+ │         └── cost: 1050000.02
  ├── G3: (projections G4)
  ├── G4: (function G5 lower)
  ├── G5: (scalar-list G6)
@@ -380,7 +380,7 @@ memo (optimized, ~6KB, required=[presentation: j:5])
  ├── G4: (scan a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
  │    └── []
  │         ├── best: (scan a@si_idx,cols=(4,5))
- │         └── cost: 1060.02
+ │         └── cost: 1060000.02
  ├── G5: (filters G7)
  ├── G6: (scan a@s_idx,cols=(1,4),constrained)
  │    └── []
@@ -407,10 +407,10 @@ memo (optimized, ~2KB, required=[presentation: s:4,i:2,f:3] [ordering: +1])
  └── G1: (scan a,cols=(1-4)) (scan a@s_idx,cols=(1-4))
       ├── [presentation: s:4,i:2,f:3] [ordering: +1]
       │    ├── best: (scan a,cols=(1-4))
-      │    └── cost: 1090.02
+      │    └── cost: 1090000.02
       └── []
            ├── best: (scan a@s_idx,cols=(1-4))
-           └── cost: 1080.02
+           └── cost: 1080000.02
 
 # Secondary index has right order
 opt
@@ -427,10 +427,10 @@ memo (optimized, ~2KB, required=[presentation: s:4,j:5] [ordering: +4])
  └── G1: (scan a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
       ├── [presentation: s:4,j:5] [ordering: +4]
       │    ├── best: (scan a@si_idx,rev,cols=(4,5))
-      │    └── cost: 1159.68
+      │    └── cost: 1259315.71
       └── []
            ├── best: (scan a@si_idx,cols=(4,5))
-           └── cost: 1060.02
+           └── cost: 1060000.02
 
 # Consider three different indexes, and pick index with multiple keys.
 opt
@@ -454,13 +454,13 @@ memo (optimized, ~2KB, required=[presentation: i:2,k:1] [ordering: -4,+2,+1])
  └── G1: (scan a,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4))
       ├── [presentation: i:2,k:1] [ordering: -4,+2,+1]
       │    ├── best: (sort G1="[ordering: -4]")
-      │    └── cost: 1161.00
+      │    └── cost: 1160970.52
       ├── [ordering: -4]
       │    ├── best: (scan a@si_idx,cols=(1,2,4))
-      │    └── cost: 1070.02
+      │    └── cost: 1070000.02
       └── []
            ├── best: (scan a@s_idx,cols=(1,2,4))
-           └── cost: 1070.02
+           └── cost: 1070000.02
 
 memo
 SELECT i, k FROM a WHERE s >= 'foo'
@@ -469,16 +469,16 @@ memo (optimized, ~5KB, required=[presentation: i:2,k:1])
  ├── G1: (project G2 G3 k i)
  │    └── [presentation: i:2,k:1]
  │         ├── best: (project G2 G3 k i)
- │         └── cost: 356.42
+ │         └── cost: 356400.02
  ├── G2: (select G4 G5) (scan a@s_idx,cols=(1,2,4),constrained) (scan a@si_idx,cols=(1,2,4),constrained)
  │    └── []
  │         ├── best: (scan a@s_idx,cols=(1,2,4),constrained)
- │         └── cost: 353.11
+ │         └── cost: 353100.01
  ├── G3: (projections)
  ├── G4: (scan a,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4))
  │    └── []
  │         ├── best: (scan a@s_idx,cols=(1,2,4))
- │         └── cost: 1070.02
+ │         └── cost: 1070000.02
  ├── G5: (filters G6)
  ├── G6: (ge G7 G8)
  ├── G7: (variable s)

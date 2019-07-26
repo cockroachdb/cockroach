@@ -47,7 +47,7 @@ WHERE y=10
 select
  ├── columns: x:1(string!null) y:2(int!null) z:3(float)
  ├── side-effects, mutations
- ├── stats: [rows=1, distinct(1)=0.999742533, null(1)=0, distinct(2)=1, null(2)=0]
+ ├── stats: [rows=1, distinct(1)=0.999999751, null(1)=0, distinct(2)=1, null(2)=0]
  ├── fd: ()-->(2)
  ├── upsert xyz
  │    ├── columns: x:1(string!null) y:2(int!null) z:3(float)
@@ -64,18 +64,18 @@ select
  │    │    ├──  upsert_y:14 => y:2
  │    │    └──  upsert_z:15 => z:3
  │    ├── side-effects, mutations
- │    ├── stats: [rows=200, distinct(1)=181.351171, null(1)=0, distinct(2)=200, null(2)=0]
+ │    ├── stats: [rows=200, distinct(1)=199.980101, null(1)=0, distinct(2)=200, null(2)=0]
  │    └── project
  │         ├── columns: upsert_x:13(string) upsert_y:14(int) upsert_z:15(float) a:4(int!null) b:5(string!null) column8:8(float) x:9(string) y:10(int) z:11(float) column12:12(int!null)
- │         ├── stats: [rows=200, distinct(13)=181.351171, null(13)=0, distinct(14)=200, null(14)=0]
+ │         ├── stats: [rows=200, distinct(13)=199.980101, null(13)=0, distinct(14)=200, null(14)=0]
  │         ├── fd: ()-->(5,8,12), (9)-->(10,11), (9)-->(13), (4,9)-->(14)
  │         ├── project
  │         │    ├── columns: column12:12(int!null) a:4(int!null) b:5(string!null) column8:8(float) x:9(string) y:10(int) z:11(float)
- │         │    ├── stats: [rows=200, distinct(5,9)=181.351171, null(5,9)=0, distinct(4,9,12)=200, null(4,9,12)=0]
+ │         │    ├── stats: [rows=200, distinct(5,9)=199.980101, null(5,9)=0, distinct(4,9,12)=200, null(4,9,12)=0]
  │         │    ├── fd: ()-->(5,8,12), (9)-->(10,11)
  │         │    ├── left-join (hash)
  │         │    │    ├── columns: a:4(int!null) b:5(string!null) column8:8(float) x:9(string) y:10(int) z:11(float)
- │         │    │    ├── stats: [rows=200, distinct(9)=1, null(9)=0, distinct(4,9)=200, null(4,9)=0, distinct(5,9)=181.351171, null(5,9)=0]
+ │         │    │    ├── stats: [rows=200, distinct(9)=1, null(9)=0, distinct(4,9)=200, null(4,9)=0, distinct(5,9)=199.980101, null(5,9)=0]
  │         │    │    ├── fd: ()-->(5,8), (9)-->(10,11)
  │         │    │    ├── project
  │         │    │    │    ├── columns: column8:8(float) a:4(int!null) b:5(string!null)
@@ -101,7 +101,7 @@ select
  │         │    │    │         └── NULL::FLOAT8 [type=float]
  │         │    │    ├── scan xyz
  │         │    │    │    ├── columns: x:9(string!null) y:10(int!null) z:11(float)
- │         │    │    │    ├── stats: [rows=1000, distinct(9)=1000, null(9)=0]
+ │         │    │    │    ├── stats: [rows=1000000, distinct(9)=1000000, null(9)=0]
  │         │    │    │    ├── key: (9)
  │         │    │    │    └── fd: (9)-->(10,11)
  │         │    │    └── filters

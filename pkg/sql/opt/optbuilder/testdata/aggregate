@@ -3072,23 +3072,23 @@ firstCol, secondCol, thirdCol;
 group-by
  ├── columns: firstcol:1(int!null) secondcol:2(int) thirdcol:2(int)
  ├── grouping columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
- ├── stats: [rows=991, distinct(1,2)=991, null(1,2)=10]
- ├── cost: 1109.95
+ ├── stats: [rows=990001, distinct(1,2)=990001, null(1,2)=10000]
+ ├── cost: 1109900.05
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── interesting orderings: (+1,+2)
  └── project
       ├── columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
-      ├── stats: [rows=1000, distinct(1,2)=991, null(1,2)=10]
-      ├── cost: 1070.03
+      ├── stats: [rows=1000000, distinct(1,2)=990001, null(1,2)=10000]
+      ├── cost: 1070000.03
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── prune: (1,2)
       ├── interesting orderings: (+1,+2)
       └── scan t.public.xyz
            ├── columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int) t.public.xyz.z:3(float)
-           ├── stats: [rows=1000, distinct(1,2)=991, null(1,2)=10]
-           ├── cost: 1060.02
+           ├── stats: [rows=1000000, distinct(1,2)=990001, null(1,2)=10000]
+           ├── cost: 1060000.02
            ├── key: (1)
            ├── fd: (1)-->(2,3)
            ├── prune: (1-3)

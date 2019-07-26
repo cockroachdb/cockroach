@@ -1648,18 +1648,18 @@ SELECT ntile(i) OVER () FROM a
 ----
 project
  ├── columns: ntile:5(int)
- ├── stats: [rows=1000]
- ├── cost: 1060.04
+ ├── stats: [rows=1000000]
+ ├── cost: 1060000.04
  ├── prune: (5)
  └── window partition=()
       ├── columns: t.public.a.i:2(int) ntile:5(int)
-      ├── stats: [rows=1000]
-      ├── cost: 1050.03
+      ├── stats: [rows=1000000]
+      ├── cost: 1050000.03
       ├── prune: (5)
       ├── scan t.public.a
       │    ├── columns: t.public.a.i:2(int)
-      │    ├── stats: [rows=1000]
-      │    ├── cost: 1050.02
+      │    ├── stats: [rows=1000000]
+      │    ├── cost: 1050000.02
       │    └── prune: (2)
       └── windows
            └── ntile [type=int, outer=(2)]
@@ -1781,18 +1781,18 @@ SELECT x FROM (SELECT ntile(i) OVER () x, ntile(f::int) OVER () y FROM a)
 ----
 project
  ├── columns: x:5(int)
- ├── stats: [rows=1000]
- ├── cost: 1060.04
+ ├── stats: [rows=1000000]
+ ├── cost: 1060000.04
  ├── prune: (5)
  └── window partition=()
       ├── columns: t.public.a.i:2(int) ntile:5(int)
-      ├── stats: [rows=1000]
-      ├── cost: 1050.03
+      ├── stats: [rows=1000000]
+      ├── cost: 1050000.03
       ├── prune: (5)
       ├── scan t.public.a
       │    ├── columns: t.public.a.i:2(int)
-      │    ├── stats: [rows=1000]
-      │    ├── cost: 1050.02
+      │    ├── stats: [rows=1000000]
+      │    ├── cost: 1050000.02
       │    └── prune: (2)
       └── windows
            └── ntile [type=int, outer=(2)]

@@ -543,16 +543,16 @@ with &1 (subq)
  ├── fd: ()-->(26)
  ├── project
  │    ├── columns: col1:23(bool) tab1.g:18(int4!null)
- │    ├── stats: [rows=333333.333, distinct(18)=100, null(18)=0, distinct(23)=333333.333, null(23)=16336.65]
+ │    ├── stats: [rows=3.33333333e+11, distinct(18)=100000, null(18)=0, distinct(23)=3.33333333e+11, null(23)=1.633665e+10]
  │    ├── inner-join (hash)
  │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null) tab1.e:16(varchar) tab1.f:17("char") tab1.g:18(int4!null) tab1.j:21(float!null)
- │    │    ├── stats: [rows=333333.333, distinct(10)=100, null(10)=0, distinct(18)=100, null(18)=0, distinct(21)=100, null(21)=0, distinct(5,6,8,16,17)=333333.333, null(5,6,8,16,17)=16336.65]
+ │    │    ├── stats: [rows=3.33333333e+11, distinct(10)=100000, null(10)=0, distinct(18)=100000, null(18)=0, distinct(21)=100000, null(21)=0, distinct(5,6,8,16,17)=3.33333333e+11, null(5,6,8,16,17)=1.633665e+10]
  │    │    ├── scan tab0
  │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null)
- │    │    │    └── stats: [rows=1000, distinct(10)=100, null(10)=0, distinct(5,6,8)=1000, null(5,6,8)=29.701]
+ │    │    │    └── stats: [rows=1000000, distinct(10)=100000, null(10)=0, distinct(5,6,8)=1000000, null(5,6,8)=29701]
  │    │    ├── scan tab1
  │    │    │    ├── columns: tab1.e:16(varchar) tab1.f:17("char") tab1.g:18(int4!null) tab1.j:21(float!null)
- │    │    │    └── stats: [rows=1000, distinct(18)=100, null(18)=0, distinct(21)=100, null(21)=0, distinct(16,17)=1000, null(16,17)=19.9]
+ │    │    │    └── stats: [rows=1000000, distinct(18)=100000, null(18)=0, distinct(21)=100000, null(21)=0, distinct(16,17)=1000000, null(16,17)=19900]
  │    │    └── filters
  │    │         └── tab0.j IN (tab1.j,) [type=bool, outer=(10,21)]
  │    └── projections
@@ -570,7 +570,7 @@ with &1 (subq)
       │    │    ├── mapping:
       │    │    │    ├──  tab1.g:18(int4) => col0:24(int4)
       │    │    │    └──  col1:23(bool) => col1:25(bool)
-      │    │    ├── stats: [rows=333333.333, distinct(24)=100, null(24)=0, distinct(25)=333333.333, null(25)=16336.65]
+      │    │    ├── stats: [rows=3.33333333e+11, distinct(24)=100000, null(24)=0, distinct(25)=3.33333333e+11, null(25)=1.633665e+10]
       │    │    └── fd: (18)-->(24), (23)-->(25)
       │    └── filters
       │         └── variable: col1 [type=bool, outer=(25), constraints=(/25: [/true - /true]; tight), fd=()-->(25)]

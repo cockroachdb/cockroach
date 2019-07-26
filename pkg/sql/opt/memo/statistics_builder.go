@@ -2267,7 +2267,7 @@ const (
 	// TODO(rytaft): Add other selectivities for other types of predicates.
 
 	// This is an arbitrary row count used in the absence of any real statistics.
-	unknownRowCount = 1000
+	unknownRowCount = 1000000
 
 	// This is the ratio of distinct column values to number of rows, which is
 	// used in the absence of any real statistics for non-key columns.
