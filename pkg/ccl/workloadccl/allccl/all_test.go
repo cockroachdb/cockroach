@@ -105,62 +105,6 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 	}
 }
 
-func TestAllRegisteredSetup(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	for _, meta := range workload.Registered() {
-		if bigInitialData(meta) {
-			continue
-		}
-
-		// This test is big enough that it causes timeout issues under race, so only
-		// run one workload. Doing any more than this doesn't get us enough to be
-		// worth the hassle.
-		if util.RaceEnabled && meta.Name != `bank` {
-			continue
-		}
-
-		gen := meta.New()
-		switch meta.Name {
-		case `roachmart`:
-			// TODO(dan): It'd be nice to test this with the default flags. For now,
-			// this is better than nothing.
-			if err := gen.(workload.Flagser).Flags().Parse([]string{
-				`--users=10`, `--orders=100`, `--partition=false`,
-			}); err != nil {
-				t.Fatal(err)
-			}
-		case `interleavedpartitioned`:
-			// This require a specific node locality setup
-			continue
-		}
-
-		t.Run(meta.Name, func(t *testing.T) {
-			ctx := context.Background()
-			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-				UseDatabase: "d",
-			})
-			defer s.Stopper().Stop(ctx)
-			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
-			sqlutils.MakeSQLRunner(db).Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = false`)
-
-			var l workloadsql.InsertsDataLoader
-			if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
-				t.Fatalf(`%+v`, err)
-			}
-
-			// Run the consistency check if this workload has one.
-			if h, ok := gen.(workload.Hookser); ok {
-				if checkConsistencyFn := h.Hooks().CheckConsistency; checkConsistencyFn != nil {
-					if err := checkConsistencyFn(ctx, db); err != nil {
-						t.Errorf(`%+v`, err)
-					}
-				}
-			}
-		})
-	}
-}
-
 func TestConsistentSchema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Test that the table schemas are consistent when the workload is created
