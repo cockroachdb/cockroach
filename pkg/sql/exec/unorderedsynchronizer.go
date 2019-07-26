@@ -45,6 +45,11 @@ type UnorderedSynchronizer struct {
 	// lastReadInputIdx is the index of the input whose batch we last returned.
 	// Used so that on the next call to Next, we can resume the input.
 	lastReadInputIdx int
+	// batches are the last batches read from the corresponding input.
+	batches []coldata.Batch
+	// nextBatch is a slice of functions each of which obtains a next batch from
+	// the corresponding to it input.
+	nextBatch []func()
 
 	initialized bool
 	done        bool
@@ -83,6 +88,8 @@ func NewUnorderedSynchronizer(
 	return &UnorderedSynchronizer{
 		inputs:            inputs,
 		readNextBatch:     readNextBatch,
+		batches:           make([]coldata.Batch, len(inputs)),
+		nextBatch:         make([]func(), len(inputs)),
 		zeroBatch:         zeroBatch,
 		externalWaitGroup: wg,
 		internalWaitGroup: &sync.WaitGroup{},
@@ -112,6 +119,11 @@ func (s *UnorderedSynchronizer) Init() {
 func (s *UnorderedSynchronizer) init(ctx context.Context) {
 	ctx, s.cancelFn = contextutil.WithCancel(ctx)
 	for i, input := range s.inputs {
+		s.nextBatch[i] = func(input Operator, inputIdx int) func() {
+			return func() {
+				s.batches[inputIdx] = input.Next(ctx)
+			}
+		}(input, i)
 		s.externalWaitGroup.Add(1)
 		s.internalWaitGroup.Add(1)
 		// TODO(asubiotto): Most inputs are Inboxes, and these have handler
@@ -129,8 +141,7 @@ func (s *UnorderedSynchronizer) init(ctx context.Context) {
 				inputIdx: inputIdx,
 			}
 			for {
-				var b coldata.Batch
-				if err := CatchVectorizedRuntimeError(func() { b = input.Next(ctx) }); err != nil {
+				if err := CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
 					select {
 					// Non-blocking write to errCh, if an error is present the main
 					// goroutine will use that and cancel all inputs.
@@ -139,10 +150,10 @@ func (s *UnorderedSynchronizer) init(ctx context.Context) {
 					}
 					return
 				}
-				if b.Length() == 0 {
+				if s.batches[inputIdx].Length() == 0 {
 					return
 				}
-				msg.b = b
+				msg.b = s.batches[inputIdx]
 				select {
 				case <-ctx.Done():
 					select {
