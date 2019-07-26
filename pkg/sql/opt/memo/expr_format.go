@@ -220,6 +220,10 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			fmt.Fprintf(f.Buffer, " (%s)", ws.Name)
 		}
 
+	case *CreateViewExpr:
+		fmt.Fprintf(f.Buffer, "%v", e.Op())
+		FormatPrivate(f, e.Private(), required)
+
 	default:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		if opt.IsJoinNonApplyOp(t) {
@@ -424,6 +428,30 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *CreateTableExpr:
 		tp.Child(t.Syntax.String())
+
+	case *CreateViewExpr:
+		tp.Child(t.ViewQuery)
+
+		f.Buffer.Reset()
+		f.Buffer.WriteString("columns:")
+		for _, col := range t.Columns {
+			formatCol(f, col.Alias, col.ID, opt.ColSet{} /* notNullCols */, false /* omitType */)
+		}
+		tp.Child(f.Buffer.String())
+
+		n := tp.Child("dependencies")
+		for _, dep := range t.Deps {
+			f.Buffer.Reset()
+			name := dep.DataSource.Name()
+			f.Buffer.WriteString(name.String())
+			if dep.SpecificIndex {
+				fmt.Fprintf(f.Buffer, "@%s", dep.DataSource.(cat.Table).Index(dep.Index).Name())
+			}
+			if !dep.ColumnOrdinals.Empty() {
+				fmt.Fprintf(f.Buffer, " [columns: %s]", dep.ColumnOrdinals)
+			}
+			n.Child(f.Buffer.String())
+		}
 
 	case *ExplainExpr:
 		// ExplainPlan is the default, don't show it.
@@ -1043,6 +1071,10 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		if t.IfExists {
 			f.Buffer.WriteString(" [if-exists]")
 		}
+
+	case *CreateViewPrivate:
+		schema := f.Memo.Metadata().Schema(t.Schema)
+		fmt.Fprintf(f.Buffer, " %s.%s", schema.Name(), t.ViewName)
 
 	case *JoinPrivate:
 		// Nothing to show; flags are shown separately.

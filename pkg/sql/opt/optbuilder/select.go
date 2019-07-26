@@ -97,14 +97,24 @@ func (b *Builder) buildDataSource(
 		}
 
 		ds, resName := b.resolveDataSource(tn, privilege.SELECT)
+		if b.insideViewDef {
+			// Overwrite the table name in the AST to the fully resolved version.
+			// TODO(radu): modifying the AST in-place is hacky; we will need to switch
+			// to using AST annotations.
+			*tn = resName
+			tn.ExplicitCatalog = true
+			tn.ExplicitSchema = true
+		}
 		switch t := ds.(type) {
 		case cat.Table:
 			tabMeta := b.addTable(t, &resName)
 			return b.buildScan(tabMeta, nil /* ordinals */, indexFlags, excludeMutations, inScope)
-		case cat.View:
-			return b.buildView(t, &resName, inScope)
+
 		case cat.Sequence:
 			return b.buildSequenceSelect(t, &resName, inScope)
+
+		case cat.View:
+			return b.buildView(t, &resName, inScope)
 		default:
 			panic(errors.AssertionFailedf("unknown DataSource type %T", ds))
 		}
@@ -201,6 +211,13 @@ func (b *Builder) buildView(
 		b.skipSelectPrivilegeChecks = true
 		defer func() { b.skipSelectPrivilegeChecks = false }()
 	}
+	trackDeps := b.trackViewDeps
+	if trackDeps {
+		// We are only interested in the direct dependency on this view descriptor.
+		// Any further dependency by the view's query should not be tracked.
+		b.trackViewDeps = false
+		defer func() { b.trackViewDeps = true }()
+	}
 
 	outScope = b.buildSelect(sel, nil /* desiredTypes */, &scope{builder: b})
 
@@ -212,6 +229,14 @@ func (b *Builder) buildView(
 		if hasCols {
 			outScope.cols[i].name = view.ColumnName(i)
 		}
+	}
+
+	if trackDeps {
+		dep := opt.ViewDep{DataSource: view}
+		for i := range outScope.cols {
+			dep.ColumnOrdinals.Add(i)
+		}
+		b.viewDeps = append(b.viewDeps, dep)
 	}
 
 	return outScope
@@ -359,15 +384,18 @@ func (b *Builder) buildScan(
 		}
 	}
 
+	getOrdinal := func(i int) int {
+		if ordinals == nil {
+			return i
+		}
+		return ordinals[i]
+	}
+
 	var tabColIDs opt.ColSet
 	outScope = inScope.push()
 	outScope.cols = make([]scopeColumn, 0, colCount)
 	for i := 0; i < colCount; i++ {
-		ord := i
-		if ordinals != nil {
-			ord = ordinals[i]
-		}
-
+		ord := getOrdinal(i)
 		col := tab.Column(ord)
 		colID := tabID.ColumnID(ord)
 		tabColIDs.Add(colID)
@@ -390,6 +418,8 @@ func (b *Builder) buildScan(
 		}
 		private := memo.VirtualScanPrivate{Table: tabID, Cols: tabColIDs}
 		outScope.expr = b.factory.ConstructVirtualScan(&private)
+
+		// Virtual tables should not be collected as view dependencies.
 	} else {
 		private := memo.ScanPrivate{Table: tabID, Cols: tabColIDs}
 
@@ -420,6 +450,18 @@ func (b *Builder) buildScan(
 		}
 		outScope.expr = b.factory.ConstructScan(&private)
 		b.addCheckConstraintsToScan(outScope, tabMeta)
+
+		if b.trackViewDeps {
+			dep := opt.ViewDep{DataSource: tab}
+			for i := 0; i < colCount; i++ {
+				dep.ColumnOrdinals.Add(getOrdinal(i))
+			}
+			if private.Flags.ForceIndex {
+				dep.SpecificIndex = true
+				dep.Index = private.Flags.Index
+			}
+			b.viewDeps = append(b.viewDeps, dep)
+		}
 	}
 	return outScope
 }
@@ -477,6 +519,10 @@ func (b *Builder) buildSequenceSelect(
 		Cols:     cols,
 	}
 	outScope.expr = b.factory.ConstructSequenceSelect(&private)
+
+	if b.trackViewDeps {
+		b.viewDeps = append(b.viewDeps, opt.ViewDep{DataSource: seq})
+	}
 	return outScope
 }
 

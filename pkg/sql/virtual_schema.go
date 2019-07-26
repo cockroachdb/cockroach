@@ -149,13 +149,16 @@ func (v virtualSchemaView) initVirtualTableDesc(
 
 	create := stmt.AST.(*tree.CreateView)
 
+	columns := v.resultColumns
+	if len(create.ColumnNames) != 0 {
+		columns = overrideColumnNames(columns, create.ColumnNames)
+	}
 	mutDesc, err := makeViewTableDesc(
 		create.Name.Table(),
 		tree.AsStringWithFlags(create.AsSource, tree.FmtParsable),
-		create.ColumnNames,
 		0, /* parentID */
 		id,
-		v.resultColumns,
+		columns,
 		hlc.Timestamp{}, /* creationTime */
 		publicSelectPrivileges,
 		nil, /* semaCtx */

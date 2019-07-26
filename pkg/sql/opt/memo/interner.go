@@ -502,6 +502,14 @@ func (h *hasher) HashIndexOrdinal(val cat.IndexOrdinal) {
 	h.HashInt(val)
 }
 
+func (h *hasher) HashViewDeps(val opt.ViewDeps) {
+	// Hash the length and address of the first element.
+	h.HashInt(len(val))
+	if len(val) > 0 {
+		h.HashPointer(unsafe.Pointer(&val[0]))
+	}
+}
+
 func (h *hasher) HashWindowFrame(val WindowFrame) {
 	h.HashInt(int(val.StartBoundType))
 	h.HashInt(int(val.EndBoundType))
@@ -799,6 +807,13 @@ func (h *hasher) IsJobCommandEqual(l, r tree.JobCommand) bool {
 
 func (h *hasher) IsIndexOrdinalEqual(l, r cat.IndexOrdinal) bool {
 	return l == r
+}
+
+func (h *hasher) IsViewDepsEqual(l, r opt.ViewDeps) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	return len(l) == 0 || &l[0] == &r[0]
 }
 
 func (h *hasher) IsWindowFrameEqual(l, r WindowFrame) bool {

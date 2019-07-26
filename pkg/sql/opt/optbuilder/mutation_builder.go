@@ -774,7 +774,7 @@ func (mb *mutationBuilder) buildFKChecks() {
 		// referenced columns on the right.
 
 		refID := fk.ReferencedTableID()
-		refTab, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, refID)
+		refTab, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, refID)
 		if err != nil {
 			panic(err)
 		}

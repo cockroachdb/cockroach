@@ -569,7 +569,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 	case *createViewNode:
 		if v.observer.attr != nil {
-			v.observer.attr(name, "query", tree.AsStringWithFlags(n.n.AsSource, tree.FmtParsable))
+			v.observer.attr(name, "query", n.viewQuery)
 		}
 
 	case *setVarNode:
