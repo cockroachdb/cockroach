@@ -35,7 +35,8 @@ func TestScan(t *testing.T) {
 	var f norm.Factory
 	f.Init(evalCtx)
 	md := f.Metadata()
-	tab := md.AddTable(tc.Table(tree.NewUnqualifiedTableName("t")))
+	tn := tree.NewUnqualifiedTableName("t")
+	tab := md.AddTable(tc.Table(tn), tn)
 
 	if c1 := tab.ColumnID(0); c1 != 1 {
 		t.Fatalf("unexpected ID for column c1: %d\n", c1)

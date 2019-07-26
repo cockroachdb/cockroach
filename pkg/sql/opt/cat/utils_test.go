@@ -177,11 +177,11 @@ func TestResolveTableIndex(t *testing.T) {
 
 	for _, tc := range testCases {
 		var res string
-		idx, err := cat.ResolveTableIndex(ctx, testcat, cat.Flags{}, &tc.name)
+		idx, tn, err := cat.ResolveTableIndex(ctx, testcat, cat.Flags{}, &tc.name)
 		if err != nil {
 			res = fmt.Sprintf("error: %v", err)
 		} else {
-			res = fmt.Sprintf("%s@%s", idx.Table().Name().FQString(), idx.Name())
+			res = fmt.Sprintf("%s@%s", tn.FQString(), idx.Name())
 		}
 		if res != tc.expected {
 			t.Errorf("pattern: %v  expected: %s  got: %s", tc.name.String(), tc.expected, res)

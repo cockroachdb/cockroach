@@ -107,7 +107,7 @@ TABLE child
  │    ├── q int
  │    ├── r int
  │    └── c int not null
- └── CONSTRAINT fk FOREIGN KEY test.public.child (p, q, r) REFERENCES test.public.parent (p, q, r) MATCH FULL
+ └── CONSTRAINT fk FOREIGN KEY child (p, q, r) REFERENCES parent (p, q, r) MATCH FULL
 scan child
 
 # TODO(lucy/jordan/radu): the inbound foreign key reference is borked.
@@ -123,5 +123,5 @@ TABLE parent
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
- └── REFERENCED BY CONSTRAINT  FOREIGN KEY test.public.child () REFERENCES test.public.parent ()
+ └── REFERENCED BY CONSTRAINT  FOREIGN KEY child () REFERENCES parent ()
 scan parent

@@ -260,19 +260,15 @@ func (md *Metadata) Schema(schID SchemaID) cat.Schema {
 	return md.schemas[schID-1]
 }
 
-// AddTable is a helper that calls AddTableWithAlias with tab.Name() as the
-// table's alias.
-func (md *Metadata) AddTable(tab cat.Table) TableID {
-	return md.AddTableWithAlias(tab, tab.Name())
-}
-
-// AddTableWithAlias indexes a new reference to a table within the query.
-// Separate references to the same table are assigned different table ids (e.g.
-// in a self-join query). All columns are added to the metadata. If mutation
-// columns are present, they are added after active columns. The table's alias
-// is passed separately so that its original formatting is preserved for error
-// messages, pretty-printing, etc.
-func (md *Metadata) AddTableWithAlias(tab cat.Table, alias *tree.TableName) TableID {
+// AddTable indexes a new reference to a table within the query. Separate
+// references to the same table are assigned different table ids (e.g.  in a
+// self-join query). All columns are added to the metadata. If mutation columns
+// are present, they are added after active columns.
+//
+// The ExplicitCatalog/ExplicitSchema fields of the table's alias are honored so
+// that its original formatting is preserved for error messages,
+// pretty-printing, etc.
+func (md *Metadata) AddTable(tab cat.Table, alias *tree.TableName) TableID {
 	tabID := makeTableID(len(md.tables), ColumnID(len(md.cols)+1))
 	if md.tables == nil {
 		md.tables = make([]TableMeta, 0, 4)
@@ -356,7 +352,7 @@ func (md *Metadata) ColumnMeta(colID ColumnID) *ColumnMeta {
 //      a different table name, then prefix the column alias with the table
 //      name: "tabName.columnAlias".
 //
-func (md *Metadata) QualifiedAlias(colID ColumnID, fullyQualify bool) string {
+func (md *Metadata) QualifiedAlias(colID ColumnID, fullyQualify bool, catalog cat.Catalog) string {
 	cm := md.ColumnMeta(colID)
 	if cm.Table == 0 {
 		// Column doesn't belong to a table, so no need to qualify it further.
@@ -397,8 +393,11 @@ func (md *Metadata) QualifiedAlias(colID ColumnID, fullyQualify bool) string {
 
 	var sb strings.Builder
 	if fullyQualify {
-		s := md.TableMeta(cm.Table).Table.Name().FQString()
-		sb.WriteString(s)
+		tn, err := catalog.FullyQualifiedName(context.TODO(), md.TableMeta(cm.Table).Table)
+		if err != nil {
+			panic(err)
+		}
+		sb.WriteString(tn.FQString())
 	} else {
 		sb.WriteString(tabAlias.String())
 	}

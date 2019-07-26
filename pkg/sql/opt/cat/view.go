@@ -51,7 +51,7 @@ func FormatView(view View, tp treeprinter.Node) {
 		buf.WriteString(")")
 	}
 
-	child := tp.Childf("VIEW %s%s", view.Name().TableName, buf.String())
+	child := tp.Childf("VIEW %s%s", view.Name(), buf.String())
 
 	child.Child(view.Query())
 }

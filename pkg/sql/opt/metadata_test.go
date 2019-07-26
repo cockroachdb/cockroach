@@ -26,7 +26,7 @@ func TestMetadata(t *testing.T) {
 	var md opt.Metadata
 	schID := md.AddSchema(&testcat.Schema{})
 	colID := md.AddColumn("col", types.Int)
-	tabID := md.AddTable(&testcat.Table{})
+	tabID := md.AddTable(&testcat.Table{}, &tree.TableName{})
 
 	// Call Init and add objects from catalog, verifying that IDs have been reset.
 	testCat := testcat.New()
@@ -40,11 +40,11 @@ func TestMetadata(t *testing.T) {
 	if md.AddColumn("col2", types.Int) != colID {
 		t.Fatalf("unexpected column id")
 	}
-	if md.AddTable(tab) != tabID {
+	if md.AddTable(tab, &tree.TableName{}) != tabID {
 		t.Fatalf("unexpected table id")
 	}
 
-	md.AddDependency(opt.DepByName(tab.Name()), tab, privilege.CREATE)
+	md.AddDependency(opt.DepByName(&tab.TabName), tab, privilege.CREATE)
 	depsUpToDate, err := md.CheckDependencies(context.TODO(), testCat)
 	if err == nil || depsUpToDate {
 		t.Fatalf("expected table privilege to be revoked")
@@ -140,7 +140,7 @@ func TestMetadataTables(t *testing.T) {
 	y := &testcat.Column{Name: "y"}
 	a.Columns = append(a.Columns, x, y)
 
-	tabID := md.AddTable(a)
+	tabID := md.AddTable(a, &tree.TableName{})
 	if tabID == 0 {
 		t.Fatalf("unexpected table id: %d", tabID)
 	}
@@ -165,7 +165,7 @@ func TestMetadataTables(t *testing.T) {
 	b.TabName = tree.MakeUnqualifiedTableName(tree.Name("b"))
 	b.Columns = append(b.Columns, &testcat.Column{Name: "x"})
 
-	otherTabID := md.AddTable(b)
+	otherTabID := md.AddTable(b, &tree.TableName{})
 	if otherTabID == tabID {
 		t.Fatalf("unexpected table id: %d", tabID)
 	}
@@ -192,7 +192,8 @@ func TestIndexColumns(t *testing.T) {
 	}
 
 	var md opt.Metadata
-	a := md.AddTable(cat.Table(tree.NewUnqualifiedTableName("a")))
+	tn := tree.NewUnqualifiedTableName("a")
+	a := md.AddTable(cat.Table(tn), tn)
 
 	k := a.ColumnID(0)
 	i := a.ColumnID(1)

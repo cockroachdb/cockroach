@@ -6,7 +6,7 @@ error (42P01): no data source matches prefix: "information_schema.public.does_no
 build
 SELECT * FROM information_schema.columns
 ----
-virtual-scan t.information_schema.columns
+virtual-scan information_schema.columns
  └── columns: table_catalog:1(string) table_schema:2(string) table_name:3(string) column_name:4(string) ordinal_position:5(int) column_default:6(string) is_nullable:7(string) data_type:8(string) character_maximum_length:9(int) character_octet_length:10(int) numeric_precision:11(int) numeric_precision_radix:12(int) numeric_scale:13(int) datetime_precision:14(int) interval_type:15(string) interval_precision:16(int) character_set_catalog:17(string) character_set_schema:18(string) character_set_name:19(string) collation_catalog:20(string) collation_schema:21(string) collation_name:22(string) domain_catalog:23(string) domain_schema:24(string) domain_name:25(string) udt_catalog:26(string) udt_schema:27(string) udt_name:28(string) scope_catalog:29(string) scope_schema:30(string) scope_name:31(string) maximum_cardinality:32(int) dtd_identifier:33(string) is_self_referencing:34(string) is_identity:35(string) identity_generation:36(string) identity_start:37(string) identity_increment:38(string) identity_maximum:39(string) identity_minimum:40(string) identity_cycle:41(string) is_generated:42(string) generation_expression:43(string) is_updatable:44(string) is_hidden:45(string) crdb_sql_type:46(string)
 
 # Since we lazily create these, the name resolution codepath is slightly
@@ -14,12 +14,12 @@ virtual-scan t.information_schema.columns
 build
 SELECT * FROM information_schema.columns
 ----
-virtual-scan t.information_schema.columns
+virtual-scan information_schema.columns
  └── columns: table_catalog:1(string) table_schema:2(string) table_name:3(string) column_name:4(string) ordinal_position:5(int) column_default:6(string) is_nullable:7(string) data_type:8(string) character_maximum_length:9(int) character_octet_length:10(int) numeric_precision:11(int) numeric_precision_radix:12(int) numeric_scale:13(int) datetime_precision:14(int) interval_type:15(string) interval_precision:16(int) character_set_catalog:17(string) character_set_schema:18(string) character_set_name:19(string) collation_catalog:20(string) collation_schema:21(string) collation_name:22(string) domain_catalog:23(string) domain_schema:24(string) domain_name:25(string) udt_catalog:26(string) udt_schema:27(string) udt_name:28(string) scope_catalog:29(string) scope_schema:30(string) scope_name:31(string) maximum_cardinality:32(int) dtd_identifier:33(string) is_self_referencing:34(string) is_identity:35(string) identity_generation:36(string) identity_start:37(string) identity_increment:38(string) identity_maximum:39(string) identity_minimum:40(string) identity_cycle:41(string) is_generated:42(string) generation_expression:43(string) is_updatable:44(string) is_hidden:45(string) crdb_sql_type:46(string)
 
 # Alias the virtual table name.
 build
 SELECT * FROM information_schema.columns c
 ----
-virtual-scan t.information_schema.columns
+virtual-scan information_schema.columns
  └── columns: table_catalog:1(string) table_schema:2(string) table_name:3(string) column_name:4(string) ordinal_position:5(int) column_default:6(string) is_nullable:7(string) data_type:8(string) character_maximum_length:9(int) character_octet_length:10(int) numeric_precision:11(int) numeric_precision_radix:12(int) numeric_scale:13(int) datetime_precision:14(int) interval_type:15(string) interval_precision:16(int) character_set_catalog:17(string) character_set_schema:18(string) character_set_name:19(string) collation_catalog:20(string) collation_schema:21(string) collation_name:22(string) domain_catalog:23(string) domain_schema:24(string) domain_name:25(string) udt_catalog:26(string) udt_schema:27(string) udt_name:28(string) scope_catalog:29(string) scope_schema:30(string) scope_name:31(string) maximum_cardinality:32(int) dtd_identifier:33(string) is_self_referencing:34(string) is_identity:35(string) identity_generation:36(string) identity_start:37(string) identity_increment:38(string) identity_maximum:39(string) identity_minimum:40(string) identity_cycle:41(string) is_generated:42(string) generation_expression:43(string) is_updatable:44(string) is_hidden:45(string) crdb_sql_type:46(string)
