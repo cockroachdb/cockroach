@@ -300,16 +300,16 @@ func newColOperator(
 			return result, err
 		}
 
-		columnTypes = make([]semtypes.T, len(leftTypes)+len(rightTypes))
-		copy(columnTypes, spec.Input[0].ColumnTypes)
-		copy(columnTypes[len(leftTypes):], spec.Input[1].ColumnTypes)
-
 		nLeftCols := uint32(len(leftTypes))
 		nRightCols := uint32(len(rightTypes))
 
 		leftOutCols := make([]uint32, 0)
 		rightOutCols := make([]uint32, 0)
 
+		// Note that we do not need a special treatment in case of LEFT SEMI and
+		// LEFT ANTI joins when setting up outCols because in such cases there will
+		// be a projection with post.OutputColumns already projecting out the right
+		// side.
 		if post.Projection {
 			for _, col := range post.OutputColumns {
 				if col < nLeftCols {
@@ -322,7 +322,6 @@ func newColOperator(
 			for i := uint32(0); i < nLeftCols; i++ {
 				leftOutCols = append(leftOutCols, i)
 			}
-
 			for i := uint32(0); i < nRightCols; i++ {
 				rightOutCols = append(rightOutCols, i)
 			}
@@ -343,6 +342,15 @@ func newColOperator(
 		)
 		if err != nil {
 			return result, err
+		}
+
+		columnTypes = make([]semtypes.T, nLeftCols+nRightCols)
+		copy(columnTypes, spec.Input[0].ColumnTypes)
+		if core.HashJoiner.Type != sqlbase.JoinType_LEFT_SEMI {
+			// TODO(yuzefovich): update this conditional once LEFT ANTI is supported.
+			copy(columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
+		} else {
+			columnTypes = columnTypes[:nLeftCols]
 		}
 
 		if !core.HashJoiner.OnExpr.Empty() {
@@ -377,12 +385,15 @@ func newColOperator(
 		leftOutCols := make([]uint32, 0, nLeftCols)
 		rightOutCols := make([]uint32, 0, nRightCols)
 
+		// Note that we do not need a special treatment in case of LEFT SEMI and
+		// LEFT ANTI joins when setting up outCols because in such cases there will
+		// be a projection with post.OutputColumns already projecting out the right
+		// side.
 		if post.Projection {
 			for _, col := range post.OutputColumns {
 				if col < nLeftCols {
 					leftOutCols = append(leftOutCols, col)
-				} else if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI &&
-					core.MergeJoiner.Type != sqlbase.JoinType_LEFT_ANTI {
+				} else {
 					rightOutCols = append(rightOutCols, col-nLeftCols)
 				}
 			}
@@ -390,12 +401,8 @@ func newColOperator(
 			for i := uint32(0); i < nLeftCols; i++ {
 				leftOutCols = append(leftOutCols, i)
 			}
-
-			if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI &&
-				core.MergeJoiner.Type != sqlbase.JoinType_LEFT_ANTI {
-				for i := uint32(0); i < nRightCols; i++ {
-					rightOutCols = append(rightOutCols, i)
-				}
+			for i := uint32(0); i < nRightCols; i++ {
+				rightOutCols = append(rightOutCols, i)
 			}
 		}
 
