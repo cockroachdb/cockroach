@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/apply"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -92,7 +93,7 @@ func (d *replicaDecoder) retrieveLocalProposals(ctx context.Context) (anyLocal b
 	}
 	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
 		cmd := it.cur()
-		toRelease := int64(0)
+		var toRelease *quotapool.IntAlloc
 		shouldRemove := cmd.IsLocal() &&
 			// If this entry does not have the most up-to-date view of the
 			// corresponding proposal's maximum lease index then the proposal
@@ -115,7 +116,8 @@ func (d *replicaDecoder) retrieveLocalProposals(ctx context.Context) (anyLocal b
 			// when reproposals from the same proposal end up in the same entry
 			// application batch.
 			delete(d.r.mu.proposals, cmd.idKey)
-			toRelease = cmd.proposal.quotaSize
+			toRelease = cmd.proposal.quotaAlloc
+			cmd.proposal.quotaAlloc = nil
 		}
 		// At this point we're not guaranteed to have proposalQuota initialized,
 		// the same is true for quotaReleaseQueues. Only queue the proposal's
