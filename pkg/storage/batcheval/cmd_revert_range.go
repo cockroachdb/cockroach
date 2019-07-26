@@ -12,7 +12,6 @@ package batcheval
 
 import (
 	"context"
-	"errors"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 func init() {
@@ -70,6 +70,10 @@ func RevertRange(
 
 	args := cArgs.Args.(*roachpb.RevertRangeRequest)
 	var pd result.Result
+
+	if gc := cArgs.EvalCtx.GetGCThreshold(); !gc.Less(args.TargetTime) {
+		return result.Result{}, errors.Errorf("cannot revert before replica GC threshold %v", gc)
+	}
 
 	if empty, err := isEmptyKeyTimeRange(
 		batch, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp,

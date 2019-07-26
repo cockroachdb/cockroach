@@ -297,20 +297,15 @@ message ClearRangeResponse {
 // A RevertRangeRequest specifies a range of keys in which to clear all MVCC
 // revisions more recent than some TargetTime from the underlying engine, thus
 // reverting the range (from the perspective of an MVCC scan) to that time.
-//
-// Note: if a more recent MVCC revision of a key has caused an earlier revision
-// to be GC'ed, it is no longer possible to revert to that earlier revision and
-// instead clearing the more recent revision would simply delete that key. It is
-// up to the caller to consider if this is applicable to their usage and if so,
-// take steps to avoid it. Some future work could add the concept of a
-// gc.revert_ttl to prevent GC until the newer revision meets an age threshold.
 message RevertRangeRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
-  // TargetTime specifies a the time to which to "revert" the range by clearing any
-  // MVCC key with a strictly higher timestamp.
+  // TargetTime specifies a the time to which to "revert" the range by clearing
+  // any MVCC key with a strictly higher timestamp. TargetTime must be higher
+  // than the GC Threshold for the replica - so that it is assured that the keys
+  // for that time are still there — or the request will fail.
   util.hlc.Timestamp target_time = 2 [(gogoproto.nullable) = false];
 }
 
@@ -318,7 +313,6 @@ message RevertRangeRequest {
 message RevertRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
-
 
 // ScanOptions is a collection of options for a batch of scans. The options
 // apply to all the scans in the batch.
