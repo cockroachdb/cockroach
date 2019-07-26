@@ -128,7 +128,7 @@ scan  ·      ·
 ·     table  t@primary
 ·     spans  /10-/10/#
 
-query T
+query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
 ----
 TABLE t
