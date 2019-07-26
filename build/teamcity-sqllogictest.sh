@@ -16,7 +16,7 @@ export BUILDER_HIDE_GOPATH_SRC=0
 build/builder.sh \
   stdbuf -oL -eL \
   make test TESTFLAGS="-v -bigtest" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestSqlLiteLogic$$' 2>&1 \
-  | tee "artifacts/${config}.log" \
+  | tee "artifacts/sqllite-logic.log" \
   | go-test-teamcity
 
 # Need to specify the flex-types flag in order to skip past variations that have
@@ -24,5 +24,5 @@ build/builder.sh \
 build/builder.sh \
   stdbuf -oL -eL \
   make test TESTFLAGS="-v -bigtest -config local-opt,fakedist-opt -flex-types" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestSqlLiteCorrelatedLogic$$' 2>&1 \
-  | tee "artifacts/${config}.log" \
+  | tee "artifacts/sqllite-correlated.log" \
   | go-test-teamcity
