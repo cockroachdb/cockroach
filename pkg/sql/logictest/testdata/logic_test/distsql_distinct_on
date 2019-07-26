@@ -61,7 +61,7 @@ ALTER TABLE abc EXPERIMENTAL_RELOCATE VALUES
   (ARRAY[4], '2', '3', '4'),
   (ARRAY[5], '3', '4', '5')
 
-query TTTI colnames
+query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE xyz]
 ----
 start_key  end_key  replicas  lease_holder
@@ -71,7 +71,7 @@ NULL       /2       {1}       1
 /6         /7       {4}       4
 /7         NULL     {5}       5
 
-query TTTI colnames
+query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE abc]
 ----
 start_key        end_key          replicas  lease_holder

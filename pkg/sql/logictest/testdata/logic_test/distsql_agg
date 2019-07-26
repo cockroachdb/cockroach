@@ -21,7 +21,7 @@ INSERT INTO data SELECT a, b, c::FLOAT, d::DECIMAL FROM
    generate_series(1, 10) AS d(d)
 
 # Verify data placement.
-query TTTI colnames
+query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
 ----
 start_key  end_key  replicas  lease_holder
@@ -312,7 +312,7 @@ ALTER TABLE two EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 0)
 statement ok
 INSERT INTO two VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10)
 
-query TTTI colnames
+query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE one]
 ----
 start_key  end_key  replicas  lease_holder
@@ -320,7 +320,7 @@ NULL       /0       {5}       5
 /0         /99      {1}       1
 /99        NULL     {5}       5
 
-query TTTI colnames
+query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE two]
 ----
 start_key  end_key  replicas  lease_holder

@@ -53,7 +53,7 @@ NULL       /2       {1}       1
 /6         /7       {4}       4
 /7         NULL     {5}       5
 
-query TTTI colnames
+query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE abc]
 ----
 start_key        end_key          replicas  lease_holder
