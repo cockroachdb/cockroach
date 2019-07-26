@@ -1,0 +1,47 @@
+# --------------------------------------------------
+# GenerateConstrainedScans + Partitioning
+# --------------------------------------------------
+
+# Create a truly distributed table. Partitioned appropriately.
+exec-ddl
+CREATE TABLE partitioned (
+    planet STRING, region STRING, subregion STRING, val INT8,
+    PRIMARY KEY (planet, region, subregion, val)
+)
+    PARTITION BY LIST (planet, region, subregion)
+        (
+            PARTITION westcoast VALUES IN (('earth', 'us', 'seattle'), ('earth', 'us', 'cali')),
+            PARTITION eu VALUES IN (('earth', 'eu', DEFAULT)),
+            PARTITION us VALUES IN (('earth', 'us', DEFAULT)),
+            PARTITION earth VALUES IN (('earth', DEFAULT)),
+            PARTITION mars VALUES IN (('mars', DEFAULT)),
+            PARTITION titan VALUES IN (('jupiter', 'titan', DEFAULT)),
+            PARTITION red_spot VALUES IN (('jupiter', 'titan', 'red spot')),
+            PARTITION jupiter VALUES IN (('jupiter', DEFAULT)),
+            PARTITION default VALUES IN (DEFAULT)
+        )
+----
+
+# Use partition values to constrain the scan.
+opt
+EXPLAIN (OPT, VERBOSE)
+  SELECT
+  *
+  FROM
+  partitioned
+  WHERE
+  val = 1
+----
+explain
+ ├── columns: text:5(string)
+ ├── mode: opt, verbose
+ └── select
+      ├── columns: planet:1(string!null) region:2(string!null) subregion:3(string!null) val:4(int!null)
+      ├── key: (1-3)
+      ├── fd: ()-->(4)
+      ├── scan partitioned
+      │    ├── columns: planet:1(string!null) region:2(string!null) subregion:3(string!null) val:4(int!null)
+      │    ├── constraint: /1/2/3/4: [ - /'earth'/'us'/'cali') [/'earth'/'us'/'cali'/1 - /'earth'/'us'/'cali'/1] [/'earth'/'us'/e'cali\x00'/1 - /'earth'/'us'/'seattle') [/'earth'/'us'/'seattle'/1 - /'earth'/'us'/'seattle'/1] [/'earth'/'us'/e'seattle\x00'/1 - /'jupiter'/'titan'/'red spot') [/'jupiter'/'titan'/'red spot'/1 - /'jupiter'/'titan'/'red spot'/1] [/'jupiter'/'titan'/e'red spot\x00'/1 - ]
+      │    └── key: (1-4)
+      └── filters
+           └── val = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
