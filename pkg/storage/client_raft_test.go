@@ -2168,8 +2168,8 @@ func TestQuotaPool(t *testing.T) {
 		}
 
 		testutils.SucceedsSoon(t, func() error {
-			if qLen := leaderRepl.QuotaReleaseQueueLen(); qLen != 1 {
-				return errors.Errorf("expected 1 queued quota release, found: %d", qLen)
+			if qLen := leaderRepl.QuotaReleaseQueueLen(); qLen < 1 {
+				return errors.Errorf("expected at least 1 queued quota release, found: %d", qLen)
 			}
 			return nil
 		})

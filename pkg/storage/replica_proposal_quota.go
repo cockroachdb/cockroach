@@ -102,11 +102,12 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		return
 	}
 
+	status := r.mu.internalRaftGroup.BasicStatus()
 	if r.mu.leaderID != lastLeaderID {
 		if r.mu.replicaID == r.mu.leaderID {
 			// We're becoming the leader.
-			r.mu.proposalQuotaBaseIndex = r.mu.lastIndex
-
+			// Initialize the proposalQuotaBaseIndex as the current committed index.
+			r.mu.proposalQuotaBaseIndex = status.Applied
 			if r.mu.proposalQuota != nil {
 				log.Fatal(ctx, "proposalQuota was not nil before becoming the leader")
 			}
@@ -145,7 +146,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 
 	// Find the minimum index that active followers have acknowledged.
 	now := timeutil.Now()
-	status := r.mu.internalRaftGroup.BasicStatus()
 	commitIndex, minIndex := status.Commit, status.Commit
 	r.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, progress tracker.Progress) {
 		rep, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(id))
@@ -239,5 +239,16 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		r.mu.quotaReleaseQueue = r.mu.quotaReleaseQueue[numReleases:]
 
 		r.mu.proposalQuota.add(sum)
+	}
+	// Assert the sanity of the base index and the queue. Queue entries should
+	// correspond to applied entries. It should not be possible for the base
+	// index and the not yet released applied entries to not equal the applied
+	// index.
+	releasableIndex := r.mu.proposalQuotaBaseIndex + uint64(len(r.mu.quotaReleaseQueue))
+	if releasableIndex != status.Applied {
+		log.Fatalf(ctx, "proposalQuotaBaseIndex (%d) + quotaReleaseQueueLen (%d) = %d"+
+			" must equal the applied index (%d)",
+			r.mu.proposalQuotaBaseIndex, len(r.mu.quotaReleaseQueue), releasableIndex,
+			status.Applied)
 	}
 }
