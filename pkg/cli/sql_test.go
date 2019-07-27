@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/assert"
 )
 
 // Example_sql_lex tests the usage of the lexer in the sql subcommand.
@@ -187,4 +188,44 @@ func TestIsEndOfStatement(t *testing.T) {
 			t.Errorf("%q: isEnd expected %v, got %v", test.in, test.isEnd, isEnd)
 		}
 	}
+}
+
+// Test handleCliCmd cases for metacommands that are aliases for sql statements
+func TestHandleCliCmdSqlAliasMetacommands(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var metaCommandTestsTable = []struct {
+		commandString string
+		wantSQLStmt   string
+	}{
+		{`\l`, `SHOW DATABASES`},
+		{`\dt`, `SHOW TABLES`},
+		{`\du`, `SHOW USERS`},
+		{`\d mytable`, `SHOW COLUMNS FROM mytable`},
+	}
+
+	c := setupTestCliState()
+
+	for _, tt := range metaCommandTestsTable {
+		c.lastInputLine = tt.commandString
+		gotState := c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
+
+		assert.Equal(t, cliRunStatement, gotState)
+		assert.Equal(t, tt.wantSQLStmt, c.concatLines)
+	}
+}
+
+func TestHandleCliCmdSlashDInvalidSyntax(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	c := setupTestCliState()
+	c.lastInputLine = `\d`
+	gotState := c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
+
+	assert.Equal(t, cliStateEnum(0), gotState)
+	assert.Equal(t, errInvalidSyntax, c.exitErr)
+}
+
+func setupTestCliState() cliState {
+	c := cliState{}
+	c.ins = noLineEditor
+	return c
 }
