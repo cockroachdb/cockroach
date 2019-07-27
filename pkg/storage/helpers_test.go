@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
 )
 
 // AddReplica adds the replica to the store's replica map and to the sorted
@@ -262,16 +263,25 @@ func (r *Replica) LastAssignedLeaseIndex() uint64 {
 // a given quota. Additionally it initializes the replica's quota release queue
 // and its command sizes map. Only safe to call on the replica that is both
 // lease holder and raft leader.
-func (r *Replica) InitQuotaPool(quota int64) {
+func (r *Replica) InitQuotaPool(quota int64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	var appliedIndex uint64
+	err := r.withRaftGroupLocked(false, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, err error) {
+		appliedIndex = r.BasicStatus().Applied
+		return false, nil
+	})
+	if err != nil {
+		return err
+	}
 
-	r.mu.proposalQuotaBaseIndex = r.mu.lastIndex
+	r.mu.proposalQuotaBaseIndex = appliedIndex
 	if r.mu.proposalQuota != nil {
 		r.mu.proposalQuota.close()
 	}
 	r.mu.proposalQuota = newQuotaPool(quota)
 	r.mu.quotaReleaseQueue = nil
+	return nil
 }
 
 // QuotaAvailable returns the quota available in the replica's quota pool. Only
