@@ -2867,17 +2867,10 @@ func (desc *ImmutableTableDescriptor) MakeFirstMutationPublic(
 // ColumnNeedsBackfill returns true if adding the given column requires a
 // backfill (dropping a column always requires a backfill).
 func ColumnNeedsBackfill(desc *ColumnDescriptor) bool {
-	// Consider the case where the user explicitly states the default value of a
-	// new column to be NULL. desc.DefaultExpr is not nil, but the string "NULL"
-	if desc.DefaultExpr != nil {
-		if defaultExpr, err := parser.ParseExpr(*desc.DefaultExpr); err != nil {
-			panic(errors.NewAssertionErrorWithWrappedErrf(err,
-				"failed to parse default expression %s", *desc.DefaultExpr))
-		} else if defaultExpr == tree.DNull {
-			return false
-		}
+	if desc.HasNullDefault() {
+		return false
 	}
-	return desc.DefaultExpr != nil || !desc.Nullable || desc.IsComputed()
+	return desc.HasDefault() || !desc.Nullable || desc.IsComputed()
 }
 
 // HasColumnBackfillMutation returns whether the table has any queued column
@@ -3245,6 +3238,19 @@ var _ cat.Column = &ColumnDescriptor{}
 // IsNullable is part of the cat.Column interface.
 func (desc *ColumnDescriptor) IsNullable() bool {
 	return desc.Nullable
+}
+
+// HasNullDefault checks that the column descriptor has a default of NULL.
+func (desc *ColumnDescriptor) HasNullDefault() bool {
+	if !desc.HasDefault() {
+		return false
+	}
+	defaultExpr, err := parser.ParseExpr(*desc.DefaultExpr)
+	if err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err,
+			"failed to parse default expression %s", *desc.DefaultExpr))
+	}
+	return defaultExpr == tree.DNull
 }
 
 // ColID is part of the cat.Column interface.
