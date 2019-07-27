@@ -1020,6 +1020,26 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	case `\hf`:
 		return c.handleFunctionHelp(cmd[1:], loopState, errState)
 
+	case `\l`:
+		c.concatLines = "SHOW DATABASES"
+		return cliRunStatement
+
+	case `\dt`:
+		c.concatLines = "SHOW TABLES"
+		return cliRunStatement
+
+	case `\du`:
+		c.concatLines = "SHOW USERS"
+		return cliRunStatement
+
+	case `\d`:
+		if len(cmd) > 1 {
+			c.concatLines = "SHOW COLUMNS FROM " + cmd[1]
+			return cliRunStatement
+		} else {
+			return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+		}
+
 	default:
 		if strings.HasPrefix(cmd[0], `\d`) {
 			// Unrecognized command for now, but we want to be helpful.
