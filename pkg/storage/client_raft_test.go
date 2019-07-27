@@ -2105,7 +2105,9 @@ func TestQuotaPool(t *testing.T) {
 	testutils.SucceedsSoon(t, assertEqualLastIndex)
 
 	leaderRepl := mtc.getRaftLeader(rangeID)
-	leaderRepl.InitQuotaPool(quota)
+	if err := leaderRepl.InitQuotaPool(quota); err != nil {
+		t.Fatalf("failed to initialize quota pool: %v", err)
+	}
 	followerRepl := func() *storage.Replica {
 		for _, store := range mtc.stores {
 			repl, err := store.GetReplica(rangeID)
@@ -2168,8 +2170,8 @@ func TestQuotaPool(t *testing.T) {
 		}
 
 		testutils.SucceedsSoon(t, func() error {
-			if qLen := leaderRepl.QuotaReleaseQueueLen(); qLen != 1 {
-				return errors.Errorf("expected 1 queued quota release, found: %d", qLen)
+			if qLen := leaderRepl.QuotaReleaseQueueLen(); qLen < 1 {
+				return errors.Errorf("expected at least 1 queued quota release, found: %d", qLen)
 			}
 			return nil
 		})
