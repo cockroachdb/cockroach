@@ -168,12 +168,20 @@ func MakeColumnDefDescs(
 		); err != nil {
 			return nil, nil, nil, err
 		}
-		// We keep the type checked expression so that the type annotation
-		// gets properly stored.
-		d.DefaultExpr.Expr = typedExpr
 
-		s := tree.Serialize(d.DefaultExpr.Expr)
-		col.DefaultExpr = &s
+		// Set the default expression of the column descriptor to nil, if it is in
+		// fact "NULL". It would be "NULL" instead of nil is the client explicitly
+		// set the default to NULL.
+		if d.DefaultExpr.Expr == tree.DNull {
+			d.DefaultExpr.Expr = nil
+			col.DefaultExpr = nil
+		} else {
+			// Otherwise, we keep the type checked expression so that the type
+			// annotation gets properly stored.
+			d.DefaultExpr.Expr = typedExpr
+			s := tree.Serialize(d.DefaultExpr.Expr)
+			col.DefaultExpr = &s
+		}
 	}
 
 	if d.IsComputed() {

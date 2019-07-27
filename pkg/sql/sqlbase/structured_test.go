@@ -1307,30 +1307,3 @@ func TestKeysPerRow(t *testing.T) {
 		})
 	}
 }
-
-func TestColumnNeedsBackfill(t *testing.T) {
-	// Define variable strings here such that we can pass their address below
-	null := "NULL"
-	four := "4:::INT8"
-	// Create Column Descriptors that reflect the definition of a column with a
-	// default value of NULL that was set implicitly, one that was set explicitly,
-	// and one that has an INT default value, respectively.
-	implicitNull := &ColumnDescriptor{Name: "im", ID: 2, DefaultExpr: nil, Nullable: true, ComputeExpr: nil}
-	explicitNull := &ColumnDescriptor{Name: "ex", ID: 3, DefaultExpr: &null, Nullable: true, ComputeExpr: nil}
-	defaultNotNull := &ColumnDescriptor{Name: "four", ID: 4, DefaultExpr: &four, Nullable: true, ComputeExpr: nil}
-	// Verify that a backfill doesn't occur according to the ColumnNeedsBackfill
-	// function for the default NULL values, and that it does occur for an INT
-	// default value.
-	if ColumnNeedsBackfill(implicitNull) != false {
-		t.Fatal("Expected implicit SET DEFAULT NULL to not require a backfill," +
-			" ColumnNeedsBackfill states that it does.")
-	}
-	if ColumnNeedsBackfill(explicitNull) != false {
-		t.Fatal("Expected explicit SET DEFAULT NULL to not require a backfill," +
-			" ColumnNeedsBackfill states that it does.")
-	}
-	if ColumnNeedsBackfill(defaultNotNull) != true {
-		t.Fatal("Expected explicit SET DEFAULT NULL to require a backfill," +
-			" ColumnNeedsBackfill states that it does not.")
-	}
-}

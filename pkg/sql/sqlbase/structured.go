@@ -2643,16 +2643,6 @@ func (desc *ImmutableTableDescriptor) MakeFirstMutationPublic(
 // ColumnNeedsBackfill returns true if adding the given column requires a
 // backfill (dropping a column always requires a backfill).
 func ColumnNeedsBackfill(desc *ColumnDescriptor) bool {
-	// Consider the case where the user explicitly states the default value of a
-	// new column to be NULL. desc.DefaultExpr is not nil, but the string "NULL"
-	if desc.DefaultExpr != nil {
-		if defaultExpr, err := parser.ParseExpr(*desc.DefaultExpr); err != nil {
-			panic(errors.NewAssertionErrorWithWrappedErrf(err,
-				"failed to parse default expression %s", *desc.DefaultExpr))
-		} else if defaultExpr == tree.DNull {
-			return false
-		}
-	}
 	return desc.DefaultExpr != nil || !desc.Nullable || desc.IsComputed()
 }
 

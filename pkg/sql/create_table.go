@@ -593,19 +593,6 @@ func ResolveFK(
 		}
 	}
 
-	// Don't add a SET DEFAULT action on an index that has any column that does
-	// not have a DEFAULT expression.
-	if d.Actions.Delete == tree.SetDefault || d.Actions.Update == tree.SetDefault {
-		for _, sourceColumn := range srcCols {
-			if sourceColumn.DefaultExpr == nil {
-				col := qualifyFKColErrorWithDB(ctx, txn, tbl.TableDesc(), sourceColumn.Name)
-				return pgerror.Newf(pgcode.InvalidForeignKey,
-					"cannot add a SET DEFAULT cascading action on column %q which has no DEFAULT expression", col,
-				)
-			}
-		}
-	}
-
 	ref := sqlbase.ForeignKeyReference{
 		Table:           target.ID,
 		Index:           targetIdxID,
