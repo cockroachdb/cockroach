@@ -1310,7 +1310,7 @@ func TestKeysPerRow(t *testing.T) {
 }
 
 func TestColumnNeedsBackfill(t *testing.T) {
-	// Define variable strings here such that we can pass their address below
+	// Define variable strings here such that we can pass their address below.
 	null := "NULL"
 	four := "4:::INT8"
 	// Create Column Descriptors that reflect the definition of a column with a
@@ -1756,4 +1756,39 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestDefaultExprNil(t *testing.T) {
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	if _, err := conn.Exec(`CREATE DATABASE t`); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	t.Run(fmt.Sprintf("%s - %d", "(a INT PRIMARY KEY)", 1), func(t *testing.T) {
+		sqlDB := sqlutils.MakeSQLRunner(conn)
+		// Execute SQL commands with both implicit and explicit setting of the
+		// default expression.
+		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO t (a) VALUES (1), (2)`)
+		sqlDB.Exec(t, `ALTER TABLE t ADD COLUMN b INT NULL`)
+		sqlDB.Exec(t, `INSERT INTO t (a) VALUES (3)`)
+		sqlDB.Exec(t, `ALTER TABLE t ADD COLUMN c INT DEFAULT NULL`)
+
+		var descBytes []byte
+		// Grab the most recently created descriptor.
+		row := sqlDB.QueryRow(t,
+			`SELECT descriptor FROM system.descriptor ORDER BY id DESC LIMIT 1`)
+		row.Scan(&descBytes)
+		var desc Descriptor
+		if err := protoutil.Unmarshal(descBytes, &desc); err != nil {
+			t.Fatalf("%+v", err)
+		}
+		// Test and verify that the default expressions of the column descriptors
+		// are all nil.
+		for _, col := range desc.GetTable().Columns {
+			if col.DefaultExpr != nil {
+				t.Errorf("expected Column Default Expression to be 'nil', got %s instead.", *col.DefaultExpr)
+			}
+		}
+	})
 }

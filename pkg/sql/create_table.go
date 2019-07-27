@@ -599,14 +599,17 @@ func ResolveFK(
 		}
 	}
 
-	// Don't add a SET DEFAULT action on an index that has any column that does
-	// not have a DEFAULT expression.
+	// Don't add a SET DEFAULT action on an index that has any column that has
+	// a DEFAULT expression of NULL and a NOT NULL constraint.
 	if d.Actions.Delete == tree.SetDefault || d.Actions.Update == tree.SetDefault {
 		for _, sourceColumn := range srcCols {
-			if sourceColumn.DefaultExpr == nil {
+			// Having a default expression of NULL, and a constraint of NOT NULL is a
+			// contradiction and should never be allowed.
+			if sourceColumn.DefaultExpr == nil && !sourceColumn.Nullable {
 				col := qualifyFKColErrorWithDB(ctx, txn, tbl.TableDesc(), sourceColumn.Name)
 				return pgerror.Newf(pgcode.InvalidForeignKey,
-					"cannot add a SET DEFAULT cascading action on column %q which has no DEFAULT expression", col,
+					"cannot add a SET DEFAULT cascading action on column %q which has a "+
+						"NOT NULL constraint and a NULL default expression", col,
 				)
 			}
 		}
