@@ -2643,6 +2643,12 @@ func (desc *ImmutableTableDescriptor) MakeFirstMutationPublic(
 // ColumnNeedsBackfill returns true if adding the given column requires a
 // backfill (dropping a column always requires a backfill).
 func ColumnNeedsBackfill(desc *ColumnDescriptor) bool {
+	// TODO (tyler): There should no longer be a case where the Default Expression
+	// is not nil but instead NULL in 19.2. This should be removed once we are
+	// confident we do not need to be concerned with supporting previous version.
+	// TODO (tyler): Delete the unit test associated with this behavior once this
+	// check is deleted. The test is TestColumnNeedsBackfill in structured_test.go
+
 	// Consider the case where the user explicitly states the default value of a
 	// new column to be NULL. desc.DefaultExpr is not nil, but the string "NULL"
 	if desc.DefaultExpr != nil {
