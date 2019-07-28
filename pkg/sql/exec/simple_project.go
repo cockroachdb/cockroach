@@ -60,9 +60,22 @@ func (b *projectingBatch) AppendCol(t types.T) {
 }
 
 // NewSimpleProjectOp returns a new simpleProjectOp that applies a simple
-// projection on the columns in its input batch, returning a new batch with only
-// the columns in the projection slice, in order.
-func NewSimpleProjectOp(input Operator, projection []uint32) Operator {
+// projection on the columns in its input batch, returning a new batch with
+// only the columns in the projection slice, in order. In a degenerate case
+// when input already outputs batches that satisfy the projection, a
+// simpleProjectOp is not planned and input is returned.
+func NewSimpleProjectOp(input Operator, numInputCols int, projection []uint32) Operator {
+	if numInputCols == len(projection) {
+		projectionIsRedundant := true
+		for i := range projection {
+			if projection[i] != uint32(i) {
+				projectionIsRedundant = false
+			}
+		}
+		if projectionIsRedundant {
+			return input
+		}
+	}
 	return &simpleProjectOp{
 		input: input,
 		batch: newProjectionBatch(projection),
