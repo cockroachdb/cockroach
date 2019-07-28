@@ -543,7 +543,7 @@ func newColOperator(
 				projection = append(projection, i)
 			}
 			projection = append(projection, wf.OutputColIdx+1)
-			result.op = exec.NewSimpleProjectOp(result.op, projection)
+			result.op = exec.NewSimpleProjectOp(result.op, int(wf.OutputColIdx+1), projection)
 		}
 
 		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
@@ -590,11 +590,11 @@ func newColOperator(
 			for i := range columnTypes {
 				outputColumns = append(outputColumns, uint32(i))
 			}
-			result.op = exec.NewSimpleProjectOp(result.op, outputColumns)
+			result.op = exec.NewSimpleProjectOp(result.op, len(filterColumnTypes), outputColumns)
 		}
 	}
 	if post.Projection {
-		result.op = exec.NewSimpleProjectOp(result.op, post.OutputColumns)
+		result.op = exec.NewSimpleProjectOp(result.op, len(columnTypes), post.OutputColumns)
 		// Update output columnTypes.
 		newTypes := make([]semtypes.T, 0, len(post.OutputColumns))
 		for _, j := range post.OutputColumns {
@@ -625,12 +625,12 @@ func newColOperator(
 			result.memUsage += renderMem
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}
+		result.op = exec.NewSimpleProjectOp(result.op, len(columnTypes), renderedCols)
 		newTypes := make([]semtypes.T, 0, len(renderedCols))
 		for _, j := range renderedCols {
 			newTypes = append(newTypes, columnTypes[j])
 		}
 		columnTypes = newTypes
-		result.op = exec.NewSimpleProjectOp(result.op, renderedCols)
 	}
 	if post.Offset != 0 {
 		result.op = exec.NewOffsetOp(result.op, post.Offset)
