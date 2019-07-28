@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -45,10 +46,12 @@ type samplerProcessor struct {
 
 	flowCtx         *FlowCtx
 	input           RowSource
+	memAcc          mon.BoundAccount
 	sr              stats.SampleReservoir
 	sketches        []sketchInfo
 	outTypes        []types.T
 	maxFractionIdle float64
+
 	// Output column indices for special columns.
 	rankCol      int
 	sketchIdxCol int
@@ -99,9 +102,12 @@ func newSamplerProcessor(
 		}
 	}
 
+	ctx := flowCtx.EvalCtx.Ctx()
+	memMonitor := NewMonitor(ctx, flowCtx.EvalCtx.Mon, "sampler-mem")
 	s := &samplerProcessor{
 		flowCtx:         flowCtx,
 		input:           input,
+		memAcc:          memMonitor.MakeBoundAccount(),
 		sketches:        make([]sketchInfo, len(spec.Sketches)),
 		maxFractionIdle: spec.MaxFractionIdle,
 	}
@@ -114,7 +120,7 @@ func newSamplerProcessor(
 		}
 	}
 
-	s.sr.Init(int(spec.SampleSize), input.OutputTypes())
+	s.sr.Init(int(spec.SampleSize), input.OutputTypes(), &s.memAcc)
 
 	inTypes := input.OutputTypes()
 	outTypes := make([]types.T, 0, len(inTypes)+5)
@@ -145,9 +151,13 @@ func newSamplerProcessor(
 	s.outTypes = outTypes
 
 	if err := s.Init(
-		nil, post, outTypes, flowCtx, processorID, output, nil, /* memMonitor */
-		// this proc doesn't implement RowSource and doesn't use ProcessorBase to drain
-		ProcStateOpts{},
+		nil, post, outTypes, flowCtx, processorID, output, memMonitor,
+		ProcStateOpts{
+			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+				s.close()
+				return nil
+			},
+		},
 	); err != nil {
 		return nil, err
 	}
@@ -172,6 +182,7 @@ func (s *samplerProcessor) Run(ctx context.Context) {
 		s.input.ConsumerClosed()
 		s.out.Close()
 	}
+	s.MoveToDraining(nil /* err */)
 }
 
 // TestingSamplerSleep introduces a sleep inside the sampler, every
@@ -299,7 +310,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 		// Use Int63 so we don't have headaches converting to DInt.
 		rank := uint64(rng.Int63())
-		if err := s.sr.SampleRow(row, rank); err != nil {
+		if err := s.sr.SampleRow(ctx, row, rank); err != nil {
 			return false, err
 		}
 	}
@@ -347,4 +358,11 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	}
 
 	return false, nil
+}
+
+func (s *samplerProcessor) close() {
+	if s.InternalClose() {
+		s.memAcc.Close(s.Ctx)
+		s.MemMonitor.Stop(s.Ctx)
+	}
 }

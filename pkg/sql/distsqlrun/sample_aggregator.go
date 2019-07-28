@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -36,6 +37,7 @@ type sampleAggregator struct {
 
 	spec    *distsqlpb.SampleAggregatorSpec
 	input   RowSource
+	memAcc  mon.BoundAccount
 	inTypes []types.T
 	sr      stats.SampleReservoir
 
@@ -82,10 +84,13 @@ func newSampleAggregator(
 		}
 	}
 
+	ctx := flowCtx.EvalCtx.Ctx()
+	memMonitor := NewMonitor(ctx, flowCtx.EvalCtx.Mon, "sample-aggregator-mem")
 	rankCol := len(input.OutputTypes()) - 5
 	s := &sampleAggregator{
 		spec:         spec,
 		input:        input,
+		memAcc:       memMonitor.MakeBoundAccount(),
 		inTypes:      input.OutputTypes(),
 		tableID:      spec.TableID,
 		sampledCols:  spec.SampledColumnIDs,
@@ -106,12 +111,16 @@ func newSampleAggregator(
 		}
 	}
 
-	s.sr.Init(int(spec.SampleSize), input.OutputTypes()[:rankCol])
+	s.sr.Init(int(spec.SampleSize), input.OutputTypes()[:rankCol], &s.memAcc)
 
 	if err := s.Init(
-		nil, post, []types.T{}, flowCtx, processorID, output, nil, /* memMonitor */
-		// this proc doesn't implement RowSource and doesn't use ProcessorBase to drain
-		ProcStateOpts{},
+		nil, post, []types.T{}, flowCtx, processorID, output, memMonitor,
+		ProcStateOpts{
+			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+				s.close()
+				return nil
+			},
+		},
 	); err != nil {
 		return nil, err
 	}
@@ -135,6 +144,14 @@ func (s *sampleAggregator) Run(ctx context.Context) {
 		s.pushTrailingMeta(s.Ctx)
 		s.input.ConsumerClosed()
 		s.out.Close()
+	}
+	s.MoveToDraining(nil /* err */)
+}
+
+func (s *sampleAggregator) close() {
+	if s.InternalClose() {
+		s.memAcc.Close(s.Ctx)
+		s.MemMonitor.Stop(s.Ctx)
 	}
 }
 
@@ -212,7 +229,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 				return false, errors.NewAssertionErrorWithWrappedErrf(err, "decoding rank column")
 			}
 			// Retain the rows with the top ranks.
-			if err := s.sr.SampleRow(row[:s.rankCol], uint64(rank)); err != nil {
+			if err := s.sr.SampleRow(ctx, row[:s.rankCol], uint64(rank)); err != nil {
 				return false, err
 			}
 			continue
