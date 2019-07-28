@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+//
 package cli
 
 import (
@@ -42,17 +43,36 @@ import (
 )
 
 const (
-	infoMessage = `# Welcome to the cockroach SQL interface.
+	welcomeMessage = `#
+# Welcome to the CockroachDB CLI shell.
 # All statements must be terminated by a semicolon.
-# To exit: CTRL + D.
+# To exit, type: \q.
 #
 `
+	helpMessageFmt = `You are using 'cockroach sql', CockroachDB's lightweight SQL client.
+Type:
+  \? or "help"      print this help.
+  \q, quit, exit    exit the shell (Ctrl+C/Ctrl+D also supported)
+  \! CMD            run an external command and print its results on standard output.
+  \| CMD            run an external command and run its output as SQL statements.
+  \set [NAME]       set a client-side flag or (without argument) print the current settings.
+  \unset NAME       unset a flag.
+  \show             during a multi-line statement or transaction, show the SQL entered so far.
+  \h [NAME]         help on syntax of SQL commands.
+  \hf [NAME]        help on SQL built-in functions.
+  \l                list all databases in the CockroachDB cluster
+  \dt               show the tables of the current schema in the current database
+  \du               list the users for all databases
+  \d TABLE          show details about columns in the specified table
+More documentation about our SQL dialect and the CLI shell is available online:
+%s
+%s`
+
+	defaultPromptPattern = "%n@%M/%/%x>"
+
+	// debugPromptPattern avoids substitution patterns that require a db roundtrip.
+	debugPromptPattern = "%n@%M>"
 )
-
-const defaultPromptPattern = "%n@%M/%/%x>"
-
-// debugPromptPattern avoids substitution patterns that require a db roundtrip.
-const debugPromptPattern = "%n@%M>"
 
 // sqlShellCmd opens a sql shell.
 var sqlShellCmd = &cobra.Command{
@@ -187,21 +207,7 @@ const (
 
 // printCliHelp prints a short inline help about the CLI.
 func printCliHelp() {
-	fmt.Printf(`You are using 'cockroach sql', CockroachDB's lightweight SQL client.
-Type:
-  \q, quit, exit    exit the shell (Ctrl+C/Ctrl+D also supported)
-  \! CMD            run an external command and print its results on standard output.
-  \| CMD            run an external command and run its output as SQL statements.
-  \set [NAME]       set a client-side flag or (without argument) print the current settings.
-  \unset NAME       unset a flag.
-  \show             during a multi-line statement or transaction, show the SQL entered so far.
-  \? or "help"      print this help.
-  \h [NAME]         help on syntax of SQL commands.
-  \hf [NAME]        help on SQL built-in functions.
-
-More documentation about our SQL dialect and the CLI shell is available online:
-%s
-%s`,
+	fmt.Printf(helpMessageFmt,
 		base.DocsURL("sql-statements.html"),
 		base.DocsURL("use-the-built-in-sql-client.html"),
 	)
@@ -214,8 +220,7 @@ func (c *cliState) hasEditor() bool {
 	return c.ins != noLineEditor
 }
 
-// addHistory persists a line of input to the readline history
-// file.
+// addHistory persists a line of input to the readline history file.
 func (c *cliState) addHistory(line string) {
 	if !c.hasEditor() || len(line) == 0 {
 		return
@@ -1021,20 +1026,20 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return c.handleFunctionHelp(cmd[1:], loopState, errState)
 
 	case `\l`:
-		c.concatLines = "SHOW DATABASES"
+		c.concatLines = `SHOW DATABASES`
 		return cliRunStatement
 
 	case `\dt`:
-		c.concatLines = "SHOW TABLES"
+		c.concatLines = `SHOW TABLES`
 		return cliRunStatement
 
 	case `\du`:
-		c.concatLines = "SHOW USERS"
+		c.concatLines = `SHOW USERS`
 		return cliRunStatement
 
 	case `\d`:
 		if len(cmd) > 1 {
-			c.concatLines = "SHOW COLUMNS FROM " + cmd[1]
+			c.concatLines = `SHOW COLUMNS FROM ` + cmd[1]
 			return cliRunStatement
 		} else {
 			return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
@@ -1429,7 +1434,7 @@ func runTerm(cmd *cobra.Command, args []string) error {
 
 	if cliCtx.isInteractive {
 		// The user only gets to see the info screen on interactive sessions.
-		fmt.Print(infoMessage)
+		fmt.Print(welcomeMessage)
 	}
 
 	conn, err := getPasswordAndMakeSQLClient("cockroach sql")
