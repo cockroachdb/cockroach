@@ -632,9 +632,11 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	// SplitTable moves the right range, so we split things back to front
 	// in order to move less data.
+	var argss []sql.SplitTableArgs
 	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+		argss = append(argss, sql.SplitTableArgs{TargetNodeIdx: i, Val: maxValue / numNodes * i})
 	}
+	sql.SplitTable(t, tc, tableDesc, argss)
 
 	ctx := context.TODO()
 
@@ -808,9 +810,11 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	// SplitTable moves the right range, so we split things back to front
 	// in order to move less data.
+	var argss []sql.SplitTableArgs
 	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+		argss = append(argss, sql.SplitTableArgs{TargetNodeIdx: i, Val: maxValue / numNodes * i})
 	}
+	sql.SplitTable(t, tc, tableDesc, argss)
 
 	ctx := context.TODO()
 
@@ -920,9 +924,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// Split the table into multiple ranges.
 	// SplitTable moves the right range, so we split things back to front
 	// in order to move less data.
+	var argss []sql.SplitTableArgs
 	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+		argss = append(argss, sql.SplitTableArgs{TargetNodeIdx: i, Val: maxValue / numNodes * i})
 	}
+	sql.SplitTable(t, tc, tableDesc, argss)
 
 	ctx := context.TODO()
 
@@ -2530,9 +2536,11 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	// SplitTable moves the right range, so we split things back to front
 	// in order to move less data.
+	var argss []sql.SplitTableArgs
 	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+		argss = append(argss, sql.SplitTableArgs{TargetNodeIdx: i, Val: maxValue / numNodes * i})
 	}
+	sql.SplitTable(t, tc, tableDesc, argss)
 
 	// Run some schema changes.
 	testCases := []struct {
@@ -2805,9 +2813,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	// SplitTable moves the right range, so we split things back to front
 	// in order to move less data.
+	var argss []sql.SplitTableArgs
 	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+		argss = append(argss, sql.SplitTableArgs{TargetNodeIdx: i, Val: maxValue / numNodes * i})
 	}
+	sql.SplitTable(t, tc, tableDesc, argss)
 
 	testCases := []struct {
 		sql    string
@@ -3630,10 +3640,12 @@ func TestCancelSchemaChange(t *testing.T) {
 	// Split the table into multiple ranges.
 	// SplitTable moves the right range, so we split things back to front
 	// in order to move less data.
+	var argss []sql.SplitTableArgs
 	const numSplits = numNodes * 2
 	for i := numSplits - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i%numNodes, maxValue/numSplits*i)
+		argss = append(argss, sql.SplitTableArgs{TargetNodeIdx: i % numNodes, Val: maxValue / numSplits * i})
 	}
+	sql.SplitTable(t, tc, tableDesc, argss)
 
 	ctx := context.TODO()
 	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
@@ -4747,9 +4759,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
+	var argss []sql.SplitTableArgs
 	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/2)
+		argss = append(argss, sql.SplitTableArgs{TargetNodeIdx: i, Val: maxValue / 2})
 	}
+	sql.SplitTable(t, tc, tableDesc, argss)
 
 	bg := ctxgroup.WithContext(ctx)
 	bg.Go(func() error {

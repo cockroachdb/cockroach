@@ -58,6 +58,11 @@ type TestClusterInterface interface {
 		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) roachpb.RangeDescriptor
 
+	// WaitForReplicationComplete wait for replication complete.
+	WaitForReplicationComplete(
+		startKey roachpb.Key,
+		targets ...roachpb.ReplicationTarget) error
+
 	// RemoveReplicas removes one or more replicas from a range.
 	RemoveReplicas(
 		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,

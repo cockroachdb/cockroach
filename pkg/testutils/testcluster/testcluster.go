@@ -391,15 +391,24 @@ func (tc *TestCluster) AddReplicas(
 	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	rKey := keys.MustAddr(startKey)
-	errRetry := errors.Errorf("target not found")
-	for {
-		rangeDesc, err := tc.changeReplicas(
-			roachpb.ADD_REPLICA, rKey, targets...,
-		)
-		if err != nil {
-			return roachpb.RangeDescriptor{}, err
-		}
+	rangeDesc, err := tc.changeReplicas(
+		roachpb.ADD_REPLICA, rKey, targets...,
+	)
+	if err != nil {
+		return roachpb.RangeDescriptor{}, err
+	}
 
+	return rangeDesc, nil
+}
+
+// WaitForReplicationComplete wait for replication complete.
+func (tc *TestCluster) WaitForReplicationComplete(
+	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) error {
+	rKey := keys.MustAddr(startKey)
+	errRetry := errors.Errorf("target not found")
+
+	for {
 		// Wait for the replication to complete on all destination nodes.
 		if err := retry.ForDuration(time.Second*25, func() error {
 			for _, target := range targets {
@@ -424,9 +433,10 @@ func (tc *TestCluster) AddReplicas(
 			log.Warningf(context.Background(), "target was likely downreplicated again; retrying after %s", err)
 			continue
 		} else if err != nil {
-			return roachpb.RangeDescriptor{}, err
+			return err
 		}
-		return rangeDesc, nil
+
+		return nil
 	}
 }
 

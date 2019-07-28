@@ -60,32 +60,57 @@ func SplitTable(
 	t *testing.T,
 	tc serverutils.TestClusterInterface,
 	desc *sqlbase.TableDescriptor,
-	targetNodeIdx int,
-	vals ...interface{},
+	argss []SplitTableArgs,
 ) {
-	if tc.ReplicationMode() != base.ReplicationManual {
-		t.Fatal("SplitTable called on a test cluster that was not in manual replication mode")
+	var rangeKeyAndTargets []keyAndTarget
+
+	for _, args := range argss {
+		if tc.ReplicationMode() != base.ReplicationManual {
+			t.Fatal("SplitTable called on a test cluster that was not in manual replication mode")
+		}
+
+		pik, err := sqlbase.TestingMakePrimaryIndexKey(desc, args.Val)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, rightRange, err := tc.Server(0).SplitRange(pik)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		rightRangeStartKey := rightRange.StartKey.AsRawKey()
+		target := tc.Target(args.TargetNodeIdx)
+
+		rangeKeyAndTargets = append(
+			rangeKeyAndTargets,
+			keyAndTarget{rightRangeStartKey, target})
+		rightRange, err = tc.AddReplicas(rightRangeStartKey, target)
+		if err != nil && !testutils.IsError(err, "is already present") {
+			t.Fatal(err)
+		}
+
+		if err := tc.TransferRangeLease(rightRange, target); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	pik, err := sqlbase.TestingMakePrimaryIndexKey(desc, vals...)
-	if err != nil {
-		t.Fatal(err)
+	for _, keyAndTargets := range rangeKeyAndTargets {
+		if err := tc.WaitForReplicationComplete(keyAndTargets.Key, keyAndTargets.Target); err != nil {
+			t.Fatal(err)
+		}
 	}
+}
 
-	_, rightRange, err := tc.Server(0).SplitRange(pik)
-	if err != nil {
-		t.Fatal(err)
-	}
+// SplitTableArgs contains the parameters one can SplitTable.
+type SplitTableArgs struct {
+	TargetNodeIdx int
+	Val           int
+}
 
-	rightRangeStartKey := rightRange.StartKey.AsRawKey()
-	rightRange, err = tc.AddReplicas(rightRangeStartKey, tc.Target(targetNodeIdx))
-	if err != nil && !testutils.IsError(err, "is already present") {
-		t.Fatal(err)
-	}
-
-	if err := tc.TransferRangeLease(rightRange, tc.Target(targetNodeIdx)); err != nil {
-		t.Fatal(err)
-	}
+type keyAndTarget struct {
+	Key    roachpb.Key
+	Target roachpb.ReplicationTarget
 }
 
 // TestPlanningDuringSplits verifies that table reader planning (resolving

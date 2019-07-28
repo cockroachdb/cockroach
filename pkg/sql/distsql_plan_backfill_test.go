@@ -77,9 +77,11 @@ func TestDistBackfill(t *testing.T) {
 	descNumToStr := sqlbase.GetTableDescriptor(cdb, "test", "numtostr")
 	// SplitTable moves the right range, so we split things back to front
 	// in order to move less data.
+	var argss []SplitTableArgs
 	for i := numNodes - 1; i > 0; i-- {
-		SplitTable(t, tc, descNumToStr, i, n*n/numNodes*i)
+		argss = append(argss, SplitTableArgs{i, n * n / numNodes * i})
 	}
+	SplitTable(t, tc, descNumToStr, argss)
 
 	db := tc.ServerConn(0)
 	db.SetMaxOpenConns(1)
