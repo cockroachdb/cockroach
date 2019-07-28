@@ -12,7 +12,6 @@ package cli
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/assert"
 )
 
 // Example_sql_lex tests the usage of the lexer in the sql subcommand.
@@ -194,7 +194,7 @@ func TestIsEndOfStatement(t *testing.T) {
 func TestHandleCliCmdSqlAliasMetacommands(t *testing.T) {
 	var metaCommandTestsTable = []struct {
 		commandString string
-		wantSqlStmt string
+		wantSQLStmt   string
 	}{
 		{`\l`, `SHOW DATABASES`},
 		{`\dt`, `SHOW TABLES`},
@@ -209,7 +209,7 @@ func TestHandleCliCmdSqlAliasMetacommands(t *testing.T) {
 		gotState := c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
 
 		assert.Equal(t, cliRunStatement, gotState)
-		assert.Equal(t, tt.wantSqlStmt, c.concatLines)
+		assert.Equal(t, tt.wantSQLStmt, c.concatLines)
 	}
 }
 
