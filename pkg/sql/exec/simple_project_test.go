@@ -10,7 +10,13 @@
 
 package exec
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/stretchr/testify/require"
+)
 
 func TestSimpleProjectOp(t *testing.T) {
 	tcs := []struct {
@@ -54,13 +60,20 @@ func TestSimpleProjectOp(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, []int{0, 1}, func(input []Operator) (Operator, error) {
-			return NewSimpleProjectOp(input[0], tc.colsToKeep), nil
+			return NewSimpleProjectOp(input[0], len(tc.tuples[0]), tc.colsToKeep), nil
 		})
 	}
 
 	// Empty projection.
 	runTests(t, []tuples{{{1, 2, 3}, {1, 2, 3}}}, tuples{{}, {}}, orderedVerifier, []int{},
 		func(input []Operator) (Operator, error) {
-			return NewSimpleProjectOp(input[0], nil), nil
+			return NewSimpleProjectOp(input[0], 3 /* numInputCols */, nil), nil
 		})
+
+	t.Run("RedundantProjectionIsNotPlanned", func(t *testing.T) {
+		typs := []types.T{types.Int64, types.Int64}
+		input := newFiniteBatchSource(coldata.NewMemBatch(typs), 1 /* usableCount */)
+		projectOp := NewSimpleProjectOp(input, len(typs), []uint32{0, 1})
+		require.IsType(t, input, projectOp)
+	})
 }
