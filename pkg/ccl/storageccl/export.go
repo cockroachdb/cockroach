@@ -37,17 +37,6 @@ func declareKeysExport(
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
 }
 
-// getDBEngine recursively searches for the underlying RocksDB or
-// rocksDBReadOnly engine.
-func getDBEngine(e engine.Reader, span roachpb.Span) engine.Reader {
-	switch v := e.(type) {
-	case spanset.ReadWriter:
-		return getDBEngine(spanset.GetSpanReader(v, span), span)
-	default:
-		return e
-	}
-}
-
 // evalExport dumps the requested keys into files of non-overlapping key ranges
 // in a format suitable for bulk ingest.
 func evalExport(
@@ -142,7 +131,7 @@ func evalExport(
 		io.MaxTimestampHint = h.Timestamp
 	}
 
-	e := getDBEngine(batch, roachpb.Span{Key: args.Key, EndKey: args.EndKey})
+	e := spanset.GetDBEngine(batch, roachpb.Span{Key: args.Key, EndKey: args.EndKey})
 
 	data, summary, err := engine.ExportToSst(ctx, e, start, end, exportAllRevisions, io)
 
