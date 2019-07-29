@@ -130,6 +130,12 @@ func TestTransactionRetryErrorCounts(t *testing.T) {
 
 	for _, txn := range []*gosql.Tx{txn1, txn2} {
 		if _, err := txn.Exec("UPDATE accounts SET balance = balance - 100 WHERE id = 1"); err != nil {
+			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "40001" {
+				if err := txn.Rollback(); err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
 			t.Fatal(err)
 		}
 		if err := txn.Commit(); err != nil && err.(*pq.Error).Code != "40001" {

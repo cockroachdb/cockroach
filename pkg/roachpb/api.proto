@@ -1653,6 +1653,13 @@ message Header {
   // be much more straightforward if all transactional requests were
   // idempotent. We could just re-issue requests. See #26915.
   bool async_consensus = 13;
+  // WriteTooOldErrors can either be returned immediately or deferred
+  // to the end of the transaction. By default they are returned
+  // immediately to maximize the SQL-level first-statement retry
+  // ability. Set this flag to request deferred errors, which can
+  // improve performance under heavy contention when client-side
+  // retries are already inevitable.
+  bool defer_write_too_old_error = 14;
 }
 
 

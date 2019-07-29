@@ -158,14 +158,17 @@ func TestLostUpdate(t *testing.T) {
 			t.Fatal("should experience just one restart")
 		}
 
+		var newVal string
 		if gr.Exists() && bytes.Equal(gr.ValueBytes(), []byte("hi")) {
-			if err := txn.Put(ctx, key, "correct"); err != nil {
-				t.Fatal(err)
-			}
+			newVal = "correct"
 		} else {
-			if err := txn.Put(ctx, key, "oops!"); err != nil {
-				t.Fatal(err)
-			}
+			newVal = "oops!"
+		}
+		b := txn.NewBatch()
+		b.Header.DeferWriteTooOldError = true
+		b.Put(key, newVal)
+		if err := txn.Run(ctx, b); err != nil {
+			t.Fatal(err)
 		}
 		// Verify that the WriteTooOld boolean is set on the txn.
 		proto := txn.Serialize()
