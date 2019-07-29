@@ -43,7 +43,7 @@ import (
 
 const (
 	welcomeMessage = `#
-# Welcome to the CockroachDB CLI shell.
+# Welcome to the CockroachDB SQL shell.
 # All statements must be terminated by a semicolon.
 # To exit, type: \q.
 #
