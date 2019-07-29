@@ -820,8 +820,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.IndexElemList> index_params create_as_params
 %type <tree.NameList> name_list privilege_list
 %type <[]int32> opt_array_bounds
-%type <tree.From> from_clause update_from_clause
-%type <tree.TableExprs> from_list rowsfrom_list
+%type <tree.From> from_clause
+%type <tree.TableExprs> from_list rowsfrom_list opt_from_list
 %type <tree.TablePatterns> table_pattern_list single_table_pattern_list
 %type <tree.TableNames> table_name_list
 %type <tree.Exprs> expr_list opt_expr_list tuple1_ambiguous_values tuple1_unambiguous_values
@@ -5523,12 +5523,13 @@ returning_clause:
 // %SeeAlso: INSERT, UPSERT, DELETE, WEBDOCS/update.html
 update_stmt:
   opt_with_clause UPDATE table_name_expr_opt_alias_idx
-    SET set_clause_list update_from_clause opt_where_clause opt_sort_clause opt_limit_clause returning_clause
+    SET set_clause_list opt_from_list opt_where_clause opt_sort_clause opt_limit_clause returning_clause
   {
     $$.val = &tree.Update{
       With: $1.with(),
       Table: $3.tblExpr(),
       Exprs: $5.updateExprs(),
+      From: $6.tblExprs(),
       Where: tree.NewWhere(tree.AstWhere, $7.expr()),
       OrderBy: $8.orderBy(),
       Limit: $9.limit(),
@@ -5537,10 +5538,13 @@ update_stmt:
   }
 | opt_with_clause UPDATE error // SHOW HELP: UPDATE
 
-// Mark this as unimplemented until the normal from_clause is supported here.
-update_from_clause:
-  FROM from_list { return unimplementedWithIssue(sqllex, 7841) }
-| /* EMPTY */ {}
+opt_from_list:
+  FROM from_list {
+    $$.val = $2.tblExprs()
+  }
+| /* EMPTY */ {
+    $$.val = tree.TableExprs{}
+}
 
 set_clause_list:
   set_clause

@@ -103,7 +103,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	//   ORDER BY <order-by> LIMIT <limit>
 	//
 	// All columns from the update table will be projected.
-	mb.buildInputForUpdateOrDelete(inScope, upd.Where, upd.Limit, upd.OrderBy)
+	fromCols := mb.buildInputForUpdate(inScope, upd.From, upd.Where, upd.Limit, upd.OrderBy)
 
 	// Derive the columns that will be updated from the SET expressions.
 	mb.addTargetColsForUpdate(upd.Exprs)
@@ -117,9 +117,9 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 
 	// Build the final update statement, including any returned expressions.
 	if resultsNeeded(upd.Returning) {
-		mb.buildUpdate(*upd.Returning.(*tree.ReturningExprs))
+		mb.buildUpdate(*upd.Returning.(*tree.ReturningExprs), fromCols)
 	} else {
-		mb.buildUpdate(nil /* returning */)
+		mb.buildUpdate(nil /* returning */, fromCols)
 	}
 
 	mb.outScope.expr = b.wrapWithCTEs(mb.outScope.expr, ctes)
@@ -321,11 +321,15 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 
 // buildUpdate constructs an Update operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
-func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
+func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs, fromCols []scopeColumn) {
 	mb.addCheckConstraintCols()
 
 	private := mb.makeMutationPrivate(returning != nil)
+	for _, col := range fromCols {
+		if col.id != 0 {
+			private.PassthroughCols = append(private.PassthroughCols, col.id)
+		}
+	}
 	mb.outScope.expr = mb.b.factory.ConstructUpdate(mb.outScope.expr, mb.checks, private)
-
-	mb.buildReturning(returning)
+	mb.buildReturning(returning, fromCols)
 }

@@ -494,6 +494,11 @@ type updateRun struct {
 	// of the mutation. Otherwise, the value at the i-th index refers to the
 	// index of the resultRowBuffer where the i-th column is to be returned.
 	rowIdxToRetIdx []int
+
+	// numPassthrough is the number of columns in addition to the set of
+	// columns of the target table being returned, that we must pass through
+	// from the input node.
+	numPassthrough int
 }
 
 // maxUpdateBatchSize is the max number of entries in the KV batch for
@@ -693,7 +698,7 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 				return err
 			}
 		} else {
-			checkVals := sourceVals[len(u.run.tu.ru.FetchCols)+len(u.run.tu.ru.UpdateCols):]
+			checkVals := sourceVals[len(u.run.tu.ru.FetchCols)+len(u.run.tu.ru.UpdateCols)+u.run.numPassthrough:]
 			if err := u.run.checkHelper.CheckInput(checkVals); err != nil {
 				return err
 			}
@@ -716,10 +721,28 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		// MakeUpdater guarantees that the first columns of the new values
 		// are those specified u.columns.
 		resultValues := make([]tree.Datum, len(u.columns))
+		largestRetIdx := -1
 		for i := range u.run.rowIdxToRetIdx {
 			retIdx := u.run.rowIdxToRetIdx[i]
 			if retIdx >= 0 {
+				if retIdx >= largestRetIdx {
+					largestRetIdx = retIdx
+				}
 				resultValues[retIdx] = newValues[i]
+			}
+		}
+
+		// At this point we've extracted all the RETURNING values that are part
+		// of the target table. We must now extract the columns in the RETURNING
+		// clause that refer to other tables (from the FROM clause of the update).
+		if u.run.numPassthrough > 0 {
+			passthroughBegin := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols)
+			passthroughEnd := passthroughBegin + u.run.numPassthrough
+			passthroughValues := sourceVals[passthroughBegin:passthroughEnd]
+
+			for i := 0; i < u.run.numPassthrough; i++ {
+				largestRetIdx++
+				resultValues[largestRetIdx] = passthroughValues[i]
 			}
 		}
 

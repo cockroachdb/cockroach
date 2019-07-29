@@ -214,7 +214,7 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 	o.mem.SetRoot(root, rootProps)
 
 	// Validate there are no dangling references.
-	if !root.Relational().OuterCols.Empty() {
+	if !root.Relational().OuterCols.Empty() && false {
 		return nil, errors.AssertionFailedf(
 			"top-level relational expression cannot have outer columns: %s",
 			errors.Safe(root.Relational().OuterCols),
