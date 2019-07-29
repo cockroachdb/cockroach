@@ -470,65 +470,63 @@ func (jr *joinReader) emitRow() (
 	sqlbase.EncDatumRow,
 	*distsqlpb.ProducerMetadata,
 ) {
-	for {
-		// Loop until we find a valid row to emit, or the cursor runs off the end.
-		if jr.emitCursor.inputRowIdx >= len(jr.inputRowIdxToLookedUpRows) {
-			// Ready for another input batch. Reset state.
-			jr.inputRows = jr.inputRows[:0]
-			jr.keyToInputRowIndices = make(map[string][]int)
-			jr.emitCursor.outputRowIdx = 0
-			jr.emitCursor.inputRowIdx = 0
-			jr.emitCursor.seenMatch = false
-			return jrReadingInput, nil, nil
-		}
-		inputRow := jr.inputRows[jr.emitCursor.inputRowIdx]
-		lookedUpRows := jr.inputRowIdxToLookedUpRows[jr.emitCursor.inputRowIdx]
-		if jr.emitCursor.outputRowIdx >= len(lookedUpRows) {
-			// We have no more rows for the current input row. Emit an outer or anti
-			// row if we didn't see a match, and bump to the next input row.
-			jr.emitCursor.inputRowIdx++
-			jr.emitCursor.outputRowIdx = 0
-			seenMatch := jr.emitCursor.seenMatch
-			jr.emitCursor.seenMatch = false
-			if !seenMatch {
-				switch jr.joinType {
-				case sqlbase.LeftOuterJoin:
-					// An outer-join non-match means we emit the input row with NULLs for
-					// the right side (if it passes the ON-condition).
-					if renderedRow := jr.renderUnmatchedRow(inputRow, leftSide); renderedRow != nil {
-						return jrEmittingRows, renderedRow, nil
-					}
-				case sqlbase.LeftAntiJoin:
-					// An anti-join non-match means we emit the input row.
-					return jrEmittingRows, inputRow, nil
-				}
-			}
-			continue
-		}
-
-		lookedUpRow := lookedUpRows[jr.emitCursor.outputRowIdx]
-		jr.emitCursor.outputRowIdx++
-		switch jr.joinType {
-		case sqlbase.LeftSemiJoin:
-			// A semi-join match means we emit our input row.
-			jr.emitCursor.seenMatch = true
-			return jrEmittingRows, inputRow, nil
-		case sqlbase.LeftAntiJoin:
-			// An anti-join match means we emit nothing.
-			jr.emitCursor.seenMatch = true
-			continue
-		}
-
-		outputRow, err := jr.render(inputRow, lookedUpRow)
-		if err != nil {
-			jr.MoveToDraining(err)
-			return jrStateUnknown, nil, jr.DrainHelper()
-		}
-		if outputRow != nil {
-			jr.emitCursor.seenMatch = true
-			return jrEmittingRows, outputRow, nil
-		}
+	// Loop until we find a valid row to emit, or the cursor runs off the end.
+	if jr.emitCursor.inputRowIdx >= len(jr.inputRowIdxToLookedUpRows) {
+		// Ready for another input batch. Reset state.
+		jr.inputRows = jr.inputRows[:0]
+		jr.keyToInputRowIndices = make(map[string][]int)
+		jr.emitCursor.outputRowIdx = 0
+		jr.emitCursor.inputRowIdx = 0
+		jr.emitCursor.seenMatch = false
+		return jrReadingInput, nil, nil
 	}
+	inputRow := jr.inputRows[jr.emitCursor.inputRowIdx]
+	lookedUpRows := jr.inputRowIdxToLookedUpRows[jr.emitCursor.inputRowIdx]
+	if jr.emitCursor.outputRowIdx >= len(lookedUpRows) {
+		// We have no more rows for the current input row. Emit an outer or anti
+		// row if we didn't see a match, and bump to the next input row.
+		jr.emitCursor.inputRowIdx++
+		jr.emitCursor.outputRowIdx = 0
+		seenMatch := jr.emitCursor.seenMatch
+		jr.emitCursor.seenMatch = false
+		if !seenMatch {
+			switch jr.joinType {
+			case sqlbase.LeftOuterJoin:
+				// An outer-join non-match means we emit the input row with NULLs for
+				// the right side (if it passes the ON-condition).
+				if renderedRow := jr.renderUnmatchedRow(inputRow, leftSide); renderedRow != nil {
+					return jrEmittingRows, renderedRow, nil
+				}
+			case sqlbase.LeftAntiJoin:
+				// An anti-join non-match means we emit the input row.
+				return jrEmittingRows, inputRow, nil
+			}
+		}
+		return jrEmittingRows, nil, nil
+	}
+
+	lookedUpRow := lookedUpRows[jr.emitCursor.outputRowIdx]
+	jr.emitCursor.outputRowIdx++
+	switch jr.joinType {
+	case sqlbase.LeftSemiJoin:
+		// A semi-join match means we emit our input row.
+		jr.emitCursor.seenMatch = true
+		return jrEmittingRows, inputRow, nil
+	case sqlbase.LeftAntiJoin:
+		// An anti-join match means we emit nothing.
+		jr.emitCursor.seenMatch = true
+		return jrEmittingRows, nil, nil
+	}
+
+	outputRow, err := jr.render(inputRow, lookedUpRow)
+	if err != nil {
+		jr.MoveToDraining(err)
+		return jrStateUnknown, nil, jr.DrainHelper()
+	}
+	if outputRow != nil {
+		jr.emitCursor.seenMatch = true
+	}
+	return jrEmittingRows, outputRow, nil
 }
 
 func (jr *joinReader) hasNullLookupColumn(row sqlbase.EncDatumRow) bool {
