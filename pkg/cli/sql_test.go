@@ -192,6 +192,7 @@ func TestIsEndOfStatement(t *testing.T) {
 
 // Test handleCliCmd cases for metacommands that are aliases for sql statements
 func TestHandleCliCmdSqlAliasMetacommands(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	var metaCommandTestsTable = []struct {
 		commandString string
 		wantSQLStmt   string
@@ -214,6 +215,7 @@ func TestHandleCliCmdSqlAliasMetacommands(t *testing.T) {
 }
 
 func TestHandleCliCmdSlashDInvalidSyntax(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	c := setupTestCliState()
 	c.lastInputLine = `\d`
 	gotState := c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
