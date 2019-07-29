@@ -69,7 +69,13 @@ type execPlan struct {
 // if the node outputs the same optimizer ColumnID multiple times.
 // TODO(justin): we should keep track of this instead of computing it each time.
 func (ep *execPlan) numOutputCols() int {
-	max, ok := ep.outputCols.MaxValue()
+	return numOutputColsInMap(ep.outputCols)
+}
+
+// numOutputColsInMap returns the number of slots required to fill in all of
+// the columns referred to by this ColMap.
+func numOutputColsInMap(m opt.ColMap) int {
+	max, ok := m.MaxValue()
 	if !ok {
 		return 0
 	}
@@ -514,6 +520,7 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
+
 	projections := prj.Projections
 	if len(projections) == 0 {
 		// We have only pass-through columns.
@@ -635,7 +642,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	allCols := joinOutputMap(left.outputCols, fakeRight.outputCols)
 
 	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, numOutputColsInMap(allCols)),
 		ivarMap: allCols,
 	}
 
@@ -773,7 +780,7 @@ func (b *Builder) initJoinBuild(
 	allCols := joinOutputMap(leftPlan.outputCols, rightPlan.outputCols)
 
 	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, numOutputColsInMap(allCols)),
 		ivarMap: allCols,
 	}
 
@@ -794,7 +801,8 @@ func (b *Builder) initJoinBuild(
 // joinOutputMap determines the outputCols map for a (non-semi/anti) join, given
 // the outputCols maps for its inputs.
 func joinOutputMap(left, right opt.ColMap) opt.ColMap {
-	numLeftCols := left.Len()
+	numLeftCols := numOutputColsInMap(left)
+
 	res := left.Copy()
 	right.ForEach(func(colIdx, rightIdx int) {
 		res.Set(colIdx, rightIdx+numLeftCols)
