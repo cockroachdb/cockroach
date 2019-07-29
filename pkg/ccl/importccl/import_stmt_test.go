@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -1095,14 +1094,14 @@ func TestImportCSVStmt(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE pk.t (a INT8, b STRING) CSV DATA (%s)`, strings.Join(testFiles.files, ", ")))
 		// Verify the rowids are being generated as expected.
 		sqlDB.CheckQueryResults(t,
-			`SELECT count(*), sum(rowid) FROM pk.t`,
+			`SELECT count(*) FROM pk.t`,
 			sqlDB.QueryStr(t, `
-				SELECT count(*), sum(rowid) FROM
-					(SELECT file + (rownum << $3) as rowid FROM
+				SELECT count(*) FROM
+					(SELECT * FROM
 						(SELECT generate_series(0, $1 - 1) file),
 						(SELECT generate_series(1, $2) rownum)
 					)
-			`, numFiles, rowsPerFile, builtins.NodeIDBits),
+			`, numFiles, rowsPerFile),
 		)
 	})
 
@@ -1505,20 +1504,17 @@ func TestImportIntoCSV(t *testing.T) {
 			}
 		}
 
-		var existingRowsRowIDSum int
-		sqlDB.QueryRow(t, `SELECT sum(rowid) FROM pk.t`).Scan(&existingRowsRowIDSum)
-
 		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO pk.t (a, b) CSV DATA (%s)`, strings.Join(testFiles.files, ", ")))
 		// Verify the rowids are being generated as expected.
 		sqlDB.CheckQueryResults(t,
-			`SELECT count(*), sum(rowid) FROM pk.t`,
+			`SELECT count(*) FROM pk.t`,
 			sqlDB.QueryStr(t, `
-				SELECT count(*) + $5, sum(rowid) + $4 FROM
-					(SELECT file + (rownum << $3) as rowid FROM
-						(SELECT generate_series(0, $1 - 1) file),
-						(SELECT generate_series(1, $2) rownum)
-					)
-			`, numFiles, rowsPerFile, builtins.NodeIDBits, existingRowsRowIDSum, numExistingRows),
+			SELECT count(*) + $3 FROM
+			(SELECT * FROM
+				(SELECT generate_series(0, $1 - 1) file),
+				(SELECT generate_series(1, $2) rownum)
+			)
+			`, numFiles, rowsPerFile, numExistingRows),
 		)
 	})
 
@@ -1658,21 +1654,6 @@ func TestImportIntoCSV(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE targetcols; USE targetcols")
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
 
-		// Insert the test data
-		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
-
-		if tx, err := db.Begin(); err != nil {
-			t.Fatal(err)
-		} else {
-			for i, v := range insert {
-				sqlDB.Exec(t, fmt.Sprintf("INSERT INTO t (a, b) VALUES (%d, %s)", i, v))
-			}
-
-			if err := tx.Commit(); err != nil {
-				t.Fatal(err)
-			}
-		}
-
 		// Expect an error if attempting to IMPORT INTO a target list which does
 		// not include all the PKs of the table.
 		sqlDB.ExpectErr(
@@ -1809,6 +1790,43 @@ func TestImportIntoCSV(t *testing.T) {
 		)
 
 		sqlDB.Exec(t, "DROP DATABASE targetcols")
+	})
+
+	// This tests that consecutive imports from unique data sources into an
+	// existing table without an explicit PK, do not overwrite each other. It
+	// exercises the row_id generation in IMPORT.
+	t.Run("multiple-import-into-without-pk", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE multiple; USE multiple")
+		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
+
+		// Insert the test data
+		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
+		numExistingRows := len(insert)
+		insertedRows := rowsPerFile * 3
+
+		if tx, err := db.Begin(); err != nil {
+			t.Fatal(err)
+		} else {
+			for i, v := range insert {
+				sqlDB.Exec(t, fmt.Sprintf("INSERT INTO t (a, b) VALUES (%d, %s)", i, v))
+			}
+
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Expect it to succeed with correct columns.
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]))
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[1]))
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[2]))
+
+		// Verify correct number of rows via COUNT.
+		var result int
+		sqlDB.QueryRow(t, `SELECT count(*) FROM t`).Scan(&result)
+		if expect := numExistingRows + insertedRows; result != expect {
+			t.Fatalf("expected %d rows, got %d", expect, result)
+		}
 	})
 }
 
