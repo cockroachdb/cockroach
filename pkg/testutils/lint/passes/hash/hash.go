@@ -8,18 +8,27 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// TODO(radu): re-enable the checkers using the new staticcheck interfaces.
-// +build lint_todo
-
-package lint
+// Package hash defines an Analyzer that detects correct use of hash.Hash.
+package hash
 
 import (
 	"go/ast"
 	"go/types"
-	"log"
 
-	"honnef.co/go/tools/lint"
+	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
+
+// Doc documents this pass.
+const Doc = `check for correct use of hash.Hash`
+
+// Analyzer defines this pass.
+var Analyzer = &analysis.Analyzer{
+	Name:     "hash",
+	Doc:      Doc,
+	Requires: []*analysis.Analyzer{inspect.Analyzer},
+	Run:      run,
+}
 
 // hashChecker assures that the hash.Hash interface is not misused. A common
 // mistake is to assume that the Sum function returns the hash of its input,
@@ -29,7 +38,7 @@ import (
 //
 // In fact, the parameter to Sum is not the bytes to be hashed, but a slice that
 // will be used as output in case the caller wants to avoid an allocation. In
-// the example above, hashedBytes is not the SHA-256 hash of inputBytes, but a
+// the example above, hashedBytes is not the SHA-256 hash of inputBytes, but
 // the concatenation of inputBytes with the hash of the empty string.
 //
 // Correct uses of the hash.Hash interface are as follows:
@@ -48,39 +57,24 @@ import (
 // b) the return value is used.
 //
 // The hash.Hash interface may be remedied in Go 2. See golang/go#21070.
-type hashChecker struct {
-	hashType *types.Interface
-}
-
-func (*hashChecker) Name() string {
-	return "hashcheck"
-}
-
-func (*hashChecker) Prefix() string {
-	return "HC"
-}
-
-func (c *hashChecker) Init(program *lint.Program) {
-	hashPkg := program.Prog.Package("hash")
-	if hashPkg == nil {
-		log.Fatal("hash package not found")
+func run(pass *analysis.Pass) (interface{}, error) {
+	selectorIsHash := func(s *ast.SelectorExpr) bool {
+		tv, ok := pass.TypesInfo.Types[s.X]
+		if !ok {
+			return false
+		}
+		named, ok := tv.Type.(*types.Named)
+		if !ok {
+			return false
+		}
+		if named.Obj().Type().String() != "hash.Hash" {
+			return false
+		}
+		return true
 	}
-	hashIface := hashPkg.Pkg.Scope().Lookup("Hash")
-	if hashIface == nil {
-		log.Fatal("hash.Hash type not found")
-	}
-	c.hashType = hashIface.Type().Underlying().(*types.Interface)
-}
 
-func (c *hashChecker) Funcs() map[string]lint.Func {
-	return map[string]lint.Func{
-		"HC1000": c.checkHashWritten,
-	}
-}
-
-func (c *hashChecker) checkHashWritten(j *lint.Job) {
 	stack := make([]ast.Node, 0, 32)
-	forAllFiles(j, func(n ast.Node) bool {
+	forAllFiles(pass.Files, func(n ast.Node) bool {
 		if n == nil {
 			stack = stack[:len(stack)-1] // pop
 			return true
@@ -95,7 +89,7 @@ func (c *hashChecker) checkHashWritten(j *lint.Job) {
 		if selExpr.Sel.Name != "Sum" {
 			return true
 		}
-		if !types.Implements(j.Program.Info.TypeOf(selExpr.X), c.hashType) {
+		if !selectorIsHash(selExpr) {
 			return true
 		}
 		callExpr, ok := stack[len(stack)-2].(*ast.CallExpr)
@@ -136,9 +130,17 @@ func (c *hashChecker) checkHashWritten(j *lint.Job) {
 		}
 
 		if !nilArg && !retUnused {
-			j.Errorf(callExpr, "probable misuse of hash.Hash.Sum: "+
+			pass.Reportf(callExpr.Pos(), "probable misuse of hash.Hash.Sum: "+
 				"provide parameter or use return value, but not both")
 		}
 		return true
 	})
+
+	return nil, nil
+}
+
+func forAllFiles(files []*ast.File, fn func(node ast.Node) bool) {
+	for _, f := range files {
+		ast.Inspect(f, fn)
+	}
 }
