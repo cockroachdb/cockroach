@@ -1154,6 +1154,7 @@ opt_cluster ::=
 ranges_kw ::=
 	'TESTING_RANGES'
 	| 'EXPERIMENTAL_RANGES'
+	| 'RANGES'
 
 table_index_name ::=
 	table_name '@' index_name

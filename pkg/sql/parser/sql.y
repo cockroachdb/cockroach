@@ -3714,6 +3714,7 @@ show_ranges_stmt:
 ranges_kw:
   TESTING_RANGES
 | EXPERIMENTAL_RANGES
+| RANGES
 
 show_fingerprints_stmt:
   SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name

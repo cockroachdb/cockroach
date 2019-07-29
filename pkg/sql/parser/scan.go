@@ -15,6 +15,7 @@ import (
 	"go/constant"
 	"go/token"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 	"unsafe"
 
@@ -540,7 +541,13 @@ func (s *scanner) scanIdent(lval *sqlSymType) {
 		lval.str = lex.NormalizeName(s.in[start:s.pos])
 	}
 
-	lval.id = lex.GetKeywordID(lval.str)
+	if strings.HasPrefix(lval.str, "experimental_") {
+		lval.id = lex.GetKeywordID(lval.str[13:])
+	} else if strings.HasPrefix(lval.str, "testing_") {
+		lval.id = lex.GetKeywordID(lval.str[8:])
+	} else {
+		lval.id = lex.GetKeywordID(lval.str)
+	}
 }
 
 func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
