@@ -7,7 +7,7 @@ statement ok
 CREATE TABLE y(b) AS SELECT generate_series(2, 4)
 
 # Referencing a CTE multiple times.
-query II
+query II rowsort
 WITH t AS (SELECT b FROM y) SELECT * FROM t JOIN t AS q ON true
 ----
 2  2
@@ -20,7 +20,7 @@ WITH t AS (SELECT b FROM y) SELECT * FROM t JOIN t AS q ON true
 4  3
 4  4
 
-query II
+query II rowsort
 WITH
     one AS (SELECT a AS u FROM x),
     two AS (SELECT b AS v FROM (SELECT b FROM y UNION ALL SELECT u FROM one))
