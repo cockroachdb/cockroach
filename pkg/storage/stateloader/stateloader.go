@@ -472,11 +472,8 @@ func (rsl StateLoader) LoadLegacyTxnSpanGCThreshold(
 	ctx context.Context, reader engine.Reader,
 ) (*hlc.Timestamp, error) {
 	var t hlc.Timestamp
-	found, err := engine.MVCCGetProto(ctx, reader, rsl.RangeTxnSpanGCThresholdKey(),
+	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeTxnSpanGCThresholdKey(),
 		hlc.Timestamp{}, &t, engine.MVCCGetOptions{})
-	if !found {
-		return nil, err
-	}
 	return &t, err
 }
 
