@@ -159,7 +159,7 @@ func (tc *Catalog) ResolveDataSourceByID(
 	ctx context.Context, id cat.StableID,
 ) (cat.DataSource, error) {
 	for _, ds := range tc.testSchema.dataSources {
-		if tab, ok := ds.(*Table); ok && tab.TabID == id {
+		if ds.ID() == id {
 			return ds, nil
 		}
 	}
