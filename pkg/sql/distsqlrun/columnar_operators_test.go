@@ -113,6 +113,120 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 	}
 }
 
+func TestHashJoinerAgainstProcessor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(context.Background())
+	seed := rand.Int()
+	rng := rand.New(rand.NewSource(int64(seed)))
+
+	type hjTestSpec struct {
+		joinType        sqlbase.JoinType
+		onExprSupported bool
+	}
+	testSpecs := []hjTestSpec{
+		{
+			joinType:        sqlbase.JoinType_INNER,
+			onExprSupported: true,
+		},
+		{
+			joinType: sqlbase.JoinType_LEFT_OUTER,
+		},
+		{
+			joinType: sqlbase.JoinType_RIGHT_OUTER,
+		},
+		{
+			joinType: sqlbase.JoinType_FULL_OUTER,
+		},
+		{
+			joinType: sqlbase.JoinType_LEFT_SEMI,
+		},
+	}
+
+	nRuns := 3
+	nRows := 10
+	maxCols := 3
+	maxNum := 5
+	nullProbability := 0.1
+	typs := make([]types.T, maxCols)
+	for i := range typs {
+		// TODO(yuzefovich): randomize the types of the columns.
+		typs[i] = *types.Int
+	}
+	for run := 1; run < nRuns; run++ {
+		for _, testSpec := range testSpecs {
+			for nCols := 1; nCols <= maxCols; nCols++ {
+				for nEqCols := 1; nEqCols <= nCols; nEqCols++ {
+					triedWithoutOnExpr, triedWithOnExpr := false, false
+					if !testSpec.onExprSupported {
+						triedWithOnExpr = true
+					}
+					for !triedWithoutOnExpr || !triedWithOnExpr {
+						inputTypes := typs[:nCols]
+
+						lRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+						rRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+						outputTypes := append(inputTypes, inputTypes...)
+						if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI {
+							outputTypes = inputTypes
+						}
+						outputColumns := make([]uint32, len(outputTypes))
+						for i := range outputColumns {
+							outputColumns[i] = uint32(i)
+						}
+
+						var onExpr distsqlpb.Expression
+						if triedWithoutOnExpr {
+							onExpr = generateOnExpr(rng, nCols, nEqCols, maxNum)
+						}
+						hjSpec := &distsqlpb.HashJoinerSpec{
+							LeftEqColumns:  generateEqualityColumns(rng, nCols, nEqCols),
+							RightEqColumns: generateEqualityColumns(rng, nCols, nEqCols),
+							OnExpr:         onExpr,
+							Type:           testSpec.joinType,
+						}
+						pspec := &distsqlpb.ProcessorSpec{
+							Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
+							Core:  distsqlpb.ProcessorCoreUnion{HashJoiner: hjSpec},
+							Post:  distsqlpb.PostProcessSpec{Projection: true, OutputColumns: outputColumns},
+						}
+						if err := verifyColOperator(
+							true, /* anyOrder */
+							[][]types.T{inputTypes, inputTypes},
+							[]sqlbase.EncDatumRows{lRows, rRows},
+							outputTypes,
+							pspec,
+						); err != nil {
+							fmt.Printf("--- join type = %s onExpr = %q seed = %d run = %d ---\n",
+								testSpec.joinType.String(), onExpr.Expr, seed, run)
+							t.Fatal(err)
+						}
+						if onExpr.Expr == "" {
+							triedWithoutOnExpr = true
+						} else {
+							triedWithOnExpr = true
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// generateEqualityColumns produces a random permutation of nEqCols random
+// columns on a table with nCols columns, so nEqCols must be not greater than
+// nCols.
+func generateEqualityColumns(rng *rand.Rand, nCols int, nEqCols int) []uint32 {
+	if nEqCols > nCols {
+		panic("nEqCols > nCols in generateEqualityColumns")
+	}
+	eqCols := make([]uint32, 0, nEqCols)
+	for _, eqCol := range rng.Perm(nCols)[:nEqCols] {
+		eqCols = append(eqCols, uint32(eqCol))
+	}
+	return eqCols
+}
+
 func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var da sqlbase.DatumAlloc
@@ -122,12 +236,14 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	rng := rand.New(rand.NewSource(int64(seed)))
 
 	type mjTestSpec struct {
-		joinType sqlbase.JoinType
-		anyOrder bool
+		joinType        sqlbase.JoinType
+		anyOrder        bool
+		onExprSupported bool
 	}
 	testSpecs := []mjTestSpec{
 		{
-			joinType: sqlbase.JoinType_INNER,
+			joinType:        sqlbase.JoinType_INNER,
+			onExprSupported: true,
 		},
 		{
 			joinType: sqlbase.JoinType_LEFT_OUTER,
@@ -163,61 +279,78 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		for _, testSpec := range testSpecs {
 			for nCols := 1; nCols <= maxCols; nCols++ {
 				for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
-					inputTypes := typs[:nCols]
-					lOrderingCols := generateColumnOrdering(rng, nCols, nOrderingCols)
-					rOrderingCols := generateColumnOrdering(rng, nCols, nOrderingCols)
-					// Set the directions of both columns to be the same.
-					for i, lCol := range lOrderingCols {
-						rOrderingCols[i].Direction = lCol.Direction
+					triedWithoutOnExpr, triedWithOnExpr := false, false
+					if !testSpec.onExprSupported {
+						triedWithOnExpr = true
 					}
+					for !triedWithoutOnExpr || !triedWithOnExpr {
+						inputTypes := typs[:nCols]
+						lOrderingCols := generateColumnOrdering(rng, nCols, nOrderingCols)
+						rOrderingCols := generateColumnOrdering(rng, nCols, nOrderingCols)
+						// Set the directions of both columns to be the same.
+						for i, lCol := range lOrderingCols {
+							rOrderingCols[i].Direction = lCol.Direction
+						}
 
-					lRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-					rRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-					lMatchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: lOrderingCols})
-					rMatchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: rOrderingCols})
-					sort.Slice(lRows, func(i, j int) bool {
-						cmp, err := lRows[i].Compare(inputTypes, &da, lMatchedCols, &evalCtx, lRows[j])
-						if err != nil {
+						lRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+						rRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+						lMatchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: lOrderingCols})
+						rMatchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: rOrderingCols})
+						sort.Slice(lRows, func(i, j int) bool {
+							cmp, err := lRows[i].Compare(inputTypes, &da, lMatchedCols, &evalCtx, lRows[j])
+							if err != nil {
+								t.Fatal(err)
+							}
+							return cmp < 0
+						})
+						sort.Slice(rRows, func(i, j int) bool {
+							cmp, err := rRows[i].Compare(inputTypes, &da, rMatchedCols, &evalCtx, rRows[j])
+							if err != nil {
+								t.Fatal(err)
+							}
+							return cmp < 0
+						})
+						outputTypes := append(inputTypes, inputTypes...)
+						if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
+							testSpec.joinType == sqlbase.JoinType_LEFT_ANTI {
+							outputTypes = inputTypes
+						}
+						outputColumns := make([]uint32, len(outputTypes))
+						for i := range outputColumns {
+							outputColumns[i] = uint32(i)
+						}
+
+						var onExpr distsqlpb.Expression
+						if triedWithoutOnExpr {
+							onExpr = generateOnExpr(rng, nCols, nOrderingCols, maxNum)
+						}
+						mjSpec := &distsqlpb.MergeJoinerSpec{
+							OnExpr:        onExpr,
+							LeftOrdering:  distsqlpb.Ordering{Columns: lOrderingCols},
+							RightOrdering: distsqlpb.Ordering{Columns: rOrderingCols},
+							Type:          testSpec.joinType,
+						}
+						pspec := &distsqlpb.ProcessorSpec{
+							Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
+							Core:  distsqlpb.ProcessorCoreUnion{MergeJoiner: mjSpec},
+							Post:  distsqlpb.PostProcessSpec{Projection: true, OutputColumns: outputColumns},
+						}
+						if err := verifyColOperator(
+							testSpec.anyOrder,
+							[][]types.T{inputTypes, inputTypes},
+							[]sqlbase.EncDatumRows{lRows, rRows},
+							outputTypes,
+							pspec,
+						); err != nil {
+							fmt.Printf("--- join type = %s onExpr = %q seed = %d run = %d ---\n",
+								testSpec.joinType.String(), onExpr.Expr, seed, run)
 							t.Fatal(err)
 						}
-						return cmp < 0
-					})
-					sort.Slice(rRows, func(i, j int) bool {
-						cmp, err := rRows[i].Compare(inputTypes, &da, rMatchedCols, &evalCtx, rRows[j])
-						if err != nil {
-							t.Fatal(err)
+						if onExpr.Expr == "" {
+							triedWithoutOnExpr = true
+						} else {
+							triedWithOnExpr = true
 						}
-						return cmp < 0
-					})
-					outputTypes := append(inputTypes, inputTypes...)
-					if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
-						testSpec.joinType == sqlbase.JoinType_LEFT_ANTI {
-						outputTypes = inputTypes
-					}
-					outputColumns := make([]uint32, len(outputTypes))
-					for i := range outputColumns {
-						outputColumns[i] = uint32(i)
-					}
-
-					mjSpec := &distsqlpb.MergeJoinerSpec{
-						LeftOrdering:  distsqlpb.Ordering{Columns: lOrderingCols},
-						RightOrdering: distsqlpb.Ordering{Columns: rOrderingCols},
-						Type:          testSpec.joinType,
-					}
-					pspec := &distsqlpb.ProcessorSpec{
-						Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
-						Core:  distsqlpb.ProcessorCoreUnion{MergeJoiner: mjSpec},
-						Post:  distsqlpb.PostProcessSpec{Projection: true, OutputColumns: outputColumns},
-					}
-					if err := verifyColOperator(
-						testSpec.anyOrder,
-						[][]types.T{inputTypes, inputTypes},
-						[]sqlbase.EncDatumRows{lRows, rRows},
-						outputTypes,
-						pspec,
-					); err != nil {
-						fmt.Printf("--- join type = %s seed = %d run = %d ---\n", testSpec.joinType.String(), seed, run)
-						t.Fatal(err)
 					}
 				}
 			}
@@ -227,7 +360,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 
 // generateColumnOrdering produces a random ordering of nOrderingCols columns
 // on a table with nCols columns, so nOrderingCols must be not greater than
-// nCols
+// nCols.
 func generateColumnOrdering(
 	rng *rand.Rand, nCols int, nOrderingCols int,
 ) []distsqlpb.Ordering_Column {
@@ -243,6 +376,41 @@ func generateColumnOrdering(
 		}
 	}
 	return orderingCols
+}
+
+// generateOnExpr populates a distsqlpb.Expression that contains a single
+// comparison which can be either comparing a column from the left against a
+// column from the right or comparing a column from either side against a
+// constant.
+func generateOnExpr(rng *rand.Rand, nCols int, nEqCols int, maxNum int) distsqlpb.Expression {
+	var comparison string
+	r := rng.Float64()
+	if r < 0.25 {
+		comparison = "<"
+	} else if r < 0.5 {
+		comparison = ">"
+	} else if r < 0.75 {
+		comparison = "="
+	} else {
+		comparison = "<>"
+	}
+	// When all columns are used in equality comparison between inputs, there is
+	// only one interesting case when a column from either side is compared
+	// against a constant. The second conditional is us choosing to compare
+	// against a constant.
+	if nCols == nEqCols || rng.Float64() < 0.33 {
+		colIdx := rng.Intn(nCols) + 1
+		constVal := rng.Intn(maxNum)
+		if rng.Float64() >= 0.5 {
+			// Use right side.
+			colIdx += nCols
+		}
+		return distsqlpb.Expression{Expr: fmt.Sprintf("@%d %s %d", colIdx, comparison, constVal)}
+	}
+	// We will compare a column from the left against a column from the right.
+	leftColIdx := rng.Intn(nCols) + 1
+	rightColIdx := rng.Intn(nCols) + nCols + 1
+	return distsqlpb.Expression{Expr: fmt.Sprintf("@%d %s @%d", leftColIdx, comparison, rightColIdx)}
 }
 
 func TestWindowFunctionsAgainstProcessor(t *testing.T) {
