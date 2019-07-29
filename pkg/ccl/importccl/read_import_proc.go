@@ -382,6 +382,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
+			adder.SetDisallowShadowing(true)
 			defer adder.Close(ctx)
 
 			// Drain the kvCh using the BulkAdder until it closes.

@@ -446,7 +446,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 		}
 
 		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-		if !testutils.IsError(err, "key collision at a") {
+		if !testutils.IsError(err, "ingested key collides with an existing one: \"a\"") {
 			t.Fatalf("%+v", err)
 		}
 	}
@@ -472,7 +472,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 		}
 
 		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-		if !testutils.IsError(err, "key collision at g") {
+		if !testutils.IsError(err, "ingested key collides with an existing one: \"g\"") {
 			t.Fatalf("%+v", err)
 		}
 	}
@@ -501,7 +501,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 		}
 
 		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-		if !testutils.IsError(err, "key collision at z") {
+		if !testutils.IsError(err, "ingested key collides with an existing one: \"z\"") {
 			t.Fatalf("%+v", err)
 		}
 	}
@@ -559,7 +559,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 		}
 
 		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-		if !testutils.IsError(err, "key collision at y") {
+		if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
 			t.Fatalf("%+v", err)
 		}
 	}
@@ -587,7 +587,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 		}
 
 		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-		if !testutils.IsError(err, "key collision at b") {
+		if !testutils.IsError(err, "ingested key collides with an existing one: \"b\"") {
 			t.Fatalf("%+v", err)
 		}
 	}
@@ -616,7 +616,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 		}
 
 		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-		if !testutils.IsError(err, "key collision at y") {
+		if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
 			t.Fatalf("%+v", err)
 		}
 	}

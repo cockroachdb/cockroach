@@ -2906,6 +2906,7 @@ func CheckForKeyCollisions(existingIter Iterator, sstIter Iterator) error {
 	state := C.DBCheckForKeyCollisions(existingIterGetter.getIter(), sstableIterGetter.getIter(), &intentErr)
 
 	err := statusToError(state.status)
+
 	if err != nil {
 		if err.Error() == "WriteIntentError" {
 			var e roachpb.WriteIntentError
@@ -2914,7 +2915,10 @@ func CheckForKeyCollisions(existingIter Iterator, sstIter Iterator) error {
 			}
 
 			return &e
+		} else if err.Error() == "InlineError" {
+			return errors.Errorf("inline values are unsupported when checking for key collisions")
 		}
+		err = errors.Wrap(&RocksDBError{msg: cToGoKey(state.key).String()}, "ingested key collides with an existing one")
 	}
 
 	return err
