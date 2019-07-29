@@ -68,3 +68,42 @@ root                                       ·              ·                 (a
 ·                                          size           2 columns, 1 row  ·                   ·
 ·                                          row 0, expr 0  1                 ·                   ·
 ·                                          row 0, expr 1  unique_rowid()    ·                   ·
+
+# Regression test for #39010.
+
+statement ok
+CREATE TABLE table39010 (col NAME)
+
+query TTTTT
+EXPLAIN (VERBOSE)
+  WITH
+    w AS (SELECT NULL, NULL FROM table39010)
+  SELECT
+    col
+  FROM
+    w, table39010
+----
+root                                  ·             ·                                  (col)                          ·
+ ├── render                           ·             ·                                  (col)                          ·
+ │    │                               render 0      col                                ·                              ·
+ │    └── hash-join                   ·             ·                                  ("?column?", "?column?", col)  ·
+ │         │                          type          cross                              ·                              ·
+ │         ├── render                 ·             ·                                  ("?column?", "?column?")       ·
+ │         │    │                     render 0      "?column?"                         ·                              ·
+ │         │    │                     render 1      "?column?"                         ·                              ·
+ │         │    └── scan buffer node  ·             ·                                  ("?column?")                   ·
+ │         │                          label         buffer 1 (w)                       ·                              ·
+ │         └── scan                   ·             ·                                  (col)                          ·
+ │                                    table         table39010@primary                 ·                              ·
+ │                                    spans         ALL                                ·                              ·
+ └── subquery                         ·             ·                                  (col)                          ·
+      │                               id            @S1                                ·                              ·
+      │                               original sql  SELECT NULL, NULL FROM table39010  ·                              ·
+      │                               exec mode     all rows                           ·                              ·
+      └── buffer node                 ·             ·                                  ("?column?")                   ·
+           │                          label         buffer 1 (w)                       ·                              ·
+           └── render                 ·             ·                                  ("?column?")                   ·
+                │                     render 0      NULL                               ·                              ·
+                └── scan              ·             ·                                  ()                             ·
+·                                     table         table39010@primary                 ·                              ·
+·                                     spans         ALL                                ·                              ·
