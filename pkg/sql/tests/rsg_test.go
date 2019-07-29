@@ -511,6 +511,10 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 			fmt.Printf("%s;\n", stmt)
 			tableStmts[i] = stmt
 		}
+		if err := db.exec(ctx, sqlsmith.SeedTable); err != nil {
+			return err
+		}
+		fmt.Printf("%s;\n", sqlsmith.SeedTable)
 		var err error
 		smither, err = sqlsmith.NewSmither(db.db, r.Rnd, sqlsmith.DisableMutations())
 		return err
