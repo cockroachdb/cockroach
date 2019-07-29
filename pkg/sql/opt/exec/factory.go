@@ -328,6 +328,7 @@ type Factory interface {
 		updateCols ColumnOrdinalSet,
 		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
+		passthrough sqlbase.ResultColumns,
 	) (Node, error)
 
 	// ConstructUpsert creates a node that implements an INSERT..ON CONFLICT or
