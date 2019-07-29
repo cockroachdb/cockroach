@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -52,18 +53,18 @@ var _ inputConverter = &mysqldumpReader{}
 
 func newMysqldumpReader(
 	kvCh chan []roachpb.KeyValue,
-	tables map[string]*sqlbase.TableDescriptor,
+	tables map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
 ) (*mysqldumpReader, error) {
 	res := &mysqldumpReader{evalCtx: evalCtx, kvCh: kvCh}
 
 	converters := make(map[string]*row.DatumRowConverter, len(tables))
 	for name, table := range tables {
-		if table == nil {
+		if table.Desc == nil {
 			converters[name] = nil
 			continue
 		}
-		conv, err := row.NewDatumRowConverter(table, evalCtx, kvCh)
+		conv, err := row.NewDatumRowConverter(table.Desc, nil /* targetColNames */, evalCtx, kvCh)
 		if err != nil {
 			return nil, err
 		}

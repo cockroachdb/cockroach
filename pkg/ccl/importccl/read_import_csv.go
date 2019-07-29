@@ -33,6 +33,7 @@ type csvInputReader struct {
 	batch        csvRecord
 	opts         roachpb.CSVOptions
 	tableDesc    *sqlbase.TableDescriptor
+	targetCols   tree.NameList
 	expectedCols int
 }
 
@@ -42,6 +43,7 @@ func newCSVInputReader(
 	kvCh chan []roachpb.KeyValue,
 	opts roachpb.CSVOptions,
 	tableDesc *sqlbase.TableDescriptor,
+	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
 ) *csvInputReader {
 	return &csvInputReader{
@@ -50,6 +52,7 @@ func newCSVInputReader(
 		kvCh:         kvCh,
 		expectedCols: len(tableDesc.VisibleColumns()),
 		tableDesc:    tableDesc,
+		targetCols:   targetCols,
 		recordCh:     make(chan csvRecord),
 		batchSize:    500,
 	}
@@ -162,7 +165,7 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 	// Create a new evalCtx per converter so each go routine gets its own
 	// collationenv, which can't be accessed in parallel.
 	evalCtx := c.evalCtx.Copy()
-	conv, err := row.NewDatumRowConverter(c.tableDesc, evalCtx, c.kvCh)
+	conv, err := row.NewDatumRowConverter(c.tableDesc, c.targetCols, evalCtx, c.kvCh)
 	if err != nil {
 		return err
 	}
@@ -173,18 +176,25 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 	for batch := range c.recordCh {
 		for batchIdx, record := range batch.r {
 			rowNum := int64(batch.rowOffset + batchIdx)
+			datumIdx := 0
 			for i, v := range record {
+				// Skip over record entries corresponding to columns not in the target
+				// columns specified by the user.
+				if _, ok := conv.IsTargetCol[i]; !ok {
+					continue
+				}
 				col := conv.VisibleCols[i]
 				if c.opts.NullEncoding != nil && v == *c.opts.NullEncoding {
-					conv.Datums[i] = tree.DNull
+					conv.Datums[datumIdx] = tree.DNull
 				} else {
 					var err error
-					conv.Datums[i], err = tree.ParseDatumStringAs(conv.VisibleColTypes[i], v, conv.EvalCtx)
+					conv.Datums[datumIdx], err = tree.ParseDatumStringAs(conv.VisibleColTypes[i], v, conv.EvalCtx)
 					if err != nil {
 						return wrapRowErr(err, batch.file, rowNum, pgcode.Syntax,
 							"parse %q as %s", col.Name, col.Type.SQLString())
 					}
 				}
+				datumIdx++
 			}
 			if err := conv.Row(ctx, batch.fileIndex, rowNum); err != nil {
 				return wrapRowErr(err, batch.file, rowNum, pgcode.Uncategorized, "")

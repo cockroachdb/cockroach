@@ -145,7 +145,7 @@ func (p *planner) Delete(
 	// being deleted. Also RETURNING will expose this.
 	rows, err := p.SelectClause(ctx, &tree.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(rd.FetchCols, true /* forUpdateOrDelete */),
-		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
+		From:  tree.From{Tables: []tree.TableExpr{n.Table}},
 		Where: n.Where,
 	}, n.OrderBy, n.Limit, nil /*with*/, nil /*desiredTypes*/, publicAndNonPublicColumns)
 	if err != nil {

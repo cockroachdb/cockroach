@@ -168,6 +168,11 @@ type DatumRowConverter struct {
 
 	tableDesc *sqlbase.ImmutableTableDescriptor
 
+	// Tracks which column indices in the set of visible columns are part of the
+	// user specified target columns. This can be used before populating Datums
+	// to filter out unwanted column data.
+	IsTargetCol map[int]struct{}
+
 	// The rest of these are derived from tableDesc, just cached here.
 	hidden                int
 	ri                    Inserter
@@ -183,7 +188,10 @@ const kvDatumRowConverterBatchSize = 5000
 
 // NewDatumRowConverter returns an instance of a DatumRowConverter.
 func NewDatumRowConverter(
-	tableDesc *sqlbase.TableDescriptor, evalCtx *tree.EvalContext, kvCh chan<- []roachpb.KeyValue,
+	tableDesc *sqlbase.TableDescriptor,
+	targetColNames tree.NameList,
+	evalCtx *tree.EvalContext,
+	kvCh chan<- []roachpb.KeyValue,
 ) (*DatumRowConverter, error) {
 	immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc)
 	c := &DatumRowConverter{
@@ -192,21 +200,50 @@ func NewDatumRowConverter(
 		EvalCtx:   evalCtx,
 	}
 
-	ri, err := MakeInserter(nil /* txn */, immutDesc, nil, /* fkTables */
-		immutDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
-	if err != nil {
-		return nil, errors.Wrap(err, "make row inserter")
+	var targetColDescriptors []sqlbase.ColumnDescriptor
+	var err error
+	// IMPORT INTO allows specifying target columns which could be a subset of
+	// immutDesc.VisibleColumns. If no target columns are specified we assume all
+	// columns of the table descriptor are to be inserted into.
+	if len(targetColNames) != 0 {
+		if targetColDescriptors, err = sqlbase.ProcessTargetColumns(immutDesc, targetColNames,
+			true /* ensureColumns */, false /* allowMutations */); err != nil {
+			return nil, err
+		}
+	} else {
+		targetColDescriptors = immutDesc.VisibleColumns()
 	}
-	c.ri = ri
+
+	isTargetColID := make(map[sqlbase.ColumnID]struct{})
+	for _, col := range targetColDescriptors {
+		isTargetColID[col.ID] = struct{}{}
+	}
+
+	c.IsTargetCol = make(map[int]struct{})
+	for i, col := range immutDesc.VisibleColumns() {
+		if _, ok := isTargetColID[col.ID]; !ok {
+			continue
+		}
+		c.IsTargetCol[i] = struct{}{}
+	}
 
 	var txCtx transform.ExprTransformContext
-	// Although we don't yet support DEFAULT expressions on visible columns,
-	// we do on hidden columns (which is only the default _rowid one). This
-	// allows those expressions to run.
-	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(immutDesc.Columns, immutDesc, &txCtx, c.EvalCtx)
+	// We do not currently support DEFAULT expressions on target or non-target
+	// columns. All non-target columns must be nullable and will be set to NULL
+	// during import. We do however support DEFAULT on hidden columns (which is
+	// only the default _rowid one). This allows those expressions to run.
+	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(targetColDescriptors, immutDesc, &txCtx, c.EvalCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default columns")
 	}
+
+	ri, err := MakeInserter(nil /* txn */, immutDesc, nil, /* fkTables */
+		cols, false /* checkFKs */, &sqlbase.DatumAlloc{})
+	if err != nil {
+		return nil, errors.Wrap(err, "make row inserter")
+	}
+
+	c.ri = ri
 	c.cols = cols
 	c.defaultExprs = defaultExprs
 
@@ -215,7 +252,8 @@ func NewDatumRowConverter(
 	for i := range c.VisibleCols {
 		c.VisibleColTypes[i] = c.VisibleCols[i].DatumType()
 	}
-	c.Datums = make([]tree.Datum, len(c.VisibleCols), len(cols))
+
+	c.Datums = make([]tree.Datum, len(targetColDescriptors), len(cols))
 
 	// Check for a hidden column. This should be the unique_rowid PK if present.
 	c.hidden = -1

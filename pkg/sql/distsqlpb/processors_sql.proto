@@ -193,9 +193,9 @@ message JoinReaderSpec {
   // the right stream.
   optional Expression on_expr = 4 [(gogoproto.nullable) = false];
 
-  // For lookup joins. Filter expression to be applied to index rows before
-  // joining to the input.
-  optional Expression index_filter_expr = 5 [(gogoproto.nullable) = false];
+  // This used to be used for an extra index filter expression. It was removed
+  // in DistSQL version 24.
+  reserved 5;
 
   // For lookup joins. Only JoinType_INNER and JoinType_LEFT_OUTER are
   // supported.

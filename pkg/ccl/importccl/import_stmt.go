@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -399,8 +400,34 @@ func importPlanHook(
 			if err != nil {
 				return err
 			}
-			// TODO(dt): configure target cols from ImportStmt.IntoCols
-			tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, IsNew: false}}
+
+			// Validate target columns.
+			var intoCols []string
+			var isTargetCol = make(map[string]bool, len(importStmt.IntoCols))
+			for _, name := range importStmt.IntoCols {
+				var err error
+				if _, err = found.FindActiveColumnByName(name.String()); err != nil {
+					return errors.Wrap(err, "verifying target columns")
+				}
+
+				isTargetCol[name.String()] = true
+				intoCols = append(intoCols, name.String())
+			}
+
+			// IMPORT INTO does not support columns with DEFAULT expressions. Ensure
+			// that all non-target columns are nullable until we support DEFAULT
+			// expressions.
+			for _, col := range found.VisibleColumns() {
+				if col.HasDefault() {
+					return errors.Errorf("cannot IMPORT INTO a table with a DEFAULT expression for any of its columns")
+				}
+
+				if !isTargetCol[col.Name] && !col.IsNullable() {
+					return errors.Errorf("all non-target columns in IMPORT INTO must be nullable")
+				}
+			}
+
+			tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, IsNew: false, TargetCols: intoCols}}
 		} else {
 			var tableDescs []*sqlbase.TableDescriptor
 			seqVals := make(map[sqlbase.ID]int64)
@@ -523,7 +550,7 @@ func doDistributedCSVTransform(
 	files []string,
 	p sql.PlanHookState,
 	parentID sqlbase.ID,
-	tables map[string]*sqlbase.TableDescriptor,
+	tables map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
 	format roachpb.IOFileFormat,
 	walltime int64,
 	sstSize int64,
@@ -804,8 +831,7 @@ func (r *importResumer) Resume(
 		sstSize = storageccl.MaxImportBatchSize(r.settings) * 5
 	}
 
-	tables := make(map[string]*sqlbase.TableDescriptor, len(details.Tables))
-
+	tables := make(map[string]*distsqlpb.ReadImportDataSpec_ImportTable, len(details.Tables))
 	if details.Tables != nil {
 		// Skip prepare stage on job resumption, if it has already been completed.
 		if !details.PrepareComplete {
@@ -817,11 +843,11 @@ func (r *importResumer) Resume(
 			details = r.job.Details().(jobspb.ImportDetails)
 		}
 
-		for _, tbl := range details.Tables {
-			if tbl.Name != "" {
-				tables[tbl.Name] = tbl.Desc
-			} else if tbl.Desc != nil {
-				tables[tbl.Desc.Name] = tbl.Desc
+		for _, i := range details.Tables {
+			if i.Name != "" {
+				tables[i.Name] = &distsqlpb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetCols: i.TargetCols}
+			} else if i.Desc != nil {
+				tables[i.Desc.Name] = &distsqlpb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetCols: i.TargetCols}
 			} else {
 				return errors.Errorf("invalid table specification")
 			}
@@ -854,7 +880,7 @@ func (r *importResumer) Resume(
 	if !stickyBitEnabled {
 		tableIDs := make([]uint32, 0, len(tables))
 		for _, t := range tables {
-			tableIDs = append(tableIDs, uint32(t.ID))
+			tableIDs = append(tableIDs, uint32(t.Desc.ID))
 		}
 		disableCtx, cancel := context.WithCancel(ctx)
 		defer cancel()

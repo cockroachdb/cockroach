@@ -78,7 +78,7 @@ type SelectClause struct {
 	Distinct    bool
 	DistinctOn  DistinctOn
 	Exprs       SelectExprs
-	From        *From
+	From        From
 	Where       *Where
 	GroupBy     GroupBy
 	Having      *Where
@@ -104,7 +104,7 @@ func (node *SelectClause) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.Exprs)
 		if len(node.From.Tables) > 0 {
 			ctx.WriteByte(' ')
-			ctx.FormatNode(node.From)
+			ctx.FormatNode(&node.From)
 		}
 		if node.Where != nil {
 			ctx.WriteByte(' ')
