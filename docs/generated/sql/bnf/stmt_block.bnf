@@ -193,7 +193,7 @@ truncate_stmt ::=
 	'TRUNCATE' opt_table relation_expr_list opt_drop_behavior
 
 update_stmt ::=
-	opt_with_clause 'UPDATE' table_name_expr_opt_alias_idx 'SET' set_clause_list opt_where_clause opt_sort_clause opt_limit_clause returning_clause
+	opt_with_clause 'UPDATE' table_name_expr_opt_alias_idx 'SET' set_clause_list opt_from_list opt_where_clause opt_sort_clause opt_limit_clause returning_clause
 
 upsert_stmt ::=
 	opt_with_clause 'UPSERT' 'INTO' insert_target insert_rest returning_clause
@@ -554,6 +554,10 @@ opt_drop_behavior ::=
 
 set_clause_list ::=
 	( set_clause ) ( ( ',' set_clause ) )*
+
+opt_from_list ::=
+	'FROM' from_list
+	| 
 
 db_object_name ::=
 	simple_db_object_name
@@ -1185,6 +1189,9 @@ set_clause ::=
 	single_set_clause
 	| multiple_set_clause
 
+from_list ::=
+	( table_ref ) ( ( ',' table_ref ) )*
+
 simple_db_object_name ::=
 	db_object_name_component
 
@@ -1545,6 +1552,16 @@ single_set_clause ::=
 multiple_set_clause ::=
 	'(' insert_column_list ')' '=' in_expr
 
+table_ref ::=
+	relation_expr opt_index_flags opt_ordinality opt_alias_clause
+	| select_with_parens opt_ordinality opt_alias_clause
+	| 'LATERAL' select_with_parens opt_ordinality opt_alias_clause
+	| joined_table
+	| '(' joined_table ')' opt_ordinality alias_clause
+	| func_table opt_ordinality opt_alias_clause
+	| 'LATERAL' func_table opt_ordinality opt_alias_clause
+	| '[' row_source_extension_stmt ']' opt_ordinality opt_alias_clause
+
 cockroachdb_extra_type_func_name_keyword ::=
 	'FAMILY'
 
@@ -1847,16 +1864,6 @@ distinct_clause ::=
 distinct_on_clause ::=
 	'DISTINCT' 'ON' '(' expr_list ')'
 
-table_ref ::=
-	relation_expr opt_index_flags opt_ordinality opt_alias_clause
-	| select_with_parens opt_ordinality opt_alias_clause
-	| 'LATERAL' select_with_parens opt_ordinality opt_alias_clause
-	| joined_table
-	| '(' joined_table ')' opt_ordinality alias_clause
-	| func_table opt_ordinality opt_alias_clause
-	| 'LATERAL' func_table opt_ordinality opt_alias_clause
-	| '[' row_source_extension_stmt ']' opt_ordinality opt_alias_clause
-
 all_or_distinct ::=
 	'ALL'
 	| 'DISTINCT'
@@ -1864,6 +1871,39 @@ all_or_distinct ::=
 
 var_list ::=
 	( var_value ) ( ( ',' var_value ) )*
+
+opt_ordinality ::=
+	'WITH' 'ORDINALITY'
+	| 
+
+opt_alias_clause ::=
+	alias_clause
+	| 
+
+joined_table ::=
+	'(' joined_table ')'
+	| table_ref 'CROSS' opt_join_hint 'JOIN' table_ref
+	| table_ref join_type opt_join_hint 'JOIN' table_ref join_qual
+	| table_ref 'JOIN' table_ref join_qual
+	| table_ref 'NATURAL' join_type opt_join_hint 'JOIN' table_ref
+	| table_ref 'NATURAL' 'JOIN' table_ref
+
+alias_clause ::=
+	'AS' table_alias_name opt_column_list
+	| table_alias_name opt_column_list
+
+func_table ::=
+	func_expr_windowless
+	| 'ROWS' 'FROM' '(' rowsfrom_list ')'
+
+row_source_extension_stmt ::=
+	delete_stmt
+	| explain_stmt
+	| insert_stmt
+	| select_stmt
+	| show_stmt
+	| update_stmt
+	| upsert_stmt
 
 user_priority ::=
 	'LOW'
@@ -2061,44 +2101,31 @@ character_base ::=
 	| 'VARCHAR'
 	| 'STRING'
 
-from_list ::=
-	( table_ref ) ( ( ',' table_ref ) )*
-
 window_definition_list ::=
 	( window_definition ) ( ( ',' window_definition ) )*
 
-opt_ordinality ::=
-	'WITH' 'ORDINALITY'
+opt_join_hint ::=
+	'HASH'
+	| 'MERGE'
+	| 'LOOKUP'
 	| 
 
-opt_alias_clause ::=
-	alias_clause
-	| 
+join_type ::=
+	'FULL' join_outer
+	| 'LEFT' join_outer
+	| 'RIGHT' join_outer
+	| 'INNER'
 
-joined_table ::=
-	'(' joined_table ')'
-	| table_ref 'CROSS' opt_join_hint 'JOIN' table_ref
-	| table_ref join_type opt_join_hint 'JOIN' table_ref join_qual
-	| table_ref 'JOIN' table_ref join_qual
-	| table_ref 'NATURAL' join_type opt_join_hint 'JOIN' table_ref
-	| table_ref 'NATURAL' 'JOIN' table_ref
+join_qual ::=
+	'USING' '(' name_list ')'
+	| 'ON' a_expr
 
-alias_clause ::=
-	'AS' table_alias_name opt_column_list
-	| table_alias_name opt_column_list
+func_expr_windowless ::=
+	func_application
+	| func_expr_common_subexpr
 
-func_table ::=
-	func_expr_windowless
-	| 'ROWS' 'FROM' '(' rowsfrom_list ')'
-
-row_source_extension_stmt ::=
-	delete_stmt
-	| explain_stmt
-	| insert_stmt
-	| select_stmt
-	| show_stmt
-	| update_stmt
-	| upsert_stmt
+rowsfrom_list ::=
+	( rowsfrom_item ) ( ( ',' rowsfrom_item ) )*
 
 opt_column ::=
 	'COLUMN'
@@ -2230,28 +2257,12 @@ char_aliases ::=
 window_definition ::=
 	window_name 'AS' window_specification
 
-opt_join_hint ::=
-	'HASH'
-	| 'MERGE'
-	| 'LOOKUP'
+join_outer ::=
+	'OUTER'
 	| 
 
-join_type ::=
-	'FULL' join_outer
-	| 'LEFT' join_outer
-	| 'RIGHT' join_outer
-	| 'INNER'
-
-join_qual ::=
-	'USING' '(' name_list ')'
-	| 'ON' a_expr
-
-func_expr_windowless ::=
-	func_application
-	| func_expr_common_subexpr
-
-rowsfrom_list ::=
-	( rowsfrom_item ) ( ( ',' rowsfrom_item ) )*
+rowsfrom_item ::=
+	func_expr_windowless
 
 create_as_col_qualification_elem ::=
 	'PRIMARY' 'KEY'
@@ -2316,13 +2327,6 @@ trim_list ::=
 	a_expr 'FROM' expr_list
 	| 'FROM' expr_list
 	| expr_list
-
-join_outer ::=
-	'OUTER'
-	| 
-
-rowsfrom_item ::=
-	func_expr_windowless
 
 create_as_param ::=
 	column_name
