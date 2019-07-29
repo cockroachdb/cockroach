@@ -290,10 +290,6 @@ func newColOperator(
 			return result, err
 		}
 
-		if !core.HashJoiner.OnExpr.Empty() {
-			return result, errors.Newf("can't plan hash join with on expressions")
-		}
-
 		var leftTypes, rightTypes []types.T
 		leftTypes, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
@@ -345,17 +341,23 @@ func newColOperator(
 			core.HashJoiner.LeftEqColumnsAreKey || core.HashJoiner.RightEqColumnsAreKey,
 			core.HashJoiner.Type,
 		)
+		if err != nil {
+			return result, err
+		}
+
+		if !core.HashJoiner.OnExpr.Empty() {
+			if core.HashJoiner.Type != sqlbase.JoinType_INNER {
+				return result, errors.Newf("can't plan non-inner hash join with on expressions")
+			}
+			columnTypes, err = result.planFilterExpr(flowCtx, core.HashJoiner.OnExpr, columnTypes)
+		}
 
 	case core.MergeJoiner != nil:
 		if err := checkNumIn(inputs, 2); err != nil {
 			return result, err
 		}
 
-		if !core.MergeJoiner.OnExpr.Empty() {
-			return result, errors.Newf("can't plan merge join with on expressions")
-		}
-		if core.MergeJoiner.Type == sqlbase.JoinType_INTERSECT_ALL ||
-			core.MergeJoiner.Type == sqlbase.JoinType_EXCEPT_ALL {
+		if core.MergeJoiner.Type.IsSetOpJoin() {
 			return result, errors.AssertionFailedf("unexpectedly %s merge join was planned", core.MergeJoiner.Type.String())
 		}
 
@@ -408,6 +410,9 @@ func newColOperator(
 			core.MergeJoiner.LeftOrdering.Columns,
 			core.MergeJoiner.RightOrdering.Columns,
 		)
+		if err != nil {
+			return result, err
+		}
 
 		columnTypes = make([]semtypes.T, nLeftCols+nRightCols)
 		copy(columnTypes, spec.Input[0].ColumnTypes)
@@ -416,6 +421,13 @@ func newColOperator(
 			copy(columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
 		} else {
 			columnTypes = columnTypes[:nLeftCols]
+		}
+
+		if !core.MergeJoiner.OnExpr.Empty() {
+			if core.MergeJoiner.Type != sqlbase.JoinType_INNER {
+				return result, errors.Errorf("can't plan non-inner merge joins with on expressions")
+			}
+			columnTypes, err = result.planFilterExpr(flowCtx, core.MergeJoiner.OnExpr, columnTypes)
 		}
 
 	case core.JoinReader != nil:
@@ -552,6 +564,10 @@ func newColOperator(
 		return result, errors.Newf("unsupported processor core %q", core)
 	}
 
+	if err != nil {
+		return result, err
+	}
+
 	// After constructing the base operator, calculate the memory usage
 	// of the operator.
 	if sMemOp, ok := result.op.(exec.StaticMemoryOperator); ok {
@@ -560,37 +576,13 @@ func newColOperator(
 
 	log.VEventf(ctx, 1, "made op %T\n", result.op)
 
-	if err != nil {
-		return result, err
-	}
-
 	if columnTypes == nil {
 		return result, errors.AssertionFailedf("output columnTypes unset after planning %T", result.op)
 	}
 
 	if !post.Filter.Empty() {
-		var (
-			helper       exprHelper
-			selectionMem int
-		)
-		err := helper.init(post.Filter, columnTypes, flowCtx.EvalCtx)
-		if err != nil {
+		if columnTypes, err = result.planFilterExpr(flowCtx, post.Filter, columnTypes); err != nil {
 			return result, err
-		}
-		var filterColumnTypes []semtypes.T
-		result.op, _, filterColumnTypes, selectionMem, err = planSelectionOperators(flowCtx.NewEvalCtx(), helper.expr, columnTypes, result.op)
-		if err != nil {
-			return result, errors.Wrapf(err, "unable to columnarize filter expression %q", post.Filter.Expr)
-		}
-		result.memUsage += selectionMem
-		if len(filterColumnTypes) > len(columnTypes) {
-			// Additional columns were appended to store projection results while
-			// evaluating the filter. Project them away.
-			var outputColumns []uint32
-			for i := range columnTypes {
-				outputColumns = append(outputColumns, uint32(i))
-			}
-			result.op = exec.NewSimpleProjectOp(result.op, len(filterColumnTypes), outputColumns)
 		}
 	}
 	if post.Projection {
@@ -643,6 +635,35 @@ func newColOperator(
 	}
 	result.outputTypes, err = conv.FromColumnTypes(columnTypes)
 	return result, err
+}
+
+func (r *newColOperatorResult) planFilterExpr(
+	flowCtx *FlowCtx, filter distsqlpb.Expression, columnTypes []semtypes.T,
+) ([]semtypes.T, error) {
+	var (
+		helper       exprHelper
+		selectionMem int
+	)
+	err := helper.init(filter, columnTypes, flowCtx.EvalCtx)
+	if err != nil {
+		return columnTypes, err
+	}
+	var filterColumnTypes []semtypes.T
+	r.op, _, filterColumnTypes, selectionMem, err = planSelectionOperators(flowCtx.NewEvalCtx(), helper.expr, columnTypes, r.op)
+	if err != nil {
+		return columnTypes, errors.Wrapf(err, "unable to columnarize filter expression %q", filter.Expr)
+	}
+	r.memUsage += selectionMem
+	if len(filterColumnTypes) > len(columnTypes) {
+		// Additional columns were appended to store projections while evaluating
+		// the filter. Project them away.
+		var outputColumns []uint32
+		for i := range columnTypes {
+			outputColumns = append(outputColumns, uint32(i))
+		}
+		r.op = exec.NewSimpleProjectOp(r.op, len(filterColumnTypes), outputColumns)
+	}
+	return columnTypes, nil
 }
 
 func planSelectionOperators(
