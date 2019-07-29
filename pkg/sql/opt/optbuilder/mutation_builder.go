@@ -176,8 +176,116 @@ func (mb *mutationBuilder) fetchColID(tabOrd int) opt.ColumnID {
 	return mb.scopeOrdToColID(mb.fetchOrds[tabOrd])
 }
 
-// buildInputForUpdateOrDelete constructs a Select expression from the fields in
-// the Update or Delete operator, similar to this:
+// buildInputForUpdate constructs a Select expression from the fields in
+// the Update operator, similar to this:
+//
+//   SELECT <cols>
+//   FROM <table>
+//   WHERE <where>
+//   ORDER BY <order-by>
+//   LIMIT <limit>
+//
+// All columns from the table to update are added to fetchColList.
+// If a FROM clause is defined, we build out each of the table
+// expressions required and JOIN them together (LATERAL joins between
+// the tables are allowed). We then JOIN the result with the target
+// table (the FROM tables can't reference this table) and apply the
+// appropriate WHERE conditions.
+//
+// It is the responsibility of the user to guarantee that the JOIN
+// produces a maximum of one row per row of the target table. If multiple
+// are found, an arbitrary one is chosen (this row is not readily
+// predictable, consistent with the POSTGRES implementation).
+// buildInputForUpdate returns the columns of the FROM tables so they
+// can me made accessible to other parts of the query (RETURNING clause).
+// TODO(andyk): Do needed column analysis to project fewer columns if possible.
+func (mb *mutationBuilder) buildInputForUpdate(
+	inScope *scope, from tree.TableExprs, where *tree.Where, limit *tree.Limit, orderBy tree.OrderBy,
+) (cols []scopeColumn) {
+	// Fetch columns from different instance of the table metadata, so that it's
+	// possible to remap columns, as in this example:
+	//
+	//   UPDATE abc SET a=b
+	//
+
+	// FROM
+	mb.outScope = mb.b.buildScan(
+		mb.b.addTable(mb.tab, &mb.alias),
+		nil, /* ordinals */
+		nil, /* indexFlags */
+		includeMutations,
+		inScope,
+	)
+
+	fromClausePresent := len(from) > 0
+	numCols := len(mb.outScope.cols)
+
+	// If there is a FROM clause present, we must join all the tables
+	// together with the table being updated.
+	if fromClausePresent {
+		fromScope := mb.b.buildFromTables(from, inScope)
+
+		// Check that the same table name is not used multiple times.
+		mb.b.validateJoinTableNames(mb.outScope, fromScope)
+
+		cols = fromScope.cols
+		mb.outScope.appendColumnsFromScope(fromScope)
+
+		left := mb.outScope.expr.(memo.RelExpr)
+		right := fromScope.expr.(memo.RelExpr)
+		mb.outScope.expr = mb.b.factory.ConstructInnerJoin(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
+	}
+
+	// WHERE
+	mb.b.buildWhere(where, mb.outScope)
+
+	// SELECT + ORDER BY (which may add projected expressions)
+	projectionsScope := mb.outScope.replace()
+	projectionsScope.appendColumnsFromScope(mb.outScope)
+	orderByScope := mb.b.analyzeOrderBy(orderBy, mb.outScope, projectionsScope)
+	mb.b.buildOrderBy(mb.outScope, projectionsScope, orderByScope)
+	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
+
+	// LIMIT
+	if limit != nil {
+		mb.b.buildLimit(limit, inScope, projectionsScope)
+	}
+
+	mb.outScope = projectionsScope
+
+	// Build a distinct on to ensure there is at most one row in the joined output
+	// for every row in the table.
+	if fromClausePresent {
+		var pkCols opt.ColSet
+
+		// We need to ensure that the join has a maximum of one row for every row in the
+		// table and we ensure this by constructing a distinct on the primary key columns.
+		primaryIndex := mb.tab.Index(cat.PrimaryIndex)
+		for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
+			pkCol := mb.outScope.cols[primaryIndex.Column(i).Ordinal]
+
+			// If the primary key column is hidden, then we don't need to use it
+			// for the distinct on.
+			if !pkCol.hidden {
+				pkCols.Add(pkCol.id)
+			}
+		}
+
+		if !pkCols.Empty() {
+			mb.outScope = mb.b.buildDistinctOn(pkCols, mb.outScope)
+		}
+	}
+
+	// Set list of columns that will be fetched by the input expression.
+	for i := 0; i < numCols; i++ {
+		mb.fetchOrds[i] = scopeOrdinal(i)
+	}
+
+	return cols
+}
+
+// buildInputForDelete constructs a Select expression from the fields in
+// the Delete operator, similar to this:
 //
 //   SELECT <cols>
 //   FROM <table>
@@ -187,16 +295,14 @@ func (mb *mutationBuilder) fetchColID(tabOrd int) opt.ColumnID {
 //
 // All columns from the table to update are added to fetchColList.
 // TODO(andyk): Do needed column analysis to project fewer columns if possible.
-func (mb *mutationBuilder) buildInputForUpdateOrDelete(
+func (mb *mutationBuilder) buildInputForDelete(
 	inScope *scope, where *tree.Where, limit *tree.Limit, orderBy tree.OrderBy,
 ) {
 	// Fetch columns from different instance of the table metadata, so that it's
 	// possible to remap columns, as in this example:
 	//
-	//   UPDATE abc SET a=b
+	//   DELETE abc SET a=b
 	//
-
-	// FROM
 	mb.outScope = mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		nil, /* ordinals */
@@ -652,7 +758,13 @@ func (mb *mutationBuilder) mapToReturnScopeOrd(tabOrd int) scopeOrdinal {
 
 // buildReturning wraps the input expression with a Project operator that
 // projects the given RETURNING expressions.
-func (mb *mutationBuilder) buildReturning(returning tree.ReturningExprs) {
+// The extraAccessibleCols param contains all the columns that the RETURNING
+// clause can refer to in addition to the table columns. This is useful for
+// UPDATE ... FROM statements, where all columns from tables in the FROM clause
+// are in scope for the RETURNING clause.
+func (mb *mutationBuilder) buildReturning(
+	returning tree.ReturningExprs, extraAccessibleCols []scopeColumn,
+) {
 	// Handle case of no RETURNING clause.
 	if returning == nil {
 		mb.outScope = &scope{builder: mb.b, expr: mb.outScope.expr}
@@ -681,6 +793,10 @@ func (mb *mutationBuilder) buildReturning(returning tree.ReturningExprs) {
 			hidden: tabCol.IsHidden(),
 		})
 	}
+
+	// The returning columns can reference the columns defined in the FROM clause of
+	// an Update.
+	inScope.appendColumns(extraAccessibleCols)
 
 	// Construct the Project operator that projects the RETURNING expressions.
 	outScope := inScope.replace()

@@ -620,7 +620,7 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 	private := mb.makeMutationPrivate(returning != nil)
 	mb.outScope.expr = mb.b.factory.ConstructInsert(mb.outScope.expr, mb.checks, private)
 
-	mb.buildReturning(returning)
+	mb.buildReturning(returning, nil /* extraAccessibleCols */)
 }
 
 // buildInputForDoNothing wraps the input expression in LEFT OUTER JOIN
@@ -871,7 +871,7 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	private := mb.makeMutationPrivate(returning != nil)
 	mb.outScope.expr = mb.b.factory.ConstructUpsert(mb.outScope.expr, mb.checks, private)
 
-	mb.buildReturning(returning)
+	mb.buildReturning(returning, nil /* extraAccessibleCols */)
 }
 
 // projectUpsertColumns projects a set of merged columns that will be either

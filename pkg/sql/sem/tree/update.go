@@ -24,6 +24,7 @@ type Update struct {
 	With      *With
 	Table     TableExpr
 	Exprs     UpdateExprs
+	From      TableExprs
 	Where     *Where
 	OrderBy   OrderBy
 	Limit     *Limit
@@ -37,6 +38,10 @@ func (node *Update) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Table)
 	ctx.WriteString(" SET ")
 	ctx.FormatNode(&node.Exprs)
+	if len(node.From) > 0 {
+		ctx.WriteString(" FROM ")
+		ctx.FormatNode(&node.From)
+	}
 	if node.Where != nil {
 		ctx.WriteByte(' ')
 		ctx.FormatNode(node.Where)

@@ -321,6 +321,10 @@ type Factory interface {
 	// columns in the same order as they appear in the table schema, with the
 	// fetch columns first and the update columns second. The rowsNeeded parameter
 	// is true if a RETURNING clause needs the updated row(s) as output.
+	// The passthrough parameter contains all the result columns that are part
+	// of the input node that the update node needs to return (passing through
+	// from the input). The pass through columns are used to return any column
+	// from the FROM tables that are referenced in the RETURNING clause.
 	ConstructUpdate(
 		input Node,
 		table cat.Table,
@@ -328,6 +332,7 @@ type Factory interface {
 		updateCols ColumnOrdinalSet,
 		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
+		passthrough sqlbase.ResultColumns,
 	) (Node, error)
 
 	// ConstructUpsert creates a node that implements an INSERT..ON CONFLICT or
