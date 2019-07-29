@@ -462,7 +462,7 @@ func runCDCSchemaRegistry(ctx context.Context, t *test, c *cluster) {
 
 func registerCDC(r *testRegistry) {
 	useRangeFeed := true
-	if r.buildVersion.Compare(version.MustParse(`v2.2.0-0`)) < 0 {
+	if r.buildVersion.Compare(version.MustParse(`v19.1.0-0`)) < 0 {
 		// RangeFeed is not production ready in 2.1, so run the tests with the
 		// poller.
 		useRangeFeed = false
@@ -504,7 +504,7 @@ func registerCDC(r *testRegistry) {
 		// When testing a 2.1 binary, we use the poller for all the other tests
 		// and this is close enough to cdc/tpcc-1000 test to be redundant, so
 		// skip it.
-		MinVersion: "v2.2.0",
+		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -576,7 +576,7 @@ func registerCDC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       "cdc/cloud-sink-gcs/rangefeed=true",
-		MinVersion: "v2.2.0",
+		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -609,7 +609,7 @@ func registerCDC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       "cdc/schemareg",
-		MinVersion: "v2.2.0",
+		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(1),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCDCSchemaRegistry(ctx, t, c)
