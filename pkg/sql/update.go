@@ -233,7 +233,7 @@ func (p *planner) Update(
 	// renderNode to ideally reuse some of the queries.
 	rows, err := p.SelectClause(ctx, &tree.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(ru.FetchCols, true /* forUpdateOrDelete */),
-		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
+		From:  tree.From{Tables: []tree.TableExpr{n.Table}},
 		Where: n.Where,
 	}, n.OrderBy, n.Limit, nil /* with */, nil /*desiredTypes*/, publicAndNonPublicColumns)
 	if err != nil {

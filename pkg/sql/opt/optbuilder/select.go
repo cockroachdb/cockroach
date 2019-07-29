@@ -777,7 +777,7 @@ func (b *Builder) buildSelectClause(
 //
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
-func (b *Builder) buildFrom(from *tree.From, inScope *scope) (outScope *scope) {
+func (b *Builder) buildFrom(from tree.From, inScope *scope) (outScope *scope) {
 	// The root AS OF clause is recognized and handled by the executor. The only
 	// thing that must be done at this point is to ensure that if any timestamps
 	// are specified, the root SELECT was an AS OF SYSTEM TIME and that the time
