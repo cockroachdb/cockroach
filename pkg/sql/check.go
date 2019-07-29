@@ -40,7 +40,7 @@ func validateCheckExpr(
 	tblref := tree.TableRef{TableID: int64(tableDesc.ID), As: tree.AliasClause{Alias: "t"}}
 	sel := &tree.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(tableDesc.Columns, false /* forUpdateOrDelete */),
-		From:  &tree.From{Tables: []tree.TableExpr{&tblref}},
+		From:  tree.From{Tables: []tree.TableExpr{&tblref}},
 		Where: &tree.Where{Type: tree.AstWhere, Expr: &tree.NotExpr{Expr: expr}},
 	}
 	lim := &tree.Limit{Count: tree.NewDInt(1)}

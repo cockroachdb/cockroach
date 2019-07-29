@@ -847,7 +847,7 @@ func (p *planner) isAsOf(stmt tree.Statement) (*hlc.Timestamp, error) {
 		if !ok {
 			return nil, nil
 		}
-		if sc.From == nil || sc.From.AsOf.Expr == nil {
+		if sc.From.AsOf.Expr == nil {
 			return nil, nil
 		}
 

@@ -275,8 +275,8 @@ func (u *sqlSymUnion) tblExpr() tree.TableExpr {
 func (u *sqlSymUnion) tblExprs() tree.TableExprs {
     return u.val.(tree.TableExprs)
 }
-func (u *sqlSymUnion) from() *tree.From {
-    return u.val.(*tree.From)
+func (u *sqlSymUnion) from() tree.From {
+    return u.val.(tree.From)
 }
 func (u *sqlSymUnion) int32s() []int32 {
     return u.val.([]int32)
@@ -819,7 +819,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.IndexElemList> index_params create_as_params
 %type <tree.NameList> name_list privilege_list
 %type <[]int32> opt_array_bounds
-%type <*tree.From> from_clause update_from_clause
+%type <tree.From> from_clause update_from_clause
 %type <tree.TableExprs> from_list rowsfrom_list
 %type <tree.TablePatterns> table_pattern_list single_table_pattern_list
 %type <tree.TableNames> table_name_list
@@ -5783,7 +5783,7 @@ table_clause:
   {
     $$.val = &tree.SelectClause{
       Exprs:       tree.SelectExprs{tree.StarSelectExpr()},
-      From:        &tree.From{Tables: tree.TableExprs{$2.tblExpr()}},
+      From:        tree.From{Tables: tree.TableExprs{$2.tblExpr()}},
       TableSelect: true,
     }
   }
@@ -6077,12 +6077,12 @@ values_clause:
 from_clause:
   FROM from_list opt_as_of_clause
   {
-    $$.val = &tree.From{Tables: $2.tblExprs(), AsOf: $3.asOfClause()}
+    $$.val = tree.From{Tables: $2.tblExprs(), AsOf: $3.asOfClause()}
   }
 | FROM error // SHOW HELP: <SOURCE>
 | /* EMPTY */
   {
-    $$.val = &tree.From{}
+    $$.val = tree.From{}
   }
 
 from_list:
