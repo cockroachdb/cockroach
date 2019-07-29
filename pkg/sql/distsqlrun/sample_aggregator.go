@@ -294,6 +294,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// closure.
 	if err := s.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for _, si := range s.sketches {
+			distinctCount := int64(si.sketch.Estimate())
 			var histogram *stats.HistogramData
 			if si.spec.GenerateHistogram && len(s.sr.Get()) != 0 {
 				colIdx := int(si.spec.Columns[0])
@@ -305,6 +306,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 					colIdx,
 					typ,
 					si.numRows,
+					distinctCount,
 					int(si.spec.HistogramMaxBuckets),
 				)
 				if err != nil {
@@ -338,7 +340,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				si.spec.StatName,
 				columnIDs,
 				si.numRows,
-				int64(si.sketch.Estimate()),
+				distinctCount,
 				si.numNulls,
 				histogram,
 			); err != nil {
@@ -364,6 +366,7 @@ func generateHistogram(
 	colIdx int,
 	colType *types.T,
 	numRows int64,
+	distinctCount int64,
 	maxBuckets int,
 ) (stats.HistogramData, error) {
 	var da sqlbase.DatumAlloc
@@ -378,5 +381,5 @@ func generateHistogram(
 			values = append(values, ed.Datum)
 		}
 	}
-	return stats.EquiDepthHistogram(evalCtx, values, numRows, maxBuckets)
+	return stats.EquiDepthHistogram(evalCtx, values, numRows, distinctCount, maxBuckets)
 }

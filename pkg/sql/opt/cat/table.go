@@ -187,14 +187,15 @@ type HistogramBucket struct {
 	// NumEq is the estimated number of values equal to UpperBound.
 	NumEq uint64
 
-	// NumRange is the estimated number of values between the lower bound of the
-	// bucket and UpperBound (both boundaries are exclusive).
-	//
-	// The lower bound is inferred based on the location of this bucket in a
-	// slice of buckets. If it is the first bucket, the lower bound is the minimum
-	// possible value for the given data type. Otherwise, the lower bound is equal
-	// to the upper bound of the previous bucket.
+	// NumRange is the estimated number of values between the upper bound of the
+	// previous bucket and UpperBound (both boundaries are exclusive).
+	// The first bucket should always have NumRange=0.
 	NumRange uint64
+
+	// DistinctRange is the estimated number of distinct values between the upper
+	// bound of the previous bucket and UpperBound (both boundaries are
+	// exclusive).
+	DistinctRange float64
 
 	// UpperBound is the upper bound of the bucket.
 	UpperBound tree.Datum
