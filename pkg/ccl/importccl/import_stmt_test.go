@@ -1773,6 +1773,44 @@ func TestImportIntoCSV(t *testing.T) {
 	})
 	// TODO(adityamaru): Add test for IMPORT INTO without target columns specified
 	// once grammar has been added.
+
+	// IMPORT INTO disallows shadowing of existing keys when ingesting data.
+	//
+	// This tests key collision detection when importing the same source file twice.
+	t.Run("import-into-key-collision", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE keycollision; USE keycollision")
+		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+
+		sqlDB.Exec(t,
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]),
+		)
+
+		sqlDB.ExpectErr(
+			t, `ingested key collides with an existing one: /Table/95/1/0/0`,
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]),
+		)
+	})
+
+	// This tests key collision detection when using direct ingest, and importing
+	// a source file with the colliding key sandwiched between valid keys.
+	t.Run("direct-import-into-key-collision", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE directkeycollision; USE directkeycollision")
+		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+
+		sqlDB.Exec(t,
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s) WITH experimental_direct_ingestion`, testFiles.files[0]),
+		)
+
+		numRowsImported := 0
+		sqlDB.QueryRow(t, `SELECT count(*) FROM t`).Scan(&numRowsImported)
+
+		testShadowKeyFile := getShadowKeyTestFile(t, numRowsImported)
+
+		sqlDB.ExpectErr(
+			t, `ingested key collides with an existing one: /Table/97/1/600/0`,
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s) WITH experimental_direct_ingestion`, testShadowKeyFile),
+		)
+	})
 }
 
 func BenchmarkImport(b *testing.B) {
