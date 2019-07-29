@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -239,6 +240,15 @@ func (mq *mergeQueue) process(
 		return nil
 	}
 
+	// Range was manually split and not expired, so skip merging.
+	now := mq.store.Clock().Now()
+	if now.Less(rhsDesc.GetStickyBit()) {
+		log.VEventf(ctx, 2, "skipping merge: ranges were manually split and sticky bit was not expired")
+		// TODO(jeffreyxiao): Consider returning a purgatory error to avoid
+		// repeatedly processing ranges that cannot be merged.
+		return nil
+	}
+
 	mergedDesc := &roachpb.RangeDescriptor{
 		StartKey: lhsDesc.StartKey,
 		EndKey:   rhsDesc.EndKey,
@@ -264,13 +274,46 @@ func (mq *mergeQueue) process(
 		return nil
 	}
 
-	if !replicaSetsEqual(lhsDesc.Replicas().Unwrap(), rhsDesc.Replicas().Unwrap()) {
+	{
+		// AdminMerge errors if there are learners on either side and
+		// AdminRelocateRange removes any on the range it operates on. For the sake
+		// of obviousness, just remove them all upfront.
+		newLHSDesc, err := removeLearners(ctx, lhsRepl.store.DB(), lhsDesc)
+		if err != nil {
+			log.VEventf(ctx, 2, `%v`, err)
+			return err
+		}
+		lhsDesc = newLHSDesc
+		newRHSDesc, err := removeLearners(ctx, lhsRepl.store.DB(), &rhsDesc)
+		if err != nil {
+			log.VEventf(ctx, 2, `%v`, err)
+			return err
+		}
+		rhsDesc = *newRHSDesc
+	}
+	lhsReplicas, rhsReplicas := lhsDesc.Replicas().All(), rhsDesc.Replicas().All()
+
+	// Defensive sanity check that everything is now a voter.
+	for i := range lhsReplicas {
+		if lhsReplicas[i].GetType() != roachpb.ReplicaType_VOTER {
+			return errors.Errorf(`cannot merge non-voter replicas on lhs: %v`, lhsReplicas)
+		}
+	}
+	for i := range rhsReplicas {
+		if rhsReplicas[i].GetType() != roachpb.ReplicaType_VOTER {
+			return errors.Errorf(`cannot merge non-voter replicas on rhs: %v`, rhsReplicas)
+		}
+	}
+
+	if !replicaSetsEqual(lhsReplicas, rhsReplicas) {
 		var targets []roachpb.ReplicationTarget
-		for _, lhsReplDesc := range lhsDesc.Replicas().Unwrap() {
+		for _, lhsReplDesc := range lhsReplicas {
 			targets = append(targets, roachpb.ReplicationTarget{
 				NodeID: lhsReplDesc.NodeID, StoreID: lhsReplDesc.StoreID,
 			})
 		}
+		// AdminRelocateRange moves the lease to the first target in the list, so
+		// sort the existing leaseholder there to leave it unchanged.
 		lease, _ := lhsRepl.GetLease()
 		for i := range targets {
 			if targets[i].NodeID == lease.Replica.NodeID && targets[i].StoreID == lease.Replica.StoreID {
@@ -285,15 +328,6 @@ func (mq *mergeQueue) process(
 		if err := mq.store.DB().AdminRelocateRange(ctx, rhsDesc.StartKey, targets); err != nil {
 			return err
 		}
-	}
-
-	// Range was manually split and not expired, so skip merging.
-	now := mq.store.Clock().Now()
-	if now.Less(rhsDesc.GetStickyBit()) {
-		log.VEventf(ctx, 2, "skipping merge: ranges were manually split and sticky bit was not expired")
-		// TODO(jeffreyxiao): Consider returning a purgatory error to avoid
-		// repeatedly processing ranges that cannot be merged.
-		return nil
 	}
 
 	log.VEventf(ctx, 2, "merging to produce range: %s-%s", mergedDesc.StartKey, mergedDesc.EndKey)
