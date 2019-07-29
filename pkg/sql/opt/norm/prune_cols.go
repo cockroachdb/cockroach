@@ -59,6 +59,7 @@ func (c *CustomFuncs) NeededMutationCols(private *memo.MutationPrivate) opt.ColS
 	addCols(private.UpdateCols)
 	addCols(private.CheckCols)
 	addCols(private.ReturnCols)
+	addCols(private.PassthroughCols)
 	if private.CanaryCol != 0 {
 		cols.Add(private.CanaryCol)
 	}
