@@ -235,9 +235,21 @@ func (s spanSetReader) NewIterator(opts engine.IterOptions) engine.Iterator {
 	return &Iterator{s.r.NewIterator(opts), s.spans, nil, false}
 }
 
-// GetSpanReader is a getter to access the engine.Reader field of the
+// GetDBEngine recursively searches for the underlying rocksDB engine.
+func GetDBEngine(e engine.Reader, span roachpb.Span) engine.Reader {
+	switch v := e.(type) {
+	case ReadWriter:
+		return GetDBEngine(getSpanReader(v, span), span)
+	case *spanSetBatch:
+		return GetDBEngine(getSpanReader(v.ReadWriter, span), span)
+	default:
+		return e
+	}
+}
+
+// getSpanReader is a getter to access the engine.Reader field of the
 // spansetReader.
-func GetSpanReader(r ReadWriter, span roachpb.Span) engine.Reader {
+func getSpanReader(r ReadWriter, span roachpb.Span) engine.Reader {
 	if err := r.spanSetReader.spans.CheckAllowed(SpanReadOnly, span); err != nil {
 		panic("Not in the span")
 	}

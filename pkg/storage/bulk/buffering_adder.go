@@ -63,7 +63,13 @@ func MakeBulkAdder(
 
 // SkipLocalDuplicates configures skipping of duplicate keys in local batches.
 func (b *BufferingAdder) SkipLocalDuplicates(skip bool) {
-	b.sink.skipDuplicates = skip
+	b.sink.skipDuplicateKeys = skip
+}
+
+// SkipLocalDuplicatesWithSameValues configures skipping of duplicate keys with
+// the same value in local batches.
+func (b *BufferingAdder) SkipLocalDuplicatesWithSameValues(skip bool) {
+	b.sink.skipDuplicateKeysWithSameValue = skip
 }
 
 // Close closes the underlying SST builder.

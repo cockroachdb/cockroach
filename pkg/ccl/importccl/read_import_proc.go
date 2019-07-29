@@ -381,6 +381,16 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
+			adder.SetDisallowShadowing(true)
+			// AddSSTable with disallowShadowing=true does not consider a KV with the
+			// same ts and value to be a collision. This is to support the resumption
+			// of IMPORT jobs which might re-import some already ingested, but not
+			// checkpointed KVs.
+			//
+			// To provide a similar behavior with KVs within the same SST, we silently
+			// skip over duplicates with the same value, instead of throwing a
+			// uniqueness error.
+			adder.SkipLocalDuplicatesWithSameValues(true)
 			defer adder.Close(ctx)
 
 			// Drain the kvCh using the BulkAdder until it closes.
