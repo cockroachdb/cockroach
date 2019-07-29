@@ -1037,12 +1037,11 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return cliRunStatement
 
 	case `\d`:
-		if len(cmd) > 1 {
+		if len(cmd) == 2 {
 			c.concatLines = `SHOW COLUMNS FROM ` + cmd[1]
 			return cliRunStatement
-		} else {
-			return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
 		}
+		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
 
 	default:
 		if strings.HasPrefix(cmd[0], `\d`) {
