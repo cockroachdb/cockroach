@@ -20,12 +20,80 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/pkg/errors"
 )
 
 var rewriteCSVTestData = envutil.EnvOrDefaultBool("COCKROACH_REWRITE_CSV_TESTDATA", false)
 
 type csvTestFiles struct {
 	files, gzipFiles, bzipFiles, filesWithOpts, filesWithDups []string
+}
+
+// Returns a single CSV file with a previously imported key sandiwched between
+// a set of unqiue keys. This is used to ensure that IMPORT does not allow
+// ingestion of shadowing keys.
+func getShadowKeyTestFile(t testing.TB, numRowsImportedBefore int) string {
+	if numRowsImportedBefore < 1 {
+		t.Fatal(errors.Errorf("table has no existing rows to shadow"))
+	}
+	padding := 10
+	dir := filepath.Join("testdata", "csv")
+	fileName := filepath.Join(dir, "shadow-data")
+	f, err := os.Create(fileName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Start the file with some non-colliding rows.
+	for i := numRowsImportedBefore; i < numRowsImportedBefore+padding; i++ {
+		if _, err := fmt.Fprintf(f, "%d,%c\n", i, 'A'+i%26); err != nil {
+			t.Fatal(err)
+		}
+	}
+	numRowsImportedBefore += padding
+
+	// Insert colliding row.
+	if _, err := fmt.Fprintf(f, "%d,%c\n", 0, 'A'); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pad file with some more non-colliding rows.
+	for i := numRowsImportedBefore; i < numRowsImportedBefore+padding; i++ {
+		if _, err := fmt.Fprintf(f, "%d,%c\n", i, 'A'+i%26); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	return fmt.Sprintf(`'nodelocal:///shadow-data'`)
+}
+
+func getDupWithSameValueFile(t testing.TB) string {
+	dir := filepath.Join("testdata", "csv")
+	fileName := filepath.Join(dir, "dup-key-same-value")
+	f, err := os.Create(fileName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Start the file with some non-colliding rows.
+	for i := 0; i < 200; i++ {
+		if _, err := fmt.Fprintf(f, "%d,%c\n", i, 'A'+i%26); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Insert dup keys with same value.
+	for i := 0; i < 200; i++ {
+		if _, err := fmt.Fprintf(f, "%d,%c\n", i, 'A'+i%26); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	return fmt.Sprintf(`'nodelocal:///dup-key-same-value'`)
 }
 
 func getTestFiles(numFiles int) csvTestFiles {
