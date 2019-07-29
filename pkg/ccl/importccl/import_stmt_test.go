@@ -83,14 +83,15 @@ func TestImportData(t *testing.T) {
 		{
 			name: "duplicate PK",
 			create: `
-				i int8 primary key
+				i int8 primary key,
+				s string
 			`,
 			typ: "CSV",
-			data: `1
-2
-3
-3
-4`,
+			data: `1, A
+2, B
+3, C
+3, D
+4, E`,
 			err: "duplicate key",
 		},
 		{
@@ -116,7 +117,7 @@ d
 			with: `WITH sstsize = '10B'`,
 			typ:  "CSV",
 			data: `1,0000000000
-1,0000000000`,
+1,0000000001`,
 			err: "duplicate key",
 		},
 		{
@@ -1827,6 +1828,112 @@ func TestImportIntoCSV(t *testing.T) {
 		if expect := numExistingRows + insertedRows; result != expect {
 			t.Fatalf("expected %d rows, got %d", expect, result)
 		}
+	})
+
+	// This tests that a collision is not detected when importing the same source
+	// file twice in the same IMPORT, into a table without a PK. It exercises the
+	// row_id generation logic.
+	t.Run("multiple-file-import-into-without-pk", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE nokeycollision; USE nokeycollision")
+		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
+
+		sqlDB.Exec(t,
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s, %s)`, testFiles.files[0], testFiles.files[0]),
+		)
+
+		// Verify correct number of rows via COUNT.
+		var result int
+		sqlDB.QueryRow(t, `SELECT count(*) FROM t`).Scan(&result)
+		if result != 2000 {
+			t.Fatalf("expected 2000 rows, got %d", result)
+		}
+	})
+
+	// IMPORT INTO disallows shadowing of existing keys when ingesting data. With
+	// the exception of shadowing keys having the same ts and value.
+	//
+	// This tests key collision detection when importing the same source file
+	// twice. The ts across imports is different, and so this is considered a
+	// collision.
+	t.Run("import-into-same-file-diff-imports", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE keycollision; USE keycollision")
+		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+
+		sqlDB.Exec(t,
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]),
+		)
+
+		sqlDB.ExpectErr(
+			t, `ingested key collides with an existing one: /Table/115/1/0/0`,
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]),
+		)
+	})
+
+	// When the ts and value of the ingested keys across SSTs match the existing
+	// keys we do not consider this to be a collision. This is to support IMPORT
+	// job pause/resumption.
+	//
+	// To ensure uniform behavior we apply the same exception to keys within the
+	// same SST.
+	//
+	// This test attempts to ingest duplicate keys in the same SST, with the same
+	// value, and succeeds in doing so.
+	t.Run("import-into-dups-in-sst", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE sameimport; USE sameimport")
+		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+
+		sqlDB.Exec(t,
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s) WITH experimental_direct_ingestion`, getDupWithSameValueFile(t)),
+		)
+
+		// Verify correct number of rows via COUNT.
+		var result int
+		sqlDB.QueryRow(t, `SELECT count(*) FROM t`).Scan(&result)
+		if result != 200 {
+			t.Fatalf("expected 200 rows, got %d", result)
+		}
+	})
+
+	// This tests key collision detection when using regular import, and importing
+	// a source file with the colliding key sandwiched between valid keys.
+	t.Run("regular-import-into-key-collision", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE regularkeycollision; USE regularkeycollision")
+		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+
+		sqlDB.Exec(t,
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]),
+		)
+
+		numRowsImported := 0
+		sqlDB.QueryRow(t, `SELECT count(*) FROM t`).Scan(&numRowsImported)
+
+		testShadowKeyFile := getShadowKeyTestFile(t, numRowsImported)
+
+		sqlDB.ExpectErr(
+			t, `ingested key collides with an existing one: /Table/119/1/600/0`,
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testShadowKeyFile),
+		)
+	})
+
+	// This tests key collision detection when using direct ingest, and importing
+	// a source file with the colliding key sandwiched between valid keys.
+	t.Run("direct-import-into-key-collision", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE directkeycollision; USE directkeycollision")
+		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+
+		sqlDB.Exec(t,
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s) WITH experimental_direct_ingestion`, testFiles.files[0]),
+		)
+
+		numRowsImported := 0
+		sqlDB.QueryRow(t, `SELECT count(*) FROM t`).Scan(&numRowsImported)
+
+		testShadowKeyFile := getShadowKeyTestFile(t, numRowsImported)
+
+		sqlDB.ExpectErr(
+			t, `ingested key collides with an existing one: /Table/121/1/600/0`,
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s) WITH experimental_direct_ingestion`, testShadowKeyFile),
+		)
 	})
 
 	// Tests that IMPORT INTO invalidates FK and CHECK constraints.
