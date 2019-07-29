@@ -486,8 +486,8 @@ show_queries_stmt ::=
 	| 'SHOW' 'ALL' opt_cluster 'QUERIES'
 
 show_ranges_stmt ::=
-	'SHOW' ranges_kw 'FROM' 'TABLE' table_name
-	| 'SHOW' ranges_kw 'FROM' 'INDEX' table_index_name
+	'SHOW' 'RANGES' 'FROM' 'TABLE' table_name
+	| 'SHOW' 'RANGES' 'FROM' 'INDEX' table_index_name
 
 show_roles_stmt ::=
 	'SHOW' 'ROLES'
@@ -617,7 +617,6 @@ unreserved_keyword ::=
 	| 'EXPERIMENTAL'
 	| 'EXPERIMENTAL_AUDIT'
 	| 'EXPERIMENTAL_FINGERPRINTS'
-	| 'EXPERIMENTAL_RANGES'
 	| 'EXPERIMENTAL_RELOCATE'
 	| 'EXPERIMENTAL_REPLICA'
 	| 'EXPIRATION'
@@ -780,7 +779,6 @@ unreserved_keyword ::=
 	| 'TEMP'
 	| 'TEMPLATE'
 	| 'TEMPORARY'
-	| 'TESTING_RANGES'
 	| 'TESTING_RELOCATE'
 	| 'TEXT'
 	| 'TRACE'
@@ -1150,10 +1148,6 @@ opt_automatic ::=
 opt_cluster ::=
 	'CLUSTER'
 	| 'LOCAL'
-
-ranges_kw ::=
-	'TESTING_RANGES'
-	| 'EXPERIMENTAL_RANGES'
 
 table_index_name ::=
 	table_name '@' index_name
