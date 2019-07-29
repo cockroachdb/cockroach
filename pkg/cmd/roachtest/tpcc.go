@@ -404,7 +404,7 @@ func gceOrAws(cloud string, gce, aws int) int {
 }
 
 func maybeMinVersionForFixturesImport(cloud string) string {
-	const minVersionForFixturesImport = "v2.2.0"
+	const minVersionForFixturesImport = "v19.1.0"
 	if cloud == "aws" {
 		return minVersionForFixturesImport
 	}
