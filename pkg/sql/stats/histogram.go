@@ -11,11 +11,13 @@
 package stats
 
 import (
+	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
 )
@@ -28,13 +30,18 @@ var HistogramClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
-// EquiDepthHistogram creates a histogram where each bucket contains roughly the
-// same number of samples (though it can vary when a boundary value has high
-// frequency).
+// EquiDepthHistogram creates a histogram where each bucket contains roughly
+// the same number of samples (though it can vary when a boundary value has
+// high frequency).
 //
 // numRows is the total number of rows from which values were sampled.
+//
+// In addition to building the histogram buckets, EquiDepthHistogram also
+// estimates the number of distinct values in each bucket. It distributes the
+// known number of distinct values (distinctCount) among the buckets, in
+// proportion with the number of rows in each bucket.
 func EquiDepthHistogram(
-	evalCtx *tree.EvalContext, samples tree.Datums, numRows int64, maxBuckets int,
+	evalCtx *tree.EvalContext, samples tree.Datums, numRows, distinctCount int64, maxBuckets int,
 ) (HistogramData, error) {
 	numSamples := len(samples)
 	if numSamples == 0 {
@@ -61,11 +68,10 @@ func EquiDepthHistogram(
 	h := HistogramData{
 		Buckets: make([]HistogramData_Bucket, 0, numBuckets),
 	}
-	var err error
-	h.ColumnType = *samples[0].ResolvedType()
-	if err != nil {
-		return HistogramData{}, err
-	}
+	lowerBound := samples[0]
+	h.ColumnType = *lowerBound.ResolvedType()
+	var distinctCountRange, distinctCountEq float64
+
 	// i keeps track of the current sample and advances as we form buckets.
 	for i, b := 0, 0; b < numBuckets && i < numSamples; b++ {
 		// num is the number of samples in this bucket. The first bucket has
@@ -90,16 +96,118 @@ func EquiDepthHistogram(
 				break
 			}
 		}
+
+		numEq := int64(num-numLess) * numRows / int64(numSamples)
+		numRange := int64(numLess) * numRows / int64(numSamples)
+		distinctRange := estimatedDistinctValuesInRange(float64(numRange), lowerBound, upper)
 		encoded, err := sqlbase.EncodeTableKey(nil, upper, encoding.Ascending)
 		if err != nil {
 			return HistogramData{}, err
 		}
+
 		i += num
 		h.Buckets = append(h.Buckets, HistogramData_Bucket{
-			NumEq:      int64(num-numLess) * numRows / int64(numSamples),
-			NumRange:   int64(numLess) * numRows / int64(numSamples),
-			UpperBound: encoded,
+			NumEq:         numEq,
+			NumRange:      numRange,
+			DistinctRange: distinctRange,
+			UpperBound:    encoded,
 		})
+
+		// Keep track of the total number of estimated distinct values. This will
+		// be used to adjust the distinct count below.
+		distinctCountRange += distinctRange
+		if numEq > 0 {
+			distinctCountEq++
+		}
+
+		lowerBound = getNextLowerBound(evalCtx, upper)
 	}
+	h.adjustDistinctCount(float64(distinctCount), distinctCountRange, distinctCountEq)
 	return h, nil
+}
+
+// adjustDistinctCount adjusts the number of distinct values per bucket based
+// on the total number of distinct values.
+func (h *HistogramData) adjustDistinctCount(
+	distinctCountTotal, distinctCountRange, distinctCountEq float64,
+) {
+	if distinctCountRange == 0 {
+		return
+	}
+
+	adjustmentFactor := (distinctCountTotal - distinctCountEq) / distinctCountRange
+	if adjustmentFactor < 0 {
+		adjustmentFactor = 0
+	}
+	for i := range h.Buckets {
+		h.Buckets[i].DistinctRange *= adjustmentFactor
+	}
+}
+
+// estimatedDistinctValuesInRange returns the estimated number of distinct
+// values in the range [lowerBound, upperBound), given that the total number
+// of values is numRange.
+func estimatedDistinctValuesInRange(numRange float64, lowerBound, upperBound tree.Datum) float64 {
+	if maxDistinct, ok := maxDistinctValuesInRange(lowerBound, upperBound); ok {
+		return expectedDistinctCount(numRange, maxDistinct)
+	}
+	return numRange
+}
+
+// maxDistinctValuesInRange returns the maximum number of distinct values in
+// the range [lowerBound, upperBound). It returns ok=false when it is not
+// possible to determine a finite value (which is the case for all types other
+// than integers and dates).
+func maxDistinctValuesInRange(lowerBound, upperBound tree.Datum) (_ float64, ok bool) {
+	switch lowerBound.ResolvedType().Family() {
+	case types.IntFamily:
+		return float64(*upperBound.(*tree.DInt)) - float64(*lowerBound.(*tree.DInt)), true
+
+	case types.DateFamily:
+		lower := lowerBound.(*tree.DDate)
+		upper := upperBound.(*tree.DDate)
+		if lower.IsFinite() && upper.IsFinite() {
+			return float64(upper.PGEpochDays()) - float64(lower.PGEpochDays()), true
+		}
+		return 0, false
+
+	default:
+		return 0, false
+	}
+}
+
+func getNextLowerBound(evalCtx *tree.EvalContext, currentUpperBound tree.Datum) tree.Datum {
+	nextLowerBound, ok := currentUpperBound.Next(evalCtx)
+	if !ok {
+		nextLowerBound = currentUpperBound
+	}
+	return nextLowerBound
+}
+
+// expectedDistinctCount returns the expected number of distinct values
+// among k random numbers selected from n possible values. We assume the
+// values are chosen using uniform random sampling with replacement.
+func expectedDistinctCount(k, n float64) float64 {
+	if n == 0 || k == 0 {
+		return 0
+	}
+	// The probability that one specific value (out of the n possible values)
+	// does not appear in any of the k selections is:
+	//
+	//         ⎛ n-1 ⎞ k
+	//     p = ⎜-----⎟
+	//         ⎝  n  ⎠
+	//
+	// Therefore, the probability that a specific value appears at least once is
+	// 1-p. Over all n values, the expected number that appear at least once is
+	// n * (1-p). In other words, the expected distinct count is:
+	//
+	//                             ⎛     ⎛ n-1 ⎞ k ⎞
+	//     E[distinct count] = n * ⎜ 1 - ⎜-----⎟   ⎟
+	//                             ⎝     ⎝  n  ⎠   ⎠
+	//
+	// See https://math.stackexchange.com/questions/72223/finding-expected-
+	//   number-of-distinct-values-selected-from-a-set-of-integers for more info.
+	count := n * (1 - math.Pow((n-1)/n, k))
+	return count
 }
