@@ -617,7 +617,6 @@ unreserved_keyword ::=
 	| 'EXPERIMENTAL'
 	| 'EXPERIMENTAL_AUDIT'
 	| 'EXPERIMENTAL_FINGERPRINTS'
-	| 'EXPERIMENTAL_RANGES'
 	| 'EXPERIMENTAL_RELOCATE'
 	| 'EXPERIMENTAL_REPLICA'
 	| 'EXPIRATION'
@@ -780,7 +779,6 @@ unreserved_keyword ::=
 	| 'TEMP'
 	| 'TEMPLATE'
 	| 'TEMPORARY'
-	| 'TESTING_RANGES'
 	| 'TESTING_RELOCATE'
 	| 'TEXT'
 	| 'TRACE'
@@ -1152,8 +1150,7 @@ opt_cluster ::=
 	| 'LOCAL'
 
 ranges_kw ::=
-	'TESTING_RANGES'
-	| 'EXPERIMENTAL_RANGES'
+	'RANGES'
 
 table_index_name ::=
 	table_name '@' index_name
