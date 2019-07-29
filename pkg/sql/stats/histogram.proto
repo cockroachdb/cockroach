@@ -35,6 +35,14 @@ message HistogramData {
     // compressed histogram).
     int64 num_range = 2;
 
+    // The estimated number of distinct values in the bucket (excluding
+    // those that are equal to upper_bound). This is a floating point
+    // value because it is estimated by distributing the known distinct
+    // count for the column among the buckets, in proportion to the number
+    // of rows in each bucket. This value is in fact derived from the rest
+    // of the data, but is included to avoid re-computing it later.
+    double distinct_range = 4;
+
     // The upper boundary of the bucket. The column values for the upper bound
     // are encoded using the ascending key encoding of the column type.
     bytes upper_bound = 3;

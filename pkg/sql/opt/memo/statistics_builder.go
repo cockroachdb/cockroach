@@ -474,7 +474,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 				if cols.Len() == 1 && stat.Histogram() != nil {
 					col, _ := cols.Next(0)
 					colStat.Histogram = &props.Histogram{}
-					colStat.Histogram.Init(sb.evalCtx, col, stat.Histogram(), colStat.DistinctCount)
+					colStat.Histogram.Init(sb.evalCtx, col, stat.Histogram())
 				}
 
 				// Make sure the distinct count is at least 1, for the same reason as

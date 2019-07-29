@@ -28,6 +28,7 @@ import (
 var showHistogramColumns = sqlbase.ResultColumns{
 	{Name: "upper_bound", Typ: types.String},
 	{Name: "range_rows", Typ: types.Int},
+	{Name: "distinct_range_rows", Typ: types.Float},
 	{Name: "equal_rows", Typ: types.Int},
 }
 
@@ -80,6 +81,7 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 				row := tree.Datums{
 					tree.NewDString(ed.String(&histogram.ColumnType)),
 					tree.NewDInt(tree.DInt(b.NumRange)),
+					tree.NewDFloat(tree.DFloat(b.DistinctRange)),
 					tree.NewDInt(tree.DInt(b.NumEq)),
 				}
 				if _, err := v.rows.AddRow(ctx, row); err != nil {

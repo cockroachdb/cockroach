@@ -34,8 +34,8 @@ type Histogram struct {
 }
 
 // HistogramBucket contains the data for a single bucket in a Histogram. Note
-// that NumEq and NumRange are floats so the statisticsBuilder can apply
-// filters to the histogram.
+// that NumEq, NumRange, and DistinctRange are floats so the statisticsBuilder
+// can apply filters to the histogram.
 type HistogramBucket struct {
 	// NumEq is the estimated number of values equal to UpperBound.
 	NumEq float64
@@ -63,7 +63,7 @@ func (h *Histogram) String() string {
 
 // Init initializes the histogram with data from the catalog.
 func (h *Histogram) Init(
-	evalCtx *tree.EvalContext, col opt.ColumnID, buckets []cat.HistogramBucket, distinctCount float64,
+	evalCtx *tree.EvalContext, col opt.ColumnID, buckets []cat.HistogramBucket,
 ) {
 	h.evalCtx = evalCtx
 	h.col = col
@@ -74,86 +74,9 @@ func (h *Histogram) Init(
 	for i := range buckets {
 		h.buckets[i].NumEq = float64(buckets[i].NumEq)
 		h.buckets[i].NumRange = float64(buckets[i].NumRange)
+		h.buckets[i].DistinctRange = buckets[i].DistinctRange
 		h.buckets[i].UpperBound = buckets[i].UpperBound
 	}
-
-	// Estimate the number of distinct values in each bucket.
-	h.initDistinctCount(distinctCount)
-}
-
-// initDistinctCount estimates the number of distinct values in each bucket.
-// It distributes the known number of distinct values (distinctCount) among
-// the buckets, in proportion with the number of rows in each bucket.
-func (h *Histogram) initDistinctCount(distinctCount float64) {
-	// The lower bound for the first bucket is the smallest possible value for
-	// the data type.
-	lowerBound, ok := h.buckets[0].UpperBound.Min(h.evalCtx)
-	if !ok {
-		lowerBound = h.buckets[0].UpperBound
-	}
-	isDiscrete := isDiscreteType(lowerBound)
-
-	// Estimate the number of distinct values for each bucket, keeping track of
-	// the total.
-	var distinctCountRange, distinctCountEq float64
-	for i := range h.buckets {
-		b := &h.buckets[i]
-		if !isDiscrete {
-			b.DistinctRange = b.NumRange
-		} else if maxDistinct, ok := b.maxDistinctValuesInRange(lowerBound); ok {
-			b.DistinctRange = expectedDistinctCount(b.NumRange, maxDistinct)
-		} else {
-			b.DistinctRange = b.NumRange
-		}
-
-		distinctCountRange += b.DistinctRange
-		if b.NumEq > 0 {
-			distinctCountEq++
-		}
-		lowerBound = h.getNextLowerBound(b.UpperBound)
-	}
-
-	if distinctCountRange == 0 {
-		return
-	}
-
-	// Adjust the number of distinct values per bucket based on the total number
-	// of distinct values.
-	adjustmentFactor := (distinctCount - distinctCountEq) / distinctCountRange
-	if adjustmentFactor < 0 {
-		adjustmentFactor = 0
-	}
-	for i := range h.buckets {
-		h.buckets[i].DistinctRange *= adjustmentFactor
-	}
-}
-
-// expectedDistinctCount returns the expected number of distinct values
-// among k random numbers selected from n possible values. We assume the
-// values are chosen using uniform random sampling with replacement.
-func expectedDistinctCount(k, n float64) float64 {
-	if n == 0 || k == 0 {
-		return 0
-	}
-	// The probability that one specific value (out of the n possible values)
-	// does not appear in any of the k selections is:
-	//
-	//         ⎛ n-1 ⎞ k
-	//     p = ⎜-----⎟
-	//         ⎝  n  ⎠
-	//
-	// Therefore, the probability that a specific value appears at least once is
-	// 1-p. Over all n values, the expected number that appear at least once is
-	// n * (1-p). In other words, the expected distinct count is:
-	//
-	//                             ⎛     ⎛ n-1 ⎞ k ⎞
-	//     E[distinct count] = n * ⎜ 1 - ⎜-----⎟   ⎟
-	//                             ⎝     ⎝  n  ⎠   ⎠
-	//
-	// See https://math.stackexchange.com/questions/72223/finding-expected-
-	//   number-of-distinct-values-selected-from-a-set-of-integers for more info.
-	count := n * (1 - math.Pow((n-1)/n, k))
-	return count
 }
 
 // Copy returns a deep copy of the histogram.
@@ -263,15 +186,6 @@ func (b *HistogramBucket) maxDistinctValuesInRange(lowerBound tree.Datum) (_ flo
 
 	default:
 		return 0, false
-	}
-}
-
-func isDiscreteType(d tree.Datum) bool {
-	switch d.ResolvedType().Family() {
-	case types.IntFamily, types.DateFamily:
-		return true
-	default:
-		return false
 	}
 }
 
