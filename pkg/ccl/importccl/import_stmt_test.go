@@ -1743,6 +1743,45 @@ func TestImportIntoCSV(t *testing.T) {
 		sqlDB.Exec(t, "DROP DATABASE targetcols")
 	})
 
+	// Tests IMPORT INTO without any target columns specified. This implies an
+	// import of all columns in the exisiting table.
+	t.Run("no-target-cols-specified", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE targetcols; USE targetcols")
+		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
+
+		// Insert the test data
+		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
+
+		if tx, err := db.Begin(); err != nil {
+			t.Fatal(err)
+		} else {
+			for i, v := range insert {
+				sqlDB.Exec(t, fmt.Sprintf("INSERT INTO t (a, b) VALUES (%d, %s)", i, v))
+			}
+
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		sqlDB.Exec(t, fmt.Sprintf("IMPORT INTO t CSV DATA (%s)", testFiles.files[0]))
+
+		var result int
+		numExistingRows := len(insert)
+		// Verify that all columns have been populated with imported data.
+		sqlDB.QueryRow(t, `SELECT count(*) FROM t WHERE a IS NOT NULL`).Scan(&result)
+		if expect := numExistingRows + rowsPerFile; result != expect {
+			t.Fatalf("expected %d rows, got %d", expect, result)
+		}
+
+		sqlDB.QueryRow(t, `SELECT count(*) FROM t WHERE b IS NOT NULL`).Scan(&result)
+		if expect := numExistingRows + rowsPerFile; result != expect {
+			t.Fatalf("expected %d rows, got %d", expect, result)
+		}
+
+		sqlDB.Exec(t, "DROP DATABASE targetcols")
+	})
+
 	// IMPORT INTO does not support DEFAULT expressions for either target or
 	// non-target columns.
 	t.Run("import-into-check-no-default-cols", func(t *testing.T) {
@@ -1755,8 +1794,8 @@ func TestImportIntoCSV(t *testing.T) {
 		if tx, err := db.Begin(); err != nil {
 			t.Fatal(err)
 		} else {
-			for i := range insert {
-				sqlDB.Exec(t, fmt.Sprintf("INSERT INTO t (a, b) VALUES (%d, %s)", i, insert[i]))
+			for i, v := range insert {
+				sqlDB.Exec(t, fmt.Sprintf("INSERT INTO t (a, b) VALUES (%d, %s)", i, v))
 			}
 
 			if err := tx.Commit(); err != nil {
@@ -1771,8 +1810,6 @@ func TestImportIntoCSV(t *testing.T) {
 
 		sqlDB.Exec(t, "DROP DATABASE targetcols")
 	})
-	// TODO(adityamaru): Add test for IMPORT INTO without target columns specified
-	// once grammar has been added.
 }
 
 func BenchmarkImport(b *testing.B) {
