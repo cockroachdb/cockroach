@@ -45,8 +45,15 @@ type SSTBatcher struct {
 	flushKey        roachpb.Key
 	rc              *kv.RangeDescriptorCache
 
-	// skips duplicates (iff they are buffered together).
-	skipDuplicates bool
+	// skips duplicates with the same key (iff they are buffered together).
+	skipDuplicateKeys bool
+
+	// skips duplicates with the same value (iff they are buffered together).
+	skipDuplicateKeysWithSameValue bool
+
+	// map for the current batch of KVs to allow duplicate keys with the same
+	// value to be skipped if needed.
+	keyToValue map[string][]byte
 
 	maxSize int64
 	// rows written in the current batch.
@@ -80,9 +87,15 @@ func MakeSSTBatcher(ctx context.Context, db sender, flushBytes int64) (*SSTBatch
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value []byte) error {
 	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) {
-		if b.skipDuplicates {
+		if b.skipDuplicateKeys {
 			return nil
 		}
+
+		sameValue := len(b.keyToValue) > 0 && bytes.Equal(b.keyToValue[string(key.Key)], value)
+		if b.skipDuplicateKeysWithSameValue && sameValue {
+			return nil
+		}
+
 		var err storagebase.DuplicateKeyError
 		err.Key = append(err.Key, key.Key...)
 		err.Value = append(err.Value, value...)
@@ -106,6 +119,11 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value [
 	}
 	b.batchEndKey = append(b.batchEndKey[:0], key.Key...)
 
+	if b.keyToValue == nil {
+		b.keyToValue = make(map[string][]byte)
+	}
+	b.keyToValue[string(key.Key)] = value
+
 	if err := b.rowCounter.Count(key.Key); err != nil {
 		return err
 	}
@@ -122,6 +140,7 @@ func (b *SSTBatcher) Reset() error {
 	b.sstWriter = w
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
+	b.keyToValue = make(map[string][]byte)
 	b.flushKey = nil
 	b.flushKeyChecked = false
 
@@ -236,7 +255,7 @@ func AddSSTable(
 		return errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
 	}
 
-	work := []*sstSpan{{start: start, end: end, sstBytes: sstBytes, stats: stats}}
+	work := []*sstSpan{{start: start, end: end, sstBytes: sstBytes, disallowShadowing: disallowShadowing, stats: stats}}
 	const maxAddSSTableRetries = 10
 	for len(work) > 0 {
 		item := work[0]

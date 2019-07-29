@@ -560,7 +560,7 @@ DBIterState DBCheckForKeyCollisions(DBIterator* existingIter, DBIterator* sstIte
       // INTO. We do not expect to encounter any inline values, and thus we
       // report an error.
       if (meta.has_raw_bytes()) {
-        state.status = FmtStatus("inline values are unsupported when checking for key collisions");
+        state.status = FmtStatus("InlineError");
       } else if (meta.has_txn()) {
         // Check for a write intent.
         //
@@ -615,7 +615,8 @@ DBIterState DBCheckForKeyCollisions(DBIterator* existingIter, DBIterator* sstIte
       }
 
       state.valid = false;
-      state.status = FmtStatus("key collision at %s", sstKey.data());
+      state.key.key = ToDBSlice(sstKey);
+      state.status = FmtStatus("key collision");
       return state;
     } else if (compare < 0) {
       targetKey.key = ToDBSlice(sstKey);
