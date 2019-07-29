@@ -1930,7 +1930,7 @@ type scanIndexIter struct {
 	mem          *memo.Memo
 	scanPrivate  *memo.ScanPrivate
 	tab          cat.Table
-	indexOrdinal int
+	indexOrdinal cat.IndexOrdinal
 	index        cat.Index
 	cols         opt.ColSet
 }

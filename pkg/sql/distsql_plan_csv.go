@@ -166,7 +166,7 @@ func LoadCSV(
 	phs PlanHookState,
 	job *jobs.Job,
 	resultRows *RowResultWriter,
-	tables map[string]*sqlbase.TableDescriptor,
+	tables map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
 	from []string,
 	format roachpb.IOFileFormat,
 	walltime int64,
@@ -262,8 +262,8 @@ func LoadCSV(
 
 	splits := make([][]byte, 0, 2*len(tables)+len(samples))
 	// Add the table keys to the spans.
-	for _, desc := range tables {
-		tableSpan := desc.TableSpan()
+	for _, table := range tables {
+		tableSpan := table.Desc.TableSpan()
 		splits = append(splits, tableSpan.Key, tableSpan.EndKey)
 	}
 
@@ -466,7 +466,7 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanning(
 
 func makeImportReaderSpecs(
 	job *jobs.Job,
-	tables map[string]*sqlbase.TableDescriptor,
+	tables map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
 	from []string,
 	format roachpb.IOFileFormat,
 	nodes []roachpb.NodeID,
@@ -659,7 +659,7 @@ func DistIngest(
 	ctx context.Context,
 	phs PlanHookState,
 	job *jobs.Job,
-	tables map[string]*sqlbase.TableDescriptor,
+	tables map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
 	from []string,
 	format roachpb.IOFileFormat,
 	walltime int64,

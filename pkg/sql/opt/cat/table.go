@@ -92,12 +92,13 @@ type Table interface {
 	// >= WritableIndexCount.
 	DeletableIndexCount() int
 
-	// Index returns the ith index, where i < IndexCount. The table's primary
-	// index is always the 0th index, and is always present (use cat.PrimaryIndex
-	// to select it). The primary index corresponds to the table's primary key.
-	// If a primary key was not explicitly specified, then the system implicitly
-	// creates one based on a hidden rowid column.
-	Index(i int) Index
+	// Index returns the ith index, where i < DeletableIndexCount. Except for
+	// virtual tables, the table's primary index is always the 0th index, and is
+	// always present (use cat.PrimaryIndex to select it). The primary index
+	// corresponds to the table's primary key. If a primary key was not
+	// explicitly specified, then the system implicitly creates one based on a
+	// hidden rowid column.
+	Index(i IndexOrdinal) Index
 
 	// StatisticCount returns the number of statistics available for the table.
 	StatisticCount() int
