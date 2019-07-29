@@ -217,7 +217,7 @@ func TestHandleCliCmdSqlAliasMetacommands(t *testing.T) {
 func TestHandleCliCmdSlashDInvalidSyntax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	metaCommandTestsTable := []string {`\d`, `\d goodarg badarg`, `\dz`}
+	metaCommandTestsTable := []string{`\d`, `\d goodarg badarg`, `\dz`}
 
 	var c cliState
 	for _, tt := range metaCommandTestsTable {
