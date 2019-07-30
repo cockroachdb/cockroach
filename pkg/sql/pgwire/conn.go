@@ -1037,11 +1037,14 @@ func (fi *flushInfo) registerCmd(pos sql.CmdPos) {
 }
 
 func cookTag(tagStr string, buf []byte, stmtType tree.StatementType, rowsAffected int) []byte {
-	if tagStr == "INSERT" {
-		// From the postgres docs (49.5. Message Formats):
-		// `INSERT oid rows`... oid is the object ID of the inserted row if
-		//	rows is 1 and the target table has OIDs; otherwise oid is 0.
+	// From the postgres docs (49.5. Message Formats):
+	// `INSERT oid rows`... oid is the object ID of the inserted row if
+	//	rows is 1 and the target table has OIDs; otherwise oid is 0.
+	switch tagStr {
+	case "INSERT":
 		tagStr = "INSERT 0"
+	case "UPSERT":
+		tagStr = "UPSERT 0"
 	}
 	tag := append(buf, tagStr...)
 

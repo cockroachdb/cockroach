@@ -448,7 +448,12 @@ func (*GrantRole) cclOnlyStatement() {}
 func (n *Insert) StatementType() StatementType { return n.Returning.statementType() }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*Insert) StatementTag() string { return "INSERT" }
+func (n *Insert) StatementTag() string {
+	if n.OnConflict != nil && n.OnConflict.IsUpsertAlias() {
+		return "UPSERT"
+	}
+	return "INSERT"
+}
 
 // StatementType implements the Statement interface.
 func (n *Import) StatementType() StatementType { return Rows }
