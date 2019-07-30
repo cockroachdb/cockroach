@@ -51,7 +51,7 @@ type cmdAppCtx struct {
 	proposalRetry proposalReevaluationReason
 	mutationCount int // number of mutations in the WriteBatch, for writeStats
 	// splitMergeUnlock is acquired for splits and merges.
-	splitMergeUnlock func(*storagepb.ReplicatedEvalResult)
+	splitMergeUnlock func()
 
 	// The below fields are set after the data has been written to the storage
 	// engine in prepareLocalResult.
