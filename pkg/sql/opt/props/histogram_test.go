@@ -53,29 +53,21 @@ func TestHistogram(t *testing.T) {
 
 	testData := []struct {
 		constraint  string
-		buckets     []HistogramBucket
+		buckets     []cat.HistogramBucket
 		count       float64
 		maxDistinct float64
 		distinct    float64
 	}{
 		{
-			constraint: "/1: [/0 - /0]",
-			//   0  0
-			// <--- 0
-			buckets: []HistogramBucket{
-				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: tree.NewDInt(0)},
-			},
+			constraint:  "/1: [/0 - /0]",
+			buckets:     []cat.HistogramBucket{},
 			count:       0,
 			maxDistinct: 0,
 			distinct:    0,
 		},
 		{
-			constraint: "/1: [/50 - /100]",
-			//   0  0
-			// <--- 42
-			buckets: []HistogramBucket{
-				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: tree.NewDInt(42)},
-			},
+			constraint:  "/1: [/50 - /100]",
+			buckets:     []cat.HistogramBucket{},
 			count:       0,
 			maxDistinct: 0,
 			distinct:    0,
@@ -84,7 +76,7 @@ func TestHistogram(t *testing.T) {
 			constraint: "/1: [ - /1] [/11 - /24] [/30 - /45]",
 			//   0  1  0  0   3.7143 0.28571 0  0   40  35
 			// <--- 1 --- 10 --------- 24 ----- 30 ---- 42
-			buckets: []HistogramBucket{
+			buckets: []cat.HistogramBucket{
 				{NumRange: 0, NumEq: 1, DistinctRange: 0, UpperBound: tree.NewDInt(1)},
 				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: tree.NewDInt(10)},
 				{NumRange: 3.71, NumEq: 0.29, DistinctRange: 1.86, UpperBound: tree.NewDInt(24)},
@@ -99,7 +91,7 @@ func TestHistogram(t *testing.T) {
 			constraint: "/1: [/5 - /10] [/15 - /32] [/34 - /36] [/38 - ]",
 			//   0  0  1.875  3   0  0   2.8571  5   0  0   3.6364 3.6364 0  0   7.2727 3.6364 0  0   14.545  35
 			// <--- 4 ------- 10 --- 14 -------- 25 --- 30 --------- 32 ---- 33 --------- 36 ---- 37 -------- 42
-			buckets: []HistogramBucket{
+			buckets: []cat.HistogramBucket{
 				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: tree.NewDInt(4)},
 				{NumRange: 1.88, NumEq: 3, DistinctRange: 1.25, UpperBound: tree.NewDInt(10)},
 				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: tree.NewDInt(14)},
@@ -119,7 +111,7 @@ func TestHistogram(t *testing.T) {
 			constraint: "/1: [ - /41]",
 			//   0  1  3  3   4  5   0  0   36.364 3.6364
 			// <--- 1 --- 10 --- 25 --- 30 --------- 41 -
-			buckets: []HistogramBucket{
+			buckets: []cat.HistogramBucket{
 				{NumRange: 0, NumEq: 1, DistinctRange: 0, UpperBound: tree.NewDInt(1)},
 				{NumRange: 3, NumEq: 3, DistinctRange: 2, UpperBound: tree.NewDInt(10)},
 				{NumRange: 4, NumEq: 5, DistinctRange: 2, UpperBound: tree.NewDInt(25)},
@@ -134,7 +126,7 @@ func TestHistogram(t *testing.T) {
 			constraint: "/1: [/1 - ]",
 			//   0  1  3  3   4  5   0  0   40  35
 			// <--- 1 --- 10 --- 25 --- 30 ---- 42
-			buckets: []HistogramBucket{
+			buckets: []cat.HistogramBucket{
 				{NumRange: 0, NumEq: 1, DistinctRange: 0, UpperBound: tree.NewDInt(1)},
 				{NumRange: 3, NumEq: 3, DistinctRange: 2, UpperBound: tree.NewDInt(10)},
 				{NumRange: 4, NumEq: 5, DistinctRange: 2, UpperBound: tree.NewDInt(25)},
@@ -144,6 +136,17 @@ func TestHistogram(t *testing.T) {
 			count:       91,
 			maxDistinct: 22,
 			distinct:    15,
+		},
+		{
+			constraint: "/1: [/40 - /40]",
+			//   0 3.6364
+			// <---- 40 -
+			buckets: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 3.64, DistinctRange: 0, UpperBound: tree.NewDInt(40)},
+			},
+			count:       3.64,
+			maxDistinct: 1,
+			distinct:    1,
 		},
 	}
 
@@ -192,12 +195,12 @@ func TestFilterBucket(t *testing.T) {
 
 	type testCase struct {
 		span     string
-		expected *HistogramBucket
+		expected *cat.HistogramBucket
 		isError  bool
 	}
 	runTestCase := func(
-		bucket *HistogramBucket, lowerBound tree.Datum, span *constraint.Span,
-	) (actual *HistogramBucket, err error) {
+		bucket *cat.HistogramBucket, lowerBound tree.Datum, span *constraint.Span,
+	) (actual *cat.HistogramBucket, err error) {
 		defer func() {
 			// Any errors will be propagated as panics.
 			if r := recover(); r != nil {
@@ -209,11 +212,11 @@ func TestFilterBucket(t *testing.T) {
 			}
 		}()
 
-		return bucket.getFilteredBucket(&keyCtx, span, lowerBound), nil
+		return getFilteredBucket(bucket, &keyCtx, span, lowerBound), nil
 	}
 
 	runTest := func(
-		bucket *HistogramBucket, lowerBound tree.Datum, testData []testCase, typ types.Family,
+		bucket *cat.HistogramBucket, lowerBound tree.Datum, testData []testCase, typ types.Family,
 	) {
 		for _, testCase := range testData {
 			span := constraint.ParseSpan(&evalCtx, testCase.span, typ)
@@ -232,28 +235,28 @@ func TestFilterBucket(t *testing.T) {
 	}
 
 	t.Run("int", func(t *testing.T) {
-		bucket := &HistogramBucket{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDInt(10)}
+		bucket := &cat.HistogramBucket{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDInt(10)}
 		lowerBound := tree.NewDInt(0)
 		testData := []testCase{
 			{
 				span:     "[/0 - /0]",
-				expected: &HistogramBucket{NumEq: 1, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(0)},
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(0)},
 			},
 			{
 				span:     "[/0 - /5]",
-				expected: &HistogramBucket{NumEq: 1, NumRange: 5, DistinctRange: 5, UpperBound: tree.NewDInt(5)},
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 5, DistinctRange: 5, UpperBound: tree.NewDInt(5)},
 			},
 			{
 				span:     "[/2 - /9]",
-				expected: &HistogramBucket{NumEq: 1, NumRange: 7, DistinctRange: 7, UpperBound: tree.NewDInt(9)},
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 7, DistinctRange: 7, UpperBound: tree.NewDInt(9)},
 			},
 			{
 				span:     "[/2 - /10]",
-				expected: &HistogramBucket{NumEq: 5, NumRange: 8, DistinctRange: 8, UpperBound: tree.NewDInt(10)},
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 8, DistinctRange: 8, UpperBound: tree.NewDInt(10)},
 			},
 			{
 				span:     "[/10 - /10]",
-				expected: &HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(10)},
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(10)},
 			},
 			{
 				span:    "[/20 - /30]",
@@ -265,29 +268,29 @@ func TestFilterBucket(t *testing.T) {
 	})
 
 	t.Run("float", func(t *testing.T) {
-		bucket := &HistogramBucket{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDFloat(10)}
+		bucket := &cat.HistogramBucket{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDFloat(10)}
 		lowerBound := tree.NewDFloat(0)
 
 		testData := []testCase{
 			{
 				span:     "[/0 - /0]",
-				expected: &HistogramBucket{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDFloat(0)},
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDFloat(0)},
 			},
 			{
 				span:     "(/0 - /5]",
-				expected: &HistogramBucket{NumEq: 0, NumRange: 5, DistinctRange: 5, UpperBound: tree.NewDFloat(5)},
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 5, DistinctRange: 5, UpperBound: tree.NewDFloat(5)},
 			},
 			{
 				span:     "[/2.5 - /9)",
-				expected: &HistogramBucket{NumEq: 0, NumRange: 6.5, DistinctRange: 6.5, UpperBound: tree.NewDFloat(9)},
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 6.5, DistinctRange: 6.5, UpperBound: tree.NewDFloat(9)},
 			},
 			{
 				span:     "[/2 - /10]",
-				expected: &HistogramBucket{NumEq: 5, NumRange: 8, DistinctRange: 8, UpperBound: tree.NewDFloat(10)},
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 8, DistinctRange: 8, UpperBound: tree.NewDFloat(10)},
 			},
 			{
 				span:     "[/10 - /10]",
-				expected: &HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDFloat(10)},
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDFloat(10)},
 			},
 			{
 				span:    "[/10 - /20]",
@@ -303,7 +306,7 @@ func TestFilterBucket(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		bucket := &HistogramBucket{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: upperBound}
+		bucket := &cat.HistogramBucket{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: upperBound}
 		lowerBound, err := tree.ParseDDecimal("0")
 		if err != nil {
 			t.Fatal(err)
@@ -321,11 +324,11 @@ func TestFilterBucket(t *testing.T) {
 		testData := []testCase{
 			{
 				span:     "[/2.50 - /9)",
-				expected: &HistogramBucket{NumEq: 0, NumRange: 6.5, DistinctRange: 6.5, UpperBound: ub1},
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 6.5, DistinctRange: 6.5, UpperBound: ub1},
 			},
 			{
 				span:     "[/2 - /10.00]",
-				expected: &HistogramBucket{NumEq: 5, NumRange: 8, DistinctRange: 8, UpperBound: ub2},
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 8, DistinctRange: 8, UpperBound: ub2},
 			},
 		}
 
@@ -337,7 +340,7 @@ func TestFilterBucket(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		bucket := &HistogramBucket{NumEq: 1, NumRange: 62, DistinctRange: 31, UpperBound: upperBound}
+		bucket := &cat.HistogramBucket{NumEq: 1, NumRange: 62, DistinctRange: 31, UpperBound: upperBound}
 		lowerBound, err := tree.ParseDDate(&evalCtx, "2019-07-01")
 		if err != nil {
 			t.Fatal(err)
@@ -351,11 +354,11 @@ func TestFilterBucket(t *testing.T) {
 		testData := []testCase{
 			{
 				span:     "[/2019-07-01 - /2019-07-02]",
-				expected: &HistogramBucket{NumEq: 2, NumRange: 2, DistinctRange: 1, UpperBound: ub1},
+				expected: &cat.HistogramBucket{NumEq: 2, NumRange: 2, DistinctRange: 1, UpperBound: ub1},
 			},
 			{
 				span:     "[/2019-07-05 - /2019-08-01]",
-				expected: &HistogramBucket{NumEq: 1, NumRange: 54, DistinctRange: 27, UpperBound: upperBound},
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 54, DistinctRange: 27, UpperBound: upperBound},
 			},
 		}
 
@@ -367,7 +370,7 @@ func TestFilterBucket(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		bucket := &HistogramBucket{NumEq: 1, NumRange: 62, DistinctRange: 31, UpperBound: upperBound}
+		bucket := &cat.HistogramBucket{NumEq: 1, NumRange: 62, DistinctRange: 31, UpperBound: upperBound}
 		lowerBound, err := tree.ParseDTimestamp(&evalCtx, "2019-07-01 12:00:00.000000", time.Microsecond)
 		if err != nil {
 			t.Fatal(err)
@@ -381,11 +384,11 @@ func TestFilterBucket(t *testing.T) {
 		testData := []testCase{
 			{
 				span:     "[/2019-07-01 12:00:00.000000 - /2019-07-02 00:00:00.000000)",
-				expected: &HistogramBucket{NumEq: 0, NumRange: 1, DistinctRange: 0.5, UpperBound: ub1},
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 1, DistinctRange: 0.5, UpperBound: ub1},
 			},
 			{
 				span:     "[/2019-07-05 12:00:00.000000 - /2019-08-01 12:00:00.000000)",
-				expected: &HistogramBucket{NumEq: 0, NumRange: 54, DistinctRange: 27, UpperBound: upperBound},
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 54, DistinctRange: 27, UpperBound: upperBound},
 			},
 		}
 
@@ -393,16 +396,16 @@ func TestFilterBucket(t *testing.T) {
 	})
 
 	t.Run("string", func(t *testing.T) {
-		bucket := &HistogramBucket{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("foo")}
+		bucket := &cat.HistogramBucket{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("foo")}
 		lowerBound := tree.NewDString("bar")
 		testData := []testCase{
 			{
 				span:     "[/bar - /baz]",
-				expected: &HistogramBucket{NumEq: 0, NumRange: 5, DistinctRange: 5, UpperBound: tree.NewDString("baz")},
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 5, DistinctRange: 5, UpperBound: tree.NewDString("baz")},
 			},
 			{
 				span:     "[/baz - /foo]",
-				expected: &HistogramBucket{NumEq: 5, NumRange: 5, DistinctRange: 5, UpperBound: tree.NewDString("foo")},
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 5, DistinctRange: 5, UpperBound: tree.NewDString("foo")},
 			},
 		}
 
