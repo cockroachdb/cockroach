@@ -243,6 +243,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	ctx := s.AnnotateCtx(context.Background())
 
+	// Check the compatibility between the configured addresses and that
+	// provided in certificates. This also logs the certificate
+	// addresses in all cases to aid troubleshooting.
+	// This must be called after the certificate manager was initialized
+	// and after ValidateAddrs().
+	s.cfg.CheckCertificateAddrs(ctx)
+
 	s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper,
 		&cfg.Settings.Version)
 	s.rpcContext.HeartbeatCB = func() {
@@ -1159,12 +1166,6 @@ func (s *Server) Start(ctx context.Context) error {
 	if err := base.UpdateAddrs(ctx, &s.cfg.HTTPAddr, &s.cfg.HTTPAdvertiseAddr, httpLn.Addr()); err != nil {
 		return errors.Wrapf(err, "internal error: cannot parse http listen address")
 	}
-
-	// Check the compatibility between the configured addresses and that
-	// provided in certificates. This also logs the certificate
-	// addresses in all cases to aid troubleshooting.
-	// This must be called after both calls to UpdateAddrs() above.
-	s.cfg.CheckCertificateAddrs(ctx)
 
 	workersCtx := s.AnnotateCtx(context.Background())
 
