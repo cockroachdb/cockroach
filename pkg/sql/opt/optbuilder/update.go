@@ -94,7 +94,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	b.checkPrivilege(opt.DepByName(tn), tab, privilege.SELECT)
 
 	var mb mutationBuilder
-	mb.init(b, opt.UpdateOp, tab, *alias)
+	mb.init(b, "update", tab, *alias)
 
 	// Build the input expression that selects the rows that will be updated:
 	//
@@ -324,7 +324,7 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	mb.addCheckConstraintCols()
 
-	mb.buildFKChecks()
+	mb.buildFKChecksForUpdate()
 
 	private := mb.makeMutationPrivate(returning != nil)
 	for _, col := range mb.extraAccessibleCols {

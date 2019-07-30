@@ -12,6 +12,7 @@ package optbuilder
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -36,8 +37,8 @@ type mutationBuilder struct {
 	b  *Builder
 	md *opt.Metadata
 
-	// op is InsertOp, UpdateOp, UpsertOp, or DeleteOp.
-	op opt.Operator
+	// opName is the statement's name, used in error messages.
+	opName string
 
 	// tab is the target table.
 	tab cat.Table
@@ -123,7 +124,7 @@ type mutationBuilder struct {
 	// from the table schema. These are parsed once and cached for reuse.
 	parsedExprs []tree.Expr
 
-	// checks contains foreign key check queries; see buildFKChecks.
+	// checks contains foreign key check queries; see buildFKChecks methods.
 	checks memo.FKChecksExpr
 
 	// withID is nonzero if we need to buffer the input for FK checks.
@@ -136,10 +137,10 @@ type mutationBuilder struct {
 	extraAccessibleCols []scopeColumn
 }
 
-func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab cat.Table, alias tree.TableName) {
+func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias tree.TableName) {
 	mb.b = b
 	mb.md = b.factory.Metadata()
-	mb.op = op
+	mb.opName = opName
 	mb.tab = tab
 	mb.alias = alias
 	mb.targetColList = make(opt.ColList, 0, tab.DeletableColumnCount())
@@ -820,15 +821,9 @@ func (mb *mutationBuilder) checkNumCols(expected, actual int) {
 			more, less = less, more
 		}
 
-		var kw string
-		if mb.op == opt.InsertOp {
-			kw = "INSERT"
-		} else {
-			kw = "UPSERT"
-		}
 		panic(pgerror.Newf(pgcode.Syntax,
 			"%s has more %s than %s, %d expressions for %d targets",
-			kw, more, less, actual, expected))
+			strings.ToUpper(mb.opName), more, less, actual, expected))
 	}
 }
 
@@ -866,27 +861,10 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 	return expr
 }
 
-// buildFKChecks populates mb.checks with queries that check the integrity of
-// foreign key relations that involve modified rows.
-func (mb *mutationBuilder) buildFKChecks() {
-	if !mb.b.evalCtx.SessionData.OptimizerFKs {
-		return
-	}
-
-	switch mb.op {
-	case opt.InsertOp:
-		mb.buildFKChecksForInsert()
-	case opt.DeleteOp:
-		mb.buildFKChecksForDelete()
-	case opt.UpdateOp:
-		mb.buildFKChecksForUpdate()
-	case opt.UpsertOp:
-		// Not supported yet.
-	}
-}
-
+// buildFKChecks* methods populate mb.checks with queries that check the
+// integrity of foreign key relations that involve modified rows.
 func (mb *mutationBuilder) buildFKChecksForInsert() {
-	if mb.tab.OutboundForeignKeyCount() == 0 {
+	if !mb.b.evalCtx.SessionData.OptimizerFKs || mb.tab.OutboundForeignKeyCount() == 0 {
 		return
 	}
 
@@ -901,12 +879,14 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 	}
 
 	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
-		mb.addInsertionCheck(i, insertCols, "insert")
+		mb.addInsertionCheck(i, insertCols)
 	}
 }
 
+// buildFKChecks* methods populate mb.checks with queries that check the
+// integrity of foreign key relations that involve modified rows.
 func (mb *mutationBuilder) buildFKChecksForDelete() {
-	if mb.tab.InboundForeignKeyCount() == 0 {
+	if !mb.b.evalCtx.SessionData.OptimizerFKs || mb.tab.InboundForeignKeyCount() == 0 {
 		return
 	}
 
@@ -932,7 +912,7 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 		}
 
 		input, cols := mb.makeFKInputScan(deletedFKCols)
-		ok := mb.addDeletionCheck(i, input, cols, fk.DeleteReferenceAction(), "delete")
+		ok := mb.addDeletionCheck(i, input, cols, fk.DeleteReferenceAction())
 		if !ok {
 			mb.checks = nil
 			break
@@ -940,7 +920,12 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 	}
 }
 
+// buildFKChecks* methods populate mb.checks with queries that check the
+// integrity of foreign key relations that involve modified rows.
 func (mb *mutationBuilder) buildFKChecksForUpdate() {
+	if !mb.b.evalCtx.SessionData.OptimizerFKs {
+		return
+	}
 	if mb.tab.OutboundForeignKeyCount() == 0 && mb.tab.InboundForeignKeyCount() == 0 {
 		return
 	}
@@ -1006,7 +991,7 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 			continue
 		}
 
-		mb.addInsertionCheck(i, newRowColIDs, "update")
+		mb.addInsertionCheck(i, newRowColIDs)
 	}
 
 	// The "deletion" incurred by an update is the rows deleted for a given
@@ -1071,7 +1056,7 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 		// TODO(justin): add rules to allow this to get pushed down.
 		input := mb.b.factory.ConstructProject(deletions, proj, opt.ColSet{})
 
-		ok := mb.addDeletionCheck(i, input, outCols, fk.UpdateReferenceAction(), "update")
+		ok := mb.addDeletionCheck(i, input, outCols, fk.UpdateReferenceAction())
 		if !ok {
 			mb.checks = nil
 			break
@@ -1088,7 +1073,7 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 // The input to the insertion check will be the input to the mutation operator.
 // insertCols is a list of the columns for the rows being inserted, indexed by
 // their ordinal position in the table.
-func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColList, opName string) {
+func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColList) {
 	fk := mb.tab.OutboundForeignKey(fkOrdinal)
 	numCols := fk.ColumnCount()
 	var notNullInputCols opt.ColSet
@@ -1115,7 +1100,7 @@ func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColLi
 		OriginTable: mb.tabID,
 		FKOutbound:  true,
 		FKOrdinal:   fkOrdinal,
-		OpName:      opName,
+		OpName:      mb.opName,
 	}}
 
 	// Build an anti-join, with the origin FK columns on the left and the
@@ -1234,18 +1219,14 @@ func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColLi
 // Returns false if the check to be added couldn't be added (say, because it
 // uses CASCADE).
 func (mb *mutationBuilder) addDeletionCheck(
-	fkOrdinal int,
-	deletedRows memo.RelExpr,
-	deleteCols opt.ColList,
-	action tree.ReferenceAction,
-	opName string,
+	fkOrdinal int, deletedRows memo.RelExpr, deleteCols opt.ColList, action tree.ReferenceAction,
 ) (ok bool) {
 	fk := mb.tab.InboundForeignKey(fkOrdinal)
 	item := memo.FKChecksItem{FKChecksItemPrivate: memo.FKChecksItemPrivate{
 		ReferencedTable: mb.tabID,
 		FKOutbound:      false,
 		FKOrdinal:       fkOrdinal,
-		OpName:          opName,
+		OpName:          mb.opName,
 	}}
 
 	// Build a semi join, with the referenced FK columns on the left and the
