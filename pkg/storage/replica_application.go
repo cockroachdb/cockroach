@@ -286,24 +286,6 @@ func (r *Replica) stageRaftCommand(
 		// thrown.
 		cmd.forcedErr = roachpb.NewError(r.requestCanProceed(roachpb.RSpan{}, ts))
 	}
-
-	// applyRaftCommandToBatch will return "expected" errors, but may also indicate
-	// replica corruption (as of now, signaled by a replicaCorruptionError).
-	// We feed its return through maybeSetCorrupt to act when that happens.
-	if cmd.forcedErr != nil {
-		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.forcedErr)
-	} else {
-		log.Event(ctx, "applying command")
-
-		if splitMergeUnlock, err := r.maybeAcquireSplitMergeLock(ctx, cmd.raftCmd); err != nil {
-			log.Fatalf(ctx, "unable to acquire split lock: %s", err)
-		} else if splitMergeUnlock != nil {
-			// Set the splitMergeUnlock on the cmdAppCtx to be called after the batch
-			// has been applied (see applyBatch).
-			cmd.splitMergeUnlock = splitMergeUnlock
-		}
-	}
-
 	if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr == nil && filter != nil {
 		var newPropRetry int
 		newPropRetry, cmd.forcedErr = filter(storagebase.ApplyFilterArgs{
@@ -316,12 +298,25 @@ func (r *Replica) stageRaftCommand(
 			cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
 		}
 	}
-
 	if cmd.forcedErr != nil {
 		// Apply an empty entry.
 		*cmd.replicatedResult() = storagepb.ReplicatedEvalResult{}
 		cmd.raftCmd.WriteBatch = nil
 		cmd.raftCmd.LogicalOpLog = nil
+		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.forcedErr)
+	} else {
+		log.Event(ctx, "applying command")
+	}
+
+	// Acquire the split or merge lock, if necessary. If a split or merge
+	// command was rejected with a below-Raft forced error then its replicated
+	// result was just cleared and this will be a no-op.
+	if splitMergeUnlock, err := r.maybeAcquireSplitMergeLock(ctx, cmd.raftCmd); err != nil {
+		log.Fatalf(ctx, "unable to acquire split lock: %s", err)
+	} else if splitMergeUnlock != nil {
+		// Set the splitMergeUnlock on the cmdAppCtx to be called after the batch
+		// has been applied (see applyBatch).
+		cmd.splitMergeUnlock = splitMergeUnlock
 	}
 
 	// Update the node clock with the serviced request. This maintains
@@ -343,6 +338,9 @@ func (r *Replica) stageRaftCommand(
 
 	// Apply the Raft command to the batch's accumulated state. This may also
 	// have the effect of mutating cmd.replicatedResult().
+	// applyRaftCommandToBatch will return "expected" errors, but may also indicate
+	// replica corruption (as of now, signaled by a replicaCorruptionError).
+	// We feed its return through maybeSetCorrupt to act when that happens.
 	err := r.applyRaftCommandToBatch(cmd.ctx, cmd, replicaState, batch, writeAppliedState)
 	if err != nil {
 		// applyRaftCommandToBatch returned an error, which usually indicates
@@ -788,7 +786,7 @@ func (r *Replica) applyCmdAppBatch(
 		batchIsNonTrivial = true
 		// Deal with locking sometimes associated with complex commands.
 		if unlock := cmd.splitMergeUnlock; unlock != nil {
-			defer unlock(cmd.replicatedResult())
+			defer unlock()
 			cmd.splitMergeUnlock = nil
 		}
 		if cmd.replicatedResult().BlockReads {
