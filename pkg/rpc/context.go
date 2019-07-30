@@ -677,13 +677,18 @@ func (ctx *Context) grpcDialOptions(
 				otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFuncForClient))))
 	}
 	if ctx.testingKnobs.UnaryClientInterceptor != nil {
-		unaryInterceptors = append(unaryInterceptors,
-			ctx.testingKnobs.UnaryClientInterceptor(target, class))
+		testingUnaryInterceptor := ctx.testingKnobs.UnaryClientInterceptor(target, class)
+		if testingUnaryInterceptor != nil {
+			unaryInterceptors = append(unaryInterceptors, testingUnaryInterceptor)
+		}
 	}
 	dialOpts = append(dialOpts, grpc.WithChainUnaryInterceptor(unaryInterceptors...))
 	if ctx.testingKnobs.StreamClientInterceptor != nil {
-		dialOpts = append(dialOpts, grpc.WithStreamInterceptor(
-			ctx.testingKnobs.StreamClientInterceptor(target, class)))
+		testingStreamInterceptor := grpc.WithStreamInterceptor(
+			ctx.testingKnobs.StreamClientInterceptor(target, class))
+		if testingStreamInterceptor != nil {
+			dialOpts = append(dialOpts, testingStreamInterceptor)
+		}
 	}
 	return dialOpts, nil
 }
