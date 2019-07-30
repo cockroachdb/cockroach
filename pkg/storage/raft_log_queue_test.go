@@ -722,10 +722,11 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 func TestTruncateLog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
+	cfg := TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-	tc.repl.store.SetRaftLogQueueActive(false)
+	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	// Populate the log with 10 entries. Save the LastIndex after each write.
 	var indexes []uint64
@@ -887,10 +888,11 @@ func TestTruncateLogRecompute(t *testing.T) {
 	tc := testContext{
 		engine: eng,
 	}
+	cfg := TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-	tc.repl.store.SetRaftLogQueueActive(false)
+	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	key := roachpb.Key("a")
 	repl := tc.store.LookupReplica(keys.MustAddr(key))

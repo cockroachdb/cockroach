@@ -1285,10 +1285,10 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
+	// Disable raft log truncation which confuses this test.
+	cfg.TestingKnobs.DisableRaftLogQueue = true
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
-	// Disable raft log truncation which confuses this test.
-	tc.store.SetRaftLogQueueActive(false)
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
 	if err != nil {
 		t.Fatal(err)
@@ -5159,15 +5159,12 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 				t.Fatalf("%d: %s", i, pErr)
 			}
 		case roachpb.STAGING:
-			// TODO(nvanbenschoten): Avoid writing directly to the engine once
-			// there's a way to create a STAGING transaction record.
-			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
-			txnRecord := pushee.AsRecord()
-			txnRecord.Status = roachpb.STAGING
-			if err := engine.MVCCPutProto(
-				context.Background(), tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{}, nil, &txnRecord,
-			); err != nil {
-				t.Fatal(err)
+			et, etH := endTxnArgs(pushee, true)
+			et.InFlightWrites = []roachpb.SequencedWrite{
+				{Key: key, Sequence: 1},
+			}
+			if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), etH, &et); pErr != nil {
+				t.Fatalf("%d: %s", i, pErr)
 			}
 		default:
 			t.Fatalf("unexpected status: %v", test.status)
@@ -6624,10 +6621,10 @@ func TestEntries(t *testing.T) {
 	// Disable ticks to avoid quiescence, which can result in empty
 	// entries being proposed and causing the test to flake.
 	cfg.RaftTickInterval = math.MaxInt32
+	cfg.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, cfg)
-	tc.repl.store.SetRaftLogQueueActive(false)
 
 	repl := tc.repl
 	rangeID := repl.RangeID
@@ -6774,10 +6771,11 @@ func TestEntries(t *testing.T) {
 func TestTerm(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
+	tsc := TestStoreConfig(nil)
+	tsc.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-	tc.repl.store.SetRaftLogQueueActive(false)
+	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	repl := tc.repl
 	rangeID := repl.RangeID
