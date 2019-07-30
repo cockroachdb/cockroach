@@ -284,25 +284,11 @@ func (cfg *Config) CheckCertificateAddrs(ctx context.Context) {
 			panic("programming error: call ValidateAddrs() first")
 		}
 		if err := cert.VerifyHostname(host); err != nil {
-			// The hostname itself is not in the cert. Is the numeric address in the cert?
-			resolvedAddrInCert := false
-			ipaddr, err := net.ResolveIPAddr("ip", host)
-			if err != nil {
-				log.Shout(ctx, log.Severity_WARNING,
-					fmt.Sprintf("advertise address %q does not resolve (%v)", host, err))
-			} else {
-				if err := cert.VerifyHostname(ipaddr.String()); err == nil {
-					resolvedAddrInCert = true
-				}
-			}
-
-			if !resolvedAddrInCert {
-				log.Shout(ctx, log.Severity_WARNING,
-					fmt.Sprintf("advertise address %q not in node certificate (%s)\n"+
-						"Secure node-node and SQL connections are likely to fail.\n"+
-						"Consider extending the node certificate or tweak --listen-addr/--advertise-addr.",
-						host, addrInfo))
-			}
+			log.Shout(ctx, log.Severity_WARNING,
+				fmt.Sprintf("advertise address %q not in node certificate (%s)\n"+
+					"Secure node-node and SQL connections are likely to fail.\n"+
+					"Consider extending the node certificate or tweak --listen-addr/--advertise-addr.",
+					host, addrInfo))
 		}
 	}
 
