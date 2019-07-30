@@ -491,7 +491,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 6},
 	},
 	{
-		// VersionTopLevelForeignKeys is https://github.com/cockroachdb/cockroach/pull/XXXXX.
+		// VersionTopLevelForeignKeys is https://github.com/cockroachdb/cockroach/pull/39173.
 		//
 		// It represents an upgrade to the table descriptor format in which foreign
 		// key references are pulled out of the index descriptors where they
