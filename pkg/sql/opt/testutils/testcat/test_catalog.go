@@ -984,8 +984,8 @@ func (ts *TableStat) Histogram() []cat.HistogramBucket {
 			panic(err)
 		}
 		histogram[i] = cat.HistogramBucket{
-			NumEq:         uint64(bucket.NumEq),
-			NumRange:      uint64(bucket.NumRange),
+			NumEq:         float64(bucket.NumEq),
+			NumRange:      float64(bucket.NumRange),
 			DistinctRange: bucket.DistinctRange,
 			UpperBound:    datum,
 		}

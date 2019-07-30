@@ -167,7 +167,7 @@ func (c *ColumnStatistic) ApplySelectivity(selectivity, inputRows float64) {
 	c.NullCount *= selectivity
 
 	if c.Histogram != nil {
-		c.Histogram.ApplySelectivity(selectivity)
+		c.Histogram = c.Histogram.ApplySelectivity(selectivity)
 	}
 
 	if selectivity == 1 || c.DistinctCount == 0 {
