@@ -244,6 +244,9 @@ type multiTestContext struct {
 	manualClock *hlc.ManualClock
 	clock       *hlc.Clock
 	rpcContext  *rpc.Context
+	// rpcTestingKnobs are optional configuration for the rpcContext.
+	rpcTestingKnobs rpc.ContextTestingKnobs
+
 	// By default, a multiTestContext starts with a bunch of system ranges, just
 	// like a regular Server after bootstrap. If startWithSingleRange is set,
 	// we'll start with a single range spanning all the key space. The split
@@ -306,6 +309,7 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 		mCopy.engines = nil
 		mCopy.engineStoppers = nil
 		mCopy.startWithSingleRange = false
+		mCopy.rpcTestingKnobs = rpc.ContextTestingKnobs{}
 		var empty multiTestContext
 		if !reflect.DeepEqual(empty, mCopy) {
 			t.Fatalf("illegal fields set in multiTestContext:\n%s", pretty.Diff(empty, mCopy))
@@ -338,8 +342,8 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	if m.rpcContext == nil {
-		m.rpcContext = rpc.NewContext(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, m.clock,
-			m.transportStopper, &st.Version)
+		m.rpcContext = rpc.NewContextWithTestingKnobs(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, m.clock,
+			m.transportStopper, &st.Version, m.rpcTestingKnobs)
 		// Ensure that tests using this test context and restart/shut down
 		// their servers do not inadvertently start talking to servers from
 		// unrelated concurrent tests.
