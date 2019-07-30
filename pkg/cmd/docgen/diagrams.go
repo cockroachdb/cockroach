@@ -1146,9 +1146,8 @@ var specs = []stmtSpec{
 		name: "show_roles_stmt",
 	},
 	{
-		name:    "show_ranges_stmt",
-		inline:  []string{"ranges_kw"},
-		exclude: []*regexp.Regexp{regexp.MustCompile("'TESTING_RANGES'")},
+		name: "show_ranges_stmt",
+		stmt: "show_ranges_stmt",
 	},
 	{
 		name: "show_schemas",

@@ -550,7 +550,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> START STATISTICS STATUS STDIN STRICT STRING STORE STORED STORING SUBSTRING
 %token <str> SYMMETRIC SYNTAX SYSTEM SUBSCRIPTION
 
-%token <str> TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES EXPERIMENTAL_RANGES TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
+%token <str> TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
 %token <str> TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE TRANSACTION TREAT TRIGGER TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE
 %token <str> TRACING
@@ -976,7 +976,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <privilege.List> privileges
 %type <tree.AuditMode> audit_mode
 
-%type <str> relocate_kw ranges_kw
+%type <str> relocate_kw 
 
 %type <*tree.SetZoneConfig> set_zone_config
 
@@ -3702,23 +3702,19 @@ show_zone_stmt:
 // %Help: SHOW RANGES - list ranges
 // %Category: Misc
 // %Text:
-// SHOW EXPERIMENTAL_RANGES FROM TABLE <tablename>
-// SHOW EXPERIMENTAL_RANGES FROM INDEX [ <tablename> @ ] <indexname>
+// SHOW RANGES FROM TABLE <tablename>
+// SHOW RANGES FROM INDEX [ <tablename> @ ] <indexname>
 show_ranges_stmt:
-  SHOW ranges_kw FROM TABLE table_name
+  SHOW RANGES FROM TABLE table_name
   {
     name := $5.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowRanges{TableOrIndex: tree.TableIndexName{Table: name}}
   }
-| SHOW ranges_kw FROM INDEX table_index_name
+| SHOW RANGES FROM INDEX table_index_name
   {
     $$.val = &tree.ShowRanges{TableOrIndex: $5.tableIndexName()}
   }
-| SHOW ranges_kw error // SHOW HELP: SHOW RANGES
-
-ranges_kw:
-  TESTING_RANGES
-| EXPERIMENTAL_RANGES
+| SHOW RANGES error // SHOW HELP: SHOW RANGES
 
 show_fingerprints_stmt:
   SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name
@@ -9049,7 +9045,6 @@ unreserved_keyword:
 | EXPERIMENTAL
 | EXPERIMENTAL_AUDIT
 | EXPERIMENTAL_FINGERPRINTS
-| EXPERIMENTAL_RANGES
 | EXPERIMENTAL_RELOCATE
 | EXPERIMENTAL_REPLICA
 | EXPIRATION
@@ -9212,7 +9207,6 @@ unreserved_keyword:
 | TEMP
 | TEMPLATE
 | TEMPORARY
-| TESTING_RANGES
 | TESTING_RELOCATE
 | TEXT
 | TRACE

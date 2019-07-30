@@ -15,6 +15,7 @@ import (
 	"go/constant"
 	"go/token"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 	"unsafe"
 
@@ -540,7 +541,36 @@ func (s *scanner) scanIdent(lval *sqlSymType) {
 		lval.str = lex.NormalizeName(s.in[start:s.pos])
 	}
 
-	lval.id = lex.GetKeywordID(lval.str)
+	isExperimental := false
+	kw := lval.str
+	switch {
+	case strings.HasPrefix(lval.str, "experimental_"):
+		kw = lval.str[13:]
+		isExperimental = true
+	case strings.HasPrefix(lval.str, "testing_"):
+		kw = lval.str[8:]
+		isExperimental = true
+	}
+	lval.id = lex.GetKeywordID(kw)
+	if lval.id != lex.IDENT {
+		if isExperimental {
+			if _, ok := lex.AllowedExperimental[kw]; !ok {
+				// If the parsed token is not on the whitelisted set of keywords,
+				// then it might have been intended to be parsed as something else.
+				// In that case, re-tokenize the original string.
+				lval.id = lex.GetKeywordID(lval.str)
+			} else {
+				// It is a whitelisted keyword, so remember the shortened
+				// keyword for further processing.
+				lval.str = kw
+			}
+		}
+	} else {
+		// If the word after experimental_ or testing_ is an identifier,
+		// then we might have classified it incorrectly after removing the
+		// experimental_/testing_ prefix.
+		lval.id = lex.GetKeywordID(lval.str)
+	}
 }
 
 func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
