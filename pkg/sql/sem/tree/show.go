@@ -373,14 +373,14 @@ func (node *ShowRoles) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ROLES")
 }
 
-// ShowRanges represents a SHOW EXPERIMENTAL_RANGES statement.
+// ShowRanges represents a SHOW RANGES statement.
 type ShowRanges struct {
 	TableOrIndex TableIndexName
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowRanges) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW EXPERIMENTAL_RANGES FROM ")
+	ctx.WriteString("SHOW RANGES FROM ")
 	if node.TableOrIndex.Index != "" {
 		ctx.WriteString("INDEX ")
 	} else {

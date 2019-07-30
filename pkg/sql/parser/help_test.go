@@ -293,7 +293,7 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW SYNTAX ??`, `SHOW SYNTAX`},
 		{`SHOW SYNTAX 'foo' ??`, `SHOW SYNTAX`},
 
-		{`SHOW EXPERIMENTAL_RANGES ??`, `SHOW RANGES`},
+		{`SHOW RANGES ??`, `SHOW RANGES`},
 
 		{`SHOW USERS ??`, `SHOW USERS`},
 

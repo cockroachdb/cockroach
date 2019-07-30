@@ -13,7 +13,7 @@ ALTER INDEX t@v EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i+1], (i * 10)::int FROM generate_series(0, 4) AS g(i)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM INDEX t@v]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM INDEX t@v]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /10      {1}       1
