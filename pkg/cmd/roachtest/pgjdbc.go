@@ -12,7 +12,6 @@ package main
 
 import (
 	"context"
-	"encoding/xml"
 	"fmt"
 	"regexp"
 	"sort"
@@ -194,7 +193,7 @@ func registerPgjdbc(r *testRegistry) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			tests, passed, err := extractFailureFromPgjdbcXML(fileOutput)
+			tests, passed, err := extractFailureFromJUnitXML(fileOutput)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -306,37 +305,6 @@ func registerPgjdbc(r *testRegistry) {
 			runPgjdbc(ctx, t, c)
 		},
 	})
-}
-
-func extractFailureFromPgjdbcXML(contents []byte) ([]string, []bool, error) {
-	type Failure struct {
-		Message string `xml:"message,attr"`
-	}
-	type TestCase struct {
-		Name      string  `xml:"name,attr"`
-		ClassName string  `xml:"classname,attr"`
-		Failure   Failure `xml:"failure,omitempty"`
-	}
-	type TestSuite struct {
-		XMLName   xml.Name   `xml:"testsuite"`
-		TestCases []TestCase `xml:"testcase"`
-	}
-
-	var testSuite TestSuite
-	_ = testSuite.XMLName
-
-	if err := xml.Unmarshal(contents, &testSuite); err != nil {
-		return nil, nil, err
-	}
-
-	var tests []string
-	var passed []bool
-	for _, testCase := range testSuite.TestCases {
-		tests = append(tests, fmt.Sprintf("%s.%s", testCase.ClassName, testCase.Name))
-		passed = append(passed, len(testCase.Failure.Message) == 0)
-	}
-
-	return tests, passed, nil
 }
 
 const pgjdbcDatabaseParams = `
