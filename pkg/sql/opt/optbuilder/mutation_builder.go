@@ -759,7 +759,7 @@ func (mb *mutationBuilder) buildFKChecks() {
 	// need to buffer it. This could be a normalization rule, but it's probably
 	// more efficient if we did it in here (or we'd end up building the entire FK
 	// subtrees twice).
-	mb.withID = mb.b.factory.Memo().AddWithBinding(mb.outScope.expr)
+	mb.withID = mb.b.factory.Memo().NextWithID()
 
 	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
 		fk := mb.tab.OutboundForeignKey(i)

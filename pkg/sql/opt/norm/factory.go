@@ -189,7 +189,6 @@ func (f *Factory) CopyAndReplace(
 	// Copy all metadata to the target memo so that referenced tables and columns
 	// can keep the same ids they had in the "from" memo.
 	f.mem.Metadata().CopyFrom(from.Memo().Metadata())
-	f.mem.CopyWiths(from.Memo(), replace)
 
 	// Perform copy and replacement, and store result as the root of this
 	// factory's memo.

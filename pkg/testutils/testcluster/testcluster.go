@@ -358,6 +358,17 @@ func (tc *TestCluster) SplitRange(
 	return tc.Servers[0].SplitRange(splitKey)
 }
 
+// SplitRangeOrFatal is the same as SplitRange but will Fatal the test on error.
+func (tc *TestCluster) SplitRangeOrFatal(
+	t testing.TB, splitKey roachpb.Key,
+) (roachpb.RangeDescriptor, roachpb.RangeDescriptor) {
+	lhsDesc, rhsDesc, err := tc.Servers[0].SplitRange(splitKey)
+	if err != nil {
+		t.Fatalf(`splitting at %s: %+v`, splitKey, err)
+	}
+	return lhsDesc, rhsDesc
+}
+
 // Target returns a ReplicationTarget for the specified server.
 func (tc *TestCluster) Target(serverIdx int) roachpb.ReplicationTarget {
 	s := tc.Servers[serverIdx]

@@ -566,8 +566,19 @@ func (r *Replica) AdminMerge(
 			// Should never happen, but just in case.
 			return errors.Errorf("ranges are not adjacent; %s != %s", origLeftDesc.EndKey, rightDesc.StartKey)
 		}
-		if l, r := origLeftDesc.Replicas(), rightDesc.Replicas(); !replicaSetsEqual(l.Unwrap(), r.Unwrap()) {
-			return errors.Errorf("ranges not collocated; %s != %s", l, r)
+		// For simplicity, don't handle learner replicas, expect the caller to
+		// resolve them first. (Defensively, we check that there are no non-voter
+		// replicas, in case some third type is later added). This behavior can be
+		// changed later if the complexity becomes worth it, but it's not right now.
+		lReplicas, rReplicas := origLeftDesc.Replicas(), rightDesc.Replicas()
+		if len(lReplicas.Voters()) != len(lReplicas.All()) {
+			return errors.Errorf("cannot merge range with non-voter replicas on lhs: %s", lReplicas)
+		}
+		if len(rReplicas.Voters()) != len(rReplicas.All()) {
+			return errors.Errorf("cannot merge range with non-voter replicas on rhs: %s", rReplicas)
+		}
+		if !replicaSetsEqual(lReplicas.All(), rReplicas.All()) {
+			return errors.Errorf("ranges not collocated; %s != %s", lReplicas, rReplicas)
 		}
 
 		updatedLeftDesc := *origLeftDesc
@@ -1549,6 +1560,20 @@ func (s *Store) AdminRelocateRange(
 	rangeDesc.SetReplicas(rangeDesc.Replicas().DeepCopy())
 	startKey := rangeDesc.StartKey.AsRawKey()
 
+	// Step 0: Remove all learners so we don't have to think about them. We could
+	// do something smarter here and try to promote them, but it doesn't seem
+	// worth the complexity right now. Revisit if this is an issue in practice.
+	//
+	// Note that we can't just add the learners to removeTargets. The below logic
+	// always does add then remove and if the learner was in the requested
+	// targets, we might try to add it before removing it.
+	newDesc, err := removeLearners(ctx, s.DB(), &rangeDesc)
+	if err != nil {
+		log.Warning(ctx, err)
+		return err
+	}
+	rangeDesc = *newDesc
+
 	// Step 1: Compute which replicas are to be added and which are to be removed.
 	//
 	// TODO(radu): we can't have multiple replicas on different stores on the
@@ -1608,32 +1633,6 @@ func (s *Store) AdminRelocateRange(
 			ctx, startKey, targets[0].StoreID,
 		); err != nil {
 			log.Warningf(ctx, "while transferring lease: %+v", err)
-		}
-	}
-
-	// updateRangeDesc updates the passed RangeDescriptor following the successful
-	// completion of an AdminChangeReplicasRequest with the single provided target
-	// and changeType.
-	// TODO(ajwerner): Remove this for 19.2 after AdminChangeReplicas always
-	// returns a non-nil Desc.
-	updateRangeDesc := func(
-		desc *roachpb.RangeDescriptor,
-		changeType roachpb.ReplicaChangeType,
-		target roachpb.ReplicationTarget,
-	) {
-		switch changeType {
-		case roachpb.ADD_REPLICA:
-			desc.AddReplica(roachpb.ReplicaDescriptor{
-				NodeID:    target.NodeID,
-				StoreID:   target.StoreID,
-				ReplicaID: desc.NextReplicaID,
-			})
-			desc.NextReplicaID++
-		case roachpb.REMOVE_REPLICA:
-			newReplicas := removeTargetFromSlice(desc.Replicas().All(), target)
-			desc.SetReplicas(roachpb.MakeReplicaDescriptors(&newReplicas))
-		default:
-			panic(errors.Errorf("unknown ReplicaChangeType %v", changeType))
 		}
 	}
 
@@ -1720,12 +1719,7 @@ func (s *Store) AdminRelocateRange(
 			// local copy of the range descriptor such that future allocator
 			// decisions take it into account.
 			addTargets = removeTargetFromSlice(addTargets, target)
-			if newDesc != nil {
-				rangeInfo.Desc = newDesc
-			} else {
-				// TODO(ajwerner): Remove this case for 19.2.
-				updateRangeDesc(rangeInfo.Desc, roachpb.ADD_REPLICA, target)
-			}
+			rangeInfo.Desc = newDesc
 		}
 
 		if len(removeTargets) > 0 && len(removeTargets) > len(addTargets) {
@@ -1757,12 +1751,7 @@ func (s *Store) AdminRelocateRange(
 			// copy of the range descriptor such that future allocator decisions take
 			// its absence into account.
 			removeTargets = removeTargetFromSlice(removeTargets, target)
-			if newDesc != nil {
-				rangeInfo.Desc = newDesc
-			} else {
-				// TODO(ajwerner): Remove this case for 19.2.
-				updateRangeDesc(rangeInfo.Desc, roachpb.REMOVE_REPLICA, target)
-			}
+			rangeInfo.Desc = newDesc
 		}
 	}
 
@@ -1786,6 +1775,26 @@ func removeTargetFromSlice(
 		}
 	}
 	return targets
+}
+
+func removeLearners(
+	ctx context.Context, db *client.DB, desc *roachpb.RangeDescriptor,
+) (*roachpb.RangeDescriptor, error) {
+	learners := desc.Replicas().Learners()
+	if len(learners) == 0 {
+		return desc, nil
+	}
+	targets := make([]roachpb.ReplicationTarget, len(learners))
+	for i := range learners {
+		targets[i].NodeID = learners[i].NodeID
+		targets[i].StoreID = learners[i].StoreID
+	}
+	log.VEventf(ctx, 2, `removing learner replicas %v from %v`, targets, desc)
+	newDesc, err := db.AdminChangeReplicas(ctx, desc.StartKey, roachpb.REMOVE_REPLICA, targets, *desc)
+	if err != nil {
+		return nil, errors.Wrapf(err, `removing learners from %s`, desc)
+	}
+	return newDesc, nil
 }
 
 // adminScatter moves replicas and leaseholders for a selection of ranges.

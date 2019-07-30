@@ -1369,32 +1369,32 @@ SELECT x FROM t WHERE x
 ----
 with &1 (t)
  ├── columns: x:6(bool!null)
- ├── stats: [rows=4e+10, distinct(6)=1, null(6)=0]
+ ├── stats: [rows=1, distinct(6)=1, null(6)=0]
  ├── fd: ()-->(6)
  ├── project
  │    ├── columns: x:5(bool)
- │    ├── stats: [rows=4e+20, distinct(5)=1, null(5)=4e+20]
+ │    ├── stats: [rows=4e+20]
  │    ├── left-join (hash)
  │    │    ├── columns: t1.x:1(bool) t2.x:3(bool)
- │    │    ├── stats: [rows=4e+20, distinct(1,3)=1, null(1,3)=4e+20]
+ │    │    ├── stats: [rows=4e+20]
  │    │    ├── scan t1
  │    │    │    ├── columns: t1.x:1(bool)
- │    │    │    └── stats: [rows=2e+10, distinct(1)=1, null(1)=2e+10]
+ │    │    │    └── stats: [rows=2e+10]
  │    │    ├── scan t2
  │    │    │    ├── columns: t2.x:3(bool)
- │    │    │    └── stats: [rows=2e+10, distinct(3)=1, null(3)=2e+10]
+ │    │    │    └── stats: [rows=2e+10]
  │    │    └── filters (true)
  │    └── projections
  │         └── (t1.x::INT8 << 5533)::BOOL OR t2.x [type=bool, outer=(1,3)]
  └── select
       ├── columns: x:6(bool!null)
-      ├── stats: [rows=4e+10, distinct(6)=1, null(6)=0]
+      ├── stats: [rows=1, distinct(6)=1, null(6)=0]
       ├── fd: ()-->(6)
       ├── with-scan &1 (t)
       │    ├── columns: x:6(bool)
       │    ├── mapping:
       │    │    └──  x:5(bool) => x:6(bool)
-      │    ├── stats: [rows=4e+20, distinct(6)=1, null(6)=4e+20]
+      │    ├── stats: [rows=4e+20]
       │    └── fd: (5)-->(6)
       └── filters
            └── variable: x [type=bool, outer=(6), constraints=(/6: [/true - /true]; tight), fd=()-->(6)]
