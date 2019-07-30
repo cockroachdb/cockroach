@@ -73,7 +73,7 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 // UpdateAddrs updates the listen and advertise port numbers with
 // those found during the call to net.Listen().
 //
-// After ValidateAddr() the actual listen addr should be equal to the
+// After ValidateAddrs() the actual listen addr should be equal to the
 // one requested; only the port number can change because of
 // auto-allocation. We do check this equality here and report a
 // warning if any discrepancy is found.
@@ -252,7 +252,10 @@ func LookupAddr(ctx context.Context, resolver *net.Resolver, host string) (strin
 
 // CheckCertificateAddrs validates the addresses inside the configured
 // certificates to be compatible with the configured listen and
-// advertise addresses.
+// advertise addresses. This is an advisory function (to inform/educate
+// the user) and not a requirement for security.
+// This must also be called after ValidateAddrs() and after
+// the certificate manager was initialized.
 func (cfg *Config) CheckCertificateAddrs(ctx context.Context) {
 	if cfg.Insecure {
 		return
@@ -274,23 +277,32 @@ func (cfg *Config) CheckCertificateAddrs(ctx context.Context) {
 		// Log the certificate details in any case. This will aid during troubleshooting.
 		log.Infof(ctx, "server certificate addresses: %s", addrInfo)
 
-		// Verify the compatibility. This requires that ValidateAddr() has
+		// Verify the compatibility. This requires that ValidateAddrs() has
 		// been called already.
-		var buf strings.Builder
-		notifyFunc := func(msg, host string) {
-			if buf.Len() > 0 {
-				buf.WriteString(" and ")
-			}
-			fmt.Fprintf(&buf, "%s address %q", msg, host)
+		host, _, err := net.SplitHostPort(cfg.AdvertiseAddr)
+		if err != nil {
+			panic("programming error: call ValidateAddrs() first")
 		}
-		checkCertAddr(ctx, cfg.Addr, "listen", notifyFunc, cert)
-		checkCertAddr(ctx, cfg.AdvertiseAddr, "advertise", notifyFunc, cert)
-		if buf.Len() > 0 {
-			log.Shout(ctx, log.Severity_WARNING,
-				fmt.Sprintf("%s not in node certificate (%s)\n"+
-					"Secure node-node and SQL connections are likely to fail.\n"+
-					"Consider extending the node certificate or tweak --listen-addr/--advertise-addr.",
-					buf.String(), addrInfo))
+		if err := cert.VerifyHostname(host); err != nil {
+			// The hostname itself is not in the cert. Is the numeric address in the cert?
+			resolvedAddrInCert := false
+			ipaddr, err := net.ResolveIPAddr("ip", host)
+			if err != nil {
+				log.Shout(ctx, log.Severity_WARNING,
+					fmt.Sprintf("advertise address %q does not resolve (%v)", host, err))
+			} else {
+				if err := cert.VerifyHostname(ipaddr.String()); err == nil {
+					resolvedAddrInCert = true
+				}
+			}
+
+			if !resolvedAddrInCert {
+				log.Shout(ctx, log.Severity_WARNING,
+					fmt.Sprintf("advertise address %q not in node certificate (%s)\n"+
+						"Secure node-node and SQL connections are likely to fail.\n"+
+						"Consider extending the node certificate or tweak --listen-addr/--advertise-addr.",
+						host, addrInfo))
+			}
 		}
 	}
 
@@ -313,20 +325,6 @@ func (cfg *Config) CheckCertificateAddrs(ctx context.Context) {
 		// Log the certificate details in any case. This will aid during
 		// troubleshooting.
 		log.Infof(ctx, "web UI certificate addresses: %s", addrInfo)
-	}
-}
-
-// checkCertAddr verifies that the given address in addr is compatible
-// with the provided certificate.
-func checkCertAddr(
-	ctx context.Context, addr, msg string, notifyFunc func(msg, host string), cert *x509.Certificate,
-) {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		panic(fmt.Sprintf("programming error: %s address not normalized: %v", msg, err))
-	}
-	if err := cert.VerifyHostname(host); err != nil {
-		notifyFunc(msg, host)
 	}
 }
 
