@@ -433,6 +433,7 @@ func (t *RaftTransport) processQueue(
 	ch chan *RaftMessageRequest,
 	stats *raftTransportStats,
 	stream MultiRaft_RaftMessageBatchClient,
+	class rpc.ConnectionClass,
 ) error {
 	errCh := make(chan error, 1)
 
@@ -479,7 +480,6 @@ func (t *RaftTransport) processQueue(
 			return err
 		case req := <-ch:
 			batch.Requests = append(batch.Requests, *req)
-
 			// Pull off as many queued requests as possible.
 			//
 			// TODO(peter): Think about limiting the size of the batch we send.
@@ -603,7 +603,7 @@ func (t *RaftTransport) startProcessNewQueue(
 			return
 		}
 
-		if err := t.processQueue(toNodeID, ch, stats, stream); err != nil {
+		if err := t.processQueue(toNodeID, ch, stats, stream, class); err != nil {
 			log.Warningf(ctx, "while processing outgoing Raft queue to node %d: %s:", toNodeID, err)
 			// Intentionally does not return.
 		}
