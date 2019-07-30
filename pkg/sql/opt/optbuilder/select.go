@@ -557,7 +557,7 @@ func (b *Builder) buildCTE(
 
 		cteScope = projectionsScope
 
-		id := b.factory.Memo().AddWithBinding(cteScope.expr)
+		id := b.factory.Memo().NextWithID()
 
 		// No good way to show non-select expressions, like INSERT, here.
 		var stmt tree.SelectStatement

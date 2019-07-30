@@ -41,7 +41,7 @@ with &1 (foo)
  ├── fd: (1)-->(2-4), (2)-->(5), (3)-->(6)
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(3)=10, null(3)=0]
+ │    ├── stats: [rows=5000]
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── with-scan &1 (foo)
@@ -50,6 +50,6 @@ with &1 (foo)
       │    ├──  a.x:1(int) => x:4(int)
       │    ├──  a.y:2(int) => y:5(int)
       │    └──  a.s:3(string) => s:6(string)
-      ├── stats: [rows=5000, distinct(4)=5000, null(4)=0, distinct(5)=400, null(5)=0, distinct(6)=10, null(6)=0]
+      ├── stats: [rows=5000]
       ├── key: (1)
       └── fd: (1)-->(2-4), (2)-->(5), (3)-->(6)
