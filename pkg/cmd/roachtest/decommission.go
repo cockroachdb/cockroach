@@ -282,6 +282,22 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		return execCLI(ctx, t, c, runNode, args...)
 	}
 
+	getCsvNumCols := func(csvStr string) (cols int, err error) {
+		defer func() {
+			if err != nil {
+				err = errors.Errorf("error reading csv input: \n %v\n", csvStr, err)
+			}
+		}()
+
+		reader := csv.NewReader(strings.NewReader(csvStr))
+		reader.FieldsPerRecord = -1
+		records, err := reader.Read()
+		if err != nil {
+			return 0, err
+		}
+		return len(records), nil
+	}
+
 	matchCSV := func(csvStr string, matchColRow [][]string) (err error) {
 		defer func() {
 			if err != nil {
@@ -333,6 +349,10 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	statusHeader := []string{
 		"id", "address", "build", "started_at", "updated_at", "locality", "is_available", "is_live",
 	}
+	statusHeaderNoLocality := []string{
+		"id", "address", "build", "started_at", "updated_at", "is_available", "is_live",
+	}
+
 	waitLiveDeprecated := "--wait=live is deprecated and is treated as --wait=all"
 
 	t.l.Printf("decommissioning first node from the second, polling the status manually\n")
@@ -383,12 +403,29 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		if err != nil {
 			t.Fatalf("node-status failed: %v", err)
 		}
-		exp := [][]string{
-			statusHeader,
-			{`1`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+		var exp [][]string
+		numCols, err := getCsvNumCols(o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Different output here to be backwards compatible with earlier
+		// versions of cockroach.
+		if numCols == 7 {
+			exp = [][]string{
+				statusHeaderNoLocality,
+				{`1`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+				{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+				{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+				{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			}
+		} else {
+			exp = [][]string{
+				statusHeader,
+				{`1`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+				{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+				{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+				{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			}
 		}
 		if err := matchCSV(o, exp); err != nil {
 			t.Fatal(err)
@@ -576,12 +613,27 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		if err != nil {
 			t.Fatalf("node-status failed: %v", err)
 		}
-
-		exp := [][]string{
-			statusHeader,
-			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+		var exp [][]string
+		numCols, err := getCsvNumCols(o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Different output here to be backwards compatible with earlier
+		// versions of cockroach.
+		if numCols == 7 {
+			exp = [][]string{
+				statusHeaderNoLocality,
+				{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+				{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+				{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			}
+		} else {
+			exp = [][]string{
+				statusHeader,
+				{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+				{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+				{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			}
 		}
 		if err := matchCSV(o, exp); err != nil {
 			time.Sleep(time.Second)
@@ -605,13 +657,29 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		if err != nil {
 			t.Fatalf("node-status failed: %v", err)
 		}
-
-		exp := [][]string{
-			statusHeader,
-			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`5`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+		var exp [][]string
+		numCols, err := getCsvNumCols(o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Different output here to be backwards compatible with earlier
+		// versions of cockroach.
+		if numCols == 7 {
+			exp = [][]string{
+				statusHeaderNoLocality,
+				{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+				{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+				{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+				{`5`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			}
+		} else {
+			exp = [][]string{
+				statusHeader,
+				{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+				{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+				{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+				{`5`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			}
 		}
 		return matchCSV(o, exp)
 	}); err != nil {
