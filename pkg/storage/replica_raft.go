@@ -1474,18 +1474,10 @@ func (r *Replica) acquireSplitLock(
 	if err != nil {
 		return nil, err
 	}
-
-	// It would be nice to assert that rightRng is not initialized
-	// here. Unfortunately, due to reproposals and retries we might be executing
-	// a reproposal for a split trigger that was already executed via a
-	// retry. The reproposed command will not succeed (the transaction has
-	// already committed).
-	//
-	// TODO(peter): It might be okay to return an error here, but it is more
-	// conservative to hit the exact same error paths that we would hit for other
-	// commands that have reproposals interacting with retries (i.e. we don't
-	// treat splits differently).
-
+	if rightRng.IsInitialized() {
+		return nil, errors.Errorf("RHS of split %s / %s already initialized before split application",
+			&split.LeftDesc, &split.RightDesc)
+	}
 	return rightRng.raftMu.Unlock, nil
 }
 
