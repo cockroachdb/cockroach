@@ -12,6 +12,7 @@ import (
 	"context"
 	"io"
 	"runtime"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -32,6 +33,7 @@ type csvInputReader struct {
 	batchSize    int
 	batch        csvRecord
 	opts         roachpb.CSVOptions
+	walltime     int64
 	tableDesc    *sqlbase.TableDescriptor
 	targetCols   tree.NameList
 	expectedCols int
@@ -42,6 +44,7 @@ var _ inputConverter = &csvInputReader{}
 func newCSVInputReader(
 	kvCh chan []roachpb.KeyValue,
 	opts roachpb.CSVOptions,
+	walltime int64,
 	tableDesc *sqlbase.TableDescriptor,
 	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
@@ -49,6 +52,7 @@ func newCSVInputReader(
 	return &csvInputReader{
 		evalCtx:      evalCtx,
 		opts:         opts,
+		walltime:     walltime,
 		kvCh:         kvCh,
 		expectedCols: len(tableDesc.VisibleColumns()),
 		tableDesc:    tableDesc,
@@ -173,6 +177,9 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 		panic("uninitialized session data")
 	}
 
+	const precision = uint64(10 * time.Microsecond)
+	timestamp := uint64(c.walltime) / precision
+
 	for batch := range c.recordCh {
 		for batchIdx, record := range batch.r {
 			rowNum := int64(batch.rowOffset + batchIdx)
@@ -196,7 +203,9 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 				}
 				datumIdx++
 			}
-			if err := conv.Row(ctx, batch.fileIndex, rowNum); err != nil {
+
+			rowIndex := int64(timestamp) + rowNum
+			if err := conv.Row(ctx, batch.fileIndex, rowIndex); err != nil {
 				return wrapRowErr(err, batch.file, rowNum, pgcode.Uncategorized, "")
 			}
 		}

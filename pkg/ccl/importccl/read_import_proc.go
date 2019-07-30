@@ -297,7 +297,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 		if isWorkload {
 			conv = newWorkloadReader(kvCh, singleTable, evalCtx)
 		} else {
-			conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, singleTableTargetCols, evalCtx)
+			conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, cp.spec.WalltimeNanos, singleTable, singleTableTargetCols, evalCtx)
 		}
 	case roachpb.IOFileFormat_MysqlOutfile:
 		conv, err = newMysqloutfileReader(kvCh, cp.spec.Format.MysqlOut, singleTable, evalCtx)
