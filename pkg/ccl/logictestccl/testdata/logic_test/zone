@@ -30,7 +30,7 @@ scan  ·      ·
 ·     table  t@secondary
 ·     spans  /10-/11
 
-query T
+query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
 ----
 TABLE t
@@ -70,7 +70,7 @@ scan  ·      ·
 ·     table  t@tertiary
 ·     spans  /10-/11
 
-query T
+query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
 ----
 TABLE t
@@ -128,7 +128,7 @@ scan  ·      ·
 ·     table  t@primary
 ·     spans  /10-/10/#
 
-query T
+query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
 ----
 TABLE t
@@ -221,7 +221,7 @@ scan  ·      ·
 ·     table  t@tertiary
 ·     spans  /10-/11
 
-query T
+query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
 ----
 TABLE t
@@ -271,7 +271,7 @@ scan  ·      ·
 ·     table  t@secondary
 ·     spans  /10-/11
 
-query T
+query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
 ----
 TABLE t
@@ -362,7 +362,7 @@ scan  ·      ·
 ·     table  t36642@tertiary
 ·     spans  /10-/11
 
-query T
+query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
 ----
 TABLE t
