@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -573,4 +574,127 @@ func TestLearnerFollowerRead(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestLearnerAdminRelocateRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	knobs, ltk := makeLearnerTestKnobs()
+	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
+
+	scratchStartKey := tc.ScratchRange(t)
+	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 1)
+	_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(2))
+	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 0)
+
+	// Test AdminRelocateRange's treatment of learners by having one that it has
+	// to remove and one that should stay and become a voter.
+	//
+	// Before: 1 (voter), 2 (learner), 3 (learner)
+	// After: 1 (voter), 2 (voter), 4 (voter)
+	targets := []roachpb.ReplicationTarget{tc.Target(0), tc.Target(1), tc.Target(3)}
+	require.NoError(t, tc.Server(0).DB().AdminRelocateRange(ctx, scratchStartKey, targets))
+	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
+	voters := desc.Replicas().Voters()
+	require.Len(t, voters, len(targets))
+	sort.Slice(voters, func(i, j int) bool { return voters[i].NodeID < voters[j].NodeID })
+	for i := range voters {
+		require.Equal(t, targets[i].NodeID, voters[i].NodeID, `%v`, voters)
+		require.Equal(t, targets[i].StoreID, voters[i].StoreID, `%v`, voters)
+	}
+	require.Empty(t, desc.Replicas().Learners())
+}
+
+func TestLearnerAdminMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	knobs, ltk := makeLearnerTestKnobs()
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
+
+	scratchStartKey := tc.ScratchRange(t)
+	splitKey1 := scratchStartKey.Next()
+	splitKey2 := splitKey1.Next()
+	_, _ = tc.SplitRangeOrFatal(t, splitKey1)
+	_, _ = tc.SplitRangeOrFatal(t, splitKey2)
+
+	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 1)
+	_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	_ = tc.AddReplicasOrFatal(t, splitKey2, tc.Target(1))
+	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 0)
+
+	// Learner on the lhs should fail.
+	err := tc.Server(0).DB().AdminMerge(ctx, scratchStartKey)
+	if !testutils.IsError(err, `cannot merge range with non-voter replicas on lhs`) {
+		t.Fatalf(`expected "cannot merge range with non-voter replicas on lhs" error got: %+v`, err)
+	}
+	// Learner on the rhs should fail.
+	err = tc.Server(0).DB().AdminMerge(ctx, splitKey1)
+	if !testutils.IsError(err, `cannot merge range with non-voter replicas on rhs`) {
+		t.Fatalf(`expected "cannot merge range with non-voter replicas on rhs" error got: %+v`, err)
+	}
+}
+
+func TestMergeQueueSeesLearner(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	knobs, ltk := makeLearnerTestKnobs()
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
+	// TestCluster currently overrides this when used with ReplicationManual.
+	db.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = true`)
+
+	scratchStartKey := tc.ScratchRange(t)
+	origDesc := tc.LookupRangeOrFatal(t, scratchStartKey)
+
+	splitKey := scratchStartKey.Next()
+	_, _ = tc.SplitRangeOrFatal(t, splitKey)
+
+	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 1)
+	_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 0)
+
+	// Unsplit the range to clear the sticky bit.
+	require.NoError(t, tc.Server(0).DB().AdminUnsplit(ctx, splitKey))
+
+	// Run the merge queue.
+	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
+	trace, errMsg, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
+	require.NoError(t, err)
+	require.Equal(t, ``, errMsg)
+	formattedTrace := tracing.FormatRecordedSpans(trace)
+	expectedMessages := []string{
+		`removing learner replicas \[n2,s2\]`,
+		`merging to produce range: /Table/Max-/Max`,
+	}
+	if err := testutils.MatchInOrder(formattedTrace, expectedMessages...); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sanity check that the desc has the same bounds it did originally.
+	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
+	require.Equal(t, origDesc.StartKey, desc.StartKey)
+	require.Equal(t, origDesc.EndKey, desc.EndKey)
+	// The merge removed the learner.
+	require.Len(t, desc.Replicas().Voters(), 1)
+	require.Empty(t, desc.Replicas().Learners())
 }

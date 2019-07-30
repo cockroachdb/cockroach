@@ -349,7 +349,11 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		return sb.colStat(colSet, e.Child(1).(RelExpr))
 
 	case opt.WithScanOp:
-		return sb.colStatWithScan(colSet, e.(*WithScanExpr))
+		// This is tricky, since if we deferred to the expression being referenced,
+		// the computation of stats for a WithScan would depend on something
+		// outside of the expression itself. Just call it unknown for now.
+		// TODO(justin): find a real solution for this.
+		return sb.colStatUnknown(colSet, e.Relational())
 
 	case opt.FakeRelOp:
 		panic(errors.AssertionFailedf("FakeRelOp does not contain col stat for %v", colSet))
@@ -2059,37 +2063,6 @@ func (sb *statisticsBuilder) colStatSequenceSelect(
 	colStat.NullCount = 0
 	sb.finalizeFromRowCount(colStat, s.RowCount)
 	return colStat
-}
-
-// +-----------+
-// | With Scan |
-// +-----------+
-
-func (sb *statisticsBuilder) colStatWithScan(
-	colSet opt.ColSet, ws *WithScanExpr,
-) *props.ColumnStatistic {
-	relProps := ws.Relational()
-	s := &relProps.Stats
-
-	withExpr := ws.Memo().WithExpr(ws.ID)
-
-	// We need to pass on the colStat request to the referenced expression, but
-	// we need to translate the columns to the ones returned by the original
-	// expression, rather than the reference.
-	cols := translateColSet(colSet, ws.OutCols, ws.InCols)
-
-	// Note that if the WITH contained placeholders, we still hold onto the
-	// original, unreplaced expression, and so we won't be able to generate stats
-	// corresponding to the replaced expression.
-	// TODO(justin): find a way to lift this limitation. One way could be to
-	// rebuild WithScans when the WITH they reference has placeholders that get
-	// replaced.
-
-	colstat, _ := s.ColStats.Add(colSet)
-	*colstat = *sb.colStat(cols, withExpr)
-	colstat.Cols = colSet
-
-	return colstat
 }
 
 // +---------+

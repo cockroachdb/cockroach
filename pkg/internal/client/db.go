@@ -451,10 +451,11 @@ func (db *DB) DelRange(ctx context.Context, begin, end interface{}) error {
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-// AdminMerge merges the range containing key and the subsequent
-// range. After the merge operation is complete, the range containing
-// key will contain all of the key/value pairs of the subsequent range
-// and the subsequent range will no longer exist.
+// AdminMerge merges the range containing key and the subsequent range. After
+// the merge operation is complete, the range containing key will contain all of
+// the key/value pairs of the subsequent range and the subsequent range will no
+// longer exist. Neither range may contain learner replicas, if one does, an
+// error is returned.
 //
 // key can be either a byte slice or a string.
 func (db *DB) AdminMerge(ctx context.Context, key interface{}) error {
