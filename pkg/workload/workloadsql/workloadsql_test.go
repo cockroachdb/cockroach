@@ -136,7 +136,7 @@ func TestSplits(t *testing.T) {
 				}
 
 				countRangesQ := fmt.Sprintf(
-					`SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE test.%s]`, table.Name,
+					`SELECT count(*) FROM [SHOW RANGES FROM TABLE test.%s]`, table.Name,
 				)
 				var actual int
 				sqlDB.QueryRow(t, countRangesQ).Scan(&actual)

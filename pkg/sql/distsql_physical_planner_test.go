@@ -335,7 +335,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	}
 
 	// Ensure that the range cache is populated (see #31235).
-	_, err = db0.Exec(`SHOW EXPERIMENTAL_RANGES FROM TABLE "right"`)
+	_, err = db0.Exec(`SHOW RANGES FROM TABLE "right"`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -423,7 +423,7 @@ func TestDistSQLDeadHosts(t *testing.T) {
 		))
 	}
 
-	r.Exec(t, "SHOW EXPERIMENTAL_RANGES FROM TABLE t")
+	r.Exec(t, "SHOW RANGES FROM TABLE t")
 
 	r.Exec(t, fmt.Sprintf("INSERT INTO t SELECT i, i*i FROM generate_series(1, %d) AS g(i)", n))
 
@@ -519,7 +519,7 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 	})
 
 	// Ensure that the range cache is populated (see #31235).
-	r.Exec(t, "SHOW EXPERIMENTAL_RANGES FROM TABLE nums")
+	r.Exec(t, "SHOW RANGES FROM TABLE nums")
 
 	const query = "SELECT count(*) FROM NUMS"
 	expectPlan := func(expectedPlan [][]string) {

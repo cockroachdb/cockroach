@@ -160,7 +160,7 @@ func runLoadSplits(ctx context.Context, t *test, c *cluster, params splitParams)
 		t.Status("checking initial range count")
 		rangeCount := func() int {
 			var ranges int
-			const q = "SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE kv.kv]"
+			const q = "SELECT count(*) FROM [SHOW RANGES FROM TABLE kv.kv]"
 			if err := db.QueryRow(q).Scan(&ranges); err != nil {
 				t.Fatalf("failed to get range count: %v", err)
 			}
@@ -288,7 +288,7 @@ func runLargeRangeSplits(ctx context.Context, t *test, c *cluster, size int) {
 		t.Status("checking for single range")
 		rangeCount := func() int {
 			var ranges int
-			const q = "SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE bank.bank]"
+			const q = "SELECT count(*) FROM [SHOW RANGES FROM TABLE bank.bank]"
 			if err := db.QueryRow(q).Scan(&ranges); err != nil {
 				t.Fatalf("failed to get range count: %v", err)
 			}
