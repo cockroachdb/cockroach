@@ -392,7 +392,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		forceProcess()
 		r := db.QueryRow(
-			"select replicas from [show experimental_ranges from table t] where start_key='/2'")
+			"select replicas from [show ranges from table t] where start_key='/2'")
 		var repl string
 		if err := r.Scan(&repl); err != nil {
 			return err
@@ -407,7 +407,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		forceProcess()
 		r := db.QueryRow(
-			"select replicas from [show experimental_ranges from table t] where start_key is null")
+			"select replicas from [show ranges from table t] where start_key is null")
 		var repl string
 		if err := r.Scan(&repl); err != nil {
 			return err
