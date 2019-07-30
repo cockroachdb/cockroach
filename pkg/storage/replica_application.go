@@ -296,21 +296,7 @@ func (r *Replica) stageRaftCommand(
 		log.Event(ctx, "applying command")
 
 		if splitMergeUnlock, err := r.maybeAcquireSplitMergeLock(ctx, cmd.raftCmd); err != nil {
-			log.Eventf(ctx, "unable to acquire split lock: %s", err)
-			// Send a crash report because a former bug in the error handling might have
-			// been the root cause of #19172.
-			_ = r.store.stopper.RunAsyncTask(ctx, "crash report", func(ctx context.Context) {
-				log.SendCrashReport(
-					ctx,
-					&r.store.cfg.Settings.SV,
-					0, // depth
-					"while acquiring split lock: %s",
-					[]interface{}{err},
-					log.ReportTypeError,
-				)
-			})
-
-			cmd.forcedErr = roachpb.NewError(err)
+			log.Fatalf(ctx, "unable to acquire split lock: %s", err)
 		} else if splitMergeUnlock != nil {
 			// Set the splitMergeUnlock on the cmdAppCtx to be called after the batch
 			// has been applied (see applyBatch).
