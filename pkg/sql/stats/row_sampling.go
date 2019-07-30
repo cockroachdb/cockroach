@@ -12,9 +12,11 @@ package stats
 
 import (
 	"container/heap"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // SampledRow is a row that was sampled.
@@ -43,14 +45,16 @@ type SampleReservoir struct {
 	colTypes []types.T
 	da       sqlbase.DatumAlloc
 	ra       sqlbase.EncDatumRowAlloc
+	memAcc   *mon.BoundAccount
 }
 
 var _ heap.Interface = &SampleReservoir{}
 
 // Init initializes a SampleReservoir.
-func (sr *SampleReservoir) Init(numSamples int, colTypes []types.T) {
+func (sr *SampleReservoir) Init(numSamples int, colTypes []types.T, memAcc *mon.BoundAccount) {
 	sr.samples = make([]SampledRow, 0, numSamples)
 	sr.colTypes = colTypes
+	sr.memAcc = memAcc
 }
 
 // Len is part of heap.Interface.
@@ -76,11 +80,21 @@ func (sr *SampleReservoir) Push(x interface{}) { panic("unimplemented") }
 func (sr *SampleReservoir) Pop() interface{} { panic("unimplemented") }
 
 // SampleRow looks at a row and either drops it or adds it to the reservoir.
-func (sr *SampleReservoir) SampleRow(row sqlbase.EncDatumRow, rank uint64) error {
+func (sr *SampleReservoir) SampleRow(
+	ctx context.Context, row sqlbase.EncDatumRow, rank uint64,
+) error {
 	if len(sr.samples) < cap(sr.samples) {
 		// We haven't accumulated enough rows yet, just append.
 		rowCopy := sr.ra.AllocRow(len(row))
-		if err := sr.copyRow(rowCopy, row); err != nil {
+
+		// Perform memory accounting for the allocated EncDatumRow. We will account
+		// for the additional memory used after copying inside copyRow.
+		if sr.memAcc != nil {
+			if err := sr.memAcc.Grow(ctx, int64(len(rowCopy))*int64(rowCopy[0].Size())); err != nil {
+				return err
+			}
+		}
+		if err := sr.copyRow(ctx, rowCopy, row); err != nil {
 			return err
 		}
 		sr.samples = append(sr.samples, SampledRow{Row: rowCopy, Rank: rank})
@@ -92,7 +106,7 @@ func (sr *SampleReservoir) SampleRow(row sqlbase.EncDatumRow, rank uint64) error
 	}
 	// Replace the max rank if ours is smaller.
 	if len(sr.samples) > 0 && rank < sr.samples[0].Rank {
-		if err := sr.copyRow(sr.samples[0].Row, row); err != nil {
+		if err := sr.copyRow(ctx, sr.samples[0].Row, row); err != nil {
 			return err
 		}
 		sr.samples[0].Rank = rank
@@ -106,7 +120,7 @@ func (sr *SampleReservoir) Get() []SampledRow {
 	return sr.samples
 }
 
-func (sr *SampleReservoir) copyRow(dst, src sqlbase.EncDatumRow) error {
+func (sr *SampleReservoir) copyRow(ctx context.Context, dst, src sqlbase.EncDatumRow) error {
 	for i := range src {
 		// Copy only the decoded datum to ensure that we remove any reference to
 		// the encoded bytes. The encoded bytes would have been scanned in a batch
@@ -115,7 +129,15 @@ func (sr *SampleReservoir) copyRow(dst, src sqlbase.EncDatumRow) error {
 		if err := src[i].EnsureDecoded(&sr.colTypes[i], &sr.da); err != nil {
 			return err
 		}
+		beforeSize := dst[i].Size()
 		dst[i] = sqlbase.DatumToEncDatum(&sr.colTypes[i], src[i].Datum)
+		// Perform memory accounting.
+		if afterSize := dst[i].Size(); sr.memAcc != nil && afterSize > beforeSize {
+			if err := sr.memAcc.Grow(ctx, int64(afterSize-beforeSize)); err != nil {
+				return err
+			}
+		}
+
 	}
 	return nil
 }
