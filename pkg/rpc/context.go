@@ -400,6 +400,7 @@ type Context struct {
 	// For unittesting.
 	BreakerFactory  func() *circuit.Breaker
 	testingDialOpts []grpc.DialOption
+	testingKnobs    ContextTestingKnobs
 
 	// For testing. See the comment on the same field in HeartbeatService.
 	TestingAllowNamedRPCToAnonymousServer bool
@@ -422,6 +423,19 @@ func NewContext(
 	stopper *stop.Stopper,
 	version *cluster.ExposedClusterVersion,
 ) *Context {
+	return NewContextWithTestingKnobs(ambient, baseCtx, hlcClock, stopper, version,
+		ContextTestingKnobs{})
+}
+
+// NewContextWithTestingKnobs creates an rpc Context with the supplied values.
+func NewContextWithTestingKnobs(
+	ambient log.AmbientContext,
+	baseCtx *base.Config,
+	hlcClock *hlc.Clock,
+	stopper *stop.Stopper,
+	version *cluster.ExposedClusterVersion,
+	knobs ContextTestingKnobs,
+) *Context {
 	if hlcClock == nil {
 		panic("nil clock is forbidden")
 	}
@@ -434,6 +448,7 @@ func NewContext(
 		},
 		rpcCompression: enableRPCCompression,
 		version:        version,
+		testingKnobs:   knobs,
 	}
 	var cancel context.CancelFunc
 	ctx.masterCtx, cancel = context.WithCancel(ambient.AnnotateCtx(context.Background()))
@@ -462,7 +477,9 @@ func NewContext(
 			return true
 		})
 	})
-
+	if knobs.ClusterID != nil {
+		ctx.ClusterID.Set(ctx.masterCtx, *knobs.ClusterID)
+	}
 	return ctx
 }
 
@@ -614,6 +631,14 @@ func (ctx *Context) removeConn(conn *Connection, keys ...connKey) {
 // necessarily included to support compression-enabled servers, and compression
 // is included for symmetry. These choices are admittedly subjective.
 func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
+	return ctx.grpcDialOptions("", DefaultClass)
+}
+
+// grpcDialOptions extends GRPCDialOptions to support a connection class for use
+// with TestingKnobs.
+func (ctx *Context) grpcDialOptions(
+	target string, class ConnectionClass,
+) ([]grpc.DialOption, error) {
 	var dialOpts []grpc.DialOption
 	if ctx.Insecure {
 		dialOpts = append(dialOpts, grpc.WithInsecure())
@@ -641,17 +666,25 @@ func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor((snappyCompressor{}).Name())))
 	}
 
+	var unaryInterceptors []grpc.UnaryClientInterceptor
+
 	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
 		// We use a SpanInclusionFunc to circumvent the interceptor's work when
 		// tracing is disabled. Otherwise, the interceptor causes an increase in
 		// the number of packets (even with an empty context!). See #17177.
-		interceptor := otgrpc.OpenTracingClientInterceptor(
-			tracer,
-			otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFuncForClient)),
-		)
-		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(interceptor))
+		unaryInterceptors = append(unaryInterceptors,
+			otgrpc.OpenTracingClientInterceptor(tracer,
+				otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFuncForClient))))
 	}
-
+	if ctx.testingKnobs.UnaryClientInterceptor != nil {
+		unaryInterceptors = append(unaryInterceptors,
+			ctx.testingKnobs.UnaryClientInterceptor(target, class))
+	}
+	dialOpts = append(dialOpts, grpc.WithChainUnaryInterceptor(unaryInterceptors...))
+	if ctx.testingKnobs.StreamClientInterceptor != nil {
+		dialOpts = append(dialOpts, grpc.WithStreamInterceptor(
+			ctx.testingKnobs.StreamClientInterceptor(target, class)))
+	}
 	return dialOpts, nil
 }
 
@@ -718,7 +751,7 @@ func (ctx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, <-chan struct{
 func (ctx *Context) grpcDialRaw(
 	target string, class ConnectionClass,
 ) (*grpc.ClientConn, <-chan struct{}, error) {
-	dialOpts, err := ctx.GRPCDialOptions()
+	dialOpts, err := ctx.grpcDialOptions(target, class)
 	if err != nil {
 		return nil, nil, err
 	}
