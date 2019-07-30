@@ -11,6 +11,7 @@
 package stats
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"sort"
@@ -25,11 +26,12 @@ import (
 // runSampleTest feeds rows with the given ranks through a reservoir
 // of a given size and verifies the results are correct.
 func runSampleTest(t *testing.T, numSamples int, ranks []int) {
+	ctx := context.Background()
 	var sr SampleReservoir
-	sr.Init(numSamples, []types.T{*types.Int})
+	sr.Init(numSamples, []types.T{*types.Int}, nil /* memAcc */)
 	for _, r := range ranks {
 		d := sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(r)))
-		if err := sr.SampleRow(sqlbase.EncDatumRow{d}, uint64(r)); err != nil {
+		if err := sr.SampleRow(ctx, sqlbase.EncDatumRow{d}, uint64(r)); err != nil {
 			t.Errorf("%v", err)
 		}
 	}
