@@ -23,8 +23,8 @@ with &1 (foo)
       ├── key: (1)
       └── fd: (1)-->(2,3), (2)-->(4)
 
-# Side effects should not be propagated up to the top-level from the Value
-# side of a WITH.
+# Side effects should be propagated up to the top-level from the Binding side
+# of a WITH.
 build
 WITH foo AS (SELECT 1/0) SELECT * FROM foo
 ----
@@ -54,7 +54,6 @@ with &1 (foo)
       ├── mapping:
       │    └──  "?column?":1(decimal) => "?column?":2(decimal)
       ├── cardinality: [1 - 1]
-      ├── side-effects
       ├── key: ()
       └── fd: ()-->(1), (1)-->(2)
 
@@ -99,3 +98,91 @@ with &1 (foo)
            └── div [type=decimal, side-effects]
                 ├── const: 1 [type=int]
                 └── const: 0 [type=int]
+
+build
+WITH foo AS (SELECT $1::INT) SELECT 1 FROM foo
+----
+with &1 (foo)
+ ├── columns: "?column?":3(int!null)
+ ├── cardinality: [1 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(3)
+ ├── project
+ │    ├── columns: int8:1(int)
+ │    ├── cardinality: [1 - 1]
+ │    ├── has-placeholder
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── prune: (1)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── tuple [type=tuple]
+ │    └── projections
+ │         └── cast: INT8 [type=int]
+ │              └── placeholder: $1 [type=string]
+ └── project
+      ├── columns: "?column?":3(int!null)
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(3)
+      ├── prune: (3)
+      ├── with-scan &1 (foo)
+      │    ├── columns: int8:2(int)
+      │    ├── mapping:
+      │    │    └──  int8:1(int) => int8:2(int)
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(1), (1)-->(2)
+      └── projections
+           └── const: 1 [type=int]
+
+# WithScan should not have outer columns.
+build
+SELECT
+    *
+FROM
+    (VALUES (1), (2)) AS v (x),
+    LATERAL (SELECT * FROM (WITH foo AS (SELECT 1 + x) SELECT * FROM foo))
+----
+inner-join-apply
+ ├── columns: x:1(int!null) "?column?":3(int)
+ ├── cardinality: [2 - 2]
+ ├── values
+ │    ├── columns: column1:1(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── prune: (1)
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 2 [type=int]
+ ├── with &1 (foo)
+ │    ├── columns: "?column?":3(int)
+ │    ├── outer: (1)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2), (2)-->(3)
+ │    ├── project
+ │    │    ├── columns: "?column?":2(int)
+ │    │    ├── outer: (1)
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(2)
+ │    │    ├── prune: (2)
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── tuple [type=tuple]
+ │    │    └── projections
+ │    │         └── plus [type=int, outer=(1)]
+ │    │              ├── const: 1 [type=int]
+ │    │              └── variable: column1 [type=int]
+ │    └── with-scan &1 (foo)
+ │         ├── columns: "?column?":3(int)
+ │         ├── mapping:
+ │         │    └──  "?column?":2(int) => "?column?":3(int)
+ │         ├── cardinality: [1 - 1]
+ │         ├── key: ()
+ │         └── fd: ()-->(2), (2)-->(3)
+ └── filters (true)

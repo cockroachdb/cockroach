@@ -857,6 +857,9 @@ define WithScan {
 define WithScanPrivate {
     ID WithID
 
+    # BindingProps stores the relational properties of the referenced expression.
+    BindingProps RelPropsPtr
+
     # Name is used to identify the with being referenced for debugging purposes.
     Name string
 
