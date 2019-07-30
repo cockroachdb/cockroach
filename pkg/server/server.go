@@ -1316,7 +1316,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	conn, err := grpc.DialContext(ctx, s.cfg.AdvertiseAddr, append(
 		dialOpts,
-		grpc.WithDialer(func(string, time.Duration) (net.Conn, error) {
+		grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
 			return c2, nil
 		}),
 	)...)

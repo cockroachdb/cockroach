@@ -124,6 +124,10 @@ ignored = [
   name = "google.golang.org/genproto"
   branch = "master"
 
+[[constraint]]
+  name = "google.golang.org/grpc"
+  version = "=v1.21.2"
+
 [prune]
   go-tests = true
   unused-packages = true
