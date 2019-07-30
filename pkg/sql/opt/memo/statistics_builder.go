@@ -555,7 +555,13 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *pro
 	inputColStat := sb.colStatTable(scan.Table, colSet)
 	colStat := sb.copyColStat(colSet, s, inputColStat)
 	if inputColStat.Histogram != nil {
-		colStat.Histogram = inputColStat.Histogram.Copy()
+		if s.Selectivity != 1 || scan.HardLimit.IsSet() {
+			colStat.Histogram = inputColStat.Histogram.Copy()
+		} else {
+			// We don't need to make a deep copy of the histogram because we won't be
+			// modifying it.
+			colStat.Histogram = inputColStat.Histogram
+		}
 	}
 
 	if s.Selectivity != 1 {

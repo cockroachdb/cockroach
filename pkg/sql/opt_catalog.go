@@ -1008,8 +1008,8 @@ func (os *optTableStat) init(tab *optTable, stat *stats.TableStatistic) (ok bool
 				return false, err
 			}
 			os.histogram[i] = cat.HistogramBucket{
-				NumEq:         uint64(bucket.NumEq),
-				NumRange:      uint64(bucket.NumRange),
+				NumEq:         float64(bucket.NumEq),
+				NumRange:      float64(bucket.NumRange),
 				DistinctRange: bucket.DistinctRange,
 				UpperBound:    datum,
 			}
