@@ -102,11 +102,15 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		return
 	}
 
+	status := r.mu.internalRaftGroup.BasicStatus()
 	if r.mu.leaderID != lastLeaderID {
 		if r.mu.replicaID == r.mu.leaderID {
 			// We're becoming the leader.
-			r.mu.proposalQuotaBaseIndex = r.mu.lastIndex
-
+			// Initialize the proposalQuotaBaseIndex at the applied index.
+			// After the proposal quota is enabled all entries applied by this replica
+			// will be appended to the quotaReleaseQueue. The proposalQuotaBaseIndex
+			// and the quotaReleaseQueue together track status.Applied exactly.
+			r.mu.proposalQuotaBaseIndex = status.Applied
 			if r.mu.proposalQuota != nil {
 				log.Fatal(ctx, "proposalQuota was not nil before becoming the leader")
 			}
@@ -145,8 +149,14 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 
 	// Find the minimum index that active followers have acknowledged.
 	now := timeutil.Now()
-	status := r.mu.internalRaftGroup.BasicStatus()
-	commitIndex, minIndex := status.Commit, status.Commit
+	// commitIndex is used to determine whether a newly added replica has fully
+	// caught up.
+	commitIndex := status.Commit
+	// Initialize minIndex to the currently applied index. The below progress
+	// checks will only decrease the minIndex. Given that the quotaReleaseQueue
+	// cannot correspond to values beyond the applied index there's no reason
+	// to consider progress beyond it as meaningful.
+	minIndex := status.Applied
 	r.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, progress tracker.Progress) {
 		rep, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(id))
 		if !ok {
@@ -214,30 +224,28 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	})
 
 	if r.mu.proposalQuotaBaseIndex < minIndex {
-		// We've persisted minIndex - r.mu.proposalQuotaBaseIndex entries to
-		// the raft log on all 'active' replicas since last we checked,
-		// we 'should' be able to release the difference back to
-		// the quota pool. But consider the scenario where we have a single
-		// replica that we're writing to, we only construct the
-		// quotaReleaseQueue when entries 'come out' of Raft via
-		// raft.Ready.CommittedEntries. The minIndex computed above uses the
-		// replica's commit index which is independent of whether or we've
-		// iterated over the entirety of raft.Ready.CommittedEntries and
-		// therefore may not have all minIndex - r.mu.proposalQuotaBaseIndex
-		// command sizes in our quotaReleaseQueue.  Hence we only process
-		// min(minIndex - r.mu.proposalQuotaBaseIndex, len(r.mu.quotaReleaseQueue))
-		// quota releases.
+		// We've persisted at least minIndex-r.mu.proposalQuotaBaseIndex entries
+		// to the raft log on all 'active' replicas and applied at least minIndex
+		// entries locally since last we checked, so we are able to release the
+		// difference back to the quota pool.
 		numReleases := minIndex - r.mu.proposalQuotaBaseIndex
-		if qLen := uint64(len(r.mu.quotaReleaseQueue)); qLen < numReleases {
-			numReleases = qLen
-		}
 		sum := int64(0)
 		for _, rel := range r.mu.quotaReleaseQueue[:numReleases] {
 			sum += rel
 		}
 		r.mu.proposalQuotaBaseIndex += numReleases
 		r.mu.quotaReleaseQueue = r.mu.quotaReleaseQueue[numReleases:]
-
 		r.mu.proposalQuota.add(sum)
+	}
+	// Assert the sanity of the base index and the queue. Queue entries should
+	// correspond to applied entries. It should not be possible for the base
+	// index and the not yet released applied entries to not equal the applied
+	// index.
+	releasableIndex := r.mu.proposalQuotaBaseIndex + uint64(len(r.mu.quotaReleaseQueue))
+	if releasableIndex != status.Applied {
+		log.Fatalf(ctx, "proposalQuotaBaseIndex (%d) + quotaReleaseQueueLen (%d) = %d"+
+			" must equal the applied index (%d)",
+			r.mu.proposalQuotaBaseIndex, len(r.mu.quotaReleaseQueue), releasableIndex,
+			status.Applied)
 	}
 }
