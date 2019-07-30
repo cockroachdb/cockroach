@@ -22,7 +22,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/transport"
 )
 
 // ErrCannotReuseClientConn is returned when a failed connection is
@@ -62,9 +61,6 @@ func IsClosedConnection(err error) bool {
 		strings.Contains(err.Error(), io.ErrClosedPipe.Error()) ||
 		strings.Contains(err.Error(), io.EOF.Error()) ||
 		strings.Contains(err.Error(), "node unavailable") {
-		return true
-	}
-	if streamErr, ok := err.(transport.StreamError); ok && streamErr.Code == codes.Canceled {
 		return true
 	}
 	return netutil.IsClosedConnection(err)

@@ -891,6 +891,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 // its response stream even if it doesn't get any new requests.
 func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("Takes too long given https://github.com/grpc/grpc-go/pull/2642")
 
 	sc := log.Scope(t)
 	defer sc.Close(t)
@@ -1041,8 +1042,8 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 	// PartitionableConns. We'll partition the first opened connection.
 	dialerCh := make(chan *testutils.PartitionableConn, 1)
 	clientCtx.AddTestingDialOpts(
-		grpc.WithDialer(
-			func(addr string, timeout time.Duration) (net.Conn, error) {
+		grpc.WithContextDialer(
+			func(_ context.Context, addr string) (net.Conn, error) {
 				if !atomic.CompareAndSwapInt32(&firstConn, 1, 0) {
 					// If we allow gRPC to open a 2nd transport connection, then our RPCs
 					// might succeed if they're sent on that one. In the spirit of a
@@ -1052,7 +1053,7 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 					return nil, errors.Errorf("No more connections for you. We're partitioned.")
 				}
 
-				conn, err := net.DialTimeout("tcp", addr, timeout)
+				conn, err := net.Dial("tcp", addr)
 				if err != nil {
 					return nil, err
 				}
@@ -1116,10 +1117,8 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 	// Now partition either client->server, server->client, or both, and attempt
 	// to perform an RPC. We expect it to fail once the grpc keepalive fails to
 	// get a response from the server.
-
 	transportConn := <-dialerCh
 	defer transportConn.Finish()
-
 	if c.partitionC2S {
 		log.Infof(ctx, "partition C2S")
 		transportConn.PartitionC2S()
@@ -1129,38 +1128,65 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 		transportConn.PartitionS2C()
 	}
 
+	// We want to start a goroutine that keeps trying to send requests and reports
+	// the error from the send call. In cases where there are no keep-alives this
+	// request may get blocked if flow control blocks it.
+	errChan := make(chan error)
+	sendCtx, cancel := context.WithCancel(ctx)
+	r := retry.StartWithCtx(sendCtx, retry.Options{
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     500 * time.Millisecond,
+	})
+	defer cancel()
+	go func() {
+		for r.Next() {
+			err := heartbeatClient.Send(&request)
+			isClosed := err != nil && grpcutil.IsClosedConnection(err)
+			log.Infof(ctx, "heartbeat Send got error %+v (closed=%v)", err, isClosed)
+			select {
+			case errChan <- err:
+			case <-sendCtx.Done():
+				return
+			}
+			if isClosed {
+				return
+			}
+		}
+	}()
 	// Check whether the connection eventually closes. We may need to
 	// adjust this duration if the test gets flaky.
-	const retryDur = 3 * time.Second
-	errNotClosed := errors.New("conn not closed")
-	closedErr := retry.ForDuration(retryDur, func() error {
-		err := heartbeatClient.Send(&request)
-		if err == nil {
-			log.Infof(ctx, "expected send error, got no error")
-			return errNotClosed
+	// This unfortunately massive amount of time is required due to gRPC's
+	// minimum timeout of 10s and the below issue whereby keepalives are sent
+	// at half the expected rate.
+	// https://github.com/grpc/grpc-go/issues/2638
+	const timeoutDur = 21 * time.Second
+	timeout := time.After(timeoutDur)
+	// sendErr will hold the last error we saw from an attempt to send a
+	// heartbeat. Initialize it with a dummy error which will fail the test if
+	// it is not overwritten.
+	sendErr := fmt.Errorf("not a real error")
+	for done := false; !done; {
+		select {
+		case <-timeout:
+			cancel()
+			done = true
+		case sendErr = <-errChan:
 		}
-		if !grpcutil.IsClosedConnection(err) {
-			newErr := fmt.Errorf("expected closed connection error, found %v", err)
-			log.Infof(ctx, "%+v", newErr)
-			return newErr
-		}
-		return nil
-	})
+	}
 	if c.expClose {
-		if closedErr != nil {
-			newErr := fmt.Errorf("expected closed connection, found %v", closedErr)
+		if sendErr == nil || !grpcutil.IsClosedConnection(sendErr) {
+			newErr := fmt.Errorf("expected closed connection, found %v", sendErr)
 			log.Infof(ctx, "%+v", newErr)
 			return newErr
 		}
 	} else {
-		if closedErr != errNotClosed {
-			newErr := fmt.Errorf("expected unclosed connection, found %v", closedErr)
+		if sendErr != nil {
+			newErr := fmt.Errorf("expected unclosed connection, found %v", sendErr)
 			log.Infof(ctx, "%+v", newErr)
 			return newErr
 		}
 	}
 
-	log.Infof(ctx, "test done")
 	// If the DialOptions we passed to gRPC didn't prevent it from opening new
 	// connections, then next RPCs would succeed since gRPC reconnects the
 	// transport (and that would succeed here since we've only partitioned one
@@ -1169,6 +1195,7 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 	// the (application-level) heartbeats performed by rpc.Context, but the
 	// behavior of our heartbeats in the face of transport failures is
 	// sufficiently tested in TestHeartbeatHealthTransport.
+	log.Infof(ctx, "test done")
 	return nil
 }
 
