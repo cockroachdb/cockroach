@@ -41,6 +41,7 @@ const (
 	VersionParallelCommits
 	VersionGenerationComparable
 	VersionLearnerReplicas
+	VersionTopLevelForeignKeys
 
 	// Add new versions here (step one of two).
 
@@ -488,6 +489,20 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionLearnerReplicas is https://github.com/cockroachdb/cockroach/pull/38149.
 		Key:     VersionLearnerReplicas,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 6},
+	},
+	{
+		// VersionTopLevelForeignKeys is https://github.com/cockroachdb/cockroach/pull/XXXXX.
+		//
+		// It represents an upgrade to the table descriptor format in which foreign
+		// key references are pulled out of the index descriptors where they
+		// originally were kept, and rewritten into a top level field on the index's
+		// parent table descriptors. During a mixed-version state, the database will
+		// write old-style table descriptors at all system boundaries, but upgrade
+		// all old-style table descriptors into the new format upon read. Once the
+		// upgrade is finalized, the database will write the upgraded format, but
+		// continue to upgrade old-style descriptors on-demand.
+		Key:     VersionTopLevelForeignKeys,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 7},
 	},
 
 	// Add new versions here (step two of two).
