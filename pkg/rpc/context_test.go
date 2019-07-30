@@ -65,20 +65,23 @@ func newTestServer(t testing.TB, ctx *Context, extraOpts ...grpc.ServerOption) *
 	return grpc.NewServer(opts...)
 }
 
-func newTestContext(clusterID uuid.UUID, clock *hlc.Clock, stopper *stop.Stopper) *Context {
-	rctx := NewContext(
+func newTestContextWithKnobs(
+	clock *hlc.Clock, stopper *stop.Stopper, knobs ContextTestingKnobs,
+) *Context {
+	return NewContextWithTestingKnobs(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		testutils.NewNodeTestBaseContext(),
 		clock,
 		stopper,
 		&cluster.MakeTestingClusterSettings().Version,
+		knobs,
 	)
-	// Ensure that tests using this test context and restart/shut down
-	// their servers do not inadvertently start talking to servers from
-	// unrelated concurrent tests.
-	rctx.ClusterID.Set(context.TODO(), clusterID)
+}
 
-	return rctx
+func newTestContext(clusterID uuid.UUID, clock *hlc.Clock, stopper *stop.Stopper) *Context {
+	return newTestContextWithKnobs(clock, stopper, ContextTestingKnobs{
+		ClusterID: &clusterID,
+	})
 }
 
 func TestHeartbeatCB(t *testing.T) {
@@ -1468,9 +1471,6 @@ func TestGRPCDialClass(t *testing.T) {
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
 	require.Nil(t, err)
 	remoteAddr := ln.Addr().String()
-
-	// Ensure the client ctx gets a new fresh cluster ID so it becomes
-	// different from the server's.
 	clientCtx := newTestContext(serverCtx.ClusterID.Get(), clock, stopper)
 
 	def1 := clientCtx.GRPCDialNodeClass(remoteAddr, 1, DefaultClass)
@@ -1491,6 +1491,148 @@ func TestGRPCDialClass(t *testing.T) {
 		"class to the same target to be the same")
 	for _, c := range []*Connection{def2, sys2} {
 		require.Nil(t, c.Health(), "expected connections to be healthy")
+	}
+}
+
+// TestTestingKnobs ensures that the testing knobs are injected in the proper
+// places.
+func TestTestingKnobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	clusterID := uuid.MakeV4()
+
+	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+	serverCtx := newTestContext(clusterID, clock, stopper)
+	const serverNodeID = 1
+	serverCtx.NodeID.Set(context.TODO(), serverNodeID)
+	// Register an UnknownServiceHandler that expects a BatchRequest and sends
+	// a BatchResponse. It will be used both as a unary and stream handler below.
+	s := newTestServer(t, serverCtx, grpc.UnknownServiceHandler(
+		func(srv interface{}, stream grpc.ServerStream) error {
+			var ba roachpb.BatchRequest
+			if err := stream.RecvMsg(&ba); err != nil {
+				return err
+			}
+			return stream.SendMsg(&roachpb.BatchResponse{})
+		},
+	))
+	RegisterHeartbeatServer(s, &HeartbeatService{
+		clock:              clock,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+		clusterID:          &serverCtx.ClusterID,
+		nodeID:             &serverCtx.NodeID,
+		version:            serverCtx.version,
+	})
+
+	// The test will inject interceptors for both stream and unary calls and then
+	// will ensure that these interceptors are properly called by keeping track
+	// of all calls.
+
+	// Use these structs to keep track of the number of times the interceptors
+	// are called in the seen map below.
+	type streamCall struct {
+		target string
+		class  ConnectionClass
+		method string
+	}
+	type unaryCall struct {
+		target string
+		class  ConnectionClass
+		method string
+	}
+	seen := make(map[interface{}]int)
+	var seenMu syncutil.Mutex
+	recordCall := func(call interface{}) {
+		seenMu.Lock()
+		defer seenMu.Unlock()
+		seen[call]++
+	}
+	clientCtx := newTestContextWithKnobs(clock, stopper, ContextTestingKnobs{
+		ClusterID: &clusterID,
+		StreamClientInterceptor: func(
+			target string, class ConnectionClass,
+		) grpc.StreamClientInterceptor {
+			return func(
+				ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
+				method string, streamer grpc.Streamer, opts ...grpc.CallOption,
+			) (grpc.ClientStream, error) {
+				cs, err := streamer(ctx, desc, cc, method, opts...)
+				if err != nil {
+					return nil, err
+				}
+				recordCall(streamCall{
+					target: target,
+					class:  class,
+					method: method,
+				})
+				return cs, nil
+			}
+		},
+		UnaryClientInterceptor: func(
+			target string, class ConnectionClass,
+		) grpc.UnaryClientInterceptor {
+			return func(
+				ctx context.Context, method string, req, reply interface{},
+				cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption,
+			) error {
+				recordCall(unaryCall{
+					target: target,
+					class:  class,
+					method: method,
+				})
+				return invoker(ctx, method, req, reply, cc, opts...)
+			}
+		},
+	})
+
+	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+	require.Nil(t, err)
+	remoteAddr := ln.Addr().String()
+	sysConn, err := clientCtx.GRPCDialNodeClass(remoteAddr, 1, SystemClass).Connect(context.TODO())
+	require.Nil(t, err)
+	defConn, err := clientCtx.GRPCDialNodeClass(remoteAddr, 1, DefaultClass).Connect(context.TODO())
+	require.Nil(t, err)
+	const unaryMethod = "/cockroach.rpc.Testing/Foo"
+	const streamMethod = "/cockroach.rpc.Testing/Bar"
+	const numSysUnary = 3
+	for i := 0; i < numSysUnary; i++ {
+		ba := roachpb.BatchRequest{}
+		br := roachpb.BatchResponse{}
+		err := sysConn.Invoke(context.TODO(), unaryMethod, &ba, &br)
+		require.Nil(t, err)
+	}
+	const numDefStream = 4
+	for i := 0; i < numDefStream; i++ {
+		desc := grpc.StreamDesc{
+			StreamName:    "bar",
+			ClientStreams: true,
+		}
+		cs, err := defConn.NewStream(context.TODO(), &desc, streamMethod)
+		require.Nil(t, err)
+		require.Nil(t, cs.SendMsg(&roachpb.BatchRequest{}))
+		var br roachpb.BatchResponse
+		require.Nil(t, cs.RecvMsg(&br))
+		require.Nil(t, cs.CloseSend())
+	}
+
+	exp := map[interface{}]int{
+		unaryCall{
+			target: remoteAddr,
+			class:  SystemClass,
+			method: unaryMethod,
+		}: numSysUnary,
+		streamCall{
+			target: remoteAddr,
+			class:  DefaultClass,
+			method: streamMethod,
+		}: numDefStream,
+	}
+	seenMu.Lock()
+	defer seenMu.Unlock()
+	for call, num := range exp {
+		require.Equal(t, num, seen[call])
 	}
 }
 
