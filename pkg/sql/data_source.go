@@ -370,14 +370,16 @@ func (p *planner) getViewPlan(
 
 	// Register the dependency to the planner, if requested.
 	if p.curPlan.deps != nil {
-		usedColumns := make([]sqlbase.ColumnID, len(desc.Columns))
-		for i := range desc.Columns {
-			usedColumns[i] = desc.Columns[i].ID
+		if !desc.IsVirtualTable() {
+			usedColumns := make([]sqlbase.ColumnID, len(desc.Columns))
+			for i := range desc.Columns {
+				usedColumns[i] = desc.Columns[i].ID
+			}
+			deps := p.curPlan.deps[desc.ID]
+			deps.desc = desc
+			deps.deps = append(deps.deps, sqlbase.TableDescriptor_Reference{ColumnIDs: usedColumns})
+			p.curPlan.deps[desc.ID] = deps
 		}
-		deps := p.curPlan.deps[desc.ID]
-		deps.desc = desc
-		deps.deps = append(deps.deps, sqlbase.TableDescriptor_Reference{ColumnIDs: usedColumns})
-		p.curPlan.deps[desc.ID] = deps
 
 		// We are only interested in the dependency to this view descriptor. Any
 		// further dependency by the view's query should not be tracked in this planner.
