@@ -32,8 +32,8 @@
 #include "iterator.h"
 #include "merge.h"
 #include "options.h"
-#include "row_counter.h"
 #include "protos/roachpb/errors.pb.h"
+#include "row_counter.h"
 #include "snapshot.h"
 #include "status.h"
 #include "table_props.h"
@@ -582,6 +582,15 @@ DBIterState DBCheckForKeyCollisions(DBIterator* existingIter, DBIterator* sstIte
       }
 
       state.valid = false;
+      return state;
+    }
+
+    // If the ingested KV has an identical timestamp and value as the existing
+    // data then we do not consider it to be a collision.
+    bool has_equal_timestamp = existing_ts.wall_time == sst_ts.wall_time && existing_ts.logical == sst_ts.logical;
+    bool has_equal_value = kComparator.Compare(existingIter->rep->value(), sstIter->rep->value()) == 0;
+    if (has_equal_timestamp && has_equal_value) {
+      state.valid = true;
       return state;
     }
 

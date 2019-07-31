@@ -274,7 +274,7 @@ DBStatus DBPartialMergeOne(DBSlice existing, DBSlice update, DBString* new_value
 
 // DBCheckForKeyCollisions runs both iterators in lockstep and errors out at the
 // first key collision, where a collision refers to any two MVCC keys with the
-// same user key, regardless of timestamps.
+// same user key, and with a different timestamp or value.
 //
 // An exception is made when the latest version of the colliding key is a
 // tombstone from an MVCC delete in the existing data. If the timestamp of the
