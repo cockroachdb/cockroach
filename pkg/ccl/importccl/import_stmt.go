@@ -970,6 +970,38 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 		tableDesc := *tbl.Desc
 		tableDesc.Version++
 		tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+
+		if !tbl.IsNew {
+			// NB: This is not using AllNonDropIndexes or directly mutating the
+			// constraints returned by the other usual helpers because we need to
+			// replace the `Indexes` and `Checks` slices of tableDesc with copies that
+			// we can mutate. We need to do that because tableDesc is a shallow copy
+			// of tbl.Desc that we'll be asserting is the current version when we
+			// CPut below.
+			//
+			// Set FK constraints to unvalidated before publishing the table imported
+			// into.
+			if tableDesc.PrimaryIndex.ForeignKey.IsSet() {
+				tableDesc.PrimaryIndex.ForeignKey.Validity = sqlbase.ConstraintValidity_Unvalidated
+			}
+
+			tableDesc.Indexes = make([]sqlbase.IndexDescriptor, len(tbl.Desc.Indexes))
+			copy(tableDesc.Indexes, tbl.Desc.Indexes)
+			for i := range tableDesc.Indexes {
+				if tableDesc.Indexes[i].ForeignKey.IsSet() {
+					tableDesc.Indexes[i].ForeignKey.Validity = sqlbase.ConstraintValidity_Unvalidated
+				}
+			}
+
+			// Set CHECK constraints to unvalidated before publishing the table imported into.
+			tableDesc.Checks = make([]*sqlbase.TableDescriptor_CheckConstraint, len(tbl.Desc.Checks))
+			for i, c := range tbl.Desc.AllActiveAndInactiveChecks() {
+				ck := *c
+				ck.Validity = sqlbase.ConstraintValidity_Unvalidated
+				tableDesc.Checks[i] = &ck
+			}
+		}
+
 		// TODO(dt): re-validate any FKs?
 		// Note that this CPut is safe with respect to mixed-version descriptor
 		// upgrade and downgrade, because IMPORT does not operate in mixed-version
