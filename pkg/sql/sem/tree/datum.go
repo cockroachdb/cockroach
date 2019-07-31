@@ -2120,6 +2120,30 @@ func ParseDTimestampTZ(
 	return MakeDTimestampTZ(t, precision), nil
 }
 
+// AsDTimestampTZ attempts to retrieve a DTimestampTZ from an Expr, returning a
+// DTimestampTZ and a flag signifying whether the assertion was successful. The
+// function should be used instead of direct type assertions wherever a
+// *DTimestamp wrapped by a *DOidWrapper is possible.
+func AsDTimestampTZ(e Expr) (DTimestampTZ, bool) {
+	switch t := e.(type) {
+	case *DTimestampTZ:
+		return *t, true
+	case *DOidWrapper:
+		return AsDTimestampTZ(t.Wrapped)
+	}
+	return DTimestampTZ{}, false
+}
+
+// MustBeDTimestampTZ attempts to retrieve a DTimestampTZ from an Expr,
+// panicking if the assertion fails.
+func MustBeDTimestampTZ(e Expr) DTimestampTZ {
+	t, ok := AsDTimestampTZ(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DTimestampTZ, found %T", e))
+	}
+	return t
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (*DTimestampTZ) ResolvedType() *types.T {
 	return types.TimestampTZ
@@ -2195,7 +2219,13 @@ func (d *DTimestampTZ) Size() uintptr {
 // TimestampTZ '2012-01-01 12:00:00 +02:00' would become
 //             '2012-01-01 12:00:00'.
 func (d *DTimestampTZ) stripTimeZone(ctx *EvalContext) *DTimestamp {
-	_, locOffset := d.Time.In(ctx.GetLocation()).Zone()
+	return d.EvalAtTimeZone(ctx, ctx.GetLocation())
+}
+
+// EvalAtTimeZone evaluates this TimestampTZ as if it were in the supplied
+// location, returning a timestamp without a timezone.
+func (d *DTimestampTZ) EvalAtTimeZone(ctx *EvalContext, loc *time.Location) *DTimestamp {
+	_, locOffset := d.Time.In(loc).Zone()
 	newTime := duration.Add(ctx, d.Time.UTC(), duration.FromInt64(int64(locOffset)))
 	return MakeDTimestamp(newTime, time.Microsecond)
 }
