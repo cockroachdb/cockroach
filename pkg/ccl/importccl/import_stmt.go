@@ -970,6 +970,32 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 		tableDesc := *tbl.Desc
 		tableDesc.Version++
 		tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+
+		if !tbl.IsNew {
+			// Set FK constraints to unvalidated before publishing the table imported into.
+			tableDesc.Indexes = make([]sqlbase.IndexDescriptor, 0, len(tbl.Desc.Indexes))
+			for i, idx := range tbl.Desc.AllNonDropIndexes() {
+				tableIdx := *idx
+				if tableIdx.ForeignKey.IsSet() {
+					tableIdx.ForeignKey.Validity = sqlbase.ConstraintValidity_Unvalidated
+				}
+
+				if i == 0 && tbl.Desc.IsPhysicalTable() {
+					tableDesc.PrimaryIndex = tableIdx
+				} else {
+					tableDesc.Indexes = append(tableDesc.Indexes, tableIdx)
+				}
+			}
+
+			// Set CHECK constraints to unvalidated before publishing the table imported into.
+			tableDesc.Checks = make([]*sqlbase.TableDescriptor_CheckConstraint, len(tbl.Desc.Checks))
+			for i, c := range tbl.Desc.AllActiveAndInactiveChecks() {
+				ck := *c
+				ck.Validity = sqlbase.ConstraintValidity_Unvalidated
+				tableDesc.Checks[i] = &ck
+			}
+		}
+
 		// TODO(dt): re-validate any FKs?
 		// Note that this CPut is safe with respect to mixed-version descriptor
 		// upgrade and downgrade, because IMPORT does not operate in mixed-version
