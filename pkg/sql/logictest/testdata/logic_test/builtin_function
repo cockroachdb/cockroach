@@ -1510,6 +1510,16 @@ SELECT current_schema()
 ----
 public
 
+query T
+SELECT COLLATION FOR (description) FROM pg_description LIMIT 1
+----
+default
+
+query T
+SELECT COLLATION FOR ('foo' COLLATE "de_DE");
+----
+de_DE
+
 query I
 SELECT array_length(ARRAY['a', 'b'], 1)
 ----
