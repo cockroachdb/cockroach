@@ -425,3 +425,27 @@ type ShowHistogram struct {
 func (node *ShowHistogram) Format(ctx *FmtCtx) {
 	ctx.Printf("SHOW HISTOGRAM %d", node.HistogramID)
 }
+
+// ShowPartitions represents a SHOW PARTITIONS statement.
+type ShowPartitions struct {
+	Object string
+
+	IsDB bool
+
+	IsIndex bool
+	Index   TableIndexName
+
+	IsTable bool
+	Table   *UnresolvedObjectName
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowPartitions) Format(ctx *FmtCtx) {
+	if node.IsDB {
+		ctx.Printf("SHOW PARTITIONS FROM DATABASE %s", node.Object)
+	} else if node.IsIndex {
+		ctx.Printf("SHOW PARTITIONS FROM INDEX %s", node.Object)
+	} else {
+		ctx.Printf("SHOW PARTITIONS FROM TABLE %s", node.Object)
+	}
+}
