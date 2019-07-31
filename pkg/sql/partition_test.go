@@ -98,8 +98,8 @@ func TestRemovePartitioningOSS(t *testing.T) {
 		t.Fatal(err)
 	}
 	sqlDB.Exec(t, `INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, zoneConfigBytes)
-	for _, p := range []string{"p1", "p2"} {
-		if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.kv."+p); !exists {
+	for _, p := range []string{"t.kv.p1", "t.kv@foo.p2"} {
+		if exists := sqlutils.ZoneConfigExists(t, sqlDB, p); !exists {
 			t.Fatalf("zone config for %s does not exist", p)
 		}
 	}
@@ -110,7 +110,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	sqlDB.ExpectErr(t, reqCCLErr, `ALTER TABLE t.kv PARTITION BY NOTHING`)
 	sqlDB.ExpectErr(t, reqCCLErr, `ALTER INDEX t.kv@foo PARTITION BY NOTHING`)
 	sqlDB.ExpectErr(t, reqCCLErr, `ALTER PARTITION p1 OF TABLE t.kv CONFIGURE ZONE USING DEFAULT`)
-	sqlDB.ExpectErr(t, reqCCLErr, `ALTER PARTITION p2 OF TABLE t.kv CONFIGURE ZONE USING DEFAULT`)
+	sqlDB.ExpectErr(t, reqCCLErr, `ALTER PARTITION p2 OF INDEX t.kv@foo CONFIGURE ZONE USING DEFAULT`)
 
 	// Odd exception: removing partitioning is, in fact, possible when there are
 	// no zone configs for the table's indices or partitions.

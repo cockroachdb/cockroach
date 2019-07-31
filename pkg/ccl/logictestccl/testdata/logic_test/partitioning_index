@@ -107,7 +107,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS i4 ON indexes (b) PARTITION BY LIST (b) (
     PARTITION p4 VALUES IN (1)
 )
 
-statement error PARTITION p1: name must be unique \(used in both index "i1" and index "i5"\)
+statement error PARTITION p1: name must be unique \(used twice in index "i5"\)
+CREATE INDEX i5 ON indexes (b) PARTITION BY LIST (b) (
+    PARTITION p1 VALUES IN (1),
+    PARTITION p1 VALUES IN (2)
+)
+
+# Partition names can be reused across indexes.
+statement ok
 CREATE INDEX i5 ON indexes (b) PARTITION BY LIST (b) (
     PARTITION p1 VALUES IN (1)
 )
@@ -130,6 +137,9 @@ indexes  CREATE TABLE indexes (
          ),
          UNIQUE INDEX i4 (b ASC) PARTITION BY LIST (b) (
            PARTITION p4 VALUES IN ((1))
+         ),
+         INDEX i5 (b ASC) PARTITION BY LIST (b) (
+           PARTITION p1 VALUES IN ((1))
          ),
          FAMILY "primary" (a, b)
 )

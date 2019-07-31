@@ -200,10 +200,10 @@ SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
 
-query ITTTTT colnames
+query ITTTTTTTTT colnames
 SELECT * FROM crdb_internal.zones WHERE false
 ----
-zone_id  zone_name cli_specifier  config_yaml  config_sql  config_protobuf
+zone_id  zone_name  range_name  database_name  table_name  index_name  partition_name  config_yaml  config_sql  config_protobuf
 
 query ITTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.ranges WHERE range_id < 0
@@ -222,7 +222,7 @@ INSERT INTO system.zones (id, config) VALUES
   (54, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
 
 query IT
-SELECT zone_id, cli_specifier FROM crdb_internal.zones ORDER BY 1
+SELECT zone_id, zone_name FROM crdb_internal.zones ORDER BY 1
 ----
 0   .default
 1   system

@@ -22,14 +22,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 // These must match crdb_internal.zones.
 var showZoneConfigColumns = sqlbase.ResultColumns{
 	{Name: "zone_id", Typ: types.Int, Hidden: true},
 	{Name: "zone_name", Typ: types.String},
-	{Name: "cli_specifier", Typ: types.String, Hidden: true},
+	{Name: "range_name", Typ: types.String, Hidden: true},
+	{Name: "database_name", Typ: types.String, Hidden: true},
+	{Name: "table_name", Typ: types.String, Hidden: true},
+	{Name: "index_name", Typ: types.String, Hidden: true},
+	{Name: "partition_name", Typ: types.String, Hidden: true},
 	{Name: "config_yaml", Typ: types.String, Hidden: true},
 	{Name: "config_sql", Typ: types.String},
 	{Name: "config_protobuf", Typ: types.Bytes, Hidden: true},
@@ -39,7 +43,11 @@ var showZoneConfigColumns = sqlbase.ResultColumns{
 const (
 	zoneIDCol int = iota
 	zoneNameCol
-	cliSpecifierCol
+	rangeNameCol
+	databaseNameCol
+	tableNameCol
+	indexNameCol
+	partitionNameCol
 	configYAMLCol
 	configSQLCol
 	configProtobufCol
@@ -58,9 +66,7 @@ func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (p
 					ctx,
 					"show-all-zone-configurations",
 					p.txn,
-					`SELECT zone_id, zone_name, cli_specifier, config_yaml, config_sql, config_protobuf
-					 FROM crdb_internal.zones
-					 WHERE cli_specifier IS NOT NULL`,
+					`SELECT * FROM crdb_internal.zones WHERE zone_name IS NOT NULL`,
 				)
 				if err != nil {
 					return nil, err
@@ -119,7 +125,7 @@ func getShowZoneConfigRow(
 		zone = &subzone.Config
 	}
 
-	// Determine the CLI specifier for the zone config that actually applies
+	// Determine the zone specifier for the zone config that actually applies
 	// without performing another KV lookup.
 	zs := ascendZoneSpecifier(zoneSpecifier, uint32(targetID), zoneID, subzone)
 
@@ -148,13 +154,32 @@ func generateZoneConfigIntrospectionValues(
 	// Populate the ID column.
 	values[zoneIDCol] = zoneID
 
-	// Populate the specifier column.
-	if zs == nil {
-		values[zoneNameCol] = tree.DNull
-	} else {
-		values[zoneNameCol] = tree.NewDString(config.CLIZoneSpecifier(zs))
+	// Populate the zone specifier columns.
+	values[zoneNameCol] = tree.DNull
+	values[rangeNameCol] = tree.DNull
+	values[databaseNameCol] = tree.DNull
+	values[tableNameCol] = tree.DNull
+	values[indexNameCol] = tree.DNull
+	values[partitionNameCol] = tree.DNull
+	if zs != nil {
+		values[zoneNameCol] = tree.NewDString(config.ToZoneName(zs))
+		if zs.NamedZone != "" {
+			values[rangeNameCol] = tree.NewDString(string(zs.NamedZone))
+		}
+		if zs.Database != "" {
+			values[databaseNameCol] = tree.NewDString(string(zs.Database))
+		}
+		if zs.TableOrIndex.Table.TableName != "" {
+			values[databaseNameCol] = tree.NewDString(string(zs.TableOrIndex.Table.CatalogName))
+			values[tableNameCol] = tree.NewDString(string(zs.TableOrIndex.Table.TableName))
+		}
+		if zs.TableOrIndex.Index != "" {
+			values[indexNameCol] = tree.NewDString(string(zs.TableOrIndex.Index))
+		}
+		if zs.Partition != "" {
+			values[partitionNameCol] = tree.NewDString(string(zs.Partition))
+		}
 	}
-	values[cliSpecifierCol] = values[zoneNameCol]
 
 	// Populate the YAML column.
 	yamlConfig, err := yaml.Marshal(zone)
@@ -264,6 +289,8 @@ func ascendZoneSpecifier(
 		// We had to traverse to the top of the hierarchy, so we're showing the
 		// default zone config.
 		zs.NamedZone = config.DefaultZoneName
+		zs.Database = ""
+		zs.TableOrIndex = tree.TableIndexName{}
 		// Since the default zone has no partition, we can erase the
 		// partition name field.
 		zs.Partition = ""
@@ -271,6 +298,7 @@ func ascendZoneSpecifier(
 		// We traversed at least one level up, and we're not at the top of the
 		// hierarchy, so we're showing the database zone config.
 		zs.Database = zs.TableOrIndex.Table.CatalogName
+		zs.TableOrIndex = tree.TableIndexName{}
 		// Since databases don't have partition, we can erase the
 		// partition name field.
 		zs.Partition = ""

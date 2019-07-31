@@ -17,14 +17,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 // ZoneRow represents a row returned by SHOW ZONE CONFIGURATION.
 type ZoneRow struct {
-	ID           uint32
-	CLISpecifier string
-	Config       config.ZoneConfig
+	ID     uint32
+	Config config.ZoneConfig
 }
 
 func (row ZoneRow) sqlRowString() ([]string, error) {
@@ -34,19 +34,50 @@ func (row ZoneRow) sqlRowString() ([]string, error) {
 	}
 	return []string{
 		fmt.Sprintf("%d", row.ID),
-		row.CLISpecifier,
 		string(configProto),
 	}, nil
+}
+
+// GetAllZoneSpecifiers returns specifiers for all installed zone configs.
+func GetAllZoneSpecifiers(t testing.TB, sqlDB *SQLRunner) []tree.ZoneSpecifier {
+	rows := sqlDB.Query(t, `
+SELECT range_name, database_name, table_name, index_name, partition_name
+FROM crdb_internal.zones`)
+	defer rows.Close()
+
+	var result []tree.ZoneSpecifier
+	for rows.Next() {
+		var rangeName, databaseName, tableName, indexName, partitionName gosql.NullString
+		var zs tree.ZoneSpecifier
+		err := rows.Scan(&rangeName, &databaseName, &tableName, &indexName, &partitionName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rangeName.Valid {
+			zs.NamedZone = tree.UnrestrictedName(rangeName.String)
+		}
+		if databaseName.Valid && !tableName.Valid {
+			zs.Database = tree.Name(databaseName.String)
+		}
+		if tableName.Valid {
+			zs.TableOrIndex.Table = *tree.NewTableName(
+				tree.Name(databaseName.String), tree.Name(tableName.String))
+		}
+		if indexName.Valid {
+			zs.TableOrIndex.Index = tree.UnrestrictedName(indexName.String)
+		}
+		if partitionName.Valid {
+			zs.Partition = tree.Name(partitionName.String)
+		}
+		result = append(result, zs)
+	}
+	return result
 }
 
 // RemoveAllZoneConfigs removes all installed zone configs.
 func RemoveAllZoneConfigs(t testing.TB, sqlDB *SQLRunner) {
 	t.Helper()
-	for _, zone := range sqlDB.QueryStr(t, "SELECT cli_specifier FROM crdb_internal.zones") {
-		zs, err := config.ParseCLIZoneSpecifier(zone[0])
-		if err != nil {
-			t.Fatal(err)
-		}
+	for _, zs := range GetAllZoneSpecifiers(t, sqlDB) {
 		if zs.NamedZone == config.DefaultZoneName {
 			// The default zone cannot be removed.
 			continue
@@ -88,7 +119,7 @@ func VerifyZoneConfigForTarget(t testing.TB, sqlDB *SQLRunner, target string, ro
 		t.Fatal(err)
 	}
 	sqlDB.CheckQueryResults(t, fmt.Sprintf(`
-SELECT zone_id, cli_specifier, config_protobuf
+SELECT zone_id, config_protobuf
   FROM [SHOW ZONE CONFIGURATION FOR %s]`, target),
 		[][]string{sqlRow})
 }
@@ -106,18 +137,17 @@ func VerifyAllZoneConfigs(t testing.TB, sqlDB *SQLRunner, rows ...ZoneRow) {
 		}
 	}
 	sqlDB.CheckQueryResults(t, `
-SELECT zone_id, cli_specifier, config_protobuf
+SELECT zone_id, config_protobuf
   FROM crdb_internal.zones
-  WHERE cli_specifier IS NOT NULL`, expected)
+  WHERE zone_name IS NOT NULL`, expected)
 }
 
-// ZoneConfigExists returns whether a zone config with the provided cliSpecifier
-// exists.
-func ZoneConfigExists(t testing.TB, sqlDB *SQLRunner, cliSpecifier string) bool {
+// ZoneConfigExists returns whether a zone config with the provided name exists.
+func ZoneConfigExists(t testing.TB, sqlDB *SQLRunner, name string) bool {
 	t.Helper()
 	var exists bool
 	sqlDB.QueryRow(
-		t, "SELECT EXISTS (SELECT 1 FROM crdb_internal.zones WHERE cli_specifier = $1)", cliSpecifier,
+		t, "SELECT EXISTS (SELECT 1 FROM crdb_internal.zones WHERE zone_name = $1)", name,
 	).Scan(&exists)
 	return exists
 }

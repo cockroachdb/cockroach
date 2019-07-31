@@ -1832,7 +1832,7 @@ func (desc *TableDescriptor) PrimaryKeyString() string {
 
 // validatePartitioningDescriptor validates that a PartitioningDescriptor, which
 // may represent a subpartition, is well-formed. Checks include validating the
-// table-level uniqueness of all partition names, validating that the encoded
+// index-level uniqueness of all partition names, validating that the encoded
 // tuples match the corresponding column types, and that range partitions are
 // stored sorted by upper bound. colOffset is non-zero for subpartitions and
 // indicates how many index columns to skip over.
@@ -1882,8 +1882,6 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 				return fmt.Errorf("PARTITION %s: name must be unique (used twice in index %q)",
 					name, indexName)
 			}
-			return fmt.Errorf("PARTITION %s: name must be unique (used in both index %q and index %q)",
-				name, indexName, idxDesc.Name)
 		}
 		partitionNames[name] = idxDesc.Name
 		return nil
@@ -1959,20 +1957,6 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 	}
 
 	return nil
-}
-
-// FindNonDropPartitionByName returns the PartitionDescriptor and the
-// IndexDescriptor that the partition with the specified name belongs to. If no
-// such partition exists, an error is returned.
-func (desc *TableDescriptor) FindNonDropPartitionByName(
-	name string,
-) (*PartitioningDescriptor, *IndexDescriptor, error) {
-	for _, idx := range desc.AllNonDropIndexes() {
-		if p := idx.FindPartitionByName(name); p != nil {
-			return p, idx, nil
-		}
-	}
-	return nil, nil, fmt.Errorf("partition %q does not exist", name)
 }
 
 // validatePartitioning validates that any PartitioningDescriptors contained in
