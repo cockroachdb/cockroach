@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -50,6 +51,9 @@ type splitQueue struct {
 	*baseQueue
 	db       *client.DB
 	purgChan <-chan time.Time
+
+	// loadBasedCount counts the load-based splits performed by the queue.
+	loadBasedCount telemetry.Counter
 }
 
 // newSplitQueue returns a new instance of splitQueue.
@@ -63,8 +67,9 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 	}
 
 	sq := &splitQueue{
-		db:       db,
-		purgChan: purgChan,
+		db:             db,
+		purgChan:       purgChan,
+		loadBasedCount: telemetry.GetCounterOnce("kv.split.load"),
 	}
 	sq.baseQueue = newBaseQueue(
 		"split", sq, store, gossip,
@@ -215,6 +220,9 @@ func (sq *splitQueue) processAttempt(
 		); pErr != nil {
 			return errors.Wrapf(pErr, "unable to split %s at key %q", r, splitByLoadKey)
 		}
+
+		telemetry.Inc(sq.loadBasedCount)
+
 		// Reset the splitter now that the bounds of the range changed.
 		r.loadBasedSplitter.Reset()
 		return nil
