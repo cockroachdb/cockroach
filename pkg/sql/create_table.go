@@ -64,6 +64,8 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 	if n.As() {
 		// The sourcePlan is needed to determine the set of columns to use
 		// to populate the new table descriptor in Start() below.
+		// This planning step is also necessary to populate db/schema details in the
+		// table names in-place, to later store in the table descriptor.
 		sourcePlan, err = p.Select(ctx, n.AsSource, []*types.T{})
 		if err != nil {
 			return nil, err
@@ -152,14 +154,6 @@ func (n *createTableNode) startExec(params runParams) error {
 	var affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor
 	creationTime := params.p.txn.CommitTimestamp()
 	if n.n.As() {
-		// TODO(adityamaru): This planning step is only to populate db/schema
-		// details in the table names in-place, to later store in the table
-		// descriptor. Figure out a cleaner way to do this.
-		_, err = params.p.Select(params.ctx, n.n.AsSource, []*types.T{})
-		if err != nil {
-			return err
-		}
-
 		asCols = planColumns(n.sourcePlan)
 		if !n.run.fromHeuristicPlanner && !n.n.AsHasUserSpecifiedPrimaryKey() {
 			// rowID column is already present in the input as the last column if it

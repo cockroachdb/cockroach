@@ -98,14 +98,6 @@ func (b *Builder) buildDataSource(
 		}
 
 		ds, resName := b.resolveDataSource(tn, privilege.SELECT)
-		if b.insideViewDef {
-			// Overwrite the table name in the AST to the fully resolved version.
-			// TODO(radu): modifying the AST in-place is hacky; we will need to switch
-			// to using AST annotations.
-			*tn = resName
-			tn.ExplicitCatalog = true
-			tn.ExplicitSchema = true
-		}
 		switch t := ds.(type) {
 		case cat.Table:
 			tabMeta := b.addTable(t, &resName)
