@@ -63,6 +63,9 @@ func (c *cliTest) runWithArgs(args []string) {
 }
 
 func Example_cclzone() {
+	// Note(solon): This test is redundant with the Example_zone test and could be
+	// removed. However, I'm keeping it here as an example in case we need to add
+	// more CCL CLI tests in the future.
 	storeSpec := base.DefaultTestStoreSpec
 	storeSpec.Attributes = roachpb.Attributes{Attrs: []string{"ssd"}}
 	c := newCLITest(base.TestServerArgs{
@@ -86,26 +89,7 @@ func Example_cclzone() {
   PARTITION p1 VALUES IN (DEFAULT)
 )`})
 	c.runWithArgs([]string{"sql", "-e", "CREATE INDEX ON db.t (c2)"})
-	c.run("zone set db.t@nonexistent --file=./../../cli/testdata/zone_attrs.yaml")
-	c.run("zone set db.t.nonexistent --file=./../../cli/testdata/zone_attrs.yaml")
-	c.run("zone set db.t.p0@t_c2_idx --file=./../../cli/testdata/zone_attrs.yaml")
 	c.run("zone set db.t@primary --file=./../../cli/testdata/zone_attrs.yaml")
-	c.run("zone get db.t.p0")
-	c.run("zone get db.t")
-	c.run("zone get db.t@t_c2_idx")
-	c.run("zone set db.t.p1 --file=./../../cli/testdata/zone_range_max_bytes.yaml")
-	c.run("zone get db.t.p1")
-	c.run("zone get db.t.p0")
-	c.run("zone ls")
-	c.run("zone rm db.t@primary")
-	c.run("zone get db.t.p0")
-	c.run("zone get db.t.p1")
-	c.run("zone ls")
-	c.run("zone rm db.t.p0")
-	c.run("zone rm db.t.p1")
-	c.run("zone ls")
-	c.run("zone set db.t@primary --file=./../../cli/testdata/zone_attrs_advanced.yaml")
-	c.run("zone set db.t@primary --file=./../../cli/testdata/zone_attrs_experimental.yaml")
 
 	// Output:
 	// sql -e CREATE DATABASE db
@@ -120,135 +104,6 @@ func Example_cclzone() {
 	// CREATE TABLE
 	// sql -e CREATE INDEX ON db.t (c2)
 	// CREATE INDEX
-	// zone set db.t@nonexistent --file=./../../cli/testdata/zone_attrs.yaml
-	// pq: index "nonexistent" does not exist
-	// zone set db.t.nonexistent --file=./../../cli/testdata/zone_attrs.yaml
-	// pq: partition "nonexistent" does not exist
-	// zone set db.t.p0@t_c2_idx --file=./../../cli/testdata/zone_attrs.yaml
-	// index and partition cannot be specified simultaneously: "db.t.p0@t_c2_idx"
 	// zone set db.t@primary --file=./../../cli/testdata/zone_attrs.yaml
-	// range_min_bytes: 16777216
-	// range_max_bytes: 67108864
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 1
-	// constraints: [+zone=us-east-1a, +ssd]
-	// lease_preferences: []
-	//
-	// zone get db.t.p0
-	// db.t@primary
-	// range_min_bytes: 16777216
-	// range_max_bytes: 67108864
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 1
-	// constraints: [+zone=us-east-1a, +ssd]
-	// lease_preferences: []
-	// zone get db.t
-	// .default
-	// range_min_bytes: 16777216
-	// range_max_bytes: 67108864
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 1
-	// constraints: []
-	// lease_preferences: []
-	// zone get db.t@t_c2_idx
-	// .default
-	// range_min_bytes: 16777216
-	// range_max_bytes: 67108864
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 1
-	// constraints: []
-	// lease_preferences: []
-	// zone set db.t.p1 --file=./../../cli/testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 3
-	// constraints: [+zone=us-east-1a, +ssd]
-	// lease_preferences: []
-	//
-	// zone get db.t.p1
-	// db.t.p1
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 3
-	// constraints: [+zone=us-east-1a, +ssd]
-	// lease_preferences: []
-	// zone get db.t.p0
-	// db.t@primary
-	// range_min_bytes: 16777216
-	// range_max_bytes: 67108864
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 1
-	// constraints: [+zone=us-east-1a, +ssd]
-	// lease_preferences: []
-	// zone ls
-	// .default
-	// .liveness
-	// .meta
-	// .system
-	// db.t.p1
-	// db.t@primary
-	// system
-	// system.jobs
-	// zone rm db.t@primary
-	// zone get db.t.p0
-	// .default
-	// range_min_bytes: 16777216
-	// range_max_bytes: 67108864
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 1
-	// constraints: []
-	// lease_preferences: []
-	// zone get db.t.p1
-	// db.t.p1
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 3
-	// constraints: [+zone=us-east-1a, +ssd]
-	// lease_preferences: []
-	// zone ls
-	// .default
-	// .liveness
-	// .meta
-	// .system
-	// db.t.p1
-	// system
-	// system.jobs
-	// zone rm db.t.p0
-	// zone rm db.t.p1
-	// zone ls
-	// .default
-	// .liveness
-	// .meta
-	// .system
-	// system
-	// system.jobs
-	// zone set db.t@primary --file=./../../cli/testdata/zone_attrs_advanced.yaml
-	// range_min_bytes: 16777216
-	// range_max_bytes: 67108864
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 3
-	// constraints: {+region=us-east-1: 1, '+zone=us-east-1a,+ssd': 1}
-	// lease_preferences: [[+region=us-east-1], [+zone=us-east-1a]]
-	//
-	// zone set db.t@primary --file=./../../cli/testdata/zone_attrs_experimental.yaml
-	// range_min_bytes: 16777216
-	// range_max_bytes: 67108864
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 3
-	// constraints: {+region=us-east-1: 1, '+zone=us-east-1a,+ssd': 1}
-	// lease_preferences: [[+zone=us-east-1a]]
+	// command "set" has been removed
 }
