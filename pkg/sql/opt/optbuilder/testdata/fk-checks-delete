@@ -1,0 +1,177 @@
+exec-ddl
+CREATE TABLE parent (x INT, p INT PRIMARY KEY, other INT UNIQUE)
+----
+
+exec-ddl
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p))
+----
+
+build
+DELETE FROM child WHERE c = 4
+----
+delete child
+ ├── columns: <none>
+ ├── fetch columns: c:3(int) p:4(int)
+ └── select
+      ├── columns: c:3(int!null) p:4(int!null)
+      ├── scan child
+      │    └── columns: c:3(int!null) p:4(int!null)
+      └── filters
+           └── eq [type=bool]
+                ├── variable: c [type=int]
+                └── const: 4 [type=int]
+
+build
+DELETE FROM parent WHERE p = 3
+----
+delete parent
+ ├── columns: <none>
+ ├── fetch columns: x:4(int) parent.p:5(int) other:6(int)
+ ├── input binding: &1
+ ├── select
+ │    ├── columns: x:4(int) parent.p:5(int!null) other:6(int)
+ │    ├── scan parent
+ │    │    └── columns: x:4(int) parent.p:5(int!null) other:6(int)
+ │    └── filters
+ │         └── eq [type=bool]
+ │              ├── variable: parent.p [type=int]
+ │              └── const: 3 [type=int]
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── semi-join (hash)
+                ├── columns: p:9(int!null)
+                ├── with-scan &1
+                │    ├── columns: p:9(int!null)
+                │    └── mapping:
+                │         └──  parent.p:5(int) => p:9(int)
+                ├── scan child
+                │    └── columns: child.p:8(int!null)
+                └── filters
+                     └── eq [type=bool]
+                          ├── variable: p [type=int]
+                          └── variable: child.p [type=int]
+
+exec-ddl
+CREATE TABLE child2 (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(other))
+----
+
+build
+DELETE FROM parent WHERE p = 3
+----
+delete parent
+ ├── columns: <none>
+ ├── fetch columns: x:4(int) parent.p:5(int) parent.other:6(int)
+ ├── input binding: &1
+ ├── select
+ │    ├── columns: x:4(int) parent.p:5(int!null) parent.other:6(int)
+ │    ├── scan parent
+ │    │    └── columns: x:4(int) parent.p:5(int!null) parent.other:6(int)
+ │    └── filters
+ │         └── eq [type=bool]
+ │              ├── variable: parent.p [type=int]
+ │              └── const: 3 [type=int]
+ └── f-k-checks
+      ├── f-k-checks-item: child(p) -> parent(p)
+      │    └── semi-join (hash)
+      │         ├── columns: p:9(int!null)
+      │         ├── with-scan &1
+      │         │    ├── columns: p:9(int!null)
+      │         │    └── mapping:
+      │         │         └──  parent.p:5(int) => p:9(int)
+      │         ├── scan child
+      │         │    └── columns: child.p:8(int!null)
+      │         └── filters
+      │              └── eq [type=bool]
+      │                   ├── variable: p [type=int]
+      │                   └── variable: child.p [type=int]
+      └── f-k-checks-item: child2(p) -> parent(other)
+           └── semi-join (hash)
+                ├── columns: other:12(int)
+                ├── with-scan &1
+                │    ├── columns: other:12(int)
+                │    └── mapping:
+                │         └──  parent.other:6(int) => other:12(int)
+                ├── scan child2
+                │    └── columns: child2.p:11(int!null)
+                └── filters
+                     └── eq [type=bool]
+                          ├── variable: other [type=int]
+                          └── variable: child2.p [type=int]
+
+exec-ddl
+CREATE TABLE doubleparent (p1 INT, p2 INT, other INT, PRIMARY KEY (p1, p2))
+----
+
+exec-ddl
+CREATE TABLE doublechild (c INT PRIMARY KEY, p1 INT, p2 INT, FOREIGN KEY (p1, p2) REFERENCES doubleparent (p1, p2))
+----
+
+build
+DELETE FROM doubleparent WHERE p1 = 10
+----
+delete doubleparent
+ ├── columns: <none>
+ ├── fetch columns: doubleparent.p1:4(int) doubleparent.p2:5(int) other:6(int)
+ ├── input binding: &1
+ ├── select
+ │    ├── columns: doubleparent.p1:4(int!null) doubleparent.p2:5(int!null) other:6(int)
+ │    ├── scan doubleparent
+ │    │    └── columns: doubleparent.p1:4(int!null) doubleparent.p2:5(int!null) other:6(int)
+ │    └── filters
+ │         └── eq [type=bool]
+ │              ├── variable: doubleparent.p1 [type=int]
+ │              └── const: 10 [type=int]
+ └── f-k-checks
+      └── f-k-checks-item: doublechild(p1,p2) -> doubleparent(p1,p2)
+           └── semi-join (hash)
+                ├── columns: p1:10(int!null) p2:11(int!null)
+                ├── with-scan &1
+                │    ├── columns: p1:10(int!null) p2:11(int!null)
+                │    └── mapping:
+                │         ├──  doubleparent.p1:4(int) => p1:10(int)
+                │         └──  doubleparent.p2:5(int) => p2:11(int)
+                ├── scan doublechild
+                │    └── columns: doublechild.p1:8(int) doublechild.p2:9(int)
+                └── filters
+                     ├── eq [type=bool]
+                     │    ├── variable: p1 [type=int]
+                     │    └── variable: doublechild.p1 [type=int]
+                     └── eq [type=bool]
+                          ├── variable: p2 [type=int]
+                          └── variable: doublechild.p2 [type=int]
+
+build
+DELETE FROM doublechild WHERE p1 = 10
+----
+delete doublechild
+ ├── columns: <none>
+ ├── fetch columns: c:4(int) p1:5(int) p2:6(int)
+ └── select
+      ├── columns: c:4(int!null) p1:5(int!null) p2:6(int)
+      ├── scan doublechild
+      │    └── columns: c:4(int!null) p1:5(int) p2:6(int)
+      └── filters
+           └── eq [type=bool]
+                ├── variable: p1 [type=int]
+                └── const: 10 [type=int]
+
+exec-ddl
+CREATE TABLE child_cascade (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE)
+----
+
+# Bail in the presence of CASCADE, so that exec-style FK checks take over.
+build
+DELETE FROM parent WHERE p = 1
+----
+delete parent
+ ├── columns: <none>
+ ├── fetch columns: x:4(int) parent.p:5(int) parent.other:6(int)
+ ├── input binding: &1
+ └── select
+      ├── columns: x:4(int) parent.p:5(int!null) parent.other:6(int)
+      ├── scan parent
+      │    └── columns: x:4(int) parent.p:5(int!null) parent.other:6(int)
+      └── filters
+           └── eq [type=bool]
+                ├── variable: parent.p [type=int]
+                └── const: 1 [type=int]

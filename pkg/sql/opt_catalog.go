@@ -541,6 +541,7 @@ func newOptTable(
 				numCols:         int(fk.SharedPrefixLen),
 				validity:        fk.Validity,
 				match:           fk.Match,
+				deleteAction:    fk.OnDelete,
 			})
 		}
 		for j := range idxDesc.ReferencedBy {
@@ -551,9 +552,12 @@ func newOptTable(
 				originIndex:     fk.Index,
 				referencedTable: ot.ID(),
 				referencedIndex: idxDesc.ID,
-				numCols:         int(fk.SharedPrefixLen),
-				validity:        fk.Validity,
-				match:           fk.Match,
+				// TODO(justin): this field is currently not populated, so it will
+				// always be zero and should not be used from this side.
+				numCols:      int(fk.SharedPrefixLen),
+				validity:     fk.Validity,
+				match:        fk.Match,
+				deleteAction: fk.OnDelete,
 			})
 		}
 	}
@@ -1121,9 +1125,12 @@ type optForeignKeyConstraint struct {
 	referencedTable cat.StableID
 	referencedIndex sqlbase.IndexID
 
-	numCols  int
-	validity sqlbase.ConstraintValidity
-	match    sqlbase.ForeignKeyReference_Match
+	numCols      int
+	validity     sqlbase.ConstraintValidity
+	match        sqlbase.ForeignKeyReference_Match
+	deleteAction sqlbase.ForeignKeyReference_Action
+
+	id cat.StableID
 }
 
 var _ cat.ForeignKeyConstraint = &optForeignKeyConstraint{}
@@ -1193,6 +1200,16 @@ func (fk *optForeignKeyConstraint) Validated() bool {
 // MatchMethod is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) MatchMethod() tree.CompositeKeyMatchMethod {
 	return sqlbase.ForeignKeyReferenceMatchValue[fk.match]
+}
+
+// DeleteReferenceAction is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) DeleteReferenceAction() tree.ReferenceAction {
+	return sqlbase.ForeignKeyReferenceActionType[fk.deleteAction]
+}
+
+// ID is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) ID() cat.StableID {
+	return fk.id
 }
 
 // optVirtualTable is similar to optTable but is used with virtual tables.

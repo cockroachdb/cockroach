@@ -373,7 +373,11 @@ type Factory interface {
 	// as they appear in the table schema. The rowsNeeded parameter is true if a
 	// RETURNING clause needs the deleted row(s) as output.
 	ConstructDelete(
-		input Node, table cat.Table, fetchCols ColumnOrdinalSet, returnCols ColumnOrdinalSet,
+		input Node,
+		table cat.Table,
+		fetchCols ColumnOrdinalSet,
+		returnCols ColumnOrdinalSet,
+		skipFKChecks bool,
 	) (Node, error)
 
 	// ConstructDeleteRange creates a node that efficiently deletes contiguous
