@@ -32,8 +32,8 @@
 #include "iterator.h"
 #include "merge.h"
 #include "options.h"
-#include "row_counter.h"
 #include "protos/roachpb/errors.pb.h"
+#include "row_counter.h"
 #include "snapshot.h"
 #include "status.h"
 #include "table_props.h"
@@ -598,6 +598,18 @@ DBIterState DBCheckForKeyCollisions(DBIterator* existingIter, DBIterator* sstIte
       // If the ts of the sst key is less than that of the tombstone it is
       // changing existing data, and we treat this as a collision.
       if (existingIter->rep->value().empty() && sst_ts >= existing_ts) {
+        DBIterNext(existingIter, true /* skip_current_key_versions */);
+        continue;
+      }
+
+      // If the ingested KV has an identical timestamp and value as the existing
+      // data then we do not consider it to be a collision. We move the iterator
+      // over the existing data to the next potentially colliding key (skipping
+      // all versions of the current key), and resume iteration.
+      bool has_equal_timestamp = existing_ts == sst_ts;
+      bool has_equal_value =
+          kComparator.Compare(existingIter->rep->value(), sstIter->rep->value()) == 0;
+      if (has_equal_timestamp && has_equal_value) {
         DBIterNext(existingIter, true /* skip_current_key_versions */);
         continue;
       }
