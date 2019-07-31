@@ -258,6 +258,7 @@ func (f *stubFactory) ConstructDelete(
 	table cat.Table,
 	fetchCols exec.ColumnOrdinalSet,
 	returnCols exec.ColumnOrdinalSet,
+	skipFKChecks bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
