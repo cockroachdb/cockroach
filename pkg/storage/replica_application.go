@@ -111,7 +111,7 @@ func (r *Replica) handleCommittedEntriesRaftMuLocked(
 			// Decode zero or more trivial entries into b.
 			var numEmptyEntries int
 			haveNonTrivialEntry, numEmptyEntries, toProcess, errExpl, err =
-				b.decode(ctx, toProcess, &b.decodeBuf)
+				b.decode(ctx, toProcess, &b.decodeBuf, r.store.TestingKnobs().MaxApplicationBatchSize)
 			if err != nil {
 				return stats, errExpl, err
 			}
