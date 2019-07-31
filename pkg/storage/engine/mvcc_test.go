@@ -2628,6 +2628,13 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 		require.NoError(t, MVCCPut(ctx, e, nil, key, hlc.Timestamp{WallTime: int64(swathTime)}, v, nil))
 	}
 
+	// Add another swath of keys above to exercise an after-iteration range flush.
+	for i := keyRange; i < keyRange+200; i++ {
+		key := roachpb.Key(fmt.Sprintf("%05d", i))
+		v := roachpb.MakeValueFromString(fmt.Sprintf("v-%d", i))
+		require.NoError(t, MVCCPut(ctx, e, nil, key, hlc.Timestamp{WallTime: int64(randTimeRange + 1)}, v, nil))
+	}
+
 	// Pick timestamps to which we'll revert, and sort them so we can go back
 	// though them in order. The largest will still be less than randTimeRange so
 	// the initial revert will be assured to use ClearRange.
