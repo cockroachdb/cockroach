@@ -33,8 +33,6 @@ project
       ├── constraint: /1: [/1 - /1]
       ├── cardinality: [0 - 1]
       ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
-      │   histogram(1)=  0  1
-      │                <--- 1
       ├── cost: 1.12
       ├── key: ()
       ├── fd: ()-->(1,8)
@@ -71,8 +69,6 @@ project
       ├── constraint: /3/2/1: [/1/1/50 - /1/1/50]
       ├── cardinality: [0 - 1]
       ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=0.999501832, null(6)=0, distinct(14)=0.786939691, null(14)=0, distinct(16)=0.999901673, null(16)=0]
-      │   histogram(3)=  0  1
-      │                <--- 1
       ├── cost: 1.28
       ├── key: ()
       ├── fd: ()-->(1-3,6,14,16)
@@ -266,8 +262,6 @@ project
       ├── constraint: /3/2/1: [/1/1/50 - /1/1/50]
       ├── cardinality: [0 - 1]
       ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=0.999106141, null(4)=0, distinct(5)=0.632121172, null(5)=0, distinct(6)=0.999501832, null(6)=0, distinct(17)=0.632121172, null(17)=0]
-      │   histogram(3)=  0  1
-      │                <--- 1
       ├── cost: 1.29
       ├── key: ()
       ├── fd: ()-->(1-6,17)
@@ -588,8 +582,6 @@ project
       ├── constraint: /2/1: [/4/9 - /4/9]
       ├── cardinality: [0 - 1]
       ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(11)=0.633967659, null(11)=0]
-      │   histogram(2)=  0  1
-      │                <--- 4
       ├── cost: 1.15
       ├── key: ()
       ├── fd: ()-->(1,2,11)
