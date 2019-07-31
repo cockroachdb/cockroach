@@ -376,17 +376,22 @@ func (node *ShowRoles) Format(ctx *FmtCtx) {
 // ShowRanges represents a SHOW RANGES statement.
 type ShowRanges struct {
 	TableOrIndex TableIndexName
+	DatabaseName string
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowRanges) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW RANGES FROM ")
-	if node.TableOrIndex.Index != "" {
+	if node.DatabaseName != "" {
+		ctx.WriteString("DATABASE ")
+		ctx.WriteString(node.DatabaseName)
+	} else if node.TableOrIndex.Index != "" {
 		ctx.WriteString("INDEX ")
+		ctx.FormatNode(&node.TableOrIndex)
 	} else {
 		ctx.WriteString("TABLE ")
+		ctx.FormatNode(&node.TableOrIndex)
 	}
-	ctx.FormatNode(&node.TableOrIndex)
 }
 
 // ShowFingerprints represents a SHOW EXPERIMENTAL_FINGERPRINTS statement.
