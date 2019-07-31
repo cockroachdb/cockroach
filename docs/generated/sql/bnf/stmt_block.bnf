@@ -2009,7 +2009,8 @@ over_clause ::=
 	| 
 
 func_expr_common_subexpr ::=
-	'CURRENT_DATE'
+	'COLLATION' 'FOR' '(' a_expr ')'
+	| 'CURRENT_DATE'
 	| 'CURRENT_SCHEMA'
 	| 'CURRENT_CATALOG'
 	| 'CURRENT_TIMESTAMP'

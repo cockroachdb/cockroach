@@ -3026,7 +3026,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT GROUPING (a,b,c)`, 0, `d_expr grouping`},
 		{`SELECT a(VARIADIC b)`, 0, `variadic`},
 		{`SELECT a(b, c, VARIADIC b)`, 0, `variadic`},
-		{`SELECT COLLATION FOR (a)`, 32563, ``},
 		{`SELECT CURRENT_TIME`, 26097, `current_time`},
 		{`SELECT CURRENT_TIME()`, 26097, `current_time`},
 		{`SELECT TREAT (a AS INT8)`, 0, `treat`},
