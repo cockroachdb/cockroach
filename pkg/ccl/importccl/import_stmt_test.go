@@ -1828,6 +1828,33 @@ func TestImportIntoCSV(t *testing.T) {
 			t.Fatalf("expected %d rows, got %d", expect, result)
 		}
 	})
+
+	// Tests that IMPORT INTO invalidates FK and CHECK constraints.
+	t.Run("import-into-invalidate-constraints", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE invalidateconstraints; USE invalidateconstraints")
+
+		sqlDB.Exec(t, `CREATE TABLE ref (b STRING PRIMARY KEY)`)
+		sqlDB.Exec(t, `CREATE TABLE t (a INT CHECK (a >= 0), b STRING, CONSTRAINT fk_ref FOREIGN KEY (b) REFERENCES ref)`)
+
+		var checkValidated, fkValidated bool
+		sqlDB.QueryRow(t, fmt.Sprintf(`SELECT validated from [SHOW CONSTRAINT FROM t] WHERE constraint_name = 'check_a'`)).Scan(&checkValidated)
+		sqlDB.QueryRow(t, fmt.Sprintf(`SELECT validated from [SHOW CONSTRAINT FROM t] WHERE constraint_name = 'fk_ref'`)).Scan(&fkValidated)
+
+		// Prior to import all constraints should be validated.
+		if !checkValidated || !fkValidated {
+			t.Fatal("Constraints not validated on creation.\n")
+		}
+
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]))
+
+		sqlDB.QueryRow(t, fmt.Sprintf(`SELECT validated from [SHOW CONSTRAINT FROM t] WHERE constraint_name = 'check_a'`)).Scan(&checkValidated)
+		sqlDB.QueryRow(t, fmt.Sprintf(`SELECT validated from [SHOW CONSTRAINT FROM t] WHERE constraint_name = 'fk_ref'`)).Scan(&fkValidated)
+
+		// Following an import the constraints should be unvalidated.
+		if checkValidated || fkValidated {
+			t.Fatal("FK and CHECK constraints not unvalidated after IMPORT INTO\n")
+		}
+	})
 }
 
 func BenchmarkImport(b *testing.B) {
