@@ -554,7 +554,13 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *pro
 
 	inputColStat := sb.colStatTable(scan.Table, colSet)
 	colStat := sb.copyColStat(colSet, s, inputColStat)
-	colStat.Histogram = inputColStat.Histogram
+
+	// If we know that the cardinality is 0 or 1 (e.g., due to an equality
+	// constraint on a key column), don't bother adding the overhead of
+	// creating a histogram.
+	if !relProps.Cardinality.IsZeroOrOne() {
+		colStat.Histogram = inputColStat.Histogram
+	}
 
 	if s.Selectivity != 1 {
 		tableStats := sb.makeTableStatistics(scan.Table)
@@ -2396,6 +2402,13 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 		sb.updateDistinctCountFromUnappliedConjuncts(col, e, relProps, numConjuncts)
 	}
 
+	// If we know that the cardinality is 0 or 1 (e.g., due to an equality
+	// constraint on a key column), don't bother adding the overhead of
+	// creating a histogram.
+	if relProps.Cardinality.IsZeroOrOne() {
+		return constrainedCols, histCols
+	}
+
 	// Calculate histogram.
 	inputStat := sb.colStatFromInput(constrainedCols, e)
 	inputHist := inputStat.Histogram
@@ -2448,6 +2461,13 @@ func (sb *statisticsBuilder) applyConstraintSet(
 		if !tight {
 			// TODO(rytaft): it may still be beneficial to calculate the histogram
 			// even if the constraint is not tight, but don't bother for now.
+			continue
+		}
+
+		// If we know that the cardinality is 0 or 1 (e.g., due to an equality
+		// constraint on a key column), don't bother adding the overhead of
+		// creating a histogram.
+		if relProps.Cardinality.IsZeroOrOne() {
 			continue
 		}
 
