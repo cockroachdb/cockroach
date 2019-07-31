@@ -26,6 +26,26 @@ eval
 false
 
 eval
+1 > -1
+----
+true
+
+eval
+1 <= -1
+----
+false
+
+eval
+-1 >= 1
+----
+false
+
+eval
+-1 < 1
+----
+true
+
+eval
 0 >= 1
 ----
 false
