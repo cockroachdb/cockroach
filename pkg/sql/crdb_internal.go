@@ -1901,10 +1901,11 @@ CREATE TABLE crdb_internal.zones (
 			var zoneSpecifier *tree.ZoneSpecifier
 			zs, err := config.ZoneSpecifierFromID(id, resolveID)
 			if err != nil {
-				// The database or table has been deleted so there is no way
-				// to refer to it anymore. We are still going to show
-				// something but the CLI specifier part will become NULL.
-				zoneSpecifier = nil
+				// If the database or table that we are looking at has been
+				// deleted, do not emit a column for this zone specifier
+				// in the output table. TODO (rohany): should we delete
+				// this zone from the system table as well here?
+				continue
 			} else {
 				zoneSpecifier = &zs
 			}
