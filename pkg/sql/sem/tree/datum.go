@@ -2495,12 +2495,19 @@ func AsJSON(d Datum) (json.JSON, error) {
 		return builder.Build(), nil
 	case *DTuple:
 		builder := json.NewObjectBuilder(len(t.D))
+		labels := t.typ.TupleLabels()
 		for i, e := range t.D {
 			j, err := AsJSON(e)
 			if err != nil {
 				return nil, err
 			}
-			builder.Add(fmt.Sprintf("f%d", i+1), j)
+			var key string
+			if i >= len(labels) {
+				key = fmt.Sprintf("f%d", i+1)
+			} else {
+				key = labels[i]
+			}
+			builder.Add(key, j)
 		}
 		return builder.Build(), nil
 	case *DTimestampTZ:
