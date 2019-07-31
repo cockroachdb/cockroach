@@ -4,9 +4,39 @@ eval
 2
 
 eval
+1 + -1
+----
+0
+
+eval
+-1 + 1
+----
+0
+
+eval
+-1 + -1
+----
+-2
+
+eval
 1 - 2
 ----
 -1
+
+eval
+1 - -2
+----
+3
+
+eval
+-1 - 2
+----
+-3
+
+eval
+-1 - -2
+----
+1
 
 eval
 3 * 4
@@ -14,7 +44,37 @@ eval
 12
 
 eval
+3 * -4
+----
+-12
+
+eval
+-3 * 4
+----
+-12
+
+eval
+-3 * -4
+----
+12
+
+eval
 9 // 2
+----
+4
+
+eval
+9 // -2
+----
+-4
+
+eval
+-9 // 2
+----
+-4
+
+eval
+-9 // -2
 ----
 4
 
@@ -37,6 +97,21 @@ eval
 3.1 % 2.0
 ----
 1.1
+
+eval
+3.1 % -2.0
+----
+1.1
+
+eval
+-3.1 % 2.0
+----
+-1.1
+
+eval
+-3.1 % -2.0
+----
+-1.1
 
 eval
 5 % 3
@@ -89,9 +164,79 @@ eval
 8.0
 
 eval
+2:::float ^ -3:::float
+----
+0.125
+
+eval
+-2:::float ^ 3:::float
+----
+-8.0
+
+eval
+-2:::float ^ -3:::float
+----
+-0.125
+
+eval
+3:::float ^ 2:::float
+----
+9.0
+
+eval
+3:::float ^ -2:::float
+----
+0.1111111111111111
+
+eval
+-3:::float ^ 2:::float
+----
+9.0
+
+eval
+-3:::float ^ -2:::float
+----
+0.1111111111111111
+
+eval
 2:::decimal ^ 3:::decimal
 ----
 8
+
+eval
+2:::decimal ^ -3:::decimal
+----
+0.125
+
+eval
+-2:::decimal ^ 3:::decimal
+----
+-8
+
+eval
+-2:::decimal ^ -3:::decimal
+----
+-0.125
+
+eval
+3:::decimal ^ 2:::decimal
+----
+9
+
+eval
+3:::decimal ^ -2:::decimal
+----
+0.11111111111111111111
+
+eval
+-3:::decimal ^ 2:::decimal
+----
+9
+
+eval
+-3:::decimal ^ -2:::decimal
+----
+0.11111111111111111111
 
 eval
 2:::int ^ 62:::int
