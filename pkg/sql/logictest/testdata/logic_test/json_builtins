@@ -314,6 +314,11 @@ SELECT to_jsonb((1, 2, 'hello', NULL, NULL))
 ----
 {"f1": 1, "f2": 2, "f3": "hello", "f4": null, "f5": null}
 
+query T
+SELECT to_json(x.*) FROM (VALUES (1,2)) AS x(a,b);
+----
+{"a": 1, "b": 2}
+
 ## json_array_elements and jsonb_array_elements
 
 query T
