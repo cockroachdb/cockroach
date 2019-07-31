@@ -13,6 +13,7 @@ package tree
 import (
 	"bytes"
 	"fmt"
+	"go/constant"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -80,6 +81,13 @@ var _ VariableExpr = UnqualifiedStar{}
 var _ VariableExpr = &UnresolvedName{}
 var _ VariableExpr = &AllColumnsSelector{}
 var _ VariableExpr = &ColumnItem{}
+
+// NumExpr is an Expr that has a numerical constant.
+type NumExpr interface {
+	Expr
+	asValue() constant.Value
+	asConstantInt() (constant.Value, bool)
+}
 
 // operatorExpr is used to identify expression types that involve operators;
 // used by exprStrWithParen.
