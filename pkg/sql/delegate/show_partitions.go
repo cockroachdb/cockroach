@@ -33,7 +33,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 
 		const showTablePartitionsQuery = `
 		SELECT
-			database_name,
+			tables.database_name,
 			tables.name AS table_name,
 			partitions.name AS partition_name,
 			partitions.parent_name AS parent_partition,
@@ -48,16 +48,18 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 					table_indexes.descriptor_id = tables.table_id
 					AND table_indexes.index_id = partitions.index_id
 			LEFT JOIN crdb_internal.zones ON
-					zones.zone_name
-					= concat(database_name, '.', tables.name, '.', partitions.name)
+					zones.database_name = tables.database_name
+					AND zones.table_name = tables.name
+					AND zones.index_name = table_indexes.index_name
+					AND zones.partition_name = partitions.name
 		WHERE
-			tables.name = %[1]s AND database_name = %[2]s;
+			tables.name = %[1]s AND tables.database_name = %[2]s;
 		`
 		return parse(fmt.Sprintf(showTablePartitionsQuery, lex.EscapeSQLString(resName.Table()), lex.EscapeSQLString(resName.Catalog())))
 	} else if n.IsDB {
 		const showDatabasePartitionsQuery = `
 		SELECT
-			database_name,
+			tables.database_name,
 			tables.name AS table_name,
 			partitions.name AS partition_name,
 			partitions.parent_name AS parent_partition,
@@ -72,10 +74,12 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 					table_indexes.descriptor_id = tables.table_id
 					AND table_indexes.index_id = partitions.index_id
 			LEFT JOIN %[1]s.crdb_internal.zones ON
-					zones.zone_name
-					= concat(database_name, '.', tables.name, '.', partitions.name)
+					zones.database_name = tables.database_name
+					AND zones.table_name = tables.name
+					AND zones.index_name = table_indexes.index_name
+					AND zones.partition_name = partitions.name
 		WHERE
-			database_name = %[2]s
+			tables.database_name = %[2]s
 		ORDER BY
 			tables.name, partitions.name;
 		`
@@ -99,7 +103,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 	WITH
 		dummy AS (SELECT * FROM %[3]s@%[4]s LIMIT 0)
 	SELECT
-		database_name,
+		tables.database_name,
 		tables.name AS table_name,
 		partitions.name AS partition_name,
 		partitions.parent_name AS parent_partition,
@@ -114,10 +118,12 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 				AND partitions.table_id = table_indexes.descriptor_id
 		JOIN crdb_internal.tables ON table_indexes.descriptor_id = tables.table_id
 		LEFT JOIN crdb_internal.zones ON
-				zones.zone_name
-				= concat(database_name, '.', tables.name, '.', partitions.name)
+				zones.database_name = tables.database_name
+				AND zones.table_name = tables.name
+				AND zones.index_name = table_indexes.index_name
+				AND zones.partition_name = partitions.name
 	WHERE
-		index_name = %[1]s AND tables.name = %[2]s;
+		table_indexes.index_name = %[1]s AND tables.name = %[2]s;
 	`
 	return parse(fmt.Sprintf(showIndexPartitionsQuery,
 		lex.EscapeSQLString(n.Index.Index.String()),
