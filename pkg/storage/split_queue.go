@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -26,6 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
+
+// loadBasedSplitCounter is incremented each time a load-based split occurs.
+var loadBasedSplitCounter = telemetry.GetCounterOnce("kv.split.load")
 
 const (
 	// splitQueueTimerDuration is the duration between splits of queued ranges.
@@ -215,6 +219,9 @@ func (sq *splitQueue) processAttempt(
 		); pErr != nil {
 			return errors.Wrapf(pErr, "unable to split %s at key %q", r, splitByLoadKey)
 		}
+
+		telemetry.Inc(loadBasedSplitCounter)
+
 		// Reset the splitter now that the bounds of the range changed.
 		r.loadBasedSplitter.Reset()
 		return nil
