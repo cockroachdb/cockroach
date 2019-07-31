@@ -3714,6 +3714,10 @@ show_ranges_stmt:
   {
     $$.val = &tree.ShowRanges{TableOrIndex: $5.tableIndexName()}
   }
+| SHOW RANGES FROM DATABASE database_name 
+  {
+    $$.val = &tree.ShowRanges{DatabaseName: $5}
+  }
 | SHOW RANGES error // SHOW HELP: SHOW RANGES
 
 show_fingerprints_stmt:
