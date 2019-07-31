@@ -1,0 +1,138 @@
+# This file tests behavior that differs from Postgres wrt portal
+# handling. That is, the -rewrite flag, when used with Postgres, will
+# produce different results than Cockroach.
+
+# More behavior that differs from postgres. Try executing a new query
+# when a portal is suspended. Cockroach errors.
+
+send
+Query {"String": "BEGIN"}
+Parse {"Query": "SELECT * FROM generate_series(1, 2)"}
+Bind
+Execute {"MaxRows": 1}
+Query {"String": "SELECT 1"}
+Sync
+----
+
+until keepErrMessage
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: execute row count limits only partially supported"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Query {"String": "ROLLBACK"}
+Query {"String": "SELECT 'here'"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"here"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Also try binding another portal during suspension.
+
+send
+Query {"String": "BEGIN"}
+Parse {"Query": "SELECT * FROM generate_series(1, 2)"}
+Bind
+Execute {"MaxRows": 1}
+Bind
+Sync
+----
+
+until keepErrMessage
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: execute row count limits only partially supported"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Query {"String": "ROLLBACK"}
+Query {"String": "SELECT 'here'"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"here"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute a portal partially and close it. In PG this works, but we
+# don't support manually closing a portal early.
+
+send
+Query {"String": "BEGIN"}
+Parse {"Query": "SELECT * FROM generate_series(1, 2)"}
+Bind
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Close the empty portal then try to execute it. 80 = 'P'
+send
+Close {"ObjectType": 80}
+Execute
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"0A000"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Query {"String": "ROLLBACK"}
+Query {"String": "SELECT 'here'"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"here"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

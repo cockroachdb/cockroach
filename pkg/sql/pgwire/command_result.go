@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -57,9 +57,6 @@ type commandResult struct {
 	// If typ == commandComplete, this is the tag to be written in the
 	// CommandComplete message.
 	cmdCompleteTag string
-	// If set, an error will be sent to the client if more rows are produced than
-	// this limit.
-	limit int
 
 	stmtType     tree.StatementType
 	descOpt      sql.RowDescOpt
@@ -99,18 +96,6 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 	if r.err != nil {
 		r.conn.bufferErr(r.err)
 		return
-	}
-
-	if r.err == nil &&
-		r.limit != 0 &&
-		r.rowsAffected > r.limit &&
-		r.typ == commandComplete &&
-		r.stmtType == tree.Rows {
-
-		r.err = unimplemented.NewWithIssuef(4035,
-			"execute row count limits not supported: %d of %d",
-			r.limit, r.rowsAffected)
-		r.conn.bufferErr(r.err)
 	}
 
 	// Send a completion message, specific to the type of result.
@@ -262,12 +247,6 @@ func (r *commandResult) RowsAffected() int {
 	return r.rowsAffected
 }
 
-// SetLimit is part of the CommandResult interface.
-func (r *commandResult) SetLimit(n int) {
-	r.assertNotReleased()
-	r.limit = n
-}
-
 // ResetStmtType is part of the CommandResult interface.
 func (r *commandResult) ResetStmtType(stmt tree.Statement) {
 	r.assertNotReleased()
@@ -309,7 +288,10 @@ func (c *conn) newCommandResult(
 	stmt tree.Statement,
 	formatCodes []pgwirebase.FormatCode,
 	conv sessiondata.DataConversionConfig,
-) *commandResult {
+	limit int,
+	portalName string,
+	implicitTxn bool,
+) sql.CommandResult {
 	r := c.allocCommandResult()
 	*r = commandResult{
 		conn:           c,
@@ -321,7 +303,15 @@ func (c *conn) newCommandResult(
 		descOpt:        descOpt,
 		formatCodes:    formatCodes,
 	}
-	return r
+	if limit == 0 {
+		return r
+	}
+	return &limitedCommandResult{
+		limit:         limit,
+		portalName:    portalName,
+		implicitTxn:   implicitTxn,
+		commandResult: r,
+	}
 }
 
 func (c *conn) newMiscResult(pos sql.CmdPos, typ completionMsgType) *commandResult {
@@ -332,4 +322,108 @@ func (c *conn) newMiscResult(pos sql.CmdPos, typ completionMsgType) *commandResu
 		typ:  typ,
 	}
 	return r
+}
+
+// limitedCommandResult is a commandResult that has a limit, after which calls
+// to AddRow will block until the associated client connection asks for more
+// rows. It essentially implements the "execute portal with limit" part of the
+// Postgres protocol.
+//
+// This design is known to be flawed. It only supports a specific subset of the
+// protocol. We only allow a portal suspension in an explicit transaction where
+// the suspended portal is completely exhausted before any other pgwire command
+// is executed, otherwise an error is produced. You cannot, for example,
+// interleave portal executions (a portal must be executed to completion before
+// another can be executed). It also breaks the software layering by adding an
+// additional state machine here, instead of teaching the state machine in the
+// sql package about portals.
+//
+// This has been done because refactoring the executor to be able to correctly
+// suspend a portal will require a lot of work, and we wanted to move
+// forward. The work included is things like auditing all of the defers and
+// post-execution stuff (like stats collection) to have it only execute once
+// per statement instead of once per portal.
+type limitedCommandResult struct {
+	*commandResult
+	portalName  string
+	implicitTxn bool
+
+	seenTuples int
+	// If set, an error will be sent to the client if more rows are produced than
+	// this limit.
+	limit int
+}
+
+// AddRow is part of the CommandResult interface.
+func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
+	if err := r.commandResult.AddRow(ctx, row); err != nil {
+		return err
+	}
+	r.seenTuples++
+
+	if r.seenTuples == r.limit {
+		// If we've seen up to the limit of rows, send a "portal suspended" message
+		// and wait for another exec portal message.
+		r.conn.bufferPortalSuspended()
+		if err := r.conn.Flush(r.pos); err != nil {
+			return err
+		}
+		r.seenTuples = 0
+
+		return r.moreResultsNeeded()
+	}
+	if _ /* flushed */, err := r.conn.maybeFlush(r.pos); err != nil {
+		return err
+	}
+	return nil
+}
+
+// moreResultsNeeded is a restricted connection handler that waits for more
+// requests for rows from the active portal, during the "execute portal" flow
+// when a limit has been specified.
+func (r *limitedCommandResult) moreResultsNeeded() error {
+	// In an implicit transaction, a portal suspension is immediately
+	// followed by closing the portal.
+	if r.implicitTxn {
+		r.typ = noCompletionMsg
+		return sql.ErrLimitedResultClosed
+	}
+
+	r.conn.stmtBuf.AdvanceOne()
+	for {
+		cmd, _, err := r.conn.stmtBuf.CurCmd()
+		if err != nil {
+			return err
+		}
+		// TODO(mjibson): It would be nice to support the
+		// sql.DeletePreparedStmt type here (Close in PG parlance,
+		// which can delete portals or prepared statements). This would
+		// require having stmtbuf rewind by one. Again, this double
+		// state machine thing is not great.
+		switch c := cmd.(type) {
+		case sql.ExecPortal:
+			// The happy case: the client wants more rows from the portal.
+			if c.Name != r.portalName {
+				return errors.WithDetail(sql.ErrLimitedResultNotSupported, "portals must be executed to completion")
+			}
+			r.limit = c.Limit
+			// In order to get the correct command tag, we need to reset the seen rows.
+			r.rowsAffected = 0
+			return nil
+		case sql.Sync:
+			// The client wants to see a ready for query message
+			// back. Send it then run the for loop again.
+			r.conn.stmtBuf.AdvanceOne()
+			// We can hard code InTxnBlock here because we don't
+			// support implicit transactions, so we know we're in
+			// a transaction.
+			r.conn.bufferReadyForQuery(byte(sql.InTxnBlock))
+			if err := r.conn.Flush(r.pos); err != nil {
+				return err
+			}
+		default:
+			// We got some other message, but we only support executing to completion.
+			return errors.WithDetail(sql.ErrLimitedResultNotSupported, "portals must be executed to completion")
+		}
+	}
 }
