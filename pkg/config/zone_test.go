@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -798,8 +799,7 @@ func TestZoneSpecifiers(t *testing.T) {
 	}
 
 	// Simulate the following schema:
-	//   CREATE DATABASE db;   CREATE TABLE db.table ...
-	//   CREATE DATABASE ".";  CREATE TABLE ".".".table." ...
+	//   CREATE DATABASE db;   CREATE TABLE db.tbl ...
 	//   CREATE DATABASE carl; CREATE TABLE carl.toys ...
 	type namespaceEntry struct {
 		parentID uint32
@@ -808,9 +808,6 @@ func TestZoneSpecifiers(t *testing.T) {
 	namespace := map[namespaceEntry]uint32{
 		{0, "db"}:               50,
 		{50, "tbl"}:             51,
-		{0, "user"}:             52,
-		{0, "."}:                53,
-		{53, ".table."}:         54,
 		{0, "carl"}:             55,
 		{55, "toys"}:            56,
 		{9000, "broken_parent"}: 57,
@@ -832,51 +829,33 @@ func TestZoneSpecifiers(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		cliSpecifier string
-		id           int
-		err          string
+		specifier tree.ZoneSpecifier
+		id        int
+		err       string
 	}{
-		{".default", 0, ""},
-		{".carl", 42, ""},
-		{".foo", -1, `"foo" is not a built-in zone`},
-		{"db", 50, ""},
-		{".db", -1, `"db" is not a built-in zone`},
-		{"db.tbl", 51, ""},
-		{"db.tbl.prt", 51, ""},
-		{`db.tbl@idx`, 51, ""},
-		{`db.tbl.prt@idx`, -1, "index and partition cannot be specified simultaneously"},
-		{"db.tbl.too.many.dots", 0, `malformed name: "db.tbl.too.many.dots"`},
-		{`db.tbl@primary`, 51, ""},
-		{"tbl", -1, `"tbl" not found`},
-		{"table", -1, `malformed name: "table"`}, // SQL keyword; requires quotes
-		{`"table"`, -1, `"table" not found`},
-		{"user", -1, "malformed name: \"user\""}, // SQL keyword; requires quotes
-		{`"user"`, 52, ""},
-		{`"."`, 53, ""},
-		{`.`, -1, `missing zone name`},
-		{`".table."`, -1, `".table." not found`},
-		{`".".".table."`, 54, ""},
-		{`.table.`, -1, `"table." is not a built-in zone`},
-		{"carl", 55, ""},
-		{"carl.toys", 56, ""},
-		{"carl.love", -1, `"love" not found`},
-		{"; DROP DATABASE system", -1, `malformed name`},
+		{tree.ZoneSpecifier{NamedZone: "default"}, 0, ""},
+		{tree.ZoneSpecifier{NamedZone: "carl"}, 42, ""},
+		{tree.ZoneSpecifier{NamedZone: "foo"}, -1, `"foo" is not a built-in zone`},
+		{tree.ZoneSpecifier{Database: "db"}, 50, ""},
+		{tree.ZoneSpecifier{NamedZone: "db"}, -1, `"db" is not a built-in zone`},
+		{tableSpecifier("db", "tbl", "", ""), 51, ""},
+		{tableSpecifier("db", "tbl", "", "prt"), 51, ""},
+		{tableSpecifier("db", "tbl", "primary", ""), 51, ""},
+		{tableSpecifier("db", "tbl", "idx", ""), 51, ""},
+		{tableSpecifier("db", "tbl", "idx", "prt"), 51, ""},
+		{tree.ZoneSpecifier{Database: "tbl"}, -1, `"tbl" not found`},
+		{tree.ZoneSpecifier{Database: "carl"}, 55, ""},
+		{tableSpecifier("carl", "toys", "", ""), 56, ""},
+		{tableSpecifier("carl", "love", "", ""), -1, `"love" not found`},
 	} {
-		t.Run(fmt.Sprintf("parse-cli=%s", tc.cliSpecifier), func(t *testing.T) {
+		t.Run(fmt.Sprintf("resolve-specifier=%s", ToZoneName(&tc.specifier)), func(t *testing.T) {
 			err := func() error {
-				zs, err := ParseCLIZoneSpecifier(tc.cliSpecifier)
-				if err != nil {
-					return err
-				}
-				id, err := ResolveZoneSpecifier(&zs, resolveName)
+				id, err := ResolveZoneSpecifier(&tc.specifier, resolveName)
 				if err != nil {
 					return err
 				}
 				if e, a := tc.id, int(id); a != e {
 					t.Errorf("path %d did not match expected path %d", a, e)
-				}
-				if e, a := tc.cliSpecifier, CLIZoneSpecifier(&zs); e != a {
-					t.Errorf("expected %q to roundtrip, but got %q", e, a)
 				}
 				return nil
 			}()
@@ -887,18 +866,15 @@ func TestZoneSpecifiers(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		id           uint32
-		cliSpecifier string
-		err          string
+		id       uint32
+		zoneName string
+		err      string
 	}{
 		{0, ".default", ""},
 		{41, "", "41 not found"},
 		{42, ".carl", ""},
 		{50, "db", ""},
 		{51, "db.tbl", ""},
-		{52, `"user"`, ""},
-		{53, `"."`, ""},
-		{54, `".".".table."`, ""},
 		{55, "carl", ""},
 		{56, "carl.toys", ""},
 		{57, "", "9000 not found"},
@@ -912,9 +888,21 @@ func TestZoneSpecifiers(t *testing.T) {
 			if tc.err != "" {
 				return
 			}
-			if e, a := tc.cliSpecifier, CLIZoneSpecifier(&zs); e != a {
-				t.Errorf("expected %q specifier for ID %d, but got %q", e, tc.id, a)
+			if e, a := tc.zoneName, ToZoneName(&zs); e != a {
+				t.Errorf("expected %q zone name for ID %d, but got %q", e, tc.id, a)
 			}
 		})
+	}
+}
+
+func tableSpecifier(
+	db tree.Name, tbl tree.Name, idx tree.UnrestrictedName, partition tree.Name,
+) tree.ZoneSpecifier {
+	return tree.ZoneSpecifier{
+		TableOrIndex: tree.TableIndexName{
+			Table: tree.MakeTableName(db, tbl),
+			Index: idx,
+		},
+		Partition: partition,
 	}
 }

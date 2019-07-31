@@ -45,70 +45,58 @@ func TestValidSetShowZones(t *testing.T) {
 	partialZoneOverride.GC = &config.GCPolicy{TTLSeconds: 42}
 
 	defaultRow := sqlutils.ZoneRow{
-		ID:           keys.RootNamespaceID,
-		CLISpecifier: ".default",
-		Config:       s.(*server.TestServer).Cfg.DefaultZoneConfig,
+		ID:     keys.RootNamespaceID,
+		Config: s.(*server.TestServer).Cfg.DefaultZoneConfig,
 	}
 	defaultOverrideRow := sqlutils.ZoneRow{
-		ID:           keys.RootNamespaceID,
-		CLISpecifier: ".default",
-		Config:       zoneOverride,
+		ID:     keys.RootNamespaceID,
+		Config: zoneOverride,
 	}
 	metaRow := sqlutils.ZoneRow{
-		ID:           keys.MetaRangesID,
-		CLISpecifier: ".meta",
-		Config:       zoneOverride,
+		ID:     keys.MetaRangesID,
+		Config: zoneOverride,
 	}
 	systemRow := sqlutils.ZoneRow{
-		ID:           keys.SystemDatabaseID,
-		CLISpecifier: "system",
-		Config:       zoneOverride,
+		ID:     keys.SystemDatabaseID,
+		Config: zoneOverride,
 	}
 	jobsRow := sqlutils.ZoneRow{
-		ID:           keys.JobsTableID,
-		CLISpecifier: "system.jobs",
-		Config:       zoneOverride,
+		ID:     keys.JobsTableID,
+		Config: zoneOverride,
 	}
 
 	dbID := sqlutils.QueryDatabaseID(t, db, "d")
 	tableID := sqlutils.QueryTableID(t, db, "d", "t")
 
 	dbRow := sqlutils.ZoneRow{
-		ID:           dbID,
-		CLISpecifier: "d",
-		Config:       zoneOverride,
+		ID:     dbID,
+		Config: zoneOverride,
 	}
 	tableRow := sqlutils.ZoneRow{
-		ID:           tableID,
-		CLISpecifier: "d.t",
-		Config:       zoneOverride,
+		ID:     tableID,
+		Config: zoneOverride,
 	}
 
 	// Partially filled config rows
 	partialMetaRow := sqlutils.ZoneRow{
-		ID:           keys.MetaRangesID,
-		CLISpecifier: ".meta",
-		Config:       partialZoneOverride,
+		ID:     keys.MetaRangesID,
+		Config: partialZoneOverride,
 	}
 	partialSystemRow := sqlutils.ZoneRow{
-		ID:           keys.SystemDatabaseID,
-		CLISpecifier: "system",
-		Config:       partialZoneOverride,
+		ID:     keys.SystemDatabaseID,
+		Config: partialZoneOverride,
 	}
 	partialJobsRow := sqlutils.ZoneRow{
-		ID:           keys.JobsTableID,
-		CLISpecifier: "system.jobs",
-		Config:       partialZoneOverride,
+		ID:     keys.JobsTableID,
+		Config: partialZoneOverride,
 	}
 	partialDbRow := sqlutils.ZoneRow{
-		ID:           dbID,
-		CLISpecifier: "d",
-		Config:       partialZoneOverride,
+		ID:     dbID,
+		Config: partialZoneOverride,
 	}
 	partialTableRow := sqlutils.ZoneRow{
-		ID:           tableID,
-		CLISpecifier: "d.t",
-		Config:       partialZoneOverride,
+		ID:     tableID,
+		Config: partialZoneOverride,
 	}
 
 	// Remove stock zone configs installed at cluster bootstrap. Otherwise this
@@ -253,9 +241,8 @@ func TestZoneInheritField(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE d; USE d; CREATE TABLE t ();`)
 
 	defaultRow := sqlutils.ZoneRow{
-		ID:           keys.RootNamespaceID,
-		CLISpecifier: ".default",
-		Config:       s.(*server.TestServer).Cfg.DefaultZoneConfig,
+		ID:     keys.RootNamespaceID,
+		Config: s.(*server.TestServer).Cfg.DefaultZoneConfig,
 	}
 
 	newReplicationFactor := 10
@@ -264,15 +251,13 @@ func TestZoneInheritField(t *testing.T) {
 	newDefCfg.NumReplicas = proto.Int32(int32(newReplicationFactor))
 
 	newDefaultRow := sqlutils.ZoneRow{
-		ID:           keys.RootNamespaceID,
-		CLISpecifier: ".default",
-		Config:       newDefCfg,
+		ID:     keys.RootNamespaceID,
+		Config: newDefCfg,
 	}
 
 	newTableRow := sqlutils.ZoneRow{
-		ID:           tableID,
-		CLISpecifier: "d.t",
-		Config:       s.(*server.TestServer).Cfg.DefaultZoneConfig,
+		ID:     tableID,
+		Config: s.(*server.TestServer).Cfg.DefaultZoneConfig,
 	}
 
 	// Doesn't have any values of its own.
