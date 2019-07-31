@@ -454,7 +454,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	//     hasReady == true.
 	//     If we don't release quota back at the end of
 	//     handleRaftReadyRaftMuLocked, the next write will get blocked.
-	defer r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
+	defer func(ctx context.Context, lastLeaderID roachpb.ReplicaID) {
+		// If we panicked during this call we may obfuscate that panic if we hit
+		// an assertion failure while updating the proposalQuota.
+		if recovered := recover; recovered != nil {
+			panic(recovered)
+		}
+		r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
+	}(ctx, lastLeaderID)
 
 	err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		if err := r.mu.proposalBuf.FlushLockedWithRaftGroup(raftGroup); err != nil {
