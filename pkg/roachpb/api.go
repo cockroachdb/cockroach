@@ -286,6 +286,21 @@ func (dr *DeleteRangeResponse) combine(c combinable) error {
 	return nil
 }
 
+var _ combinable = &DeleteRangeResponse{}
+
+// combine implements the combinable interface.
+func (dr *RevertRangeResponse) combine(c combinable) error {
+	otherDR := c.(*RevertRangeResponse)
+	if dr != nil {
+		if err := dr.ResponseHeader.combine(otherDR.Header()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var _ combinable = &RevertRangeResponse{}
+
 // combine implements the combinable interface.
 func (rr *ResolveIntentRangeResponse) combine(c combinable) error {
 	otherRR := c.(*ResolveIntentRangeResponse)
@@ -1039,7 +1054,7 @@ func (*ClearRangeRequest) flags() int { return isWrite | isRange | isAlone }
 
 // Note that RevertRange commands cannot be part of a transaction as
 // they clear all MVCC versions above their target time.
-func (*RevertRangeRequest) flags() int { return isWrite | isRange | isAlone }
+func (*RevertRangeRequest) flags() int { return isWrite | isRange }
 
 func (*ScanRequest) flags() int { return isRead | isRange | isTxn | updatesReadTSCache | needsRefresh }
 func (*ReverseScanRequest) flags() int {
