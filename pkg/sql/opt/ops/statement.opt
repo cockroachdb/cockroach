@@ -116,7 +116,7 @@ define OpaqueRelPrivate {
 }
 
 # AlterTableSplit represents an `ALTER TABLE/INDEX .. SPLIT AT ..` statement.
-[Relational, DDL]
+[Relational, Mutation]
 define AlterTableSplit {
     # The input expression provides values for the index columns (or a prefix of
     # them).
@@ -150,7 +150,7 @@ define AlterTableSplitPrivate {
 
 # AlterTableUnsplit represents an `ALTER TABLE/INDEX .. UNSPLIT AT ..`
 # statement.
-[Relational, DDL]
+[Relational, Mutation]
 define AlterTableUnsplit {
     Input RelExpr
 
@@ -158,13 +158,13 @@ define AlterTableUnsplit {
 }
 
 # AlterTableUnsplit represents an `ALTER TABLE/INDEX .. UNSPLIT ALL` statement.
-[Relational, DDL]
+[Relational, Mutation]
 define AlterTableUnsplitAll {
     _ AlterTableSplitPrivate
 }
 
 # AlterTableRelocate represents an `ALTER TABLE/INDEX .. SPLIT AT ..` statement.
-[Relational, DDL]
+[Relational, Mutation]
 define AlterTableRelocate {
     # The input expression provides values for the index columns (or a prefix of
     # them).

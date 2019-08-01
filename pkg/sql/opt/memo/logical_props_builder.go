@@ -809,59 +809,46 @@ func (b *logicalPropsBuilder) buildShowTraceForSessionProps(
 
 func (b *logicalPropsBuilder) buildOpaqueRelProps(op *OpaqueRelExpr, rel *props.Relational) {
 	b.buildBasicProps(op, op.Columns, rel)
-	rel.CanHaveSideEffects = true
-	rel.CanMutate = true
 }
 
 func (b *logicalPropsBuilder) buildAlterTableSplitProps(
 	split *AlterTableSplitExpr, rel *props.Relational,
 ) {
 	b.buildBasicProps(split, split.Columns, rel)
-	rel.CanHaveSideEffects = true
-	rel.CanMutate = true
 }
 
 func (b *logicalPropsBuilder) buildAlterTableUnsplitProps(
 	unsplit *AlterTableUnsplitExpr, rel *props.Relational,
 ) {
 	b.buildBasicProps(unsplit, unsplit.Columns, rel)
-	rel.CanHaveSideEffects = true
-	rel.CanMutate = true
 }
 
 func (b *logicalPropsBuilder) buildAlterTableUnsplitAllProps(
 	unsplitAll *AlterTableUnsplitAllExpr, rel *props.Relational,
 ) {
 	b.buildBasicProps(unsplitAll, unsplitAll.Columns, rel)
-	rel.CanHaveSideEffects = true
-	rel.CanMutate = true
 }
 
 func (b *logicalPropsBuilder) buildAlterTableRelocateProps(
 	relocate *AlterTableRelocateExpr, rel *props.Relational,
 ) {
 	b.buildBasicProps(relocate, relocate.Columns, rel)
-	rel.CanHaveSideEffects = true
-	rel.CanMutate = true
 }
 
 func (b *logicalPropsBuilder) buildControlJobsProps(ctl *ControlJobsExpr, rel *props.Relational) {
 	b.buildBasicProps(ctl, opt.ColList{}, rel)
-	rel.CanHaveSideEffects = true
 }
 
 func (b *logicalPropsBuilder) buildCancelQueriesProps(
 	cancel *CancelQueriesExpr, rel *props.Relational,
 ) {
 	b.buildBasicProps(cancel, opt.ColList{}, rel)
-	rel.CanHaveSideEffects = true
 }
 
 func (b *logicalPropsBuilder) buildCancelSessionsProps(
 	cancel *CancelSessionsExpr, rel *props.Relational,
 ) {
 	b.buildBasicProps(cancel, opt.ColList{}, rel)
-	rel.CanHaveSideEffects = true
 }
 
 func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relational) {
