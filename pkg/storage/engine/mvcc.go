@@ -1981,7 +1981,7 @@ func MVCCClearTimeRange(
 		}
 	}
 
-	return resume, flushClearedKeys(MVCCKey{Key: key})
+	return resume, flushClearedKeys(MVCCKey{Key: endKey})
 }
 
 // MVCCDeleteRange deletes the range of key/value pairs specified by start and
