@@ -1308,9 +1308,9 @@ build
 SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
 project
- ├── columns: col0:1(int)
+ ├── columns: col0:1(int!null)
  └── select
-      ├── columns: col0:1(int) col1:2(float) col3:3(int) col4:4(float) rowid:5(int!null)
+      ├── columns: col0:1(int!null) col1:2(float) col3:3(int) col4:4(float!null) rowid:5(int!null)
       ├── scan tab4
       │    └── columns: col0:1(int) col1:2(float) col3:3(int) col4:4(float) rowid:5(int!null)
       └── filters
