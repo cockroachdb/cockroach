@@ -1174,11 +1174,9 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 		filteredSL := tc.sl
 		filteredSL.stores = append([]roachpb.StoreDescriptor(nil), filteredSL.stores...)
 		existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
-		rangeInfo := RangeInfo{
-			Desc: &roachpb.RangeDescriptor{},
-		}
+		var replicas []roachpb.ReplicaDescriptor
 		for _, nodeID := range tc.existingNodeIDs {
-			rangeInfo.Desc.InternalReplicas = append(rangeInfo.Desc.InternalReplicas, roachpb.ReplicaDescriptor{
+			replicas = append(replicas, roachpb.ReplicaDescriptor{
 				NodeID:  nodeID,
 				StoreID: roachpb.StoreID(nodeID),
 			})
@@ -1194,7 +1192,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 			context.Background(),
 			filteredSL,
 			analyzedConstraints{},
-			rangeInfo,
+			replicas,
 			existingNodeLocalities,
 			func(nodeID roachpb.NodeID) string {
 				locality := localityForNodeID(tc.sl, nodeID)
@@ -1487,8 +1485,6 @@ func TestBalanceScore(t *testing.T) {
 	sRangesUnderfull := sMean
 	sRangesUnderfull.RangeCount = 500
 
-	ri := RangeInfo{}
-
 	testCases := []struct {
 		sc       roachpb.StoreCapacity
 		expected float64
@@ -1499,7 +1495,7 @@ func TestBalanceScore(t *testing.T) {
 		{sRangesUnderfull, 1},
 	}
 	for i, tc := range testCases {
-		if a, e := balanceScore(storeList, tc.sc, ri, options), tc.expected; a.totalScore() != e {
+		if a, e := balanceScore(storeList, tc.sc, options), tc.expected; a.totalScore() != e {
 			t.Errorf("%d: balanceScore(storeList, %+v) got %s; want %.2f", i, tc.sc, a, e)
 		}
 	}

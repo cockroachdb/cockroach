@@ -735,9 +735,9 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 	return *r.mu.state.GCThreshold
 }
 
-// maxReplicaID returns the maximum ReplicaID of any replica, including voters
-// and learners.
-func maxReplicaID(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
+// maxReplicaIDOfAny returns the maximum ReplicaID of any replica, including
+// voters and learners.
+func maxReplicaIDOfAny(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
 	if desc == nil || !desc.IsInitialized() {
 		return 0
 	}

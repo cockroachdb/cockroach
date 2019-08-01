@@ -156,7 +156,7 @@ func (r *RangeDescriptor) RemoveReplica(nodeID NodeID, storeID StoreID) (Replica
 // GetReplicaDescriptor returns the replica which matches the specified store
 // ID.
 func (r *RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescriptor, bool) {
-	for _, repDesc := range r.Replicas().Unwrap() {
+	for _, repDesc := range r.Replicas().All() {
 		if repDesc.StoreID == storeID {
 			return repDesc, true
 		}
@@ -167,7 +167,7 @@ func (r *RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescript
 // GetReplicaDescriptorByID returns the replica which matches the specified store
 // ID.
 func (r *RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaDescriptor, bool) {
-	for _, repDesc := range r.Replicas().Unwrap() {
+	for _, repDesc := range r.Replicas().All() {
 		if repDesc.ReplicaID == replicaID {
 			return repDesc, true
 		}
