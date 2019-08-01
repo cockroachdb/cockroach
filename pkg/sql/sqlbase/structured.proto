@@ -89,10 +89,10 @@ message ForeignKeyConstraint {
   // representation to the old representation (which happens when the cluster
   // is in a mixed-version state containing VersionTopLevelForeignKeys) was done
   // without creating any accidental changes to the foreign key references.
-  optional uint32 origin_index = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID", deprecated = true];
-  optional uint32 referenced_index = 11 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID", deprecated = true];
-  optional ForeignKeyReference upgraded_from_origin_reference = 12 [(gogoproto.nullable) = false, deprecated = true];
-  optional ForeignKeyReference upgraded_from_referenced_reference = 13 [(gogoproto.nullable) = false, deprecated = true];
+  optional uint32 legacy_origin_index = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID", deprecated = true];
+  optional uint32 legacy_referenced_index = 11 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID", deprecated = true];
+  optional ForeignKeyReference legacy_upgraded_from_origin_reference = 12 [(gogoproto.nullable) = false, deprecated = true];
+  optional ForeignKeyReference legacy_upgraded_from_referenced_reference = 13 [(gogoproto.nullable) = false, deprecated = true];
 }
 
 message ColumnDescriptor {
