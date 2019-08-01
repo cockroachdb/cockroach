@@ -3486,15 +3486,24 @@ show_jobs_stmt:
   {
     $$.val = &tree.ShowJobs{Automatic: true}
   }
-|  SHOW JOBS
+| SHOW JOBS
   {
     $$.val = &tree.ShowJobs{Automatic: false}
   }
 | SHOW AUTOMATIC JOBS error // SHOW HELP: SHOW JOBS
 | SHOW JOBS error // SHOW HELP: SHOW JOBS
-| SHOW JOB iconst64
+| SHOW JOBS select_stmt
   {
-    $$.val = &tree.ShowJob{JobID: $3.int64()}
+    $$.val = &tree.ShowJobs{Jobs: $3.slct()}
+  }
+| SHOW JOBS select_stmt error // SHOW HELP: SHOW JOBS
+| SHOW JOB a_expr
+  {
+    $$.val = &tree.ShowJobs{
+      Jobs: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
+      },
+    }
   }
 | SHOW JOB error // SHOW HELP: SHOW JOBS
 

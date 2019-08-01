@@ -488,7 +488,8 @@ show_partitions_stmt ::=
 show_jobs_stmt ::=
 	'SHOW' 'AUTOMATIC' 'JOBS'
 	| 'SHOW' 'JOBS'
-	| 'SHOW' 'JOB' iconst64
+	| 'SHOW' 'JOBS' select_stmt
+	| 'SHOW' 'JOB' a_expr
 
 show_queries_stmt ::=
 	'SHOW' opt_cluster 'QUERIES'
@@ -1155,9 +1156,6 @@ table_index_name ::=
 	table_name '@' index_name
 	| standalone_index_name
 
-iconst64 ::=
-	'ICONST'
-
 opt_cluster ::=
 	'CLUSTER'
 	| 'LOCAL'
@@ -1701,6 +1699,9 @@ create_as_table_defs ::=
 
 common_table_expr ::=
 	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'
+
+iconst64 ::=
+	'ICONST'
 
 index_flags_param_list ::=
 	( index_flags_param ) ( ( ',' index_flags_param ) )*

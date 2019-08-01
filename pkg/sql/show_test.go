@@ -1039,13 +1039,31 @@ func TestShowAutomaticJobs(t *testing.T) {
 	}
 
 	var out row
+
 	sqlDB.QueryRow(t, `SELECT job_id, job_type FROM [SHOW JOB 1]`).Scan(&out.id, &out.typ)
 	if out.id != 1 || out.typ != "CREATE STATS" {
 		t.Fatalf("Expected id:%d and type:%s but found id:%d and type:%s",
 			1, "CREATE STATS", out.id, out.typ)
 	}
 
+	sqlDB.QueryRow(t, `SELECT job_id, job_type FROM [SHOW JOBS SELECT 1]`).Scan(&out.id, &out.typ)
+	if out.id != 1 || out.typ != "CREATE STATS" {
+		t.Fatalf("Expected id:%d and type:%s but found id:%d and type:%s",
+			1, "CREATE STATS", out.id, out.typ)
+	}
+
+	sqlDB.QueryRow(t, `SELECT job_id, job_type FROM [SHOW JOBS (SELECT 1)]`).Scan(&out.id, &out.typ)
+	if out.id != 1 || out.typ != "CREATE STATS" {
+		t.Fatalf("Expected id:%d and type:%s but found id:%d and type:%s",
+			1, "CREATE STATS", out.id, out.typ)
+	}
 	sqlDB.QueryRow(t, `SELECT job_id, job_type FROM [SHOW JOB 2]`).Scan(&out.id, &out.typ)
+	if out.id != 2 || out.typ != "AUTO CREATE STATS" {
+		t.Fatalf("Expected id:%d and type:%s but found id:%d and type:%s",
+			2, "AUTO CREATE STATS", out.id, out.typ)
+	}
+
+	sqlDB.QueryRow(t, `SELECT job_id, job_type FROM [SHOW JOBS SELECT 2]`).Scan(&out.id, &out.typ)
 	if out.id != 2 || out.typ != "AUTO CREATE STATS" {
 		t.Fatalf("Expected id:%d and type:%s but found id:%d and type:%s",
 			2, "AUTO CREATE STATS", out.id, out.typ)
