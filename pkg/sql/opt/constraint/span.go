@@ -63,7 +63,10 @@ var UnconstrainedSpan = Span{}
 // before Set is called. Unconstrained spans cannot be used in constraints,
 // since the absence of a constraint is equivalent to an unconstrained span.
 func (sp *Span) IsUnconstrained() bool {
-	return sp.start.IsEmpty() && sp.end.IsEmpty()
+	startUnconstrained := sp.start.IsEmpty() || (sp.start.IsNull() && sp.startBoundary == IncludeBoundary)
+	endUnconstrained := sp.end.IsEmpty()
+
+	return startUnconstrained && endUnconstrained
 }
 
 // StartKey returns the start key.
