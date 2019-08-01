@@ -326,6 +326,20 @@ DROP VIEW v1
 statement error pgcode 42P01 relation "v1" does not exist
 DROP VIEW v1
 
+# Verify that we can depend on virtual tables.
+statement ok
+CREATE VIEW virt1 AS SELECT table_schema FROM information_schema.columns
+
+statement ok
+DROP VIEW virt1
+
+# Verify that we can depend on virtual views.
+statement ok
+CREATE VIEW virt2 AS SELECT range_id, lease_holder FROM crdb_internal.ranges
+
+statement ok
+DROP VIEW virt2
+
 # Verify correct rejection of star expressions
 # TODO(a-robinson): Support star expressions as soon as we can (#10028)
 
