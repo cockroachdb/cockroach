@@ -129,6 +129,11 @@ func (r *Replica) handleCommittedEntriesRaftMuLocked(
 		var it cmdAppCtxBufIterator
 		for ok := it.init(&b.cmdBuf); ok; ok = it.next() {
 			cmd := it.cur()
+			// Reset the context for already applied commands to ensure that
+			// reproposals at the same MaxLeaseIndex do not record into closed spans.
+			if cmd.proposedLocally() && cmd.proposal.applied {
+				cmd.ctx = ctx
+			}
 			r.stageRaftCommand(cmd.ctx, cmd, b.batch, &b.replicaState,
 				it.isLast() /* writeAppliedState */)
 			// We permit trivial commands to update the truncated state but we need to
@@ -873,6 +878,11 @@ func (r *Replica) applyCmdAppBatch(
 	}
 	for ok := it.init(&b.cmdBuf); ok; ok = it.next() {
 		cmd := it.cur()
+		// Reset the context for already applied commands to ensure that
+		// reproposals at the same MaxLeaseIndex do not record into closed spans.
+		if cmd.proposedLocally() && cmd.proposal.applied {
+			cmd.ctx = ctx
+		}
 		for _, sc := range cmd.replicatedResult().SuggestedCompactions {
 			r.store.compactor.Suggest(cmd.ctx, sc)
 		}
