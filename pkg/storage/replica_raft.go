@@ -258,8 +258,20 @@ func (r *Replica) evalAndPropose(
 //
 // The method hands ownership of the command over to the Raft machinery. After
 // the method returns, all access to the command must be performed while holding
-// Replica.mu and Replica.raftMu.
-func (r *Replica) propose(ctx context.Context, p *ProposalData) (int64, *roachpb.Error) {
+// Replica.mu and Replica.raftMu. If a non-nil error is returned the
+// MaxLeaseIndex is not updated.
+func (r *Replica) propose(ctx context.Context, p *ProposalData) (index int64, pErr *roachpb.Error) {
+
+	// If an error occurs reset the command's MaxLeaseIndex to its initial value.
+	// Failure to propose will propagate to the client. An invariant of this
+	// package is that proposals which are finished carry raft command with a
+	// MaxLeaseIndex equal to the proposal command's max lease index.
+	defer func(prev uint64) {
+		if pErr != nil {
+			p.command.MaxLeaseIndex = prev
+		}
+	}(p.command.MaxLeaseIndex)
+
 	// Make sure the maximum lease index is unset. This field will be set in
 	// propBuf.Insert and its encoded bytes will be appended to the encoding
 	// buffer as a RaftCommandFooter.

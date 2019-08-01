@@ -457,6 +457,9 @@ func (r *Replica) finishRaftCommand(ctx context.Context, cmd *cmdAppCtx) {
 	}
 
 	if cmd.proposedLocally() {
+		if cmd.raftCmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex {
+			log.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index")
+		}
 		cmd.proposal.finishApplication(cmd.response)
 	} else if cmd.response.Err != nil {
 		log.VEventf(ctx, 1, "applying raft command resulted in error: %s", cmd.response.Err)

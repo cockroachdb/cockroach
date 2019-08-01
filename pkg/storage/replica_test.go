@@ -64,6 +64,7 @@ import (
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.etcd.io/etcd/raft/tracker"
+	"golang.org/x/net/trace"
 )
 
 // allSpans is a SpanSet that covers *everything* for use in tests that don't
@@ -11556,4 +11557,167 @@ func TestSplitSnapshotWarningStr(t *testing.T) {
 		"; r12/2 is being probed (may or may not need a Raft snapshot)",
 		splitSnapshotWarningStr(12, status),
 	)
+}
+
+// TestHighestMaxLeaseIndexReproposalFinishesCommand exercises a case where a
+// command is reproposed twice at different MaxLeaseIndex values to ultimately
+// fail with an error which cannot be reproposed (say due to a lease transfer
+// or change to the gc threshold). This test works to exercise the invariant
+// that when a proposal has been reproposed at different MaxLeaseIndex value
+// the client is ultimately acknowledged with an error from a reproposal with
+// the largest index. The test verfies this condition by asserting that the
+// span used to trace the execution of the proposal is not used after the
+// proposal has been finished.
+func TestHighestMaxLeaseIndexReproposalFinishesCommand(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Set the trace infrastructure to log if a span is used after being finished.
+	defer enableTraceDebugUseAfterFree()()
+
+	// Set logging up to a test specific directory.
+	scope := log.Scope(t)
+	defer scope.Close(t)
+
+	tc := testContext{}
+	ctx := context.Background()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.manualClock = hlc.NewManualClock(123)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	// Set up tracing.
+	tracer := tracing.NewTracer()
+	tracer.Configure(&cfg.Settings.SV)
+	cfg.AmbientCtx.Tracer = tracer
+
+	// Below we set txnID to the value of the transaction we're going to force to
+	// be proposed multiple times.
+	var txnID uuid.UUID
+	// In the TestingProposalFilter we populater cmdID with the id of the proposal
+	// which corresponds to txnID.
+	var cmdID storagebase.CmdIDKey
+	// After we evalAndPropose the command we populate prop with the ProposalData
+	// value to enable reproposing the same command more than once.
+	var prop *ProposalData
+	// seen is used to detect the first application of our proposal.
+	var seen bool
+	cfg.TestingKnobs = StoreTestingKnobs{
+		MaxApplicationBatchSize: 1,
+		// Set the TestingProposalFilter in order to know the CmdIDKey for our
+		// request by detecting its txnID.
+		TestingProposalFilter: func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+			if args.Req.Header.Txn != nil && args.Req.Header.Txn.ID == txnID {
+				cmdID = args.CmdID
+			}
+			return nil
+		},
+		// Detect the application of the proposal to repropose it and also
+		// invalidate the lease.
+		TestingApplyFilter: func(args storagebase.ApplyFilterArgs) (retry int, pErr *roachpb.Error) {
+			if seen || args.CmdID != cmdID {
+				return 0, nil
+			}
+			seen = true
+			// Repropose on a separate location to not mess with the
+			// goldenProtosBelowRaft checks.
+			reproposed := make(chan struct{})
+			go func() {
+				if _, pErr := tc.repl.propose(prop.ctx, prop); pErr != nil {
+					panic(pErr)
+				}
+				close(reproposed)
+			}()
+			<-reproposed
+			tc.repl.mu.Lock()
+			defer tc.repl.mu.Unlock()
+			// Flush the proposalBuf to ensure that the reproposal makes it into the
+			// Replica's proposal map.
+			if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+				panic(err)
+			}
+			// Increase the lease sequence so that future reproposals will fail with
+			// NotLeaseHolderError. This mimics the outcome of a leaseholder change
+			// slipping in between the application of the first proposal and the
+			// reproposals.
+			tc.repl.mu.state.Lease.Sequence++
+			// This return value will force another retry which will carry a yet
+			// higher MaxLeaseIndex and will trigger our invariant violation.
+			return int(proposalIllegalLeaseIndex),
+				roachpb.NewErrorf("forced error that can be reproposed at a higher index")
+		},
+	}
+	tc.StartWithStoreConfig(t, stopper, cfg)
+	key := roachpb.Key("a")
+	lease, _ := tc.repl.GetLease()
+	txn := newTransaction("test", key, roachpb.NormalUserPriority, tc.Clock())
+	txnID = txn.ID
+	ba := roachpb.BatchRequest{
+		Header: roachpb.Header{
+			RangeID: tc.repl.RangeID,
+			Txn:     txn,
+		},
+	}
+	ba.Timestamp = txn.OrigTimestamp
+	ba.Add(&roachpb.PutRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: key,
+		},
+		Value: roachpb.MakeValueFromBytes([]byte("val")),
+	})
+
+	// Hold the RaftLock to ensure that after evalAndPropose our proposal is in
+	// the proposal map. Entries are only removed from that map underneath raft.
+	// We want to grab the proposal so that we can shove in an extra reproposal
+	// while the first proposal is being applied.
+	tc.repl.RaftLock()
+	tracedCtx, cleanup := tracing.EnsureContext(ctx, cfg.AmbientCtx.Tracer, "replica send")
+	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, lease, &ba, &allSpans, endCmds{})
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	errCh := make(chan *roachpb.Error)
+	go func() {
+		res := <-ch
+		cleanup()
+		errCh <- res.Err
+	}()
+
+	func() {
+		tc.repl.mu.Lock()
+		defer tc.repl.mu.Unlock()
+		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+			t.Fatal(err)
+		}
+		tc.repl.refreshProposalsLocked(0, reasonNewLeaderOrConfigChange)
+		prop = tc.repl.mu.proposals[cmdID]
+	}()
+	tc.repl.RaftUnlock()
+
+	if pErr = <-errCh; !testutils.IsPError(pErr, "NotLeaseHolder") {
+		t.Fatal(pErr)
+	}
+
+	// Round trip another proposal through the replica to ensure that previously
+	// committed entries have been applied.
+	_, pErr = tc.repl.sendWithRangeID(ctx, tc.repl.RangeID, ba)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	log.Flush()
+
+	stopper.Quiesce(ctx)
+	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
+		regexp.MustCompile("net/trace"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) > 0 {
+		t.Fatalf("reused span after free: %v", entries)
+	}
+}
+
+func enableTraceDebugUseAfterFree() (restore func()) {
+	prev := trace.DebugUseAfterFinish
+	trace.DebugUseAfterFinish = true
+	return func() { trace.DebugUseAfterFinish = prev }
 }
