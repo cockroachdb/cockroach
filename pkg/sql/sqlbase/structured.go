@@ -260,16 +260,25 @@ func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor 
 	return desc
 }
 
+// ProtoGetter is a sub-interface of client.Txn that can fetch protobufs in a
+// transaction.
+type ProtoGetter interface {
+	// GetProto retrieves a protoutil.Message that's stored at key, storing it
+	// into the input msg parameter. If the key doesn't exist, the input proto
+	// will be reset.
+	GetProto(ctx context.Context, key interface{}, msg protoutil.Message) error
+}
+
 // GetDatabaseDescFromID retrieves the database descriptor for the database
-// ID passed in using an existing txn. Returns an error if the descriptor
-// doesn't exist or if it exists and is not a database.
+// ID passed in using an existing proto getter. Returns an error if the
+// descriptor doesn't exist or if it exists and is not a database.
 func GetDatabaseDescFromID(
-	ctx context.Context, txn *client.Txn, id ID,
+	ctx context.Context, protoGetter ProtoGetter, id ID,
 ) (*DatabaseDescriptor, error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
 
-	if err := txn.GetProto(ctx, descKey, desc); err != nil {
+	if err := protoGetter.GetProto(ctx, descKey, desc); err != nil {
 		return nil, err
 	}
 	db := desc.GetDatabase()
@@ -280,13 +289,15 @@ func GetDatabaseDescFromID(
 }
 
 // GetTableDescFromID retrieves the table descriptor for the table
-// ID passed in using an existing txn. Returns an error if the
+// ID passed in using an existing proto getter. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a table.
-func GetTableDescFromID(ctx context.Context, txn *client.Txn, id ID) (*TableDescriptor, error) {
+func GetTableDescFromID(
+	ctx context.Context, protoGetter ProtoGetter, id ID,
+) (*TableDescriptor, error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
 
-	if err := txn.GetProto(ctx, descKey, desc); err != nil {
+	if err := protoGetter.GetProto(ctx, descKey, desc); err != nil {
 		return nil, err
 	}
 	table := desc.GetTable()
@@ -297,13 +308,13 @@ func GetTableDescFromID(ctx context.Context, txn *client.Txn, id ID) (*TableDesc
 }
 
 // GetMutableTableDescFromID retrieves the table descriptor for the table
-// ID passed in using an existing txn. Returns an error if the
+// ID passed in using an existing proto getter. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a table.
 // Otherwise a mutable copy of the table is returned.
 func GetMutableTableDescFromID(
-	ctx context.Context, txn *client.Txn, id ID,
+	ctx context.Context, protoGetter ProtoGetter, id ID,
 ) (*MutableTableDescriptor, error) {
-	table, err := GetTableDescFromID(ctx, txn, id)
+	table, err := GetTableDescFromID(ctx, protoGetter, id)
 	if err != nil {
 		return nil, err
 	}
