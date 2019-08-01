@@ -87,36 +87,12 @@ func RevertRange(
 
 	log.VEventf(ctx, 2, "clearing keys with timestamp (%v, %v]", args.TargetTime, cArgs.Header.Timestamp)
 
-	// Get the initial MVCC stats for all the keys in the affected span.
-	statsBefore, err := computeStatsDelta(
-		ctx, batch, cArgs, engine.MVCCKey{Key: args.Key}, engine.MVCCKey{Key: args.EndKey},
-	)
-	if err != nil {
-		return result.Result{}, err
-	}
-
 	resume, err := engine.MVCCClearTimeRange(
-		ctx, batch, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp, cArgs.MaxKeys,
+		ctx, batch, cArgs.Stats, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp, cArgs.MaxKeys,
 	)
 	if err != nil {
 		return result.Result{}, err
 	}
-
-	// Compute the true stats for the affected span after modification.
-	iter := batch.NewIterator(engine.IterOptions{UpperBound: args.Key})
-	statsAfter, err := iter.ComputeStats(
-		engine.MVCCKey{Key: args.Key}, engine.MVCCKey{Key: args.EndKey}, cArgs.Header.Timestamp.WallTime,
-	)
-	iter.Close()
-	if err != nil {
-		return result.Result{}, err
-	}
-
-	// Compute the difference between the computed post-modification stats and the
-	// initial stats for the span and
-	statsAfter.Subtract(statsBefore)
-
-	*cArgs.Stats = statsAfter
 
 	if resume != nil {
 		reply.ResumeSpan = resume
