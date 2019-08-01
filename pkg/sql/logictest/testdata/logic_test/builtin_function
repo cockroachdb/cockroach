@@ -1510,6 +1510,35 @@ SELECT current_schema()
 ----
 public
 
+# COLLATION FOR returns a locale name for a collated string
+# but for a not collated string 'default' locale name is a Postgres compatible behavior:
+# https://www.postgresql.org/docs/10/functions-info.html#FUNCTIONS-INFO-CATALOG-TABLE
+query T
+SELECT COLLATION FOR ('foo')
+----
+default
+
+query T
+SELECT COLLATION FOR ('foo' COLLATE "de_DE");
+----
+de_DE
+
+statement error pq: pg_collation_for\(\): collations are not supported by type: int
+SELECT COLLATION FOR (1);
+
+query T
+SELECT pg_collation_for ('foo')
+----
+default
+
+query T
+SELECT pg_collation_for ('foo' COLLATE "de_DE");
+----
+de_DE
+
+statement error pq: pg_collation_for\(\): collations are not supported by type: int
+SELECT pg_collation_for(1);
+
 query I
 SELECT array_length(ARRAY['a', 'b'], 1)
 ----

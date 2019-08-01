@@ -2783,6 +2783,27 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	// https://www.postgresql.org/docs/10/functions-info.html#FUNCTIONS-INFO-CATALOG-TABLE
+	"pg_collation_for": makeBuiltin(
+		tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"str", types.Any}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				switch t := args[0].(type) {
+				case *tree.DString:
+					return tree.NewDString("default"), nil
+				case *tree.DCollatedString:
+					return tree.NewDString(t.Locale), nil
+				default:
+					return tree.DNull, pgerror.Newf(pgcode.DatatypeMismatch,
+						"collations are not supported by type: %s", t.ResolvedType())
+				}
+			},
+			Info: "Returns the collation of the argument",
+		},
+	),
+
 	"crdb_internal.locality_value": makeBuiltin(
 		tree.FunctionProperties{Category: categorySystemInfo},
 		tree.Overload{
