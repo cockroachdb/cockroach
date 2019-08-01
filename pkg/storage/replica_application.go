@@ -873,6 +873,11 @@ func (r *Replica) applyCmdAppBatch(
 	}
 	for ok := it.init(&b.cmdBuf); ok; ok = it.next() {
 		cmd := it.cur()
+		// Reset the context for already applied commands to ensure that
+		// reproposals at the same MaxLeaseIndex do not record into closed spans.
+		if cmd.proposedLocally() && cmd.proposal.applied {
+			cmd.ctx = ctx
+		}
 		for _, sc := range cmd.replicatedResult().SuggestedCompactions {
 			r.store.compactor.Suggest(cmd.ctx, sc)
 		}
