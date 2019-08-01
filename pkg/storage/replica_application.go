@@ -164,6 +164,16 @@ func (r *Replica) retrieveLocalProposals(ctx context.Context, b *cmdAppBatch) {
 	for ok := it.init(&b.cmdBuf); ok; ok = it.next() {
 		cmd := it.cur()
 		cmd.proposal = r.mu.proposals[cmd.idKey]
+		if cmd.proposedLocally() && cmd.raftCmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex {
+			// If this entry does not have the most up-to-date view of the
+			// corresponding proposal's maximum lease index then the proposal
+			// must have been reproposed with a higher lease index. (see
+			// tryReproposeWithNewLeaseIndex). In that case, there's a newer
+			// version of the proposal in the pipeline, so don't consider this
+			// entry to have been proposed locally. We entry must necessarily be
+			// rejected by checkForcedErr.
+			cmd.proposal = nil
+		}
 		if cmd.proposedLocally() {
 			// We initiated this command, so use the caller-supplied context.
 			cmd.ctx = cmd.proposal.ctx
@@ -179,16 +189,7 @@ func (r *Replica) retrieveLocalProposals(ctx context.Context, b *cmdAppBatch) {
 	for ok := it.init(&b.cmdBuf); ok; ok = it.next() {
 		cmd := it.cur()
 		toRelease := int64(0)
-		shouldRemove := cmd.proposedLocally() &&
-			// If this entry does not have the most up-to-date view of the
-			// corresponding proposal's maximum lease index then the proposal
-			// must have been reproposed with a higher lease index. (see
-			// tryReproposeWithNewLeaseIndex). In that case, there's a newer
-			// version of the proposal in the pipeline, so don't remove the
-			// proposal from the map. We expect this entry to be rejected by
-			// checkForcedErr.
-			cmd.raftCmd.MaxLeaseIndex == cmd.proposal.command.MaxLeaseIndex
-		if shouldRemove {
+		if cmd.proposedLocally() {
 			// Delete the proposal from the proposals map. There may be reproposals
 			// of the proposal in the pipeline, but those will all have the same max
 			// lease index, meaning that they will all be rejected after this entry

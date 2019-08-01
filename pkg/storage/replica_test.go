@@ -11557,3 +11557,107 @@ func TestSplitSnapshotWarningStr(t *testing.T) {
 		splitSnapshotWarningStr(12, status),
 	)
 }
+
+// TestReproposalAtLaterIndexDoesNotShareContextWithEarlierReproposal exercises
+// a case where a command is reproposed twice at different MaxLeaseIndex values
+// to ultimately fail with an error which cannot be reproposed (say due to a
+// lease transfer or change to its gc threshold). This test works to exercise
+// the invariant that when a proposal has been reproposed at different
+// MaxLeaseIndex value the client is ultimately acknowledged with an error from
+// a reproposal with the largest index.
+//
+// This test creates a scenario in which multiple reproposals exist at different
+// MaxLeaseIndex values and verifies that an assertion does not fire. It was
+// motivated by panics due to recording into already closed tracing spans.
+func TestHighestMaxLeaseIndexReproposalFinishesCommand(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tc := testContext{}
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.manualClock = hlc.NewManualClock(123)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	// Below we saet txnID to the value of the transaction we're going to force to
+	// be proposed multiple times.
+	var txnID uuid.UUID
+	// In the TestingProposalFilter we populater cmdID with the id of the proposal
+	// which corresponds to txnID.
+	var cmdID storagebase.CmdIDKey
+	// After we evalAndPropose the command we populate prop with the ProposalData
+	// value to enable reproposing the same command more than once.
+	var prop *ProposalData
+	// seen is used to detect the first application of our proposal.
+	var seen bool
+	cfg.TestingKnobs = StoreTestingKnobs{
+		MaxApplicationBatchSize: 1,
+		// Set the TestingProposalFilter in order to know the CmdIDKey for our
+		// request by detecting its txnID.
+		TestingProposalFilter: func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+			if args.Req.Header.Txn != nil && args.Req.Header.Txn.ID == txnID {
+				cmdID = args.CmdID
+			}
+			return nil
+		},
+		// Detect the application of the
+		TestingApplyFilter: func(args storagebase.ApplyFilterArgs) (retry int, pErr *roachpb.Error) {
+			if !seen && args.CmdID != cmdID {
+				return 0, nil
+			}
+			seen = true
+			if _, pErr := tc.repl.propose(prop.ctx, prop); pErr != nil {
+				panic(pErr)
+			}
+			tc.repl.mu.Lock()
+			defer tc.repl.mu.Unlock()
+			// Flush the proposalBuf to ensure that the reproposal makes it into the
+			// Replica's proposal map.
+			tc.repl.mu.proposalBuf.flushLocked()
+			// Increase the lease sequence so that future reproposals will fail with
+			// NotLeaseHolderError.
+			tc.repl.mu.state.Lease.Sequence++
+			// This return value will force another retry which will carry a yet
+			// higher MaxLeaseIndex and will trigger our invariant violation.
+			return 1, roachpb.NewErrorf("forced error that can be reproposed at a higher index")
+		},
+	}
+	tc.StartWithStoreConfig(t, stopper, cfg)
+	key := roachpb.Key("a")
+	lease, _ := tc.repl.GetLease()
+	txn := newTransaction("test", key, roachpb.NormalUserPriority, tc.Clock())
+	txnID = txn.ID
+	ba := roachpb.BatchRequest{
+		Header: roachpb.Header{
+			RangeID: tc.repl.RangeID,
+			Txn:     txn,
+		},
+	}
+	ba.Timestamp = txn.OrigTimestamp
+	ba.Add(&roachpb.PutRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: key,
+		},
+		Value: roachpb.MakeValueFromBytes([]byte("val")),
+	})
+
+	// Hold the RaftLock to ensure that after evalAndPropose our proposal is in
+	// the proposal map. Entries are only removed from that map underneath raft.
+	// We want to grab the proposal so that we can shove in an extra reproposal
+	// while the first proposal is being applied.
+	tc.repl.RaftLock()
+	ch, _, _, err := tc.repl.evalAndPropose(ctx, lease, &ba, &allSpans, endCmds{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tc.repl.mu.Lock()
+	tc.repl.mu.proposalBuf.flushLocked()
+	tc.repl.refreshProposalsLocked(0, reasonNewLeaderOrConfigChange)
+	prop = tc.repl.mu.proposals[cmdID]
+	tc.repl.mu.Unlock()
+	tc.repl.RaftUnlock()
+
+	res := <-ch
+	if !testutils.IsPError(res.Err, "NotLeaseHolder") {
+		t.Fatal(res.Err)
+	}
+}
