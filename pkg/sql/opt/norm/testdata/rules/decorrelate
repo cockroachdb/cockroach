@@ -2321,7 +2321,7 @@ project
  │    │    │    └── projections
  │    │    │         └── true [type=bool]
  │    │    └── filters
- │    │         └── (y = i) OR (y IS NULL) [type=bool, outer=(2,7), constraints=(/7: [/NULL - ])]
+ │    │         └── (y = i) OR (y IS NULL) [type=bool, outer=(2,7)]
  │    └── aggregations
  │         ├── array-agg [type=int[], outer=(7)]
  │         │    └── variable: y [type=int]

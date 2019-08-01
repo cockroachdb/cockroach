@@ -561,7 +561,7 @@ select
  │    │         └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(4), constraints=(/4: [/'bar' - /'bar'] [/'foo' - /'foo'])]
  │    └── filters (true)
  └── filters
-      └── (i < y) OR (y IS NULL) [type=bool, outer=(2,7), constraints=(/7: [/NULL - ])]
+      └── (i < y) OR (y IS NULL) [type=bool, outer=(2,7)]
 
 # Pushdown constant condition.
 norm expect=PushSelectIntoJoinLeft
@@ -744,7 +744,7 @@ select
  │    │         └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(6), constraints=(/6: [/'bar' - /'bar'] [/'foo' - /'foo'])]
  │    └── filters (true)
  └── filters
-      └── (i < y) OR (y IS NULL) [type=bool, outer=(2,4), constraints=(/2: [/NULL - ])]
+      └── (i < y) OR (y IS NULL) [type=bool, outer=(2,4)]
 
 # Don't push down conditions in case of LEFT JOIN.
 opt
@@ -880,7 +880,7 @@ select
  │    │    └── fd: (6)-->(7)
  │    └── filters (true)
  └── filters
-      └── (k = x) OR (x IS NULL) [type=bool, outer=(1,6), constraints=(/6: [/NULL - ])]
+      └── (k = x) OR (x IS NULL) [type=bool, outer=(1,6)]
 
 # Don't merge with RIGHT JOIN.
 opt expect-not=MergeSelectInnerJoin
@@ -904,7 +904,7 @@ select
  │    │    └── fd: (6)-->(7)
  │    └── filters (true)
  └── filters
-      └── (k = x) OR (k IS NULL) [type=bool, outer=(1,6), constraints=(/1: [/NULL - ])]
+      └── (k = x) OR (k IS NULL) [type=bool, outer=(1,6)]
 
 # Don't merge with FULL JOIN.
 opt expect-not=MergeSelectInnerJoin

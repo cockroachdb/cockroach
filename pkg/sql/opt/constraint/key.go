@@ -60,6 +60,11 @@ func (k Key) IsEmpty() bool {
 	return k.firstVal == nil
 }
 
+// IsNull is true if this key is the NULL value.
+func (k Key) IsNull() bool {
+	return k.Length() == 1 && k.firstVal == tree.DNull
+}
+
 // Length returns the number of values in the key. If the count is zero, then
 // this is an empty key.
 func (k Key) Length() int {
