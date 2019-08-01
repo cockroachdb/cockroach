@@ -17,11 +17,11 @@ import (
 
 // A getZoneCmd command displays a zone config.
 var getZoneCmd = &cobra.Command{
-	Use:   "get [options] <database[.table]>",
-	Short: "fetches and displays the zone config",
+	Use:   "get - this command has been removed",
+	Short: "this command has been removed",
 	Long: `
-Fetches and displays the zone configuration for the specified database or
-table.
+This command has been removed.
+Use SHOW ZONE CONFIGURATION FOR ... in a SQL client instead.
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runGetZone),
@@ -37,10 +37,11 @@ func runGetZone(_ *cobra.Command, _ []string) error {
 
 // A lsZonesCmd command displays a list of zone configs.
 var lsZonesCmd = &cobra.Command{
-	Use:   "ls [options]",
-	Short: "list all zone configs",
+	Use:   "ls - this command has been removed",
+	Short: "this command has been removed",
 	Long: `
-List zone configs.
+This command has been removed.
+Use SHOW ZONE CONFIGURATIONS in a SQL client instead.
 `,
 	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runLsZones),
@@ -54,10 +55,11 @@ func runLsZones(_ *cobra.Command, _ []string) error {
 
 // A rmZoneCmd command removes a zone config.
 var rmZoneCmd = &cobra.Command{
-	Use:   "rm [options] <database[.table]>",
-	Short: "remove a zone config",
+	Use:   "rm - this command has been removed",
+	Short: "this command has been removed",
 	Long: `
-Remove an existing zone config for the specified database or table.
+This command has been removed.
+Use ALTER ... CONFIGURE ZONE DISCARD in a SQL client instead.
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runRmZone),
@@ -71,29 +73,11 @@ func runRmZone(_ *cobra.Command, _ []string) error {
 
 // A setZoneCmd command creates a new or updates an existing zone config.
 var setZoneCmd = &cobra.Command{
-	Use:   "set [options] <database[.table]> -f file.yaml",
-	Short: "create or update zone config for object ID",
+	Use:   "set - this command has been removed",
+	Short: "this command has been removed",
 	Long: `
-Create or update the zone config for the specified database or table to the
-specified zone-config from the given file ("-" for stdin).
-
-The zone config format has the following YAML schema:
-
-  num_replicas: <num>
-  constraints: [comma-separated attribute list]
-  range_min_bytes: <size-in-bytes>
-  range_max_bytes: <size-in-bytes>
-  gc:
-    ttlseconds: <time-in-seconds>
-
-For example, to set the zone config for the system database, run:
-$ cockroach zone set system -f - << EOF
-num_replicas: 3
-constraints: [ssd, -mem]
-EOF
-
-Note that the specified zone config is merged with the existing zone config for
-the database or table.
+This command has been removed.
+Use ALTER ... CONFIGURE ZONE in a SQL client instead.
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runSetZone),
@@ -116,7 +100,7 @@ var zoneCmds = []*cobra.Command{
 
 var zoneCmd = &cobra.Command{
 	Use:        "zone",
-	Short:      "get, set, list and remove zones",
+	Short:      "this command has been removed",
 	RunE:       usageAndErr,
 	Deprecated: "use SHOW ZONE and CONFIGURE ZONE commands in a SQL client instead.",
 }
