@@ -137,18 +137,3 @@ SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'blo
 ----
 descriptor_id  descriptor_name    index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
 63             blog_posts_id_seq  NULL      64               sequence           0                      NULL               Columns: [0]
-
-# Verify that we report a dependency on a column that is being mutated.
-  #CREATE VIEW v AS WITH a AS (UPDATE kv SET v = 444 RETURNING k) SELECT k FROM a;
-statement ok
-CREATE TABLE kv (k INT PRIMARY KEY, v INT);
-BEGIN;
-  ALTER TABLE kv ADD COLUMN z INT DEFAULT 123;
-  CREATE VIEW v AS SELECT k FROM [UPDATE kv SET v = 444 WHERE k > 0 RETURNING k];
-COMMIT
-
-query ITIITITT colnames
-SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = 'kv'
-----
-descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-65             kv               NULL      66               view               0                      NULL               Columns: [1 2 3]
