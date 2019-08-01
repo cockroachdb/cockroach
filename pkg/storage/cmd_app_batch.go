@@ -93,7 +93,7 @@ func (b *cmdAppBatch) add(e *raftpb.Entry, d decodedRaftEntry) {
 // numEmptyEntries indicates the number of entries in the consumed portion of
 // toProcess contained a zero-byte payload.
 func (b *cmdAppBatch) decode(
-	ctx context.Context, toProcess []raftpb.Entry, decodeBuf *decodedRaftEntry,
+	ctx context.Context, toProcess []raftpb.Entry, decodeBuf *decodedRaftEntry, maxEntries int,
 ) (
 	foundNonTrivialEntry bool,
 	numEmptyEntries int,
@@ -101,7 +101,7 @@ func (b *cmdAppBatch) decode(
 	errExpl string,
 	err error,
 ) {
-	for len(toProcess) > 0 {
+	for len(toProcess) > 0 && (maxEntries <= 0 || int(b.cmdBuf.len) < maxEntries) {
 		e := &toProcess[0]
 		if len(e.Data) == 0 {
 			numEmptyEntries++

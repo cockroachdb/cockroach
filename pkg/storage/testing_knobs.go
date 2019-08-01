@@ -195,6 +195,11 @@ type StoreTestingKnobs struct {
 	// This ensures the `*Replica` will be materialized on the Store when it
 	// returns.
 	ReplicaAddStopAfterLearnerSnapshot func() bool
+
+	// MaxApplicationBatchSize enforces a maximum size on application batches.
+	// This can be useful for testing conditions which require commands to be
+	// applied in separate batches.
+	MaxApplicationBatchSize int
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
