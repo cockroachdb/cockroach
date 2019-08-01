@@ -117,13 +117,13 @@ type Catalog interface {
 	// the given catalog object. If not, then CheckAnyPrivilege returns an error.
 	CheckAnyPrivilege(ctx context.Context, o Object) error
 
-	// IsSuperUser checks that the current user has admin privileges. If yes,
+	// HasAdminRole checks that the current user has admin privileges. If yes,
 	// returns true. Returns an error if query on the `system.users` table failed
-	IsSuperUser(ctx context.Context, action string) (bool, error)
+	HasAdminRole(ctx context.Context) (bool, error)
 
-	// RequireSuperUser checks that the current user has admin privileges. If not,
+	// RequireAdminRole checks that the current user has admin privileges. If not,
 	// returns an error.
-	RequireSuperUser(ctx context.Context, action string) error
+	RequireAdminRole(ctx context.Context, action string) error
 
 	// FullyQualifiedName retrieves the fully qualified name of a data source.
 	// Note that:

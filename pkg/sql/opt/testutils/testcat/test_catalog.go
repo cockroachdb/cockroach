@@ -197,13 +197,13 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 	return nil
 }
 
-// IsSuperUser is part of the cat.Catalog interface.
-func (tc *Catalog) IsSuperUser(ctx context.Context, action string) (bool, error) {
+// HasAdminRole is part of the cat.Catalog interface.
+func (tc *Catalog) HasAdminRole(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// RequireSuperUser is part of the cat.Catalog interface.
-func (tc *Catalog) RequireSuperUser(ctx context.Context, action string) error {
+// RequireAdminRole is part of the cat.Catalog interface.
+func (tc *Catalog) RequireAdminRole(ctx context.Context, action string) error {
 	return nil
 }
 

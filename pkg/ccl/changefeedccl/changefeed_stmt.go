@@ -136,7 +136,7 @@ func changefeedPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		if err := p.RequireSuperUser(ctx, "CREATE CHANGEFEED"); err != nil {
+		if err := p.RequireAdminRole(ctx, "CREATE CHANGEFEED"); err != nil {
 			return err
 		}
 
