@@ -96,7 +96,9 @@ func RevertRange(
 	}
 
 	if resume != nil {
+		log.VEventf(ctx, 2, "hit limit while clearing keys, resume span [%v, %v)", resume.Key, resume.EndKey)
 		reply.ResumeSpan = resume
+		reply.NumKeys = cArgs.MaxKeys
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
 

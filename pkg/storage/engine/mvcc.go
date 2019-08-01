@@ -2018,7 +2018,7 @@ func MVCCClearTimeRange(
 
 		if startTime.Less(k.Timestamp) && !endTime.Less(k.Timestamp) {
 			if batchSize >= maxBatchSize {
-				resume = &roachpb.Span{Key: append([]byte{}, k.Key...)}
+				resume = &roachpb.Span{Key: append([]byte{}, k.Key...), EndKey: endKey}
 				break
 			}
 			clearMatchingKey(k)
