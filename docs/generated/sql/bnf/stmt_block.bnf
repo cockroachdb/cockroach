@@ -94,7 +94,7 @@ alter_stmt ::=
 	| alter_user_stmt
 
 backup_stmt ::=
-	'BACKUP' targets 'TO' string_or_placeholder opt_as_of_clause opt_incremental opt_with_options
+	'BACKUP' targets 'TO' partitioned_backup opt_as_of_clause opt_incremental opt_with_options
 
 cancel_stmt ::=
 	cancel_jobs_stmt
@@ -142,8 +142,8 @@ reset_stmt ::=
 	| reset_csetting_stmt
 
 restore_stmt ::=
-	'RESTORE' targets 'FROM' string_or_placeholder_list opt_with_options
-	| 'RESTORE' targets 'FROM' string_or_placeholder_list as_of_clause opt_with_options
+	'RESTORE' targets 'FROM' partitioned_backup_list opt_with_options
+	| 'RESTORE' targets 'FROM' partitioned_backup_list as_of_clause opt_with_options
 
 resume_stmt ::=
 	'RESUME' 'JOB' a_expr
@@ -284,9 +284,9 @@ alter_ddl_stmt ::=
 alter_user_stmt ::=
 	alter_user_password_stmt
 
-string_or_placeholder ::=
-	non_reserved_word_or_sconst
-	| 'PLACEHOLDER'
+partitioned_backup ::=
+	string_or_placeholder
+	| '(' string_or_placeholder_list ')'
 
 opt_as_of_clause ::=
 	as_of_clause
@@ -384,6 +384,10 @@ explain_option_list ::=
 import_format ::=
 	name
 
+string_or_placeholder ::=
+	non_reserved_word_or_sconst
+	| 'PLACEHOLDER'
+
 string_or_placeholder_list ::=
 	( string_or_placeholder ) ( ( ',' string_or_placeholder ) )*
 
@@ -415,6 +419,9 @@ reset_session_stmt ::=
 
 reset_csetting_stmt ::=
 	'RESET' 'CLUSTER' 'SETTING' var_name
+
+partitioned_backup_list ::=
+	( partitioned_backup ) ( ( ',' partitioned_backup ) )*
 
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
@@ -948,10 +955,6 @@ alter_user_password_stmt ::=
 	'ALTER' 'USER' string_or_placeholder 'WITH' 'PASSWORD' string_or_placeholder
 	| 'ALTER' 'USER' 'IF' 'EXISTS' string_or_placeholder 'WITH' 'PASSWORD' string_or_placeholder
 
-non_reserved_word_or_sconst ::=
-	non_reserved_word
-	| 'SCONST'
-
 kv_option_list ::=
 	( kv_option ) ( ( ',' kv_option ) )*
 
@@ -1045,6 +1048,10 @@ drop_sequence_stmt ::=
 
 explain_option_name ::=
 	non_reserved_word
+
+non_reserved_word_or_sconst ::=
+	non_reserved_word
+	| 'SCONST'
 
 table_elem ::=
 	column_def
@@ -1290,12 +1297,6 @@ alter_zone_database_stmt ::=
 alter_zone_range_stmt ::=
 	'ALTER' 'RANGE' zone_name set_zone_config
 
-non_reserved_word ::=
-	'identifier'
-	| unreserved_keyword
-	| col_name_keyword
-	| type_func_name_keyword
-
 kv_option ::=
 	name '=' string_or_placeholder
 	| name
@@ -1416,6 +1417,12 @@ table_index_name_list ::=
 
 table_name_list ::=
 	( table_name ) ( ( ',' table_name ) )*
+
+non_reserved_word ::=
+	'identifier'
+	| unreserved_keyword
+	| col_name_keyword
+	| type_func_name_keyword
 
 column_def ::=
 	column_name typename col_qual_list

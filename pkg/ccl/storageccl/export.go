@@ -82,7 +82,8 @@ func evalExport(
 	}
 	defer cArgs.EvalCtx.GetLimiters().ConcurrentExportRequests.Finish()
 
-	makeExportStorage := !args.ReturnSST || (args.Storage != roachpb.ExportStorage{})
+	makeExportStorage := !args.ReturnSST || args.Storage != roachpb.ExportStorage{} ||
+		(args.StorageByLocalityKV != nil && len(args.StorageByLocalityKV) > 0)
 	if makeExportStorage || log.V(1) {
 		log.Infof(ctx, "export [%s,%s)", args.Key, args.EndKey)
 	} else {
@@ -90,10 +91,24 @@ func evalExport(
 		log.Eventf(ctx, "export [%s,%s)", args.Key, args.EndKey)
 	}
 
+	// To get the store to export to, first try to match the locality of this node
+	// to the locality KVs in args.StorageByLocalityKV (used for partitioned
+	// backups). If that map isn't set or there's no match, fall back to
+	// args.Storage.
+	var localityKV string
 	var exportStore ExportStorage
 	if makeExportStorage {
+		var storeConf roachpb.ExportStorage
 		var err error
-		exportStore, err = MakeExportStorage(ctx, args.Storage, cArgs.EvalCtx.ClusterSettings())
+		foundStoreByLocality := false
+		if args.StorageByLocalityKV != nil && len(args.StorageByLocalityKV) > 0 {
+			locality := cArgs.EvalCtx.GetNodeLocality()
+			localityKV, storeConf, foundStoreByLocality = getMatchingStore(&locality, args.StorageByLocalityKV)
+		}
+		if !foundStoreByLocality {
+			storeConf = args.Storage
+		}
+		exportStore, err = MakeExportStorage(ctx, storeConf, cArgs.EvalCtx.ClusterSettings())
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -150,9 +165,10 @@ func evalExport(
 	}
 
 	exported := roachpb.ExportResponse_File{
-		Span:     args.Span(),
-		Exported: summary,
-		Sha512:   checksum,
+		Span:       args.Span(),
+		Exported:   summary,
+		Sha512:     checksum,
+		LocalityKV: localityKV,
 	}
 
 	if exportStore != nil {
@@ -177,4 +193,18 @@ func SHA512ChecksumData(data []byte) ([]byte, error) {
 		panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
 	}
 	return h.Sum(nil), nil
+}
+
+func getMatchingStore(
+	locality *roachpb.Locality, storageByLocalityKV map[string]*roachpb.ExportStorage,
+) (string, roachpb.ExportStorage, bool) {
+	kvs := locality.Tiers
+	// When matching, more specific KVs in the node locality take precedence
+	// over less specific ones.
+	for i := len(kvs) - 1; i >= 0; i-- {
+		if store, ok := storageByLocalityKV[kvs[i].String()]; ok {
+			return kvs[i].String(), *store, true
+		}
+	}
+	return "", roachpb.ExportStorage{}, false
 }

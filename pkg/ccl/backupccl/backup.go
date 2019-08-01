@@ -11,7 +11,9 @@ package backupccl
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/ioutil"
+	"net/url"
 	"sort"
 	"time"
 
@@ -43,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -50,6 +53,9 @@ const (
 	// BackupDescriptorName is the file name used for serialized
 	// BackupDescriptor protos.
 	BackupDescriptorName = "BACKUP"
+	// BackupPartitionDescriptorPrefix is the file name prefix for serialized
+	// BackupPartitionDescriptor protos.
+	BackupPartitionDescriptorPrefix = "BACKUP_PART"
 	// BackupDescriptorCheckpointName is the file name used to store the
 	// serialized BackupDescriptor proto while the backup is in progress.
 	BackupDescriptorCheckpointName = "BACKUP-CHECKPOINT"
@@ -59,6 +65,8 @@ const (
 
 const (
 	backupOptRevisionHistory = "revision_history"
+	localityURLParam         = "COCKROACH_LOCALITY"
+	defaultLocalityValue     = "default"
 )
 
 var backupOptionExpectValues = map[string]sql.KVStringOptValidate{
@@ -107,6 +115,25 @@ func readBackupDescriptor(
 	var backupDesc BackupDescriptor
 	if err := protoutil.Unmarshal(descBytes, &backupDesc); err != nil {
 		return BackupDescriptor{}, err
+	}
+	return backupDesc, err
+}
+
+func readBackupPartitionDescriptor(
+	ctx context.Context, exportStore storageccl.ExportStorage, filename string,
+) (BackupPartitionDescriptor, error) {
+	r, err := exportStore.ReadFile(ctx, filename)
+	if err != nil {
+		return BackupPartitionDescriptor{}, err
+	}
+	defer r.Close()
+	descBytes, err := ioutil.ReadAll(r)
+	if err != nil {
+		return BackupPartitionDescriptor{}, err
+	}
+	var backupDesc BackupPartitionDescriptor
+	if err := protoutil.Unmarshal(descBytes, &backupDesc); err != nil {
+		return BackupPartitionDescriptor{}, err
 	}
 	return backupDesc, err
 }
@@ -458,7 +485,7 @@ func optsToKVOptions(opts map[string]string) tree.KVOptions {
 func backupJobDescription(
 	p sql.PlanHookState,
 	backup *tree.Backup,
-	to string,
+	to []string,
 	incrementalFrom []string,
 	opts map[string]string,
 ) (string, error) {
@@ -468,11 +495,13 @@ func backupJobDescription(
 		Targets: backup.Targets,
 	}
 
-	to, err := storageccl.SanitizeExportStorageURI(to)
-	if err != nil {
-		return "", err
+	for _, t := range to {
+		sanitizedTo, err := storageccl.SanitizeExportStorageURI(t)
+		if err != nil {
+			return "", err
+		}
+		b.To = append(b.To, tree.NewDString(sanitizedTo))
 	}
-	b.To = tree.NewDString(to)
 
 	for _, from := range incrementalFrom {
 		sanitizedFrom, err := storageccl.SanitizeExportStorageURI(from)
@@ -516,6 +545,23 @@ func writeBackupDescriptor(
 ) error {
 	sort.Sort(BackupFileDescriptors(desc.Files))
 
+	descBuf, err := protoutil.Marshal(desc)
+	if err != nil {
+		return err
+	}
+
+	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
+}
+
+// writeBackupPartitionDescriptor writes metadata (containing a locality KV and
+// partial file listing) for a partitioned BACKUP to one of the stores in the
+// backup.
+func writeBackupPartitionDescriptor(
+	ctx context.Context,
+	exportStore storageccl.ExportStorage,
+	filename string,
+	desc *BackupPartitionDescriptor,
+) error {
 	descBuf, err := protoutil.Marshal(desc)
 	if err != nil {
 		return err
@@ -580,7 +626,8 @@ func backup(
 	db *client.DB,
 	gossip *gossip.Gossip,
 	settings *cluster.Settings,
-	exportStore storageccl.ExportStorage,
+	defaultStore storageccl.ExportStorage,
+	storageByLocalityKV map[string]*roachpb.ExportStorage,
 	job *jobs.Job,
 	backupDesc *BackupDescriptor,
 	checkpointDesc *BackupDescriptor,
@@ -692,10 +739,11 @@ func backup(
 				defer func() { <-exportsSem }()
 				header := roachpb.Header{Timestamp: span.end}
 				req := &roachpb.ExportRequest{
-					RequestHeader: roachpb.RequestHeaderFromSpan(span.span),
-					Storage:       exportStore.Conf(),
-					StartTime:     span.start,
-					MVCCFilter:    roachpb.MVCCFilter(backupDesc.MVCCFilter),
+					RequestHeader:       roachpb.RequestHeaderFromSpan(span.span),
+					Storage:             defaultStore.Conf(),
+					StorageByLocalityKV: storageByLocalityKV,
+					StartTime:           span.start,
+					MVCCFilter:          roachpb.MVCCFilter(backupDesc.MVCCFilter),
 				}
 				rawRes, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 				if pErr != nil {
@@ -713,6 +761,7 @@ func backup(
 						Path:        file.Path,
 						Sha512:      file.Sha512,
 						EntryCounts: file.Exported,
+						LocalityKV:  file.LocalityKV,
 					}
 					if span.start != backupDesc.StartTime {
 						f.StartTime = span.start
@@ -736,7 +785,7 @@ func backup(
 					checkpointMu.Lock()
 					backupDesc.Files = checkpointFiles
 					err := writeBackupDescriptor(
-						ctx, exportStore, BackupDescriptorCheckpointName, backupDesc,
+						ctx, defaultStore, BackupDescriptorCheckpointName, backupDesc,
 					)
 					checkpointMu.Unlock()
 					if err != nil {
@@ -758,11 +807,66 @@ func backup(
 	backupDesc.Files = mu.files
 	backupDesc.EntryCounts = mu.exported
 
-	if err := writeBackupDescriptor(ctx, exportStore, BackupDescriptorName, backupDesc); err != nil {
+	backupID := uuid.MakeV4()
+	backupDesc.ID = backupID
+	// Write additional partial descriptors to each node for partitioned backups.
+	if len(storageByLocalityKV) > 0 {
+		filesByLocalityKV := make(map[string][]BackupDescriptor_File)
+		for i := range mu.files {
+			file := &mu.files[i]
+			filesByLocalityKV[file.LocalityKV] = append(filesByLocalityKV[file.LocalityKV], *file)
+		}
+
+		nextPartitionedDescFilenameID := 1
+		for kv, conf := range storageByLocalityKV {
+			backupDesc.LocalityKVs = append(backupDesc.LocalityKVs, kv)
+			// Set a unique filename for each partition backup descriptor. The ID
+			// ensures uniqueness, and the kv string appended to the end is for
+			// readability.
+			filename := fmt.Sprintf("%s_%d_%s",
+				BackupPartitionDescriptorPrefix, nextPartitionedDescFilenameID, sanitizeLocalityKV(kv))
+			nextPartitionedDescFilenameID++
+			backupDesc.PartitionDescriptorFilenames = append(backupDesc.PartitionDescriptorFilenames, filename)
+			desc := BackupPartitionDescriptor{
+				LocalityKV: kv,
+				Files:      filesByLocalityKV[kv],
+				BackupID:   backupID,
+			}
+
+			if err := func() error {
+				store, err := storageccl.MakeExportStorage(ctx, *conf, settings)
+				if err != nil {
+					return err
+				}
+				defer store.Close()
+				return writeBackupPartitionDescriptor(ctx, store, filename, &desc)
+			}(); err != nil {
+				return mu.exported, err
+			}
+		}
+	}
+
+	if err := writeBackupDescriptor(ctx, defaultStore, BackupDescriptorName, backupDesc); err != nil {
 		return mu.exported, err
 	}
 
 	return mu.exported, nil
+}
+
+// sanitizeLocalityKV returns a sanitized version of the input string where all
+// characters that are not alphanumeric or -, =, or _ are replaced with _.
+func sanitizeLocalityKV(kv string) string {
+	sanitizedKV := make([]byte, len(kv))
+	for i := 0; i < len(kv); i++ {
+		if (kv[i] >= 'a' && kv[i] <= 'z') ||
+			(kv[i] >= 'A' && kv[i] >= 'Z') ||
+			(kv[i] >= '0' && kv[i] >= '9') || kv[i] == '-' || kv[i] == '=' {
+			sanitizedKV[i] = kv[i]
+		} else {
+			sanitizedKV[i] = '_'
+		}
+	}
+	return string(sanitizedKV)
 }
 
 // VerifyUsableExportTarget ensures that the target location does not already
@@ -805,7 +909,7 @@ func backupPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	toFn, err := p.TypeAsString(backupStmt.To, "BACKUP")
+	toFn, err := p.TypeAsStringArray(tree.Exprs(backupStmt.To), "BACKUP")
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -864,11 +968,16 @@ func backupPlanHook(
 			}
 		}
 
-		exportStore, err := storageccl.ExportStorageFromURI(ctx, to, p.ExecCfg().Settings)
+		// TODO (lucy): put partitioned BACKUP behind a 19.2 version gate
+		defaultURI, urisByLocalityKV, err := getURIsByLocalityKV(to)
+		if err != nil {
+			return nil
+		}
+		defaultStore, err := storageccl.ExportStorageFromURI(ctx, defaultURI, p.ExecCfg().Settings)
 		if err != nil {
 			return err
 		}
-		defer exportStore.Close()
+		defer defaultStore.Close()
 
 		opts, err := optsFn()
 		if err != nil {
@@ -992,14 +1101,19 @@ func backupPlanHook(
 			}
 
 			var err error
-			_, coveredTime, err := makeImportSpans(spans, prevBackups, keys.MinKey,
+			_, coveredTime, err := makeImportSpans(
+				spans,
+				prevBackups,
+				nil, /*backupLocalityInfo*/
+				keys.MinKey,
 				func(span intervalccl.Range, start, end hlc.Timestamp) error {
 					if (start == hlc.Timestamp{}) {
 						newSpans = append(newSpans, roachpb.Span{Key: span.Start, EndKey: span.End})
 						return nil
 					}
 					return errOnMissingRange(span, start, end)
-				})
+				},
+			)
 			if err != nil {
 				return errors.Wrapf(err, "invalid previous backups (a new full backup may be required if a table has been created, dropped or truncated)")
 			}
@@ -1034,7 +1148,11 @@ func backupPlanHook(
 		// including this backup, to ensure that the this backup plus any previous
 		// backups does cover the interval expected.
 		if _, coveredEnd, err := makeImportSpans(
-			spans, append(prevBackups, backupDesc), keys.MinKey, errOnMissingRange,
+			spans,
+			append(prevBackups, backupDesc),
+			nil, /*backupLocalityInfo*/
+			keys.MinKey,
+			errOnMissingRange,
 		); err != nil {
 			return err
 		} else if coveredEnd != endTime {
@@ -1051,7 +1169,9 @@ func backupPlanHook(
 			return err
 		}
 
-		if err := VerifyUsableExportTarget(ctx, exportStore, to); err != nil {
+		// TODO (lucy): For partitioned backups, also add verification for other
+		// stores we are writing to in addition to the default.
+		if err := VerifyUsableExportTarget(ctx, defaultStore, defaultURI); err != nil {
 			return err
 		}
 
@@ -1067,7 +1187,8 @@ func backupPlanHook(
 			Details: jobspb.BackupDetails{
 				StartTime:        startTime,
 				EndTime:          endTime,
-				URI:              to,
+				URI:              defaultURI,
+				URIsByLocalityKV: urisByLocalityKV,
 				BackupDescriptor: descBytes,
 			},
 			Progress: jobspb.BackupProgress{},
@@ -1102,16 +1223,26 @@ func (b *backupResumer) Resume(
 		return pgerror.Wrapf(err, pgcode.DataCorrupted,
 			"unmarshal backup descriptor")
 	}
-	conf, err := storageccl.ExportStorageConfFromURI(details.URI)
+	// For all backups, partitioned or not, the main BACKUP manifest is stored at
+	// details.URI.
+	defaultConf, err := storageccl.ExportStorageConfFromURI(details.URI)
 	if err != nil {
 		return errors.Wrapf(err, "export configuration")
 	}
-	exportStore, err := storageccl.MakeExportStorage(ctx, conf, b.settings)
+	defaultStore, err := storageccl.MakeExportStorage(ctx, defaultConf, b.settings)
 	if err != nil {
 		return errors.Wrapf(err, "make storage")
 	}
+	storageByLocalityKV := make(map[string]*roachpb.ExportStorage)
+	for kv, uri := range details.URIsByLocalityKV {
+		conf, err := storageccl.ExportStorageConfFromURI(uri)
+		if err != nil {
+			return err
+		}
+		storageByLocalityKV[kv] = &conf
+	}
 	var checkpointDesc *BackupDescriptor
-	if desc, err := readBackupDescriptor(ctx, exportStore, BackupDescriptorCheckpointName); err == nil {
+	if desc, err := readBackupDescriptor(ctx, defaultStore, BackupDescriptorCheckpointName); err == nil {
 		// If the checkpoint is from a different cluster, it's meaningless to us.
 		// More likely though are dummy/lock-out checkpoints with no ClusterID.
 		if desc.ClusterID.Equal(p.ExecCfg().ClusterID()) {
@@ -1130,7 +1261,8 @@ func (b *backupResumer) Resume(
 		p.ExecCfg().DB,
 		p.ExecCfg().Gossip,
 		p.ExecCfg().Settings,
-		exportStore,
+		defaultStore,
+		storageByLocalityKV,
 		b.job,
 		&backupDesc,
 		checkpointDesc,
@@ -1153,6 +1285,8 @@ func (b *backupResumer) OnTerminal(
 	// Attempt to delete BACKUP-CHECKPOINT.
 	if err := func() error {
 		details := b.job.Details().(jobspb.BackupDetails)
+		// For all backups, partitioned or not, the main BACKUP manifest is stored at
+		// details.URI.
 		conf, err := storageccl.ExportStorageConfFromURI(details.URI)
 		if err != nil {
 			return err
@@ -1247,4 +1381,70 @@ func init() {
 			}
 		},
 	)
+}
+
+// getURIsByLocalityKV takes a slice of URIs for a single (possibly partitioned)
+// backup, and returns the default backup destination URI and a map of all other
+// URIs by locality KV. The URIs in the result do not include the
+// COCKROACH_LOCALITY parameter.
+func getURIsByLocalityKV(to []string) (string, map[string]string, error) {
+	localityAndBaseURI := func(uri string) (string, string, error) {
+		parsedURI, err := url.Parse(uri)
+		if err != nil {
+			return "", "", err
+		}
+		q := parsedURI.Query()
+		localityKV := q.Get(localityURLParam)
+		// Remove the backup locality parameter.
+		q.Del(localityURLParam)
+		parsedURI.RawQuery = q.Encode()
+		baseURI := parsedURI.String()
+		return localityKV, baseURI, nil
+	}
+
+	urisByLocalityKV := make(map[string]string)
+	if len(to) == 1 {
+		localityKV, baseURI, err := localityAndBaseURI(to[0])
+		if err != nil {
+			return "", nil, err
+		}
+		if localityKV != "" && localityKV != defaultLocalityValue {
+			return "", nil, errors.Errorf("%s %s is invalid for a single BACKUP location",
+				localityURLParam, localityKV)
+		}
+		return baseURI, urisByLocalityKV, nil
+	}
+
+	var defaultURI string
+	for _, uri := range to {
+		localityKV, baseURI, err := localityAndBaseURI(uri)
+		if err != nil {
+			return "", nil, err
+		}
+		if localityKV == "" {
+			return "", nil, errors.Errorf(
+				"multiple URLs are provided for partitioned BACKUP, but %s is not specified",
+				localityURLParam,
+			)
+		}
+		if localityKV == defaultLocalityValue {
+			if defaultURI != "" {
+				return "", nil, errors.Errorf("multiple default URLs provided for partition backup")
+			}
+			defaultURI = baseURI
+		} else {
+			kv := roachpb.Tier{}
+			if err := kv.FromString(localityKV); err != nil {
+				return "", nil, errors.Wrap(err, "failed to parse backup locality")
+			}
+			if _, ok := urisByLocalityKV[localityKV]; ok {
+				return "", nil, errors.Errorf("duplicate URIs for locality %s", localityKV)
+			}
+			urisByLocalityKV[localityKV] = baseURI
+		}
+	}
+	if defaultURI == "" {
+		return "", nil, errors.Errorf("no default URL provided for partitioned backup")
+	}
+	return defaultURI, urisByLocalityKV, nil
 }

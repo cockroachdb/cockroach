@@ -51,6 +51,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_DeleteRangeResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_DeleteRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_DeleteResponse;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ExportRequest_StorageByLocalityKvEntry_DoNotUse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_GCRequest_GCKey;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_GCResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_GetRequest;
@@ -114,7 +115,6 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_TransferLeaseRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_WriteBatchRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_AdminChangeReplicasRequest;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_ExportRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_ExportResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_GCRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_RequestLeaseRequest;
@@ -124,6 +124,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<43> scc_info_ResponseUnion;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<44> scc_info_RequestUnion;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_BatchResponse_Header;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_ExportRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_Header;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_PushTxnRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_EndTransactionRequest;
@@ -582,6 +583,11 @@ class WriteBatchResponseDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<WriteBatchResponse>
       _instance;
 } _WriteBatchResponse_default_instance_;
+class ExportRequest_StorageByLocalityKvEntry_DoNotUseDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<ExportRequest_StorageByLocalityKvEntry_DoNotUse>
+      _instance;
+} _ExportRequest_StorageByLocalityKvEntry_DoNotUse_default_instance_;
 class ExportRequestDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<ExportRequest>
@@ -2131,6 +2137,20 @@ static void InitDefaultsWriteBatchResponse() {
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsWriteBatchResponse}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_ResponseHeader.base,}};
 
+static void InitDefaultsExportRequest_StorageByLocalityKvEntry_DoNotUse() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_ExportRequest_StorageByLocalityKvEntry_DoNotUse_default_instance_;
+    new (ptr) ::cockroach::roachpb::ExportRequest_StorageByLocalityKvEntry_DoNotUse();
+  }
+  ::cockroach::roachpb::ExportRequest_StorageByLocalityKvEntry_DoNotUse::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<1> scc_info_ExportRequest_StorageByLocalityKvEntry_DoNotUse =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsExportRequest_StorageByLocalityKvEntry_DoNotUse}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_ExportStorage.base,}};
+
 static void InitDefaultsExportRequest() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -2142,11 +2162,12 @@ static void InitDefaultsExportRequest() {
   ::cockroach::roachpb::ExportRequest::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<3> scc_info_ExportRequest =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 3, InitDefaultsExportRequest}, {
+::google::protobuf::internal::SCCInfo<4> scc_info_ExportRequest =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 4, InitDefaultsExportRequest}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_ExportStorage.base,
-      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
+      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,
+      &protobuf_roachpb_2fapi_2eproto::scc_info_ExportRequest_StorageByLocalityKvEntry_DoNotUse.base,}};
 
 static void InitDefaultsBulkOpSummary() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -2807,6 +2828,7 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_ExportStorage.base);
   ::google::protobuf::internal::InitSCC(&scc_info_WriteBatchRequest.base);
   ::google::protobuf::internal::InitSCC(&scc_info_WriteBatchResponse.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_ExportRequest_StorageByLocalityKvEntry_DoNotUse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ExportRequest.base);
   ::google::protobuf::internal::InitSCC(&scc_info_BulkOpSummary.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ExportResponse_File.base);
@@ -23917,6 +23939,14 @@ void WriteBatchResponse::InternalSwap(WriteBatchResponse* other) {
 
 // ===================================================================
 
+ExportRequest_StorageByLocalityKvEntry_DoNotUse::ExportRequest_StorageByLocalityKvEntry_DoNotUse() {}
+ExportRequest_StorageByLocalityKvEntry_DoNotUse::ExportRequest_StorageByLocalityKvEntry_DoNotUse(::google::protobuf::Arena* arena) : SuperType(arena) {}
+void ExportRequest_StorageByLocalityKvEntry_DoNotUse::MergeFrom(const ExportRequest_StorageByLocalityKvEntry_DoNotUse& other) {
+  MergeFromInternal(other);
+}
+
+// ===================================================================
+
 void ExportRequest::InitAsDefaultInstance() {
   ::cockroach::roachpb::_ExportRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
@@ -23939,6 +23969,7 @@ const int ExportRequest::kMvccFilterFieldNumber;
 const int ExportRequest::kReturnSstFieldNumber;
 const int ExportRequest::kOmitChecksumFieldNumber;
 const int ExportRequest::kEnableTimeBoundIteratorOptimizationFieldNumber;
+const int ExportRequest::kStorageByLocalityKvFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ExportRequest::ExportRequest()
@@ -23952,6 +23983,7 @@ ExportRequest::ExportRequest(const ExportRequest& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  storage_by_locality_kv_.MergeFrom(from.storage_by_locality_kv_);
   if (from.has_header()) {
     header_ = new ::cockroach::roachpb::RequestHeader(*from.header_);
   } else {
@@ -24005,6 +24037,7 @@ void ExportRequest::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  storage_by_locality_kv_.Clear();
   if (GetArenaNoVirtual() == NULL && header_ != NULL) {
     delete header_;
   }
@@ -24127,6 +24160,28 @@ bool ExportRequest::MergePartialFromCodedStream(
         break;
       }
 
+      case 8: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(66u /* 66 & 0xFF */)) {
+          ExportRequest_StorageByLocalityKvEntry_DoNotUse::Parser< ::google::protobuf::internal::MapFieldLite<
+              ExportRequest_StorageByLocalityKvEntry_DoNotUse,
+              ::std::string, ::cockroach::roachpb::ExportStorage,
+              ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+              ::google::protobuf::internal::WireFormatLite::TYPE_MESSAGE,
+              0 >,
+            ::google::protobuf::Map< ::std::string, ::cockroach::roachpb::ExportStorage > > parser(&storage_by_locality_kv_);
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+              input, &parser));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            parser.key().data(), static_cast<int>(parser.key().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.roachpb.ExportRequest.StorageByLocalityKvEntry.key"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -24187,6 +24242,54 @@ void ExportRequest::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(7, this->enable_time_bound_iterator_optimization(), output);
   }
 
+  if (!this->storage_by_locality_kv().empty()) {
+    typedef ::google::protobuf::Map< ::std::string, ::cockroach::roachpb::ExportStorage >::const_pointer
+        ConstPtr;
+    typedef ConstPtr SortItem;
+    typedef ::google::protobuf::internal::CompareByDerefFirst<SortItem> Less;
+    struct Utf8Check {
+      static void Check(ConstPtr p) {
+        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          p->first.data(), static_cast<int>(p->first.length()),
+          ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+          "cockroach.roachpb.ExportRequest.StorageByLocalityKvEntry.key");
+      }
+    };
+
+    if (output->IsSerializationDeterministic() &&
+        this->storage_by_locality_kv().size() > 1) {
+      ::std::unique_ptr<SortItem[]> items(
+          new SortItem[this->storage_by_locality_kv().size()]);
+      typedef ::google::protobuf::Map< ::std::string, ::cockroach::roachpb::ExportStorage >::size_type size_type;
+      size_type n = 0;
+      for (::google::protobuf::Map< ::std::string, ::cockroach::roachpb::ExportStorage >::const_iterator
+          it = this->storage_by_locality_kv().begin();
+          it != this->storage_by_locality_kv().end(); ++it, ++n) {
+        items[static_cast<ptrdiff_t>(n)] = SortItem(&*it);
+      }
+      ::std::sort(&items[0], &items[static_cast<ptrdiff_t>(n)], Less());
+      ::std::unique_ptr<ExportRequest_StorageByLocalityKvEntry_DoNotUse> entry;
+      for (size_type i = 0; i < n; i++) {
+        entry.reset(storage_by_locality_kv_.NewEntryWrapper(
+            items[static_cast<ptrdiff_t>(i)]->first, items[static_cast<ptrdiff_t>(i)]->second));
+        ::google::protobuf::internal::WireFormatLite::WriteMessage(
+            8, *entry, output);
+        Utf8Check::Check(items[static_cast<ptrdiff_t>(i)]);
+      }
+    } else {
+      ::std::unique_ptr<ExportRequest_StorageByLocalityKvEntry_DoNotUse> entry;
+      for (::google::protobuf::Map< ::std::string, ::cockroach::roachpb::ExportStorage >::const_iterator
+          it = this->storage_by_locality_kv().begin();
+          it != this->storage_by_locality_kv().end(); ++it) {
+        entry.reset(storage_by_locality_kv_.NewEntryWrapper(
+            it->first, it->second));
+        ::google::protobuf::internal::WireFormatLite::WriteMessage(
+            8, *entry, output);
+        Utf8Check::Check(&*it);
+      }
+    }
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ExportRequest)
@@ -24197,6 +24300,19 @@ size_t ExportRequest::ByteSizeLong() const {
   size_t total_size = 0;
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  total_size += 1 *
+      ::google::protobuf::internal::FromIntSize(this->storage_by_locality_kv_size());
+  {
+    ::std::unique_ptr<ExportRequest_StorageByLocalityKvEntry_DoNotUse> entry;
+    for (::google::protobuf::Map< ::std::string, ::cockroach::roachpb::ExportStorage >::const_iterator
+        it = this->storage_by_locality_kv().begin();
+        it != this->storage_by_locality_kv().end(); ++it) {
+      entry.reset(storage_by_locality_kv_.NewEntryWrapper(it->first, it->second));
+      total_size += ::google::protobuf::internal::WireFormatLite::
+          MessageSizeNoVirtual(*entry);
+    }
+  }
 
   if (this->has_header()) {
     total_size += 1 +
@@ -24252,6 +24368,7 @@ void ExportRequest::MergeFrom(const ExportRequest& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  storage_by_locality_kv_.MergeFrom(from.storage_by_locality_kv_);
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
@@ -24292,6 +24409,7 @@ void ExportRequest::Swap(ExportRequest* other) {
 }
 void ExportRequest::InternalSwap(ExportRequest* other) {
   using std::swap;
+  storage_by_locality_kv_.Swap(&other->storage_by_locality_kv_);
   swap(header_, other->header_);
   swap(storage_, other->storage_);
   swap(start_time_, other->start_time_);
@@ -24607,6 +24725,7 @@ const int ExportResponse_File::kPathFieldNumber;
 const int ExportResponse_File::kSha512FieldNumber;
 const int ExportResponse_File::kExportedFieldNumber;
 const int ExportResponse_File::kSstFieldNumber;
+const int ExportResponse_File::kLocalityKvFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ExportResponse_File::ExportResponse_File()
@@ -24632,6 +24751,10 @@ ExportResponse_File::ExportResponse_File(const ExportResponse_File& from)
   if (from.sst().size() > 0) {
     sst_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.sst_);
   }
+  locality_kv_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.locality_kv().size() > 0) {
+    locality_kv_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.locality_kv_);
+  }
   if (from.has_span()) {
     span_ = new ::cockroach::roachpb::Span(*from.span_);
   } else {
@@ -24649,6 +24772,7 @@ void ExportResponse_File::SharedCtor() {
   path_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   sha512_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   sst_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  locality_kv_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&span_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&exported_) -
       reinterpret_cast<char*>(&span_)) + sizeof(exported_));
@@ -24663,6 +24787,7 @@ void ExportResponse_File::SharedDtor() {
   path_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   sha512_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   sst_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  locality_kv_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != internal_default_instance()) delete span_;
   if (this != internal_default_instance()) delete exported_;
 }
@@ -24685,6 +24810,7 @@ void ExportResponse_File::Clear() {
   path_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   sha512_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   sst_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  locality_kv_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (GetArenaNoVirtual() == NULL && span_ != NULL) {
     delete span_;
   }
@@ -24773,6 +24899,21 @@ bool ExportResponse_File::MergePartialFromCodedStream(
         break;
       }
 
+      case 8: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(66u /* 66 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_locality_kv()));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            this->locality_kv().data(), static_cast<int>(this->locality_kv().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.roachpb.ExportResponse.File.locality_kv"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -24830,6 +24971,15 @@ void ExportResponse_File::SerializeWithCachedSizes(
       7, this->sst(), output);
   }
 
+  if (this->locality_kv().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+      this->locality_kv().data(), static_cast<int>(this->locality_kv().length()),
+      ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+      "cockroach.roachpb.ExportResponse.File.locality_kv");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      8, this->locality_kv(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ExportResponse.File)
@@ -24859,6 +25009,12 @@ size_t ExportResponse_File::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::BytesSize(
         this->sst());
+  }
+
+  if (this->locality_kv().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::StringSize(
+        this->locality_kv());
   }
 
   if (this->has_span()) {
@@ -24902,6 +25058,10 @@ void ExportResponse_File::MergeFrom(const ExportResponse_File& from) {
 
     sst_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.sst_);
   }
+  if (from.locality_kv().size() > 0) {
+
+    locality_kv_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.locality_kv_);
+  }
   if (from.has_span()) {
     mutable_span()->::cockroach::roachpb::Span::MergeFrom(from.span());
   }
@@ -24932,6 +25092,8 @@ void ExportResponse_File::InternalSwap(ExportResponse_File* other) {
   sha512_.Swap(&other->sha512_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   sst_.Swap(&other->sst_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  locality_kv_.Swap(&other->locality_kv_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   swap(span_, other->span_);
   swap(exported_, other->exported_);
@@ -36987,6 +37149,9 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::WriteBatchRe
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::WriteBatchResponse* Arena::CreateMaybeMessage< ::cockroach::roachpb::WriteBatchResponse >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::WriteBatchResponse >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ExportRequest_StorageByLocalityKvEntry_DoNotUse* Arena::CreateMaybeMessage< ::cockroach::roachpb::ExportRequest_StorageByLocalityKvEntry_DoNotUse >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::ExportRequest_StorageByLocalityKvEntry_DoNotUse >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ExportRequest* Arena::CreateMaybeMessage< ::cockroach::roachpb::ExportRequest >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::ExportRequest >(arena);
