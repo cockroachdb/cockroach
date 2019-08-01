@@ -452,6 +452,12 @@ func (u *sqlSymUnion) resolvableFuncRefFromName() tree.ResolvableFunctionReferen
 func (u *sqlSymUnion) rowsFromExpr() *tree.RowsFromExpr {
     return u.val.(*tree.RowsFromExpr)
 }
+func (u *sqlSymUnion) regularOrGeodistributedBackup() tree.RegularOrGeodistributedBackup {
+    return u.val.(tree.RegularOrGeodistributedBackup)
+}
+func (u *sqlSymUnion) regularOrGeodistributedBackups() []tree.RegularOrGeodistributedBackup {
+    return u.val.([]tree.RegularOrGeodistributedBackup)
+}
 func newNameFromStr(s string) *tree.Name {
     return (*tree.Name)(&s)
 }
@@ -699,6 +705,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> reset_stmt reset_session_stmt reset_csetting_stmt
 %type <tree.Statement> resume_stmt
 %type <tree.Statement> restore_stmt
+%type <tree.RegularOrGeodistributedBackup> regular_or_geodistributed_backup
+%type <[]tree.RegularOrGeodistributedBackup> regular_or_geodistributed_backup_list
 %type <tree.Statement> revoke_stmt
 %type <*tree.Select> select_stmt
 %type <tree.Statement> abort_stmt
@@ -1731,9 +1739,9 @@ opt_validate_behavior:
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
-  BACKUP targets TO string_or_placeholder opt_as_of_clause opt_incremental opt_with_options
+  BACKUP targets TO regular_or_geodistributed_backup opt_as_of_clause opt_incremental opt_with_options
   {
-    $$.val = &tree.Backup{Targets: $2.targetList(), To: $4.expr(), IncrementalFrom: $6.exprs(), AsOf: $5.asOfClause(), Options: $7.kvOptions()}
+    $$.val = &tree.Backup{Targets: $2.targetList(), To: $4.regularOrGeodistributedBackup(), IncrementalFrom: $6.exprs(), AsOf: $5.asOfClause(), Options: $7.kvOptions()}
   }
 | BACKUP error // SHOW HELP: BACKUP
 
@@ -1757,15 +1765,35 @@ backup_stmt:
 //
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
-  RESTORE targets FROM string_or_placeholder_list opt_with_options
+  RESTORE targets FROM regular_or_geodistributed_backup_list opt_with_options
   {
-    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.exprs(), Options: $5.kvOptions()}
+    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.regularOrGeodistributedBackups(), Options: $5.kvOptions()}
   }
-| RESTORE targets FROM string_or_placeholder_list as_of_clause opt_with_options
+| RESTORE targets FROM regular_or_geodistributed_backup_list as_of_clause opt_with_options
   {
-    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.exprs(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
+    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.regularOrGeodistributedBackups(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
   }
 | RESTORE error // SHOW HELP: RESTORE
+
+regular_or_geodistributed_backup:
+  string_or_placeholder
+  {
+    $$.val = tree.RegularOrGeodistributedBackup{$1.expr()}
+  }
+| '(' string_or_placeholder_list ')'
+  {
+    $$.val = tree.RegularOrGeodistributedBackup($2.exprs())
+  }
+
+regular_or_geodistributed_backup_list:
+  regular_or_geodistributed_backup
+  {
+    $$.val = []tree.RegularOrGeodistributedBackup{$1.regularOrGeodistributedBackup()}
+  }
+| regular_or_geodistributed_backup_list ',' regular_or_geodistributed_backup
+  {
+    $$.val = append($1.regularOrGeodistributedBackups(), $3.regularOrGeodistributedBackup())
+  }
 
 import_format:
   name

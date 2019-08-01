@@ -97,7 +97,7 @@ alter_stmt ::=
 	| alter_user_stmt
 
 backup_stmt ::=
-	'BACKUP' targets 'TO' string_or_placeholder opt_as_of_clause opt_incremental opt_with_options
+	'BACKUP' targets 'TO' regular_or_geodistributed_backup opt_as_of_clause opt_incremental opt_with_options
 
 cancel_stmt ::=
 	cancel_jobs_stmt
@@ -145,8 +145,8 @@ reset_stmt ::=
 	| reset_csetting_stmt
 
 restore_stmt ::=
-	'RESTORE' targets 'FROM' string_or_placeholder_list opt_with_options
-	| 'RESTORE' targets 'FROM' string_or_placeholder_list as_of_clause opt_with_options
+	'RESTORE' targets 'FROM' regular_or_geodistributed_backup_list opt_with_options
+	| 'RESTORE' targets 'FROM' regular_or_geodistributed_backup_list as_of_clause opt_with_options
 
 resume_stmt ::=
 	'RESUME' 'JOB' a_expr
@@ -296,6 +296,10 @@ alter_ddl_stmt ::=
 alter_user_stmt ::=
 	alter_user_password_stmt
 
+regular_or_geodistributed_backup ::=
+	string_or_placeholder
+	| '(' string_or_placeholder_list ')'
+
 opt_as_of_clause ::=
 	as_of_clause
 	| 
@@ -415,6 +419,9 @@ reset_session_stmt ::=
 
 reset_csetting_stmt ::=
 	'RESET' 'CLUSTER' 'SETTING' var_name
+
+regular_or_geodistributed_backup_list ::=
+	( regular_or_geodistributed_backup ) ( ( ',' regular_or_geodistributed_backup ) )*
 
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr

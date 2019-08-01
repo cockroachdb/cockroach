@@ -1330,6 +1330,10 @@ message ExportRequest {
   // eliminate any need to investigate time-bound iterators when/if someone hits
   // a correctness bug.
   bool enable_time_bound_iterator_optimization = 7;
+  // StorageByLocalityKV is a map of locality KVs to storage configurations. If
+  // set, files will be written to the store that matches the most specific
+  // locality KV in the map.
+  map<string, ExportStorage> storage_by_locality_kv = 8 [(gogoproto.customname) = "StorageByLocalityKV"];
 }
 
 message BulkOpSummary {
@@ -1353,6 +1357,7 @@ message ExportResponse {
     BulkOpSummary exported = 6 [(gogoproto.nullable) = false];
 
     bytes sst = 7 [(gogoproto.customname) = "SST"];
+    string locality_kv = 8 [(gogoproto.customname) = "LocalityKV"];
   }
 
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
