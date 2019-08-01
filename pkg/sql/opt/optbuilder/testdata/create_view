@@ -1,0 +1,167 @@
+# This table has ID 53.
+exec-ddl
+CREATE TABLE ab (a INT PRIMARY KEY, b INT, INDEX idx(b))
+----
+
+exec-ddl
+CREATE TABLE cd (c INT PRIMARY KEY, d INT)
+----
+
+exec-ddl
+CREATE SEQUENCE s
+----
+
+build
+CREATE VIEW v1 AS VALUES (1)
+----
+create-view t.public.v1
+ ├── VALUES (1)
+ ├── columns: column1:1(int)
+ └── dependencies
+
+build
+CREATE VIEW v1 AS SELECT a FROM ab 
+----
+create-view t.public.v1
+ ├── SELECT a FROM t.public.ab
+ ├── columns: a:1(int)
+ └── dependencies
+      └── ab [columns: (0,1)]
+
+# Test dependency on specific index.
+build
+CREATE VIEW v1 AS SELECT a FROM ab@idx
+----
+create-view t.public.v1
+ ├── SELECT a FROM t.public.ab@idx
+ ├── columns: a:1(int)
+ └── dependencies
+      └── ab@idx [columns: (0,1)]
+
+build
+CREATE VIEW v1 AS SELECT a FROM ab@primary
+----
+create-view t.public.v1
+ ├── SELECT a FROM t.public.ab@primary
+ ├── columns: a:1(int)
+ └── dependencies
+      └── ab@primary [columns: (0,1)]
+
+# Test dependency on view.
+exec-ddl
+CREATE VIEW av AS SELECT a FROM ab
+----
+
+build
+CREATE VIEW v1 AS SELECT a FROM av 
+----
+create-view t.public.v1
+ ├── SELECT a FROM t.public.av
+ ├── columns: a:1(int)
+ └── dependencies
+      └── av [columns: (0)]
+
+build
+CREATE VIEW v1 AS SELECT av.a, ab.a FROM av, ab
+----
+create-view t.public.v1
+ ├── SELECT av.a, ab.a FROM t.public.av, t.public.ab
+ ├── columns: a:1(int) a:3(int)
+ └── dependencies
+      ├── av [columns: (0)]
+      └── ab [columns: (0,1)]
+
+# Test that we don't report virtual table dependencies.
+build
+CREATE VIEW v1 AS SELECT a, table_schema FROM ab, information_schema.columns
+----
+create-view t.public.v1
+ ├── SELECT a, table_schema FROM t.public.ab, "".information_schema.columns
+ ├── columns: a:1(int) table_schema:4(string)
+ └── dependencies
+      └── ab [columns: (0,1)]
+
+# Test cases with specified column names.
+build
+CREATE VIEW v2 (x) AS SELECT ab.a FROM ab, ab AS ab2, cd
+----
+create-view t.public.v2
+ ├── SELECT ab.a FROM t.public.ab, t.public.ab AS ab2, t.public.cd
+ ├── columns: x:1(int)
+ └── dependencies
+      ├── ab [columns: (0,1)]
+      ├── ab [columns: (0,1)]
+      └── cd [columns: (0,1)]
+
+build
+CREATE VIEW v3 (x, y) AS SELECT a FROM ab
+----
+error (42601): CREATE VIEW specifies 2 column names, but data source has 1 column
+
+build
+CREATE VIEW v3 (x) AS SELECT a, b FROM ab
+----
+error (42601): CREATE VIEW specifies 1 column name, but data source has 2 columns
+
+# Verify that we disallow * in view definitions (#10028).
+build
+CREATE VIEW v4 AS SELECT * FROM ab
+----
+error (0A000): unimplemented: views do not currently support * expressions
+
+build
+CREATE VIEW v5 AS SELECT a FROM [53 AS t]
+----
+create-view t.public.v5
+ ├── SELECT a FROM [53 AS t]
+ ├── columns: a:1(int)
+ └── dependencies
+      └── ab [columns: (0,1)]
+
+# Verify that we only depend on the specified column.
+build
+CREATE VIEW v6 AS SELECT a FROM [53(1) AS t]
+----
+create-view t.public.v6
+ ├── SELECT a FROM [53(1) AS t]
+ ├── columns: a:1(int)
+ └── dependencies
+      └── ab [columns: (0)]
+
+# Verify dependency on sequence.
+build
+CREATE VIEW v7 AS SELECT last_value FROM s
+----
+create-view t.public.v7
+ ├── SELECT last_value FROM t.public.s
+ ├── columns: last_value:1(int)
+ └── dependencies
+      └── s
+
+# Verify CTEs (and that we don't depend on tables with the same name).
+build
+CREATE VIEW v8 AS
+WITH cd AS (SELECT a, b FROM ab)
+  SELECT a+b FROM cd
+----
+create-view t.public.v8
+ ├── WITH cd AS (SELECT a, b FROM t.public.ab) SELECT a + b FROM cd
+ ├── columns: "?column?":5(int)
+ └── dependencies
+      └── ab [columns: (0,1)]
+
+# Verify that we disallow mutation statements.
+build
+CREATE VIEW v8 AS SELECT a,b FROM [INSERT INTO ab VALUES (1,1) RETURNING a, b]
+----
+error (42601): INSERT cannot be used inside a view definition
+
+build
+CREATE VIEW v9 AS SELECT a,b FROM [UPDATE ab SET a=a+1 RETURNING a, b]
+----
+error (42601): UPDATE cannot be used inside a view definition
+
+build
+CREATE VIEW v9 AS SELECT a,b FROM [DELETE FROM ab WHERE a>b RETURNING a, b]
+----
+error (42601): DELETE cannot be used inside a view definition

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,6 +54,9 @@ func getTypedExprs(exprs []tree.Expr) []tree.TypedExpr {
 func (b *Builder) expandStar(
 	expr tree.Expr, inScope *scope,
 ) (aliases []string, exprs []tree.TypedExpr) {
+	if b.insideViewDef {
+		panic(unimplemented.NewWithIssue(10028, "views do not currently support * expressions"))
+	}
 	switch t := expr.(type) {
 	case *tree.TupleStar:
 		texpr := inScope.resolveType(t.Expr, types.Any)
@@ -461,7 +465,12 @@ func (b *Builder) resolveTable(
 func (b *Builder) resolveDataSource(
 	tn *tree.TableName, priv privilege.Kind,
 ) (cat.DataSource, cat.DataSourceName) {
-	ds, resName, err := b.catalog.ResolveDataSource(b.ctx, cat.Flags{}, tn)
+	var flags cat.Flags
+	if b.insideViewDef {
+		// Avoid taking table leases when we're creating a view.
+		flags.AvoidDescriptorCaches = true
+	}
+	ds, resName, err := b.catalog.ResolveDataSource(b.ctx, flags, tn)
 	if err != nil {
 		panic(err)
 	}
@@ -474,7 +483,12 @@ func (b *Builder) resolveDataSource(
 // does not have the given privilege, then resolveDataSourceFromRef raises an
 // error.
 func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) cat.DataSource {
-	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, cat.StableID(ref.TableID))
+	var flags cat.Flags
+	if b.insideViewDef {
+		// Avoid taking table leases when we're creating a view.
+		flags.AvoidDescriptorCaches = true
+	}
+	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, flags, cat.StableID(ref.TableID))
 	if err != nil {
 		panic(pgerror.Wrapf(err, pgcode.UndefinedObject, "%s", tree.ErrString(ref)))
 	}

@@ -28,6 +28,30 @@ define CreateTablePrivate {
     Syntax CreateTable
 }
 
+[Relational, DDL, Mutation]
+define CreateView {
+    _ CreateViewPrivate
+}
+
+[Private]
+define CreateViewPrivate {
+    # Schema is the ID of the catalog schema into which the new table goes.
+    Schema SchemaID
+
+    ViewName string
+
+    # ViewQuery contains the query for the view; data sources are always fully
+    # qualified.
+    ViewQuery string
+
+    # Columns that correspond to the output of the view query, with the names
+    # they will have as part of the view.
+    Columns Presentation
+
+    # Deps contains the data source dependencies of the view.
+    Deps ViewDeps
+}
+
 # Explain returns information about the execution plan of the "input"
 # expression.
 [Relational]

@@ -14,9 +14,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -107,6 +110,19 @@ type Builder struct {
 	// subquery contains a pointer to the subquery which is currently being built
 	// (if any).
 	subquery *subquery
+
+	// If set, we are processing a view definition; in this case, catalog caches
+	// are disabled and certain statements (like mutations) are disallowed.
+	insideViewDef bool
+
+	// If set, we are collecting view dependencies in viewDeps. This can only
+	// happen inside view definitions.
+	//
+	// When a view depends on another view, we only want to track the dependency
+	// on the inner view itself, and not the transitive dependencies (so
+	// trackViewDeps would be false inside that inner view).
+	trackViewDeps bool
+	viewDeps      opt.ViewDeps
 }
 
 // New creates a new Builder structure initialized with the given
@@ -191,6 +207,18 @@ func unimplementedWithIssueDetailf(issue int, detail, format string, args ...int
 func (b *Builder) buildStmt(
 	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
+	if b.insideViewDef {
+		// A black list of statements that can't be used from inside a view.
+		switch stmt := stmt.(type) {
+		case *tree.Delete, *tree.Insert, *tree.Update, *tree.CreateTable, *tree.CreateView,
+			*tree.Split, *tree.Unsplit, *tree.Relocate,
+			*tree.ControlJobs, *tree.CancelQueries, *tree.CancelSessions:
+			panic(pgerror.Newf(
+				pgcode.Syntax, "%s cannot be used inside a view definition", stmt.StatementTag(),
+			))
+		}
+	}
+
 	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
 	case *tree.Delete:
@@ -210,6 +238,9 @@ func (b *Builder) buildStmt(
 
 	case *tree.CreateTable:
 		return b.buildCreateTable(stmt, inScope)
+
+	case *tree.CreateView:
+		return b.buildCreateView(stmt, inScope)
 
 	case *tree.Explain:
 		return b.buildExplain(stmt, inScope)
