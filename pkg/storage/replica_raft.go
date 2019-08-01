@@ -435,27 +435,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
 
-	// We defer the check to Replica.updateProposalQuotaRaftMuLocked because we need
-	// to check it in both cases, if hasReady is false and otherwise.
-	// If hasReady == false:
-	//     Consider the case when our quota is of size 1 and two out of three
-	//     replicas have committed one log entry while the third is lagging
-	//     behind. When the third replica finally does catch up and sends
-	//     along a MsgAppResp, since the entry is already committed on the
-	//     leader replica, no Ready is emitted. But given that the third
-	//     replica has caught up, we can release
-	//     some quota back to the pool.
-	// Otherwise:
-	//     Consider the case where there are two replicas and we have a quota
-	//     of size 1. We acquire the quota when the write gets proposed on the
-	//     leader and expect it to be released when the follower commits it
-	//     locally. In order to do so we need to have the entry 'come out of
-	//     raft' and in the case of a two node raft group, this only happens if
-	//     hasReady == true.
-	//     If we don't release quota back at the end of
-	//     handleRaftReadyRaftMuLocked, the next write will get blocked.
-	defer r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
-
 	err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		if err := r.mu.proposalBuf.FlushLockedWithRaftGroup(raftGroup); err != nil {
 			return false, err
@@ -472,6 +451,15 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 
 	if !hasReady {
+		// We must update the proposal quota even if we don't have a ready.
+		// Consider the case when our quota is of size 1 and two out of three
+		// replicas have committed one log entry while the third is lagging
+		// behind. When the third replica finally does catch up and sends
+		// along a MsgAppResp, since the entry is already committed on the
+		// leader replica, no Ready is emitted. But given that the third
+		// replica has caught up, we can release
+		// some quota back to the pool.
+		r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
 		return stats, "", nil
 	}
 
@@ -767,6 +755,17 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}); err != nil {
 		return stats, expl, errors.Wrap(err, expl)
 	}
+
+	// NB: All other early returns before this point are due to errors.
+	// We must also update the proposal quota even if we did have a ready.
+	// Consider the case where there are two replicas and we have a quota
+	// of size 1. We acquire the quota when the write gets proposed on the
+	// leader and expect it to be released when the follower commits it
+	// locally. In order to do so we need to have the entry 'come out of
+	// raft' and in the case of a two node raft group, this only happens if
+	// hasReady == true. If we don't release quota back at the end of
+	// handleRaftReadyRaftMuLocked, the next write will get blocked.
+	r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
 	return stats, "", nil
 }
 
