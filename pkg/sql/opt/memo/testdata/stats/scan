@@ -609,11 +609,11 @@ ALTER TABLE hist INJECT STATISTICS '[
     "distinct_count": 40,
     "histo_col_type": "int",
     "histo_buckets": [
-      {"num_eq": 0, "num_range": 0, "upper_bound": "0"},
-      {"num_eq": 10, "num_range": 90, "upper_bound": "10"},
-      {"num_eq": 20, "num_range": 180, "upper_bound": "20"},
-      {"num_eq": 30, "num_range": 270, "upper_bound": "30"},
-      {"num_eq": 40, "num_range": 360, "upper_bound": "40"}
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "10"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 9, "upper_bound": "20"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 9, "upper_bound": "30"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 9, "upper_bound": "40"}
     ]
   },
   {
@@ -623,11 +623,11 @@ ALTER TABLE hist INJECT STATISTICS '[
     "distinct_count": 120,
     "histo_col_type": "date",
     "histo_buckets": [
-      {"num_eq": 0, "num_range": 0, "upper_bound": "2018-06-30"},
-      {"num_eq": 10, "num_range": 90, "upper_bound": "2018-07-31"},
-      {"num_eq": 20, "num_range": 180, "upper_bound": "2018-08-31"},
-      {"num_eq": 30, "num_range": 270, "upper_bound": "2018-09-30"},
-      {"num_eq": 40, "num_range": 360, "upper_bound": "2018-10-31"}
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "2018-06-30"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 29, "upper_bound": "2018-07-31"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 29, "upper_bound": "2018-08-31"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 29, "upper_bound": "2018-09-30"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 29, "upper_bound": "2018-10-31"}
     ]
   },
   {
@@ -637,11 +637,11 @@ ALTER TABLE hist INJECT STATISTICS '[
     "distinct_count": 45,
     "histo_col_type": "decimal",
     "histo_buckets": [
-      {"num_eq": 0, "num_range": 0, "upper_bound": "0"},
-      {"num_eq": 10, "num_range": 90, "upper_bound": "10"},
-      {"num_eq": 20, "num_range": 180, "upper_bound": "20"},
-      {"num_eq": 30, "num_range": 270, "upper_bound": "30"},
-      {"num_eq": 40, "num_range": 360, "upper_bound": "40"}
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "10"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 10, "upper_bound": "20"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 11, "upper_bound": "30"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 11, "upper_bound": "40"}
     ]
   },
   {
@@ -651,11 +651,11 @@ ALTER TABLE hist INJECT STATISTICS '[
     "distinct_count": 45,
     "histo_col_type": "float",
     "histo_buckets": [
-      {"num_eq": 0, "num_range": 0, "upper_bound": "0"},
-      {"num_eq": 10, "num_range": 90, "upper_bound": "10"},
-      {"num_eq": 20, "num_range": 180, "upper_bound": "20"},
-      {"num_eq": 30, "num_range": 270, "upper_bound": "30"},
-      {"num_eq": 40, "num_range": 360, "upper_bound": "40"}
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "10"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 10, "upper_bound": "20"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 11, "upper_bound": "30"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 11, "upper_bound": "40"}
     ]
   },
   {
@@ -665,11 +665,11 @@ ALTER TABLE hist INJECT STATISTICS '[
     "distinct_count": 200,
     "histo_col_type": "timestamp",
     "histo_buckets": [
-      {"num_eq": 0, "num_range": 0, "upper_bound": "2018-06-30"},
-      {"num_eq": 10, "num_range": 90, "upper_bound": "2018-07-31"},
-      {"num_eq": 20, "num_range": 180, "upper_bound": "2018-08-31"},
-      {"num_eq": 30, "num_range": 270, "upper_bound": "2018-09-30"},
-      {"num_eq": 40, "num_range": 360, "upper_bound": "2018-10-31"}
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "2018-06-30"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 49, "upper_bound": "2018-07-31"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 49, "upper_bound": "2018-08-31"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 49, "upper_bound": "2018-09-30"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 49, "upper_bound": "2018-10-31"}
     ]
   },
   {
@@ -679,11 +679,11 @@ ALTER TABLE hist INJECT STATISTICS '[
     "distinct_count": 200,
     "histo_col_type": "timestamptz",
     "histo_buckets": [
-      {"num_eq": 0, "num_range": 0, "upper_bound": "2018-06-30"},
-      {"num_eq": 10, "num_range": 90, "upper_bound": "2018-07-31"},
-      {"num_eq": 20, "num_range": 180, "upper_bound": "2018-08-31"},
-      {"num_eq": 30, "num_range": 270, "upper_bound": "2018-09-30"},
-      {"num_eq": 40, "num_range": 360, "upper_bound": "2018-10-31"}
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "2018-06-30"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 49, "upper_bound": "2018-07-31"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 49, "upper_bound": "2018-08-31"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 49, "upper_bound": "2018-09-30"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 49, "upper_bound": "2018-10-31"}
     ]
   },
   {
@@ -693,11 +693,11 @@ ALTER TABLE hist INJECT STATISTICS '[
     "distinct_count": 40,
     "histo_col_type": "string",
     "histo_buckets": [
-      {"num_eq": 0, "num_range": 0, "upper_bound": "apple"},
-      {"num_eq": 10, "num_range": 90, "upper_bound": "banana"},
-      {"num_eq": 20, "num_range": 180, "upper_bound": "cherry"},
-      {"num_eq": 30, "num_range": 270, "upper_bound": "mango"},
-      {"num_eq": 40, "num_range": 360, "upper_bound": "pineapple"}
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "apple"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "banana"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 9, "upper_bound": "cherry"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 9, "upper_bound": "mango"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 9, "upper_bound": "pineapple"}
     ]
   }
 ]'
@@ -709,13 +709,13 @@ SELECT * FROM hist WHERE a < 10
 ----
 index-join hist
  ├── columns: a:1(int!null) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
- ├── stats: [rows=90, distinct(1)=8.99985057, null(1)=0]
+ ├── stats: [rows=90, distinct(1)=9, null(1)=0]
  │   histogram(1)=  0  0  80 10
  │                <--- 0 ---- 9
  └── scan hist@idx_a
       ├── columns: a:1(int!null) rowid:8(int!null)
       ├── constraint: /1/8: (/NULL - /9]
-      ├── stats: [rows=90, distinct(1)=8.99985057, null(1)=0, distinct(8)=90, null(8)=0]
+      ├── stats: [rows=90, distinct(1)=9, null(1)=0, distinct(8)=90, null(8)=0]
       │   histogram(1)=  0  0  80 10
       │                <--- 0 ---- 9
       ├── key: (8)
@@ -743,13 +743,13 @@ SELECT * FROM hist WHERE b > '2018-07-31'::DATE AND b < '2018-08-05'::DATE
 ----
 index-join hist
  ├── columns: a:1(int) b:2(date!null) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
- ├── stats: [rows=24, distinct(2)=3.95478935, null(2)=0]
+ ├── stats: [rows=24, distinct(2)=3.9, null(2)=0]
  │   histogram(2)=  0       0        18       6
  │                <--- '2018-07-31' ---- '2018-08-04'
  └── scan hist@idx_b
       ├── columns: b:2(date!null) rowid:8(int!null)
       ├── constraint: /2/8: [/'2018-08-01' - /'2018-08-04']
-      ├── stats: [rows=24, distinct(2)=3.95478935, null(2)=0, distinct(8)=24, null(8)=0]
+      ├── stats: [rows=24, distinct(2)=3.9, null(2)=0, distinct(8)=24, null(8)=0]
       │   histogram(2)=  0       0        18       6
       │                <--- '2018-07-31' ---- '2018-08-04'
       ├── key: (8)
@@ -764,7 +764,7 @@ index-join hist
  └── scan hist@idx_c
       ├── columns: c:3(decimal!null) rowid:8(int!null)
       ├── constraint: /3/8: (/NULL - /10) [/20 - /20]
-      ├── stats: [rows=110, distinct(3)=5.1, null(3)=0, distinct(8)=110, null(8)=0]
+      ├── stats: [rows=110, distinct(3)=10, null(3)=0, distinct(8)=110, null(8)=0]
       │   histogram(3)=  0  0  90  0   0  20
       │                <--- 0 ---- 10 --- 20
       ├── key: (8)
@@ -779,7 +779,7 @@ index-join hist
  └── scan hist@idx_c
       ├── columns: c:3(decimal!null) rowid:8(int!null)
       ├── constraint: /3/8: (/NULL - /10] [/20 - /20]
-      ├── stats: [rows=120, distinct(3)=6.1, null(3)=0, distinct(8)=120, null(8)=0]
+      ├── stats: [rows=120, distinct(3)=11, null(3)=0, distinct(8)=120, null(8)=0]
       │   histogram(3)=  0  0  90  10  0  20
       │                <--- 0 ---- 10 --- 20
       ├── key: (8)
@@ -793,13 +793,13 @@ index-join hist
  ├── stats: [rows=333.333333]
  └── select
       ├── columns: d:4(float!null) rowid:8(int!null)
-      ├── stats: [rows=61.6666667, distinct(4)=8.14917966, null(4)=0, distinct(8)=61.6666667, null(8)=0]
+      ├── stats: [rows=61.6666667, distinct(4)=11.4830985, null(4)=0, distinct(8)=61.6666667, null(8)=0]
       ├── key: (8)
       ├── fd: (8)-->(4)
       ├── scan hist@idx_d
       │    ├── columns: d:4(float!null) rowid:8(int!null)
       │    ├── constraint: /4/8: [/5.0 - /14.999999999999998] [/40.0 - ]
-      │    ├── stats: [rows=185, distinct(4)=8.15, null(4)=0, distinct(8)=185, null(8)=0]
+      │    ├── stats: [rows=185, distinct(4)=11.5, null(4)=0, distinct(8)=185, null(8)=0]
       │    │   histogram(4)=  0          0          45   10   90          0           0   40
       │    │                <--- 4.999999999999999 ---- 10.0 ---- 14.999999999999998 --- 40.0
       │    ├── key: (8)
@@ -812,13 +812,13 @@ SELECT * FROM hist WHERE e < '2018-07-31 23:00:00'::TIMESTAMP
 ----
 index-join hist
  ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp!null) f:6(timestamptz) g:7(string)
- ├── stats: [rows=105.564516, distinct(5)=21.811828, null(5)=0]
+ ├── stats: [rows=105.564516, distinct(5)=51.5147849, null(5)=0]
  │   histogram(5)=  0               0               90              10               5.5645                  0
  │                <--- '2018-06-30 00:00:00+00:00' ---- '2018-07-31 00:00:00+00:00' -------- '2018-07-31 22:59:59.999999+00:00'
  └── scan hist@idx_e
       ├── columns: e:5(timestamp!null) rowid:8(int!null)
       ├── constraint: /5/8: (/NULL - /'2018-07-31 22:59:59.999999+00:00']
-      ├── stats: [rows=105.564516, distinct(5)=21.811828, null(5)=0, distinct(8)=105.564516, null(8)=0]
+      ├── stats: [rows=105.564516, distinct(5)=51.5147849, null(5)=0, distinct(8)=105.564516, null(8)=0]
       │   histogram(5)=  0               0               90              10               5.5645                  0
       │                <--- '2018-06-30 00:00:00+00:00' ---- '2018-07-31 00:00:00+00:00' -------- '2018-07-31 22:59:59.999999+00:00'
       ├── key: (8)
@@ -830,15 +830,13 @@ SELECT * FROM hist WHERE f = '2019-10-30 23:00:00'::TIMESTAMPTZ
 index-join hist
  ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz!null) g:7(string)
  ├── stats: [rows=1, distinct(6)=1, null(6)=0]
- │   histogram(6)=  0               0
- │                <--- '2018-10-31 00:00:00+00:00'
+ │   histogram(6)=
  ├── fd: ()-->(6)
  └── scan hist@idx_f
       ├── columns: f:6(timestamptz!null) rowid:8(int!null)
       ├── constraint: /6/8: [/'2019-10-30 23:00:00+00:00' - /'2019-10-30 23:00:00+00:00']
       ├── stats: [rows=1, distinct(6)=1, null(6)=0, distinct(8)=1, null(8)=0]
-      │   histogram(6)=  0               0
-      │                <--- '2018-10-31 00:00:00+00:00'
+      │   histogram(6)=
       ├── key: (8)
       └── fd: ()-->(6)
 

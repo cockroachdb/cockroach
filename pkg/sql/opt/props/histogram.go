@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -30,27 +31,7 @@ import (
 type Histogram struct {
 	evalCtx *tree.EvalContext
 	col     opt.ColumnID
-	buckets []HistogramBucket
-}
-
-// HistogramBucket contains the data for a single bucket in a Histogram. Note
-// that NumEq and NumRange are floats so the statisticsBuilder can apply
-// filters to the histogram.
-type HistogramBucket struct {
-	// NumEq is the estimated number of values equal to UpperBound.
-	NumEq float64
-
-	// NumRange is the estimated number of values in this bucket not equal to
-	// UpperBound.
-	NumRange float64
-
-	// DistinctRange is the estimated number of distinct values in this bucket
-	// not equal to UpperBound.
-	DistinctRange float64
-
-	// UpperBound is the largest value in this bucket. The lower bound can be
-	// inferred based on the upper bound of the previous bucket in the histogram.
-	UpperBound tree.Datum
+	buckets []cat.HistogramBucket
 }
 
 func (h *Histogram) String() string {
@@ -63,102 +44,16 @@ func (h *Histogram) String() string {
 
 // Init initializes the histogram with data from the catalog.
 func (h *Histogram) Init(
-	evalCtx *tree.EvalContext, col opt.ColumnID, buckets []cat.HistogramBucket, distinctCount float64,
+	evalCtx *tree.EvalContext, col opt.ColumnID, buckets []cat.HistogramBucket,
 ) {
 	h.evalCtx = evalCtx
 	h.col = col
-	if len(buckets) == 0 {
-		return
-	}
-	h.buckets = make([]HistogramBucket, len(buckets))
-	for i := range buckets {
-		h.buckets[i].NumEq = float64(buckets[i].NumEq)
-		h.buckets[i].NumRange = float64(buckets[i].NumRange)
-		h.buckets[i].UpperBound = buckets[i].UpperBound
-	}
-
-	// Estimate the number of distinct values in each bucket.
-	h.initDistinctCount(distinctCount)
-}
-
-// initDistinctCount estimates the number of distinct values in each bucket.
-// It distributes the known number of distinct values (distinctCount) among
-// the buckets, in proportion with the number of rows in each bucket.
-func (h *Histogram) initDistinctCount(distinctCount float64) {
-	// The lower bound for the first bucket is the smallest possible value for
-	// the data type.
-	lowerBound, ok := h.buckets[0].UpperBound.Min(h.evalCtx)
-	if !ok {
-		lowerBound = h.buckets[0].UpperBound
-	}
-	isDiscrete := isDiscreteType(lowerBound)
-
-	// Estimate the number of distinct values for each bucket, keeping track of
-	// the total.
-	var distinctCountRange, distinctCountEq float64
-	for i := range h.buckets {
-		b := &h.buckets[i]
-		if !isDiscrete {
-			b.DistinctRange = b.NumRange
-		} else if maxDistinct, ok := b.maxDistinctValuesInRange(lowerBound); ok {
-			b.DistinctRange = expectedDistinctCount(b.NumRange, maxDistinct)
-		} else {
-			b.DistinctRange = b.NumRange
-		}
-
-		distinctCountRange += b.DistinctRange
-		if b.NumEq > 0 {
-			distinctCountEq++
-		}
-		lowerBound = h.getNextLowerBound(b.UpperBound)
-	}
-
-	if distinctCountRange == 0 {
-		return
-	}
-
-	// Adjust the number of distinct values per bucket based on the total number
-	// of distinct values.
-	adjustmentFactor := (distinctCount - distinctCountEq) / distinctCountRange
-	if adjustmentFactor < 0 {
-		adjustmentFactor = 0
-	}
-	for i := range h.buckets {
-		h.buckets[i].DistinctRange *= adjustmentFactor
-	}
-}
-
-// expectedDistinctCount returns the expected number of distinct values
-// among k random numbers selected from n possible values. We assume the
-// values are chosen using uniform random sampling with replacement.
-func expectedDistinctCount(k, n float64) float64 {
-	if n == 0 || k == 0 {
-		return 0
-	}
-	// The probability that one specific value (out of the n possible values)
-	// does not appear in any of the k selections is:
-	//
-	//         ⎛ n-1 ⎞ k
-	//     p = ⎜-----⎟
-	//         ⎝  n  ⎠
-	//
-	// Therefore, the probability that a specific value appears at least once is
-	// 1-p. Over all n values, the expected number that appear at least once is
-	// n * (1-p). In other words, the expected distinct count is:
-	//
-	//                             ⎛     ⎛ n-1 ⎞ k ⎞
-	//     E[distinct count] = n * ⎜ 1 - ⎜-----⎟   ⎟
-	//                             ⎝     ⎝  n  ⎠   ⎠
-	//
-	// See https://math.stackexchange.com/questions/72223/finding-expected-
-	//   number-of-distinct-values-selected-from-a-set-of-integers for more info.
-	count := n * (1 - math.Pow((n-1)/n, k))
-	return count
+	h.buckets = buckets
 }
 
 // Copy returns a deep copy of the histogram.
 func (h *Histogram) Copy() *Histogram {
-	buckets := make([]HistogramBucket, len(h.buckets))
+	buckets := make([]cat.HistogramBucket, len(h.buckets))
 	copy(buckets, h.buckets)
 	return &Histogram{
 		evalCtx: h.evalCtx,
@@ -174,7 +69,7 @@ func (h *Histogram) BucketCount() int {
 
 // Bucket returns a pointer to the ith bucket in the histogram.
 // i must be greater than or equal to 0 and less than BucketCount.
-func (h *Histogram) Bucket(i int) *HistogramBucket {
+func (h *Histogram) Bucket(i int) *cat.HistogramBucket {
 	return &h.buckets[i]
 }
 
@@ -216,17 +111,17 @@ func (h *Histogram) maxDistinctValuesCount() float64 {
 		return 0
 	}
 
-	// The lower bound for the first bucket is the smallest possible value for
-	// the data type.
-	lowerBound, ok := h.buckets[0].UpperBound.Min(h.evalCtx)
-	if !ok {
-		lowerBound = h.buckets[0].UpperBound
+	// The first bucket always has a zero value for NumRange, so the lower bound
+	// of the histogram is the upper bound of the first bucket.
+	if h.Bucket(0).NumRange != 0 {
+		panic(errors.AssertionFailedf("the first bucket should have NumRange=0"))
 	}
+	lowerBound := h.Bucket(0).UpperBound
 
 	var count float64
 	for i := range h.buckets {
 		b := &h.buckets[i]
-		rng, ok := b.maxDistinctValuesInRange(lowerBound)
+		rng, ok := maxDistinctValuesInRange(lowerBound, b.UpperBound)
 
 		if ok && b.NumRange > rng {
 			count += rng
@@ -245,17 +140,17 @@ func (h *Histogram) maxDistinctValuesCount() float64 {
 }
 
 // maxDistinctValuesInRange returns the maximum number of distinct values in
-// the range of the bucket (i.e., not including the upper bound). It returns
-// ok=false when it is not possible to determine a finite value (which is the
-// case for all types other than integers and dates).
-func (b *HistogramBucket) maxDistinctValuesInRange(lowerBound tree.Datum) (_ float64, ok bool) {
+// the range [lowerBound, upperBound). It returns ok=false when it is not
+// possible to determine a finite value (which is the case for all types other
+// than integers and dates).
+func maxDistinctValuesInRange(lowerBound, upperBound tree.Datum) (_ float64, ok bool) {
 	switch lowerBound.ResolvedType().Family() {
 	case types.IntFamily:
-		return float64(*b.UpperBound.(*tree.DInt)) - float64(*lowerBound.(*tree.DInt)), true
+		return float64(*upperBound.(*tree.DInt)) - float64(*lowerBound.(*tree.DInt)), true
 
 	case types.DateFamily:
 		lower := lowerBound.(*tree.DDate)
-		upper := b.UpperBound.(*tree.DDate)
+		upper := upperBound.(*tree.DDate)
 		if lower.IsFinite() && upper.IsFinite() {
 			return float64(upper.PGEpochDays()) - float64(lower.PGEpochDays()), true
 		}
@@ -263,15 +158,6 @@ func (b *HistogramBucket) maxDistinctValuesInRange(lowerBound tree.Datum) (_ flo
 
 	default:
 		return 0, false
-	}
-}
-
-func isDiscreteType(d tree.Datum) bool {
-	switch d.ResolvedType().Family() {
-	case types.IntFamily, types.DateFamily:
-		return true
-	default:
-		return false
 	}
 }
 
@@ -301,45 +187,66 @@ func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
 		panic(errors.AssertionFailedf("histogram filter with descending constraint not yet supported"))
 	}
 
+	bucketCount := h.BucketCount()
 	filtered := &Histogram{
 		evalCtx: h.evalCtx,
 		col:     h.col,
-		buckets: make([]HistogramBucket, 0, len(h.buckets)),
+		buckets: make([]cat.HistogramBucket, 0, bucketCount),
 	}
-	if len(h.buckets) == 0 {
+	if bucketCount == 0 {
 		return filtered
 	}
 
-	// The lower bound for the first bucket is the smallest possible value for
-	// the data type.
-	// TODO(rytaft): Ensure that the first bucket has a zero value for NumRange,
-	// at least for types that don't have a Min.
-	lowerBound, ok := h.buckets[0].UpperBound.Min(h.evalCtx)
-	if !ok {
-		lowerBound = h.buckets[0].UpperBound
+	// The first bucket always has a zero value for NumRange, so the lower bound
+	// of the histogram is the upper bound of the first bucket.
+	if h.Bucket(0).NumRange != 0 {
+		panic(errors.AssertionFailedf("the first bucket should have NumRange=0"))
 	}
-
-	// Use variation on merge sort, because both sets of buckets and spans are
-	// ordered and non-overlapping.
-	// TODO(rytaft): use binary search to find the first bucket.
+	lowerBound := h.Bucket(0).UpperBound
 
 	bucIndex := 0
 	spanIndex := 0
 	keyCtx := constraint.KeyContext{EvalCtx: h.evalCtx}
 	keyCtx.Columns.InitSingle(opt.MakeOrderingColumn(h.col, false /* descending */))
 
-	for bucIndex < h.BucketCount() && spanIndex < c.Spans.Count() {
+	// Find the first span that may overlap with the histogram.
+	firstBucket := makeSpanFromBucket(h.Bucket(bucIndex), lowerBound)
+	spanCount := c.Spans.Count()
+	for spanIndex < spanCount {
+		span := c.Spans.Get(spanIndex)
+		if firstBucket.StartsAfter(&keyCtx, span) {
+			spanIndex++
+			continue
+		}
+		break
+	}
+	if spanIndex == spanCount {
+		return filtered
+	}
+
+	// Use binary search to find the first bucket that overlaps with the span.
+	span := c.Spans.Get(spanIndex)
+	bucIndex = sort.Search(bucketCount, func(i int) bool {
+		// The lower bound of the bucket doesn't matter here since we're just
+		// checking whether the span starts after the *upper bound* of the bucket.
+		bucket := makeSpanFromBucket(h.Bucket(i), lowerBound)
+		return !span.StartsAfter(&keyCtx, &bucket)
+	})
+	if bucIndex == bucketCount {
+		return filtered
+	}
+	if bucIndex > 0 {
+		prevUpperBound := h.Bucket(bucIndex - 1).UpperBound
+		filtered.addEmptyBucket(prevUpperBound)
+		lowerBound = h.getNextLowerBound(prevUpperBound)
+	}
+
+	// For the remaining buckets and spans, use a variation on merge sort.
+	for bucIndex < bucketCount && spanIndex < spanCount {
 		bucket := h.Bucket(bucIndex)
 		// Convert the bucket to a span in order to take advantage of the
 		// constraint library.
-		var left constraint.Span
-		left.Init(
-			constraint.MakeKey(lowerBound),
-			constraint.IncludeBoundary,
-			constraint.MakeKey(bucket.UpperBound),
-			constraint.IncludeBoundary,
-		)
-
+		left := makeSpanFromBucket(bucket, lowerBound)
 		right := c.Spans.Get(spanIndex)
 
 		if left.StartsAfter(&keyCtx, right) {
@@ -359,7 +266,7 @@ func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
 		if filteredSpan.Compare(&keyCtx, &left) != 0 {
 			// The bucket was cut off in the middle. Get the resulting filtered
 			// bucket.
-			filteredBucket = bucket.getFilteredBucket(&keyCtx, &filteredSpan, lowerBound)
+			filteredBucket = getFilteredBucket(bucket, &keyCtx, &filteredSpan, lowerBound)
 			if filteredSpan.CompareStarts(&keyCtx, &left) != 0 {
 				// We need to add an empty bucket before the new bucket.
 				emptyBucketUpperBound := filteredSpan.StartKey().Value(0)
@@ -397,10 +304,10 @@ func (h *Histogram) getNextLowerBound(currentUpperBound tree.Datum) tree.Datum {
 }
 
 func (h *Histogram) addEmptyBucket(upperBound tree.Datum) {
-	h.addBucket(&HistogramBucket{UpperBound: upperBound})
+	h.addBucket(&cat.HistogramBucket{UpperBound: upperBound})
 }
 
-func (h *Histogram) addBucket(bucket *HistogramBucket) {
+func (h *Histogram) addBucket(bucket *cat.HistogramBucket) {
 	// Check whether we can combine this bucket with the previous bucket.
 	if len(h.buckets) != 0 {
 		lastBucket := &h.buckets[len(h.buckets)-1]
@@ -418,10 +325,11 @@ func (h *Histogram) addBucket(bucket *HistogramBucket) {
 }
 
 // ApplySelectivity reduces the size of each histogram bucket according to
-// the given selectivity.
-func (h *Histogram) ApplySelectivity(selectivity float64) {
-	for i := range h.buckets {
-		b := &h.buckets[i]
+// the given selectivity, and returns a new histogram with the results.
+func (h *Histogram) ApplySelectivity(selectivity float64) *Histogram {
+	res := h.Copy()
+	for i := range res.buckets {
+		b := &res.buckets[i]
 
 		// Save n and d for the distinct count formula below.
 		n := b.NumRange
@@ -442,6 +350,17 @@ func (h *Histogram) ApplySelectivity(selectivity float64) {
 		// when d << n.
 		b.DistinctRange = d - d*math.Pow(1-selectivity, n/d)
 	}
+	return res
+}
+
+func makeSpanFromBucket(b *cat.HistogramBucket, lowerBound tree.Datum) (span constraint.Span) {
+	span.Init(
+		constraint.MakeKey(lowerBound),
+		constraint.IncludeBoundary,
+		constraint.MakeKey(b.UpperBound),
+		constraint.IncludeBoundary,
+	)
+	return span
 }
 
 // getFilteredBucket filters the histogram bucket according to the given span,
@@ -475,9 +394,12 @@ func (h *Histogram) ApplySelectivity(selectivity float64) {
 // the size of NumRange if the bucket is cut off in the middle. In this case,
 // we use the heuristic that NumRange is reduced by half.
 //
-func (b *HistogramBucket) getFilteredBucket(
-	keyCtx *constraint.KeyContext, filteredSpan *constraint.Span, bucketLowerBound tree.Datum,
-) *HistogramBucket {
+func getFilteredBucket(
+	b *cat.HistogramBucket,
+	keyCtx *constraint.KeyContext,
+	filteredSpan *constraint.Span,
+	bucketLowerBound tree.Datum,
+) *cat.HistogramBucket {
 	spanLowerBound := filteredSpan.StartKey().Value(0)
 	spanUpperBound := filteredSpan.EndKey().Value(0)
 
@@ -592,7 +514,7 @@ func (b *HistogramBucket) getFilteredBucket(
 		distinctCountRange = b.DistinctRange * numRange / b.NumRange
 	}
 
-	return &HistogramBucket{
+	return &cat.HistogramBucket{
 		NumEq:         numEq,
 		NumRange:      numRange,
 		DistinctRange: distinctCountRange,
@@ -623,7 +545,7 @@ const (
 	boundaries
 )
 
-func (w *histogramWriter) init(buckets []HistogramBucket) {
+func (w *histogramWriter) init(buckets []cat.HistogramBucket) {
 	w.cells = [][]string{
 		make([]string, len(buckets)*2),
 		make([]string, len(buckets)*2),
@@ -648,6 +570,10 @@ func (w *histogramWriter) init(buckets []HistogramBucket) {
 }
 
 func (w *histogramWriter) write(out io.Writer) {
+	if len(w.cells[counts]) == 0 {
+		return
+	}
+
 	// Print a space to match up with the "<" character below.
 	fmt.Fprint(out, " ")
 	for i := range w.cells[counts] {

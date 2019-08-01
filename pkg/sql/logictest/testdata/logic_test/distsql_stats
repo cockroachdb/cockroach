@@ -76,20 +76,20 @@ s1               {a}           10000      10              0           true
 let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's1'
 
-query TII colnames
+query TIRI colnames
 SHOW HISTOGRAM $hist_id_1
 ----
-upper_bound  range_rows  equal_rows
-1            0           1000
-2            0           1000
-3            0           1000
-4            0           1000
-5            0           1000
-6            0           1000
-7            0           1000
-8            0           1000
-9            0           1000
-10           0           1000
+upper_bound  range_rows  distinct_range_rows  equal_rows
+1            0           0                    1000
+2            0           0                    1000
+3            0           0                    1000
+4            0           0                    1000
+5            0           0                    1000
+6            0           0                    1000
+7            0           0                    1000
+8            0           0                    1000
+9            0           0                    1000
+10           0           0                    1000
 
 statement ok
 CREATE STATISTICS "" ON b FROM data

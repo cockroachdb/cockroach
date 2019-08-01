@@ -474,7 +474,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 				if cols.Len() == 1 && stat.Histogram() != nil {
 					col, _ := cols.Next(0)
 					colStat.Histogram = &props.Histogram{}
-					colStat.Histogram.Init(sb.evalCtx, col, stat.Histogram(), colStat.DistinctCount)
+					colStat.Histogram.Init(sb.evalCtx, col, stat.Histogram())
 				}
 
 				// Make sure the distinct count is at least 1, for the same reason as
@@ -554,21 +554,11 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *pro
 
 	inputColStat := sb.colStatTable(scan.Table, colSet)
 	colStat := sb.copyColStat(colSet, s, inputColStat)
-	if inputColStat.Histogram != nil {
-		colStat.Histogram = inputColStat.Histogram.Copy()
-	}
+	colStat.Histogram = inputColStat.Histogram
 
 	if s.Selectivity != 1 {
 		tableStats := sb.makeTableStatistics(scan.Table)
 		colStat.ApplySelectivity(s.Selectivity, tableStats.RowCount)
-	}
-
-	// Cap distinct and null counts at limit, if it exists.
-	if scan.HardLimit.IsSet() {
-		if limit := float64(scan.HardLimit.RowCount()); limit < s.RowCount {
-			colStat.DistinctCount = min(colStat.DistinctCount, limit)
-			colStat.NullCount = min(colStat.NullCount, limit)
-		}
 	}
 
 	if colSet.SubsetOf(relProps.NotNullCols) {
@@ -2215,7 +2205,7 @@ func (sb *statisticsBuilder) finalizeFromRowCount(
 	if colStat.Histogram != nil {
 		valuesCount := colStat.Histogram.ValuesCount()
 		if valuesCount > rowCount {
-			colStat.Histogram.ApplySelectivity(rowCount / valuesCount)
+			colStat.Histogram = colStat.Histogram.ApplySelectivity(rowCount / valuesCount)
 		}
 	}
 }
