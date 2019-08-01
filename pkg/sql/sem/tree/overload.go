@@ -23,6 +23,22 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// SpecializedVectorizedBuiltin is used to map overloads
+// to the vectorized operator that is specific to
+// that implementation of the builtin function.
+type SpecializedVectorizedBuiltin int
+
+// TODO (rohany): What is the best place to put this list?
+// I want to put it in builtins or exec, but those create an import
+// cycle with exec. tree is imported by both of them, so
+// this package seems like a good place to do it.
+
+// Keep this list alphabetized so that it is easy to manage.
+const (
+	_ SpecializedVectorizedBuiltin = iota
+	SubstringStringIntInt
+)
+
 // Overload is one of the overloads of a built-in function.
 // Each FunctionDefinition may contain one or more overloads.
 type Overload struct {
@@ -54,6 +70,10 @@ type Overload struct {
 	// counter, if non-nil, should be incremented upon successful
 	// type check of expressions using this overload.
 	counter telemetry.Counter
+
+	// SpecializedVecBuiltin is used to let the vectorized engine
+	// know when an Overload has a specialized vectorized operator.
+	SpecializedVecBuiltin SpecializedVectorizedBuiltin
 }
 
 // params implements the overloadImpl interface.
