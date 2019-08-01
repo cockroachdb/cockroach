@@ -45,8 +45,8 @@ type AuthorizationAccessor interface {
 	CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.DescriptorProto) error
 
 	// IsSuperUser returns tuple of bool and error:
-	// (true, nil) means that the user is a superuser (i.e. root or node)
-	// (false, nil) means that the user is NOT a superuser
+	// (true, nil) means that the user has an admin role (i.e. root or node)
+	// (false, nil) means that the user has NO admin role
 	// (false, err) means that there was an error running the query on
 	// the `system.users` table
 	IsSuperUser(ctx context.Context, action string) (bool, error)
@@ -184,7 +184,7 @@ func (p *planner) RequireSuperUser(ctx context.Context, action string) error {
 	if !ok {
 		//raise error if user is not a super-user
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"only superusers are allowed to %s", action)
+			"only users with the admin role are allowed to %s", action)
 	}
 	return nil
 }
