@@ -467,6 +467,25 @@ func updateStatsOnAbort(
 	orig, restored *enginepb.MVCCMetadata,
 	restoredNanos int64,
 ) enginepb.MVCCStats {
+	ms := updateStatsOnClear(
+		key, origMetaKeySize, origMetaValSize, restoredMetaKeySize, restoredMetaValSize, orig, restored, restoredNanos,
+	)
+	ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
+	ms.IntentCount--
+	return ms
+}
+
+// updateStatsOnClear updates stat counters by subtracting a
+// cleared value's key and value byte sizes. If an earlier version
+// was restored, the restored values are added to live bytes and
+// count if the restored value isn't a deletion tombstone.
+func updateStatsOnClear(
+	key roachpb.Key,
+	origMetaKeySize, origMetaValSize, restoredMetaKeySize, restoredMetaValSize int64,
+	orig, restored *enginepb.MVCCMetadata,
+	restoredNanos int64,
+) enginepb.MVCCStats {
+
 	var ms enginepb.MVCCStats
 
 	if isSysLocal(key) {
@@ -486,7 +505,7 @@ func updateStatsOnAbort(
 	// 1. the previous value is a tombstone, so according to rule 2 it accrues
 	// GCBytesAge from its own timestamp on (we need to adjust only for the
 	// implicit meta key that "pops up" at that timestamp), -- or --
-	// 2. it is not, and it has been shadowed by the intent we're now aborting,
+	// 2. it is not, and it has been shadowed by the key we are clearing,
 	// in which case we need to offset its GCBytesAge contribution from
 	// restoredNanos to orig.Timestamp (rule 1).
 	if restored != nil {
@@ -531,8 +550,6 @@ func updateStatsOnAbort(
 	ms.ValBytes -= (orig.ValBytes + origMetaValSize)
 	ms.KeyCount--
 	ms.ValCount--
-	ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
-	ms.IntentCount--
 
 	return ms
 }
@@ -1863,6 +1880,7 @@ func MVCCMerge(
 func MVCCClearTimeRange(
 	ctx context.Context,
 	batch ReadWriter,
+	ms *enginepb.MVCCStats,
 	key, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
 	maxBatchSize int64,
@@ -1936,6 +1954,9 @@ func MVCCClearTimeRange(
 	it := batch.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
 	defer it.Close()
 
+	var clearedKey []byte
+	var clearedMeta enginepb.MVCCMetadata
+	var restoredMeta enginepb.MVCCMetadata
 	for it.Seek(MVCCKey{Key: key}); ; it.Next() {
 		ok, err := it.Valid()
 		if err != nil {
@@ -1943,7 +1964,34 @@ func MVCCClearTimeRange(
 		} else if !ok {
 			break
 		}
+
 		k := it.UnsafeKey()
+
+		if ms != nil {
+			if len(clearedKey) > 0 {
+				metaKeySize := int64(len(clearedKey) + 1)
+				newKey := !bytes.Equal(clearedKey, k.Key)
+
+				if newKey {
+					// we cleared a prev key and are now on a new key so we did not
+					// "restore" a prior key (if we had, it would be in it.Key).
+					ms.Add(updateStatsOnClear(
+						clearedKey, metaKeySize, 0, 0, 0, &clearedMeta, nil, 0,
+					))
+				} else {
+					valueSize := int64(len(it.Value()))
+					restoredMeta.Deleted = valueSize == 0
+					restoredMeta.KeyBytes = mvccVersionTimestampSize
+					restoredMeta.ValBytes = valueSize
+
+					ms.Add(updateStatsOnClear(clearedKey, metaKeySize, 0,
+						metaKeySize, 0, &clearedMeta, &restoredMeta, k.Timestamp.WallTime))
+				}
+				clearedKey = clearedKey[:0]
+			}
+
+		}
+
 		if c := k.Key.Compare(endKey); c >= 0 {
 			break
 		}
@@ -1965,6 +2013,7 @@ func MVCCClearTimeRange(
 					}}}
 				return nil, err
 			}
+			continue
 		}
 
 		if startTime.Less(k.Timestamp) && !endTime.Less(k.Timestamp) {
@@ -1973,12 +2022,24 @@ func MVCCClearTimeRange(
 				break
 			}
 			clearMatchingKey(k)
+			clearedKey = append(clearedKey[:0], k.Key...)
+			clearedMeta.ValBytes = int64(len(it.UnsafeValue()))
+			clearedMeta.Deleted = clearedMeta.ValBytes == 0
+			clearedMeta.KeyBytes = mvccVersionTimestampSize
+			clearedMeta.Timestamp = hlc.LegacyTimestamp(k.Timestamp)
 		} else {
 			// This key does not match, so we need to flush our run of matching keys.
 			if err := flushClearedKeys(k); err != nil {
 				return nil, err
 			}
 		}
+	}
+
+	if ms != nil && len(clearedKey) > 0 {
+		origMetaKeySize := int64(len(clearedKey) + 1)
+		ms.Add(updateStatsOnClear(
+			clearedKey, origMetaKeySize, 0, 0, 0, &clearedMeta, nil, 0,
+		))
 	}
 
 	return resume, flushClearedKeys(MVCCKey{Key: endKey})
