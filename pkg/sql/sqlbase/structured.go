@@ -727,6 +727,220 @@ func (desc *TableDescriptor) MaybeFillInDescriptor() bool {
 	return changedVersion || changedPrivileges
 }
 
+// maybeUpgradeForeignKeyRepresentation destructively modifies the input table
+// descriptor by replacing all old-style foreign key references (the ForeignKey
+// and ReferencedBy fields on IndexDescriptor) with new-style foreign key
+// references (the InboundFKs and OutboundFKs fields on TableDescriptor). It
+// uses the supplied proto getter to look up the referenced descriptor on
+// outgoing FKs and the origin descriptor on incoming FKs. It returns true in
+// the first position if the descriptor was upgraded at all (i.e. had old-style
+// references on it) and an error if the descriptor was unable to be upgraded
+// for some reason.
+func (desc *TableDescriptor) maybeUpgradeForeignKeyRepresentation(
+	ctx context.Context, protoGetter ProtoGetter,
+) (bool, error) {
+	otherTables := make(map[ID]*TableDescriptor)
+	changed := false
+	// No need to process mutations, since only descriptors written on a 19.2
+	// cluster (after finalizing the upgrade) have foreign key mutations.
+	for i := range desc.Indexes {
+		newChanged, err := maybeUpgradeForeignKeyRepOnIndex(ctx, protoGetter, otherTables, desc, &desc.Indexes[i])
+		if err != nil {
+			return false, err
+		}
+		changed = changed || newChanged
+	}
+	newChanged, err := maybeUpgradeForeignKeyRepOnIndex(ctx, protoGetter, otherTables, desc, &desc.PrimaryIndex)
+	if err != nil {
+		return false, err
+	}
+	changed = changed || newChanged
+
+	return changed, nil
+}
+
+// maybeUpgradeForeignKeyRepOnIndex is the meat of the previous function - it
+// tries to upgrade a particular index's foreign key representation.
+func maybeUpgradeForeignKeyRepOnIndex(
+	ctx context.Context,
+	protoGetter ProtoGetter,
+	otherTables map[ID]*TableDescriptor,
+	desc *TableDescriptor,
+	idx *IndexDescriptor,
+) (bool, error) {
+	var changed bool
+	if idx.ForeignKey.IsSet() {
+		ref := &idx.ForeignKey
+		if _, ok := otherTables[ref.Table]; !ok {
+			tbl, err := GetTableDescFromID(ctx, protoGetter, ref.Table)
+			if err != nil {
+				return false, err
+			}
+			otherTables[ref.Table] = tbl
+		}
+
+		referencedIndex, err := otherTables[ref.Table].FindIndexByID(ref.Index)
+		if err != nil {
+			return false, err
+		}
+		numCols := ref.SharedPrefixLen
+		outFK := ForeignKeyConstraint{
+			OriginTableID:               desc.ID,
+			OriginColumnIDs:             idx.ColumnIDs[:numCols],
+			ReferencedTableID:           ref.Table,
+			ReferencedColumnIDs:         referencedIndex.ColumnIDs[:numCols],
+			Name:                        ref.Name,
+			Validity:                    ref.Validity,
+			OnDelete:                    ref.OnDelete,
+			OnUpdate:                    ref.OnUpdate,
+			Match:                       ref.Match,
+			OriginIndex:                 idx.ID,
+			ReferencedIndex:             referencedIndex.ID,
+			UpgradedFromOriginReference: idx.ForeignKey,
+		}
+		desc.OutboundFKs = append(desc.OutboundFKs, outFK)
+		changed = true
+		idx.ForeignKey = ForeignKeyReference{}
+	}
+
+	for refIdx := range idx.ReferencedBy {
+		ref := &idx.ReferencedBy[refIdx]
+		if _, ok := otherTables[ref.Table]; !ok {
+			tbl, err := GetTableDescFromID(ctx, protoGetter, ref.Table)
+			if err != nil {
+				return false, err
+			}
+			otherTables[ref.Table] = tbl
+		}
+
+		originIndex, err := otherTables[ref.Table].FindIndexByID(ref.Index)
+		if err != nil {
+			return false, err
+		}
+		numCols := originIndex.ForeignKey.SharedPrefixLen
+		inFK := ForeignKeyConstraint{
+			OriginTableID:                   ref.Table,
+			OriginColumnIDs:                 originIndex.ColumnIDs[:numCols],
+			ReferencedTableID:               desc.ID,
+			ReferencedColumnIDs:             idx.ColumnIDs[:numCols],
+			Name:                            originIndex.ForeignKey.Name,
+			Validity:                        originIndex.ForeignKey.Validity,
+			OnDelete:                        originIndex.ForeignKey.OnDelete,
+			OnUpdate:                        originIndex.ForeignKey.OnUpdate,
+			Match:                           originIndex.ForeignKey.Match,
+			OriginIndex:                     originIndex.ID,
+			ReferencedIndex:                 idx.ID,
+			UpgradedFromReferencedReference: *ref,
+		}
+		desc.InboundFKs = append(desc.InboundFKs, inFK)
+		changed = true
+		idx.ReferencedBy = nil
+	}
+	return changed, nil
+}
+
+// maybeDowngradeForeignKeyRepresentation non-destructively downgrades the
+// receiver into the old foreign key representation (the ForeignKey
+// and ReferencedBy fields on IndexDescriptor if and only if the cluster version
+// has not yet been upgraded to VersionTopLevelForeignKeys. It returns true in
+// the first position if the downgrade occurred, along with a new
+// TableDescriptor object that is the downgraded descriptor. The receiver is not
+// modified in either case.
+func (desc *TableDescriptor) maybeDowngradeForeignKeyRepresentation(
+	ctx context.Context, protoGetter ProtoGetter, clusterSettings *cluster.Settings,
+) (bool, *TableDescriptor, error) {
+	downgradeUnnecessary := clusterSettings.Version.IsActive(cluster.VersionTopLevelForeignKeys)
+	if downgradeUnnecessary {
+		return false, desc, nil
+	}
+	// TODO (lucy): add check that all fields are actually populated
+	descCopy := protoutil.Clone(desc).(*TableDescriptor)
+	changed := false
+	otherTables := make(map[ID]*TableDescriptor)
+
+	// No need to process mutations, since only descriptors written on a 19.2
+	// cluster (after finalizing the upgrade) have foreign key mutations.
+	for _, fk := range descCopy.OutboundFKs {
+		if _, ok := otherTables[fk.ReferencedTableID]; !ok {
+			tbl, err := GetTableDescFromID(ctx, protoGetter, fk.ReferencedTableID)
+			if err != nil {
+				return false, nil, err
+			}
+			otherTables[fk.ReferencedTableID] = tbl
+		}
+		ref := ForeignKeyReference{
+			Table:           fk.ReferencedTableID,
+			Index:           fk.ReferencedIndex,
+			Name:            fk.Name,
+			Validity:        fk.Validity,
+			SharedPrefixLen: int32(len(fk.OriginColumnIDs)),
+			OnDelete:        fk.OnDelete,
+			OnUpdate:        fk.OnUpdate,
+			Match:           fk.Match,
+		}
+		// Validate that the resultant downgraded foreign key reference is identical
+		// to the one that we expected. All fields should be the same, except for
+		// potentially the Name and Validity.
+		if err := validateDowngradedFKReference(ref, fk.UpgradedFromOriginReference); err != nil {
+			return false, nil, err
+		}
+
+		idx, err := descCopy.FindIndexByID(fk.OriginIndex)
+		if err != nil {
+			return false, nil, err
+		}
+		idx.ForeignKey = ref
+		changed = true
+	}
+	descCopy.OutboundFKs = nil
+
+	for _, fk := range descCopy.InboundFKs {
+		backref := ForeignKeyReference{
+			Table: fk.OriginTableID,
+			Index: fk.OriginIndex,
+		}
+		if err := validateDowngradedFKReference(backref, fk.UpgradedFromReferencedReference); err != nil {
+			return false, nil, err
+		}
+		backrefIdx, err := descCopy.FindIndexByID(fk.ReferencedIndex)
+		if err != nil {
+			return false, nil, err
+		}
+		backrefIdx.ReferencedBy = append(backrefIdx.ReferencedBy, backref)
+		changed = true
+	}
+	descCopy.InboundFKs = nil
+	return changed, descCopy, nil
+}
+
+func validateDowngradedFKReference(downgraded, original ForeignKeyReference) error {
+	if downgraded.Index != original.Index {
+		return errors.AssertionFailedf("downgraded.Index(%d) != original.Index (%d)",
+			downgraded.Index, original.Index)
+	}
+	if downgraded.Table != original.Table {
+		return errors.AssertionFailedf("downgraded.Table(%d) != original.Table (%d)",
+			downgraded.Table, original.Table)
+	}
+	if downgraded.SharedPrefixLen != original.SharedPrefixLen {
+		return errors.AssertionFailedf("downgraded.SharedPrefixLen(%d) != original.SharedPrefixLen (%d)",
+			downgraded.SharedPrefixLen, original.SharedPrefixLen)
+	}
+	if downgraded.OnDelete != original.OnDelete {
+		return errors.AssertionFailedf("downgraded.OnDelete(%d) != original.OnDelete (%d)",
+			downgraded.OnDelete, original.OnDelete)
+	}
+	if downgraded.OnUpdate != original.OnUpdate {
+		return errors.AssertionFailedf("downgraded.OnUpdate(%d) != original.OnUpdate (%d)",
+			downgraded.OnUpdate, original.OnUpdate)
+	}
+	if downgraded.Match != original.Match {
+		return errors.AssertionFailedf("downgraded.Match(%d) != original.Match (%d)",
+			downgraded.Match, original.Match)
+	}
+	return nil
+}
+
 // maybeUpgradeFormatVersion transforms the TableDescriptor to the latest
 // FormatVersion (if it's not already there) and returns true if any changes
 // were made.
