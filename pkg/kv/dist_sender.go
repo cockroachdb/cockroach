@@ -576,6 +576,8 @@ func (ds *DistSender) initAndVerifyBatch(
 			case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest, *roachpb.ReverseScanRequest:
 				continue
 
+			case *roachpb.RevertRangeRequest:
+				continue
 			default:
 				return roachpb.NewErrorf("batch with limit contains %T request", inner)
 			}
