@@ -440,13 +440,9 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	replica.leaseholderStats = rs
 	replica.writeStats = rs
 
-	rangeDesc := &roachpb.RangeDescriptor{
-		RangeID: replica.RangeID,
-	}
+	rangeUsageInfo := rangeUsageInfoForRepl(replica)
 
-	rangeInfo := rangeInfoForRepl(replica, rangeDesc)
-
-	sp.updateLocalStoreAfterRebalance(roachpb.StoreID(1), rangeInfo, roachpb.ADD_REPLICA)
+	sp.updateLocalStoreAfterRebalance(roachpb.StoreID(1), rangeUsageInfo, roachpb.ADD_REPLICA)
 	desc, ok := sp.getStoreDescriptor(roachpb.StoreID(1))
 	if !ok {
 		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 1)
@@ -466,7 +462,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 		t.Errorf("expected WritesPerSecond %f, but got %f", expectedWPS, desc.Capacity.WritesPerSecond)
 	}
 
-	sp.updateLocalStoreAfterRebalance(roachpb.StoreID(2), rangeInfo, roachpb.REMOVE_REPLICA)
+	sp.updateLocalStoreAfterRebalance(roachpb.StoreID(2), rangeUsageInfo, roachpb.REMOVE_REPLICA)
 	desc, ok = sp.getStoreDescriptor(roachpb.StoreID(2))
 	if !ok {
 		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 2)
@@ -484,7 +480,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 		t.Errorf("expected WritesPerSecond %f, but got %f", expectedWPS, desc.Capacity.WritesPerSecond)
 	}
 
-	sp.updateLocalStoresAfterLeaseTransfer(roachpb.StoreID(1), roachpb.StoreID(2), rangeInfo.QueriesPerSecond)
+	sp.updateLocalStoresAfterLeaseTransfer(roachpb.StoreID(1), roachpb.StoreID(2), rangeUsageInfo.QueriesPerSecond)
 	desc, ok = sp.getStoreDescriptor(roachpb.StoreID(1))
 	if !ok {
 		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 1)
@@ -547,14 +543,14 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	}
 	replica.leaseholderStats = newReplicaStats(store.Clock(), nil)
 
-	rangeInfo := rangeInfoForRepl(replica, &rg)
+	rangeUsageInfo := rangeUsageInfoForRepl(replica)
 
 	// Update StorePool, which should be a no-op.
 	storeID := roachpb.StoreID(1)
 	if _, ok := sp.getStoreDescriptor(storeID); ok {
 		t.Fatalf("StoreDescriptor not gossiped, should not be found")
 	}
-	sp.updateLocalStoreAfterRebalance(storeID, rangeInfo, roachpb.ADD_REPLICA)
+	sp.updateLocalStoreAfterRebalance(storeID, rangeUsageInfo, roachpb.ADD_REPLICA)
 	if _, ok := sp.getStoreDescriptor(storeID); ok {
 		t.Fatalf("StoreDescriptor still not gossiped, should not be found")
 	}
