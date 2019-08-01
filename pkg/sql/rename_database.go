@@ -39,7 +39,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, pgerror.DangerousStatementf("RENAME DATABASE on current database")
 	}
 
-	if err := p.RequireSuperUser(ctx, "ALTER DATABASE ... RENAME"); err != nil {
+	if err := p.RequireAdminRole(ctx, "ALTER DATABASE ... RENAME"); err != nil {
 		return nil, err
 	}
 

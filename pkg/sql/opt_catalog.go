@@ -230,14 +230,14 @@ func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error
 	return oc.planner.CheckAnyPrivilege(ctx, desc)
 }
 
-// IsSuperUser is part of the cat.Catalog interface.
-func (oc *optCatalog) IsSuperUser(ctx context.Context, action string) (bool, error) {
-	return oc.planner.IsSuperUser(ctx, action)
+// HasAdminRole is part of the cat.Catalog interface.
+func (oc *optCatalog) HasAdminRole(ctx context.Context) (bool, error) {
+	return oc.planner.HasAdminRole(ctx)
 }
 
-// RequireSuperUser is part of the cat.Catalog interface.
-func (oc *optCatalog) RequireSuperUser(ctx context.Context, action string) error {
-	return oc.planner.RequireSuperUser(ctx, action)
+// RequireAdminRole is part of the cat.Catalog interface.
+func (oc *optCatalog) RequireAdminRole(ctx context.Context, action string) error {
+	return oc.planner.RequireAdminRole(ctx, action)
 }
 
 // FullyQualifiedName is part of the cat.Catalog interface.

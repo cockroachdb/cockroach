@@ -38,7 +38,7 @@ func showBackupPlanHook(
 		return nil, nil, nil, false, err
 	}
 
-	if err := p.RequireSuperUser(ctx, "SHOW BACKUP"); err != nil {
+	if err := p.RequireAdminRole(ctx, "SHOW BACKUP"); err != nil {
 		return nil, nil, nil, false, err
 	}
 

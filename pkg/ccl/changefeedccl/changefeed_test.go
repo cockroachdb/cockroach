@@ -1489,8 +1489,8 @@ func TestChangefeedPermissions(t *testing.T) {
 		if strings.Contains(t.Name(), `enterprise`) {
 			stmt = `CREATE CHANGEFEED FOR foo`
 		}
-		if _, err := testuser.Exec(stmt); !testutils.IsError(err, `only superusers`) {
-			t.Errorf(`expected 'only superusers' error got: %+v`, err)
+		if _, err := testuser.Exec(stmt); !testutils.IsError(err, `only users with the admin role`) {
+			t.Errorf(`expected 'only users with the admin role' error got: %+v`, err)
 		}
 	}
 
