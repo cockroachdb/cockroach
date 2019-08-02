@@ -125,22 +125,18 @@ message ReplicatedEvalResult {
   storage.storagepb.ReplicaState state = 2;
   Split split = 3;
   Merge merge = 4;
-  reserved 5;
   ComputeChecksum compute_checksum = 21;
   bool is_lease_request = 6;
-  reserved 7;
   // Duplicates BatchRequest.Timestamp for proposer-evaluated KV. Used
   // to verify the validity of the command (for lease coverage and GC
   // threshold).
   util.hlc.Timestamp timestamp = 8 [(gogoproto.nullable) = false];
-  bool is_consistency_related = 9;
   // The stats delta corresponding to the data in this WriteBatch. On
   // a split, contains only the contributions to the left-hand side.
   storage.engine.enginepb.MVCCStats deprecated_delta = 10; // See #18828
   storage.engine.enginepb.MVCCStatsDelta delta = 18 [(gogoproto.nullable) = false];
   ChangeReplicas change_replicas = 12;
   int64 raft_log_delta = 13;
-  reserved 14, 15;
 
   // AddSSTable is a side effect that must execute before the Raft application
   // is committed. It must be idempotent to account for an ill-timed crash after
@@ -158,7 +154,6 @@ message ReplicatedEvalResult {
     bytes data = 1;
     uint32 crc32 = 2 [(gogoproto.customname) = "CRC32"];
   }
-  reserved 16;
   AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
 
   // suggested_compactions are sent to the engine's compactor to
@@ -171,7 +166,7 @@ message ReplicatedEvalResult {
   // but before we tried to apply it.
   util.hlc.Timestamp prev_lease_proposal = 20;
 
-  reserved 10001 to 10013;
+  reserved 5, 7, 9, 14, 15, 16, 10001 to 10013;
 }
 
 // WriteBatch is the serialized representation of a RocksDB write
