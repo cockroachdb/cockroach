@@ -612,3 +612,60 @@ func TestHide(t *testing.T) {
 		t.Errorf("expected 'sekretz' to be hidden")
 	}
 }
+
+func TestMaxSettings(t *testing.T) {
+	maxSettings := 128
+	var err error
+	//register max settings
+	maxName := batchRegisterSettings(t, "i.Val", maxSettings-1-len(settings.Keys()), &err)
+	if err != nil {
+		t.Errorf("expected no error to register 128 settings, but get error %s", err)
+	}
+
+	//test the change method of max slotIdx
+	sv := &settings.Values{}
+	sv.Init(settings.TestOpaque)
+
+	var changes int
+	intSetting, ok := settings.Lookup(maxName)
+	if !ok {
+		t.Errorf("expected lookup setting : %s", maxName)
+	}
+	intSetting.SetOnChange(sv, func() { changes++ })
+
+	u := settings.NewUpdater(sv)
+	u.Set(maxName, settings.EncodeInt(9), "i")
+
+	if changes != 1 {
+		t.Errorf("expected the max slot setting changed .")
+	}
+
+	//register too many setting
+	batchRegisterSettings(t, "i.ValMax", 1, &err)
+	expectedErr := "too many settings; increase maxSettings"
+	if err.Error() != expectedErr {
+		t.Errorf("expected error :'%s' error, but get : %s", expectedErr, err)
+	}
+}
+func batchRegisterSettings(t *testing.T, keyPrefix string, count int, err *error) string {
+	defer func() {
+		//catch painc error, and convert to error
+		if r := recover(); r != nil {
+			//check exactly what the panic was and create error.
+			switch x := r.(type) {
+			case string:
+				*err = errors.New(x)
+			case error:
+				*err = x
+			default:
+				*err = errors.New("Unknow panic")
+			}
+		}
+	}()
+	var name string
+	for i := 0; i < count; i++ {
+		name = fmt.Sprintf("%s_%3d", keyPrefix, i)
+		settings.RegisterValidatedIntSetting(name, "desc", 0, nil)
+	}
+	return name
+}
