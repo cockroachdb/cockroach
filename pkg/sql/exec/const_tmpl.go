@@ -80,14 +80,21 @@ func (c const_TYPEOp) Init() {
 
 func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
-	if batch.Length() == 0 {
+	n := batch.Length()
+	if n == 0 {
 		return batch
 	}
 
 	if batch.Width() == c.outputIdx {
 		batch.AppendCol(c.typ)
-		col := batch.ColVec(c.outputIdx)._TemplateType()
-		for i := range col {
+	}
+	col := batch.ColVec(c.outputIdx)._TemplateType()
+	if sel := batch.Selection(); sel != nil {
+		for _, i := range sel[:n] {
+			col[i] = c.constVal
+		}
+	} else {
+		for i := range col[:n] {
 			col[i] = c.constVal
 		}
 	}
@@ -116,14 +123,22 @@ func (c constNullOp) Init() {
 
 func (c constNullOp) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
-	if batch.Length() == 0 {
+	n := batch.Length()
+	if n == 0 {
 		return batch
 	}
 
 	if batch.Width() == c.outputIdx {
 		batch.AppendCol(types.Int8)
-		col := batch.ColVec(c.outputIdx)
-		col.Nulls().SetNulls()
+	}
+	col := batch.ColVec(c.outputIdx)
+	nulls := col.Nulls()
+	if sel := batch.Selection(); sel != nil {
+		for _, i := range sel[:n] {
+			nulls.SetNull(i)
+		}
+	} else {
+		nulls.SetNulls()
 	}
 	return batch
 }
