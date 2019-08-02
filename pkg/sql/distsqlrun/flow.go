@@ -499,6 +499,8 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
 	f.ctx, f.ctxCancel = contextutil.WithCancel(ctx)
+	// Note that we want all components to run using the same context f.ctx.
+	ctx = f.ctx
 
 	if f.EvalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
 		log.VEventf(ctx, 1, "setting up vectorize flow %d with setting %s", f.id, f.EvalCtx.SessionData.Vectorize)
@@ -526,10 +528,10 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 // startInternal starts the flow. All processors are started, each in their own
 // goroutine. The caller must forward any returned error to syncFlowConsumer if
 // set.
-func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
+func (f *Flow) startInternal(doneFn func()) error {
 	f.doneFn = doneFn
 	log.VEventf(
-		ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
+		f.ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
 	)
 
 	// Only register the flow if there will be inbound stream connections that
@@ -542,7 +544,7 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 		f.waitGroup.Add(len(f.inboundStreams))
 
 		if err := f.flowRegistry.RegisterFlow(
-			ctx, f.id, f, f.inboundStreams, settingFlowStreamTimeout.Get(&f.FlowCtx.Settings.SV),
+			f.ctx, f.id, f, f.inboundStreams, settingFlowStreamTimeout.Get(&f.FlowCtx.Settings.SV),
 		); err != nil {
 			return err
 		}
@@ -551,15 +553,15 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 	f.status = FlowRunning
 
 	if log.V(1) {
-		log.Infof(ctx, "registered flow %s", f.id.Short())
+		log.Infof(f.ctx, "registered flow %s", f.id.Short())
 	}
 	for _, s := range f.startables {
-		s.start(ctx, &f.waitGroup, f.ctxCancel)
+		s.start(f.ctx, &f.waitGroup, f.ctxCancel)
 	}
 	for i := 0; i < len(f.processors); i++ {
 		f.waitGroup.Add(1)
 		go func(i int) {
-			f.processors[i].Run(ctx)
+			f.processors[i].Run(f.ctx)
 			f.waitGroup.Done()
 		}(i)
 	}
@@ -580,8 +582,8 @@ func (f *Flow) isLocal() bool {
 // But if the flow is a synchronous one, then no error is returned; instead the
 // setup error is pushed to the syncFlowConsumer. In this case, a subsequent
 // call to f.Wait() will not block.
-func (f *Flow) Start(ctx context.Context, doneFn func()) error {
-	if err := f.startInternal(ctx, doneFn); err != nil {
+func (f *Flow) Start(_ context.Context, doneFn func()) error {
+	if err := f.startInternal(doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
 			f.syncFlowConsumer.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
@@ -599,7 +601,7 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 // f.Wait() is called internally, so the call blocks until all the flow's
 // goroutines are done.
 // The caller needs to call f.Cleanup().
-func (f *Flow) Run(ctx context.Context, doneFn func()) error {
+func (f *Flow) Run(_ context.Context, doneFn func()) error {
 	defer f.Wait()
 
 	// We'll take care of the last processor in particular.
@@ -610,7 +612,7 @@ func (f *Flow) Run(ctx context.Context, doneFn func()) error {
 	headProc = f.processors[len(f.processors)-1]
 	f.processors = f.processors[:len(f.processors)-1]
 
-	if err := f.startInternal(ctx, doneFn); err != nil {
+	if err := f.startInternal(doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
 			f.syncFlowConsumer.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
@@ -619,7 +621,9 @@ func (f *Flow) Run(ctx context.Context, doneFn func()) error {
 		}
 		return err
 	}
-	headProc.Run(ctx)
+	// Note that we want all processors to run using the same context, so we're
+	// using f.ctx instead of passed in argument.
+	headProc.Run(f.ctx)
 	return nil
 }
 
