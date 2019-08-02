@@ -216,3 +216,80 @@ func TestApplyCommittedEntriesWithBatchSize(t *testing.T) {
 		require.True(t, cmd.finished)
 	}
 }
+
+func TestAckCommittedEntriesBeforeApplication(t *testing.T) {
+	ctx := context.Background()
+	sm := testingStateMachine{}
+	dec := testingDecoder{cmds: []cmd{
+		{index: 1, trivial: true, local: true, shouldReject: false},
+		{index: 2, trivial: true, local: false, shouldReject: false},
+		{index: 3, trivial: true, local: true, shouldReject: true},
+		{index: 4, trivial: true, local: true, shouldReject: false},
+		{index: 5, trivial: true, local: true, shouldReject: false},
+		{index: 6, trivial: false, local: true, shouldReject: false},
+		{index: 7, trivial: false, local: true, shouldReject: false},
+		{index: 8, trivial: true, local: true, shouldReject: false},
+		{index: 9, trivial: false, local: true, shouldReject: false},
+	}}
+
+	// Use an apply.Task to ack all commands before applying them.
+	appT := apply.MakeTask(&sm, &dec)
+	defer appT.Close()
+	require.NoError(t, appT.Decode(ctx, nil /* ents */))
+	require.NoError(t, appT.AckCommittedEntriesBeforeApplication(ctx, 10 /* maxIndex */))
+
+	// Assert that the state machine was not updated.
+	require.Equal(t, testingStateMachine{}, sm)
+
+	// Assert that some commands were acknowledged early and that none were finished.
+	for _, cmd := range dec.cmds {
+		var exp bool
+		switch cmd.index {
+		case 1, 4, 5:
+			exp = true // local and successful
+		case 2:
+			exp = false // remote
+		case 3:
+			exp = false // local and rejected
+		default:
+			exp = false // after first non-trivial cmd
+		}
+		require.Equal(t, exp, cmd.acked)
+		require.False(t, cmd.finished)
+	}
+
+	// Try again with a lower maximum log index.
+	appT.Close()
+	appT = apply.MakeTask(&sm, &dec)
+	dec = testingDecoder{cmds: []cmd{
+		{index: 1, trivial: true, local: true, shouldReject: false},
+		{index: 2, trivial: true, local: false, shouldReject: false},
+		{index: 3, trivial: true, local: true, shouldReject: true},
+		{index: 4, trivial: true, local: true, shouldReject: false},
+		{index: 5, trivial: true, local: true, shouldReject: false},
+	}}
+	require.NoError(t, appT.Decode(ctx, nil /* ents */))
+	require.NoError(t, appT.AckCommittedEntriesBeforeApplication(ctx, 4 /* maxIndex */))
+
+	// Assert that the state machine was not updated.
+	require.Equal(t, testingStateMachine{}, sm)
+
+	// Assert that some commands were acknowledged early and that none were finished.
+	for _, cmd := range dec.cmds {
+		var exp bool
+		switch cmd.index {
+		case 1, 4:
+			exp = true // local and successful
+		case 2:
+			exp = false // remote
+		case 3:
+			exp = false // local and rejected
+		case 5:
+			exp = false // index too high
+		default:
+			t.Fatalf("unexpected index %d", cmd.index)
+		}
+		require.Equal(t, exp, cmd.acked)
+		require.False(t, cmd.finished)
+	}
+}
