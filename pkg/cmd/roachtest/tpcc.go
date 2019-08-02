@@ -93,25 +93,24 @@ func tpccFixturesCmd(t *test, cloud string, warehouses int, extraArgs string) st
 		command, warehouses, extraArgs)
 }
 
-func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
-	crdbNodes := c.Range(1, c.spec.NodeCount-1)
-	workloadNode := c.Node(c.spec.NodeCount)
-	rampDuration := 5 * time.Minute
+func setupTPCC(
+	ctx context.Context, t *test, c *cluster, warehouses int, zfs bool, versions []string,
+) (crdbNodes, workloadNode nodeListOption) {
+	crdbNodes = c.Range(1, c.spec.NodeCount-1)
+	workloadNode = c.Node(c.spec.NodeCount)
 	if c.isLocal() {
-		opts.Warehouses = 1
-		opts.Duration = 1 * time.Minute
-		rampDuration = 30 * time.Second
+		warehouses = 1
 	}
 
-	if n := len(opts.Versions); n == 0 {
-		opts.Versions = make([]string, c.spec.NodeCount-1)
+	if n := len(versions); n == 0 {
+		versions = make([]string, c.spec.NodeCount-1)
 	} else if n != c.spec.NodeCount-1 {
-		t.Fatalf("must specify Versions for all %d nodes: %v", c.spec.NodeCount-1, opts.Versions)
+		t.Fatalf("must specify Versions for all %d nodes: %v", c.spec.NodeCount-1, versions)
 	}
 
 	{
 		var regularNodes []option
-		for i, v := range opts.Versions {
+		for i, v := range versions {
 			if v == "" {
 				regularNodes = append(regularNodes, c.Node(i+1))
 			} else {
@@ -139,7 +138,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 	func() {
 		db := c.Conn(ctx, 1)
 		defer db.Close()
-		if opts.ZFS {
+		if zfs {
 			if err := c.RunE(ctx, c.Node(1), "test -d /mnt/data1/.zfs/snapshot/pristine"); err != nil {
 				// Use ZFS so the initial store dumps can be instantly rolled back to their
 				// pristine state. Useful for iterating quickly on the test, especially when
@@ -149,7 +148,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 				t.Status("loading dataset")
 				c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
 
-				c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, opts.Warehouses, ""))
+				c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, warehouses, ""))
 				c.Stop(ctx, crdbNodes)
 
 				c.Run(ctx, crdbNodes, "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
@@ -159,9 +158,20 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 			c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
 		} else {
 			c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
-			c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, opts.Warehouses, ""))
+			c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, warehouses, ""))
 		}
 	}()
+	return crdbNodes, workloadNode
+}
+
+func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
+	rampDuration := 5 * time.Minute
+	if c.isLocal() {
+		opts.Warehouses = 1
+		opts.Duration = time.Minute
+		rampDuration = 30 * time.Second
+	}
+	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts.Warehouses, opts.ZFS, opts.Versions)
 	t.Status("waiting")
 	m := newMonitor(ctx, c, crdbNodes)
 	m.Go(func(ctx context.Context) error {
