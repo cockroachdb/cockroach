@@ -58,7 +58,7 @@
 # Citations: [1]
 [RejectNullsLeftJoin, Normalize, HighPriority]
 (Select
-    $input:(LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
+    $input:(LeftJoin | LeftJoinApply | FullJoin
         $left:*
         $right:*
         $on:*
@@ -86,7 +86,7 @@
 # RejectNullsLeftJoin.
 [RejectNullsRightJoin, Normalize, HighPriority]
 (Select
-    $input:(RightJoin | RightJoinApply | FullJoin | FullJoinApply
+    $input:(RightJoin | FullJoin
         $left:*
         $right:*
         $on:*

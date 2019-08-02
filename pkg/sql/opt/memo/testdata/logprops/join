@@ -318,73 +318,6 @@ right-join (hash)
            ├── variable: x [type=int]
            └── variable: u [type=int]
 
-# Right-join-apply.
-opt
-SELECT * FROM xysd RIGHT JOIN uv ON (SELECT u FROM uv WHERE u=x OFFSET 1) IS NULL
-----
-right-join (hash)
- ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int!null)
- ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- ├── prune: (1-6)
- ├── reject-nulls: (1-4)
- ├── interesting orderings: (+1) (-3,+4,+1)
- ├── project
- │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (-3,+4,+1)
- │    └── select
- │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:8(int)
- │         ├── key: (1)
- │         ├── fd: ()-->(8), (1)-->(2-4), (3,4)~~>(1,2)
- │         ├── prune: (2-4)
- │         ├── interesting orderings: (+1) (-3,+4,+1)
- │         ├── left-join-apply
- │         │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:8(int)
- │         │    ├── key: (1)
- │         │    ├── fd: (1)-->(2-4,8), (3,4)~~>(1,2)
- │         │    ├── prune: (2-4)
- │         │    ├── reject-nulls: (8)
- │         │    ├── interesting orderings: (+1) (-3,+4,+1)
- │         │    ├── scan xysd
- │         │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │         │    │    ├── key: (1)
- │         │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │         │    │    ├── prune: (1-4)
- │         │    │    └── interesting orderings: (+1) (-3,+4,+1)
- │         │    ├── max1-row
- │         │    │    ├── columns: u:8(int!null)
- │         │    │    ├── outer: (1)
- │         │    │    ├── cardinality: [0 - 1]
- │         │    │    ├── key: ()
- │         │    │    ├── fd: ()-->(8)
- │         │    │    └── offset
- │         │    │         ├── columns: u:8(int!null)
- │         │    │         ├── outer: (1)
- │         │    │         ├── fd: ()-->(8)
- │         │    │         ├── select
- │         │    │         │    ├── columns: u:8(int!null)
- │         │    │         │    ├── outer: (1)
- │         │    │         │    ├── fd: ()-->(8)
- │         │    │         │    ├── scan uv
- │         │    │         │    │    ├── columns: u:8(int)
- │         │    │         │    │    └── prune: (8)
- │         │    │         │    └── filters
- │         │    │         │         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
- │         │    │         │              ├── variable: u [type=int]
- │         │    │         │              └── variable: x [type=int]
- │         │    │         └── const: 1 [type=int]
- │         │    └── filters (true)
- │         └── filters
- │              └── is [type=bool, outer=(8), constraints=(/8: [/NULL - /NULL]; tight), fd=()-->(8)]
- │                   ├── variable: u [type=int]
- │                   └── null [type=unknown]
- ├── scan uv
- │    ├── columns: u:5(int) v:6(int!null)
- │    └── prune: (5,6)
- └── filters (true)
-
 # Full-join.
 build
 SELECT *, rowid FROM xysd FULL JOIN uv ON x=u
@@ -412,64 +345,6 @@ full-join (hash)
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            ├── variable: x [type=int]
            └── variable: u [type=int]
-
-# Full-join-apply.
-opt
-SELECT * FROM xysd FULL JOIN uv ON (SELECT u FROM uv WHERE u=x OFFSET 1) IS NULL
-----
-project
- ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int)
- ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- ├── prune: (1-6)
- ├── interesting orderings: (+1) (-3,+4,+1)
- └── full-join-apply
-      ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) u:8(int)
-      ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
-      ├── prune: (2-6)
-      ├── reject-nulls: (1-6,8)
-      ├── interesting orderings: (+1) (-3,+4,+1)
-      ├── scan xysd
-      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
-      │    ├── prune: (1-4)
-      │    └── interesting orderings: (+1) (-3,+4,+1)
-      ├── left-join (hash)
-      │    ├── columns: u:5(int) v:6(int!null) u:8(int)
-      │    ├── outer: (1)
-      │    ├── fd: ()~~>(8)
-      │    ├── prune: (5,6)
-      │    ├── reject-nulls: (8)
-      │    ├── scan uv
-      │    │    ├── columns: u:5(int) v:6(int!null)
-      │    │    └── prune: (5,6)
-      │    ├── max1-row
-      │    │    ├── columns: u:8(int!null)
-      │    │    ├── outer: (1)
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(8)
-      │    │    └── offset
-      │    │         ├── columns: u:8(int!null)
-      │    │         ├── outer: (1)
-      │    │         ├── fd: ()-->(8)
-      │    │         ├── select
-      │    │         │    ├── columns: u:8(int!null)
-      │    │         │    ├── outer: (1)
-      │    │         │    ├── fd: ()-->(8)
-      │    │         │    ├── scan uv
-      │    │         │    │    ├── columns: u:8(int)
-      │    │         │    │    └── prune: (8)
-      │    │         │    └── filters
-      │    │         │         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      │    │         │              ├── variable: u [type=int]
-      │    │         │              └── variable: x [type=int]
-      │    │         └── const: 1 [type=int]
-      │    └── filters (true)
-      └── filters
-           └── is [type=bool, outer=(8), constraints=(/8: [/NULL - /NULL]; tight), fd=()-->(8)]
-                ├── variable: u [type=int]
-                └── null [type=unknown]
 
 # Semi-join.
 opt
