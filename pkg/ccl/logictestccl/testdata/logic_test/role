@@ -590,7 +590,7 @@ CREATE DATABASE db1
 
 user testuser
 
-statement error only superusers are allowed to CREATE DATABASE
+statement error only users with the admin role are allowed to CREATE DATABASE
 CREATE DATABASE db2
 
 statement error user testuser does not have DROP privilege on database db1
