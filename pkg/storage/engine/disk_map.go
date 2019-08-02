@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/petermattis/pebble"
 	"github.com/pkg/errors"
 )
 
@@ -259,4 +260,245 @@ func (b *rocksDBMapBatchWriter) Close(ctx context.Context) error {
 	err := b.Flush()
 	b.batch.Close()
 	return err
+}
+
+// pebbleMapBatchWriter batches writes to a pebbleMap.
+type pebbleMapBatchWriter struct {
+	// capacity is the number of bytes to write before a Flush() is triggered.
+	capacity int
+
+	// makeKey is a function that transforms a key into an MVCCKey with a prefix
+	// to be written to the underlying store. Since Pebble accepts byte slices
+	// and not MVCCKeys, the key needs to be encoded before being written
+	// to Pebble.
+	makeKey func(k []byte) MVCCKey
+	batch   *pebble.Batch
+	store   *pebble.DB
+
+	// encodingBuf is a byte slice to store byte-encoded variants of MVCCKeys
+	// temporarily.
+	encodingBuf []byte
+}
+
+// pebbleMapIterator iterates over the keys of a pebbleMap in sorted order.
+type pebbleMapIterator struct {
+	iter *pebble.Iterator
+	// makeKey is a function that transforms a key into an MVCCKey with a prefix
+	// used to Seek() the underlying iterator.
+	makeKey func(k []byte) MVCCKey
+	// prefix is the prefix of keys that this iterator iterates over.
+	prefix []byte
+}
+
+// pebbleMap is a SortedDiskMap, similar to rocksDBMap, that uses pebble as its
+// underlying storage engine.
+type pebbleMap struct {
+	prefix          []byte
+	store           *pebble.DB
+	allowDuplicates bool
+	keyID           int64
+}
+
+var _ diskmap.SortedDiskMapBatchWriter = &pebbleMapBatchWriter{}
+var _ diskmap.SortedDiskMapIterator = &pebbleMapIterator{}
+var _ diskmap.SortedDiskMap = &pebbleMap{}
+
+// newPebbleMap creates a new pebbleMap with the passed in Engine as the
+// underlying store. The pebbleMap instance will have a keyspace prefixed by a
+// unique prefix. The allowDuplicates parameter controls whether Puts with
+// identical keys will write multiple entries or overwrite previous entries.
+func newPebbleMap(e *pebble.DB, allowDuplicates bool) *pebbleMap {
+	prefix := generateTempStorageID()
+	return &pebbleMap{
+		prefix:          encoding.EncodeUvarintAscending([]byte(nil), prefix),
+		store:           e,
+		allowDuplicates: allowDuplicates,
+	}
+}
+
+// makeKey appends k to the pebbleMap's prefix to keep the key local to this
+// instance and creates an MVCCKey, which is what the underlying storage engine
+// expects. The returned key is only valid until the next call to makeKey().
+func (r *pebbleMap) makeKey(k []byte) MVCCKey {
+	// TODO(asubiotto): We can make this more performant by bypassing MVCCKey
+	// creation (have to generalize storage API). See
+	// https://github.com/cockroachdb/cockroach/issues/16718#issuecomment-311493414
+	prefixLen := len(r.prefix)
+	r.prefix = append(r.prefix, k...)
+	mvccKey := MVCCKey{Key: r.prefix}
+	r.prefix = r.prefix[:prefixLen]
+	return mvccKey
+}
+
+// makeKeyWithTimestamp makes a key appropriate for a Put operation. It is like
+// makeKey except it respects allowDuplicates, which uses the MVCC timestamp
+// field to assign a unique keyID so duplicate keys don't overwrite each other.
+func (r *pebbleMap) makeKeyWithTimestamp(k []byte) MVCCKey {
+	mvccKey := r.makeKey(k)
+	if r.allowDuplicates {
+		r.keyID++
+		mvccKey.Timestamp.WallTime = r.keyID
+	}
+	return mvccKey
+}
+
+// Put implements the SortedDiskMap interface.
+func (r *pebbleMap) Put(k []byte, v []byte) error {
+	return r.store.Set(EncodeKey(r.makeKeyWithTimestamp(k)), v, nil)
+}
+
+// Get implements the SortedDiskMap interface.
+func (r *pebbleMap) Get(k []byte) ([]byte, error) {
+	if r.allowDuplicates {
+		return nil, errors.New("Get not supported if allowDuplicates is true")
+	}
+	return r.store.Get(EncodeKey(r.makeKey(k)))
+}
+
+// NewIterator implements the SortedDiskMap interface.
+func (r *pebbleMap) NewIterator() diskmap.SortedDiskMapIterator {
+	return &pebbleMapIterator{
+		iter: r.store.NewIter(&pebble.IterOptions{
+			UpperBound: roachpb.Key(r.prefix).PrefixEnd(),
+		}),
+		makeKey: r.makeKey,
+		prefix:  r.prefix,
+	}
+}
+
+// NewBatchWriter implements the SortedDiskMap interface.
+func (r *pebbleMap) NewBatchWriter() diskmap.SortedDiskMapBatchWriter {
+	return r.NewBatchWriterCapacity(defaultBatchCapacityBytes)
+}
+
+// NewBatchWriterCapacity implements the SortedDiskMap interface.
+func (r *pebbleMap) NewBatchWriterCapacity(capacityBytes int) diskmap.SortedDiskMapBatchWriter {
+	makeKey := r.makeKey
+	if r.allowDuplicates {
+		makeKey = r.makeKeyWithTimestamp
+	}
+	return &pebbleMapBatchWriter{
+		capacity: capacityBytes,
+		makeKey:  makeKey,
+		batch:    r.store.NewBatch(),
+		store:    r.store,
+		// Initialize with enough capacity for the wall time and logical parts of
+		// the hlc timestamp, as well as the number of bytes at the end. Leave
+		// an arbitrary amount of room at the start for the user-specified key.
+		encodingBuf: make([]byte, 0, len(r.prefix)+10+1+8+4+1),
+	}
+}
+
+// Clear implements the SortedDiskMap interface.
+func (r *pebbleMap) Clear() error {
+	if err := r.store.DeleteRange(
+		r.prefix,
+		roachpb.Key(r.prefix).PrefixEnd(),
+		pebble.NoSync,
+	); err != nil {
+		return errors.Wrapf(err, "unable to clear range with prefix %v", r.prefix)
+	}
+	// NB: we manually flush after performing the clear range to ensure that the
+	// range tombstone is pushed to disk which will kick off compactions that
+	// will eventually free up the deleted space.
+	return r.store.AsyncFlush()
+}
+
+// Close implements the SortedDiskMap interface.
+func (r *pebbleMap) Close(ctx context.Context) {
+	if err := r.Clear(); err != nil {
+		log.Error(ctx, err)
+	}
+}
+
+// Seek implements the SortedDiskMapIterator interface.
+func (i *pebbleMapIterator) Seek(k []byte) {
+	i.iter.SeekGE(EncodeKey(i.makeKey(k)))
+}
+
+// Rewind implements the SortedDiskMapIterator interface.
+func (i *pebbleMapIterator) Rewind() {
+	i.iter.SeekGE(EncodeKey(i.makeKey(nil)))
+}
+
+// Valid implements the SortedDiskMapIterator interface.
+func (i *pebbleMapIterator) Valid() (bool, error) {
+	ok := i.iter.Valid()
+	if ok && !bytes.HasPrefix(i.iter.Key(), i.prefix) {
+		return false, nil
+	}
+
+	return ok, nil
+}
+
+// Next implements the SortedDiskMapIterator interface.
+func (i *pebbleMapIterator) Next() {
+	i.iter.Next()
+}
+
+// Key implements the SortedDiskMapIterator interface.
+func (i *pebbleMapIterator) Key() []byte {
+	unsafeKey := i.UnsafeKey()
+	safeKey := make([]byte, len(unsafeKey), len(unsafeKey))
+	copy(safeKey, unsafeKey)
+
+	return safeKey
+}
+
+// Value implements the SortedDiskMapIterator interface.
+func (i *pebbleMapIterator) Value() []byte {
+	unsafeValue := i.iter.Value()
+	safeValue := make([]byte, len(unsafeValue), len(unsafeValue))
+	copy(safeValue, unsafeValue)
+
+	return safeValue
+}
+
+// UnsafeKey implements the SortedDiskMapIterator interface.
+func (i *pebbleMapIterator) UnsafeKey() []byte {
+	unsafeMVCCKey, err := DecodeMVCCKey(i.iter.Key())
+	if err != nil {
+		panic("pebble key decode into mvcckey unsuccessful")
+	}
+	return unsafeMVCCKey.Key[len(i.prefix):]
+}
+
+// UnsafeValue implements the SortedDiskMapIterator interface.
+func (i *pebbleMapIterator) UnsafeValue() []byte {
+	return i.iter.Value()
+}
+
+// Close implements the SortedDiskMapIterator interface.
+func (i *pebbleMapIterator) Close() {
+	_ = i.iter.Close()
+}
+
+// Put implements the SortedDiskMapBatchWriter interface.
+func (b *pebbleMapBatchWriter) Put(k []byte, v []byte) error {
+	b.encodingBuf = EncodeKeyToBuf(b.encodingBuf[:0], b.makeKey(k))
+	if err := b.batch.Set(b.encodingBuf, v, nil); err != nil {
+		return err
+	}
+	if len(b.batch.Repr()) >= b.capacity {
+		return b.Flush()
+	}
+	return nil
+}
+
+// Flush implements the SortedDiskMapBatchWriter interface.
+func (b *pebbleMapBatchWriter) Flush() error {
+	if err := b.batch.Commit(pebble.NoSync); err != nil {
+		return err
+	}
+	b.batch = b.store.NewBatch()
+	return nil
+}
+
+// Close implements the SortedDiskMapBatchWriter interface.
+func (b *pebbleMapBatchWriter) Close(ctx context.Context) error {
+	err := b.Flush()
+	if err != nil {
+		return err
+	}
+	return b.batch.Close()
 }

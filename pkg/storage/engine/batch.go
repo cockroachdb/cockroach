@@ -13,6 +13,7 @@ package engine
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -348,6 +349,32 @@ func EncodeKey(key MVCCKey) []byte {
 	dbKey[len(dbKey)-1] = byte(timestampLength)
 
 	return dbKey
+}
+
+// EncodeKeyToBuf encodes an engine.MVCC key into the RocksDB / Pebble
+// representation, just like EncodeKey(), with the difference that it writes to
+// an existing buffer passed in. The existing slice is append()ed to, so callers
+// should ensure it was created with sufficient remaining capacity.
+func EncodeKeyToBuf(dst []byte, key MVCCKey) []byte {
+	// <key>\x00[<wall_time>[<logical>]]<#timestamp-bytes>
+	const (
+		timestampSentinelLen      = 1
+		walltimeEncodedLen        = 8
+		logicalEncodedLen         = 4
+	)
+
+	dst = append(dst, key.Key...)
+	dst = append(dst, 0)
+	if key.Timestamp != (hlc.Timestamp{}) {
+		extra := byte(timestampSentinelLen + walltimeEncodedLen)
+		dst = encoding.EncodeUint64Ascending(dst, uint64(key.Timestamp.WallTime))
+		if key.Timestamp.Logical != 0 {
+			dst = encoding.EncodeUint32Ascending(dst, uint32(key.Timestamp.Logical))
+			extra += logicalEncodedLen
+		}
+		dst = append(dst, extra)
+	}
+	return dst
 }
 
 // DecodeMVCCKey decodes an engine.MVCCKey from its serialized representation. This
