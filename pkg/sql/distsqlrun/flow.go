@@ -500,8 +500,8 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
 	f.ctxDone = ctx.Done()
 
-	if f.EvalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
-		log.VEventf(ctx, 1, "setting up vectorize flow %d with setting %s", f.id, f.EvalCtx.SessionData.Vectorize)
+	if f.EvalCtx.SessionData.VectorizeMode != sessiondata.VectorizeOff {
+		log.VEventf(ctx, 1, "setting up vectorize flow %d", f.id)
 		acc := f.EvalCtx.Mon.MakeBoundAccount()
 		f.vectorizedBoundAccount = &acc
 		err := f.setupVectorizedFlow(ctx, f.vectorizedBoundAccount)

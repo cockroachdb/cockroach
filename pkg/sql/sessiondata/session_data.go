@@ -71,8 +71,9 @@ type SessionData struct {
 	// DurationAdditionMode enables math compatibility options to be enabled.
 	// TODO(bob): Remove this once the 2.2 release branch is cut.
 	DurationAdditionMode duration.AdditionMode
-	// Vectorize enables automatic planning of vectorized operators.
-	Vectorize VectorizeExecMode
+	// VectorizeMode indicates which kinds of queries to use vectorized execution
+	// engine for.
+	VectorizeMode VectorizeExecMode
 	// ForceSavepointRestart overrides the default SAVEPOINT behavior
 	// for compatibility with certain ORMs. When this flag is set,
 	// the savepoint name will no longer be compared against the magic
@@ -253,22 +254,28 @@ type VectorizeExecMode int64
 const (
 	// VectorizeOff means that columnar execution is disabled.
 	VectorizeOff VectorizeExecMode = iota
-	// VectorizeOn means that any supported queries will be run using the columnar
-	// execution on.
-	VectorizeOn
-	// VectorizeAlways means that we attempt to vectorize all queries; unsupported
-	// queries will fail. Mostly used for testing.
-	VectorizeAlways
+	// VectorizeAuto means that that any supported queries that use only
+	// streaming operators (i.e. those that do not require any buffering) will be
+	// run using the columnar execution.
+	VectorizeAuto
+	// VectorizeExperimentalOn means that any supported queries will be run using
+	// the columnar execution on.
+	VectorizeExperimentalOn
+	// VectorizeExperimentalAlways means that we attempt to vectorize all
+	// queries; unsupported queries will fail. Mostly used for testing.
+	VectorizeExperimentalAlways
 )
 
 func (m VectorizeExecMode) String() string {
 	switch m {
 	case VectorizeOff:
 		return "off"
-	case VectorizeOn:
-		return "on"
-	case VectorizeAlways:
-		return "always"
+	case VectorizeAuto:
+		return "auto"
+	case VectorizeExperimentalOn:
+		return "experimental_on"
+	case VectorizeExperimentalAlways:
+		return "experimental_always"
 	default:
 		return fmt.Sprintf("invalid (%d)", m)
 	}
@@ -281,10 +288,12 @@ func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 	switch strings.ToUpper(val) {
 	case "OFF":
 		m = VectorizeOff
-	case "ON":
-		m = VectorizeOn
-	case "ALWAYS":
-		m = VectorizeAlways
+	case "AUTO":
+		m = VectorizeAuto
+	case "EXPERIMENTAL_ON":
+		m = VectorizeExperimentalOn
+	case "EXPERIMENTAL_ALWAYS":
+		m = VectorizeExperimentalAlways
 	default:
 		return 0, false
 	}

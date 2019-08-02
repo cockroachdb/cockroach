@@ -4,7 +4,7 @@
 # execution engine.
 
 statement ok
-SET experimental_vectorize=off
+SET vectorize=off
 
 statement ok
 CREATE TABLE xyz (
