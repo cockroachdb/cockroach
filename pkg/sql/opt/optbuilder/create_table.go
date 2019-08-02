@@ -39,6 +39,15 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 	var input memo.RelExpr
 	var inputCols physical.Presentation
 	if ct.As() {
+		// The execution code might need to stringify the query to run it
+		// asynchronously. For that we need the data sources to be fully qualified.
+		// TODO(radu): this interaction is pretty hacky, investigate moving the
+		// generation of the string to the optimizer.
+		b.qualifyDataSourceNamesInAST = true
+		defer func() {
+			b.qualifyDataSourceNamesInAST = false
+		}()
+
 		// Build the input query.
 		outScope := b.buildSelect(ct.AsSource, nil /* desiredTypes */, inScope)
 
