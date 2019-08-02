@@ -905,7 +905,7 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	}
 	tc.repl.mu.Lock()
 	_, _, pErr := checkForcedErr(
-		context.Background(), makeIDKey(), raftCmd, nil /* proposal */, false, /* proposedLocally */
+		context.Background(), makeIDKey(), &raftCmd, false, /* isLocal */
 		&tc.repl.mu.state,
 	)
 	tc.repl.mu.Unlock()
@@ -11586,6 +11586,9 @@ func TestHighestMaxLeaseIndexReproposalFinishesCommand(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.manualClock = hlc.NewManualClock(123)
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	// Set the RaftMaxCommittedSizePerReady so that only a single raft entry is
+	// applied at a time, which makes it easier to line up the timing of reproposals.
+	cfg.RaftMaxCommittedSizePerReady = 1
 	// Set up tracing.
 	tracer := tracing.NewTracer()
 	tracer.Configure(&cfg.Settings.SV)
@@ -11603,7 +11606,6 @@ func TestHighestMaxLeaseIndexReproposalFinishesCommand(t *testing.T) {
 	// seen is used to detect the first application of our proposal.
 	var seen bool
 	cfg.TestingKnobs = StoreTestingKnobs{
-		MaxApplicationBatchSize: 1,
 		// Set the TestingProposalFilter in order to know the CmdIDKey for our
 		// request by detecting its txnID.
 		TestingProposalFilter: func(args storagebase.ProposalFilterArgs) *roachpb.Error {
