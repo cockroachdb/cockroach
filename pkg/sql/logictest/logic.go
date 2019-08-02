@@ -969,6 +969,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 					OptimizerCostPerturbation:       *optimizerCostPerturbation,
 				},
 			},
+			ClusterName: "testclustername",
 			UseDatabase: "test",
 			// Set Locality so we can use it in zone config tests.
 			Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test"}}},

@@ -766,12 +766,17 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 				fmt.Fprintf(tw, "status:\trestarted pre-existing node\n")
 			}
 
+			if baseCfg.ClusterName != "" {
+				fmt.Fprintf(tw, "cluster name:\t%s\n", baseCfg.ClusterName)
+			}
+
 			// Remember the cluster ID for log file rotation.
 			clusterID := s.ClusterID().String()
 			log.SetClusterID(clusterID)
 			fmt.Fprintf(tw, "clusterID:\t%s\n", clusterID)
-
 			fmt.Fprintf(tw, "nodeID:\t%d\n", nodeID)
+
+			// Collect the formatted string and show it to the user.
 			if err := tw.Flush(); err != nil {
 				return err
 			}

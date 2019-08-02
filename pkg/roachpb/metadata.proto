@@ -281,6 +281,7 @@ message NodeDescriptor {
   optional string build_tag = 6 [(gogoproto.nullable) = false];
   optional int64 started_at = 7 [(gogoproto.nullable) = false];
   repeated LocalityAddress locality_address = 8 [(gogoproto.nullable) = false];
+  optional string cluster_name = 9 [(gogoproto.nullable) = false];
 }
 
 // LocalityAddress holds the private address accessible only from other nodes
