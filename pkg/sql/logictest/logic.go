@@ -425,6 +425,7 @@ var logicTestConfigs = []testClusterConfig{
 	{name: "local-vec", numNodes: 1, overrideOptimizerMode: "on", overrideExpVectorize: "on"},
 	{name: "fakedist", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
 	{name: "fakedist-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideAutoStats: "false"},
+	{name: "fakedist-vec", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideAutoStats: "false", overrideExpVectorize: "on"},
 	{name: "fakedist-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",
 		distSQLMetadataTestEnabled: true, skipShort: true},
 	{name: "fakedist-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",

@@ -262,7 +262,10 @@ type HashRouter struct {
 	unblockedEventsChan <-chan struct{}
 	numBlockedOutputs   int
 
-	bufferedMeta []distsqlpb.ProducerMetadata
+	mu struct {
+		syncutil.Mutex
+		bufferedMeta []distsqlpb.ProducerMetadata
+	}
 
 	scratch struct {
 		// buckets is scratch space for the computed hash value of a group of columns
@@ -325,10 +328,18 @@ func newHashRouterWithOutputs(
 func (r *HashRouter) Run(ctx context.Context) {
 	r.input.Init()
 	cancelOutputs := func(err error) {
-		r.bufferedMeta = append(r.bufferedMeta, distsqlpb.ProducerMetadata{Err: err})
+		if err != nil {
+			r.mu.Lock()
+			r.mu.bufferedMeta = append(r.mu.bufferedMeta, distsqlpb.ProducerMetadata{Err: err})
+			r.mu.Unlock()
+		}
 		for _, o := range r.outputs {
 			o.cancel()
 		}
+	}
+	var done bool
+	processNextBatch := func() {
+		done = r.processNextBatch(ctx)
 	}
 	for {
 		// Check for cancellation.
@@ -362,10 +373,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 			}
 		}
 
-		var done bool
-		if err := CatchVectorizedRuntimeError(func() {
-			done = r.processNextBatch(ctx)
-		}); err != nil {
+		if err := CatchVectorizedRuntimeError(processNextBatch); err != nil {
 			cancelOutputs(err)
 			return
 		}
@@ -377,8 +385,9 @@ func (r *HashRouter) Run(ctx context.Context) {
 	}
 }
 
-// processNextBatch reads the next batch from its input, hashes it and adds each
-// column to its corresponding output, returning whether the input is done.
+// processNextBatch reads the next batch from its input, hashes it and adds
+// each column to its corresponding output, returning whether the input is
+// done.
 func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 	r.ht.initHash(r.scratch.buckets, uint64(len(r.scratch.buckets)))
 	b := r.input.Next(ctx)
@@ -446,7 +455,9 @@ func (r *HashRouter) reset() {
 
 // DrainMeta is part of the MetadataGenerator interface.
 func (r *HashRouter) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
-	meta := r.bufferedMeta
-	r.bufferedMeta = r.bufferedMeta[:0]
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	meta := r.mu.bufferedMeta
+	r.mu.bufferedMeta = r.mu.bufferedMeta[:0]
 	return meta
 }

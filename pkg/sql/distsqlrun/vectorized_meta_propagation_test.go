@@ -76,6 +76,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		nil, /* output */
 		[]distsqlpb.MetadataSource{col},
 		nil, /* outputStatsToTrace */
+		nil, /* cancelFlow */
 	)
 	if err != nil {
 		t.Fatal(err)
