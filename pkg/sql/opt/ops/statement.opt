@@ -104,8 +104,22 @@ define ShowTracePrivate {
 #
 # OpaqueRel can produce data and can be used as a data source as part of a
 # larger enclosing query.
-[Relational, DDL, Mutation]
+[Relational]
 define OpaqueRel {
+    _ OpaqueRelPrivate
+}
+
+# OpaqueMutation is a variant of OpaqueRel for operators that can mutate data as
+# part of the transaction.
+[Relational, Mutation]
+define OpaqueMutation {
+    _ OpaqueRelPrivate
+}
+
+# OpaqueMutation is a variant of OpaqueRel for operators that cause a schema
+# change and cannot be executed following a mutation in the same transaction.
+[Relational, Mutation, DDL]
+define OpaqueDDL {
     _ OpaqueRelPrivate
 }
 

@@ -811,6 +811,16 @@ func (b *logicalPropsBuilder) buildOpaqueRelProps(op *OpaqueRelExpr, rel *props.
 	b.buildBasicProps(op, op.Columns, rel)
 }
 
+func (b *logicalPropsBuilder) buildOpaqueMutationProps(
+	op *OpaqueMutationExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(op, op.Columns, rel)
+}
+
+func (b *logicalPropsBuilder) buildOpaqueDDLProps(op *OpaqueDDLExpr, rel *props.Relational) {
+	b.buildBasicProps(op, op.Columns, rel)
+}
+
 func (b *logicalPropsBuilder) buildAlterTableSplitProps(
 	split *AlterTableSplitExpr, rel *props.Relational,
 ) {
