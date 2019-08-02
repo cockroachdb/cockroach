@@ -166,6 +166,8 @@ func runTestsWithFixedSel(
 //     t.Fatal(err)
 // }
 type opTestInput struct {
+	ZeroInputNode
+
 	typs []types.T
 
 	batchSize uint16
@@ -314,6 +316,8 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 }
 
 type opFixedSelTestInput struct {
+	ZeroInputNode
+
 	typs []types.T
 
 	batchSize uint16
@@ -441,7 +445,7 @@ func (s *opFixedSelTestInput) Next(context.Context) coldata.Batch {
 // opTestOutput is a test verification struct that ensures its input batches
 // match some expected output tuples.
 type opTestOutput struct {
-	input    Operator
+	OneInputNode
 	cols     []int
 	expected tuples
 
@@ -456,9 +460,9 @@ func newOpTestOutput(input Operator, cols []int, expected tuples) *opTestOutput 
 	input.Init()
 
 	return &opTestOutput{
-		input:    input,
-		cols:     cols,
-		expected: expected,
+		OneInputNode: NewOneInputNode(input),
+		cols:         cols,
+		expected:     expected,
 	}
 }
 
@@ -595,6 +599,8 @@ func assertTuplesOrderedEqual(expected tuples, actual tuples) error {
 // finiteBatchSource is an Operator that returns the same batch a specified
 // number of times.
 type finiteBatchSource struct {
+	ZeroInputNode
+
 	repeatableBatch *RepeatableBatchSource
 
 	usableCount int
@@ -628,6 +634,7 @@ func (f *finiteBatchSource) Next(ctx context.Context) coldata.Batch {
 // randomLengthBatchSource is an Operator that forever returns the same batch at
 // a different length each time.
 type randomLengthBatchSource struct {
+	ZeroInputNode
 	internalBatch coldata.Batch
 	rng           *rand.Rand
 }
@@ -656,6 +663,7 @@ func (r *randomLengthBatchSource) Next(context.Context) coldata.Batch {
 // (except for the first) the batch is returned to emulate source that is
 // already ordered on matchLen columns.
 type finiteChunksSource struct {
+	ZeroInputNode
 	repeatableBatch *RepeatableBatchSource
 
 	usableCount int
@@ -792,6 +800,7 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 // chunkingBatchSource is a batch source that takes unlimited-size columns and
 // chunks them into BatchSize-sized chunks when Nexted.
 type chunkingBatchSource struct {
+	ZeroInputNode
 	typs []types.T
 	cols []coldata.Vec
 	len  uint64

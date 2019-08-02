@@ -33,9 +33,9 @@ func TestSelLTInt64Int64ConstOp(t *testing.T) {
 	tups := tuples{{0}, {1}, {2}, {nil}}
 	runTests(t, []tuples{tups}, tuples{{0}, {1}}, orderedVerifier, []int{0}, func(input []Operator) (Operator, error) {
 		return &selLTInt64Int64ConstOp{
-			input:    input[0],
-			colIdx:   0,
-			constArg: 2,
+			OneInputNode: NewOneInputNode(input[0]),
+			colIdx:       0,
+			constArg:     2,
 		}, nil
 	})
 }
@@ -52,9 +52,9 @@ func TestSelLTInt64Int64(t *testing.T) {
 	}
 	runTests(t, []tuples{tups}, tuples{{0, 1}}, orderedVerifier, []int{0, 1}, func(input []Operator) (Operator, error) {
 		return &selLTInt64Int64Op{
-			input:   input[0],
-			col1Idx: 0,
-			col2Idx: 1,
+			OneInputNode: NewOneInputNode(input[0]),
+			col1Idx:      0,
+			col2Idx:      1,
 		}, nil
 	})
 }
@@ -69,7 +69,11 @@ func TestGetSelectionConstOperator(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	expected := &selLTInt64Int64ConstOp{input: input, colIdx: colIdx, constArg: constVal}
+	expected := &selLTInt64Int64ConstOp{
+		OneInputNode: NewOneInputNode(input),
+		colIdx:       colIdx,
+		constArg:     constVal,
+	}
 	if !reflect.DeepEqual(op, expected) {
 		t.Errorf("got %+v, expected %+v", op, expected)
 	}
@@ -85,7 +89,11 @@ func TestGetSelectionOperator(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	expected := &selGEInt16Int16Op{input: input, col1Idx: col1Idx, col2Idx: col2Idx}
+	expected := &selGEInt16Int16Op{
+		OneInputNode: NewOneInputNode(input),
+		col1Idx:      col1Idx,
+		col2Idx:      col2Idx,
+	}
 	if !reflect.DeepEqual(op, expected) {
 		t.Errorf("got %+v, expected %+v", op, expected)
 	}
@@ -122,9 +130,9 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasN
 	source.Init()
 
 	plusOp := &selLTInt64Int64ConstOp{
-		input:    source,
-		colIdx:   0,
-		constArg: 0,
+		OneInputNode: NewOneInputNode(source),
+		colIdx:       0,
+		constArg:     0,
 	}
 	plusOp.Init()
 
@@ -180,9 +188,9 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 	source.Init()
 
 	plusOp := &selLTInt64Int64Op{
-		input:   source,
-		col1Idx: 0,
-		col2Idx: 1,
+		OneInputNode: NewOneInputNode(source),
+		col1Idx:      0,
+		col2Idx:      1,
 	}
 	plusOp.Init()
 

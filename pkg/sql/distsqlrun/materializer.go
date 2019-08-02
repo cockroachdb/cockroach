@@ -12,6 +12,7 @@ package distsqlrun
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
@@ -121,6 +122,19 @@ func newMaterializer(
 	m.finishTrace = outputStatsToTrace
 	m.cancelFlow = cancelFlow
 	return m, nil
+}
+
+var _ exec.OpNode = &materializer{}
+
+func (m *materializer) ChildCount() int {
+	return 1
+}
+
+func (m *materializer) Child(nth int) exec.OpNode {
+	if nth == 0 {
+		return m.input
+	}
+	panic(fmt.Sprintf("invalid index %d", nth))
 }
 
 func (m *materializer) Start(ctx context.Context) context.Context {

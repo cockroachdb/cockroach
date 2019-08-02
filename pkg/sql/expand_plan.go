@@ -153,6 +153,13 @@ func doExpandPlan(
 		explainParams.atTop = true
 		n.plan, err = doExpandPlan(ctx, p, explainParams, n.plan)
 
+	case *explainVecNode:
+		// EXPLAIN only shows the structure of the plan, and wants to do
+		// so "as if" plan was at the top level w.r.t spool semantics.
+		explainParams := noParamsBase
+		explainParams.atTop = true
+		n.plan, err = doExpandPlan(ctx, p, explainParams, n.plan)
+
 	case *showTraceReplicaNode:
 		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
 
@@ -697,6 +704,9 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		n.source = p.simplifyOrderings(n.source, nil).(batchedPlanNode)
 
 	case *explainDistSQLNode:
+		n.plan = p.simplifyOrderings(n.plan, nil)
+
+	case *explainVecNode:
 		n.plan = p.simplifyOrderings(n.plan, nil)
 
 	case *showTraceReplicaNode:

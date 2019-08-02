@@ -21,6 +21,7 @@ import (
 )
 
 var _ StaticMemoryOperator = &OrderedSynchronizer{}
+var _ Operator = &OrderedSynchronizer{}
 
 // OrderedSynchronizer receives rows from multiple inputs and produces a single
 // stream of rows, ordered according to a set of columns. The rows in each input
@@ -37,6 +38,16 @@ type OrderedSynchronizer struct {
 	// comparators stores one comparator per ordering column.
 	comparators []vecComparator
 	output      coldata.Batch
+}
+
+// ChildCount implements the OpNode interface.
+func (o *OrderedSynchronizer) ChildCount() int {
+	return len(o.inputs)
+}
+
+// Child implements the OpNode interface.
+func (o *OrderedSynchronizer) Child(nth int) OpNode {
+	return o.inputs[nth]
 }
 
 // NewOrderedSynchronizer creates a new OrderedSynchronizer.

@@ -208,6 +208,7 @@ type RandomDataOpArgs struct {
 // RandomDataOp is an operator that generates random data according to
 // RandomDataOpArgs. Call GetBuffer to get all data that was returned.
 type RandomDataOp struct {
+	ZeroInputNode
 	batchAccumulator func(b coldata.Batch)
 	typs             []types.T
 	rng              *rand.Rand

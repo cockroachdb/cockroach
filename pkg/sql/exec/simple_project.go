@@ -20,7 +20,7 @@ import (
 // simpleProjectOp is an operator that implements "simple projection" - removal of
 // columns that aren't needed by later operators.
 type simpleProjectOp struct {
-	input Operator
+	OneInputNode
 
 	batch *projectingBatch
 }
@@ -77,8 +77,8 @@ func NewSimpleProjectOp(input Operator, numInputCols int, projection []uint32) O
 		}
 	}
 	return &simpleProjectOp{
-		input: input,
-		batch: newProjectionBatch(projection),
+		OneInputNode: NewOneInputNode(input),
+		batch:        newProjectionBatch(projection),
 	}
 }
 

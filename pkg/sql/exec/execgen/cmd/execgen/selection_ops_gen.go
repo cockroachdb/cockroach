@@ -91,7 +91,7 @@ if sel := batch.Selection(); sel != nil {
 
 {{define "selConstOp"}}
 type {{template "opConstName" .}} struct {
-	input Operator
+	OneInputNode
 
 	colIdx   int
 	constArg {{.RGoType}}
@@ -128,7 +128,7 @@ func (p {{template "opConstName" .}}) Init() {
 
 {{define "selOp"}}
 type {{template "opName" .}} struct {
-	input Operator
+	OneInputNode
 
 	col1Idx int
 	col2Idx int
@@ -195,7 +195,7 @@ func GetSelectionConstOperator(
 		{{range $overloads}}
 		case tree.{{.Name}}:
 			return &{{template "opConstName" .}}{
-				input:    input,
+				OneInputNode: NewOneInputNode(input),
 				colIdx:   colIdx,
 				constArg: c.({{.RGoType}}),
 			}, nil
@@ -225,7 +225,7 @@ func GetSelectionOperator(
 		{{range $overloads}}
 		case tree.{{.Name}}:
 			return &{{template "opName" .}}{
-				input:   input,
+				OneInputNode: NewOneInputNode(input),
 				col1Idx: col1Idx,
 				col2Idx: col2Idx,
 			}, nil

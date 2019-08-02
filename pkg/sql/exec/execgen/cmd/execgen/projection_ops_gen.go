@@ -44,7 +44,7 @@ import (
 {{range .}}
 
 type {{template "opRConstName" .}} struct {
-	input Operator
+	OneInputNode
 
 	colIdx   int
 	constArg {{.RGoType}}
@@ -92,7 +92,7 @@ func (p {{template "opRConstName" .}}) Init() {
 }
 
 type {{template "opLConstName" .}} struct {
-	input Operator
+	OneInputNode
 
 	colIdx   int
 	constArg {{.LGoType}}
@@ -140,7 +140,7 @@ func (p {{template "opLConstName" .}}) Init() {
 }
 
 type {{template "opName" .}} struct {
-	input Operator
+	OneInputNode
 
 	col1Idx int
 	col2Idx int
@@ -219,7 +219,7 @@ func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
 			{{if .IsBinOp}}
 			case tree.{{.Name}}:
 				return &{{if $left}}{{template "opLConstName" .}}{{else}}{{template "opRConstName" .}}{{end}}{
-					input:    input,
+					OneInputNode: NewOneInputNode(input),
 					colIdx:   colIdx,
 					constArg: c.({{if $left}}{{.LGoType}}{{else}}{{.RGoType}}{{end}}),
 					outputIdx: outputIdx,
@@ -235,7 +235,7 @@ func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
 			{{if .IsCmpOp}}
 			case tree.{{.Name}}:
 				return &{{if $left}}{{template "opLConstName" .}}{{else}}{{template "opRConstName" .}}{{end}}{
-					input:    input,
+					OneInputNode: NewOneInputNode(input),
 					colIdx:   colIdx,
 					constArg: c.({{if $left}}{{.LGoType}}{{else}}{{.RGoType}}{{end}}),
 					outputIdx: outputIdx,
@@ -275,7 +275,7 @@ func GetProjectionOperator(
 			{{if .IsBinOp}}
 			case tree.{{.Name}}:
 				return &{{template "opName" .}}{
-					input:    input,
+					OneInputNode: NewOneInputNode(input),
 					col1Idx:   col1Idx,
 					col2Idx:   col2Idx,
 					outputIdx: outputIdx,
@@ -291,7 +291,7 @@ func GetProjectionOperator(
 			{{if .IsCmpOp}}
 			case tree.{{.Name}}:
 				return &{{template "opName" .}}{
-					input:    input,
+					OneInputNode: NewOneInputNode(input),
 					col1Idx:   col1Idx,
 					col2Idx:   col2Idx,
 					outputIdx: outputIdx,

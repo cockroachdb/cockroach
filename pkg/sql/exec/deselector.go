@@ -22,7 +22,7 @@ import (
 // or omitted according to the selection vector). If the batches come with no
 // selection vector, it is a noop.
 type deselectorOp struct {
-	input      Operator
+	OneInputNode
 	inputTypes []types.T
 
 	output coldata.Batch
@@ -34,8 +34,8 @@ var _ Operator = &deselectorOp{}
 // operator with the given column types.
 func NewDeselectorOp(input Operator, colTypes []types.T) Operator {
 	return &deselectorOp{
-		input:      input,
-		inputTypes: colTypes,
+		OneInputNode: NewOneInputNode(input),
+		inputTypes:   colTypes,
 	}
 }
 

@@ -595,6 +595,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *explainDistSQLNode:
 		n.plan = v.visit(n.plan)
 
+	case *explainVecNode:
+		n.plan = v.visit(n.plan)
+
 	case *ordinalityNode:
 		n.source = v.visit(n.source)
 
@@ -784,6 +787,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&errorIfRowsNode{}):          "error if rows",
 	reflect.TypeOf(&explainDistSQLNode{}):       "explain distsql",
 	reflect.TypeOf(&explainPlanNode{}):          "explain plan",
+	reflect.TypeOf(&explainVecNode{}):           "explain vectorized",
 	reflect.TypeOf(&exportNode{}):               "export",
 	reflect.TypeOf(&filterNode{}):               "filter",
 	reflect.TypeOf(&groupNode{}):                "group",

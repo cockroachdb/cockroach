@@ -38,7 +38,10 @@ func OrderedDistinctColsToOperators(
 ) (Operator, []bool, error) {
 	distinctCol := make([]bool, coldata.BatchSize)
 	// zero the boolean column on every iteration.
-	input = fnOp{input: input, fn: func() { copy(distinctCol, zeroBoolColumn) }}
+	input = fnOp{
+		OneInputNode: NewOneInputNode(input),
+		fn:           func() { copy(distinctCol, zeroBoolColumn) },
+	}
 	var err error
 	for i := range distinctCols {
 		input, err = newSingleOrderedDistinct(input, int(distinctCols[i]), distinctCol, typs[distinctCols[i]])
@@ -57,8 +60,8 @@ func NewOrderedDistinct(input Operator, distinctCols []uint32, typs []types.T) (
 		return nil, err
 	}
 	return &boolVecToSelOp{
-		input:     op,
-		outputCol: outputCol,
+		OneInputNode: NewOneInputNode(op),
+		outputCol:    outputCol,
 	}, nil
 }
 
@@ -99,7 +102,7 @@ func newSingleOrderedDistinct(
 	// {{range .}}
 	case _TYPES_T:
 		return &sortedDistinct_TYPEOp{
-			input:             input,
+			OneInputNode:      NewOneInputNode(input),
 			sortedDistinctCol: distinctColIdx,
 			outputCol:         outputCol,
 		}, nil
@@ -137,7 +140,7 @@ func newPartitioner(t types.T) (partitioner, error) {
 // TODO(solon): Update this name to remove "sorted". The input values are not
 // necessarily in sorted order.
 type sortedDistinct_TYPEOp struct {
-	input Operator
+	OneInputNode
 
 	// sortedDistinctCol is the index of the column to distinct upon.
 	sortedDistinctCol int

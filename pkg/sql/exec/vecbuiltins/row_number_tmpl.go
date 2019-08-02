@@ -36,7 +36,7 @@ type _ROW_NUMBER_STRINGOp struct {
 var _ exec.Operator = &_ROW_NUMBER_STRINGOp{}
 
 func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
-	batch := r.input.Next(ctx)
+	batch := r.Input().Next(ctx)
 	if batch.Length() == 0 {
 		return batch
 	}
