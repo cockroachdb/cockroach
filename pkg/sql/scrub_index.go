@@ -16,14 +16,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 // indexCheckOperation implements the checkOperation interface. It is a
@@ -53,9 +50,8 @@ type indexCheckOperation struct {
 // indexCheckRun contains the run-time state for indexCheckOperation
 // during local execution.
 type indexCheckRun struct {
-	started bool
-	// Intermediate values.
-	rows     *rowcontainer.RowContainer
+	started  bool
+	rows     []tree.Datums
 	rowIndex int
 }
 
@@ -140,38 +136,11 @@ func (o *indexCheckOperation) Start(params runParams) error {
 		colNames(pkColumns), colNames(otherColumns),
 		o.tableDesc.ID, o.indexDesc.ID, o.asOf,
 	)
-	plan, err := params.p.delegateQuery(ctx, "SCRUB TABLE ... WITH OPTIONS INDEX", checkQuery, nil, nil)
-	if err != nil {
-		log.Errorf(ctx, "failed to create query plan for query: %s", checkQuery)
-		return errors.NewAssertionErrorWithWrappedErrf(err, "could not create query plan")
-	}
 
-	// All columns projected in the plan generated from the query are
-	// needed. The columns are the index columns and extra columns in the
-	// index, twice -- for the primary and then secondary index.
-	needed := make([]bool, len(planColumns(plan)))
-	for i := range needed {
-		needed[i] = true
-	}
-
-	// Optimize the plan. This is required in order to populate scanNode
-	// spans.
-	plan, err = params.p.optimizePlan(ctx, plan, needed)
+	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
+		ctx, "scrub-index", params.p.txn, checkQuery,
+	)
 	if err != nil {
-		plan.Close(ctx)
-		return err
-	}
-	defer plan.Close(ctx)
-
-	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
-	physPlan, err := scrubPlanDistSQL(ctx, planCtx, plan)
-	if err != nil {
-		return err
-	}
-
-	rows, err := scrubRunDistSQL(ctx, planCtx, params.p, physPlan, columnTypes)
-	if err != nil {
-		rows.Close(ctx)
 		return err
 	}
 
@@ -187,7 +156,7 @@ func (o *indexCheckOperation) Start(params runParams) error {
 
 // Next implements the checkOperation interface.
 func (o *indexCheckOperation) Next(params runParams) (tree.Datums, error) {
-	row := o.run.rows.At(o.run.rowIndex)
+	row := o.run.rows[o.run.rowIndex]
 	o.run.rowIndex++
 
 	// Check if this row has results from the left. See the comment above
@@ -266,14 +235,11 @@ func (o *indexCheckOperation) Started() bool {
 
 // Done implements the checkOperation interface.
 func (o *indexCheckOperation) Done(ctx context.Context) bool {
-	return o.run.rows == nil || o.run.rowIndex >= o.run.rows.Len()
+	return o.run.rows == nil || o.run.rowIndex >= len(o.run.rows)
 }
 
 // Close4 implements the checkOperation interface.
 func (o *indexCheckOperation) Close(ctx context.Context) {
-	if o.run.rows != nil {
-		o.run.rows.Close(ctx)
-	}
 }
 
 // createIndexCheckQuery will make the index check query for a given
