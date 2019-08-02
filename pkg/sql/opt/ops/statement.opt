@@ -104,8 +104,22 @@ define ShowTracePrivate {
 #
 # OpaqueRel can produce data and can be used as a data source as part of a
 # larger enclosing query.
-[Relational, DDL, Mutation]
+[Relational]
 define OpaqueRel {
+    _ OpaqueRelPrivate
+}
+
+# OpaqueMutation is a variant of OpaqueRel for operators that can mutate data as
+# part of the transaction.
+[Relational, Mutation]
+define OpaqueMutation {
+    _ OpaqueRelPrivate
+}
+
+# OpaqueMutation is a variant of OpaqueRel for operators that cause a schema
+# change and cannot be executed following a mutation in the same transaction.
+[Relational, Mutation, DDL]
+define OpaqueDDL {
     _ OpaqueRelPrivate
 }
 
@@ -116,7 +130,7 @@ define OpaqueRelPrivate {
 }
 
 # AlterTableSplit represents an `ALTER TABLE/INDEX .. SPLIT AT ..` statement.
-[Relational, DDL]
+[Relational, Mutation]
 define AlterTableSplit {
     # The input expression provides values for the index columns (or a prefix of
     # them).
@@ -150,7 +164,7 @@ define AlterTableSplitPrivate {
 
 # AlterTableUnsplit represents an `ALTER TABLE/INDEX .. UNSPLIT AT ..`
 # statement.
-[Relational, DDL]
+[Relational, Mutation]
 define AlterTableUnsplit {
     Input RelExpr
 
@@ -158,13 +172,13 @@ define AlterTableUnsplit {
 }
 
 # AlterTableUnsplit represents an `ALTER TABLE/INDEX .. UNSPLIT ALL` statement.
-[Relational, DDL]
+[Relational, Mutation]
 define AlterTableUnsplitAll {
     _ AlterTableSplitPrivate
 }
 
 # AlterTableRelocate represents an `ALTER TABLE/INDEX .. SPLIT AT ..` statement.
-[Relational, DDL]
+[Relational, Mutation]
 define AlterTableRelocate {
     # The input expression provides values for the index columns (or a prefix of
     # them).
