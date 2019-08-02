@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/apply"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
@@ -402,7 +403,7 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 }
 
 type handleRaftReadyStats struct {
-	handleCommittedEntriesStats
+	applyCommittedEntriesStats
 }
 
 // noSnap can be passed to handleRaftReady when no snapshot should be processed.
@@ -717,12 +718,19 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	applicationStart := timeutil.Now()
 	if len(rd.CommittedEntries) > 0 {
-		var expl string
-		stats.handleCommittedEntriesStats, expl, err =
-			r.handleCommittedEntriesRaftMuLocked(ctx, rd.CommittedEntries)
-		if err != nil {
-			return stats, expl, err
+		app := r.getApplier()
+		dec := r.getDecoder()
+		appTask := apply.MakeTask(app, dec)
+		appTask.SetMaxBatchSize(r.store.TestingKnobs().MaxApplicationBatchSize)
+		defer appTask.Close()
+		if err := appTask.Decode(ctx, rd.CommittedEntries); err != nil {
+			return stats, err.(*nonDeterministicFailure).safeExpl, err
 		}
+		if err := appTask.ApplyCommittedEntries(ctx); err != nil {
+			return stats, err.(*nonDeterministicFailure).safeExpl, err
+		}
+		stats.applyCommittedEntriesStats = app.moveStats()
+
 		// etcd raft occasionally adds a nil entry (our own commands are never
 		// empty). This happens in two situations: When a new leader is elected, and
 		// when a config change is dropped due to the "one at a time" rule. In both
