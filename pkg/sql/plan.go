@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -532,62 +531,6 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 	}
 
 	return nil, nil
-}
-
-// delegateQuery creates a plan for a given SQL query.
-// In addition, the caller can specify an additional validation
-// function (initialCheck) that will be ran and checked for errors
-// during plan optimization. This is meant for checks that cannot be
-// run during a SQL prepare operation.
-func (p *planner) delegateQuery(
-	ctx context.Context,
-	name string,
-	sql string,
-	initialCheck func(ctx context.Context) error,
-	desiredTypes []*types.T,
-) (planNode, error) {
-	log.VEventf(ctx, 2, "delegated query: %q", sql)
-
-	// Prepare the sub-plan.
-	stmt, err := parser.ParseOne(sql)
-	if err != nil {
-		return nil, err
-	}
-	plan, err := p.newPlan(ctx, stmt.AST, desiredTypes)
-	if err != nil {
-		return nil, err
-	}
-
-	if initialCheck == nil {
-		return plan, nil
-	}
-
-	// To enable late calling into initialCheck, we use a delayedNode.
-	return &delayedNode{
-		name: name,
-
-		// The columns attribute cannot be a straight-up reference to the sub-plan's
-		// own columns, because they can be modified in-place by setNeededColumns().
-		columns: append(sqlbase.ResultColumns(nil), planColumns(plan)...),
-
-		// The delayed constructor's only responsibility is to call
-		// initialCheck() - the plan is already constructed.
-		constructor: func(ctx context.Context, _ *planner) (planNode, error) {
-			if err := initialCheck(ctx); err != nil {
-				return nil, err
-			}
-			return plan, nil
-		},
-
-		// Breaking with the common usage pattern of delayedNode, where
-		// the plan attribute is initially nil (the constructor creates
-		// it), here we prepopulate the field with the sub-plan created
-		// above. We do this instead of simply returning the newly created
-		// sub-plan in a constructor closure, to ensure the sub-plan is
-		// properly Close()d if the delayedNode is discarded before its
-		// constructor is called.
-		plan: plan,
-	}, nil
 }
 
 // newPlan constructs a planNode from a statement. This is used
