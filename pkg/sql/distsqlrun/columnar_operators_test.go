@@ -382,6 +382,8 @@ func generateColumnOrdering(
 // comparison which can be either comparing a column from the left against a
 // column from the right or comparing a column from either side against a
 // constant.
+// TODO(yuzefovich): update this once LEFT SEMI or LEFT ANTI is supported with
+// ON expression.
 func generateOnExpr(rng *rand.Rand, nCols int, nEqCols int, maxNum int) distsqlpb.Expression {
 	var comparison string
 	r := rng.Float64()
