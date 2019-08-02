@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"reflect"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -65,14 +64,14 @@ func buildOpaque(
 		return nil, nil, err
 	}
 	res := &opaqueMetadata{
-		info: strings.TrimPrefix(reflect.TypeOf(stmt).String(), "*tree."),
+		info: stmt.StatementTag(),
 		plan: plan,
 	}
 	return res, planColumns(plan), nil
 }
 
 func init() {
-	opaqueStmts := []reflect.Type{
+	opaqueReadOnlyStmts := []reflect.Type{
 		reflect.TypeOf(&tree.ShowClusterSetting{}),
 		reflect.TypeOf(&tree.ShowHistogram{}),
 		reflect.TypeOf(&tree.ShowTableStats{}),
@@ -80,7 +79,7 @@ func init() {
 		reflect.TypeOf(&tree.ShowZoneConfig{}),
 		reflect.TypeOf(&tree.ShowFingerprints{}),
 	}
-	for _, t := range opaqueStmts {
-		optbuilder.RegisterOpaque(t, buildOpaque)
+	for _, t := range opaqueReadOnlyStmts {
+		optbuilder.RegisterOpaque(t, optbuilder.OpaqueReadOnly, buildOpaque)
 	}
 }

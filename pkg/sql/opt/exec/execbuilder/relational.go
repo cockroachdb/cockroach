@@ -155,11 +155,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	}
 
 	// Raise error if mutation op is part of a read-only transaction.
-	if opt.IsMutationOp(e) {
-		if b.evalCtx.TxnReadOnly {
-			return execPlan{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
-				"cannot execute %s in a read-only transaction", e.Op().SyntaxTag())
-		}
+	if opt.IsMutationOp(e) && b.evalCtx.TxnReadOnly {
+		return execPlan{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+			"cannot execute %s in a read-only transaction", b.statementTag(e))
 	}
 
 	// Collect usage telemetry for relational node, if appropriate.
@@ -261,8 +259,8 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.ShowTraceForSessionExpr:
 		ep, err = b.buildShowTrace(t)
 
-	case *memo.OpaqueRelExpr:
-		ep, err = b.buildOpaque(t)
+	case *memo.OpaqueRelExpr, *memo.OpaqueMutationExpr, *memo.OpaqueDDLExpr:
+		ep, err = b.buildOpaque(t.Private().(*memo.OpaqueRelPrivate))
 
 	case *memo.AlterTableSplitExpr:
 		ep, err = b.buildAlterTableSplit(t)
@@ -1778,7 +1776,7 @@ func (b *Builder) applySaveTable(
 	return input, err
 }
 
-func (b *Builder) buildOpaque(opaque *memo.OpaqueRelExpr) (execPlan, error) {
+func (b *Builder) buildOpaque(opaque *memo.OpaqueRelPrivate) (execPlan, error) {
 	node, err := b.factory.ConstructOpaque(opaque.Metadata)
 	if err != nil {
 		return execPlan{}, err
@@ -1901,4 +1899,16 @@ func (b *Builder) buildSortedInput(input execPlan, ordering opt.Ordering) (execP
 		return execPlan{}, err
 	}
 	return execPlan{root: node, outputCols: input.outputCols}, nil
+}
+
+// statementTag returns a string that can be used in an error message regarding
+// the given expression.
+func (b *Builder) statementTag(expr memo.RelExpr) string {
+	switch expr.Op() {
+	case opt.OpaqueRelOp, opt.OpaqueMutationOp, opt.OpaqueDDLOp:
+		return expr.Private().(*memo.OpaqueRelPrivate).Metadata.String()
+
+	default:
+		return expr.Op().SyntaxTag()
+	}
 }

@@ -281,8 +281,8 @@ func AggregateIsNullOnEmpty(op Operator) bool {
 type OpaqueMetadata interface {
 	ImplementsOpaqueMetadata()
 
-	// String is used when printing optimizer trees and should contain a short
-	// description of the statement.
+	// String is a short description used when printing optimizer trees and when
+	// forming error messages; it should be the SQL statement tag.
 	String() string
 }
 
