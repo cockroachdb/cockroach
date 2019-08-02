@@ -31,6 +31,13 @@ type CheckedCommand interface {
 	Command
 	// Rejected returns whether the command was rejected.
 	Rejected() bool
+	// CanAckBeforeApplication returns whether the success of the command
+	// can be acknowledged before the command has been applied to the state
+	// machine.
+	CanAckBeforeApplication() bool
+	// AckSuccess acknowledges the success of the command to its client.
+	// Must only be called if !Rejected.
+	AckSuccess() error
 }
 
 // AppliedCommand is a command that has been applied to the replicated state

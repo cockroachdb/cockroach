@@ -29,7 +29,15 @@ type StateMachine interface {
 	// effects that a group of Commands will have on the replicated state
 	// machine. Commands are staged in the batch one-by-one and then the
 	// entire batch is committed at once.
-	NewBatch() Batch
+	//
+	// Batch comes in two flavors - real batches and ephemeral batches.
+	// Real batches are capable of accumulating updates from commands and
+	// applying them to the state machine. Ephemeral batches are not able
+	// to make changes to the durable state machine, but can still be used
+	// for the purpose of checking commands to determine whether they will
+	// be rejected or not when staged in a real batch. The principal user
+	// of ephemeral batches is AckCommittedEntriesBeforeApplication.
+	NewBatch(ephemeral bool) Batch
 	// ApplySideEffects applies the in-memory side-effects of a Command to
 	// the replicated state machine. The method will be called in the order
 	// that the commands are committed to the state machine's log. It will
@@ -107,6 +115,106 @@ func (t *Task) assertDecoded() {
 	}
 }
 
+// AckCommittedEntriesBeforeApplication attempts to acknowledge the success of
+// raft entries that have been durably committed to the raft log but have not
+// yet been applied to the proposer replica's replicated state machine.
+//
+// This is safe because a proposal through raft can be known to have succeeded
+// as soon as it is durably replicated to a quorum of replicas (i.e. has
+// committed in the raft log). The proposal does not need to wait for the
+// effects of the proposal to be applied in order to know whether its changes
+// will succeed or fail. This is because the raft log is the provider of
+// atomicity and durability for replicated writes, not (ignoring log
+// truncation) the replicated state machine itself.
+//
+// However, there are a few complications to acknowledging the success of a
+// proposal at this stage:
+//
+//  1. Committing an entry in the raft log and having the command in that entry
+//     succeed are similar but not equivalent concepts. Even if the entry succeeds
+//     in achieving durability by replicating to a quorum of replicas, its command
+//     may still be rejected "beneath raft". This means that a (deterministic)
+//     check after replication decides that the command will not be applied to the
+//     replicated state machine. In that case, the client waiting on the result of
+//     the command should not be informed of its success. Luckily, this check is
+//     cheap to perform so we can do it here and when applying the command.
+//
+//     Determining whether the command will succeed or be rejected before applying
+//     it for real is accomplished using an ephemeral batch. Commands are staged in
+//     the ephemeral batch to acquire CheckedCommands, which can then be acknowledged
+//     immediately even though the ephemeral batch itself cannot be used to update
+//     the durable state machine. Once the rejection status of each command is
+//     determined, any successful commands that permit acknowledgement before
+//     application (see CanAckBeforeApplication) are acknowledged. The ephemeral
+//     batch is then thrown away.
+//
+//  2. Some commands perform non-trivial work such as updating Replica configuration
+//     state or performing Range splits. In those cases, it's likely that the client
+//     is interested in not only knowing whether it has succeeded in sequencing the
+//     change in the raft log, but also in knowing when the change has gone into
+//     effect. There's currently no exposed hook to ask for an acknowledgement only
+//     after a command has been applied, so for simplicity the current implementation
+//     only ever acks transactional writes before they have gone into effect. All
+//     other commands wait until they have been applied to ack their client.
+//
+//  3. Even though we can determine whether a command has succeeded without applying
+//     it, the effect of the command will not be visible to conflicting commands until
+//     it is applied. Because of this, the client can be informed of the success of
+//     a write at this point, but we cannot release that write's latches until the
+//     write has applied. See ProposalData.signalProposalResult/finishApplication.
+//
+//  4. etcd/raft may provided a series of CommittedEntries in a Ready struct that
+//     haven't actually been appended to our own log. This is most common in single
+//     node replication groups, but it is possible when a follower in a multi-node
+//     replication group is catching up after falling behind. In the first case,
+//     the entries are not yet committed so acknowledging them would be a lie. In
+//     the second case, the entries are committed so we could acknowledge them at
+//     this point, but doing so seems risky. To avoid complications in either case,
+//     the method takes a maxIndex parameter that limits the indexes that it will
+//     acknowledge. Typically, callers will supply the highest index that they have
+//     durably written to their raft log for this upper bound.
+//
+func (t *Task) AckCommittedEntriesBeforeApplication(ctx context.Context, maxIndex uint64) error {
+	t.assertDecoded()
+	if !t.anyLocal {
+		return nil // fast-path
+	}
+
+	// Create a new ephemeral application batch. All we're interested in is
+	// whether commands will be rejected or not when staged in a real batch.
+	batch := t.sm.NewBatch(true /* ephemeral */)
+	defer batch.Close()
+
+	iter := t.dec.NewCommandIter()
+	defer iter.Close()
+
+	// Collect a batch of trivial commands from the applier. Stop at the first
+	// non-trivial command or at the first command with an index above maxIndex.
+	batchIter := takeWhileCmdIter(iter, func(cmd Command) bool {
+		if cmd.Index() > maxIndex {
+			return false
+		}
+		return cmd.IsTrivial()
+	})
+
+	// Stage the commands in the (moephemeralck) batch.
+	stagedIter, err := mapCmdIter(batchIter, batch.Stage)
+	if err != nil {
+		return err
+	}
+
+	// Acknowledge any locally-proposed commands that succeeded in being staged
+	// in the batch and can be acknowledged before they are actually applied.
+	// Don't acknowledge rejected proposals early because the StateMachine may
+	// want to retry the command instead of returning the error to the client.
+	return forEachCheckedCmdIter(stagedIter, func(cmd CheckedCommand) error {
+		if !cmd.Rejected() && cmd.IsLocal() && cmd.CanAckBeforeApplication() {
+			return cmd.AckSuccess()
+		}
+		return nil
+	})
+}
+
 // SetMaxBatchSize sets the maximum application batch size. If 0, no limit
 // will be placed on the number of commands that can be applied in a batch.
 func (t *Task) SetMaxBatchSize(size int) {
@@ -134,7 +242,7 @@ func (t *Task) ApplyCommittedEntries(ctx context.Context) error {
 // b) exactly one non-trivial command
 func (t *Task) applyOneBatch(ctx context.Context, iter CommandIterator) error {
 	// Create a new application batch.
-	batch := t.sm.NewBatch()
+	batch := t.sm.NewBatch(false /* ephemeral */)
 	defer batch.Close()
 
 	// Consume a batch-worth of commands.

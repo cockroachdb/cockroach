@@ -543,6 +543,36 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 
+	// If the ready struct includes entries that have been committed, these
+	// entries will be applied to the Replica's replicated state machine down
+	// below, after appending new entries to the raft log and sending messages
+	// to peers. However, the process of appending new entries to the raft log
+	// and then applying committed entries to the state machine can take some
+	// time - and these entries are already durably committed. If they have
+	// clients waiting on them, we'd like to acknowledge their success as soon
+	// as possible. To facilitate this, we take a quick pass over the committed
+	// entries and acknowledge as many as we can trivially prove will not be
+	// rejected beneath raft.
+	//
+	// We only try to ack committed entries before applying them if we have
+	// clients waiting on the result of Raft entries. If not, we know none of
+	// the committed entries were proposed locally.
+	//
+	// We share the entry generator and command application batch with the call
+	// to handleCommittedEntriesRaftMuLocked down below to avoid duplicating any
+	// decoding work.
+	sm := r.getStateMachine()
+	dec := r.getDecoder()
+	appTask := apply.MakeTask(sm, dec)
+	appTask.SetMaxBatchSize(r.store.TestingKnobs().MaxApplicationBatchSize)
+	defer appTask.Close()
+	if err := appTask.Decode(ctx, rd.CommittedEntries); err != nil {
+		return stats, err.(*nonDeterministicFailure).safeExpl, err
+	}
+	if err := appTask.AckCommittedEntriesBeforeApplication(ctx, lastIndex); err != nil {
+		return stats, err.(*nonDeterministicFailure).safeExpl, err
+	}
+
 	// Separate the MsgApp messages from all other Raft message types so that we
 	// can take advantage of the optimization discussed in the Raft thesis under
 	// the section: `10.2.1 Writing to the leader’s disk in parallel`. The
@@ -718,14 +748,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	applicationStart := timeutil.Now()
 	if len(rd.CommittedEntries) > 0 {
-		sm := r.getStateMachine()
-		dec := r.getDecoder()
-		appTask := apply.MakeTask(sm, dec)
-		appTask.SetMaxBatchSize(r.store.TestingKnobs().MaxApplicationBatchSize)
-		defer appTask.Close()
-		if err := appTask.Decode(ctx, rd.CommittedEntries); err != nil {
-			return stats, err.(*nonDeterministicFailure).safeExpl, err
-		}
 		if err := appTask.ApplyCommittedEntries(ctx); err != nil {
 			return stats, err.(*nonDeterministicFailure).safeExpl, err
 		}

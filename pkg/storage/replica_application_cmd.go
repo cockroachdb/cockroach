@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -108,6 +109,43 @@ func (c *replicatedCmd) IsLocal() bool {
 // Rejected implements the apply.CheckedCommand interface.
 func (c *replicatedCmd) Rejected() bool {
 	return c.forcedErr != nil
+}
+
+// CanAckBeforeApplication implements the apply.CheckedCommand interface.
+func (c *replicatedCmd) CanAckBeforeApplication() bool {
+	// CanAckBeforeApplication determines whether the request type is compatable
+	// with acknowledgement of success before it has been applied. For now, this
+	// determination is based on whether the request is performing transactional
+	// writes. This could be exposed as an option on the batch header instead.
+	//
+	// We don't try to ack async consensus writes before application because we
+	// know that there isn't a client waiting for the result.
+	req := c.proposal.Request
+	return req.IsTransactionWrite() && !req.AsyncConsensus
+}
+
+// AckSuccess implements the apply.CheckedCommand interface.
+func (c *replicatedCmd) AckSuccess() error {
+	if !c.IsLocal() {
+		return nil
+	}
+	// If the local command isn't already managing its own tracing span, fork
+	// the request's context so that it can outlive the proposer's context.
+	if c.proposal.sp == nil {
+		c.proposal.ctx, c.proposal.sp = tracing.ForkCtxSpan(c.ctx, "command application")
+		c.ctx = c.proposal.ctx
+	}
+
+	// Signal the proposal's response channel with the result.
+	// Make a copy of the response to avoid data races.
+	var resp proposalResult
+	reply := *c.proposal.Local.Reply
+	reply.Responses = append([]roachpb.ResponseUnion(nil), reply.Responses...)
+	resp.Reply = &reply
+	resp.Intents = c.proposal.Local.DetachIntents()
+	resp.EndTxns = c.proposal.Local.DetachEndTxns(false)
+	c.proposal.signalProposalResult(resp)
+	return nil
 }
 
 // FinishAndAckOutcome implements the apply.AppliedCommand interface.
