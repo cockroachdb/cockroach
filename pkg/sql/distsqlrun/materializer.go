@@ -51,18 +51,41 @@ type materializer struct {
 	// adapter.
 	outputRow      sqlbase.EncDatumRow
 	outputMetadata *distsqlpb.ProducerMetadata
+
+	// ctxCancel will cancel the context that is passed to the input (which will
+	// pass it down further). This allows for the cancellation of the tree rooted
+	// at this materializer when it is closed.
+	ctxCancel context.CancelFunc
+	// cancelFlow will cancel the context of the flow (i.e. if non-nil, it is
+	// Flow.ctxCancel).
+	cancelFlow context.CancelFunc
 }
 
+const materializerProcName = "materializer"
+
+// newMaterializer creates a new materializer processor which processes the
+// columnar data coming from input to return it as rows.
+// Arguments:
+// - typs is the output types scheme.
+// - metadataSourcesQueue are all of the metadata sources that are planned on
+// the same node as the materializer and that need to be drained.
+// - outputStatsToTrace (when tracing is enabled) finishes the stats.
+// - cancelFlow is the context cancellation function that cancels the context
+// of the flow (i.e. it is Flow.ctxCancel). It should only be non-nil in case
+// of a root materializer (i.e. not when we're wrapping a row source).
 func newMaterializer(
 	flowCtx *FlowCtx,
 	processorID int32,
 	input exec.Operator,
 	typs []types.T,
+	// TODO(yuzefovich): I feel like we should remove outputToInputColIdx
+	// argument since it's always {0, 1, ..., len(typs)-1}.
 	outputToInputColIdx []int,
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
 	outputStatsToTrace func(),
+	cancelFlow context.CancelFunc,
 ) (*materializer, error) {
 	m := &materializer{
 		input:               input,
@@ -84,6 +107,7 @@ func newMaterializer(
 				for _, src := range metadataSourcesQueue {
 					trailingMeta = append(trailingMeta, src.DrainMeta(ctx)...)
 				}
+				m.InternalClose()
 				return trailingMeta
 			},
 		},
@@ -91,13 +115,22 @@ func newMaterializer(
 		return nil, err
 	}
 	m.finishTrace = outputStatsToTrace
+	m.cancelFlow = cancelFlow
 	return m, nil
 }
 
 func (m *materializer) Start(ctx context.Context) context.Context {
 	m.input.Init()
-	m.Ctx = ctx
-	return ctx
+	ctx = m.ProcessorBase.StartInternal(ctx, materializerProcName)
+	// We want to be able to cancel the context that will be passed into the
+	// operators on the calls to Next(), but since we don't have the access to
+	// the "flow context" (which m.cancelFlow closes - if it is non-nil), we use
+	// another context and get another cancellation function, and we will trigger
+	// both upon exit from the materializer.
+	// TODO(yuzefovich): again, this seems very fragile to me as well. We should
+	// figure out a better way to propagate cancellation.
+	m.Ctx, m.ctxCancel = context.WithCancel(ctx)
+	return m.Ctx
 }
 
 // nextAdapter calls next() and saves the returned results in m. For internal
@@ -157,9 +190,24 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 	return m.outputRow, m.outputMetadata
 }
 
+func (m *materializer) InternalClose() bool {
+	if m.ProcessorBase.InternalClose() {
+		m.ctxCancel()
+		if m.cancelFlow != nil {
+			m.cancelFlow()
+		}
+		return true
+	}
+	return false
+}
+
+func (m *materializer) ConsumerDone() {
+	// Materializer will move into 'draining' state, and after all the metadata
+	// has been drained - as part of TrailingMetaCallback - InternalClose() will
+	// be called which will cancel the flow.
+	m.MoveToDraining(nil /* err */)
+}
+
 func (m *materializer) ConsumerClosed() {
-	// TODO(yuzefovich): this seems like a hack to me, but in order to close an
-	// Inbox, we need to drain it.
-	m.trailingMetaCallback(m.Ctx)
 	m.InternalClose()
 }

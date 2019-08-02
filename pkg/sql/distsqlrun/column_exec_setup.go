@@ -16,6 +16,7 @@ import (
 	"math"
 	"reflect"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -79,6 +80,7 @@ func wrapRowSource(
 			nil, /* output */
 			nil, /* metadataSourcesQueue */
 			nil, /* outputStatsToTrace */
+			nil, /* cancelFlow */
 		)
 		if err != nil {
 			return nil, err
@@ -964,6 +966,8 @@ type flowCreatorHelper interface {
 	accumulateAsyncComponent(runFn)
 	// addMaterializer adds a materializer to the flow.
 	addMaterializer(*materializer)
+	// getCancelFlowFn returns a flow cancellation function.
+	getCancelFlowFn() context.CancelFunc
 }
 
 // vectorizedFlowCreator performs all the setup of vectorized flows. Depending
@@ -981,6 +985,11 @@ type vectorizedFlowCreator struct {
 	syncFlowConsumer               RowReceiver
 	nodeDialer                     *nodedialer.Dialer
 	flowID                         distsqlpb.FlowID
+
+	// numOutboxes counts how many exec.Outboxes have been set up on this node.
+	// It must be accessed atomically.
+	numOutboxes       int32
+	materializerAdded bool
 }
 
 func newVectorizedFlowCreator(
@@ -1015,7 +1024,12 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 		return err
 	}
 	run := func(ctx context.Context, cancelFn context.CancelFunc) {
+		atomic.AddInt32(&s.numOutboxes, 1)
 		outbox.Run(ctx, s.nodeDialer, stream.TargetNodeID, s.flowID, stream.StreamID, cancelFn)
+		atomic.AddInt32(&s.numOutboxes, -1)
+		if !s.materializerAdded && atomic.LoadInt32(&s.numOutboxes) == 0 && cancelFn != nil {
+			cancelFn()
+		}
 	}
 	s.accumulateAsyncComponent(run)
 	return nil
@@ -1267,6 +1281,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				// further appends without overwriting.
 				append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
 				outputStatsToTrace,
+				s.getCancelFlowFn(),
 			)
 			if err != nil {
 				return nil, err
@@ -1274,6 +1289,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			metadataSourcesQueue = metadataSourcesQueue[:0]
 			s.vectorizedStatsCollectorsQueue = s.vectorizedStatsCollectorsQueue[:0]
 			s.addMaterializer(proc)
+			s.materializerAdded = true
 		default:
 			return nil, errors.Errorf("unsupported output stream type %s", outputStream.Type)
 		}
@@ -1446,6 +1462,10 @@ func (r *vectorizedFlowCreatorHelper) addMaterializer(m *materializer) {
 	r.f.processors[0] = m
 }
 
+func (r *vectorizedFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
+	return r.f.ctxCancel
+}
+
 func (f *Flow) setupVectorizedFlow(ctx context.Context, acc *mon.BoundAccount) error {
 	recordingStats := false
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
@@ -1487,7 +1507,10 @@ func (r *noopFlowCreatorHelper) checkInboundStreamID(sid distsqlpb.StreamID) err
 
 func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 
-func (r *noopFlowCreatorHelper) addMaterializer(m *materializer) {
+func (r *noopFlowCreatorHelper) addMaterializer(*materializer) {}
+
+func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
+	return nil
 }
 
 // SupportsVectorized checks whether flow is supported by the vectorized engine
