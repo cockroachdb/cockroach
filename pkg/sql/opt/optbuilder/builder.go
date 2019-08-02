@@ -123,6 +123,13 @@ type Builder struct {
 	// trackViewDeps would be false inside that inner view).
 	trackViewDeps bool
 	viewDeps      opt.ViewDeps
+
+	// If set, the data source names in the AST are rewritten to the fully
+	// qualified version (after resolution). Used to construct the strings for
+	// CREATE VIEW and CREATE TABLE AS queries.
+	// TODO(radu): modifying the AST in-place is hacky; we will need to switch to
+	// using AST annotations.
+	qualifyDataSourceNamesInAST bool
 }
 
 // New creates a new Builder structure initialized with the given
