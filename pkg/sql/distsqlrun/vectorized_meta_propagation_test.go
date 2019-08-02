@@ -67,6 +67,8 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 
 	noop := exec.NewNoop(col)
 	mat, err := newMaterializer(
+		nil, /* ctxFlow */
+		nil, /* cancelFlow */
 		&flowCtx,
 		2, /* processorID */
 		noop,

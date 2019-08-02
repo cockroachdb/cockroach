@@ -50,7 +50,7 @@ func verifyColOperator(
 	defer diskMonitor.Stop(ctx)
 	flowCtx := &FlowCtx{
 		EvalCtx:     &evalCtx,
-		Settings:    cluster.MakeTestingClusterSettings(),
+		Settings:    st,
 		TempStorage: tempEngine,
 		diskMonitor: diskMonitor,
 	}
@@ -90,6 +90,8 @@ func verifyColOperator(
 		outputToInputColIdx[i] = i
 	}
 	outColOp, err := newMaterializer(
+		nil, /* ctxFlow */
+		nil, /* cancelFlow */
 		flowCtx,
 		int32(len(inputs))+2,
 		result.op,

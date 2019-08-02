@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // materializer converts an exec.Operator input into a RowSource.
@@ -51,13 +52,33 @@ type materializer struct {
 	// adapter.
 	outputRow      sqlbase.EncDatumRow
 	outputMetadata *distsqlpb.ProducerMetadata
+
+	// ctxCancel will cancel the context that is passed to the input (which will
+	// pass it down further). This allows for the cancellation of the tree rooted
+	// at this materializer when it is closed.
+	ctxCancel context.CancelFunc
 }
 
+// newMaterializer creates a new materializer processor which processes the
+// columnar data coming from input to return it as rows.
+// Arguments:
+// - ctxFlow is the context of the flow (i.e. Flow.ctx). It should only be
+// non-nil in case of a root materializer.
+// - cancelFlow is the context cancellation function that cancels ctxFlow. It
+// must be non-nil if ctxFlow is non-nil and must be nil if ctxFlow is nil.
+// - typs is the output types scheme.
+// - metadataSourcesQueue are all of the metadata sources that are planned on
+// the same node as the materializer and that need to be drained.
+// - outputStatsToTrace (when tracing is enabled) finishes the stats.
 func newMaterializer(
+	ctxFlow context.Context,
+	cancelFlow context.CancelFunc,
 	flowCtx *FlowCtx,
 	processorID int32,
 	input exec.Operator,
 	typs []types.T,
+	// TODO(yuzefovich): I feel like we should remove outputToInputColIdx
+	// argument since it's always {0, 1, ..., len(typs)-1}.
 	outputToInputColIdx []int,
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
@@ -84,6 +105,7 @@ func newMaterializer(
 				for _, src := range metadataSourcesQueue {
 					trailingMeta = append(trailingMeta, src.DrainMeta(ctx)...)
 				}
+				m.InternalClose()
 				return trailingMeta
 			},
 		},
@@ -91,13 +113,23 @@ func newMaterializer(
 		return nil, err
 	}
 	m.finishTrace = outputStatsToTrace
+	if ctxFlow == nil && cancelFlow != nil {
+		return nil, errors.AssertionFailedf("ctxFlow is nil but cancelFlow is non-nil")
+	}
+	if ctxFlow != nil && cancelFlow == nil {
+		return nil, errors.AssertionFailedf("ctxFlow is non-nil but cancelFlow is nil")
+	}
+	m.Ctx = ctxFlow
+	m.ctxCancel = cancelFlow
 	return m, nil
 }
 
 func (m *materializer) Start(ctx context.Context) context.Context {
 	m.input.Init()
-	m.Ctx = ctx
-	return ctx
+	if m.ctxCancel == nil {
+		m.Ctx, m.ctxCancel = context.WithCancel(ctx)
+	}
+	return m.Ctx
 }
 
 // nextAdapter calls next() and saves the returned results in m. For internal
@@ -157,9 +189,21 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 	return m.outputRow, m.outputMetadata
 }
 
+func (m *materializer) InternalClose() bool {
+	if m.ProcessorBase.InternalClose() {
+		m.ctxCancel()
+		return true
+	}
+	return false
+}
+
+func (m *materializer) ConsumerDone() {
+	// Materializer will move into 'draining' state, and after all the metadata
+	// has been drained - as part of TrailingMetaCallback - InternalClose() will
+	// be called which will cancel the flow.
+	m.MoveToDraining(nil /* err */)
+}
+
 func (m *materializer) ConsumerClosed() {
-	// TODO(yuzefovich): this seems like a hack to me, but in order to close an
-	// Inbox, we need to drain it.
-	m.trailingMetaCallback(m.Ctx)
 	m.InternalClose()
 }

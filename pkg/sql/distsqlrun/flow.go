@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // FlowCtx encompasses the contexts needed for various flow components.
@@ -193,10 +193,11 @@ type Flow struct {
 
 	status flowStatus
 
+	// ctx is the context of this flow.
+	ctx context.Context
 	// Cancel function for ctx. Call this to cancel the flow (safe to be called
 	// multiple times).
 	ctxCancel context.CancelFunc
-	ctxDone   <-chan struct{}
 
 	// spec is the request that produced this flow. Only used for debugging.
 	spec *distsqlpb.FlowSpec
@@ -497,6 +498,7 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 
 func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
+	f.ctx, f.ctxCancel = contextutil.WithCancel(ctx)
 
 	if f.EvalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
 		log.VEventf(ctx, 1, "setting up vectorize flow %d with setting %s", f.id, f.EvalCtx.SessionData.Vectorize)
@@ -529,9 +531,6 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 	log.VEventf(
 		ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
 	)
-
-	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
-	f.ctxDone = ctx.Done()
 
 	// Only register the flow if there will be inbound stream connections that
 	// need to look up this flow in the flow registry.
@@ -638,7 +637,7 @@ func (f *Flow) Wait() {
 	}()
 
 	select {
-	case <-f.ctxDone:
+	case <-f.ctx.Done():
 		f.cancel()
 		<-waitChan
 	case <-waitChan:

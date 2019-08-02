@@ -51,6 +51,8 @@ func TestVectorizedErrorPropagation(t *testing.T) {
 
 	vee := exec.NewTestVectorizedErrorEmitter(col)
 	mat, err := newMaterializer(
+		nil, /* ctxFlow */
+		nil, /* cancelFlow */
 		&flowCtx,
 		1, /* processorID */
 		vee,
@@ -111,6 +113,8 @@ func TestNonVectorizedErrorPropagation(t *testing.T) {
 
 	nvee := newTestVectorizedErrorEmitter(col)
 	mat, err := newMaterializer(
+		nil, /* ctxFlow */
+		nil, /* cancelFlow */
 		&flowCtx,
 		1, /* processorID */
 		nvee,
