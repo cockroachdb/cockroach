@@ -199,7 +199,8 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 
 	acc := evalCtx.Mon.MakeBoundAccount()
 	defer acc.Close(ctx)
-	require.NoError(t, vfc.setupFlow(context.Background(), &f.FlowCtx, procs, &acc))
+	_, err := vfc.setupFlow(context.Background(), &f.FlowCtx, procs, &acc)
+	require.NoError(t, err)
 
 	// Verify that an outbox was actually created.
 	require.True(t, outboxCreated)

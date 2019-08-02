@@ -67,6 +67,9 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 	case tree.ExplainOpt:
 		return nil, errors.New("EXPLAIN (OPT) only supported with the cost-based optimizer")
 
+	case tree.ExplainVec:
+		return nil, errors.New("EXPLAIN (VEC) only supported with the cost-based optimizer")
+
 	default:
 		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", opts.Mode)
 	}

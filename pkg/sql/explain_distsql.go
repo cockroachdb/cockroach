@@ -14,13 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // explainDistSQLNode is a planNode that wraps a plan and returns
@@ -69,13 +66,6 @@ type distSQLExplainable interface {
 }
 
 func (n *explainDistSQLNode) startExec(params runParams) error {
-	if n.analyze && params.SessionData().DistSQLMode == sessiondata.DistSQLOff {
-		return pgerror.Newf(
-			pgcode.ObjectNotInPrerequisiteState,
-			"cannot run EXPLAIN ANALYZE while distsql is disabled",
-		)
-	}
-
 	// Trigger limit propagation.
 	params.p.prepareForDistSQLSupportCheck()
 

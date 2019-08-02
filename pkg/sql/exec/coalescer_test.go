@@ -89,8 +89,8 @@ func BenchmarkCoalescer(b *testing.B) {
 				source := newRandomLengthBatchSource(batch)
 
 				co := &coalescerOp{
-					input:      source,
-					inputTypes: sourceTypes,
+					OneInputNode: NewOneInputNode(source),
+					inputTypes:   sourceTypes,
 				}
 
 				co.Init()

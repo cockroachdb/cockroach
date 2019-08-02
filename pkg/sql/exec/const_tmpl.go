@@ -53,10 +53,10 @@ func NewConstOp(input Operator, t types.T, constVal interface{}, outputIdx int) 
 	// {{range .}}
 	case _TYPES_T:
 		return &const_TYPEOp{
-			input:     input,
-			outputIdx: outputIdx,
-			typ:       t,
-			constVal:  constVal.(_GOTYPE),
+			OneInputNode: NewOneInputNode(input),
+			outputIdx:    outputIdx,
+			typ:          t,
+			constVal:     constVal.(_GOTYPE),
 		}, nil
 	// {{end}}
 	default:
@@ -67,7 +67,7 @@ func NewConstOp(input Operator, t types.T, constVal interface{}, outputIdx int) 
 // {{range .}}
 
 type const_TYPEOp struct {
-	input Operator
+	OneInputNode
 
 	typ       types.T
 	outputIdx int
@@ -107,13 +107,13 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 // value at index outputIdx.
 func NewConstNullOp(input Operator, outputIdx int) Operator {
 	return &constNullOp{
-		input:     input,
-		outputIdx: outputIdx,
+		OneInputNode: NewOneInputNode(input),
+		outputIdx:    outputIdx,
 	}
 }
 
 type constNullOp struct {
-	input     Operator
+	OneInputNode
 	outputIdx int
 }
 

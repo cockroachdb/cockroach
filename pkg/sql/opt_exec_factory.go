@@ -1169,6 +1169,12 @@ func (ef *execFactory) ConstructExplain(
 			stmtType:      stmtType,
 		}, nil
 
+	case tree.ExplainVec:
+		return &explainVecNode{
+			plan:     p.plan,
+			stmtType: stmtType,
+		}, nil
+
 	case tree.ExplainPlan:
 		if analyzeSet {
 			return nil, errors.New("EXPLAIN ANALYZE only supported with (DISTSQL) option")

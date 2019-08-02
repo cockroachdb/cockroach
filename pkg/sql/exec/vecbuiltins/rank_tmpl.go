@@ -44,7 +44,7 @@ func _UPDATE_RANK_INCREMENT() {
 // */}}
 
 type rankInitFields struct {
-	input exec.Operator
+	exec.OneInputNode
 	// distinctCol is the output column of the chain of ordered distinct
 	// operators in which true will indicate that a new rank needs to be assigned
 	// to the corresponding tuple.
@@ -69,7 +69,7 @@ type _RANK_STRINGOp struct {
 var _ exec.Operator = &_RANK_STRINGOp{}
 
 func (r *_RANK_STRINGOp) Init() {
-	r.input.Init()
+	r.Input().Init()
 	// RANK and DENSE_RANK start counting from 1. Before we assign the rank to a
 	// tuple in the batch, we first increment r.rank, so setting this
 	// rankIncrement to 1 will update r.rank to 1 on the very first tuple (as
@@ -78,7 +78,7 @@ func (r *_RANK_STRINGOp) Init() {
 }
 
 func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
-	batch := r.input.Next(ctx)
+	batch := r.Input().Next(ctx)
 	if batch.Length() == 0 {
 		return batch
 	}

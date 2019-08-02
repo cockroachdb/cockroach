@@ -19,7 +19,7 @@ import (
 // boolVecToSelOp transforms a boolean column into a selection vector by adding
 // an index to the selection for each true value in the boolean column.
 type boolVecToSelOp struct {
-	input Operator
+	OneInputNode
 
 	// outputCol is the boolean output column. It should be shared by other
 	// operators that write to it.
@@ -101,8 +101,8 @@ func boolVecToSel64(vec []bool, sel []uint64) []uint64 {
 // based on a boolean column that *isn't* in a batch, just create a
 // boolVecToSelOp directly with the desired boolean slice.
 func NewBoolVecToSelOp(input Operator, colIdx int) Operator {
-	d := selBoolOp{input: input, colIdx: colIdx}
-	ret := &boolVecToSelOp{input: &d}
+	d := selBoolOp{OneInputNode: NewOneInputNode(input), colIdx: colIdx}
+	ret := &boolVecToSelOp{OneInputNode: NewOneInputNode(&d)}
 	d.boolVecToSelOp = ret
 	return ret
 }
@@ -110,7 +110,7 @@ func NewBoolVecToSelOp(input Operator, colIdx int) Operator {
 // selBoolOp is a small helper operator that transforms a boolVecToSelOp into
 // an operator that can see the inside of its input batch for NewBoolVecToSelOp.
 type selBoolOp struct {
-	input          Operator
+	OneInputNode
 	boolVecToSelOp *boolVecToSelOp
 	colIdx         int
 }

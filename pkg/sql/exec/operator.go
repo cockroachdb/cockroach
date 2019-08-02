@@ -12,6 +12,7 @@ package exec
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 )
@@ -32,6 +33,82 @@ type Operator interface {
 	// Canceling the provided context results in forceful termination of
 	// execution.
 	Next(context.Context) coldata.Batch
+
+	OpNode
+}
+
+// OpNode is an interface to operator-like structures with children.
+type OpNode interface {
+	// ChildCount returns the number of children (inputs) of the operator.
+	ChildCount() int
+
+	// Child returns the nth child (input) of the operator.
+	Child(nth int) OpNode
+}
+
+// NewOneInputNode returns an OpNode with a single Operator input.
+func NewOneInputNode(input Operator) OneInputNode {
+	return OneInputNode{input: input}
+}
+
+// OneInputNode is an OpNode with a single Operator input.
+type OneInputNode struct {
+	input Operator
+}
+
+// ChildCount implements the OpNode interface.
+func (OneInputNode) ChildCount() int {
+	return 1
+}
+
+// Child implements the OpNode interface.
+func (n OneInputNode) Child(nth int) OpNode {
+	if nth == 0 {
+		return n.input
+	}
+	panic(fmt.Sprintf("invalid index %d", nth))
+}
+
+// Input returns the single input of this OneInputNode as an Operator.
+func (n OneInputNode) Input() Operator {
+	return n.input
+}
+
+// ZeroInputNode is an OpNode with no inputs.
+type ZeroInputNode struct{}
+
+// ChildCount implements the OpNode interface.
+func (ZeroInputNode) ChildCount() int {
+	return 0
+}
+
+// Child implements the OpNode interface.
+func (ZeroInputNode) Child(nth int) OpNode {
+	panic(fmt.Sprintf("invalid index %d", nth))
+}
+
+// newTwoInputNode returns an OpNode with two Operator inputs.
+func newTwoInputNode(inputOne, inputTwo Operator) twoInputNode {
+	return twoInputNode{inputOne: inputOne, inputTwo: inputTwo}
+}
+
+type twoInputNode struct {
+	inputOne Operator
+	inputTwo Operator
+}
+
+func (twoInputNode) ChildCount() int {
+	return 2
+}
+
+func (n *twoInputNode) Child(nth int) OpNode {
+	switch nth {
+	case 0:
+		return n.inputOne
+	case 1:
+		return n.inputTwo
+	}
+	panic(fmt.Sprintf("invalid idx %d", nth))
 }
 
 // StaticMemoryOperator is an interface that streaming operators can implement
@@ -55,14 +132,14 @@ type resettableOperator interface {
 }
 
 type noopOperator struct {
-	input Operator
+	OneInputNode
 }
 
 var _ Operator = &noopOperator{}
 
 // NewNoop returns a new noop Operator.
 func NewNoop(input Operator) Operator {
-	return &noopOperator{input: input}
+	return &noopOperator{OneInputNode: NewOneInputNode(input)}
 }
 
 func (n *noopOperator) Init() {
@@ -80,14 +157,14 @@ func (n *noopOperator) reset() {
 }
 
 type zeroOperator struct {
-	input Operator
+	OneInputNode
 }
 
 var _ Operator = &zeroOperator{}
 
 // NewZeroOp creates a new operator which just returns an empty batch.
 func NewZeroOp(input Operator) Operator {
-	return &zeroOperator{input: input}
+	return &zeroOperator{OneInputNode: NewOneInputNode(input)}
 }
 
 func (s *zeroOperator) Init() {
@@ -102,6 +179,7 @@ func (s *zeroOperator) Next(ctx context.Context) coldata.Batch {
 }
 
 type singleTupleNoInputOperator struct {
+	ZeroInputNode
 	batch  coldata.Batch
 	nexted bool
 }

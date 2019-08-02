@@ -417,6 +417,7 @@ func TestRouterOutputRandom(t *testing.T) {
 }
 
 type callbackRouterOutput struct {
+	ZeroInputNode
 	addBatchCb func(coldata.Batch, []uint16) bool
 	cancelCb   func()
 }

@@ -43,6 +43,7 @@ type flowStreamServer interface {
 // RunWithStream (or more specifically, the RPC handler) will unblock Next by
 // closing the stream.
 type Inbox struct {
+	exec.ZeroInputNode
 	typs []types.T
 
 	zeroBatch coldata.Batch
