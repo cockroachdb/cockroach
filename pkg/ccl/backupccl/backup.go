@@ -839,7 +839,7 @@ func backupPlanHook(
 			return err
 		}
 
-		if err := p.RequireSuperUser(ctx, "BACKUP"); err != nil {
+		if err := p.RequireAdminRole(ctx, "BACKUP"); err != nil {
 			return err
 		}
 

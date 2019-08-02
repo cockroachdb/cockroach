@@ -2298,12 +2298,12 @@ func TestBackupRestorePermissions(t *testing.T) {
 
 	t.Run("root-only", func(t *testing.T) {
 		if _, err := testuser.Exec(backupStmt); !testutils.IsError(
-			err, "only superusers are allowed to BACKUP",
+			err, "only users with the admin role are allowed to BACKUP",
 		) {
 			t.Fatal(err)
 		}
 		if _, err := testuser.Exec(`RESTORE blah FROM 'blah'`); !testutils.IsError(
-			err, "only superusers are allowed to RESTORE",
+			err, "only users with the admin role are allowed to RESTORE",
 		) {
 			t.Fatal(err)
 		}
