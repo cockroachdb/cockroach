@@ -17,6 +17,7 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -75,7 +76,7 @@ func setupTransientServers(
 
 	// Set up logging. For demo/transient server we use non-standard
 	// behavior where we avoid file creation if possible.
-	df := startCtx.logDirFlag
+	df := cmd.Flags().Lookup(cliflags.LogDir.Name)
 	sf := cmd.Flags().Lookup(logflags.LogToStderrName)
 	if !df.Changed && !sf.Changed {
 		// User did not request logging flags; shut down logging under
@@ -87,7 +88,7 @@ func setupTransientServers(
 		_ = sf.Value.Set(log.Severity_ERROR.String())
 		sf.Changed = true
 	}
-	stopper, err := setupAndInitializeLoggingAndProfiling(ctx)
+	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd)
 	if err != nil {
 		return connURL, adminURL, cleanup, err
 	}
