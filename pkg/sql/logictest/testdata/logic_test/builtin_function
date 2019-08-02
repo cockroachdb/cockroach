@@ -2246,3 +2246,28 @@ query BBB
 SELECT pg_type_is_visible('int'::regtype), pg_type_is_visible(NULL), pg_type_is_visible(99999)
 ----
 true  NULL  NULL
+
+
+# Tests for width_bucket builtin
+query I
+SELECT width_bucket(8.0, 2.0, 3.0, 5)
+----
+6
+
+query I
+SELECT width_bucket(5.35, 0.024, 10.06, 5)
+----
+3
+
+query I
+SELECT width_bucket(7, 3, 11, 5)
+----
+3
+
+query I
+SELECT width_bucket(now(), array['yesterday', 'today', 'tomorrow']::timestamptz[])
+----
+2
+
+query error pq: width_bucket\(\): Operand and thresholds must be of the same type
+SELECT width_bucket(1, array['a', 'h', 'l', 'z']);
