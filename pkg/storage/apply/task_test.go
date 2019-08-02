@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/apply"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -114,12 +115,12 @@ func getStateMachine() *testingStateMachine {
 	return new(testingStateMachine)
 }
 
-func (sm *testingStateMachine) NewBatch() apply.Batch {
+func (sm *testingStateMachine) NewBatch(mock bool) apply.Batch {
 	if sm.batchOpen {
 		panic("batch not closed")
 	}
 	sm.batchOpen = true
-	return &testingBatch{sm: sm}
+	return &testingBatch{sm: sm, mock: mock}
 }
 func (sm *testingStateMachine) ApplySideEffects(
 	cmdI apply.CheckedCommand,
@@ -135,6 +136,7 @@ func (sm *testingStateMachine) ApplySideEffects(
 
 type testingBatch struct {
 	sm     *testingStateMachine
+	mock   bool
 	staged []uint64
 }
 
@@ -145,6 +147,9 @@ func (b *testingBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error) {
 	return &ccmd, nil
 }
 func (b *testingBatch) Commit(_ context.Context) error {
+	if b.mock {
+		return errors.New("can't commit a mock batch")
+	}
 	b.sm.batches = append(b.sm.batches, b.staged)
 	b.sm.applied = append(b.sm.applied, b.staged...)
 	if logging {
@@ -261,5 +266,78 @@ func TestApplyCommittedEntriesWithBatchSize(t *testing.T) {
 	for _, cmd := range dec.cmds {
 		require.True(t, cmd.acked)
 		require.True(t, cmd.finished)
+	}
+}
+
+func TestAckCommittedEntriesBeforeApplication(t *testing.T) {
+	ctx := context.Background()
+	ents := makeEntries(9)
+
+	sm := getStateMachine()
+	dec := newDecoder()
+	dec.nonTrivial[6] = true
+	dec.nonTrivial[7] = true
+	dec.nonTrivial[9] = true
+	dec.nonLocal[2] = true
+	dec.shouldReject[3] = true
+
+	// Use an apply.Task to ack all commands before applying them.
+	appT := apply.MakeTask(sm, dec)
+	defer appT.Close()
+	require.NoError(t, appT.Decode(ctx, ents))
+	require.NoError(t, appT.AckCommittedEntriesBeforeApplication(ctx, 10 /* maxIndex */))
+
+	// Assert that the state machine was not updated.
+	require.Equal(t, testingStateMachine{}, *sm)
+
+	// Assert that some commands were acknowledged early and that none were finished.
+	for _, cmd := range dec.cmds {
+		var exp bool
+		switch cmd.index {
+		case 1, 4, 5:
+			exp = true // local and successful
+		case 2:
+			exp = false // remote
+		case 3:
+			exp = false // local and rejected
+		default:
+			exp = false // after first non-trivial cmd
+		}
+		require.Equal(t, exp, cmd.acked)
+		require.False(t, cmd.finished)
+	}
+
+	// Try again with a lower maximum log index.
+	appT.Close()
+	ents = makeEntries(5)
+
+	dec = newDecoder()
+	dec.nonLocal[2] = true
+	dec.shouldReject[3] = true
+
+	appT = apply.MakeTask(sm, dec)
+	require.NoError(t, appT.Decode(ctx, ents))
+	require.NoError(t, appT.AckCommittedEntriesBeforeApplication(ctx, 4 /* maxIndex */))
+
+	// Assert that the state machine was not updated.
+	require.Equal(t, testingStateMachine{}, *sm)
+
+	// Assert that some commands were acknowledged early and that none were finished.
+	for _, cmd := range dec.cmds {
+		var exp bool
+		switch cmd.index {
+		case 1, 4:
+			exp = true // local and successful
+		case 2:
+			exp = false // remote
+		case 3:
+			exp = false // local and rejected
+		case 5:
+			exp = false // index too high
+		default:
+			t.Fatalf("unexpected index %d", cmd.index)
+		}
+		require.Equal(t, exp, cmd.acked)
+		require.False(t, cmd.finished)
 	}
 }
