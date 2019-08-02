@@ -13,6 +13,7 @@ package cli
 import (
 	"flag"
 	"net"
+	"regexp"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -168,10 +170,10 @@ func (a addrSetter) String() string {
 	return net.JoinHostPort(*a.addr, *a.port)
 }
 
-// Type implements the pflag.Value interface
+// Type implements the pflag.Value interface.
 func (a addrSetter) Type() string { return "<addr/host>[:<port>]" }
 
-// Set implement the pflag.Value interface.
+// Set implements the pflag.Value interface.
 func (a addrSetter) Set(v string) error {
 	addr, port, err := netutil.SplitHostPort(v, *a.port)
 	if err != nil {
@@ -181,6 +183,42 @@ func (a addrSetter) Set(v string) error {
 	*a.port = port
 	return nil
 }
+
+// clusterNameSetter wraps the cluster name variable
+// and verifies its format during configuration.
+type clusterNameSetter struct {
+	clusterName *string
+}
+
+// String implements the pflag.Value interface.
+func (a clusterNameSetter) String() string { return *a.clusterName }
+
+// Type implements the pflag.Value interface.
+func (a clusterNameSetter) Type() string { return "<identifier>" }
+
+// Set implements the pflag.Value interface.
+func (a clusterNameSetter) Set(v string) error {
+	if v == "" {
+		return errors.New("cluster name cannot be empty")
+	}
+	if len(v) > maxClusterNameLength {
+		return errors.Newf(`cluster name can contain at most %d characters`, maxClusterNameLength)
+	}
+	if !clusterNameRe.MatchString(v) {
+		return errClusterNameInvalidFormat
+	}
+	*a.clusterName = v
+	return nil
+}
+
+var errClusterNameInvalidFormat = errors.New(`cluster name must contain only letters, numbers or the "-" and "." characters`)
+
+// clusterNameRe matches valid cluster names.
+// For example, "a", "a123" and "a-b" are OK,
+// but "0123", "a-" and "123a" are not OK.
+var clusterNameRe = regexp.MustCompile(`^[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9]|)$`)
+
+const maxClusterNameLength = 256
 
 const backgroundEnvVar = "COCKROACH_BACKGROUND_RESTART"
 
@@ -328,9 +366,13 @@ func init() {
 		// --join, because it delegates its logic to that of 'start', and
 		// 'start' will check that the flag is properly defined.
 		VarFlag(f, &serverCfg.JoinList, cliflags.Join)
+		VarFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
+		BoolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification, false)
 		// We also hide it from help for 'start-single-node'.
 		if cmd == startSingleNodeCmd {
 			_ = f.MarkHidden(cliflags.Join.Name)
+			_ = f.MarkHidden(cliflags.ClusterName.Name)
+			_ = f.MarkHidden(cliflags.DisableClusterNameVerification.Name)
 		}
 
 		// Engine flags.

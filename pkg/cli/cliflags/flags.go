@@ -279,6 +279,34 @@ csv, table, records, sql, raw, html. If left unspecified, defaults to
 tsv for non-interactive sessions and table for interactive sessions.`,
 	}
 
+	ClusterName = FlagInfo{
+		Name: "cluster-name",
+		Description: `
+Sets a name to verify the identity of a remote node or cluster. The
+value must match between this node and the remote node(s) specified
+via --join.
+
+This can be used as an additional verification when either the node or
+cluster, or both, have not yet been initialized and do not yet know
+their cluster ID.
+
+To introduce a cluster name into an already-initialized cluster, pair
+this flag with --disable-cluster-name-verification.`,
+	}
+
+	DisableClusterNameVerification = FlagInfo{
+		Name: "disable-cluster-name-verification",
+		Description: `
+Tell the server to ignore cluster name mismatches. This is meant for
+use when opting an existing cluster into starting to use cluster name
+verification, or when changing the cluster name.
+
+The cluster should be restarted once with --cluster-name and
+--disable-cluster-name-verification combined, and once all nodes have
+been updated to know the new cluster name, the cluster can be
+restarted again with this flag removed.`,
+	}
+
 	Join = FlagInfo{
 		Name:      "join",
 		Shorthand: "j",

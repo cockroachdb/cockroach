@@ -92,6 +92,47 @@ func TestCacheFlagValue(t *testing.T) {
 	}
 }
 
+func TestClusterNameFlag(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Avoid leaking configuration changes after the test ends.
+	defer initCLIDefaults()
+
+	testCases := []struct {
+		value       string
+		expectedErr string
+	}{
+		{"abc", ""},
+		{"a-b", ""},
+		{"a123", ""},
+		{"", "cluster name cannot be empty"},
+		{fmt.Sprintf("%*s", 1000, "a"), "cluster name can contain at most 256 characters"},
+		{"a-b.c", errClusterNameInvalidFormat.Error()},
+		{"a123.456", errClusterNameInvalidFormat.Error()},
+		{"...", errClusterNameInvalidFormat.Error()},
+		{"-abc", errClusterNameInvalidFormat.Error()},
+		{"123a", errClusterNameInvalidFormat.Error()},
+		{"abc.", errClusterNameInvalidFormat.Error()},
+		{"_abc", errClusterNameInvalidFormat.Error()},
+		{"a.b_c._.", errClusterNameInvalidFormat.Error()},
+	}
+
+	for _, c := range testCases {
+		baseCfg.ClusterName = ""
+		f := startCmd.Flags()
+		args := []string{"--cluster-name", c.value}
+		err := f.Parse(args)
+		if !testutils.IsError(err, c.expectedErr) {
+			t.Fatal(err)
+		}
+		if err == nil {
+			if baseCfg.ClusterName != c.value {
+				t.Errorf("expected %q, got %q", c.value, baseCfg.ClusterName)
+			}
+		}
+	}
+}
+
 func TestSQLMemoryPoolFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

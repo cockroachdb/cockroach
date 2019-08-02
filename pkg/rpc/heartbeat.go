@@ -44,9 +44,13 @@ type HeartbeatService struct {
 	// A pointer to the RemoteClockMonitor configured in the RPC Context,
 	// shared by rpc clients, to keep track of remote clock measurements.
 	remoteClockMonitor *RemoteClockMonitor
-	clusterID          *base.ClusterIDContainer
-	nodeID             *base.NodeIDContainer
-	version            *cluster.ExposedClusterVersion
+
+	clusterID *base.ClusterIDContainer
+	nodeID    *base.NodeIDContainer
+	version   *cluster.ExposedClusterVersion
+
+	clusterName                    string
+	disableClusterNameVerification bool
 
 	// TestingAllowNamedRPCToAnonymousServer, when defined (in tests),
 	// disables errors in case a heartbeat requests a specific node ID but
@@ -54,6 +58,30 @@ type HeartbeatService struct {
 	// currently used by the multiTestContext which does not suitably
 	// populate separate node IDs for each heartbeat service.
 	testingAllowNamedRPCToAnonymousServer bool
+}
+
+func checkClusterName(
+	disableClusterNameVerification bool, clusterName string, peerName string,
+) error {
+	if disableClusterNameVerification {
+		// A cluster uses --disable-cluster-name-verification to gradually introduce
+		// a cluster name where none was known before.
+		return nil
+	}
+	if clusterName != peerName {
+		var err error
+		if clusterName == "" {
+			err = errors.Errorf("peer node expects cluster name %q, use --cluster-name to configure", peerName)
+		} else if peerName == "" {
+			err = errors.New("peer node does not have a cluster name configured, cannot use --cluster-name")
+		} else {
+			err = errors.Errorf(
+				"local cluster name %q does not match peer cluster name %q", clusterName, peerName)
+		}
+		log.Shout(context.Background(), log.Severity_ERROR, err)
+		return err
+	}
+	return nil
 }
 
 func checkVersion(
@@ -85,10 +113,18 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	}
 	// Check that cluster IDs match.
 	clusterID := hs.clusterID.Get()
-	if args.ClusterID != nil && *args.ClusterID != uuid.Nil && clusterID != uuid.Nil &&
-		*args.ClusterID != clusterID {
-		return nil, errors.Errorf(
-			"client cluster ID %q doesn't match server cluster ID %q", args.ClusterID, clusterID)
+	if args.ClusterID != nil && *args.ClusterID != uuid.Nil && clusterID != uuid.Nil {
+		// There is a cluster ID on both sides. Use that to verify the connection.
+		//
+		// Note: we could be checking the cluster name here too, however
+		// for UX reason it is better to check it on the other side (the side
+		// initiating the connection), so that the user of a newly started
+		// node gets a chance to see a cluster name mismatch as an error message
+		// on their side.
+		if *args.ClusterID != clusterID {
+			return nil, errors.Errorf(
+				"client cluster ID %q doesn't match server cluster ID %q", args.ClusterID, clusterID)
+		}
 	}
 	// Check that node IDs match.
 	var nodeID roachpb.NodeID
@@ -132,8 +168,10 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	serverOffset.Offset = -serverOffset.Offset
 	hs.remoteClockMonitor.UpdateOffset(ctx, args.Addr, serverOffset, 0 /* roundTripLatency */)
 	return &PingResponse{
-		Pong:          args.Ping,
-		ServerTime:    hs.clock.PhysicalNow(),
-		ServerVersion: hs.version.ServerVersion,
+		Pong:                           args.Ping,
+		ServerTime:                     hs.clock.PhysicalNow(),
+		ServerVersion:                  hs.version.ServerVersion,
+		ClusterName:                    hs.clusterName,
+		DisableClusterNameVerification: hs.disableClusterNameVerification,
 	}, nil
 }
