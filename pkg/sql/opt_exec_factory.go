@@ -11,12 +11,8 @@
 package sql
 
 import (
-	"bytes"
-	"compress/zlib"
 	"context"
-	"encoding/base64"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -923,42 +919,6 @@ func (ef *execFactory) ConstructPlan(
 	return res, nil
 }
 
-// urlOutputter handles writing strings into an encoded URL for EXPLAIN (OPT,
-// ENV). It also ensures that (in the text that is encoded by the URL) each
-// entry gets its own line and there's exactly one blank line between entries.
-type urlOutputter struct {
-	buf bytes.Buffer
-}
-
-func (e *urlOutputter) writef(format string, args ...interface{}) {
-	if e.buf.Len() > 0 {
-		e.buf.WriteString("\n")
-	}
-	fmt.Fprintf(&e.buf, format, args...)
-}
-
-func (e *urlOutputter) finish() (url.URL, error) {
-	// Generate a URL that encodes all the text.
-	var compressed bytes.Buffer
-	encoder := base64.NewEncoder(base64.URLEncoding, &compressed)
-	compressor := zlib.NewWriter(encoder)
-	if _, err := e.buf.WriteTo(compressor); err != nil {
-		return url.URL{}, err
-	}
-	if err := compressor.Close(); err != nil {
-		return url.URL{}, err
-	}
-	if err := encoder.Close(); err != nil {
-		return url.URL{}, err
-	}
-	return url.URL{
-		Scheme:   "https",
-		Host:     "cockroachdb.github.io",
-		Path:     "text/decode.html",
-		Fragment: compressed.String(),
-	}, nil
-}
-
 // environmentQuery is a helper to run a query to build up the output of
 // showEnv. It expects a query that returns a single string column.
 func (ef *execFactory) environmentQuery(query string) (string, error) {
@@ -1005,7 +965,7 @@ func TestingOverrideExplainEnvVersion(ver string) func() {
 // showEnv implements EXPLAIN (opt, env). It returns a node which displays
 // the environment a query was run in.
 func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.Node, error) {
-	var out urlOutputter
+	var out util.URLOutputter
 
 	// Show the version of Cockroach running.
 	version, err := ef.environmentQuery("SELECT version()")
@@ -1015,7 +975,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 	if testingOverrideExplainEnvVersion != "" {
 		version = testingOverrideExplainEnvVersion
 	}
-	out.writef("Version: %s\n", version)
+	out.Writef("Version: %s\n", version)
 
 	// Show the definition of each referenced catalog object.
 	for _, tn := range envOpts.Sequences {
@@ -1026,7 +986,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 			return nil, err
 		}
 
-		out.writef("%s;\n", createStatement)
+		out.Writef("%s;\n", createStatement)
 	}
 
 	// TODO(justin): it might also be relevant in some cases to print the create
@@ -1039,7 +999,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 			return nil, err
 		}
 
-		out.writef("%s;\n", createStatement)
+		out.Writef("%s;\n", createStatement)
 
 		// In addition to the schema, it's important to know what the table
 		// statistics on each table are.
@@ -1067,7 +1027,7 @@ FROM
 			return nil, err
 		}
 
-		out.writef("ALTER TABLE %s INJECT STATISTICS '%s';\n", tn.String(), stats)
+		out.Writef("ALTER TABLE %s INJECT STATISTICS '%s';\n", tn.String(), stats)
 	}
 
 	for _, tn := range envOpts.Views {
@@ -1078,7 +1038,7 @@ FROM
 			return nil, err
 		}
 
-		out.writef("%s;\n", createStatement)
+		out.Writef("%s;\n", createStatement)
 	}
 
 	// Show the values of any non-default session variables that can impact
@@ -1089,7 +1049,7 @@ FROM
 		return nil, err
 	}
 	if value != strconv.FormatInt(opt.DefaultJoinOrderLimit, 10) {
-		out.writef("SET reorder_joins_limit = %s;\n", value)
+		out.Writef("SET reorder_joins_limit = %s;\n", value)
 	}
 
 	for _, param := range []string{
@@ -1101,15 +1061,15 @@ FROM
 		}
 		defaultVal := varGen[param].GlobalDefault(nil)
 		if value != defaultVal {
-			out.writef("SET %s = %s;\n", param, value)
+			out.Writef("SET %s = %s;\n", param, value)
 		}
 	}
 
 	// Show the query running. Note that this is the *entire* query, including
 	// the "EXPLAIN (opt, env)" preamble.
-	out.writef("%s;\n----\n%s", ef.planner.stmt.AST.String(), plan)
+	out.Writef("%s;\n----\n%s", ef.planner.stmt.AST.String(), plan)
 
-	url, err := out.finish()
+	url, err := out.Finish()
 	if err != nil {
 		return nil, err
 	}
