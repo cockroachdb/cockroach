@@ -261,6 +261,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.SessionAccessor = p
 	p.extendedEvalCtx.Sequence = p
 	p.extendedEvalCtx.ClusterID = execCfg.ClusterID()
+	p.extendedEvalCtx.ClusterName = execCfg.RPCContext.ClusterName()
 	p.extendedEvalCtx.NodeID = execCfg.NodeID.Get()
 	p.extendedEvalCtx.Locality = execCfg.Locality
 
