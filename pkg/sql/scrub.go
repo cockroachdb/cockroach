@@ -11,7 +11,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -317,75 +316,36 @@ func getPrimaryColIdxs(
 	return primaryColIdxs, nil
 }
 
-// tableColumnsIsNullPredicate creates a predicate that checks if all of
-// the specified columns for a table are NULL (or not NULL, based on the
-// isNull flag). For example, given table is t1 and the columns id,
-// name, data, then the returned string is:
-//
-//   t1.id IS NULL AND t1.name IS NULL AND t1.data IS NULL
-//
-func tableColumnsIsNullPredicate(
-	tableName string, columns []string, conjunction string, isNull bool,
-) string {
-	var buf bytes.Buffer
-	nullCheck := "NOT NULL"
-	if isNull {
-		nullCheck = "NULL"
+// col returns the string for referencing a column, with a specific alias,
+// e.g. "table.col".
+func colRef(tableAlias string, columnName string) string {
+	u := tree.UnrestrictedName(columnName)
+	if tableAlias == "" {
+		return u.String()
 	}
-	for i, col := range columns {
-		if i > 0 {
-			buf.WriteByte(' ')
-			buf.WriteString(conjunction)
-			buf.WriteByte(' ')
-		}
-		fmt.Fprintf(&buf, "%[1]q.%[2]q IS %[3]s", tableName, col, nullCheck)
-	}
-	return buf.String()
+	return fmt.Sprintf("%s.%s", tableAlias, &u)
 }
 
-// tableColumnsEQ creates a predicate that checks if all of the
-// specified columns for two tables are equal. For example, given tables
-// t1, t2 and the columns id, name, then the returned string is:
-//
-//   t1.id = t2.id AND t1.name = t2.name
-//
-func tableColumnsEQ(
-	tableName string, otherTableName string, columns []string, otherColumns []string,
-) string {
-	if len(columns) != len(otherColumns) {
-		panic(fmt.Sprintf(
-			"expected columns to have the same size: columns len was %d, otherColumns len was %d",
-			len(columns),
-			len(otherColumns),
-		))
+// colRefs returns the strings for referencing a list of columns (as a list).
+func colRefs(tableAlias string, columnNames []string) []string {
+	res := make([]string, len(columnNames))
+	for i := range res {
+		res[i] = colRef(tableAlias, columnNames[i])
 	}
-
-	var buf bytes.Buffer
-	for i := range columns {
-		if i > 0 {
-			buf.WriteString(" AND ")
-		}
-		fmt.Fprintf(&buf, `%[1]q.%[3]q = %[2]q.%[4]q`,
-			tableName, otherTableName, columns[i], otherColumns[i])
-	}
-	return buf.String()
+	return res
 }
 
-// tableColumnsProjection creates the select projection statement (a
-// comma delimetered column list), for the specified table and
-// columns. For example, if the table is t1 and the columns are id,
-// name, data, then the returned string is:
-//
-//   t1.id, t1.name, t1.data
-func tableColumnsProjection(tableName string, columns []string) string {
-	var buf bytes.Buffer
-	for i, col := range columns {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		fmt.Fprintf(&buf, "%[1]q.%[2]q", tableName, col)
+// pairwiseOp joins each string on the left with the string on the right, with a
+// given operator in-between. For example
+//   pairwiseOp([]string{"a","b"}, []string{"x", "y"}, "=")
+// returns
+//   []string{"a = x", "b = y"}.
+func pairwiseOp(left []string, right []string, op string) []string {
+	res := make([]string, len(left))
+	for i := range res {
+		res[i] = fmt.Sprintf("%s %s %s", left[i], op, right[i])
 	}
-	return buf.String()
+	return res
 }
 
 // createPhysicalCheckOperations will return the physicalCheckOperation
