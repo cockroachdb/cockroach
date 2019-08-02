@@ -426,24 +426,6 @@ define LeftJoinApply {
 }
 
 [Relational, Join, JoinApply, Telemetry]
-define RightJoinApply {
-    Left  RelExpr
-    Right RelExpr
-    On    FiltersExpr
-
-    _ JoinPrivate
-}
-
-[Relational, Join, JoinApply, Telemetry]
-define FullJoinApply {
-    Left  RelExpr
-    Right RelExpr
-    On    FiltersExpr
-
-    _ JoinPrivate
-}
-
-[Relational, Join, JoinApply, Telemetry]
 define SemiJoinApply {
     Left  RelExpr
     Right RelExpr
