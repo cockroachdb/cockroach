@@ -52,6 +52,11 @@ type TestClusterInterface interface {
 		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) (roachpb.RangeDescriptor, error)
 
+	// AddReplicasMulti is the same as AddReplicas but will execute multiple jobs.
+	AddReplicasMulti(
+		kts ...KeyAndTargets,
+	) ([]roachpb.RangeDescriptor, []error)
+
 	// AddReplicasOrFatal is the same as AddReplicas but will Fatal the test on
 	// error.
 	AddReplicasOrFatal(
@@ -128,4 +133,10 @@ func StartTestCluster(t testing.TB, numNodes int, args base.TestClusterArgs) Tes
 			"from the package's TestMain()")
 	}
 	return clusterFactoryImpl.StartTestCluster(t, numNodes, args)
+}
+
+// KeyAndTargets contains replica startKey and targets.
+type KeyAndTargets struct {
+	StartKey roachpb.Key
+	Targets  []roachpb.ReplicationTarget
 }
