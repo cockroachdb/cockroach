@@ -12,6 +12,7 @@ package exec
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
@@ -188,6 +189,20 @@ type hashJoinEqOp struct {
 	emittingUnmatchedState struct {
 		rowIdx uint64
 	}
+}
+
+func (hj *hashJoinEqOp) ChildCount() int {
+	return 2
+}
+
+func (hj *hashJoinEqOp) Child(nth int) OpNode {
+	switch nth {
+	case 0:
+		return hj.spec.left.source
+	case 1:
+		return hj.spec.right.source
+	}
+	panic(fmt.Sprintf("invalid idx %d", nth))
 }
 
 var _ Operator = &hashJoinEqOp{}

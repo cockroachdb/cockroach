@@ -22,7 +22,7 @@ import (
 // column containing a single integer, the count of rows received from the
 // upstream.
 type countOp struct {
-	input Operator
+	OneInputNode
 
 	internalBatch coldata.Batch
 	done          bool
@@ -35,7 +35,7 @@ var _ StaticMemoryOperator = &countOp{}
 // NewCountOp returns a new count operator that counts the rows in its input.
 func NewCountOp(input Operator) Operator {
 	c := &countOp{
-		input: input,
+		OneInputNode: NewOneInputNode(input),
 	}
 	c.internalBatch = coldata.NewMemBatchWithSize([]types.T{types.Int64}, 1)
 	return c

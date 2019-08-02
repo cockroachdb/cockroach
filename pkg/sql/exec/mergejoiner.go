@@ -153,6 +153,7 @@ type mergeJoinInput struct {
 // feedOperator is used to feed the distincter with input by manually setting
 // the next batch.
 type feedOperator struct {
+	ZeroInputNode
 	batch coldata.Batch
 }
 
@@ -268,6 +269,7 @@ func newMergeJoinBase(
 	}
 
 	base := mergeJoinBase{
+		twoInputNode: newTwoInputNode(left, right),
 		left: mergeJoinInput{
 			source:      left,
 			outCols:     leftOutCols,
@@ -298,6 +300,7 @@ func newMergeJoinBase(
 
 // mergeJoinBase extract the common logic between all merge join operators.
 type mergeJoinBase struct {
+	twoInputNode
 	left  mergeJoinInput
 	right mergeJoinInput
 

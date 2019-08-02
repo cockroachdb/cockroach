@@ -46,11 +46,15 @@ func NewWindowSortingPartitioner(
 		return nil, err
 	}
 
-	return &windowSortingPartitioner{input: input, distinctCol: distinctCol, partitionColIdx: partitionColIdx}, nil
+	return &windowSortingPartitioner{
+		OneInputNode:    NewOneInputNode(input),
+		distinctCol:     distinctCol,
+		partitionColIdx: partitionColIdx,
+	}, nil
 }
 
 type windowSortingPartitioner struct {
-	input Operator
+	OneInputNode
 
 	// distinctCol is the output column of the chain of ordered distinct
 	// operators in which true will indicate that a new partition begins with the

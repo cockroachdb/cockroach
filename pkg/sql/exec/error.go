@@ -104,7 +104,7 @@ func isPanicFromVectorizedEngine(panicEmittedFrom string) bool {
 // even-numbered (i.e. it becomes a noop for those iterations). Used for tests
 // only.
 type TestVectorizedErrorEmitter struct {
-	input     Operator
+	OneInputNode
 	emitBatch bool
 }
 
@@ -112,7 +112,7 @@ var _ Operator = &TestVectorizedErrorEmitter{}
 
 // NewTestVectorizedErrorEmitter creates a new TestVectorizedErrorEmitter.
 func NewTestVectorizedErrorEmitter(input Operator) Operator {
-	return &TestVectorizedErrorEmitter{input: input}
+	return &TestVectorizedErrorEmitter{OneInputNode: NewOneInputNode(input)}
 }
 
 // Init is part of Operator interface.

@@ -27,10 +27,10 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 	runTests(t, []tuples{{{1}, {2}, {nil}}}, tuples{{1, 2}, {2, 3}, {nil, nil}}, orderedVerifier,
 		[]int{0, 1}, func(input []Operator) (Operator, error) {
 			return &projPlusInt64Int64ConstOp{
-				input:     input[0],
-				colIdx:    0,
-				constArg:  1,
-				outputIdx: 1,
+				OneInputNode: NewOneInputNode(input[0]),
+				colIdx:       0,
+				constArg:     1,
+				outputIdx:    1,
 			}, nil
 		})
 }
@@ -40,10 +40,10 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 		orderedVerifier, []int{0, 1, 2},
 		func(input []Operator) (Operator, error) {
 			return &projPlusInt64Int64Op{
-				input:     input[0],
-				col1Idx:   0,
-				col2Idx:   1,
-				outputIdx: 2,
+				OneInputNode: NewOneInputNode(input[0]),
+				col1Idx:      0,
+				col2Idx:      1,
+				outputIdx:    2,
 			}, nil
 		})
 }
@@ -75,10 +75,10 @@ func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, h
 	source.Init()
 
 	plusOp := &projPlusInt64Int64ConstOp{
-		input:     source,
-		colIdx:    0,
-		constArg:  1,
-		outputIdx: 1,
+		OneInputNode: NewOneInputNode(source),
+		colIdx:       0,
+		constArg:     1,
+		outputIdx:    1,
 	}
 	plusOp.Init()
 
@@ -110,10 +110,10 @@ func TestGetProjectionConstOperator(t *testing.T) {
 		t.Error(err)
 	}
 	expected := &projMultFloat64Float64ConstOp{
-		input:     input,
-		colIdx:    colIdx,
-		constArg:  constVal,
-		outputIdx: outputIdx,
+		OneInputNode: NewOneInputNode(input),
+		colIdx:       colIdx,
+		constArg:     constVal,
+		outputIdx:    outputIdx,
 	}
 	if !reflect.DeepEqual(op, expected) {
 		t.Errorf("got %+v, expected %+v", op, expected)
@@ -132,10 +132,10 @@ func TestGetProjectionOperator(t *testing.T) {
 		t.Error(err)
 	}
 	expected := &projMultInt16Int16Op{
-		input:     input,
-		col1Idx:   col1Idx,
-		col2Idx:   col2Idx,
-		outputIdx: outputIdx,
+		OneInputNode: NewOneInputNode(input),
+		col1Idx:      col1Idx,
+		col2Idx:      col2Idx,
+		outputIdx:    outputIdx,
 	}
 	if !reflect.DeepEqual(op, expected) {
 		t.Errorf("got %+v, expected %+v", op, expected)
@@ -191,34 +191,34 @@ func BenchmarkProjOp(b *testing.B) {
 	projOpMap := map[string]func(*RepeatableBatchSource) Operator{
 		"projPlusInt64Int64Op": func(source *RepeatableBatchSource) Operator {
 			return &projPlusInt64Int64Op{
-				input:     source,
-				col1Idx:   0,
-				col2Idx:   1,
-				outputIdx: 2,
+				OneInputNode: NewOneInputNode(source),
+				col1Idx:      0,
+				col2Idx:      1,
+				outputIdx:    2,
 			}
 		},
 		"projMinusInt64Int64Op": func(source *RepeatableBatchSource) Operator {
 			return &projMinusInt64Int64Op{
-				input:     source,
-				col1Idx:   0,
-				col2Idx:   1,
-				outputIdx: 2,
+				OneInputNode: NewOneInputNode(source),
+				col1Idx:      0,
+				col2Idx:      1,
+				outputIdx:    2,
 			}
 		},
 		"projMultInt64Int64Op": func(source *RepeatableBatchSource) Operator {
 			return &projMultInt64Int64Op{
-				input:     source,
-				col1Idx:   0,
-				col2Idx:   1,
-				outputIdx: 2,
+				OneInputNode: NewOneInputNode(source),
+				col1Idx:      0,
+				col2Idx:      1,
+				outputIdx:    2,
 			}
 		},
 		"projDivInt64Int64Op": func(source *RepeatableBatchSource) Operator {
 			return &projDivInt64Int64Op{
-				input:     source,
-				col1Idx:   0,
-				col2Idx:   1,
-				outputIdx: 2,
+				OneInputNode: NewOneInputNode(source),
+				col1Idx:      0,
+				col2Idx:      1,
+				outputIdx:    2,
 			}
 		},
 	}

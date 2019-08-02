@@ -19,7 +19,7 @@ import (
 // fnOp is an operator that executes an arbitrary function for its side-effects,
 // once per input batch, passing the input batch unmodified along.
 type fnOp struct {
-	input Operator
+	OneInputNode
 
 	fn func()
 }

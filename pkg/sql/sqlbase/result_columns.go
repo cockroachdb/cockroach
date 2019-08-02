@@ -110,6 +110,12 @@ var ExplainDistSQLColumns = ResultColumns{
 	{Name: "json", Typ: types.String, Hidden: true},
 }
 
+// ExplainVecColumns are the result columns of an
+// EXPLAIN (OPT) statement.
+var ExplainVecColumns = ResultColumns{
+	{Name: "text", Typ: types.String},
+}
+
 // ExplainOptColumns are the result columns of an
 // EXPLAIN (OPT) statement.
 var ExplainOptColumns = ResultColumns{

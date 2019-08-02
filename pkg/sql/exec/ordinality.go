@@ -20,7 +20,7 @@ import (
 // ordinalityOp is an operator that implements WITH ORDINALITY, which adds
 // an additional column to the result with an ordinal number.
 type ordinalityOp struct {
-	input Operator
+	OneInputNode
 
 	// hasOrdinalityColumn is a flag to indicate if the ordinality column has
 	// already been added to the batch. It is needed because batches are reused
@@ -35,7 +35,7 @@ var _ Operator = &ordinalityOp{}
 // NewOrdinalityOp returns a new WITH ORDINALITY operator.
 func NewOrdinalityOp(input Operator) Operator {
 	c := &ordinalityOp{
-		input:               input,
+		OneInputNode:        NewOneInputNode(input),
 		hasOrdinalityColumn: false,
 		counter:             1,
 	}

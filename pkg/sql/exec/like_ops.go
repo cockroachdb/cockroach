@@ -25,15 +25,15 @@ func GetLikeOperator(
 	if pattern == "" {
 		if negate {
 			return &selNEBytesBytesConstOp{
-				input:    input,
-				colIdx:   colIdx,
-				constArg: []byte{},
+				OneInputNode: NewOneInputNode(input),
+				colIdx:       colIdx,
+				constArg:     []byte{},
 			}, nil
 		}
 		return &selEQBytesBytesConstOp{
-			input:    input,
-			colIdx:   colIdx,
-			constArg: []byte{},
+			OneInputNode: NewOneInputNode(input),
+			colIdx:       colIdx,
+			constArg:     []byte{},
 		}, nil
 	}
 	if pattern == "%" {
@@ -54,45 +54,45 @@ func GetLikeOperator(
 			// No wildcards, so this is just an exact string match.
 			if negate {
 				return &selNEBytesBytesConstOp{
-					input:    input,
-					colIdx:   colIdx,
-					constArg: []byte(pattern),
+					OneInputNode: NewOneInputNode(input),
+					colIdx:       colIdx,
+					constArg:     []byte(pattern),
 				}, nil
 			}
 			return &selEQBytesBytesConstOp{
-				input:    input,
-				colIdx:   colIdx,
-				constArg: []byte(pattern),
+				OneInputNode: NewOneInputNode(input),
+				colIdx:       colIdx,
+				constArg:     []byte(pattern),
 			}, nil
 		}
 		if firstChar == '%' && !isWildcard(lastChar) {
 			suffix := []byte(pattern[1:])
 			if negate {
 				return &selNotSuffixBytesBytesConstOp{
-					input:    input,
-					colIdx:   colIdx,
-					constArg: suffix,
+					OneInputNode: NewOneInputNode(input),
+					colIdx:       colIdx,
+					constArg:     suffix,
 				}, nil
 			}
 			return &selSuffixBytesBytesConstOp{
-				input:    input,
-				colIdx:   colIdx,
-				constArg: suffix,
+				OneInputNode: NewOneInputNode(input),
+				colIdx:       colIdx,
+				constArg:     suffix,
 			}, nil
 		}
 		if lastChar == '%' && !isWildcard(firstChar) {
 			prefix := []byte(pattern[:len(pattern)-1])
 			if negate {
 				return &selNotPrefixBytesBytesConstOp{
-					input:    input,
-					colIdx:   colIdx,
-					constArg: prefix,
+					OneInputNode: NewOneInputNode(input),
+					colIdx:       colIdx,
+					constArg:     prefix,
 				}, nil
 			}
 			return &selPrefixBytesBytesConstOp{
-				input:    input,
-				colIdx:   colIdx,
-				constArg: prefix,
+				OneInputNode: NewOneInputNode(input),
+				colIdx:       colIdx,
+				constArg:     prefix,
 			}, nil
 		}
 	}
@@ -103,15 +103,15 @@ func GetLikeOperator(
 	}
 	if negate {
 		return &selNotRegexpBytesBytesConstOp{
-			input:    input,
-			colIdx:   colIdx,
-			constArg: re,
+			OneInputNode: NewOneInputNode(input),
+			colIdx:       colIdx,
+			constArg:     re,
 		}, nil
 	}
 	return &selRegexpBytesBytesConstOp{
-		input:    input,
-		colIdx:   colIdx,
-		constArg: re,
+		OneInputNode: NewOneInputNode(input),
+		colIdx:       colIdx,
+		constArg:     re,
 	}, nil
 }
 

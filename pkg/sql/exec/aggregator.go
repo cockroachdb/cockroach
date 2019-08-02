@@ -84,7 +84,7 @@ type aggregateFunc interface {
 // output batch if a worst case input batch is encountered (one where every
 // value is part of a new group).
 type orderedAggregator struct {
-	input Operator
+	OneInputNode
 
 	done bool
 
@@ -154,7 +154,7 @@ func NewOrderedAggregator(
 		// mark the first row as distinct, so we have to do it ourselves. Set up a
 		// oneShotOp to set the first row to distinct.
 		op = &oneShotOp{
-			input: op,
+			OneInputNode: NewOneInputNode(op),
 			fn: func(batch coldata.Batch) {
 				if batch.Length() == 0 {
 					return
@@ -170,7 +170,7 @@ func NewOrderedAggregator(
 	}
 
 	*a = orderedAggregator{
-		input: op,
+		OneInputNode: NewOneInputNode(op),
 
 		aggCols:  aggCols,
 		aggTypes: aggTypes,

@@ -62,6 +62,10 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		}
 		cols = sqlbase.ExplainOptColumns
 
+	case tree.ExplainVec:
+		telemetry.Inc(sqltelemetry.ExplainVecUseCounter)
+		cols = sqlbase.ExplainVecColumns
+
 	default:
 		panic(pgerror.Newf(pgcode.FeatureNotSupported,
 			"EXPLAIN ANALYZE does not support RETURNING NOTHING statements"))

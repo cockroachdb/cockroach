@@ -20,7 +20,7 @@ import (
 // that it gets, then deletes itself from the operator tree. This is useful for
 // first-Next initialization that has to happen in an operator.
 type oneShotOp struct {
-	input Operator
+	OneInputNode
 
 	outputSourceRef *Operator
 
