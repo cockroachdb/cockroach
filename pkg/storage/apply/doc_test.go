@@ -38,6 +38,11 @@ func Example() {
 		panic(err)
 	}
 
+	fmt.Println("\nAckCommittedEntriesBeforeApplication:")
+	if err := t.AckCommittedEntriesBeforeApplication(ctx, 10 /* maxIndex */); err != nil {
+		panic(err)
+	}
+
 	fmt.Println("\nApplyCommittedEntries:")
 	if err := t.ApplyCommittedEntries(ctx); err != nil {
 		panic(err)
@@ -52,6 +57,10 @@ func Example() {
 	//  decoding command 5; local=true
 	//  decoding command 6; local=false
 	//  decoding command 7; local=true
+	//
+	// AckCommittedEntriesBeforeApplication:
+	//  acknowledging command 1 before application
+	//  acknowledging command 4 before application
 	//
 	// ApplyCommittedEntries:
 	//  committing batch with commands=[1 2 3 4]

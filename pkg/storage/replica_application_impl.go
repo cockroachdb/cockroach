@@ -62,8 +62,10 @@ type applyCommittedEntriesStats struct {
 // side-effects of each command is applied to the Replica's in-memory state.
 type replicaApplier struct {
 	r *Replica
-	// batch is returned from NewBatch().
+	// batch is returned from NewBatch(false /* mock */).
 	batch replicaAppBatch
+	// mockBatch is returned from NewBatch(true /* mock */).
+	mockBatch mockReplicaAppBatch
 	// stats are updated during command application and reset by moveStats.
 	stats applyCommittedEntriesStats
 }
@@ -278,8 +280,16 @@ func checkForcedErr(
 }
 
 // NewBatch implements the apply.StateMachine interface.
-func (a *replicaApplier) NewBatch() apply.Batch {
+func (a *replicaApplier) NewBatch(mock bool) apply.Batch {
 	r := a.r
+	if mock {
+		mb := &a.mockBatch
+		mb.r = r
+		r.mu.RLock()
+		mb.state = r.mu.state
+		r.mu.RUnlock()
+		return mb
+	}
 	b := &a.batch
 	b.r = r
 	b.a = a
@@ -725,6 +735,35 @@ func (b *replicaAppBatch) Close() {
 		b.batch.Close()
 	}
 	*b = replicaAppBatch{}
+}
+
+// mockReplicaAppBatch implements the apply.Batch interface.
+//
+// The batch performs the bare-minimum amount of work to be able to
+// determine whether a replicated command should be rejected or applied.
+type mockReplicaAppBatch struct {
+	r     *Replica
+	state storagepb.ReplicaState
+}
+
+// Stage implements the apply.Batch interface.
+func (mb *mockReplicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error) {
+	cmd := cmdI.(*cmdAppCtx)
+	ctx := cmd.ctx
+
+	mb.r.checkShouldApplyCommand(ctx, cmd, &mb.state)
+	mb.state.LeaseAppliedIndex = cmd.leaseIndex
+	return cmd, nil
+}
+
+// Commit implements the apply.Batch interface.
+func (mb *mockReplicaAppBatch) Commit(ctx context.Context) error {
+	panic("cannot commit mockReplicaAppBatch")
+}
+
+// Close implements the apply.Batch interface.
+func (mb *mockReplicaAppBatch) Close() {
+	*mb = mockReplicaAppBatch{}
 }
 
 // ApplySideEffects implements the apply.StateMachine interface. The method
