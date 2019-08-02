@@ -296,12 +296,8 @@ func (f *Factory) ConstructJoin(
 		return f.ConstructLeftJoinApply(left, right, on, private)
 	case opt.RightJoinOp:
 		return f.ConstructRightJoin(left, right, on, private)
-	case opt.RightJoinApplyOp:
-		return f.ConstructRightJoinApply(left, right, on, private)
 	case opt.FullJoinOp:
 		return f.ConstructFullJoin(left, right, on, private)
-	case opt.FullJoinApplyOp:
-		return f.ConstructFullJoinApply(left, right, on, private)
 	case opt.SemiJoinOp:
 		return f.ConstructSemiJoin(left, right, on, private)
 	case opt.SemiJoinApplyOp:

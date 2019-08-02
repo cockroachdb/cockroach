@@ -227,8 +227,6 @@
                         MergeJoinPrivate |
                         InnerJoinApply |
                         LeftJoinApply |
-                        RightJoinApply |
-                        FullJoinApply |
                         SemiJoinApply |
                         AntiJoinApply |
                         GroupBy |

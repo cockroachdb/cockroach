@@ -200,7 +200,7 @@
 # details.
 [PushSelectCondRightIntoJoinLeftAndRight, Normalize]
 (Select
-    $input:(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
+    $input:(InnerJoin | InnerJoinApply | RightJoin
         $left:*
         $right:*
         $on:*
@@ -279,7 +279,7 @@
 # into the left side. See that rule's comments for more details.
 [PushSelectIntoJoinRight, Normalize]
 (Select
-    $input:(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
+    $input:(InnerJoin | InnerJoinApply | RightJoin
         $left:*
         $right:*
         $on:*

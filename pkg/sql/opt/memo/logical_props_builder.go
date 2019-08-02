@@ -353,18 +353,6 @@ func (b *logicalPropsBuilder) buildLeftJoinApplyProps(
 	b.buildJoinProps(join, rel)
 }
 
-func (b *logicalPropsBuilder) buildRightJoinApplyProps(
-	join *RightJoinApplyExpr, rel *props.Relational,
-) {
-	b.buildJoinProps(join, rel)
-}
-
-func (b *logicalPropsBuilder) buildFullJoinApplyProps(
-	join *FullJoinApplyExpr, rel *props.Relational,
-) {
-	b.buildJoinProps(join, rel)
-}
-
 func (b *logicalPropsBuilder) buildSemiJoinApplyProps(
 	join *SemiJoinApplyExpr, rel *props.Relational,
 ) {
@@ -1754,7 +1742,7 @@ func (h *joinPropsHelper) notNullCols() opt.ColSet {
 	// Left/full outer joins can result in right columns becoming null.
 	// Otherwise, propagate not null setting from right child.
 	switch h.joinType {
-	case opt.LeftJoinOp, opt.FullJoinOp, opt.LeftJoinApplyOp, opt.FullJoinApplyOp,
+	case opt.LeftJoinOp, opt.FullJoinOp, opt.LeftJoinApplyOp,
 		opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 
 	default:
@@ -1764,7 +1752,7 @@ func (h *joinPropsHelper) notNullCols() opt.ColSet {
 	// Right/full outer joins can result in left columns becoming null.
 	// Otherwise, propagate not null setting from left child.
 	switch h.joinType {
-	case opt.RightJoinOp, opt.FullJoinOp, opt.RightJoinApplyOp, opt.FullJoinApplyOp:
+	case opt.RightJoinOp, opt.FullJoinOp:
 
 	default:
 		notNullCols.UnionWith(h.leftProps.NotNullCols)
@@ -1822,13 +1810,13 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 			rel.FuncDeps.AddFrom(&h.filtersFD)
 			addOuterColsToFuncDep(rel.OuterCols, &rel.FuncDeps)
 
-		case opt.RightJoinOp, opt.RightJoinApplyOp:
+		case opt.RightJoinOp:
 			rel.FuncDeps.MakeOuter(h.leftProps.OutputCols, notNullInputCols)
 
 		case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 			rel.FuncDeps.MakeOuter(h.rightProps.OutputCols, notNullInputCols)
 
-		case opt.FullJoinOp, opt.FullJoinApplyOp:
+		case opt.FullJoinOp:
 			// Clear the relation's key if all columns are nullable, because
 			// duplicate all-null rows are possible:
 			//
@@ -1884,10 +1872,10 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		return innerJoinCard.AtLeast(left)
 
-	case opt.RightJoinOp, opt.RightJoinApplyOp:
+	case opt.RightJoinOp:
 		return innerJoinCard.AtLeast(right)
 
-	case opt.FullJoinOp, opt.FullJoinApplyOp:
+	case opt.FullJoinOp:
 		if innerJoinCard.IsZero() {
 			// In this case, we know that each left or right row will generate an
 			// output row.
