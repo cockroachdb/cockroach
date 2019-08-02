@@ -148,13 +148,14 @@ var ReorderJoinsLimitClusterValue = settings.RegisterValidatedIntSetting(
 // VectorizeClusterMode controls the cluster default for when automatic
 // vectorization is enabled.
 var VectorizeClusterMode = settings.RegisterEnumSetting(
-	"sql.defaults.experimental_vectorize",
-	"default experimental_vectorize mode",
-	"off",
+	"sql.defaults.vectorize",
+	"default vectorize mode",
+	"auto",
 	map[int64]string{
-		int64(sessiondata.VectorizeOff):    "off",
-		int64(sessiondata.VectorizeOn):     "on",
-		int64(sessiondata.VectorizeAlways): "always",
+		int64(sessiondata.VectorizeOff):                "off",
+		int64(sessiondata.VectorizeAuto):               "auto",
+		int64(sessiondata.VectorizeExperimentalOn):     "experimental_on",
+		int64(sessiondata.VectorizeExperimentalAlways): "experimental_always",
 	},
 )
 
@@ -1800,7 +1801,7 @@ func (m *sessionDataMutator) SetReorderJoinsLimit(val int) {
 }
 
 func (m *sessionDataMutator) SetVectorize(val sessiondata.VectorizeExecMode) {
-	m.data.Vectorize = val
+	m.data.VectorizeMode = val
 }
 
 func (m *sessionDataMutator) SetOptimizerMode(val sessiondata.OptimizerMode) {
