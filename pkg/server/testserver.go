@@ -110,6 +110,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.JoinAddr != "" {
 		cfg.JoinList = []string{params.JoinAddr}
 	}
+	cfg.ClusterName = params.ClusterName
 	cfg.Insecure = params.Insecure
 	cfg.SocketFile = params.SocketFile
 	cfg.RetryOptions = params.RetryOptions

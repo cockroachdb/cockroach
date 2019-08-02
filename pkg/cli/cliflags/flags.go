@@ -293,6 +293,17 @@ csv, table, records, sql, raw, html. If left unspecified, defaults to
 tsv for non-interactive sessions and table for interactive sessions.`,
 	}
 
+	ClusterName = FlagInfo{
+		Name: "cluster-name",
+		Description: `
+Sets a name to verify the identity of a remote node or cluster. The
+value must match between this node and the remote node(s) specified
+via --join.
+This can be used as an additional verification when either either the
+node or cluster, or both, have not yet been initialized and do not yet
+know their cluster ID. `,
+	}
+
 	Join = FlagInfo{
 		Name:      "join",
 		Shorthand: "j",

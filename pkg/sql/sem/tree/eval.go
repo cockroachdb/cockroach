@@ -2557,9 +2557,10 @@ type EvalContext struct {
 	TxnReadOnly bool
 	TxnImplicit bool
 
-	Settings  *cluster.Settings
-	ClusterID uuid.UUID
-	NodeID    roachpb.NodeID
+	Settings    *cluster.Settings
+	ClusterID   uuid.UUID
+	NodeID      roachpb.NodeID
+	ClusterName string
 
 	// Locality contains the location of the current node as a set of user-defined
 	// key/value pairs, ordered from most inclusive to least inclusive. If there

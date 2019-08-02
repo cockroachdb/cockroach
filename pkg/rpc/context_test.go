@@ -1243,6 +1243,87 @@ func TestClusterIDMismatch(t *testing.T) {
 	wg.Wait()
 }
 
+func TestClusterNameMismatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+	serverCtx := newTestContext(uuid.MakeV4(), clock, stopper)
+	serverCtx.clusterName = "helloworld"
+
+	s := newTestServer(t, serverCtx)
+	RegisterHeartbeatServer(s, &HeartbeatService{
+		clock:              clock,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+		clusterID:          &serverCtx.ClusterID,
+		nodeID:             &serverCtx.NodeID,
+		version:            serverCtx.version,
+		clusterName:        serverCtx.clusterName,
+	})
+
+	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteAddr := ln.Addr().String()
+
+	t.Run("same name", func(t *testing.T) {
+		var wg sync.WaitGroup
+		for i := 0; i < 10; i++ {
+			wg.Add(1)
+			go func() {
+				_, err := serverCtx.GRPCUnvalidatedDial(remoteAddr).Connect(context.Background())
+				if err != nil {
+					t.Error(err)
+				}
+				wg.Done()
+			}()
+		}
+		wg.Wait()
+	})
+
+	t.Run("different names", func(t *testing.T) {
+		// Make a the client ctx with a different cluster name.
+		clientCtx := newTestContext(serverCtx.ClusterID.Get(), clock, stopper)
+		clientCtx.clusterName = "anotherplanet"
+
+		var wg sync.WaitGroup
+		for i := 0; i < 10; i++ {
+			wg.Add(1)
+			go func() {
+				_, err := clientCtx.GRPCUnvalidatedDial(remoteAddr).Connect(context.Background())
+				expected := `local cluster name "anotherplanet" does not match peer cluster name "helloworld"`
+				if !testutils.IsError(err, expected) {
+					t.Errorf("expected %s error, got %v", expected, err)
+				}
+				wg.Done()
+			}()
+		}
+		wg.Wait()
+	})
+
+	t.Run("missing name", func(t *testing.T) {
+		clientCtx := newTestContext(serverCtx.ClusterID.Get(), clock, stopper)
+		clientCtx.clusterName = ""
+
+		var wg sync.WaitGroup
+		for i := 0; i < 10; i++ {
+			wg.Add(1)
+			go func() {
+				_, err := clientCtx.GRPCUnvalidatedDial(remoteAddr).Connect(context.Background())
+				expected := `peer node expects cluster name "helloworld", use --cluster-name to configure`
+				if !testutils.IsError(err, expected) {
+					t.Errorf("expected %s error, got %v", expected, err)
+				}
+				wg.Done()
+			}()
+		}
+		wg.Wait()
+	})
+}
+
 func TestNodeIDMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

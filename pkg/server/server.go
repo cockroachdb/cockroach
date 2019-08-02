@@ -534,6 +534,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Stopper:        s.stopper,
 		NodeID:         &s.nodeIDContainer,
 		ClusterID:      &s.rpcContext.ClusterID,
+		ClusterName:    s.cfg.ClusterName,
 
 		TempStorage: tempEngine,
 		BulkAdder: func(ctx context.Context, db *client.DB, bufferSize, flushSize int64, ts hlc.Timestamp) (storagebase.BulkAdder, error) {

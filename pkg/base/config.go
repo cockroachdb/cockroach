@@ -157,6 +157,13 @@ type Config struct {
 	// route to an interface that Addr is listening on.
 	AdvertiseAddr string
 
+	// ClusterName is the name used as a sanity check when a node joins
+	// an uninitialized cluster, or when an uninitialized node joins an
+	// initialized cluster. The initial RPC handshake verifies that the
+	// name matches on both sides. Once the cluster ID has been
+	// negotiated on both sides, the cluster name is not used any more.
+	ClusterName string
+
 	// HTTPAddr is the configured HTTP listen address.
 	//
 	// This is temporary, and will be removed when grpc.(*Server).ServeHTTP
@@ -208,6 +215,7 @@ func (cfg *Config) InitDefaults() {
 	cfg.SSLCertsDir = DefaultCertsDirectory
 	cfg.certificateManager = lazyCertificateManager{}
 	cfg.RPCHeartbeatInterval = defaultRPCHeartbeatInterval
+	cfg.ClusterName = ""
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of Insecure.
