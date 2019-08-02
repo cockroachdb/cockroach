@@ -21,7 +21,7 @@ send "$argv cert create-node localhost --certs-dir=$certs_dir --ca-key=$certs_di
 eexpect $prompt
 
 start_test "Check that the server reports a warning if attempting to advertise an IP address not in cert."
-send "$argv start --certs-dir=$certs_dir --advertise-addr=127.0.0.1\r"
+send "$argv start-single-node --certs-dir=$certs_dir --advertise-addr=127.0.0.1\r"
 eexpect "advertise address"
 eexpect "127.0.0.1"
 eexpect "not in node certificate"
@@ -32,7 +32,7 @@ eexpect $prompt
 end_test
 
 start_test "Check that the server reports no warning if the avertise addr is in th cert."
-send "$argv start --certs-dir=$certs_dir --advertise-addr=localhost\r"
+send "$argv start-single-node --certs-dir=$certs_dir --advertise-addr=localhost\r"
 expect {
   "not in node certificate" {
      report "unexpected warning"

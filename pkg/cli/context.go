@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -107,6 +108,8 @@ func initCLIDefaults() {
 	serverCfg.DelayedBootstrapFn = nil
 	serverCfg.SocketFile = ""
 	serverCfg.JoinList = nil
+	serverCfg.DefaultZoneConfig = config.DefaultZoneConfig()
+	serverCfg.DefaultSystemZoneConfig = config.DefaultSystemZoneConfig()
 
 	startCtx.serverInsecure = baseCfg.Insecure
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
@@ -286,8 +289,7 @@ var startCtx struct {
 	pidFile string
 
 	// logging settings specific to file logging.
-	logDir     log.DirName
-	logDirFlag *pflag.Flag
+	logDir log.DirName
 }
 
 // quitCtx captures the command-line parameters of the `quit` command.

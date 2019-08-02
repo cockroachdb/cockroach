@@ -31,7 +31,7 @@ func TestInitInsecure(t *testing.T) {
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
 
-	f := StartCmd.Flags()
+	f := startCmd.Flags()
 
 	testCases := []struct {
 		args     []string
@@ -83,7 +83,7 @@ func TestStartArgChecking(t *testing.T) {
 	defer func(save server.Config) { serverCfg = save }(serverCfg)
 	defer initCLIDefaults()
 
-	f := StartCmd.Flags()
+	f := startCmd.Flags()
 
 	testCases := []struct {
 		args     []string
