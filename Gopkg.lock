@@ -1310,6 +1310,29 @@
   revision = "b0b1615b78e5ee59739545bb38426383b2cda4c9"
 
 [[projects]]
+  branch = "master"
+  digest = "1:427bb57741bd798f617eb1ee61acdb7b9b0be39a50f3099e9521218c6ff914c2"
+  name = "github.com/petermattis/pebble"
+  packages = [
+    ".",
+    "cache",
+    "internal/arenaskl",
+    "internal/base",
+    "internal/batchskl",
+    "internal/bytealloc",
+    "internal/crc",
+    "internal/humanize",
+    "internal/rangedel",
+    "internal/rate",
+    "internal/rawalloc",
+    "internal/record",
+    "sstable",
+    "vfs",
+  ]
+  pruneopts = "UT"
+  revision = "3a73281c9812fb6e4ff35d160a387d83f2ba9125"
+
+[[projects]]
   digest = "1:e39a5ee8fcbec487f8fc68863ef95f2b025e0739b0e4aa55558a2b4cf8f0ecf0"
   name = "github.com/pierrec/lz4"
   packages = [
@@ -1993,6 +2016,8 @@
     "github.com/opentracing/opentracing-go/log",
     "github.com/openzipkin-contrib/zipkin-go-opentracing",
     "github.com/petermattis/goid",
+    "github.com/petermattis/pebble",
+    "github.com/petermattis/pebble/cache",
     "github.com/pkg/errors",
     "github.com/pmezard/go-difflib/difflib",
     "github.com/prometheus/client_golang/prometheus",
