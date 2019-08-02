@@ -19,23 +19,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
-// cmdAppCtx stores the state required to apply a single raft
-// entry to a replica. The state is accumulated in stages which occur in
-// Replica.handleCommittedEntriesRaftMuLocked. From a high level, a command is
-// decoded into an entryApplicationBatch, then if it was proposed locally the
-// proposal is populated from the replica's proposals map, then the command
-// is staged into the batch by writing its update to the batch's engine.Batch
-// and applying its "trivial" side-effects to the batch's view of ReplicaState.
-// Then the batch is committed, the side-effects are applied and the local
-// result is processed.
+// cmdAppCtx stores the state required to apply a single raft entry to a
+// replica. The state is accumulated in stages which occur in apply.Task. From
+// a high level, the command is decoded from a committed raft entry, then if it
+// was proposed locally the proposal is populated from the replica's proposals
+// map, then the command is staged into a replicaAppBatch by writing its update
+// to the batch's engine.Batch and applying its "trivial" side-effects to the
+// batch's view of ReplicaState. Then the batch is committed, the side-effects
+// are applied and the local result is processed.
 type cmdAppCtx struct {
-	// e is the Entry being applied.
-	e                *raftpb.Entry
-	decodedRaftEntry // decoded from e.
+	ent              *raftpb.Entry // the raft.Entry being applied
+	decodedRaftEntry               // decoded from ent
 
 	// proposal is populated on the proposing Replica only and comes from the
 	// Replica's proposal map.
@@ -44,23 +41,23 @@ type cmdAppCtx struct {
 	// be populated with the handleCommittedEntries ctx.
 	ctx context.Context
 
-	// The below fields are set during stageRaftCommand when we validate that
-	// a command applies given the current lease in checkForcedErr.
+	// The following fields are set in shouldApplyCommand when we validate that
+	// a command applies given the current lease and GC threshold. The process
+	// of setting these fields is what transforms an apply.Command into an
+	// apply.CheckedCommand.
 	leaseIndex    uint64
 	forcedErr     *roachpb.Error
 	proposalRetry proposalReevaluationReason
-	mutationCount int // number of mutations in the WriteBatch, for writeStats
-	// splitMergeUnlock is acquired for splits and merges.
+	// splitMergeUnlock is acquired for splits and merges when they are staged
+	// in the application batch and called after the command's side effects
+	// are applied.
 	splitMergeUnlock func()
 
-	// The below fields are set after the data has been written to the storage
-	// engine in prepareLocalResult.
+	// The following fields are set after the data has been written to the
+	// storage engine in prepareLocalResult. The process of setting these fields
+	// is what transforms an apply.CheckedCommand into an apply.AppliedCommand.
 	localResult *result.LocalResult
 	response    proposalResult
-}
-
-func (cmd *cmdAppCtx) proposedLocally() bool {
-	return cmd.proposal != nil
 }
 
 // decodedRaftEntry represents the deserialized content of a raftpb.Entry.
@@ -76,19 +73,52 @@ type decodedConfChange struct {
 	ccCtx ConfChangeContext
 }
 
+// decode decodes the entry e into the cmdAppCtx.
+func (c *cmdAppCtx) decode(ctx context.Context, e *raftpb.Entry) error {
+	c.ent = e
+	return c.decodedRaftEntry.decode(ctx, e)
+}
+
 func (d *decodedRaftEntry) replicatedResult() *storagepb.ReplicatedEvalResult {
 	return &d.raftCmd.ReplicatedEvalResult
 }
 
+// Index implements the apply.Command interface.
+func (c *cmdAppCtx) Index() uint64 {
+	return c.ent.Index
+}
+
+// IsTrivial implements the apply.Command interface.
+func (c *cmdAppCtx) IsTrivial() bool {
+	return isTrivial(c.replicatedResult())
+}
+
+// IsLocal implements the apply.Command interface.
+func (c *cmdAppCtx) IsLocal() bool {
+	return c.proposal != nil
+}
+
+// Rejected implements the apply.CheckedCommand interface.
+func (c *cmdAppCtx) Rejected() bool {
+	return c.forcedErr != nil
+}
+
+// FinishAndAckOutcome implements the apply.AppliedCommand interface.
+func (c *cmdAppCtx) FinishAndAckOutcome() error {
+	if !c.IsLocal() {
+		return nil
+	}
+	c.proposal.finishApplication(c.response)
+	return nil
+}
+
 // decode decodes the entry e into the decodedRaftEntry.
-func (d *decodedRaftEntry) decode(
-	ctx context.Context, e *raftpb.Entry,
-) (errExpl string, err error) {
+func (d *decodedRaftEntry) decode(ctx context.Context, e *raftpb.Entry) error {
 	*d = decodedRaftEntry{}
 	// etcd raft sometimes inserts nil commands, ours are never nil.
 	// This case is handled upstream of this call.
 	if len(e.Data) == 0 {
-		return "", nil
+		return nil
 	}
 	switch e.Type {
 	case raftpb.EntryNormal:
@@ -97,11 +127,11 @@ func (d *decodedRaftEntry) decode(
 		return d.decodeConfChangeEntry(e)
 	default:
 		log.Fatalf(ctx, "unexpected Raft entry: %v", e)
-		return "", nil // unreachable
+		return nil // unreachable
 	}
 }
 
-func (d *decodedRaftEntry) decodeNormalEntry(e *raftpb.Entry) (errExpl string, err error) {
+func (d *decodedRaftEntry) decodeNormalEntry(e *raftpb.Entry) error {
 	var encodedCommand []byte
 	d.idKey, encodedCommand = DecodeRaftCommand(e.Data)
 	// An empty command is used to unquiesce a range and wake the
@@ -109,26 +139,22 @@ func (d *decodedRaftEntry) decodeNormalEntry(e *raftpb.Entry) (errExpl string, e
 	if len(encodedCommand) == 0 {
 		d.idKey = ""
 	} else if err := protoutil.Unmarshal(encodedCommand, &d.raftCmd); err != nil {
-		const errExpl = "while unmarshalling entry"
-		return errExpl, errors.Wrap(err, errExpl)
+		return wrapWithNonDeterministicFailure(err, "while unmarshaling entry")
 	}
-	return "", nil
+	return nil
 }
 
-func (d *decodedRaftEntry) decodeConfChangeEntry(e *raftpb.Entry) (errExpl string, err error) {
+func (d *decodedRaftEntry) decodeConfChangeEntry(e *raftpb.Entry) error {
 	d.decodedConfChange = &decodedConfChange{}
 	if err := protoutil.Unmarshal(e.Data, &d.cc); err != nil {
-		const errExpl = "while unmarshaling ConfChange"
-		return errExpl, errors.Wrap(err, errExpl)
+		return wrapWithNonDeterministicFailure(err, "while unmarshaling ConfChange")
 	}
 	if err := protoutil.Unmarshal(d.cc.Context, &d.ccCtx); err != nil {
-		const errExpl = "while unmarshaling ConfChangeContext"
-		return errExpl, errors.Wrap(err, errExpl)
+		return wrapWithNonDeterministicFailure(err, "while unmarshaling ConfChangeContext")
 	}
 	if err := protoutil.Unmarshal(d.ccCtx.Payload, &d.raftCmd); err != nil {
-		const errExpl = "while unmarshaling RaftCommand"
-		return errExpl, errors.Wrap(err, errExpl)
+		return wrapWithNonDeterministicFailure(err, "while unmarshaling RaftCommand")
 	}
 	d.idKey = storagebase.CmdIDKey(d.ccCtx.CommandID)
-	return "", nil
+	return nil
 }
