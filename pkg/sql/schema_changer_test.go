@@ -532,10 +532,7 @@ func runSchemaChangeWithOperations(
 		t.Fatal(err)
 	}
 	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
-		// TODO(dt,lucy-zhang): #35160. Fix scrub's plan assertions.
-		if !strings.Contains(err.Error(), "could not find MergeJoinerSpec in plan") {
-			t.Fatal(err)
-		}
+		t.Fatal(err)
 	}
 
 	// Delete the rows inserted.
