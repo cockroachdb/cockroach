@@ -42,7 +42,7 @@ set -euo pipefail
 
 raw_version=$(node --version)
 if [ $(grep -oE 'v[0-9]+\.' <<< ${raw_version}) != "v10." ]; then
-    echo "node v10.x is required, found ${raw_version}"
+    echo "node v10.x is required, found ${raw_version}" >&2
     exit 1
 fi
 
