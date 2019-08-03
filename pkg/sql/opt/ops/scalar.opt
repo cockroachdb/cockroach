@@ -1030,6 +1030,22 @@ define NthValue {
     Nth   ScalarExpr
 }
 
+# KVOptions is a set of KVOptionItems that specify arbitrary keys and values
+# that are used as modifiers for various statements (see tree.KVOptions). The
+# key is a constant string but the value can be a scalar expression.
+[Scalar, List]
+define KVOptions {
+}
+
+# KVOptionsItem is the key and value of an option (see tree.KVOption). For keys
+# that don't have values, the value is Null.
+[Scalar, ListItem]
+define KVOptionsItem {
+    Value ScalarExpr
+
+    Key string
+}
+
 # ScalarList is a list expression that has scalar expression items of type
 # opt.ScalarExpr. opt.ScalarExpr is an external type that is defined outside of
 # Optgen. It is hard-coded in the code generator to be the item type for

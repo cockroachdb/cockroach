@@ -588,6 +588,13 @@ func (h *hasher) HashFKChecksExpr(val FKChecksExpr) {
 	}
 }
 
+func (h *hasher) HashKVOptionsExpr(val KVOptionsExpr) {
+	for i := range val {
+		h.HashString(val[i].Key)
+		h.HashScalarExpr(val[i].Value)
+	}
+}
+
 func (h *hasher) HashPresentation(val physical.Presentation) {
 	for i := range val {
 		col := &val[i]
@@ -922,6 +929,18 @@ func (h *hasher) IsFKChecksExprEqual(l, r FKChecksExpr) bool {
 	}
 	for i := range l {
 		if l[i].Check != r[i].Check {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsKVOptionsExprEqual(l, r KVOptionsExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i].Key != r[i].Key || l[i].Value != r[i].Value {
 			return false
 		}
 	}

@@ -211,7 +211,7 @@ func TestExportShow(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal:///show' FROM SELECT * FROM [SHOW DATABASES]`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal:///show' FROM SELECT * FROM [SHOW DATABASES] ORDER BY database_name`)
 	content, err := ioutil.ReadFile(filepath.Join(dir, "show", "n1.0.csv"))
 	if err != nil {
 		t.Fatal(err)

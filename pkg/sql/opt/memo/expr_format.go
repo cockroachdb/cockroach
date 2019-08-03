@@ -196,7 +196,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		*WindowExpr, *OpaqueRelExpr, *OpaqueMutationExpr, *OpaqueDDLExpr,
 		*AlterTableSplitExpr, *AlterTableUnsplitExpr, *AlterTableUnsplitAllExpr,
 		*AlterTableRelocateExpr, *ControlJobsExpr, *CancelQueriesExpr,
-		*CancelSessionsExpr:
+		*CancelSessionsExpr, *CreateViewExpr, *ExportExpr:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
 
@@ -220,10 +220,6 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if ws.Name != "" {
 			fmt.Fprintf(f.Buffer, " (%s)", ws.Name)
 		}
-
-	case *CreateViewExpr:
-		fmt.Fprintf(f.Buffer, "%v", e.Op())
-		FormatPrivate(f, e.Private(), required)
 
 	default:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
@@ -454,6 +450,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			n.Child(f.Buffer.String())
 		}
 
+	case *ExportExpr:
+		tp.Childf("format: %s", t.FileFormat)
+
 	case *ExplainExpr:
 		// ExplainPlan is the default, don't show it.
 		m := ""
@@ -584,8 +583,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 	switch scalar.Op() {
-	case opt.ProjectionsOp, opt.AggregationsOp:
-		// Omit empty Projections and Aggregations expressions.
+	case opt.ProjectionsOp, opt.AggregationsOp, opt.FKChecksOp, opt.KVOptionsOp:
+		// Omit empty lists (except filters).
 		if scalar.ChildCount() == 0 {
 			return
 		}
@@ -624,12 +623,6 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 		f.formatExpr(scalar.Child(1), tp.Child("filter"))
 
 		return
-
-	case opt.FKChecksOp:
-		if scalar.ChildCount() == 0 {
-			// Hide the FK checks field when there are no checks.
-			return
-		}
 	}
 
 	// Don't show scalar-list, as it's redundant with its parent.
@@ -670,7 +663,7 @@ func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
 	// expression.
 	typ := scalar.DataType()
 	if typ == nil {
-		if scalar.Op() != opt.FKChecksItemOp {
+		if scalar.Op() != opt.FKChecksItemOp && scalar.Op() != opt.KVOptionsItemOp {
 			f.Buffer.WriteString(" [type=undefined]")
 		}
 	} else {
@@ -754,6 +747,9 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 
 	case *CastExpr:
 		private = t.Typ.SQLString()
+
+	case *KVOptionsItem:
+		fmt.Fprintf(f.Buffer, " %s", t.Key)
 
 	case *FKChecksItem:
 		origin := f.Memo.metadata.TableMeta(t.OriginTable)
@@ -1080,7 +1076,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	case *JoinPrivate:
 		// Nothing to show; flags are shown separately.
 
-	case *ExplainPrivate, *opt.ColSet, *opt.ColList, *SetPrivate, *types.T:
+	case *ExplainPrivate, *opt.ColSet, *opt.ColList, *SetPrivate, *types.T, *ExportPrivate:
 		// Don't show anything, because it's mostly redundant.
 
 	default:
