@@ -176,13 +176,13 @@ func TestBackpressure(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		bs := <-sc
 		go reply(bs)
-		// Shouldn't need to use atomics to read sent. A race would indicate a bug.
-		assert.Equal(t, int64(0), sent)
+		// We don't expect either of the calls to send to have finished yet.
+		assert.Equal(t, int64(0), atomic.LoadInt64(&sent))
 	}
 	// Allow one reply to fly which should not unblock the requests.
 	canReply <- struct{}{}
 	runtime.Gosched() // tickle the runtime in case there might be a timing bug
-	assert.Equal(t, int64(0), sent)
+	assert.Equal(t, int64(0), atomic.LoadInt64(&sent))
 	canReply <- struct{}{} // now the two requests should send
 	testutils.SucceedsSoon(t, func() error {
 		if numSent := atomic.LoadInt64(&sent); numSent != 2 {
