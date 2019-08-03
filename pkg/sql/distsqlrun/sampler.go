@@ -225,7 +225,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 				//  - if it is lower than cpuUsageMinThrottle, we do not throttle;
 				//  - if it is higher than cpuUsageMaxThrottle, we throttle all the way;
 				//  - in-between, we scale the idle time proportionally.
-				usage := s.flowCtx.RuntimeStats.GetCPUCombinedPercentNorm()
+				usage := s.flowCtx.Cfg.RuntimeStats.GetCPUCombinedPercentNorm()
 
 				if usage > cpuUsageMinThrottle {
 					fractionIdle := s.maxFractionIdle

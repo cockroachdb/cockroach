@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -922,7 +922,7 @@ func getInputStats(flowCtx *FlowCtx, input RowSource) (InputStats, bool) {
 	if !ok {
 		return InputStats{}, false
 	}
-	if flowCtx.testingKnobs.DeterministicStats {
+	if flowCtx.Cfg.TestingKnobs.DeterministicStats {
 		isc.InputStats.StallTime = 0
 	}
 	return isc.InputStats, true
@@ -938,7 +938,7 @@ func getFetcherInputStats(flowCtx *FlowCtx, f rowFetcher) (InputStats, bool) {
 		return InputStats{}, false
 	}
 	// Add row fetcher start scan stall time to Next() stall time.
-	if !flowCtx.testingKnobs.DeterministicStats {
+	if !flowCtx.Cfg.TestingKnobs.DeterministicStats {
 		is.StallTime += rfsc.startScanStallTime
 	}
 	return is, true

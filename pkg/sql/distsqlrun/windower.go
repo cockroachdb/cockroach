@@ -162,7 +162,7 @@ func newWindower(
 	ctx := evalCtx.Ctx()
 	memMonitor := NewMonitor(ctx, evalCtx.Mon, "windower-mem")
 	w.acc = memMonitor.MakeBoundAccount()
-	w.diskMonitor = NewMonitor(ctx, flowCtx.diskMonitor, "windower-disk")
+	w.diskMonitor = NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "windower-disk")
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		w.input = NewInputStatCollector(w.input)
 		w.finishTrace = w.outputStatsToTrace
@@ -175,7 +175,7 @@ func newWindower(
 		evalCtx,
 		memMonitor,
 		w.diskMonitor,
-		flowCtx.TempStorage,
+		flowCtx.Cfg.TempStorage,
 	)
 	w.allRowsPartitioned = &allRowsPartitioned
 	if err := w.allRowsPartitioned.Init(
@@ -667,7 +667,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 		ordering,
 		w.inputTypes,
 		w.evalCtx,
-		w.flowCtx.TempStorage,
+		w.flowCtx.Cfg.TempStorage,
 		w.MemMonitor,
 		w.diskMonitor,
 		0, /* rowCapacity */

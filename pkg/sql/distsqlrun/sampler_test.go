@@ -46,8 +46,8 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 
 	spec := &distsqlpb.SamplerSpec{SampleSize: uint32(numSamples)}
@@ -170,8 +170,8 @@ func TestSamplerSketch(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 
 	spec := &distsqlpb.SamplerSpec{

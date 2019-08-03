@@ -404,10 +404,10 @@ func TestIndexSkipTableReader(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(ctx)
 			flowCtx := FlowCtx{
-				EvalCtx:  &evalCtx,
-				Settings: s.ClusterSettings(),
-				txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-				NodeID:   s.NodeID(),
+				EvalCtx: &evalCtx,
+				Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
+				txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				NodeID:  s.NodeID(),
 			}
 
 			tr, err := newIndexSkipTableReader(&flowCtx, 0 /* processorID */, &ts, &c.post, nil)
@@ -475,10 +475,10 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 	defer evalCtx.Stop(ctx)
 	nodeID := tc.Server(0).NodeID()
 	flowCtx := FlowCtx{
-		EvalCtx:  &evalCtx,
-		Settings: st,
-		txn:      client.NewTxn(ctx, tc.Server(0).DB(), nodeID, client.RootTxn),
-		NodeID:   nodeID,
+		EvalCtx: &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		txn:     client.NewTxn(ctx, tc.Server(0).DB(), nodeID, client.RootTxn),
+		NodeID:  nodeID,
 	}
 	spec := distsqlpb.IndexSkipTableReaderSpec{
 		Spans: []distsqlpb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
@@ -599,10 +599,10 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 			}
 
 			flowCtxTableReader := FlowCtx{
-				EvalCtx:  &evalCtx,
-				Settings: s.ClusterSettings(),
-				txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-				NodeID:   s.NodeID(),
+				EvalCtx: &evalCtx,
+				Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
+				txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				NodeID:  s.NodeID(),
 			}
 
 			b.Run(fmt.Sprintf("TableReader+Distinct-rows=%d-ratio=%d", numRows, valueRatio), func(b *testing.B) {
@@ -636,10 +636,10 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 			})
 
 			flowCtxIndexSkipTableReader := FlowCtx{
-				EvalCtx:  &evalCtx,
-				Settings: s.ClusterSettings(),
-				txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-				NodeID:   s.NodeID(),
+				EvalCtx: &evalCtx,
+				Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
+				txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				NodeID:  s.NodeID(),
 			}
 
 			// run the index skip table reader

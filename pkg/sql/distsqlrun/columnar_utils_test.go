@@ -49,10 +49,12 @@ func verifyColOperator(
 	diskMonitor := makeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 	flowCtx := &FlowCtx{
-		EvalCtx:     &evalCtx,
-		Settings:    st,
-		TempStorage: tempEngine,
-		diskMonitor: diskMonitor,
+		EvalCtx: &evalCtx,
+		Cfg: &ServerConfig{
+			Settings:    st,
+			TempStorage: tempEngine,
+			DiskMonitor: diskMonitor,
+		},
 	}
 
 	inputsProc := make([]RowSource, len(inputs))

@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -42,7 +42,7 @@ func scanShouldLimitBatches(maxResults uint64, limitHint int64, flowCtx *FlowCtx
 	if maxResults != 0 &&
 		maxResults < ParallelScanResultThreshold &&
 		limitHint == 0 &&
-		sqlbase.ParallelScans.Get(&flowCtx.Settings.SV) {
+		sqlbase.ParallelScans.Get(&flowCtx.Cfg.Settings.SV) {
 		return false
 	}
 	return true
@@ -232,7 +232,7 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 	} else {
 		initialTS := tr.flowCtx.txn.GetTxnCoordMeta(ctx).Txn.OrigTimestamp
 		err = tr.fetcher.StartInconsistentScan(
-			fetcherCtx, tr.flowCtx.ClientDB, initialTS,
+			fetcherCtx, tr.flowCtx.Cfg.DB, initialTS,
 			tr.maxTimestampAge, tr.spans,
 			limitBatches, tr.limitHint, tr.flowCtx.traceKV,
 		)

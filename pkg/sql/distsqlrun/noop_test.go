@@ -31,8 +31,8 @@ func BenchmarkNoop(b *testing.B) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 	post := &distsqlpb.PostProcessSpec{}
 	disposer := &RowDisposer{}

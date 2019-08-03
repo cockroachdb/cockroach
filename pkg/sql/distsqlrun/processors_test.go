@@ -410,8 +410,8 @@ func TestProcessorBaseContext(t *testing.T) {
 	runTest := func(t *testing.T, f func(noop *noopProcessor)) {
 		evalCtx := tree.MakeTestingEvalContext(st)
 		flowCtx := &FlowCtx{
-			Settings: st,
-			EvalCtx:  &evalCtx,
+			Cfg:     &ServerConfig{Settings: st},
+			EvalCtx: &evalCtx,
 		}
 		defer flowCtx.EvalCtx.Stop(ctx)
 

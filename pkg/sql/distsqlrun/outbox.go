@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 )
 
@@ -217,7 +217,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 	if m.stream == nil {
 		var conn *grpc.ClientConn
 		var err error
-		conn, err = m.flowCtx.nodeDialer.Dial(ctx, m.nodeID)
+		conn, err = m.flowCtx.Cfg.NodeDialer.Dial(ctx, m.nodeID)
 		if err != nil {
 			return err
 		}
@@ -275,7 +275,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 					if err != nil {
 						return nil
 					}
-					if m.flowCtx.testingKnobs.DeterministicStats {
+					if m.flowCtx.Cfg.TestingKnobs.DeterministicStats {
 						m.stats.BytesSent = 0
 					}
 					tracing.SetSpanStats(span, &m.stats)
@@ -365,7 +365,7 @@ func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 	ch := make(chan drainSignal, 1)
 
 	stream := m.stream
-	if err := m.flowCtx.stopper.RunAsyncTask(ctx, "drain", func(ctx context.Context) {
+	if err := m.flowCtx.Cfg.Stopper.RunAsyncTask(ctx, "drain", func(ctx context.Context) {
 		sendDrainSignal := func(drainRequested bool, err error) bool {
 			select {
 			case ch <- drainSignal{drainRequested: drainRequested, err: err}:

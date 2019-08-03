@@ -41,11 +41,13 @@ func TestSampleAggregator(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
-		Gossip:   server.Gossip(),
-		ClientDB: kvDB,
-		executor: server.InternalExecutor().(sqlutil.InternalExecutor),
+		EvalCtx: &evalCtx,
+		Cfg: &ServerConfig{
+			Settings: st,
+			DB:       kvDB,
+			Executor: server.InternalExecutor().(sqlutil.InternalExecutor),
+			Gossip:   server.Gossip(),
+		},
 	}
 
 	inputRows := [][]int{

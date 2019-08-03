@@ -274,7 +274,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			if err != nil {
 				return err
 			}
-			es, err := storageccl.MakeExportStorage(ctx, conf, sp.flowCtx.Settings)
+			es, err := storageccl.MakeExportStorage(ctx, conf, sp.flowCtx.Cfg.Settings)
 			if err != nil {
 				return err
 			}
