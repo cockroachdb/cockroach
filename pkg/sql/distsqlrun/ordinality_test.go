@@ -109,8 +109,8 @@ func TestOrdinality(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
-				Settings: st,
-				EvalCtx:  &evalCtx,
+				Cfg:     &ServerConfig{Settings: st},
+				EvalCtx: &evalCtx,
 			}
 
 			d, err := newOrdinalityProcessor(&flowCtx, 0 /* processorID */, &os, in, &distsqlpb.PostProcessSpec{}, out)
@@ -156,8 +156,8 @@ func BenchmarkOrdinality(b *testing.B) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 	spec := &distsqlpb.OrdinalitySpec{}
 

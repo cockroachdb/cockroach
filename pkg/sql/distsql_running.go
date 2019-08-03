@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // To allow queries to send out flow RPCs in parallel, we use a pool of workers
@@ -140,7 +140,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if evalCtx.SessionData.VectorizeMode != sessiondata.VectorizeOff {
 		for _, spec := range flows {
 			if err := distsqlrun.SupportsVectorized(
-				ctx, &distsqlrun.FlowCtx{EvalCtx: &evalCtx.EvalContext, NodeID: -1}, spec.Processors,
+				ctx, &distsqlrun.FlowCtx{
+					EvalCtx: &evalCtx.EvalContext,
+					Cfg:     &distsqlrun.ServerConfig{},
+					NodeID:  -1,
+				}, spec.Processors,
 			); err != nil {
 				// Vectorization attempt failed with an error.
 				returnVectorizationSetupError := false

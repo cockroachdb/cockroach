@@ -40,8 +40,8 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 	c, err := newColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
@@ -122,8 +122,8 @@ func TestMaterializeTypes(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 	c, err := newColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
@@ -179,8 +179,8 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 	c, err := newColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {

@@ -36,8 +36,8 @@ func TestVectorizedErrorPropagation(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := FlowCtx{
-		EvalCtx:  &evalCtx,
-		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx: &evalCtx,
+		Cfg:     &ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 
 	nRows, nCols := 1, 1
@@ -97,8 +97,8 @@ func TestNonVectorizedErrorPropagation(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := FlowCtx{
-		EvalCtx:  &evalCtx,
-		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx: &evalCtx,
+		Cfg:     &ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 
 	nRows, nCols := 1, 1

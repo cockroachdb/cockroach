@@ -37,8 +37,8 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := FlowCtx{
-		EvalCtx:  &evalCtx,
-		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx: &evalCtx,
+		Cfg:     &ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 
 	nRows := 10

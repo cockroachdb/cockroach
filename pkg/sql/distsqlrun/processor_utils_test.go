@@ -37,8 +37,8 @@ func DefaultProcessorTestConfig() ProcessorTestConfig {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	return ProcessorTestConfig{
 		FlowCtx: &FlowCtx{
-			Settings: st,
-			EvalCtx:  &evalCtx,
+			Cfg:     &ServerConfig{Settings: st},
+			EvalCtx: &evalCtx,
 		},
 	}
 }

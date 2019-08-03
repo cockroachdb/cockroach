@@ -59,10 +59,10 @@ func BenchmarkColBatchScan(b *testing.B) {
 			defer evalCtx.Stop(ctx)
 
 			flowCtx := FlowCtx{
-				EvalCtx:  &evalCtx,
-				Settings: s.ClusterSettings(),
-				txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-				NodeID:   s.NodeID(),
+				EvalCtx: &evalCtx,
+				Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
+				txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				NodeID:  s.NodeID(),
 			}
 
 			b.SetBytes(int64(numRows * numCols * 8))

@@ -321,7 +321,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 		defer tracing.FinishSpan(span)
 		defer conv.inputFinished(ctx)
 
-		job, err := cp.flowCtx.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
+		job, err := cp.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
 		if err != nil {
 			return err
 		}
@@ -339,7 +339,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			})
 		}
 
-		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, progFn, cp.flowCtx.Settings)
+		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, progFn, cp.flowCtx.Cfg.Settings)
 	})
 
 	// TODO(jeffreyxiao): Remove this check in 20.1.
@@ -347,16 +347,16 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	// ensure that the splits are not automatically split by the merge queue. If
 	// the cluster does not support sticky bits, we disable the merge queue via
 	// gossip, so we can just set the split to expire immediately.
-	stickyBitEnabled := cp.flowCtx.Settings.Version.IsActive(cluster.VersionStickyBit)
+	stickyBitEnabled := cp.flowCtx.Cfg.Settings.Version.IsActive(cluster.VersionStickyBit)
 	expirationTime := hlc.Timestamp{}
 	if stickyBitEnabled {
-		expirationTime = cp.flowCtx.ClientDB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+		expirationTime = cp.flowCtx.Cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 	}
 
 	if cp.spec.IngestDirectly {
 		for _, tbl := range cp.spec.Tables {
 			for _, span := range tbl.Desc.AllIndexSpans() {
-				if err := cp.flowCtx.ClientDB.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
+				if err := cp.flowCtx.Cfg.DB.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
 					return err
 				}
 
@@ -364,7 +364,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 				scatterReq := &roachpb.AdminScatterRequest{
 					RequestHeader: roachpb.RequestHeaderFromSpan(span),
 				}
-				if _, pErr := client.SendWrapped(ctx, cp.flowCtx.ClientDB.NonTransactionalSender(), scatterReq); pErr != nil {
+				if _, pErr := client.SendWrapped(ctx, cp.flowCtx.Cfg.DB.NonTransactionalSender(), scatterReq); pErr != nil {
 					log.Errorf(ctx, "failed to scatter span %s: %s", span.Key, pErr)
 				}
 			}
@@ -378,7 +378,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 
 			writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
 			const bufferSize, flushSize = 64 << 20, 16 << 20
-			adder, err := cp.flowCtx.BulkAdder(ctx, cp.flowCtx.ClientDB, bufferSize, flushSize, writeTS)
+			adder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, bufferSize, flushSize, writeTS)
 			if err != nil {
 				return err
 			}
@@ -427,7 +427,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 
 			// Populate the split-point spans which have already been imported.
 			var completedSpans roachpb.SpanGroup
-			job, err := cp.flowCtx.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
+			job, err := cp.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
 			if err != nil {
 				return err
 			}

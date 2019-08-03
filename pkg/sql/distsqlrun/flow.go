@@ -14,37 +14,25 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // FlowCtx encompasses the contexts needed for various flow components.
 type FlowCtx struct {
 	log.AmbientContext
 
-	// TODO(radu): FlowCtx should store a pointer to the server's ServerConfig
-	// instead of having copies of most of its fields.
-	Settings     *cluster.Settings
-	RuntimeStats RuntimeStats
-
-	stopper *stop.Stopper
+	Cfg *ServerConfig
 
 	// id is a unique identifier for a remote flow. It is mainly used as a key
 	// into the flowRegistry. Since local flows do not need to exist in the flow
@@ -52,6 +40,7 @@ type FlowCtx struct {
 	// assigned ids. This is done for performance reasons, as local flows are
 	// more likely to be dominated by setup time.
 	id distsqlpb.FlowID
+
 	// EvalCtx is used by all the processors in the flow to evaluate expressions.
 	// Processors that intend to evaluate expressions with this EvalCtx should
 	// get a copy with NewEvalCtx instead of storing a pointer to this one
@@ -60,49 +49,16 @@ type FlowCtx struct {
 	// TODO(andrei): Get rid of this field and pass a non-shared EvalContext to
 	// cores of the processors that need it.
 	EvalCtx *tree.EvalContext
-	// nodeDialer is used by the Outboxes that may be present in the
-	// flow for connecting to other nodes.
-	nodeDialer *nodedialer.Dialer
-	// Gossip is used by the sample aggregator to notify nodes of a new statistic.
-	Gossip *gossip.Gossip
+
 	// The transaction in which kv operations performed by processors in the flow
 	// must be performed. Processors in the Flow will use this txn concurrently.
 	// This field is generally not nil, except for flows that don't run in a
 	// higher-level txn (like backfills).
 	txn *client.Txn
-	// ClientDB is a handle to the cluster. Used for performing requests outside
-	// of the transaction in which the flow's query is running.
-	ClientDB *client.DB
-
-	// Executor can be used to run "internal queries". Note that Flows also have
-	// access to an executor in the EvalContext. That one is "session bound"
-	// whereas this one isn't.
-	executor sqlutil.InternalExecutor
-
-	// LeaseManager is a *sql.LeaseManager. It's returned as an `interface{}`
-	// due to package dependency cycles.
-	LeaseManager interface{}
 
 	// nodeID is the ID of the node on which the processors using this FlowCtx
 	// run.
-	NodeID       roachpb.NodeID
-	testingKnobs TestingKnobs
-
-	// TempStorage is used by some DistSQL processors to store Rows when the
-	// working set is larger than can be stored in memory.
-	// This is not supposed to be used as a general engine.Engine and thus
-	// one should sparingly use the set of features offered by it.
-	TempStorage diskmap.Factory
-
-	// BulkAdder is used by backfill/bulk-ingestion processors to ingest large
-	// amounts of data in bulk as SSTs.
-	BulkAdder storagebase.BulkAdderFactory
-
-	// diskMonitor is used to monitor temporary storage disk usage.
-	diskMonitor *mon.BytesMonitor
-
-	// JobRegistry is used during backfill to load jobs which keep state.
-	JobRegistry *jobs.Registry
+	NodeID roachpb.NodeID
 
 	// traceKV is true if KV tracing was requested by the session.
 	traceKV bool
@@ -126,12 +82,12 @@ func (ctx *FlowCtx) NewEvalCtx() *tree.EvalContext {
 
 // TestingKnobs returns the distsql testing knobs for this flow context.
 func (ctx *FlowCtx) TestingKnobs() TestingKnobs {
-	return ctx.testingKnobs
+	return ctx.Cfg.TestingKnobs
 }
 
 // Stopper returns the stopper for this flowCtx.
 func (ctx *FlowCtx) Stopper() *stop.Stopper {
-	return ctx.stopper
+	return ctx.Cfg.Stopper
 }
 
 type flowStatus int
@@ -542,7 +498,7 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 		f.waitGroup.Add(len(f.inboundStreams))
 
 		if err := f.flowRegistry.RegisterFlow(
-			ctx, f.id, f, f.inboundStreams, settingFlowStreamTimeout.Get(&f.FlowCtx.Settings.SV),
+			ctx, f.id, f, f.inboundStreams, settingFlowStreamTimeout.Get(&f.FlowCtx.Cfg.Settings.SV),
 		); err != nil {
 			return err
 		}

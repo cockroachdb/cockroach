@@ -185,9 +185,9 @@ func runProcessorTest(
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
-		txn:      txn,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
+		txn:     txn,
 	}
 
 	p, err := newProcessor(
