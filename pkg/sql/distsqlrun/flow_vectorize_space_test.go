@@ -33,8 +33,8 @@ func TestVectorizeSpaceError(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 
 	// Without a limit, the default sorter creates a vectorized operator

@@ -124,7 +124,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	nodeID := ca.flowCtx.EvalCtx.NodeID
 	var err error
 	if ca.sink, err = getSink(
-		ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.Opts, ca.spec.Feed.Targets, ca.flowCtx.Settings,
+		ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.Opts, ca.spec.Feed.Targets, ca.flowCtx.Cfg.Settings,
 	); err != nil {
 		err = MarkRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
@@ -151,7 +151,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	// The job registry has a set of metrics used to monitor the various jobs it
 	// runs. They're all stored as the `metric.Struct` interface because of
 	// dependency cycles.
-	metrics := ca.flowCtx.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+	metrics := ca.flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 	ca.sink = makeMetricsSink(metrics, ca.sink)
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
@@ -173,15 +173,15 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	ca.pollerMemMon = &pollerMemMon
 
 	buf := makeBuffer()
-	leaseMgr := ca.flowCtx.LeaseManager.(*sql.LeaseManager)
+	leaseMgr := ca.flowCtx.Cfg.LeaseManager.(*sql.LeaseManager)
 	ca.poller = makePoller(
-		ca.flowCtx.Settings, ca.flowCtx.ClientDB, ca.flowCtx.ClientDB.Clock(), ca.flowCtx.Gossip,
+		ca.flowCtx.Cfg.Settings, ca.flowCtx.Cfg.DB, ca.flowCtx.Cfg.DB.Clock(), ca.flowCtx.Cfg.Gossip,
 		spans, ca.spec.Feed, initialHighWater, buf, leaseMgr, metrics, ca.pollerMemMon,
 	)
 	rowsFn := kvsToRows(leaseMgr, ca.spec.Feed, buf.Get)
 
 	ca.tickFn = emitEntries(
-		ca.flowCtx.Settings, ca.spec.Feed, spans, ca.encoder, ca.sink, rowsFn, knobs, metrics)
+		ca.flowCtx.Cfg.Settings, ca.spec.Feed, spans, ca.encoder, ca.sink, rowsFn, knobs, metrics)
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
@@ -422,7 +422,7 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	nodeID := cf.flowCtx.EvalCtx.NodeID
 	var err error
 	if cf.sink, err = getSink(
-		cf.spec.Feed.SinkURI, nodeID, cf.spec.Feed.Opts, cf.spec.Feed.Targets, cf.flowCtx.Settings,
+		cf.spec.Feed.SinkURI, nodeID, cf.spec.Feed.Opts, cf.spec.Feed.Targets, cf.flowCtx.Cfg.Settings,
 	); err != nil {
 		err = MarkRetryableError(err)
 		cf.MoveToDraining(err)
@@ -436,13 +436,13 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	// The job registry has a set of metrics used to monitor the various jobs it
 	// runs. They're all stored as the `metric.Struct` interface because of
 	// dependency cycles.
-	cf.metrics = cf.flowCtx.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+	cf.metrics = cf.flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 	cf.sink = makeMetricsSink(cf.metrics, cf.sink)
 	cf.sink = &errorWrapperSink{wrapped: cf.sink}
 
 	cf.highWaterAtStart = cf.spec.Feed.StatementTime
 	if cf.spec.JobID != 0 {
-		job, err := cf.flowCtx.JobRegistry.LoadJob(ctx, cf.spec.JobID)
+		job, err := cf.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cf.spec.JobID)
 		if err != nil {
 			cf.MoveToDraining(err)
 			return ctx
@@ -560,7 +560,7 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 	// job progress update closure, but it currently doesn't pass along the info
 	// we'd need to do it that way.
 	if !resolved.Timestamp.IsEmpty() && resolved.Timestamp.Less(cf.highWaterAtStart) {
-		log.ReportOrPanic(cf.Ctx, &cf.flowCtx.Settings.SV,
+		log.ReportOrPanic(cf.Ctx, &cf.flowCtx.Cfg.Settings.SV,
 			`got a span level timestamp %s for %s that is less than the initial high-water %s`,
 			log.Safe(resolved.Timestamp), resolved.Span, log.Safe(cf.highWaterAtStart))
 		return nil
@@ -594,8 +594,8 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 	// rangefeed is only checked at changefeed start/resume, so instead of
 	// switching on it here, just add them. Also add 1 second in case both these
 	// settings are set really low (as they are in unit tests).
-	pollInterval := changefeedPollInterval.Get(&cf.flowCtx.Settings.SV)
-	closedtsInterval := closedts.TargetDuration.Get(&cf.flowCtx.Settings.SV)
+	pollInterval := changefeedPollInterval.Get(&cf.flowCtx.Cfg.Settings.SV)
+	closedtsInterval := closedts.TargetDuration.Get(&cf.flowCtx.Cfg.Settings.SV)
 	slownessThreshold := time.Second + 10*(pollInterval+closedtsInterval)
 	frontier := cf.sf.Frontier()
 	now := timeutil.Now()

@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 func checkNumIn(inputs []exec.Operator, numIn int) error {
@@ -1268,7 +1268,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 							// Start a separate recording so that GetRecording will return
 							// the recordings for only the child spans containing stats.
 							ctx, span := tracing.ChildSpanSeparateRecording(ctx, "")
-							finishVectorizedStatsCollectors(ctx, flowCtx.testingKnobs.DeterministicStats, vscs, s.procIDs)
+							finishVectorizedStatsCollectors(ctx, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscs, s.procIDs)
 							return []distsqlpb.ProducerMetadata{{TraceData: tracing.GetRecording(span)}}
 						},
 					},
@@ -1295,7 +1295,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				vscq := append([]*exec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
 				outputStatsToTrace = func() {
 					finishVectorizedStatsCollectors(
-						ctx, flowCtx.testingKnobs.DeterministicStats, vscq, s.procIDs,
+						ctx, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscq, s.procIDs,
 					)
 				}
 			}
@@ -1507,7 +1507,7 @@ func (f *Flow) setupVectorizedFlow(ctx context.Context, acc *mon.BoundAccount) e
 	}
 	helper := &vectorizedFlowCreatorHelper{f: f}
 	creator := newVectorizedFlowCreator(
-		helper, recordingStats, &f.waitGroup, f.syncFlowConsumer, f.nodeDialer, f.id,
+		helper, recordingStats, &f.waitGroup, f.syncFlowConsumer, f.Cfg.NodeDialer, f.id,
 	)
 	return creator.setupFlow(ctx, &f.FlowCtx, f.spec.Processors, acc)
 }
@@ -1572,7 +1572,7 @@ func SupportsVectorized(
 		nil,           /* maxHist */
 		-1,            /* increment */
 		math.MaxInt64, /* noteworthy */
-		flowCtx.Settings,
+		flowCtx.Cfg.Settings,
 	)
 	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)

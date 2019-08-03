@@ -438,24 +438,12 @@ func (ds *ServerImpl) setupFlow(
 	}
 	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := FlowCtx{
-		Settings:       ds.Settings,
-		RuntimeStats:   ds.RuntimeStats,
 		AmbientContext: ds.AmbientContext,
-		stopper:        ds.Stopper,
+		Cfg:            &ds.ServerConfig,
 		id:             req.Flow.FlowID,
 		EvalCtx:        evalCtx,
-		nodeDialer:     ds.NodeDialer,
-		Gossip:         ds.Gossip,
 		txn:            txn,
-		ClientDB:       ds.DB,
-		executor:       ds.Executor,
-		LeaseManager:   ds.LeaseManager,
-		testingKnobs:   ds.TestingKnobs,
 		NodeID:         nodeID,
-		TempStorage:    ds.TempStorage,
-		BulkAdder:      ds.BulkAdder,
-		diskMonitor:    ds.DiskMonitor,
-		JobRegistry:    ds.JobRegistry,
 		traceKV:        req.TraceKV,
 		local:          localState.IsLocal,
 	}

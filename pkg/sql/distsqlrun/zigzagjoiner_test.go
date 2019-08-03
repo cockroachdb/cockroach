@@ -498,9 +498,9 @@ func TestZigzagJoiner(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(ctx)
 			flowCtx := FlowCtx{
-				EvalCtx:  &evalCtx,
-				Settings: st,
-				txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				EvalCtx: &evalCtx,
+				Cfg:     &ServerConfig{Settings: st},
+				txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 			}
 
 			out := &RowBuffer{}
@@ -561,9 +561,9 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		EvalCtx:  &evalCtx,
-		Settings: s.ClusterSettings(),
-		txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+		EvalCtx: &evalCtx,
+		Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
+		txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
