@@ -1313,16 +1313,30 @@ func execChangeReplicasTxn(
 // waiting for a second and final response from the recipient which indicates if
 // the snapshot was a success.
 //
+// `receiveSnapshot` takes the key-value pairs sent and creates three SSTs from
+// them for direct ingestion: one for the replicated range-ID local keys, one
+// for the range local keys, and one for the user keys. The reason it creates
+// three separate SSTs is to prevent overlaps with the memtable and existing
+// SSTs in RocksDB. Each of the SSTs also has a range deletion tombstone to
+// delete the existing in the range.
+//
 // Applying the snapshot: After the recipient has received the message
 // indicating it has all the data, it hands it all to
-// `(Store).processRaftSnapshotRequest` to be applied. First, this re-checks the
-// same things as `shouldAcceptSnapshotData` to make sure nothing has changed
-// while the snapshot was being transferred. It then guarantees that there is
-// either an initialized[3] replica or a `ReplicaPlaceholder`[4] to accept the
-// snapshot by creating a placeholder if necessary. Finally, a *Raft snapshot*
-// message is manually handed to the replica's Raft node (by calling
-// `stepRaftGroup` + `handleRaftReadyRaftMuLocked`), at which point the snapshot
-// has been applied.
+// `(Store).processRaftSnapshotRequest` to be applied. First, this re-checks
+// the same things as `shouldAcceptSnapshotData` to make sure nothing has
+// changed while the snapshot was being transferred. It then guarantees that
+// there is either an initialized[3] replica or a `ReplicaPlaceholder`[4] to
+// accept the snapshot by creating a placeholder if necessary. Finally, a *Raft
+// snapshot* message is manually handed to the replica's Raft node (by calling
+// `stepRaftGroup` + `handleRaftReadyRaftMuLocked`). During the application
+// process, several other SSTs may be created for direct ingestion. An SST for
+// the unreplicated range-ID local keys is created for the Raft entries, hard
+// state, and truncated state. An SST is created for deleting each subsumed
+// replica's range-ID local keys and at most two SSTs are created for deleting
+// the user keys and range local keys of all subsumed replicas. All in all, a
+// maximum of 6 + SR SSTs will be created for direct ingestion where SR is the
+// number of subsumed replicas. In the case where there are no subsumed
+// replicas, 4 SSTs will be created.
 //
 // [1]: There is a third kind of snapshot, called "preemptive", which is how we
 // avoided the above fragility before learner replicas were introduced in the
