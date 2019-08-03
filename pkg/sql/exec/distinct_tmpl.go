@@ -58,7 +58,7 @@ func OrderedDistinctColsToOperators(
 	if r, ok = input.(resettableOperator); !ok {
 		execerror.VectorizedInternalPanic("unexpectedly an ordered distinct is not a resetter")
 	}
-	distinctChain := distinctChainOps{
+	distinctChain := &distinctChainOps{
 		resettableOperator:         r,
 		estimatedStaticMemoryUsage: EstimateBatchSizeBytes([]coltypes.T{coltypes.Bool}, coldata.BatchSize),
 	}
