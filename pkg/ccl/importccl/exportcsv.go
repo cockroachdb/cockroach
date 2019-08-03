@@ -90,12 +90,6 @@ func exportPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, exportStmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "EXPORT",
-		); err != nil {
-			return err
-		}
-
 		if err := p.RequireAdminRole(ctx, "EXPORT"); err != nil {
 			return err
 		}
@@ -172,6 +166,16 @@ func newCSVWriterProcessor(
 	input distsqlrun.RowSource,
 	output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
+
+	if err := utilccl.CheckEnterpriseEnabled(
+		flowCtx.Cfg.Settings,
+		flowCtx.Cfg.ClusterID.Get(),
+		sql.ClusterOrganization.Get(&flowCtx.Cfg.Settings.SV),
+		"EXPORT",
+	); err != nil {
+		return nil, err
+	}
+
 	c := &csvWriter{
 		flowCtx:     flowCtx,
 		processorID: processorID,
