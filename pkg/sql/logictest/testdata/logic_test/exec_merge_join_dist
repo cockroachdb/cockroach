@@ -3,50 +3,59 @@
 # Regression test for #39317.
 
 statement ok
-CREATE TABLE l (a INT PRIMARY KEY)
+CREATE TABLE l (a INT PRIMARY KEY, b INT)
 
 statement ok
-CREATE TABLE r (a INT PRIMARY KEY)
+CREATE TABLE r (a INT PRIMARY KEY, b INT)
 
 statement ok
-INSERT INTO l VALUES (1), (2)
+INSERT INTO l VALUES (1, 10), (2, 20), (3, 30)
 
 statement ok
-INSERT INTO r VALUES (2), (3)
+INSERT INTO r VALUES (2, 200), (3, 300), (4, 400)
 
 statement ok
-ALTER TABLE l SPLIT AT VALUES (2)
+ALTER TABLE l SPLIT AT VALUES (2), (3)
 
 statement ok
-ALTER TABLE r SPLIT AT VALUES (2)
+ALTER TABLE r SPLIT AT VALUES (2), (3)
 
 statement ok
-ALTER TABLE l EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 2)
+ALTER TABLE l EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 2), (ARRAY[3], 3)
 
 statement ok
-ALTER TABLE r EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 2), (ARRAY[2], 1)
+ALTER TABLE r EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 2), (ARRAY[2], 3), (ARRAY[3], 1)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE l]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE l] ORDER BY lease_holder
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /2       {1}       1
-/2         NULL     {2}       2
+/2         /3       {2}       2
+/3         NULL     {3}       3
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE r]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE r] ORDER BY lease_holder
 ----
 start_key  end_key  replicas  lease_holder
-/2         NULL     {1}       1
-NULL       /2       {2}       2
+/2         /3       {1}       1
+/3         NULL     {2}       2
+NULL       /2       {3}       3
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk09rgzAYxu_7FPLusrEUjXWXwKCXDlq2Ojp3Gh5S884K1kgSYaX43Yc6aHXWtWxsN_Pn97zPkwd3kEmBC75BDewVKBBwISSQKxmh1lJV282lmXgH5hBIsrww1XZIIJIKge3AJCZFYBDwVYpL5AKVXWkJNDxJa-lcJRuuthMFBJ5znmlm2e7Idu1LCEsCsjCfsnu11dZac71u60wohGVIQBseIzC3JEfs7XWKTCqBCkVLKazI7670ZHxEFeNcJhkqe9z2FmxzZNbD9D6w_JdgurTm_mwBBFJ8M1cTenN9p5J43XwCAb8wzKrzHObfZxv_IFuP8YUcydz2uo_QO9prjaant-70t57-buv0qL2_aN39p9Z7bC1R5zLTeFKpThUMRYzNQ2lZqAiflIzqMc3Sr7n6TQVq05x6zWKW1Uf1L3c6TIdh2oWdQ9htwbQLu4PwbQt2uvD4jMxfJg_DdBj2zsoclhcfAQAA___49Nlj
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk8Fro0AUxu_7V8jbyy47QWfiXgYWvGQhYTeW1J6Kh4nzagTjyMwIDcH_vaiFVGtsQkt7c2be73vvex8eoVAS12KPBvg9UCDAICZQapWgMUo3113RUj4C9whkRVnZ5jomkCiNwI9gM5sjcIjENscNConabbQkWpHlrXSps73Qh0ADgdtSFIY7Lpu5zP0OcU1AVfZZ9qS2PTg7YXZ9nYBCXMcEjBUpAmc1OTPeSacqlJaoUfaU4oZ8q2TE43_UKa5UVqB25_3ZokOJ3Pm3-Bs54V202DircLkGAjk-2B8B_fXzj87SXfcJBMLKciegJGAk8AdbODmcv8PhyPhrNVOl6w9XMdra77Wml2fvjWeff2z29Ox4n5E9-9LsR4bboClVYfCiaL3GHsoUu3UZVekEb7RK2jbdMWy5drMSje1e_e6wLNqn9ve7HKbTMB3C3kuY9WA6hNkk_LsHe0N4foXnV52nYToN-1d5jutvTwEAAP__eVLb3w==
 
-query I
+query III
 SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2
 ----
-2
+2 20 200
 
+# Test that LEFT SEMI merge join outputs batches only with the columns from the
+# left side.
+query II rowsort
+SELECT * FROM l WHERE EXISTS(SELECT * FROM r WHERE r.a=l.a)
+----
+2  20
+3  30
