@@ -43,21 +43,51 @@ type ReplicaDataIterator struct {
 
 // MakeAllKeyRanges returns all key ranges for the given Range.
 func MakeAllKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
-	return makeReplicaKeyRanges(d, keys.MakeRangeIDPrefix)
+	return []KeyRange{
+		MakeRangeIDLocalKeyRange(d, false),
+		MakeRangeLocalKeyRange(d),
+		MakeUserKeyRange(d),
+	}
 }
 
-// MakeReplicatedKeyRanges returns all key ranges that are fully Raft replicated
-// for the given Range.
+// MakeReplicatedKeyRanges returns all key ranges that are fully Raft
+// replicated for the given Range. NOTE: The logic for receiving snapshot
+// relies on this function returning the ranges in a specific order.
 func MakeReplicatedKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
-	return makeReplicaKeyRanges(d, keys.MakeRangeIDReplicatedPrefix)
+	return []KeyRange{
+		MakeRangeIDLocalKeyRange(d, true),
+		MakeRangeLocalKeyRange(d),
+		MakeUserKeyRange(d),
+	}
 }
 
-// makeReplicaKeyRanges returns a slice of 3 key ranges. The last key range in
-// the returned slice corresponds to the actual range data (i.e. not the range
-// metadata).
-func makeReplicaKeyRanges(
-	d *roachpb.RangeDescriptor, metaFunc func(roachpb.RangeID) roachpb.Key,
-) []KeyRange {
+// MakeRangeIDLocalKeyRange returns the range-id local key range. If
+// replicatedOnly is true, then it returns only the replicated keys, otherwise,
+// it only returns both the replicated and unreplicated keys.
+func MakeRangeIDLocalKeyRange(d *roachpb.RangeDescriptor, replicatedOnly bool) KeyRange {
+	var prefixFn func(roachpb.RangeID) roachpb.Key
+	if replicatedOnly {
+		prefixFn = keys.MakeRangeIDReplicatedPrefix
+	} else {
+		prefixFn = keys.MakeRangeIDPrefix
+	}
+	sysRangeIDKey := prefixFn(d.RangeID)
+	return KeyRange{
+		Start: engine.MakeMVCCMetadataKey(sysRangeIDKey),
+		End:   engine.MakeMVCCMetadataKey(sysRangeIDKey.PrefixEnd()),
+	}
+}
+
+// MakeRangeLocalKeyRange returns the range local key range.
+func MakeRangeLocalKeyRange(d *roachpb.RangeDescriptor) KeyRange {
+	return KeyRange{
+		Start: engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.StartKey)),
+		End:   engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.EndKey)),
+	}
+}
+
+// MakeUserKeyRange returns the user key range.
+func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 	// The first range in the keyspace starts at KeyMin, which includes the
 	// node-local space. We need the original StartKey to find the range
 	// metadata, but the actual data starts at LocalMax.
@@ -65,20 +95,9 @@ func makeReplicaKeyRanges(
 	if d.StartKey.Equal(roachpb.RKeyMin) {
 		dataStartKey = keys.LocalMax
 	}
-	sysRangeIDKey := metaFunc(d.RangeID)
-	return []KeyRange{
-		{
-			Start: engine.MakeMVCCMetadataKey(sysRangeIDKey),
-			End:   engine.MakeMVCCMetadataKey(sysRangeIDKey.PrefixEnd()),
-		},
-		{
-			Start: engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.StartKey)),
-			End:   engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.EndKey)),
-		},
-		{
-			Start: engine.MakeMVCCMetadataKey(dataStartKey),
-			End:   engine.MakeMVCCMetadataKey(d.EndKey.AsRawKey()),
-		},
+	return KeyRange{
+		Start: engine.MakeMVCCMetadataKey(dataStartKey),
+		End:   engine.MakeMVCCMetadataKey(d.EndKey.AsRawKey()),
 	}
 }
 

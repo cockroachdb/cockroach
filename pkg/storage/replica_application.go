@@ -398,8 +398,14 @@ func (r *Replica) stageRaftCommand(
 		if err != nil {
 			log.Fatal(ctx, err)
 		}
-		const destroyData = false
-		err = rhsRepl.preDestroyRaftMuLocked(ctx, batch, batch, merge.RightDesc.NextReplicaID, destroyData)
+		err = rhsRepl.preDestroyRaftMuLocked(
+			ctx,
+			batch,
+			batch,
+			merge.RightDesc.NextReplicaID,
+			false, /* destroyData */
+			false, /* mustClearRange */
+		)
 		if err != nil {
 			log.Fatal(ctx, err)
 		}
