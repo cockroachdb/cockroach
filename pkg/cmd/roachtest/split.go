@@ -94,9 +94,9 @@ func registerLoadSplits(r *testRegistry) {
 				qpsThreshold:  100,      // 100 queries per second
 				minimumRanges: 1,        // We expect no splits so require only 1 range.
 				// We expect no splits so require only 1 range. However, in practice we
-				// sometimes see a split early in, presumably when the sampling gets
-				// lucky.
-				maximumRanges: 2,
+				// sometimes see a split or two early in, presumably when the sampling
+				// gets lucky.
+				maximumRanges: 3,
 				sequential:    true,
 				waitDuration:  60 * time.Second,
 			})
