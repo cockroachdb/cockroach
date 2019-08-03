@@ -113,10 +113,6 @@ type hashJoiner struct {
 		iter rowcontainer.RowIterator
 	}
 
-	// testingKnobMemFailPoint specifies a state in which the hashJoiner will
-	// fail at a random point during this phase.
-	testingKnobMemFailPoint hashJoinerState
-
 	// Context cancellation checker.
 	cancelChecker *sqlbase.CancelChecker
 }
@@ -172,8 +168,7 @@ func newHashJoiner(
 	st := h.flowCtx.Settings
 	ctx := h.flowCtx.EvalCtx.Ctx()
 	h.useTempStorage = settingUseTempStorageJoins.Get(&st.SV) ||
-		h.flowCtx.testingKnobs.MemoryLimitBytes > 0 ||
-		h.testingKnobMemFailPoint != hjStateUnknown
+		h.flowCtx.testingKnobs.MemoryLimitBytes > 0
 	if h.useTempStorage {
 		// Limit the memory use by creating a child monitor with a hard limit.
 		// The hashJoiner will overflow to disk if this limit is not enough.
