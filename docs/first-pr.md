@@ -636,4 +636,4 @@ Here's a checklist of action items to keep you sane:
 [this repository's wiki]: https://github.com/cockroachdb/cockroach/wiki/Jargon
 [by humans for humans]: https://mtlynch.io/human-code-reviews-1/
 [minimally nice maintainer]: https://brson.github.io/2017/04/05/minimally-nice-maintainer
-[Bors merge bot]: https://github.com/cockroachdb/cockroach/wiki/Bors-merge-bot
+[Bors merge bot]: https://wiki.crdb.io/wiki/spaces/CRDB/pages/73204099/Bors+Merge+Bot
