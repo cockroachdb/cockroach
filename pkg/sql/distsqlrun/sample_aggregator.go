@@ -160,7 +160,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 	jobID := s.spec.JobID
 	// Some tests run this code without a job, so check if the jobID is 0.
 	if jobID != 0 {
-		job, err = s.flowCtx.JobRegistry.LoadJob(ctx, s.spec.JobID)
+		job, err = s.flowCtx.Cfg.JobRegistry.LoadJob(ctx, s.spec.JobID)
 		if err != nil {
 			return false, err
 		}
@@ -292,7 +292,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// internal executor instead of doing this weird thing where it uses the
 	// internal executor to execute one statement at a time inside a db.Txn()
 	// closure.
-	if err := s.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := s.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for _, si := range s.sketches {
 			distinctCount := int64(si.sketch.Estimate())
 			var histogram *stats.HistogramData
@@ -323,7 +323,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			// Delete old stats that have been superseded.
 			if err := stats.DeleteOldStatsForColumns(
 				ctx,
-				s.flowCtx.executor,
+				s.flowCtx.Cfg.Executor,
 				txn,
 				s.tableID,
 				columnIDs,
@@ -334,7 +334,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			// Insert the new stat.
 			if err := stats.InsertNewStat(
 				ctx,
-				s.flowCtx.executor,
+				s.flowCtx.Cfg.Executor,
 				txn,
 				s.tableID,
 				si.spec.StatName,
@@ -354,7 +354,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	}
 
 	// Gossip invalidation of the stat caches for this table.
-	return stats.GossipTableStatAdded(s.flowCtx.Gossip, s.tableID)
+	return stats.GossipTableStatAdded(s.flowCtx.Cfg.Gossip, s.tableID)
 }
 
 // generateHistogram returns a histogram (on a given column) from a set of

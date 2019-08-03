@@ -396,8 +396,8 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(ctx)
 			flowCtx := FlowCtx{
-				EvalCtx:  &evalCtx,
-				Settings: s.ClusterSettings(),
+				EvalCtx: &evalCtx,
+				Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
 				// Run in a RootTxn so that there's no txn metadata produced.
 				txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				NodeID: s.NodeID(),
@@ -526,8 +526,8 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(ctx)
 			flowCtx := FlowCtx{
-				EvalCtx:  &evalCtx,
-				Settings: s.ClusterSettings(),
+				EvalCtx: &evalCtx,
+				Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
 				// Run in a RootTxn so that there's no txn metadata produced.
 				txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				NodeID: s.NodeID(),
@@ -584,8 +584,8 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	defer sp.Finish()
 
 	flowCtx := FlowCtx{
-		EvalCtx:  &evalCtx,
-		Settings: s.ClusterSettings(),
+		EvalCtx: &evalCtx,
+		Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
 		// Run in a LeafTxn so that txn metadata is produced.
 		txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn),
 		NodeID: s.NodeID(),

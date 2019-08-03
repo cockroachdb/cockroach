@@ -382,9 +382,9 @@ func TestJoinReader(t *testing.T) {
 				evalCtx := tree.MakeTestingEvalContext(st)
 				defer evalCtx.Stop(ctx)
 				flowCtx := FlowCtx{
-					EvalCtx:  &evalCtx,
-					Settings: st,
-					txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+					EvalCtx: &evalCtx,
+					Cfg:     &ServerConfig{Settings: st},
+					txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				}
 				encRows := make(sqlbase.EncDatumRows, len(c.input))
 				for rowIdx, row := range c.input {
@@ -474,9 +474,9 @@ func TestJoinReaderDrain(t *testing.T) {
 	defer sp.Finish()
 
 	flowCtx := FlowCtx{
-		EvalCtx:  &evalCtx,
-		Settings: s.ClusterSettings(),
-		txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn),
+		EvalCtx: &evalCtx,
+		Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
+		txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn),
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
@@ -565,9 +565,9 @@ func BenchmarkJoinReader(b *testing.B) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := FlowCtx{
-		EvalCtx:  &evalCtx,
-		Settings: s.ClusterSettings(),
-		txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+		EvalCtx: &evalCtx,
+		Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
+		txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 	}
 
 	const numCols = 2
