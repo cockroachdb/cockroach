@@ -412,6 +412,7 @@ type Store struct {
 	raftEntryCache     *raftentry.Cache
 	limiters           batcheval.Limiters
 	txnWaitMetrics     *txnwait.Metrics
+	sss                SSTSnapshotStorage
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -865,6 +866,9 @@ func NewStore(
 	s.limiters.ConcurrentExportRequests = limit.MakeConcurrentRequestLimiter(
 		"exportRequestLimiter", int(ExportRequestsLimit.Get(&cfg.Settings.SV)),
 	)
+
+	s.sss = NewSSTSnapshotStorage(s.engine, s.limiters.BulkIOWriteRate)
+
 	// On low-CPU instances, a default limit value may still allow ExportRequests
 	// to tie up all cores so cap limiter at cores-1 when setting value is higher.
 	exportCores := runtime.NumCPU() - 1

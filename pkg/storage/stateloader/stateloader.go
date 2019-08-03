@@ -541,13 +541,13 @@ func (rsl StateLoader) LoadRaftTruncatedState(
 
 // SetRaftTruncatedState overwrites the truncated state.
 func (rsl StateLoader) SetRaftTruncatedState(
-	ctx context.Context, eng engine.ReadWriter, truncState *roachpb.RaftTruncatedState,
+	ctx context.Context, eng engine.Writer, truncState *roachpb.RaftTruncatedState,
 ) error {
 	if (*truncState == roachpb.RaftTruncatedState{}) {
 		return errors.New("cannot persist empty RaftTruncatedState")
 	}
-	return engine.MVCCPutProto(ctx, eng, nil, /* ms */
-		rsl.RaftTruncatedStateKey(), hlc.Timestamp{}, nil, truncState)
+	return engine.MVCCBlindPutProto(ctx, eng, nil, /* ms */
+		rsl.RaftTruncatedStateKey(), hlc.Timestamp{}, truncState, nil)
 }
 
 // LoadHardState loads the HardState.
@@ -566,10 +566,10 @@ func (rsl StateLoader) LoadHardState(
 
 // SetHardState overwrites the HardState.
 func (rsl StateLoader) SetHardState(
-	ctx context.Context, batch engine.ReadWriter, st raftpb.HardState,
+	ctx context.Context, batch engine.Writer, st raftpb.HardState,
 ) error {
-	return engine.MVCCPutProto(ctx, batch, nil,
-		rsl.RaftHardStateKey(), hlc.Timestamp{}, nil, &st)
+	return engine.MVCCBlindPutProto(ctx, batch, nil, /* ms */
+		rsl.RaftHardStateKey(), hlc.Timestamp{}, &st, nil)
 }
 
 // SynthesizeRaftState creates a Raft state which synthesizes both a HardState
