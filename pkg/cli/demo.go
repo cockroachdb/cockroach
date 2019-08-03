@@ -39,7 +39,9 @@ var demoCmd = &cobra.Command{
 Start an in-memory, standalone, single-node CockroachDB instance, and open an
 interactive SQL prompt to it. Various datasets are available to be preloaded as
 subcommands: e.g. "cockroach demo startrek". See --help for a full list.
-`,
+
+By default, the 'movr' dataset is pre-loaded. You can also use --empty
+to avoid pre-loading a dataset.`,
 	Example: `  cockroach demo`,
 	Args:    cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(func(cmd *cobra.Command, _ []string) error {
@@ -47,9 +49,20 @@ subcommands: e.g. "cockroach demo startrek". See --help for a full list.
 	}),
 }
 
+const defaultGeneratorName = "movr"
+
+var defaultGenerator workload.Generator
+
 func init() {
 	for _, meta := range workload.Registered() {
 		gen := meta.New()
+
+		if meta.Name == defaultGeneratorName {
+			// Save the default for use in the top-level 'demo' command
+			// without argument.
+			defaultGenerator = gen
+		}
+
 		var genFlags *pflag.FlagSet
 		if f, ok := gen.(workload.Flagser); ok {
 			genFlags = f.Flags().FlagSet
@@ -168,6 +181,11 @@ func setupTransientServers(
 }
 
 func runDemo(cmd *cobra.Command, gen workload.Generator) error {
+	if gen == nil && !demoCtx.useEmptyDatabase {
+		// Use a default dataset unless prevented by --empty.
+		gen = defaultGenerator
+	}
+
 	connURL, adminURL, cleanup, err := setupTransientServers(cmd, gen)
 	defer cleanup()
 	if err != nil {
