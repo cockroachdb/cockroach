@@ -214,3 +214,10 @@ var SequenceSelectColumns = ResultColumns{
 	{Name: `log_cnt`, Typ: types.Int},
 	{Name: `is_called`, Typ: types.Bool},
 }
+
+// ExportColumns are the result columns of an EXPORT statement.
+var ExportColumns = ResultColumns{
+	{Name: "filename", Typ: types.String},
+	{Name: "rows", Typ: types.Int},
+	{Name: "bytes", Typ: types.Int},
+}

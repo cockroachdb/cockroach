@@ -348,3 +348,9 @@ func (f *stubFactory) ConstructCreateView(
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructExport(
+	input exec.Node, fileName tree.TypedExpr, fileFormat string, options []exec.KVOption,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}
