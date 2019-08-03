@@ -99,6 +99,8 @@ type mergeJoin_JOIN_TYPE_STRINGOp struct {
 	mergeJoinBase
 }
 
+var _ StaticMemoryOperator = &mergeJoin_JOIN_TYPE_STRINGOp{}
+
 // {{ end }}
 
 // {{/*
