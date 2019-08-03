@@ -12,6 +12,7 @@ package exec
 
 import (
 	"context"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -323,24 +324,40 @@ type mergeJoinBase struct {
 	builderState mjBuilderState
 }
 
+func (o *mergeJoinBase) getOutColTypes() []coltypes.T {
+	if len(o.right.outCols) == 0 {
+		// We do not have output columns from the right input in case of LEFT SEMI
+		// and LEFT ANTI joins, and we should not have the corresponding columns in
+		// the output batch, so we simply return the types of the left input.
+		return o.left.sourceTypes
+	}
+	return append(o.left.sourceTypes, o.right.sourceTypes...)
+}
+
+func (o *mergeJoinBase) EstimateStaticMemoryUsage() int {
+	const sizeOfGroup = int(unsafe.Sizeof(group{}))
+	leftDistincter := o.left.distincter.(StaticMemoryOperator)
+	rightDistincter := o.right.distincter.(StaticMemoryOperator)
+	return EstimateBatchSizeBytes(
+		o.getOutColTypes(), coldata.BatchSize,
+	) + // base.output
+		EstimateBatchSizeBytes(
+			o.left.sourceTypes, coldata.BatchSize,
+		) + // base.proberState.lBufferedGroup
+		EstimateBatchSizeBytes(
+			o.right.sourceTypes, coldata.BatchSize,
+		) + // base.proberState.rBufferedGroup
+		4*sizeOfGroup*coldata.BatchSize + // base.groups
+		leftDistincter.EstimateStaticMemoryUsage() + // base.left.distincter
+		rightDistincter.EstimateStaticMemoryUsage() // base.right.distincter
+}
+
 func (o *mergeJoinBase) Init() {
 	o.initWithBatchSize(coldata.BatchSize)
 }
 
 func (o *mergeJoinBase) initWithBatchSize(outBatchSize uint16) {
-	outColTypes := make([]coltypes.T, len(o.left.sourceTypes)+len(o.right.sourceTypes))
-	copy(outColTypes, o.left.sourceTypes)
-	if len(o.right.outCols) == 0 {
-		// We do not have output columns from the right input in case of LEFT SEMI
-		// and LEFT ANTI joins, and we should not have the corresponding columns in
-		// the output batch, so we only have the types from the left input in
-		// outColTypes.
-		outColTypes = outColTypes[:len(o.left.sourceTypes)]
-	} else {
-		copy(outColTypes[len(o.left.sourceTypes):], o.right.sourceTypes)
-	}
-
-	o.output = coldata.NewMemBatchWithSize(outColTypes, int(outBatchSize))
+	o.output = coldata.NewMemBatchWithSize(o.getOutColTypes(), int(outBatchSize))
 	o.left.source.Init()
 	o.right.source.Init()
 	o.outputBatchSize = outBatchSize

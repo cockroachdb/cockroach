@@ -319,6 +319,16 @@ message MergeJoinerSpec {
   // This allows OUTER JOINs to consider NULL values meaningfully. An
   // example of this is during SCRUB checks on secondary indexes.
   optional bool null_equality = 7 [(gogoproto.nullable) = false];
+
+  // If true, it is guaranteed that the left equality columns form a key for
+  // the left input. In other words, no two rows from the left input have the
+  // same set of values on the left equality columns.
+  optional bool left_eq_columns_are_key = 8 [(gogoproto.nullable) = false];
+
+  // If true, it is guaranteed that the right equality columns form a key for
+  // the right input. In other words, no two rows from the right input have the
+  // same set of values on the right equality columns.
+  optional bool right_eq_columns_are_key = 9 [(gogoproto.nullable) = false];
 }
 
 // HashJoinerSpec is the specification for a hash join processor. The processor
