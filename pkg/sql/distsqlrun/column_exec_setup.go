@@ -378,9 +378,6 @@ func newColOperator(
 		}
 
 	case core.MergeJoiner != nil:
-		// TODO(yuzefovich): merge joiner is streaming when both input sources are
-		// unique. We probably need to propagate that information from the
-		// optimizer.
 		if err := checkNumIn(inputs, 2); err != nil {
 			return result, err
 		}
@@ -456,6 +453,10 @@ func newColOperator(
 			}
 			columnTypes, err = result.planFilterExpr(flowCtx, core.MergeJoiner.OnExpr, columnTypes)
 		}
+
+		// Merge joiner is a streaming operator when equality columns form a key
+		// for both of the inputs.
+		result.isStreaming = core.MergeJoiner.LeftEqColumnsAreKey && core.MergeJoiner.RightEqColumnsAreKey
 
 	case core.JoinReader != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
@@ -1458,6 +1459,13 @@ func (s *vectorizedFlowCreator) setupFlow(
 			op = vsc
 		}
 
+		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto &&
+			pspec.Output[0].Type == distsqlpb.OutputRouterSpec_BY_HASH {
+			// exec.HashRouter can do unlimited buffering, and it is present in the
+			// flow, so we don't want to run such a flow via the vectorized engine
+			// when vectorize=auto.
+			return nil, errors.Errorf("hash router encountered when vectorize=auto")
+		}
 		if err = s.setupOutput(
 			ctx, flowCtx, pspec, op, result.outputTypes, metadataSourcesQueue,
 		); err != nil {

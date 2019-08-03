@@ -12,6 +12,7 @@ package exec
 
 import (
 	"context"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
@@ -295,6 +296,8 @@ func newMergeJoinBase(
 	base.right.distincterInput = &feedOperator{}
 	base.right.distincter, base.right.distinctOutput, err = OrderedDistinctColsToOperators(
 		base.right.distincterInput, rEqCols, rightTypes)
+
+	base.estimateStaticMemoryUsage()
 	return base, err
 }
 
@@ -318,6 +321,30 @@ type mergeJoinBase struct {
 	state        mjState
 	proberState  mjProberState
 	builderState mjBuilderState
+
+	estimatedStaticMemoryUsage int
+}
+
+func (o *mergeJoinBase) estimateStaticMemoryUsage() {
+	const sizeOfGroup = int(unsafe.Sizeof(group{}))
+	leftDistincter := o.left.distincter.(StaticMemoryOperator)
+	rightDistincter := o.right.distincter.(StaticMemoryOperator)
+	o.estimatedStaticMemoryUsage =
+		// TODO(yuzefovich): the first addendum is an overestimation in case of
+		// LEFT SEMI and LEFT ANTI joins. Update this once the bug about the output
+		// columns is fixed.
+		EstimateBatchSizeBytes(
+			append(o.left.sourceTypes, o.right.sourceTypes...), coldata.BatchSize,
+		) + // base.output
+			EstimateBatchSizeBytes(
+				o.left.sourceTypes, coldata.BatchSize,
+			) + // base.proberState.lBufferedGroup
+			EstimateBatchSizeBytes(
+				o.right.sourceTypes, coldata.BatchSize,
+			) + // base.proberState.rBufferedGroup
+			4*sizeOfGroup*coldata.BatchSize + // base.groups
+			leftDistincter.EstimateStaticMemoryUsage() + // base.left.distincter
+			rightDistincter.EstimateStaticMemoryUsage() // base.right.distincter
 }
 
 func (o *mergeJoinBase) Init() {

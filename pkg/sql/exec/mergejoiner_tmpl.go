@@ -94,6 +94,12 @@ type mergeJoin_JOIN_TYPE_STRINGOp struct {
 	mergeJoinBase
 }
 
+var _ StaticMemoryOperator = &mergeJoin_JOIN_TYPE_STRINGOp{}
+
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) EstimateStaticMemoryUsage() int {
+	return o.estimatedStaticMemoryUsage
+}
+
 // {{ end }}
 
 // {{/*
