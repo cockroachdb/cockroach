@@ -14,7 +14,9 @@ end_test
 
 
 # Make a server with a tiny log buffer so as to force frequent log rotation.
-system "mkfifo url_fifo || true; $argv start-single-node --insecure --pid-file=server_pid --listening-url-file=url_fifo --background -s=path=logs/db --log-file-max-size=2k >>logs/expect-cmd.log 2>&1 & cat url_fifo > server_url"
+system "$argv start-single-node --insecure --pid-file=server_pid --background -s=path=logs/db --log-file-max-size=2k >>logs/expect-cmd.log 2>&1;
+        $argv sql --insecure -e 'select 1'"
+# Stop the server, which also flushes and closes the log files.
 stop_server $argv
 
 start_test "Check that the cluster ID is reported at the start of new log files."
