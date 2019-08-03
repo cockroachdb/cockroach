@@ -195,7 +195,8 @@ func NewMergeJoinOp(
 	leftOrdering []distsqlpb.Ordering_Column,
 	rightOrdering []distsqlpb.Ordering_Column,
 ) (Operator, error) {
-	base, err := newMergeJoinBase(left, right, leftOutCols, rightOutCols, leftTypes, rightTypes, leftOrdering, rightOrdering)
+	isLeftSemiAnti := joinType == sqlbase.JoinType_LEFT_SEMI || joinType == sqlbase.JoinType_LEFT_ANTI
+	base, err := newMergeJoinBase(isLeftSemiAnti, left, right, leftOutCols, rightOutCols, leftTypes, rightTypes, leftOrdering, rightOrdering)
 	switch joinType {
 	case sqlbase.JoinType_INNER:
 		return &mergeJoinInnerOp{base}, err
@@ -245,6 +246,7 @@ func (s *mjBuilderCrossProductState) setBuilderColumnState(target mjBuilderCross
 }
 
 func newMergeJoinBase(
+	isLeftSemiAnti bool,
 	left Operator,
 	right Operator,
 	leftOutCols []uint32,
@@ -269,7 +271,8 @@ func newMergeJoinBase(
 	}
 
 	base := mergeJoinBase{
-		twoInputNode: newTwoInputNode(left, right),
+		twoInputNode:   newTwoInputNode(left, right),
+		isLeftSemiAnti: isLeftSemiAnti,
 		left: mergeJoinInput{
 			source:      left,
 			outCols:     leftOutCols,
@@ -304,6 +307,8 @@ type mergeJoinBase struct {
 	left  mergeJoinInput
 	right mergeJoinInput
 
+	isLeftSemiAnti bool
+
 	// Output buffer definition.
 	output            coldata.Batch
 	needToResetOutput bool
@@ -327,7 +332,11 @@ func (o *mergeJoinBase) Init() {
 func (o *mergeJoinBase) initWithBatchSize(outBatchSize uint16) {
 	outColTypes := make([]types.T, len(o.left.sourceTypes)+len(o.right.sourceTypes))
 	copy(outColTypes, o.left.sourceTypes)
-	copy(outColTypes[len(o.left.sourceTypes):], o.right.sourceTypes)
+	if o.isLeftSemiAnti {
+		outColTypes = outColTypes[:len(o.left.sourceTypes)]
+	} else {
+		copy(outColTypes[len(o.left.sourceTypes):], o.right.sourceTypes)
+	}
 
 	o.output = coldata.NewMemBatchWithSize(outColTypes, int(outBatchSize))
 	o.left.source.Init()

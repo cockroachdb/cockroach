@@ -48,6 +48,8 @@ const (
 // combined left and right output columns.
 
 type hashJoinerSpec struct {
+	// TODO(yuzefovich): update this when LEFT ANTI is supported.
+	isLeftSemi bool
 	// left and right are the specifications of the two input table sources to
 	// the hash joiner.
 	left  hashJoinerSourceSpec
@@ -239,6 +241,7 @@ func (hj *hashJoinEqOp) Init() {
 		hj.ht, probe, build,
 		hj.spec.buildRightSide,
 		hj.spec.buildDistinct,
+		hj.spec.isLeftSemi,
 	)
 
 	hj.runningState = hjBuilding
@@ -738,6 +741,7 @@ func makeHashJoinProber(
 	build hashJoinerSourceSpec,
 	buildRightSide bool,
 	buildDistinct bool,
+	isLeftSemi bool,
 ) *hashJoinProber {
 	// Prepare the output batch by allocating with the correct column types.
 	nBuildCols := uint32(len(build.sourceTypes))
@@ -745,10 +749,17 @@ func makeHashJoinProber(
 	var outColTypes []types.T
 	var buildColOffset, probeColOffset uint32
 	if buildRightSide {
-		outColTypes = append(probe.sourceTypes, build.sourceTypes...)
+		if isLeftSemi {
+			outColTypes = probe.sourceTypes
+		} else {
+			outColTypes = append(probe.sourceTypes, build.sourceTypes...)
+		}
 		buildColOffset = uint32(len(probe.sourceTypes))
 		probeColOffset = 0
 	} else {
+		if isLeftSemi {
+			panic("hash joiner is building left side with LEFT SEMI join type")
+		}
 		outColTypes = append(build.sourceTypes, probe.sourceTypes...)
 		buildColOffset = 0
 		probeColOffset = nBuildCols
@@ -1029,6 +1040,7 @@ func NewEqHashJoinerOp(
 	joinType sqlbase.JoinType,
 ) (Operator, error) {
 	var leftOuter, rightOuter bool
+	var isLeftSemi bool
 	switch joinType {
 	case sqlbase.JoinType_INNER:
 	case sqlbase.JoinType_RIGHT_OUTER:
@@ -1048,6 +1060,7 @@ func NewEqHashJoinerOp(
 		// conditions just yet. When we do, we'll have a separate case for that.
 		buildRightSide = true
 		buildDistinct = true
+		isLeftSemi = true
 		if len(rightOutCols) != 0 {
 			return nil, errors.Errorf("semi-join can't have right-side output columns")
 		}
@@ -1056,6 +1069,7 @@ func NewEqHashJoinerOp(
 	}
 
 	spec := hashJoinerSpec{
+		isLeftSemi: isLeftSemi,
 		left: hashJoinerSourceSpec{
 			eqCols:      leftEqCols,
 			outCols:     leftOutCols,
