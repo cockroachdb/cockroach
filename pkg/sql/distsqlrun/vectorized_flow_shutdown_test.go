@@ -144,8 +144,8 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				evalCtx := tree.MakeTestingEvalContext(st)
 				defer evalCtx.Stop(ctxLocal)
 				flowCtx := &FlowCtx{
-					EvalCtx:  &evalCtx,
-					Settings: st,
+					EvalCtx: &evalCtx,
+					Cfg:     &ServerConfig{Settings: st},
 				}
 
 				rng, _ := randutil.NewPseudoRand()
