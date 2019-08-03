@@ -492,6 +492,9 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 	case *windowNode:
 		return dsp.checkSupportForNode(n.plan)
 
+	case *exportNode:
+		return dsp.checkSupportForNode(n.source)
+
 	default:
 		return cannotDistribute, newQueryNotSupportedErrorf("unsupported node %T", node)
 	}
@@ -2412,6 +2415,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	case *windowNode:
 		plan, err = dsp.createPlanForWindow(planCtx, n)
 
+	case *exportNode:
+		plan, err = dsp.createPlanForExport(planCtx, n)
+
 	default:
 		// Can't handle a node? We wrap it and continue on our way.
 		plan, err = dsp.wrapPlan(planCtx, n)
@@ -3252,6 +3258,36 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 		plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(plan.ResultTypes))
 	}
 
+	return plan, nil
+}
+
+// createPlanForExport creates a physical plan for EXPORT.
+// We add a new stage of CSVWriter processors to the input plan.
+func (dsp *DistSQLPlanner) createPlanForExport(
+	planCtx *PlanningCtx, n *exportNode,
+) (PhysicalPlan, error) {
+	plan, err := dsp.createPlanForNode(planCtx, n.source)
+	if err != nil {
+		return PhysicalPlan{}, err
+	}
+
+	core := distsqlpb.ProcessorCoreUnion{CSVWriter: &distsqlpb.CSVWriterSpec{
+		Destination: n.fileName,
+		NamePattern: exportFilePatternDefault,
+		Options:     n.csvOpts,
+		ChunkRows:   int64(n.chunkSize),
+	}}
+
+	resTypes := make([]types.T, len(sqlbase.ExportColumns))
+	for i := range sqlbase.ExportColumns {
+		resTypes[i] = *sqlbase.ExportColumns[i].Typ
+	}
+	plan.AddNoGroupingStage(
+		core, distsqlpb.PostProcessSpec{}, resTypes, distsqlpb.Ordering{},
+	)
+
+	// The CSVWriter produces the same columns as the EXPORT statement.
+	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(sqlbase.ExportColumns))
 	return plan, nil
 }
 

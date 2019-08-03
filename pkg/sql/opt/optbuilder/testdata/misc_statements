@@ -140,3 +140,47 @@ build
 CANCEL QUERIES VALUES (1, 2)
 ----
 error (42601): too many columns in CANCEL QUERIES data
+
+build
+EXPORT INTO CSV 'nodelocal://foo' FROM SELECT * FROM ab
+----
+export
+ ├── columns: filename:4(string) rows:5(int) bytes:6(int)
+ ├── format: CSV
+ ├── project
+ │    ├── columns: a:1(int) b:2(string)
+ │    └── scan ab
+ │         └── columns: a:1(int) b:2(string) rowid:3(int!null)
+ └── const: 'nodelocal://foo' [type=string]
+
+build
+EXPORT INTO CSV 'nodelocal://foo' WITH 'foo', 'bar'='baz' FROM SELECT * FROM ab
+----
+export
+ ├── columns: filename:4(string) rows:5(int) bytes:6(int)
+ ├── format: CSV
+ ├── project
+ │    ├── columns: a:1(int) b:2(string)
+ │    └── scan ab
+ │         └── columns: a:1(int) b:2(string) rowid:3(int!null)
+ ├── const: 'nodelocal://foo' [type=string]
+ └── k-v-options
+      ├── k-v-options-item foo
+      │    └── null [type=string]
+      └── k-v-options-item bar
+           └── const: 'baz' [type=string]
+
+build
+EXPORT INTO CSV 'nodelocal://foo' WITH 'foo' = $1 FROM SELECT * FROM ab
+----
+export
+ ├── columns: filename:4(string) rows:5(int) bytes:6(int)
+ ├── format: CSV
+ ├── project
+ │    ├── columns: a:1(int) b:2(string)
+ │    └── scan ab
+ │         └── columns: a:1(int) b:2(string) rowid:3(int!null)
+ ├── const: 'nodelocal://foo' [type=string]
+ └── k-v-options
+      └── k-v-options-item foo
+           └── placeholder: $1 [type=string]

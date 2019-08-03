@@ -119,6 +119,7 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *dropTableNode:
 	case *dropViewNode:
 	case *errorIfRowsNode:
+	case *exportNode:
 	case *explainDistSQLNode:
 	case *hookFnNode:
 	case *relocateNode:

@@ -273,6 +273,9 @@ func (b *Builder) buildStmt(
 	case *tree.CancelSessions:
 		return b.buildCancelSessions(stmt, inScope)
 
+	case *tree.Export:
+		return b.buildExport(stmt, inScope)
+
 	default:
 		// See if this statement can be rewritten to another statement using the
 		// delegate functionality.

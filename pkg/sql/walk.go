@@ -659,6 +659,12 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			v.observer.attr(name, "label", n.label)
 		}
 		n.plan = v.visit(n.plan)
+
+	case *exportNode:
+		if v.observer.attr != nil {
+			v.observer.attr(name, "destination", n.fileName)
+		}
+		n.source = v.visit(n.source)
 	}
 }
 
@@ -777,6 +783,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&errorIfRowsNode{}):          "error if rows",
 	reflect.TypeOf(&explainDistSQLNode{}):       "explain distsql",
 	reflect.TypeOf(&explainPlanNode{}):          "explain plan",
+	reflect.TypeOf(&exportNode{}):               "export",
 	reflect.TypeOf(&filterNode{}):               "filter",
 	reflect.TypeOf(&groupNode{}):                "group",
 	reflect.TypeOf(&hookFnNode{}):               "plugin",

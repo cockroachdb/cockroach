@@ -9,7 +9,6 @@ stmt ::=
 	| execute_stmt
 	| deallocate_stmt
 	| discard_stmt
-	| export_stmt
 	| grant_stmt
 	| prepare_stmt
 	| revoke_stmt
@@ -33,6 +32,7 @@ preparable_stmt ::=
 	| reset_stmt
 	| restore_stmt
 	| resume_stmt
+	| export_stmt
 	| scrub_stmt
 	| select_stmt
 	| preparable_set_stmt
@@ -60,9 +60,6 @@ deallocate_stmt ::=
 
 discard_stmt ::=
 	'DISCARD' 'ALL'
-
-export_stmt ::=
-	'EXPORT' 'INTO' import_format string_or_placeholder opt_with_options 'FROM' select_stmt
 
 grant_stmt ::=
 	'GRANT' privileges 'ON' targets 'TO' name_list
@@ -152,6 +149,9 @@ resume_stmt ::=
 	'RESUME' 'JOB' a_expr
 	| 'RESUME' 'JOBS' select_stmt
 
+export_stmt ::=
+	'EXPORT' 'INTO' import_format string_or_placeholder opt_with_options 'FROM' select_stmt
+
 scrub_stmt ::=
 	scrub_table_stmt
 	| scrub_database_stmt
@@ -228,18 +228,6 @@ name ::=
 	| unreserved_keyword
 	| col_name_keyword
 
-import_format ::=
-	name
-
-string_or_placeholder ::=
-	non_reserved_word_or_sconst
-	| 'PLACEHOLDER'
-
-opt_with_options ::=
-	'WITH' kv_option_list
-	| 'WITH' 'OPTIONS' '(' kv_option_list ')'
-	| 
-
 privileges ::=
 	'ALL'
 	| privilege_list
@@ -296,12 +284,21 @@ alter_ddl_stmt ::=
 alter_user_stmt ::=
 	alter_user_password_stmt
 
+string_or_placeholder ::=
+	non_reserved_word_or_sconst
+	| 'PLACEHOLDER'
+
 opt_as_of_clause ::=
 	as_of_clause
 	| 
 
 opt_incremental ::=
 	'INCREMENTAL' 'FROM' string_or_placeholder_list
+	| 
+
+opt_with_options ::=
+	'WITH' kv_option_list
+	| 'WITH' 'OPTIONS' '(' kv_option_list ')'
 	| 
 
 cancel_jobs_stmt ::=
@@ -383,6 +380,9 @@ drop_user_stmt ::=
 
 explain_option_list ::=
 	( explain_option_name ) ( ( ',' explain_option_name ) )*
+
+import_format ::=
+	name
 
 string_or_placeholder_list ::=
 	( string_or_placeholder ) ( ( ',' string_or_placeholder ) )*
@@ -865,13 +865,6 @@ col_name_keyword ::=
 	| 'VIRTUAL'
 	| 'WORK'
 
-non_reserved_word_or_sconst ::=
-	non_reserved_word
-	| 'SCONST'
-
-kv_option_list ::=
-	( kv_option ) ( ( ',' kv_option ) )*
-
 complex_table_pattern ::=
 	complex_db_object_name
 	| db_object_name_component '.' unrestricted_name '.' '*'
@@ -949,6 +942,13 @@ alter_range_stmt ::=
 alter_user_password_stmt ::=
 	'ALTER' 'USER' string_or_placeholder 'WITH' 'PASSWORD' string_or_placeholder
 	| 'ALTER' 'USER' 'IF' 'EXISTS' string_or_placeholder 'WITH' 'PASSWORD' string_or_placeholder
+
+non_reserved_word_or_sconst ::=
+	non_reserved_word
+	| 'SCONST'
+
+kv_option_list ::=
+	( kv_option ) ( ( ',' kv_option ) )*
 
 opt_password ::=
 	opt_with 'PASSWORD' string_or_placeholder
@@ -1204,18 +1204,6 @@ unrestricted_name ::=
 	| type_func_name_keyword
 	| reserved_keyword
 
-non_reserved_word ::=
-	'identifier'
-	| unreserved_keyword
-	| col_name_keyword
-	| type_func_name_keyword
-
-kv_option ::=
-	name '=' string_or_placeholder
-	| name
-	| 'SCONST' '=' string_or_placeholder
-	| 'SCONST'
-
 transaction_mode ::=
 	transaction_user_priority
 	| transaction_read_mode
@@ -1293,6 +1281,18 @@ alter_zone_database_stmt ::=
 
 alter_zone_range_stmt ::=
 	'ALTER' 'RANGE' zone_name set_zone_config
+
+non_reserved_word ::=
+	'identifier'
+	| unreserved_keyword
+	| col_name_keyword
+	| type_func_name_keyword
+
+kv_option ::=
+	name '=' string_or_placeholder
+	| name
+	| 'SCONST' '=' string_or_placeholder
+	| 'SCONST'
 
 opt_with ::=
 	'WITH'
