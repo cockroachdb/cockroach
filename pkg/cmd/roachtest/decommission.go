@@ -344,10 +344,10 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	// versions of cockroach (versions pre commit 888813c, which
 	// extends the node status command to include locality information).
 	statusHeaderWithLocality := []string{
-		"id", "address", "build", "started_at", "updated_at", "locality", "is_available", "is_live",
+		"id", "address", "sql_address", "build", "started_at", "updated_at", "locality", "is_available", "is_live",
 	}
 	statusHeaderNoLocality := []string{
-		"id", "address", "build", "started_at", "updated_at", "is_available", "is_live",
+		"id", "address", "sql_address", "build", "started_at", "updated_at", "is_available", "is_live",
 	}
 	getStatusCsvOutput := func(ids []string, numCols int) [][]string {
 		var res [][]string

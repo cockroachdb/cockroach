@@ -68,7 +68,6 @@ type cliTestParams struct {
 	noServer   bool
 	storeSpecs []base.StoreSpec
 	locality   roachpb.Locality
-	addr       string
 }
 
 func (c *cliTest) fail(err interface{}) {
@@ -132,14 +131,14 @@ func newCLITest(params cliTestParams) cliTest {
 			SSLCertsDir: c.certsDir,
 			StoreSpecs:  params.storeSpecs,
 			Locality:    params.locality,
-			Addr:        params.addr,
 		})
 		if err != nil {
 			c.fail(err)
 		}
 		c.TestServer = s.(*server.TestServer)
 
-		log.Infof(context.TODO(), "server started at %s", c.ServingAddr())
+		log.Infof(context.TODO(), "server started at %s", c.ServingRPCAddr())
+		log.Infof(context.TODO(), "SQL listener at %s", c.ServingSQLAddr())
 	}
 
 	baseCfg.User = security.NodeUser
@@ -167,7 +166,8 @@ func setCLIDefaultsForTests() {
 // stopServer stops the test server.
 func (c *cliTest) stopServer() {
 	if c.TestServer != nil {
-		log.Infof(context.TODO(), "stopping server at %s", c.ServingAddr())
+		log.Infof(context.TODO(), "stopping server at %s / %s",
+			c.ServingRPCAddr(), c.ServingSQLAddr())
 		select {
 		case <-c.Stopper().ShouldStop():
 			// If ShouldStop() doesn't block, that means someone has already
@@ -179,7 +179,7 @@ func (c *cliTest) stopServer() {
 	}
 }
 
-// restartServer stops and restarts the test server. The ServingAddr() may
+// restartServer stops and restarts the test server. The ServingRPCAddr() may
 // have changed after this method returns.
 func (c *cliTest) restartServer(params cliTestParams) {
 	c.stopServer()
@@ -193,7 +193,8 @@ func (c *cliTest) restartServer(params cliTestParams) {
 		c.fail(err)
 	}
 	c.TestServer = s.(*server.TestServer)
-	log.Infof(context.TODO(), "restarted server at %s", c.ServingAddr())
+	log.Infof(context.TODO(), "restarted server at %s / %s",
+		c.ServingRPCAddr(), c.ServingSQLAddr())
 }
 
 // cleanup cleans up after the test, stopping the server if necessary.
@@ -352,23 +353,49 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 	redirectOutput(func() { c.runWithArgsUnredirected(origArgs) })
 }
 
+func isSQLCommand(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	switch args[0] {
+	case "user", "sql", "dump", "workload":
+		return true
+	case "node":
+		if len(args) == 0 {
+			return false
+		}
+		switch args[1] {
+		case "status", "ls":
+			return true
+		default:
+			return false
+		}
+	default:
+		return false
+	}
+}
+
 func (c cliTest) runWithArgsUnredirected(origArgs []string) {
 	TestingReset()
 
 	if err := func() error {
 		args := append([]string(nil), origArgs[:1]...)
 		if c.TestServer != nil {
-			h, p, err := net.SplitHostPort(c.ServingAddr())
+			addr := c.ServingRPCAddr()
+			if isSQLCommand(origArgs) {
+				addr = c.ServingSQLAddr()
+			}
+			h, p, err := net.SplitHostPort(addr)
 			if err != nil {
 				return err
 			}
+			args = append(args, fmt.Sprintf("--host=%s", net.JoinHostPort(h, p)))
 			if c.Cfg.Insecure {
 				args = append(args, "--insecure")
 			} else {
 				args = append(args, "--insecure=false")
 				args = append(args, fmt.Sprintf("--certs-dir=%s", c.certsDir))
 			}
-			args = append(args, fmt.Sprintf("--host=%s", net.JoinHostPort(h, p)))
 		}
 		args = append(args, origArgs[1:]...)
 
@@ -1780,15 +1807,23 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 		t.Errorf("node address (%s) != expected (%s)", a, e)
 	}
 
+	nodeSQLAddr, err := c.Gossip().GetNodeIDSQLAddress(nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, e := fields[2], nodeSQLAddr.String(); a != e {
+		t.Errorf("node SQL address (%s) != expected (%s)", a, e)
+	}
+
 	// Verify Build Tag.
-	if a, e := fields[2], build.GetInfo().Tag; a != e {
+	if a, e := fields[3], build.GetInfo().Tag; a != e {
 		t.Errorf("build tag (%s) != expected (%s)", a, e)
 	}
 
 	// Verify that updated_at and started_at are reasonably recent.
 	// CircleCI can be very slow. This was flaky at 5s.
-	checkTimeElapsed(t, fields[3], 15*time.Second, start)
 	checkTimeElapsed(t, fields[4], 15*time.Second, start)
+	checkTimeElapsed(t, fields[5], 15*time.Second, start)
 
 	testcases := []testCase{}
 

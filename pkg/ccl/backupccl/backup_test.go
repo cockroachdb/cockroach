@@ -2470,7 +2470,7 @@ func TestBackupRestorePermissions(t *testing.T) {
 
 	sqlDB.Exec(t, `CREATE USER testuser`)
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, tc.Server(0).ServingAddr(), "TestBackupRestorePermissions-testuser", url.User("testuser"),
+		t, tc.Server(0).ServingSQLAddr(), "TestBackupRestorePermissions-testuser", url.User("testuser"),
 	)
 	defer cleanupFunc()
 	testuser, err := gosql.Open("postgres", pgURL.String())

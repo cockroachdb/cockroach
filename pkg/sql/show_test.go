@@ -787,7 +787,7 @@ func TestShowSessionPrivileges(t *testing.T) {
 	pgURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User("nonroot"),
-		Host:     s.ServingAddr(),
+		Host:     s.ServingSQLAddr(),
 		RawQuery: "sslmode=disable",
 	}
 	rawSQLDBnonroot, err := gosql.Open("postgres", pgURL.String())

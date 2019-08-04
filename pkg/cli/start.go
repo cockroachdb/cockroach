@@ -729,7 +729,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 				fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
 			}
 
-			fmt.Fprintf(tw, "client flags:\t%s\n", clientFlags())
+			fmt.Fprintf(tw, "RPC client flags:\t%s\n", clientFlagsRPC())
 			if len(serverCfg.SocketFile) != 0 {
 				fmt.Fprintf(tw, "socket:\t%s\n", serverCfg.SocketFile)
 			}
@@ -974,7 +974,7 @@ func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
 	}
 }
 
-func clientFlags() string {
+func clientFlagsRPC() string {
 	flags := []string{os.Args[0], "<client cmd>"}
 	if serverCfg.AdvertiseAddr != "" {
 		flags = append(flags, "--host="+serverCfg.AdvertiseAddr)

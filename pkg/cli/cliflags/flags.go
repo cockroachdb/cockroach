@@ -351,12 +351,25 @@ or both forms can be used together, for example:
 	ListenAddr = FlagInfo{
 		Name: "listen-addr",
 		Description: `
-The address/hostname and port to listen on, for example
---listen-addr=myhost:26257 or --listen-addr=:26257 (listen on all
-interfaces). If the port part is left unspecified, it defaults
-to 26257.
+The address/hostname and port to listen on for intra-cluster
+communication, for example --listen-addr=myhost:26257 or
+--listen-addr=:26257 (listen on all interfaces).
+Unless --sql-addr is also specified, this address is also
+used to accept SQL client connections.
+<PRE>
+
+</PRE>
+If the address part is left unspecified, it defaults to
+the "all interfaces" address (0.0.0.0 IPv4 / [::] IPv6).
+If the port part is left unspecified, it defaults to 26257.
+<PRE>
+
+</PRE>
 An IPv6 address can also be specified with the notation [...], for
 example [::1]:26257 or [fe80::f6f2:::]:26257.
+<PRE>
+
+</PRE>
 If --advertise-addr is left unspecified, the node will also announce
 this address for use by other nodes. It is strongly recommended to use
 --advertise-addr in cloud and container deployments or any setup where
@@ -379,10 +392,47 @@ NAT is present between cluster nodes.`,
 The address/hostname and port to advertise to other CockroachDB nodes
 for intra-cluster communication. It must resolve and be routable from
 other nodes in the cluster.
+<PRE>
+
+</PRE>
 If left unspecified, it defaults to the setting of --listen-addr.
+If the flag is provided but either the address part or the port part
+is left unspecified, that particular part defaults to the
+same part in --listen-addr.
+<PRE>
+
+</PRE>
 An IPv6 address can also be specified with the notation [...], for
 example [::1]:26257 or [fe80::f6f2:::]:26257.
+<PRE>
+
+</PRE>
 The port number should be the same as in --listen-addr unless port
+forwarding is set up on an intermediate firewall/router.`,
+	}
+
+	SQLAdvertiseAddr = FlagInfo{
+		Name: "advertise-sql-addr",
+		Description: `
+The SQL address/hostname and port to advertise to CLI admin utilities
+and via SQL introspection for the purpose of SQL address discovery.
+It must resolve and be routable from clients.
+<PRE>
+
+</PRE>
+If left unspecified, it defaults to the setting of --sql-addr.
+If the flag is provided but either the address part or the port part
+is left unspecified, that particular part defaults to the
+same part in --sql-addr.
+<PRE>
+
+</PRE>
+An IPv6 address can also be specified with the notation [...], for
+example [::1]:26257 or [fe80::f6f2:::]:26257.
+<PRE>
+
+</PRE>
+The port number should be the same as in --sql-addr unless port
 forwarding is set up on an intermediate firewall/router.`,
 	}
 
@@ -394,6 +444,35 @@ forwarding is set up on an intermediate firewall/router.`,
 	AdvertisePort = FlagInfo{
 		Name:        "advertise-port",
 		Description: `Deprecated. Use --advertise-addr=<host>:<port>.`,
+	}
+
+	ListenSQLAddr = FlagInfo{
+		Name: "sql-addr",
+		Description: `
+The hostname or IP address to bind to for SQL clients, for example
+--sql-addr=myhost:26257 or --sql-addr=:26257 (listen on all interfaces).
+If left unspecified, the address specified by --listen-addr will be
+used for both RPC and SQL connections.
+<PRE>
+
+</PRE>
+If specified but the address part is omitted, the address part
+defaults to the address part of --listen-addr.
+If specified but the port number is omitted, the port
+number defaults to 26257.
+<PRE>
+
+</PRE>
+To actually use separate bindings, it is recommended to specify
+both flags and use a different port number via --listen-addr, for
+example --sql-addr=:26257 --listen-addr=:26258. Ensure that
+--join is set accordingly on other nodes. It is also possible
+to use the same port number but separate host addresses.
+<PRE>
+
+</PRE>
+An IPv6 address can also be specified with the notation [...], for
+example [::1]:26257 or [fe80::f6f2:::]:26257.`,
 	}
 
 	ListenHTTPAddr = FlagInfo{

@@ -916,7 +916,7 @@ func (t *logicTest) setUser(user string) func() {
 		return func() {}
 	}
 
-	addr := t.cluster.Server(t.nodeIdx).ServingAddr()
+	addr := t.cluster.Server(t.nodeIdx).ServingSQLAddr()
 	pgURL, cleanupFunc := sqlutils.PGUrl(t.t, addr, "TestLogic", url.User(user))
 	pgURL.Path = "test"
 	db, err := gosql.Open("postgres", pgURL.String())

@@ -838,17 +838,21 @@ func inspectEngines(
 // file", these are written once the listeners are available, before the server
 // is necessarily ready to serve.
 type listenerInfo struct {
-	listen    string // the (RPC) listen address
-	advertise string // equals `listen` unless --advertise-addr is used
-	http      string // the HTTP endpoint
+	listenRPC    string // the (RPC) listen address, rewritten after name resolution and port allocation
+	advertiseRPC string // contains the original addr part of --listen/--advertise, with actual port number after port allocation if original was 0
+	listenHTTP   string // the HTTP endpoint
+	listenSQL    string // the SQL endpoint, rewritten after name resolution and port allocation
+	advertiseSQL string // contains the original addr part of --sql-addr, with actual port number after port allocation if original was 0
 }
 
 // Iter returns a mapping of file names to desired contents.
 func (li listenerInfo) Iter() map[string]string {
 	return map[string]string{
-		"cockroach.advertise-addr": li.advertise,
-		"cockroach.http-addr":      li.http,
-		"cockroach.listen-addr":    li.listen,
+		"cockroach.advertise-addr":     li.advertiseRPC,
+		"cockroach.http-addr":          li.listenHTTP,
+		"cockroach.listen-addr":        li.listenRPC,
+		"cockroach.sql-addr":           li.listenSQL,
+		"cockroach.advertise-sql-addr": li.advertiseSQL,
 	}
 }
 
@@ -1141,7 +1145,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
 	// below when the server has initialized.
-	pgL, startRPCServer, err := s.startServeRPC(ctx, workersCtx)
+	pgL, startRPCServer, err := s.startListenRPCAndSQL(ctx, workersCtx)
 	if err != nil {
 		return err
 	}
@@ -1230,9 +1234,11 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Write listener info files early in the startup sequence. `listenerInfo` has a comment.
 	listenerFiles := listenerInfo{
-		advertise: s.cfg.AdvertiseAddr,
-		http:      s.cfg.HTTPAdvertiseAddr,
-		listen:    s.cfg.Addr,
+		listenRPC:    s.cfg.Addr,
+		advertiseRPC: s.cfg.AdvertiseAddr,
+		listenSQL:    s.cfg.SQLAddr,
+		advertiseSQL: s.cfg.SQLAdvertiseAddr,
+		listenHTTP:   s.cfg.HTTPAdvertiseAddr,
 	}.Iter()
 
 	for _, storeSpec := range s.cfg.Stores.Specs {
@@ -1258,6 +1264,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// advertise addresses.
 	listenAddrU := util.NewUnresolvedAddr("tcp", s.cfg.Addr)
 	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
+	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
 	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, listenAddrU, advAddrU)
 	s.gossip.Start(advAddrU, filtered)
 	log.Event(ctx, "started gossip")
@@ -1384,7 +1391,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// we're joining an existing cluster for the first time.
 	if err := s.node.start(
 		ctx,
-		advAddrU,
+		advAddrU, advSQLAddrU,
 		bootstrappedEngines, emptyEngines,
 		s.cfg.ClusterName,
 		s.cfg.NodeAttributes,
@@ -1418,7 +1425,7 @@ func (s *Server) Start(ctx context.Context) error {
 	})
 
 	// We can now add the node registry.
-	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAdvertiseAddr)
+	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAdvertiseAddr, s.cfg.SQLAdvertiseAddr)
 
 	// Begin recording runtime statistics.
 	s.startSampleEnvironment(ctx, DefaultMetricsSampleInterval)
@@ -1464,7 +1471,12 @@ func (s *Server) Start(ctx context.Context) error {
 
 	log.Infof(ctx, "starting %s server at %s (use: %s)",
 		s.cfg.HTTPRequestScheme(), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
-	log.Infof(ctx, "starting grpc/postgres server at %s", s.cfg.Addr)
+	rpcConnType := "grpc/postgres"
+	if s.cfg.SplitListenSQL {
+		rpcConnType = "grpc"
+		log.Infof(ctx, "starting postgres server at %s (use: %s)", s.cfg.SQLAddr, s.cfg.SQLAdvertiseAddr)
+	}
+	log.Infof(ctx, "starting %s server at %s", rpcConnType, s.cfg.Addr)
 	log.Infof(ctx, "advertising CockroachDB node at %s", s.cfg.AdvertiseAddr)
 
 	log.Event(ctx, "accepting connections")
@@ -1597,20 +1609,41 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
-// startServeRPC starts the RPC and SQL listeners.
+// startListenRPCAndSQL starts the RPC and SQL listeners.
 // It returns the SQL listener, which can be used
 // to start the SQL server when initialization has completed.
 // It also returns a function that starts the RPC server,
 // when the cluster is known to have bootstrapped or
 // when waiting for init().
-func (s *Server) startServeRPC(
+func (s *Server) startListenRPCAndSQL(
 	ctx, workersCtx context.Context,
 ) (sqlListener net.Listener, startRPCServer func(ctx context.Context), err error) {
-	ln, err := listen(ctx, &s.cfg.Addr, &s.cfg.AdvertiseAddr, "rpc/sql")
+	rpcChanName := "rpc/sql"
+	if s.cfg.SplitListenSQL {
+		rpcChanName = "rpc"
+	}
+	ln, err := listen(ctx, &s.cfg.Addr, &s.cfg.AdvertiseAddr, rpcChanName)
 	if err != nil {
 		return nil, nil, err
 	}
 	log.Eventf(ctx, "listening on port %s", s.cfg.Addr)
+
+	var pgL net.Listener
+	if s.cfg.SplitListenSQL {
+		pgL, err = listen(ctx, &s.cfg.SQLAddr, &s.cfg.SQLAdvertiseAddr, "sql")
+		if err != nil {
+			return nil, nil, err
+		}
+		// The SQL listener shutdown worker, which closes everything under
+		// the SQL port when the stopper indicates we are shutting down.
+		s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
+			<-s.stopper.ShouldQuiesce()
+			if err := pgL.Close(); err != nil {
+				log.Fatal(workersCtx, err)
+			}
+		})
+		log.Eventf(ctx, "listening on sql port %s", s.cfg.SQLAddr)
+	}
 
 	// The following code is a specialization of util/net.go's ListenAndServe
 	// which adds pgwire support. A single port is used to serve all protocols
@@ -1639,9 +1672,18 @@ func (s *Server) startServeRPC(
 
 	m := cmux.New(ln)
 
-	pgL := m.Match(func(r io.Reader) bool {
-		return pgwire.Match(r)
-	})
+	if !s.cfg.SplitListenSQL {
+		// If the pg port is split, it will be opened above. Otherwise,
+		// we make it hang off the RPC listener via cmux here.
+		pgL = m.Match(func(r io.Reader) bool {
+			return pgwire.Match(r)
+		})
+		// Also if the pg port is not split, the actual listen
+		// and advertise address for SQL become equal to that of RPC,
+		// regardless of what was configured.
+		s.cfg.SQLAddr = s.cfg.Addr
+		s.cfg.SQLAdvertiseAddr = s.cfg.AdvertiseAddr
+	}
 
 	anyL := m.Match(cmux.Any())
 
