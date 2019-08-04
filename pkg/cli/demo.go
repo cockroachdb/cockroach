@@ -198,12 +198,20 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) error {
 		fmt.Printf(`#
 # Welcome to the CockroachDB demo database!
 #
-# You are connected to a temporary, in-memory CockroachDB
-# cluster of %d node%s. Your changes will not be saved!
+# You are connected to a temporary, in-memory CockroachDB cluster of %d node%s.
+`, demoCtx.nodes, util.Pluralize(int64(demoCtx.nodes)))
+
+		if gen != nil {
+			fmt.Printf("# The cluster has been preloaded with the %q dataset\n# (%s).\n",
+				gen.Meta().Name, gen.Meta().Description)
+		}
+
+		fmt.Printf(`#
+# Your changes will not be saved!
 #
 # Web UI: %s
 #
-`, demoCtx.nodes, util.Pluralize(int64(demoCtx.nodes)), adminURL)
+`, adminURL)
 	}
 
 	checkTzDatabaseAvailability(context.Background())
