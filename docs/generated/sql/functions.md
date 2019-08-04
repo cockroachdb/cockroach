@@ -662,9 +662,9 @@ has no relationship with the commit order of concurrent transactions.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
-<tr><td><code>aclexplode(aclitems: <a href="string.html">string</a>[]) &rarr; tuple{oid AS grantor, oid AS grantee, string AS privilege_type, bool AS is_grantable}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing aclitem stuff (returns no rows as this feature is unsupported in CockroachDB)</p>
+<tr><td><a name="aclexplode"></a><code>aclexplode(aclitems: <a href="string.html">string</a>[]) &rarr; tuple{oid AS grantor, oid AS grantee, string AS privilege_type, bool AS is_grantable}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing aclitem stuff (returns no rows as this feature is unsupported in CockroachDB)</p>
 </span></td></tr>
-<tr><td><code>crdb_internal.unary_table() &rarr; tuple</code></td><td><span class="funcdesc"><p>Produces a virtual table containing a single row with no values.</p>
+<tr><td><a name="crdb_internal.unary_table"></a><code>crdb_internal.unary_table() &rarr; tuple</code></td><td><span class="funcdesc"><p>Produces a virtual table containing a single row with no values.</p>
 <p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>
 <tr><td><a name="generate_series"></a><code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the integer values from <code>start</code> to <code>end</code>, inclusive.</p>
@@ -1004,7 +1004,7 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
-<tr><td><code>row_to_json(row: tuple) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the row as a JSON object.</p>
+<tr><td><a name="row_to_json"></a><code>row_to_json(row: tuple) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the row as a JSON object.</p>
 </span></td></tr></tbody>
 </table>
 
@@ -1176,3 +1176,4 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <tr><td><a name="pg_sleep"></a><code>pg_sleep(seconds: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>pg_sleep makes the current session’s process sleep until seconds seconds have elapsed. seconds is a value of type double precision, so fractional-second delays can be specified.</p>
 </span></td></tr></tbody>
 </table>
+
