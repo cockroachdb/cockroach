@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -568,10 +569,14 @@ func (db *DB) WriteBatch(ctx context.Context, begin, end interface{}, data []byt
 // AddSSTable links a file into the RocksDB log-structured merge-tree. Existing
 // data in the range is cleared.
 func (db *DB) AddSSTable(
-	ctx context.Context, begin, end interface{}, data []byte, disallowShadowing bool,
+	ctx context.Context,
+	begin, end interface{},
+	data []byte,
+	disallowShadowing bool,
+	stats *enginepb.MVCCStats,
 ) error {
 	b := &Batch{}
-	b.addSSTable(begin, end, data, disallowShadowing)
+	b.addSSTable(begin, end, data, disallowShadowing, stats)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
