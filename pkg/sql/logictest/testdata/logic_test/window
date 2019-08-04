@@ -3338,3 +3338,12 @@ SELECT *, avg(w) OVER (PARTITION BY w, z ORDER BY y) FROM wxyz ORDER BY z, w, y 
 ----
 2  10  2  0  2
 4  10  2  0  4
+
+# Regression test verifying that ROWS mode of framing takes precedence over the
+# concept of peers.
+query I
+SELECT count(a) OVER (ROWS 1 PRECEDING) FROM t
+----
+1
+2
+2

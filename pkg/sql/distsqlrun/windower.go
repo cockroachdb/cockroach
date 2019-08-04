@@ -208,11 +208,12 @@ func newWindower(
 
 		w.builtins = append(w.builtins, windowConstructor(evalCtx))
 		wf := &windowFunc{
-			ordering:     windowFn.Ordering,
-			argsIdxs:     windowFn.ArgsIdxs,
-			frame:        windowFn.Frame,
-			filterColIdx: int(windowFn.FilterColIdx),
-			outputColIdx: int(windowFn.OutputColIdx),
+			ordering:        windowFn.Ordering,
+			argsIdxs:        windowFn.ArgsIdxs,
+			frame:           windowFn.Frame,
+			filterColIdx:    int(windowFn.FilterColIdx),
+			outputColIdx:    int(windowFn.OutputColIdx),
+			isAggregateFunc: windowFn.Func.AggregateFunc != nil,
 		}
 
 		w.windowFns = append(w.windowFns, wf)
@@ -577,8 +578,16 @@ func (w *windower) processPartition(
 				rowCopy:   make(sqlbase.EncDatumRow, len(w.inputTypes)),
 			}
 		} else {
-			// If ORDER BY clause is not provided, all rows are peers.
-			peerGrouper = allPeers{}
+			if windowFn.isAggregateFunc && windowFn.frame != nil && windowFn.frame.Mode == distsqlpb.WindowerSpec_Frame_ROWS {
+				// ROWS mode of framing takes precedence over the concept of peers for
+				// aggregate functions used as window functions.
+				peerGrouper = noPeers{}
+			} else {
+				// If ORDER BY clause is not provided, all rows are considered peers
+				// for "pure" window functions as well as for all modes of framing
+				// except for ROWS.
+				peerGrouper = allPeers{}
+			}
 		}
 
 		frameRun.Rows = partition
@@ -782,11 +791,12 @@ func (w *windower) populateNextOutputRow() (bool, error) {
 }
 
 type windowFunc struct {
-	ordering     distsqlpb.Ordering
-	argsIdxs     []uint32
-	frame        *distsqlpb.WindowerSpec_Frame
-	filterColIdx int
-	outputColIdx int
+	ordering        distsqlpb.Ordering
+	argsIdxs        []uint32
+	frame           *distsqlpb.WindowerSpec_Frame
+	filterColIdx    int
+	outputColIdx    int
+	isAggregateFunc bool
 }
 
 type partitionPeerGrouper struct {
@@ -837,6 +847,11 @@ type allPeers struct{}
 
 // allPeers implements the PeerGroupChecker interface.
 func (allPeers) InSameGroup(i, j int) (bool, error) { return true, nil }
+
+type noPeers struct{}
+
+// noPeers implements the PeerGroupChecker interface.
+func (noPeers) InSameGroup(i, j int) (bool, error) { return false, nil }
 
 const sizeOfInt = int64(unsafe.Sizeof(int(0)))
 const sliceOfIntsOverhead = int64(unsafe.Sizeof([]int{}))
