@@ -16,6 +16,6 @@ eexpect "Cluster ID"
 eexpect "brief introduction"
 # Ensure user is root.
 eexpect root@
-# Ensure db is defaultdb.
-eexpect "defaultdb>"
+# Ensure db is movr.
+eexpect "movr>"
 end_test

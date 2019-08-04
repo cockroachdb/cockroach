@@ -473,6 +473,7 @@ func Example_demo() {
 
 	testData := [][]string{
 		{`demo`, `-e`, `show database`},
+		{`demo`, `-e`, `show database`, `--empty`},
 		{`demo`, `-e`, `show application_name`},
 		{`demo`, `--format=table`, `-e`, `show database`},
 		{`demo`, `-e`, `select 1 as "1"`, `-e`, `select 3 as "3"`},
@@ -488,14 +489,17 @@ func Example_demo() {
 	// Output:
 	// demo -e show database
 	// database
+	// movr
+	// demo -e show database --empty
+	// database
 	// defaultdb
 	// demo -e show application_name
 	// application_name
 	// $ cockroach demo
 	// demo --format=table -e show database
 	//   database
-	// +-----------+
-	//   defaultdb
+	// +----------+
+	//   movr
 	// (1 row)
 	// demo -e select 1 as "1" -e select 3 as "3"
 	// 1

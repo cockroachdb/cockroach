@@ -795,6 +795,13 @@ The line length where sqlfmt will try to wrap.`,
 		Description: `How many in-memory nodes to create for the demo.`,
 	}
 
+	UseEmptyDatabase = FlagInfo{
+		Name: "empty",
+		Description: `
+Start with an empty database: avoid pre-loading a default dataset in
+the demo shell.`,
+	}
+
 	LogDir = FlagInfo{
 		Name: "log-dir",
 		Description: `

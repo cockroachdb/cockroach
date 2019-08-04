@@ -146,6 +146,9 @@ func initCLIDefaults() {
 	networkBenchCtx.port = 8081
 	networkBenchCtx.addresses = []string{"localhost:8081"}
 
+	demoCtx.nodes = 1
+	demoCtx.useEmptyDatabase = false
+
 	initPreFlagsDefaults()
 
 	// Clear the "Changed" state of all the registered command-line flags.
@@ -339,5 +342,6 @@ var sqlfmtCtx struct {
 // demoCtx captures the command-line parameters of the `demo` command.
 // Defaults set by InitCLIDefaults() above.
 var demoCtx struct {
-	nodes int
+	nodes            int
+	useEmptyDatabase bool
 }
