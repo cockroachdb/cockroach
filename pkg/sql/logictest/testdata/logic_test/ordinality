@@ -72,12 +72,21 @@ SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY
 b 1
 c 2
 
+# In the vectorized engine, both ordinality and row_number are appending a new
+# column for its output, and we want to make sure that the "dance" with column
+# indices is done correctly.
+statement ok
+SET vectorize=experimental_on
+
 query B
 SELECT ordinality = row_number() OVER () FROM foo WITH ORDINALITY
 ----
 true
 true
 true
+
+statement ok
+RESET vectorize
 
 # Regression test for #33659
 statement ok
