@@ -50,14 +50,22 @@ type TestServerInterface interface {
 	// NodeID returns the ID of this node within its cluster.
 	NodeID() roachpb.NodeID
 
-	// ServingAddr returns the server's advertised address.
-	ServingAddr() string
+	// ServingRPCAddr returns the server's advertised address.
+	ServingRPCAddr() string
+
+	// ServingSQLAddr returns the server's advertised SQL address.
+	ServingSQLAddr() string
 
 	// HTTPAddr returns the server's http address.
 	HTTPAddr() string
 
-	// Addr returns the server's address.
-	Addr() string
+	// RPCAddr returns the server's RPC address.
+	// Note: use ServingRPCAddr() instead unless specific reason not to.
+	RPCAddr() string
+
+	// SQLAddr returns the server's SQL address.
+	// Note: use ServingSQLAddr() instead unless specific reason not to.
+	SQLAddr() string
 
 	// DB returns a *client.DB instance for talking to this KV server.
 	DB() *client.DB
@@ -179,7 +187,7 @@ func StartServer(
 	}
 
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, server.ServingAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
+		t, server.ServingSQLAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
 	pgURL.Path = params.UseDatabase
 	if params.Insecure {
 		pgURL.RawQuery = "sslmode=disable"

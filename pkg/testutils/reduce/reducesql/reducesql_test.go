@@ -52,7 +52,7 @@ func isInterestingSQL(contains string) reduce.InterestingFn {
 		url := url.URL{
 			Scheme:   "postgres",
 			User:     url.User(security.RootUser),
-			Host:     server.ServingAddr(),
+			Host:     server.ServingSQLAddr(),
 			RawQuery: options.Encode(),
 		}
 

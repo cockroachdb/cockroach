@@ -11,6 +11,7 @@
 package base
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	"fmt"
@@ -41,22 +42,39 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 	advHost, advPort, err := validateAdvertiseAddr(ctx,
 		cfg.AdvertiseAddr, "--listen-addr", cfg.Addr, "")
 	if err != nil {
-		return errors.Wrapf(err, "invalid --advertise-addr")
+		return errors.Wrap(err, "invalid --advertise-addr")
 	}
 	cfg.AdvertiseAddr = net.JoinHostPort(advHost, advPort)
 
-	// Validate the listen address.
+	// Validate the RPC listen address.
 	listenHost, listenPort, err := validateListenAddr(ctx, cfg.Addr, "")
 	if err != nil {
-		return errors.Wrapf(err, "invalid --listen-addr")
+		return errors.Wrap(err, "invalid --listen-addr")
 	}
 	cfg.Addr = net.JoinHostPort(listenHost, listenPort)
 
-	// Validate the HTTP advertise address.
+	// Validate the SQL advertise address. Use the provided advertise
+	// addr as default.
+	advSQLHost, advSQLPort, err := validateAdvertiseAddr(ctx,
+		cfg.SQLAdvertiseAddr, "--sql-addr", cfg.SQLAddr, advHost)
+	if err != nil {
+		return errors.Wrap(err, "invalid --advertise-sql-addr")
+	}
+	cfg.SQLAdvertiseAddr = net.JoinHostPort(advSQLHost, advSQLPort)
+
+	// Validate the SQL listen address - use the resolved listen addr as default.
+	sqlHost, sqlPort, err := validateListenAddr(ctx, cfg.SQLAddr, listenHost)
+	if err != nil {
+		return errors.Wrap(err, "invalid --sql-addr")
+	}
+	cfg.SQLAddr = net.JoinHostPort(sqlHost, sqlPort)
+
+	// Validate the HTTP advertise address. Use the provided advertise
+	// addr as default.
 	advHTTPHost, advHTTPPort, err := validateAdvertiseAddr(ctx,
 		cfg.HTTPAdvertiseAddr, "--http-addr", cfg.HTTPAddr, advHost)
 	if err != nil {
-		return errors.Wrapf(err, "cannot compute public HTTP address")
+		return errors.Wrap(err, "cannot compute public HTTP address")
 	}
 	cfg.HTTPAdvertiseAddr = net.JoinHostPort(advHTTPHost, advHTTPPort)
 
@@ -64,7 +82,7 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 	// as default.
 	httpHost, httpPort, err := validateListenAddr(ctx, cfg.HTTPAddr, listenHost)
 	if err != nil {
-		return errors.Wrapf(err, "invalid --http-addr")
+		return errors.Wrap(err, "invalid --http-addr")
 	}
 	cfg.HTTPAddr = net.JoinHostPort(httpHost, httpPort)
 	return nil
@@ -277,6 +295,7 @@ func (cfg *Config) CheckCertificateAddrs(ctx context.Context) {
 		// Log the certificate details in any case. This will aid during troubleshooting.
 		log.Infof(ctx, "server certificate addresses: %s", addrInfo)
 
+		var msg bytes.Buffer
 		// Verify the compatibility. This requires that ValidateAddrs() has
 		// been called already.
 		host, _, err := net.SplitHostPort(cfg.AdvertiseAddr)
@@ -284,11 +303,21 @@ func (cfg *Config) CheckCertificateAddrs(ctx context.Context) {
 			panic("programming error: call ValidateAddrs() first")
 		}
 		if err := cert.VerifyHostname(host); err != nil {
+			fmt.Fprintf(&msg, "advertise address %q not in node certificate (%s)\n", host, addrInfo)
+		}
+		host, _, err = net.SplitHostPort(cfg.SQLAdvertiseAddr)
+		if err != nil {
+			panic("programming error: call ValidateAddrs() first")
+		}
+		if err := cert.VerifyHostname(host); err != nil {
+			fmt.Fprintf(&msg, "advertise SQL address %q not in node certificate (%s)\n", host, addrInfo)
+		}
+		if msg.Len() > 0 {
 			log.Shout(ctx, log.Severity_WARNING,
-				fmt.Sprintf("advertise address %q not in node certificate (%s)\n"+
-					"Secure node-node and SQL connections are likely to fail.\n"+
-					"Consider extending the node certificate or tweak --listen-addr/--advertise-addr.",
-					host, addrInfo))
+				fmt.Sprintf("%s"+
+					"Secure client connections are likely to fail.\n"+
+					"Consider extending the node certificate or tweak --listen-addr/--advertise-addr/--sql-addr/--advertise-sql-addr.",
+					msg.String()))
 		}
 	}
 

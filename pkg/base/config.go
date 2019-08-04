@@ -35,6 +35,9 @@ const (
 
 	// From IANA Service Name and Transport Protocol Port Number Registry. See
 	// https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml?search=cockroachdb
+	//
+	// This is used for both RPC and SQL connections unless --sql-addr
+	// is used on the command line and/or SQLAddr is set in the Config object.
 	DefaultPort = "26257"
 
 	// The default port for HTTP-for-humans.
@@ -43,6 +46,7 @@ const (
 	// NB: net.JoinHostPort is not a constant.
 	defaultAddr     = ":" + DefaultPort
 	defaultHTTPAddr = ":" + DefaultHTTPPort
+	defaultSQLAddr  = ":" + DefaultPort
 
 	// NetworkTimeout is the timeout used for network operations.
 	NetworkTimeout = 3 * time.Second
@@ -170,12 +174,19 @@ type Config struct {
 	// existing cluster into using a new cluster name.
 	DisableClusterNameVerification bool
 
+	// SplitListenSQL indicates whether to listen for SQL
+	// clients on a separate address from RPC requests.
+	SplitListenSQL bool
+
+	// SQLAddr is the configured SQL listen address.
+	// This is used if SplitListenSQL is set to true.
+	SQLAddr string
+
+	// SQLAdvertiseAddr is the advertised SQL address.
+	// This is computed from SQLAddr if specified otherwise Addr.
+	SQLAdvertiseAddr string
+
 	// HTTPAddr is the configured HTTP listen address.
-	//
-	// This is temporary, and will be removed when grpc.(*Server).ServeHTTP
-	// performance problems are addressed upstream.
-	//
-	// See https://github.com/grpc/grpc-go/issues/586.
 	HTTPAddr string
 
 	// HTTPAdvertiseAddr is the advertised HTTP address.
@@ -218,6 +229,10 @@ func (cfg *Config) InitDefaults() {
 	cfg.Addr = defaultAddr
 	cfg.AdvertiseAddr = cfg.Addr
 	cfg.HTTPAddr = defaultHTTPAddr
+	cfg.HTTPAdvertiseAddr = ""
+	cfg.SplitListenSQL = false
+	cfg.SQLAddr = defaultSQLAddr
+	cfg.SQLAdvertiseAddr = cfg.SQLAddr
 	cfg.SSLCertsDir = DefaultCertsDirectory
 	cfg.certificateManager = lazyCertificateManager{}
 	cfg.RPCHeartbeatInterval = defaultRPCHeartbeatInterval
@@ -313,7 +328,7 @@ func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
 	return &url.URL{
 		Scheme:   "postgresql",
 		User:     user,
-		Host:     cfg.AdvertiseAddr,
+		Host:     cfg.SQLAdvertiseAddr,
 		RawQuery: options.Encode(),
 	}, nil
 }

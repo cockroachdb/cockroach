@@ -168,9 +168,10 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	// Take down the first node and replace it with a new one.
 	oldNodeIdx := 0
 	newServerArgs := serverArgs
-	newServerArgs.Addr = tc.Servers[oldNodeIdx].ServingAddr()
+	newServerArgs.Addr = tc.Servers[oldNodeIdx].ServingRPCAddr()
+	newServerArgs.SQLAddr = tc.Servers[oldNodeIdx].ServingSQLAddr()
 	newServerArgs.PartOfCluster = true
-	newServerArgs.JoinAddr = tc.Servers[1].ServingAddr()
+	newServerArgs.JoinAddr = tc.Servers[1].ServingRPCAddr()
 	log.Infof(ctx, "stopping server %d", oldNodeIdx)
 	tc.StopServer(oldNodeIdx)
 	tc.AddServer(t, newServerArgs)

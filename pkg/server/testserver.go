@@ -76,10 +76,13 @@ func makeTestConfig(st *cluster.Settings) Config {
 
 	// Addr defaults to localhost with port set at time of call to
 	// Start() to an available port. May be overridden later (as in
-	// makeTestConfigFromParams). Call TestServer.ServingAddr() for the
-	// full address (including bound port).
+	// makeTestConfigFromParams). Call TestServer.ServingRPCAddr() and
+	// .ServingSQLAddr() for the full address (including bound port).
 	cfg.Addr = util.TestAddr.String()
+	cfg.SQLAddr = util.TestAddr.String()
 	cfg.AdvertiseAddr = util.TestAddr.String()
+	cfg.SQLAdvertiseAddr = util.TestAddr.String()
+	cfg.SplitListenSQL = true
 	cfg.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
 	cfg.User = security.NodeUser
@@ -162,15 +165,23 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		// stress.
 		cfg.Addr = util.IsolatedTestAddr.String()
 		cfg.AdvertiseAddr = util.IsolatedTestAddr.String()
+		cfg.SQLAddr = util.IsolatedTestAddr.String()
+		cfg.SQLAdvertiseAddr = util.IsolatedTestAddr.String()
 		cfg.HTTPAddr = util.IsolatedTestAddr.String()
 	} else {
 		cfg.Addr = util.TestAddr.String()
 		cfg.AdvertiseAddr = util.TestAddr.String()
+		cfg.SQLAddr = util.TestAddr.String()
+		cfg.SQLAdvertiseAddr = util.TestAddr.String()
 		cfg.HTTPAddr = util.TestAddr.String()
 	}
 	if params.Addr != "" {
 		cfg.Addr = params.Addr
 		cfg.AdvertiseAddr = params.Addr
+	}
+	if params.SQLAddr != "" {
+		cfg.SQLAddr = params.SQLAddr
+		cfg.SQLAdvertiseAddr = params.SQLAddr
 	}
 	if params.HTTPAddr != "" {
 		cfg.HTTPAddr = params.HTTPAddr
@@ -310,7 +321,7 @@ func (ts *TestServer) PGServer() *pgwire.Server {
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
-// TestServer.ServingAddr() after Start() for client connections.
+// TestServer.ServingRPCAddr() after Start() for client connections.
 // Use TestServer.Stopper().Stop() to shutdown the server after the test
 // completes.
 func (ts *TestServer) Start(params base.TestServerArgs) error {
@@ -405,9 +416,14 @@ func (ts *TestServer) Engines() []engine.Engine {
 	return ts.engines
 }
 
-// ServingAddr returns the server's address. Should be used by clients.
-func (ts *TestServer) ServingAddr() string {
+// ServingRPCAddr returns the server's RPC address. Should be used by clients.
+func (ts *TestServer) ServingRPCAddr() string {
 	return ts.cfg.AdvertiseAddr
+}
+
+// ServingSQLAddr returns the server's SQL address. Should be used by clients.
+func (ts *TestServer) ServingSQLAddr() string {
+	return ts.cfg.SQLAdvertiseAddr
 }
 
 // HTTPAddr returns the server's HTTP address. Should be used by clients.
@@ -415,9 +431,16 @@ func (ts *TestServer) HTTPAddr() string {
 	return ts.cfg.HTTPAddr
 }
 
-// Addr returns the server's listening address.
-func (ts *TestServer) Addr() string {
+// RPCAddr returns the server's listening RPC address.
+// Note: use ServingRPCAddr() instead unless there is a specific reason not to.
+func (ts *TestServer) RPCAddr() string {
 	return ts.cfg.Addr
+}
+
+// SQLAddr returns the server's listening SQL address.
+// Note: use ServingSQLAddr() instead unless there is a specific reason not to.
+func (ts *TestServer) SQLAddr() string {
+	return ts.cfg.SQLAddr
 }
 
 // WriteSummaries implements TestServerInterface.
