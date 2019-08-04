@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -211,7 +212,11 @@ func runTestImport(t *testing.T, batchSize int64) {
 type mockSender func(span roachpb.Span) error
 
 func (m mockSender) AddSSTable(
-	ctx context.Context, begin, end interface{}, data []byte, disallowShadowing bool,
+	ctx context.Context,
+	begin, end interface{},
+	data []byte,
+	disallowShadowing bool,
+	_ *enginepb.MVCCStats,
 ) error {
 	return m(roachpb.Span{Key: begin.(roachpb.Key), EndKey: end.(roachpb.Key)})
 }
@@ -248,7 +253,7 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 			splits = append(splits, key(i))
 		}
 		if err := w.Add(engine.MVCCKeyValue{
-			Key:   engine.MVCCKey{Key: key(i)},
+			Key:   engine.MVCCKey{Key: key(i), Timestamp: hlc.Timestamp{WallTime: 1}},
 			Value: roachpb.MakeValueFromString(string(buf)).RawBytes,
 		}); err != nil {
 			t.Fatal(err)

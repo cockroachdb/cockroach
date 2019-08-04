@@ -88,13 +88,13 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 
 		// Key is before the range in the request span.
 		if err := db.AddSSTable(
-			ctx, "d", "e", data, false, /* disallowShadowing */
+			ctx, "d", "e", data, false /* disallowShadowing */, nil, /* stats */
 		); !testutils.IsError(err, "not in request range") {
 			t.Fatalf("expected request range error got: %+v", err)
 		}
 		// Key is after the range in the request span.
 		if err := db.AddSSTable(
-			ctx, "a", "b", data, false, /* disallowShadowing */
+			ctx, "a", "b", data, false /* disallowShadowing */, nil, /* stats */
 		); !testutils.IsError(err, "not in request range") {
 			t.Fatalf("expected request range error got: %+v", err)
 		}
@@ -102,7 +102,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 		// Do an initial ingest.
 		ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
 		defer cancel()
-		if err := db.AddSSTable(ingestCtx, "b", "c", data, false /* disallowShadowing */); err != nil {
+		if err := db.AddSSTable(ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		formatted := tracing.FormatRecordedSpans(collect())
@@ -143,7 +143,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			t.Fatalf("%+v", err)
 		}
 
-		if err := db.AddSSTable(ctx, "b", "c", data, false /* disallowShadowing */); err != nil {
+		if err := db.AddSSTable(ctx, "b", "c", data, false /* disallowShadowing */, nil /* stats */); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		if r, err := db.Get(ctx, "bb"); err != nil {
@@ -178,7 +178,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
 			defer cancel()
 
-			if err := db.AddSSTable(ingestCtx, "b", "c", data, false /* disallowShadowing */); err != nil {
+			if err := db.AddSSTable(ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */); err != nil {
 				t.Fatalf("%+v", err)
 			}
 			if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()),
@@ -223,7 +223,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			t.Fatalf("%+v", err)
 		}
 
-		if err := db.AddSSTable(ctx, "b", "c", data, false /* disallowShadowing */); !testutils.IsError(err, "invalid checksum") {
+		if err := db.AddSSTable(ctx, "b", "c", data, false /* disallowShadowing */, nil /* stats */); !testutils.IsError(err, "invalid checksum") {
 			t.Fatalf("expected 'invalid checksum' error got: %+v", err)
 		}
 	}
@@ -325,13 +325,13 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		return beforeStats
 	}()
 
-	sstBytes := func() []byte {
+	mkSST := func(kvs []engine.MVCCKeyValue) []byte {
 		sst, err := engine.MakeRocksDBSstFileWriter()
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
 		defer sst.Close()
-		for _, kv := range sstKVs {
+		for _, kv := range kvs {
 			if err := sst.Add(kv); err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -341,7 +341,9 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 			t.Fatalf("%+v", err)
 		}
 		return sstBytes
-	}()
+	}
+
+	sstBytes := mkSST(sstKVs)
 
 	cArgs := batcheval.CommandArgs{
 		Header: roachpb.Header{
@@ -353,8 +355,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		},
 		Stats: &enginepb.MVCCStats{},
 	}
-	_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-	if err != nil {
+	if _, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil); err != nil {
 		t.Fatalf("%+v", err)
 	}
 
@@ -382,6 +383,27 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	if !afterStats.Equal(evaledStats) {
 		t.Errorf("mvcc stats mismatch: diff(expected, actual): %s", pretty.Diff(afterStats, evaledStats))
 	}
+
+	cArgsWithStats := batcheval.CommandArgs{
+		Header: roachpb.Header{Timestamp: hlc.Timestamp{WallTime: 7}},
+		Args: &roachpb.AddSSTableRequest{
+			RequestHeader: roachpb.RequestHeader{Key: keys.MinKey, EndKey: keys.MaxKey},
+			Data: mkSST([]engine.MVCCKeyValue{{
+				Key:   engine.MVCCKey{Key: roachpb.Key("zzzzzzz"), Timestamp: ts},
+				Value: roachpb.MakeValueFromBytes([]byte("zzz")).RawBytes,
+			}}),
+			MVCCStats: &enginepb.MVCCStats{KeyCount: 10},
+		},
+		Stats: &enginepb.MVCCStats{},
+	}
+	if _, err := batcheval.EvalAddSSTable(ctx, e, cArgsWithStats, nil); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	expected := enginepb.MVCCStats{ContainsEstimates: true, KeyCount: 10}
+	if got := *cArgsWithStats.Stats; got != expected {
+		t.Fatalf("expected %v got %v", expected, got)
+	}
+
 }
 
 func TestAddSSTableDisallowShadowing(t *testing.T) {

@@ -12610,6 +12610,17 @@ class AddSSTableRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::cockroach::roachpb::RequestHeader* mutable_header();
   void set_allocated_header(::cockroach::roachpb::RequestHeader* header);
 
+  bool has_mvcc_stats() const;
+  void clear_mvcc_stats();
+  static const int kMvccStatsFieldNumber = 4;
+  private:
+  const ::cockroach::storage::engine::enginepb::MVCCStats& _internal_mvcc_stats() const;
+  public:
+  const ::cockroach::storage::engine::enginepb::MVCCStats& mvcc_stats() const;
+  ::cockroach::storage::engine::enginepb::MVCCStats* release_mvcc_stats();
+  ::cockroach::storage::engine::enginepb::MVCCStats* mutable_mvcc_stats();
+  void set_allocated_mvcc_stats(::cockroach::storage::engine::enginepb::MVCCStats* mvcc_stats);
+
   // bool disallow_shadowing = 3;
   void clear_disallow_shadowing();
   static const int kDisallowShadowingFieldNumber = 3;
@@ -12622,6 +12633,7 @@ class AddSSTableRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::ArenaStringPtr data_;
   ::cockroach::roachpb::RequestHeader* header_;
+  ::cockroach::storage::engine::enginepb::MVCCStats* mvcc_stats_;
   bool disallow_shadowing_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
@@ -27292,6 +27304,53 @@ inline void AddSSTableRequest::set_disallow_shadowing(bool value) {
   
   disallow_shadowing_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.AddSSTableRequest.disallow_shadowing)
+}
+
+inline bool AddSSTableRequest::has_mvcc_stats() const {
+  return this != internal_default_instance() && mvcc_stats_ != NULL;
+}
+inline const ::cockroach::storage::engine::enginepb::MVCCStats& AddSSTableRequest::_internal_mvcc_stats() const {
+  return *mvcc_stats_;
+}
+inline const ::cockroach::storage::engine::enginepb::MVCCStats& AddSSTableRequest::mvcc_stats() const {
+  const ::cockroach::storage::engine::enginepb::MVCCStats* p = mvcc_stats_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.AddSSTableRequest.mvcc_stats)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::engine::enginepb::MVCCStats*>(
+      &::cockroach::storage::engine::enginepb::_MVCCStats_default_instance_);
+}
+inline ::cockroach::storage::engine::enginepb::MVCCStats* AddSSTableRequest::release_mvcc_stats() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.AddSSTableRequest.mvcc_stats)
+  
+  ::cockroach::storage::engine::enginepb::MVCCStats* temp = mvcc_stats_;
+  mvcc_stats_ = NULL;
+  return temp;
+}
+inline ::cockroach::storage::engine::enginepb::MVCCStats* AddSSTableRequest::mutable_mvcc_stats() {
+  
+  if (mvcc_stats_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCStats>(GetArenaNoVirtual());
+    mvcc_stats_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AddSSTableRequest.mvcc_stats)
+  return mvcc_stats_;
+}
+inline void AddSSTableRequest::set_allocated_mvcc_stats(::cockroach::storage::engine::enginepb::MVCCStats* mvcc_stats) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(mvcc_stats_);
+  }
+  if (mvcc_stats) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      mvcc_stats = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, mvcc_stats, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  mvcc_stats_ = mvcc_stats;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.AddSSTableRequest.mvcc_stats)
 }
 
 // -------------------------------------------------------------------
