@@ -411,9 +411,13 @@ func TestServerConnSettings(t *testing.T) {
 		{[]string{"start", "--advertise-addr", "192.168.0.111", "--port", "12345"}, ":12345", "192.168.0.111:12345", "[]"},
 		{[]string{"start", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"}, ":" + base.DefaultPort, "192.168.0.111:12345", "[]"},
 		{[]string{"start", "--advertise-addr", "192.168.0.111", "--port", "54321", "--advertise-port", "12345"}, ":54321", "192.168.0.111:12345", "[]"},
+
 		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@235.0.0.5"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp 235.0.0.5:26257} zone=1}]"},
 		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@235.0.0.5,zone=2@123.0.0.5"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp 235.0.0.5:26257} zone=1} {{tcp 123.0.0.5:26257} zone=2}]"},
 		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@235.0.0.5:1234"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp 235.0.0.5:1234} zone=1}]"},
+		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@[::2]"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp [::2]:26257} zone=1}]"},
+		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@[::2],zone=2@123.0.0.5"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp [::2]:26257} zone=1} {{tcp 123.0.0.5:26257} zone=2}]"},
+		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@[::2]:1234"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp [::2]:1234} zone=1}]"},
 	}
 
 	for i, td := range testData {
@@ -423,7 +427,9 @@ func TestServerConnSettings(t *testing.T) {
 				t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
 			}
 
-			extraServerFlagInit()
+			if err := extraServerFlagInit(); err != nil {
+				t.Fatal(err)
+			}
 			if td.expectedAddr != serverCfg.Addr {
 				t.Errorf("%d. serverCfg.Addr expected '%s', but got '%s'. td.args was '%#v'.",
 					i, td.expectedAddr, serverCfg.Addr, td.args)
@@ -587,7 +593,9 @@ func TestHttpHostFlagValue(t *testing.T) {
 			t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
 		}
 
-		extraServerFlagInit()
+		if err := extraServerFlagInit(); err != nil {
+			t.Fatal(err)
+		}
 		if td.expected != serverCfg.HTTPAddr {
 			t.Errorf("%d. serverCfg.HTTPAddr expected '%s', but got '%s'. td.args was '%#v'.", i, td.expected, serverCfg.HTTPAddr, td.args)
 		}
