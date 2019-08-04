@@ -22,22 +22,24 @@ import (
 type ordinalityOp struct {
 	input Operator
 
-	// hasOrdinalityColumn is a flag to indicate if the ordinality column has
-	// already been added to the batch. It is needed because batches are reused
-	// between subsequent calls to Next().
-	hasOrdinalityColumn bool
+	// ordinalityCol is the index of the column in which ordinalityOp will write
+	// the ordinal number. It is colNotAppended if the column has not been
+	// appended yet.
+	ordinalityCol int
 	// counter is the number of tuples seen so far.
 	counter int64
 }
 
 var _ Operator = &ordinalityOp{}
 
+const colNotAppended = -1
+
 // NewOrdinalityOp returns a new WITH ORDINALITY operator.
 func NewOrdinalityOp(input Operator) Operator {
 	c := &ordinalityOp{
-		input:               input,
-		hasOrdinalityColumn: false,
-		counter:             1,
+		input:         input,
+		ordinalityCol: colNotAppended,
+		counter:       1,
 	}
 	return c
 }
@@ -48,11 +50,11 @@ func (c *ordinalityOp) Init() {
 
 func (c *ordinalityOp) Next(ctx context.Context) coldata.Batch {
 	bat := c.input.Next(ctx)
-	if !c.hasOrdinalityColumn {
+	if c.ordinalityCol == colNotAppended {
+		c.ordinalityCol = bat.Width()
 		bat.AppendCol(types.Int64)
-		c.hasOrdinalityColumn = true
 	}
-	vec := bat.ColVec(bat.Width() - 1).Int64()
+	vec := bat.ColVec(c.ordinalityCol).Int64()
 	sel := bat.Selection()
 
 	if sel != nil {
