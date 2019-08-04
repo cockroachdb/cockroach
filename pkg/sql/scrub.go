@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -441,19 +440,6 @@ func createConstraintCheckOperations(
 		}
 	}
 	return results, nil
-}
-
-// scrubPlanDistSQL will prepare and run the plan in distSQL.
-func scrubPlanDistSQL(
-	ctx context.Context, planCtx *PlanningCtx, plan planNode,
-) (*PhysicalPlan, error) {
-	log.VEvent(ctx, 1, "creating DistSQL plan")
-	physPlan, err := planCtx.ExtendedEvalCtx.DistSQLPlanner.createPlanForNode(planCtx, plan)
-	if err != nil {
-		return nil, err
-	}
-	planCtx.ExtendedEvalCtx.DistSQLPlanner.FinalizePlan(planCtx, &physPlan)
-	return &physPlan, nil
 }
 
 // scrubRunDistSQL run a distSQLPhysicalPlan plan in distSQL. If
