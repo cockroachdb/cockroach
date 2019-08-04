@@ -256,11 +256,11 @@ import (
 //
 // Configuration:
 //
-// -config name   customizes the test cluster configuration for test
+// -config name[,name2,...]   customizes the test cluster configuration for test
 //                files that lack LogicTest directives; must be one
 //                of `logicTestConfigs`.
 //                Example:
-//                  -config distsql
+//                  -config local-opt,fakedist-opt
 //
 // Error mode:
 //
@@ -319,11 +319,11 @@ var (
 	varRE     = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
 
 	// Input selection
-	logictestdata = flag.String("d", "", "glob that selects subset of files to run")
-	bigtest       = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
-	defaultConfig = flag.String(
-		"config", "local",
-		"customizes the default test cluster configuration for files that lack LogicTest directives",
+	logictestdata  = flag.String("d", "", "glob that selects subset of files to run")
+	bigtest        = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
+	overrideConfig = flag.String(
+		"config", "",
+		"sets the test cluster configuration; comma-separated values",
 	)
 
 	// Testing mode
@@ -383,8 +383,8 @@ type testClusterConfig struct {
 	overrideOptimizerMode string
 	// if non-empty, overrides the default distsql mode.
 	overrideDistSQLMode string
-	// if non-empty, overrides the default experimental_vectorize mode.
-	overrideExpVectorize string
+	// if non-empty, overrides the default vectorize mode.
+	overrideVectorize string
 	// if non-empty, overrides the default automatic statistics mode.
 	overrideAutoStats string
 	// if set, queries using distSQL processors that can fall back to disk do
@@ -422,22 +422,47 @@ var logicTestConfigs = []testClusterConfig{
 		disableUpgrade: true,
 	},
 	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "off", overrideOptimizerMode: "on", overrideAutoStats: "false"},
-	{name: "local-vec", numNodes: 1, overrideOptimizerMode: "on", overrideExpVectorize: "on"},
+	{name: "local-vec", numNodes: 1, overrideOptimizerMode: "on", overrideVectorize: "experimental_on"},
 	{name: "fakedist", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
 	{name: "fakedist-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideAutoStats: "false"},
+	{name: "fakedist-vec", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideAutoStats: "false", overrideVectorize: "experimental_on"},
 	{name: "fakedist-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",
 		distSQLMetadataTestEnabled: true, skipShort: true},
 	{name: "fakedist-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",
 		distSQLUseDisk: true, skipShort: true},
 	{name: "5node-local", numNodes: 5, overrideDistSQLMode: "off", overrideOptimizerMode: "off"},
 	{name: "5node-dist", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
-	{name: "5node-dist-vec", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideExpVectorize: "on", overrideAutoStats: "false"},
+	{name: "5node-dist-vec", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideVectorize: "experimental_on", overrideAutoStats: "false"},
 	{name: "5node-dist-opt", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideAutoStats: "false"},
 	{name: "5node-dist-metadata", numNodes: 5, overrideDistSQLMode: "on", distSQLMetadataTestEnabled: true,
 		skipShort: true, overrideOptimizerMode: "off"},
 	{name: "5node-dist-disk", numNodes: 5, overrideDistSQLMode: "on", distSQLUseDisk: true, skipShort: true,
 		overrideOptimizerMode: "off"},
 }
+
+func parseTestConfig(names []string) []logicTestConfigIdx {
+	ret := make([]logicTestConfigIdx, len(names))
+	for i, name := range names {
+		idx, ok := findLogicTestConfig(name)
+		if !ok {
+			panic(fmt.Errorf("unknown config %s", name))
+		}
+		ret[i] = idx
+	}
+	return ret
+}
+
+var (
+	defaultConfigNames = []string{
+		"local",
+		"local-opt",
+		"fakedist",
+		"fakedist-opt",
+		"fakedist-metadata",
+		"fakedist-disk",
+	}
+	defaultConfig = parseTestConfig(defaultConfigNames)
+)
 
 // An index in the above slice.
 type logicTestConfigIdx int
@@ -1037,9 +1062,9 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 			return nil
 		})
 	}
-	if cfg.overrideExpVectorize != "" {
+	if cfg.overrideVectorize != "" {
 		if _, err := t.cluster.ServerConn(0).Exec(
-			"SET CLUSTER SETTING sql.defaults.experimental_vectorize = $1::string", cfg.overrideExpVectorize,
+			"SET CLUSTER SETTING sql.defaults.vectorize = $1::string", cfg.overrideVectorize,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -1139,11 +1164,7 @@ func readTestFileConfigs(t *testing.T, path string) []logicTestConfigIdx {
 		}
 	}
 	// No directive found, return the default config.
-	idx, ok := findLogicTestConfig(*defaultConfig)
-	if !ok {
-		t.Fatalf("unknown -config %s", *defaultConfig)
-	}
-	return []logicTestConfigIdx{idx}
+	return defaultConfig
 }
 
 type subtestDetails struct {
@@ -2125,9 +2146,16 @@ func RunLogicTest(t *testing.T, globs ...string) {
 	// Read the configuration directives from all the files and accumulate a list
 	// of paths per config.
 	configPaths := make([][]string, len(logicTestConfigs))
+	var configs []logicTestConfigIdx
+	if *overrideConfig != "" {
+		configs = parseTestConfig(strings.Split(*overrideConfig, ","))
+	}
 
 	for _, path := range paths {
-		for _, idx := range readTestFileConfigs(t, path) {
+		if *overrideConfig == "" {
+			configs = readTestFileConfigs(t, path)
+		}
+		for _, idx := range configs {
 			configPaths[idx] = append(configPaths[idx], path)
 		}
 	}

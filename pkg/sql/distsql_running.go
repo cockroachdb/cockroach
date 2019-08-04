@@ -30,11 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
 )
@@ -131,6 +131,57 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(flows) > 1 {
 		resultChan = make(chan runnerResult, len(flows)-1)
 	}
+	// First check to see whether or not to even try vectorizing the flow. The
+	// goal here is to determine up front whether all of the flows can be
+	// vectorized. If any of them can't, turn off the setting.
+	// TODO(yuzefovich): this is a safe but quite inefficient way of setting up
+	// vectorized flows since the flows will effectively be planned twice. Remove
+	// this once logic of falling back to DistSQL is bullet-proof.
+	if evalCtx.SessionData.VectorizeMode != sessiondata.VectorizeOff {
+		for _, spec := range flows {
+			if err := distsqlrun.SupportsVectorized(
+				ctx, &distsqlrun.FlowCtx{
+					EvalCtx: &evalCtx.EvalContext,
+					Cfg:     &distsqlrun.ServerConfig{},
+					NodeID:  -1,
+				}, spec.Processors,
+			); err != nil {
+				// Vectorization attempt failed with an error.
+				returnVectorizationSetupError := false
+				if evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeExperimentalAlways {
+					returnVectorizationSetupError = true
+					// If running with VectorizeExperimentalAlways, this check makes sure
+					// that we can still run SET statements (mostly to set vectorize to
+					// off) and the like.
+					if len(spec.Processors) == 1 &&
+						spec.Processors[0].Core.LocalPlanNode != nil {
+						rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
+						if rsidx != nil {
+							lp := localState.LocalProcs[*rsidx]
+							if z, ok := lp.(distsqlrun.VectorizeAlwaysException); ok {
+								if z.IsException() {
+									returnVectorizationSetupError = false
+								}
+							}
+						}
+					}
+				}
+				log.VEventf(ctx, 1, "failed to vectorize: %s", err)
+				if returnVectorizationSetupError {
+					return nil, nil, err
+				}
+				// Vectorization is not supported for this flow, so we override the
+				// setting. Note that we need to restore the setting of evalCtx since
+				// it can be used in the future, but setupReq is used only once, so we
+				// don't need to restore it.
+				setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
+				origMode := evalCtx.SessionData.VectorizeMode
+				evalCtx.SessionData.VectorizeMode = sessiondata.VectorizeOff
+				defer func() { evalCtx.SessionData.VectorizeMode = origMode }()
+				break
+			}
+		}
+	}
 	for nodeID, flowSpec := range flows {
 		if nodeID == thisNodeID {
 			// Skip this node.
@@ -168,28 +219,6 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// into the local flow.
 	}
 	if firstErr != nil {
-		if _, ok := errors.If(firstErr, func(err error) (v interface{}, ok bool) {
-			v, ok = err.(*distsqlrun.VectorizedSetupError)
-			return v, ok
-		}); ok && evalCtx.SessionData.Vectorize == sessiondata.VectorizeOn {
-			// Error vectorizing remote flows, try again with off.
-			// Generate a new flow ID so that any remote nodes that successfully set
-			// up a vectorized flow will not be connected to by a non-vectorized flow.
-			newFlowID := uuid.MakeV4()
-			log.Infof(
-				ctx, "error vectorizing remote flow %s, restarting with vectorize=off and ID %s: %+v", flows[thisNodeID].FlowID, newFlowID, firstErr,
-			)
-			for i := range flows {
-				flows[i].FlowID.UUID = newFlowID
-			}
-			evalCtx.SessionData.Vectorize = sessiondata.VectorizeOff
-			// Reset vectorize setting after returning.
-			defer func() { evalCtx.SessionData.Vectorize = sessiondata.VectorizeOn }()
-			// Recurse once with sessiondata.VectorizeOff, note that this branch will
-			// not be hit again due to the condition above that
-			// evalCtx.SessionData.Vectorize == sessiondata.VectorizeOn.
-			return dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState)
-		}
 		return nil, nil, firstErr
 	}
 
@@ -543,7 +572,11 @@ func (r *DistSQLReceiver) Push(
 			// previous error (if any).
 			if roachpb.ErrPriority(meta.Err) > roachpb.ErrPriority(r.resultWriter.Err()) {
 				if r.txn != nil {
-					if retryErr, ok := meta.Err.(*roachpb.UnhandledRetryableError); ok {
+					if err, ok := errors.If(meta.Err, func(err error) (v interface{}, ok bool) {
+						v, ok = err.(*roachpb.UnhandledRetryableError)
+						return v, ok
+					}); ok {
+						retryErr := err.(*roachpb.UnhandledRetryableError)
 						// Update the txn in response to remote errors. In the non-DistSQL
 						// world, the TxnCoordSender handles "unhandled" retryable errors,
 						// but this one is coming from a distributed SQL node, which has
@@ -632,22 +665,44 @@ func (r *DistSQLReceiver) Push(
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
 	// Note that AddRow accounts for the memory used by the Datums.
 	if commErr := r.resultWriter.AddRow(r.ctx, r.row); commErr != nil {
-		r.commErr = commErr
-		// Set the error on the resultWriter too, for the convenience of some of the
-		// clients. If clients don't care to differentiate between communication
-		// errors and query execution errors, they can simply inspect
-		// resultWriter.Err(). Also, this function itself doesn't care about the
-		// distinction and just uses resultWriter.Err() to see if we're still
-		// accepting results.
-		r.resultWriter.SetError(commErr)
+		// ErrLimitedResultClosed is not a real error, it is a
+		// signal to stop distsql and return success to the client.
+		if !errors.Is(commErr, ErrLimitedResultClosed) {
+			// Set the error on the resultWriter too, for the convenience of some of the
+			// clients. If clients don't care to differentiate between communication
+			// errors and query execution errors, they can simply inspect
+			// resultWriter.Err(). Also, this function itself doesn't care about the
+			// distinction and just uses resultWriter.Err() to see if we're still
+			// accepting results.
+			r.resultWriter.SetError(commErr)
+
+			// We don't need to shut down the connection
+			// if there's a portal-related error. This is
+			// definitely a layering violation, but is part
+			// of some accepted technical debt (see comments on
+			// sql/pgwire.limitedCommandResult.moreResultsNeeded).
+			// Instead of changing the signature of AddRow, we have
+			// a sentinel error that is handled specially here.
+			if !errors.Is(commErr, ErrLimitedResultNotSupported) {
+				r.commErr = commErr
+			}
+		}
 		// TODO(andrei): We should drain here. Metadata from this query would be
 		// useful, particularly as it was likely a large query (since AddRow()
 		// above failed, presumably with an out-of-memory error).
 		r.status = distsqlrun.ConsumerClosed
-		return r.status
 	}
 	return r.status
 }
+
+var (
+	// ErrLimitedResultNotSupported is an error produced by pgwire
+	// indicating an unsupported feature of row count limits was attempted.
+	ErrLimitedResultNotSupported = unimplemented.NewWithIssue(4035, "execute row count limits only partially supported")
+	// ErrLimitedResultClosed is a sentinel error produced by pgwire
+	// indicating the portal should be closed without error.
+	ErrLimitedResultClosed = errors.New("row count limit closed")
+)
 
 // ProducerDone is part of the RowReceiver interface.
 func (r *DistSQLReceiver) ProducerDone() {

@@ -49,27 +49,7 @@ func TestGenerateParse(t *testing.T) {
 	rnd, _ := randutil.NewPseudoRand()
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
-	db.Exec(t, `
-		CREATE TABLE t (
-			_bool bool,
-			_bytes bytes,
-			_date date,
-			_decimal decimal,
-			_float4 float4,
-			_float8 float8,
-			_inet inet,
-			_int4 int4,
-			_int8 int8,
-			_interval interval,
-			_jsonb jsonb,
-			_string string,
-			_time time,
-			_timestamp timestamp,
-			_timestamptz timestamptz,
-			_uuid uuid
-		);
-		INSERT INTO t DEFAULT VALUES;
-	`)
+	db.Exec(t, SeedTable)
 
 	var opts []SmitherOption
 	if *flagNoMutations {
@@ -79,7 +59,7 @@ func TestGenerateParse(t *testing.T) {
 		opts = append(opts, DisableWith())
 	}
 
-	smither, err := NewSmither(nil, rnd, opts...)
+	smither, err := NewSmither(sqlDB, rnd, opts...)
 	if err != nil {
 		t.Fatal(err)
 	}

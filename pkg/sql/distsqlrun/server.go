@@ -71,11 +71,11 @@ import (
 //
 // ATTENTION: When updating these fields, add to version_history.txt explaining
 // what changed.
-const Version distsqlpb.DistSQLVersion = 23
+const Version distsqlpb.DistSQLVersion = 24
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
-const MinAcceptedVersion distsqlpb.DistSQLVersion = 23
+const MinAcceptedVersion distsqlpb.DistSQLVersion = 24
 
 // minFlowDrainWait is the minimum amount of time a draining server allows for
 // any incoming flows to be registered. It acts as a grace period in which the
@@ -394,7 +394,7 @@ func (ds *ServerImpl) setupFlow(
 				BytesEncodeFormat: be,
 				ExtraFloatDigits:  int(req.EvalContext.ExtraFloatDigits),
 			},
-			Vectorize: sessiondata.VectorizeExecMode(req.EvalContext.Vectorize),
+			VectorizeMode: sessiondata.VectorizeExecMode(req.EvalContext.Vectorize),
 		}
 		// Enable better compatibility with PostgreSQL date math.
 		if req.Version >= 22 {
@@ -438,24 +438,12 @@ func (ds *ServerImpl) setupFlow(
 	}
 	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := FlowCtx{
-		Settings:       ds.Settings,
-		RuntimeStats:   ds.RuntimeStats,
 		AmbientContext: ds.AmbientContext,
-		stopper:        ds.Stopper,
+		Cfg:            &ds.ServerConfig,
 		id:             req.Flow.FlowID,
 		EvalCtx:        evalCtx,
-		nodeDialer:     ds.NodeDialer,
-		Gossip:         ds.Gossip,
 		txn:            txn,
-		ClientDB:       ds.DB,
-		executor:       ds.Executor,
-		LeaseManager:   ds.LeaseManager,
-		testingKnobs:   ds.TestingKnobs,
-		nodeID:         nodeID,
-		TempStorage:    ds.TempStorage,
-		BulkAdder:      ds.BulkAdder,
-		diskMonitor:    ds.DiskMonitor,
-		JobRegistry:    ds.JobRegistry,
+		NodeID:         nodeID,
 		traceKV:        req.TraceKV,
 		local:          localState.IsLocal,
 	}

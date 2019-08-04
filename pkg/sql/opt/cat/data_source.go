@@ -21,9 +21,6 @@ type DataSourceName = tree.TableName
 type DataSource interface {
 	Object
 
-	// Name returns the fully normalized, fully qualified, and fully resolved
-	// name of the data source (<db-name>.<schema-name>.<data-source-name>). The
-	// ExplicitCatalog and ExplicitSchema fields will always be true, since all
-	// parts of the name are always specified.
-	Name() *DataSourceName
+	// Name returns the unqualified name of the object.
+	Name() tree.Name
 }

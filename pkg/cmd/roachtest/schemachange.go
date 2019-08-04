@@ -310,7 +310,7 @@ func makeIndexAddTpccTest(spec clusterSpec, warehouses int, length time.Duration
 				Duration: length,
 			})
 		},
-		MinVersion: "v2.2.0",
+		MinVersion: "v19.1.0",
 	}
 }
 

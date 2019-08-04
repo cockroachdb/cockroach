@@ -1294,6 +1294,7 @@ func TestParse(t *testing.T) {
 		{`IMPORT TABLE foo (id INT8, email STRING, age INT8) CSV DATA ('path/to/some/file', $1) WITH comma = ',', "nullif" = 'n/a', temp = $2`},
 		{`IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
 		{`IMPORT INTO foo(id, email) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
+		{`IMPORT INTO foo CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 
 		{`IMPORT PGDUMP 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
 		{`EXPLAIN IMPORT PGDUMP 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
@@ -2998,8 +2999,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT * FROM a FOR UPDATE`, 6583, ``},
 		{`SELECT * FROM ROWS FROM (a(b) AS (d))`, 0, `ROWS FROM with col_def_list`},
 
-		{`SELECT 123 AT TIME ZONE 'b'`, 32005, ``},
-
 		{`SELECT 'a'::INTERVAL SECOND`, 0, `interval with unit qualifier`},
 		{`SELECT 'a'::INTERVAL(123)`, 32564, ``},
 		{`SELECT 'a'::INTERVAL SECOND(123)`, 32564, `interval second`},
@@ -3025,7 +3024,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT GROUPING (a,b,c)`, 0, `d_expr grouping`},
 		{`SELECT a(VARIADIC b)`, 0, `variadic`},
 		{`SELECT a(b, c, VARIADIC b)`, 0, `variadic`},
-		{`SELECT COLLATION FOR (a)`, 32563, ``},
 		{`SELECT CURRENT_TIME`, 26097, `current_time`},
 		{`SELECT CURRENT_TIME()`, 26097, `current_time`},
 		{`SELECT TREAT (a AS INT8)`, 0, `treat`},

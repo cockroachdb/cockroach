@@ -68,14 +68,14 @@ func RunTest(t *testing.T, path, addr, user string) {
 			return ""
 		case "receive":
 			until := parseMessages(d.Input)
-			msgs, err := p.Receive(until...)
+			msgs, err := p.Receive(hasKeepErrMsg(d), until...)
 			if err != nil {
 				t.Fatalf("%s: %+v", d.Pos, err)
 			}
 			return msgsToJSONWithIgnore(msgs, d)
 		case "until":
 			until := parseMessages(d.Input)
-			msgs, err := p.Until(until...)
+			msgs, err := p.Until(hasKeepErrMsg(d), until...)
 			if err != nil {
 				t.Fatalf("%s: %+v", d.Pos, err)
 			}
@@ -88,7 +88,6 @@ func RunTest(t *testing.T, path, addr, user string) {
 	if err := p.Close(); err != nil {
 		t.Fatal(err)
 	}
-
 }
 
 func parseMessages(s string) []pgproto3.BackendMessage {
@@ -99,11 +98,21 @@ func parseMessages(s string) []pgproto3.BackendMessage {
 	return msgs
 }
 
+func hasKeepErrMsg(d *datadriven.TestData) bool {
+	for _, arg := range d.CmdArgs {
+		if arg.Key == "keepErrMessage" {
+			return true
+		}
+	}
+	return false
+}
+
 func msgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestData) string {
 	ignore := map[string]bool{}
 	errs := map[string]string{}
 	for _, arg := range args.CmdArgs {
 		switch arg.Key {
+		case "keepErrMessage":
 		case "ignore":
 			for _, typ := range arg.Vals {
 				ignore[fmt.Sprintf("*pgproto3.%s", typ)] = true
@@ -126,11 +135,13 @@ func msgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 				code = v
 			}
 			if err := enc.Encode(struct {
-				Type string
-				Code string
+				Type    string
+				Code    string
+				Message string `json:",omitempty"`
 			}{
-				Type: "ErrorResponse",
-				Code: code,
+				Type:    "ErrorResponse",
+				Code:    code,
+				Message: errmsg.Message,
 			}); err != nil {
 				panic(err)
 			}
@@ -157,6 +168,8 @@ func toMessage(typ string) interface{} {
 		return &pgproto3.Execute{}
 	case "Parse":
 		return &pgproto3.Parse{}
+	case "PortalSuspended":
+		return &pgproto3.PortalSuspended{}
 	case "Query":
 		return &pgproto3.Query{}
 	case "ReadyForQuery":
@@ -164,6 +177,6 @@ func toMessage(typ string) interface{} {
 	case "Sync":
 		return &pgproto3.Sync{}
 	default:
-		panic(fmt.Errorf("unknown type %s", typ))
+		panic(fmt.Errorf("unknown type %q", typ))
 	}
 }

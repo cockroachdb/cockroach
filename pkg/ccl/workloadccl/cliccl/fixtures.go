@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	workloadcli "github.com/cockroachdb/cockroach/pkg/workload/cli"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -268,6 +269,29 @@ func fixturesMake(gen workload.Generator, urls []string, _ string) error {
 	return nil
 }
 
+// restoreDataLoader is an InitialDataLoader implementation that loads data with
+// RESTORE.
+type restoreDataLoader struct {
+	fixture  workloadccl.Fixture
+	database string
+}
+
+// InitialDataLoad implements the InitialDataLoader interface.
+func (l restoreDataLoader) InitialDataLoad(
+	ctx context.Context, db *gosql.DB, gen workload.Generator,
+) (int64, error) {
+	log.Infof(ctx, "starting restore of %d tables", len(gen.Tables()))
+	start := timeutil.Now()
+	bytes, err := workloadccl.RestoreFixture(ctx, db, l.fixture, l.database, true /* injectStats */)
+	if err != nil {
+		return 0, errors.Wrap(err, `restoring fixture`)
+	}
+	elapsed := timeutil.Since(start)
+	log.Infof(ctx, "restored %s bytes in %d tables (took %s, %s)",
+		humanizeutil.IBytes(bytes), len(gen.Tables()), elapsed, humanizeutil.DataRate(bytes, elapsed))
+	return bytes, nil
+}
+
 func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
 	gcs, err := getStorage(ctx)
@@ -289,19 +313,21 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 		return errors.Wrap(err, `finding fixture`)
 	}
 
-	start := timeutil.Now()
-	log.Infof(ctx, "starting load of %d tables", len(gen.Tables()))
-	bytes, err := workloadccl.RestoreFixture(ctx, sqlDB, fixture, dbName)
-	if err != nil {
-		return errors.Wrap(err, `restoring fixture`)
+	l := restoreDataLoader{fixture: fixture, database: dbName}
+	if _, err := workloadsql.Setup(ctx, sqlDB, gen, l); err != nil {
+		return err
 	}
-	elapsed := timeutil.Since(start)
-	log.Infof(ctx, "loaded %s in %d tables (took %s, %s)",
-		humanizeutil.IBytes(bytes), len(gen.Tables()), elapsed, humanizeutil.DataRate(bytes, elapsed))
+
+	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
+	for _, table := range gen.Tables() {
+		if err := workloadsql.Split(ctx, sqlDB, table, splitConcurrency); err != nil {
+			return errors.Wrapf(err, `splitting %s`, table.Name)
+		}
+	}
 
 	if hooks, ok := gen.(workload.Hookser); *fixturesRunChecks && ok {
 		if consistencyCheckFn := hooks.Hooks().CheckConsistency; consistencyCheckFn != nil {
-			log.Info(ctx, "fixture is restored; now running consistency checks (ctrl-c to abort)")
+			log.Info(ctx, "fixture is imported; now running consistency checks (ctrl-c to abort)")
 			if err := consistencyCheckFn(ctx, sqlDB); err != nil {
 				return err
 			}
@@ -321,26 +347,26 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 		return err
 	}
 
-	log.Infof(ctx, "starting import of %d tables", len(gen.Tables()))
-	start := timeutil.Now()
-	directIngestion := *fixturesImportDirectIngestionTable
-	filesPerNode := *fixturesImportFilesPerNode
-	injectStats := *fixturesImportInjectStats
-	noSkipPostLoad := false
-	csvServer := *fixturesMakeImportCSVServerURL
-	bytes, err := workloadccl.ImportFixture(
-		ctx, sqlDB, gen, dbName, directIngestion, filesPerNode, injectStats, noSkipPostLoad, csvServer,
-	)
-	if err != nil {
-		return errors.Wrap(err, `importing fixture`)
+	l := workloadccl.ImportDataLoader{
+		DirectIngestion: *fixturesImportDirectIngestionTable,
+		FilesPerNode:    *fixturesImportFilesPerNode,
+		InjectStats:     *fixturesImportInjectStats,
+		CSVServer:       *fixturesMakeImportCSVServerURL,
 	}
-	elapsed := timeutil.Since(start)
-	log.Infof(ctx, "imported %s in %d tables (took %s, %s)",
-		humanizeutil.IBytes(bytes), len(gen.Tables()), elapsed, humanizeutil.DataRate(bytes, elapsed))
+	if _, err := workloadsql.Setup(ctx, sqlDB, gen, l); err != nil {
+		return err
+	}
+
+	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
+	for _, table := range gen.Tables() {
+		if err := workloadsql.Split(ctx, sqlDB, table, splitConcurrency); err != nil {
+			return errors.Wrapf(err, `splitting %s`, table.Name)
+		}
+	}
 
 	if hooks, ok := gen.(workload.Hookser); *fixturesRunChecks && ok {
 		if consistencyCheckFn := hooks.Hooks().CheckConsistency; consistencyCheckFn != nil {
-			log.Info(ctx, "fixture is imported; now running consistency checks (ctrl-c to abort)")
+			log.Info(ctx, "fixture is restored; now running consistency checks (ctrl-c to abort)")
 			if err := consistencyCheckFn(ctx, sqlDB); err != nil {
 				return err
 			}

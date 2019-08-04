@@ -16,6 +16,20 @@ import (
 	"strings"
 )
 
+// ReplicaTypeVoter returns a ReplicaType_VOTER pointer suitable for use in a
+// nullable proto field.
+func ReplicaTypeVoter() *ReplicaType {
+	t := ReplicaType_VOTER
+	return &t
+}
+
+// ReplicaTypeLearner returns a ReplicaType_LEARNER pointer suitable for use in
+// a nullable proto field.
+func ReplicaTypeLearner() *ReplicaType {
+	t := ReplicaType_LEARNER
+	return &t
+}
+
 // ReplicaDescriptors is a set of replicas, usually the nodes/stores on which
 // replicas of a range are stored.
 type ReplicaDescriptors struct {
@@ -49,13 +63,6 @@ func (d ReplicaDescriptors) String() string {
 		fmt.Fprint(&buf, desc)
 	}
 	return buf.String()
-}
-
-// Unwrap returns every replica in the set. It is a placeholder for code that
-// used to work on a slice of replicas until learner replicas are added. At that
-// point, all uses of Unwrap will be migrated to All/Voters/Learners.
-func (d ReplicaDescriptors) Unwrap() []ReplicaDescriptor {
-	return d.wrapped
 }
 
 // All returns every replica in the set, including both voter replicas and

@@ -511,6 +511,10 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 			fmt.Printf("%s;\n", stmt)
 			tableStmts[i] = stmt
 		}
+		if err := db.exec(ctx, sqlsmith.SeedTable); err != nil {
+			return err
+		}
+		fmt.Printf("%s;\n", sqlsmith.SeedTable)
 		var err error
 		smither, err = sqlsmith.NewSmither(db.db, r.Rnd, sqlsmith.DisableMutations())
 		return err
@@ -543,6 +547,88 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 		fmt.Printf("%s;", stmt)
 	}
 	fmt.Printf("\n")
+}
+
+func TestRandomDatumRoundtrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sema := tree.MakeSemaContext()
+	eval := tree.MakeTestingEvalContext(nil)
+
+	var smither *sqlsmith.Smither
+	testRandomSyntax(t, true, "", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+		var err error
+		smither, err = sqlsmith.NewSmither(nil, r.Rnd)
+		return err
+	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+		defer func() {
+			if err := recover(); err != nil {
+				s := fmt.Sprint(err)
+				// JSONB NaN and Infinity can't round
+				// trip because JSON doesn't support
+				// those as Numbers, only strings. (Try
+				// `JSON.stringify(Infinity)` in a JS console.)
+				if strings.Contains(s, "JSONB") && (strings.Contains(s, "Infinity") || strings.Contains(s, "NaN")) {
+					return
+				}
+				for _, cmp := range []string{
+					"ReturnType called on TypedExpr with empty typeAnnotation",
+					"runtime error: invalid memory address or nil pointer dereference",
+				} {
+					if strings.Contains(s, cmp) {
+						return
+					}
+				}
+				panic(err)
+			}
+		}()
+		generated := smither.GenerateExpr()
+		typ := generated.ResolvedType()
+		switch typ {
+		case types.Date, types.Decimal:
+			return nil
+		}
+		serializedGen := tree.Serialize(generated)
+
+		// We don't care about errors below because they are often
+		// caused by sqlsmith generating bogus queries. We're just
+		// looking for datums that don't match.
+		parsed1, err := parser.ParseExpr(serializedGen)
+		if err != nil {
+			return nil
+		}
+		typed1, err := parsed1.TypeCheck(&sema, typ)
+		if err != nil {
+			return nil
+		}
+		datum1, err := typed1.Eval(&eval)
+		if err != nil {
+			return nil
+		}
+		serialized1 := tree.Serialize(datum1)
+
+		parsed2, err := parser.ParseExpr(serialized1)
+		if err != nil {
+			return nil
+		}
+		typed2, err := parsed2.TypeCheck(&sema, typ)
+		if err != nil {
+			return nil
+		}
+		datum2, err := typed2.Eval(&eval)
+		if err != nil {
+			return nil
+		}
+		serialized2 := tree.Serialize(datum2)
+
+		if serialized1 != serialized2 {
+			panic(errors.Errorf("serialized didn't match:\nexpr: %s\nfirst: %s\nsecond: %s", generated, serialized1, serialized2))
+		}
+		if datum1.Compare(&eval, datum2) != 0 {
+			panic(errors.Errorf("%s [%[1]T] != %s [%[2]T] (original expr: %s)", serialized1, serialized2, serializedGen))
+		}
+		return nil
+	})
 }
 
 // testRandomSyntax performs all of the RSG setup and teardown for common

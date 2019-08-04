@@ -1,0 +1,96 @@
+# LogicTest: local-opt
+# ------------------------------------------------------------------------------
+# Numeric References Tests.
+# These are put at the beginning of the file to ensure the numeric table
+# reference is 53 (the numeric reference of the first table).
+# If the numbering scheme in cockroach changes, this test will break.
+# TODO(madhavsuresh): get the numeric reference ID in a less brittle fashion
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE num_ref (a INT PRIMARY KEY, xx INT, b INT, c INT, INDEX bc (b,c))
+
+statement ok
+CREATE TABLE num_ref_hidden (a INT, b INT)
+
+statement ok
+ALTER TABLE num_ref RENAME COLUMN b TO d
+
+statement ok
+ALTER TABLE num_ref RENAME COLUMN a TO p
+
+statement ok
+ALTER TABLE num_ref DROP COLUMN xx
+
+statement ok
+INSERT INTO num_ref VALUES (1, 10, 101), (2, 20, 200), (3, 30, 300)
+
+statement ok
+INSERT INTO num_ref_hidden VALUES (1, 10), (2, 20), (3, 30)
+
+query III
+SELECT * FROM num_ref
+----
+1  10  101
+2  20  200
+3  30  300
+
+let $num_ref_id
+SELECT id FROM system.namespace WHERE name='num_ref'
+
+query III
+SELECT * FROM [$num_ref_id as num_ref_alias]
+----
+1  10  101
+2  20  200
+3  30  300
+
+query III
+SELECT * FROM [$num_ref_id(4,3,1) AS num_ref_alias]
+----
+101  10  1
+200  20  2
+300  30  3
+
+query I
+SELECT * FROM [$num_ref_id(4) AS num_ref_alias]@[2]
+----
+101
+200
+300
+
+query I
+SELECT * FROM [$num_ref_id(1) AS num_ref_alias]@[1]
+----
+1
+2
+3
+
+query III colnames
+SELECT * FROM [$num_ref_id(1,3,4) AS num_ref_alias(col1,col2,col3)]
+----
+col1  col2  col3
+1     10    101
+2     20    200
+3     30    300
+
+let $num_ref_hidden_id
+SELECT id FROM system.namespace WHERE name='num_ref_hidden'
+
+query I
+SELECT * FROM [$num_ref_hidden_id(1,3) AS num_ref_hidden]
+----
+1
+2
+3
+
+query I
+SELECT count(rowid) FROM [$num_ref_hidden_id(3) AS num_ref_hidden]
+----
+3
+
+# Ensure that privileges are checked when using numeric references.
+user testuser
+
+statement error pq: user testuser does not have SELECT privilege on relation num_ref
+SELECT * FROM [$num_ref_id AS t]

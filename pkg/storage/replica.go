@@ -396,6 +396,9 @@ type Replica struct {
 		// replicas have persisted the corresponding entry into their logs.
 		proposalQuota *quotaPool
 
+		// The base index is the index up to (including) which quota was already
+		// released. That is, the first element in quotaReleaseQueue below is
+		// released as the base index moves up by one, etc.
 		proposalQuotaBaseIndex uint64
 
 		// Once the leader observes a proposal come 'out of Raft', we add the
@@ -659,6 +662,11 @@ func (r *Replica) NodeID() roachpb.NodeID {
 	return r.store.nodeDesc.NodeID
 }
 
+// GetNodeLocality returns the locality of the node this replica belongs to.
+func (r *Replica) GetNodeLocality() roachpb.Locality {
+	return r.store.nodeDesc.Locality
+}
+
 // ClusterSettings returns the node's ClusterSettings.
 func (r *Replica) ClusterSettings() *cluster.Settings {
 	return r.store.cfg.Settings
@@ -727,9 +735,9 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 	return *r.mu.state.GCThreshold
 }
 
-// maxReplicaID returns the maximum ReplicaID of any replica, including voters
-// and learners.
-func maxReplicaID(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
+// maxReplicaIDOfAny returns the maximum ReplicaID of any replica, including
+// voters and learners.
+func maxReplicaIDOfAny(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
 	if desc == nil || !desc.IsInitialized() {
 		return 0
 	}
@@ -903,6 +911,8 @@ func (r *Replica) State() storagepb.RangeInfo {
 	ri.NumDropped = uint64(r.mu.droppedMessages)
 	if r.mu.proposalQuota != nil {
 		ri.ApproximateProposalQuota = r.mu.proposalQuota.approximateQuota()
+		ri.ProposalQuotaBaseIndex = int64(r.mu.proposalQuotaBaseIndex)
+		ri.ProposalQuotaReleaseQueue = append([]int64(nil), r.mu.quotaReleaseQueue...)
 	}
 	ri.RangeMaxBytes = *r.mu.zone.RangeMaxBytes
 	if desc := ri.ReplicaState.Desc; desc != nil {

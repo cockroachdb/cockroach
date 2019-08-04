@@ -154,6 +154,31 @@ func (d *Datums) Format(ctx *FmtCtx) {
 	ctx.WriteByte(')')
 }
 
+// Compare does a lexicographical comparison and returns -1 if the receiver
+// is less than other, 0 if receiver is equal to other and +1 if receiver is
+// greater than other.
+func (d Datums) Compare(evalCtx *EvalContext, other Datums) int {
+	if len(d) == 0 {
+		panic(errors.AssertionFailedf("empty Datums being compared to other"))
+	}
+
+	for i := range d {
+		if i >= len(other) {
+			return 1
+		}
+
+		compareDatum := d[i].Compare(evalCtx, other[i])
+		if compareDatum != 0 {
+			return compareDatum
+		}
+	}
+
+	if len(d) < len(other) {
+		return -1
+	}
+	return 0
+}
+
 // IsDistinctFrom checks to see if two datums are distinct from each other. Any
 // change in value is considered distinct, however, a NULL value is NOT
 // considered disctinct from another NULL value.
@@ -2095,6 +2120,30 @@ func ParseDTimestampTZ(
 	return MakeDTimestampTZ(t, precision), nil
 }
 
+// AsDTimestampTZ attempts to retrieve a DTimestampTZ from an Expr, returning a
+// DTimestampTZ and a flag signifying whether the assertion was successful. The
+// function should be used instead of direct type assertions wherever a
+// *DTimestamp wrapped by a *DOidWrapper is possible.
+func AsDTimestampTZ(e Expr) (DTimestampTZ, bool) {
+	switch t := e.(type) {
+	case *DTimestampTZ:
+		return *t, true
+	case *DOidWrapper:
+		return AsDTimestampTZ(t.Wrapped)
+	}
+	return DTimestampTZ{}, false
+}
+
+// MustBeDTimestampTZ attempts to retrieve a DTimestampTZ from an Expr,
+// panicking if the assertion fails.
+func MustBeDTimestampTZ(e Expr) DTimestampTZ {
+	t, ok := AsDTimestampTZ(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DTimestampTZ, found %T", e))
+	}
+	return t
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (*DTimestampTZ) ResolvedType() *types.T {
 	return types.TimestampTZ
@@ -2170,7 +2219,13 @@ func (d *DTimestampTZ) Size() uintptr {
 // TimestampTZ '2012-01-01 12:00:00 +02:00' would become
 //             '2012-01-01 12:00:00'.
 func (d *DTimestampTZ) stripTimeZone(ctx *EvalContext) *DTimestamp {
-	_, locOffset := d.Time.In(ctx.GetLocation()).Zone()
+	return d.EvalAtTimeZone(ctx, ctx.GetLocation())
+}
+
+// EvalAtTimeZone evaluates this TimestampTZ as if it were in the supplied
+// location, returning a timestamp without a timezone.
+func (d *DTimestampTZ) EvalAtTimeZone(ctx *EvalContext, loc *time.Location) *DTimestamp {
+	_, locOffset := d.Time.In(loc).Zone()
 	newTime := duration.Add(ctx, d.Time.UTC(), duration.FromInt64(int64(locOffset)))
 	return MakeDTimestamp(newTime, time.Microsecond)
 }
@@ -2470,12 +2525,19 @@ func AsJSON(d Datum) (json.JSON, error) {
 		return builder.Build(), nil
 	case *DTuple:
 		builder := json.NewObjectBuilder(len(t.D))
+		labels := t.typ.TupleLabels()
 		for i, e := range t.D {
 			j, err := AsJSON(e)
 			if err != nil {
 				return nil, err
 			}
-			builder.Add(fmt.Sprintf("f%d", i+1), j)
+			var key string
+			if i >= len(labels) {
+				key = fmt.Sprintf("f%d", i+1)
+			} else {
+				key = labels[i]
+			}
+			builder.Add(key, j)
 		}
 		return builder.Build(), nil
 	case *DTimestampTZ:

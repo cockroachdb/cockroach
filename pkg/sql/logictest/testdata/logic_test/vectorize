@@ -225,7 +225,7 @@ SELECT count(*) FROM [EXPLAIN SELECT c.a FROM c JOIN d ON d.b = c.b] WHERE tree 
 1
 
 statement ok
-SET experimental_vectorize = always
+SET vectorize = experimental_always
 
 # Simple lookup join.
 query I
@@ -273,7 +273,7 @@ SELECT c.a FROM c INNER LOOKUP JOIN c@sec AS s ON c.b=s.b
 
 # Test that LIKE expressions are properly handled by vectorized execution.
 statement ok
-RESET experimental_vectorize
+RESET vectorize
 
 statement ok
 CREATE TABLE e (x TEXT)
@@ -282,7 +282,7 @@ statement ok
 INSERT INTO e VALUES ('abc'), ('xyz')
 
 statement ok
-SET experimental_vectorize = always
+SET vectorize = experimental_always
 
 query T
 SELECT * FROM e WHERE x LIKE ''
@@ -336,7 +336,7 @@ xyz
 
 # Test that vectorized stats are collected correctly.
 statement ok
-SET experimental_vectorize = on
+SET vectorize = experimental_on
 
 statement ok
 SET distsql = on
@@ -349,7 +349,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkLFO9DAQhPv_KaKp9weHCl
 query T
 SELECT url FROM [EXPLAIN ANALYZE SELECT c.a FROM c JOIN d ON d.b = c.b]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJykkj9P8zAQxvf3U1jP7BeSjp6yFiGKChvK4DqnYkhty3dBrap8d5S4Q4vEPzH6ufvd3U_yESF2dGd3xDBPqNFqpBwdMcc8RaVh2e1hKg0f0iBT3Gq4mAnmCPHSEwwe7aanNdmO8nUFjY7E-n4ey-QaB42HZAMb9R8aq0GMamrdLKCxseKeiVUcJE15DQ0ZUn8WTW1MPTnxb14ORlVX1bSFxfa9Er8joypGO2oU5HQli90STD3qn5vcRB9OIvWlSMp-Z_Oh6aBxG-PrkNRL9EHFYNRsctL6mxPtyQ3iY_jea_EbrzVxioHpwumzydXYalC3pfILOA7Z0X2Obl5TnquZm4OOWEq1Lo9lKKXpwHO4_hJefIDb8d97AAAA__8MFtxW
+https://cockroachdb.github.io/distsqlplan/decode.html#eJykkk9PIzEMxe_7KSKfs7uTHnOaaxGiqHBDc0gTqwSmcRR7oFU13x3NH0GLBCrimGc_27-nHCFRwBu3Qwb7AAYaDbmQR2YqgzQ1LMMebKUhptzJIDcaPBUEewSJ0iJYuHebFtfoApb_FWgIKC6241hGX3vQcJddYqv-goZVJ1bVRtcL0LBx4h-RFXWSB92ABulyeyINbYwteokvUQ5WVf-qYQuLa1slcYdWVQxNr2GyzFeyuC2CNb2-nOSKYppBzDlILnHnyqEOoOGa6LnL6oliUpSsGklmrN8x4R59J5HSB5eGQq-sCrow-865B6CAe3XSZd7FCzNa_CSjNXKmxHiWz1eTq77RgGGL049i6orH20J-XDM9V6NvFAKyTFUzPZZpKg0HnprNt-bFJ3PT_3kLAAD__8_x9IM=
 
 query T
 SELECT url FROM [EXPLAIN ANALYZE SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b]
@@ -357,7 +357,7 @@ SELECT url FROM [EXPLAIN ANALYZE SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d
 https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kkFr4zAQhe_7K8ycdlm1sZ2boJBrCm1K2lvxQZGmjkCRjDQqCcH_vcgqNAluQ0rpzXrSNzPvjfdgncJ7scEA_BkqaBh03kkMwfkk5QdztQVeMtC2i5TkhoF0HoHvgTQZBA5PYmVwiUKhn5TAQCEJbYayndcb4XczCQweO2EDL66AwSISL2YVMFgJkmsMhYvUJTFpFDtzINXAIKBBSfpV044X5XWZ2gQSxhSkN8iLMkDTM8jI-5iBRIvAq559z0o1bkWNWal_xUr9qZUPB9E6r9CjOpq-SeS5JyN53KFv8dZpi35SH-dh8IX-zqr__268btf586dWi1uUkbSz5zOZXrLeJYbO2YCn2YxWLlMgqFrMAQcXvcQH7-TQJh8XAzcICgPl2zof5na4Gv6_Q7i6AK5P4fpLeHoEl33T_3kLAAD__6RFR6I=
 
 statement ok
-RESET optimizer; RESET experimental_vectorize; RESET distsql
+RESET optimizer; RESET vectorize; RESET distsql
 
 # Regression test for composite null handling
 # https://github.com/cockroachdb/cockroach/issues/37358
@@ -464,7 +464,7 @@ statement ok
 INSERT INTO t38908 VALUES (1)
 
 statement ok
-SET experimental_vectorize=always
+SET vectorize=experimental_always
 
 query I
 SELECT * FROM t38908 WHERE x IN (1, 2)
@@ -472,7 +472,7 @@ SELECT * FROM t38908 WHERE x IN (1, 2)
 1
 
 statement ok
-RESET experimental_vectorize
+RESET vectorize
 
 # Test that an aggregate with no aggregate functions is handled correctly.
 query III
@@ -560,3 +560,62 @@ SELECT min(x) FROM t38959_2 WHERE (y, z) = (2, 3.0)
 
 statement ok
 SET tracing=off
+
+# Making sure that colBatchScan operator can parallelize scans.
+# This test is similar to that in testplannerlogic/select
+statement ok
+CREATE TABLE tpar (a INT PRIMARY KEY, item STRING, price FLOAT, UNIQUE INDEX item (item), UNIQUE INDEX p (price))
+
+statement ok
+ALTER TABLE tpar SPLIT AT VALUES(5)
+
+# Run a select to prime the range cache to simplify the trace below.
+statement ok
+SELECT * FROM tpar
+
+# Make sure that the scan actually gets parallelized.
+statement ok
+SET tracing = on; SELECT * FROM tpar WHERE a = 0 OR a = 10; SET tracing = off
+
+# The span "sending partial batch" means that the scan was parallelized.
+# Note that table ID here is hardcoded, so if a new table is created before
+# tpar, this query will need an adjustment.
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN 
+    ('querying next range at /Table/71/1/0',
+     'querying next range at /Table/71/1/10',
+     '=== SPAN START: kv.DistSender: sending partial batch ==='
+    )
+----
+querying next range at /Table/71/1/0
+=== SPAN START: kv.DistSender: sending partial batch ===
+querying next range at /Table/71/1/10
+
+# Test for #38858 -- handle aggregates correctly on an empty table.
+statement ok
+CREATE TABLE empty (a INT PRIMARY KEY, b FLOAT)
+
+# GROUP BY is omitted, so aggregates are in scalar context.
+query IIIIIRR
+SELECT count(*), count(a), sum_int(a), min(a), max(a), sum(b), avg(b) FROM empty
+----
+0  0  NULL  NULL  NULL  NULL  NULL
+
+ # GROUP BY is present, so aggregates are in non-scalar context.
+query IIIIIRR
+SELECT count(*), count(a), sum_int(a), min(a), max(a), sum(b), avg(b) FROM empty GROUP BY a
+----
+
+
+statement ok
+CREATE TABLE t_38995 (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t_38995 VALUES (1), (2), (3)
+
+query II
+SELECT a, ordinality*2 FROM t_38995 WITH ORDINALITY
+----
+1 2
+2 4
+3 6

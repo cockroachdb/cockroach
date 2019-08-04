@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -268,9 +267,14 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	evalCtx := cp.flowCtx.NewEvalCtx()
 
 	var singleTable *sqlbase.TableDescriptor
+	var singleTableTargetCols tree.NameList
 	if len(cp.spec.Tables) == 1 {
 		for _, table := range cp.spec.Tables {
-			singleTable = table
+			singleTable = table.Desc
+			singleTableTargetCols = make(tree.NameList, len(table.TargetCols))
+			for i, colName := range table.TargetCols {
+				singleTableTargetCols[i] = tree.Name(colName)
+			}
 		}
 	}
 
@@ -292,7 +296,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 		if isWorkload {
 			conv = newWorkloadReader(kvCh, singleTable, evalCtx)
 		} else {
-			conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, evalCtx)
+			conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, cp.spec.WalltimeNanos, singleTable, singleTableTargetCols, evalCtx)
 		}
 	case roachpb.IOFileFormat_MysqlOutfile:
 		conv, err = newMysqloutfileReader(kvCh, cp.spec.Format.MysqlOut, singleTable, evalCtx)
@@ -316,7 +320,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 		defer tracing.FinishSpan(span)
 		defer conv.inputFinished(ctx)
 
-		job, err := cp.flowCtx.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
+		job, err := cp.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
 		if err != nil {
 			return err
 		}
@@ -334,7 +338,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			})
 		}
 
-		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, progFn, cp.flowCtx.Settings)
+		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, progFn, cp.flowCtx.Cfg.Settings)
 	})
 
 	// TODO(jeffreyxiao): Remove this check in 20.1.
@@ -342,16 +346,16 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	// ensure that the splits are not automatically split by the merge queue. If
 	// the cluster does not support sticky bits, we disable the merge queue via
 	// gossip, so we can just set the split to expire immediately.
-	stickyBitEnabled := cp.flowCtx.Settings.Version.IsActive(cluster.VersionStickyBit)
+	stickyBitEnabled := cp.flowCtx.Cfg.Settings.Version.IsActive(cluster.VersionStickyBit)
 	expirationTime := hlc.Timestamp{}
 	if stickyBitEnabled {
-		expirationTime = cp.flowCtx.ClientDB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+		expirationTime = cp.flowCtx.Cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 	}
 
 	if cp.spec.IngestDirectly {
 		for _, tbl := range cp.spec.Tables {
-			for _, span := range tbl.AllIndexSpans() {
-				if err := cp.flowCtx.ClientDB.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
+			for _, span := range tbl.Desc.AllIndexSpans() {
+				if err := cp.flowCtx.Cfg.DB.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
 					return err
 				}
 
@@ -359,7 +363,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 				scatterReq := &roachpb.AdminScatterRequest{
 					RequestHeader: roachpb.RequestHeaderFromSpan(span),
 				}
-				if _, pErr := client.SendWrapped(ctx, cp.flowCtx.ClientDB.NonTransactionalSender(), scatterReq); pErr != nil {
+				if _, pErr := client.SendWrapped(ctx, cp.flowCtx.Cfg.DB.NonTransactionalSender(), scatterReq); pErr != nil {
 					log.Errorf(ctx, "failed to scatter span %s: %s", span.Key, pErr)
 				}
 			}
@@ -373,7 +377,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 
 			writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
 			const bufferSize, flushSize = 64 << 20, 16 << 20
-			adder, err := cp.flowCtx.BulkAdder(ctx, cp.flowCtx.ClientDB, bufferSize, flushSize, writeTS)
+			adder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, bufferSize, flushSize, writeTS)
 			if err != nil {
 				return err
 			}
@@ -422,7 +426,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 
 			// Populate the split-point spans which have already been imported.
 			var completedSpans roachpb.SpanGroup
-			job, err := cp.flowCtx.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
+			job, err := cp.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
 			if err != nil {
 				return err
 			}
@@ -509,69 +513,41 @@ func wrapRowErr(err error, file string, row int64, code, format string, args ...
 func ingestKvs(
 	ctx context.Context, adder storagebase.BulkAdder, kvCh <-chan []roachpb.KeyValue,
 ) error {
-	const sortBatchSize = 48 << 20 // 48MB
-
-	// TODO(dt): buffer to disk instead of all in-mem.
-
-	// Batching all kvs together leads to worst case overlap behavior in the
-	// resulting AddSSTable calls, leading to compactions and potentially L0
-	// stalls. Instead maintain a separate buffer for each table's primary data.
-	// This optimizes for the case when the data arriving to IMPORT is already
-	// sorted by primary key, leading to no overlapping AddSSTable requests. Given
-	// that many workloads (and actual imported data) will be sorted by primary
-	// key, it makes sense to try to exploit this.
+	// We insert splits at every index span of the table prior to the invocation
+	// of this method. Since the BulkAdder is split aware when constructing SSTs,
+	// there is no risk of worst case overlap behavior in the resulting AddSSTable
+	// calls.
 	//
-	// TODO(dan): This was merged because it stabilized direct ingest IMPORT, but
-	// we may be able to do something simpler (such as chunking along index
-	// boundaries in flush) or more general (such as chunking based on the common
-	// prefix of the last N kvs).
-	kvsByTableIDIndexID := make(map[string]roachpb.KeyValueByKey)
-	sizeByTableIDIndexID := make(map[string]int64)
-
-	flush := func(ctx context.Context, buf roachpb.KeyValueByKey) error {
-		if len(buf) == 0 {
-			return nil
-		}
-		for i := range buf {
-			if err := adder.Add(ctx, buf[i].Key, buf[i].Value.RawBytes); err != nil {
+	// NB: We are getting rid of the pre-buffering stage which constructed
+	// separate buckets for each table's primary data, and flushed to the
+	// BulkAdder when the bucket was full. This is because, a tpcc 1k IMPORT would
+	// OOM when maintaining this buffer. Two big wins we got from this
+	// pre-buffering stage were:
+	//
+	// 1. We avoided worst case overlapping behavior in the AddSSTable calls as a
+	// result of flushing keys with the same TableIDIndexID prefix, together.
+	//
+	// 2. Secondary index KVs which were few and filled the bucket infrequently
+	// were flushed rarely, resulting in fewer L0 (and total) files.
+	//
+	// While we continue to achieve the first property as a result of the splits
+	// mentioned above, the KVs sent to the BulkAdder are no longer grouped which
+	// results in flushing a much larger number of small SSTs. This increases the
+	// number of L0 (and total) files, but with a lower memory usage.
+	//
+	// TODO(adityamaru): Once the roachtest import/experimental-direct-ingestion
+	// stabilizes, we can explore a two adder approach where we send primary
+	// indexes to one, and secondary indexes to the other. This should reduce the
+	// number of L0 (and total) files to be comparable to the previous
+	// implementation with pre-buffering.
+	for kvBatch := range kvCh {
+		for _, kv := range kvBatch {
+			if err := adder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
 				if _, ok := err.(storagebase.DuplicateKeyError); ok {
 					return errors.WithStack(err)
 				}
 				return err
 			}
-		}
-		return nil
-	}
-
-	for kvBatch := range kvCh {
-		for _, kv := range kvBatch {
-			tableLen, err := encoding.PeekLength(kv.Key)
-			if err != nil {
-				return err
-			}
-			indexLen, err := encoding.PeekLength(kv.Key[tableLen:])
-			if err != nil {
-				return err
-			}
-			bufKey := kv.Key[:tableLen+indexLen]
-			kvsByTableIDIndexID[string(bufKey)] = append(kvsByTableIDIndexID[string(bufKey)], kv)
-			sizeByTableIDIndexID[string(bufKey)] += int64(len(kv.Key) + len(kv.Value.RawBytes))
-
-			// TODO(dan): Prevent unbounded memory usage by flushing the largest
-			// buffer when the total size of all buffers exceeds some threshold.
-			if s := sizeByTableIDIndexID[string(bufKey)]; s > sortBatchSize {
-				buf := kvsByTableIDIndexID[string(bufKey)]
-				if err := flush(ctx, buf); err != nil {
-					return err
-				}
-				kvsByTableIDIndexID[string(bufKey)] = buf[:0]
-				sizeByTableIDIndexID[string(bufKey)] = 0
-			}
-		}
-	}
-	for _, buf := range kvsByTableIDIndexID {
-		if err := flush(ctx, buf); err != nil {
-			return err
 		}
 	}
 

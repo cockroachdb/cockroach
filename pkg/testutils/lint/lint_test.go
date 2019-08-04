@@ -1071,50 +1071,6 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	// TestLogicTestsLint verifies that all the logic test files start with
-	// a LogicTest directive.
-	t.Run("TestLogicTestsLint", func(t *testing.T) {
-		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(
-			pkgDir, "git", "ls-files",
-			"sql/logictest/testdata/logic_test/",
-			"sql/logictest/testdata/planner_test/",
-			"sql/opt/exec/execbuilder/testdata/",
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(filter, func(filename string) {
-			file, err := os.Open(filepath.Join(pkgDir, filename))
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			defer file.Close()
-			firstLine, err := bufio.NewReader(file).ReadString('\n')
-			if err != nil {
-				t.Errorf("reading first line of %s: %s", filename, err)
-				return
-			}
-			if !strings.HasPrefix(firstLine, "# LogicTest:") {
-				t.Errorf("%s must start with a directive, e.g. `# LogicTest: default`", filename)
-			}
-		}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
 	// Things that are packaged scoped are below here.
 	pkgScope := pkgVar
 	if !pkgSpecified {

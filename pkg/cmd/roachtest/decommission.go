@@ -282,6 +282,15 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		return execCLI(ctx, t, c, runNode, args...)
 	}
 
+	getCsvNumCols := func(csvStr string) (cols int, err error) {
+		reader := csv.NewReader(strings.NewReader(csvStr))
+		records, err := reader.Read()
+		if err != nil {
+			return 0, errors.Errorf("error reading csv input: \n %v\n errors:%s", csvStr, err)
+		}
+		return len(records), nil
+	}
+
 	matchCSV := func(csvStr string, matchColRow [][]string) (err error) {
 		defer func() {
 			if err != nil {
@@ -330,9 +339,36 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		"No more data reported on target nodes. " +
 			"Please verify cluster health before removing the nodes.",
 	}
-	statusHeader := []string{
+
+	// Different output here to be backwards compatible with earlier
+	// versions of cockroach (versions pre commit 888813c, which
+	// extends the node status command to include locality information).
+	statusHeaderWithLocality := []string{
+		"id", "address", "build", "started_at", "updated_at", "locality", "is_available", "is_live",
+	}
+	statusHeaderNoLocality := []string{
 		"id", "address", "build", "started_at", "updated_at", "is_available", "is_live",
 	}
+	getStatusCsvOutput := func(ids []string, numCols int) [][]string {
+		var res [][]string
+		switch numCols {
+		case len(statusHeaderNoLocality):
+			res = append(res, statusHeaderNoLocality)
+		case len(statusHeaderWithLocality):
+			res = append(res, statusHeaderWithLocality)
+		default:
+			t.Fatalf("Expected status output numCols to be either %d or %d, found %d", len(statusHeaderNoLocality), len(statusHeaderWithLocality), numCols)
+		}
+		for _, id := range ids {
+			build := []string{id}
+			for i := 0; i < numCols-1; i++ {
+				build = append(build, `.*`)
+			}
+			res = append(res, build)
+		}
+		return res
+	}
+
 	waitLiveDeprecated := "--wait=live is deprecated and is treated as --wait=all"
 
 	t.l.Printf("decommissioning first node from the second, polling the status manually\n")
@@ -383,13 +419,11 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		if err != nil {
 			t.Fatalf("node-status failed: %v", err)
 		}
-		exp := [][]string{
-			statusHeader,
-			{`1`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+		numCols, err := getCsvNumCols(o)
+		if err != nil {
+			t.Fatal(err)
 		}
+		exp := getStatusCsvOutput([]string{`1`, `2`, `3`, `4`}, numCols)
 		if err := matchCSV(o, exp); err != nil {
 			t.Fatal(err)
 		}
@@ -576,13 +610,11 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		if err != nil {
 			t.Fatalf("node-status failed: %v", err)
 		}
-
-		exp := [][]string{
-			statusHeader,
-			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+		numCols, err := getCsvNumCols(o)
+		if err != nil {
+			t.Fatal(err)
 		}
+		exp := getStatusCsvOutput([]string{`2`, `3`, `4`}, numCols)
 		if err := matchCSV(o, exp); err != nil {
 			time.Sleep(time.Second)
 			continue
@@ -605,14 +637,11 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		if err != nil {
 			t.Fatalf("node-status failed: %v", err)
 		}
-
-		exp := [][]string{
-			statusHeader,
-			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`5`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+		numCols, err := getCsvNumCols(o)
+		if err != nil {
+			t.Fatal(err)
 		}
+		exp := getStatusCsvOutput([]string{`2`, `3`, `4`, `5`}, numCols)
 		return matchCSV(o, exp)
 	}); err != nil {
 		t.Fatal(err)

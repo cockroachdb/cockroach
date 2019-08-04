@@ -142,9 +142,8 @@ type Memo struct {
 	// curID is the highest currently in-use scalar expression ID.
 	curID opt.ScalarID
 
-	// withExprs is the set of With expressions that have been constructed thus
-	// far.
-	withExprs []RelExpr
+	// curWithID is the highest currently in-use WITH ID.
+	curWithID opt.WithID
 
 	// WARNING: if you add more members, add initialization code in Init.
 }
@@ -162,7 +161,6 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.rootExpr = nil
 	m.rootProps = nil
 	m.memEstimate = 0
-	m.withExprs = nil
 
 	m.dataConversion = evalCtx.SessionData.DataConversion
 	m.reorderJoinsLimit = evalCtx.SessionData.ReorderJoinsLimit
@@ -172,6 +170,7 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.saveTablesPrefix = evalCtx.SessionData.SaveTablesPrefix
 
 	m.curID = 0
+	m.curWithID = 0
 }
 
 // IsEmpty returns true if there are no expressions in the memo.
@@ -359,15 +358,8 @@ func (m *Memo) RequestColStat(
 	return nil, false
 }
 
-// AddWithBinding adds a new expression to the set of referenceable With
-// expressions, returning its associated ID that can be used to retrieve it.
-func (m *Memo) AddWithBinding(e RelExpr) opt.WithID {
-	m.withExprs = append(m.withExprs, e)
-	return opt.WithID(len(m.withExprs))
-}
-
-// WithExpr returns the expression associated with the given WithID.
-// This shouldn't be used for anything relating to physical props.
-func (m *Memo) WithExpr(id opt.WithID) RelExpr {
-	return m.withExprs[id-1]
+// NextWithID returns a not-yet-assigned identifier for a WITH expression.
+func (m *Memo) NextWithID() opt.WithID {
+	m.curWithID++
+	return m.curWithID
 }

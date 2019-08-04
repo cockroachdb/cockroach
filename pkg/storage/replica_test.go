@@ -58,12 +58,14 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.etcd.io/etcd/raft/tracker"
+	"golang.org/x/net/trace"
 )
 
 // allSpans is a SpanSet that covers *everything* for use in tests that don't
@@ -1285,10 +1287,10 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
+	// Disable raft log truncation which confuses this test.
+	cfg.TestingKnobs.DisableRaftLogQueue = true
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
-	// Disable raft log truncation which confuses this test.
-	tc.store.SetRaftLogQueueActive(false)
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
 	if err != nil {
 		t.Fatal(err)
@@ -5159,15 +5161,12 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 				t.Fatalf("%d: %s", i, pErr)
 			}
 		case roachpb.STAGING:
-			// TODO(nvanbenschoten): Avoid writing directly to the engine once
-			// there's a way to create a STAGING transaction record.
-			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
-			txnRecord := pushee.AsRecord()
-			txnRecord.Status = roachpb.STAGING
-			if err := engine.MVCCPutProto(
-				context.Background(), tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{}, nil, &txnRecord,
-			); err != nil {
-				t.Fatal(err)
+			et, etH := endTxnArgs(pushee, true)
+			et.InFlightWrites = []roachpb.SequencedWrite{
+				{Key: key, Sequence: 1},
+			}
+			if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), etH, &et); pErr != nil {
+				t.Fatalf("%d: %s", i, pErr)
 			}
 		default:
 			t.Fatalf("unexpected status: %v", test.status)
@@ -6624,10 +6623,10 @@ func TestEntries(t *testing.T) {
 	// Disable ticks to avoid quiescence, which can result in empty
 	// entries being proposed and causing the test to flake.
 	cfg.RaftTickInterval = math.MaxInt32
+	cfg.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, cfg)
-	tc.repl.store.SetRaftLogQueueActive(false)
 
 	repl := tc.repl
 	rangeID := repl.RangeID
@@ -6774,10 +6773,11 @@ func TestEntries(t *testing.T) {
 func TestTerm(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
+	tsc := TestStoreConfig(nil)
+	tsc.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-	tc.repl.store.SetRaftLogQueueActive(false)
+	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	repl := tc.repl
 	rangeID := repl.RangeID
@@ -7849,6 +7849,88 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	}
 }
 
+// TestReplicaReproposalWithNewLeaseIndexError tests an interaction where a
+// proposal is rejected beneath raft due an illegal lease index error and then
+// hits an error when being reproposed. The expectation is that this error
+// manages to make its way back to the client.
+func TestReplicaReproposalWithNewLeaseIndexError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	var tc testContext
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
+
+	type magicKey struct{}
+	magicCtx := context.WithValue(ctx, magicKey{}, "foo")
+
+	var c int32 // updated atomically
+	tc.repl.mu.Lock()
+	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64, _ error) {
+		if v := p.ctx.Value(magicKey{}); v != nil {
+			curAttempt := atomic.AddInt32(&c, 1)
+			switch curAttempt {
+			case 1:
+				// This is the first time the command is being given a max lease
+				// applied index. Set the index to that of the recently applied
+				// write. Two requests can't have the same lease applied index,
+				// so this will cause it to be rejected beneath raft with an
+				// illegal lease index error.
+				wrongLeaseIndex := uint64(1)
+				return wrongLeaseIndex, nil
+			case 2:
+				// This is the second time the command is being given a max
+				// lease applied index, which should be after the command was
+				// rejected beneath raft. Return an error. We expect this error
+				// to propagate up through tryReproposeWithNewLeaseIndex and
+				// make it back to the client.
+				return 0, errors.New("boom")
+			default:
+				// Unexpected. Asserted against below.
+				return 0, nil
+			}
+		}
+		return 0, nil
+	}
+	tc.repl.mu.Unlock()
+
+	// Perform a few writes to advance the lease applied index.
+	const initCount = 3
+	key := roachpb.Key("a")
+	for i := 0; i < initCount; i++ {
+		iArg := incrementArgs(key, 1)
+		if _, pErr := tc.SendWrapped(&iArg); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	// Perform a write that will first hit an illegal lease index error and
+	// will then hit the injected error when we attempt to repropose it.
+	var ba roachpb.BatchRequest
+	iArg := incrementArgs(key, 10)
+	ba.Add(&iArg)
+	if _, pErr := tc.Sender().Send(magicCtx, ba); pErr == nil {
+		t.Fatal("expected a non-nil error")
+	} else if !testutils.IsPError(pErr, "boom") {
+		t.Fatalf("unexpected error: %v", pErr)
+	}
+	// The command should have picked a new max lease index exactly twice.
+	if exp, act := int32(2), atomic.LoadInt32(&c); exp != act {
+		t.Fatalf("expected %d proposals, got %d", exp, act)
+	}
+
+	// The command should not have applied.
+	gArgs := getArgs(key)
+	if reply, pErr := tc.SendWrapped(&gArgs); pErr != nil {
+		t.Fatal(pErr)
+	} else if v, err := reply.(*roachpb.GetResponse).Value.GetInt(); err != nil {
+		t.Fatal(err)
+	} else if v != initCount {
+		t.Fatalf("expected value of %d, found %d", initCount, v)
+	}
+}
+
 // TestGCWithoutThreshold validates that GCRequest only declares the threshold
 // key if it is subject to change, and that it does not access this key if it
 // does not declare them.
@@ -7958,10 +8040,10 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 	if err := testutils.MatchInOrder(formatted,
 		// The first proposal is rejected.
 		"retry proposal.*applied at lease index.*but required",
-		// The LocalResult is nil. This is the important part for this test.
-		"LocalResult: nil",
 		// The request will be re-evaluated.
 		"retry: proposalIllegalLeaseIndex",
+		// The LocalResult is nil. This is the important part for this test.
+		"LocalResult: nil",
 		// Re-evaluation succeeds and one txn is to be updated.
 		"LocalResult \\(reply.*#updated txns: 1",
 	); err != nil {
@@ -11476,4 +11558,269 @@ func TestSplitSnapshotWarningStr(t *testing.T) {
 		"; r12/2 is being probed (may or may not need a Raft snapshot)",
 		splitSnapshotWarningStr(12, status),
 	)
+}
+
+// TestHighestMaxLeaseIndexReproposalFinishesCommand exercises a case where a
+// command is reproposed twice at different MaxLeaseIndex values to ultimately
+// fail with an error which cannot be reproposed (say due to a lease transfer
+// or change to the gc threshold). This test works to exercise the invariant
+// that when a proposal has been reproposed at different MaxLeaseIndex value
+// the client is ultimately acknowledged with an error from a reproposal with
+// the largest index. The test verfies this condition by asserting that the
+// span used to trace the execution of the proposal is not used after the
+// proposal has been finished.
+func TestHighestMaxLeaseIndexReproposalFinishesCommand(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Set the trace infrastructure to log if a span is used after being finished.
+	defer enableTraceDebugUseAfterFree()()
+
+	// Set logging up to a test specific directory.
+	scope := log.Scope(t)
+	defer scope.Close(t)
+
+	tc := testContext{}
+	ctx := context.Background()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.manualClock = hlc.NewManualClock(123)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	// Set up tracing.
+	tracer := tracing.NewTracer()
+	tracer.Configure(&cfg.Settings.SV)
+	cfg.AmbientCtx.Tracer = tracer
+
+	// Below we set txnID to the value of the transaction we're going to force to
+	// be proposed multiple times.
+	var txnID uuid.UUID
+	// In the TestingProposalFilter we populater cmdID with the id of the proposal
+	// which corresponds to txnID.
+	var cmdID storagebase.CmdIDKey
+	// After we evalAndPropose the command we populate prop with the ProposalData
+	// value to enable reproposing the same command more than once.
+	var prop *ProposalData
+	// seen is used to detect the first application of our proposal.
+	var seen bool
+	cfg.TestingKnobs = StoreTestingKnobs{
+		MaxApplicationBatchSize: 1,
+		// Set the TestingProposalFilter in order to know the CmdIDKey for our
+		// request by detecting its txnID.
+		TestingProposalFilter: func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+			if args.Req.Header.Txn != nil && args.Req.Header.Txn.ID == txnID {
+				cmdID = args.CmdID
+			}
+			return nil
+		},
+		// Detect the application of the proposal to repropose it and also
+		// invalidate the lease.
+		TestingApplyFilter: func(args storagebase.ApplyFilterArgs) (retry int, pErr *roachpb.Error) {
+			if seen || args.CmdID != cmdID {
+				return 0, nil
+			}
+			seen = true
+			// Repropose on a separate location to not mess with the
+			// goldenProtosBelowRaft checks.
+			reproposed := make(chan struct{})
+			go func() {
+				if _, pErr := tc.repl.propose(prop.ctx, prop); pErr != nil {
+					panic(pErr)
+				}
+				close(reproposed)
+			}()
+			<-reproposed
+			tc.repl.mu.Lock()
+			defer tc.repl.mu.Unlock()
+			// Flush the proposalBuf to ensure that the reproposal makes it into the
+			// Replica's proposal map.
+			if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+				panic(err)
+			}
+			// Increase the lease sequence so that future reproposals will fail with
+			// NotLeaseHolderError. This mimics the outcome of a leaseholder change
+			// slipping in between the application of the first proposal and the
+			// reproposals.
+			tc.repl.mu.state.Lease.Sequence++
+			// This return value will force another retry which will carry a yet
+			// higher MaxLeaseIndex and will trigger our invariant violation.
+			return int(proposalIllegalLeaseIndex),
+				roachpb.NewErrorf("forced error that can be reproposed at a higher index")
+		},
+	}
+	tc.StartWithStoreConfig(t, stopper, cfg)
+	key := roachpb.Key("a")
+	lease, _ := tc.repl.GetLease()
+	txn := newTransaction("test", key, roachpb.NormalUserPriority, tc.Clock())
+	txnID = txn.ID
+	ba := roachpb.BatchRequest{
+		Header: roachpb.Header{
+			RangeID: tc.repl.RangeID,
+			Txn:     txn,
+		},
+	}
+	ba.Timestamp = txn.OrigTimestamp
+	ba.Add(&roachpb.PutRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: key,
+		},
+		Value: roachpb.MakeValueFromBytes([]byte("val")),
+	})
+
+	// Hold the RaftLock to ensure that after evalAndPropose our proposal is in
+	// the proposal map. Entries are only removed from that map underneath raft.
+	// We want to grab the proposal so that we can shove in an extra reproposal
+	// while the first proposal is being applied.
+	tc.repl.RaftLock()
+	tracedCtx, cleanup := tracing.EnsureContext(ctx, cfg.AmbientCtx.Tracer, "replica send")
+	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, lease, &ba, &allSpans, endCmds{})
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	errCh := make(chan *roachpb.Error)
+	go func() {
+		res := <-ch
+		cleanup()
+		errCh <- res.Err
+	}()
+
+	func() {
+		tc.repl.mu.Lock()
+		defer tc.repl.mu.Unlock()
+		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+			t.Fatal(err)
+		}
+		tc.repl.refreshProposalsLocked(0, reasonNewLeaderOrConfigChange)
+		prop = tc.repl.mu.proposals[cmdID]
+	}()
+	tc.repl.RaftUnlock()
+
+	if pErr = <-errCh; !testutils.IsPError(pErr, "NotLeaseHolder") {
+		t.Fatal(pErr)
+	}
+
+	// Round trip another proposal through the replica to ensure that previously
+	// committed entries have been applied.
+	_, pErr = tc.repl.sendWithRangeID(ctx, tc.repl.RangeID, ba)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	log.Flush()
+
+	stopper.Quiesce(ctx)
+	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
+		regexp.MustCompile("net/trace"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) > 0 {
+		t.Fatalf("reused span after free: %v", entries)
+	}
+}
+
+// TestLaterReproposalsDoNotReuseContext ensures that when commands are
+// reproposed more than once at the same MaxLeaseIndex and the first command
+// applies that the later reproposals do not log into the proposal's context
+// as its underlying trace span may already be finished.
+func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Set the trace infrastructure to log if a span is used after being finished.
+	defer enableTraceDebugUseAfterFree()()
+
+	tc := testContext{}
+	ctx := context.Background()
+
+	// Set logging up to a test specific directory.
+	scope := log.Scope(t)
+	defer scope.Close(t)
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	cfg := TestStoreConfig(hlc.NewClock(hlc.UnixNano, time.Nanosecond))
+	// Set up tracing.
+	tracer := tracing.NewTracer()
+	tracer.Configure(&cfg.Settings.SV)
+	tracer.AlwaysTrace()
+	cfg.AmbientCtx.Tracer = tracer
+	tc.StartWithStoreConfig(t, stopper, cfg)
+	key := roachpb.Key("a")
+	lease, _ := tc.repl.GetLease()
+	txn := newTransaction("test", key, roachpb.NormalUserPriority, tc.Clock())
+	ba := roachpb.BatchRequest{
+		Header: roachpb.Header{
+			RangeID: tc.repl.RangeID,
+			Txn:     txn,
+		},
+	}
+	ba.Timestamp = txn.OrigTimestamp
+	ba.Add(&roachpb.PutRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: key,
+		},
+		Value: roachpb.MakeValueFromBytes([]byte("val")),
+	})
+
+	// Hold the RaftLock to encourage the reproposals to occur in the same batch.
+	tc.repl.RaftLock()
+	sp := tracer.StartRootSpan("replica send", logtags.FromContext(ctx), tracing.RecordableSpan)
+	tracedCtx := opentracing.ContextWithSpan(ctx, sp)
+	// Go out of our way to enable recording so that expensive logging is enabled
+	// for this context.
+	tracing.StartRecording(sp, tracing.SingleNodeRecording)
+	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, lease, &ba, &allSpans, endCmds{})
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	// Launch a goroutine to finish the span as soon as a result has been sent.
+	errCh := make(chan *roachpb.Error)
+	go func() {
+		res := <-ch
+		sp.Finish()
+		errCh <- res.Err
+	}()
+
+	// Flush the proposal and then repropose it twice.
+	// This test verifies that these later reproposals don't record into the
+	// tracedCtx after its span has been finished.
+	func() {
+		tc.repl.mu.Lock()
+		defer tc.repl.mu.Unlock()
+		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+			t.Fatal(err)
+		}
+		tc.repl.refreshProposalsLocked(0, reasonNewLeaderOrConfigChange)
+		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+			t.Fatal(err)
+		}
+		tc.repl.refreshProposalsLocked(0, reasonNewLeaderOrConfigChange)
+	}()
+	tc.repl.RaftUnlock()
+
+	if pErr = <-errCh; pErr != nil {
+		t.Fatal(pErr)
+	}
+	// Round trip another proposal through the replica to ensure that previously
+	// committed entries have been applied.
+	_, pErr = tc.repl.sendWithRangeID(ctx, tc.repl.RangeID, ba)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	stopper.Quiesce(ctx)
+	// Check and see if the trace package logged an error.
+	log.Flush()
+	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
+		regexp.MustCompile("net/trace"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) > 0 {
+		t.Fatalf("reused span after free: %v", entries)
+	}
+}
+
+func enableTraceDebugUseAfterFree() (restore func()) {
+	prev := trace.DebugUseAfterFinish
+	trace.DebugUseAfterFinish = true
+	return func() { trace.DebugUseAfterFinish = prev }
 }

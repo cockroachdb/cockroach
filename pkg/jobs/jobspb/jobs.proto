@@ -72,6 +72,7 @@ message ImportDetails {
     string name = 18;
     int64 seq_val = 19;
     bool is_new = 20;
+    repeated string target_cols = 21;
     reserved 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17;
   }
   repeated Table tables = 1 [(gogoproto.nullable) = false];
@@ -81,6 +82,7 @@ message ImportDetails {
   int64 sst_size = 4 [(gogoproto.customname) = "SSTSize"];
   int64 oversample = 9;
   bool skip_fks = 10 [(gogoproto.customname) = "SkipFKs"];
+  bool prepare_complete = 12;
   int64 walltime = 5;
   uint32 parent_id = 6 [
     (gogoproto.customname) = "ParentID",

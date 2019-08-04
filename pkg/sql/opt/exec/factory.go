@@ -373,7 +373,11 @@ type Factory interface {
 	// as they appear in the table schema. The rowsNeeded parameter is true if a
 	// RETURNING clause needs the deleted row(s) as output.
 	ConstructDelete(
-		input Node, table cat.Table, fetchCols ColumnOrdinalSet, returnCols ColumnOrdinalSet,
+		input Node,
+		table cat.Table,
+		fetchCols ColumnOrdinalSet,
+		returnCols ColumnOrdinalSet,
+		skipFKChecks bool,
 	) (Node, error)
 
 	// ConstructDeleteRange creates a node that efficiently deletes contiguous
@@ -390,6 +394,16 @@ type Factory interface {
 	// ConstructCreateTable returns a node that implements a CREATE TABLE
 	// statement.
 	ConstructCreateTable(input Node, schema cat.Schema, ct *tree.CreateTable) (Node, error)
+
+	// ConstructCreateView returns a node that implements a CREATE VIEW
+	// statement.
+	ConstructCreateView(
+		schema cat.Schema,
+		viewName string,
+		viewQuery string,
+		columns sqlbase.ResultColumns,
+		deps opt.ViewDeps,
+	) (Node, error)
 
 	// ConstructSequenceSelect creates a node that implements a scan of a sequence
 	// as a data source.

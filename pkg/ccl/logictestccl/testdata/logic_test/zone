@@ -30,7 +30,7 @@ scan  ·      ·
 ·     table  t@secondary
 ·     spans  /10-/11
 
-query T
+query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
 ----
 TABLE t
@@ -70,7 +70,7 @@ scan  ·      ·
 ·     table  t@tertiary
 ·     spans  /10-/11
 
-query T
+query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
 ----
 TABLE t
@@ -128,7 +128,7 @@ scan  ·      ·
 ·     table  t@primary
 ·     spans  /10-/10/#
 
-query T
+query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
 ----
 TABLE t
@@ -221,7 +221,7 @@ scan  ·      ·
 ·     table  t@tertiary
 ·     spans  /10-/11
 
-query T
+query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
 ----
 TABLE t
@@ -271,7 +271,7 @@ scan  ·      ·
 ·     table  t@secondary
 ·     spans  /10-/11
 
-query T
+query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
 ----
 TABLE t
@@ -362,7 +362,7 @@ scan  ·      ·
 ·     table  t36642@tertiary
 ·     spans  /10-/11
 
-query T
+query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
 ----
 TABLE t
@@ -479,3 +479,20 @@ test.t38391.x1_idx  ALTER PARTITION x1_idx OF INDEX t38391@foo CONFIGURE ZONE US
                     num_replicas = 3,
                     constraints = '[]',
                     lease_preferences = '[]'
+
+statement ok
+CREATE TABLE dup_constraint (x INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE dup_constraint PARTITION BY LIST (x) (
+    PARTITION p1 VALUES IN (1),
+    PARTITION p2 VALUES IN (2)
+)
+
+statement error pq: incompatible zone constraints: "\+region=us-east1" and "\+region=us-west1"
+ALTER PARTITION p1 OF TABLE dup_constraint CONFIGURE ZONE USING
+CONSTRAINTS='[+region=us-east1, +region=us-west1]'
+
+statement error pq: incompatible zone constraints: "\+region=us-east1" and "\-region=us-east1"
+ALTER PARTITION p1 OF TABLE dup_constraint CONFIGURE ZONE USING
+CONSTRAINTS='[+region=us-east1, -region=us-east1]'

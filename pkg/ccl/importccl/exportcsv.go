@@ -96,7 +96,7 @@ func exportPlanHook(
 			return err
 		}
 
-		if err := p.RequireSuperUser(ctx, "EXPORT"); err != nil {
+		if err := p.RequireAdminRole(ctx, "EXPORT"); err != nil {
 			return err
 		}
 
@@ -274,7 +274,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			if err != nil {
 				return err
 			}
-			es, err := storageccl.MakeExportStorage(ctx, conf, sp.flowCtx.Settings)
+			es, err := storageccl.MakeExportStorage(ctx, conf, sp.flowCtx.Cfg.Settings)
 			if err != nil {
 				return err
 			}

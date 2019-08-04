@@ -43,8 +43,9 @@ type JSONStatistic struct {
 //
 // See HistogramData for a description of the fields.
 type JSONHistoBucket struct {
-	NumEq    int64 `json:"num_eq"`
-	NumRange int64 `json:"num_range"`
+	NumEq         int64   `json:"num_eq"`
+	NumRange      int64   `json:"num_range"`
+	DistinctRange float64 `json:"distinct_range"`
 	// UpperBound is the string representation of a datum; parsable with
 	// tree.ParseStringAs.
 	UpperBound string `json:"upper_bound"`
@@ -60,6 +61,7 @@ func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 		b := &h.Buckets[i]
 		js.HistogramBuckets[i].NumEq = b.NumEq
 		js.HistogramBuckets[i].NumRange = b.NumRange
+		js.HistogramBuckets[i].DistinctRange = b.DistinctRange
 
 		datum, _, err := sqlbase.DecodeTableKey(&a, typ, b.UpperBound, encoding.Ascending)
 		if err != nil {
@@ -67,9 +69,10 @@ func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 		}
 
 		js.HistogramBuckets[i] = JSONHistoBucket{
-			NumEq:      b.NumEq,
-			NumRange:   b.NumRange,
-			UpperBound: datum.String(),
+			NumEq:         b.NumEq,
+			NumRange:      b.NumRange,
+			DistinctRange: b.DistinctRange,
+			UpperBound:    tree.AsStringWithFlags(datum, tree.FmtBareStrings),
 		}
 	}
 	return nil
@@ -111,6 +114,7 @@ func (js *JSONStatistic) GetHistogram(evalCtx *tree.EvalContext) (*HistogramData
 		}
 		h.Buckets[i].NumEq = hb.NumEq
 		h.Buckets[i].NumRange = hb.NumRange
+		h.Buckets[i].DistinctRange = hb.DistinctRange
 		h.Buckets[i].UpperBound, err = sqlbase.EncodeTableKey(nil, upperVal, encoding.Ascending)
 		if err != nil {
 			return nil, err

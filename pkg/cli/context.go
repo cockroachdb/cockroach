@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -107,6 +108,8 @@ func initCLIDefaults() {
 	serverCfg.DelayedBootstrapFn = nil
 	serverCfg.SocketFile = ""
 	serverCfg.JoinList = nil
+	serverCfg.DefaultZoneConfig = config.DefaultZoneConfig()
+	serverCfg.DefaultSystemZoneConfig = config.DefaultSystemZoneConfig()
 
 	startCtx.serverInsecure = baseCfg.Insecure
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
@@ -142,6 +145,9 @@ func initCLIDefaults() {
 	networkBenchCtx.server = true
 	networkBenchCtx.port = 8081
 	networkBenchCtx.addresses = []string{"localhost:8081"}
+
+	demoCtx.nodes = 1
+	demoCtx.useEmptyDatabase = false
 
 	initPreFlagsDefaults()
 
@@ -229,7 +235,7 @@ var sqlCtx = struct {
 	debugMode bool
 }{cliContext: &cliCtx}
 
-// dumpCtx captures the command-line parameters of the `sql` command.
+// dumpCtx captures the command-line parameters of the `dump` command.
 // Defaults set by InitCLIDefaults() above.
 var dumpCtx struct {
 	// dumpMode determines which part of the database should be dumped.
@@ -286,8 +292,7 @@ var startCtx struct {
 	pidFile string
 
 	// logging settings specific to file logging.
-	logDir     log.DirName
-	logDirFlag *pflag.Flag
+	logDir log.DirName
 }
 
 // quitCtx captures the command-line parameters of the `quit` command.
@@ -332,4 +337,11 @@ var sqlfmtCtx struct {
 	noSimplify bool
 	align      bool
 	execStmts  statementsValue
+}
+
+// demoCtx captures the command-line parameters of the `demo` command.
+// Defaults set by InitCLIDefaults() above.
+var demoCtx struct {
+	nodes            int
+	useEmptyDatabase bool
 }

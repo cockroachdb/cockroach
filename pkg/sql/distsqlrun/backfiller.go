@@ -194,12 +194,12 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 		b.name, totalSpans, totalChunks, timeutil.Since(start))
 
 	return WriteResumeSpan(ctx,
-		b.flowCtx.ClientDB,
+		b.flowCtx.Cfg.DB,
 		b.spec.Table.ID,
 		mutationID,
 		b.filter,
 		finishedSpans,
-		b.flowCtx.JobRegistry,
+		b.flowCtx.Cfg.JobRegistry,
 	)
 }
 

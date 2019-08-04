@@ -41,7 +41,7 @@ func registerLoadSplits(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("splits/load/uniform/nodes=%d", numNodes),
-		MinVersion: "v2.2.0",
+		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			// This number was determined experimentally. Often, but not always,
@@ -84,7 +84,7 @@ func registerLoadSplits(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("splits/load/sequential/nodes=%d", numNodes),
-		MinVersion: "v2.2.0",
+		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
@@ -94,9 +94,9 @@ func registerLoadSplits(r *testRegistry) {
 				qpsThreshold:  100,      // 100 queries per second
 				minimumRanges: 1,        // We expect no splits so require only 1 range.
 				// We expect no splits so require only 1 range. However, in practice we
-				// sometimes see a split early in, presumably when the sampling gets
-				// lucky.
-				maximumRanges: 2,
+				// sometimes see a split or two early in, presumably when the sampling
+				// gets lucky.
+				maximumRanges: 3,
 				sequential:    true,
 				waitDuration:  60 * time.Second,
 			})
@@ -104,7 +104,7 @@ func registerLoadSplits(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("splits/load/spanning/nodes=%d", numNodes),
-		MinVersion: "v2.2.0",
+		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runLoadSplits(ctx, t, c, splitParams{

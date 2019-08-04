@@ -102,6 +102,7 @@ const (
 	AllocatorRemoveDecommissioning
 	AllocatorRemoveLearner
 	AllocatorConsiderRebalance
+	AllocatorRangeUnavailable
 )
 
 var allocatorActionNames = map[AllocatorAction]string{
@@ -112,6 +113,7 @@ var allocatorActionNames = map[AllocatorAction]string{
 	AllocatorRemoveDecommissioning: "remove decommissioning",
 	AllocatorRemoveLearner:         "remove learner",
 	AllocatorConsiderRebalance:     "consider rebalance",
+	AllocatorRangeUnavailable:      "range unavailable",
 }
 
 func (a AllocatorAction) String() string {
@@ -200,18 +202,16 @@ func makeAllocatorRand(source rand.Source) allocatorRand {
 	}
 }
 
-// RangeInfo contains the information needed by the allocator to make
-// rebalancing decisions for a given range.
-type RangeInfo struct {
-	Desc             *roachpb.RangeDescriptor
+// RangeUsageInfo contains usage information (sizes and traffic) needed by the
+// allocator to make rebalancing decisions for a given range.
+type RangeUsageInfo struct {
 	LogicalBytes     int64
 	QueriesPerSecond float64
 	WritesPerSecond  float64
 }
 
-func rangeInfoForRepl(repl *Replica, desc *roachpb.RangeDescriptor) RangeInfo {
-	info := RangeInfo{
-		Desc:         desc,
+func rangeUsageInfoForRepl(repl *Replica) RangeUsageInfo {
+	info := RangeUsageInfo{
 		LogicalBytes: repl.GetMVCCStats().Total(),
 	}
 	if queriesPerSecond, dur := repl.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
@@ -292,7 +292,7 @@ func GetNeededReplicas(zoneConfigReplicaCount int32, clusterNodes int) int {
 // supplied range, as governed by the supplied zone configuration. It
 // returns the required action that should be taken and a priority.
 func (a *Allocator) ComputeAction(
-	ctx context.Context, zone *config.ZoneConfig, rangeInfo RangeInfo,
+	ctx context.Context, zone *config.ZoneConfig, desc *roachpb.RangeDescriptor,
 ) (AllocatorAction, float64) {
 	if a.storePool == nil {
 		// Do nothing if storePool is nil for some unittests.
@@ -330,7 +330,7 @@ func (a *Allocator) ComputeAction(
 	// On the other hand if we get the race where a leaseholder starts adding a
 	// replica in the replicate queue and during this loses its lease, it should
 	// probably not retry.
-	if learners := rangeInfo.Desc.Replicas().Learners(); len(learners) > 0 {
+	if learners := desc.Replicas().Learners(); len(learners) > 0 {
 		// TODO(dan): Since this goes before anything else, the priority here should
 		// be influenced by whatever operations would happen right after the learner
 		// is removed. In the meantime, we don't want to block something important
@@ -339,11 +339,19 @@ func (a *Allocator) ComputeAction(
 		// removeLearnerReplicaPriority as the highest priority.
 		return AllocatorRemoveLearner, removeLearnerReplicaPriority
 	}
+	// computeAction expects to operate only on voters.
+	return a.computeAction(ctx, zone, desc.RangeID, desc.Replicas().Voters())
+}
 
+func (a *Allocator) computeAction(
+	ctx context.Context,
+	zone *config.ZoneConfig,
+	rangeID roachpb.RangeID,
+	voterReplicas []roachpb.ReplicaDescriptor,
+) (AllocatorAction, float64) {
 	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
-	have := len(rangeInfo.Desc.Replicas().Unwrap())
-	decommissioningReplicas := a.storePool.decommissioningReplicas(
-		rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas().Unwrap())
+	have := len(voterReplicas)
+	decommissioningReplicas := a.storePool.decommissioningReplicas(rangeID, voterReplicas)
 	clusterNodes := a.storePool.ClusterNodeCount()
 	need := GetNeededReplicas(*zone.NumReplicas, clusterNodes)
 	desiredQuorum := computeQuorum(need)
@@ -354,7 +362,8 @@ func (a *Allocator) ComputeAction(
 		// Priority is adjusted by the difference between the current replica
 		// count and the quorum of the desired replica count.
 		priority := addMissingReplicaPriority + float64(desiredQuorum-have)
-		log.VEventf(ctx, 3, "AllocatorAdd - missing replica need=%d, have=%d, priority=%.2f", need, have, priority)
+		log.VEventf(ctx, 3, "AllocatorAdd - missing replica need=%d, have=%d, priority=%.2f",
+			need, have, priority)
 		return AllocatorAdd, priority
 	}
 
@@ -368,17 +377,16 @@ func (a *Allocator) ComputeAction(
 		return AllocatorAdd, priority
 	}
 
-	liveReplicas, deadReplicas := a.storePool.liveAndDeadReplicas(
-		rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas().Unwrap())
-	if len(liveReplicas) < quorum {
+	liveVoterReplicas, deadVoterReplicas := a.storePool.liveAndDeadReplicas(rangeID, voterReplicas)
+	if len(liveVoterReplicas) < quorum {
 		// Do not take any removal action if we do not have a quorum of live
 		// replicas.
 		log.VEventf(ctx, 1, "unable to take action - live replicas %v don't meet quorum of %d",
-			liveReplicas, quorum)
-		return AllocatorNoop, 0
+			liveVoterReplicas, quorum)
+		return AllocatorRangeUnavailable, 0
 	}
 
-	if have == need && len(deadReplicas) > 0 {
+	if have == need && len(deadVoterReplicas) > 0 {
 		// Range has dead replica(s). We should up-replicate to add another before
 		// before removing the dead one. This can avoid permanent data loss in cases
 		// where the node is only temporarily dead, but we remove it from the range
@@ -386,7 +394,7 @@ func (a *Allocator) ComputeAction(
 		// The dead replica(s) will be down-replicated later.
 		priority := addDeadReplacementPriority
 		log.VEventf(ctx, 3, "AllocatorAdd - replacement for %d dead replicas priority=%.2f",
-			len(deadReplicas), priority)
+			len(deadVoterReplicas), priority)
 		return AllocatorAdd, priority
 	}
 
@@ -396,11 +404,11 @@ func (a *Allocator) ComputeAction(
 	// need, and there are no available stores to up-replicate to, then we should
 	// try to remove the dead replica(s) to get down to an odd number of
 	// replicas.
-	if len(deadReplicas) > 0 {
+	if len(deadVoterReplicas) > 0 {
 		// The range has dead replicas, which should be removed immediately.
-		priority := removeDeadReplicaPriority + float64(quorum-len(liveReplicas))
+		priority := removeDeadReplicaPriority + float64(quorum-len(liveVoterReplicas))
 		log.VEventf(ctx, 3, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
-			len(deadReplicas), len(liveReplicas), quorum, priority)
+			len(deadVoterReplicas), len(liveVoterReplicas), quorum, priority)
 		return AllocatorRemoveDead, priority
 	}
 
@@ -440,13 +448,13 @@ type decisionDetails struct {
 func (a *Allocator) AllocateTarget(
 	ctx context.Context,
 	zone *config.ZoneConfig,
-	existing []roachpb.ReplicaDescriptor,
-	rangeInfo RangeInfo,
+	rangeID roachpb.RangeID,
+	existingReplicas []roachpb.ReplicaDescriptor,
 ) (*roachpb.StoreDescriptor, string, error) {
-	sl, aliveStoreCount, throttled := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
+	sl, aliveStoreCount, throttled := a.storePool.getStoreList(rangeID, storeFilterThrottled)
 
 	target, details := a.allocateTargetFromList(
-		ctx, sl, zone, existing, rangeInfo, a.scorerOptions())
+		ctx, sl, zone, existingReplicas, a.scorerOptions())
 
 	if target != nil {
 		return target, details, nil
@@ -461,7 +469,7 @@ func (a *Allocator) AllocateTarget(
 	}
 	return nil, "", &allocatorError{
 		constraints:      zone.Constraints,
-		existingReplicas: len(existing),
+		existingReplicas: len(existingReplicas),
 		aliveStores:      aliveStoreCount,
 		throttledStores:  len(throttled),
 	}
@@ -471,14 +479,14 @@ func (a *Allocator) allocateTargetFromList(
 	ctx context.Context,
 	sl StoreList,
 	zone *config.ZoneConfig,
-	existing []roachpb.ReplicaDescriptor,
-	rangeInfo RangeInfo,
+	candidateReplicas []roachpb.ReplicaDescriptor,
 	options scorerOptions,
 ) (*roachpb.StoreDescriptor, string) {
 	analyzedConstraints := analyzeConstraints(
-		ctx, a.storePool.getStoreDescriptor, existing, zone)
+		ctx, a.storePool.getStoreDescriptor, candidateReplicas, zone)
 	candidates := allocateCandidates(
-		sl, analyzedConstraints, existing, rangeInfo, a.storePool.getLocalities(existing), options,
+		sl, analyzedConstraints, candidateReplicas, a.storePool.getLocalities(candidateReplicas),
+		options,
 	)
 	log.VEventf(ctx, 3, "allocate candidates: %s", candidates)
 	if target := candidates.selectGood(a.randGen); target != nil {
@@ -499,19 +507,20 @@ func (a Allocator) simulateRemoveTarget(
 	targetStore roachpb.StoreID,
 	zone *config.ZoneConfig,
 	candidates []roachpb.ReplicaDescriptor,
-	rangeInfo RangeInfo,
+	existingReplicas []roachpb.ReplicaDescriptor,
+	rangeUsageInfo RangeUsageInfo,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	// Update statistics first
 	// TODO(a-robinson): This could theoretically interfere with decisions made by other goroutines,
 	// but as of October 2017 calls to the Allocator are mostly serialized by the ReplicateQueue
 	// (with the main exceptions being Scatter and the status server's allocator debug endpoint).
 	// Try to make this interfere less with other callers.
-	a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeInfo, roachpb.ADD_REPLICA)
+	a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_REPLICA)
 	defer func() {
-		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeInfo, roachpb.REMOVE_REPLICA)
+		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.REMOVE_REPLICA)
 	}()
 	log.VEventf(ctx, 3, "simulating which replica would be removed after adding s%d", targetStore)
-	return a.RemoveTarget(ctx, zone, candidates, rangeInfo)
+	return a.RemoveTarget(ctx, zone, candidates, existingReplicas)
 }
 
 // RemoveTarget returns a suitable replica to remove from the provided replica
@@ -523,7 +532,7 @@ func (a Allocator) RemoveTarget(
 	ctx context.Context,
 	zone *config.ZoneConfig,
 	candidates []roachpb.ReplicaDescriptor,
-	rangeInfo RangeInfo,
+	existingReplicas []roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	if len(candidates) == 0 {
 		return roachpb.ReplicaDescriptor{}, "", errors.Errorf("must supply at least one candidate replica to allocator.RemoveTarget()")
@@ -537,18 +546,17 @@ func (a Allocator) RemoveTarget(
 	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, roachpb.RangeID(0), storeFilterNone)
 
 	analyzedConstraints := analyzeConstraints(
-		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas().Unwrap(), zone)
+		ctx, a.storePool.getStoreDescriptor, existingReplicas, zone)
 	options := a.scorerOptions()
 	rankedCandidates := removeCandidates(
 		sl,
 		analyzedConstraints,
-		rangeInfo,
-		a.storePool.getLocalities(rangeInfo.Desc.Replicas().Unwrap()),
+		a.storePool.getLocalities(existingReplicas),
 		options,
 	)
 	log.VEventf(ctx, 3, "remove candidates: %s", rankedCandidates)
 	if bad := rankedCandidates.selectBad(a.randGen); bad != nil {
-		for _, exist := range rangeInfo.Desc.Replicas().Unwrap() {
+		for _, exist := range existingReplicas {
 			if exist.StoreID == bad.store.StoreID {
 				log.VEventf(ctx, 3, "remove target: %s", bad)
 				details := decisionDetails{Target: bad.compactString(options)}
@@ -586,10 +594,12 @@ func (a Allocator) RebalanceTarget(
 	ctx context.Context,
 	zone *config.ZoneConfig,
 	raftStatus *raft.Status,
-	rangeInfo RangeInfo,
+	rangeID roachpb.RangeID,
+	existingReplicas []roachpb.ReplicaDescriptor,
+	rangeUsageInfo RangeUsageInfo,
 	filter storeFilter,
 ) (*roachpb.StoreDescriptor, string) {
-	sl, _, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, filter)
+	sl, _, _ := a.storePool.getStoreList(rangeID, filter)
 
 	// We're going to add another replica to the range which will change the
 	// quorum size. Verify that the number of existing live replicas is sufficient
@@ -601,17 +611,17 @@ func (a Allocator) RebalanceTarget(
 	// NB: The len(replicas) > 1 check allows rebalancing of ranges with only a
 	// single replica. This is a corner case which could happen in practice and
 	// also affects tests.
-	if len(rangeInfo.Desc.Replicas().Unwrap()) > 1 {
+	if len(existingReplicas) > 1 {
 		var numLiveReplicas int
 		for _, s := range sl.stores {
-			for _, repl := range rangeInfo.Desc.Replicas().Unwrap() {
+			for _, repl := range existingReplicas {
 				if s.StoreID == repl.StoreID {
 					numLiveReplicas++
 					break
 				}
 			}
 		}
-		newQuorum := computeQuorum(len(rangeInfo.Desc.Replicas().Unwrap()) + 1)
+		newQuorum := computeQuorum(len(existingReplicas) + 1)
 		if numLiveReplicas < newQuorum {
 			// Don't rebalance as we won't be able to make quorum after the rebalance
 			// until the new replica has been caught up.
@@ -620,14 +630,14 @@ func (a Allocator) RebalanceTarget(
 	}
 
 	analyzedConstraints := analyzeConstraints(
-		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas().Unwrap(), zone)
+		ctx, a.storePool.getStoreDescriptor, existingReplicas, zone)
 	options := a.scorerOptions()
 	results := rebalanceCandidates(
 		ctx,
 		sl,
 		analyzedConstraints,
-		rangeInfo,
-		a.storePool.getLocalities(rangeInfo.Desc.Replicas().Unwrap()),
+		existingReplicas,
+		a.storePool.getLocalities(existingReplicas),
 		a.storePool.getNodeLocalityString,
 		options,
 	)
@@ -635,11 +645,6 @@ func (a Allocator) RebalanceTarget(
 	if len(results) == 0 {
 		return nil, ""
 	}
-
-	// Deep-copy the Replicas slice since we'll mutate it in the loop below.
-	desc := *rangeInfo.Desc
-	rangeInfo.Desc = &desc
-
 	// Keep looping until we either run out of options or find a target that we're
 	// pretty sure we won't want to remove immediately after adding it.
 	// If we would, we don't want to actually rebalance to that target.
@@ -657,19 +662,16 @@ func (a Allocator) RebalanceTarget(
 		newReplica := roachpb.ReplicaDescriptor{
 			NodeID:    target.store.Node.NodeID,
 			StoreID:   target.store.StoreID,
-			ReplicaID: rangeInfo.Desc.NextReplicaID,
+			ReplicaID: maxReplicaID(existingReplicas) + 1,
 		}
-		// Intentionally don't use RangeDescriptor.AddReplica so we can force the
-		// deep copy.
-		newReplicas := rangeInfo.Desc.Replicas().DeepCopy()
-		newReplicas.AddReplica(newReplica)
-		rangeInfo.Desc.SetReplicas(newReplicas)
+		// Deep-copy the Replicas slice since we'll mutate it below.
+		replicaCandidates := append([]roachpb.ReplicaDescriptor(nil), existingReplicas...)
+		replicaCandidates = append(replicaCandidates, newReplica)
 
 		// If we can, filter replicas as we would if we were actually removing one.
 		// If we can't (e.g. because we're the leaseholder but not the raft leader),
 		// it's better to simulate the removal with the info that we do have than to
 		// assume that the rebalance is ok (#20241).
-		replicaCandidates := newReplicas.Unwrap()
 		if raftStatus != nil && raftStatus.Progress != nil {
 			replicaCandidates = simulateFilterUnremovableReplicas(
 				raftStatus, replicaCandidates, newReplica.ReplicaID)
@@ -686,7 +688,9 @@ func (a Allocator) RebalanceTarget(
 			target.store.StoreID,
 			zone,
 			replicaCandidates,
-			rangeInfo)
+			replicaCandidates,
+			rangeUsageInfo,
+		)
 		if err != nil {
 			log.Warningf(ctx, "simulating RemoveTarget failed: %+v", err)
 			return nil, ""
@@ -697,7 +701,6 @@ func (a Allocator) RebalanceTarget(
 
 		log.VEventf(ctx, 2, "not rebalancing to s%d because we'd immediately remove it: %s",
 			target.store.StoreID, removeDetails)
-		rangeInfo.Desc.RemoveReplica(newReplica.NodeID, newReplica.StoreID)
 	}
 
 	// Compile the details entry that will be persisted into system.rangelog for
@@ -1251,7 +1254,7 @@ func replicaIsBehind(raftStatus *raft.Status, replicaID roachpb.ReplicaID) bool 
 
 // simulateFilterUnremovableReplicas removes any unremovable replicas from the
 // supplied slice. Unlike filterUnremovableReplicas, brandNewReplicaID is
-// considered up-to-date (and thus can participiate in quorum), but is not
+// considered up-to-date (and thus can participate in quorum), but is not
 // considered a candidate for removal.
 func simulateFilterUnremovableReplicas(
 	raftStatus *raft.Status,
@@ -1324,4 +1327,14 @@ func filterUnremovableReplicas(
 		}
 	}
 	return candidates
+}
+
+func maxReplicaID(replicas []roachpb.ReplicaDescriptor) roachpb.ReplicaID {
+	var max roachpb.ReplicaID
+	for i := range replicas {
+		if replicaID := replicas[i].ReplicaID; replicaID > max {
+			max = replicaID
+		}
+	}
+	return max
 }

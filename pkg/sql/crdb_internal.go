@@ -144,7 +144,7 @@ CREATE TABLE crdb_internal.node_runtime_info (
   value     STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser(ctx, "access the node runtime information"); err != nil {
+		if err := p.RequireAdminRole(ctx, "access the node runtime information"); err != nil {
 			return err
 		}
 
@@ -595,7 +595,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   implicit_txn        BOOL NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser(ctx, "access application statistics"); err != nil {
+		if err := p.RequireAdminRole(ctx, "access application statistics"); err != nil {
 			return err
 		}
 
@@ -731,7 +731,7 @@ CREATE TABLE crdb_internal.cluster_settings (
   description   STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser(ctx, "read crdb_internal.cluster_settings"); err != nil {
+		if err := p.RequireAdminRole(ctx, "read crdb_internal.cluster_settings"); err != nil {
 			return err
 		}
 		for _, k := range settings.Keys() {
@@ -789,7 +789,7 @@ CREATE TABLE crdb_internal.%s (
 
 func (p *planner) makeSessionsRequest(ctx context.Context) serverpb.ListSessionsRequest {
 	req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
-	if err := p.RequireSuperUser(ctx, "list sessions"); err == nil {
+	if err := p.RequireAdminRole(ctx, "list sessions"); err == nil {
 		// The root user can see all sessions.
 		req.Username = ""
 	}
@@ -1033,7 +1033,7 @@ var crdbInternalLocalMetricsTable = virtualSchemaTable{
   value							 FLOAT NOT NULL    -- value of the metric
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser(ctx, "read crdb_internal.node_metrics"); err != nil {
+		if err := p.RequireAdminRole(ctx, "read crdb_internal.node_metrics"); err != nil {
 			return err
 		}
 
@@ -1722,7 +1722,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 )
 `,
 	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
-		if err := p.RequireSuperUser(ctx, "read crdb_internal.ranges_no_leases"); err != nil {
+		if err := p.RequireAdminRole(ctx, "read crdb_internal.ranges_no_leases"); err != nil {
 			return nil, err
 		}
 		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
@@ -1901,10 +1901,11 @@ CREATE TABLE crdb_internal.zones (
 			var zoneSpecifier *tree.ZoneSpecifier
 			zs, err := config.ZoneSpecifierFromID(id, resolveID)
 			if err != nil {
-				// The database or table has been deleted so there is no way
-				// to refer to it anymore. We are still going to show
-				// something but the CLI specifier part will become NULL.
-				zoneSpecifier = nil
+				// We can have valid zoneSpecifiers whose table/database has been
+				// deleted because zoneSpecifiers are collected asynchronously.
+				// In this case, just don't show the zoneSpecifier in the
+				// output of the table.
+				continue
 			} else {
 				zoneSpecifier = &zs
 			}
@@ -1982,7 +1983,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_nodes"); err != nil {
+		if err := p.RequireAdminRole(ctx, "read crdb_internal.gossip_nodes"); err != nil {
 			return err
 		}
 
@@ -2102,7 +2103,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 		// which is highly available. DO NOT CALL functions which require the
 		// cluster to be healthy, such as StatusServer.Nodes().
 
-		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_liveness"); err != nil {
+		if err := p.RequireAdminRole(ctx, "read crdb_internal.gossip_liveness"); err != nil {
 			return err
 		}
 
@@ -2170,7 +2171,7 @@ CREATE TABLE crdb_internal.gossip_alerts (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_alerts"); err != nil {
+		if err := p.RequireAdminRole(ctx, "read crdb_internal.gossip_alerts"); err != nil {
 			return err
 		}
 
@@ -2236,7 +2237,7 @@ CREATE TABLE crdb_internal.gossip_network (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_network"); err != nil {
+		if err := p.RequireAdminRole(ctx, "read crdb_internal.gossip_network"); err != nil {
 			return err
 		}
 
@@ -2265,7 +2266,38 @@ func addPartitioningRows(
 	indexID := tree.NewDInt(tree.DInt(index.ID))
 	numColumns := tree.NewDInt(tree.DInt(partitioning.NumColumns))
 
+	var buf bytes.Buffer
+	for i := uint32(colOffset); i < uint32(colOffset)+partitioning.NumColumns; i++ {
+		if i != uint32(colOffset) {
+			buf.WriteString(`, `)
+		}
+		buf.WriteString(index.ColumnNames[i])
+	}
+	colNames := tree.NewDString(buf.String())
+
+	var a sqlbase.DatumAlloc
+
+	// We don't need real prefixes in the DecodePartitionTuple calls because we
+	// only use the tree.Datums part of the output.
+	fakePrefixDatums := make([]tree.Datum, colOffset)
+	for i := range fakePrefixDatums {
+		fakePrefixDatums[i] = tree.DNull
+	}
+
 	for _, l := range partitioning.List {
+		var buf bytes.Buffer
+		for j, values := range l.Values {
+			if j != 0 {
+				buf.WriteString(`, `)
+			}
+			tuple, _, err := sqlbase.DecodePartitionTuple(
+				&a, table, index, partitioning, values, fakePrefixDatums,
+			)
+			if err != nil {
+				return err
+			}
+			buf.WriteString(tuple.String())
+		}
 		name := tree.NewDString(l.Name)
 		if err := addRow(
 			tableID,
@@ -2273,6 +2305,9 @@ func addPartitioningRows(
 			parentName,
 			name,
 			numColumns,
+			colNames,
+			tree.NewDString(buf.String()),
+			tree.DNull,
 		); err != nil {
 			return err
 		}
@@ -2284,12 +2319,31 @@ func addPartitioningRows(
 	}
 
 	for _, r := range partitioning.Range {
+		var buf bytes.Buffer
+		fromTuple, _, err := sqlbase.DecodePartitionTuple(
+			&a, table, index, partitioning, r.FromInclusive, fakePrefixDatums,
+		)
+		if err != nil {
+			return err
+		}
+		buf.WriteString(fromTuple.String())
+		buf.WriteString(" TO ")
+		toTuple, _, err := sqlbase.DecodePartitionTuple(
+			&a, table, index, partitioning, r.ToExclusive, fakePrefixDatums,
+		)
+		if err != nil {
+			return err
+		}
+		buf.WriteString(toTuple.String())
 		if err := addRow(
 			tableID,
 			indexID,
 			parentName,
 			tree.NewDString(r.Name),
 			numColumns,
+			colNames,
+			tree.DNull,
+			tree.NewDString(buf.String()),
 		); err != nil {
 			return err
 		}
@@ -2310,7 +2364,10 @@ CREATE TABLE crdb_internal.partitions (
 	index_id    INT NOT NULL,
 	parent_name STRING,
 	name        STRING NOT NULL,
-	columns     INT NOT NULL
+	columns     INT NOT NULL,
+	column_names STRING,
+	list_value  STRING,
+	range_value STRING
 )
 	`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -2355,7 +2412,7 @@ CREATE TABLE crdb_internal.kv_node_status (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser(ctx, "read crdb_internal.kv_node_status"); err != nil {
+		if err := p.RequireAdminRole(ctx, "read crdb_internal.kv_node_status"); err != nil {
 			return err
 		}
 
@@ -2458,7 +2515,7 @@ CREATE TABLE crdb_internal.kv_store_status (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser(ctx, "read crdb_internal.kv_store_status"); err != nil {
+		if err := p.RequireAdminRole(ctx, "read crdb_internal.kv_store_status"); err != nil {
 			return err
 		}
 

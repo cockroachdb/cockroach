@@ -12,10 +12,12 @@ package execbuilder
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -67,7 +69,13 @@ type execPlan struct {
 // if the node outputs the same optimizer ColumnID multiple times.
 // TODO(justin): we should keep track of this instead of computing it each time.
 func (ep *execPlan) numOutputCols() int {
-	max, ok := ep.outputCols.MaxValue()
+	return numOutputColsInMap(ep.outputCols)
+}
+
+// numOutputColsInMap returns the number of slots required to fill in all of
+// the columns referred to by this ColMap.
+func numOutputColsInMap(m opt.ColMap) int {
+	max, ok := m.MaxValue()
 	if !ok {
 		return 0
 	}
@@ -147,11 +155,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	}
 
 	// Raise error if mutation op is part of a read-only transaction.
-	if opt.IsMutationOp(e) {
-		if b.evalCtx.TxnReadOnly {
-			return execPlan{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
-				"cannot execute %s in a read-only transaction", e.Op().SyntaxTag())
-		}
+	if opt.IsMutationOp(e) && b.evalCtx.TxnReadOnly {
+		return execPlan{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+			"cannot execute %s in a read-only transaction", b.statementTag(e))
 	}
 
 	// Collect usage telemetry for relational node, if appropriate.
@@ -238,6 +244,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.CreateTableExpr:
 		ep, err = b.buildCreateTable(t)
 
+	case *memo.CreateViewExpr:
+		ep, err = b.buildCreateView(t)
+
 	case *memo.WithExpr:
 		ep, err = b.buildWith(t)
 
@@ -250,8 +259,8 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.ShowTraceForSessionExpr:
 		ep, err = b.buildShowTrace(t)
 
-	case *memo.OpaqueRelExpr:
-		ep, err = b.buildOpaque(t)
+	case *memo.OpaqueRelExpr, *memo.OpaqueMutationExpr, *memo.OpaqueDDLExpr:
+		ep, err = b.buildOpaque(t.Private().(*memo.OpaqueRelPrivate))
 
 	case *memo.AlterTableSplitExpr:
 		ep, err = b.buildAlterTableSplit(t)
@@ -512,6 +521,7 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
+
 	projections := prj.Projections
 	if len(projections) == 0 {
 		// We have only pass-through columns.
@@ -633,7 +643,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	allCols := joinOutputMap(left.outputCols, fakeRight.outputCols)
 
 	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, numOutputColsInMap(allCols)),
 		ivarMap: allCols,
 	}
 
@@ -771,7 +781,7 @@ func (b *Builder) initJoinBuild(
 	allCols := joinOutputMap(leftPlan.outputCols, rightPlan.outputCols)
 
 	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, numOutputColsInMap(allCols)),
 		ivarMap: allCols,
 	}
 
@@ -792,7 +802,8 @@ func (b *Builder) initJoinBuild(
 // joinOutputMap determines the outputCols map for a (non-semi/anti) join, given
 // the outputCols maps for its inputs.
 func joinOutputMap(left, right opt.ColMap) opt.ColMap {
-	numLeftCols := left.Len()
+	numLeftCols := numOutputColsInMap(left)
+
 	res := left.Copy()
 	right.ForEach(func(colIdx, rightIdx int) {
 		res.Set(colIdx, rightIdx+numLeftCols)
@@ -1765,7 +1776,7 @@ func (b *Builder) applySaveTable(
 	return input, err
 }
 
-func (b *Builder) buildOpaque(opaque *memo.OpaqueRelExpr) (execPlan, error) {
+func (b *Builder) buildOpaque(opaque *memo.OpaqueRelPrivate) (execPlan, error) {
 	node, err := b.factory.ConstructOpaque(opaque.Metadata)
 	if err != nil {
 		return execPlan{}, err
@@ -1856,26 +1867,25 @@ func (b *Builder) getEnvData() exec.ExplainEnvData {
 	// Catalog objects can show up multiple times in these lists, so
 	// deduplicate them.
 	seen := make(map[tree.TableName]bool)
-	for _, t := range b.mem.Metadata().AllTables() {
-		tn := *t.Table.Name()
+	addDS := func(list []tree.TableName, ds cat.DataSource) []tree.TableName {
+		tn, err := b.catalog.FullyQualifiedName(context.TODO(), ds)
+		if err != nil {
+			panic(err)
+		}
 		if !seen[tn] {
 			seen[tn] = true
-			envOpts.Tables = append(envOpts.Tables, tn)
+			list = append(list, tn)
 		}
+		return list
+	}
+	for _, t := range b.mem.Metadata().AllTables() {
+		envOpts.Tables = addDS(envOpts.Tables, t.Table)
 	}
 	for _, s := range b.mem.Metadata().AllSequences() {
-		tn := *s.Name()
-		if !seen[tn] {
-			seen[tn] = true
-			envOpts.Sequences = append(envOpts.Sequences, tn)
-		}
+		envOpts.Sequences = addDS(envOpts.Sequences, s)
 	}
 	for _, v := range b.mem.Metadata().AllViews() {
-		tn := *v.Name()
-		if !seen[tn] {
-			seen[tn] = true
-			envOpts.Views = append(envOpts.Views, tn)
-		}
+		envOpts.Views = addDS(envOpts.Views, v)
 	}
 
 	return envOpts
@@ -1889,4 +1899,16 @@ func (b *Builder) buildSortedInput(input execPlan, ordering opt.Ordering) (execP
 		return execPlan{}, err
 	}
 	return execPlan{root: node, outputCols: input.outputCols}, nil
+}
+
+// statementTag returns a string that can be used in an error message regarding
+// the given expression.
+func (b *Builder) statementTag(expr memo.RelExpr) string {
+	switch expr.Op() {
+	case opt.OpaqueRelOp, opt.OpaqueMutationOp, opt.OpaqueDDLOp:
+		return expr.Private().(*memo.OpaqueRelPrivate).Metadata.String()
+
+	default:
+		return expr.Op().SyntaxTag()
+	}
 }

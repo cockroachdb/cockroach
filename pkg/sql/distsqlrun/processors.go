@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -922,7 +922,7 @@ func getInputStats(flowCtx *FlowCtx, input RowSource) (InputStats, bool) {
 	if !ok {
 		return InputStats{}, false
 	}
-	if flowCtx.testingKnobs.DeterministicStats {
+	if flowCtx.Cfg.TestingKnobs.DeterministicStats {
 		isc.InputStats.StallTime = 0
 	}
 	return isc.InputStats, true
@@ -938,7 +938,7 @@ func getFetcherInputStats(flowCtx *FlowCtx, f rowFetcher) (InputStats, bool) {
 		return InputStats{}, false
 	}
 	// Add row fetcher start scan stall time to Next() stall time.
-	if !flowCtx.testingKnobs.DeterministicStats {
+	if !flowCtx.Cfg.TestingKnobs.DeterministicStats {
 		is.StallTime += rfsc.startScanStallTime
 	}
 	return is, true
@@ -1196,7 +1196,7 @@ func newProcessor(
 		}
 		return NewChangeFrontierProcessor(flowCtx, processorID, *core.ChangeFrontier, inputs[0], outputs[0])
 	}
-	return nil, errors.Errorf("unsupported processor core %s", core)
+	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 
 // LocalProcessor is a RowSourcedProcessor that needs to be initialized with
@@ -1212,17 +1212,17 @@ type LocalProcessor interface {
 	SetInput(ctx context.Context, input RowSource) error
 }
 
-// vectorizeAlwaysException is an object that returns whether or not execution
-// should continue if experimental_vectorize=always and an error occurred when
+// VectorizeAlwaysException is an object that returns whether or not execution
+// should continue if vectorize=experimental_always and an error occurred when
 // setting up the vectorized flow. Consider the case in which
-// experimental_vectorize=always. The user must be able to unset this session
+// vectorize=experimental_always. The user must be able to unset this session
 // variable without getting an error.
-type vectorizeAlwaysException interface {
+type VectorizeAlwaysException interface {
 	// IsException returns whether this object should be an exception to the rule
 	// that an inability to run this node in a vectorized flow should produce an
 	// error.
 	// TODO(asubiotto): This is the cleanest way I can think of to not error out
-	// on SET statements when running with experimental_vectorize = always. If
+	// on SET statements when running with vectorize = experimental_always. If
 	// there is a better way, we should get rid of this interface.
 	IsException() bool
 }

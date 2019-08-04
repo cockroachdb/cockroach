@@ -458,6 +458,21 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 				`alter_default: [2]->{"after": {"a": 2, "b": "after"}}`,
 			})
 		})
+
+		// Test adding a column with explicitly setting the default value to be NULL
+		t.Run(`add column with DEFAULT NULL`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE t (id INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO t VALUES (1)`)
+			defaultNull := feed(t, f, `CREATE CHANGEFEED FOR t`)
+			defer closeFeed(t, defaultNull)
+			sqlDB.Exec(t, `ALTER TABLE t ADD COLUMN c INT DEFAULT NULL`)
+			sqlDB.Exec(t, `INSERT INTO t VALUES (2, 2)`)
+			assertPayloads(t, defaultNull, []string{
+				// Verify that no column backfill occurs
+				`t: [1]->{"after": {"id": 1}}`,
+				`t: [2]->{"after": {"c": 2, "id": 2}}`,
+			})
+		})
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
@@ -1474,8 +1489,8 @@ func TestChangefeedPermissions(t *testing.T) {
 		if strings.Contains(t.Name(), `enterprise`) {
 			stmt = `CREATE CHANGEFEED FOR foo`
 		}
-		if _, err := testuser.Exec(stmt); !testutils.IsError(err, `only superusers`) {
-			t.Errorf(`expected 'only superusers' error got: %+v`, err)
+		if _, err := testuser.Exec(stmt); !testutils.IsError(err, `only users with the admin role`) {
+			t.Errorf(`expected 'only users with the admin role' error got: %+v`, err)
 		}
 	}
 

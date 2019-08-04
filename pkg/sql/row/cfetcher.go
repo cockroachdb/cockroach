@@ -79,6 +79,9 @@ type cTableInfo struct {
 	// One value per column that is part of the key; each value is a column
 	// index (into cols); -1 if we don't need the value for that column.
 	extraValColOrdinals []int
+	// allExtraValColOrdinals is the same as extraValColOrdinals but
+	// does not contain any -1's. It is meant to be used only in logging.
+	allExtraValColOrdinals []int
 
 	// maxColumnFamilyID is the maximum possible family id for the configured
 	// table.
@@ -274,8 +277,9 @@ func (rf *CFetcher) Init(
 
 		// These slice fields might get re-allocated below, so reslice them from
 		// the old table here in case they've got enough capacity already.
-		indexColOrdinals:    oldTable.indexColOrdinals[:0],
-		extraValColOrdinals: oldTable.extraValColOrdinals[:0],
+		indexColOrdinals:       oldTable.indexColOrdinals[:0],
+		extraValColOrdinals:    oldTable.extraValColOrdinals[:0],
+		allExtraValColOrdinals: oldTable.allExtraValColOrdinals[:0],
 	}
 	rf.machine.batch = coldata.NewMemBatch(typs)
 	rf.machine.colvecs = rf.machine.batch.ColVecs()
@@ -369,7 +373,15 @@ func (rf *CFetcher) Init(
 			} else {
 				table.extraValColOrdinals = make([]int, nExtraColumns)
 			}
+
+			if cap(table.allExtraValColOrdinals) >= nExtraColumns {
+				table.allExtraValColOrdinals = table.allExtraValColOrdinals[:nExtraColumns]
+			} else {
+				table.allExtraValColOrdinals = make([]int, nExtraColumns)
+			}
+
 			for i, id := range table.index.ExtraColumnIDs {
+				table.allExtraValColOrdinals[i] = tableArgs.ColIdxMap[id]
 				if neededCols.Contains(int(id)) {
 					table.extraValColOrdinals[i] = tableArgs.ColIdxMap[id]
 				} else {
@@ -541,7 +553,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInitFetch:
 			moreKeys, kv, newSpan, err := rf.fetcher.nextKV(ctx)
 			if err != nil {
-				return nil, err
+				return nil, exec.NewStorageError(err)
 			}
 			if !moreKeys {
 				rf.machine.state[0] = stateEmitLastBatch
@@ -580,7 +592,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.machine.batch.SetSelection(false)
 			rf.shiftState()
 		case stateDecodeFirstKVOfRow:
-			if rf.mustDecodeIndexKey {
+			if rf.mustDecodeIndexKey || rf.traceKV {
 				if debugState {
 					log.Infof(ctx, "Decoding first key %s", rf.machine.nextKV.Key)
 				}
@@ -643,7 +655,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			for {
 				moreRows, kv, _, err := rf.fetcher.nextKV(ctx)
 				if err != nil {
-					return nil, err
+					return nil, exec.NewStorageError(err)
 				}
 				if debugState {
 					log.Infof(ctx, "found kv %s, seeking to prefix %s", kv.Key, rf.machine.seekPrefix)
@@ -666,7 +678,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateFetchNextKVWithUnfinishedRow:
 			moreKVs, kv, _, err := rf.fetcher.nextKV(ctx)
 			if err != nil {
-				return nil, err
+				return nil, exec.NewStorageError(err)
 			}
 			if !moreKVs {
 				// No more data. Finalize the row and exit.
@@ -677,7 +689,6 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			// TODO(jordan): if nextKV returns newSpan = true, set the new span
 			// prefix and indicate that it needs decoding.
 			rf.machine.nextKV = kv
-
 			if debugState {
 				log.Infof(ctx, "Decoding next key %s", rf.machine.nextKV.Key)
 			}
@@ -766,6 +777,15 @@ func (rf *CFetcher) pushState(state fetcherState) {
 	rf.machine.state[0] = state
 }
 
+// getDatumAt returns the converted datum object at the given (colIdx, rowIdx).
+// This function is meant for tracing and should not be used in hot paths.
+func (rf *CFetcher) getDatumAt(colIdx int, rowIdx uint16, typ semtypes.T) tree.Datum {
+	if rf.machine.colvecs[colIdx].Nulls().NullAt(rowIdx) {
+		return tree.DNull
+	}
+	return exec.PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, rf.table.da, typ)
+}
+
 // processValue processes the state machine's current value component, setting
 // columns in the rowIdx'th tuple in the current batch depending on what data
 // is found in the current value component.
@@ -785,8 +805,7 @@ func (rf *CFetcher) processValue(
 		for _, idx := range rf.table.indexColOrdinals {
 			buf.WriteByte('/')
 			if idx != -1 {
-				dVal := exec.PhysicalTypeColElemToDatum(rf.machine.colvecs[idx], rf.machine.rowIdx, rf.table.da, rf.table.cols[idx].Type)
-				buf.WriteString(fmt.Sprintf("%v", dVal.String()))
+				buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
 			} else {
 				buf.WriteByte('?')
 			}
@@ -852,17 +871,38 @@ func (rf *CFetcher) processValue(
 			// This is a unique secondary index; decode the extra
 			// column values from the value.
 			var err error
-			valueBytes, err = colencoding.DecodeKeyValsToCols(
-				rf.machine.colvecs,
-				rf.machine.rowIdx,
-				table.extraValColOrdinals,
-				table.extraTypes,
-				nil,
-				&rf.machine.remainingValueColsByIdx,
-				valueBytes,
-			)
+			if rf.traceKV {
+				valueBytes, err = colencoding.DecodeKeyValsToCols(
+					rf.machine.colvecs,
+					rf.machine.rowIdx,
+					table.allExtraValColOrdinals,
+					table.extraTypes,
+					nil,
+					&rf.machine.remainingValueColsByIdx,
+					valueBytes,
+				)
+			} else {
+				valueBytes, err = colencoding.DecodeKeyValsToCols(
+					rf.machine.colvecs,
+					rf.machine.rowIdx,
+					table.extraValColOrdinals,
+					table.extraTypes,
+					nil,
+					&rf.machine.remainingValueColsByIdx,
+					valueBytes,
+				)
+			}
 			if err != nil {
 				return "", "", scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
+			}
+			if rf.traceKV {
+				var buf strings.Builder
+				for j := range table.extraTypes {
+					idx := table.allExtraValColOrdinals[j]
+					buf.WriteByte('/')
+					buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
+				}
+				prettyValue = buf.String()
 			}
 		}
 
@@ -933,7 +973,7 @@ func (rf *CFetcher) processValueSingle(
 			rf.machine.remainingValueColsByIdx.Remove(idx)
 
 			if rf.traceKV {
-				prettyValue = exec.PhysicalTypeColElemToDatum(rf.machine.colvecs[idx], rf.machine.rowIdx, rf.table.da, *typ).String()
+				prettyValue = rf.getDatumAt(idx, rf.machine.rowIdx, *typ).String()
 			}
 			if debugRowFetch {
 				log.Infof(ctx, "Scan %s -> %v", rf.machine.nextKV.Key, "?")
@@ -1023,7 +1063,8 @@ func (rf *CFetcher) processValueBytes(
 		}
 		rf.machine.remainingValueColsByIdx.Remove(idx)
 		if rf.traceKV {
-			if _, err := fmt.Fprintf(rf.machine.prettyValueBuf, "/%v", exec.PhysicalTypeColElemToDatum(vec, rf.machine.rowIdx, rf.table.da, *valTyp).String()); err != nil {
+			dVal := rf.getDatumAt(idx, rf.machine.rowIdx, *valTyp)
+			if _, err := fmt.Fprintf(rf.machine.prettyValueBuf, "/%v", dVal.String()); err != nil {
 				return "", "", err
 			}
 		}
@@ -1057,7 +1098,7 @@ func (rf *CFetcher) fillNulls() error {
 			var indexColValues []string
 			for _, idx := range table.indexColOrdinals {
 				if idx != -1 {
-					indexColValues = append(indexColValues, exec.PhysicalTypeColElemToDatum(rf.machine.colvecs[idx], rf.machine.rowIdx, rf.table.da, rf.table.cols[idx].Type).String())
+					indexColValues = append(indexColValues, rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
 				} else {
 					indexColValues = append(indexColValues, "?")
 				}

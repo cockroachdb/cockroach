@@ -303,7 +303,7 @@ func (s *Store) processPreemptiveSnapshotRequest(
 				appliedIndex,
 				r.store.cfg,
 				&raftLogger{ctx: ctx},
-			), nil)
+			))
 		if err != nil {
 			return roachpb.NewError(err)
 		}

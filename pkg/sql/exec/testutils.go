@@ -100,3 +100,17 @@ func (s *RepeatableBatchSource) ResetBatchesToReturn(b int) {
 	s.batchesToReturn = b
 	s.batchesReturned = 0
 }
+
+// CallbackOperator is a testing utility struct that delegates Next calls to a
+// callback provided by the user.
+type CallbackOperator struct {
+	NextCb func(ctx context.Context) coldata.Batch
+}
+
+// Init is part of the Operator interface.
+func (o *CallbackOperator) Init() {}
+
+// Next is part of the Operator interface.
+func (o *CallbackOperator) Next(ctx context.Context) coldata.Batch {
+	return o.NextCb(ctx)
+}

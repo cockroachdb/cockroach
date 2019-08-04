@@ -275,8 +275,8 @@ func (u *sqlSymUnion) tblExpr() tree.TableExpr {
 func (u *sqlSymUnion) tblExprs() tree.TableExprs {
     return u.val.(tree.TableExprs)
 }
-func (u *sqlSymUnion) from() *tree.From {
-    return u.val.(*tree.From)
+func (u *sqlSymUnion) from() tree.From {
+    return u.val.(tree.From)
 }
 func (u *sqlSymUnion) int32s() []int32 {
     return u.val.([]int32)
@@ -530,7 +530,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED OPERATOR
 
-%token <str> PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
+%token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PHYSICAL PLACING
 %token <str> PLAN PLANS POSITION PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 %token <str> PROCEDURAL PUBLICATION
 
@@ -550,7 +550,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> START STATISTICS STATUS STDIN STRICT STRING STORE STORED STORING SUBSTRING
 %token <str> SYMMETRIC SYNTAX SYSTEM SUBSCRIPTION
 
-%token <str> TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES EXPERIMENTAL_RANGES TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
+%token <str> TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
 %token <str> TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE TRANSACTION TREAT TRIGGER TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE
 %token <str> TRACING
@@ -725,6 +725,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_grants_stmt
 %type <tree.Statement> show_histogram_stmt
 %type <tree.Statement> show_indexes_stmt
+%type <tree.Statement> show_partitions_stmt
 %type <tree.Statement> show_jobs_stmt
 %type <tree.Statement> show_queries_stmt
 %type <tree.Statement> show_ranges_stmt
@@ -819,7 +820,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.IndexElemList> index_params create_as_params
 %type <tree.NameList> name_list privilege_list
 %type <[]int32> opt_array_bounds
-%type <*tree.From> from_clause update_from_clause
+%type <tree.From> from_clause update_from_clause
 %type <tree.TableExprs> from_list rowsfrom_list
 %type <tree.TablePatterns> table_pattern_list single_table_pattern_list
 %type <tree.TableNames> table_name_list
@@ -976,7 +977,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <privilege.List> privileges
 %type <tree.AuditMode> audit_mode
 
-%type <str> relocate_kw ranges_kw
+%type <str> relocate_kw 
 
 %type <*tree.SetZoneConfig> set_zone_config
 
@@ -1838,6 +1839,11 @@ import_stmt:
   {
     name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Import{Table: &name, Into: true, IntoCols: $5.nameList(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
+  }
+| IMPORT INTO table_name import_format DATA '(' string_or_placeholder_list ')' opt_with_options
+  {
+    name := $3.unresolvedObjectName().ToTableName()
+    $$.val = &tree.Import{Table: &name, Into: true, IntoCols: nil, FileFormat: $4, Files: $7.exprs(), Options: $9.kvOptions()}
   }
 | IMPORT error // SHOW HELP: IMPORT
 
@@ -3185,9 +3191,9 @@ zone_value:
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
 // SHOW CREATE, SHOW DATABASES, SHOW HISTOGRAM, SHOW INDEXES, SHOW
-// JOBS, SHOW QUERIES, SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW
-// SESSION, SHOW SESSIONS, SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES,
-// SHOW TRACE SHOW TRANSACTION, SHOW USERS
+// PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW ROLES, SHOW SCHEMAS,
+// SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS, SHOW STATISTICS,
+// SHOW SYNTAX, SHOW TABLES, SHOW TRACE SHOW TRANSACTION, SHOW USERS
 show_stmt:
   show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
@@ -3199,6 +3205,7 @@ show_stmt:
 | show_grants_stmt          // EXTEND WITH HELP: SHOW GRANTS
 | show_histogram_stmt       // EXTEND WITH HELP: SHOW HISTOGRAM
 | show_indexes_stmt         // EXTEND WITH HELP: SHOW INDEXES
+| show_partitions_stmt      // EXTEND WITH HELP: SHOW PARTITIONS
 | show_jobs_stmt            // EXTEND WITH HELP: SHOW JOBS
 | show_queries_stmt         // EXTEND WITH HELP: SHOW QUERIES
 | show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
@@ -3343,6 +3350,25 @@ show_columns_stmt:
     $$.val = &tree.ShowColumns{Table: $4.unresolvedObjectName(), WithComment: $5.bool()}
   }
 | SHOW COLUMNS error // SHOW HELP: SHOW COLUMNS
+
+// %Help: SHOW PARTITIONS - list partition information
+// %Category: DDL
+// %Text: SHOW PARTITIONS FROM { TABLE <table> | INDEX <index> | DATABASE <database> }
+// %SeeAlso: WEBDOCS/show-partitions.html
+show_partitions_stmt:
+  SHOW PARTITIONS FROM TABLE table_name
+  {
+    $$.val = &tree.ShowPartitions{Object: $5.unresolvedObjectName().String(), IsTable: true, Table: $5.unresolvedObjectName()}
+  }
+| SHOW PARTITIONS FROM DATABASE database_name
+  {
+    $$.val = &tree.ShowPartitions{Object: $5, IsDB: true}
+  }
+| SHOW PARTITIONS FROM INDEX table_index_name
+  {
+    $$.val = &tree.ShowPartitions{Object: $5.newTableIndexName().String(), IsIndex: true, Index: $5.tableIndexName()}
+  }
+| SHOW PARTITIONS error // SHOW HELP: SHOW PARTITIONS
 
 // %Help: SHOW DATABASES - list databases
 // %Category: DDL
@@ -3697,23 +3723,19 @@ show_zone_stmt:
 // %Help: SHOW RANGES - list ranges
 // %Category: Misc
 // %Text:
-// SHOW EXPERIMENTAL_RANGES FROM TABLE <tablename>
-// SHOW EXPERIMENTAL_RANGES FROM INDEX [ <tablename> @ ] <indexname>
+// SHOW RANGES FROM TABLE <tablename>
+// SHOW RANGES FROM INDEX [ <tablename> @ ] <indexname>
 show_ranges_stmt:
-  SHOW ranges_kw FROM TABLE table_name
+  SHOW RANGES FROM TABLE table_name
   {
     name := $5.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowRanges{TableOrIndex: tree.TableIndexName{Table: name}}
   }
-| SHOW ranges_kw FROM INDEX table_index_name
+| SHOW RANGES FROM INDEX table_index_name
   {
     $$.val = &tree.ShowRanges{TableOrIndex: $5.tableIndexName()}
   }
-| SHOW ranges_kw error // SHOW HELP: SHOW RANGES
-
-ranges_kw:
-  TESTING_RANGES
-| EXPERIMENTAL_RANGES
+| SHOW RANGES error // SHOW HELP: SHOW RANGES
 
 show_fingerprints_stmt:
   SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name
@@ -5783,7 +5805,7 @@ table_clause:
   {
     $$.val = &tree.SelectClause{
       Exprs:       tree.SelectExprs{tree.StarSelectExpr()},
-      From:        &tree.From{Tables: tree.TableExprs{$2.tblExpr()}},
+      From:        tree.From{Tables: tree.TableExprs{$2.tblExpr()}},
       TableSelect: true,
     }
   }
@@ -6077,12 +6099,12 @@ values_clause:
 from_clause:
   FROM from_list opt_as_of_clause
   {
-    $$.val = &tree.From{Tables: $2.tblExprs(), AsOf: $3.asOfClause()}
+    $$.val = tree.From{Tables: $2.tblExprs(), AsOf: $3.asOfClause()}
   }
 | FROM error // SHOW HELP: <SOURCE>
 | /* EMPTY */
   {
-    $$.val = &tree.From{}
+    $$.val = tree.From{}
   }
 
 from_list:
@@ -7129,7 +7151,10 @@ a_expr:
   {
     $$.val = &tree.CollateExpr{Expr: $1.expr(), Locale: $3}
   }
-| a_expr AT TIME ZONE a_expr %prec AT { return unimplementedWithIssue(sqllex, 32005) }
+| a_expr AT TIME ZONE a_expr %prec AT
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("timezone"), Exprs: tree.Exprs{$1.expr(), $5.expr()}}
+  }
   // These operators must be called out explicitly in order to make use of
   // bison's automatic operator-precedence handling. All other operator names
   // are handled by the generic productions using "OP", below; and all those
@@ -7803,7 +7828,10 @@ func_expr_windowless:
 
 // Special expressions that are considered to be functions.
 func_expr_common_subexpr:
-  COLLATION FOR '(' a_expr ')' { return unimplementedWithIssue(sqllex, 32563) }
+  COLLATION FOR '(' a_expr ')'
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("pg_collation_for"), Exprs: tree.Exprs{$4.expr()}}
+  }
 | CURRENT_DATE
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
@@ -9044,7 +9072,6 @@ unreserved_keyword:
 | EXPERIMENTAL
 | EXPERIMENTAL_AUDIT
 | EXPERIMENTAL_FINGERPRINTS
-| EXPERIMENTAL_RANGES
 | EXPERIMENTAL_RELOCATE
 | EXPERIMENTAL_REPLICA
 | EXPIRATION
@@ -9129,6 +9156,7 @@ unreserved_keyword:
 | PARENT
 | PARTIAL
 | PARTITION
+| PARTITIONS
 | PASSWORD
 | PAUSE
 | PHYSICAL
@@ -9207,7 +9235,6 @@ unreserved_keyword:
 | TEMP
 | TEMPLATE
 | TEMPORARY
-| TESTING_RANGES
 | TESTING_RELOCATE
 | TEXT
 | TRACE

@@ -99,9 +99,8 @@ func backupRestoreTestSetupWithParams(
 
 	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE data`)
-	const insertBatchSize = 1000
-	const concurrency = 4
-	if _, err := workloadsql.Setup(ctx, sqlDB.DB.(*gosql.DB), bankData, insertBatchSize, concurrency); err != nil {
+	l := workloadsql.InsertsDataLoader{BatchSize: 1000, Concurrency: 4}
+	if _, err := workloadsql.Setup(ctx, sqlDB.DB.(*gosql.DB), bankData, l); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	if err := workloadsql.Split(ctx, sqlDB.DB.(*gosql.DB), bankData.Tables()[0], 1 /* concurrency */); err != nil {
@@ -2299,12 +2298,12 @@ func TestBackupRestorePermissions(t *testing.T) {
 
 	t.Run("root-only", func(t *testing.T) {
 		if _, err := testuser.Exec(backupStmt); !testutils.IsError(
-			err, "only superusers are allowed to BACKUP",
+			err, "only users with the admin role are allowed to BACKUP",
 		) {
 			t.Fatal(err)
 		}
 		if _, err := testuser.Exec(`RESTORE blah FROM 'blah'`); !testutils.IsError(
-			err, "only superusers are allowed to RESTORE",
+			err, "only users with the admin role are allowed to RESTORE",
 		) {
 			t.Fatal(err)
 		}

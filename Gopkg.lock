@@ -957,7 +957,7 @@
   version = "v1.0"
 
 [[projects]]
-  digest = "1:6a5edb6e9ad91f22d33e01739bbabea324fed674c40bc4f7d60adb48235e8b48"
+  digest = "1:a7261255f31aa65e511b45cf7a36fda39dafb08914287506c93cb8c07afb9708"
   name = "github.com/jackc/pgx"
   packages = [
     ".",
@@ -968,8 +968,8 @@
     "pgtype",
   ]
   pruneopts = "UT"
-  revision = "c59c9cac59ab95eceb0c12ff338923c62f411ea2"
-  version = "v3.3.0"
+  revision = "a1d6202434aa40c3624688f6c2cacbc27eef5472"
+  version = "v3.5.0"
 
 [[projects]]
   digest = "1:dcb3e2ad17349c0cc89ffc16692d05195e6a67b4924fe81760fba9a307a7271d"
@@ -1489,7 +1489,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:51f3f946cfff94e96c8d0a8705a2bcd88d17a70408676ff740acd5255f40a537"
+  digest = "1:a5dd907052a1b42bbdf6a9608300143ee14f477bd6232597494203a21aa0fd45"
   name = "go.etcd.io/etcd"
   packages = [
     "raft",
@@ -1499,7 +1499,7 @@
     "raft/tracker",
   ]
   pruneopts = "UT"
-  revision = "62f4fb3c5eaed2a7614258083b4504f18bf44269"
+  revision = "d137fa9d4ad7aa242f6fed04186a700ce082fdda"
 
 [[projects]]
   digest = "1:3b5a3bc35810830ded5e26ef9516e933083a2380d8e57371fdfde3c70d7c6952"
@@ -1526,7 +1526,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:55a70b7b8111fbbe7f412b3839dbff52bfba5c35d04a21fedc0b0f724895b3a5"
+  digest = "1:3454241817ada8069448d68384231cb86f2107046f2560fdcc092da8f6b5cb2b"
   name = "golang.org/x/crypto"
   packages = [
     "bcrypt",
@@ -1536,6 +1536,7 @@
     "ed25519/internal/edwards25519",
     "internal/chacha20",
     "internal/subtle",
+    "pbkdf2",
     "poly1305",
     "ssh",
     "ssh/agent",
@@ -1625,23 +1626,28 @@
   revision = "a457fd036447854c0c02e89ea439481bdcf941a2"
 
 [[projects]]
-  digest = "1:a4427f5b90e0d06b5b19d2891615137a814eb934c5a77397d0d5a753783e5f1e"
+  digest = "1:4de077368be8e07b66ac3f803454b4dc1138c135b5b0917edef59f6580e0bda5"
   name = "golang.org/x/text"
   packages = [
+    "cases",
     "collate",
     "collate/build",
+    "internal",
     "internal/colltab",
     "internal/gen",
     "internal/tag",
     "internal/triegen",
     "internal/ucd",
     "language",
+    "runes",
     "secure/bidirule",
+    "secure/precis",
     "transform",
     "unicode/bidi",
     "unicode/cldr",
     "unicode/norm",
     "unicode/rangetable",
+    "width",
   ]
   pruneopts = "UT"
   revision = "470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4"
@@ -1767,24 +1773,32 @@
   revision = "db91494dd46c1fdcbbde05e5ff5eb56df8f7d79a"
 
 [[projects]]
-  digest = "1:3a98314fd2e43bbd905b33125dad80b10111ba6e5e541db8ed2a953fe01fbb31"
+  digest = "1:1bdff737fd41a4c48d06265e782e38f7fddb2610ed6877095c42763b8767d195"
   name = "google.golang.org/grpc"
   packages = [
     ".",
     "balancer",
     "balancer/base",
     "balancer/roundrobin",
+    "binarylog/grpc_binarylog_v1",
     "codes",
     "connectivity",
     "credentials",
+    "credentials/internal",
     "encoding",
     "encoding/proto",
     "grpclog",
     "health/grpc_health_v1",
     "internal",
     "internal/backoff",
+    "internal/balancerload",
+    "internal/binarylog",
     "internal/channelz",
+    "internal/envconfig",
     "internal/grpcrand",
+    "internal/grpcsync",
+    "internal/syscall",
+    "internal/transport",
     "keepalive",
     "metadata",
     "naming",
@@ -1795,11 +1809,10 @@
     "stats",
     "status",
     "tap",
-    "transport",
   ]
   pruneopts = "UT"
-  revision = "168a6198bcb0ef175f7dacec0b8691fc141dc9b8"
-  version = "v1.13.0"
+  revision = "86af7e80a3703e2400cce4ea455a9abab36bbcf8"
+  version = "v1.21.2"
 
 [[projects]]
   branch = "v2-encoding-style"
@@ -2045,7 +2058,6 @@
     "google.golang.org/grpc/peer",
     "google.golang.org/grpc/stats",
     "google.golang.org/grpc/status",
-    "google.golang.org/grpc/transport",
     "gopkg.in/yaml.v2",
     "honnef.co/go/tools/cmd/staticcheck",
     "honnef.co/go/tools/lint",

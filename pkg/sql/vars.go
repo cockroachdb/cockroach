@@ -382,17 +382,18 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`experimental_vectorize`: {
+	`vectorize`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			mode, ok := sessiondata.VectorizeExecModeFromString(s)
 			if !ok {
-				return newVarValueError(`experimental_vectorize`, s, "off", "on", "always")
+				return newVarValueError(`vectorize`, s,
+					"off", "auto", "experimental_on", "experimental_always")
 			}
 			m.SetVectorize(mode)
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return evalCtx.SessionData.Vectorize.String()
+			return evalCtx.SessionData.VectorizeMode.String()
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return sessiondata.VectorizeExecMode(
@@ -506,6 +507,13 @@ var varGen = map[string]sessionVar{
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-INTERVALSTYLE
 	`intervalstyle`: makeCompatStringVar(`IntervalStyle`, "postgres"),
+
+	// CockroachDB extension.
+	`locality`: {
+		Get: func(evalCtx *extendedEvalContext) string {
+			return evalCtx.Locality.String()
+		},
+	},
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-LOC-TIMEOUT
 	`lock_timeout`: makeCompatIntVar(`lock_timeout`, 0),

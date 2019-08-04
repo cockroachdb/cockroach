@@ -468,37 +468,37 @@ GROUP BY q.b
 with &1 (q)
  ├── columns: "?column?":6(int!null)
  ├── cardinality: [0 - 3]
- ├── stats: [rows=0.22654092]
+ ├── stats: [rows=1]
  ├── fd: ()-->(6)
  ├── values
  │    ├── columns: column1:1(bool!null) column2:2(int)
  │    ├── cardinality: [3 - 3]
- │    ├── stats: [rows=3, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=2]
+ │    ├── stats: [rows=3]
  │    ├── (true, NULL) [type=tuple{bool, int}]
  │    ├── (false, NULL) [type=tuple{bool, int}]
  │    └── (true, 5) [type=tuple{bool, int}]
  └── project
       ├── columns: "?column?":6(int!null)
       ├── cardinality: [0 - 3]
-      ├── stats: [rows=0.22654092]
+      ├── stats: [rows=1]
       ├── fd: ()-->(6)
       ├── select
       │    ├── columns: b:4(int) bool_or:5(bool!null)
       │    ├── cardinality: [0 - 3]
-      │    ├── stats: [rows=0.22654092, distinct(5)=0.22654092, null(5)=0]
+      │    ├── stats: [rows=1, distinct(5)=1, null(5)=0]
       │    ├── key: (4)
       │    ├── fd: ()-->(5)
       │    ├── group-by
       │    │    ├── columns: b:4(int) bool_or:5(bool)
       │    │    ├── grouping columns: b:4(int)
       │    │    ├── cardinality: [0 - 3]
-      │    │    ├── stats: [rows=1.29289322, distinct(4)=1.29289322, null(4)=1, distinct(5)=1.29289322, null(5)=1]
+      │    │    ├── stats: [rows=1, distinct(4)=1, null(4)=0, distinct(5)=1, null(5)=0]
       │    │    ├── key: (4)
       │    │    ├── fd: (4)-->(5)
       │    │    ├── select
       │    │    │    ├── columns: a:3(bool!null) b:4(int)
       │    │    │    ├── cardinality: [0 - 3]
-      │    │    │    ├── stats: [rows=1.5, distinct(3)=1, null(3)=0, distinct(4)=1.29289322, null(4)=1]
+      │    │    │    ├── stats: [rows=1, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0]
       │    │    │    ├── fd: ()-->(3)
       │    │    │    ├── with-scan &1 (q)
       │    │    │    │    ├── columns: a:3(bool!null) b:4(int)
@@ -506,7 +506,7 @@ with &1 (q)
       │    │    │    │    │    ├──  column1:1(bool) => a:3(bool)
       │    │    │    │    │    └──  column2:2(int) => b:4(int)
       │    │    │    │    ├── cardinality: [3 - 3]
-      │    │    │    │    ├── stats: [rows=3, distinct(3)=2, null(3)=0, distinct(4)=2, null(4)=2]
+      │    │    │    │    ├── stats: [rows=3]
       │    │    │    │    └── fd: (1)-->(3), (2)-->(4)
       │    │    │    └── filters
       │    │    │         └── variable: a [type=bool, outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]

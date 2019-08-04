@@ -17,11 +17,11 @@ namespace cockroach {
 
 const DBTimestamp kZeroTimestamp = {0, 0};
 
-DBTimestamp ToDBTimestamp(const cockroach::util::hlc::LegacyTimestamp& timestamp) {
+inline DBTimestamp ToDBTimestamp(const cockroach::util::hlc::LegacyTimestamp& timestamp) {
   return DBTimestamp{timestamp.wall_time(), timestamp.logical()};
 }
 
-DBTimestamp PrevTimestamp(DBTimestamp ts) {
+inline DBTimestamp PrevTimestamp(DBTimestamp ts) {
   if (ts.logical > 0) {
     --ts.logical;
   } else if (ts.wall_time == 0) {

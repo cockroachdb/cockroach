@@ -42,13 +42,55 @@ func EvalAddSSTable(
 	// defer tracing.FinishSpan(span)
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
 
+	// IMPORT INTO should not proceed if any KVs from the SST shadow existing data
+	// entries - #38044.
+	if args.DisallowShadowing {
+		if err := checkForKeyCollisions(ctx, batch, mvccStartKey, mvccEndKey, args.Data); err != nil {
+			return result.Result{}, errors.Wrap(err, "checking for key collisions")
+		}
+	}
+
 	// Verify that the keys in the sstable are within the range specified by the
-	// request header, verify the key-value checksums, and compute the new
-	// MVCCStats.
-	stats, err := verifySSTable(
-		args.Data, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
+	// request header, and if the request did not include pre-computed stats,
+	// compute the expected MVCC stats delta of ingesting the SST.
+	dataIter, err := engine.NewMemSSTIterator(args.Data, true)
 	if err != nil {
-		return result.Result{}, errors.Wrap(err, "verifying sstable data")
+		return result.Result{}, err
+	}
+	defer dataIter.Close()
+
+	// Check that the first key is in the expected range.
+	dataIter.Seek(engine.MVCCKey{Key: keys.MinKey})
+	ok, err := dataIter.Valid()
+	if err != nil {
+		return result.Result{}, err
+	} else if ok {
+		if unsafeKey := dataIter.UnsafeKey(); unsafeKey.Less(mvccStartKey) {
+			return result.Result{}, errors.Errorf("first key %s not in request range [%s,%s)",
+				unsafeKey.Key, mvccStartKey.Key, mvccEndKey.Key)
+		}
+	}
+
+	var stats enginepb.MVCCStats
+	if args.MVCCStats != nil {
+		stats = *args.MVCCStats
+	} else {
+		log.VEventf(ctx, 2, "computing MVCCStats for SSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
+
+		computed, err := engine.ComputeStatsGo(dataIter, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
+		if err != nil {
+			return result.Result{}, errors.Wrap(err, "computing SSTable MVCC stats")
+		}
+		stats = computed
+	}
+
+	dataIter.Seek(mvccEndKey)
+	ok, err = dataIter.Valid()
+	if err != nil {
+		return result.Result{}, err
+	} else if ok {
+		return result.Result{}, errors.Errorf("last key %s not in request range [%s,%s)",
+			dataIter.UnsafeKey(), mvccStartKey.Key, mvccEndKey.Key)
 	}
 
 	// The above MVCCStats represents what is in this new SST.
@@ -105,45 +147,44 @@ func EvalAddSSTable(
 	}, nil
 }
 
-func verifySSTable(
-	data []byte, start, end engine.MVCCKey, nowNanos int64,
-) (enginepb.MVCCStats, error) {
-	// To verify every KV is a valid roachpb.KeyValue in the range [start, end)
-	// we a) pass a verify flag on the iterator so that as ComputeStatsGo calls
-	// Next, we're also verifying each KV pair. We explicitly check the first key
-	// is >= start and then that we do not find a key after end.
-	dataIter, err := engine.NewMemSSTIterator(data, true)
-	if err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	defer dataIter.Close()
+func checkForKeyCollisions(
+	ctx context.Context,
+	batch engine.ReadWriter,
+	mvccStartKey engine.MVCCKey,
+	mvccEndKey engine.MVCCKey,
+	data []byte,
+) error {
 
-	// Check that the first key is in the expected range.
-	dataIter.Seek(engine.MVCCKey{Key: keys.MinKey})
-	ok, err := dataIter.Valid()
-	if err != nil {
-		return enginepb.MVCCStats{}, err
-	} else if ok {
-		if unsafeKey := dataIter.UnsafeKey(); unsafeKey.Less(start) {
-			return enginepb.MVCCStats{}, errors.Errorf("first key %s not in request range [%s,%s)",
-				unsafeKey.Key, start.Key, end.Key)
-		}
+	// Create iterator over the existing data.
+	existingDataIter := batch.NewIterator(engine.IterOptions{UpperBound: mvccEndKey.Key})
+	defer existingDataIter.Close()
+	existingDataIter.Seek(mvccStartKey)
+	if ok, err := existingDataIter.Valid(); err != nil {
+		return errors.Wrap(err, "checking for key collisions")
+	} else if ok && !existingDataIter.UnsafeKey().Less(mvccEndKey) {
+		// Target key range is empty, so it is safe to ingest.
+		return nil
 	}
 
-	stats, err := engine.ComputeStatsGo(dataIter, start, end, nowNanos)
-	if err != nil {
-		return stats, err
+	// Create a C++ iterator over the SST being added. This iterator is used to
+	// perform a check for key collisions between the SST being ingested, and the
+	// exisiting data. As the collision check is in C++ we are unable to use a
+	// pure go iterator as in verifySSTable.
+	//
+	// TODO(adityamaru): reuse this iterator in verifySSTable.
+	sst := engine.MakeRocksDBSstFileReader()
+	defer sst.Close()
+
+	if err := sst.IngestExternalFile(data); err != nil {
+		return err
+	}
+	sstIterator := sst.NewIterator(engine.IterOptions{UpperBound: mvccEndKey.Key})
+	defer sstIterator.Close()
+	sstIterator.Seek(mvccStartKey)
+	if ok, err := sstIterator.Valid(); err != nil || !ok {
+		return errors.Wrap(err, "checking for key collisions")
 	}
 
-	dataIter.Seek(end)
-	ok, err = dataIter.Valid()
-	if err != nil {
-		return enginepb.MVCCStats{}, err
-	} else if ok {
-		if unsafeKey := dataIter.UnsafeKey(); !unsafeKey.Less(end) {
-			return enginepb.MVCCStats{}, errors.Errorf("last key %s not in request range [%s,%s)",
-				unsafeKey.Key, start.Key, end.Key)
-		}
-	}
-	return stats, nil
+	checkErr := engine.CheckForKeyCollisions(existingDataIter, sstIterator)
+	return checkErr
 }

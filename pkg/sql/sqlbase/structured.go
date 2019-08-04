@@ -260,16 +260,25 @@ func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor 
 	return desc
 }
 
+// protoGetter is a sub-interface of client.Txn that can fetch protobufs in a
+// transaction.
+type protoGetter interface {
+	// GetProto retrieves a protoutil.Message that's stored at key, storing it
+	// into the input msg parameter. If the key doesn't exist, the input proto
+	// will be reset.
+	GetProto(ctx context.Context, key interface{}, msg protoutil.Message) error
+}
+
 // GetDatabaseDescFromID retrieves the database descriptor for the database
-// ID passed in using an existing txn. Returns an error if the descriptor
-// doesn't exist or if it exists and is not a database.
+// ID passed in using an existing proto getter. Returns an error if the
+// descriptor doesn't exist or if it exists and is not a database.
 func GetDatabaseDescFromID(
-	ctx context.Context, txn *client.Txn, id ID,
+	ctx context.Context, protoGetter protoGetter, id ID,
 ) (*DatabaseDescriptor, error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
 
-	if err := txn.GetProto(ctx, descKey, desc); err != nil {
+	if err := protoGetter.GetProto(ctx, descKey, desc); err != nil {
 		return nil, err
 	}
 	db := desc.GetDatabase()
@@ -280,13 +289,15 @@ func GetDatabaseDescFromID(
 }
 
 // GetTableDescFromID retrieves the table descriptor for the table
-// ID passed in using an existing txn. Returns an error if the
+// ID passed in using an existing proto getter. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a table.
-func GetTableDescFromID(ctx context.Context, txn *client.Txn, id ID) (*TableDescriptor, error) {
+func GetTableDescFromID(
+	ctx context.Context, protoGetter protoGetter, id ID,
+) (*TableDescriptor, error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
 
-	if err := txn.GetProto(ctx, descKey, desc); err != nil {
+	if err := protoGetter.GetProto(ctx, descKey, desc); err != nil {
 		return nil, err
 	}
 	table := desc.GetTable()
@@ -297,13 +308,13 @@ func GetTableDescFromID(ctx context.Context, txn *client.Txn, id ID) (*TableDesc
 }
 
 // GetMutableTableDescFromID retrieves the table descriptor for the table
-// ID passed in using an existing txn. Returns an error if the
+// ID passed in using an existing proto getter. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a table.
 // Otherwise a mutable copy of the table is returned.
 func GetMutableTableDescFromID(
-	ctx context.Context, txn *client.Txn, id ID,
+	ctx context.Context, protoGetter protoGetter, id ID,
 ) (*MutableTableDescriptor, error) {
-	table, err := GetTableDescFromID(ctx, txn, id)
+	table, err := GetTableDescFromID(ctx, protoGetter, id)
 	if err != nil {
 		return nil, err
 	}
@@ -714,6 +725,219 @@ func (desc *TableDescriptor) MaybeFillInDescriptor() bool {
 	changedVersion := desc.maybeUpgradeFormatVersion()
 	changedPrivileges := desc.Privileges.MaybeFixPrivileges(desc.ID)
 	return changedVersion || changedPrivileges
+}
+
+// maybeUpgradeForeignKeyRepresentation destructively modifies the input table
+// descriptor by replacing all old-style foreign key references (the ForeignKey
+// and ReferencedBy fields on IndexDescriptor) with new-style foreign key
+// references (the InboundFKs and OutboundFKs fields on TableDescriptor). It
+// uses the supplied proto getter to look up the referenced descriptor on
+// outgoing FKs and the origin descriptor on incoming FKs. It returns true in
+// the first position if the descriptor was upgraded at all (i.e. had old-style
+// references on it) and an error if the descriptor was unable to be upgraded
+// for some reason.
+func (desc *TableDescriptor) maybeUpgradeForeignKeyRepresentation(
+	ctx context.Context, protoGetter protoGetter,
+) (bool, error) {
+	otherTables := make(map[ID]*TableDescriptor)
+	changed := false
+	// No need to process mutations, since only descriptors written on a 19.2
+	// cluster (after finalizing the upgrade) have foreign key mutations.
+	for i := range desc.Indexes {
+		newChanged, err := maybeUpgradeForeignKeyRepOnIndex(ctx, protoGetter, otherTables, desc, &desc.Indexes[i])
+		if err != nil {
+			return false, err
+		}
+		changed = changed || newChanged
+	}
+	newChanged, err := maybeUpgradeForeignKeyRepOnIndex(ctx, protoGetter, otherTables, desc, &desc.PrimaryIndex)
+	if err != nil {
+		return false, err
+	}
+	changed = changed || newChanged
+
+	return changed, nil
+}
+
+// maybeUpgradeForeignKeyRepOnIndex is the meat of the previous function - it
+// tries to upgrade a particular index's foreign key representation.
+func maybeUpgradeForeignKeyRepOnIndex(
+	ctx context.Context,
+	protoGetter protoGetter,
+	otherTables map[ID]*TableDescriptor,
+	desc *TableDescriptor,
+	idx *IndexDescriptor,
+) (bool, error) {
+	var changed bool
+	if idx.ForeignKey.IsSet() {
+		ref := &idx.ForeignKey
+		if _, ok := otherTables[ref.Table]; !ok {
+			tbl, err := GetTableDescFromID(ctx, protoGetter, ref.Table)
+			if err != nil {
+				return false, err
+			}
+			otherTables[ref.Table] = tbl
+		}
+
+		referencedIndex, err := otherTables[ref.Table].FindIndexByID(ref.Index)
+		if err != nil {
+			return false, err
+		}
+		numCols := ref.SharedPrefixLen
+		outFK := ForeignKeyConstraint{
+			OriginTableID:                     desc.ID,
+			OriginColumnIDs:                   idx.ColumnIDs[:numCols],
+			ReferencedTableID:                 ref.Table,
+			ReferencedColumnIDs:               referencedIndex.ColumnIDs[:numCols],
+			Name:                              ref.Name,
+			Validity:                          ref.Validity,
+			OnDelete:                          ref.OnDelete,
+			OnUpdate:                          ref.OnUpdate,
+			Match:                             ref.Match,
+			LegacyOriginIndex:                 idx.ID,
+			LegacyReferencedIndex:             referencedIndex.ID,
+			LegacyUpgradedFromOriginReference: idx.ForeignKey,
+		}
+		desc.OutboundFKs = append(desc.OutboundFKs, outFK)
+		changed = true
+		idx.ForeignKey = ForeignKeyReference{}
+	}
+
+	for refIdx := range idx.ReferencedBy {
+		ref := &idx.ReferencedBy[refIdx]
+		if _, ok := otherTables[ref.Table]; !ok {
+			tbl, err := GetTableDescFromID(ctx, protoGetter, ref.Table)
+			if err != nil {
+				return false, err
+			}
+			otherTables[ref.Table] = tbl
+		}
+
+		originIndex, err := otherTables[ref.Table].FindIndexByID(ref.Index)
+		if err != nil {
+			return false, err
+		}
+		numCols := originIndex.ForeignKey.SharedPrefixLen
+		inFK := ForeignKeyConstraint{
+			OriginTableID:                         ref.Table,
+			OriginColumnIDs:                       originIndex.ColumnIDs[:numCols],
+			ReferencedTableID:                     desc.ID,
+			ReferencedColumnIDs:                   idx.ColumnIDs[:numCols],
+			Name:                                  originIndex.ForeignKey.Name,
+			Validity:                              originIndex.ForeignKey.Validity,
+			OnDelete:                              originIndex.ForeignKey.OnDelete,
+			OnUpdate:                              originIndex.ForeignKey.OnUpdate,
+			Match:                                 originIndex.ForeignKey.Match,
+			LegacyOriginIndex:                     originIndex.ID,
+			LegacyReferencedIndex:                 idx.ID,
+			LegacyUpgradedFromReferencedReference: *ref,
+		}
+		desc.InboundFKs = append(desc.InboundFKs, inFK)
+		changed = true
+		idx.ReferencedBy = nil
+	}
+	return changed, nil
+}
+
+// maybeDowngradeForeignKeyRepresentation non-destructively downgrades the
+// receiver into the old foreign key representation (the ForeignKey
+// and ReferencedBy fields on IndexDescriptor if and only if the cluster version
+// has not yet been upgraded to VersionTopLevelForeignKeys. It returns true in
+// the first position if the downgrade occurred, along with a new
+// TableDescriptor object that is the downgraded descriptor. The receiver is not
+// modified in either case.
+func (desc *TableDescriptor) maybeDowngradeForeignKeyRepresentation(
+	ctx context.Context, protoGetter protoGetter, clusterSettings *cluster.Settings,
+) (bool, *TableDescriptor, error) {
+	downgradeUnnecessary := clusterSettings.Version.IsActive(cluster.VersionTopLevelForeignKeys)
+	if downgradeUnnecessary {
+		return false, desc, nil
+	}
+	descCopy := protoutil.Clone(desc).(*TableDescriptor)
+	changed := false
+	otherTables := make(map[ID]*TableDescriptor)
+
+	// No need to process mutations, since only descriptors written on a 19.2
+	// cluster (after finalizing the upgrade) have foreign key mutations.
+	for _, fk := range descCopy.OutboundFKs {
+		if _, ok := otherTables[fk.ReferencedTableID]; !ok {
+			tbl, err := GetTableDescFromID(ctx, protoGetter, fk.ReferencedTableID)
+			if err != nil {
+				return false, nil, err
+			}
+			otherTables[fk.ReferencedTableID] = tbl
+		}
+		ref := ForeignKeyReference{
+			Table:           fk.ReferencedTableID,
+			Index:           fk.LegacyReferencedIndex,
+			Name:            fk.Name,
+			Validity:        fk.Validity,
+			SharedPrefixLen: int32(len(fk.OriginColumnIDs)),
+			OnDelete:        fk.OnDelete,
+			OnUpdate:        fk.OnUpdate,
+			Match:           fk.Match,
+		}
+		// Validate that the resultant downgraded foreign key reference is identical
+		// to the one that we expected. All fields should be the same, except for
+		// potentially the Name and Validity.
+		if err := validateDowngradedFKReference(ref, fk.LegacyUpgradedFromOriginReference); err != nil {
+			return false, nil, err
+		}
+
+		idx, err := descCopy.FindIndexByID(fk.LegacyOriginIndex)
+		if err != nil {
+			return false, nil, err
+		}
+		idx.ForeignKey = ref
+		changed = true
+	}
+	descCopy.OutboundFKs = nil
+
+	for _, fk := range descCopy.InboundFKs {
+		backref := ForeignKeyReference{
+			Table: fk.OriginTableID,
+			Index: fk.LegacyOriginIndex,
+		}
+		if err := validateDowngradedFKReference(backref, fk.LegacyUpgradedFromReferencedReference); err != nil {
+			return false, nil, err
+		}
+		backrefIdx, err := descCopy.FindIndexByID(fk.LegacyReferencedIndex)
+		if err != nil {
+			return false, nil, err
+		}
+		backrefIdx.ReferencedBy = append(backrefIdx.ReferencedBy, backref)
+		changed = true
+	}
+	descCopy.InboundFKs = nil
+	return changed, descCopy, nil
+}
+
+func validateDowngradedFKReference(downgraded, original ForeignKeyReference) error {
+	if downgraded.Index != original.Index {
+		return errors.AssertionFailedf("downgraded.Index(%d) != original.Index (%d)",
+			downgraded.Index, original.Index)
+	}
+	if downgraded.Table != original.Table {
+		return errors.AssertionFailedf("downgraded.Table(%d) != original.Table (%d)",
+			downgraded.Table, original.Table)
+	}
+	if downgraded.SharedPrefixLen != original.SharedPrefixLen {
+		return errors.AssertionFailedf("downgraded.SharedPrefixLen(%d) != original.SharedPrefixLen (%d)",
+			downgraded.SharedPrefixLen, original.SharedPrefixLen)
+	}
+	if downgraded.OnDelete != original.OnDelete {
+		return errors.AssertionFailedf("downgraded.OnDelete(%d) != original.OnDelete (%d)",
+			downgraded.OnDelete, original.OnDelete)
+	}
+	if downgraded.OnUpdate != original.OnUpdate {
+		return errors.AssertionFailedf("downgraded.OnUpdate(%d) != original.OnUpdate (%d)",
+			downgraded.OnUpdate, original.OnUpdate)
+	}
+	if downgraded.Match != original.Match {
+		return errors.AssertionFailedf("downgraded.Match(%d) != original.Match (%d)",
+			downgraded.Match, original.Match)
+	}
+	return nil
 }
 
 // maybeUpgradeFormatVersion transforms the TableDescriptor to the latest
@@ -2643,6 +2867,16 @@ func (desc *ImmutableTableDescriptor) MakeFirstMutationPublic(
 // ColumnNeedsBackfill returns true if adding the given column requires a
 // backfill (dropping a column always requires a backfill).
 func ColumnNeedsBackfill(desc *ColumnDescriptor) bool {
+	// Consider the case where the user explicitly states the default value of a
+	// new column to be NULL. desc.DefaultExpr is not nil, but the string "NULL"
+	if desc.DefaultExpr != nil {
+		if defaultExpr, err := parser.ParseExpr(*desc.DefaultExpr); err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err,
+				"failed to parse default expression %s", *desc.DefaultExpr))
+		} else if defaultExpr == tree.DNull {
+			return false
+		}
+	}
 	return desc.DefaultExpr != nil || !desc.Nullable || desc.IsComputed()
 }
 
@@ -2851,16 +3085,6 @@ func (desc *TableDescriptor) TableSpan() roachpb.Span {
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
 
-// GetDescMetadataKey returns the descriptor key for the table.
-func (desc TableDescriptor) GetDescMetadataKey() roachpb.Key {
-	return MakeDescMetadataKey(desc.ID)
-}
-
-// GetNameMetadataKey returns the namespace key for the table.
-func (desc TableDescriptor) GetNameMetadataKey() roachpb.Key {
-	return MakeNameMetadataKey(desc.ParentID, desc.Name)
-}
-
 // SQLString returns the SQL statement describing the column.
 func (desc *ColumnDescriptor) SQLString() string {
 	f := tree.NewFmtCtx(tree.FmtSimple)
@@ -2980,8 +3204,18 @@ func (x ForeignKeyReference_Match) String() string {
 	}
 }
 
-// ForeignKeyReferenceActionValue allows the conversion between a
+// ForeignKeyReferenceActionType allows the conversion between a
 // tree.ReferenceAction and a ForeignKeyReference_Action.
+var ForeignKeyReferenceActionType = [...]tree.ReferenceAction{
+	ForeignKeyReference_NO_ACTION:   tree.NoAction,
+	ForeignKeyReference_RESTRICT:    tree.Restrict,
+	ForeignKeyReference_SET_DEFAULT: tree.SetDefault,
+	ForeignKeyReference_SET_NULL:    tree.SetNull,
+	ForeignKeyReference_CASCADE:     tree.Cascade,
+}
+
+// ForeignKeyReferenceActionValue allows the conversion between a
+// ForeignKeyReference_Action and a tree.ReferenceAction.
 var ForeignKeyReferenceActionValue = [...]ForeignKeyReference_Action{
 	tree.NoAction:   ForeignKeyReference_NO_ACTION,
 	tree.Restrict:   ForeignKeyReference_RESTRICT,

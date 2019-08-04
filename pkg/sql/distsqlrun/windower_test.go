@@ -13,14 +13,103 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
+	"math"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
+
+const noFilterIdx = -1
+
+func TestWindowerAccountingForResults(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	monitor := mon.MakeMonitorWithLimit(
+		"test-monitor",
+		mon.MemoryResource,
+		100000,        /* limit */
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		5000,          /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+	evalCtx := tree.MakeTestingEvalContextWithMon(st, &monitor)
+	defer evalCtx.Stop(ctx)
+	diskMonitor := makeTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+
+	flowCtx := &FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &ServerConfig{
+			Settings:    st,
+			TempStorage: tempEngine,
+			DiskMonitor: diskMonitor,
+		},
+	}
+
+	post := &distsqlpb.PostProcessSpec{}
+	input := NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(1000, 1))
+	aggSpec := distsqlpb.AggregatorSpec_Func(distsqlpb.AggregatorSpec_ARRAY_AGG)
+	spec := distsqlpb.WindowerSpec{
+		PartitionBy: []uint32{},
+		WindowFns: []distsqlpb.WindowerSpec_WindowFn{{
+			Func:         distsqlpb.WindowerSpec_Func{AggregateFunc: &aggSpec},
+			ArgsIdxs:     []uint32{0},
+			Ordering:     distsqlpb.Ordering{Columns: []distsqlpb.Ordering_Column{{ColIdx: 0}}},
+			OutputColIdx: 0,
+			FilterColIdx: noFilterIdx,
+			Frame: &distsqlpb.WindowerSpec_Frame{
+				Mode: distsqlpb.WindowerSpec_Frame_ROWS,
+				Bounds: distsqlpb.WindowerSpec_Frame_Bounds{
+					Start: distsqlpb.WindowerSpec_Frame_Bound{
+						BoundType: distsqlpb.WindowerSpec_Frame_OFFSET_PRECEDING,
+						IntOffset: 100,
+					},
+				},
+			},
+		}},
+	}
+	output := NewRowBuffer(
+		sqlbase.OneIntCol, nil, RowBufferArgs{},
+	)
+
+	d, err := newWindower(flowCtx, 0 /* processorID */, &spec, input, post, output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Run(ctx)
+	for {
+		row, meta := output.Next()
+		if row != nil {
+			t.Fatalf("unexpectedly received row %+v", row)
+		}
+		if meta == nil {
+			t.Fatalf("unexpectedly didn't receive an OOM error")
+		}
+		if meta.Err != nil {
+			if !strings.Contains(meta.Err.Error(), "memory budget exceeded") {
+				t.Fatalf("unexpectedly received an error other than OOM")
+			}
+			break
+		}
+	}
+}
 
 type windowTestSpec struct {
 	// The column indices of PARTITION BY clause.
@@ -59,6 +148,7 @@ func windows(windowTestSpecs []windowTestSpec) ([]distsqlpb.WindowerSpec, error)
 			}
 			windowFnSpec.Ordering = distsqlpb.Ordering{Columns: ordCols}
 		}
+		windowFnSpec.FilterColIdx = noFilterIdx
 		windows[i].WindowFns[0] = windowFnSpec
 	}
 	return windows, nil
@@ -111,9 +201,11 @@ func BenchmarkWindower(b *testing.B) {
 	defer diskMonitor.Stop(ctx)
 
 	flowCtx := &FlowCtx{
-		Settings:    st,
-		EvalCtx:     &evalCtx,
-		diskMonitor: diskMonitor,
+		EvalCtx: &evalCtx,
+		Cfg: &ServerConfig{
+			Settings:    st,
+			DiskMonitor: diskMonitor,
+		},
 	}
 
 	rowsGenerators := []func(int, int) sqlbase.EncDatumRows{

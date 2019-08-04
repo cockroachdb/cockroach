@@ -2,7 +2,7 @@
 
 source [file join [file dirname $argv0] common.tcl]
 
-system "mkfifo url_fifo || true; $argv start --insecure --vmodule=*=3 --pid-file=server_pid --listening-url-file=url_fifo -s=path=logs/db & cat url_fifo > server_url"
+system "mkfifo url_fifo || true; $argv start-single-node --insecure --vmodule=*=3 --pid-file=server_pid --listening-url-file=url_fifo -s=path=logs/db & cat url_fifo > server_url"
 
 spawn /bin/bash
 send "PS1=':''/# '\r"

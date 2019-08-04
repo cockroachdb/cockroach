@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt
-
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v INT)
 

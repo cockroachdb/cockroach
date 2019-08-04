@@ -346,7 +346,7 @@ CREATE SEQUENCE x
 build
 SELECT * FROM x
 ----
-sequence-select t.public.x
+sequence-select x
  ├── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()

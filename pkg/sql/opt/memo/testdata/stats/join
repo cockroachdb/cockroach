@@ -853,7 +853,7 @@ inner-join (merge)
  ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(4)=499.999999, null(4)=0, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0, distinct(7)=6321.5735, null(7)=0, distinct(2,3)=5000, null(2,3)=5050, distinct(3,5)=10000, null(3,5)=5050, distinct(1,2,7)=10000, null(1,2,7)=5000]
  ├── key: (7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6), (1)==(5), (5)==(1)
- ├── scan t.public.xysd
+ ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
  │    ├── key: (1)
@@ -865,7 +865,7 @@ inner-join (merge)
  │    ├── key: (7)
  │    ├── fd: (7)-->(5,6)
  │    ├── ordering: +5
- │    └── scan t.public.uv
+ │    └── scan uv
  │         ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │         ├── stats: [rows=10000, distinct(5)=500, null(5)=5000, distinct(6)=100, null(6)=0, distinct(7)=10000, null(7)=0]
  │         ├── key: (7)
@@ -894,7 +894,7 @@ left-join (merge)
  ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(5)=500, null(5)=1666.66667, distinct(6)=100, null(6)=1666.66667, distinct(2,3)=5000, null(2,3)=2525, distinct(3,5)=5000, null(3,5)=2525, distinct(1,2,7)=5000, null(1,2,7)=2500]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
- ├── scan t.public.xysd
+ ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
  │    ├── key: (1)
@@ -906,7 +906,7 @@ left-join (merge)
  │    ├── key: (7)
  │    ├── fd: (7)-->(5,6)
  │    ├── ordering: +5
- │    └── scan t.public.uv
+ │    └── scan uv
  │         ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │         ├── stats: [rows=10000, distinct(5)=500, null(5)=5000, distinct(6)=100, null(6)=0, distinct(7)=10000, null(7)=0]
  │         ├── key: (7)

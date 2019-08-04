@@ -1844,6 +1844,146 @@ func MVCCMerge(
 	return err
 }
 
+// MVCCClearTimeRange clears all MVCC versions within the span [key, endKey)
+// which have timestamps in the span (startTime, endTime]. This can have the
+// apparent effect of "reverting" the range to startTime if all of the older
+// revisions of cleared keys are still available (i.e. have not been GC'ed).
+//
+// Long runs of keys that all qualify for clearing will be cleared via a single
+// clear-range operation. Once maxBatchSize Clear and ClearRange operations are
+// hit during iteration, the next matching key is instead returned in the
+// resumeSpan. It is possible to exceed maxBatchSize by up to the size of the
+// buffer of keys selected for deletion but not yet flushed (as done to detect
+// long runs for cleaning in a single ClearRange).
+//
+// This function does not handle the stats computations to determine the correct
+// incremental deltas of clearing these keys (and correctly determining if it
+// does or not not change the live and gc keys) so the caller is responsible for
+// recomputing stats over the resulting span if needed.
+func MVCCClearTimeRange(
+	ctx context.Context,
+	batch ReadWriter,
+	key, endKey roachpb.Key,
+	startTime, endTime hlc.Timestamp,
+	maxBatchSize int64,
+) (*roachpb.Span, error) {
+	var batchSize int64
+	var resume *roachpb.Span
+
+	// When iterating, instead of immediately clearing a matching key we can
+	// accumulate it in buf until either a) useRangeClearThreshold is reached and
+	// we discard the buffer, instead just keeping track of where the span of keys
+	// matching started or b) a non-matching key is seen and we flush the buffer
+	// keys one by one as Clears. Once we switch to just tracking where the run
+	// started, on seeing a non-matching key we flush the run via one ClearRange.
+	// This can be a big win for reverting bulk-ingestion of clustered data as the
+	// entire span may likely match and thus could be cleared in one ClearRange
+	// instead of hundreds of thousands of individual Clears. This constant hasn't
+	// been tuned here at all, but was just borrowed from `clearRangeData` where
+	// where this strategy originated.
+	const useClearRangeThreshold = 64
+	var buf [useClearRangeThreshold]MVCCKey
+	var bufSize int
+	var clearRangeStart MVCCKey
+
+	clearMatchingKey := func(k MVCCKey) {
+		if len(clearRangeStart.Key) == 0 {
+			// Currently buffering keys to clear one-by-one.
+			if bufSize < useClearRangeThreshold {
+				buf[bufSize].Key = append(buf[bufSize].Key[:0], k.Key...)
+				buf[bufSize].Timestamp = k.Timestamp
+				bufSize++
+			} else {
+				// Buffer is now full -- switch to just tracking the start of the range
+				// from which we will clear when we either see a non-matching key or if
+				// we finish iterating.
+				clearRangeStart = buf[0]
+				bufSize = 0
+			}
+		}
+	}
+
+	flushClearedKeys := func(nonMatch MVCCKey) error {
+		if len(clearRangeStart.Key) != 0 {
+			if err := batch.ClearRange(clearRangeStart, nonMatch); err != nil {
+				return err
+			}
+			batchSize++
+			clearRangeStart = MVCCKey{}
+		} else if bufSize > 0 {
+			for i := 0; i < bufSize; i++ {
+				if err := batch.Clear(buf[i]); err != nil {
+					return err
+				}
+			}
+			batchSize += int64(bufSize)
+			bufSize = 0
+		}
+		return nil
+	}
+
+	// TODO(dt): time-bound iter could potentially be a big win here -- the
+	// expected use-case for this is to run over an entire table's span with a
+	// very recent timestamp, rolling back just the writes of some failed IMPORT
+	// and that could very likely only have hit some small subset of the table's
+	// keyspace. However to get the stats right we need a non-time-bound iter
+	// e.g. we need to know if there is an older key under the one we are
+	// clearing to know if we're changing the number of live keys. An approach
+	// that seems promising might be to use time-bound iter to find candidates
+	// for deletion, allowing us to quickly skip over swaths of uninteresting
+	// keys, but then use a normal iteration to actually do the delete including
+	// updating the live key stats correctly.
+	it := batch.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
+	defer it.Close()
+
+	for it.Seek(MVCCKey{Key: key}); ; it.Next() {
+		ok, err := it.Valid()
+		if err != nil {
+			return nil, err
+		} else if !ok {
+			break
+		}
+		k := it.UnsafeKey()
+		if c := k.Key.Compare(endKey); c >= 0 {
+			break
+		}
+
+		// We need to check for and fail on any intents in our time-range as we do
+		// not want to clear any running transactions. We don't _expect_ to hit this
+		// since the RevertRange is only intended for non-live key spans but there
+		// could be an intent leftover.
+		var meta enginepb.MVCCMetadata
+		if !k.IsValue() {
+			if err := it.ValueProto(&meta); err != nil {
+				return nil, err
+			}
+			ts := hlc.Timestamp(meta.Timestamp)
+			if meta.Txn != nil && startTime.Less(ts) && !endTime.Less(ts) {
+				err := &roachpb.WriteIntentError{
+					Intents: []roachpb.Intent{{Span: roachpb.Span{Key: append([]byte{}, k.Key...)},
+						Status: roachpb.PENDING, Txn: *meta.Txn,
+					}}}
+				return nil, err
+			}
+		}
+
+		if startTime.Less(k.Timestamp) && !endTime.Less(k.Timestamp) {
+			if batchSize >= maxBatchSize {
+				resume = &roachpb.Span{Key: append([]byte{}, k.Key...)}
+				break
+			}
+			clearMatchingKey(k)
+		} else {
+			// This key does not match, so we need to flush our run of matching keys.
+			if err := flushClearedKeys(k); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return resume, flushClearedKeys(MVCCKey{Key: endKey})
+}
+
 // MVCCDeleteRange deletes the range of key/value pairs specified by start and
 // end keys. It returns the range of keys deleted when returnedKeys is set,
 // the next span to resume from, and the number of keys deleted.

@@ -444,311 +444,27 @@ func Example_logging() {
 }
 
 func Example_zone() {
-	storeSpec := base.DefaultTestStoreSpec
-	storeSpec.Attributes = roachpb.Attributes{Attrs: []string{"ssd"}}
-	c := newCLITest(cliTestParams{
-		storeSpecs: []base.StoreSpec{storeSpec},
-		locality: roachpb.Locality{
-			Tiers: []roachpb.Tier{
-				{Key: "region", Value: "us-east-1"},
-				{Key: "zone", Value: "us-east-1a"},
-			},
-		},
-	})
+	c := newCLITest(cliTestParams{noServer: true})
 	defer c.cleanup()
 
 	c.Run("zone ls")
 	c.Run("zone set system --file=./testdata/zone_attrs.yaml")
-	c.Run("zone ls")
 	c.Run("zone get .liveness")
-	c.Run("zone get .meta")
-	c.Run("zone get system.nonexistent")
-	c.Run("zone get system.descriptor")
-	c.Run("zone set system.descriptor --file=./testdata/zone_attrs.yaml")
-	c.Run("zone set system.namespace --file=./testdata/zone_attrs.yaml")
-	c.Run("zone set system.nonexistent --file=./testdata/zone_attrs.yaml")
-	c.Run("zone set system --file=./testdata/zone_range_max_bytes.yaml")
-	c.Run("zone get system")
 	c.Run("zone rm system")
-	c.Run("zone ls")
-	c.Run("zone rm .default")
-	c.Run("zone set .liveness --file=./testdata/zone_range_max_bytes.yaml")
-	c.Run("zone set .meta --file=./testdata/zone_range_max_bytes.yaml")
-	c.Run("zone set .system --file=./testdata/zone_range_max_bytes.yaml")
-	c.Run("zone set .timeseries --file=./testdata/zone_range_max_bytes.yaml")
-	c.Run("zone get .system")
-	c.Run("zone ls")
-	c.Run("zone set .default --file=./testdata/zone_range_max_bytes.yaml")
-	c.Run("zone get system")
-	c.Run("zone set .default --disable-replication")
-	c.Run("zone get system")
-	c.Run("zone rm .liveness")
-	c.Run("zone rm .meta")
-	c.Run("zone rm .system")
-	c.Run("zone ls")
-	c.Run("zone rm .timeseries")
-	c.Run("zone ls")
-	c.Run("zone rm .liveness")
-	c.Run("zone rm .meta")
-	c.Run("zone rm .system")
-	c.Run("zone rm .timeseries")
-	c.Run("zone set system.jobs@primary --file=./testdata/zone_attrs.yaml")
-	c.Run("zone set system --file=./testdata/zone_attrs_advanced.yaml")
-	c.Run("zone set system --file=./testdata/zone_attrs_experimental.yaml")
-	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int)"})
-	c.Run("zone set t --file=./testdata/zone_range_max_bytes.yaml")
-	c.Run("zone ls")
-	c.Run("zone set t.f --file=./testdata/zone_range_max_bytes.yaml")
-	c.Run("zone ls")
-	c.RunWithArgs([]string{"sql", "-e", "drop database t cascade"})
-	c.Run("zone ls")
 
 	// Output:
 	// zone ls
-	// .default
-	// .liveness
-	// .meta
-	// .system
-	// system
-	// system.jobs
+	// command "ls" has been removed
+	// HINT: Use SHOW ZONE CONFIGURATIONS in a SQL client instead.
 	// zone set system --file=./testdata/zone_attrs.yaml
-	// range_min_bytes: 16777216
-	// range_max_bytes: 67108864
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 1
-	// constraints: [+zone=us-east-1a, +ssd]
-	// lease_preferences: []
-	//
-	// zone ls
-	// .default
-	// .liveness
-	// .meta
-	// .system
-	// system
-	// system.jobs
+	// command "set" has been removed
+	// HINT: Use ALTER ... CONFIGURE ZONE in a SQL client instead.
 	// zone get .liveness
-	// .liveness
-	// range_min_bytes: 16777216
-	// range_max_bytes: 67108864
-	// gc:
-	//   ttlseconds: 600
-	// num_replicas: 5
-	// constraints: []
-	// lease_preferences: []
-	// zone get .meta
-	// .meta
-	// range_min_bytes: 16777216
-	// range_max_bytes: 67108864
-	// gc:
-	//   ttlseconds: 3600
-	// num_replicas: 5
-	// constraints: []
-	// lease_preferences: []
-	// zone get system.nonexistent
-	// pq: relation "system.public.nonexistent" does not exist
-	// zone get system.descriptor
-	// system
-	// range_min_bytes: 16777216
-	// range_max_bytes: 67108864
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 1
-	// constraints: [+zone=us-east-1a, +ssd]
-	// lease_preferences: []
-	// zone set system.descriptor --file=./testdata/zone_attrs.yaml
-	// pq: cannot set zone configs for system config tables; try setting your config on the entire "system" database instead
-	// zone set system.namespace --file=./testdata/zone_attrs.yaml
-	// pq: cannot set zone configs for system config tables; try setting your config on the entire "system" database instead
-	// zone set system.nonexistent --file=./testdata/zone_attrs.yaml
-	// pq: relation "system.public.nonexistent" does not exist
-	// zone set system --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 3
-	// constraints: [+zone=us-east-1a, +ssd]
-	// lease_preferences: []
-	//
-	// zone get system
-	// system
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 3
-	// constraints: [+zone=us-east-1a, +ssd]
-	// lease_preferences: []
+	// command "get" has been removed
+	// HINT: Use SHOW ZONE CONFIGURATION FOR ... in a SQL client instead.
 	// zone rm system
-	// zone ls
-	// .default
-	// .liveness
-	// .meta
-	// .system
-	// system.jobs
-	// zone rm .default
-	// pq: cannot remove default zone
-	// zone set .liveness --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 600
-	// num_replicas: 3
-	// constraints: []
-	// lease_preferences: []
-	//
-	// zone set .meta --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 3600
-	// num_replicas: 3
-	// constraints: []
-	// lease_preferences: []
-	//
-	// zone set .system --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 3
-	// constraints: []
-	// lease_preferences: []
-	//
-	// zone set .timeseries --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 3
-	// constraints: []
-	// lease_preferences: []
-	//
-	// zone get .system
-	// .system
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 3
-	// constraints: []
-	// lease_preferences: []
-	// zone ls
-	// .default
-	// .liveness
-	// .meta
-	// .system
-	// .timeseries
-	// system.jobs
-	// zone set .default --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 3
-	// constraints: []
-	// lease_preferences: []
-	//
-	// zone get system
-	// .default
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 3
-	// constraints: []
-	// lease_preferences: []
-	// zone set .default --disable-replication
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 1
-	// constraints: []
-	// lease_preferences: []
-	//
-	// zone get system
-	// .default
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 1
-	// constraints: []
-	// lease_preferences: []
-	// zone rm .liveness
-	// zone rm .meta
-	// zone rm .system
-	// zone ls
-	// .default
-	// .timeseries
-	// system.jobs
-	// zone rm .timeseries
-	// zone ls
-	// .default
-	// system.jobs
-	// zone rm .liveness
-	// zone rm .meta
-	// zone rm .system
-	// zone rm .timeseries
-	// zone set system.jobs@primary --file=./testdata/zone_attrs.yaml
-	// pq: setting zone configs on indexes or partitions requires a CCL binary
-	// zone set system --file=./testdata/zone_attrs_advanced.yaml
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 3
-	// constraints: {+region=us-east-1: 1, '+zone=us-east-1a,+ssd': 1}
-	// lease_preferences: [[+region=us-east-1], [+zone=us-east-1a]]
-	//
-	// zone set system --file=./testdata/zone_attrs_experimental.yaml
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 3
-	// constraints: {+region=us-east-1: 1, '+zone=us-east-1a,+ssd': 1}
-	// lease_preferences: [[+zone=us-east-1a]]
-	//
-	// sql -e create database t; create table t.f (x int, y int)
-	// CREATE TABLE
-	// zone set t --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 3
-	// constraints: []
-	// lease_preferences: []
-	//
-	// zone ls
-	// .default
-	// system
-	// system.jobs
-	// t
-	// zone set t.f --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 16777216
-	// range_max_bytes: 134217728
-	// gc:
-	//   ttlseconds: 90000
-	// num_replicas: 3
-	// constraints: []
-	// lease_preferences: []
-	//
-	// zone ls
-	// .default
-	// system
-	// system.jobs
-	// t
-	// t.f
-	// sql -e drop database t cascade
-	// DROP DATABASE
-	// zone ls
-	// .default
-	// system
-	// system.jobs
+	// command "rm" has been removed
+	// HINT: Use ALTER ... CONFIGURE ZONE DISCARD in a SQL client instead.
 }
 
 func Example_demo() {
@@ -757,6 +473,7 @@ func Example_demo() {
 
 	testData := [][]string{
 		{`demo`, `-e`, `show database`},
+		{`demo`, `-e`, `show database`, `--empty`},
 		{`demo`, `-e`, `show application_name`},
 		{`demo`, `--format=table`, `-e`, `show database`},
 		{`demo`, `-e`, `select 1 as "1"`, `-e`, `select 3 as "3"`},
@@ -772,14 +489,17 @@ func Example_demo() {
 	// Output:
 	// demo -e show database
 	// database
+	// movr
+	// demo -e show database --empty
+	// database
 	// defaultdb
 	// demo -e show application_name
 	// application_name
 	// $ cockroach demo
 	// demo --format=table -e show database
 	//   database
-	// +-----------+
-	//   defaultdb
+	// +----------+
+	//   movr
 	// (1 row)
 	// demo -e select 1 as "1" -e select 3 as "3"
 	// 1
@@ -1802,24 +1522,25 @@ func TestFlagUsage(t *testing.T) {
   cockroach [command]
 
 Available Commands:
-  start       start a node
-  init        initialize a cluster
-  cert        create ca, node, and client certs
-  quit        drain and shutdown node
+  start             start a node in a multi-node cluster
+  start-single-node start a single-node cluster
+  init              initialize a cluster
+  cert              create ca, node, and client certs
+  quit              drain and shutdown node
 
-  sql         open a sql shell
-  user        get, set, list and remove users
-  node        list, inspect or remove nodes
-  dump        dump sql tables
+  sql               open a sql shell
+  user              get, set, list and remove users
+  node              list, inspect or remove nodes
+  dump              dump sql tables
 
-  demo        open a demo sql shell
-  gen         generate auxiliary files
-  version     output version information
-  debug       debugging commands
-  sqlfmt      format SQL statements
-  workload    [experimental] generators for data and query loads
-  systembench Run systembench
-  help        Help about any command
+  demo              open a demo sql shell
+  gen               generate auxiliary files
+  version           output version information
+  debug             debugging commands
+  sqlfmt            format SQL statements
+  workload          [experimental] generators for data and query loads
+  systembench       Run systembench
+  help              Help about any command
 
 Flags:
   -h, --help                             help for cockroach

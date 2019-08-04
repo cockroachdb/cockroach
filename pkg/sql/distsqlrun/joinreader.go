@@ -42,10 +42,6 @@ const (
 	// jrPerformingLookup means we are performing an index lookup for the current
 	// input row batch.
 	jrPerformingLookup
-	// jrCollectingOutputRows means we are collecting the result of the index
-	// lookup to be emitted, while preserving the order of the input, and
-	// optionally rendering rows for unmatched inputs for left outer joins.
-	jrCollectingOutputRows
 	// jrEmittingRows means we are emitting the results of the index lookup.
 	jrEmittingRows
 )
@@ -77,10 +73,6 @@ type joinReader struct {
 	// Column indexes in the input stream specifying the columns which match with
 	// the index columns. These are the equality columns of the join.
 	lookupCols columns
-	// indexFilter is the filter expression from the index's scanNode in a
-	// lookup join. It is applied to index rows before they are joined to the
-	// input rows.
-	indexFilter exprHelper
 	// indexTypes is an array of the types of the index we're looking up into,
 	// in the order of the columns in that index.
 	indexTypes []types.T
@@ -91,25 +83,35 @@ type joinReader struct {
 	batchSize int
 
 	// State variables for each batch of input rows.
-	inputRows               sqlbase.EncDatumRows
-	keyToInputRowIndices    map[string][]int
-	inputRowIdxToOutputRows []sqlbase.EncDatumRows
-	finalLookupBatch        bool
-	toEmit                  sqlbase.EncDatumRows
+	inputRows            sqlbase.EncDatumRows
+	keyToInputRowIndices map[string][]int
+	// inputRowIdxToLookedUpRows is a slice of looked up rows, one per row in
+	// inputRows. It's populated in the jrPerformingLookup state. For non partial
+	// joins (everything but semi/anti join), the looked up rows are the rows that
+	// came back from the lookup span for each input row, without checking for
+	// matches with respect to the on-condition. For semi/anti join, we store at
+	// most one nil, indicating a matching lookup if it's present, since the right
+	// side of a semi/anti join is not used.
+	inputRowIdxToLookedUpRows []sqlbase.EncDatumRows
+	// emitCursor contains information about where the next row to emit is within
+	// inputRowIdxToOutputRows.
+	emitCursor struct {
+		// inputRowIdx contains the index into inputRowIdxToOutputRows that we're
+		// about to emit.
+		inputRowIdx int
+		// outputRowIdx contains the index into the inputRowIdx'th row of
+		// inputRowIdxToOutputRows that we're about to emit.
+		outputRowIdx int
+		// seenMatch is true if there was a match at the current inputRowIdx. A
+		// match means that there's no need to output an outer or anti join row.
+		seenMatch bool
+	}
 
 	// neededFamilies maintains what families we need to query from if our
 	// needed columns span multiple queries
 	neededFamilies []sqlbase.FamilyID
 
-	// A few scratch buffers, to avoid re-allocating.
-	lookupRows  []lookupRow
 	indexKeyRow sqlbase.EncDatumRow
-}
-
-// lookupRow represents an index key and the corresponding index row.
-type lookupRow struct {
-	key string
-	row sqlbase.EncDatumRow
 }
 
 var _ Processor = &joinReader{}
@@ -175,9 +177,6 @@ func newJoinReader(
 			},
 		},
 	); err != nil {
-		return nil, err
-	}
-	if err := jr.indexFilter.init(spec.IndexFilterExpr, columnTypes, jr.evalCtx); err != nil {
 		return nil, err
 	}
 
@@ -256,11 +255,6 @@ func (jr *joinReader) neededRightCols() util.FastIntSet {
 		}
 	}
 
-	// Add columns needed by the index filter.
-	for _, v := range jr.indexFilter.vars.GetIndexedVars() {
-		neededRightCols.Add(v.Idx)
-	}
-
 	return neededRightCols
 }
 
@@ -318,10 +312,8 @@ func (jr *joinReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) 
 			jr.runningState, meta = jr.readInput()
 		case jrPerformingLookup:
 			jr.runningState, meta = jr.performLookup()
-		case jrCollectingOutputRows:
-			jr.runningState = jr.collectOutputRows()
 		case jrEmittingRows:
-			jr.runningState, row = jr.emitRow()
+			jr.runningState, row, meta = jr.emitRow()
 		default:
 			log.Fatalf(jr.Ctx, "unsupported state: %d", jr.runningState)
 		}
@@ -366,13 +358,13 @@ func (jr *joinReader) readInput() (joinReaderState, *distsqlpb.ProducerMetadata)
 	// will allow us to preserve the order of the input in the face of multiple
 	// input rows having the same lookup keyspan, or if we're doing an outer join
 	// and we need to emit unmatched rows.
-	if len(jr.inputRowIdxToOutputRows) >= len(jr.inputRows) {
-		jr.inputRowIdxToOutputRows = jr.inputRowIdxToOutputRows[:len(jr.inputRows)]
-		for i := range jr.inputRowIdxToOutputRows {
-			jr.inputRowIdxToOutputRows[i] = nil
+	if cap(jr.inputRowIdxToLookedUpRows) >= len(jr.inputRows) {
+		jr.inputRowIdxToLookedUpRows = jr.inputRowIdxToLookedUpRows[:len(jr.inputRows)]
+		for i := range jr.inputRowIdxToLookedUpRows {
+			jr.inputRowIdxToLookedUpRows[i] = jr.inputRowIdxToLookedUpRows[i][:0]
 		}
 	} else {
-		jr.inputRowIdxToOutputRows = make([]sqlbase.EncDatumRows, len(jr.inputRows))
+		jr.inputRowIdxToLookedUpRows = make([]sqlbase.EncDatumRows, len(jr.inputRows))
 	}
 
 	// Start the index lookup. We maintain a map from index key to the
@@ -396,8 +388,7 @@ func (jr *joinReader) readInput() (joinReaderState, *distsqlpb.ProducerMetadata)
 	}
 	if len(spans) == 0 {
 		// All of the input rows were filtered out. Skip the index lookup.
-		jr.finalLookupBatch = true
-		return jrCollectingOutputRows, nil
+		return jrEmittingRows, nil
 	}
 	// Sort the spans so that we can rely upon the fetcher to limit the number of
 	// results per batch. It's safe to reorder the spans here because we already
@@ -418,11 +409,11 @@ func (jr *joinReader) readInput() (joinReaderState, *distsqlpb.ProducerMetadata)
 // performLookup reads the next batch of index rows, joins them to the
 // corresponding input rows, and adds the results to jr.inputRowIdxToOutputRows.
 func (jr *joinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetadata) {
-	jr.lookupRows = jr.lookupRows[:0]
 	nCols := len(jr.lookupCols)
 
-	// Read the next batch of index rows.
-	for len(jr.lookupRows) < jr.batchSize {
+	isJoinTypePartialJoin := jr.joinType == sqlbase.LeftSemiJoin || jr.joinType == sqlbase.LeftAntiJoin
+	// Read the entire set of rows looked up for the last input batch.
+	for {
 		// Construct a "partial key" of nCols, so we can match the key format that
 		// was stored in our keyToInputRowIndices map. This matches the format that
 		// is output in jr.generateSpan.
@@ -432,96 +423,110 @@ func (jr *joinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetad
 			return jrStateUnknown, jr.DrainHelper()
 		}
 
-		indexRow, meta := jr.fetcher.Next()
+		lookedUpRow, meta := jr.fetcher.Next()
 		if meta != nil {
 			jr.MoveToDraining(scrub.UnwrapScrubError(meta.Err))
 			return jrStateUnknown, jr.DrainHelper()
 		}
-		if indexRow == nil {
+		if lookedUpRow == nil {
 			// Done with this input batch.
-			jr.finalLookupBatch = true
 			break
 		}
 
-		jr.lookupRows = append(jr.lookupRows, lookupRow{key: string(key), row: jr.rowAlloc.CopyRow(indexRow)})
-	}
-
-	// Iterate over the lookup results, map them to the input rows, and emit the
-	// rendered rows.
-	isJoinTypeLeftSemiJoin := jr.joinType == sqlbase.LeftSemiJoin
-	for _, lookupRow := range jr.lookupRows {
-		if jr.indexFilter.expr != nil {
-			// Apply index filter.
-			res, err := jr.indexFilter.evalFilter(lookupRow.row)
-			if err != nil {
-				jr.MoveToDraining(err)
-				return jrStateUnknown, jr.DrainHelper()
-			}
-			if !res {
-				continue
+		for _, inputRowIdx := range jr.keyToInputRowIndices[string(key)] {
+			if isJoinTypePartialJoin {
+				// During a SemiJoin or AntiJoin, we only output if we've seen no match
+				// for this input row yet. Additionally, since we don't have to render
+				// anything to output a Semi or Anti join match, we can evaluate our
+				// on condition now and only buffer if we pass it.
+				if len(jr.inputRowIdxToLookedUpRows[inputRowIdx]) == 0 {
+					renderedRow, err := jr.render(jr.inputRows[inputRowIdx], lookedUpRow)
+					if err != nil {
+						jr.MoveToDraining(err)
+						return jrStateUnknown, jr.DrainHelper()
+					}
+					if renderedRow == nil {
+						// We failed our on-condition - don't buffer anything.
+						continue
+					}
+					jr.inputRowIdxToLookedUpRows[inputRowIdx] = append(
+						jr.inputRowIdxToLookedUpRows[inputRowIdx], nil)
+				}
+			} else {
+				jr.inputRowIdxToLookedUpRows[inputRowIdx] = append(
+					jr.inputRowIdxToLookedUpRows[inputRowIdx],
+					jr.out.rowAlloc.CopyRow(lookedUpRow))
 			}
 		}
-		for _, inputRowIdx := range jr.keyToInputRowIndices[lookupRow.key] {
-			// Only add to output if joinType is not LeftSemiJoin or if we have not gotten the match
-			if !isJoinTypeLeftSemiJoin || len(jr.inputRowIdxToOutputRows[inputRowIdx]) == 0 {
-				renderedRow, err := jr.render(jr.inputRows[inputRowIdx], lookupRow.row)
-				if err != nil {
-					jr.MoveToDraining(err)
-					return jrStateUnknown, jr.DrainHelper()
-				}
-				if renderedRow != nil {
-					rowCopy := jr.out.rowAlloc.CopyRow(renderedRow)
-					jr.inputRowIdxToOutputRows[inputRowIdx] = append(
-						jr.inputRowIdxToOutputRows[inputRowIdx], rowCopy)
-				}
-			}
-		}
-	}
-
-	if jr.finalLookupBatch {
-		return jrCollectingOutputRows, nil
 	}
 
 	return jrEmittingRows, nil
 }
 
-// collectOutputRows iterates over jr.inputRowIdxToOutputRows and adds output
-// rows to jr.Emit, rendering rows for unmatched inputs if the join is a left
-// outer join or left anti join, while preserving the input order.
-func (jr *joinReader) collectOutputRows() joinReaderState {
-	for i, outputRows := range jr.inputRowIdxToOutputRows {
-		if len(outputRows) == 0 {
-			if jr.joinType == sqlbase.LeftOuterJoin || jr.joinType == sqlbase.LeftAntiJoin {
-				if row := jr.renderUnmatchedRow(jr.inputRows[i], leftSide); row != nil {
-					jr.toEmit = append(jr.toEmit, jr.out.rowAlloc.CopyRow(row))
-				}
-			}
-		} else {
-			if jr.joinType != sqlbase.LeftAntiJoin {
-				jr.toEmit = append(jr.toEmit, outputRows...)
-			}
-		}
-	}
-	return jrEmittingRows
-}
-
 // emitRow returns the next row from jr.toEmit, if present. Otherwise it
 // prepares for another input batch.
-func (jr *joinReader) emitRow() (joinReaderState, sqlbase.EncDatumRow) {
-	if len(jr.toEmit) == 0 {
-		if jr.finalLookupBatch {
-			// Ready for another input batch. Reset state.
-			jr.inputRows = jr.inputRows[:0]
-			jr.keyToInputRowIndices = make(map[string][]int)
-			jr.finalLookupBatch = false
-			return jrReadingInput, nil
-		}
-		// Process the next index lookup batch.
-		return jrPerformingLookup, nil
+func (jr *joinReader) emitRow() (
+	joinReaderState,
+	sqlbase.EncDatumRow,
+	*distsqlpb.ProducerMetadata,
+) {
+	// Loop until we find a valid row to emit, or the cursor runs off the end.
+	if jr.emitCursor.inputRowIdx >= len(jr.inputRowIdxToLookedUpRows) {
+		// Ready for another input batch. Reset state.
+		jr.inputRows = jr.inputRows[:0]
+		jr.keyToInputRowIndices = make(map[string][]int)
+		jr.emitCursor.outputRowIdx = 0
+		jr.emitCursor.inputRowIdx = 0
+		jr.emitCursor.seenMatch = false
+		return jrReadingInput, nil, nil
 	}
-	row := jr.toEmit[0]
-	jr.toEmit = jr.toEmit[1:]
-	return jrEmittingRows, row
+	inputRow := jr.inputRows[jr.emitCursor.inputRowIdx]
+	lookedUpRows := jr.inputRowIdxToLookedUpRows[jr.emitCursor.inputRowIdx]
+	if jr.emitCursor.outputRowIdx >= len(lookedUpRows) {
+		// We have no more rows for the current input row. Emit an outer or anti
+		// row if we didn't see a match, and bump to the next input row.
+		jr.emitCursor.inputRowIdx++
+		jr.emitCursor.outputRowIdx = 0
+		seenMatch := jr.emitCursor.seenMatch
+		jr.emitCursor.seenMatch = false
+		if !seenMatch {
+			switch jr.joinType {
+			case sqlbase.LeftOuterJoin:
+				// An outer-join non-match means we emit the input row with NULLs for
+				// the right side (if it passes the ON-condition).
+				if renderedRow := jr.renderUnmatchedRow(inputRow, leftSide); renderedRow != nil {
+					return jrEmittingRows, renderedRow, nil
+				}
+			case sqlbase.LeftAntiJoin:
+				// An anti-join non-match means we emit the input row.
+				return jrEmittingRows, inputRow, nil
+			}
+		}
+		return jrEmittingRows, nil, nil
+	}
+
+	lookedUpRow := lookedUpRows[jr.emitCursor.outputRowIdx]
+	jr.emitCursor.outputRowIdx++
+	switch jr.joinType {
+	case sqlbase.LeftSemiJoin:
+		// A semi-join match means we emit our input row.
+		jr.emitCursor.seenMatch = true
+		return jrEmittingRows, inputRow, nil
+	case sqlbase.LeftAntiJoin:
+		// An anti-join match means we emit nothing.
+		jr.emitCursor.seenMatch = true
+		return jrEmittingRows, nil, nil
+	}
+
+	outputRow, err := jr.render(inputRow, lookedUpRow)
+	if err != nil {
+		jr.MoveToDraining(err)
+		return jrStateUnknown, nil, jr.DrainHelper()
+	}
+	if outputRow != nil {
+		jr.emitCursor.seenMatch = true
+	}
+	return jrEmittingRows, outputRow, nil
 }
 
 func (jr *joinReader) hasNullLookupColumn(row sqlbase.EncDatumRow) bool {

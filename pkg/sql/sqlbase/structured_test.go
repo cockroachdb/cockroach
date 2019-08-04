@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/gogo/protobuf/proto"
 )
 
 // Makes an IndexDescriptor with all columns being ascending.
@@ -1305,5 +1306,454 @@ func TestKeysPerRow(t *testing.T) {
 				t.Errorf("expected %d keys got %d", test.expected, keys)
 			}
 		})
+	}
+}
+
+func TestColumnNeedsBackfill(t *testing.T) {
+	// Define variable strings here such that we can pass their address below
+	null := "NULL"
+	four := "4:::INT8"
+	// Create Column Descriptors that reflect the definition of a column with a
+	// default value of NULL that was set implicitly, one that was set explicitly,
+	// and one that has an INT default value, respectively.
+	implicitNull := &ColumnDescriptor{Name: "im", ID: 2, DefaultExpr: nil, Nullable: true, ComputeExpr: nil}
+	explicitNull := &ColumnDescriptor{Name: "ex", ID: 3, DefaultExpr: &null, Nullable: true, ComputeExpr: nil}
+	defaultNotNull := &ColumnDescriptor{Name: "four", ID: 4, DefaultExpr: &four, Nullable: true, ComputeExpr: nil}
+	// Verify that a backfill doesn't occur according to the ColumnNeedsBackfill
+	// function for the default NULL values, and that it does occur for an INT
+	// default value.
+	if ColumnNeedsBackfill(implicitNull) != false {
+		t.Fatal("Expected implicit SET DEFAULT NULL to not require a backfill," +
+			" ColumnNeedsBackfill states that it does.")
+	}
+	if ColumnNeedsBackfill(explicitNull) != false {
+		t.Fatal("Expected explicit SET DEFAULT NULL to not require a backfill," +
+			" ColumnNeedsBackfill states that it does.")
+	}
+	if ColumnNeedsBackfill(defaultNotNull) != true {
+		t.Fatal("Expected explicit SET DEFAULT NULL to require a backfill," +
+			" ColumnNeedsBackfill states that it does not.")
+	}
+}
+
+type fakeProtoGetter struct {
+	protos map[interface{}]protoutil.Message
+}
+
+func (m fakeProtoGetter) GetProto(
+	ctx context.Context, key interface{}, msg protoutil.Message,
+) error {
+	msg.Reset()
+	if other, ok := m.protos[string(key.(roachpb.Key))]; ok {
+		bytes := make([]byte, other.Size())
+		if _, err := other.MarshalTo(bytes); err != nil {
+			return err
+		}
+		if err := protoutil.Unmarshal(bytes, msg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// oldFormatUpgradedPair is a helper struct for the upgrade/downgrade test
+// below. It holds an "old format" (pre-19.2) table descriptor, and an expected
+// upgraded equivalent. The test will verify that the old format descriptor
+// upgrades into the provided expected descriptor.
+type oldFormatUpgradedPair struct {
+	oldFormat        TableDescriptor
+	expectedUpgraded TableDescriptor
+}
+
+// This test exercises the foreign key representation upgrade and downgrade
+// methods that were introduced in 19.2 to move foreign key descriptors from
+// the index descriptor representation onto the new table descriptor
+// representation.
+func TestUpgradeDowngradeFKRepr(t *testing.T) {
+	mixedVersionSettings := cluster.MakeTestingClusterSettingsWithVersion(
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.VersionByKey(cluster.VersionTopLevelForeignKeys-1),
+	)
+	newVersionSettings := cluster.MakeTestingClusterSettingsWithVersion(
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.VersionByKey(cluster.VersionTopLevelForeignKeys),
+	)
+
+	testCases := []struct {
+		name       string
+		origin     oldFormatUpgradedPair
+		referenced oldFormatUpgradedPair
+	}{
+		0: {
+			name: "simple",
+			origin: oldFormatUpgradedPair{
+				oldFormat: TableDescriptor{
+					ID:      1,
+					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					Indexes: []IndexDescriptor{
+						{
+							ID:        1,
+							ColumnIDs: ColumnIDs{1},
+							ForeignKey: ForeignKeyReference{
+								Table:           2,
+								Index:           2,
+								Name:            "foo",
+								Validity:        ConstraintValidity_Validating,
+								SharedPrefixLen: 1,
+								OnDelete:        ForeignKeyReference_NO_ACTION,
+								OnUpdate:        ForeignKeyReference_NO_ACTION,
+								Match:           ForeignKeyReference_SIMPLE,
+							},
+						},
+					},
+				},
+				expectedUpgraded: TableDescriptor{
+					ID:      1,
+					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					Indexes: []IndexDescriptor{
+						{
+							ID:        1,
+							ColumnIDs: ColumnIDs{1},
+						},
+					},
+					OutboundFKs: []ForeignKeyConstraint{
+						{
+							OriginTableID:       1,
+							OriginColumnIDs:     ColumnIDs{1},
+							ReferencedTableID:   2,
+							ReferencedColumnIDs: ColumnIDs{2},
+							Name:                "foo",
+							Validity:            ConstraintValidity_Validating,
+							OnDelete:            ForeignKeyReference_NO_ACTION,
+							OnUpdate:            ForeignKeyReference_NO_ACTION,
+							Match:               ForeignKeyReference_SIMPLE,
+						},
+					},
+				},
+			},
+			referenced: oldFormatUpgradedPair{
+				oldFormat: TableDescriptor{
+					ID:      2,
+					Columns: []ColumnDescriptor{{ID: 2}},
+					Indexes: []IndexDescriptor{
+						{
+							ColumnIDs: ColumnIDs{2},
+							ID:        2,
+							ReferencedBy: []ForeignKeyReference{
+								{
+									Table: 1,
+									Index: 1,
+								},
+							},
+						},
+					},
+				},
+				expectedUpgraded: TableDescriptor{
+					ID:      2,
+					Columns: []ColumnDescriptor{{ID: 2}},
+					Indexes: []IndexDescriptor{
+						{
+							ColumnIDs: ColumnIDs{2},
+							ID:        2,
+						},
+					},
+					InboundFKs: []ForeignKeyConstraint{
+						{
+							OriginTableID:       1,
+							OriginColumnIDs:     ColumnIDs{1},
+							ReferencedTableID:   2,
+							ReferencedColumnIDs: ColumnIDs{2},
+							Name:                "foo",
+							Validity:            ConstraintValidity_Validating,
+							OnDelete:            ForeignKeyReference_NO_ACTION,
+							OnUpdate:            ForeignKeyReference_NO_ACTION,
+							Match:               ForeignKeyReference_SIMPLE,
+						},
+					},
+				},
+			},
+		},
+		1: {
+			name: "primaryKey",
+			origin: oldFormatUpgradedPair{
+				oldFormat: TableDescriptor{
+					ID:      1,
+					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					PrimaryIndex: IndexDescriptor{
+						ID:        1,
+						ColumnIDs: ColumnIDs{1},
+						ForeignKey: ForeignKeyReference{
+							Table:           2,
+							Index:           2,
+							Name:            "foo",
+							Validity:        ConstraintValidity_Validating,
+							SharedPrefixLen: 1,
+							OnDelete:        ForeignKeyReference_NO_ACTION,
+							OnUpdate:        ForeignKeyReference_NO_ACTION,
+							Match:           ForeignKeyReference_SIMPLE,
+						},
+					},
+				},
+				expectedUpgraded: TableDescriptor{
+					ID:      1,
+					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					PrimaryIndex: IndexDescriptor{
+						ID:        1,
+						ColumnIDs: ColumnIDs{1},
+					},
+					OutboundFKs: []ForeignKeyConstraint{
+						{
+							OriginTableID:       1,
+							OriginColumnIDs:     ColumnIDs{1},
+							ReferencedTableID:   2,
+							ReferencedColumnIDs: ColumnIDs{2},
+							Name:                "foo",
+							Validity:            ConstraintValidity_Validating,
+							OnDelete:            ForeignKeyReference_NO_ACTION,
+							OnUpdate:            ForeignKeyReference_NO_ACTION,
+							Match:               ForeignKeyReference_SIMPLE,
+						},
+					},
+				},
+			},
+			referenced: oldFormatUpgradedPair{
+				oldFormat: TableDescriptor{
+					ID:      2,
+					Columns: []ColumnDescriptor{{ID: 2}},
+					PrimaryIndex: IndexDescriptor{
+						ColumnIDs: ColumnIDs{2},
+						ID:        2,
+						ReferencedBy: []ForeignKeyReference{
+							{
+								Table: 1,
+								Index: 1,
+							},
+						},
+					},
+				},
+				expectedUpgraded: TableDescriptor{
+					ID:      2,
+					Columns: []ColumnDescriptor{{ID: 2}},
+					PrimaryIndex: IndexDescriptor{
+						ColumnIDs: ColumnIDs{2},
+						ID:        2,
+					},
+					InboundFKs: []ForeignKeyConstraint{
+						{
+							OriginTableID:       1,
+							OriginColumnIDs:     ColumnIDs{1},
+							ReferencedTableID:   2,
+							ReferencedColumnIDs: ColumnIDs{2},
+							Name:                "foo",
+							Validity:            ConstraintValidity_Validating,
+							OnDelete:            ForeignKeyReference_NO_ACTION,
+							OnUpdate:            ForeignKeyReference_NO_ACTION,
+							Match:               ForeignKeyReference_SIMPLE,
+						},
+					},
+				},
+			},
+		},
+		2: {
+			name: "self-reference-cycle",
+			origin: oldFormatUpgradedPair{
+				oldFormat: TableDescriptor{
+					ID:      1,
+					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					Indexes: []IndexDescriptor{
+						{
+							ID:        1,
+							ColumnIDs: ColumnIDs{1},
+							ForeignKey: ForeignKeyReference{
+								Table:           1,
+								Index:           2,
+								Name:            "foo",
+								Validity:        ConstraintValidity_Validated,
+								SharedPrefixLen: 1,
+								OnDelete:        ForeignKeyReference_NO_ACTION,
+								OnUpdate:        ForeignKeyReference_NO_ACTION,
+								Match:           ForeignKeyReference_SIMPLE,
+							},
+							ReferencedBy: []ForeignKeyReference{
+								{
+									Table: 1,
+									Index: 2,
+								},
+							},
+						},
+						{
+							ID:        2,
+							ColumnIDs: ColumnIDs{2},
+							ForeignKey: ForeignKeyReference{
+								Table:           1,
+								Index:           1,
+								Name:            "bar",
+								Validity:        ConstraintValidity_Validating,
+								SharedPrefixLen: 1,
+								OnDelete:        ForeignKeyReference_CASCADE,
+								OnUpdate:        ForeignKeyReference_CASCADE,
+								Match:           ForeignKeyReference_PARTIAL,
+							},
+							ReferencedBy: []ForeignKeyReference{
+								{
+									Table: 1,
+									Index: 1,
+								},
+							},
+						},
+					},
+				},
+				expectedUpgraded: TableDescriptor{
+					ID:      1,
+					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					Indexes: []IndexDescriptor{
+						{
+							ID:        1,
+							ColumnIDs: ColumnIDs{1},
+						},
+						{
+							ID:        2,
+							ColumnIDs: ColumnIDs{2},
+						},
+					},
+					OutboundFKs: []ForeignKeyConstraint{
+						{
+							OriginTableID:       1,
+							OriginColumnIDs:     ColumnIDs{1},
+							ReferencedTableID:   1,
+							ReferencedColumnIDs: ColumnIDs{2},
+							Name:                "foo",
+							Validity:            ConstraintValidity_Validated,
+							OnDelete:            ForeignKeyReference_NO_ACTION,
+							OnUpdate:            ForeignKeyReference_NO_ACTION,
+							Match:               ForeignKeyReference_SIMPLE,
+						},
+						{
+							OriginTableID:       1,
+							OriginColumnIDs:     ColumnIDs{2},
+							ReferencedTableID:   1,
+							ReferencedColumnIDs: ColumnIDs{1},
+							Name:                "bar",
+							Validity:            ConstraintValidity_Validating,
+							OnDelete:            ForeignKeyReference_CASCADE,
+							OnUpdate:            ForeignKeyReference_CASCADE,
+							Match:               ForeignKeyReference_PARTIAL,
+						},
+					},
+					InboundFKs: []ForeignKeyConstraint{
+						{
+							OriginTableID:       1,
+							OriginColumnIDs:     ColumnIDs{2},
+							ReferencedTableID:   1,
+							ReferencedColumnIDs: ColumnIDs{1},
+							Name:                "bar",
+							Validity:            ConstraintValidity_Validating,
+							OnDelete:            ForeignKeyReference_CASCADE,
+							OnUpdate:            ForeignKeyReference_CASCADE,
+							Match:               ForeignKeyReference_PARTIAL,
+						},
+						{
+							OriginTableID:       1,
+							OriginColumnIDs:     ColumnIDs{1},
+							ReferencedTableID:   1,
+							ReferencedColumnIDs: ColumnIDs{2},
+							Name:                "foo",
+							Validity:            ConstraintValidity_Validated,
+							OnDelete:            ForeignKeyReference_NO_ACTION,
+							OnUpdate:            ForeignKeyReference_NO_ACTION,
+							Match:               ForeignKeyReference_SIMPLE,
+						},
+					},
+				},
+			},
+			// NOTE: for this test case, we'll set this field to the same value as
+			// the above, since it's a self-referencing table.
+			referenced: oldFormatUpgradedPair{},
+		},
+	}
+
+	// Set the self-referencing test case's referenced tables to the origin tables
+	// to save on some typing.
+	testCases[2].referenced = testCases[2].origin
+
+	ctx := context.Background()
+	for _, tc := range testCases {
+		txn := fakeProtoGetter{protos: map[interface{}]protoutil.Message{
+			string(MakeDescMetadataKey(tc.origin.oldFormat.ID)):     WrapDescriptor(&tc.origin.oldFormat),
+			string(MakeDescMetadataKey(tc.referenced.oldFormat.ID)): WrapDescriptor(&tc.referenced.oldFormat),
+		}}
+
+		tables := []oldFormatUpgradedPair{tc.origin, tc.referenced}
+		// For each test case, verify that both the origin and referenced tables
+		// get upgraded to the expected state and then get downgraded back to the
+		// original state.
+		//
+		// Additionally verify that downgrading on a cluster version that's
+		// sufficiently new is a no-op.
+		for i, pair := range tables {
+			name := "origin"
+			if i == 1 {
+				name = "referenced"
+			}
+			t.Run(fmt.Sprintf("%s/%s", tc.name, name), func(t *testing.T) {
+				upgraded := protoutil.Clone(&pair.oldFormat).(*TableDescriptor)
+				wasUpgraded, err := upgraded.maybeUpgradeForeignKeyRepresentation(ctx, txn)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !wasUpgraded {
+					t.Fatalf("expected proto to be upgraded")
+				}
+
+				// The upgraded proto will also have a copy of the old foreign key
+				// reference attached for each foreign key. Delete that for the purposes of
+				// verifying equality.
+				for i := range upgraded.OutboundFKs {
+					pair.expectedUpgraded.OutboundFKs[i].LegacyUpgradedFromOriginReference = upgraded.OutboundFKs[i].LegacyUpgradedFromOriginReference
+					pair.expectedUpgraded.OutboundFKs[i].LegacyOriginIndex = upgraded.OutboundFKs[i].LegacyOriginIndex
+					pair.expectedUpgraded.OutboundFKs[i].LegacyReferencedIndex = upgraded.OutboundFKs[i].LegacyReferencedIndex
+				}
+				for i := range upgraded.InboundFKs {
+					pair.expectedUpgraded.InboundFKs[i].LegacyUpgradedFromReferencedReference = upgraded.InboundFKs[i].LegacyUpgradedFromReferencedReference
+					pair.expectedUpgraded.InboundFKs[i].LegacyOriginIndex = upgraded.InboundFKs[i].LegacyOriginIndex
+					pair.expectedUpgraded.InboundFKs[i].LegacyReferencedIndex = upgraded.InboundFKs[i].LegacyReferencedIndex
+				}
+				if !reflect.DeepEqual(upgraded, &pair.expectedUpgraded) {
+					t.Fatalf("upgrade didn't match original %s %s", proto.MarshalTextString(upgraded),
+						proto.MarshalTextString(&pair.expectedUpgraded))
+				}
+				for i := range upgraded.OutboundFKs {
+					pair.expectedUpgraded.OutboundFKs[i].LegacyUpgradedFromOriginReference = ForeignKeyReference{}
+					pair.expectedUpgraded.OutboundFKs[i].LegacyOriginIndex = 0
+					pair.expectedUpgraded.OutboundFKs[i].LegacyReferencedIndex = 0
+				}
+				for i := range upgraded.InboundFKs {
+					pair.expectedUpgraded.InboundFKs[i].LegacyUpgradedFromReferencedReference = ForeignKeyReference{}
+					pair.expectedUpgraded.InboundFKs[i].LegacyOriginIndex = 0
+					pair.expectedUpgraded.InboundFKs[i].LegacyReferencedIndex = 0
+				}
+
+				wasDowngraded, downgraded, err := upgraded.maybeDowngradeForeignKeyRepresentation(ctx, txn, mixedVersionSettings)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !wasDowngraded {
+					t.Fatalf("expected proto to be downgraded")
+				}
+
+				if !reflect.DeepEqual(downgraded, &pair.oldFormat) {
+					t.Fatalf("downgrade didn't match original %s %s", proto.MarshalTextString(downgraded),
+						proto.MarshalTextString(&pair.oldFormat))
+				}
+
+				wasDowngraded, _, err = upgraded.maybeDowngradeForeignKeyRepresentation(ctx, txn, newVersionSettings)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if wasDowngraded {
+					t.Fatalf("expected proto not to be downgraded")
+				}
+			})
+		}
 	}
 }

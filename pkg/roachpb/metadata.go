@@ -156,7 +156,7 @@ func (r *RangeDescriptor) RemoveReplica(nodeID NodeID, storeID StoreID) (Replica
 // GetReplicaDescriptor returns the replica which matches the specified store
 // ID.
 func (r *RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescriptor, bool) {
-	for _, repDesc := range r.Replicas().Unwrap() {
+	for _, repDesc := range r.Replicas().All() {
 		if repDesc.StoreID == storeID {
 			return repDesc, true
 		}
@@ -167,7 +167,7 @@ func (r *RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescript
 // GetReplicaDescriptorByID returns the replica which matches the specified store
 // ID.
 func (r *RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaDescriptor, bool) {
-	for _, repDesc := range r.Replicas().Unwrap() {
+	for _, repDesc := range r.Replicas().All() {
 		if repDesc.ReplicaID == replicaID {
 			return repDesc, true
 		}
@@ -268,20 +268,6 @@ func (r *RangeDescriptor) String() string {
 
 func (r ReplicationTarget) String() string {
 	return fmt.Sprintf("n%d,s%d", r.NodeID, r.StoreID)
-}
-
-// ReplicaTypeLearner returns a ReplicaType_LEARNER pointer suitable for use in
-// a nullable proto field.
-func ReplicaTypeLearner() *ReplicaType {
-	t := ReplicaType_LEARNER
-	return &t
-}
-
-// ReplicaTypeVoter returns a ReplicaType_VOTER pointer suitable for use in a
-// nullable proto field.
-func ReplicaTypeVoter() *ReplicaType {
-	t := ReplicaType_VOTER
-	return &t
 }
 
 func (r ReplicaDescriptor) String() string {

@@ -293,6 +293,27 @@ message ClearRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+
+// A RevertRangeRequest specifies a range of keys in which to clear all MVCC
+// revisions more recent than some TargetTime from the underlying engine, thus
+// reverting the range (from the perspective of an MVCC scan) to that time.
+message RevertRangeRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // TargetTime specifies a the time to which to "revert" the range by clearing
+  // any MVCC key with a strictly higher timestamp. TargetTime must be higher
+  // than the GC Threshold for the replica - so that it is assured that the keys
+  // for that time are still there — or the request will fail.
+  util.hlc.Timestamp target_time = 2 [(gogoproto.nullable) = false];
+}
+
+// A RevertRangeResponse is the return value from the RevertRange() method.
+message RevertRangeResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // ScanOptions is a collection of options for a batch of scans. The options
 // apply to all the scans in the batch.
 //
@@ -1415,6 +1436,15 @@ message AddSSTableRequest {
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bytes data = 2;
+  // If set, indicates that AddSSTable will not allow ingestion of keys which
+  // shadow already existing key entries. This disallows any key slice overlap
+  // regardless of the timestamps.
+  bool disallow_shadowing = 3;
+  // MVCCStats, if set, is the MVCCStats for the contents of this SSTable and is
+  // used as-is during evaluation of the AddSSTable command to update the range
+  // MVCCStats, instead of computing the stats for the SSTable by iterating it.
+  // Including these stats can make the evaluation of AddSSTable much cheaper.
+  storage.engine.enginepb.MVCCStats mvcc_stats = 4 [(gogoproto.customname) = "MVCCStats"];
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.
@@ -1549,6 +1579,7 @@ message RequestUnion {
     DeleteRequest delete = 5;
     DeleteRangeRequest delete_range = 6;
     ClearRangeRequest clear_range = 38;
+    RevertRangeRequest revert_range = 48;
     ScanRequest scan = 7;
     BeginTransactionRequest begin_transaction = 8;
     EndTransactionRequest end_transaction = 9;
@@ -1600,6 +1631,7 @@ message ResponseUnion {
     DeleteResponse delete = 5;
     DeleteRangeResponse delete_range = 6;
     ClearRangeResponse clear_range = 38;
+    RevertRangeResponse revert_range = 48;
     ScanResponse scan = 7;
     BeginTransactionResponse begin_transaction = 8;
     EndTransactionResponse end_transaction = 9;

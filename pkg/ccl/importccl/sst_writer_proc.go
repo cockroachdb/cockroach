@@ -58,9 +58,9 @@ func newSSTWriterProcessor(
 		spec:        spec,
 		input:       input,
 		output:      output,
-		tempStorage: flowCtx.TempStorage,
-		settings:    flowCtx.Settings,
-		registry:    flowCtx.JobRegistry,
+		tempStorage: flowCtx.Cfg.TempStorage,
+		settings:    flowCtx.Cfg.Settings,
+		registry:    flowCtx.Cfg.JobRegistry,
 		progress:    spec.Progress,
 		db:          flowCtx.EvalCtx.Txn.DB(),
 	}
@@ -153,7 +153,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 		// to ensure that the splits are not automatically split by the merge
 		// queue. If the cluster does not support sticky bits, we disable the merge
 		// queue via gossip, so we can just set the split to expire immediately.
-		stickyBitEnabled := sp.flowCtx.Settings.Version.IsActive(cluster.VersionStickyBit)
+		stickyBitEnabled := sp.flowCtx.Cfg.Settings.Version.IsActive(cluster.VersionStickyBit)
 		expirationTime := hlc.Timestamp{}
 		if stickyBitEnabled {
 			expirationTime = sp.db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
@@ -214,7 +214,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 						// throughput.
 						log.Errorf(ctx, "failed to scatter span %s: %s", roachpb.PrettyPrintKey(nil, end), pErr)
 					}
-					if err := bulk.AddSSTable(ctx, sp.db, sst.span.Key, sst.span.EndKey, sst.data); err != nil {
+					if err := bulk.AddSSTable(ctx, sp.db, sst.span.Key, sst.span.EndKey, sst.data, false /* disallowShadowing */); err != nil {
 						return err
 					}
 

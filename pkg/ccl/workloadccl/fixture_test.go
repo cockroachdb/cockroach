@@ -152,7 +152,7 @@ func TestFixture(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, `CREATE DATABASE test`)
-	if _, err := RestoreFixture(ctx, db, fixture, `test`); err != nil {
+	if _, err := RestoreFixture(ctx, db, fixture, `test`, false); err != nil {
 		t.Fatalf(`%+v`, err)
 	}
 	sqlDB.CheckQueryResults(t,
@@ -183,11 +183,10 @@ func TestImportFixture(t *testing.T) {
 	}
 
 	const filesPerNode = 1
-	const noSkipPostLoad = false
 	sqlDB.Exec(t, `CREATE DATABASE distsort`)
 	_, err := ImportFixture(
 		ctx, db, gen, `distsort`, false /* directIngestion */, filesPerNode, true, /* injectStats */
-		noSkipPostLoad, ``, /* csvServer */
+		``, /* csvServer */
 	)
 	require.NoError(t, err)
 	sqlDB.CheckQueryResults(t,
@@ -204,7 +203,7 @@ func TestImportFixture(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE direct`)
 	_, err = ImportFixture(
 		ctx, db, gen, `direct`, true /* directIngestion */, filesPerNode, false, /* injectStats */
-		noSkipPostLoad, ``, /* csvServer */
+		``, /* csvServer */
 	)
 	require.NoError(t, err)
 	sqlDB.CheckQueryResults(t,
@@ -241,10 +240,10 @@ func TestImportFixtureCSVServer(t *testing.T) {
 	}
 
 	const filesPerNode = 1
-	const noDirectIngest, noInjectStats, noSkipPostLoad = false, false, true
+	const noDirectIngest, noInjectStats = false, false
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	_, err := ImportFixture(
-		ctx, db, gen, `d`, noDirectIngest, filesPerNode, noInjectStats, noSkipPostLoad, ts.URL,
+		ctx, db, gen, `d`, noDirectIngest, filesPerNode, noInjectStats, ts.URL,
 	)
 	require.NoError(t, err)
 	sqlDB.CheckQueryResults(t,

@@ -48,6 +48,11 @@ func TestSpanSet(t *testing.T) {
 			MakeCompositeKey(tree.NewDInt(5), tree.NewDInt(1)), ExcludeBoundary,
 			"[/5 - /5/1)",
 		},
+		{ // 4
+			MakeKey(tree.DNull), IncludeBoundary,
+			MakeCompositeKey(tree.NewDInt(5), tree.NewDInt(1)), ExcludeBoundary,
+			"[/NULL - /5/1)",
+		},
 	}
 
 	for i, tc := range testCases {
@@ -93,6 +98,12 @@ func TestSpanUnconstrained(t *testing.T) {
 
 	if unconstrained.String() != "[ - ]" {
 		t.Errorf("unexpected string value for unconstrained span: %s", unconstrained.String())
+	}
+
+	unconstrained.startBoundary = IncludeBoundary
+	unconstrained.start = MakeKey(tree.DNull)
+	if !unconstrained.IsUnconstrained() {
+		t.Errorf("span beginning with NULL is not unconstrained")
 	}
 
 	// Test constrained span's IsUnconstrained method.

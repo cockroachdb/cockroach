@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 ## json_typeof and jsonb_typeof
 
 query T
@@ -315,6 +313,19 @@ query T
 SELECT to_jsonb((1, 2, 'hello', NULL, NULL))
 ----
 {"f1": 1, "f2": 2, "f3": "hello", "f4": null, "f5": null}
+
+query T
+SELECT to_json(x.*) FROM (VALUES (1,2)) AS x(a,b);
+----
+{"a": 1, "b": 2}
+
+query T
+SELECT to_json(x.*) FROM (VALUES (1,2)) AS x(a);
+----
+{"a": 1, "column2": 2}
+
+query error found duplicate tuple label: \"column2\"
+SELECT to_json(x.*) FROM (VALUES (1,2)) AS x(column2);
 
 ## json_array_elements and jsonb_array_elements
 

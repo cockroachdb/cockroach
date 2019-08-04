@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -50,6 +51,24 @@ func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
 	return execPlan{root: root}, err
 }
 
+func (b *Builder) buildCreateView(cv *memo.CreateViewExpr) (execPlan, error) {
+	md := b.mem.Metadata()
+	schema := md.Schema(cv.Schema)
+	cols := make(sqlbase.ResultColumns, len(cv.Columns))
+	for i := range cols {
+		cols[i].Name = cv.Columns[i].Alias
+		cols[i].Typ = md.ColumnMeta(cv.Columns[i].ID).Type
+	}
+	root, err := b.factory.ConstructCreateView(
+		schema,
+		cv.ViewName,
+		cv.ViewQuery,
+		cols,
+		cv.Deps,
+	)
+	return execPlan{root: root}, err
+}
+
 func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 	var node exec.Node
 
@@ -76,7 +95,7 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 			// TODO(radu): add views, sequences
 		}
 
-		f := memo.MakeExprFmtCtx(fmtFlags, b.mem)
+		f := memo.MakeExprFmtCtx(fmtFlags, b.mem, b.catalog)
 		f.FormatExpr(explain.Input)
 		planText.WriteString(f.Buffer.String())
 

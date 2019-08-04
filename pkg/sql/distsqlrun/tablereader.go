@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -33,6 +33,20 @@ import (
 // disables batch limits in the dist sender. This results in the parallelization
 // of these scans.
 const ParallelScanResultThreshold = 10000
+
+func scanShouldLimitBatches(maxResults uint64, limitHint int64, flowCtx *FlowCtx) bool {
+	// We don't limit batches if the scan doesn't have a limit, and if the
+	// spans scanned will return less than the ParallelScanResultThreshold.
+	// This enables distsender parallelism - if we limit batches, distsender
+	// does *not* parallelize multi-range scan requests.
+	if maxResults != 0 &&
+		maxResults < ParallelScanResultThreshold &&
+		limitHint == 0 &&
+		sqlbase.ParallelScans.Get(&flowCtx.Cfg.Settings.SV) {
+		return false
+	}
+	return true
+}
 
 // tableReader is the start of a computation flow; it performs KV operations to
 // retrieve rows for a table, runs a filter expression, and passes rows with the
@@ -82,7 +96,7 @@ func newTableReader(
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*tableReader, error) {
-	if flowCtx.nodeID == 0 {
+	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 
@@ -207,18 +221,7 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 
 	// This call doesn't do much; the real "starting" is below.
 	tr.fetcher.Start(fetcherCtx)
-
-	limitBatches := true
-	// We turn off limited batches if we know we have no limit and if the
-	// tableReader spans will return less than the ParallelScanResultThreshold.
-	// This enables distsender parallelism - if limitBatches is true, distsender
-	// does *not* parallelize multi-range scan requests.
-	if tr.maxResults != 0 &&
-		tr.maxResults < ParallelScanResultThreshold &&
-		tr.limitHint == 0 &&
-		sqlbase.ParallelScans.Get(&tr.flowCtx.Settings.SV) {
-		limitBatches = false
-	}
+	limitBatches := scanShouldLimitBatches(tr.maxResults, tr.limitHint, tr.flowCtx)
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
 	if tr.maxTimestampAge == 0 {
@@ -229,7 +232,7 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 	} else {
 		initialTS := tr.flowCtx.txn.GetTxnCoordMeta(ctx).Txn.OrigTimestamp
 		err = tr.fetcher.StartInconsistentScan(
-			fetcherCtx, tr.flowCtx.ClientDB, initialTS,
+			fetcherCtx, tr.flowCtx.Cfg.DB, initialTS,
 			tr.maxTimestampAge, tr.spans,
 			limitBatches, tr.limitHint, tr.flowCtx.traceKV,
 		)
@@ -325,7 +328,7 @@ func (tr *tableReader) outputStatsToTrace() {
 func (tr *tableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	var trailingMeta []distsqlpb.ProducerMetadata
 	if !tr.ignoreMisplannedRanges {
-		ranges := misplannedRanges(ctx, tr.fetcher.GetRangesInfo(), tr.flowCtx.nodeID)
+		ranges := misplannedRanges(ctx, tr.fetcher.GetRangesInfo(), tr.flowCtx.NodeID)
 		if ranges != nil {
 			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: ranges})
 		}

@@ -17,6 +17,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -122,6 +123,13 @@ func (s *Smither) Generate() string {
 		i = 0
 		return prettyCfg.Pretty(stmt)
 	}
+}
+
+// GenerateExpr returns a random SQL expression that does not depend on any
+// tables or columns.
+func (s *Smither) GenerateExpr() tree.TypedExpr {
+	scope := s.makeScope()
+	return makeScalar(scope, sqlbase.RandScalarType(s.rnd), nil)
 }
 
 func (s *Smither) name(prefix string) tree.Name {
@@ -254,3 +262,28 @@ func PostgresMode() SmitherOption {
 		IgnoreFNs("^version"),
 	}
 }
+
+// SeedTable is a SQL statement that creates a table with most data types and
+// some sample rows.
+const SeedTable = `
+CREATE TABLE IF NOT EXISTS tab_orig AS
+	SELECT
+		g::INT2 AS _int2,
+		g::INT4 AS _int4,
+		g::INT8 AS _int8,
+		g::FLOAT4 AS _float4,
+		g::FLOAT8 AS _float8,
+		'2001-01-01'::DATE + g AS _date,
+		'2001-01-01'::TIMESTAMP + g * '1 day'::INTERVAL AS _timestamp,
+		'2001-01-01'::TIMESTAMPTZ + g * '1 day'::INTERVAL AS _timestamptz,
+		g * '1 day'::INTERVAL AS _interval,
+		g % 2 = 1 AS _bool,
+		g::DECIMAL AS _decimal,
+		g::STRING AS _string,
+		g::STRING::BYTES AS _bytes,
+		substring('00000000-0000-0000-0000-' || g::STRING || '00000000000', 1, 36)::UUID AS _uuid,
+		'0.0.0.0'::INET + g AS _inet,
+		g::STRING::JSONB AS _jsonb
+	FROM
+		generate_series(1, 5) AS g;
+`

@@ -111,7 +111,7 @@ func (r *Replica) handleCommittedEntriesRaftMuLocked(
 			// Decode zero or more trivial entries into b.
 			var numEmptyEntries int
 			haveNonTrivialEntry, numEmptyEntries, toProcess, errExpl, err =
-				b.decode(ctx, toProcess, &b.decodeBuf)
+				b.decode(ctx, toProcess, &b.decodeBuf, r.store.TestingKnobs().MaxApplicationBatchSize)
 			if err != nil {
 				return stats, errExpl, err
 			}
@@ -154,23 +154,61 @@ func (r *Replica) retrieveLocalProposals(ctx context.Context, b *cmdAppBatch) {
 	// Copy stats as it gets updated in-place in applyRaftCommandToBatch.
 	b.replicaState.Stats = &b.stats
 	*b.replicaState.Stats = *r.mu.state.Stats
+	// Assign all the local proposals first then delete all of them from the map
+	// in a second pass. This ensures that we retrieve all proposals correctly
+	// even if the batch has multiple entries for the same proposal, in which
+	// case the proposal was reproposed (either under its original or a new
+	// MaxLeaseIndex) which we handle in a second pass below.
+	var anyLocal bool
 	var it cmdAppCtxBufIterator
-	haveProposalQuota := r.mu.proposalQuota != nil
 	for ok := it.init(&b.cmdBuf); ok; ok = it.next() {
 		cmd := it.cur()
 		cmd.proposal = r.mu.proposals[cmd.idKey]
+		if cmd.proposedLocally() && cmd.raftCmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex {
+			// If this entry does not have the most up-to-date view of the
+			// corresponding proposal's maximum lease index then the proposal
+			// must have been reproposed with a higher lease index. (see
+			// tryReproposeWithNewLeaseIndex). In that case, there's a newer
+			// version of the proposal in the pipeline, so don't consider this
+			// entry to have been proposed locally. The entry must necessarily be
+			// rejected by checkForcedErr.
+			cmd.proposal = nil
+		}
 		if cmd.proposedLocally() {
 			// We initiated this command, so use the caller-supplied context.
 			cmd.ctx = cmd.proposal.ctx
-			delete(r.mu.proposals, cmd.idKey)
-			// At this point we're not guaranteed to have proposalQuota initialized,
-			// the same is true for quotaReleaseQueues. Only queue the proposal's
-			// quota for release if the proposalQuota is initialized.
-			if haveProposalQuota {
-				r.mu.quotaReleaseQueue = append(r.mu.quotaReleaseQueue, cmd.proposal.quotaSize)
-			}
+			anyLocal = true
 		} else {
 			cmd.ctx = ctx
+		}
+	}
+	if !anyLocal && r.mu.proposalQuota == nil {
+		// Fast-path.
+		return
+	}
+	for ok := it.init(&b.cmdBuf); ok; ok = it.next() {
+		cmd := it.cur()
+		toRelease := int64(0)
+		if cmd.proposedLocally() {
+			// Delete the proposal from the proposals map. There may be reproposals
+			// of the proposal in the pipeline, but those will all have the same max
+			// lease index, meaning that they will all be rejected after this entry
+			// applies (successfully or otherwise). If tryReproposeWithNewLeaseIndex
+			// picks up the proposal on failure, it will re-add the proposal to the
+			// proposal map, but this won't affect anything in this cmdAppBatch.
+			//
+			// While here, add the proposal's quota size to the quota release queue.
+			// We check the proposal map again first to avoid double free-ing quota
+			// when reproposals from the same proposal end up in the same entry
+			// application batch.
+			delete(r.mu.proposals, cmd.idKey)
+			toRelease = cmd.proposal.quotaSize
+		}
+		// At this point we're not guaranteed to have proposalQuota initialized,
+		// the same is true for quotaReleaseQueues. Only queue the proposal's
+		// quota for release if the proposalQuota is initialized
+		if r.mu.proposalQuota != nil {
+			r.mu.quotaReleaseQueue = append(r.mu.quotaReleaseQueue, toRelease)
 		}
 	}
 }
@@ -246,38 +284,6 @@ func (r *Replica) stageRaftCommand(
 		// thrown.
 		cmd.forcedErr = roachpb.NewError(r.requestCanProceed(roachpb.RSpan{}, ts))
 	}
-
-	// applyRaftCommandToBatch will return "expected" errors, but may also indicate
-	// replica corruption (as of now, signaled by a replicaCorruptionError).
-	// We feed its return through maybeSetCorrupt to act when that happens.
-	if cmd.forcedErr != nil {
-		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.forcedErr)
-	} else {
-		log.Event(ctx, "applying command")
-
-		if splitMergeUnlock, err := r.maybeAcquireSplitMergeLock(ctx, cmd.raftCmd); err != nil {
-			log.Eventf(ctx, "unable to acquire split lock: %s", err)
-			// Send a crash report because a former bug in the error handling might have
-			// been the root cause of #19172.
-			_ = r.store.stopper.RunAsyncTask(ctx, "crash report", func(ctx context.Context) {
-				log.SendCrashReport(
-					ctx,
-					&r.store.cfg.Settings.SV,
-					0, // depth
-					"while acquiring split lock: %s",
-					[]interface{}{err},
-					log.ReportTypeError,
-				)
-			})
-
-			cmd.forcedErr = roachpb.NewError(err)
-		} else if splitMergeUnlock != nil {
-			// Set the splitMergeUnlock on the cmdAppCtx to be called after the batch
-			// has been applied (see applyBatch).
-			cmd.splitMergeUnlock = splitMergeUnlock
-		}
-	}
-
 	if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr == nil && filter != nil {
 		var newPropRetry int
 		newPropRetry, cmd.forcedErr = filter(storagebase.ApplyFilterArgs{
@@ -290,12 +296,25 @@ func (r *Replica) stageRaftCommand(
 			cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
 		}
 	}
-
 	if cmd.forcedErr != nil {
 		// Apply an empty entry.
 		*cmd.replicatedResult() = storagepb.ReplicatedEvalResult{}
 		cmd.raftCmd.WriteBatch = nil
 		cmd.raftCmd.LogicalOpLog = nil
+		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.forcedErr)
+	} else {
+		log.Event(ctx, "applying command")
+	}
+
+	// Acquire the split or merge lock, if necessary. If a split or merge
+	// command was rejected with a below-Raft forced error then its replicated
+	// result was just cleared and this will be a no-op.
+	if splitMergeUnlock, err := r.maybeAcquireSplitMergeLock(ctx, cmd.raftCmd); err != nil {
+		log.Fatalf(ctx, "unable to acquire split lock: %s", err)
+	} else if splitMergeUnlock != nil {
+		// Set the splitMergeUnlock on the cmdAppCtx to be called after the batch
+		// has been applied (see applyBatch).
+		cmd.splitMergeUnlock = splitMergeUnlock
 	}
 
 	// Update the node clock with the serviced request. This maintains
@@ -317,6 +336,9 @@ func (r *Replica) stageRaftCommand(
 
 	// Apply the Raft command to the batch's accumulated state. This may also
 	// have the effect of mutating cmd.replicatedResult().
+	// applyRaftCommandToBatch will return "expected" errors, but may also indicate
+	// replica corruption (as of now, signaled by a replicaCorruptionError).
+	// We feed its return through maybeSetCorrupt to act when that happens.
 	err := r.applyRaftCommandToBatch(cmd.ctx, cmd, replicaState, batch, writeAppliedState)
 	if err != nil {
 		// applyRaftCommandToBatch returned an error, which usually indicates
@@ -381,6 +403,19 @@ func (r *Replica) stageRaftCommand(
 		if err != nil {
 			log.Fatal(ctx, err)
 		}
+	}
+
+	// Provide the command's corresponding logical operations to the Replica's
+	// rangefeed. Only do so if the WriteBatch is non-nil, in which case the
+	// rangefeed requires there to be a corresponding logical operation log or
+	// it will shut down with an error. If the WriteBatch is nil then we expect
+	// the logical operation log to also be nil. We don't want to trigger a
+	// shutdown of the rangefeed in that situation, so we don't pass anything to
+	// the rangefed. If no rangefeed is running at all, this call will be a noop.
+	if cmd.raftCmd.WriteBatch != nil {
+		r.handleLogicalOpLogRaftMuLocked(ctx, cmd.raftCmd.LogicalOpLog, batch)
+	} else if cmd.raftCmd.LogicalOpLog != nil {
+		log.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.raftCmd)
 	}
 }
 
@@ -749,7 +784,7 @@ func (r *Replica) applyCmdAppBatch(
 		batchIsNonTrivial = true
 		// Deal with locking sometimes associated with complex commands.
 		if unlock := cmd.splitMergeUnlock; unlock != nil {
-			defer unlock(cmd.replicatedResult())
+			defer unlock()
 			cmd.splitMergeUnlock = nil
 		}
 		if cmd.replicatedResult().BlockReads {
@@ -838,12 +873,17 @@ func (r *Replica) applyCmdAppBatch(
 	}
 	for ok := it.init(&b.cmdBuf); ok; ok = it.next() {
 		cmd := it.cur()
+		// Reset the context for already applied commands to ensure that
+		// reproposals at the same MaxLeaseIndex do not record into closed spans.
+		if cmd.proposedLocally() && cmd.proposal.applied {
+			cmd.ctx = ctx
+		}
 		for _, sc := range cmd.replicatedResult().SuggestedCompactions {
 			r.store.compactor.Suggest(cmd.ctx, sc)
 		}
 		cmd.replicatedResult().SuggestedCompactions = nil
 		isNonTrivial := batchIsNonTrivial && it.isLast()
-		if errExpl, err = r.handleRaftCommandResult(ctx, cmd, isNonTrivial,
+		if errExpl, err = r.handleRaftCommandResult(cmd.ctx, cmd, isNonTrivial,
 			b.replicaState.UsingAppliedStateKey); err != nil {
 			return errExpl, err
 		}

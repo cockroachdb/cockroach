@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -451,10 +452,11 @@ func (db *DB) DelRange(ctx context.Context, begin, end interface{}) error {
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-// AdminMerge merges the range containing key and the subsequent
-// range. After the merge operation is complete, the range containing
-// key will contain all of the key/value pairs of the subsequent range
-// and the subsequent range will no longer exist.
+// AdminMerge merges the range containing key and the subsequent range. After
+// the merge operation is complete, the range containing key will contain all of
+// the key/value pairs of the subsequent range and the subsequent range will no
+// longer exist. Neither range may contain learner replicas, if one does, an
+// error is returned.
 //
 // key can be either a byte slice or a string.
 func (db *DB) AdminMerge(ctx context.Context, key interface{}) error {
@@ -566,9 +568,15 @@ func (db *DB) WriteBatch(ctx context.Context, begin, end interface{}, data []byt
 
 // AddSSTable links a file into the RocksDB log-structured merge-tree. Existing
 // data in the range is cleared.
-func (db *DB) AddSSTable(ctx context.Context, begin, end interface{}, data []byte) error {
+func (db *DB) AddSSTable(
+	ctx context.Context,
+	begin, end interface{},
+	data []byte,
+	disallowShadowing bool,
+	stats *enginepb.MVCCStats,
+) error {
 	b := &Batch{}
-	b.addSSTable(begin, end, data)
+	b.addSSTable(begin, end, data, disallowShadowing, stats)
 	return getOneErr(db.Run(ctx, b), b)
 }
 

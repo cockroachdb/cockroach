@@ -1471,8 +1471,8 @@ func (s *statusServer) ListLocalSessions(
 		return nil, err
 	}
 
-	superuser := s.isSuperUser(ctx, sessionUser)
-	if !superuser {
+	ok := s.hasAdminRole(ctx, sessionUser)
+	if !ok {
 		// For non-superusers, requests with an empty username is
 		// implicitly a request for the client's own sessions.
 		if req.Username == "" {
@@ -1856,10 +1856,10 @@ func userFromContext(ctx context.Context) (string, error) {
 }
 
 type superUserChecker interface {
-	RequireSuperUser(ctx context.Context, action string) error
+	RequireAdminRole(ctx context.Context, action string) error
 }
 
-func (s *statusServer) isSuperUser(ctx context.Context, username string) bool {
+func (s *statusServer) hasAdminRole(ctx context.Context, username string) bool {
 	if username == security.RootUser {
 		return true
 	}
@@ -1870,7 +1870,7 @@ func (s *statusServer) isSuperUser(ctx context.Context, username string) bool {
 		&sql.MemoryMetrics{},
 		s.admin.server.execCfg)
 	defer cleanup()
-	if err := planner.(superUserChecker).RequireSuperUser(ctx, "access status server endpoint"); err != nil {
+	if err := planner.(superUserChecker).RequireAdminRole(ctx, "access status server endpoint"); err != nil {
 		return false
 	}
 	return true

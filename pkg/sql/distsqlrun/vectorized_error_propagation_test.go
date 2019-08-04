@@ -36,15 +36,15 @@ func TestVectorizedErrorPropagation(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := FlowCtx{
-		EvalCtx:  &evalCtx,
-		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx: &evalCtx,
+		Cfg:     &ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 
 	nRows, nCols := 1, 1
 	types := sqlbase.OneIntCol
 	input := NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
 
-	col, err := newColumnarizer(&flowCtx, 0 /* processorID */, input)
+	col, err := newColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,6 +60,7 @@ func TestVectorizedErrorPropagation(t *testing.T) {
 		nil, /* output */
 		nil, /* metadataSourceQueue */
 		nil, /* outputStatsToTrace */
+		nil, /* cancelFlow */
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -96,15 +97,15 @@ func TestNonVectorizedErrorPropagation(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := FlowCtx{
-		EvalCtx:  &evalCtx,
-		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx: &evalCtx,
+		Cfg:     &ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 
 	nRows, nCols := 1, 1
 	types := sqlbase.OneIntCol
 	input := NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
 
-	col, err := newColumnarizer(&flowCtx, 0 /* processorID */, input)
+	col, err := newColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,6 +121,7 @@ func TestNonVectorizedErrorPropagation(t *testing.T) {
 		nil, /* output */
 		nil, /* metadataSourceQueue */
 		nil, /* outputStatsToTrace */
+		nil, /* cancelFlow */
 	)
 	if err != nil {
 		t.Fatal(err)

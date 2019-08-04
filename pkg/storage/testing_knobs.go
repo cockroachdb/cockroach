@@ -56,6 +56,7 @@ type StoreTestingKnobs struct {
 
 	// TestingPostApplyFilter is called after a command is applied to
 	// rocksdb but before in-memory side effects have been processed.
+	// It is only called on the replica the proposed the command.
 	TestingPostApplyFilter storagebase.ReplicaApplyFilter
 
 	// TestingResponseFilter is called after the replica processes a
@@ -103,6 +104,8 @@ type StoreTestingKnobs struct {
 	DisableGCQueue bool
 	// DisableMergeQueue disables the merge queue.
 	DisableMergeQueue bool
+	// DisableReplicateQueue disables the raft log queue.
+	DisableRaftLogQueue bool
 	// DisableReplicaGCQueue disables the replica GC queue.
 	DisableReplicaGCQueue bool
 	// DisableReplicateQueue disables the replication queue.
@@ -192,6 +195,11 @@ type StoreTestingKnobs struct {
 	// This ensures the `*Replica` will be materialized on the Store when it
 	// returns.
 	ReplicaAddStopAfterLearnerSnapshot func() bool
+
+	// MaxApplicationBatchSize enforces a maximum size on application batches.
+	// This can be useful for testing conditions which require commands to be
+	// applied in separate batches.
+	MaxApplicationBatchSize int
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

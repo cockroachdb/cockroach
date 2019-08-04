@@ -18,6 +18,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -497,6 +498,18 @@ func (h *hasher) HashJobCommand(val tree.JobCommand) {
 	h.HashInt(int(val))
 }
 
+func (h *hasher) HashIndexOrdinal(val cat.IndexOrdinal) {
+	h.HashInt(val)
+}
+
+func (h *hasher) HashViewDeps(val opt.ViewDeps) {
+	// Hash the length and address of the first element.
+	h.HashInt(len(val))
+	if len(val) > 0 {
+		h.HashPointer(unsafe.Pointer(&val[0]))
+	}
+}
+
 func (h *hasher) HashWindowFrame(val WindowFrame) {
 	h.HashInt(int(val.StartBoundType))
 	h.HashInt(int(val.EndBoundType))
@@ -790,6 +803,17 @@ func (h *hasher) IsShowTraceTypeEqual(l, r tree.ShowTraceType) bool {
 
 func (h *hasher) IsJobCommandEqual(l, r tree.JobCommand) bool {
 	return l == r
+}
+
+func (h *hasher) IsIndexOrdinalEqual(l, r cat.IndexOrdinal) bool {
+	return l == r
+}
+
+func (h *hasher) IsViewDepsEqual(l, r opt.ViewDeps) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	return len(l) == 0 || &l[0] == &r[0]
 }
 
 func (h *hasher) IsWindowFrameEqual(l, r WindowFrame) bool {

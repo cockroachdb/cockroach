@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -187,15 +188,25 @@ func init() {
 	initCLIDefaults()
 
 	// Every command but start will inherit the following setting.
-	cockroachCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+	AddPersistentPreRunE(cockroachCmd, func(cmd *cobra.Command, _ []string) error {
 		extraClientFlagInit()
 		return setDefaultStderrVerbosity(cmd, log.Severity_WARNING)
+	})
+
+	// Add a pre-run command for `start` and `start-single-node`.
+	for _, cmd := range StartCmds {
+		AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
+			// Finalize the configuration of network and logging settings.
+			extraServerFlagInit()
+			return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
+		})
 	}
 
-	// Add a pre-run command for `start`.
-	AddPersistentPreRunE(StartCmd, func(cmd *cobra.Command, _ []string) error {
-		extraServerFlagInit()
-		return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
+	// start-single-node starts with default replication of 1.
+	AddPersistentPreRunE(startSingleNodeCmd, func(cmd *cobra.Command, _ []string) error {
+		serverCfg.DefaultSystemZoneConfig.NumReplicas = proto.Int32(1)
+		serverCfg.DefaultZoneConfig.NumReplicas = proto.Int32(1)
+		return nil
 	})
 
 	// Map any flags registered in the standard "flag" package into the
@@ -253,8 +264,8 @@ func init() {
 	// avoid printing some messages to standard output in that case.
 	_, startCtx.inBackground = envutil.EnvString(backgroundEnvVar, 1)
 
-	{
-		f := StartCmd.Flags()
+	for _, cmd := range StartCmds {
+		f := cmd.Flags()
 
 		// Server flags.
 		VarFlag(f, addrSetter{&startCtx.serverListenAddr, &serverListenPort}, cliflags.ListenAddr)
@@ -312,8 +323,15 @@ func init() {
 		// variables, but share the same default.
 		StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir, startCtx.serverSSLCertsDir)
 
-		// Cluster joining flags.
+		// Cluster joining flags. We need to enable this both for 'start'
+		// and 'start-single-node' although the latter does not support
+		// --join, because it delegates its logic to that of 'start', and
+		// 'start' will check that the flag is properly defined.
 		VarFlag(f, &serverCfg.JoinList, cliflags.Join)
+		// We also hide it from help for 'start-single-node'.
+		if cmd == startSingleNodeCmd {
+			_ = f.MarkHidden(cliflags.Join.Name)
+		}
 
 		// Engine flags.
 		VarFlag(f, cacheSizeValue, cliflags.Cache)
@@ -329,10 +347,11 @@ func init() {
 	}
 
 	// Log flags.
-	for _, cmd := range []*cobra.Command{demoCmd, StartCmd} {
+	logCmds := append(StartCmds, demoCmd)
+	logCmds = append(logCmds, demoCmd.Commands()...)
+	for _, cmd := range logCmds {
 		f := cmd.Flags()
 		VarFlag(f, &startCtx.logDir, cliflags.LogDir)
-		startCtx.logDirFlag = f.Lookup(cliflags.LogDir.Name)
 		VarFlag(f,
 			pflag.PFlagFromGoFlag(flag.Lookup(logflags.LogFilesCombinedMaxSizeName)).Value,
 			cliflags.LogDirMaxSize)
@@ -383,7 +402,7 @@ func init() {
 		genHAProxyCmd,
 		quitCmd,
 		sqlShellCmd,
-		/* StartCmd is covered above */
+		/* StartCmds are covered above */
 	}
 	clientCmds = append(clientCmds, userCmds...)
 	clientCmds = append(clientCmds, zoneCmds...)
@@ -475,6 +494,7 @@ func init() {
 	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd, demoCmd}
 	sqlCmds = append(sqlCmds, zoneCmds...)
 	sqlCmds = append(sqlCmds, userCmds...)
+	sqlCmds = append(sqlCmds, demoCmd.Commands()...)
 	for _, cmd := range sqlCmds {
 		f := cmd.Flags()
 		BoolFlag(f, &sqlCtx.echo, cliflags.EchoSQL, sqlCtx.echo)
@@ -500,7 +520,8 @@ func init() {
 	}
 
 	// Commands that print tables.
-	tableOutputCommands := append([]*cobra.Command{sqlShellCmd, genSettingsListCmd, demoCmd},
+	tableOutputCommands := append(
+		[]*cobra.Command{sqlShellCmd, genSettingsListCmd, demoCmd},
 		demoCmd.Commands()...)
 	tableOutputCommands = append(tableOutputCommands, userCmds...)
 	tableOutputCommands = append(tableOutputCommands, nodeCmds...)
@@ -514,6 +535,15 @@ func init() {
 		f := cmd.PersistentFlags()
 		VarFlag(f, &cliCtx.tableDisplayFormat, cliflags.TableDisplayFormat)
 	}
+
+	// demo command.
+	demoFlags := demoCmd.PersistentFlags()
+	// We add this command as a persistent flag so you can do stuff like
+	// ./cockroach demo movr --nodes=3.
+	IntFlag(demoFlags, &demoCtx.nodes, cliflags.DemoNodes, 1)
+	// The --empty flag is only valid for the top level demo command,
+	// so we use the regular flag set.
+	BoolFlag(demoCmd.Flags(), &demoCtx.useEmptyDatabase, cliflags.UseEmptyDatabase, false)
 
 	// sqlfmt command.
 	fmtFlags := sqlfmtCmd.Flags()

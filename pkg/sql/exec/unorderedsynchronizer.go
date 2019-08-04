@@ -45,17 +45,35 @@ type UnorderedSynchronizer struct {
 	// lastReadInputIdx is the index of the input whose batch we last returned.
 	// Used so that on the next call to Next, we can resume the input.
 	lastReadInputIdx int
+	// batches are the last batches read from the corresponding input.
+	batches []coldata.Batch
+	// nextBatch is a slice of functions each of which obtains a next batch from
+	// the corresponding to it input.
+	nextBatch []func()
 
 	initialized bool
 	done        bool
 	zeroBatch   coldata.Batch
-	wg          *sync.WaitGroup
-	cancelFn    context.CancelFunc
-	batchCh     chan *unorderedSynchronizerMsg
-	errCh       chan error
+	// externalWaitGroup refers to the WaitGroup passed in externally. Since the
+	// UnorderedSynchronizer spawns goroutines, this allows callers to wait for
+	// the completion of these goroutines.
+	externalWaitGroup *sync.WaitGroup
+	// internalWaitGroup refers to the WaitGroup internally managed by the
+	// UnorderedSynchronizer. This will only ever be incremented by the
+	// UnorderedSynchronizer and decremented by the input goroutines. This allows
+	// the UnorderedSynchronizer to wait only on internal goroutines.
+	internalWaitGroup *sync.WaitGroup
+	cancelFn          context.CancelFunc
+	batchCh           chan *unorderedSynchronizerMsg
+	errCh             chan error
 }
 
-// NewUnorderedSynchronizer creates a new UnorderedSynchronizer.
+// NewUnorderedSynchronizer creates a new UnorderedSynchronizer. On the first
+// call to Next, len(inputs) goroutines are spawned to read each input
+// asynchronously (to not be limited by a slow input). These will increment
+// the passed-in WaitGroup and decrement when done. It is also guaranteed that
+// these spawned goroutines will have completed on any error or zero-length
+// batch received from Next.
 func NewUnorderedSynchronizer(
 	inputs []Operator, typs []types.T, wg *sync.WaitGroup,
 ) *UnorderedSynchronizer {
@@ -68,11 +86,14 @@ func NewUnorderedSynchronizer(
 	zeroBatch := coldata.NewMemBatchWithSize(typs, 0)
 	zeroBatch.SetLength(0)
 	return &UnorderedSynchronizer{
-		inputs:        inputs,
-		readNextBatch: readNextBatch,
-		zeroBatch:     zeroBatch,
-		wg:            wg,
-		batchCh:       make(chan *unorderedSynchronizerMsg, len(inputs)),
+		inputs:            inputs,
+		readNextBatch:     readNextBatch,
+		batches:           make([]coldata.Batch, len(inputs)),
+		nextBatch:         make([]func(), len(inputs)),
+		zeroBatch:         zeroBatch,
+		externalWaitGroup: wg,
+		internalWaitGroup: &sync.WaitGroup{},
+		batchCh:           make(chan *unorderedSynchronizerMsg, len(inputs)),
 		// errCh is buffered so that writers do not block. If errCh is full, the
 		// input goroutines will not push an error and exit immediately, given that
 		// the Next goroutine will read an error and panic anyway.
@@ -98,7 +119,13 @@ func (s *UnorderedSynchronizer) Init() {
 func (s *UnorderedSynchronizer) init(ctx context.Context) {
 	ctx, s.cancelFn = contextutil.WithCancel(ctx)
 	for i, input := range s.inputs {
-		s.wg.Add(1)
+		s.nextBatch[i] = func(input Operator, inputIdx int) func() {
+			return func() {
+				s.batches[inputIdx] = input.Next(ctx)
+			}
+		}(input, i)
+		s.externalWaitGroup.Add(1)
+		s.internalWaitGroup.Add(1)
 		// TODO(asubiotto): Most inputs are Inboxes, and these have handler
 		// goroutines just sitting around waiting for cancellation. I wonder if we
 		// could reuse those goroutines to push batches to batchCh directly.
@@ -107,14 +134,14 @@ func (s *UnorderedSynchronizer) init(ctx context.Context) {
 				if int(atomic.AddUint32(&s.numFinishedInputs, 1)) == len(s.inputs) {
 					close(s.batchCh)
 				}
-				s.wg.Done()
+				s.internalWaitGroup.Done()
+				s.externalWaitGroup.Done()
 			}()
 			msg := &unorderedSynchronizerMsg{
 				inputIdx: inputIdx,
 			}
 			for {
-				var b coldata.Batch
-				if err := CatchVectorizedRuntimeError(func() { b = input.Next(ctx) }); err != nil {
+				if err := CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
 					select {
 					// Non-blocking write to errCh, if an error is present the main
 					// goroutine will use that and cancel all inputs.
@@ -123,10 +150,10 @@ func (s *UnorderedSynchronizer) init(ctx context.Context) {
 					}
 					return
 				}
-				if b.Length() == 0 {
+				if s.batches[inputIdx].Length() == 0 {
 					return
 				}
-				msg.b = b
+				msg.b = s.batches[inputIdx]
 				select {
 				case <-ctx.Done():
 					select {
@@ -176,12 +203,14 @@ func (s *UnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			// If we got an error from one of our inputs, cancel all inputs and
 			// propagate this error through a panic.
 			s.cancelFn()
+			s.internalWaitGroup.Wait()
 			panic(err)
 		}
 	case msg := <-s.batchCh:
 		if msg == nil {
-			// All inputs have exited, check if this was a graceful termination or
-			// not.
+			// All inputs have exited, double check that this is indeed the case.
+			s.internalWaitGroup.Wait()
+			// Check if this was a graceful termination or not.
 			select {
 			case err := <-s.errCh:
 				if err != nil {

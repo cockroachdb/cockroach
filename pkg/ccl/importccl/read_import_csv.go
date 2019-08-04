@@ -12,6 +12,7 @@ import (
 	"context"
 	"io"
 	"runtime"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -32,7 +33,9 @@ type csvInputReader struct {
 	batchSize    int
 	batch        csvRecord
 	opts         roachpb.CSVOptions
+	walltime     int64
 	tableDesc    *sqlbase.TableDescriptor
+	targetCols   tree.NameList
 	expectedCols int
 }
 
@@ -41,15 +44,19 @@ var _ inputConverter = &csvInputReader{}
 func newCSVInputReader(
 	kvCh chan []roachpb.KeyValue,
 	opts roachpb.CSVOptions,
+	walltime int64,
 	tableDesc *sqlbase.TableDescriptor,
+	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
 ) *csvInputReader {
 	return &csvInputReader{
 		evalCtx:      evalCtx,
 		opts:         opts,
+		walltime:     walltime,
 		kvCh:         kvCh,
 		expectedCols: len(tableDesc.VisibleColumns()),
 		tableDesc:    tableDesc,
+		targetCols:   targetCols,
 		recordCh:     make(chan csvRecord),
 		batchSize:    500,
 	}
@@ -162,7 +169,7 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 	// Create a new evalCtx per converter so each go routine gets its own
 	// collationenv, which can't be accessed in parallel.
 	evalCtx := c.evalCtx.Copy()
-	conv, err := row.NewDatumRowConverter(c.tableDesc, evalCtx, c.kvCh)
+	conv, err := row.NewDatumRowConverter(c.tableDesc, c.targetCols, evalCtx, c.kvCh)
 	if err != nil {
 		return err
 	}
@@ -170,23 +177,35 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 		panic("uninitialized session data")
 	}
 
+	const precision = uint64(10 * time.Microsecond)
+	timestamp := uint64(c.walltime) / precision
+
 	for batch := range c.recordCh {
 		for batchIdx, record := range batch.r {
 			rowNum := int64(batch.rowOffset + batchIdx)
+			datumIdx := 0
 			for i, v := range record {
+				// Skip over record entries corresponding to columns not in the target
+				// columns specified by the user.
+				if _, ok := conv.IsTargetCol[i]; !ok {
+					continue
+				}
 				col := conv.VisibleCols[i]
 				if c.opts.NullEncoding != nil && v == *c.opts.NullEncoding {
-					conv.Datums[i] = tree.DNull
+					conv.Datums[datumIdx] = tree.DNull
 				} else {
 					var err error
-					conv.Datums[i], err = tree.ParseDatumStringAs(conv.VisibleColTypes[i], v, conv.EvalCtx)
+					conv.Datums[datumIdx], err = tree.ParseDatumStringAs(conv.VisibleColTypes[i], v, conv.EvalCtx)
 					if err != nil {
 						return wrapRowErr(err, batch.file, rowNum, pgcode.Syntax,
 							"parse %q as %s", col.Name, col.Type.SQLString())
 					}
 				}
+				datumIdx++
 			}
-			if err := conv.Row(ctx, batch.fileIndex, rowNum); err != nil {
+
+			rowIndex := int64(timestamp) + rowNum
+			if err := conv.Row(ctx, batch.fileIndex, rowIndex); err != nil {
 				return wrapRowErr(err, batch.file, rowNum, pgcode.Uncategorized, "")
 			}
 		}

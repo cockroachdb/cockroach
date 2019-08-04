@@ -7,7 +7,7 @@ statement ok
 CREATE TABLE y(b) AS SELECT generate_series(2, 4)
 
 # Referencing a CTE multiple times.
-query II
+query II rowsort
 WITH t AS (SELECT b FROM y) SELECT * FROM t JOIN t AS q ON true
 ----
 2  2
@@ -20,7 +20,7 @@ WITH t AS (SELECT b FROM y) SELECT * FROM t JOIN t AS q ON true
 4  3
 4  4
 
-query II
+query II rowsort
 WITH
     one AS (SELECT a AS u FROM x),
     two AS (SELECT b AS v FROM (SELECT b FROM y UNION ALL SELECT u FROM one))
@@ -68,3 +68,90 @@ query I
 SELECT count(*) FROM z
 ----
 0
+
+# WITH and prepared statements.
+
+statement ok
+CREATE TABLE engineer (
+    fellow BOOL NOT NULL, id INT4 NOT NULL, companyname VARCHAR(255) NOT NULL,
+    PRIMARY KEY (id, companyname)
+)
+
+statement ok
+PREPARE x (INT4, VARCHAR, INT4, VARCHAR) AS
+  WITH ht_engineer (id, companyname) AS (
+    SELECT id, companyname FROM (VALUES ($1, $2), ($3, $4)) AS ht (id, companyname)
+  )
+DELETE FROM engineer WHERE (id, companyname) IN (SELECT id, companyname FROM ht_engineer)
+
+statement ok
+EXECUTE x (1, 'fo', 2, 'bar')
+
+statement ok
+PREPARE z(int) AS WITH foo AS (SELECT * FROM x WHERE a = $1) SELECT * FROM foo
+
+query I
+EXECUTE z(1)
+----
+1
+
+query I
+EXECUTE z(2)
+----
+2
+
+query I
+EXECUTE z(3)
+----
+3
+
+# WITH containing a placeholder that isn't referenced.
+
+statement ok
+PREPARE z2(int) AS WITH foo AS (SELECT * FROM x WHERE a = $1) SELECT * FROM x ORDER BY a
+
+query I
+EXECUTE z2(1)
+----
+1
+2
+3
+
+statement ok
+PREPARE z3(int) AS WITH foo AS (SELECT $1) SELECT * FROM foo
+
+query I
+EXECUTE z3(3)
+----
+3
+
+statement ok
+PREPARE z4(int) AS WITH foo AS (SELECT $1), bar AS (SELECT * FROM foo) SELECT * FROM bar
+
+query I
+EXECUTE z4(3)
+----
+3
+
+statement ok
+PREPARE z5(int, int) AS WITH foo AS (SELECT $1), bar AS (SELECT $2) (SELECT * FROM foo) UNION ALL (SELECT * FROM bar)
+
+query I rowsort
+EXECUTE z5(3, 5)
+----
+3
+5
+
+statement ok
+PREPARE z6(int) AS
+    SELECT * FROM
+    (VALUES (1), (2)) v(x),
+    LATERAL (SELECT * FROM
+      (WITH foo AS (SELECT $1 + x) SELECT * FROM foo)
+    )
+
+query II
+EXECUTE z6(3)
+----
+1 4
+2 5

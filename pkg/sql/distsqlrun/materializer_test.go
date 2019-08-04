@@ -40,10 +40,10 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
-	c, err := newColumnarizer(flowCtx, 0, input)
+	c, err := newColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,10 +58,12 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		nil, /* output */
 		nil, /* metadataSourcesQueue */
 		nil, /* outputStatsToTrace */
+		nil, /* cancelFlow */
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
+	m.Start(ctx)
 
 	for i := 0; i < nRows; i++ {
 		row, meta := m.Next()
@@ -120,10 +122,10 @@ func TestMaterializeTypes(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
-	c, err := newColumnarizer(flowCtx, 0, input)
+	c, err := newColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,10 +144,12 @@ func TestMaterializeTypes(t *testing.T) {
 		nil, /* output */
 		nil, /* metadataSourcesQueue */
 		nil, /* outputStatsToTrace */
+		nil, /* cancelFlow */
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
+	m.Start(ctx)
 
 	row, meta := m.Next()
 	if meta != nil {
@@ -175,10 +179,10 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
-	c, err := newColumnarizer(flowCtx, 0, input)
+	c, err := newColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -195,10 +199,12 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 			nil, /* output */
 			nil, /* metadataSourcesQueue */
 			nil, /* outputStatsToTrace */
+			nil, /* cancelFlow */
 		)
 		if err != nil {
 			b.Fatal(err)
 		}
+		m.Start(ctx)
 
 		foundRows := 0
 		for {

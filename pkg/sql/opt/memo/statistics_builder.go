@@ -342,14 +342,19 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.SequenceSelectOp:
 		return sb.colStatSequenceSelect(colSet, e.(*SequenceSelectExpr))
 
-	case opt.ExplainOp, opt.ShowTraceForSessionOp, opt.OpaqueRelOp:
+	case opt.ExplainOp, opt.ShowTraceForSessionOp,
+		opt.OpaqueRelOp, opt.OpaqueMutationOp, opt.OpaqueDDLOp:
 		return sb.colStatUnknown(colSet, e.Relational())
 
 	case opt.WithOp:
 		return sb.colStat(colSet, e.Child(1).(RelExpr))
 
 	case opt.WithScanOp:
-		return sb.colStatWithScan(colSet, e.(*WithScanExpr))
+		// This is tricky, since if we deferred to the expression being referenced,
+		// the computation of stats for a WithScan would depend on something
+		// outside of the expression itself. Just call it unknown for now.
+		// TODO(justin): find a real solution for this.
+		return sb.colStatUnknown(colSet, e.Relational())
 
 	case opt.FakeRelOp:
 		panic(errors.AssertionFailedf("FakeRelOp does not contain col stat for %v", colSet))
@@ -548,18 +553,19 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *pro
 	relProps := scan.Relational()
 	s := &relProps.Stats
 
-	colStat := sb.copyColStat(colSet, s, sb.colStatTable(scan.Table, colSet))
+	inputColStat := sb.colStatTable(scan.Table, colSet)
+	colStat := sb.copyColStat(colSet, s, inputColStat)
+
+	// If we know that the cardinality is 0 or 1 (e.g., due to an equality
+	// constraint on a key column), don't bother adding the overhead of
+	// creating a histogram.
+	if !relProps.Cardinality.IsZeroOrOne() {
+		colStat.Histogram = inputColStat.Histogram
+	}
+
 	if s.Selectivity != 1 {
 		tableStats := sb.makeTableStatistics(scan.Table)
 		colStat.ApplySelectivity(s.Selectivity, tableStats.RowCount)
-	}
-
-	// Cap distinct and null counts at limit, if it exists.
-	if scan.HardLimit.IsSet() {
-		if limit := float64(scan.HardLimit.RowCount()); limit < s.RowCount {
-			colStat.DistinctCount = min(colStat.DistinctCount, limit)
-			colStat.NullCount = min(colStat.NullCount, limit)
-		}
 	}
 
 	if colSet.SubsetOf(relProps.NotNullCols) {
@@ -2056,30 +2062,6 @@ func (sb *statisticsBuilder) colStatSequenceSelect(
 	return colStat
 }
 
-// +-----------+
-// | With Scan |
-// +-----------+
-
-func (sb *statisticsBuilder) colStatWithScan(
-	colSet opt.ColSet, ws *WithScanExpr,
-) *props.ColumnStatistic {
-	relProps := ws.Relational()
-	s := &relProps.Stats
-
-	withExpr := ws.Memo().WithExpr(ws.ID)
-
-	// We need to pass on the colStat request to the referenced expression, but
-	// we need to translate the columns to the ones returned by the original
-	// expression, rather than the reference.
-	cols := translateColSet(colSet, ws.OutCols, ws.InCols)
-
-	colstat, _ := s.ColStats.Add(colSet)
-	*colstat = *sb.colStat(cols, withExpr)
-	colstat.Cols = colSet
-
-	return colstat
-}
-
 // +---------+
 // | Unknown |
 // +---------+
@@ -2135,7 +2117,7 @@ func (sb *statisticsBuilder) ensureColStat(
 }
 
 // copyColStat creates a column statistic and copies the data from an existing
-// column statistic.
+// column statistic. Does not copy the histogram.
 func (sb *statisticsBuilder) copyColStat(
 	colSet opt.ColSet, s *props.Statistics, inputColStat *props.ColumnStatistic,
 ) *props.ColumnStatistic {
@@ -2147,9 +2129,6 @@ func (sb *statisticsBuilder) copyColStat(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inputColStat.DistinctCount
 	colStat.NullCount = inputColStat.NullCount
-	if inputColStat.Histogram != nil {
-		colStat.Histogram = inputColStat.Histogram.Copy()
-	}
 	return colStat
 }
 
@@ -2233,7 +2212,7 @@ func (sb *statisticsBuilder) finalizeFromRowCount(
 	if colStat.Histogram != nil {
 		valuesCount := colStat.Histogram.ValuesCount()
 		if valuesCount > rowCount {
-			colStat.Histogram.ApplySelectivity(rowCount / valuesCount)
+			colStat.Histogram = colStat.Histogram.ApplySelectivity(rowCount / valuesCount)
 		}
 	}
 }
@@ -2372,7 +2351,9 @@ func (sb *statisticsBuilder) applyFilter(
 		scalarProps := conjunct.ScalarProps(e.Memo())
 		constrainedCols.UnionWith(scalarProps.OuterCols)
 		if scalarProps.Constraints != nil {
-			histColsLocal := sb.applyConstraintSet(scalarProps.Constraints, e, relProps)
+			histColsLocal := sb.applyConstraintSet(
+				scalarProps.Constraints, scalarProps.TightConstraints, e, relProps,
+			)
 			histCols.UnionWith(histColsLocal)
 			if !scalarProps.TightConstraints {
 				numUnappliedConjuncts++
@@ -2422,6 +2403,13 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 		sb.updateDistinctCountFromUnappliedConjuncts(col, e, relProps, numConjuncts)
 	}
 
+	// If we know that the cardinality is 0 or 1 (e.g., due to an equality
+	// constraint on a key column), don't bother adding the overhead of
+	// creating a histogram.
+	if relProps.Cardinality.IsZeroOrOne() {
+		return constrainedCols, histCols
+	}
+
 	// Calculate histogram.
 	inputStat := sb.colStatFromInput(constrainedCols, e)
 	inputHist := inputStat.Histogram
@@ -2430,6 +2418,7 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 		if colStat, ok := s.ColStats.Lookup(constrainedCols); ok {
 			colStat.Histogram = inputHist.Filter(c)
 			histCols = constrainedCols
+			sb.updateDistinctCountFromHistogram(colStat, inputStat.DistinctCount)
 		}
 	}
 
@@ -2440,7 +2429,7 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 // for the constrained columns in a constraint set. Returns the set of
 // columns with a filtered histogram.
 func (sb *statisticsBuilder) applyConstraintSet(
-	cs *constraint.Set, e RelExpr, relProps *props.Relational,
+	cs *constraint.Set, tight bool, e RelExpr, relProps *props.Relational,
 ) (histCols opt.ColSet) {
 	// If unconstrained, then no constraint could be derived from the expression,
 	// so fall back to estimate.
@@ -2470,6 +2459,19 @@ func (sb *statisticsBuilder) applyConstraintSet(
 			sb.updateDistinctCountFromUnappliedConjuncts(col, e, relProps, numConjuncts)
 		}
 
+		if !tight {
+			// TODO(rytaft): it may still be beneficial to calculate the histogram
+			// even if the constraint is not tight, but don't bother for now.
+			continue
+		}
+
+		// If we know that the cardinality is 0 or 1 (e.g., due to an equality
+		// constraint on a key column), don't bother adding the overhead of
+		// creating a histogram.
+		if relProps.Cardinality.IsZeroOrOne() {
+			continue
+		}
+
 		// Calculate histogram.
 		cols := opt.MakeColSet(col)
 		inputStat := sb.colStatFromInput(cols, e)
@@ -2478,6 +2480,7 @@ func (sb *statisticsBuilder) applyConstraintSet(
 			if colStat, ok := s.ColStats.Lookup(cols); ok {
 				colStat.Histogram = inputHist.Filter(c)
 				histCols.UnionWith(cols)
+				sb.updateDistinctCountFromHistogram(colStat, inputStat.DistinctCount)
 			}
 		}
 	}
@@ -2648,6 +2651,30 @@ func (sb *statisticsBuilder) updateDistinctCountFromUnappliedConjuncts(
 	inputStat := sb.colStatFromInput(colSet, e)
 	distinctCount := inputStat.DistinctCount * math.Pow(unknownFilterSelectivity, numConjuncts)
 	sb.ensureColStat(colSet, distinctCount, e, relProps)
+}
+
+// updateDistinctCountFromHistogram updates the distinct count for the given
+// column statistic based on the estimated number of distinct values in the
+// histogram. The updated count will be no larger than the provided value for
+// maxDistinctCount.
+//
+// This function should be called after updateDistinctCountsFromConstraint
+// and/or updateDistinctCountFromUnappliedConjuncts.
+func (sb *statisticsBuilder) updateDistinctCountFromHistogram(
+	colStat *props.ColumnStatistic, maxDistinctCount float64,
+) {
+	distinct := colStat.Histogram.DistinctValuesCount()
+	if distinct == 0 {
+		// Make sure the count is non-zero. The stats may be stale, and we
+		// can end up with weird and inefficient plans if we estimate 0 rows.
+		distinct = min(1, colStat.DistinctCount)
+	}
+
+	// The distinct count estimate from the histogram should always be more
+	// accurate than the distinct count analysis performed in
+	// updateDistinctCountsFromConstraint, so use the histogram estimate to
+	// replace the distinct count value.
+	colStat.DistinctCount = min(distinct, maxDistinctCount)
 }
 
 func (sb *statisticsBuilder) applyEquivalencies(

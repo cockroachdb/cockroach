@@ -18,9 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -60,6 +62,9 @@ type SSTBatcher struct {
 		split   int
 		sstSize int
 	}
+
+	// allows ingestion of keys where the MVCC.Key would shadow an exisiting row.
+	disallowShadowing bool
 }
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
@@ -178,7 +183,7 @@ func (b *SSTBatcher) Flush(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrapf(err, "finishing constructed sstable")
 	}
-	if err := AddSSTable(ctx, b.db, start, end, sstBytes); err != nil {
+	if err := AddSSTable(ctx, b.db, start, end, sstBytes, b.disallowShadowing); err != nil {
 		return err
 	}
 	b.totalRows.Add(b.rowCounter.BulkOpSummary)
@@ -197,26 +202,41 @@ func (b *SSTBatcher) GetSummary() roachpb.BulkOpSummary {
 }
 
 type sender interface {
-	AddSSTable(ctx context.Context, begin, end interface{}, data []byte) error
+	AddSSTable(
+		ctx context.Context, begin, end interface{}, data []byte, disallowShadowing bool, stats *enginepb.MVCCStats,
+	) error
 }
 
 type sstSpan struct {
-	start, end roachpb.Key
-	sstBytes   []byte
+	start, end        roachpb.Key
+	sstBytes          []byte
+	disallowShadowing bool
+	stats             enginepb.MVCCStats
 }
 
 // AddSSTable retries db.AddSSTable if retryable errors occur, including if the
 // SST spans a split, in which case it is iterated and split into two SSTs, one
 // for each side of the split in the error, and each are retried.
-func AddSSTable(ctx context.Context, db sender, start, end roachpb.Key, sstBytes []byte) error {
-	work := []*sstSpan{{start: start, end: end, sstBytes: sstBytes}}
-	// Create an iterator that iterates over the top level SST to produce all the splits.
-	var iter engine.SimpleIterator
-	defer func() {
-		if iter != nil {
-			iter.Close()
-		}
-	}()
+func AddSSTable(
+	ctx context.Context, db sender, start, end roachpb.Key, sstBytes []byte, disallowShadowing bool,
+) error {
+	// Create an iterator that iterates over the top level SST for use in stats
+	// computation and to produce split ssts if needed for retries.
+	iter, err := engine.NewMemSSTIterator(sstBytes, true)
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	now := timeutil.Now().UnixNano()
+	stats, err := engine.ComputeStatsGo(
+		iter, engine.MVCCKey{Key: start}, engine.MVCCKey{Key: end}, now,
+	)
+	if err != nil {
+		return errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
+	}
+
+	work := []*sstSpan{{start: start, end: end, sstBytes: sstBytes, stats: stats}}
 	const maxAddSSTableRetries = 10
 	for len(work) > 0 {
 		item := work[0]
@@ -224,26 +244,30 @@ func AddSSTable(ctx context.Context, db sender, start, end roachpb.Key, sstBytes
 		if err := func() error {
 			var err error
 			for i := 0; i < maxAddSSTableRetries; i++ {
-				log.VEventf(ctx, 2, "sending %s AddSSTable [%s,%s)", sz(len(sstBytes)), start, end)
+				log.VEventf(ctx, 2, "sending %s AddSSTable [%s,%s)", sz(len(item.sstBytes)), start, end)
 				// This will fail if the range has split but we'll check for that below.
-				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes)
+				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, item.disallowShadowing, &item.stats)
 				if err == nil {
 					return nil
 				}
 				// This range has split -- we need to split the SST to try again.
 				if m, ok := errors.Cause(err).(*roachpb.RangeKeyMismatchError); ok {
-					if iter == nil {
-						iter, err = engine.NewMemSSTIterator(sstBytes, false)
-						if err != nil {
-							return err
-						}
-					}
 					split := m.MismatchedRange.EndKey.AsRawKey()
 					log.Infof(ctx, "SSTable cannot be added spanning range bounds %v, retrying...", split)
-					left, right, err := createSplitSSTable(ctx, db, item.start, split, iter)
+					left, right, err := createSplitSSTable(ctx, db, item.start, split, item.disallowShadowing, iter)
 					if err != nil {
 						return err
 					}
+
+					right.stats, err = engine.ComputeStatsGo(
+						iter, engine.MVCCKey{Key: right.start}, engine.MVCCKey{Key: right.end}, now,
+					)
+					if err != nil {
+						return err
+					}
+					left.stats = item.stats
+					left.stats.Subtract(right.stats)
+
 					// Add more work.
 					work = append([]*sstSpan{left, right}, work...)
 					return nil
@@ -269,7 +293,11 @@ func AddSSTable(ctx context.Context, db sender, start, end roachpb.Key, sstBytes
 // createSplitSSTable is a helper for splitting up SSTs. The iterator
 // passed in is over the top level SST passed into AddSSTTable().
 func createSplitSSTable(
-	ctx context.Context, db sender, start, splitKey roachpb.Key, iter engine.SimpleIterator,
+	ctx context.Context,
+	db sender,
+	start, splitKey roachpb.Key,
+	disallowShadowing bool,
+	iter engine.SimpleIterator,
 ) (*sstSpan, *sstSpan, error) {
 	w, err := engine.MakeRocksDBSstFileWriter()
 	if err != nil {
@@ -297,9 +325,10 @@ func createSplitSSTable(
 				return nil, nil, err
 			}
 			left = &sstSpan{
-				start:    first,
-				end:      last.PrefixEnd(),
-				sstBytes: res,
+				start:             first,
+				end:               last.PrefixEnd(),
+				sstBytes:          res,
+				disallowShadowing: disallowShadowing,
 			}
 
 			w.Close()
@@ -330,9 +359,10 @@ func createSplitSSTable(
 		return nil, nil, err
 	}
 	right = &sstSpan{
-		start:    first,
-		end:      last.PrefixEnd(),
-		sstBytes: res,
+		start:             first,
+		end:               last.PrefixEnd(),
+		sstBytes:          res,
+		disallowShadowing: disallowShadowing,
 	}
 	return left, right, nil
 }

@@ -17,10 +17,12 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -37,7 +39,9 @@ var demoCmd = &cobra.Command{
 Start an in-memory, standalone, single-node CockroachDB instance, and open an
 interactive SQL prompt to it. Various datasets are available to be preloaded as
 subcommands: e.g. "cockroach demo startrek". See --help for a full list.
-`,
+
+By default, the 'movr' dataset is pre-loaded. You can also use --empty
+to avoid pre-loading a dataset.`,
 	Example: `  cockroach demo`,
 	Args:    cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(func(cmd *cobra.Command, _ []string) error {
@@ -45,9 +49,20 @@ subcommands: e.g. "cockroach demo startrek". See --help for a full list.
 	}),
 }
 
+const defaultGeneratorName = "movr"
+
+var defaultGenerator workload.Generator
+
 func init() {
 	for _, meta := range workload.Registered() {
 		gen := meta.New()
+
+		if meta.Name == defaultGeneratorName {
+			// Save the default for use in the top-level 'demo' command
+			// without argument.
+			defaultGenerator = gen
+		}
+
 		var genFlags *pflag.FlagSet
 		if f, ok := gen.(workload.Flagser); ok {
 			genFlags = f.Flags().FlagSet
@@ -61,12 +76,12 @@ func init() {
 				return runDemo(cmd, gen)
 			}),
 		}
-		genDemoCmd.Flags().AddFlagSet(genFlags)
 		demoCmd.AddCommand(genDemoCmd)
+		genDemoCmd.Flags().AddFlagSet(genFlags)
 	}
 }
 
-func setupTransientServer(
+func setupTransientServers(
 	cmd *cobra.Command, gen workload.Generator,
 ) (connURL string, adminURL string, cleanup func(), err error) {
 	cleanup = func() {}
@@ -74,7 +89,7 @@ func setupTransientServer(
 
 	// Set up logging. For demo/transient server we use non-standard
 	// behavior where we avoid file creation if possible.
-	df := startCtx.logDirFlag
+	df := cmd.Flags().Lookup(cliflags.LogDir.Name)
 	sf := cmd.Flags().Lookup(logflags.LogToStderrName)
 	if !df.Changed && !sf.Changed {
 		// User did not request logging flags; shut down logging under
@@ -86,7 +101,7 @@ func setupTransientServer(
 		_ = sf.Value.Set(log.Severity_ERROR.String())
 		sf.Changed = true
 	}
-	stopper, err := setupAndInitializeLoggingAndProfiling(ctx)
+	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd)
 	if err != nil {
 		return connURL, adminURL, cleanup, err
 	}
@@ -95,27 +110,37 @@ func setupTransientServer(
 	// Set up the default zone configuration. We are using an in-memory store
 	// so we really want to disable replication.
 	cfg := config.DefaultZoneConfig()
-	cfg.NumReplicas = proto.Int32(1)
-
 	sysCfg := config.DefaultSystemZoneConfig()
-	sysCfg.NumReplicas = proto.Int32(1)
 
-	// Create the transient server.
+	if demoCtx.nodes < 3 {
+		cfg.NumReplicas = proto.Int32(1)
+		sysCfg.NumReplicas = proto.Int32(1)
+	}
+
+	// Create the first transient server. The others will join this one.
 	args := base.TestServerArgs{
-		Insecure: true,
+		PartOfCluster: true,
+		Insecure:      true,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DefaultZoneConfigOverride:       &cfg,
 				DefaultSystemZoneConfigOverride: &sysCfg,
 			},
 		},
+		Stopper: stopper,
 	}
-	server := server.TestServerFactory.New(args).(*server.TestServer)
-	if err := server.Start(args); err != nil {
+	serverFactory := server.TestServerFactory
+	s := serverFactory.New(args).(*server.TestServer)
+	if err := s.Start(args); err != nil {
 		return connURL, adminURL, cleanup, err
 	}
-	prevCleanup := cleanup
-	cleanup = func() { prevCleanup(); server.Stopper().Stop(ctx) }
+	args.JoinAddr = s.ServingAddr()
+	for i := 0; i < demoCtx.nodes-1; i++ {
+		s := serverFactory.New(args).(*server.TestServer)
+		if err := s.Start(args); err != nil {
+			return connURL, adminURL, cleanup, err
+		}
+	}
 
 	// Prepare the URL for use by the SQL shell.
 	options := url.Values{}
@@ -124,7 +149,7 @@ func setupTransientServer(
 	url := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(security.RootUser),
-		Host:     server.ServingAddr(),
+		Host:     s.ServingAddr(),
 		RawQuery: options.Encode(),
 	}
 	if gen != nil {
@@ -146,17 +171,22 @@ func setupTransientServer(
 		}
 
 		ctx := context.TODO()
-		const batchSize, concurrency = 0, 0
-		if _, err := workloadsql.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
+		var l workloadsql.InsertsDataLoader
+		if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
 			return ``, ``, cleanup, err
 		}
 	}
 
-	return urlStr, server.AdminURL(), cleanup, nil
+	return urlStr, s.AdminURL(), cleanup, nil
 }
 
 func runDemo(cmd *cobra.Command, gen workload.Generator) error {
-	connURL, adminURL, cleanup, err := setupTransientServer(cmd, gen)
+	if gen == nil && !demoCtx.useEmptyDatabase {
+		// Use a default dataset unless prevented by --empty.
+		gen = defaultGenerator
+	}
+
+	connURL, adminURL, cleanup, err := setupTransientServers(cmd, gen)
 	defer cleanup()
 	if err != nil {
 		return checkAndMaybeShout(err)
@@ -168,8 +198,16 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) error {
 		fmt.Printf(`#
 # Welcome to the CockroachDB demo database!
 #
-# You are connected to a temporary, in-memory CockroachDB
-# instance. Your changes will not be saved!
+# You are connected to a temporary, in-memory CockroachDB cluster of %d node%s.
+`, demoCtx.nodes, util.Pluralize(int64(demoCtx.nodes)))
+
+		if gen != nil {
+			fmt.Printf("# The cluster has been preloaded with the %q dataset\n# (%s).\n",
+				gen.Meta().Name, gen.Meta().Description)
+		}
+
+		fmt.Printf(`#
+# Your changes will not be saved!
 #
 # Web UI: %s
 #

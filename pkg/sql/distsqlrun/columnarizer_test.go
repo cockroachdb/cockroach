@@ -33,16 +33,17 @@ func BenchmarkColumnarize(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 
 	b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 
-	c, err := newColumnarizer(flowCtx, 0, input)
+	c, err := newColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
 		b.Fatal(err)
 	}
+	c.Init()
 	for i := 0; i < b.N; i++ {
 		foundRows := 0
 		for {

@@ -370,9 +370,7 @@ func makeSelectClause(
 func (s *scope) makeSelectClause(
 	desiredTypes []*types.T, refs colRefs, withTables tableRefs,
 ) (clause *tree.SelectClause, selectRefs, orderByRefs colRefs, tables tableRefs, ok bool) {
-	clause = &tree.SelectClause{
-		From: &tree.From{},
-	}
+	clause = &tree.SelectClause{}
 
 	var fromRefs colRefs
 	// Sometimes generate a SELECT with no FROM clause.
@@ -771,7 +769,7 @@ func makeValuesSelect(
 	// for how to achieve exactly that syntax as tree nodes, but it works.
 	return &tree.SelectClause{
 		Exprs: tree.SelectExprs{tree.StarSelectExpr()},
-		From: &tree.From{
+		From: tree.From{
 			Tables: tree.TableExprs{values},
 		},
 	}, valuesRefs, withTables, true
