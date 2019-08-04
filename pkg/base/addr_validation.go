@@ -41,22 +41,40 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 	advHost, advPort, err := validateAdvertiseAddr(ctx,
 		cfg.AdvertiseAddr, "--listen-addr", cfg.Addr, "")
 	if err != nil {
-		return errors.Wrapf(err, "invalid --advertise-addr")
+		return errors.Wrap(err, "invalid --advertise-addr")
 	}
 	cfg.AdvertiseAddr = net.JoinHostPort(advHost, advPort)
 
-	// Validate the listen address.
+	// Validate the RPC listen address.
 	listenHost, listenPort, err := validateListenAddr(ctx, cfg.Addr, "")
 	if err != nil {
-		return errors.Wrapf(err, "invalid --listen-addr")
+		return errors.Wrap(err, "invalid --listen-addr")
 	}
 	cfg.Addr = net.JoinHostPort(listenHost, listenPort)
+
+	// Validate the SQL advertise address.
+	advSQLHost, advSQLPort, err := validateAdvertiseAddr(ctx,
+		cfg.SQLAdvertiseAddr, "--sql-addr", cfg.SQLAddr, advHost)
+	if err != nil {
+		return errors.Wrap(err, "cannot compute public SQL address")
+	}
+	cfg.SQLAdvertiseAddr = net.JoinHostPort(advSQLHost, advSQLPort)
+
+	// Validate the SQL listen address - use ther esolved listen addr as default.
+	sqlHost, sqlPort, err := validateListenAddr(ctx, cfg.SQLAddr, listenHost)
+	if err != nil {
+		return errors.Wrap(err, "invalid --sql-addr")
+	}
+	cfg.SQLAddr = net.JoinHostPort(sqlHost, sqlPort)
+	if cfg.SQLAddr != cfg.Addr {
+		cfg.SplitListenSQL = true
+	}
 
 	// Validate the HTTP advertise address.
 	advHTTPHost, advHTTPPort, err := validateAdvertiseAddr(ctx,
 		cfg.HTTPAdvertiseAddr, "--http-addr", cfg.HTTPAddr, advHost)
 	if err != nil {
-		return errors.Wrapf(err, "cannot compute public HTTP address")
+		return errors.Wrap(err, "cannot compute public HTTP address")
 	}
 	cfg.HTTPAdvertiseAddr = net.JoinHostPort(advHTTPHost, advHTTPPort)
 
@@ -64,7 +82,7 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 	// as default.
 	httpHost, httpPort, err := validateListenAddr(ctx, cfg.HTTPAddr, listenHost)
 	if err != nil {
-		return errors.Wrapf(err, "invalid --http-addr")
+		return errors.Wrap(err, "invalid --http-addr")
 	}
 	cfg.HTTPAddr = net.JoinHostPort(httpHost, httpPort)
 	return nil

@@ -23,11 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-type addrs struct{ listen, adv, http, advhttp string }
+type addrs struct{ listen, adv, http, advhttp, sql string }
 
 func (a *addrs) String() string {
-	return fmt.Sprintf("--listen-addr=%s --advertise-addr=%s --http-addr=%s (http adv: %s)",
-		a.listen, a.adv, a.http, a.advhttp)
+	return fmt.Sprintf("--listen-addr=%s --advertise-addr=%s --http-addr=%s (http adv: %s) --sql-addr=%s",
+		a.listen, a.adv, a.http, a.advhttp, a.sql)
 }
 
 func TestValidateAddrs(t *testing.T) {
@@ -76,63 +76,65 @@ func TestValidateAddrs(t *testing.T) {
 		expected    addrs
 	}{
 		// Common case: no server flags, all defaults.
-		{addrs{":26257", "", ":8080", ""}, "",
-			addrs{":26257", hostname + ":26257", ":8080", hostname + ":8080"}},
+		{addrs{":26257", "", ":8080", "", ":5432"}, "",
+			addrs{":26257", hostname + ":26257", ":8080", hostname + ":8080", ":5432"}},
 
 		// Another common case: --listen-addr=<somehost>
-		{addrs{hostname + ":26257", "", ":8080", ""}, "",
-			addrs{hostAddr + ":26257", hostname + ":26257", hostAddr + ":8080", hostname + ":8080"}},
+		{addrs{hostname + ":26257", "", ":8080", "", ":5432"}, "",
+			addrs{hostAddr + ":26257", hostname + ":26257", hostAddr + ":8080", hostname + ":8080", hostAddr + ":5432"}},
 
 		// Another common case: --listen-addr=localhost
-		{addrs{"localhost:26257", "", ":8080", ""}, "",
-			addrs{localAddr + ":26257", "localhost:26257", localAddr + ":8080", "localhost:8080"}},
+		{addrs{"localhost:26257", "", ":8080", "", ":5432"}, "",
+			addrs{localAddr + ":26257", "localhost:26257", localAddr + ":8080", "localhost:8080", localAddr + ":5432"}},
 
 		// Correct use: --listen-addr=<someaddr> --advertise-host=<somehost>
-		{addrs{hostAddr + ":26257", hostname + ":", ":8080", ""}, "",
-			addrs{hostAddr + ":26257", hostname + ":26257", hostAddr + ":8080", hostname + ":8080"}},
+		{addrs{hostAddr + ":26257", hostname + ":", ":8080", "", ":5432"}, "",
+			addrs{hostAddr + ":26257", hostname + ":26257", hostAddr + ":8080", hostname + ":8080", hostAddr + ":5432"}},
 
 		// Explicit port number in advertise addr.
-		{addrs{hostAddr + ":26257", hostname + ":12345", ":8080", ""}, "",
-			addrs{hostAddr + ":26257", hostname + ":12345", hostAddr + ":8080", hostname + ":8080"}},
+		{addrs{hostAddr + ":26257", hostname + ":12345", ":8080", "", ":5432"}, "",
+			addrs{hostAddr + ":26257", hostname + ":12345", hostAddr + ":8080", hostname + ":8080", hostAddr + ":5432"}},
 
 		// Use a non-numeric port number.
-		{addrs{":postgresql", "", ":http", ""}, "",
-			addrs{":5432", hostname + ":5432", ":80", hostname + ":80"}},
+		{addrs{":postgresql", "", ":http", "", ":postgresql"}, "",
+			addrs{":5432", hostname + ":5432", ":80", hostname + ":80", ":5432"}},
 
 		// Make HTTP local only.
-		{addrs{":26257", "", "localhost:8080", ""}, "",
-			addrs{":26257", hostname + ":26257", localAddr + ":8080", "localhost:8080"}},
+		{addrs{":26257", "", "localhost:8080", "", ":5432"}, "",
+			addrs{":26257", hostname + ":26257", localAddr + ":8080", "localhost:8080", ":5432"}},
 
 		// Local server but public HTTP.
-		{addrs{"localhost:26257", "", hostname + ":8080", ""}, "",
-			addrs{localAddr + ":26257", "localhost:26257", hostAddr + ":8080", hostname + ":8080"}},
+		{addrs{"localhost:26257", "", hostname + ":8080", "", ":5432"}, "",
+			addrs{localAddr + ":26257", "localhost:26257", hostAddr + ":8080", hostname + ":8080", localAddr + ":5432"}},
 
 		// Not-unreasonable case: addresses set empty. Means using port 0.
-		{addrs{"", "", "", ""}, "",
-			addrs{":0", hostname + ":0", ":0", hostname + ":0"}},
-		{addrs{":", "", "", ""}, "",
-			addrs{":0", hostname + ":0", ":0", hostname + ":0"}},
-		{addrs{"", ":", "", ""}, "",
-			addrs{":0", hostname + ":0", ":0", hostname + ":0"}},
-		{addrs{"", "", ":", ""}, "",
-			addrs{":0", hostname + ":0", ":0", hostname + ":0"}},
+		{addrs{"", "", "", "", ""}, "",
+			addrs{":0", hostname + ":0", ":0", hostname + ":0", ":0"}},
+		{addrs{":", "", "", "", ""}, "",
+			addrs{":0", hostname + ":0", ":0", hostname + ":0", ":0"}},
+		{addrs{"", ":", "", "", ""}, "",
+			addrs{":0", hostname + ":0", ":0", hostname + ":0", ":0"}},
+		{addrs{"", "", ":", "", ""}, "",
+			addrs{":0", hostname + ":0", ":0", hostname + ":0", ":0"}},
+		{addrs{"", "", "", "", ":"}, "",
+			addrs{":0", hostname + ":0", ":0", hostname + ":0", ":0"}},
 
 		// Advertise port 0 means reuse listen port. We don't
 		// auto-allocate ports for advertised addresses.
-		{addrs{":12345", ":0", "", ""}, "",
-			addrs{":12345", hostname + ":12345", ":0", hostname + ":0"}},
+		{addrs{":12345", ":0", "", "", ":5432"}, "",
+			addrs{":12345", hostname + ":12345", ":0", hostname + ":0", ":5432"}},
 
 		// Expected errors.
 
 		// Missing port number.
-		{addrs{"localhost", "", "", ""}, "invalid --listen-addr.*missing port in address", addrs{}},
-		{addrs{":26257", "", "localhost", ""}, "invalid --http-addr.*missing port in address", addrs{}},
+		{addrs{"localhost", "", "", "", ""}, "invalid --listen-addr.*missing port in address", addrs{}},
+		{addrs{":26257", "", "localhost", "", ""}, "invalid --http-addr.*missing port in address", addrs{}},
 		// Invalid port number.
-		{addrs{"localhost:-1231", "", "", ""}, "invalid port", addrs{}},
-		{addrs{"localhost:nonexistent", "", "", ""}, portExpectedErr, addrs{}},
+		{addrs{"localhost:-1231", "", "", "", ""}, "invalid port", addrs{}},
+		{addrs{"localhost:nonexistent", "", "", "", ""}, portExpectedErr, addrs{}},
 		// Invalid address.
-		{addrs{"nonexistent.example.com:26257", "", "", ""}, "no such host", addrs{}},
-		{addrs{"333.333.333.333:26257", "", "", ""}, "no such host", addrs{}},
+		{addrs{"nonexistent.example.com:26257", "", "", "", ""}, "no such host", addrs{}},
+		{addrs{"333.333.333.333:26257", "", "", "", ""}, "no such host", addrs{}},
 	}
 
 	for _, test := range testData {
@@ -141,6 +143,7 @@ func TestValidateAddrs(t *testing.T) {
 				Addr:          test.in.listen,
 				AdvertiseAddr: test.in.adv,
 				HTTPAddr:      test.in.http,
+				SQLAddr:       test.in.sql,
 			}
 
 			if err := cfg.ValidateAddrs(context.Background()); err != nil {
@@ -153,7 +156,7 @@ func TestValidateAddrs(t *testing.T) {
 				t.Fatalf("expected error %q, got success", test.expectedErr)
 			}
 
-			got := addrs{cfg.Addr, cfg.AdvertiseAddr, cfg.HTTPAddr, cfg.HTTPAdvertiseAddr}
+			got := addrs{cfg.Addr, cfg.AdvertiseAddr, cfg.HTTPAddr, cfg.HTTPAdvertiseAddr, cfg.SQLAddr}
 			gotStr := got.String()
 			expStr := test.expected.String()
 

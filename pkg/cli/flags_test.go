@@ -368,56 +368,63 @@ func TestServerConnSettings(t *testing.T) {
 
 	f := startCmd.Flags()
 	testData := []struct {
-		args                     []string
-		expectedAddr             string
-		expectedAdvertiseAddr    string
-		expLocalityAdvertiseAddr string
+		args                  []string
+		expectedAddr          string
+		expectedAdvertiseAddr string
+		expSQLAddr            string
 	}{
-		{[]string{"start"}, ":" + base.DefaultPort, ":" + base.DefaultPort, "[]"},
-		{[]string{"start", "--listen-addr", "127.0.0.1"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[]"},
-		{[]string{"start", "--listen-addr", "192.168.0.111"}, "192.168.0.111:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort, "[]"},
-		{[]string{"start", "--listen-addr", ":12345"}, ":12345", ":12345", "[]"},
-		{[]string{"start", "--listen-addr", "127.0.0.1:12345"}, "127.0.0.1:12345", "127.0.0.1:12345", "[]"},
-		{[]string{"start", "--listen-addr", "127.0.0.1:12345", "--port", "55555"}, "127.0.0.1:55555", "127.0.0.1:55555", "[]"},
-		{[]string{"start", "--advertise-addr", "192.168.0.111"}, ":" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort, "[]"},
-		{[]string{"start", "--advertise-addr", "192.168.0.111:12345"}, ":" + base.DefaultPort, "192.168.0.111:12345", "[]"},
-		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111"}, "127.0.0.1:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort, "[]"},
-		{[]string{"start", "--listen-addr", "127.0.0.1:12345", "--advertise-addr", "192.168.0.111"}, "127.0.0.1:12345", "192.168.0.111:12345", "[]"},
-		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111:12345"}, "127.0.0.1:" + base.DefaultPort, "192.168.0.111:12345", "[]"},
-		{[]string{"start", "--listen-addr", "127.0.0.1:54321", "--advertise-addr", "192.168.0.111:12345"}, "127.0.0.1:54321", "192.168.0.111:12345", "[]"},
-		{[]string{"start", "--advertise-addr", "192.168.0.111", "--listen-addr", ":12345"}, ":12345", "192.168.0.111:12345", "[]"},
-		{[]string{"start", "--advertise-addr", "192.168.0.111:12345", "--listen-addr", ":54321"}, ":54321", "192.168.0.111:12345", "[]"},
+		{[]string{"start"}, ":" + base.DefaultPort, ":" + base.DefaultPort, "x"},
+		{[]string{"start", "--listen-addr", "127.0.0.1"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "x"},
+		{[]string{"start", "--listen-addr", "192.168.0.111"}, "192.168.0.111:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort, "x"},
+		{[]string{"start", "--listen-addr", ":"}, ":", ":", "x"},
+		{[]string{"start", "--listen-addr", "127.0.0.1:"}, "127.0.0.1:", "127.0.0.1:", "x"},
+		{[]string{"start", "--listen-addr", ":12345"}, ":12345", ":12345", "x"},
+		{[]string{"start", "--listen-addr", "127.0.0.1:12345"}, "127.0.0.1:12345", "127.0.0.1:12345", "x"},
+		{[]string{"start", "--listen-addr", "127.0.0.1:12345", "--port", "55555"}, "127.0.0.1:55555", "127.0.0.1:55555", "x"},
+
+		{[]string{"start", "--sql-addr", "127.0.0.1"}, ":" + base.DefaultPort, ":" + base.DefaultPort, "127.0.0.1:" + base.DefaultSQLPort},
+		{[]string{"start", "--sql-addr", ":1234"}, ":" + base.DefaultPort, ":" + base.DefaultPort, ":1234"},
+		{[]string{"start", "--sql-addr", "127.0.0.1:1234"}, ":" + base.DefaultPort, ":" + base.DefaultPort, "127.0.0.1:1234"},
+		{[]string{"start", "--sql-addr", "[::2]"}, ":" + base.DefaultPort, ":" + base.DefaultPort, "[::2]:" + base.DefaultSQLPort},
+		{[]string{"start", "--sql-addr", "[::2]:1234"}, ":" + base.DefaultPort, ":" + base.DefaultPort, "[::2]:1234"},
+
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--sql-addr", "127.0.0.2"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "127.0.0.2:" + base.DefaultSQLPort},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--sql-addr", ":1234"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:1234"},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--sql-addr", "127.0.0.2:1234"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "127.0.0.2:1234"},
+		{[]string{"start", "--listen-addr", "[::2]", "--sql-addr", ":1234"}, "[::2]:" + base.DefaultPort, "[::2]:" + base.DefaultPort, "[::2]:1234"},
+
+		{[]string{"start", "--advertise-addr", "192.168.0.111"}, ":" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort, "x"},
+		{[]string{"start", "--advertise-addr", "192.168.0.111:12345"}, ":" + base.DefaultPort, "192.168.0.111:12345", "x"},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111"}, "127.0.0.1:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort, "x"},
+		{[]string{"start", "--listen-addr", "127.0.0.1:12345", "--advertise-addr", "192.168.0.111"}, "127.0.0.1:12345", "192.168.0.111:12345", "x"},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111:12345"}, "127.0.0.1:" + base.DefaultPort, "192.168.0.111:12345", "x"},
+		{[]string{"start", "--listen-addr", "127.0.0.1:54321", "--advertise-addr", "192.168.0.111:12345"}, "127.0.0.1:54321", "192.168.0.111:12345", "x"},
+		{[]string{"start", "--advertise-addr", "192.168.0.111", "--listen-addr", ":12345"}, ":12345", "192.168.0.111:12345", "x"},
+		{[]string{"start", "--advertise-addr", "192.168.0.111:12345", "--listen-addr", ":54321"}, ":54321", "192.168.0.111:12345", "x"},
 		// confirm hostnames will work
-		{[]string{"start", "--listen-addr", "my.host.name"}, "my.host.name:" + base.DefaultPort, "my.host.name:" + base.DefaultPort, "[]"},
-		{[]string{"start", "--listen-addr", "myhostname"}, "myhostname:" + base.DefaultPort, "myhostname:" + base.DefaultPort, "[]"},
+		{[]string{"start", "--listen-addr", "my.host.name"}, "my.host.name:" + base.DefaultPort, "my.host.name:" + base.DefaultPort, "x"},
+		{[]string{"start", "--listen-addr", "myhostname"}, "myhostname:" + base.DefaultPort, "myhostname:" + base.DefaultPort, "x"},
 		// confirm IPv6 works too
-		{[]string{"start", "--listen-addr", "[::1]"}, "[::1]:" + base.DefaultPort, "[::1]:" + base.DefaultPort, "[]"},
+		{[]string{"start", "--listen-addr", "[::1]"}, "[::1]:" + base.DefaultPort, "[::1]:" + base.DefaultPort, "x"},
 		{[]string{"start", "--listen-addr", "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]"},
-			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort, "[]"},
+			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort, "x"},
 
 		// Backward-compatibility flag combinations.
-		{[]string{"start", "--host", "192.168.0.111"}, "192.168.0.111:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort, "[]"},
-		{[]string{"start", "--port", "12345"}, ":12345", ":12345", "[]"},
-		{[]string{"start", "--advertise-host", "192.168.0.111"}, ":" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort, "[]"},
-		{[]string{"start", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"}, ":" + base.DefaultPort, "192.168.0.111:12345", "[]"},
-		{[]string{"start", "--listen-addr", "[::1]"}, "[::1]:" + base.DefaultPort, "[::1]:" + base.DefaultPort, "[]"},
-		{[]string{"start", "--listen-addr", "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]", "[]"},
-			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort, "[]"},
-		{[]string{"start", "--listen-addr", "127.0.0.1", "--port", "12345"}, "127.0.0.1:12345", "127.0.0.1:12345", "[]"},
-		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--port", "12345"}, "127.0.0.1:12345", "192.168.0.111:12345", "[]"},
-		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--port", "12345"}, "127.0.0.1:12345", "192.168.0.111:12345", "[]"},
-		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"}, "127.0.0.1:" + base.DefaultPort, "192.168.0.111:12345", "[]"},
-		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--port", "54321", "--advertise-port", "12345"}, "127.0.0.1:54321", "192.168.0.111:12345", "[]"},
-		{[]string{"start", "--advertise-addr", "192.168.0.111", "--port", "12345"}, ":12345", "192.168.0.111:12345", "[]"},
-		{[]string{"start", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"}, ":" + base.DefaultPort, "192.168.0.111:12345", "[]"},
-		{[]string{"start", "--advertise-addr", "192.168.0.111", "--port", "54321", "--advertise-port", "12345"}, ":54321", "192.168.0.111:12345", "[]"},
-
-		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@235.0.0.5"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp 235.0.0.5:26257} zone=1}]"},
-		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@235.0.0.5,zone=2@123.0.0.5"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp 235.0.0.5:26257} zone=1} {{tcp 123.0.0.5:26257} zone=2}]"},
-		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@235.0.0.5:1234"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp 235.0.0.5:1234} zone=1}]"},
-		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@[::2]"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp [::2]:26257} zone=1}]"},
-		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@[::2],zone=2@123.0.0.5"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp [::2]:26257} zone=1} {{tcp 123.0.0.5:26257} zone=2}]"},
-		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@[::2]:1234"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp [::2]:1234} zone=1}]"},
+		{[]string{"start", "--host", "192.168.0.111"}, "192.168.0.111:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort, "x"},
+		{[]string{"start", "--port", "12345"}, ":12345", ":12345", "x"},
+		{[]string{"start", "--advertise-host", "192.168.0.111"}, ":" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort, "x"},
+		{[]string{"start", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"}, ":" + base.DefaultPort, "192.168.0.111:12345", "x"},
+		{[]string{"start", "--listen-addr", "[::1]"}, "[::1]:" + base.DefaultPort, "[::1]:" + base.DefaultPort, "x"},
+		{[]string{"start", "--listen-addr", "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]", "x"},
+			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort, "x"},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--port", "12345"}, "127.0.0.1:12345", "127.0.0.1:12345", "x"},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--port", "12345"}, "127.0.0.1:12345", "192.168.0.111:12345", "x"},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--port", "12345"}, "127.0.0.1:12345", "192.168.0.111:12345", "x"},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"}, "127.0.0.1:" + base.DefaultPort, "192.168.0.111:12345", "x"},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--port", "54321", "--advertise-port", "12345"}, "127.0.0.1:54321", "192.168.0.111:12345", "x"},
+		{[]string{"start", "--advertise-addr", "192.168.0.111", "--port", "12345"}, ":12345", "192.168.0.111:12345", "x"},
+		{[]string{"start", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"}, ":" + base.DefaultPort, "192.168.0.111:12345", "x"},
+		{[]string{"start", "--advertise-addr", "192.168.0.111", "--port", "54321", "--advertise-port", "12345"}, ":54321", "192.168.0.111:12345", "x"},
 	}
 
 	for i, td := range testData {
@@ -427,7 +434,9 @@ func TestServerConnSettings(t *testing.T) {
 				t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
 			}
 
-			extraServerFlagInit()
+			if err := extraServerFlagInit(startCmd); err != nil {
+				t.Fatal(err)
+			}
 			if td.expectedAddr != serverCfg.Addr {
 				t.Errorf("%d. serverCfg.Addr expected '%s', but got '%s'. td.args was '%#v'.",
 					i, td.expectedAddr, serverCfg.Addr, td.args)
@@ -435,6 +444,57 @@ func TestServerConnSettings(t *testing.T) {
 			if td.expectedAdvertiseAddr != serverCfg.AdvertiseAddr {
 				t.Errorf("%d. serverCfg.AdvertiseAddr expected '%s', but got '%s'. td.args was '%#v'.",
 					i, td.expectedAdvertiseAddr, serverCfg.AdvertiseAddr, td.args)
+			}
+
+			if td.expSQLAddr == "x" && serverCfg.SplitListenSQL {
+				t.Errorf("%d. expected combined RPC/SQL listen, found split SQL address", i)
+			}
+			if td.expSQLAddr != "x" {
+				if !serverCfg.SplitListenSQL {
+					t.Errorf("%d. expected split RPC/SQL listen, found combined", i)
+				}
+				if td.expSQLAddr != serverCfg.SQLAddr {
+					t.Errorf("%d. serverCfg.SQLAddr expected '%s', got '%s'. td.args was '%#v'.",
+						i, td.expSQLAddr, serverCfg.SQLAddr, td.args)
+				}
+			}
+		})
+	}
+}
+
+func TestLocalityAdvAddrFlag(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Avoid leaking configuration changes after the tests end.
+	defer initCLIDefaults()
+
+	f := startCmd.Flags()
+	testData := []struct {
+		args                     []string
+		expLocalityAdvertiseAddr string
+	}{
+		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@235.0.0.5"},
+			"[{{tcp 235.0.0.5:26257} zone=1}]"},
+		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@235.0.0.5,zone=2@123.0.0.5"},
+			"[{{tcp 235.0.0.5:26257} zone=1} {{tcp 123.0.0.5:26257} zone=2}]"},
+		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@235.0.0.5:1234"},
+			"[{{tcp 235.0.0.5:1234} zone=1}]"},
+		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@[::2]"},
+			"[{{tcp [::2]:26257} zone=1}]"},
+		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@[::2],zone=2@123.0.0.5"},
+			"[{{tcp [::2]:26257} zone=1} {{tcp 123.0.0.5:26257} zone=2}]"},
+		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@[::2]:1234"},
+			"[{{tcp [::2]:1234} zone=1}]"},
+	}
+
+	for i, td := range testData {
+		t.Run(strings.Join(td.args, " "), func(t *testing.T) {
+			initCLIDefaults()
+			if err := f.Parse(td.args); err != nil {
+				t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
+			}
+			if err := extraServerFlagInit(startCmd); err != nil {
+				t.Fatal(err)
 			}
 			var locAddrStr strings.Builder
 			locAddrStr.WriteString("[")
@@ -591,7 +651,7 @@ func TestHttpHostFlagValue(t *testing.T) {
 			t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
 		}
 
-		extraServerFlagInit()
+		extraServerFlagInit(startCmd)
 		if td.expected != serverCfg.HTTPAddr {
 			t.Errorf("%d. serverCfg.HTTPAddr expected '%s', but got '%s'. td.args was '%#v'.", i, td.expected, serverCfg.HTTPAddr, td.args)
 		}

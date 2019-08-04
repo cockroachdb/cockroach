@@ -840,6 +840,7 @@ type listenerInfo struct {
 	listen    string // the (RPC) listen address
 	advertise string // equals `listen` unless --advertise-addr is used
 	http      string // the HTTP endpoint
+	sql       string // the SQL endpoint, equals `listen` unless --sql-addr is used
 }
 
 // Iter returns a mapping of file names to desired contents.
@@ -848,6 +849,7 @@ func (li listenerInfo) Iter() map[string]string {
 		"cockroach.advertise-addr": li.advertise,
 		"cockroach.http-addr":      li.http,
 		"cockroach.listen-addr":    li.listen,
+		"cockroach.sql-addr":       li.sql,
 	}
 }
 
@@ -1140,7 +1142,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
 	// below when the server has initialized.
-	pgL, startRPCServer, err := s.startServeRPC(ctx, workersCtx)
+	pgL, startRPCServer, err := s.startListenRPCAndSQL(ctx, workersCtx)
 	if err != nil {
 		return err
 	}
@@ -1232,6 +1234,7 @@ func (s *Server) Start(ctx context.Context) error {
 		advertise: s.cfg.AdvertiseAddr,
 		http:      s.cfg.HTTPAdvertiseAddr,
 		listen:    s.cfg.Addr,
+		sql:       s.cfg.SQLAddr,
 	}.Iter()
 
 	for _, storeSpec := range s.cfg.Stores.Specs {
@@ -1416,7 +1419,7 @@ func (s *Server) Start(ctx context.Context) error {
 	})
 
 	// We can now add the node registry.
-	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAdvertiseAddr)
+	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAdvertiseAddr, s.cfg.SQLAdvertiseAddr)
 
 	// Begin recording runtime statistics.
 	s.startSampleEnvironment(ctx, DefaultMetricsSampleInterval)
@@ -1462,7 +1465,13 @@ func (s *Server) Start(ctx context.Context) error {
 
 	log.Infof(ctx, "starting %s server at %s (use: %s)",
 		s.cfg.HTTPRequestScheme(), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
-	log.Infof(ctx, "starting grpc/postgres server at %s", s.cfg.Addr)
+	rpcConnType := "grpc/postgres"
+	if s.cfg.SplitListenSQL {
+		rpcConnType = "grpc"
+		log.Infof(ctx, "starting postgres server at %s", s.cfg.SQLAddr)
+		log.Infof(ctx, "advertising SQL server at %s", s.cfg.SQLAdvertiseAddr)
+	}
+	log.Infof(ctx, "starting %s server at %s", rpcConnType, s.cfg.Addr)
 	log.Infof(ctx, "advertising CockroachDB node at %s", s.cfg.AdvertiseAddr)
 
 	log.Event(ctx, "accepting connections")
@@ -1595,20 +1604,33 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
-// startServeRPC starts the RPC and SQL listeners.
+// startListenRPCAndSQL starts the RPC and SQL listeners.
 // It returns the SQL listener, which can be used
 // to start the SQL server when initialization has completed.
 // It also returns a function that starts the RPC server,
 // when the cluster is known to have bootstrapped or
 // when waiting for init().
-func (s *Server) startServeRPC(
+func (s *Server) startListenRPCAndSQL(
 	ctx, workersCtx context.Context,
 ) (sqlListener net.Listener, startRPCServer func(ctx context.Context), err error) {
-	ln, err := listen(ctx, &s.cfg.Addr, &s.cfg.AdvertiseAddr, "rpc/sql")
+	rpcChanName := "rpc/sql"
+	if s.cfg.SplitListenSQL {
+		rpcChanName = "rpc"
+	}
+	ln, err := listen(ctx, &s.cfg.Addr, &s.cfg.AdvertiseAddr, rpcChanName)
 	if err != nil {
 		return nil, nil, err
 	}
 	log.Eventf(ctx, "listening on port %s", s.cfg.Addr)
+
+	var pgL net.Listener
+	if s.cfg.SplitListenSQL {
+		pgL, err = listen(ctx, &s.cfg.SQLAddr, &s.cfg.SQLAdvertiseAddr, "sql")
+		if err != nil {
+			return nil, nil, err
+		}
+		log.Eventf(ctx, "listening on sql port %s", s.cfg.SQLAddr)
+	}
 
 	// The following code is a specialization of util/net.go's ListenAndServe
 	// which adds pgwire support. A single port is used to serve all protocols
@@ -1637,9 +1659,13 @@ func (s *Server) startServeRPC(
 
 	m := cmux.New(ln)
 
-	pgL := m.Match(func(r io.Reader) bool {
-		return pgwire.Match(r)
-	})
+	if !s.cfg.SplitListenSQL {
+		// If the pg port is split, it will be opened above. Otherwise,
+		// we make it hang off the RPC listener via cmux here.
+		pgL = m.Match(func(r io.Reader) bool {
+			return pgwire.Match(r)
+		})
+	}
 
 	anyL := m.Match(cmux.Any())
 

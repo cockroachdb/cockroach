@@ -42,7 +42,9 @@ import (
 // - the underlying context parameters must receive defaults in
 //   initCLIDefaults() even when they are otherwise overridden by the
 //   flags logic, because some tests to not use the flag logic at all.
-var serverListenPort, serverAdvertiseAddr, serverAdvertisePort string
+var serverListenPort string
+var serverSQLAddr, serverSQLPort string
+var serverAdvertiseAddr, serverAdvertisePort string
 var serverHTTPAddr, serverHTTPPort string
 var localityAdvertiseHosts localityList
 
@@ -50,6 +52,10 @@ var localityAdvertiseHosts localityList
 // defined above.
 func initPreFlagsDefaults() {
 	serverListenPort = base.DefaultPort
+
+	serverSQLAddr = ""
+	serverSQLPort = base.DefaultSQLPort
+
 	serverAdvertiseAddr = ""
 	serverAdvertisePort = ""
 
@@ -197,7 +203,7 @@ func init() {
 	for _, cmd := range StartCmds {
 		AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
 			// Finalize the configuration of network and logging settings.
-			if err := extraServerFlagInit(); err != nil {
+			if err := extraServerFlagInit(cmd); err != nil {
 				return err
 			}
 			return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
@@ -271,6 +277,7 @@ func init() {
 
 		// Server flags.
 		VarFlag(f, addrSetter{&startCtx.serverListenAddr, &serverListenPort}, cliflags.ListenAddr)
+		VarFlag(f, addrSetter{&serverSQLAddr, &serverSQLPort}, cliflags.ListenSQLAddr)
 		VarFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)
 		VarFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
 
@@ -577,9 +584,16 @@ func init() {
 	}
 }
 
-func extraServerFlagInit() error {
+func extraServerFlagInit(cmd *cobra.Command) error {
 	// Construct the main RPC listen address.
 	serverCfg.Addr = net.JoinHostPort(startCtx.serverListenAddr, serverListenPort)
+
+	// Fill in the defaults for --sql-addr.
+	if serverSQLAddr == "" {
+		serverSQLAddr = startCtx.serverListenAddr
+	}
+	serverCfg.SQLAddr = net.JoinHostPort(serverSQLAddr, serverSQLPort)
+	serverCfg.SplitListenSQL = cmd.Flags().Lookup(cliflags.ListenSQLAddr.Name).Changed
 
 	// Fill in the defaults for --advertise-addr.
 	if serverAdvertiseAddr == "" {
