@@ -161,7 +161,7 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 		}
 
 		if i > 0 {
-			serverArgs.JoinAddr = tc.Servers[0].ServingAddr()
+			serverArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
 		}
 		if err := tc.doAddServer(t, serverArgs); err != nil {
 			t.Fatal(err)
@@ -228,7 +228,7 @@ func checkServerArgsForCluster(
 // cluster's ReplicationMode.
 func (tc *TestCluster) AddServer(t testing.TB, serverArgs base.TestServerArgs) {
 	if serverArgs.JoinAddr == "" && len(tc.Servers) > 0 {
-		serverArgs.JoinAddr = tc.Servers[0].ServingAddr()
+		serverArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
 	}
 	if err := tc.doAddServer(t, serverArgs); err != nil {
 		t.Fatal(err)
@@ -665,7 +665,7 @@ func (tc *TestCluster) WaitForFullReplication() error {
 // store in the cluster.
 func (tc *TestCluster) WaitForNodeStatuses(t testing.TB) {
 	testutils.SucceedsSoon(t, func() error {
-		url := tc.Server(0).ServingAddr()
+		url := tc.Server(0).ServingRPCAddr()
 		nodeID := tc.Server(0).NodeID()
 		conn, err := tc.Server(0).RPCContext().GRPCDialNode(url, nodeID).Connect(context.Background())
 		if err != nil {

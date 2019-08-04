@@ -44,8 +44,10 @@ type TestServerArgs struct {
 	// is always set to true when the server is started via a TestCluster.
 	PartOfCluster bool
 
-	// Addr (if nonempty) is the address to use for the test server.
+	// Addr (if nonempty) is the RPC address to use for the test server.
 	Addr string
+	// SQLAddr (if nonempty) is the SQL address to use for the test server.
+	SQLAddr string
 	// HTTPAddr (if nonempty) is the HTTP address to use for the test server.
 	HTTPAddr string
 

@@ -86,7 +86,7 @@ func (t *parallelTest) getClient(nodeIdx, clientIdx int) *gosql.DB {
 	for len(t.clients[nodeIdx]) <= clientIdx {
 		// Add a client.
 		pgURL, cleanupFunc := sqlutils.PGUrl(t.T,
-			t.cluster.Server(nodeIdx).ServingAddr(),
+			t.cluster.Server(nodeIdx).ServingSQLAddr(),
 			"TestParallel",
 			url.User(security.RootUser))
 		db, err := gosql.Open("postgres", pgURL.String())

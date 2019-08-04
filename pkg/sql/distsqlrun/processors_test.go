@@ -573,7 +573,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 	}
 
 	pgURL, cleanup := sqlutils.PGUrl(
-		t, tc.Server(0).ServingAddr(), t.Name(), url.User(security.RootUser))
+		t, tc.Server(0).ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
 	pgURL.Path = `test`
 	pgxConfig, err := pgx.ParseConnectionString(pgURL.String())

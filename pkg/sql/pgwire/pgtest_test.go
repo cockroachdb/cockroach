@@ -39,7 +39,7 @@ func TestPGTest(t *testing.T) {
 		})
 		defer s.Stopper().Stop(ctx)
 
-		addr = s.Addr()
+		addr = s.ServingSQLAddr()
 		user = security.RootUser
 	}
 
