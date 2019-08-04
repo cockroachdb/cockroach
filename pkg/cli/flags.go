@@ -197,7 +197,9 @@ func init() {
 	for _, cmd := range StartCmds {
 		AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
 			// Finalize the configuration of network and logging settings.
-			extraServerFlagInit()
+			if err := extraServerFlagInit(); err != nil {
+				return err
+			}
 			return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
 		})
 	}
@@ -572,8 +574,11 @@ func init() {
 	}
 }
 
-func extraServerFlagInit() {
+func extraServerFlagInit() error {
+	// Construct the main RPC listen address.
 	serverCfg.Addr = net.JoinHostPort(startCtx.serverListenAddr, serverListenPort)
+
+	// Fill in the defaults for --advertise-addr.
 	if serverAdvertiseAddr == "" {
 		serverAdvertiseAddr = startCtx.serverListenAddr
 	}
@@ -581,16 +586,24 @@ func extraServerFlagInit() {
 		serverAdvertisePort = serverListenPort
 	}
 	serverCfg.AdvertiseAddr = net.JoinHostPort(serverAdvertiseAddr, serverAdvertisePort)
+
+	// Fill in the defaults for --http-addr.
 	if serverHTTPAddr == "" {
 		serverHTTPAddr = startCtx.serverListenAddr
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
+
+	// Fill the advertise port into the locality advertise addresses.
 	for i, addr := range localityAdvertiseHosts {
-		if !strings.Contains(localityAdvertiseHosts[i].Address.AddressField, ":") {
-			localityAdvertiseHosts[i].Address.AddressField = net.JoinHostPort(addr.Address.AddressField, serverAdvertisePort)
+		host, port, err := netutil.SplitHostPort(addr.Address.AddressField, serverAdvertisePort)
+		if err != nil {
+			return err
 		}
+		localityAdvertiseHosts[i].Address.AddressField = net.JoinHostPort(host, port)
 	}
 	serverCfg.LocalityAddresses = localityAdvertiseHosts
+
+	return nil
 }
 
 func extraClientFlagInit() {
