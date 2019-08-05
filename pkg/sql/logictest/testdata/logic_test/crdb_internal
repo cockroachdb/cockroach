@@ -394,9 +394,6 @@ true
 user testuser
 
 query error insufficient privilege
-select crdb_internal.force_retry(interval '0s')
-
-query error insufficient privilege
 select crdb_internal.force_panic('foo')
 
 query error insufficient privilege
