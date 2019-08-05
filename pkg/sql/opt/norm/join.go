@@ -141,7 +141,7 @@ func (c *CustomFuncs) CanMapJoinOpFilter(
 	// For CanMapJoinOpFilter to be true, each column in src must map to at
 	// least one column in dst.
 	for i, ok := scalarProps.OuterCols.Next(0); ok; i, ok = scalarProps.OuterCols.Next(i + 1) {
-		eqCols := c.GetEquivColsWithEquivType(opt.ColumnID(i), filters)
+		eqCols := c.GetEquivColsWithEquivType(i, filters)
 		if !eqCols.Intersects(c.OutputCols(dst)) {
 			return false
 		}
@@ -186,7 +186,7 @@ func (c *CustomFuncs) MapJoinOpFilter(
 	var colMap util.FastIntMap
 	outerCols := src.ScalarProps(c.mem).OuterCols
 	for srcCol, ok := outerCols.Next(0); ok; srcCol, ok = outerCols.Next(srcCol + 1) {
-		eqCols := c.GetEquivColsWithEquivType(opt.ColumnID(srcCol), filters)
+		eqCols := c.GetEquivColsWithEquivType(srcCol, filters)
 		eqCols.IntersectionWith(c.OutputCols(dst))
 		if eqCols.Contains(srcCol) {
 			colMap.Set(int(srcCol), int(srcCol))

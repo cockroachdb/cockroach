@@ -276,7 +276,7 @@ func remapProvided(provided opt.Ordering, fds *props.FuncDepSet, outCols opt.Col
 				copy(result, provided)
 			}
 			result = append(result, opt.MakeOrderingColumn(
-				opt.ColumnID(remappedCol), provided[i].Descending(),
+				remappedCol, provided[i].Descending(),
 			))
 		}
 		closure.Add(col)

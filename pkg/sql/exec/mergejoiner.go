@@ -370,7 +370,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 				ColType:     cType,
 				Src:         batch.ColVec(cIdx),
 				Sel:         sel,
-				DestIdx:     uint64(destStartIdx),
+				DestIdx:     destStartIdx,
 				SrcStartIdx: uint16(groupStartIdx),
 				SrcEndIdx:   uint16(groupEndIdx),
 			},
@@ -378,7 +378,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 		if sel != nil {
 			bufferedGroup.ColVec(cIdx).Nulls().ExtendWithSel(
 				batch.ColVec(cIdx).Nulls(),
-				uint64(destStartIdx),
+				destStartIdx,
 				uint16(groupStartIdx),
 				uint16(groupLength),
 				sel,
@@ -386,7 +386,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 		} else {
 			bufferedGroup.ColVec(cIdx).Nulls().Extend(
 				batch.ColVec(cIdx).Nulls(),
-				uint64(destStartIdx),
+				destStartIdx,
 				uint16(groupStartIdx),
 				uint16(groupLength),
 			)

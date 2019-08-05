@@ -847,7 +847,7 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 	groupingColIdx := make([]exec.ColumnOrdinal, 0, groupingCols.Len())
 	for i, ok := groupingCols.Next(0); ok; i, ok = groupingCols.Next(i + 1) {
 		ep.outputCols.Set(int(i), len(groupingColIdx))
-		groupingColIdx = append(groupingColIdx, input.getColumnOrdinal(opt.ColumnID(i)))
+		groupingColIdx = append(groupingColIdx, input.getColumnOrdinal(i))
 	}
 
 	aggregations := *groupBy.Child(1).(*memo.AggregationsExpr)
