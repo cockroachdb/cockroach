@@ -560,6 +560,31 @@ func runStart(cmd *cobra.Command, args []string) error {
 			}
 		}
 
+		// If the invoker has requested an URL update, do it now that
+		// the server is ready to accept SQL connections.
+		// (Note: as stated above, ReadyFn is called after the server
+		// has started listening on its socket, but possibly before
+		// the cluster has been initialized and can start processing requests.
+		// This is OK for SQL clients, as the connection will be accepted
+		// by the network listener and will just wait/suspend until
+		// the cluster initializes, at which point it will be picked up
+		// and let the client go through, transparently.)
+		if startCtx.listeningURLFile != "" {
+			log.Infof(ctx, "listening URL file: %s", startCtx.listeningURLFile)
+			// (Re-)compute the client connection URL. We cannot do this
+			// earlier (e.g. above, in the runStart function) because
+			// at this time the address and port have not been resolved yet.
+			pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
+			if err != nil {
+				log.Errorf(ctx, "failed computing the URL: %v", err)
+				return
+			}
+
+			if err = ioutil.WriteFile(startCtx.listeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL)), 0644); err != nil {
+				log.Errorf(ctx, "failed writing the URL: %v", err)
+			}
+		}
+
 		if waitForInit {
 			log.Shout(ctx, log.Severity_INFO,
 				"initial startup completed.\n"+
@@ -685,12 +710,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 				s.PeriodicallyCheckForUpdates(ctx)
 			}
 
-			// Compute the client connection URL.
-			pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
-			if err != nil {
-				return err
-			}
-
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
 			var buf bytes.Buffer
@@ -699,7 +718,17 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			fmt.Fprintf(tw, "CockroachDB node starting at %s (took %0.1fs)\n", timeutil.Now(), timeutil.Since(tBegin).Seconds())
 			fmt.Fprintf(tw, "build:\t%s %s @ %s (%s)\n", info.Distribution, info.Tag, info.Time, info.GoVersion)
 			fmt.Fprintf(tw, "webui:\t%s\n", serverCfg.AdminURL())
-			fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
+
+			// (Re-)compute the client connection URL. We cannot do this
+			// earlier (e.g. above, in the runStart function) because
+			// at this time the address and port have not been resolved yet.
+			pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
+			if err != nil {
+				log.Errorf(ctx, "failed computing the URL: %v", err)
+			} else {
+				fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
+			}
+
 			fmt.Fprintf(tw, "client flags:\t%s\n", clientFlags())
 			if len(serverCfg.SocketFile) != 0 {
 				fmt.Fprintf(tw, "socket:\t%s\n", serverCfg.SocketFile)
@@ -750,21 +779,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			log.Infof(ctx, "node startup completed:\n%s", msg)
 			if !startCtx.inBackground && !log.LoggingToStderr(log.Severity_INFO) {
 				fmt.Print(msg)
-			}
-
-			// If the invoker has requested an URL update, do it now that
-			// the server is ready to accept SQL connections. We do this
-			// here and not in ReadyFn because we need to wait for bootstrap
-			// to complete.
-			if startCtx.listeningURLFile != "" {
-				log.Infof(ctx, "listening URL file: %s", startCtx.listeningURLFile)
-				pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
-				if err == nil {
-					err = ioutil.WriteFile(startCtx.listeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL)), 0644)
-				}
-				if err != nil {
-					log.Error(ctx, err)
-				}
 			}
 
 			return nil
