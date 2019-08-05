@@ -605,6 +605,7 @@ func Example_sql() {
 	// sql -e copy t.f from stdin
 	// woops! COPY has confused this client! Suggestion: use 'psql' for COPY
 	// user ls --echo-sql
+	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
 	// > SHOW USERS
 	// user_name
 	// root
@@ -1415,57 +1416,80 @@ func Example_user() {
 
 	// Output:
 	// user ls
+	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
 	// user_name
 	// root
 	// user ls --format=table
+	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
 	//   user_name
 	// +-----------+
 	//   root
 	// (1 row)
 	// user ls --format=tsv
+	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
 	// user_name
 	// root
 	// user set FOO
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 1
 	// sql -e create user if not exists 'FOO'
 	// CREATE USER 0
 	// user set Foo
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 0
 	// user set fOo
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 0
 	// user set foO
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 0
 	// user set foo
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 0
 	// user set _foo
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 1
 	// user set f_oo
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 1
 	// user set foo_
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 1
 	// user set ,foo
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// pq: username ",foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set f,oo
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// pq: username "f,oo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set foo,
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// pq: username "foo," invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set 0foo
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// pq: username "0foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set foo0
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 1
 	// user set f0oo
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 1
 	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// pq: username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 1
 	// user set Ομηρος
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 1
 	// user set and
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 1
 	// user set table
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 1
 	// user ls --format=table
+	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
 	//                              user_name
 	// +-----------------------------------------------------------------+
 	//   _foo
@@ -1481,8 +1505,10 @@ func Example_user() {
 	//   ομηρος
 	// (11 rows)
 	// user rm foo
+	// warning: This command is deprecated. Use DROP USER or DROP ROLE in a SQL session.
 	// DROP USER 1
 	// user ls --format=table
+	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
 	//                              user_name
 	// +-----------------------------------------------------------------+
 	//   _foo
@@ -1529,7 +1555,7 @@ Available Commands:
   quit              drain and shutdown node
 
   sql               open a sql shell
-  user              get, set, list and remove users
+  user              get, set, list and remove users (deprecated)
   node              list, inspect or remove nodes
   dump              dump sql tables
 
