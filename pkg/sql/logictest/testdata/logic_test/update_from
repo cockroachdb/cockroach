@@ -168,7 +168,6 @@ a  b    c    a  b    a  c
 1  200  300  1  200  1  300
 2  300  400  2  300  2  400
 
-
 # Make sure the FROM clause cannot reference the target table.
 statement error no data source matches prefix: abc
 UPDATE abc SET a = other.a FROM (SELECT abc.a FROM abc AS x) AS other WHERE abc.a=other.a

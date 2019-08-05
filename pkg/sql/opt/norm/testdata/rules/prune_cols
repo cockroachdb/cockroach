@@ -2640,3 +2640,42 @@ project
            └── projections
                 ├── CASE WHEN rowid IS NULL THEN column12 ELSE d END [type=int, outer=(12,17,21)]
                 └── CASE WHEN rowid IS NULL THEN column13 ELSE rowid END [type=int, outer=(13,21)]
+
+# Make sure the passthrough columns of an UPDATE ... FROM query are pruned.
+opt
+UPDATE abcde
+SET
+  b=family.b, c = family.c
+FROM
+  family
+WHERE
+  abcde.a=family.a
+RETURNING
+  abcde.a, family.b, family.c
+----
+update abcde
+ ├── columns: a:1(int!null) b:12(int) c:13(int)
+ ├── fetch columns: abcde.a:6(int) abcde.b:7(int) abcde.c:8(int) abcde.d:9(int) abcde.e:10(int)
+ ├── update-mapping:
+ │    ├──  "family".b:12 => abcde.b:2
+ │    └──  "family".c:13 => abcde.c:3
+ ├── side-effects, mutations
+ ├── key: (1)
+ ├── fd: (1)-->(12,13)
+ └── inner-join (merge)
+      ├── columns: abcde.a:6(int!null) abcde.b:7(int) abcde.c:8(int) abcde.d:9(int) abcde.e:10(int) "family".a:11(int!null) "family".b:12(int) "family".c:13(int)
+      ├── left ordering: +6
+      ├── right ordering: +11
+      ├── key: (11)
+      ├── fd: (6)-->(7-10), (7,8)~~>(6,9,10), (11)-->(12,13), (6)==(11), (11)==(6)
+      ├── scan abcde
+      │    ├── columns: abcde.a:6(int!null) abcde.b:7(int) abcde.c:8(int) abcde.d:9(int) abcde.e:10(int)
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7-10), (7,8)~~>(6,9,10)
+      │    └── ordering: +6
+      ├── scan "family"
+      │    ├── columns: "family".a:11(int!null) "family".b:12(int) "family".c:13(int)
+      │    ├── key: (11)
+      │    ├── fd: (11)-->(12,13)
+      │    └── ordering: +11
+      └── filters (true)
