@@ -326,7 +326,7 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 
 	private := mb.makeMutationPrivate(returning != nil)
 	for _, col := range mb.extraAccessibleCols {
-		if col.id != 0 && !col.hidden {
+		if col.id != 0 {
 			private.PassthroughCols = append(private.PassthroughCols, col.id)
 		}
 	}
