@@ -2258,7 +2258,7 @@ create_stats_option:
   THROTTLING FCONST
   {
     /* SKIP DOC */
-    value, _ := constant.Float64Val($2.numVal().Value)
+    value, _ := constant.Float64Val($2.numVal().AsConstantValue())
     if value < 0.0 || value >= 1.0 {
       sqllex.Error("THROTTLING fraction must be between 0 and 1")
       return 1
@@ -4687,7 +4687,7 @@ numeric_only:
 | '-' FCONST
   {
     n := $2.numVal()
-    n.Negative = true
+    n.SetNegative()
     $$.val = n
   }
 | signed_iconst
@@ -6021,7 +6021,7 @@ select_limit_value:
    }
  | /* EMPTY */
    {
-     $$.val = &tree.NumVal{Value: constant.MakeInt64(1)}
+     $$.val = tree.NewNumVal(constant.MakeInt64(1), "" /* origString */, false /* negative */)
    }
 
 // noise words
@@ -8715,7 +8715,7 @@ signed_iconst:
 | '-' ICONST
   {
     n := $2.numVal()
-    n.Negative = true
+    n.SetNegative()
     $$.val = n
   }
 
