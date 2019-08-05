@@ -86,7 +86,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 
 		// Convert the datum into a physical type and write it out.
 		if res == tree.DNull {
-			batch.ColVec(b.outputIdx).Nulls().SetNull(uint16(rowIdx))
+			batch.ColVec(b.outputIdx).Nulls().SetNull(rowIdx)
 		} else {
 			converted, err := b.converter(res)
 			if err != nil {

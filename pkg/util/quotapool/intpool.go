@@ -256,7 +256,7 @@ func (p *IntPool) Capacity() uint64 {
 // decCapacity decrements the capacity by c.
 func (p *IntPool) decCapacity(c uint64) {
 	// This is how you decrement from a uint64.
-	atomic.AddUint64(&p.capacity, ^uint64(c-1))
+	atomic.AddUint64(&p.capacity, ^(c - 1))
 	// Wake up the request at the front of the queue. The decrement above may race
 	// with an ongoing request (which is why it's an atomic access), but in any
 	// case that request is evaluated again.

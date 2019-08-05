@@ -116,7 +116,7 @@ func StreamingGroupingColOrdering(
 			// The rest of the ordering is not useful.
 			return ordering[:i]
 		}
-		ordering[i] = opt.MakeOrderingColumn(opt.ColumnID(colID), inputOrdering.Columns[i].Descending)
+		ordering[i] = opt.MakeOrderingColumn(colID, inputOrdering.Columns[i].Descending)
 	}
 	return ordering
 }

@@ -267,7 +267,7 @@ func ExtractValuesFromFilter(on FiltersExpr, cols opt.ColSet) map[opt.ColumnID]t
 		if !ok || !cols.Contains(col) {
 			continue
 		}
-		vals[opt.ColumnID(col)] = val
+		vals[col] = val
 	}
 	return vals
 }
@@ -281,7 +281,7 @@ func ExtractConstantFilter(on FiltersExpr, cols opt.ColSet) map[opt.ColumnID]Fil
 		if !ok || !cols.Contains(col) {
 			continue
 		}
-		vals[opt.ColumnID(col)] = on[i]
+		vals[col] = on[i]
 	}
 	return vals
 }

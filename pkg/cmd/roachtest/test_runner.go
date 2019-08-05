@@ -567,7 +567,7 @@ func (r *testRunner) runTest(
 
 			if teamCity {
 				shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
-					t.Name(), teamCityEscape(string(output)), t.Name(),
+					t.Name(), teamCityEscape(output), t.Name(),
 				)
 
 				// Copy a snapshot of the testrunner's log to the test's artifacts dir
