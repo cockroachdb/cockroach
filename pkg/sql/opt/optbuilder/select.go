@@ -474,7 +474,7 @@ func (b *Builder) addCheckConstraintsToScan(scope *scope, tabMeta *opt.TableMeta
 		if !checkConstraint.Validated {
 			continue
 		}
-		expr, err := parser.ParseExpr(string(checkConstraint.Constraint))
+		expr, err := parser.ParseExpr(checkConstraint.Constraint)
 		if err != nil {
 			panic(err)
 		}

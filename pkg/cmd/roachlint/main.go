@@ -13,6 +13,7 @@ package main
 import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/hash"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/timer"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/unconvert"
 	"golang.org/x/tools/go/analysis/multichecker"
 )
 
@@ -20,5 +21,6 @@ func main() {
 	multichecker.Main(
 		hash.Analyzer,
 		timer.Analyzer,
+		unconvert.Analyzer,
 	)
 }
