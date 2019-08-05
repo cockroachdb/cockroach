@@ -365,7 +365,7 @@ func (ex *connExecutor) execBind(
 	}
 
 	columnFormatCodes := bindCmd.OutFormats
-	if len(bindCmd.OutFormats) == 1 {
+	if len(bindCmd.OutFormats) == 1 && numCols > 1 {
 		// Apply the format code to every column.
 		columnFormatCodes = make([]pgwirebase.FormatCode, numCols)
 		for i := 0; i < numCols; i++ {
