@@ -456,9 +456,6 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 
 func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
-	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
-	f.ctxDone = ctx.Done()
-
 	if f.isVectorized {
 		log.VEventf(ctx, 1, "setting up vectorize flow %d", f.id)
 		acc := f.EvalCtx.Mon.MakeBoundAccount()
@@ -490,6 +487,9 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 	log.VEventf(
 		ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
 	)
+
+	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
+	f.ctxDone = ctx.Done()
 
 	// Only register the flow if there will be inbound stream connections that
 	// need to look up this flow in the flow registry.

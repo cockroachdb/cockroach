@@ -280,7 +280,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					nil, /* output */
 					materializerMetadataSources,
 					nil, /* outputStatsToTrace */
-					cancelLocal,
+					func() context.CancelFunc { return cancelLocal },
 				)
 				require.NoError(t, err)
 				materializer.Start(ctxLocal)
