@@ -59,6 +59,7 @@ func (c *CustomFuncs) NeededMutationCols(private *memo.MutationPrivate) opt.ColS
 	addCols(private.UpdateCols)
 	addCols(private.CheckCols)
 	addCols(private.ReturnCols)
+	addCols(private.PassthroughCols)
 	if private.CanaryCol != 0 {
 		cols.Add(private.CanaryCol)
 	}
@@ -545,6 +546,12 @@ func (c *CustomFuncs) CanPruneMutationReturnCols(
 		}
 	}
 
+	for _, passthroughCol := range private.PassthroughCols {
+		if passthroughCol != 0 && !needed.Contains(passthroughCol) {
+			return true
+		}
+	}
+
 	return false
 }
 
@@ -557,14 +564,24 @@ func (c *CustomFuncs) PruneMutationReturnCols(
 ) *memo.MutationPrivate {
 	newPrivate := *private
 	newReturnCols := make(opt.ColList, len(private.ReturnCols))
+	newPassthroughCols := make(opt.ColList, 0, len(private.PassthroughCols))
 	tabID := c.mem.Metadata().TableMeta(private.Table).MetaID
 
+	// Prune away the ReturnCols that are unused.
 	for i := range private.ReturnCols {
 		if needed.Contains(tabID.ColumnID(i)) {
 			newReturnCols[i] = private.ReturnCols[i]
 		}
 	}
 
+	// Prune away the PassthroughCols that are unused.
+	for _, passthroughCol := range private.PassthroughCols {
+		if passthroughCol != 0 && needed.Contains(passthroughCol) {
+			newPassthroughCols = append(newPassthroughCols, passthroughCol)
+		}
+	}
+
 	newPrivate.ReturnCols = newReturnCols
+	newPrivate.PassthroughCols = newPassthroughCols
 	return &newPrivate
 }

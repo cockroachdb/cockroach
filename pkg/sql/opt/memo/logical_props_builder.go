@@ -1192,6 +1192,14 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 		}
 	}
 
+	// The output columns of the mutation will also include all
+	// columns it allowed to pass through.
+	for _, col := range private.PassthroughCols {
+		if col != 0 {
+			rel.OutputCols.Add(col)
+		}
+	}
+
 	// Not Null Columns
 	// ----------------
 	// A column should be marked as not-null if the target table column is not

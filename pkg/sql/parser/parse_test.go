@@ -1033,6 +1033,9 @@ func TestParse(t *testing.T) {
 		{`UPDATE a.b SET b = 3`},
 		{`UPDATE a.b@c SET b = 3`},
 		{`UPDATE a SET b = 3, c = DEFAULT`},
+		{`UPDATE a SET b = 3, c = DEFAULT FROM b`},
+		{`UPDATE a SET b = 3, c = DEFAULT FROM a AS other`},
+		{`UPDATE a SET b = 3, c = DEFAULT FROM a AS other, b`},
 		{`UPDATE a SET b = 3 + 4`},
 		{`UPDATE a SET (b, c) = (3, DEFAULT)`},
 		{`UPDATE a SET (b, c) = (SELECT 3, 4)`},
@@ -1045,6 +1048,7 @@ func TestParse(t *testing.T) {
 		{`UPDATE a SET b = 3 WHERE a = b RETURNING a, a + b`},
 		{`UPDATE a SET b = 3 WHERE a = b RETURNING NOTHING`},
 		{`UPDATE a SET b = 3 WHERE a = b ORDER BY c LIMIT d RETURNING e`},
+		{`UPDATE a SET b = 3 FROM other WHERE a = b ORDER BY c LIMIT d RETURNING e`},
 
 		{`UPDATE t AS "0" SET k = ''`},                 // "0" lost its quotes
 		{`SELECT * FROM "0" JOIN "0" USING (id, "0")`}, // last "0" lost its quotes.
@@ -3053,7 +3057,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`UPDATE foo SET (a, a.b) = (1, 2)`, 27792, ``},
 		{`UPDATE foo SET a.b = 1`, 27792, ``},
-		{`UPDATE foo SET x = y FROM a, b`, 7841, ``},
 		{`UPDATE Foo SET x.y = z`, 27792, ``},
 
 		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``},

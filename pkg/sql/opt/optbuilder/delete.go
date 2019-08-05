@@ -68,7 +68,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	//   ORDER BY <order-by> LIMIT <limit>
 	//
 	// All columns from the delete table will be projected.
-	mb.buildInputForUpdateOrDelete(inScope, del.Where, del.Limit, del.OrderBy)
+	mb.buildInputForDelete(inScope, del.Where, del.Limit, del.OrderBy)
 
 	// Build the final delete statement, including any returned expressions.
 	if resultsNeeded(del.Returning) {

@@ -1023,7 +1023,12 @@ func (node *Update) doc(p *PrettyCfg) pretty.Doc {
 	items = append(items,
 		node.With.docRow(p),
 		p.row("UPDATE", p.Doc(node.Table)),
-		p.row("SET", p.Doc(&node.Exprs)),
+		p.row("SET", p.Doc(&node.Exprs)))
+	if len(node.From) > 0 {
+		items = append(items,
+			p.row("FROM", p.Doc(&node.From)))
+	}
+	items = append(items,
 		node.Where.docRow(p),
 		node.OrderBy.docRow(p))
 	items = append(items, node.Limit.docTable(p)...)

@@ -1328,6 +1328,7 @@ func (ef *execFactory) ConstructUpdate(
 	updateColOrdSet exec.ColumnOrdinalSet,
 	returnColOrdSet exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
+	passthrough sqlbase.ResultColumns,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
@@ -1400,6 +1401,9 @@ func (ef *execFactory) ConstructUpdate(
 
 		returnCols = sqlbase.ResultColumnsFromColDescs(returnColDescs)
 
+		// Add the passthrough columns to the returning columns.
+		returnCols = append(returnCols, passthrough...)
+
 		// Update the rowIdxToRetIdx for the mutation. Update returns
 		// the non-mutation columns specified, in the same order they are
 		// defined in the table.
@@ -1436,6 +1440,7 @@ func (ef *execFactory) ConstructUpdate(
 			updateValues:   make(tree.Datums, len(ru.UpdateCols)),
 			updateColsIdx:  updateColsIdx,
 			rowIdxToRetIdx: rowIdxToRetIdx,
+			numPassthrough: len(passthrough),
 		},
 	}
 
