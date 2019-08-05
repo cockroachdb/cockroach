@@ -102,6 +102,38 @@ func (dsp *DistSQLPlanner) initRunners() {
 	}
 }
 
+// isRowCountSufficientForVectorized returns whether the vectorize row count
+// threshold is exceeded, and only if it is, the vectorized execution engine
+// will be used.
+func isRowCountSufficientForVectorized(
+	flows map[roachpb.NodeID]*distsqlpb.FlowSpec, rowCountThreshold uint64,
+) bool {
+	rowCountSoFar := uint64(0)
+	for _, flow := range flows {
+		for _, pspec := range flow.Processors {
+			if pspec.Core.TableReader != nil {
+				rowCountSoFar += pspec.Core.TableReader.RowCount
+			}
+		}
+	}
+	return rowCountSoFar > rowCountThreshold
+}
+
+// disableVectorize disables usage of the vectorized execution engine for
+// setupReq. It returns a function that restores the setting and that must be
+// deferred so that setting up of the flows happens with vectorize off.
+func disableVectorize(
+	evalCtx *extendedEvalContext, setupReq *distsqlpb.SetupFlowRequest,
+) (restoreSetting func()) {
+	setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
+	origMode := evalCtx.SessionData.VectorizeMode
+	evalCtx.SessionData.VectorizeMode = sessiondata.VectorizeOff
+	// Note that we need to restore the setting of evalCtx since it can be used
+	// in the future, but setupReq is used only once, so we don't need to restore
+	// it.
+	return func() { evalCtx.SessionData.VectorizeMode = origMode }
+}
+
 // setupFlows sets up all the flows specified in flows using the provided state.
 // It will first attempt to set up all remote flows using the dsp workers if
 // available or sequentially if not, and then finally set up the gateway flow,
@@ -131,6 +163,16 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(flows) > 1 {
 		resultChan = make(chan runnerResult, len(flows)-1)
 	}
+
+	// Check whether we anticipate enough data to justify the usage of the
+	// vectorized execution engine (if the amount of data is too small, then the
+	// overhead of conversion from row storage to columnar in-memory format and
+	// back will dominate the execution time).
+	if !isRowCountSufficientForVectorized(flows, evalCtx.SessionData.VectorizeRowCountThreshold) {
+		restoreSetting := disableVectorize(evalCtx, &setupReq)
+		defer restoreSetting()
+	}
+
 	// First check to see whether or not to even try vectorizing the flow. The
 	// goal here is to determine up front whether all of the flows can be
 	// vectorized. If any of them can't, turn off the setting.
@@ -171,13 +213,9 @@ func (dsp *DistSQLPlanner) setupFlows(
 					return nil, nil, err
 				}
 				// Vectorization is not supported for this flow, so we override the
-				// setting. Note that we need to restore the setting of evalCtx since
-				// it can be used in the future, but setupReq is used only once, so we
-				// don't need to restore it.
-				setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
-				origMode := evalCtx.SessionData.VectorizeMode
-				evalCtx.SessionData.VectorizeMode = sessiondata.VectorizeOff
-				defer func() { evalCtx.SessionData.VectorizeMode = origMode }()
+				// setting.
+				restoreSetting := disableVectorize(evalCtx, &setupReq)
+				defer restoreSetting()
 				break
 			}
 		}

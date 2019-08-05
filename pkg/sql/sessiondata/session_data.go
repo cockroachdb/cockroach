@@ -74,6 +74,9 @@ type SessionData struct {
 	// VectorizeMode indicates which kinds of queries to use vectorized execution
 	// engine for.
 	VectorizeMode VectorizeExecMode
+	// VectorizeRowCountThreshold indicates the row count upon exceeding of which
+	// the vectorized execution engine will be used if possible.
+	VectorizeRowCountThreshold uint64
 	// ForceSavepointRestart overrides the default SAVEPOINT behavior
 	// for compatibility with certain ORMs. When this flag is set,
 	// the savepoint name will no longer be compared against the magic

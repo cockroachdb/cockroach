@@ -1,0 +1,72 @@
+# LogicTest: 5node-dist-opt
+
+# Disable automatic stats.
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
+# Check that vectorize row count threshold is respected. The test relies on the
+# fact that DistSQL and vectorized execution engines output execution stats in
+# a different format.
+statement ok
+CREATE TABLE small (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO small SELECT g FROM generate_series(0, 100) g(g)
+
+statement ok
+ALTER TABLE small INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE SELECT count(*) FROM small]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkV9LwzAUxd_9FOE8KUTX7EXIk3-ehrDKNvFBimTNpRSSpuSmuDH63aUtohMm8_Gee38nP8gBTbC0NJ4Y-g0KhUQbQ0nMIQ7RdLCwO-hMom7aLg1xIVGGSNAHpDo5gsbGbB2tyFiKswwSlpKp3VjbxtqbuL9jb5yDxLo1DWtxDYm8S1osQ0OQiOGDRSRjtVCZggQn45xItSctMobEdp_o62R-cyue6gcUvUTo0rcYJ1MRtOrl-fL3VRWpMinEmTp2f8xflpv3Vf66vrw6y9GbnfDkQ9yLjslqkYnTkvP_SK6I29AwHQmeas76QoJsRdMvcuhiSc8xlOMz05iP3BhY4jRt1TQsmmk1CP6E1Z_w_Bdc9BefAQAA__8pGcZa
+
+statement ok
+SET vectorize_row_count_threshold = 1
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE SELECT count(*) FROM small]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkcFq4zAQhu_7FGZOu6DdWDnqtKWnXOKSpPRQTFHkwRXIktCMS0LwuxdZPSQtbdPjfKN_5ht0Ah86XOsBCdQjSGgFxBQMEoWUUXmw6g6gagHWx5EzbgWYkBDUCdiyQ1Cw03uHG9QdpkUNAjpkbd08NiY76HT8T4N2DgRso_akqr8goBlZVevgEQTsNZtnpCqMHDOWIIDH6M5RnSGhQ8P2xfJRVfU_mdcRa-cqtgOqqiZoJwEl9KZLrHsEJSdx_Uk3fZ-w1xzSQl5edNvcr3dPm-Zh-_vPleYfvevsjQc0I9vgv3df_sR9gxSDJ7zw_mxyPbUCsOuxfDmFMRm8S8HMa0rZzLkZdEhcurIUK19aWfA8LL8ML9-F2-nXawAAAP__V03XvA==
+
+statement ok
+RESET vectorize_row_count_threshold
+
+statement ok
+CREATE TABLE large (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO large SELECT g FROM generate_series(0, 100000) g(g)
+
+statement ok
+ALTER TABLE large INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  }
+]'
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE SELECT count(*) FROM large]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkc9KAzEQh-8-xTInhWiTnjQnxVMvXWkrHmSRdHdYA2kSMrPSUvbdZTce2lL_Heeb_Ga-IXvwocG52SCBfgUFlYCYQo1EIQ0oP5g1W9BSgPWx4wFXAuqQEPQe2LJD0LAya4cLNA2miQQBDbKxbhwbk92YtLt3JrUIApbReNLFNQgoO9bFPPgBrw3X70hF6DgO-O4WBHAX3QFTUkqpQAChw5rth-WdLtSNHFYSG-cKthvUhSSoegE596VMbFoErXrx97Me2jZhazikiTq-6rF8nq_eFuXL8vLqjL06I3_qLbM3brHu2Ab_u_v0P-4LpBg84ZH3d5NlXwnApsX87RS6VONTCvW4JpflmBtBg8S5q3Ix87k1CB6G1Y_h6Um46i8-AwAA__-osdh-
+
+statement ok
+SET vectorize_row_count_threshold = 1000000
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE SELECT count(*) FROM large]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkU9Lw0AQxe9-iuWdFFa76Un25J9TDzbSVjxIkG12CIEkG2Y22FLy3SUJohUq9Thv5vf2B3tAEzwtXU0C-4YEmUbLISeRwEM0HSz8DtZolE3bxSHONPLABHtALGNFsNi4bUUrcp54ZqDhKbqyGmtbLmvH-7vKcUHQWLeuEauuoZF20aplaIaYw4coJuetSowxJoGGRFdVKpY1WWUEGtt9pK-r-c2teiofkPUaoYvfbhJdQbBJr8_3vy8KpsLFwLPkWP8xfVlu3lfp6_ry6lzN2u1UTXXgveqEvFVGnfac_8dzRdKGRujI8VSz6TMN8gVNfymh45yeOeTjM9OYjtwYeJI4bZNpWDTTahD8CSd_wvNfcNZffAYAAP__go7Hbw==
+
+statement ok
+RESET vectorize_row_count_threshold

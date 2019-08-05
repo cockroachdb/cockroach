@@ -119,6 +119,9 @@ type scanNode struct {
 
 	// Indicates if this scan is the source for a delete node.
 	isDeleteSource bool
+
+	// rowCount is the estimated number of rows that this scanNode will output.
+	rowCount uint64
 }
 
 // scanVisibility represents which table columns should be included in a scan.
