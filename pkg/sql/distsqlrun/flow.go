@@ -18,14 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // FlowCtx encompasses the contexts needed for various flow components.
@@ -114,6 +113,8 @@ type Flow struct {
 	FlowCtx
 
 	flowRegistry *flowRegistry
+	// isVectorized indicates whether it is a vectorized flow.
+	isVectorized bool
 	// processors contains a subset of the processors in the flow - the ones that
 	// run in their own goroutines. Some processors that implement RowSource are
 	// scheduled to run in their consumer's goroutine; those are not present here.
@@ -163,10 +164,12 @@ func newFlow(
 	flowReg *flowRegistry,
 	syncFlowConsumer RowReceiver,
 	localProcessors []LocalProcessor,
+	isVectorized bool,
 ) *Flow {
 	f := &Flow{
 		FlowCtx:          flowCtx,
 		flowRegistry:     flowReg,
+		isVectorized:     isVectorized,
 		syncFlowConsumer: syncFlowConsumer,
 		localProcessors:  localProcessors,
 	}
@@ -456,7 +459,7 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
 	f.ctxDone = ctx.Done()
 
-	if f.EvalCtx.SessionData.VectorizeMode != sessiondata.VectorizeOff {
+	if f.isVectorized {
 		log.VEventf(ctx, 1, "setting up vectorize flow %d", f.id)
 		acc := f.EvalCtx.Mon.MakeBoundAccount()
 		f.vectorizedBoundAccount = &acc

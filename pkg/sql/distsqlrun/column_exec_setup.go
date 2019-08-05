@@ -172,7 +172,7 @@ func newColOperator(
 			// TODO(solon): The distsql plan for this case includes a TableReader, so
 			// we end up creating an orphaned colBatchScan. We should avoid that.
 			// Ideally the optimizer would not plan a scan in this unusual case.
-			result.op, err = exec.NewSingleTupleNoInputOp(), nil
+			result.op, result.isStreaming, err = exec.NewSingleTupleNoInputOp(), true, nil
 			// We make columnTypes non-nil so that sanity check doesn't panic.
 			columnTypes = make([]semtypes.T, 0)
 			break
@@ -182,7 +182,7 @@ func newColOperator(
 			aggSpec.Aggregations[0].FilterColIdx == nil &&
 			aggSpec.Aggregations[0].Func == distsqlpb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
-			result.op, err = exec.NewCountOp(inputs[0]), nil
+			result.op, result.isStreaming, err = exec.NewCountOp(inputs[0]), true, nil
 			columnTypes = []semtypes.T{*semtypes.Int}
 			break
 		}

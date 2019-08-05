@@ -394,7 +394,6 @@ func (ds *ServerImpl) setupFlow(
 				BytesEncodeFormat: be,
 				ExtraFloatDigits:  int(req.EvalContext.ExtraFloatDigits),
 			},
-			VectorizeMode: sessiondata.VectorizeExecMode(req.EvalContext.Vectorize),
 		}
 		// Enable better compatibility with PostgreSQL date math.
 		if req.Version >= 22 {
@@ -447,7 +446,12 @@ func (ds *ServerImpl) setupFlow(
 		traceKV:        req.TraceKV,
 		local:          localState.IsLocal,
 	}
-	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs)
+	// req always contains the desired vectorize mode, regardless of whether we
+	// have non-nil localState.EvalContext. We don't want to update EvalContext
+	// itself when the vectorize mode needs to be changed because we would need
+	// to restore the original value which can have data races under stress.
+	isVectorized := sessiondata.VectorizeExecMode(req.EvalContext.Vectorize) != sessiondata.VectorizeOff
+	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs, isVectorized)
 	if err := f.setup(ctx, &req.Flow); err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
 		tracing.FinishSpan(sp)
