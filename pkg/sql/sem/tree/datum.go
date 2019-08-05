@@ -3573,12 +3573,12 @@ func NewDOidVectorFromDArray(d *DArray) Datum {
 // pointed at (even if shared between Datum instances) but excluding
 // allocation overhead.
 //
-// The second argument indicates whether data of this type have different
+// The second return value indicates whether data of this type have different
 // sizes.
 //
 // It holds for every Datum d that d.Size() >= DatumSize(d.ResolvedType())
 func DatumTypeSize(t *types.T) (uintptr, bool) {
-	// The following are composite types.
+	// The following are composite types or types that support multiple widths.
 	switch t.Family() {
 	case types.TupleFamily:
 		if types.IsWildcardTupleType(t) {
@@ -3592,6 +3592,8 @@ func DatumTypeSize(t *types.T) (uintptr, bool) {
 			variable = variable || typvariable
 		}
 		return sz, variable
+	case types.IntFamily, types.FloatFamily:
+		return uintptr(t.Width()), false
 	}
 
 	// All the primary types have fixed size information.
