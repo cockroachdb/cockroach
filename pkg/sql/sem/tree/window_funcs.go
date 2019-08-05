@@ -254,7 +254,8 @@ func (wfr *WindowFrameRun) IsDefaultFrame() bool {
 		return true
 	}
 	if wfr.Frame.Bounds.StartBound.BoundType == UnboundedPreceding {
-		return wfr.Frame.Bounds.EndBound == nil || wfr.Frame.Bounds.EndBound.BoundType == CurrentRow
+		return wfr.DefaultFrameExclusion() &&
+			(wfr.Frame.Bounds.EndBound == nil || wfr.Frame.Bounds.EndBound.BoundType == CurrentRow)
 	}
 	return false
 }
@@ -419,7 +420,8 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 	}
 }
 
-// FrameSize returns the number of rows in the current frame.
+// FrameSize returns the number of rows in the current frame (taking into
+// account - if present - a filter and a frame exclusion).
 func (wfr *WindowFrameRun) FrameSize(ctx context.Context, evalCtx *EvalContext) (int, error) {
 	if wfr.Frame == nil {
 		return wfr.DefaultFrameSize(), nil
@@ -433,6 +435,17 @@ func (wfr *WindowFrameRun) FrameSize(ctx context.Context, evalCtx *EvalContext) 
 		return 0, err
 	}
 	size := frameEndIdx - frameStartIdx
+	if !wfr.NoFilter() || !wfr.DefaultFrameExclusion() {
+		size = 0
+		for idx := frameStartIdx; idx < frameEndIdx; idx++ {
+			if skipped, err := wfr.IsRowSkipped(ctx, idx); err != nil {
+				return 0, err
+			} else if skipped {
+				continue
+			}
+			size++
+		}
+	}
 	if size <= 0 {
 		size = 0
 	}
@@ -510,7 +523,7 @@ func (wfr *WindowFrameRun) RangeModeWithOffsets() bool {
 // FullPartitionIsInWindow checks whether we have such a window frame that all
 // rows of the partition are inside of the window for each of the rows.
 func (wfr *WindowFrameRun) FullPartitionIsInWindow() bool {
-	if wfr.Frame == nil {
+	if wfr.Frame == nil || !wfr.NoFilter() || !wfr.DefaultFrameExclusion() {
 		return false
 	}
 	if wfr.Frame.Bounds.EndBound == nil {
@@ -550,6 +563,64 @@ func (wfr *WindowFrameRun) FullPartitionIsInWindow() bool {
 		}
 	}
 	return precedingConfirmed && followingConfirmed
+}
+
+const noFilterIdx = -1
+
+// NoFilter returns whether a filter is present.
+func (wfr *WindowFrameRun) NoFilter() bool {
+	return wfr.FilterColIdx == noFilterIdx
+}
+
+// DefaultFrameExclusion returns true if optional frame exclusion is omitted.
+func (wfr *WindowFrameRun) DefaultFrameExclusion() bool {
+	return wfr.Frame == nil || wfr.Frame.Exclusion == NoExclusion
+}
+
+// isRowExcluded returns whether the row at index idx should be excluded from
+// the window frame of the current row.
+func (wfr *WindowFrameRun) isRowExcluded(idx int) bool {
+	if wfr.Frame == nil || wfr.Frame.Exclusion == NoExclusion {
+		// By default, no rows are excluded.
+		return false
+	}
+	switch wfr.Frame.Exclusion {
+	case ExcludeCurrentRow:
+		return idx == wfr.RowIdx
+	case ExcludeGroup:
+		curRowFirstPeerIdx := wfr.PeerHelper.GetFirstPeerIdx(wfr.CurRowPeerGroupNum)
+		curRowPeerGroupRowCount := wfr.PeerHelper.GetRowCount(wfr.CurRowPeerGroupNum)
+		return curRowFirstPeerIdx <= idx && idx < curRowFirstPeerIdx+curRowPeerGroupRowCount
+	case ExcludeTies:
+		curRowFirstPeerIdx := wfr.PeerHelper.GetFirstPeerIdx(wfr.CurRowPeerGroupNum)
+		curRowPeerGroupRowCount := wfr.PeerHelper.GetRowCount(wfr.CurRowPeerGroupNum)
+		return curRowFirstPeerIdx <= idx && idx < curRowFirstPeerIdx+curRowPeerGroupRowCount && idx != wfr.RowIdx
+	default:
+		panic("unexpected WindowFrameExclusion")
+	}
+}
+
+// IsRowSkipped returns whether a row at index idx is skipped from the window
+// frame (it can either be filtered out according to the filter clause or
+// excluded according to the frame exclusion clause) and any error if it
+// occurs.
+func (wfr *WindowFrameRun) IsRowSkipped(ctx context.Context, idx int) (bool, error) {
+	if !wfr.NoFilter() {
+		row, err := wfr.Rows.GetRow(ctx, idx)
+		if err != nil {
+			return false, err
+		}
+		d, err := row.GetDatum(wfr.FilterColIdx)
+		if err != nil {
+			return false, err
+		}
+		if d != DBoolTrue {
+			// Row idx is filtered out from the window frame, so it is skipped.
+			return true, nil
+		}
+	}
+	// If row is excluded from the window frame, it is skipped.
+	return wfr.isRowExcluded(idx), nil
 }
 
 // WindowFunc performs a computation on each row using data from a provided *WindowFrameRun.

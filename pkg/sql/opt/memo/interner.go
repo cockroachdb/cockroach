@@ -514,6 +514,7 @@ func (h *hasher) HashWindowFrame(val WindowFrame) {
 	h.HashInt(int(val.StartBoundType))
 	h.HashInt(int(val.EndBoundType))
 	h.HashInt(int(val.Mode))
+	h.HashInt(int(val.FrameExclusion))
 }
 
 func (h *hasher) HashTupleOrdinal(val TupleOrdinal) {
@@ -819,7 +820,8 @@ func (h *hasher) IsViewDepsEqual(l, r opt.ViewDeps) bool {
 func (h *hasher) IsWindowFrameEqual(l, r WindowFrame) bool {
 	return l.StartBoundType == r.StartBoundType &&
 		l.EndBoundType == r.EndBoundType &&
-		l.Mode == r.Mode
+		l.Mode == r.Mode &&
+		l.FrameExclusion == r.FrameExclusion
 }
 
 func (h *hasher) IsTupleOrdinalEqual(l, r TupleOrdinal) bool {
