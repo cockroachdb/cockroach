@@ -11,12 +11,14 @@
 package main
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/hash"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/timer"
 	"golang.org/x/tools/go/analysis/multichecker"
 )
 
 func main() {
 	multichecker.Main(
+		hash.Analyzer,
 		timer.Analyzer,
 	)
 }
