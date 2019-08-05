@@ -115,6 +115,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.getColumns(mut, sqlbase.ShowReplicaTraceColumns)
 	case *sequenceSelectNode:
 		return n.getColumns(mut, sqlbase.SequenceSelectColumns)
+	case *exportNode:
+		return n.getColumns(mut, sqlbase.ExportColumns)
 
 	// Nodes that have the same schema as their source or their
 	// valueNode helper.

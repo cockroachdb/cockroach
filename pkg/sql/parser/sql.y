@@ -1063,7 +1063,6 @@ stmt:
 | execute_stmt      // EXTEND WITH HELP: EXECUTE
 | deallocate_stmt   // EXTEND WITH HELP: DEALLOCATE
 | discard_stmt      // EXTEND WITH HELP: DISCARD
-| export_stmt       // EXTEND WITH HELP: EXPORT
 | grant_stmt        // EXTEND WITH HELP: GRANT
 | prepare_stmt      // EXTEND WITH HELP: PREPARE
 | revoke_stmt       // EXTEND WITH HELP: REVOKE
@@ -2565,6 +2564,7 @@ preparable_stmt:
 | reset_stmt        // help texts in sub-rule
 | restore_stmt      // EXTEND WITH HELP: RESTORE
 | resume_stmt       // EXTEND WITH HELP: RESUME JOBS
+| export_stmt       // EXTEND WITH HELP: EXPORT
 | scrub_stmt        // help texts in sub-rule
 | select_stmt       // help texts in sub-rule
   {

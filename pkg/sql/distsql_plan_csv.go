@@ -38,59 +38,6 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-// ExportPlanResultTypes is the result types for EXPORT plans.
-var ExportPlanResultTypes = []types.T{
-	*types.String, // filename
-	*types.Int,    // rows
-	*types.Int,    // bytes
-}
-
-// PlanAndRunExport makes and runs an EXPORT plan for the given input and output
-// planNode and spec respectively.  The input planNode must be runnable via
-// DistSQL. The output spec's results must conform to the ExportResultTypes.
-func PlanAndRunExport(
-	ctx context.Context,
-	dsp *DistSQLPlanner,
-	execCfg *ExecutorConfig,
-	txn *client.Txn,
-	evalCtx *extendedEvalContext,
-	in planNode,
-	out distsqlpb.ProcessorCoreUnion,
-	resultRows *RowResultWriter,
-) error {
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn)
-
-	rec, err := dsp.checkSupportForNode(in)
-	planCtx.isLocal = err != nil || rec == cannotDistribute
-
-	p, err := dsp.createPlanForNode(planCtx, in)
-	if err != nil {
-		return errors.Wrapf(err, "constructing distSQL plan")
-	}
-
-	p.AddNoGroupingStage(
-		out, distsqlpb.PostProcessSpec{}, ExportPlanResultTypes, distsqlpb.Ordering{},
-	)
-
-	// Overwrite PlanToStreamColMap (used by recv below) to reflect the output of
-	// the non-grouping stage we've added above. That stage outputs produces
-	// columns filename/rows/bytes.
-	p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(ExportPlanResultTypes))
-
-	dsp.FinalizePlan(planCtx, &p)
-
-	recv := MakeDistSQLReceiver(
-		ctx, resultRows, tree.Rows,
-		execCfg.RangeDescriptorCache, execCfg.LeaseHolderCache, txn, func(ts hlc.Timestamp) {},
-		evalCtx.Tracing,
-	)
-
-	// Copy the evalCtx, as dsp.Run() might change it.
-	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, txn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
-	return resultRows.Err()
-}
-
 // RowResultWriter is a thin wrapper around a RowContainer.
 type RowResultWriter struct {
 	rowContainer *rowcontainer.RowContainer
