@@ -328,10 +328,6 @@ func (c *CustomFuncs) ConstructNonApplyJoin(
 		return c.f.ConstructInnerJoin(left, right, on, private)
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		return c.f.ConstructLeftJoin(left, right, on, private)
-	case opt.RightJoinOp, opt.RightJoinApplyOp:
-		return c.f.ConstructRightJoin(left, right, on, private)
-	case opt.FullJoinOp, opt.FullJoinApplyOp:
-		return c.f.ConstructFullJoin(left, right, on, private)
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
 		return c.f.ConstructSemiJoin(left, right, on, private)
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
@@ -350,10 +346,6 @@ func (c *CustomFuncs) ConstructApplyJoin(
 		return c.f.ConstructInnerJoinApply(left, right, on, private)
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		return c.f.ConstructLeftJoinApply(left, right, on, private)
-	case opt.RightJoinOp, opt.RightJoinApplyOp:
-		return c.f.ConstructRightJoinApply(left, right, on, private)
-	case opt.FullJoinOp, opt.FullJoinApplyOp:
-		return c.f.ConstructFullJoinApply(left, right, on, private)
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
 		return c.f.ConstructSemiJoinApply(left, right, on, private)
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:

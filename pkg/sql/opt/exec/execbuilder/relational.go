@@ -819,10 +819,10 @@ func joinOpToJoinType(op opt.Operator) sqlbase.JoinType {
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		return sqlbase.LeftOuterJoin
 
-	case opt.RightJoinOp, opt.RightJoinApplyOp:
+	case opt.RightJoinOp:
 		return sqlbase.RightOuterJoin
 
-	case opt.FullJoinOp, opt.FullJoinApplyOp:
+	case opt.FullJoinOp:
 		return sqlbase.FullOuterJoin
 
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp:

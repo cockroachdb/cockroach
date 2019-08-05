@@ -45,8 +45,6 @@ func (c *CustomFuncs) ConstructNonLeftJoin(
 		return c.f.ConstructInnerJoinApply(left, right, on, private)
 	case opt.FullJoinOp:
 		return c.f.ConstructRightJoin(left, right, on, private)
-	case opt.FullJoinApplyOp:
-		return c.f.ConstructRightJoinApply(left, right, on, private)
 	}
 	panic(errors.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
 }
@@ -60,12 +58,8 @@ func (c *CustomFuncs) ConstructNonRightJoin(
 	switch joinOp {
 	case opt.RightJoinOp:
 		return c.f.ConstructInnerJoin(left, right, on, private)
-	case opt.RightJoinApplyOp:
-		return c.f.ConstructInnerJoinApply(left, right, on, private)
 	case opt.FullJoinOp:
 		return c.f.ConstructLeftJoin(left, right, on, private)
-	case opt.FullJoinApplyOp:
-		return c.f.ConstructLeftJoinApply(left, right, on, private)
 	}
 	panic(errors.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
 }

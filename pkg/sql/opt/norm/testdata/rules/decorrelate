@@ -4106,60 +4106,50 @@ project
       └── filters
            └── x = ?column? [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
 
-# Right join + multiple subqueries.
-opt expect=HoistJoinSubquery
+# Can't hoist in a right join.
+opt expect-not=HoistJoinSubquery
 SELECT y FROM a RIGHT JOIN xy ON (SELECT k+1) = (SELECT x+1)
 ----
 project
  ├── columns: y:7(int)
- └── right-join-apply
-      ├── columns: k:1(int) x:6(int!null) y:7(int) "?column?":8(int) "?column?":9(int)
+ └── right-join (hash)
+      ├── columns: k:1(int) x:6(int!null) y:7(int)
       ├── key: (1,6)
-      ├── fd: (1,6)-->(7-9)
+      ├── fd: (6)-->(7)
       ├── scan a
       │    ├── columns: k:1(int!null)
       │    └── key: (1)
-      ├── inner-join-apply
-      │    ├── columns: x:6(int!null) y:7(int) "?column?":8(int) "?column?":9(int)
-      │    ├── outer: (1)
+      ├── scan xy
+      │    ├── columns: x:6(int!null) y:7(int)
       │    ├── key: (6)
-      │    ├── fd: ()-->(8), (6)-->(7,9)
-      │    ├── inner-join (hash)
-      │    │    ├── columns: x:6(int!null) y:7(int) "?column?":8(int)
-      │    │    ├── outer: (1)
-      │    │    ├── key: (6)
-      │    │    ├── fd: ()-->(8), (6)-->(7)
-      │    │    ├── scan xy
-      │    │    │    ├── columns: x:6(int!null) y:7(int)
-      │    │    │    ├── key: (6)
-      │    │    │    └── fd: (6)-->(7)
-      │    │    ├── values
-      │    │    │    ├── columns: "?column?":8(int)
-      │    │    │    ├── outer: (1)
-      │    │    │    ├── cardinality: [1 - 1]
-      │    │    │    ├── key: ()
-      │    │    │    ├── fd: ()-->(8)
-      │    │    │    └── (k + 1,) [type=tuple{int}]
-      │    │    └── filters (true)
-      │    ├── values
-      │    │    ├── columns: "?column?":9(int)
-      │    │    ├── outer: (6)
-      │    │    ├── cardinality: [1 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(9)
-      │    │    └── (x + 1,) [type=tuple{int}]
-      │    └── filters (true)
+      │    └── fd: (6)-->(7)
       └── filters
-           └── ?column? = ?column? [type=bool, outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
+           └── eq [type=bool, outer=(1,6), correlated-subquery]
+                ├── subquery [type=int]
+                │    └── values
+                │         ├── columns: "?column?":8(int)
+                │         ├── outer: (1)
+                │         ├── cardinality: [1 - 1]
+                │         ├── key: ()
+                │         ├── fd: ()-->(8)
+                │         └── (k + 1,) [type=tuple{int}]
+                └── subquery [type=int]
+                     └── values
+                          ├── columns: "?column?":9(int)
+                          ├── outer: (6)
+                          ├── cardinality: [1 - 1]
+                          ├── key: ()
+                          ├── fd: ()-->(9)
+                          └── (x + 1,) [type=tuple{int}]
 
 # Hoist Exists in join filter disjunction.
 opt expect=HoistJoinSubquery
-SELECT s, x FROM a FULL JOIN xy ON EXISTS(SELECT * FROM uv WHERE u=y) OR k=x
+SELECT s, x FROM a INNER JOIN xy ON EXISTS(SELECT * FROM uv WHERE u=y) OR k=x
 ----
 project
- ├── columns: s:4(string) x:6(int)
- └── full-join (hash)
-      ├── columns: k:1(int) s:4(string) x:6(int) exists:12(bool)
+ ├── columns: s:4(string) x:6(int!null)
+ └── inner-join (hash)
+      ├── columns: k:1(int!null) s:4(string) x:6(int!null) exists:12(bool)
       ├── key: (1,6)
       ├── fd: (1)-->(4), (6)-->(12)
       ├── scan a
