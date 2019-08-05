@@ -1566,6 +1566,7 @@ func (b *Builder) buildFrame(input execPlan, w *memo.WindowsItem) (*tree.WindowF
 				BoundType: w.Frame.EndBoundType,
 			},
 		},
+		Exclusion: w.Frame.FrameExclusion,
 	}
 	if boundExpr, ok := b.extractFromOffset(w.Function); ok {
 		if !b.isOffsetMode(w.Frame.StartBoundType) {

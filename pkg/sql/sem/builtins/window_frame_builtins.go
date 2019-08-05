@@ -107,24 +107,46 @@ func (w *slidingWindowFunc) Compute(
 		return nil, err
 	}
 
+	if !wfr.DefaultFrameExclusion() {
+		// We cannot use sliding window approach because we have frame exclusion
+		// clause - some rows will be in and out of the frame which breaks the
+		// necessary assumption, so we fallback to naive quadratic approach.
+		var res tree.Datum
+		for idx := frameStartIdx; idx < frameEndIdx; idx++ {
+			if skipped, err := wfr.IsRowSkipped(ctx, idx); err != nil {
+				return nil, err
+			} else if skipped {
+				continue
+			}
+			args, err := wfr.ArgsByRowIdx(ctx, idx)
+			if err != nil {
+				return nil, err
+			}
+			if res == nil {
+				res = args[0]
+			} else {
+				if w.sw.cmp(evalCtx, args[0], res) > 0 {
+					res = args[0]
+				}
+			}
+		}
+		if res == nil {
+			// Spec: the frame is empty, so we return NULL.
+			return tree.DNull, nil
+		}
+		return res, nil
+	}
+
 	// We need to discard all values that are no longer in the frame.
 	w.sw.removeAllBefore(frameStartIdx)
 
 	// We need to add all values that just entered the frame and have not been
 	// added yet.
 	for idx := max(w.prevEnd, frameStartIdx); idx < frameEndIdx; idx++ {
-		if wfr.FilterColIdx != noFilterIdx {
-			row, err := wfr.Rows.GetRow(ctx, idx)
-			if err != nil {
-				return nil, err
-			}
-			datum, err := row.GetDatum(wfr.FilterColIdx)
-			if err != nil {
-				return nil, err
-			}
-			if datum != tree.DBoolTrue {
-				continue
-			}
+		if skipped, err := wfr.IsRowSkipped(ctx, idx); err != nil {
+			return nil, err
+		} else if skipped {
+			continue
 		}
 		args, err := wfr.ArgsByRowIdx(ctx, idx)
 		if err != nil {
@@ -201,18 +223,10 @@ func (w *slidingWindowSumFunc) removeAllBefore(
 		return err
 	}
 	for idx := w.prevStart; idx < frameStartIdx && idx < w.prevEnd; idx++ {
-		if wfr.FilterColIdx != noFilterIdx {
-			row, err := wfr.Rows.GetRow(ctx, idx)
-			if err != nil {
-				return err
-			}
-			datum, err := row.GetDatum(wfr.FilterColIdx)
-			if err != nil {
-				return err
-			}
-			if datum != tree.DBoolTrue {
-				continue
-			}
+		if skipped, err := wfr.IsRowSkipped(ctx, idx); err != nil {
+			return err
+		} else if skipped {
+			continue
 		}
 		args, err := wfr.ArgsByRowIdx(ctx, idx)
 		if err != nil {
@@ -257,6 +271,27 @@ func (w *slidingWindowSumFunc) Compute(
 	if err != nil {
 		return nil, err
 	}
+	if !wfr.DefaultFrameExclusion() {
+		// We cannot use sliding window approach because we have frame exclusion
+		// clause - some rows will be in and out of the frame which breaks the
+		// necessary assumption, so we fallback to naive quadratic approach.
+		w.agg.Reset(ctx)
+		for idx := frameStartIdx; idx < frameEndIdx; idx++ {
+			if skipped, err := wfr.IsRowSkipped(ctx, idx); err != nil {
+				return nil, err
+			} else if skipped {
+				continue
+			}
+			args, err := wfr.ArgsByRowIdx(ctx, idx)
+			if err != nil {
+				return nil, err
+			}
+			if err = w.agg.Add(ctx, args[0]); err != nil {
+				return nil, err
+			}
+		}
+		return w.agg.Result()
+	}
 
 	// We need to discard all values that are no longer in the frame.
 	if err = w.removeAllBefore(ctx, evalCtx, wfr); err != nil {
@@ -266,18 +301,10 @@ func (w *slidingWindowSumFunc) Compute(
 	// We need to sum all values that just entered the frame and have not been
 	// added yet.
 	for idx := max(w.prevEnd, frameStartIdx); idx < frameEndIdx; idx++ {
-		if wfr.FilterColIdx != noFilterIdx {
-			row, err := wfr.Rows.GetRow(ctx, idx)
-			if err != nil {
-				return nil, err
-			}
-			datum, err := row.GetDatum(wfr.FilterColIdx)
-			if err != nil {
-				return nil, err
-			}
-			if datum != tree.DBoolTrue {
-				continue
-			}
+		if skipped, err := wfr.IsRowSkipped(ctx, idx); err != nil {
+			return nil, err
+		} else if skipped {
+			continue
 		}
 		args, err := wfr.ArgsByRowIdx(ctx, idx)
 		if err != nil {
@@ -347,18 +374,10 @@ func (w *avgWindowFunc) Compute(
 		return nil, err
 	}
 	for idx := frameStartIdx; idx < frameEndIdx; idx++ {
-		if wfr.FilterColIdx != noFilterIdx {
-			row, err := wfr.Rows.GetRow(ctx, idx)
-			if err != nil {
-				return nil, err
-			}
-			datum, err := row.GetDatum(wfr.FilterColIdx)
-			if err != nil {
-				return nil, err
-			}
-			if datum != tree.DBoolTrue {
-				continue
-			}
+		if skipped, err := wfr.IsRowSkipped(ctx, idx); err != nil {
+			return nil, err
+		} else if skipped {
+			continue
 		}
 		args, err := wfr.ArgsByRowIdx(ctx, idx)
 		if err != nil {
