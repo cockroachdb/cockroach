@@ -29,14 +29,14 @@ func TestEquiDepthHistogram(t *testing.T) {
 		distinctLess float64
 	}
 	testCases := []struct {
-		samples       []int
+		samples       []int64
 		numRows       int64
 		distinctCount int64
 		maxBuckets    int
 		buckets       []expBucket
 	}{
 		{
-			samples:       []int{1, 2, 4, 5, 5, 9},
+			samples:       []int64{1, 2, 4, 5, 5, 9},
 			numRows:       6,
 			distinctCount: 5,
 			maxBuckets:    3,
@@ -56,7 +56,7 @@ func TestEquiDepthHistogram(t *testing.T) {
 			},
 		},
 		{
-			samples:       []int{1, 1, 1, 1, 2, 2},
+			samples:       []int64{1, 1, 1, 1, 2, 2},
 			numRows:       6,
 			distinctCount: 2,
 			maxBuckets:    2,
@@ -72,7 +72,7 @@ func TestEquiDepthHistogram(t *testing.T) {
 			},
 		},
 		{
-			samples:       []int{1, 1, 1, 1, 2, 2},
+			samples:       []int64{1, 1, 1, 1, 2, 2},
 			numRows:       6,
 			distinctCount: 2,
 			maxBuckets:    3,
@@ -88,7 +88,7 @@ func TestEquiDepthHistogram(t *testing.T) {
 			},
 		},
 		{
-			samples:       []int{1, 1, 2, 2, 2, 2},
+			samples:       []int64{1, 1, 2, 2, 2, 2},
 			numRows:       6,
 			distinctCount: 2,
 			maxBuckets:    2,
@@ -104,7 +104,7 @@ func TestEquiDepthHistogram(t *testing.T) {
 			},
 		},
 		{
-			samples:       []int{1, 1, 2, 2, 2, 2},
+			samples:       []int64{1, 1, 2, 2, 2, 2},
 			numRows:       6,
 			distinctCount: 2,
 			maxBuckets:    3,
@@ -120,7 +120,7 @@ func TestEquiDepthHistogram(t *testing.T) {
 			},
 		},
 		{
-			samples:       []int{1, 1, 1, 1, 1, 1},
+			samples:       []int64{1, 1, 1, 1, 1, 1},
 			numRows:       600,
 			distinctCount: 1,
 			maxBuckets:    10,
@@ -132,7 +132,7 @@ func TestEquiDepthHistogram(t *testing.T) {
 			},
 		},
 		{
-			samples:       []int{1, 2, 3, 4},
+			samples:       []int64{1, 2, 3, 4},
 			numRows:       4000,
 			distinctCount: 4,
 			maxBuckets:    3,
@@ -148,6 +148,22 @@ func TestEquiDepthHistogram(t *testing.T) {
 				{
 					// Bucket contains 3, 4.
 					upper: 4, numEq: 1000, numLess: 1000, distinctLess: 1,
+				},
+			},
+		},
+		{
+			samples:       []int64{-9222292034315889200, -9130100296576294525, -9042492057500701159},
+			numRows:       3000,
+			distinctCount: 300,
+			maxBuckets:    2,
+			buckets: []expBucket{
+				{
+					// Bucket contains -9222292034315889200.
+					upper: -9222292034315889200, numEq: 1000, numLess: 0, distinctLess: 0,
+				},
+				{
+					// Bucket contains -9130100296576294525, -9042492057500701159.
+					upper: -9042492057500701159, numEq: 1000, numLess: 1000, distinctLess: 298,
 				},
 			},
 		},
