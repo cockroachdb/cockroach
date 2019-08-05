@@ -1080,7 +1080,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	atomic.AddInt32(&s.numOutboxes, 1)
 	run := func(ctx context.Context, cancelFn context.CancelFunc) {
 		outbox.Run(ctx, s.nodeDialer, stream.TargetNodeID, s.flowID, stream.StreamID, cancelFn)
-		atomic.AddInt32(&s.numOutboxes, -1)
+		currentOutboxes := atomic.AddInt32(&s.numOutboxes, -1)
 		// When the last Outbox on this node exits, we want to make sure that
 		// everything is shutdown; namely, we need to call cancelFn if:
 		// - it is the last Outbox
@@ -1089,7 +1089,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 		// - cancelFn is non-nil (it can be nil in tests).
 		// Calling cancelFn will cancel the context that all infrastructure on this
 		// node is listening on, so it will shut everything down.
-		if atomic.LoadInt32(&s.numOutboxes) == 0 && !s.materializerAdded && cancelFn != nil {
+		if currentOutboxes == 0 && !s.materializerAdded && cancelFn != nil {
 			cancelFn()
 		}
 	}
@@ -1337,7 +1337,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			s.syncFlowConsumer,
 			metadataSourcesQueue,
 			outputStatsToTrace,
-			s.getCancelFlowFn(),
+			s.getCancelFlowFn,
 		)
 		if err != nil {
 			return err
