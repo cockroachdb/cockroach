@@ -825,10 +825,6 @@ const (
 	// This is used to enhance the error fallback and for telemetry.
 	planFlagOptIsCorrelated
 
-	// planFlagOptFallback is set if the optimizer was enabled but did not support the
-	// statement.
-	planFlagOptFallback
-
 	// planFlagOptCacheHit is set if a plan from the query plan cache was used (and
 	// re-optimized).
 	planFlagOptCacheHit

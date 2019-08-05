@@ -776,14 +776,10 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 			planner.curPlan.flags.Set(planFlagOptIsCorrelated)
 		}
 		log.VEventf(ctx, 1, "optimizer plan failed (isCorrelated=%t): %v", isCorrelated, err)
-		if !canFallbackFromOpt(err, optMode, stmt) {
-			return err
-		}
-		planner.curPlan.flags.Set(planFlagOptFallback)
-		log.VEvent(ctx, 1, "optimizer falls back on heuristic planner")
-	} else {
-		log.VEvent(ctx, 2, "optimizer disabled")
+		return err
 	}
+
+	log.VEvent(ctx, 2, "optimizer disabled")
 	// Use the heuristic planner.
 	optFlags := planner.curPlan.flags
 	err := planner.makePlan(ctx)
@@ -810,46 +806,6 @@ func (ex *connExecutor) saveLogicalPlanDescription(
 	defer stats.Unlock()
 	timeLastSampled := stats.data.SensitiveInfo.MostRecentPlanTimestamp
 	return now.Sub(timeLastSampled) >= period
-}
-
-// canFallbackFromOpt returns whether we can fallback on the heuristic planner
-// when the optimizer hits an error.
-func canFallbackFromOpt(err error, optMode sessiondata.OptimizerMode, stmt *Statement) bool {
-	if !errors.HasUnimplementedError(err) {
-		// We only fallback on "feature not supported" errors.
-		return false
-	}
-	if err.Error() == "unimplemented: schema change statement cannot follow a statement that has written in the same transaction" {
-		// This is a special error generated when SetSystemConfigTrigger fails. If
-		// we fall back to the heuristic planner, the second call to that method
-		// succeeds.
-		// TODO(radu): this will go away very soon when we remove fallback
-		// altogether.
-		return false
-	}
-
-	if optMode == sessiondata.OptimizerAlways {
-		// In Always mode we never fallback, with one exception: SET commands (or
-		// else we can't switch to another mode).
-		_, isSetVar := stmt.AST.(*tree.SetVar)
-		return isSetVar
-	}
-
-	// If the statement is EXPLAIN (OPT), then don't fallback (we want to return
-	// the error, not show a plan from the heuristic planner).
-	// TODO(radu): this is hacky and doesn't handle an EXPLAIN (OPT) inside
-	// a larger query.
-	if e, ok := stmt.AST.(*tree.Explain); ok {
-		if opts, err := e.ParseOptions(); err == nil && opts.Mode == tree.ExplainOpt {
-			return false
-		}
-	}
-
-	// Never fall back on PREPARE AS OPT PLAN.
-	if _, ok := stmt.AST.(*tree.CannedOptPlan); ok {
-		return false
-	}
-	return true
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
