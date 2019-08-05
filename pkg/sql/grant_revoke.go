@@ -29,9 +29,13 @@ import (
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
-	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
-		privDesc.Grant(grantee, n.Privileges)
-	})
+	return &changePrivilegesNode{
+		targets:  n.Targets,
+		grantees: n.Grantees,
+		changePrivilege: func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
+			privDesc.Grant(grantee, n.Privileges)
+		},
+	}, nil
 }
 
 // Revoke removes privileges from users.
@@ -44,30 +48,37 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
-	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
-		privDesc.Revoke(grantee, n.Privileges)
-	})
+	return &changePrivilegesNode{
+		targets:  n.Targets,
+		grantees: n.Grantees,
+		changePrivilege: func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
+			privDesc.Revoke(grantee, n.Privileges)
+		},
+	}, nil
 }
 
-func (p *planner) changePrivileges(
-	ctx context.Context,
-	targets tree.TargetList,
-	grantees tree.NameList,
-	changePrivilege func(*sqlbase.PrivilegeDescriptor, string),
-) (planNode, error) {
+type changePrivilegesNode struct {
+	targets         tree.TargetList
+	grantees        tree.NameList
+	changePrivilege func(*sqlbase.PrivilegeDescriptor, string)
+}
+
+func (n *changePrivilegesNode) startExec(params runParams) error {
+	ctx := params.ctx
+	p := params.p
 	// Check whether grantees exists
 	users, err := p.GetAllUsersAndRoles(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// We're allowed to grant/revoke privileges to/from the "public" role even though
 	// it does not exist: add it to the list of all users and roles.
 	users[sqlbase.PublicRole] = true // isRole
 
-	for _, grantee := range grantees {
+	for _, grantee := range n.grantees {
 		if _, ok := users[string(grantee)]; !ok {
-			return nil, errors.Errorf("user or role %s does not exist", &grantee)
+			return errors.Errorf("user or role %s does not exist", &grantee)
 		}
 	}
 
@@ -75,10 +86,10 @@ func (p *planner) changePrivileges(
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		descriptors, err = getDescriptorsFromTargetList(ctx, p, targets)
+		descriptors, err = getDescriptorsFromTargetList(ctx, p, n.targets)
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// First, update the descriptors. We want to catch all errors before
@@ -86,23 +97,23 @@ func (p *planner) changePrivileges(
 	b := p.txn.NewBatch()
 	for _, descriptor := range descriptors {
 		if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
-			return nil, err
+			return err
 		}
 		privileges := descriptor.GetPrivileges()
-		for _, grantee := range grantees {
-			changePrivilege(privileges, string(grantee))
+		for _, grantee := range n.grantees {
+			n.changePrivilege(privileges, string(grantee))
 		}
 
 		// Validate privilege descriptors directly as the db/table level Validate
 		// may fix up the descriptor.
 		if err := privileges.Validate(descriptor.GetID()); err != nil {
-			return nil, err
+			return err
 		}
 
 		switch d := descriptor.(type) {
 		case *sqlbase.DatabaseDescriptor:
 			if err := d.Validate(); err != nil {
-				return nil, err
+				return err
 			}
 			writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), p.execCfg.Settings,
 				b, descriptor.GetID(), descriptor)
@@ -111,7 +122,7 @@ func (p *planner) changePrivileges(
 			if !d.Dropped() {
 				if err := p.writeSchemaChangeToBatch(
 					ctx, d, sqlbase.InvalidMutationID, b); err != nil {
-					return nil, err
+					return err
 				}
 			}
 		}
@@ -119,7 +130,11 @@ func (p *planner) changePrivileges(
 
 	// Now update the descriptors transactionally.
 	if err := p.txn.Run(ctx, b); err != nil {
-		return nil, err
+		return err
 	}
-	return newZeroNode(nil /* columns */), nil
+	return nil
 }
+
+func (*changePrivilegesNode) Next(runParams) (bool, error) { return false, nil }
+func (*changePrivilegesNode) Values() tree.Datums          { return tree.Datums{} }
+func (*changePrivilegesNode) Close(context.Context)        {}
