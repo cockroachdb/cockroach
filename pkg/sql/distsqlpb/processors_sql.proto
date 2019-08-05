@@ -116,6 +116,9 @@ message TableReaderSpec {
   // older than this value.
   //
   optional uint64 max_timestamp_age_nanos = 9 [(gogoproto.nullable) = false];
+
+  // Indicates the estimated number of rows that this table reader will output.
+  optional uint64 row_count = 10 [(gogoproto.nullable) = false];
 }
 
 // IndexSkipTableReaderSpec is the specification for a table reader that

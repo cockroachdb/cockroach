@@ -39,6 +39,7 @@ func (f *stubFactory) ConstructScan(
 	reverse bool,
 	maxResults uint64,
 	reqOrdering exec.OutputOrdering,
+	rowCount float64,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
