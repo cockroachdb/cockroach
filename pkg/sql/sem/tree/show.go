@@ -75,8 +75,9 @@ const (
 
 // ShowBackup represents a SHOW BACKUP statement.
 type ShowBackup struct {
-	Path    Expr
-	Details BackupDetails
+	Path                 Expr
+	Details              BackupDetails
+	ShouldIncludeSchemas bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -86,6 +87,9 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 		ctx.WriteString("RANGES ")
 	} else if node.Details == BackupFileDetails {
 		ctx.WriteString("FILES ")
+	}
+	if node.ShouldIncludeSchemas {
+		ctx.WriteString("WITH SCHEMAS ")
 	}
 	ctx.FormatNode(node.Path)
 }
