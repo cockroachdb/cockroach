@@ -101,9 +101,6 @@ func initCLIDefaults() {
 	debugCtx.maxResults = 1000
 	debugCtx.ballastSize = base.SizeSpec{}
 
-	zoneCtx.zoneConfig = ""
-	zoneCtx.zoneDisableReplication = false
-
 	serverCfg.ReadyFn = nil
 	serverCfg.DelayedBootstrapFn = nil
 	serverCfg.SocketFile = ""
@@ -256,13 +253,6 @@ var debugCtx struct {
 	ballastSize       base.SizeSpec
 	printSystemConfig bool
 	maxResults        int64
-}
-
-// zoneCtx captures the command-line parameters of the `zone` command.
-// Defaults set by InitCLIDefaults() above.
-var zoneCtx struct {
-	zoneConfig             string
-	zoneDisableReplication bool
 }
 
 // startCtx captures the command-line arguments for the `start` command.
