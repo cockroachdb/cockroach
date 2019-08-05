@@ -304,8 +304,8 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
-		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp,
-		opt.MergeJoinOp, opt.LookupJoinOp, opt.ZigzagJoinOp:
+		opt.SemiJoinApplyOp, opt.AntiJoinApplyOp, opt.MergeJoinOp, opt.LookupJoinOp,
+		opt.ZigzagJoinOp:
 		return sb.colStatJoin(colSet, e)
 
 	case opt.IndexJoinOp:
@@ -813,11 +813,11 @@ func (sb *statisticsBuilder) buildJoin(
 			// All rows from left side should be in the result.
 			s.RowCount = max(s.RowCount, leftStats.RowCount)
 
-		case opt.RightJoinOp, opt.RightJoinApplyOp:
+		case opt.RightJoinOp:
 			// All rows from right side should be in the result.
 			s.RowCount = max(s.RowCount, rightStats.RowCount)
 
-		case opt.FullJoinOp, opt.FullJoinApplyOp:
+		case opt.FullJoinOp:
 			// All rows from both sides should be in the result.
 			s.RowCount = max(s.RowCount, leftStats.RowCount)
 			s.RowCount = max(s.RowCount, rightStats.RowCount)
@@ -836,11 +836,11 @@ func (sb *statisticsBuilder) buildJoin(
 			// All rows from left side should be in the result.
 			s.RowCount = leftStats.RowCount
 
-		case opt.RightJoinOp, opt.RightJoinApplyOp:
+		case opt.RightJoinOp:
 			// All rows from right side should be in the result.
 			s.RowCount = rightStats.RowCount
 
-		case opt.FullJoinOp, opt.FullJoinApplyOp:
+		case opt.FullJoinOp:
 			// All rows from both sides should be in the result.
 			s.RowCount = leftStats.RowCount + rightStats.RowCount
 		}
@@ -898,12 +898,12 @@ func (sb *statisticsBuilder) buildJoin(
 		// are not valid.
 		s.ColStats.RemoveIntersecting(h.leftProps.OutputCols)
 
-	case opt.RightJoinOp, opt.RightJoinApplyOp:
+	case opt.RightJoinOp:
 		// Keep only column stats from the left side. The stats from the right side
 		// are not valid.
 		s.ColStats.RemoveIntersecting(h.rightProps.OutputCols)
 
-	case opt.FullJoinOp, opt.FullJoinApplyOp:
+	case opt.FullJoinOp:
 		// Do not keep any column stats.
 		s.ColStats.Clear()
 	}
@@ -915,11 +915,11 @@ func (sb *statisticsBuilder) buildJoin(
 		// All rows from left side should be in the result.
 		s.RowCount = max(innerJoinRowCount, leftStats.RowCount)
 
-	case opt.RightJoinOp, opt.RightJoinApplyOp:
+	case opt.RightJoinOp:
 		// All rows from right side should be in the result.
 		s.RowCount = max(innerJoinRowCount, rightStats.RowCount)
 
-	case opt.FullJoinOp, opt.FullJoinApplyOp:
+	case opt.FullJoinOp:
 		// All rows from both sides should be in the result.
 		// T(A FOJ B) = T(A LOJ B) + T(A ROJ B) - T(A IJ B)
 		leftJoinRowCount := max(innerJoinRowCount, leftStats.RowCount)
@@ -953,8 +953,7 @@ func (sb *statisticsBuilder) buildJoin(
 		}
 
 		switch h.joinType {
-		case opt.LeftJoinOp, opt.LeftJoinApplyOp, opt.RightJoinOp, opt.RightJoinApplyOp,
-			opt.FullJoinOp, opt.FullJoinApplyOp:
+		case opt.LeftJoinOp, opt.LeftJoinApplyOp, opt.RightJoinOp, opt.FullJoinOp:
 			if !colStat.Cols.SubsetOf(relProps.NotNullCols) {
 				sb.adjustNullCountsForOuterJoins(
 					colStat,
@@ -1037,7 +1036,7 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 			colStat = sb.copyColStat(colSet, s, sb.colStatFromJoinLeft(colSet, join))
 			leftNullCount = colStat.NullCount
 			switch joinType {
-			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.RightJoinOp, opt.RightJoinApplyOp:
+			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.RightJoinOp:
 				colStat.ApplySelectivity(s.Selectivity, inputRowCount)
 			}
 		} else if leftCols.Empty() {
@@ -1062,7 +1061,7 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 			case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 				rightColStat.ApplySelectivity(s.Selectivity, inputRowCount)
 
-			case opt.RightJoinOp, opt.RightJoinApplyOp:
+			case opt.RightJoinOp:
 				leftColStat.ApplySelectivity(s.Selectivity, inputRowCount)
 			}
 			colStat, _ = s.ColStats.Add(colSet)
@@ -1080,8 +1079,7 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		)
 
 		switch joinType {
-		case opt.LeftJoinOp, opt.LeftJoinApplyOp, opt.RightJoinOp, opt.RightJoinApplyOp,
-			opt.FullJoinOp, opt.FullJoinApplyOp:
+		case opt.LeftJoinOp, opt.LeftJoinApplyOp, opt.RightJoinOp, opt.FullJoinOp:
 			sb.adjustNullCountsForOuterJoins(
 				colStat,
 				joinType,
@@ -1177,14 +1175,14 @@ func (sb *statisticsBuilder) adjustNullCountsForOuterJoins(
 			colStat.NullCount += (rowCount - innerJoinRowCount) * (1 - leftNullCount/leftRowCount)
 		}
 
-	case opt.RightJoinOp, opt.RightJoinApplyOp:
+	case opt.RightJoinOp:
 		// All nulls from right side should be in the result.
 		colStat.NullCount = max(colStat.NullCount, rightNullCount)
 		if !leftCols.Empty() {
 			colStat.NullCount += (rowCount - innerJoinRowCount) * (1 - rightNullCount/rightRowCount)
 		}
 
-	case opt.FullJoinOp, opt.FullJoinApplyOp:
+	case opt.FullJoinOp:
 		// All nulls from both sides should be in the result.
 		leftJoinNullCount := max(colStat.NullCount, leftNullCount)
 		rightJoinNullCount := max(colStat.NullCount, rightNullCount)
