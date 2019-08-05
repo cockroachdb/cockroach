@@ -81,7 +81,12 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 		Where: &tree.Where{Expr: &tree.NotExpr{Expr: expr}},
 	}
 	if o.asOf != hlc.MaxTimestamp {
-		sel.From.AsOf = tree.AsOfClause{Expr: &tree.NumVal{Value: constant.MakeInt64(o.asOf.WallTime)}}
+		sel.From.AsOf = tree.AsOfClause{
+			Expr: tree.NewNumVal(
+				constant.MakeInt64(o.asOf.WallTime),
+				"", /* origString */
+				false /* negative */),
+		}
 	}
 
 	// This could potentially use a variant of planner.SelectClause that could
