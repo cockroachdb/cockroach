@@ -169,8 +169,12 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 
 	var saveTableName string
 	if b.nameGen != nil {
-		// This function must be called in a pre-order traversal of the tree.
-		saveTableName = b.nameGen.GenerateName(e.Op())
+		// Don't save tables for operators that don't produce any columns (most
+		// importantly, for SET which is used to disable saving of tables).
+		if !e.Relational().OutputCols.Empty() {
+			// This function must be called in a pre-order traversal of the tree.
+			saveTableName = b.nameGen.GenerateName(e.Op())
+		}
 	}
 
 	// Handle read-only operators which never write data or modify schema.
