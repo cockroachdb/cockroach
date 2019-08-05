@@ -14,18 +14,45 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// delegateShowRanges implements the SHOW RANGES statement:
+// delegateShowRanges implements the SHOW EXPERIMENTAL_RANGES statement:
 //   SHOW RANGES FROM TABLE t
 //   SHOW RANGES FROM INDEX t@idx
+//   SHOW RANGES FROM DATABASE db
 //
 // These statements show the ranges corresponding to the given table or index,
 // along with the list of replicas and the lease holder.
 func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, error) {
+	if n.DatabaseName != "" {
+		const dbQuery = `
+		SELECT
+			table_name,
+			CASE
+				WHEN crdb_internal.pretty_key(r.start_key, 2) = '' THEN NULL
+				ELSE crdb_internal.pretty_key(r.start_key, 2)
+			END AS start_key,
+			CASE
+				WHEN crdb_internal.pretty_key(r.end_key, 2) = '' THEN NULL
+				ELSE crdb_internal.pretty_key(r.end_key, 2)
+			END AS end_key,
+			range_id,
+			replicas,
+			lease_holder,
+			locality
+		FROM %[1]s.crdb_internal.ranges AS r
+		LEFT JOIN %[1]s.crdb_internal.gossip_nodes n ON
+		r.lease_holder = n.node_id
+		WHERE database_name=%[2]s
+		ORDER BY table_name, r.start_key
+		`
+		return parse(fmt.Sprintf(dbQuery, n.DatabaseName, lex.EscapeSQLString(n.DatabaseName)))
+	}
+
 	idx, _, err := cat.ResolveTableIndex(
 		d.ctx, d.catalog, cat.Flags{AvoidDescriptorCaches: true}, &n.TableOrIndex,
 	)
