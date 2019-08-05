@@ -183,14 +183,16 @@ func init() {
 		&tree.ShowFingerprints{},
 		&tree.Truncate{},
 
-		// CCL statements.
+		// CCL statements (without Export which has an optimizer operator).
 		&tree.Backup{},
+		&tree.ShowBackup{},
 		&tree.Restore{},
 		&tree.CreateChangefeed{},
 		&tree.CreateRole{},
 		&tree.DropRole{},
 		&tree.GrantRole{},
 		&tree.RevokeRole{},
+		&tree.Import{},
 	} {
 		typ := optbuilder.OpaqueReadOnly
 		if tree.CanModifySchema(stmt) {
