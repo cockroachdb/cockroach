@@ -173,6 +173,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 						Mode:           windowFrames[i].Mode,
 						StartBoundType: windowFrames[i].Bounds.StartBound.BoundType,
 						EndBoundType:   windowFrames[i].Bounds.EndBound.BoundType,
+						FrameExclusion: windowFrames[i].Exclusion,
 					},
 					ColPrivate: memo.ColPrivate{Col: w.col.id},
 				},
