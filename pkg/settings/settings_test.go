@@ -613,45 +613,41 @@ func TestHide(t *testing.T) {
 	}
 }
 
-func TestMaxSettings(t *testing.T) {
+func TestMaxSlotIdxSettings(t *testing.T) {
 	maxSettings := 128
+	// Register maxSettings settings to ensure that no errors occur.
 	var err error
-	//register max settings
 	maxName := batchRegisterSettings(t, "i.Val", maxSettings-1-len(settings.Keys()), &err)
 	if err != nil {
 		t.Errorf("expected no error to register 128 settings, but get error %s", err)
 	}
 
-	//test the change method of max slotIdx
+	// Change the max slotIdx setting to ensure that no errors occur.
 	sv := &settings.Values{}
 	sv.Init(settings.TestOpaque)
+	{
+		var changes int
+		intSetting, ok := settings.Lookup(maxName)
+		if !ok {
+			t.Errorf("expected lookup setting : %s", maxName)
+		}
+		intSetting.SetOnChange(sv, func() { changes++ })
 
-	var changes int
-	intSetting, ok := settings.Lookup(maxName)
-	if !ok {
-		t.Errorf("expected lookup setting : %s", maxName)
-	}
-	intSetting.SetOnChange(sv, func() { changes++ })
+		u := settings.NewUpdater(sv)
+		if err := u.Set(maxName, settings.EncodeInt(9), "i"); err != nil {
+			t.Fatal(err)
+		}
 
-	u := settings.NewUpdater(sv)
-	u.Set(maxName, settings.EncodeInt(9), "i")
-
-	if changes != 1 {
-		t.Errorf("expected the max slot setting changed .")
-	}
-
-	//register too many setting
-	batchRegisterSettings(t, "i.ValMax", 1, &err)
-	expectedErr := "too many settings; increase maxSettings"
-	if err.Error() != expectedErr {
-		t.Errorf("expected error :'%s' error, but get : %s", expectedErr, err)
+		if changes != 1 {
+			t.Errorf("expected the max slot setting changed .")
+		}
 	}
 }
 func batchRegisterSettings(t *testing.T, keyPrefix string, count int, err *error) string {
 	defer func() {
-		//catch painc error, and convert to error
+		// Catch painc error, and convert to error
 		if r := recover(); r != nil {
-			//check exactly what the panic was and create error.
+			// Check exactly what the panic was and create error.
 			switch x := r.(type) {
 			case string:
 				*err = errors.New(x)
