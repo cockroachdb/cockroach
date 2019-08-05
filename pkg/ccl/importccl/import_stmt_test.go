@@ -1078,7 +1078,7 @@ func TestImportCSVStmt(t *testing.T) {
 			}
 
 			// Verify spans don't have trailing '/0'.
-			ranges := sqlDB.QueryStr(t, `SHOW testing_ranges FROM TABLE t`)
+			ranges := sqlDB.QueryStr(t, `SHOW ranges FROM TABLE t`)
 			for _, r := range ranges {
 				const end = `/0`
 				if strings.HasSuffix(r[0], end) || strings.HasSuffix(r[1], end) {
@@ -1473,7 +1473,7 @@ func TestImportIntoCSV(t *testing.T) {
 			}
 
 			// Verify spans don't have trailing '/0'.
-			ranges := sqlDB.QueryStr(t, `SHOW testing_ranges FROM TABLE t`)
+			ranges := sqlDB.QueryStr(t, `SHOW ranges FROM TABLE t`)
 			for _, r := range ranges {
 				const end = `/0`
 				if strings.HasSuffix(r[0], end) || strings.HasSuffix(r[1], end) {
