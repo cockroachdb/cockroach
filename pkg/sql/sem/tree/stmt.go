@@ -767,7 +767,7 @@ func (*ShowZoneConfig) StatementTag() string { return "SHOW ZONE CONFIGURATION" 
 func (*ShowRanges) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ShowRanges) StatementTag() string { return "SHOW EXPERIMENTAL_RANGES" }
+func (*ShowRanges) StatementTag() string { return "SHOW RANGES" }
 
 // StatementType implements the Statement interface.
 func (*ShowFingerprints) StatementType() StatementType { return Rows }

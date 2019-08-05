@@ -272,7 +272,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 	}
 
 	s := sqlutils.MakeSQLRunner(tc.Conns[0])
-	row := s.QueryRow(t, "select replicas from [show experimental_ranges from table system.namespace] limit 1")
+	row := s.QueryRow(t, "select replicas from [show ranges from table system.namespace] limit 1")
 	var replicaStr string
 	row.Scan(&replicaStr)
 	if replicaStr != "{1,4,5}" {

@@ -38,7 +38,7 @@ func TestShowRangesWithLocality(t *testing.T) {
 	const nodeColIdx = 4
 	const localityColIdx = 5
 
-	result := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_RANGES FROM TABLE t`)
+	result := sqlDB.QueryStr(t, `SHOW RANGES FROM TABLE t`)
 	for _, row := range result {
 		// Because StartTestCluster changes the locality no matter what the
 		// arguments are, we expect whatever the test server sets up.

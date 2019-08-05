@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// delegateShowRanges implements the SHOW EXPERIMENTAL_RANGES statement:
-//   SHOW EXPERIMENTAL_RANGES FROM TABLE t
-//   SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx
+// delegateShowRanges implements the SHOW RANGES statement:
+//   SHOW RANGES FROM TABLE t
+//   SHOW RANGES FROM INDEX t@idx
 //
 // These statements show the ranges corresponding to the given table or index,
 // along with the list of replicas and the lease holder.

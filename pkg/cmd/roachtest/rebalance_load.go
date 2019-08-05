@@ -159,7 +159,7 @@ func registerRebalanceLoad(r *testRegistry) {
 func isLoadEvenlyDistributed(l *logger, db *gosql.DB, numNodes int) (bool, error) {
 	rows, err := db.Query(
 		`select lease_holder, count(*) ` +
-			`from [show experimental_ranges from table kv.kv] ` +
+			`from [show ranges from table kv.kv] ` +
 			`group by lease_holder;`)
 	if err != nil {
 		return false, err
