@@ -75,6 +75,21 @@ func (spec *WindowerSpec_Frame_BoundType) initFromAST(bt tree.WindowFrameBoundTy
 	}
 }
 
+func (spec *WindowerSpec_Frame_Exclusion) initFromAST(e tree.WindowFrameExclusion) {
+	switch e {
+	case tree.NoExclusion:
+		*spec = WindowerSpec_Frame_NO_EXCLUSION
+	case tree.ExcludeCurrentRow:
+		*spec = WindowerSpec_Frame_EXCLUDE_CURRENT_ROW
+	case tree.ExcludeGroup:
+		*spec = WindowerSpec_Frame_EXCLUDE_GROUP
+	case tree.ExcludeTies:
+		*spec = WindowerSpec_Frame_EXCLUDE_TIES
+	default:
+		panic("unexpected WindowerFrameExclusion")
+	}
+}
+
 // If offset exprs are present, we evaluate them and save the encoded results
 // in the spec.
 func (spec *WindowerSpec_Frame_Bounds) initFromAST(
@@ -190,6 +205,7 @@ func isNegative(evalCtx *tree.EvalContext, offset tree.Datum) bool {
 // offset expressions if present in the frame.
 func (spec *WindowerSpec_Frame) InitFromAST(f *tree.WindowFrame, evalCtx *tree.EvalContext) error {
 	spec.Mode.initFromAST(f.Mode)
+	spec.Exclusion.initFromAST(f.Exclusion)
 	return spec.Bounds.initFromAST(f.Bounds, f.Mode, evalCtx)
 }
 
@@ -223,6 +239,21 @@ func (spec WindowerSpec_Frame_BoundType) convertToAST() tree.WindowFrameBoundTyp
 	}
 }
 
+func (spec WindowerSpec_Frame_Exclusion) convertToAST() tree.WindowFrameExclusion {
+	switch spec {
+	case WindowerSpec_Frame_NO_EXCLUSION:
+		return tree.NoExclusion
+	case WindowerSpec_Frame_EXCLUDE_CURRENT_ROW:
+		return tree.ExcludeCurrentRow
+	case WindowerSpec_Frame_EXCLUDE_GROUP:
+		return tree.ExcludeGroup
+	case WindowerSpec_Frame_EXCLUDE_TIES:
+		return tree.ExcludeTies
+	default:
+		panic("unexpected WindowerSpec_Frame_Exclusion")
+	}
+}
+
 // convertToAST produces tree.WindowFrameBounds based on
 // WindowerSpec_Frame_Bounds. Note that it might not be fully equivalent to
 // original - if offsetExprs were present in original tree.WindowFrameBounds,
@@ -239,5 +270,9 @@ func (spec WindowerSpec_Frame_Bounds) convertToAST() tree.WindowFrameBounds {
 
 // ConvertToAST produces a tree.WindowFrame given a WindoweSpec_Frame.
 func (spec *WindowerSpec_Frame) ConvertToAST() *tree.WindowFrame {
-	return &tree.WindowFrame{Mode: spec.Mode.convertToAST(), Bounds: spec.Bounds.convertToAST()}
+	return &tree.WindowFrame{
+		Mode:      spec.Mode.convertToAST(),
+		Bounds:    spec.Bounds.convertToAST(),
+		Exclusion: spec.Exclusion.convertToAST(),
+	}
 }

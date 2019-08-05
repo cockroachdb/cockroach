@@ -111,11 +111,13 @@ func TestInterner(t *testing.T) {
 		Mode:           tree.RANGE,
 		StartBoundType: tree.UnboundedPreceding,
 		EndBoundType:   tree.CurrentRow,
+		FrameExclusion: tree.NoExclusion,
 	}
 	frame2 := WindowFrame{
 		Mode:           tree.ROWS,
 		StartBoundType: tree.UnboundedPreceding,
 		EndBoundType:   tree.CurrentRow,
+		FrameExclusion: tree.NoExclusion,
 	}
 
 	wins1 := WindowsExpr{{

@@ -745,6 +745,9 @@ func (wf *WindowFrame) docRow(p *PrettyCfg) pretty.TableRow {
 			p.row("AND", p.Doc(wf.Bounds.EndBound)),
 		)
 	}
+	if wf.Exclusion != NoExclusion {
+		d = pretty.Stack(d, p.Doc(wf.Exclusion))
+	}
 	return p.row(kw, d)
 }
 

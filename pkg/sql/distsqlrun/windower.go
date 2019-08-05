@@ -584,12 +584,12 @@ func (w *windower) processPartition(
 		frameRun.Rows = partition
 		frameRun.RowIdx = 0
 
-		if !frameRun.IsDefaultFrame() {
-			// We have a custom frame not equivalent to default one, so if we have
-			// an aggregate function, we want to reset it for each row.
-			// Not resetting is an optimization since we're not computing
-			// the result over the whole frame but only as a result of the current
-			// row and previous results of aggregation.
+		if !frameRun.NoFilter() || !frameRun.IsDefaultFrame() {
+			// We either have a filter or a custom frame not equivalent to default
+			// one, so if we have an aggregate function, we want to reset it for each
+			// row. Not resetting is an optimization since we're not computing the
+			// result over the whole frame but only as a result of the current row
+			// and previous results of aggregation.
 			builtins.ShouldReset(builtin)
 		}
 

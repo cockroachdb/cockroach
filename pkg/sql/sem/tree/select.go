@@ -826,10 +826,25 @@ func (node *WindowFrameBounds) HasOffset() bool {
 	return node.StartBound.HasOffset() || (node.EndBound != nil && node.EndBound.HasOffset())
 }
 
+// WindowFrameExclusion indicates which mode of exclusion is used.
+type WindowFrameExclusion int
+
+const (
+	// NoExclusion represents an omitted frame exclusion clause.
+	NoExclusion WindowFrameExclusion = iota
+	// ExcludeCurrentRow represents EXCLUDE CURRENT ROW mode of frame exclusion.
+	ExcludeCurrentRow
+	// ExcludeGroup represents EXCLUDE GROUP mode of frame exclusion.
+	ExcludeGroup
+	// ExcludeTies represents EXCLUDE TIES mode of frame exclusion.
+	ExcludeTies
+)
+
 // WindowFrame represents static state of window frame over which calculations are made.
 type WindowFrame struct {
-	Mode   WindowFrameMode   // the mode of framing being used
-	Bounds WindowFrameBounds // the bounds of the frame
+	Mode      WindowFrameMode      // the mode of framing being used
+	Bounds    WindowFrameBounds    // the bounds of the frame
+	Exclusion WindowFrameExclusion // optional frame exclusion
 }
 
 // Format implements the NodeFormatter interface.
@@ -853,6 +868,24 @@ func (node *WindowFrameBound) Format(ctx *FmtCtx) {
 }
 
 // Format implements the NodeFormatter interface.
+func (node WindowFrameExclusion) Format(ctx *FmtCtx) {
+	if node == NoExclusion {
+		return
+	}
+	ctx.WriteString("EXCLUDE ")
+	switch node {
+	case ExcludeCurrentRow:
+		ctx.WriteString("CURRENT ROW")
+	case ExcludeGroup:
+		ctx.WriteString("GROUP")
+	case ExcludeTies:
+		ctx.WriteString("TIES")
+	default:
+		panic(fmt.Sprintf("unhandled case: %d", node))
+	}
+}
+
+// Format implements the NodeFormatter interface.
 func (node *WindowFrame) Format(ctx *FmtCtx) {
 	switch node.Mode {
 	case RANGE:
@@ -871,5 +904,9 @@ func (node *WindowFrame) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.Bounds.EndBound)
 	} else {
 		ctx.FormatNode(node.Bounds.StartBound)
+	}
+	if node.Exclusion != NoExclusion {
+		ctx.WriteByte(' ')
+		ctx.FormatNode(node.Exclusion)
 	}
 }
