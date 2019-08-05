@@ -443,30 +443,6 @@ func Example_logging() {
 	// 1
 }
 
-func Example_zone() {
-	c := newCLITest(cliTestParams{noServer: true})
-	defer c.cleanup()
-
-	c.Run("zone ls")
-	c.Run("zone set system --file=./testdata/zone_attrs.yaml")
-	c.Run("zone get .liveness")
-	c.Run("zone rm system")
-
-	// Output:
-	// zone ls
-	// command "ls" has been removed
-	// HINT: Use SHOW ZONE CONFIGURATIONS in a SQL client instead.
-	// zone set system --file=./testdata/zone_attrs.yaml
-	// command "set" has been removed
-	// HINT: Use ALTER ... CONFIGURE ZONE in a SQL client instead.
-	// zone get .liveness
-	// command "get" has been removed
-	// HINT: Use SHOW ZONE CONFIGURATION FOR ... in a SQL client instead.
-	// zone rm system
-	// command "rm" has been removed
-	// HINT: Use ALTER ... CONFIGURE ZONE DISCARD in a SQL client instead.
-}
-
 func Example_demo() {
 	c := newCLITest(cliTestParams{noServer: true})
 	defer c.cleanup()

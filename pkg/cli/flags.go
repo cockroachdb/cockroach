@@ -405,7 +405,6 @@ func init() {
 		/* StartCmds are covered above */
 	}
 	clientCmds = append(clientCmds, userCmds...)
-	clientCmds = append(clientCmds, zoneCmds...)
 	clientCmds = append(clientCmds, nodeCmds...)
 	clientCmds = append(clientCmds, systemBenchCmds...)
 	clientCmds = append(clientCmds, initCmd)
@@ -475,12 +474,6 @@ func init() {
 	// Quit command.
 	BoolFlag(quitCmd.Flags(), &quitCtx.serverDecommission, cliflags.Decommission, quitCtx.serverDecommission)
 
-	// Zone flags.
-	// TODO(knz): Remove in 19.3 or 20.x.
-	zf := setZoneCmd.Flags()
-	_ = zf.String(cliflags.ZoneConfig.Name, "", cliflags.ZoneConfig.Description)
-	_ = zf.Bool(cliflags.ZoneDisableReplication.Name, false, cliflags.ZoneDisableReplication.Description)
-
 	for _, cmd := range append([]*cobra.Command{sqlShellCmd, demoCmd}, demoCmd.Commands()...) {
 		f := cmd.Flags()
 		VarFlag(f, &sqlCtx.setStmts, cliflags.Set)
@@ -494,7 +487,6 @@ func init() {
 
 	// Commands that establish a SQL connection.
 	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd, demoCmd}
-	sqlCmds = append(sqlCmds, zoneCmds...)
 	sqlCmds = append(sqlCmds, userCmds...)
 	sqlCmds = append(sqlCmds, demoCmd.Commands()...)
 	for _, cmd := range sqlCmds {

@@ -127,17 +127,6 @@ Including more tiers is better than including fewer. For example:
   --locality=planet=earth,province=manitoba,colo=secondary,power=3`,
 	}
 
-	ZoneConfig = FlagInfo{
-		Name:        "file",
-		Shorthand:   "f",
-		Description: `DEPRECATED`,
-	}
-
-	ZoneDisableReplication = FlagInfo{
-		Name:        "disable-replication",
-		Description: `DEPRECATED`,
-	}
-
 	Background = FlagInfo{
 		Name: "background",
 		Description: `
