@@ -111,11 +111,13 @@ func TestInterner(t *testing.T) {
 		Mode:           tree.RANGE,
 		StartBoundType: tree.UnboundedPreceding,
 		EndBoundType:   tree.CurrentRow,
+		FrameExclusion: tree.NoExclusion,
 	}
 	frame2 := WindowFrame{
 		Mode:           tree.ROWS,
 		StartBoundType: tree.UnboundedPreceding,
 		EndBoundType:   tree.CurrentRow,
+		FrameExclusion: tree.NoExclusion,
 	}
 
 	wins1 := WindowsExpr{{
@@ -364,23 +366,23 @@ func TestInterner(t *testing.T) {
 
 		{hashFn: in.hasher.HashWindowFrame, eqFn: in.hasher.IsWindowFrameEqual, variations: []testVariation{
 			{
-				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow},
-				val2:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow},
+				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
+				val2:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
 				equal: true,
 			},
 			{
-				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow},
-				val2:  WindowFrame{tree.ROWS, tree.UnboundedPreceding, tree.CurrentRow},
+				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
+				val2:  WindowFrame{tree.ROWS, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
 				equal: false,
 			},
 			{
-				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow},
-				val2:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.UnboundedFollowing},
+				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
+				val2:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.UnboundedFollowing, tree.NoExclusion},
 				equal: false,
 			},
 			{
-				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow},
-				val2:  WindowFrame{tree.RANGE, tree.CurrentRow, tree.CurrentRow},
+				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
+				val2:  WindowFrame{tree.RANGE, tree.CurrentRow, tree.CurrentRow, tree.NoExclusion},
 				equal: false,
 			},
 		}},
