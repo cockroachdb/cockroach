@@ -451,7 +451,10 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 	return nil
 }
 
-func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
+// setup sets up a flow according to spec. A cancellable context is derived from
+// the input context, and this child cancellable context is returned. This
+// returned context must be used when running the flow.
+func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) (context.Context, error) {
 	f.spec = spec
 	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
 	f.ctxDone = ctx.Done()
@@ -463,20 +466,20 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 		err := f.setupVectorizedFlow(ctx, f.vectorizedBoundAccount)
 		if err == nil {
 			log.VEventf(ctx, 1, "vectorized flow setup succeeded")
-			return nil
+			return ctx, nil
 		}
 		log.VEventf(ctx, 1, "failed to vectorize: %s", err)
-		return err
+		return nil, err
 	}
 
 	// First step: setup the input synchronizers for all processors.
 	inputSyncs, err := f.setupInputSyncs(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Then, populate f.processors.
-	return f.setupProcessors(ctx, inputSyncs)
+	return ctx, f.setupProcessors(ctx, inputSyncs)
 }
 
 // startInternal starts the flow. All processors are started, each in their own

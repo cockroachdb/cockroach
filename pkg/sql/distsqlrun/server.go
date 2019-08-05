@@ -448,7 +448,8 @@ func (ds *ServerImpl) setupFlow(
 		local:          localState.IsLocal,
 	}
 	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs)
-	if err := f.setup(ctx, &req.Flow); err != nil {
+	var err error
+	if ctx, err = f.setup(ctx, &req.Flow); err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
 		tracing.FinishSpan(sp)
 		ctx = opentracing.ContextWithSpan(ctx, nil)
