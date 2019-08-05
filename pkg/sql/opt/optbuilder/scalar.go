@@ -553,7 +553,7 @@ func (b *Builder) checkSubqueryOuterCols(
 			!subqueryOuterCols.SubsetOf(inScope.groupby.aggOutScope.colSet()) {
 			subqueryOuterCols.DifferenceWith(inScope.groupby.aggOutScope.colSet())
 			colID, _ := subqueryOuterCols.Next(0)
-			col := inScope.getColumn(opt.ColumnID(colID))
+			col := inScope.getColumn(colID)
 			panic(pgerror.Newf(
 				pgcode.Grouping,
 				"subquery uses ungrouped column \"%s\" from outer query",

@@ -405,7 +405,7 @@ func (sb *statisticsBuilder) colStatLeaf(
 		col, _ := colSet.Next(0)
 		colStat.DistinctCount = unknownDistinctCountRatio * s.RowCount
 		colStat.NullCount = unknownNullCountRatio * s.RowCount
-		if sb.md.ColumnMeta(opt.ColumnID(col)).Type.Family() == types.BoolFamily {
+		if sb.md.ColumnMeta(col).Type.Family() == types.BoolFamily {
 			colStat.DistinctCount = min(colStat.DistinctCount, 2)
 		}
 		if notNullCols.Contains(col) {

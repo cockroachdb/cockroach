@@ -442,7 +442,7 @@ func (c *CustomFuncs) EnsureCanaryCol(in memo.RelExpr, aggs memo.AggregationsExp
 			// passthrough aggregate like ConstAgg.
 			id, ok := in.Relational().NotNullCols.Next(0)
 			if ok && !aggs.OutputCols().Contains(id) {
-				return opt.ColumnID(id)
+				return id
 			}
 
 			// Synthesize a new column ID.
@@ -540,7 +540,7 @@ func (c *CustomFuncs) TranslateNonIgnoreAggs(
 					if !ok {
 						panic(errors.AssertionFailedf("expected input expression to have not-null column"))
 					}
-					canaryCol = opt.ColumnID(id)
+					canaryCol = id
 				}
 				aggCanaryVar = c.f.ConstructVariable(canaryCol)
 			}
@@ -602,7 +602,7 @@ func (c *CustomFuncs) EnsureAggsCanIgnoreNulls(
 			if !ok {
 				panic(errors.AssertionFailedf("expected input expression to have not-null column"))
 			}
-			notNullColID := opt.ColumnID(id)
+			notNullColID := id
 			newAgg = c.f.ConstructCount(c.f.ConstructVariable(notNullColID))
 
 		default:
@@ -702,7 +702,7 @@ func (c *CustomFuncs) referenceSingleColumn(in memo.RelExpr) opt.ScalarExpr {
 		panic(errors.AssertionFailedf("expression does not have exactly one column"))
 	}
 	colID, _ := cols.Next(0)
-	return c.f.ConstructVariable(opt.ColumnID(colID))
+	return c.f.ConstructVariable(colID)
 }
 
 // subqueryHoister searches scalar expression trees looking for correlated
@@ -803,7 +803,7 @@ func (r *subqueryHoister) hoistAll(scalar opt.ScalarExpr) opt.ScalarExpr {
 		// Replace the Subquery operator with a Variable operator referring to
 		// the first (and only) column in the hoisted query.
 		colID, _ := subqueryProps.OutputCols.Next(0)
-		return r.f.ConstructVariable(opt.ColumnID(colID))
+		return r.f.ConstructVariable(colID)
 	}
 
 	return r.f.Replace(scalar, func(nd opt.Expr) opt.Expr {

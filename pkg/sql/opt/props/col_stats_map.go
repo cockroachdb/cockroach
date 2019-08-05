@@ -143,7 +143,7 @@ func (m *ColStatsMap) Lookup(cols opt.ColSet) (colStat *ColumnStatistic, ok bool
 		}
 
 		// Fetch index entry for next prefix+col combo.
-		key := colStatKey{prefix: val.prefix, id: opt.ColumnID(curr)}
+		key := colStatKey{prefix: val.prefix, id: curr}
 		val, ok = m.index[key]
 		if !ok {
 			// No entry exists, so lookup fails.
@@ -247,7 +247,7 @@ func (m *ColStatsMap) addToIndex(cols opt.ColSet, pos int) {
 	prev := opt.ColumnID(0)
 	curr, _ := cols.Next(prev)
 	for {
-		key := colStatKey{prefix: prefix, id: opt.ColumnID(curr)}
+		key := colStatKey{prefix: prefix, id: curr}
 		val, ok := m.index[key]
 		if ok {
 			// Index entry exists, so get its prefix value.
