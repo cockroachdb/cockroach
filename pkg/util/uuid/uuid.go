@@ -206,7 +206,7 @@ func (u *UUID) DeterministicV4(i, n uint64) {
 	// involved), make sure they're unique by sticking the index
 	// in the lower 8 bytes. Note that we need to use BigEndian encodings to keep
 	// the uuids sorted in the same order as the ints.
-	spacing := uint64(float64(i) * float64(math.MaxUint64) / float64(n))
+	spacing := uint64(int64(float64(i) * float64(math.MaxUint64) / float64(n)))
 	binary.BigEndian.PutUint64(u[0:8], spacing)
 	binary.BigEndian.PutUint64(u[8:16], i)
 	u.SetVersion(V4)
