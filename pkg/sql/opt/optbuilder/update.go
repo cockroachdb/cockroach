@@ -103,7 +103,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	//   ORDER BY <order-by> LIMIT <limit>
 	//
 	// All columns from the update table will be projected.
-	mb.buildInputForUpdateOrDelete(inScope, upd.Where, upd.Limit, upd.OrderBy)
+	mb.buildInputForUpdate(inScope, upd.From, upd.Where, upd.Limit, upd.OrderBy)
 
 	// Derive the columns that will be updated from the SET expressions.
 	mb.addTargetColsForUpdate(upd.Exprs)
@@ -325,7 +325,11 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	mb.addCheckConstraintCols()
 
 	private := mb.makeMutationPrivate(returning != nil)
+	for _, col := range mb.extraAccessibleCols {
+		if col.id != 0 {
+			private.PassthroughCols = append(private.PassthroughCols, col.id)
+		}
+	}
 	mb.outScope.expr = mb.b.factory.ConstructUpdate(mb.outScope.expr, mb.checks, private)
-
 	mb.buildReturning(returning)
 }

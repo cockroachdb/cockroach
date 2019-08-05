@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -105,11 +106,19 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(upd.FetchCols)+len(upd.UpdateCols)+len(upd.CheckCols))
+	colList := make(opt.ColList, 0, len(upd.FetchCols)+len(upd.UpdateCols)+len(upd.CheckCols)+len(upd.PassthroughCols))
 	colList = appendColsWhenPresent(colList, upd.FetchCols)
 	colList = appendColsWhenPresent(colList, upd.UpdateCols)
-	colList = appendColsWhenPresent(colList, upd.CheckCols)
 
+	// The RETURNING clause of the Update can refer to the columns
+	// in any of the FROM tables. As a result, the Update may need
+	// to passthrough those columns so the projection above can use
+	// them.
+	if upd.NeedResults() {
+		colList = appendColsWhenPresent(colList, upd.PassthroughCols)
+	}
+
+	colList = appendColsWhenPresent(colList, upd.CheckCols)
 	input, err := b.buildMutationInput(upd.Input, colList, &upd.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
@@ -122,6 +131,16 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	updateColOrds := ordinalSetFromColList(upd.UpdateCols)
 	returnColOrds := ordinalSetFromColList(upd.ReturnCols)
 	checkOrds := ordinalSetFromColList(upd.CheckCols)
+
+	// Construct the result columns for the passthrough set.
+	var passthroughCols sqlbase.ResultColumns
+	if upd.NeedResults() {
+		for _, passthroughCol := range upd.PassthroughCols {
+			colMeta := b.mem.Metadata().ColumnMeta(passthroughCol)
+			passthroughCols = append(passthroughCols, sqlbase.ResultColumn{Name: colMeta.Alias, Typ: colMeta.Type})
+		}
+	}
+
 	node, err := b.factory.ConstructUpdate(
 		input.root,
 		tab,
@@ -129,6 +148,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		updateColOrds,
 		returnColOrds,
 		checkOrds,
+		passthroughCols,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -354,6 +374,16 @@ func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 			ord++
 		}
 	}
+
+	// The output columns of the mutation will also include all
+	// columns it allowed to pass through.
+	for _, colID := range private.PassthroughCols {
+		if colID != 0 {
+			colMap.Set(int(colID), ord)
+			ord++
+		}
+	}
+
 	return colMap
 }
 

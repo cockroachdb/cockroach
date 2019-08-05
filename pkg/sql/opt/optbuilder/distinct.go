@@ -112,10 +112,9 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 	outScope.cols = make([]scopeColumn, 0, len(inScope.cols))
 	// Add the output columns.
 	for i := range inScope.cols {
-		if !inScope.cols[i].hidden {
-			outScope.cols = append(outScope.cols, inScope.cols[i])
-		}
+		outScope.cols = append(outScope.cols, inScope.cols[i])
 	}
+
 	// Add any extra ON columns.
 	outScope.extraCols = make([]scopeColumn, 0, len(inScope.extraCols))
 	for i := range inScope.extraCols {
