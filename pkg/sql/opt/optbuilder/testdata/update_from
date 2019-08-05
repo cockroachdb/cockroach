@@ -48,14 +48,14 @@ update abc
  │    ├──  other.b:8 => abc.b:2
  │    └──  other.c:9 => abc.c:3
  └── distinct-on
-      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) other.a:7(int) other.b:8(int) other.c:9(int)
+      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) other.a:7(int) other.b:8(int) other.c:9(int) rowid:10(int)
       ├── grouping columns: abc.a:4(int!null)
       ├── inner-join (hash)
-      │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) other.a:7(int!null) other.b:8(int) other.c:9(int)
+      │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) other.a:7(int!null) other.b:8(int) other.c:9(int) rowid:10(int!null)
       │    ├── scan abc
       │    │    └── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
       │    ├── scan other
-      │    │    └── columns: other.a:7(int) other.b:8(int) other.c:9(int)
+      │    │    └── columns: other.a:7(int) other.b:8(int) other.c:9(int) rowid:10(int!null)
       │    └── filters
       │         └── eq [type=bool]
       │              ├── variable: abc.a [type=int]
@@ -69,8 +69,10 @@ update abc
            │    └── variable: other.a [type=int]
            ├── first-agg [type=int]
            │    └── variable: other.b [type=int]
+           ├── first-agg [type=int]
+           │    └── variable: other.c [type=int]
            └── first-agg [type=int]
-                └── variable: other.c [type=int]
+                └── variable: rowid [type=int]
 
 # Check if UPDATE FROM works well with RETURNING expressions that reference the FROM tables.
 opt
@@ -233,16 +235,16 @@ update abc
  │    ├──  ab.b:8 => abc.b:2
  │    └──  ac.c:11 => abc.c:3
  └── distinct-on
-      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int) ab.b:8(int) ac.a:10(int) ac.c:11(int)
+      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int) ab.b:8(int) ab.rowid:9(int) ac.a:10(int) ac.c:11(int) ac.rowid:12(int)
       ├── grouping columns: abc.a:4(int!null)
       ├── internal-ordering: +(4|7|10)
       ├── inner-join (merge)
-      │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ac.a:10(int!null) ac.c:11(int)
+      │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ab.rowid:9(int!null) ac.a:10(int!null) ac.c:11(int) ac.rowid:12(int!null)
       │    ├── left ordering: +4
       │    ├── right ordering: +7
       │    ├── ordering: +(4|7|10)
       │    ├── inner-join (merge)
-      │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ac.a:10(int!null) ac.c:11(int)
+      │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ac.a:10(int!null) ac.c:11(int) ac.rowid:12(int!null)
       │    │    ├── left ordering: +4
       │    │    ├── right ordering: +10
       │    │    ├── ordering: +(4|10)
@@ -250,16 +252,16 @@ update abc
       │    │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
       │    │    │    └── ordering: +4
       │    │    ├── sort
-      │    │    │    ├── columns: ac.a:10(int) ac.c:11(int)
+      │    │    │    ├── columns: ac.a:10(int) ac.c:11(int) ac.rowid:12(int!null)
       │    │    │    ├── ordering: +10
       │    │    │    └── scan ac
-      │    │    │         └── columns: ac.a:10(int) ac.c:11(int)
+      │    │    │         └── columns: ac.a:10(int) ac.c:11(int) ac.rowid:12(int!null)
       │    │    └── filters (true)
       │    ├── sort
-      │    │    ├── columns: ab.a:7(int) ab.b:8(int)
+      │    │    ├── columns: ab.a:7(int) ab.b:8(int) ab.rowid:9(int!null)
       │    │    ├── ordering: +7
       │    │    └── scan ab
-      │    │         └── columns: ab.a:7(int) ab.b:8(int)
+      │    │         └── columns: ab.a:7(int) ab.b:8(int) ab.rowid:9(int!null)
       │    └── filters (true)
       └── aggregations
            ├── first-agg [type=int]
@@ -271,9 +273,13 @@ update abc
            ├── first-agg [type=int]
            │    └── variable: ab.b [type=int]
            ├── first-agg [type=int]
+           │    └── variable: ab.rowid [type=int]
+           ├── first-agg [type=int]
            │    └── variable: ac.a [type=int]
+           ├── first-agg [type=int]
+           │    └── variable: ac.c [type=int]
            └── first-agg [type=int]
-                └── variable: ac.c [type=int]
+                └── variable: ac.rowid [type=int]
 
 # Make sure UPDATE ... FROM works with LATERAL.
 opt
@@ -288,33 +294,98 @@ WHERE
 RETURNING
   *
 ----
-update abc
+project
  ├── columns: a:1(int!null) b:2(int) c:3(int) a:7(int) b:8(int) a:10(int) c:11(int)
+ └── update abc
+      ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int) ab.a:7(int) ab.b:8(int) ab.rowid:9(int) ac.a:10(int) ac.c:11(int)
+      ├── fetch columns: abc.a:4(int) abc.b:5(int) abc.c:6(int)
+      ├── update-mapping:
+      │    ├──  ab.b:8 => abc.b:2
+      │    └──  ac.c:11 => abc.c:3
+      └── distinct-on
+           ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int) ab.b:8(int) ab.rowid:9(int) ac.a:10(int) ac.c:11(int)
+           ├── grouping columns: abc.a:4(int!null)
+           ├── inner-join (hash)
+           │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ab.rowid:9(int!null) ac.a:10(int!null) ac.c:11(int)
+           │    ├── scan ac
+           │    │    └── columns: ac.a:10(int) ac.c:11(int)
+           │    ├── inner-join (hash)
+           │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ab.rowid:9(int!null)
+           │    │    ├── scan ab
+           │    │    │    └── columns: ab.a:7(int) ab.b:8(int) ab.rowid:9(int!null)
+           │    │    ├── scan abc
+           │    │    │    └── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
+           │    │    └── filters
+           │    │         └── eq [type=bool]
+           │    │              ├── variable: abc.a [type=int]
+           │    │              └── variable: ab.a [type=int]
+           │    └── filters
+           │         └── eq [type=bool]
+           │              ├── variable: ab.a [type=int]
+           │              └── variable: ac.a [type=int]
+           └── aggregations
+                ├── first-agg [type=int]
+                │    └── variable: abc.b [type=int]
+                ├── first-agg [type=int]
+                │    └── variable: abc.c [type=int]
+                ├── first-agg [type=int]
+                │    └── variable: ab.a [type=int]
+                ├── first-agg [type=int]
+                │    └── variable: ab.b [type=int]
+                ├── first-agg [type=int]
+                │    └── variable: ab.rowid [type=int]
+                ├── first-agg [type=int]
+                │    └── variable: ac.a [type=int]
+                └── first-agg [type=int]
+                     └── variable: ac.c [type=int]
+
+# Make sure UPDATE ... FROM can return hidden columns.
+opt
+UPDATE abc
+SET
+  b=ab.b, c = ac.c
+FROM
+  ab, ac
+WHERE
+  abc.a=ab.a AND abc.a = ac.a
+RETURNING
+  *, ab.rowid, ac.rowid
+----
+update abc
+ ├── columns: a:1(int!null) b:2(int) c:3(int) a:7(int) b:8(int) a:10(int) c:11(int) rowid:9(int) rowid:12(int)
  ├── fetch columns: abc.a:4(int) abc.b:5(int) abc.c:6(int)
  ├── update-mapping:
  │    ├──  ab.b:8 => abc.b:2
  │    └──  ac.c:11 => abc.c:3
  └── distinct-on
-      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int) ab.b:8(int) ac.a:10(int) ac.c:11(int)
+      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int) ab.b:8(int) ab.rowid:9(int) ac.a:10(int) ac.c:11(int) ac.rowid:12(int)
       ├── grouping columns: abc.a:4(int!null)
-      ├── inner-join (hash)
-      │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ac.a:10(int!null) ac.c:11(int)
-      │    ├── scan ac
-      │    │    └── columns: ac.a:10(int) ac.c:11(int)
-      │    ├── inner-join (hash)
-      │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int)
-      │    │    ├── scan ab
-      │    │    │    └── columns: ab.a:7(int) ab.b:8(int)
+      ├── internal-ordering: +(4|7|10)
+      ├── inner-join (merge)
+      │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ab.rowid:9(int!null) ac.a:10(int!null) ac.c:11(int) ac.rowid:12(int!null)
+      │    ├── left ordering: +4
+      │    ├── right ordering: +7
+      │    ├── ordering: +(4|7|10)
+      │    ├── inner-join (merge)
+      │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ac.a:10(int!null) ac.c:11(int) ac.rowid:12(int!null)
+      │    │    ├── left ordering: +4
+      │    │    ├── right ordering: +10
+      │    │    ├── ordering: +(4|10)
       │    │    ├── scan abc
-      │    │    │    └── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
-      │    │    └── filters
-      │    │         └── eq [type=bool]
-      │    │              ├── variable: abc.a [type=int]
-      │    │              └── variable: ab.a [type=int]
-      │    └── filters
-      │         └── eq [type=bool]
-      │              ├── variable: ab.a [type=int]
-      │              └── variable: ac.a [type=int]
+      │    │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
+      │    │    │    └── ordering: +4
+      │    │    ├── sort
+      │    │    │    ├── columns: ac.a:10(int) ac.c:11(int) ac.rowid:12(int!null)
+      │    │    │    ├── ordering: +10
+      │    │    │    └── scan ac
+      │    │    │         └── columns: ac.a:10(int) ac.c:11(int) ac.rowid:12(int!null)
+      │    │    └── filters (true)
+      │    ├── sort
+      │    │    ├── columns: ab.a:7(int) ab.b:8(int) ab.rowid:9(int!null)
+      │    │    ├── ordering: +7
+      │    │    └── scan ab
+      │    │         └── columns: ab.a:7(int) ab.b:8(int) ab.rowid:9(int!null)
+      │    └── filters (true)
       └── aggregations
            ├── first-agg [type=int]
            │    └── variable: abc.b [type=int]
@@ -325,6 +396,10 @@ update abc
            ├── first-agg [type=int]
            │    └── variable: ab.b [type=int]
            ├── first-agg [type=int]
+           │    └── variable: ab.rowid [type=int]
+           ├── first-agg [type=int]
            │    └── variable: ac.a [type=int]
+           ├── first-agg [type=int]
+           │    └── variable: ac.c [type=int]
            └── first-agg [type=int]
-                └── variable: ac.c [type=int]
+                └── variable: ac.rowid [type=int]

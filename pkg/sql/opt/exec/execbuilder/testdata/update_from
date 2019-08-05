@@ -184,27 +184,28 @@ WHERE
 RETURNING
   *
 ----
-run                                 ·                   ·
- └── update                         ·                   ·
-      │                             table               abc
-      │                             set                 b, c
-      │                             strategy            updater
-      └── render                    ·                   ·
-           └── distinct             ·                   ·
-                │                   distinct on         a
-                └── hash-join       ·                   ·
-                     │              type                inner
-                     │              equality            (a) = (a)
-                     ├── scan       ·                   ·
-                     │              table               ac@primary
-                     │              spans               ALL
-                     └── hash-join  ·                   ·
-                          │         type                inner
-                          │         equality            (a) = (a)
-                          │         right cols are key  ·
-                          ├── scan  ·                   ·
-                          │         table               ab@primary
-                          │         spans               ALL
-                          └── scan  ·                   ·
-·                                   table               abc@primary
-·                                   spans               ALL
+render                                   ·                   ·
+ └── run                                 ·                   ·
+      └── update                         ·                   ·
+           │                             table               abc
+           │                             set                 b, c
+           │                             strategy            updater
+           └── render                    ·                   ·
+                └── distinct             ·                   ·
+                     │                   distinct on         a
+                     └── hash-join       ·                   ·
+                          │              type                inner
+                          │              equality            (a) = (a)
+                          ├── scan       ·                   ·
+                          │              table               ac@primary
+                          │              spans               ALL
+                          └── hash-join  ·                   ·
+                               │         type                inner
+                               │         equality            (a) = (a)
+                               │         right cols are key  ·
+                               ├── scan  ·                   ·
+                               │         table               ab@primary
+                               │         spans               ALL
+                               └── scan  ·                   ·
+·                                        table               abc@primary
+·                                        spans               ALL
