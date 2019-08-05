@@ -475,9 +475,11 @@ func init() {
 	// Quit command.
 	BoolFlag(quitCmd.Flags(), &quitCtx.serverDecommission, cliflags.Decommission, quitCtx.serverDecommission)
 
+	// Zone flags.
+	// TODO(knz): Remove in 19.3 or 20.x.
 	zf := setZoneCmd.Flags()
-	StringFlag(zf, &zoneCtx.zoneConfig, cliflags.ZoneConfig, zoneCtx.zoneConfig)
-	BoolFlag(zf, &zoneCtx.zoneDisableReplication, cliflags.ZoneDisableReplication, zoneCtx.zoneDisableReplication)
+	_ = zf.String(cliflags.ZoneConfig.Name, "", cliflags.ZoneConfig.Description)
+	_ = zf.Bool(cliflags.ZoneDisableReplication.Name, false, cliflags.ZoneDisableReplication.Description)
 
 	for _, cmd := range append([]*cobra.Command{sqlShellCmd, demoCmd}, demoCmd.Commands()...) {
 		f := cmd.Flags()

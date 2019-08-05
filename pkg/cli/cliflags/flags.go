@@ -128,17 +128,14 @@ Including more tiers is better than including fewer. For example:
 	}
 
 	ZoneConfig = FlagInfo{
-		Name:      "file",
-		Shorthand: "f",
-		Description: `
-File to read the zone configuration from. Specify "-" to read from standard input.`,
+		Name:        "file",
+		Shorthand:   "f",
+		Description: `DEPRECATED`,
 	}
 
 	ZoneDisableReplication = FlagInfo{
-		Name: "disable-replication",
-		Description: `
-Disable replication in the zone by setting the desired replica count to 1.
-Equivalent to setting 'num_replicas: 1' via -f.`,
+		Name:        "disable-replication",
+		Description: `DEPRECATED`,
 	}
 
 	Background = FlagInfo{
