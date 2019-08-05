@@ -62,24 +62,23 @@ WHERE
 RETURNING
   abc.a, abc.b AS new_b, old.b as old_b, abc.c as new_c, old.c as old_c
 ----
-render                               ·               ·
- └── render                          ·               ·
-      └── run                        ·               ·
-           └── update                ·               ·
-                │                    table           abc
-                │                    set             b, c
-                │                    strategy        updater
-                └── render           ·               ·
-                     └── merge-join  ·               ·
-                          │          type            inner
-                          │          equality        (a) = (a)
-                          │          mergeJoinOrder  +"(a=a)"
-                          ├── scan   ·               ·
-                          │          table           abc@primary
-                          │          spans           ALL
-                          └── scan   ·               ·
-·                                    table           abc@primary
-·                                    spans           ALL
+render                          ·               ·
+ └── run                        ·               ·
+      └── update                ·               ·
+           │                    table           abc
+           │                    set             b, c
+           │                    strategy        updater
+           └── render           ·               ·
+                └── merge-join  ·               ·
+                     │          type            inner
+                     │          equality        (a) = (a)
+                     │          mergeJoinOrder  +"(a=a)"
+                     ├── scan   ·               ·
+                     │          table           abc@primary
+                     │          spans           ALL
+                     └── scan   ·               ·
+·                               table           abc@primary
+·                               spans           ALL
 
 # Check if RETURNING * returns everything
 query TTTTT
@@ -184,28 +183,27 @@ WHERE
 RETURNING
   *
 ----
-render                                   ·                   ·
- └── run                                 ·                   ·
-      └── update                         ·                   ·
-           │                             table               abc
-           │                             set                 b, c
-           │                             strategy            updater
-           └── render                    ·                   ·
-                └── distinct             ·                   ·
-                     │                   distinct on         a
-                     └── hash-join       ·                   ·
-                          │              type                inner
-                          │              equality            (a) = (a)
-                          ├── scan       ·                   ·
-                          │              table               ac@primary
-                          │              spans               ALL
-                          └── hash-join  ·                   ·
-                               │         type                inner
-                               │         equality            (a) = (a)
-                               │         right cols are key  ·
-                               ├── scan  ·                   ·
-                               │         table               ab@primary
-                               │         spans               ALL
-                               └── scan  ·                   ·
-·                                        table               abc@primary
-·                                        spans               ALL
+run                                 ·                   ·
+ └── update                         ·                   ·
+      │                             table               abc
+      │                             set                 b, c
+      │                             strategy            updater
+      └── render                    ·                   ·
+           └── distinct             ·                   ·
+                │                   distinct on         a
+                └── hash-join       ·                   ·
+                     │              type                inner
+                     │              equality            (a) = (a)
+                     ├── scan       ·                   ·
+                     │              table               ac@primary
+                     │              spans               ALL
+                     └── hash-join  ·                   ·
+                          │         type                inner
+                          │         equality            (a) = (a)
+                          │         right cols are key  ·
+                          ├── scan  ·                   ·
+                          │         table               ab@primary
+                          │         spans               ALL
+                          └── scan  ·                   ·
+·                                   table               abc@primary
+·                                   spans               ALL

@@ -86,34 +86,32 @@ WHERE
 RETURNING
   abc.a, abc.b AS new_b, old.b as old_b, abc.c as new_c, old.c as old_c
 ----
-project
+update abc
  ├── columns: a:1(int!null) new_b:2(int) old_b:8(int) new_c:3(int) old_c:9(int)
- └── update abc
-      ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int) old.a:7(int) old.b:8(int) old.c:9(int)
-      ├── fetch columns: abc.a:4(int) abc.b:5(int) abc.c:6(int)
-      ├── update-mapping:
-      │    ├──  column10:10 => abc.b:2
-      │    └──  column11:11 => abc.c:3
-      └── project
-           ├── columns: column10:10(int) column11:11(int) abc.a:4(int!null) abc.b:5(int) abc.c:6(int) old.a:7(int!null) old.b:8(int) old.c:9(int)
-           ├── inner-join (merge)
-           │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) old.a:7(int!null) old.b:8(int) old.c:9(int)
-           │    ├── left ordering: +4
-           │    ├── right ordering: +7
-           │    ├── scan abc
-           │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
-           │    │    └── ordering: +4
-           │    ├── scan old
-           │    │    ├── columns: old.a:7(int!null) old.b:8(int) old.c:9(int)
-           │    │    └── ordering: +7
-           │    └── filters (true)
-           └── projections
-                ├── plus [type=int]
-                │    ├── variable: old.b [type=int]
-                │    └── const: 1 [type=int]
-                └── plus [type=int]
-                     ├── variable: old.c [type=int]
-                     └── const: 2 [type=int]
+ ├── fetch columns: abc.a:4(int) abc.b:5(int) abc.c:6(int)
+ ├── update-mapping:
+ │    ├──  column10:10 => abc.b:2
+ │    └──  column11:11 => abc.c:3
+ └── project
+      ├── columns: column10:10(int) column11:11(int) abc.a:4(int!null) abc.b:5(int) abc.c:6(int) old.b:8(int) old.c:9(int)
+      ├── inner-join (merge)
+      │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) old.a:7(int!null) old.b:8(int) old.c:9(int)
+      │    ├── left ordering: +4
+      │    ├── right ordering: +7
+      │    ├── scan abc
+      │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
+      │    │    └── ordering: +4
+      │    ├── scan old
+      │    │    ├── columns: old.a:7(int!null) old.b:8(int) old.c:9(int)
+      │    │    └── ordering: +7
+      │    └── filters (true)
+      └── projections
+           ├── plus [type=int]
+           │    ├── variable: old.b [type=int]
+           │    └── const: 1 [type=int]
+           └── plus [type=int]
+                ├── variable: old.c [type=int]
+                └── const: 2 [type=int]
 
 # Check if RETURNING * returns everything
 opt
@@ -294,50 +292,46 @@ WHERE
 RETURNING
   *
 ----
-project
+update abc
  ├── columns: a:1(int!null) b:2(int) c:3(int) a:7(int) b:8(int) a:10(int) c:11(int)
- └── update abc
-      ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int) ab.a:7(int) ab.b:8(int) ab.rowid:9(int) ac.a:10(int) ac.c:11(int)
-      ├── fetch columns: abc.a:4(int) abc.b:5(int) abc.c:6(int)
-      ├── update-mapping:
-      │    ├──  ab.b:8 => abc.b:2
-      │    └──  ac.c:11 => abc.c:3
-      └── distinct-on
-           ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int) ab.b:8(int) ab.rowid:9(int) ac.a:10(int) ac.c:11(int)
-           ├── grouping columns: abc.a:4(int!null)
-           ├── inner-join (hash)
-           │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ab.rowid:9(int!null) ac.a:10(int!null) ac.c:11(int)
-           │    ├── scan ac
-           │    │    └── columns: ac.a:10(int) ac.c:11(int)
-           │    ├── inner-join (hash)
-           │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ab.rowid:9(int!null)
-           │    │    ├── scan ab
-           │    │    │    └── columns: ab.a:7(int) ab.b:8(int) ab.rowid:9(int!null)
-           │    │    ├── scan abc
-           │    │    │    └── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
-           │    │    └── filters
-           │    │         └── eq [type=bool]
-           │    │              ├── variable: abc.a [type=int]
-           │    │              └── variable: ab.a [type=int]
-           │    └── filters
-           │         └── eq [type=bool]
-           │              ├── variable: ab.a [type=int]
-           │              └── variable: ac.a [type=int]
-           └── aggregations
-                ├── first-agg [type=int]
-                │    └── variable: abc.b [type=int]
-                ├── first-agg [type=int]
-                │    └── variable: abc.c [type=int]
-                ├── first-agg [type=int]
-                │    └── variable: ab.a [type=int]
-                ├── first-agg [type=int]
-                │    └── variable: ab.b [type=int]
-                ├── first-agg [type=int]
-                │    └── variable: ab.rowid [type=int]
-                ├── first-agg [type=int]
-                │    └── variable: ac.a [type=int]
-                └── first-agg [type=int]
-                     └── variable: ac.c [type=int]
+ ├── fetch columns: abc.a:4(int) abc.b:5(int) abc.c:6(int)
+ ├── update-mapping:
+ │    ├──  ab.b:8 => abc.b:2
+ │    └──  ac.c:11 => abc.c:3
+ └── distinct-on
+      ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int) ab.b:8(int) ac.a:10(int) ac.c:11(int)
+      ├── grouping columns: abc.a:4(int!null)
+      ├── inner-join (hash)
+      │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int) ac.a:10(int!null) ac.c:11(int)
+      │    ├── scan ac
+      │    │    └── columns: ac.a:10(int) ac.c:11(int)
+      │    ├── inner-join (hash)
+      │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) ab.a:7(int!null) ab.b:8(int)
+      │    │    ├── scan ab
+      │    │    │    └── columns: ab.a:7(int) ab.b:8(int)
+      │    │    ├── scan abc
+      │    │    │    └── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int)
+      │    │    └── filters
+      │    │         └── eq [type=bool]
+      │    │              ├── variable: abc.a [type=int]
+      │    │              └── variable: ab.a [type=int]
+      │    └── filters
+      │         └── eq [type=bool]
+      │              ├── variable: ab.a [type=int]
+      │              └── variable: ac.a [type=int]
+      └── aggregations
+           ├── first-agg [type=int]
+           │    └── variable: abc.b [type=int]
+           ├── first-agg [type=int]
+           │    └── variable: abc.c [type=int]
+           ├── first-agg [type=int]
+           │    └── variable: ab.a [type=int]
+           ├── first-agg [type=int]
+           │    └── variable: ab.b [type=int]
+           ├── first-agg [type=int]
+           │    └── variable: ac.a [type=int]
+           └── first-agg [type=int]
+                └── variable: ac.c [type=int]
 
 # Make sure UPDATE ... FROM can return hidden columns.
 opt
