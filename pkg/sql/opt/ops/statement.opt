@@ -127,7 +127,7 @@ define OpaqueDDL {
 [Private]
 define OpaqueRelPrivate {
     Columns ColList
-    Metadata OpaqueMetadata 
+    Metadata OpaqueMetadata
 }
 
 # AlterTableSplit represents an `ALTER TABLE/INDEX .. SPLIT AT ..` statement.
@@ -238,4 +238,30 @@ define CancelSessions {
     Input RelExpr
 
     _ CancelPrivate
+}
+
+# Export represents an `EXPORT` statement.
+[Relational]
+define Export {
+    # Input is the relational expression for the data we are exporting.
+    Input    RelExpr
+
+    # FileName is the string URI for the output file.
+    FileName ScalarExpr
+
+    Options  KVOptionsExpr
+
+    _ ExportPrivate
+}
+
+[Private]
+define ExportPrivate {
+    # FileFormat describes the requested format, e.g. "CSV".
+    FileFormat string
+
+    # Props stores the required physical properties for the input expression.
+    Props PhysProps
+
+    # Columns stores the column IDs for the statement result columns.
+    Columns ColList
 }

@@ -275,3 +275,41 @@ func (b *Builder) buildCancelSessions(cancel *memo.CancelSessionsExpr) (execPlan
 	// CancelSessions returns no columns.
 	return execPlan{root: node}, nil
 }
+
+func (b *Builder) buildExport(export *memo.ExportExpr) (execPlan, error) {
+	input, err := b.buildRelational(export.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	scalarCtx := buildScalarCtx{}
+	fileName, err := b.buildScalar(&scalarCtx, export.FileName)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	opts := make([]exec.KVOption, len(export.Options))
+	for i, o := range export.Options {
+		opts[i].Key = o.Key
+		var err error
+		opts[i].Value, err = b.buildScalar(&scalarCtx, o.Value)
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
+
+	node, err := b.factory.ConstructExport(
+		input.root,
+		fileName,
+		export.FileFormat,
+		opts,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+	ep := execPlan{root: node}
+	for i, c := range export.Columns {
+		ep.outputCols.Set(int(c), i)
+	}
+	return ep, nil
+}
