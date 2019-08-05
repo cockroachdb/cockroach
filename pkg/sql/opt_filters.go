@@ -385,6 +385,7 @@ func (p *planner) propagateFilters(
 	case *commentOnColumnNode:
 	case *commentOnDatabaseNode:
 	case *commentOnTableNode:
+	case *changePrivilegesNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *CreateUserNode:

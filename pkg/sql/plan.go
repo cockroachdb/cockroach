@@ -171,6 +171,7 @@ var _ planNode = &alterTableNode{}
 var _ planNode = &bufferNode{}
 var _ planNode = &cancelQueriesNode{}
 var _ planNode = &cancelSessionsNode{}
+var _ planNode = &changePrivilegesNode{}
 var _ planNode = &createDatabaseNode{}
 var _ planNode = &createIndexNode{}
 var _ planNode = &createSequenceNode{}
