@@ -596,6 +596,11 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 		if _, err := conn.Exec("set distsql='always'"); err != nil {
 			t.Fatal(err)
 		}
+		// Temporarily disable vectorized execution due to flaky failures.
+		// https://github.com/cockroachdb/cockroach/issues/39277
+		if _, err := conn.Exec("set vectorize='off'"); err != nil {
+			t.Fatal(err)
+		}
 		limit := 5
 		if dummy {
 			limit = 6
