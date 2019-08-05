@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -155,6 +156,19 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 		int64(sessiondata.VectorizeOff):            "off",
 		int64(sessiondata.VectorizeAuto):           "auto",
 		int64(sessiondata.VectorizeExperimentalOn): "experimental_on",
+	},
+)
+
+var VectorizeRowCountThresholdClusterValue = settings.RegisterValidatedIntSetting(
+	"sql.defaults.vectorize_row_count_threshold",
+	"default vectorize row count threshold",
+	exec.DefaultVectorizeRowCountThreshold,
+	func(v int64) error {
+		if v < 0 {
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"cannot set sql.defaults.vectorize_row_count_threshold to a negative value: %d", v)
+		}
+		return nil
 	},
 )
 
@@ -1801,6 +1815,10 @@ func (m *sessionDataMutator) SetReorderJoinsLimit(val int) {
 
 func (m *sessionDataMutator) SetVectorize(val sessiondata.VectorizeExecMode) {
 	m.data.VectorizeMode = val
+}
+
+func (m *sessionDataMutator) SetVectorizeRowCountThreshold(val uint64) {
+	m.data.VectorizeRowCountThreshold = val
 }
 
 func (m *sessionDataMutator) SetOptimizerMode(val sessiondata.OptimizerMode) {
