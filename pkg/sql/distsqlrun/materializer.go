@@ -52,13 +52,10 @@ type materializer struct {
 	outputRow      sqlbase.EncDatumRow
 	outputMetadata *distsqlpb.ProducerMetadata
 
-	// ctxCancel will cancel the context that is passed to the input (which will
-	// pass it down further). This allows for the cancellation of the tree rooted
-	// at this materializer when it is closed.
-	ctxCancel context.CancelFunc
-	// cancelFlow will cancel the context of the flow (i.e. if non-nil, it is
-	// Flow.ctxCancel).
-	cancelFlow context.CancelFunc
+	// cancelFlow will return a function to cancel the context of the flow. It is
+	// a function in order to be lazily evaluated, since the context cancellation
+	// function is only available when Starting.
+	cancelFlow func() context.CancelFunc
 }
 
 const materializerProcName = "materializer"
@@ -70,9 +67,10 @@ const materializerProcName = "materializer"
 // - metadataSourcesQueue are all of the metadata sources that are planned on
 // the same node as the materializer and that need to be drained.
 // - outputStatsToTrace (when tracing is enabled) finishes the stats.
-// - cancelFlow is the context cancellation function that cancels the context
-// of the flow (i.e. it is Flow.ctxCancel). It should only be non-nil in case
-// of a root materializer (i.e. not when we're wrapping a row source).
+// - cancelFlow will return the context cancellation function that cancels the
+// context of the flow (i.e. Flow.ctxCancel). This function will only be
+// evaluated once the materializer is actually run. It should only be non-nil in
+// case of a root materializer (i.e. not when we're wrapping a row source).
 func newMaterializer(
 	flowCtx *FlowCtx,
 	processorID int32,
@@ -85,7 +83,7 @@ func newMaterializer(
 	output RowReceiver,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
 	outputStatsToTrace func(),
-	cancelFlow context.CancelFunc,
+	cancelFlow func() context.CancelFunc,
 ) (*materializer, error) {
 	m := &materializer{
 		input:               input,
@@ -121,17 +119,7 @@ func newMaterializer(
 
 func (m *materializer) Start(ctx context.Context) context.Context {
 	m.input.Init()
-	ctx = m.ProcessorBase.StartInternal(ctx, materializerProcName)
-	// In general case, ctx that is passed is related to the "flow context" that
-	// will be canceled by m.cancelFlow. However, in some cases (like when there
-	// is a subquery), it appears as if the subquery flow context is not related
-	// to the flow context of the main query, so calling m.cancelFlow will not
-	// shutdown the subquery tree. To work around this, we always use another
-	// context and get another cancellation function, and we will trigger both
-	// upon exit from the materializer.
-	// TODO(yuzefovich): figure out what is the problem here.
-	m.Ctx, m.ctxCancel = context.WithCancel(ctx)
-	return m.Ctx
+	return m.ProcessorBase.StartInternal(ctx, materializerProcName)
 }
 
 // nextAdapter calls next() and saves the returned results in m. For internal
@@ -193,9 +181,8 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 
 func (m *materializer) InternalClose() bool {
 	if m.ProcessorBase.InternalClose() {
-		m.ctxCancel()
 		if m.cancelFlow != nil {
-			m.cancelFlow()
+			m.cancelFlow()()
 		}
 		return true
 	}
