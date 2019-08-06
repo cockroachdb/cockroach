@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/pkg/errors"
 )
 
 // {{/*
@@ -55,6 +54,10 @@ type _GOTYPESLICE interface{}
 // types.Foo for each type Foo in the types.T type.
 const _TYPES_T = types.Unhandled
 
+// _ISNULL is the template type variable for whether the sorter handles nulls
+// or not. It will be replaced by the appropriate boolean.
+const _ISNULL = false
+
 // _ASSIGN_LT is the template equality function for assigning the first input
 // to the result of the second input < the third input.
 func _ASSIGN_LT(_, _, _ string) bool {
@@ -66,44 +69,72 @@ func _ASSIGN_LT(_, _, _ string) bool {
 // Use execgen package to remove unused import warning.
 var _ interface{} = execgen.GET
 
-func newSingleSorter(t types.T, dir distsqlpb.Ordering_Column_Direction) (colSorter, error) {
+func isSorterSupported(t types.T, dir distsqlpb.Ordering_Column_Direction) bool {
 	switch t {
-	// {{range .}} {{/* for each type */}}
+	// {{range $typ, $ := . }} {{/* for each type */}}
 	case _TYPES_T:
 		switch dir {
-		// {{range .Overloads}} {{/* for each direction */}}
+		// {{range (index . true).Overloads}} {{/* for each direction */}}
 		case _DIR_ENUM:
-			return &sort_TYPE_DIROp{}, nil
+			return true
 		// {{end}}
 		default:
-			return nil, errors.Errorf("unsupported sort dir %s", dir)
+			return false
 		}
 	// {{end}}
 	default:
-		return nil, errors.Errorf("unsupported sort type %s", t)
+		return false
 	}
 }
 
-// {{range .}} {{/* for each type */}}
+func newSingleSorter(t types.T, dir distsqlpb.Ordering_Column_Direction, hasNulls bool) colSorter {
+	switch t {
+	// {{range $typ, $ := . }} {{/* for each type */}}
+	case _TYPES_T:
+		switch hasNulls {
+		// {{range $isNull, $ := . }} {{/* for null vs not null */}}
+		case _ISNULL:
+			switch dir {
+			// {{range .Overloads}} {{/* for each direction */}}
+			case _DIR_ENUM:
+				return &sort_TYPE_DIR_HANDLESNULLSOp{}
+			// {{end}}
+			default:
+				panic("nulls switch failed")
+			}
+			// {{end}}
+		default:
+			panic("nulls switch failed")
+		}
+	// {{end}}
+	default:
+		panic("nulls switch failed")
+	}
+}
+
+// {{range $typ, $ := . }} {{/* for each type */}}
+// {{range . }} {{/* for null vs not null */}}
 // {{range .Overloads}} {{/* for each direction */}}
 
-type sort_TYPE_DIROp struct {
+type sort_TYPE_DIR_HANDLESNULLSOp struct {
 	sortCol       _GOTYPESLICE
+	nulls         *coldata.Nulls
 	order         []uint64
 	cancelChecker CancelChecker
 }
 
-func (s *sort_TYPE_DIROp) init(col coldata.Vec, order []uint64) {
+func (s *sort_TYPE_DIR_HANDLESNULLSOp) init(col coldata.Vec, order []uint64) {
 	s.sortCol = col._TemplateType()
+	s.nulls = col.Nulls()
 	s.order = order
 }
 
-func (s *sort_TYPE_DIROp) sort(ctx context.Context) {
+func (s *sort_TYPE_DIR_HANDLESNULLSOp) sort(ctx context.Context) {
 	n := execgen.LEN(s.sortCol)
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
-func (s *sort_TYPE_DIROp) sortPartitions(ctx context.Context, partitions []uint64) {
+func (s *sort_TYPE_DIR_HANDLESNULLSOp) sortPartitions(ctx context.Context, partitions []uint64) {
 	if len(partitions) < 1 {
 		panic(fmt.Sprintf("invalid partitions list %v", partitions))
 	}
@@ -121,7 +152,30 @@ func (s *sort_TYPE_DIROp) sortPartitions(ctx context.Context, partitions []uint6
 	}
 }
 
-func (s *sort_TYPE_DIROp) Less(i, j int) bool {
+func (s *sort_TYPE_DIR_HANDLESNULLSOp) Less(i, j int) bool {
+	// {{ if eq .Nulls true }}
+	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt64(s.order[i])
+	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt64(s.order[j])
+	// {{ if eq .DirString "Asc" }}
+	// If ascending, nulls always sort first, so we encode that logic here.
+	if n1 && n2 {
+		return false
+	} else if n1 {
+		return true
+	} else if n2 {
+		return false
+	}
+	// {{ else if eq .DirString "Desc" }}
+	// If descending, nulls always sort last, so we encode that logic here.
+	if n1 && n2 {
+		return false
+	} else if n1 {
+		return false
+	} else if n2 {
+		return true
+	}
+	// {{end}}
+	// {{end}}
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := execgen.GET(s.sortCol, int(s.order[i]))
@@ -130,14 +184,15 @@ func (s *sort_TYPE_DIROp) Less(i, j int) bool {
 	return lt
 }
 
-func (s *sort_TYPE_DIROp) Swap(i, j int) {
+func (s *sort_TYPE_DIR_HANDLESNULLSOp) Swap(i, j int) {
 	// We don't physically swap the column - we merely edit the order vector.
 	s.order[i], s.order[j] = s.order[j], s.order[i]
 }
 
-func (s *sort_TYPE_DIROp) Len() int {
+func (s *sort_TYPE_DIR_HANDLESNULLSOp) Len() int {
 	return len(s.order)
 }
 
+// {{end}}
 // {{end}}
 // {{end}}
