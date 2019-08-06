@@ -1768,7 +1768,7 @@ func (node *Backup) doc(p *PrettyCfg) pretty.Doc {
 
 	items = append(items, p.row("BACKUP", pretty.Nil))
 	items = append(items, node.Targets.docRow(p))
-	items = append(items, p.row("TO", p.Doc(node.To)))
+	items = append(items, p.row("TO", p.Doc(&node.To)))
 
 	if node.AsOf.Expr != nil {
 		items = append(items, node.AsOf.docRow(p))
@@ -1787,7 +1787,11 @@ func (node *Restore) doc(p *PrettyCfg) pretty.Doc {
 
 	items = append(items, p.row("RESTORE", pretty.Nil))
 	items = append(items, node.Targets.docRow(p))
-	items = append(items, p.row("FROM", p.Doc(&node.From)))
+	from := make([]pretty.Doc, len(node.From))
+	for i := range node.From {
+		from[i] = p.Doc(&node.From[i])
+	}
+	items = append(items, p.row("FROM", p.commaSeparated(from...)))
 
 	if node.AsOf.Expr != nil {
 		items = append(items, node.AsOf.docRow(p))

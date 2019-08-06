@@ -82,6 +82,73 @@ func loadBackupDescs(
 	return backupDescs, nil
 }
 
+// getBackupLocalityInfo takes a list of store URIs that together contain a
+// partitioned backup, the first of which must contain the main BACKUP manifest,
+// and searches for BACKUP_PART files in each store to build a map of (non-
+// default) original backup locality values to URIs that currently contain
+// the backup files.
+func getBackupLocalityInfo(
+	ctx context.Context, uris []string, settings *cluster.Settings,
+) (jobspb.RestoreDetails_BackupLocalityInfo, error) {
+	var info jobspb.RestoreDetails_BackupLocalityInfo
+	if len(uris) == 1 {
+		return info, nil
+	}
+	stores := make([]storageccl.ExportStorage, len(uris))
+	for i, uri := range uris {
+		conf, err := storageccl.ExportStorageConfFromURI(uri)
+		if err != nil {
+			return info, errors.Wrapf(err, "export configuration")
+		}
+		store, err := storageccl.MakeExportStorage(ctx, conf, settings)
+		if err != nil {
+			return info, errors.Wrapf(err, "make storage")
+		}
+		defer store.Close()
+		stores[i] = store
+	}
+
+	// First read the main backup descriptor, which is required to be at the first
+	// URI in the list.
+	mainBackupDesc, err := readBackupDescriptor(ctx, stores[0], BackupDescriptorName)
+	if err != nil {
+		return info, err
+	}
+
+	// Now get the list of expected partial per-store backup manifest filenames
+	// and attempt to find them.
+	urisByOrigLocality := make(map[string]string)
+	for _, filename := range mainBackupDesc.PartitionDescriptorFilenames {
+		found := false
+		for i, store := range stores {
+			if desc, err := readBackupPartitionDescriptor(ctx, store, filename); err == nil {
+				if desc.BackupID != mainBackupDesc.ID {
+					return info, errors.Errorf(
+						"expected backup part to have backup ID %s, found %s",
+						mainBackupDesc.ID, desc.BackupID,
+					)
+				}
+				origLocalityKV := desc.LocalityKV
+				kv := roachpb.Tier{}
+				if err := kv.FromString(origLocalityKV); err != nil {
+					return info, errors.Wrapf(err, "reading backup manifest from %s", uris[i])
+				}
+				if _, ok := urisByOrigLocality[origLocalityKV]; ok {
+					return info, errors.Errorf("duplicate locality %s found in backup", origLocalityKV)
+				}
+				urisByOrigLocality[origLocalityKV] = uris[i]
+				found = true
+				break
+			}
+		}
+		if !found {
+			return info, errors.Errorf("expected manifest %s not found in backup locations", filename)
+		}
+	}
+	info.URIsByOriginalLocalityKV = urisByOrigLocality
+	return info, nil
+}
+
 func loadSQLDescsFromBackupsAtTime(
 	backupDescs []BackupDescriptor, asOf hlc.Timestamp,
 ) ([]sqlbase.Descriptor, BackupDescriptor) {
@@ -633,6 +700,7 @@ func errOnMissingRange(span intervalccl.Range, start, end hlc.Timestamp) error {
 func makeImportSpans(
 	tableSpans []roachpb.Span,
 	backups []BackupDescriptor,
+	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	lowWaterMark roachpb.Key,
 	onMissing func(span intervalccl.Range, start, end hlc.Timestamp) error,
 ) ([]importEntry, hlc.Timestamp, error) {
@@ -672,7 +740,7 @@ func makeImportSpans(
 	// backup2 files) so they will retain that alternation in the output of
 	// OverlapCoveringMerge.
 	var maxEndTime hlc.Timestamp
-	for _, b := range backups {
+	for i, b := range backups {
 		if maxEndTime.Less(b.EndTime) {
 			maxEndTime = b.EndTime
 		}
@@ -697,14 +765,32 @@ func makeImportSpans(
 		}
 		backupCoverings = append(backupCoverings, backupSpanCovering)
 		var backupFileCovering intervalccl.Covering
+
+		var storesByLocalityKV map[string]roachpb.ExportStorage
+		if backupLocalityInfo != nil && backupLocalityInfo[i].URIsByOriginalLocalityKV != nil {
+			storesByLocalityKV = make(map[string]roachpb.ExportStorage)
+			for kv, uri := range backupLocalityInfo[i].URIsByOriginalLocalityKV {
+				conf, err := storageccl.ExportStorageConfFromURI(uri)
+				if err != nil {
+					return nil, hlc.Timestamp{}, err
+				}
+				storesByLocalityKV[kv] = conf
+			}
+		}
 		for _, f := range b.Files {
+			dir := b.Dir
+			if storesByLocalityKV != nil {
+				if newDir, ok := storesByLocalityKV[f.LocalityKV]; ok {
+					dir = newDir
+				}
+			}
 			backupFileCovering = append(backupFileCovering, intervalccl.Range{
 				Start: f.Span.Key,
 				End:   f.Span.EndKey,
 				Payload: importEntry{
 					Span:      f.Span,
 					entryType: backupFile,
-					dir:       b.Dir,
+					dir:       dir,
 					file:      f,
 				},
 			})
@@ -994,21 +1080,24 @@ func WriteTableDescs(
 }
 
 func restoreJobDescription(
-	p sql.PlanHookState, restore *tree.Restore, from []string, opts map[string]string,
+	p sql.PlanHookState, restore *tree.Restore, from [][]string, opts map[string]string,
 ) (string, error) {
 	r := &tree.Restore{
 		AsOf:    restore.AsOf,
 		Options: optsToKVOptions(opts),
 		Targets: restore.Targets,
-		From:    make(tree.Exprs, len(restore.From)),
+		From:    make([]tree.PartitionedBackup, len(restore.From)),
 	}
 
-	for i, f := range from {
-		sf, err := storageccl.SanitizeExportStorageURI(f)
-		if err != nil {
-			return "", err
+	for i, backup := range from {
+		r.From[i] = make(tree.PartitionedBackup, len(backup))
+		for j, uri := range backup {
+			sf, err := storageccl.SanitizeExportStorageURI(uri)
+			if err != nil {
+				return "", err
+			}
+			r.From[i][j] = tree.NewDString(sf)
 		}
-		r.From[i] = tree.NewDString(sf)
 	}
 
 	ann := p.ExtendedEvalContext().Annotations
@@ -1066,6 +1155,7 @@ func restore(
 	gossip *gossip.Gossip,
 	settings *cluster.Settings,
 	backupDescs []BackupDescriptor,
+	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
 	sqlDescs []sqlbase.Descriptor,
 	tableRewrites TableRewriteMap,
@@ -1151,7 +1241,7 @@ func restore(
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
-	importSpans, _, err := makeImportSpans(spans, backupDescs, highWaterMark, errOnMissingRange)
+	importSpans, _, err := makeImportSpans(spans, backupDescs, backupLocalityInfo, highWaterMark, errOnMissingRange)
 	if err != nil {
 		return mu.res, nil, nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
@@ -1311,9 +1401,13 @@ func restorePlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	fromFn, err := p.TypeAsStringArray(restoreStmt.From, "RESTORE")
-	if err != nil {
-		return nil, nil, nil, false, err
+	fromFns := make([]func() ([]string, error), len(restoreStmt.From))
+	for i := range restoreStmt.From {
+		fromFn, err := p.TypeAsStringArray(tree.Exprs(restoreStmt.From[i]), "RESTORE")
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		fromFns[i] = fromFn
 	}
 
 	optsFn, err := p.TypeAsStringOpts(restoreStmt.Options, restoreOptionExpectValues)
@@ -1340,9 +1434,12 @@ func restorePlanHook(
 			return errors.Errorf("RESTORE cannot be used inside a transaction")
 		}
 
-		from, err := fromFn()
-		if err != nil {
-			return err
+		from := make([][]string, len(fromFns))
+		for i := range fromFns {
+			from[i], err = fromFns[i]()
+			if err != nil {
+				return err
+			}
 		}
 		var endTime hlc.Timestamp
 		if restoreStmt.AsOf.Expr != nil {
@@ -1366,19 +1463,30 @@ func doRestorePlan(
 	ctx context.Context,
 	restoreStmt *tree.Restore,
 	p sql.PlanHookState,
-	from []string,
+	from [][]string,
 	endTime hlc.Timestamp,
 	opts map[string]string,
 	resultsCh chan<- tree.Datums,
 ) error {
-	backupDescs, err := loadBackupDescs(ctx, from, p.ExecCfg().Settings)
+	defaultURIs := make([]string, len(from))
+	localityInfo := make([]jobspb.RestoreDetails_BackupLocalityInfo, len(from))
+	for i, uris := range from {
+		// The first URI in the list must contain the main BACKUP manifest.
+		defaultURIs[i] = uris[0]
+		info, err := getBackupLocalityInfo(ctx, uris, p.ExecCfg().Settings)
+		if err != nil {
+			return err
+		}
+		localityInfo[i] = info
+	}
+	mainBackupDescs, err := loadBackupDescs(ctx, defaultURIs, p.ExecCfg().Settings)
 	if err != nil {
 		return err
 	}
 
 	if !endTime.IsEmpty() {
 		ok := false
-		for _, b := range backupDescs {
+		for _, b := range mainBackupDescs {
 			// Find the backup that covers the requested time.
 			if b.StartTime.Less(endTime) && !b.EndTime.Less(endTime) {
 				ok = true
@@ -1407,7 +1515,7 @@ func doRestorePlan(
 		}
 	}
 
-	sqlDescs, restoreDBs, err := selectTargets(ctx, p, backupDescs, restoreStmt.Targets, endTime)
+	sqlDescs, restoreDBs, err := selectTargets(ctx, p, mainBackupDescs, restoreStmt.Targets, endTime)
 	if err != nil {
 		return err
 	}
@@ -1455,11 +1563,12 @@ func doRestorePlan(
 			return sqlDescIDs
 		}(),
 		Details: jobspb.RestoreDetails{
-			EndTime:       endTime,
-			TableRewrites: tableRewrites,
-			URIs:          from,
-			TableDescs:    tables,
-			OverrideDB:    opts[restoreOptIntoDB],
+			EndTime:            endTime,
+			TableRewrites:      tableRewrites,
+			URIs:               defaultURIs,
+			BackupLocalityInfo: localityInfo,
+			TableDescs:         tables,
+			OverrideDB:         opts[restoreOptIntoDB],
 		},
 		Progress: jobspb.RestoreProgress{},
 	})
@@ -1515,6 +1624,7 @@ func (r *restoreResumer) Resume(
 		p.ExecCfg().Gossip,
 		p.ExecCfg().Settings,
 		backupDescs,
+		details.BackupLocalityInfo,
 		details.EndTime,
 		sqlDescs,
 		details.TableRewrites,
