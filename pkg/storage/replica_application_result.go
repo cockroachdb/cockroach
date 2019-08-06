@@ -21,6 +21,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// replica_application_*.go files provide concrete implementations of
+// the interfaces defined in the storage/apply package:
+//
+// replica_application_state_machine.go  ->  apply.StateMachine
+// replica_application_decoder.go        ->  apply.Decoder
+// replica_application_cmd.go            ->  apply.Command         (and variants)
+// replica_application_cmd_buf.go        ->  apply.CommandIterator (and variants)
+// replica_application_cmd_buf.go        ->  apply.CommandList     (and variants)
+//
+// These allow Replica to interface with the storage/apply package.
+
 // isTrivial determines whether the side-effects of a ReplicatedEvalResult are
 // "trivial". A result is fundamentally considered "trivial" if it does not have
 // side effects which rely on the written state of the replica exactly matching
@@ -100,7 +111,7 @@ func clearTrivialReplicatedEvalResultFields(r *storagepb.ReplicatedEvalResult) {
 // ReplicatedEvalResult because the process of handling the replicated eval
 // result will zero-out the struct to ensure that is has properly performed all
 // of the implied side-effects.
-func (r *Replica) prepareLocalResult(ctx context.Context, cmd *cmdAppCtx) {
+func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	if !cmd.IsLocal() {
 		return
 	}
@@ -179,7 +190,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *cmdAppCtx) {
 // has already been successfully applied or has been reproposed here or by a
 // different entry for the same proposal that hit an illegal lease index error.
 func (r *Replica) tryReproposeWithNewLeaseIndex(
-	ctx context.Context, cmd *cmdAppCtx,
+	ctx context.Context, cmd *replicatedCmd,
 ) *roachpb.Error {
 	// Note that we don't need to validate anything about the proposal's
 	// lease here - if we got this far, we know that everything but the
@@ -212,10 +223,11 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 	return nil
 }
 
-// Replica.handleXYZResult methods are called by replicaApplier.ApplySideEffects
-// when applying non-trivial side effects. As a general rule, there is a method
-// for each of the non-trivial fields in ReplicatedEvalResult. Most methods are
-// simple enough that they will be inlined.
+// The following Replica.handleXYZResult methods are called when applying
+// non-trivial side effects in replicaStateMachine.ApplySideEffects. As a
+// general rule, there is a method for each of the non-trivial fields in
+// ReplicatedEvalResult. Most methods are simple enough that they will be
+// inlined.
 
 func (r *Replica) handleSplitResult(ctx context.Context, split *storagepb.Split) {
 	splitPostApply(ctx, split.RHSDelta, &split.SplitTrigger, r)

@@ -196,10 +196,10 @@ type Replica struct {
 		stateLoader stateloader.StateLoader
 		// on-disk storage for sideloaded SSTables. nil when there's no ReplicaID.
 		sideloaded SideloadStorage
+		// stateMachine is used to apply committed raft entries.
+		stateMachine replicaStateMachine
 		// decoder is used to decode committed raft entries.
 		decoder replicaDecoder
-		// applier is used to apply committed raft entries.
-		applier replicaApplier
 	}
 
 	// Contains the lease history when enabled.

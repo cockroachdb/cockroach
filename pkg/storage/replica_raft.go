@@ -718,9 +718,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	applicationStart := timeutil.Now()
 	if len(rd.CommittedEntries) > 0 {
-		app := r.getApplier()
+		sm := r.getStateMachine()
 		dec := r.getDecoder()
-		appTask := apply.MakeTask(app, dec)
+		appTask := apply.MakeTask(sm, dec)
 		appTask.SetMaxBatchSize(r.store.TestingKnobs().MaxApplicationBatchSize)
 		defer appTask.Close()
 		if err := appTask.Decode(ctx, rd.CommittedEntries); err != nil {
@@ -729,7 +729,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		if err := appTask.ApplyCommittedEntries(ctx); err != nil {
 			return stats, err.(*nonDeterministicFailure).safeExpl, err
 		}
-		stats.applyCommittedEntriesStats = app.moveStats()
+		stats.applyCommittedEntriesStats = sm.moveStats()
 
 		// etcd raft occasionally adds a nil entry (our own commands are never
 		// empty). This happens in two situations: When a new leader is elected, and
