@@ -1243,6 +1243,82 @@ func TestClusterIDMismatch(t *testing.T) {
 	wg.Wait()
 }
 
+func TestClusterNameMismatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+
+	testData := []struct {
+		serverName             string
+		serverDisablePeerCheck bool
+		clientName             string
+		clientDisablePeerCheck bool
+		expectedErr            string
+	}{
+		{"", false, "", false, ``},
+		// The name check is enabled if both the client and server want it.
+		{"a", false, "", false, `peer node expects cluster name "a", use --cluster-name to configure`},
+		{"", false, "a", false, `peer node does not have a cluster name configured, cannot use --cluster-name`},
+		{"a", false, "b", false, `local cluster name "b" does not match peer cluster name "a"`},
+		// It's disabled if either doesn't want it.
+		// However in any case if the name is not empty it has to match.
+		{"a", true, "", false, ``},
+		{"", true, "a", false, ``},
+		{"a", true, "b", false, ``},
+		{"a", false, "", true, ``},
+		{"", false, "a", true, ``},
+		{"a", false, "b", true, ``},
+		{"a", true, "", true, ``},
+		{"", true, "a", true, ``},
+		{"a", true, "b", true, ``},
+	}
+
+	for i, c := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.TODO())
+
+			serverCtx := newTestContext(uuid.MakeV4(), clock, stopper)
+			serverCtx.clusterName = c.serverName
+			serverCtx.disableClusterNameVerification = c.serverDisablePeerCheck
+
+			s := newTestServer(t, serverCtx)
+			RegisterHeartbeatServer(s, &HeartbeatService{
+				clock:                          clock,
+				remoteClockMonitor:             serverCtx.RemoteClocks,
+				clusterID:                      &serverCtx.ClusterID,
+				nodeID:                         &serverCtx.NodeID,
+				version:                        serverCtx.version,
+				clusterName:                    serverCtx.clusterName,
+				disableClusterNameVerification: serverCtx.disableClusterNameVerification,
+			})
+
+			ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			remoteAddr := ln.Addr().String()
+
+			clientCtx := newTestContext(serverCtx.ClusterID.Get(), clock, stopper)
+			clientCtx.clusterName = c.clientName
+			clientCtx.disableClusterNameVerification = c.clientDisablePeerCheck
+
+			var wg sync.WaitGroup
+			for i := 0; i < 10; i++ {
+				wg.Add(1)
+				go func() {
+					_, err := clientCtx.GRPCUnvalidatedDial(remoteAddr).Connect(context.Background())
+					if !testutils.IsError(err, c.expectedErr) {
+						t.Errorf("expected %s error, got %v", c.expectedErr, err)
+					}
+					wg.Done()
+				}()
+			}
+			wg.Wait()
+		})
+	}
+}
+
 func TestNodeIDMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

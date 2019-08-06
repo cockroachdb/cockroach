@@ -277,6 +277,8 @@ func NewServerWithInterceptor(
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:                                 ctx.LocalClock,
 		remoteClockMonitor:                    ctx.RemoteClocks,
+		clusterName:                           ctx.clusterName,
+		disableClusterNameVerification:        ctx.disableClusterNameVerification,
 		clusterID:                             &ctx.ClusterID,
 		nodeID:                                &ctx.NodeID,
 		version:                               ctx.version,
@@ -395,6 +397,9 @@ type Context struct {
 	NodeID    base.NodeIDContainer
 	version   *cluster.ExposedClusterVersion
 
+	clusterName                    string
+	disableClusterNameVerification bool
+
 	metrics Metrics
 
 	// For unittesting.
@@ -431,8 +436,10 @@ func NewContext(
 		breakerClock: breakerClock{
 			clock: hlcClock,
 		},
-		rpcCompression: enableRPCCompression,
-		version:        version,
+		rpcCompression:                 enableRPCCompression,
+		version:                        version,
+		clusterName:                    baseCtx.ClusterName,
+		disableClusterNameVerification: baseCtx.DisableClusterNameVerification,
 	}
 	var cancel context.CancelFunc
 	ctx.masterCtx, cancel = context.WithCancel(ambient.AnnotateCtx(context.Background()))
@@ -463,6 +470,15 @@ func NewContext(
 	})
 
 	return ctx
+}
+
+// ClusterName retrieves the configured cluster name.
+func (ctx *Context) ClusterName() string {
+	if ctx == nil {
+		// This is used in tests.
+		return "<MISSING RPC CONTEXT>"
+	}
+	return ctx.clusterName
 }
 
 // GetStatsMap returns a map of network statistics maintained by the
@@ -912,6 +928,21 @@ func (ctx *Context) runHeartbeat(
 			} else {
 				err = ping(goCtx)
 			}
+
+			if err == nil {
+				// We verify the cluster name on the initiator side (instead
+				// of the hearbeat service side, as done for the cluster ID
+				// and node ID checks) so that the operator who is starting a
+				// new node in a cluster and mistakenly joins the wrong
+				// cluster gets a chance to see the error message on their
+				// management console.
+				if !ctx.disableClusterNameVerification && !response.DisableClusterNameVerification {
+					err = errors.Wrap(
+						checkClusterName(ctx.clusterName, response.ClusterName),
+						"cluster name check failed on ping response")
+				}
+			}
+
 			if err == nil {
 				err = errors.Wrap(
 					checkVersion(ctx.version, response.ServerVersion),

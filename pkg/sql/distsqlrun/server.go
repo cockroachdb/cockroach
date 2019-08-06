@@ -146,8 +146,9 @@ type ServerConfig struct {
 	Metrics *DistSQLMetrics
 
 	// NodeID is the id of the node on which this Server is running.
-	NodeID    *base.NodeIDContainer
-	ClusterID *base.ClusterIDContainer
+	NodeID      *base.NodeIDContainer
+	ClusterID   *base.ClusterIDContainer
+	ClusterName string
 
 	// JobRegistry manages jobs being used by this Server.
 	JobRegistry *jobs.Registry
@@ -412,6 +413,7 @@ func (ds *ServerImpl) setupFlow(
 			Settings:    ds.ServerConfig.Settings,
 			SessionData: sd,
 			ClusterID:   ds.ServerConfig.ClusterID.Get(),
+			ClusterName: ds.ServerConfig.ClusterName,
 			NodeID:      nodeID,
 			ReCache:     ds.regexpCache,
 			Mon:         &monitor,

@@ -2894,6 +2894,18 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"crdb_internal.cluster_name": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDString(ctx.ClusterName), nil
+			},
+			Info: "Returns the cluster name.",
+		},
+	),
+
 	"crdb_internal.force_error": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
