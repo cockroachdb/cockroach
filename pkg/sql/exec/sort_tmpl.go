@@ -84,7 +84,11 @@ func newSingleSorter(t types.T, dir distsqlpb.Ordering_Column_Direction) (colSor
 // {{range .Overloads}} {{/* for each direction */}}
 
 type sort_TYPE_DIROp struct {
-	sortCol       []_GOTYPE
+	sortCol []_GOTYPE
+	nulls   *coldata.Nulls
+	// nullOffset holds the index of the beginning of the partition that
+	// is being sorted. It is 0 when we are sorting the entire vector.
+	nullOffset    uint64
 	order         []uint64
 	workingSpace  []uint64
 	cancelChecker CancelChecker
@@ -92,6 +96,8 @@ type sort_TYPE_DIROp struct {
 
 func (s *sort_TYPE_DIROp) init(col coldata.Vec, order []uint64, workingSpace []uint64) {
 	s.sortCol = col._TemplateType()
+	s.nulls = col.Nulls()
+	s.nullOffset = 0
 	s.order = order
 	s.workingSpace = workingSpace
 }
@@ -118,6 +124,7 @@ func (s *sort_TYPE_DIROp) reorder() {
 	// the index array to an ordinal list in the process.
 	for i := range index {
 		for index[i] != uint64(i) {
+			s.nulls.SwapNulls(s.nullOffset+uint64(i), s.nullOffset+index[i])
 			s.sortCol[index[i]], s.sortCol[i] = s.sortCol[i], s.sortCol[index[i]]
 			index[i], index[index[i]] = index[index[i]], index[i]
 		}
@@ -130,6 +137,7 @@ func (s *sort_TYPE_DIROp) sortPartitions(ctx context.Context, partitions []uint6
 	}
 	order := s.order
 	sortCol := s.sortCol
+	oldOffset := s.nullOffset
 	for i, partitionStart := range partitions {
 		var partitionEnd uint64
 		if i == len(partitions)-1 {
@@ -139,12 +147,35 @@ func (s *sort_TYPE_DIROp) sortPartitions(ctx context.Context, partitions []uint6
 		}
 		s.order = order[partitionStart:partitionEnd]
 		s.sortCol = sortCol[partitionStart:partitionEnd]
+		s.nullOffset = uint64(partitionStart)
 		n := int(partitionEnd - partitionStart)
 		s.quickSort(ctx, 0, n, maxDepth(n))
 	}
+	s.nullOffset = oldOffset
 }
 
 func (s *sort_TYPE_DIROp) Less(i, j int) bool {
+	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt64(s.nullOffset+uint64(i))
+	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt64(s.nullOffset+uint64(j))
+	// {{ if eq .DirString "Asc" }}
+	// If ascending nulls, always sort first, so we encode that logic here.
+	if n1 && n2 {
+		return false
+	} else if n1 {
+		return true
+	} else if n2 {
+		return false
+	}
+	// {{ else if eq .DirString "Desc" }}
+	// If descending nulls, always sort last, so we encode that logic here.
+	if n1 && n2 {
+		return false
+	} else if n1 {
+		return false
+	} else if n2 {
+		return true
+	}
+	// {{end}}
 	var lt bool
 	_ASSIGN_LT("lt", "s.sortCol[i]", "s.sortCol[j]")
 	return lt
@@ -156,6 +187,7 @@ func (s *sort_TYPE_DIROp) Swap(i, j int) {
 	// We also store the swap order in s.order to swap all the other columns.
 	s.sortCol[i], s.sortCol[j] = s.sortCol[j], s.sortCol[i]
 	s.order[i], s.order[j] = s.order[j], s.order[i]
+	s.nulls.SwapNulls(s.nullOffset+uint64(i), s.nullOffset+uint64(j))
 }
 
 func (s *sort_TYPE_DIROp) Len() int {

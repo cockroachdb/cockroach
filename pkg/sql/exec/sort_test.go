@@ -35,6 +35,30 @@ func TestSort(t *testing.T) {
 		typ      []types.T
 	}{
 		{
+			tuples:   tuples{{1}, {2}, {nil}, {4}, {5}, {nil}},
+			expected: tuples{{nil}, {nil}, {1}, {2}, {4}, {5}},
+			typ:      []types.T{types.Int64},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
+		},
+		{
+			tuples:   tuples{{1, 2}, {1, 1}, {1, nil}, {2, nil}, {2, 3}, {2, nil}, {5, 1}},
+			expected: tuples{{1, nil}, {1, 1}, {1, 2}, {2, nil}, {2, nil}, {2, 3}, {5, 1}},
+			typ:      []types.T{types.Int64, types.Int64},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
+		},
+		{
+			tuples:   tuples{{1, 2}, {1, 1}, {1, nil}, {2, nil}, {2, 3}, {2, nil}, {5, 1}},
+			expected: tuples{{5, 1}, {2, 3}, {2, nil}, {2, nil}, {1, 2}, {1, 1}, {1, nil}},
+			typ:      []types.T{types.Int64, types.Int64},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_DESC}, {ColIdx: 1, Direction: distsqlpb.Ordering_Column_DESC}},
+		},
+		{
+			tuples:   tuples{{nil, nil}, {nil, 3}, {1, nil}, {nil, 1}, {1, 2}, {nil, nil}, {5, nil}},
+			expected: tuples{{nil, nil}, {nil, nil}, {nil, 1}, {nil, 3}, {1, nil}, {1, 2}, {5, nil}},
+			typ:      []types.T{types.Int64, types.Int64},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
+		},
+		{
 			tuples:   tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			expected: tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			typ:      []types.T{types.Int64},
