@@ -33,6 +33,7 @@ var (
 	path     = flags.String("path", "./cockroach", "path to cockroach binary")
 	verbose  = flags.Bool("v", false, "log progress")
 	contains = flags.String("contains", "", "error regex to search for")
+	unknown  = flags.Bool("unknown", false, "print unknown types during walk")
 )
 
 func usage() {
@@ -49,6 +50,7 @@ func main() {
 		fmt.Print("missing contains\n\n")
 		usage()
 	}
+	reducesql.LogUnknown = *unknown
 	out, err := reduceSQL(*path, *contains, *verbose)
 	if err != nil {
 		log.Fatal(err)
