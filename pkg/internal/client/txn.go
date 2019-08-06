@@ -274,8 +274,11 @@ func (txn *Txn) CommitTimestampFixed() bool {
 func (txn *Txn) SetSystemConfigTrigger() error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
+	if err := txn.mu.sender.AnchorOnSystemConfigRange(); err != nil {
+		return err
+	}
 	txn.systemConfigTrigger = true
-	return txn.mu.sender.SetSystemConfigTrigger()
+	return nil
 }
 
 // DisablePipelining instructs the transaction not to pipeline requests. It
