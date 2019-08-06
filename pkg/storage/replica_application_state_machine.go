@@ -33,10 +33,11 @@ import (
 // replica_application_*.go files provide concrete implementations of
 // the interfaces defined in the storage/apply package:
 //
-// replica_application_decoder.go   =>  apply.Decoder
-// replica_application_applier.go   =>  apply.StateMachine
-// replica_application_cmd.go       =>  apply.Command         (and variants)
-// replica_application_cmd_iter.go  =>  apply.CommandIterator (and variants)
+// replica_application_state_machine.go  ->  apply.StateMachine
+// replica_application_decoder.go        ->  apply.Decoder
+// replica_application_cmd.go            ->  apply.Command         (and variants)
+// replica_application_cmd_buf.go        ->  apply.CommandIterator (and variants)
+// replica_application_cmd_buf.go        ->  apply.CommandList     (and variants)
 //
 // These allow Replica to interface with the storage/apply package.
 
@@ -57,7 +58,7 @@ type applyCommittedEntriesStats struct {
 // reason during the application phase of state machine replication. The only
 // acceptable recourse is to signal that the replica has become corrupted.
 //
-// All errors returned by replicaDecoder and replicaApplier will be instances
+// All errors returned by replicaDecoder and replicaStateMachine will be instances
 // of this type.
 type nonDeterministicFailure struct {
 	wrapped  error
@@ -93,7 +94,7 @@ func (e *nonDeterministicFailure) Cause() error { return e.wrapped }
 // planned to be moved to the stdlib in go 1.13.
 func (e *nonDeterministicFailure) Unwrap() error { return e.wrapped }
 
-// replicaApplier implements the apply.StateMachine interface.
+// replicaStateMachine implements the apply.StateMachine interface.
 //
 // The structure coordinates state transitions within the Replica state machine
 // due to the application of replicated commands decoded from committed raft
@@ -102,7 +103,7 @@ func (e *nonDeterministicFailure) Unwrap() error { return e.wrapped }
 // current view of ReplicaState and staged in a replicaAppBatch, the batch is
 // committed to the Replica's storage engine atomically, and finally the
 // side-effects of each command is applied to the Replica's in-memory state.
-type replicaApplier struct {
+type replicaStateMachine struct {
 	r *Replica
 	// batch is returned from NewBatch().
 	batch replicaAppBatch
@@ -110,12 +111,12 @@ type replicaApplier struct {
 	stats applyCommittedEntriesStats
 }
 
-// getApplier returns the Replica's apply.StateMachine. The Replica's
-// raftMu is held for the entire lifetime of the replicaApplier.
-func (r *Replica) getApplier() *replicaApplier {
-	a := &r.raftMu.applier
-	a.r = r
-	return a
+// getStateMachine returns the Replica's apply.StateMachine. The Replica's
+// raftMu is held for the entire lifetime of the replicaStateMachine.
+func (r *Replica) getStateMachine() *replicaStateMachine {
+	sm := &r.raftMu.stateMachine
+	sm.r = r
+	return sm
 }
 
 // shouldApplyCommand determines whether or not a command should be applied to
@@ -123,7 +124,7 @@ func (r *Replica) getApplier() *replicaApplier {
 // then sets the provided command's leaseIndex, proposalRetry, and forcedErr
 // fields and returns whether command should be applied or rejected.
 func (r *Replica) shouldApplyCommand(
-	ctx context.Context, cmd *cmdAppCtx, replicaState *storagepb.ReplicaState,
+	ctx context.Context, cmd *replicatedCmd, replicaState *storagepb.ReplicaState,
 ) bool {
 	cmd.leaseIndex, cmd.proposalRetry, cmd.forcedErr = checkForcedErr(
 		ctx, cmd.idKey, &cmd.raftCmd, cmd.IsLocal(), replicaState,
@@ -320,11 +321,11 @@ func checkForcedErr(
 }
 
 // NewBatch implements the apply.StateMachine interface.
-func (a *replicaApplier) NewBatch() apply.Batch {
-	r := a.r
-	b := &a.batch
+func (sm *replicaStateMachine) NewBatch() apply.Batch {
+	r := sm.r
+	b := &sm.batch
 	b.r = r
-	b.a = a
+	b.sm = sm
 	b.batch = r.store.engine.NewBatch()
 	r.mu.RLock()
 	b.state = r.mu.state
@@ -343,8 +344,8 @@ func (a *replicaApplier) NewBatch() apply.Batch {
 // to the current view of ReplicaState and staged in the batch. The batch is
 // committed to the state machine's storage engine atomically.
 type replicaAppBatch struct {
-	r *Replica
-	a *replicaApplier
+	r  *Replica
+	sm *replicaStateMachine
 
 	// batch accumulates writes implied by the raft entries in this batch.
 	batch engine.Batch
@@ -395,7 +396,7 @@ type replicaAppBatch struct {
 // whether to accept or reject the next command that is staged without needing
 // to actually update the replica state machine in between.
 func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error) {
-	cmd := cmdI.(*cmdAppCtx)
+	cmd := cmdI.(*replicatedCmd)
 	ctx := cmd.ctx
 	if cmd.ent.Index == 0 {
 		return nil, makeNonDeterministicFailure("processRaftCommand requires a non-zero index")
@@ -468,7 +469,7 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 
 // migrateReplicatedResult performs any migrations necessary on the command to
 // normalize it before applying it to the batch. This may modify the command.
-func (b *replicaAppBatch) migrateReplicatedResult(ctx context.Context, cmd *cmdAppCtx) {
+func (b *replicaAppBatch) migrateReplicatedResult(ctx context.Context, cmd *replicatedCmd) {
 	// If the command was using the deprecated version of the MVCCStats proto,
 	// migrate it to the new version and clear out the field.
 	res := cmd.replicatedResult()
@@ -483,7 +484,7 @@ func (b *replicaAppBatch) migrateReplicatedResult(ctx context.Context, cmd *cmdA
 
 // stageWriteBatch applies the command's write batch to the application batch's
 // RocksDB batch. This batch is committed to RocksDB in replicaAppBatch.commit.
-func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *cmdAppCtx) error {
+func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCmd) error {
 	wb := cmd.raftCmd.WriteBatch
 	if wb == nil {
 		return nil
@@ -501,7 +502,7 @@ func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *cmdAppCtx) e
 
 // runPreApplyTriggers runs any triggers that must fire before a command is
 // applied. It may modify the command's ReplicatedEvalResult.
-func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *cmdAppCtx) error {
+func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *replicatedCmd) error {
 	res := cmd.replicatedResult()
 
 	// AddSSTable ingestions run before the actual batch gets written to the
@@ -601,7 +602,9 @@ func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *cmdAppCt
 // modifies the receiver's ReplicaState but does not modify ReplicatedEvalResult
 // in order to give the TestingPostApplyFilter testing knob an opportunity to
 // inspect the command's ReplicatedEvalResult.
-func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(ctx context.Context, cmd *cmdAppCtx) {
+func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
+	ctx context.Context, cmd *replicatedCmd,
+) {
 	if raftAppliedIndex := cmd.ent.Index; raftAppliedIndex != 0 {
 		b.state.RaftAppliedIndex = raftAppliedIndex
 	}
@@ -753,9 +756,9 @@ func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 }
 
 func (b *replicaAppBatch) recordStatsOnCommit() {
-	b.a.stats.entriesProcessed += b.entries
-	b.a.stats.numEmptyEntries += b.emptyEntries
-	b.a.stats.batchesProcessed++
+	b.sm.stats.entriesProcessed += b.entries
+	b.sm.stats.numEmptyEntries += b.emptyEntries
+	b.sm.stats.batchesProcessed++
 
 	elapsed := timeutil.Since(b.start)
 	b.r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
@@ -777,8 +780,10 @@ func (b *replicaAppBatch) Close() {
 // the Replica's in-memory state. This method deals with applying non-trivial
 // side effects of commands, such as finalizing splits/merges and informing
 // raft about applied config changes.
-func (a *replicaApplier) ApplySideEffects(cmdI apply.CheckedCommand) (apply.AppliedCommand, error) {
-	cmd := cmdI.(*cmdAppCtx)
+func (sm *replicaStateMachine) ApplySideEffects(
+	cmdI apply.CheckedCommand,
+) (apply.AppliedCommand, error) {
+	cmd := cmdI.(*replicatedCmd)
 	ctx := cmd.ctx
 
 	// Deal with locking during side-effect handling, which is sometimes
@@ -788,13 +793,13 @@ func (a *replicaApplier) ApplySideEffects(cmdI apply.CheckedCommand) (apply.Appl
 	}
 	if cmd.replicatedResult().BlockReads {
 		cmd.replicatedResult().BlockReads = false
-		a.r.readOnlyCmdMu.Lock()
-		defer a.r.readOnlyCmdMu.Unlock()
+		sm.r.readOnlyCmdMu.Lock()
+		defer sm.r.readOnlyCmdMu.Unlock()
 	}
 
 	// Set up the local result prior to handling the ReplicatedEvalResult to
 	// give testing knobs an opportunity to inspect it.
-	a.r.prepareLocalResult(ctx, cmd)
+	sm.r.prepareLocalResult(ctx, cmd)
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEvent(ctx, 2, cmd.localResult.String())
 	}
@@ -806,29 +811,29 @@ func (a *replicaApplier) ApplySideEffects(cmdI apply.CheckedCommand) (apply.Appl
 	// before notifying a potentially waiting client.
 	clearTrivialReplicatedEvalResultFields(cmd.replicatedResult())
 	if !cmd.IsTrivial() {
-		shouldAssert := a.handleNonTrivialReplicatedEvalResult(ctx, *cmd.replicatedResult())
+		shouldAssert := sm.handleNonTrivialReplicatedEvalResult(ctx, *cmd.replicatedResult())
 		// NB: Perform state assertion before acknowledging the client.
 		// Some tests (TestRangeStatsInit) assumes that once the store has started
 		// and the first range has a lease that there will not be a later hard-state.
 		if shouldAssert {
 			// Assert that the on-disk state doesn't diverge from the in-memory
 			// state as a result of the side effects.
-			a.r.mu.Lock()
-			a.r.assertStateLocked(ctx, a.r.store.Engine())
-			a.r.mu.Unlock()
-			a.stats.stateAssertions++
+			sm.r.mu.Lock()
+			sm.r.assertStateLocked(ctx, sm.r.store.Engine())
+			sm.r.mu.Unlock()
+			sm.stats.stateAssertions++
 		}
 	} else if res := cmd.replicatedResult(); !res.Equal(storagepb.ReplicatedEvalResult{}) {
 		log.Fatalf(ctx, "failed to handle all side-effects of ReplicatedEvalResult: %v", res)
 	}
 
 	if cmd.replicatedResult().RaftLogDelta == 0 {
-		a.r.handleNoRaftLogDeltaResult(ctx)
+		sm.r.handleNoRaftLogDeltaResult(ctx)
 	}
 	if cmd.localResult != nil {
-		a.r.handleLocalEvalResult(ctx, *cmd.localResult)
+		sm.r.handleLocalEvalResult(ctx, *cmd.localResult)
 	}
-	if err := a.maybeApplyConfChange(ctx, cmd); err != nil {
+	if err := sm.maybeApplyConfChange(ctx, cmd); err != nil {
 		return nil, wrapWithNonDeterministicFailure(err, "unable to apply conf change")
 	}
 
@@ -857,7 +862,7 @@ func (a *replicaApplier) ApplySideEffects(cmdI apply.CheckedCommand) (apply.Appl
 // handleNonTrivialReplicatedEvalResult carries out the side-effects of
 // non-trivial commands. It is run with the raftMu locked. It is illegal
 // to pass a replicatedResult that does not imply any side-effects.
-func (a *replicaApplier) handleNonTrivialReplicatedEvalResult(
+func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	ctx context.Context, rResult storagepb.ReplicatedEvalResult,
 ) (shouldAssert bool) {
 	// Assert that this replicatedResult implies at least one side-effect.
@@ -867,7 +872,7 @@ func (a *replicaApplier) handleNonTrivialReplicatedEvalResult(
 
 	if rResult.State != nil {
 		if rResult.State.TruncatedState != nil {
-			rResult.RaftLogDelta += a.r.handleTruncatedStateResult(ctx, rResult.State.TruncatedState)
+			rResult.RaftLogDelta += sm.r.handleTruncatedStateResult(ctx, rResult.State.TruncatedState)
 			rResult.State.TruncatedState = nil
 		}
 
@@ -877,12 +882,12 @@ func (a *replicaApplier) handleNonTrivialReplicatedEvalResult(
 	}
 
 	if rResult.RaftLogDelta != 0 {
-		a.r.handleRaftLogDeltaResult(ctx, rResult.RaftLogDelta)
+		sm.r.handleRaftLogDeltaResult(ctx, rResult.RaftLogDelta)
 		rResult.RaftLogDelta = 0
 	}
 
 	if rResult.SuggestedCompactions != nil {
-		a.r.handleSuggestedCompactionsResult(ctx, rResult.SuggestedCompactions)
+		sm.r.handleSuggestedCompactionsResult(ctx, rResult.SuggestedCompactions)
 		rResult.SuggestedCompactions = nil
 	}
 
@@ -895,33 +900,33 @@ func (a *replicaApplier) handleNonTrivialReplicatedEvalResult(
 	}
 
 	if rResult.Split != nil {
-		a.r.handleSplitResult(ctx, rResult.Split)
+		sm.r.handleSplitResult(ctx, rResult.Split)
 		rResult.Split = nil
 	}
 
 	if rResult.Merge != nil {
-		a.r.handleMergeResult(ctx, rResult.Merge)
+		sm.r.handleMergeResult(ctx, rResult.Merge)
 		rResult.Merge = nil
 	}
 
 	if rResult.State != nil {
 		if newDesc := rResult.State.Desc; newDesc != nil {
-			a.r.handleDescResult(ctx, newDesc)
+			sm.r.handleDescResult(ctx, newDesc)
 			rResult.State.Desc = nil
 		}
 
 		if newLease := rResult.State.Lease; newLease != nil {
-			a.r.handleLeaseResult(ctx, newLease)
+			sm.r.handleLeaseResult(ctx, newLease)
 			rResult.State.Lease = nil
 		}
 
 		if newThresh := rResult.State.GCThreshold; newThresh != nil {
-			a.r.handleGCThresholdResult(ctx, newThresh)
+			sm.r.handleGCThresholdResult(ctx, newThresh)
 			rResult.State.GCThreshold = nil
 		}
 
 		if rResult.State.UsingAppliedStateKey {
-			a.r.handleUsingAppliedStateKeyResult(ctx)
+			sm.r.handleUsingAppliedStateKeyResult(ctx)
 			rResult.State.UsingAppliedStateKey = false
 		}
 
@@ -931,12 +936,12 @@ func (a *replicaApplier) handleNonTrivialReplicatedEvalResult(
 	}
 
 	if rResult.ChangeReplicas != nil {
-		a.r.handleChangeReplicasResult(ctx, rResult.ChangeReplicas)
+		sm.r.handleChangeReplicasResult(ctx, rResult.ChangeReplicas)
 		rResult.ChangeReplicas = nil
 	}
 
 	if rResult.ComputeChecksum != nil {
-		a.r.handleComputeChecksumResult(ctx, rResult.ComputeChecksum)
+		sm.r.handleComputeChecksumResult(ctx, rResult.ComputeChecksum)
 		rResult.ComputeChecksum = nil
 	}
 
@@ -946,7 +951,7 @@ func (a *replicaApplier) handleNonTrivialReplicatedEvalResult(
 	return true
 }
 
-func (a *replicaApplier) maybeApplyConfChange(ctx context.Context, cmd *cmdAppCtx) error {
+func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *replicatedCmd) error {
 	switch cmd.ent.Type {
 	case raftpb.EntryNormal:
 		if cmd.replicatedResult().ChangeReplicas != nil {
@@ -958,7 +963,7 @@ func (a *replicaApplier) maybeApplyConfChange(ctx context.Context, cmd *cmdAppCt
 			// The command was rejected.
 			cmd.cc = raftpb.ConfChange{}
 		}
-		return a.r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
+		return sm.r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 			raftGroup.ApplyConfChange(cmd.cc)
 			return true, nil
 		})
@@ -967,8 +972,8 @@ func (a *replicaApplier) maybeApplyConfChange(ctx context.Context, cmd *cmdAppCt
 	}
 }
 
-func (a *replicaApplier) moveStats() applyCommittedEntriesStats {
-	stats := a.stats
-	a.stats = applyCommittedEntriesStats{}
+func (sm *replicaStateMachine) moveStats() applyCommittedEntriesStats {
+	stats := sm.stats
+	sm.stats = applyCommittedEntriesStats{}
 	return stats
 }
