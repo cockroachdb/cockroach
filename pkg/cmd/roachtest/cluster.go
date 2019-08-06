@@ -1385,6 +1385,15 @@ func (c *cluster) FetchCores(ctx context.Context) error {
 		return nil
 	}
 
+	if true {
+		// TeamCity does not handle giant artifacts well. We'd generally profit
+		// from having the cores, but we should push them straight into a temp
+		// bucket on S3 instead. OTOH, the ROI of this may be low; I don't know
+		// of a recent example where we've wanted the Core dumps.
+		c.l.Printf("skipped fetching cores\n")
+		return nil
+	}
+
 	c.l.Printf("fetching cores\n")
 	c.status("fetching cores")
 
