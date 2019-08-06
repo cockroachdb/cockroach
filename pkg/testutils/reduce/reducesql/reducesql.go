@@ -123,21 +123,44 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 			}
 			i -= matches
 
+			if node == nil {
+				continue
+			}
+			if _, ok := node.(tree.Datum); ok {
+				continue
+			}
+
 			switch node := node.(type) {
 			case *tree.AliasedTableExpr:
 				walk(node.Expr)
+			case *tree.AndExpr:
+				walk(node.Left, node.Right)
 			case *tree.AnnotateTypeExpr:
 				walk(node.Expr)
 			case *tree.Array:
 				walk(node.Exprs)
 			case *tree.BinaryExpr:
 				walk(node.Left, node.Right)
+			case *tree.CaseExpr:
+				walk(node.Expr, node.Else)
+				for _, w := range node.Whens {
+					walk(w.Cond, w.Val)
+				}
 			case *tree.CastExpr:
 				walk(node.Expr)
+			case *tree.CoalesceExpr:
+				for _, expr := range node.Exprs {
+					walk(expr)
+				}
 			case *tree.ColumnTableDef:
+			case *tree.ComparisonExpr:
+				walk(node.Left, node.Right)
 			case *tree.CreateTable:
 				for _, def := range node.Defs {
 					walk(def)
+				}
+				if node.AsSource != nil {
+					walk(node.AsSource)
 				}
 			case *tree.CTE:
 				walk(node.Stmt)
@@ -155,13 +178,21 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 			case *tree.IndexTableDef:
 			case *tree.JoinTableExpr:
 				walk(node.Left, node.Right, node.Cond)
+			case *tree.NotExpr:
+				walk(node.Expr)
 			case *tree.NumVal:
 			case *tree.OnJoinCond:
 				walk(node.Expr)
+			case *tree.OrExpr:
+				walk(node.Left, node.Right)
 			case *tree.ParenExpr:
 				walk(node.Expr)
 			case *tree.ParenSelect:
 				walk(node.Select)
+			case *tree.RowsFromExpr:
+				for _, expr := range node.Items {
+					walk(expr)
+				}
 			case *tree.Select:
 				if node.With != nil {
 					walk(node.With)
@@ -184,15 +215,24 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 				for _, expr := range node {
 					walk(expr)
 				}
+			case *tree.SetVar:
+				for _, expr := range node.Values {
+					walk(expr)
+				}
 			case *tree.StrVal:
 			case *tree.Subquery:
 				walk(node.Select)
 			case *tree.TableName:
+			case *tree.Tuple:
+				for _, expr := range node.Exprs {
+					walk(expr)
+				}
 			case *tree.UnaryExpr:
 				walk(node.Expr)
 			case *tree.UniqueConstraintTableDef:
 			case *tree.UnionClause:
 				walk(node.Left, node.Right)
+			case tree.UnqualifiedStar:
 			case *tree.UnresolvedName:
 			case *tree.ValuesClause:
 				for _, row := range node.Rows {
