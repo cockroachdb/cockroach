@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -486,4 +487,25 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	if d := *txn.deadline(); d != pastDeadline {
 		t.Errorf("unexpected deadline: %s", d)
 	}
+}
+
+// Test that, if SetSystemConfigTrigger() fails, the systemConfigTrigger has not
+// been set.
+func TestAnchoringErrorNoTrigger(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mc := hlc.NewManualClock(1)
+	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+	db := NewDB(
+		testutils.MakeAmbientCtx(),
+		MakeMockTxnSenderFactory(
+			func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+			) (*roachpb.BatchResponse, *roachpb.Error) {
+				return nil, nil
+			}),
+		clock)
+	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */, RootTxn)
+	require.Error(t, txn.SetSystemConfigTrigger(), "unimplemented")
+	require.False(t, txn.systemConfigTrigger)
 }

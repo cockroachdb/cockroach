@@ -11,6 +11,7 @@
 package kv
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"runtime/debug"
@@ -117,11 +118,6 @@ type TxnCoordSender struct {
 		// client sends anything other than a rollback, it will get an error
 		// (a retryable TransactionAbortedError in case of the async abort).
 		closed bool
-
-		// systemConfigTrigger is set to true when modifying keys from the
-		// SystemConfig span. This sets the SystemConfigTrigger on
-		// EndTransactionRequest.
-		systemConfigTrigger bool
 
 		// txn is the Transaction proto attached to all the requests and updated on
 		// all the responses.
@@ -1110,18 +1106,18 @@ func (tc *TxnCoordSender) setTxnAnchorKeyLocked(key roachpb.Key) error {
 	return nil
 }
 
-// SetSystemConfigTrigger is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) SetSystemConfigTrigger() error {
+// AnchorOnSystemConfigRange is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) AnchorOnSystemConfigRange() error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	if !tc.mu.systemConfigTrigger {
-		tc.mu.systemConfigTrigger = true
-		// The system-config trigger must be run on the system-config range which
-		// means any transaction with the trigger set needs to be anchored to the
-		// system-config range.
-		return tc.setTxnAnchorKeyLocked(keys.SystemConfigSpan.Key)
+	// Allow this to be called more than once.
+	if bytes.Equal(tc.mu.txn.Key, keys.SystemConfigSpan.Key) {
+		return nil
 	}
-	return nil
+	// The system-config trigger must be run on the system-config range which
+	// means any transaction with the trigger set needs to be anchored to the
+	// system-config range.
+	return tc.setTxnAnchorKeyLocked(keys.SystemConfigSpan.Key)
 }
 
 // TxnStatus is part of the client.TxnSender interface.
