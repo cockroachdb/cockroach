@@ -888,14 +888,15 @@ func (ctx *Context) runHeartbeat(
 		}
 
 		if err := ctx.Stopper.RunTaskWithErr(ctx.masterCtx, "rpc heartbeat", func(goCtx context.Context) error {
-			// We re-mint the PingRequest to pick up any asynchronous update to clusterID.
+			// We re-mint the PingRequest to pick up any asynchronous update to
+			// clusterID and version.
 			clusterID := ctx.ClusterID.Get()
 			request := &PingRequest{
-				Addr:           ctx.Addr,
-				MaxOffsetNanos: maxOffsetNanos,
-				ClusterID:      &clusterID,
-				NodeID:         conn.remoteNodeID,
-				ServerVersion:  ctx.version.ServerVersion,
+				Addr:                 ctx.Addr,
+				MaxOffsetNanos:       maxOffsetNanos,
+				ClusterID:            &clusterID,
+				NodeID:               conn.remoteNodeID,
+				ClientClusterVersion: ctx.version.Version().Version,
 			}
 
 			var response *PingResponse
@@ -914,7 +915,7 @@ func (ctx *Context) runHeartbeat(
 			}
 			if err == nil {
 				err = errors.Wrap(
-					checkVersion(ctx.version, response.ServerVersion),
+					checkVersion(ctx.version, response.ServerClusterVersion),
 					"version compatibility check failed on ping response")
 			}
 

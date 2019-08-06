@@ -514,6 +514,8 @@ var (
 	// this binary. If this binary is started using a store marked with an older
 	// version than BinaryMinimumSupportedVersion, then the binary will exit with
 	// an error.
+	// This is also the lowest version of "requests" coming from other nodes that
+	// this node can support.
 	BinaryMinimumSupportedVersion = VersionByKey(Version19_1)
 
 	// BinaryServerVersion is the version of this binary.

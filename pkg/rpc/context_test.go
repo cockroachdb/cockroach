@@ -1082,7 +1082,7 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 
 	// Perform an initial request-response round trip.
 	log.Infof(ctx, "first ping")
-	request := PingRequest{ServerVersion: clientCtx.version.ServerVersion}
+	request := PingRequest{ClientClusterVersion: clientCtx.version.Version().Version}
 	if err := heartbeatClient.Send(&request); err != nil {
 		return err
 	}
@@ -1304,17 +1304,31 @@ func TestVersionCheckBidirectional(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	v1 := roachpb.Version{Major: 1}
-	v2 := cluster.BinaryServerVersion
+	v2 := roachpb.Version{Major: 2}
 
 	testData := []struct {
 		name          string
 		serverVersion roachpb.Version
 		clientVersion roachpb.Version
-		expectError   bool
+		expectedErr   string //  "" for no error
 	}{
-		{"serverVersion == clientVersion", v1, v1, false},
-		{"serverVersion < clientVersion", v1, v2, true},
-		{"serverVersion > clientVersion", v2, v1, true},
+		{
+			name:          "serverVersion == clientVersion",
+			serverVersion: v1,
+			clientVersion: v1,
+			expectedErr:   ""},
+		{
+			name:          "serverVersion < clientVersion",
+			serverVersion: v1,
+			clientVersion: v2,
+			expectedErr:   "initial connection heartbeat failed.*node max version 1.0, but peer has version 2.0",
+		},
+		{
+			name:          "serverVersion > clientVersion",
+			serverVersion: v2,
+			clientVersion: v1,
+			expectedErr:   "initial connection heartbeat failed.*cluster requires at least version",
+		},
 	}
 
 	// Shared cluster ID by all RPC peers (this ensures that the peers
@@ -1355,10 +1369,9 @@ func TestVersionCheckBidirectional(t *testing.T) {
 
 			_, err = clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background())
 
-			if td.expectError {
-				expected := "initial connection heartbeat failed.*cluster requires at least version"
-				if !testutils.IsError(err, expected) {
-					t.Errorf("expected %s error, got %v", expected, err)
+			if td.expectedErr != "" {
+				if !testutils.IsError(err, td.expectedErr) {
+					t.Errorf("expected %s error, got %v", td.expectedErr, err)
 				}
 			} else if err != nil {
 				t.Errorf("unexpected error: %s", err)

@@ -63,14 +63,30 @@ func checkVersion(
 		// Cluster version has not yet been determined.
 		return nil
 	}
-	activeVersion := clusterVersion.Version().Version
+	minVersion := clusterVersion.MinSupportedVersion
+	maxVersion := clusterVersion.ServerVersion
 	if peerVersion == (roachpb.Version{}) {
 		return errors.Errorf(
-			"cluster requires at least version %s, but peer did not provide a version", activeVersion)
+			"cluster requires at least version %s, but peer did not provide a version", minVersion)
 	}
-	if peerVersion.Less(activeVersion) {
+	if peerVersion.Less(minVersion) {
+		// TODO(andrei): The peer is operating at a version that's too low. Perhaps
+		// the peer could be operating at a higher version (i.e. perhaps it didn't
+		// hear about a cluster version bump). Should we tell it that the bump
+		// happened and teach it to react to that information?
+		// E.g. Say we have two nodes:
+		// - n1 is running with {MinSupportedVersion: 2, BinaryServerVersion: 3}
+		// - n2 is running with {MinSupportedVersion: 1, BinaryServerVersion: 2}
+		// The cluster version is 2, but n2 doesn't know that; it thinks it's still
+		// 1. Say it never received the gossip update for that version bump.
+		// n2 is prevented from connecting to n1.
 		return errors.Errorf(
-			"cluster requires at least version %s, but peer has version %s", activeVersion, peerVersion)
+			"cluster requires at least version %s, but peer has version %s", minVersion, peerVersion)
+	}
+	if maxVersion.Less(peerVersion) {
+		// The peer's version is too high. We won't be able to support its requests.
+		return errors.Errorf(
+			"node max version %s, but peer has version %s", maxVersion, peerVersion)
 	}
 	return nil
 }
@@ -109,7 +125,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	}
 
 	// Check version compatibility.
-	if err := checkVersion(hs.version, args.ServerVersion); err != nil {
+	if err := checkVersion(hs.version, args.ClientClusterVersion); err != nil {
 		return nil, errors.Wrap(err, "version compatibility check failed on ping request")
 	}
 
@@ -132,8 +148,8 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	serverOffset.Offset = -serverOffset.Offset
 	hs.remoteClockMonitor.UpdateOffset(ctx, args.Addr, serverOffset, 0 /* roundTripLatency */)
 	return &PingResponse{
-		Pong:          args.Ping,
-		ServerTime:    hs.clock.PhysicalNow(),
-		ServerVersion: hs.version.ServerVersion,
+		Pong:                 args.Ping,
+		ServerTime:           hs.clock.PhysicalNow(),
+		ServerClusterVersion: hs.version.Version().Version,
 	}, nil
 }

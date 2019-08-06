@@ -53,8 +53,8 @@ func TestHeartbeatReply(t *testing.T) {
 	}
 
 	request := &PingRequest{
-		Ping:          "testPing",
-		ServerVersion: version.ServerVersion,
+		Ping:                 "testPing",
+		ClientClusterVersion: version.Version().Version,
 	}
 	response, err := heartbeat.Ping(context.Background(), request)
 	if err != nil {
@@ -123,8 +123,8 @@ func TestManualHeartbeat(t *testing.T) {
 	}
 
 	request := &PingRequest{
-		Ping:          "testManual",
-		ServerVersion: version.ServerVersion,
+		Ping:                 "testManual",
+		ClientClusterVersion: version.Version().Version,
 	}
 	manualHeartbeat.ready <- nil
 	ctx := context.Background()
@@ -171,10 +171,10 @@ func TestClockOffsetMismatch(t *testing.T) {
 	hs.clusterID.Set(ctx, uuid.Nil)
 
 	request := &PingRequest{
-		Ping:           "testManual",
-		Addr:           "test",
-		MaxOffsetNanos: (500 * time.Millisecond).Nanoseconds(),
-		ServerVersion:  hs.version.Version().Version,
+		Ping:                 "testManual",
+		Addr:                 "test",
+		MaxOffsetNanos:       (500 * time.Millisecond).Nanoseconds(),
+		ClientClusterVersion: hs.version.Version().Version,
 	}
 	response, err := hs.Ping(context.Background(), request)
 	t.Fatalf("should not have reached but got response=%v err=%v", response, err)
@@ -210,9 +210,9 @@ func TestClusterIDCompare(t *testing.T) {
 		t.Run(td.name, func(t *testing.T) {
 			heartbeat.clusterID.Reset(td.serverClusterID)
 			request := &PingRequest{
-				Ping:          "testPing",
-				ClusterID:     &td.clientClusterID,
-				ServerVersion: version.ServerVersion,
+				Ping:                 "testPing",
+				ClusterID:            &td.clientClusterID,
+				ClientClusterVersion: version.Version().Version,
 			}
 			_, err := heartbeat.Ping(context.Background(), request)
 			if td.expectError && err == nil {
@@ -255,9 +255,9 @@ func TestNodeIDCompare(t *testing.T) {
 		t.Run(td.name, func(t *testing.T) {
 			heartbeat.nodeID.Reset(td.serverNodeID)
 			request := &PingRequest{
-				Ping:          "testPing",
-				NodeID:        td.clientNodeID,
-				ServerVersion: version.ServerVersion,
+				Ping:                 "testPing",
+				NodeID:               td.clientNodeID,
+				ClientClusterVersion: version.Version().Version,
 			}
 			_, err := heartbeat.Ping(context.Background(), request)
 			if td.expectError && err == nil {

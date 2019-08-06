@@ -49,7 +49,15 @@ message PingRequest {
   optional bytes cluster_id = 5 [
     (gogoproto.customname) = "ClusterID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
-  optional roachpb.Version server_version = 6 [(gogoproto.nullable) = false];
+  // client_cluster_version is the client's active cluster version. Used by the
+  // server to verify that the client is compatible with its minimum accepted
+  // version.
+  //
+  // The client is saying that it won't make requests with versions lower than
+  // this (so, when preparing any request, at least this version will be
+  // considered active). The client might create requests "with higher versions"
+  // in the future (if the cluster version is bumped), but never lower.
+  optional roachpb.Version client_cluster_version = 6 [(gogoproto.nullable) = false];
   // Node ID to prevent connections from being misrouted to an invalid node inside the cluster.
   optional int32 node_id = 7 [
     (gogoproto.nullable) = false,
@@ -62,7 +70,15 @@ message PingResponse {
   // An echo of value sent with PingRequest.
   optional string pong = 1 [(gogoproto.nullable) = false];
   optional int64 server_time = 2 [(gogoproto.nullable) = false];
-  optional roachpb.Version server_version = 3 [(gogoproto.nullable) = false];
+  // server_cluster_version is the server's active cluster version. Used by the
+  // client to verify that the server is compatible with its minimum accepted
+  // version.
+  //
+  // The server is saying that it won't make requests with versions lower than
+  // this (so, when preparing any request, at least this version will be
+  // considered active). The server might create requests "with higher versions"
+  // in the future (if the cluster version is bumped), but never lower.
+  optional roachpb.Version server_cluster_version = 3 [(gogoproto.nullable) = false];
 }
 
 service Heartbeat {
