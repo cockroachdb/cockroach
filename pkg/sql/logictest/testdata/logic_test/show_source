@@ -69,6 +69,7 @@ transaction_priority                 normal
 transaction_read_only                off
 transaction_status                   NoTxn
 vectorize                            auto
+vectorize_row_count_threshold        1000
 
 query T colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]

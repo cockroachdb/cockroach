@@ -1122,6 +1122,9 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		}
 
 		tr.MaxResults = n.maxResults
+		if n.estimatedRowCount > p.MaxEstimatedRowCount {
+			p.MaxEstimatedRowCount = n.estimatedRowCount
+		}
 
 		proc := distsqlplan.Processor{
 			Node: sp.Node,

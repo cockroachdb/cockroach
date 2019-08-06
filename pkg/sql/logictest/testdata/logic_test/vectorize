@@ -341,6 +341,9 @@ SET vectorize = experimental_on
 statement ok
 SET distsql = on
 
+statement ok
+SET vectorize_row_count_threshold = 0
+
 query T
 SELECT url FROM [EXPLAIN ANALYZE SELECT a FROM a]
 ----
@@ -357,7 +360,7 @@ SELECT url FROM [EXPLAIN ANALYZE SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d
 https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kkFr4zAQhe_7K8ycdlm1sZ2boJBrCm1K2lvxQZGmjkCRjDQqCcH_vcgqNAluQ0rpzXrSNzPvjfdgncJ7scEA_BkqaBh03kkMwfkk5QdztQVeMtC2i5TkhoF0HoHvgTQZBA5PYmVwiUKhn5TAQCEJbYayndcb4XczCQweO2EDL66AwSISL2YVMFgJkmsMhYvUJTFpFDtzINXAIKBBSfpV044X5XWZ2gQSxhSkN8iLMkDTM8jI-5iBRIvAq559z0o1bkWNWal_xUr9qZUPB9E6r9CjOpq-SeS5JyN53KFv8dZpi35SH-dh8IX-zqr__268btf586dWi1uUkbSz5zOZXrLeJYbO2YCn2YxWLlMgqFrMAQcXvcQH7-TQJh8XAzcICgPl2zof5na4Gv6_Q7i6AK5P4fpLeHoEl33T_3kLAAD__6RFR6I=
 
 statement ok
-RESET optimizer; RESET vectorize; RESET distsql
+RESET optimizer; RESET vectorize; RESET distsql; RESET vectorize_row_count_threshold
 
 # Regression test for composite null handling
 # https://github.com/cockroachdb/cockroach/issues/37358
