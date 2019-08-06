@@ -65,11 +65,31 @@ func TestGetSelectionConstOperator(t *testing.T) {
 	colIdx := 3
 	constVal := int64(31)
 	constArg := tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(constVal))
-	op, err := GetSelectionConstOperator(types.Date, cmpOp, input, colIdx, constArg)
+	op, err := GetSelectionConstOperator(types.Date, types.Date, cmpOp, input, colIdx, constArg)
 	if err != nil {
 		t.Error(err)
 	}
 	expected := &selLTInt64Int64ConstOp{
+		OneInputNode: NewOneInputNode(input),
+		colIdx:       colIdx,
+		constArg:     constVal,
+	}
+	if !reflect.DeepEqual(op, expected) {
+		t.Errorf("got %+v, expected %+v", op, expected)
+	}
+}
+
+func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
+	cmpOp := tree.LT
+	var input Operator
+	colIdx := 3
+	constVal := int16(31)
+	constArg := tree.NewDInt(tree.DInt(constVal))
+	op, err := GetSelectionConstOperator(types.Int, types.Int2, cmpOp, input, colIdx, constArg)
+	if err != nil {
+		t.Error(err)
+	}
+	expected := &selLTInt64Int16ConstOp{
 		OneInputNode: NewOneInputNode(input),
 		colIdx:       colIdx,
 		constArg:     constVal,
@@ -85,7 +105,7 @@ func TestGetSelectionOperator(t *testing.T) {
 	var input Operator
 	col1Idx := 5
 	col2Idx := 7
-	op, err := GetSelectionOperator(ct, cmpOp, input, col1Idx, col2Idx)
+	op, err := GetSelectionOperator(ct, ct, cmpOp, input, col1Idx, col2Idx)
 	if err != nil {
 		t.Error(err)
 	}

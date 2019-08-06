@@ -70,11 +70,11 @@ func genMinMaxAgg(wr io.Writer) error {
 	data := []aggOverloads{
 		{
 			Agg:       distsqlpb.AggregatorSpec_MIN,
-			Overloads: comparisonOpToOverloads[tree.LT],
+			Overloads: sameTypeComparisonOpToOverloads[tree.LT],
 		},
 		{
 			Agg:       distsqlpb.AggregatorSpec_MAX,
-			Overloads: comparisonOpToOverloads[tree.GT],
+			Overloads: sameTypeComparisonOpToOverloads[tree.GT],
 		},
 	}
 	return tmpl.Execute(wr, data)
