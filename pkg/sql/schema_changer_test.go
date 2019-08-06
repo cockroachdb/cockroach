@@ -627,11 +627,11 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	// Split the table into multiple ranges.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	// SplitTable moves the right range, so we split things back to front
-	// in order to move less data.
-	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	var sps []sql.SplitPoint
+	for i := 1; i <= numNodes-1; i++ {
+		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
 	}
+	sql.SplitTable(t, tc, tableDesc, sps)
 
 	ctx := context.TODO()
 
@@ -803,11 +803,11 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	// Split the table into multiple ranges.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	// SplitTable moves the right range, so we split things back to front
-	// in order to move less data.
-	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	var sps []sql.SplitPoint
+	for i := 1; i <= numNodes-1; i++ {
+		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
 	}
+	sql.SplitTable(t, tc, tableDesc, sps)
 
 	ctx := context.TODO()
 
@@ -915,11 +915,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Split the table into multiple ranges.
-	// SplitTable moves the right range, so we split things back to front
-	// in order to move less data.
-	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	var sps []sql.SplitPoint
+	for i := 1; i <= numNodes-1; i++ {
+		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
 	}
+	sql.SplitTable(t, tc, tableDesc, sps)
 
 	ctx := context.TODO()
 
@@ -2525,11 +2525,11 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 
 	// Split the table into multiple ranges.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	// SplitTable moves the right range, so we split things back to front
-	// in order to move less data.
-	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	var sps []sql.SplitPoint
+	for i := 1; i <= numNodes-1; i++ {
+		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
 	}
+	sql.SplitTable(t, tc, tableDesc, sps)
 
 	// Run some schema changes.
 	testCases := []struct {
@@ -2830,11 +2830,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// Split the table into multiple ranges.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	// SplitTable moves the right range, so we split things back to front
-	// in order to move less data.
-	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	var sps []sql.SplitPoint
+	for i := 1; i <= numNodes-1; i++ {
+		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
 	}
+	sql.SplitTable(t, tc, tableDesc, sps)
 
 	testCases := []struct {
 		sql    string
@@ -3655,12 +3655,12 @@ func TestCancelSchemaChange(t *testing.T) {
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	// Split the table into multiple ranges.
-	// SplitTable moves the right range, so we split things back to front
-	// in order to move less data.
+	var sps []sql.SplitPoint
 	const numSplits = numNodes * 2
-	for i := numSplits - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i%numNodes, maxValue/numSplits*i)
+	for i := 1; i <= numSplits-1; i++ {
+		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i % numNodes, Vals: []interface{}{maxValue / numSplits * i}})
 	}
+	sql.SplitTable(t, tc, tableDesc, sps)
 
 	ctx := context.TODO()
 	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
@@ -4774,9 +4774,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
-	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/2)
+	var sps []sql.SplitPoint
+	for i := 1; i < numNodes-1; i++ {
+		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / 2}})
 	}
+	sql.SplitTable(t, tc, tableDesc, sps)
 
 	bg := ctxgroup.WithContext(ctx)
 	bg.Go(func() error {
