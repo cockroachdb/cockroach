@@ -89,6 +89,10 @@ type TestServerArgs struct {
 	// SET DATABASE=foo, which works even if the database doesn't (yet) exist.
 	UseDatabase string
 
+	// If set, this will be configured in the test server to check connections
+	// from other test servers and to report in the SQL introspection.
+	ClusterName string
+
 	// Stopper can be used to stop the server. If not set, a stopper will be
 	// constructed and it can be gotten through TestServerInterface.Stopper().
 	Stopper *stop.Stopper

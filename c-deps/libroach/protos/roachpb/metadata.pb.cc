@@ -2548,6 +2548,7 @@ const int NodeDescriptor::kServerVersionFieldNumber;
 const int NodeDescriptor::kBuildTagFieldNumber;
 const int NodeDescriptor::kStartedAtFieldNumber;
 const int NodeDescriptor::kLocalityAddressFieldNumber;
+const int NodeDescriptor::kClusterNameFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 NodeDescriptor::NodeDescriptor()
@@ -2566,6 +2567,10 @@ NodeDescriptor::NodeDescriptor(const NodeDescriptor& from)
   build_tag_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.has_build_tag()) {
     build_tag_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.build_tag_);
+  }
+  cluster_name_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.has_cluster_name()) {
+    cluster_name_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.cluster_name_);
   }
   if (from.has_address()) {
     address_ = new ::cockroach::util::UnresolvedAddr(*from.address_);
@@ -2595,6 +2600,7 @@ NodeDescriptor::NodeDescriptor(const NodeDescriptor& from)
 
 void NodeDescriptor::SharedCtor() {
   build_tag_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  cluster_name_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&address_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&node_id_) -
       reinterpret_cast<char*>(&address_)) + sizeof(node_id_));
@@ -2607,6 +2613,7 @@ NodeDescriptor::~NodeDescriptor() {
 
 void NodeDescriptor::SharedDtor() {
   build_tag_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  cluster_name_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != internal_default_instance()) delete address_;
   if (this != internal_default_instance()) delete attrs_;
   if (this != internal_default_instance()) delete locality_;
@@ -2630,28 +2637,31 @@ void NodeDescriptor::Clear() {
 
   locality_address_.Clear();
   cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 31u) {
+  if (cached_has_bits & 63u) {
     if (cached_has_bits & 0x00000001u) {
       build_tag_.ClearNonDefaultToEmptyNoArena();
     }
     if (cached_has_bits & 0x00000002u) {
+      cluster_name_.ClearNonDefaultToEmptyNoArena();
+    }
+    if (cached_has_bits & 0x00000004u) {
       GOOGLE_DCHECK(address_ != NULL);
       address_->Clear();
     }
-    if (cached_has_bits & 0x00000004u) {
+    if (cached_has_bits & 0x00000008u) {
       GOOGLE_DCHECK(attrs_ != NULL);
       attrs_->Clear();
     }
-    if (cached_has_bits & 0x00000008u) {
+    if (cached_has_bits & 0x00000010u) {
       GOOGLE_DCHECK(locality_ != NULL);
       locality_->Clear();
     }
-    if (cached_has_bits & 0x00000010u) {
+    if (cached_has_bits & 0x00000020u) {
       GOOGLE_DCHECK(serverversion_ != NULL);
       serverversion_->Clear();
     }
   }
-  if (cached_has_bits & 96u) {
+  if (cached_has_bits & 192u) {
     ::memset(&started_at_, 0, static_cast<size_t>(
         reinterpret_cast<char*>(&node_id_) -
         reinterpret_cast<char*>(&started_at_)) + sizeof(node_id_));
@@ -2768,6 +2778,17 @@ bool NodeDescriptor::MergePartialFromCodedStream(
         break;
       }
 
+      case 9: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(74u /* 74 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_cluster_name()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -2795,26 +2816,26 @@ void NodeDescriptor::SerializeWithCachedSizes(
   (void) cached_has_bits;
 
   cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 0x00000040u) {
+  if (cached_has_bits & 0x00000080u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->node_id(), output);
-  }
-
-  if (cached_has_bits & 0x00000002u) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      2, this->_internal_address(), output);
   }
 
   if (cached_has_bits & 0x00000004u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      3, this->_internal_attrs(), output);
+      2, this->_internal_address(), output);
   }
 
   if (cached_has_bits & 0x00000008u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      4, this->_internal_locality(), output);
+      3, this->_internal_attrs(), output);
   }
 
   if (cached_has_bits & 0x00000010u) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      4, this->_internal_locality(), output);
+  }
+
+  if (cached_has_bits & 0x00000020u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       5, this->_internal_serverversion(), output);
   }
@@ -2824,7 +2845,7 @@ void NodeDescriptor::SerializeWithCachedSizes(
       6, this->build_tag(), output);
   }
 
-  if (cached_has_bits & 0x00000020u) {
+  if (cached_has_bits & 0x00000040u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt64(7, this->started_at(), output);
   }
 
@@ -2834,6 +2855,11 @@ void NodeDescriptor::SerializeWithCachedSizes(
       8,
       this->locality_address(static_cast<int>(i)),
       output);
+  }
+
+  if (cached_has_bits & 0x00000002u) {
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      9, this->cluster_name(), output);
   }
 
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
@@ -2857,11 +2883,17 @@ size_t NodeDescriptor::ByteSizeLong() const {
     }
   }
 
-  if (_has_bits_[0 / 32] & 127u) {
+  if (_has_bits_[0 / 32] & 255u) {
     if (has_build_tag()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::StringSize(
           this->build_tag());
+    }
+
+    if (has_cluster_name()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::StringSize(
+          this->cluster_name());
     }
 
     if (has_address()) {
@@ -2920,27 +2952,31 @@ void NodeDescriptor::MergeFrom(const NodeDescriptor& from) {
 
   locality_address_.MergeFrom(from.locality_address_);
   cached_has_bits = from._has_bits_[0];
-  if (cached_has_bits & 127u) {
+  if (cached_has_bits & 255u) {
     if (cached_has_bits & 0x00000001u) {
       set_has_build_tag();
       build_tag_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.build_tag_);
     }
     if (cached_has_bits & 0x00000002u) {
-      mutable_address()->::cockroach::util::UnresolvedAddr::MergeFrom(from.address());
+      set_has_cluster_name();
+      cluster_name_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.cluster_name_);
     }
     if (cached_has_bits & 0x00000004u) {
-      mutable_attrs()->::cockroach::roachpb::Attributes::MergeFrom(from.attrs());
+      mutable_address()->::cockroach::util::UnresolvedAddr::MergeFrom(from.address());
     }
     if (cached_has_bits & 0x00000008u) {
-      mutable_locality()->::cockroach::roachpb::Locality::MergeFrom(from.locality());
+      mutable_attrs()->::cockroach::roachpb::Attributes::MergeFrom(from.attrs());
     }
     if (cached_has_bits & 0x00000010u) {
-      mutable_serverversion()->::cockroach::roachpb::Version::MergeFrom(from.serverversion());
+      mutable_locality()->::cockroach::roachpb::Locality::MergeFrom(from.locality());
     }
     if (cached_has_bits & 0x00000020u) {
-      started_at_ = from.started_at_;
+      mutable_serverversion()->::cockroach::roachpb::Version::MergeFrom(from.serverversion());
     }
     if (cached_has_bits & 0x00000040u) {
+      started_at_ = from.started_at_;
+    }
+    if (cached_has_bits & 0x00000080u) {
       node_id_ = from.node_id_;
     }
     _has_bits_[0] |= cached_has_bits;
@@ -2966,6 +3002,8 @@ void NodeDescriptor::InternalSwap(NodeDescriptor* other) {
   using std::swap;
   CastToBase(&locality_address_)->InternalSwap(CastToBase(&other->locality_address_));
   build_tag_.Swap(&other->build_tag_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  cluster_name_.Swap(&other->cluster_name_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   swap(address_, other->address_);
   swap(attrs_, other->attrs_);

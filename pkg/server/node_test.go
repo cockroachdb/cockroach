@@ -172,7 +172,7 @@ func createAndStartTestNode(
 	// because otherwise some of the initial ranges cannot be accessed (since
 	// they need an epoch-based lease).
 	cfg.NodeLiveness.StartHeartbeat(ctx, stopper, nil /* alive */)
-	if err := node.start(ctx, addr, bootstrappedEngines, newEngines,
+	if err := node.start(ctx, addr, bootstrappedEngines, newEngines, "",
 		roachpb.Attributes{}, locality, cv, []roachpb.LocalityAddress{},
 		nil, /*nodeDescriptorCallback */
 	); err != nil {
@@ -413,7 +413,7 @@ func TestCorruptedClusterID(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := node.start(
-		ctx, serverAddr, bootstrappedEngines, newEngines,
+		ctx, serverAddr, bootstrappedEngines, newEngines, "",
 		roachpb.Attributes{}, roachpb.Locality{}, cv,
 		[]roachpb.LocalityAddress{},
 		nil, /* nodeDescriptorCallback */
