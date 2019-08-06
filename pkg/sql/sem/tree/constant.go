@@ -124,6 +124,8 @@ type NumVal struct {
 	resDecimal DDecimal
 }
 
+var _ Constant = &NumVal{}
+
 // Format implements the NodeFormatter interface.
 func (expr *NumVal) Format(ctx *FmtCtx) {
 	s := expr.OrigString
@@ -197,14 +199,21 @@ func (expr *NumVal) AsInt32() (int32, error) {
 	return int32(i), nil
 }
 
-// asConstantInt returns the value as an constant.Int if possible, along
-// with a flag indicating whether the conversion was possible.
-// The result contains the proper sign as per expr.Negative.
-func (expr *NumVal) asConstantInt() (constant.Value, bool) {
+// asValue returns the value as a constant numerical value, with the proper sign
+// as given by expr.Negative.
+func (expr *NumVal) asValue() constant.Value {
 	v := expr.Value
 	if expr.Negative {
 		v = constant.UnaryOp(token.SUB, v, 0)
 	}
+	return v
+}
+
+// asConstantInt returns the value as an constant.Int if possible, along
+// with a flag indicating whether the conversion was possible.
+// The result contains the proper sign as per expr.Negative.
+func (expr *NumVal) asConstantInt() (constant.Value, bool) {
+	v := expr.asValue()
 	intVal := constant.ToInt(v)
 	if intVal.Kind() == constant.Int {
 		return intVal, true
@@ -298,9 +307,11 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 			}
 		}
 		if !dd.IsZero() {
-			// Negative zero does not exist for DECIMAL, in that case we
-			// ignore the sign.
-			dd.Negative = expr.Negative
+			// Negative zero does not exist for DECIMAL, in that case we ignore the
+			// sign. Otherwise XOR the signs of the expr and the decimal value
+			// contained in the expr, since the negative may have been folded into the
+			// inner decimal.
+			dd.Negative = dd.Negative != expr.Negative
 		}
 		return dd, nil
 	case types.Oid,
@@ -559,16 +570,7 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 		switch cv := t.Expr.(type) {
 		case *NumVal:
 			if tok, ok := unaryOpToToken[t.Operator]; ok {
-				switch tok {
-				case token.ADD:
-					return cv
-				case token.SUB:
-					// We always coerce -0 to 0 everywhere else, so this can be a passthrough.
-					if cv.Value.Kind() == constant.Float && constant.Compare(cv.Value, token.EQL, constant.MakeFloat64(0)) {
-						return cv
-					}
-				}
-				return &NumVal{Value: constant.UnaryOp(tok, cv.Value, 0)}
+				return &NumVal{Value: constant.UnaryOp(tok, cv.asValue(), 0)}
 			}
 			if token, ok := unaryOpToTokenIntOnly[t.Operator]; ok {
 				if intVal, ok := cv.asConstantInt(); ok {
@@ -581,7 +583,7 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 		case *NumVal:
 			if r, ok := t.Right.(*NumVal); ok {
 				if token, ok := binaryOpToToken[t.Operator]; ok {
-					return &NumVal{Value: constant.BinaryOp(l.Value, token, r.Value)}
+					return &NumVal{Value: constant.BinaryOp(l.asValue(), token, r.asValue())}
 				}
 				if token, ok := binaryOpToTokenIntOnly[t.Operator]; ok {
 					if lInt, ok := l.asConstantInt(); ok {
@@ -610,7 +612,7 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 		case *NumVal:
 			if r, ok := t.Right.(*NumVal); ok {
 				if token, ok := comparisonOpToToken[t.Operator]; ok {
-					return MakeDBool(DBool(constant.Compare(l.Value, token, r.Value)))
+					return MakeDBool(DBool(constant.Compare(l.asValue(), token, r.asValue())))
 				}
 			}
 		case *StrVal:
