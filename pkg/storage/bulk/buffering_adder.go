@@ -74,7 +74,9 @@ func (b *BufferingAdder) Close(ctx context.Context) {
 		b.flushCounts.total, b.flushCounts.bufferSize,
 		b.sink.flushCounts.total, b.sink.flushCounts.split, b.sink.flushCounts.sstSize,
 	)
-	b.sink.Close()
+	if err := b.sink.Close(); err != nil {
+		log.Warning(ctx, err)
+	}
 }
 
 // Add adds a key to the buffer and checks if it needs to flush.
