@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/pkg/errors"
 )
 
 // NewSorter returns a new sort operator, which sorts its input on the columns
@@ -31,14 +32,12 @@ func NewSorter(
 func newSorter(
 	input spooler, inputTypes []types.T, orderingCols []distsqlpb.Ordering_Column,
 ) (resettableOperator, error) {
-	sorters := make([]colSorter, len(orderingCols))
 	partitioners := make([]partitioner, len(orderingCols)-1)
 
 	var err error
 	for i, ord := range orderingCols {
-		sorters[i], err = newSingleSorter(inputTypes[ord.ColIdx], ord.Direction)
-		if err != nil {
-			return nil, err
+		if !isSorterSupported(inputTypes[ord.ColIdx], ord.Direction) {
+			return nil, errors.Errorf("sorter for type: %s and direction: %s not supported", inputTypes[ord.ColIdx], ord.Direction)
 		}
 		if i < len(orderingCols)-1 {
 			partitioners[i], err = newPartitioner(inputTypes[ord.ColIdx])
@@ -51,7 +50,6 @@ func newSorter(
 	return &sortOp{
 		input:        input,
 		inputTypes:   inputTypes,
-		sorters:      sorters,
 		partitioners: partitioners,
 		orderingCols: orderingCols,
 		state:        sortSpooling,
@@ -282,8 +280,11 @@ func (p *sortOp) sort(ctx context.Context) {
 		p.order[i] = i
 	}
 
+	p.sorters = make([]colSorter, len(p.orderingCols))
 	for i := range p.orderingCols {
-		p.sorters[i].init(p.input.getValues(int(p.orderingCols[i].ColIdx)), p.order)
+		inputVec := p.input.getValues(int(p.orderingCols[i].ColIdx))
+		p.sorters[i] = newSingleSorter(p.inputTypes[p.orderingCols[i].ColIdx], p.orderingCols[i].Direction, inputVec.MaybeHasNulls())
+		p.sorters[i].init(inputVec, p.order)
 	}
 
 	// Now, sort each column in turn.

@@ -35,6 +35,30 @@ func TestSort(t *testing.T) {
 		typ      []types.T
 	}{
 		{
+			tuples:   tuples{{1}, {2}, {nil}, {4}, {5}, {nil}},
+			expected: tuples{{nil}, {nil}, {1}, {2}, {4}, {5}},
+			typ:      []types.T{types.Int64},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
+		},
+		{
+			tuples:   tuples{{1, 2}, {1, 1}, {1, nil}, {2, nil}, {2, 3}, {2, nil}, {5, 1}},
+			expected: tuples{{1, nil}, {1, 1}, {1, 2}, {2, nil}, {2, nil}, {2, 3}, {5, 1}},
+			typ:      []types.T{types.Int64, types.Int64},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
+		},
+		{
+			tuples:   tuples{{1, 2}, {1, 1}, {1, nil}, {2, nil}, {2, 3}, {2, nil}, {5, 1}},
+			expected: tuples{{5, 1}, {2, 3}, {2, nil}, {2, nil}, {1, 2}, {1, 1}, {1, nil}},
+			typ:      []types.T{types.Int64, types.Int64},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_DESC}, {ColIdx: 1, Direction: distsqlpb.Ordering_Column_DESC}},
+		},
+		{
+			tuples:   tuples{{nil, nil}, {nil, 3}, {1, nil}, {nil, 1}, {1, 2}, {nil, nil}, {5, nil}},
+			expected: tuples{{nil, nil}, {nil, nil}, {nil, 1}, {nil, 3}, {1, nil}, {1, 2}, {5, nil}},
+			typ:      []types.T{types.Int64, types.Int64},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
+		},
+		{
 			tuples:   tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			expected: tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			typ:      []types.T{types.Int64},
@@ -145,7 +169,11 @@ func TestSortRandomized(t *testing.T) {
 						tups[i] = make(tuple, nCols)
 						for j := range tups[i] {
 							// Small range so we can test partitioning
-							tups[i][j] = rng.Int63() % 2048
+							if rng.Float64() < nullProbability {
+								tups[i][j] = nil
+							} else {
+								tups[i][j] = rng.Int63() % 2048
+							}
 						}
 						// Enforce that the last ordering column is always unique. Otherwise
 						// there would be multiple valid sort orders.
@@ -337,6 +365,25 @@ func BenchmarkAllSpooler(b *testing.B) {
 func less(tuples tuples, ordCols []distsqlpb.Ordering_Column) func(i, j int) bool {
 	return func(i, j int) bool {
 		for _, col := range ordCols {
+			n1 := tuples[i][col.ColIdx] == nil
+			n2 := tuples[j][col.ColIdx] == nil
+			if col.Direction == distsqlpb.Ordering_Column_ASC {
+				if n1 && n2 {
+					continue
+				} else if n1 {
+					return true
+				} else if n2 {
+					return false
+				}
+			} else {
+				if n1 && n2 {
+					continue
+				} else if n1 {
+					return false
+				} else if n2 {
+					return true
+				}
+			}
 			if tuples[i][col.ColIdx].(int64) < tuples[j][col.ColIdx].(int64) {
 				return col.Direction == distsqlpb.Ordering_Column_ASC
 			} else if tuples[i][col.ColIdx].(int64) > tuples[j][col.ColIdx].(int64) {
