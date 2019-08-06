@@ -22,8 +22,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -63,4 +65,100 @@ func makeRocksSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
 	sst, err := w.Finish()
 	require.NoError(t, err)
 	return sst
+}
+
+func makePebbleSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
+	w := bulk.MakeSSTWriter()
+	defer w.Close()
+
+	for i := range kvs {
+		require.NoError(t, w.Add(kvs[i]))
+	}
+	sst, err := w.Finish()
+	require.NoError(t, err)
+	return sst
+}
+
+// TestPebbleWritesSameSSTs tests that using pebble to write some SST produces
+// the same file -- byte-for-byte -- as using our Rocks-based writer. This is is
+// done not because we don't trust pebble to write the correct SST, but more
+// because we otherwise don't have a great way to be sure we've configured it to
+// to the same thing we configured RocksDB to do w.r.t. all the block size, key
+// filtering, property collecting, etc settings. Getting these settings wrong
+// could easily produce an SST with the same K/V content but subtle and hard to
+// debug differences in runtime performance (which also could prove elusive when
+// it could compacted away at any time and replaced with a Rocks-written one).
+//
+// This test may need to be removed if/when Pebble's SSTs diverge from Rocks'.
+// That is probably OK: it is mostly intended to increase our confidence during
+// the transition that we're not introducing a regression. Once pebble-written
+// SSTs are the norm, comparing to ones written using the Rocks writer (which
+// didn't actually share a configuration with the serving RocksDB, so they were
+// already different from actual runtime-written SSTs) will no longer be a
+// concen (though we will likely want testing of things like prop collectors).
+func TestPebbleWritesSameSSTs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	r, _ := randutil.NewPseudoRand()
+	const numKeys, valueSize, revisions = 5000, 100, 100
+
+	kvs := makeIntTableKVs(t, numKeys, valueSize, revisions)
+	sstRocks := makeRocksSST(t, kvs)
+	sstPebble := makePebbleSST(t, kvs)
+
+	itRocks, err := engine.NewMemSSTIterator(sstRocks, false)
+	require.NoError(t, err)
+	itPebble, err := engine.NewMemSSTIterator(sstPebble, false)
+	require.NoError(t, err)
+
+	itPebble.Seek(engine.NilKey)
+	for itRocks.Seek(engine.NilKey); ; {
+		okRocks, err := itRocks.Valid()
+		if err != nil {
+			t.Fatal(err)
+		}
+		okPebble, err := itPebble.Valid()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !okRocks {
+			break
+		}
+		if !okPebble {
+			t.Fatal("expected valid")
+		}
+		require.Equal(t, itRocks.UnsafeKey(), itPebble.UnsafeKey())
+		require.Equal(t, itRocks.UnsafeValue(), itPebble.UnsafeValue())
+
+		if r.Intn(5) == 0 {
+			itRocks.NextKey()
+			itPebble.NextKey()
+		} else {
+			itRocks.Next()
+			itPebble.Next()
+		}
+	}
+
+	require.Equal(t, string(sstRocks), string(sstPebble))
+}
+
+func BenchmarkWriteSSTable(b *testing.B) {
+	// Writing the SST 10 times keeps size needed for ~10s benchtime under 1gb.
+	const valueSize, revisions, ssts = 100, 100, 10
+	kvs := makeIntTableKVs(b, b.N, valueSize, ssts)
+	approxUserDataSizePerKV := kvs[b.N/2].Key.EncodedSize() + valueSize
+	b.SetBytes(int64(approxUserDataSizePerKV * ssts))
+	b.ResetTimer()
+
+	b.Run("rocks", func(b *testing.B) {
+		for i := 0; i < ssts; i++ {
+			_ = makeRocksSST(b, kvs)
+		}
+	})
+
+	b.Run("pebble", func(b *testing.B) {
+		for i := 0; i < ssts; i++ {
+			_ = makePebbleSST(b, kvs)
+		}
+	})
 }
