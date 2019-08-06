@@ -12,6 +12,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -104,16 +105,16 @@ type TxnSender interface {
 	// is the only one which will be invoked.
 	OnFinish(func(error))
 
-	// SetSystemConfigTrigger sets the system db trigger to true on this transaction.
-	// This will impact the EndTransactionRequest.
+	// AnchorOnSystemConfigRange ensures that the transaction record, if/when it
+	// will be created, will be created on the system config range. This is useful
+	// because some commit triggers only work when the EndTransaction is evaluated
+	// on that range.
 	//
-	// NOTE: The system db trigger will only execute correctly if the transaction
-	// record is located on the range that contains the system span. If a
-	// transaction is created which modifies both system *and* non-system data, it
-	// should be ensured that the transaction record itself is on the system span.
-	// This can be done by making sure a system key is the first key touched in the
-	// transaction.
-	SetSystemConfigTrigger() error
+	// An error is returned if the transaction's key has already been set (i.e. if
+	// the transaction already performed any writes).
+	// The note above notwithstanding, it is allowed to call this method multiple
+	// times (even if there's been writes in between the calls).
+	AnchorOnSystemConfigRange() error
 
 	// GetMeta retrieves a copy of the TxnCoordMeta, which can be sent from root
 	// to leaf transactions or the other way around. Can be combined via
@@ -294,8 +295,10 @@ func (m *MockTransactionalSender) OnFinish(f func(error)) {
 	}
 }
 
-// SetSystemConfigTrigger is part of the TxnSender interface.
-func (m *MockTransactionalSender) SetSystemConfigTrigger() error { panic("unimplemented") }
+// AnchorOnSystemConfigRange is part of the TxnSender interface.
+func (m *MockTransactionalSender) AnchorOnSystemConfigRange() error {
+	return fmt.Errorf("unimplemented")
+}
 
 // TxnStatus is part of the TxnSender interface.
 func (m *MockTransactionalSender) TxnStatus() roachpb.TransactionStatus {
