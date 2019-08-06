@@ -202,13 +202,16 @@ func (p {{template "opName" .}}) Init() {
 }
 {{end}}
 
-{{/* The outer range is a coltypes.T, and the inner is the overloads associated
-     with that type. */}}
-{{range .TypToOverloads}}
+{{/* The outer range is a coltypes.T (the left type). The middle range is also a
+     coltypes.T (the right type). The inner is the overloads associated with
+     those two types. */}}
+{{range .LTypToRTypToOverloads}}
+{{range .}}
 {{range .}}
 {{template "projRConstOp" .}}
 {{template "projLConstOp" .}}
 {{template "projOp" .}}
+{{end}}
 {{end}}
 {{end}}
 
@@ -216,123 +219,139 @@ func (p {{template "opName" .}}) Init() {
      operator, and false when outputting a right-const operator. */}}
 {{range $left := .ConstSides}}
 // GetProjectionConstOperator returns the appropriate constant projection
-// operator for the given column type and comparison.
+// operator for the given left and right column types and comparison.
 func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
-	ct *types.T,
+	leftColType *types.T,
+	rightColType *types.T,
 	op tree.Operator,
 	input Operator,
 	colIdx int,
 	constArg tree.Datum,
   outputIdx int,
 ) (Operator, error) {
-	c, err := typeconv.GetDatumToPhysicalFn(ct)(constArg)
+	c, err := typeconv.GetDatumToPhysicalFn({{if $left}}leftColType{{else}}rightColType{{end}})(constArg)
 	if err != nil {
 		return nil, err
 	}
-	switch t := typeconv.FromColumnType(ct); t {
-	{{range $typ, $overloads := $.TypToOverloads}}
-	case coltypes.{{$typ}}:
-		switch op.(type) {
-		case tree.BinaryOperator:
-			switch op {
-			{{range $overloads}}
-			{{if .IsBinOp}}
-			case tree.{{.Name}}:
-				return &{{if $left}}{{template "opLConstName" .}}{{else}}{{template "opRConstName" .}}{{end}}{
-					OneInputNode: NewOneInputNode(input),
-					colIdx:   colIdx,
-					constArg: c.({{if $left}}{{.LGoType}}{{else}}{{.RGoType}}{{end}}),
-					outputIdx: outputIdx,
-				}, nil
-			{{end}}
-			{{end}}
+	switch leftType := typeconv.FromColumnType(leftColType); leftType {
+	{{range $lTyp, $rTypToOverloads := $.LTypToRTypToOverloads}}
+	case coltypes.{{$lTyp}}:
+		switch rightType := typeconv.FromColumnType(rightColType); rightType {
+		{{range $rTyp, $overloads := $rTypToOverloads}}
+		case coltypes.{{$rTyp}}:
+			switch op.(type) {
+			case tree.BinaryOperator:
+				switch op {
+				{{range $overloads}}
+				{{if .IsBinOp}}
+				case tree.{{.Name}}:
+					return &{{if $left}}{{template "opLConstName" .}}{{else}}{{template "opRConstName" .}}{{end}}{
+						OneInputNode: NewOneInputNode(input),
+						colIdx:   colIdx,
+						constArg: c.({{if $left}}{{.LGoType}}{{else}}{{.RGoType}}{{end}}),
+						outputIdx: outputIdx,
+					}, nil
+				{{end}}
+				{{end}}
+				default:
+					return nil, errors.Errorf("unhandled binary operator: %s", op)
+				}
+			case tree.ComparisonOperator:
+				switch op {
+				{{range $overloads}}
+				{{if .IsCmpOp}}
+				case tree.{{.Name}}:
+					return &{{if $left}}{{template "opLConstName" .}}{{else}}{{template "opRConstName" .}}{{end}}{
+						OneInputNode: NewOneInputNode(input),
+						colIdx:   colIdx,
+						constArg: c.({{if $left}}{{.LGoType}}{{else}}{{.RGoType}}{{end}}),
+						outputIdx: outputIdx,
+					}, nil
+				{{end}}
+				{{end}}
+				default:
+					return nil, errors.Errorf("unhandled comparison operator: %s", op)
+				}
 			default:
-				return nil, errors.Errorf("unhandled binary operator: %s", op)
+				return nil, errors.New("unhandled operator type")
 			}
-		case tree.ComparisonOperator:
-			switch op {
-			{{range $overloads}}
-			{{if .IsCmpOp}}
-			case tree.{{.Name}}:
-				return &{{if $left}}{{template "opLConstName" .}}{{else}}{{template "opRConstName" .}}{{end}}{
-					OneInputNode: NewOneInputNode(input),
-					colIdx:   colIdx,
-					constArg: c.({{if $left}}{{.LGoType}}{{else}}{{.RGoType}}{{end}}),
-					outputIdx: outputIdx,
-				}, nil
-			{{end}}
-			{{end}}
-			default:
-				return nil, errors.Errorf("unhandled comparison operator: %s", op)
-			}
+		{{end}}
 		default:
-			return nil, errors.New("unhandled operator type")
+			return nil, errors.Errorf("unhandled right type: %s", rightType)
 		}
 	{{end}}
 	default:
-		return nil, errors.Errorf("unhandled type: %s", t)
+		return nil, errors.Errorf("unhandled left type: %s", leftType)
 	}
 }
 {{end}}
 
 // GetProjectionOperator returns the appropriate projection operator for the
-// given column type and comparison.
+// given left and right column types and comparison.
 func GetProjectionOperator(
-	ct *types.T,
+  leftColType *types.T,
+  rightColType *types.T,
 	op tree.Operator,
 	input Operator,
 	col1Idx int,
 	col2Idx int,
   outputIdx int,
 ) (Operator, error) {
-	switch t := typeconv.FromColumnType(ct); t {
-	{{range $typ, $overloads := .TypToOverloads}}
-	case coltypes.{{$typ}}:
-		switch op.(type) {
-		case tree.BinaryOperator:
-			switch op {
-			{{range $overloads}}
-			{{if .IsBinOp}}
-			case tree.{{.Name}}:
-				return &{{template "opName" .}}{
-					OneInputNode: NewOneInputNode(input),
-					col1Idx:   col1Idx,
-					col2Idx:   col2Idx,
-					outputIdx: outputIdx,
-				}, nil
-			{{end}}
-			{{end}}
+	switch leftType := typeconv.FromColumnType(leftColType); leftType {
+	{{range $lTyp, $rTypToOverloads := .LTypToRTypToOverloads}}
+	case coltypes.{{$lTyp}}:
+		switch rightType := typeconv.FromColumnType(rightColType); rightType {
+		{{range $rTyp, $overloads := $rTypToOverloads}}
+		case coltypes.{{$rTyp}}:
+			switch op.(type) {
+			case tree.BinaryOperator:
+				switch op {
+				{{range $overloads}}
+				{{if .IsBinOp}}
+				case tree.{{.Name}}:
+					return &{{template "opName" .}}{
+						OneInputNode: NewOneInputNode(input),
+						col1Idx:   col1Idx,
+						col2Idx:   col2Idx,
+						outputIdx: outputIdx,
+					}, nil
+				{{end}}
+				{{end}}
+				default:
+					return nil, errors.Errorf("unhandled binary operator: %s", op)
+				}
+			case tree.ComparisonOperator:
+				switch op {
+				{{range $overloads}}
+				{{if .IsCmpOp}}
+				case tree.{{.Name}}:
+					return &{{template "opName" .}}{
+						OneInputNode: NewOneInputNode(input),
+						col1Idx:   col1Idx,
+						col2Idx:   col2Idx,
+						outputIdx: outputIdx,
+					}, nil
+				{{end}}
+				{{end}}
+				default:
+					return nil, errors.Errorf("unhandled comparison operator: %s", op)
+				}
 			default:
-				return nil, errors.Errorf("unhandled binary operator: %s", op)
+				return nil, errors.New("unhandled operator type")
 			}
-		case tree.ComparisonOperator:
-			switch op {
-			{{range $overloads}}
-			{{if .IsCmpOp}}
-			case tree.{{.Name}}:
-				return &{{template "opName" .}}{
-					OneInputNode: NewOneInputNode(input),
-					col1Idx:   col1Idx,
-					col2Idx:   col2Idx,
-					outputIdx: outputIdx,
-				}, nil
-			{{end}}
-			{{end}}
-			default:
-				return nil, errors.Errorf("unhandled comparison operator: %s", op)
-			}
+		{{end}}
 		default:
-			return nil, errors.New("unhandled operator type")
+			return nil, errors.Errorf("unhandled right type: %s", rightType)
 		}
 	{{end}}
 	default:
-		return nil, errors.Errorf("unhandled type: %s", t)
+		return nil, errors.Errorf("unhandled left type: %s", leftType)
 	}
 }
 `
 
 type genInput struct {
-	TypToOverloads map[coltypes.T][]*overload
+	LTypToRTypToOverloads map[coltypes.T]map[coltypes.T][]*overload
 	// ConstSides is a boolean array that contains two elements, true and false.
 	// It's used by the template to generate both variants of the const projection
 	// op - once where the left is const, and one where the right is const.
@@ -349,12 +368,18 @@ func genProjectionOps(wr io.Writer) error {
 	allOverloads = append(allOverloads, binaryOpOverloads...)
 	allOverloads = append(allOverloads, comparisonOpOverloads...)
 
-	typToOverloads := make(map[coltypes.T][]*overload)
-	for _, overload := range allOverloads {
-		typ := overload.LTyp
-		typToOverloads[typ] = append(typToOverloads[typ], overload)
+	lTypToRTypToOverloads := make(map[coltypes.T]map[coltypes.T][]*overload)
+	for _, ov := range allOverloads {
+		lTyp := ov.LTyp
+		rTyp := ov.RTyp
+		rTypToOverloads := lTypToRTypToOverloads[lTyp]
+		if rTypToOverloads == nil {
+			rTypToOverloads = make(map[coltypes.T][]*overload)
+			lTypToRTypToOverloads[lTyp] = rTypToOverloads
+		}
+		rTypToOverloads[rTyp] = append(rTypToOverloads[rTyp], ov)
 	}
-	return tmpl.Execute(wr, genInput{typToOverloads, []bool{false, true}})
+	return tmpl.Execute(wr, genInput{lTypToRTypToOverloads, []bool{false, true}})
 }
 
 func init() {
