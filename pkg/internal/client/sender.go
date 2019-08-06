@@ -110,10 +110,10 @@ type TxnSender interface {
 	// because some commit triggers only work when the EndTransaction is evaluated
 	// on that range.
 	//
-	// An error is returned if the transaction's key has already been set (i.e. if
-	// the transaction already performed any writes).
-	// The note above notwithstanding, it is allowed to call this method multiple
-	// times (even if there's been writes in between the calls).
+	// An error is returned if the transaction's key has already been set by
+	// anything other than a previous call to this function (i.e. if the
+	// transaction already performed any writes).
+	// It is allowed to call this method multiple times.
 	AnchorOnSystemConfigRange() error
 
 	// GetMeta retrieves a copy of the TxnCoordMeta, which can be sent from root
