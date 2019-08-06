@@ -28,7 +28,6 @@ type coalescerOp struct {
 	buffer coldata.Batch
 }
 
-var _ Operator = &coalescerOp{}
 var _ StaticMemoryOperator = &coalescerOp{}
 
 // NewCoalescerOp creates a new coalescer operator on the given input operator

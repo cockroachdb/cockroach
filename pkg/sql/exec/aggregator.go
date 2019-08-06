@@ -117,7 +117,6 @@ type orderedAggregator struct {
 	seenNonEmptyBatch bool
 }
 
-var _ Operator = &orderedAggregator{}
 var _ StaticMemoryOperator = &orderedAggregator{}
 
 // NewOrderedAggregator creates an ordered aggregator on the given grouping

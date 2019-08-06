@@ -24,6 +24,8 @@ type fnOp struct {
 	fn func()
 }
 
+var _ resettableOperator = fnOp{}
+
 func (f fnOp) Init() {
 	f.input.Init()
 }
@@ -33,3 +35,5 @@ func (f fnOp) Next(ctx context.Context) coldata.Batch {
 	f.fn()
 	return batch
 }
+
+func (f fnOp) reset() {}
