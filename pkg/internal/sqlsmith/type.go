@@ -11,6 +11,8 @@
 package sqlsmith
 
 import (
+	exectypes "github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -27,14 +29,57 @@ func typeFromName(name string) *types.T {
 
 // pickAnyType returns a concrete type if typ is types.Any or types.AnyArray,
 // otherwise typ.
-func pickAnyType(s *scope, typ *types.T) *types.T {
+func (s *Smither) pickAnyType(typ *types.T) (_ *types.T, ok bool) {
 	switch typ.Family() {
 	case types.AnyFamily:
-		return sqlbase.RandType(s.schema.rnd)
+		typ = s.randType()
 	case types.ArrayFamily:
 		if typ.ArrayContents().Family() == types.AnyFamily {
-			return sqlbase.RandArrayContentsType(s.schema.rnd)
+			typ = sqlbase.RandArrayContentsType(s.rnd)
 		}
 	}
-	return typ
+	return typ, s.allowedType(typ)
+}
+
+func (s *Smither) randScalarType() *types.T {
+	for {
+		t := sqlbase.RandScalarType(s.rnd)
+		if !s.allowedType(t) {
+			continue
+		}
+		return t
+	}
+}
+
+func (s *Smither) randType() *types.T {
+	for {
+		t := sqlbase.RandType(s.rnd)
+		if !s.allowedType(t) {
+			continue
+		}
+		return t
+	}
+}
+
+// allowedType returns whether t is ok to be used. This is useful to filter
+// out undesirable types to enable certain execution paths to be taken (like
+// vectorization).
+func (s *Smither) allowedType(types ...*types.T) bool {
+	for _, t := range types {
+		if s.vectorizable && conv.FromColumnType(t) == exectypes.Unhandled {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Smither) makeDesiredTypes() []*types.T {
+	var typs []*types.T
+	for {
+		typs = append(typs, s.randType())
+		if s.d6() < 2 {
+			break
+		}
+	}
+	return typs
 }

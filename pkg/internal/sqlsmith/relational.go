@@ -12,7 +12,6 @@ package sqlsmith
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -90,6 +89,10 @@ var (
 		{10, makeSchemaTable},
 		{1, makeValuesTable},
 		{2, makeSelectTable},
+	}
+	vectorizableTableExprs = tableExprWeights{
+		{10, makeJoinExpr},
+		{20, makeSchemaTable},
 	}
 	allTableExprs = append(mutatingTableExprs, nonMutatingTableExprs...)
 
@@ -236,7 +239,7 @@ func (s *scope) makeWith() (*tree.With, tableRefs) {
 		var ok bool
 		var stmt tree.SelectStatement
 		var stmtRefs colRefs
-		stmt, stmtRefs, tables, ok = s.makeSelectStmt(makeDesiredTypes(s), nil /* refs */, tables)
+		stmt, stmtRefs, tables, ok = s.makeSelectStmt(s.schema.makeDesiredTypes(), nil /* refs */, tables)
 		if !ok {
 			continue
 		}
@@ -267,17 +270,6 @@ func (s *scope) makeWith() (*tree.With, tableRefs) {
 	return &tree.With{
 		CTEList: ctes,
 	}, tables
-}
-
-func makeDesiredTypes(s *scope) []*types.T {
-	var typs []*types.T
-	for {
-		typs = append(typs, sqlbase.RandType(s.schema.rnd))
-		if s.d6() < 2 {
-			break
-		}
-	}
-	return typs
 }
 
 var orderDirections = []tree.Direction{
@@ -374,7 +366,7 @@ func (s *scope) makeSelectClause(
 
 	var fromRefs colRefs
 	// Sometimes generate a SELECT with no FROM clause.
-	requireFrom := s.d6() != 1
+	requireFrom := s.schema.vectorizable || s.d6() != 1
 	for (requireFrom && len(clause.From.Tables) < 1) || s.coin() {
 		var from tree.TableExpr
 		if len(withTables) == 0 || s.coin() {
@@ -394,6 +386,10 @@ func (s *scope) makeSelectClause(
 			fromRefs = append(fromRefs, exprRefs...)
 		}
 		clause.From.Tables = append(clause.From.Tables, from)
+		// Restrict so that we don't have a crazy amount of rows due to many joins.
+		if len(clause.From.Tables) >= 4 {
+			break
+		}
 	}
 
 	selectListRefs := refs
@@ -454,7 +450,7 @@ func (s *scope) makeSelectClause(
 }
 
 func makeSelect(s *scope) (tree.Statement, bool) {
-	stmt, _, ok := s.makeSelect(makeDesiredTypes(s), nil)
+	stmt, _, ok := s.makeSelect(s.schema.makeDesiredTypes(), nil)
 	return stmt, ok
 }
 
@@ -497,7 +493,7 @@ func (s *scope) makeSelectList(
 	}
 	// If we still don't have any then there weren't any refs.
 	if len(desiredTypes) == 0 {
-		desiredTypes = makeDesiredTypes(s)
+		desiredTypes = s.schema.makeDesiredTypes()
 	}
 	result := make(tree.SelectExprs, len(desiredTypes))
 	selectRefs := make(colRefs, len(desiredTypes))
@@ -709,7 +705,7 @@ func (s *scope) makeInsertReturning(refs colRefs) (tree.TableExpr, colRefs, bool
 }
 
 func makeValuesTable(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
-	types := makeDesiredTypes(s)
+	types := s.schema.makeDesiredTypes()
 	values, valuesRefs := makeValues(s, types, refs)
 	return values, valuesRefs, true
 }
@@ -848,7 +844,7 @@ func makeLimit(s *scope) *tree.Limit {
 }
 
 func (s *scope) makeReturning(table *tableRef) (*tree.ReturningExprs, colRefs) {
-	desiredTypes := makeDesiredTypes(s)
+	desiredTypes := s.schema.makeDesiredTypes()
 
 	refs := make(colRefs, len(table.Columns))
 	for i, c := range table.Columns {
