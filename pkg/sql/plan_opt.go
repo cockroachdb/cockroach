@@ -50,6 +50,32 @@ func (p *planner) prepareUsingOptimizer(
 	opc := &p.optPlanningCtx
 	opc.reset()
 
+	// These statements do not have result columns and do not support placeholders
+	// so there is no need to do anything during prepare.
+	//
+	// Some of these statements (like BeginTransaction) aren't supported by the
+	// optbuilder so they would error out. Others (like CreateIndex) have planning
+	// code that can introduce unnecessary txn retries (because of looking up
+	// descriptors and such).
+	switch stmt.AST.(type) {
+	case *tree.AlterIndex, *tree.AlterTable, *tree.AlterSequence,
+		*tree.BeginTransaction,
+		*tree.CommentOnColumn, *tree.CommentOnDatabase, *tree.CommentOnTable, *tree.CommitTransaction,
+		*tree.CopyFrom, *tree.CreateDatabase, *tree.CreateIndex, *tree.CreateView,
+		*tree.CreateSequence,
+		*tree.CreateStats,
+		*tree.Deallocate, *tree.Discard, *tree.DropDatabase, *tree.DropIndex,
+		*tree.DropTable, *tree.DropView, *tree.DropSequence, *tree.DropRole,
+		*tree.Execute,
+		*tree.Grant, *tree.GrantRole,
+		*tree.Prepare,
+		*tree.ReleaseSavepoint, *tree.RenameColumn, *tree.RenameDatabase,
+		*tree.RenameIndex, *tree.RenameTable, *tree.Revoke, *tree.RevokeRole,
+		*tree.RollbackToSavepoint, *tree.RollbackTransaction,
+		*tree.Savepoint, *tree.SetTransaction, *tree.SetTracing, *tree.SetSessionCharacteristics:
+		return opc.flags, false, nil
+	}
+
 	if opc.useCache {
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, stmt.SQL)
 		if ok && cachedData.PrepareMetadata != nil {

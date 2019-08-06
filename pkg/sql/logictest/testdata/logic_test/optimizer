@@ -79,12 +79,6 @@ SELECT * FROM tview
 4  40
 
 statement ok
-SET OPTIMIZER = ALWAYS
-
-query error pq: unimplemented: unsupported statement: \*tree\.AlterTable
-ALTER TABLE test DROP COLUMN v;
-
-statement ok
 SET OPTIMIZER = LOCAL
 
 # In local mode, we should always get the results in order (no rowsort).

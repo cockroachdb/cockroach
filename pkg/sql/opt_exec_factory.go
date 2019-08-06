@@ -888,8 +888,11 @@ func (ef *execFactory) ConstructPlan(
 		root = spool.source
 	}
 	res := &planTop{
-		plan:        root.(planNode),
-		auditEvents: ef.planner.curPlan.auditEvents,
+		plan: root.(planNode),
+		// TODO(radu): these fields can be modified by planning various opaque
+		// statements. We should have a cleaner way of plumbing these.
+		avoidBuffering: ef.planner.curPlan.avoidBuffering,
+		auditEvents:    ef.planner.curPlan.auditEvents,
 	}
 	if len(subqueries) > 0 {
 		res.subqueryPlans = make([]subquery, len(subqueries))

@@ -168,6 +168,7 @@ var _ CCLOnlyStatement = &CreateRole{}
 var _ CCLOnlyStatement = &DropRole{}
 var _ CCLOnlyStatement = &GrantRole{}
 var _ CCLOnlyStatement = &RevokeRole{}
+var _ CCLOnlyStatement = &CreateChangefeed{}
 
 // StatementType implements the Statement interface.
 func (*AlterIndex) StatementType() StatementType { return DDL }
@@ -281,6 +282,8 @@ func (n *CreateChangefeed) StatementTag() string {
 	}
 	return "CREATE CHANGEFEED"
 }
+
+func (*CreateChangefeed) cclOnlyStatement() {}
 
 // StatementType implements the Statement interface.
 func (*CreateDatabase) StatementType() StatementType { return DDL }

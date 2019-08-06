@@ -67,7 +67,7 @@ func TestQueryCounts(t *testing.T) {
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.
-		{query: "SET OPTIMIZER = 'off'", miscCount: 1, miscExecutedCount: 1, fallbackCount: 1},
+		{query: "SET OPTIMIZER = 'off'", miscCount: 1, miscExecutedCount: 1, optCount: 1},
 		{query: "SET DISTSQL = 'off'", miscCount: 1, miscExecutedCount: 1},
 		{query: "BEGIN; END", txnBeginCount: 1, txnCommitCount: 1},
 		{query: "SELECT 1", selectCount: 1, selectExecutedCount: 1, txnCommitCount: 1},
@@ -105,7 +105,7 @@ func TestQueryCounts(t *testing.T) {
 		{query: "SELECT 3", selectCount: 1, selectExecutedCount: 1, optCount: 1},
 		{query: "CREATE TABLE mt.n (num INTEGER PRIMARY KEY)", ddlCount: 1, optCount: 1},
 		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1, optCount: 1},
-		{query: "SET OPTIMIZER = 'off'", miscCount: 1, miscExecutedCount: 1, fallbackCount: 1},
+		{query: "SET OPTIMIZER = 'off'", miscCount: 1, miscExecutedCount: 1, optCount: 1},
 	}
 
 	accum := initializeQueryCounter(s)
