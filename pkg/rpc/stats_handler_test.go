@@ -126,7 +126,8 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
 	go func() { heartbeat.ready <- nil }()
-	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background()); err != nil {
+	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).
+		Connect(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -217,7 +218,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 	if m.stream == nil {
 		var conn *grpc.ClientConn
 		var err error
-		conn, err = m.flowCtx.Cfg.NodeDialer.Dial(ctx, m.nodeID)
+		conn, err = m.flowCtx.Cfg.NodeDialer.Dial(ctx, m.nodeID, rpc.DefaultClass)
 		if err != nil {
 			return err
 		}

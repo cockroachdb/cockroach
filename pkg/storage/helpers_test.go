@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -484,8 +485,10 @@ func (nl *NodeLiveness) SetDecommissioningInternal(
 
 // GetCircuitBreaker returns the circuit breaker controlling
 // connection attempts to the specified node.
-func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
-	return t.dialer.GetCircuitBreaker(nodeID)
+func (t *RaftTransport) GetCircuitBreaker(
+	nodeID roachpb.NodeID, class rpc.ConnectionClass,
+) *circuit.Breaker {
+	return t.dialer.GetCircuitBreaker(nodeID, class)
 }
 
 func WriteRandomDataToRange(
