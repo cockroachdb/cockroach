@@ -87,6 +87,81 @@ func TestUnsetNullRange(t *testing.T) {
 	}
 }
 
+func TestSwapNulls(t *testing.T) {
+	n := NewNulls(BatchSize)
+	swapPos := []uint64{0, 1, 63, 64, 65, BatchSize - 1}
+	idxInSwapPos := func(idx uint64) bool {
+		for _, p := range swapPos {
+			if p == idx {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Test that swapping null with null doesn't change anything.
+	for _, p := range swapPos {
+		n.SetNull64(p)
+	}
+	for _, i := range swapPos {
+		for _, j := range swapPos {
+			n.SwapNulls(i, j)
+			for k := uint64(0); k < BatchSize; k++ {
+				require.Equal(t, idxInSwapPos(k), n.NullAt64(k),
+					"After swapping NULLS (%d, %d), NullAt(%d) saw %t, expected %t", i, j, k, n.NullAt64(k), idxInSwapPos(k))
+			}
+		}
+	}
+
+	// Test that swapping null with not null changes things appropriately.
+	n.UnsetNulls()
+	swaps := map[uint64]uint64{
+		0:  BatchSize - 1,
+		1:  62,
+		2:  3,
+		63: 65,
+		68: 120,
+	}
+	idxInSwaps := func(idx uint64) bool {
+		for k, v := range swaps {
+			if idx == k || idx == v {
+				return true
+			}
+		}
+		return false
+	}
+	for _, j := range swaps {
+		n.SetNull64(j)
+	}
+	for i, j := range swaps {
+		n.SwapNulls(i, j)
+		require.Truef(t, n.NullAt64(i), "After swapping not null and null (%d, %d), found null=%t at %d", i, j, n.NullAt64(i), i)
+		require.Truef(t, !n.NullAt64(j), "After swapping not null and null (%d, %d), found null=%t at %d", i, j, !n.NullAt64(j), j)
+		for k := uint64(0); k < BatchSize; k++ {
+			if idxInSwaps(k) {
+				continue
+			}
+			require.Falsef(t, n.NullAt64(k),
+				"After swapping NULLS (%d, %d), NullAt(%d) saw %t, expected false", i, j, k, n.NullAt64(k))
+		}
+	}
+
+	// Test that swapping not null with not null doesn't do anything.
+	n.SetNulls()
+	for _, p := range swapPos {
+		n.UnsetNull64(p)
+	}
+	for _, i := range swapPos {
+		for _, j := range swapPos {
+			n.SwapNulls(i, j)
+			for k := uint64(0); k < BatchSize; k++ {
+				require.Equal(t, idxInSwapPos(k), !n.NullAt64(k),
+					"After swapping NULLS (%d, %d), NullAt(%d) saw %t, expected %t", i, j, k, !n.NullAt64(k), idxInSwapPos(k))
+			}
+		}
+	}
+}
+
 func TestNullsTruncate(t *testing.T) {
 	for _, size := range pos {
 		n := NewNulls(BatchSize)
