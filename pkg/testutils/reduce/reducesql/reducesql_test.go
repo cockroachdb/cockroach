@@ -32,7 +32,7 @@ func TestReduceSQL(t *testing.T) {
 	t.Skip("unnecessary")
 	reducesql.LogUnknown = *printUnknown
 
-	reduce.Walk(t, "testdata", isInterestingSQL, reducesql.SQLPasses)
+	reduce.Walk(t, "testdata", reducesql.Pretty, isInterestingSQL, reducesql.SQLPasses)
 }
 
 func isInterestingSQL(contains string) reduce.InterestingFn {

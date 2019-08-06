@@ -20,7 +20,7 @@ import (
 )
 
 func TestReduceGo(t *testing.T) {
-	reduce.Walk(t, "testdata", isInterestingGo, goPasses)
+	reduce.Walk(t, "testdata", nil /* filter */, isInterestingGo, goPasses)
 }
 
 var (

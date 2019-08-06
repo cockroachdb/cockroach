@@ -66,6 +66,18 @@ func reduceSQL(path, contains string, verbose bool) (string, error) {
 		return "", err
 	}
 
+	// Pretty print the input so the file size comparison is useful.
+	inputSQL, err := reducesql.Pretty(input)
+	if err != nil {
+		return "", err
+	}
+
+	var logger io.Writer
+	if verbose {
+		logger = os.Stderr
+		fmt.Fprintf(logger, "input SQL pretty printed, %d bytes -> %d bytes\n", len(input), len(inputSQL))
+	}
+
 	interesting := func(f reduce.File) bool {
 		cmd := exec.Command(path, "demo")
 		sql := string(f)
@@ -85,10 +97,6 @@ func reduceSQL(path, contains string, verbose bool) (string, error) {
 		return containsRE.Match(out)
 	}
 
-	var logger io.Writer
-	if verbose {
-		logger = os.Stderr
-	}
-	out, err := reduce.Reduce(logger, reduce.File(input), interesting, reducesql.SQLPasses...)
+	out, err := reduce.Reduce(logger, reduce.File(inputSQL), interesting, reducesql.SQLPasses...)
 	return string(out), err
 }
