@@ -38,7 +38,6 @@ type columnarizer struct {
 	typs            []types.T
 }
 
-var _ exec.Operator = &columnarizer{}
 var _ exec.StaticMemoryOperator = &columnarizer{}
 
 // newColumnarizer returns a new columnarizer.
