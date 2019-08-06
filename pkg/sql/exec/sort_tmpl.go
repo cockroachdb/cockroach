@@ -89,12 +89,14 @@ func newSingleSorter(t types.T, dir distsqlpb.Ordering_Column_Direction) (colSor
 
 type sort_TYPE_DIROp struct {
 	sortCol       _GOTYPESLICE
+	nulls         *coldata.Nulls
 	order         []uint64
 	cancelChecker CancelChecker
 }
 
 func (s *sort_TYPE_DIROp) init(col coldata.Vec, order []uint64) {
 	s.sortCol = col._TemplateType()
+	s.nulls = col.Nulls()
 	s.order = order
 }
 
@@ -122,6 +124,27 @@ func (s *sort_TYPE_DIROp) sortPartitions(ctx context.Context, partitions []uint6
 }
 
 func (s *sort_TYPE_DIROp) Less(i, j int) bool {
+	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt64(s.order[i])
+	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt64(s.order[j])
+	// {{ if eq .DirString "Asc" }}
+	// If ascending nulls, always sort first, so we encode that logic here.
+	if n1 && n2 {
+		return false
+	} else if n1 {
+		return true
+	} else if n2 {
+		return false
+	}
+	// {{ else if eq .DirString "Desc" }}
+	// If descending nulls, always sort last, so we encode that logic here.
+	if n1 && n2 {
+		return false
+	} else if n1 {
+		return false
+	} else if n2 {
+		return true
+	}
+	// {{end}}
 	var lt bool
 	// We always indirect via the order vector.
 	arg1 := execgen.GET(s.sortCol, int(s.order[i]))
