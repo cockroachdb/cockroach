@@ -1555,6 +1555,7 @@ transaction_priority                 normal              NULL      NULL        N
 transaction_read_only                off                 NULL      NULL        NULL        string
 transaction_status                   NoTxn               NULL      NULL        NULL        string
 vectorize                            auto                NULL      NULL        NULL        string
+vectorize_row_count_threshold        1000                NULL      NULL        NULL        string
 
 query TTTTTTT colnames
 SELECT
@@ -1608,6 +1609,7 @@ transaction_priority                 normal              NULL  user     NULL    
 transaction_read_only                off                 NULL  user     NULL      off                 off
 transaction_status                   NoTxn               NULL  user     NULL      NoTxn               NoTxn
 vectorize                            auto                NULL  user     NULL      auto                auto
+vectorize_row_count_threshold        1000                NULL  user     NULL      1000                1000
 
 query TTTTTT colnames
 SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg_settings
@@ -1658,6 +1660,7 @@ transaction_priority                 NULL    NULL     NULL     NULL        NULL
 transaction_read_only                NULL    NULL     NULL     NULL        NULL
 transaction_status                   NULL    NULL     NULL     NULL        NULL
 vectorize                            NULL    NULL     NULL     NULL        NULL
+vectorize_row_count_threshold        NULL    NULL     NULL     NULL        NULL
 
 # pg_catalog.pg_sequence
 

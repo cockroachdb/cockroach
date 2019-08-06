@@ -32,7 +32,7 @@ type DistSQLVersion uint32
 
 // MakeEvalContext serializes some of the fields of a tree.EvalContext into a
 // distsqlpb.EvalContext proto.
-func MakeEvalContext(evalCtx tree.EvalContext) EvalContext {
+func MakeEvalContext(evalCtx *tree.EvalContext) EvalContext {
 	var be BytesEncodeFormat
 	switch evalCtx.SessionData.DataConversion.BytesEncodeFormat {
 	case sessiondata.BytesEncodeHex:

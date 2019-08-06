@@ -458,6 +458,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		ordering.ScanIsReverse(scan, &scan.RequiredPhysical().Ordering),
 		b.indexConstraintMaxResults(scan),
 		res.reqOrdering(scan),
+		scan.Relational().Stats.RowCount,
 	)
 	if err != nil {
 		return execPlan{}, err

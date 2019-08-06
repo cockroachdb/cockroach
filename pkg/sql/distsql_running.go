@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // To allow queries to send out flow RPCs in parallel, we use a pool of workers
@@ -114,10 +114,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 	flows map[roachpb.NodeID]*distsqlpb.FlowSpec,
 	recv *DistSQLReceiver,
 	localState distsqlrun.LocalState,
+	vectorizeThresholdMet bool,
 ) (context.Context, *distsqlrun.Flow, error) {
 	thisNodeID := dsp.nodeDesc.NodeID
 
-	evalCtxProto := distsqlpb.MakeEvalContext(evalCtx.EvalContext)
+	evalCtxProto := distsqlpb.MakeEvalContext(&evalCtx.EvalContext)
 	setupReq := distsqlpb.SetupFlowRequest{
 		TxnCoordMeta: txnCoordMeta,
 		Version:      distsqlrun.Version,
@@ -131,54 +132,57 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(flows) > 1 {
 		resultChan = make(chan runnerResult, len(flows)-1)
 	}
-	// First check to see whether or not to even try vectorizing the flow. The
-	// goal here is to determine up front whether all of the flows can be
-	// vectorized. If any of them can't, turn off the setting.
-	// TODO(yuzefovich): this is a safe but quite inefficient way of setting up
-	// vectorized flows since the flows will effectively be planned twice. Remove
-	// this once logic of falling back to DistSQL is bullet-proof.
+
 	if evalCtx.SessionData.VectorizeMode != sessiondata.VectorizeOff {
-		for _, spec := range flows {
-			if err := distsqlrun.SupportsVectorized(
-				ctx, &distsqlrun.FlowCtx{
-					EvalCtx: &evalCtx.EvalContext,
-					Cfg:     &distsqlrun.ServerConfig{},
-					NodeID:  -1,
-				}, spec.Processors,
-			); err != nil {
-				// Vectorization attempt failed with an error.
-				returnVectorizationSetupError := false
-				if evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeExperimentalAlways {
-					returnVectorizationSetupError = true
-					// If running with VectorizeExperimentalAlways, this check makes sure
-					// that we can still run SET statements (mostly to set vectorize to
-					// off) and the like.
-					if len(spec.Processors) == 1 &&
-						spec.Processors[0].Core.LocalPlanNode != nil {
-						rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
-						if rsidx != nil {
-							lp := localState.LocalProcs[*rsidx]
-							if z, ok := lp.(distsqlrun.VectorizeAlwaysException); ok {
-								if z.IsException() {
-									returnVectorizationSetupError = false
+		if !vectorizeThresholdMet && evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto {
+			// Vectorization is not justified for this flow because the expected
+			// amount of data is too small and the overhead of pre-allocating data
+			// structures needed for the vectorized engine is expected to dominate
+			// the execution time.
+			setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
+		} else {
+			// Now we check to see whether or not to even try vectorizing the flow.
+			// The goal here is to determine up front whether all of the flows can be
+			// vectorized. If any of them can't, turn off the setting.
+			// TODO(yuzefovich): this is a safe but quite inefficient way of setting
+			// up vectorized flows since the flows will effectively be planned twice.
+			for _, spec := range flows {
+				if err := distsqlrun.SupportsVectorized(
+					ctx, &distsqlrun.FlowCtx{
+						EvalCtx: &evalCtx.EvalContext,
+						Cfg:     &distsqlrun.ServerConfig{},
+						NodeID:  -1,
+					}, spec.Processors,
+				); err != nil {
+					// Vectorization attempt failed with an error.
+					returnVectorizationSetupError := false
+					if evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeExperimentalAlways {
+						returnVectorizationSetupError = true
+						// If running with VectorizeExperimentalAlways, this check makes sure
+						// that we can still run SET statements (mostly to set vectorize to
+						// off) and the like.
+						if len(spec.Processors) == 1 &&
+							spec.Processors[0].Core.LocalPlanNode != nil {
+							rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
+							if rsidx != nil {
+								lp := localState.LocalProcs[*rsidx]
+								if z, ok := lp.(distsqlrun.VectorizeAlwaysException); ok {
+									if z.IsException() {
+										returnVectorizationSetupError = false
+									}
 								}
 							}
 						}
 					}
+					log.VEventf(ctx, 1, "failed to vectorize: %s", err)
+					if returnVectorizationSetupError {
+						return nil, nil, err
+					}
+					// Vectorization is not supported for this flow, so we override the
+					// setting.
+					setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
+					break
 				}
-				log.VEventf(ctx, 1, "failed to vectorize: %s", err)
-				if returnVectorizationSetupError {
-					return nil, nil, err
-				}
-				// Vectorization is not supported for this flow, so we override the
-				// setting. Note that we need to restore the setting of evalCtx since
-				// it can be used in the future, but setupReq is used only once, so we
-				// don't need to restore it.
-				setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
-				origMode := evalCtx.SessionData.VectorizeMode
-				evalCtx.SessionData.VectorizeMode = sessiondata.VectorizeOff
-				defer func() { evalCtx.SessionData.VectorizeMode = origMode }()
-				break
 			}
 		}
 	}
@@ -314,7 +318,8 @@ func (dsp *DistSQLPlanner) Run(
 	recv.outputTypes = plan.ResultTypes
 	recv.resultToStreamColMap = plan.PlanToStreamColMap
 
-	ctx, flow, err := dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState)
+	vectorizedThresholdMet := plan.MaxEstimatedRowCount >= evalCtx.SessionData.VectorizeRowCountThreshold
+	ctx, flow, err := dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState, vectorizedThresholdMet)
 	if err != nil {
 		recv.SetError(err)
 		return func() {}
