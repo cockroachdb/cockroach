@@ -204,11 +204,10 @@ func (ex *connExecutor) populatePrepared(
 	// fallback for all others, so this should be safe for the foreseeable
 	// future.
 	var flags planFlags
-	var isCorrelated bool
 	if optMode := ex.sessionData.OptimizerMode; optMode != sessiondata.OptimizerOff {
 		log.VEvent(ctx, 2, "preparing using optimizer")
 		var err error
-		flags, isCorrelated, err = p.prepareUsingOptimizer(ctx)
+		flags, err = p.prepareUsingOptimizer(ctx)
 		if err == nil {
 			log.VEvent(ctx, 2, "optimizer prepare succeeded")
 			// stmt.Prepared fields have been populated.
@@ -223,7 +222,6 @@ func (ex *connExecutor) populatePrepared(
 	// a plan for the statement to figure out the typing, then close the plan.
 	prepared.AnonymizedStr = anonymizeStmt(stmt.AST)
 	if err := p.prepare(ctx, stmt.AST); err != nil {
-		err = enhanceErrWithCorrelation(err, isCorrelated)
 		return 0, err
 	}
 

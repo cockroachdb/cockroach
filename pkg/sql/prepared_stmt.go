@@ -36,10 +36,6 @@ type PreparedStatement struct {
 	// if it is used by the optimizer as a starting point.
 	Memo *memo.Memo
 
-	// IsCorrelated memoizes whether the query contained correlated
-	// subqueries during planning (prior to de-correlation).
-	IsCorrelated bool
-
 	// refCount keeps track of the number of references to this PreparedStatement.
 	// New references are registered through incRef().
 	// Once refCount hits 0 (through calls to decRef()), the following memAcc is

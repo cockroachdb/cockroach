@@ -597,35 +597,6 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 	return eventTxnFinish{}, eventTxnFinishPayload{commit: false}
 }
 
-func enhanceErrWithCorrelation(err error, isCorrelated bool) error {
-	if err == nil || !isCorrelated {
-		return err
-	}
-
-	// If the query was found to be correlated by the new-gen
-	// optimizer, but the optimizer decided to give up (e.g. because
-	// of some feature it does not support), in most cases the
-	// heuristic planner will choke on the correlation with an
-	// unhelpful "table/column not defined" error.
-	//
-	// ("In most cases" because the heuristic planner does support
-	// *some* correlation, specifically that of SRFs in projections.)
-	//
-	// To help the user understand what is going on, we enhance these
-	// error message here when correlation has been found.
-	//
-	// We cannot be more assertive/definite in the text of the hint
-	// (e.g. by replacing the error entirely by "correlated queries are
-	// not supported") because perhaps there was an actual mistake in
-	// the query in addition to the unsupported correlation, and we also
-	// want to give a chance to the user to fix mistakes.
-	if code := pgerror.GetPGCode(err); code == pgcode.UndefinedColumn || code == pgcode.UndefinedTable {
-		err = errors.WithHintf(err, "some correlated subqueries are not supported yet - see %s",
-			"https://github.com/cockroachdb/cockroach/issues/3288")
-	}
-	return err
-}
-
 // dispatchToExecutionEngine executes the statement, writes the result to res
 // and returns an event for the connection's state machine.
 //
@@ -756,27 +727,17 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 	// in error cases.
 	planner.curPlan = planTop{AST: stmt.AST}
 
-	var isCorrelated bool
 	if optMode := ex.sessionData.OptimizerMode; optMode != sessiondata.OptimizerOff {
 		log.VEvent(ctx, 2, "generating optimizer plan")
 		var result *planTop
 		var err error
-		result, isCorrelated, err = planner.makeOptimizerPlan(ctx)
-		if err == nil {
-			planner.curPlan = *result
-			return nil
+		result, err = planner.makeOptimizerPlan(ctx)
+		if err != nil {
+			log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
+			return err
 		}
-		if isCorrelated {
-			// Note: we are setting isCorrelated here because
-			// makeOptimizerPlan() can determine isCorrelated but fail with
-			// a non-nil error and a nil result -- for example, when it runs
-			// into an unsupported SQL feature that the HP supports, after
-			// having processed a correlated subquery (which the heuristic
-			// planner won't support).
-			planner.curPlan.flags.Set(planFlagOptIsCorrelated)
-		}
-		log.VEventf(ctx, 1, "optimizer plan failed (isCorrelated=%t): %v", isCorrelated, err)
-		return err
+		planner.curPlan = *result
+		return nil
 	}
 
 	log.VEvent(ctx, 2, "optimizer disabled")
@@ -784,7 +745,6 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 	optFlags := planner.curPlan.flags
 	err := planner.makePlan(ctx)
 	planner.curPlan.flags |= optFlags
-	err = enhanceErrWithCorrelation(err, isCorrelated)
 	return err
 }
 
