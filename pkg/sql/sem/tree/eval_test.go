@@ -96,13 +96,6 @@ func TestEval(t *testing.T) {
 		defer s.Stopper().Stop(ctx)
 
 		walk(t, func(d *datadriven.TestData) string {
-			// TODO(mjibson): remove this once #38780 is fixed.
-			for _, arg := range d.CmdArgs {
-				if arg.Key == "ignoreSQL" {
-					return strings.TrimSpace(d.Expected)
-				}
-			}
-
 			var res gosql.NullString
 			if err := sqlDB.QueryRow(fmt.Sprintf("SELECT (%s)::STRING", d.Input)).Scan(&res); err != nil {
 				return strings.TrimPrefix(err.Error(), "pq: ")

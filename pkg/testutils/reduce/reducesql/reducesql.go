@@ -662,12 +662,9 @@ var (
 				return 1
 			}
 		case *tree.NumVal:
-			if node.OrigString != "0" {
+			if node.OrigString() != "0" {
 				if xf {
-					*node = tree.NumVal{
-						Value:      constant.MakeInt64(0),
-						OrigString: "0",
-					}
+					*node = *tree.NewNumVal(constant.MakeInt64(0), "0", false /* negative */)
 				}
 				return 1
 			}

@@ -211,7 +211,7 @@ func (p *Parser) parse(
 // for the purpose of formatting and scrubbing.
 func unaryNegation(e tree.Expr) tree.Expr {
 	if cst, ok := e.(*tree.NumVal); ok {
-		cst.Negative = !cst.Negative
+		cst.Negate()
 		return cst
 	}
 
