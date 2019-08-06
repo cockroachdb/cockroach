@@ -11,6 +11,7 @@
 package reducesql
 
 import (
+	"bytes"
 	"fmt"
 	"go/constant"
 	"regexp"
@@ -288,6 +289,25 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 		sb.WriteString(";")
 	}
 	return sb.String(), true, nil
+}
+
+// Pretty formats input SQL into a standard format. Input SQL should be run
+// through this before reducing so file size comparisons are useful.
+func Pretty(s []byte) ([]byte, error) {
+	stmts, err := parser.Parse(string(s))
+	if err != nil {
+		return nil, err
+	}
+
+	var sb bytes.Buffer
+	for i, stmt := range stmts {
+		if i > 0 {
+			sb.WriteString("\n\n")
+		}
+		sb.WriteString(tree.Pretty(stmt.AST))
+		sb.WriteString(";")
+	}
+	return sb.Bytes(), nil
 }
 
 var (
