@@ -37,6 +37,7 @@ type Operator interface {
 // StaticMemoryOperator is an interface that streaming operators can implement
 // if they are able to declare their memory usage upfront.
 type StaticMemoryOperator interface {
+	Operator
 	// EstimateStaticMemoryUsage estimates the memory usage (in bytes)
 	// of an operator.
 	EstimateStaticMemoryUsage() int

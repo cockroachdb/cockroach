@@ -104,7 +104,6 @@ type Inbox struct {
 	}
 }
 
-var _ exec.Operator = &Inbox{}
 var _ exec.StaticMemoryOperator = &Inbox{}
 
 // NewInbox creates a new Inbox.

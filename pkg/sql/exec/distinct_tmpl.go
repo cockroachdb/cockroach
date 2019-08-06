@@ -46,7 +46,23 @@ func OrderedDistinctColsToOperators(
 			return nil, nil, err
 		}
 	}
-	return input, distinctCol, nil
+	distinctChain := distinctChainOps{
+		Operator:                   input,
+		estimatedStaticMemoryUsage: EstimateBatchSizeBytes([]types.T{types.Bool}, coldata.BatchSize),
+	}
+	return distinctChain, distinctCol, nil
+}
+
+type distinctChainOps struct {
+	Operator
+
+	estimatedStaticMemoryUsage int
+}
+
+var _ StaticMemoryOperator = &distinctChainOps{}
+
+func (d *distinctChainOps) EstimateStaticMemoryUsage() int {
+	return d.estimatedStaticMemoryUsage
 }
 
 // NewOrderedDistinct creates a new ordered distinct operator on the given
