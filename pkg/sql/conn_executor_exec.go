@@ -819,6 +819,14 @@ func canFallbackFromOpt(err error, optMode sessiondata.OptimizerMode, stmt *Stat
 		// We only fallback on "feature not supported" errors.
 		return false
 	}
+	if err.Error() == "unimplemented: schema change statement cannot follow a statement that has written in the same transaction" {
+		// This is a special error generated when SetSystemConfigTrigger fails. If
+		// we fall back to the heuristic planner, the second call to that method
+		// succeeds.
+		// TODO(radu): this will go away very soon when we remove fallback
+		// altogether.
+		return false
+	}
 
 	if optMode == sessiondata.OptimizerAlways {
 		// In Always mode we never fallback, with one exception: SET commands (or
