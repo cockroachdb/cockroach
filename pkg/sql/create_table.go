@@ -137,6 +137,18 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Guard against creating non-partitioned indexes on a partitioned table,
+	// which is undesirable in most cases.
+	if params.SessionData().SafeUpdates && n.n.PartitionBy != nil {
+		for _, def := range n.n.Defs {
+			if d, ok := def.(*tree.IndexTableDef); ok {
+				if d.PartitionBy == nil {
+					return pgerror.DangerousStatementf("non-partitioned index on partitioned table")
+				}
+			}
+		}
+	}
+
 	id, err := GenerateUniqueDescID(params.ctx, params.extendedEvalCtx.ExecCfg.DB)
 	if err != nil {
 		return err
