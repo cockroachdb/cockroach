@@ -2269,7 +2269,8 @@ func createSchemaChangeEvalCtx(
 		DataConversion: sessiondata.DataConversionConfig{
 			Location: dummyLocation,
 		},
-		User: security.NodeUser,
+		User:          security.NodeUser,
+		OptimizerMode: sessiondata.OptimizerOn,
 	}
 
 	evalCtx := extendedEvalContext{
