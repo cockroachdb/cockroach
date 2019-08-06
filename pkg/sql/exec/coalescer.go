@@ -20,7 +20,8 @@ import (
 // coalescerOp consumes the input operator and coalesces the resulting batches
 // to return full batches of col.BatchSize.
 type coalescerOp struct {
-	input      Operator
+	OneInputNode
+
 	inputTypes []types.T
 
 	group  coldata.Batch
@@ -34,8 +35,8 @@ var _ StaticMemoryOperator = &coalescerOp{}
 // with the given column types.
 func NewCoalescerOp(input Operator, colTypes []types.T) Operator {
 	return &coalescerOp{
-		input:      input,
-		inputTypes: colTypes,
+		OneInputNode: NewOneInputNode(input),
+		inputTypes:   colTypes,
 	}
 }
 

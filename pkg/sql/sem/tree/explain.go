@@ -84,12 +84,17 @@ const (
 	// ExplainOpt shows the optimized relational expression (from the cost-based
 	// optimizer).
 	ExplainOpt
+
+	// ExplainVec shows the physical vectorized plan for a query and whether a
+	// query would be run in "auto" vectorized mode.
+	ExplainVec
 )
 
 var explainModeStrings = map[string]ExplainMode{
 	"plan":    ExplainPlan,
 	"distsql": ExplainDistSQL,
 	"opt":     ExplainOpt,
+	"vec":     ExplainVec,
 }
 
 // ExplainModeName returns the human-readable name of a given ExplainMode.

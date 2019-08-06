@@ -122,6 +122,7 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *errorIfRowsNode:
 	case *exportNode:
 	case *explainDistSQLNode:
+	case *explainVecNode:
 	case *hookFnNode:
 	case *relocateNode:
 	case *renameColumnNode:

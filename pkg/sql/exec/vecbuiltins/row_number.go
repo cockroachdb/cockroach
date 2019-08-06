@@ -22,7 +22,7 @@ func NewRowNumberOperator(
 	input exec.Operator, outputColIdx int, partitionColIdx int,
 ) exec.Operator {
 	base := rowNumberBase{
-		input:           input,
+		OneInputNode:    exec.NewOneInputNode(input),
 		outputColIdx:    outputColIdx,
 		partitionColIdx: partitionColIdx,
 	}
@@ -36,7 +36,7 @@ func NewRowNumberOperator(
 // variations of row number operators. Note that it is not an operator itself
 // and should not be used directly.
 type rowNumberBase struct {
-	input           exec.Operator
+	exec.OneInputNode
 	outputColIdx    int
 	partitionColIdx int
 
@@ -44,5 +44,5 @@ type rowNumberBase struct {
 }
 
 func (r *rowNumberBase) Init() {
-	r.input.Init()
+	r.Input().Init()
 }

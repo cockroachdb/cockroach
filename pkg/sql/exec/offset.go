@@ -19,7 +19,7 @@ import (
 // offsetOp is an operator that implements offset, returning everything
 // after the first n tuples in its input.
 type offsetOp struct {
-	input Operator
+	OneInputNode
 
 	offset uint64
 
@@ -32,8 +32,8 @@ var _ Operator = &offsetOp{}
 // NewOffsetOp returns a new offset operator with the given offset.
 func NewOffsetOp(input Operator, offset uint64) Operator {
 	c := &offsetOp{
-		input:  input,
-		offset: offset,
+		OneInputNode: NewOneInputNode(input),
+		offset:       offset,
 	}
 	return c
 }

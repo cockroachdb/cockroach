@@ -65,15 +65,15 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		mjInputWatch := timeutil.NewTestStopWatch(timeSource.Now)
 
 		leftSource := &timeAdvancingOperator{
-			input:      makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize),
-			timeSource: timeSource,
+			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize)),
+			timeSource:   timeSource,
 		}
 		leftInput := NewVectorizedStatsCollector(leftSource, 0 /* id */, true /* isStall */, timeutil.NewTestStopWatch(timeSource.Now))
 		leftInput.SetOutputWatch(mjInputWatch)
 
 		rightSource := &timeAdvancingOperator{
-			input:      makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize),
-			timeSource: timeSource,
+			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize)),
+			timeSource:   timeSource,
 		}
 		rightInput := NewVectorizedStatsCollector(rightSource, 1 /* id */, true /* isStall */, timeutil.NewTestStopWatch(timeSource.Now))
 		rightInput.SetOutputWatch(mjInputWatch)
@@ -93,8 +93,8 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			t.Fatal(err)
 		}
 		timeAdvancingMergeJoiner := &timeAdvancingOperator{
-			input:      mergeJoiner,
-			timeSource: timeSource,
+			OneInputNode: NewOneInputNode(mergeJoiner),
+			timeSource:   timeSource,
 		}
 		mjStatsCollector := NewVectorizedStatsCollector(timeAdvancingMergeJoiner, 2 /* id */, false /* isStall */, mjInputWatch)
 
@@ -136,7 +136,7 @@ func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) Operator {
 // timeAdvancingOperator is an Operator that advances the time source upon
 // receiving a non-empty batch from its input. It is used for testing only.
 type timeAdvancingOperator struct {
-	input Operator
+	OneInputNode
 
 	timeSource *timeutil.TestTimeSource
 }

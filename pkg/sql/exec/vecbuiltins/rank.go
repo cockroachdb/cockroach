@@ -38,7 +38,7 @@ func NewRankOperator(
 		return nil, err
 	}
 	initFields := rankInitFields{
-		input:           op,
+		OneInputNode:    exec.NewOneInputNode(op),
 		distinctCol:     outputCol,
 		outputColIdx:    outputColIdx,
 		partitionColIdx: partitionColIdx,

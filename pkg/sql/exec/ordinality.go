@@ -20,7 +20,7 @@ import (
 // ordinalityOp is an operator that implements WITH ORDINALITY, which adds
 // an additional column to the result with an ordinal number.
 type ordinalityOp struct {
-	input Operator
+	OneInputNode
 
 	// ordinalityCol is the index of the column in which ordinalityOp will write
 	// the ordinal number. It is colNotAppended if the column has not been
@@ -37,7 +37,7 @@ const colNotAppended = -1
 // NewOrdinalityOp returns a new WITH ORDINALITY operator.
 func NewOrdinalityOp(input Operator) Operator {
 	c := &ordinalityOp{
-		input:         input,
+		OneInputNode:  NewOneInputNode(input),
 		ordinalityCol: colNotAppended,
 		counter:       1,
 	}

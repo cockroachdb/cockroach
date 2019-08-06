@@ -57,6 +57,9 @@ var ExplainAnalyzeUseCounter = telemetry.GetCounterOnce("sql.plan.explain-analyz
 // ExplainOptUseCounter is to be incremented whenever EXPLAIN (OPT) is run.
 var ExplainOptUseCounter = telemetry.GetCounterOnce("sql.plan.explain-opt")
 
+// ExplainVecUseCounter is to be incremented whenever EXPLAIN (VEC) is run.
+var ExplainVecUseCounter = telemetry.GetCounterOnce("sql.plan.explain-vec")
+
 // ExplainOptVerboseUseCounter is to be incremented whenever
 // EXPLAIN (OPT, VERBOSE) is run.
 var ExplainOptVerboseUseCounter = telemetry.GetCounterOnce("sql.plan.explain-opt-verbose")
