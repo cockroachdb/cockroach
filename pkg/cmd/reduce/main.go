@@ -23,6 +23,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/reduce"
 	"github.com/cockroachdb/cockroach/pkg/testutils/reduce/reducesql"
@@ -63,9 +64,21 @@ func reduceSQL(path, contains string, verbose bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	input, err := ioutil.ReadAll(os.Stdin)
-	if err != nil {
-		return "", err
+	var input []byte
+	{
+		done := make(chan struct{}, 1)
+		go func() {
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				log.Fatal("timeout waiting for input on stdin")
+			}
+		}()
+		input, err = ioutil.ReadAll(os.Stdin)
+		done <- struct{}{}
+		if err != nil {
+			return "", err
+		}
 	}
 
 	// Pretty print the input so the file size comparison is useful.
