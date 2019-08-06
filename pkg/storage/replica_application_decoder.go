@@ -20,22 +20,23 @@ import (
 // replica_application_*.go files provide concrete implementations of
 // the interfaces defined in the storage/apply package:
 //
-// replica_application_decoder.go   =>  apply.Decoder
-// replica_application_applier.go   =>  apply.StateMachine
-// replica_application_cmd.go       =>  apply.Command         (and variants)
-// replica_application_cmd_iter.go  =>  apply.CommandIterator (and variants)
+// replica_application_state_machine.go  ->  apply.StateMachine
+// replica_application_decoder.go        ->  apply.Decoder
+// replica_application_cmd.go            ->  apply.Command         (and variants)
+// replica_application_cmd_buf.go        ->  apply.CommandIterator (and variants)
+// replica_application_cmd_buf.go        ->  apply.CommandList     (and variants)
 //
 // These allow Replica to interface with the storage/apply package.
 
 // replicaDecoder implements the apply.Decoder interface.
 //
 // The object is capable of decoding committed raft entries into a list of
-// cmdAppCtx objects (which implement all variants of apply.Command), binding
+// replicatedCmd objects (which implement all variants of apply.Command), binding
 // these commands to their local proposals, and providing an iterator over these
 // commands.
 type replicaDecoder struct {
 	r      *Replica
-	cmdBuf cmdAppCtxBuf
+	cmdBuf replicatedCmdBuf
 }
 
 // getDecoder returns the Replica's apply.Decoder. The Replica's raftMu
@@ -76,7 +77,7 @@ func (d *replicaDecoder) retrieveLocalProposals(ctx context.Context) (anyLocal b
 	// even if the applier has multiple entries for the same proposal, in which
 	// case the proposal was reproposed (either under its original or a new
 	// MaxLeaseIndex) which we handle in a second pass below.
-	var it cmdAppCtxBufSlice
+	var it replicatedCmdBufSlice
 	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
 		cmd := it.cur()
 		cmd.proposal = d.r.mu.proposals[cmd.idKey]

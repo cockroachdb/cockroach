@@ -22,7 +22,18 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
-// cmdAppCtx stores the state required to apply a single raft entry to a
+// replica_application_*.go files provide concrete implementations of
+// the interfaces defined in the storage/apply package:
+//
+// replica_application_state_machine.go  ->  apply.StateMachine
+// replica_application_decoder.go        ->  apply.Decoder
+// replica_application_cmd.go            ->  apply.Command         (and variants)
+// replica_application_cmd_buf.go        ->  apply.CommandIterator (and variants)
+// replica_application_cmd_buf.go        ->  apply.CommandList     (and variants)
+//
+// These allow Replica to interface with the storage/apply package.
+
+// replicatedCmd stores the state required to apply a single raft entry to a
 // replica. The state is accumulated in stages which occur in apply.Task. From
 // a high level, the command is decoded from a committed raft entry, then if it
 // was proposed locally the proposal is populated from the replica's proposals
@@ -30,7 +41,7 @@ import (
 // to the batch's engine.Batch and applying its "trivial" side-effects to the
 // batch's view of ReplicaState. Then the batch is committed, the side-effects
 // are applied and the local result is processed.
-type cmdAppCtx struct {
+type replicatedCmd struct {
 	ent              *raftpb.Entry // the raft.Entry being applied
 	decodedRaftEntry               // decoded from ent
 
@@ -73,38 +84,34 @@ type decodedConfChange struct {
 	ccCtx ConfChangeContext
 }
 
-// decode decodes the entry e into the cmdAppCtx.
-func (c *cmdAppCtx) decode(ctx context.Context, e *raftpb.Entry) error {
+// decode decodes the entry e into the replicatedCmd.
+func (c *replicatedCmd) decode(ctx context.Context, e *raftpb.Entry) error {
 	c.ent = e
 	return c.decodedRaftEntry.decode(ctx, e)
 }
 
-func (d *decodedRaftEntry) replicatedResult() *storagepb.ReplicatedEvalResult {
-	return &d.raftCmd.ReplicatedEvalResult
-}
-
 // Index implements the apply.Command interface.
-func (c *cmdAppCtx) Index() uint64 {
+func (c *replicatedCmd) Index() uint64 {
 	return c.ent.Index
 }
 
 // IsTrivial implements the apply.Command interface.
-func (c *cmdAppCtx) IsTrivial() bool {
+func (c *replicatedCmd) IsTrivial() bool {
 	return isTrivial(c.replicatedResult())
 }
 
 // IsLocal implements the apply.Command interface.
-func (c *cmdAppCtx) IsLocal() bool {
+func (c *replicatedCmd) IsLocal() bool {
 	return c.proposal != nil
 }
 
 // Rejected implements the apply.CheckedCommand interface.
-func (c *cmdAppCtx) Rejected() bool {
+func (c *replicatedCmd) Rejected() bool {
 	return c.forcedErr != nil
 }
 
 // FinishAndAckOutcome implements the apply.AppliedCommand interface.
-func (c *cmdAppCtx) FinishAndAckOutcome() error {
+func (c *replicatedCmd) FinishAndAckOutcome() error {
 	if !c.IsLocal() {
 		return nil
 	}
@@ -157,4 +164,8 @@ func (d *decodedRaftEntry) decodeConfChangeEntry(e *raftpb.Entry) error {
 	}
 	d.idKey = storagebase.CmdIDKey(d.ccCtx.CommandID)
 	return nil
+}
+
+func (d *decodedRaftEntry) replicatedResult() *storagepb.ReplicatedEvalResult {
+	return &d.raftCmd.ReplicatedEvalResult
 }
