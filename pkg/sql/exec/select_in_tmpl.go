@@ -69,10 +69,10 @@ func GetInProjectionOperator(
 	// {{range .}}
 	case types._TYPE:
 		obj := &projectInOp_TYPE{
-			input:     input,
-			colIdx:    colIdx,
-			outputIdx: resultIdx,
-			negate:    negate,
+			OneInputNode: NewOneInputNode(input),
+			colIdx:       colIdx,
+			outputIdx:    resultIdx,
+			negate:       negate,
 		}
 		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(ct, datumTuple)
 		if err != nil {
@@ -93,9 +93,9 @@ func GetInOperator(
 	// {{range .}}
 	case types._TYPE:
 		obj := &selectInOp_TYPE{
-			input:  input,
-			colIdx: colIdx,
-			negate: negate,
+			OneInputNode: NewOneInputNode(input),
+			colIdx:       colIdx,
+			negate:       negate,
 		}
 		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(ct, datumTuple)
 		if err != nil {
@@ -111,7 +111,7 @@ func GetInOperator(
 // {{range .}}
 
 type selectInOp_TYPE struct {
-	input     Operator
+	OneInputNode
 	colIdx    int
 	filterRow []_GOTYPE
 	hasNulls  bool
@@ -119,7 +119,7 @@ type selectInOp_TYPE struct {
 }
 
 type projectInOp_TYPE struct {
-	input     Operator
+	OneInputNode
 	colIdx    int
 	outputIdx int
 	filterRow []_GOTYPE

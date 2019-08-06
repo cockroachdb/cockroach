@@ -116,6 +116,12 @@ var ExplainOptColumns = ResultColumns{
 	{Name: "text", Typ: types.String},
 }
 
+// ExplainVecColumns are the result columns of an
+// EXPLAIN (VEC) statement.
+var ExplainVecColumns = ResultColumns{
+	{Name: "text", Typ: types.String},
+}
+
 // ShowTraceColumns are the result columns of a SHOW [KV] TRACE statement.
 var ShowTraceColumns = ResultColumns{
 	{Name: "timestamp", Typ: types.TimestampTZ},

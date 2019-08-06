@@ -66,6 +66,8 @@ func newSorter(
 
 // spooler is a column vector operator that spools the data from its input.
 type spooler interface {
+	OpNode
+
 	// init initializes this spooler and will be called once at the setup time.
 	init()
 	// spool performs the actual spooling.
@@ -84,7 +86,7 @@ type spooler interface {
 // allSpooler is the spooler that spools all tuples from the input. It is used
 // by the general sorter over the whole input.
 type allSpooler struct {
-	input Operator
+	OneInputNode
 
 	// inputTypes contains the types of all of the columns from the input.
 	inputTypes []types.T
@@ -101,8 +103,8 @@ var _ spooler = &allSpooler{}
 
 func newAllSpooler(input Operator, inputTypes []types.T) spooler {
 	return &allSpooler{
-		input:      input,
-		inputTypes: inputTypes,
+		OneInputNode: NewOneInputNode(input),
+		inputTypes:   inputTypes,
 	}
 }
 
@@ -393,4 +395,15 @@ func (p *sortOp) reset() {
 	}
 	p.emitted = 0
 	p.state = sortSpooling
+}
+
+func (p *sortOp) ChildCount() int {
+	return 1
+}
+
+func (p *sortOp) Child(nth int) OpNode {
+	if nth == 0 {
+		return p.input
+	}
+	panic(fmt.Sprintf("invalid index %d", nth))
 }

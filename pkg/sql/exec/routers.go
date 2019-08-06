@@ -12,6 +12,7 @@ package exec
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -23,6 +24,7 @@ import (
 // routerOutput is an interface implemented by router outputs. It exists for
 // easier test mocking of outputs.
 type routerOutput interface {
+	OpNode
 	// addBatch adds the elements specified by the selection vector from batch to
 	// the output. It returns whether or not the output changed its state to
 	// blocked (see implementations).
@@ -36,6 +38,9 @@ type routerOutput interface {
 const defaultRouterOutputBlockedThreshold = coldata.BatchSize * 2
 
 type routerOutputOp struct {
+	// input is a reference to our router.
+	input OpNode
+
 	types []types.T
 	// zeroBatch is used to return a 0 length batch in some cases.
 	zeroBatch coldata.Batch
@@ -60,6 +65,17 @@ type routerOutputOp struct {
 	// a router output to be blocked.
 	blockedThreshold int
 	outputBatchSize  int
+}
+
+func (o *routerOutputOp) ChildCount() int {
+	return 1
+}
+
+func (o *routerOutputOp) Child(nth int) OpNode {
+	if nth == 0 {
+		return o.input
+	}
+	panic(fmt.Sprintf("invalid index %d", nth))
 }
 
 var _ Operator = &routerOutputOp{}
@@ -244,7 +260,7 @@ func (o *routerOutputOp) reset() {
 // destination for each row. These destinations are exposed as Operators
 // returned by the constructor.
 type HashRouter struct {
-	input Operator
+	OneInputNode
 	// types are the input types.
 	types []types.T
 	// ht is not fully initialized to a hashTable, only the utility methods are
@@ -297,7 +313,11 @@ func NewHashRouter(
 		outputs[i] = op
 		outputsAsOps[i] = op
 	}
-	return newHashRouterWithOutputs(input, types, hashCols, unblockEventsChan, outputs), outputsAsOps
+	router := newHashRouterWithOutputs(input, types, hashCols, unblockEventsChan, outputs)
+	for i := range outputs {
+		outputs[i].(*routerOutputOp).input = router
+	}
+	return router, outputsAsOps
 }
 
 func newHashRouterWithOutputs(
@@ -308,7 +328,7 @@ func newHashRouterWithOutputs(
 	outputs []routerOutput,
 ) *HashRouter {
 	r := &HashRouter{
-		input:               input,
+		OneInputNode:        NewOneInputNode(input),
 		types:               types,
 		hashCols:            hashCols,
 		outputs:             outputs,

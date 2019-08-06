@@ -26,6 +26,7 @@ import (
 // chunk into a coldata.Batch column by column.
 type columnarizer struct {
 	ProcessorBase
+	exec.ZeroInputNode
 
 	input RowSource
 	da    sqlbase.DatumAlloc

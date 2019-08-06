@@ -52,6 +52,17 @@ type sortChunksOp struct {
 	sorter resettableOperator
 }
 
+func (c *sortChunksOp) ChildCount() int {
+	return 0
+}
+
+func (c *sortChunksOp) Child(nth int) OpNode {
+	if nth == 0 {
+		return c.input
+	}
+	panic(fmt.Sprintf("invalid index %d", nth))
+}
+
 var _ Operator = &sortChunksOp{}
 
 func (c *sortChunksOp) Init() {
@@ -136,7 +147,7 @@ const (
 // in the middle of processing the input). Instead, sortChunksOp will empty the
 // buffer when appropriate.
 type chunker struct {
-	input Operator
+	OneInputNode
 	// inputTypes contains the types of all of the columns from input.
 	inputTypes []types.T
 	// inputDone indicates whether input has been fully consumed.
@@ -190,8 +201,9 @@ func newChunker(
 			return nil, err
 		}
 	}
+	deselector := NewDeselectorOp(input, inputTypes)
 	return &chunker{
-		input:             NewDeselectorOp(input, inputTypes),
+		OneInputNode:      NewOneInputNode(deselector),
 		inputTypes:        inputTypes,
 		alreadySortedCols: alreadySortedCols,
 		partitioners:      partitioners,

@@ -28,6 +28,8 @@ type unorderedSynchronizerMsg struct {
 	b        coldata.Batch
 }
 
+var _ Operator = &UnorderedSynchronizer{}
+
 // UnorderedSynchronizer is an Operator that combines multiple Operator streams
 // into one.
 type UnorderedSynchronizer struct {
@@ -66,6 +68,16 @@ type UnorderedSynchronizer struct {
 	cancelFn          context.CancelFunc
 	batchCh           chan *unorderedSynchronizerMsg
 	errCh             chan error
+}
+
+// ChildCount implements the OpNode interface.
+func (s *UnorderedSynchronizer) ChildCount() int {
+	return len(s.inputs)
+}
+
+// Child implements the OpNode interface.
+func (s *UnorderedSynchronizer) Child(nth int) OpNode {
+	return s.inputs[nth]
 }
 
 // NewUnorderedSynchronizer creates a new UnorderedSynchronizer. On the first

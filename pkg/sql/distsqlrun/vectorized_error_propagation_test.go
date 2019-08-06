@@ -147,7 +147,7 @@ func TestNonVectorizedErrorPropagation(t *testing.T) {
 // on every even-numbered (i.e. it becomes a noop for those iterations). Used
 // for tests only.
 type testNonVectorizedErrorEmitter struct {
-	input     exec.Operator
+	exec.OneInputNode
 	emitBatch bool
 }
 
@@ -155,12 +155,12 @@ var _ exec.Operator = &testNonVectorizedErrorEmitter{}
 
 // newTestVectorizedErrorEmitter creates a new TestVectorizedErrorEmitter.
 func newTestVectorizedErrorEmitter(input exec.Operator) exec.Operator {
-	return &testNonVectorizedErrorEmitter{input: input}
+	return &testNonVectorizedErrorEmitter{OneInputNode: exec.NewOneInputNode(input)}
 }
 
 // Init is part of exec.Operator interface.
 func (e *testNonVectorizedErrorEmitter) Init() {
-	e.input.Init()
+	e.Input().Init()
 }
 
 // Next is part of exec.Operator interface.
@@ -171,5 +171,5 @@ func (e *testNonVectorizedErrorEmitter) Next(ctx context.Context) coldata.Batch 
 	}
 
 	e.emitBatch = false
-	return e.input.Next(ctx)
+	return e.Input().Next(ctx)
 }

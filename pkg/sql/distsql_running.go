@@ -147,7 +147,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// TODO(yuzefovich): this is a safe but quite inefficient way of setting
 			// up vectorized flows since the flows will effectively be planned twice.
 			for _, spec := range flows {
-				if err := distsqlrun.SupportsVectorized(
+				if _, err := distsqlrun.SupportsVectorized(
 					ctx, &distsqlrun.FlowCtx{
 						EvalCtx: &evalCtx.EvalContext,
 						Cfg:     &distsqlrun.ServerConfig{},

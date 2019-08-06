@@ -45,8 +45,9 @@ type Dialer interface {
 // be called with the necessary information to establish a connection to a
 // given remote endpoint.
 type Outbox struct {
-	input exec.Operator
-	typs  []types.T
+	exec.OneInputNode
+
+	typs []types.T
 	// batch is the last batch received from the input.
 	batch coldata.Batch
 
@@ -78,7 +79,7 @@ func NewOutbox(
 	o := &Outbox{
 		// Add a deselector as selection vectors are not serialized (nor should they
 		// be).
-		input:           exec.NewDeselectorOp(input, typs),
+		OneInputNode:    exec.NewOneInputNode(exec.NewDeselectorOp(input, typs)),
 		typs:            typs,
 		converter:       c,
 		serializer:      s,
@@ -198,7 +199,7 @@ func (o *Outbox) sendBatches(
 	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
 ) (terminatedGracefully bool, _ error) {
 	nextBatch := func() {
-		o.batch = o.input.Next(ctx)
+		o.batch = o.Input().Next(ctx)
 	}
 	for {
 		if atomic.LoadUint32(&o.draining) == 1 {
@@ -261,7 +262,7 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 func (o *Outbox) runWithStream(
 	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
 ) {
-	o.input.Init()
+	o.Input().Init()
 
 	waitCh := make(chan struct{})
 	go func() {

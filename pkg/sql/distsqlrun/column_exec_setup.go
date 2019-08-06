@@ -1039,6 +1039,10 @@ type vectorizedFlowCreator struct {
 	// It must be accessed atomically.
 	numOutboxes       int32
 	materializerAdded bool
+
+	// leaves accumulates all operators that have no further outputs on the
+	// current node, for the purposes of EXPLAIN output.
+	leaves []exec.OpNode
 }
 
 func newVectorizedFlowCreator(
@@ -1072,10 +1076,10 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	outputTyps []types.T,
 	stream *distsqlpb.StreamEndpointSpec,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
-) error {
+) (exec.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(op, outputTyps, metadataSourcesQueue)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	atomic.AddInt32(&s.numOutboxes, 1)
 	run := func(ctx context.Context, cancelFn context.CancelFunc) {
@@ -1094,7 +1098,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 		}
 	}
 	s.accumulateAsyncComponent(run)
-	return nil
+	return outbox, nil
 }
 
 // setupRouter sets up a vectorized hash router according to the output router
@@ -1129,16 +1133,18 @@ func (s *vectorizedFlowCreator) setupRouter(
 	// Append the router to the metadata sources.
 	metadataSourcesQueue = append(metadataSourcesQueue, router)
 
+	foundLocalOutput := false
 	for i, op := range outputs {
 		stream := &output.Streams[i]
 		switch stream.Type {
 		case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
 			return errors.Errorf("unexpected sync response output when setting up router")
 		case distsqlpb.StreamEndpointSpec_REMOTE:
-			if err := s.setupRemoteOutputStream(op, outputTyps, stream, metadataSourcesQueue); err != nil {
+			if _, err := s.setupRemoteOutputStream(op, outputTyps, stream, metadataSourcesQueue); err != nil {
 				return err
 			}
 		case distsqlpb.StreamEndpointSpec_LOCAL:
+			foundLocalOutput = true
 			if s.recordingStats {
 				// Wrap local outputs with vectorized stats collectors when recording
 				// stats. This is mostly for compatibility but will provide some useful
@@ -1157,6 +1163,10 @@ func (s *vectorizedFlowCreator) setupRouter(
 		// created an opDAGWithMetaSources to pass along these metadataSources. We don't need to
 		// worry about metadata sources for following iterations of the loop.
 		metadataSourcesQueue = nil
+	}
+	if !foundLocalOutput {
+		// No local output means that our router is a leaf node.
+		s.leaves = append(s.leaves, router)
 	}
 	return nil
 }
@@ -1195,7 +1205,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			}
 			s.addStreamEndpoint(inputStream.StreamID, inbox, s.waitGroup)
 			metaSources = append(metaSources, inbox)
-			op = exec.Operator(inbox)
+			op = inbox
 			memUsed += op.(exec.StaticMemoryOperator).EstimateStaticMemoryUsage()
 			if s.recordingStats {
 				op, err = wrapWithVectorizedStatsCollector(
@@ -1305,7 +1315,13 @@ func (s *vectorizedFlowCreator) setupOutput(
 				},
 			)
 		}
-		return s.setupRemoteOutputStream(op, opOutputTypes, outputStream, metadataSourcesQueue)
+		outbox, err := s.setupRemoteOutputStream(op, opOutputTypes, outputStream, metadataSourcesQueue)
+		if err != nil {
+			return err
+		}
+		// An outbox is a leaf: there's nothing that sees it as an input on this
+		// node.
+		s.leaves = append(s.leaves, outbox)
 	case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
 		if s.syncFlowConsumer == nil {
 			return errors.New("syncFlowConsumer unset, unable to create materializer")
@@ -1343,6 +1359,8 @@ func (s *vectorizedFlowCreator) setupOutput(
 			return err
 		}
 		s.vectorizedStatsCollectorsQueue = s.vectorizedStatsCollectorsQueue[:0]
+		// A materializer is a leaf.
+		s.leaves = append(s.leaves, proc)
 		s.addMaterializer(proc)
 		s.materializerAdded = true
 	default:
@@ -1356,7 +1374,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	flowCtx *FlowCtx,
 	processorSpecs []distsqlpb.ProcessorSpec,
 	acc *mon.BoundAccount,
-) error {
+) (leaves []exec.OpNode, err error) {
 	streamIDToSpecIdx := make(map[distsqlpb.StreamID]int)
 	// queue is a queue of indices into processorSpecs, for topologically
 	// ordered processing.
@@ -1385,7 +1403,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		pspec := &processorSpecs[queue[0]]
 		queue = queue[1:]
 		if len(pspec.Output) > 1 {
-			return errors.Errorf("unsupported multi-output proc (%d outputs)", len(pspec.Output))
+			return nil, errors.Errorf("unsupported multi-output proc (%d outputs)", len(pspec.Output))
 		}
 
 		// metadataSourcesQueue contains all the MetadataSources that need to be
@@ -1398,10 +1416,10 @@ func (s *vectorizedFlowCreator) setupFlow(
 		for i := range pspec.Input {
 			input, metadataSources, memUsed, err := s.setupInput(pspec.Input[i])
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if err = acc.Grow(ctx, int64(memUsed)); err != nil {
-				return errors.Wrapf(err, "not enough memory to setup vectorized plan")
+				return nil, errors.Wrapf(err, "not enough memory to setup vectorized plan")
 			}
 			metadataSourcesQueue = append(metadataSourcesQueue, metadataSources...)
 			inputs = append(inputs, input)
@@ -1409,14 +1427,14 @@ func (s *vectorizedFlowCreator) setupFlow(
 
 		result, err := newColOperator(ctx, flowCtx, pspec, inputs)
 		if err != nil {
-			return errors.Wrapf(err, "unable to vectorize execution plan")
+			return nil, errors.Wrapf(err, "unable to vectorize execution plan")
 		}
 		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto &&
 			!result.isStreaming {
-			return errors.Errorf("non-streaming operator encountered when vectorize=auto")
+			return nil, errors.Errorf("non-streaming operator encountered when vectorize=auto")
 		}
 		if err = acc.Grow(ctx, int64(result.memUsage)); err != nil {
-			return errors.Wrapf(err, "not enough memory to setup vectorized plan")
+			return nil, errors.Wrapf(err, "not enough memory to setup vectorized plan")
 		}
 		metadataSourcesQueue = append(metadataSourcesQueue, result.metadataSources...)
 
@@ -1424,7 +1442,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		if s.recordingStats {
 			vsc, err := wrapWithVectorizedStatsCollector(op, inputs, pspec)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, vsc)
 			s.procIDs = append(s.procIDs, pspec.ProcessorID)
@@ -1434,7 +1452,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		if err = s.setupOutput(
 			ctx, flowCtx, pspec, op, result.outputTypes, metadataSourcesQueue,
 		); err != nil {
-			return err
+			return nil, err
 		}
 
 		// Now queue all outputs from this op whose inputs are already all
@@ -1448,7 +1466,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				}
 				procIdx, ok := streamIDToSpecIdx[stream.StreamID]
 				if !ok {
-					return errors.Errorf("couldn't find stream %d", stream.StreamID)
+					return nil, errors.Errorf("couldn't find stream %d", stream.StreamID)
 				}
 				outputSpec := &processorSpecs[procIdx]
 				for k := range outputSpec.Input {
@@ -1476,7 +1494,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	if len(s.vectorizedStatsCollectorsQueue) > 0 {
 		panic("not all vectorized stats collectors have been processed")
 	}
-	return nil
+	return s.leaves, nil
 }
 
 // vectorizedFlowCreatorHelper is a flowCreatorHelper that sets up all the
@@ -1535,7 +1553,8 @@ func (f *Flow) setupVectorizedFlow(ctx context.Context, acc *mon.BoundAccount) e
 	creator := newVectorizedFlowCreator(
 		helper, vectorizedRemoteComponentCreator{}, recordingStats, &f.waitGroup, f.syncFlowConsumer, f.Cfg.NodeDialer, f.id,
 	)
-	return creator.setupFlow(ctx, &f.FlowCtx, f.spec.Processors, acc)
+	_, err := creator.setupFlow(ctx, &f.FlowCtx, f.spec.Processors, acc)
+	return err
 }
 
 // noopFlowCreatorHelper is a flowCreatorHelper that only performs sanity
@@ -1576,9 +1595,11 @@ func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 // SupportsVectorized checks whether flow is supported by the vectorized engine
 // and returns an error if it isn't. Note that it does so by setting up the
 // full flow without running the components asynchronously.
+// It returns a list of the leaf operators of all flows for the purposes of
+// EXPLAIN output.
 func SupportsVectorized(
 	ctx context.Context, flowCtx *FlowCtx, processorSpecs []distsqlpb.ProcessorSpec,
-) error {
+) (leaves []exec.OpNode, err error) {
 	creator := newVectorizedFlowCreator(
 		newNoopFlowCreatorHelper(),
 		vectorizedRemoteComponentCreator{},

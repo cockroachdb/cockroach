@@ -32,7 +32,7 @@ func NewTopKSorter(
 	input Operator, inputTypes []types.T, orderingCols []distsqlpb.Ordering_Column, k uint16,
 ) Operator {
 	return &topKSorter{
-		input:        input,
+		OneInputNode: NewOneInputNode(input),
 		inputTypes:   inputTypes,
 		orderingCols: orderingCols,
 		k:            k,
@@ -58,7 +58,7 @@ const (
 )
 
 type topKSorter struct {
-	input        Operator
+	OneInputNode
 	orderingCols []distsqlpb.Ordering_Column
 	inputTypes   []types.T
 	k            uint16 // TODO(solon): support larger k values

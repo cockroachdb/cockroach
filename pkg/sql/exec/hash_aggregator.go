@@ -12,6 +12,7 @@ package exec
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
@@ -19,12 +20,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-// hashAggregator is an operator that performs an aggregation based on
-// specified grouping columns. This operator performs a hash table build at the
-// first call to Next() which consumes the entire build source. After the
-// build phase, the state of the hashAggregator is changed to buildFinished and
-// the grouped hash table buckets are then passed as input to an
-// orderedAggregator. The output row ordering of this aggregator is arbitrary.
+// HashAggregator is an operator chain that performs an aggregation based on
+// specified grouping columns. It's composed of two operators:
+// 1. hashGrouper
+// 2. orderedAggregator
+// This operator chain performs a hash table build at the first call to Next()
+// which consumes the entire build source. After the build phase, the state of
+// the hashGrouper is changed to buildFinished and the grouped hash table
+// buckets are then passed as input to an orderedAggregator. The output row
+// ordering of this aggregator is arbitrary.
 //
 // The high level way this works is:
 // 1. build a hash table of its entire input, throwing away non-distinct inputs
@@ -45,20 +49,6 @@ import (
 // individual aggregator functions to be a bit more general, so they don't
 // assume usage in the ordered aggregator paradigm, which is why it hasn't been
 // tried yet.
-type hashAggregator struct {
-	spec aggregatorSpec
-
-	// buildFinished represents whether the hashAggregator is in the building or
-	// aggregating phase.
-	buildFinished bool
-
-	ht      *hashTable
-	builder *hashJoinBuilder
-
-	// orderedAgg is the underlying orderedAggregator used by this
-	// hashAggregator once the bucket-groups of the input has been determined.
-	orderedAgg *orderedAggregator
-}
 
 // NewHashAggregator creates a hash aggregator on the given grouping
 // columns. The input specifications to this function are the same as that of
@@ -131,12 +121,15 @@ func NewHashAggregator(
 
 	distinctCol := make([]bool, coldata.BatchSize)
 
-	// op is the underlying batching operator used as input by the orderedAgg to
-	// create the batches of coldata.BatchSize from built hashTable.
-	op := makeHashAggregatorBatchOp(ht, distinctCol)
+	grouper := &hashGrouper{
+		builder:     builder,
+		ht:          ht,
+		distinctCol: distinctCol,
+		batch:       coldata.NewMemBatch(ht.outTypes),
+	}
 
 	orderedAgg := &orderedAggregator{
-		input:          op,
+		OneInputNode:   NewOneInputNode(grouper),
 		aggCols:        mappedAggCols,
 		aggTypes:       aggTyps,
 		groupCol:       distinctCol,
@@ -145,79 +138,21 @@ func NewHashAggregator(
 		isScalar:       isScalar,
 	}
 
-	return &hashAggregator{
-		spec: aggregatorSpec{
-			input:     input,
-			colTypes:  colTypes,
-			aggFns:    aggFns,
-			groupCols: groupCols,
-			aggCols:   aggCols,
-		},
-
-		ht:      ht,
-		builder: builder,
-
-		orderedAgg: orderedAgg,
-	}, nil
+	return orderedAgg, nil
 }
 
-func (ag *hashAggregator) Init() {
-	ag.spec.input.Init()
-	ag.orderedAgg.Init()
-}
-
-func (ag *hashAggregator) Next(ctx context.Context) coldata.Batch {
-	if !ag.buildFinished {
-		ag.build(ctx)
-	}
-
-	return ag.orderedAgg.Next(ctx)
-}
-
-// Reset resets the hashAggregator for another run. Primarily used for
-// benchmarks.
-func (ag *hashAggregator) reset() {
-	ag.ht.size = 0
-	ag.buildFinished = false
-	ag.orderedAgg.reset()
-}
-
-func (ag *hashAggregator) build(ctx context.Context) {
-	ag.builder.exec(ctx)
-	ag.buildFinished = true
-}
-
-var _ Operator = &hashAggregator{}
-
-// aggregatorSpec represents the specifications for the various aggregation
-// operators.
-type aggregatorSpec struct {
-	// input is the source Operator consumed by the aggregator.
-	input Operator
-	// colTypes represents the column types corresponding to the input columns.
-	colTypes []types.T
-
-	// aggFns represents the list of aggregation functions to be performed.
-	aggFns []distsqlpb.AggregatorSpec_Func
-
-	// aggCols is a slice where each index represents a new aggregation function.
-	// The slice at each index maps to the input column indices used as input to
-	// each corresponding aggregation function.
-	aggCols [][]uint32
-	// groupCols holds the list of group column indices.
-	groupCols []uint32
-}
-
-// hashAggregatorBatchOp is a helper operator used by the hashAggregator as
-// input to its orderedAggregator. Once the building of the hashTable is
-// completed, this batch operator returns the next batch of input to the
-// orderedAggregator based on the results of the pre-built hashTable.
-type hashAggregatorBatchOp struct {
-	ht *hashTable
+// hashGrouper performs grouping using a hashTable, returning batches
+// of the grouped hash table buckets as its output. Once the building of the
+// hashTable is completed, this operator returns the next batch of input
+// to the orderedAggregator based on the results of the pre-built hashTable.
+// See the description at the top of this file for more information.
+type hashGrouper struct {
+	builder *hashJoinBuilder
+	ht      *hashTable
 
 	// sel is an ordered list of indices to select representing the input rows.
 	// This selection vector is much bigger than coldata.BatchSize and should be
-	// batched with the hashAggregatorBatchOp operator.
+	// batched with the hashGrouper operator.
 	sel []uint64
 	// distinct represents whether each corresponding row is part of a new group.
 	distinct []bool
@@ -229,19 +164,34 @@ type hashAggregatorBatchOp struct {
 
 	batchStart uint64
 	batch      coldata.Batch
+
+	buildFinished bool
 }
 
-func makeHashAggregatorBatchOp(ht *hashTable, distinctCol []bool) Operator {
-	return &hashAggregatorBatchOp{
-		distinctCol: distinctCol,
-		ht:          ht,
-		batch:       coldata.NewMemBatch(ht.outTypes),
+var _ OpNode = &hashGrouper{}
+
+func (op *hashGrouper) ChildCount() int {
+	return 1
+}
+
+func (op *hashGrouper) Child(nth int) OpNode {
+	if nth == 0 {
+		return op.builder.spec.source
 	}
+	panic(fmt.Sprintf("invalid index %d", nth))
 }
 
-func (op *hashAggregatorBatchOp) Init() {}
+func (op *hashGrouper) Init() {
+	op.builder.spec.source.Init()
+}
 
-func (op *hashAggregatorBatchOp) Next(context.Context) coldata.Batch {
+func (op *hashGrouper) Next(ctx context.Context) coldata.Batch {
+	// First, build the hash table.
+	if !op.buildFinished {
+		op.buildFinished = true
+		op.builder.exec(ctx)
+	}
+
 	// The selection vector needs to be populated before any batching can be
 	// done.
 	if op.sel == nil {
@@ -305,8 +255,12 @@ func (op *hashAggregatorBatchOp) Next(context.Context) coldata.Batch {
 	return op.batch
 }
 
-func (op *hashAggregatorBatchOp) reset() {
+// Reset resets the hashGrouper for another run. Primarily used for
+// benchmarks.
+func (op *hashGrouper) reset() {
 	op.batchStart = 0
+	op.ht.size = 0
+	op.buildFinished = false
 }
 
-var _ Operator = &hashAggregatorBatchOp{}
+var _ Operator = &hashGrouper{}

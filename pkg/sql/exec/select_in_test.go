@@ -68,11 +68,11 @@ func TestSelectInInt64(t *testing.T) {
 			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, []int{0},
 				func(input []Operator) (Operator, error) {
 					op := selectInOpInt64{
-						input:     input[0],
-						colIdx:    0,
-						filterRow: c.filterRow,
-						negate:    c.negate,
-						hasNulls:  c.hasNulls,
+						OneInputNode: NewOneInputNode(input[0]),
+						colIdx:       0,
+						filterRow:    c.filterRow,
+						negate:       c.negate,
+						hasNulls:     c.hasNulls,
 					}
 					return &op, nil
 				})
@@ -114,9 +114,9 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 	source := NewRepeatableBatchSource(batch)
 	source.Init()
 	inOp := &selectInOpInt64{
-		input:     source,
-		colIdx:    0,
-		filterRow: []int64{1, 2, 3},
+		OneInputNode: NewOneInputNode(source),
+		colIdx:       0,
+		filterRow:    []int64{1, 2, 3},
 	}
 	inOp.Init()
 
@@ -201,12 +201,12 @@ func TestProjectInInt64(t *testing.T) {
 			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, []int{1},
 				func(input []Operator) (Operator, error) {
 					op := projectInOpInt64{
-						input:     input[0],
-						colIdx:    0,
-						outputIdx: 1,
-						filterRow: c.filterRow,
-						negate:    c.negate,
-						hasNulls:  c.hasNulls,
+						OneInputNode: NewOneInputNode(input[0]),
+						colIdx:       0,
+						outputIdx:    1,
+						filterRow:    c.filterRow,
+						negate:       c.negate,
+						hasNulls:     c.hasNulls,
 					}
 					return &op, nil
 				})

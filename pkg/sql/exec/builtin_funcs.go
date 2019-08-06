@@ -22,7 +22,7 @@ import (
 )
 
 type defaultBuiltinFuncOperator struct {
-	input          Operator
+	OneInputNode
 	evalCtx        *tree.EvalContext
 	funcExpr       *tree.FuncExpr
 	columnTypes    []semtypes.T
@@ -113,7 +113,7 @@ func NewBuiltinFunctionOperator(
 	// For now, return the default builtin operator. Future work can specialize
 	// out the operators to efficient implementations of specific builtins.
 	return &defaultBuiltinFuncOperator{
-		input:          input,
+		OneInputNode:   NewOneInputNode(input),
 		evalCtx:        evalCtx,
 		funcExpr:       funcExpr,
 		outputIdx:      outputIdx,
