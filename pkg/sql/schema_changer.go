@@ -593,14 +593,12 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 			}
 
 			// Construct an optimized logical plan of the AS source stmt.
-			// TODO(adityamaru): Design a way to fallback on the heuristic planner if
-			// the optimizer fails.
 			localPlanner.stmt = &Statement{Statement: stmt}
 			localPlanner.optPlanningCtx.init(localPlanner)
 
 			var result *planTop
 			localPlanner.runWithOptions(resolveFlags{skipCache: true}, func() {
-				result, _, err = localPlanner.makeOptimizerPlan(ctx)
+				result, err = localPlanner.makeOptimizerPlan(ctx)
 				if err == nil {
 					localPlanner.curPlan = *result
 				}

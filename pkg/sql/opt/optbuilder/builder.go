@@ -74,10 +74,6 @@ type Builder struct {
 	// These fields are set during the building process and can be used after
 	// Build is called.
 
-	// IsCorrelated is set to true during semantic analysis if a scalar variable was
-	// pulled from an outer scope, that is, if the query was found to be correlated.
-	IsCorrelated bool
-
 	// HadPlaceholders is set to true if we replaced any placeholders with their
 	// values.
 	HadPlaceholders bool
@@ -130,6 +126,10 @@ type Builder struct {
 	// TODO(radu): modifying the AST in-place is hacky; we will need to switch to
 	// using AST annotations.
 	qualifyDataSourceNamesInAST bool
+
+	// isCorrelated is set to true if we already reported to telemetry that the
+	// query contains a correlated subquery.
+	isCorrelated bool
 }
 
 // New creates a new Builder structure initialized with the given

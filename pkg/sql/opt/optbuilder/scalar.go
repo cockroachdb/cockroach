@@ -511,15 +511,11 @@ func (b *Builder) checkSubqueryOuterCols(
 		return
 	}
 
-	if !b.IsCorrelated {
-		// Remember whether the query was correlated for the heuristic planner,
-		// to enhance error messages.
-		// TODO(knz): this can go away when the HP disappears.
-		b.IsCorrelated = true
-
-		// Register the use of correlation to telemetry.
-		// Note: we don't blindly increment the counter every time this
-		// method is called, to avoid double counting the same query.
+	// Register the use of correlation to telemetry.
+	// Note: we don't blindly increment the counter every time this
+	// method is called, to avoid double counting the same query.
+	if !b.isCorrelated {
+		b.isCorrelated = true
 		telemetry.Inc(sqltelemetry.CorrelatedSubqueryUseCounter)
 	}
 

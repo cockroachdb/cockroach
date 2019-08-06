@@ -821,10 +821,6 @@ const (
 	// planFlagOptUsed is set if the optimizer was used to create the plan.
 	planFlagOptUsed planFlags = (1 << iota)
 
-	// planFlagIsCorrelated is set if the plan contained a correlated subquery.
-	// This is used to enhance the error fallback and for telemetry.
-	planFlagOptIsCorrelated
-
 	// planFlagOptCacheHit is set if a plan from the query plan cache was used (and
 	// re-optimized).
 	planFlagOptCacheHit
