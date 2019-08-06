@@ -34,6 +34,8 @@ type Pass interface {
 	// Advance moves State to the next occurrence of a transformation in
 	// the given input File and returns the new State.
 	Advance(File, State) State
+	// Name returns the name of the Pass.
+	Name() string
 }
 
 // Result is returned by a Transform func.
@@ -76,19 +78,22 @@ func Reduce(
 	}
 	current := originalTestCase
 	start := timeutil.Now()
+	log("size: %d\n", current.Size())
 	for {
 		sizeAtStart := current.Size()
-		log("size: %d\n", current.Size())
 		for pi, p := range passList {
-			log("\tpass %d of %d\n", pi+1, len(passList))
+			log("\tpass %d of %d: %s...", pi+1, len(passList), p.Name())
 			state := p.New(current)
+			found, interesting := 0, 0
 			for {
 				variant, result, err := p.Transform(current, state)
 				if err != nil {
 					return "", err
 				}
 				if result == OK {
+					found++
 					if isInteresting(variant) {
+						interesting++
 						current = variant
 					} else {
 						state = p.Advance(current, state)
@@ -96,6 +101,10 @@ func Reduce(
 				} else {
 					break
 				}
+			}
+			log(" %d found, %d interesting\n", found, interesting)
+			if interesting > 0 {
+				log("size: %d\n", current.Size())
 			}
 		}
 		if current.Size() >= sizeAtStart {
@@ -109,7 +118,10 @@ func Reduce(
 	return current, nil
 }
 
-type intPass func(string, int) (string, bool, error)
+type intPass struct {
+	name string
+	fn   func(string, int) (string, bool, error)
+}
 
 // MakeIntPass returns a Pass with a state that starts at 0 and increments by
 // 1 each Advance. f is a transformation function that takes the input and an
@@ -124,8 +136,15 @@ type intPass func(string, int) (string, bool, error)
 // This is a convenience wrapper since a large number of Pass implementations
 // just need their state to increment a counter and don't have to keep track of
 // other things like byte offsets.
-func MakeIntPass(f func(s string, i int) (out string, ok bool, err error)) Pass {
-	return intPass(f)
+func MakeIntPass(name string, f func(s string, i int) (out string, ok bool, err error)) Pass {
+	return intPass{
+		name: name,
+		fn:   f,
+	}
+}
+
+func (p intPass) Name() string {
+	return p.name
 }
 
 func (p intPass) New(File) State {
@@ -134,7 +153,7 @@ func (p intPass) New(File) State {
 
 func (p intPass) Transform(f File, s State) (File, Result, error) {
 	i := s.(int)
-	data, ok, err := p(string(f), i)
+	data, ok, err := p.fn(string(f), i)
 	res := OK
 	if !ok {
 		res = STOP
