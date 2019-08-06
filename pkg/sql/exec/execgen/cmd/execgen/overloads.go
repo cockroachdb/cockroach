@@ -68,12 +68,13 @@ type overload struct {
 	CmpOp tree.ComparisonOperator
 	BinOp tree.BinaryOperator
 	// OpStr is the string form of whichever of CmpOp and BinOp are set.
-	OpStr   string
-	LTyp    coltypes.T
-	RTyp    coltypes.T
-	LGoType string
-	RGoType string
-	RetTyp  coltypes.T
+	OpStr     string
+	LTyp      coltypes.T
+	RTyp      coltypes.T
+	LGoType   string
+	RGoType   string
+	RetTyp    coltypes.T
+	RetGoType string
 
 	AssignFunc  assignFunc
 	CompareFunc compareFunc
@@ -95,9 +96,13 @@ var comparisonOpOverloads []*overload
 // implement it.
 var binaryOpToOverloads map[tree.BinaryOperator][]*overload
 
-// comparisonOpToOverloads maps a comparison operator to all of the overloads
-// that implement it.
-var comparisonOpToOverloads map[tree.ComparisonOperator][]*overload
+// sameTypeComparisonOpToOverloads maps a comparison operator to all of the
+// overloads that implement that comparison between two values of the same type.
+var sameTypeComparisonOpToOverloads map[tree.ComparisonOperator][]*overload
+
+// anyTypeComparisonOpToOverloads maps a comparison operator to all of the
+// overloads that implement it, including all mixed type comparisons.
+var anyTypeComparisonOpToOverloads map[tree.ComparisonOperator][]*overload
 
 // hashOverloads is a list of all of the overloads that implement the hash
 // operation.
@@ -150,7 +155,8 @@ func init() {
 	binOps := []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div}
 	cmpOps := []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE}
 	binaryOpToOverloads = make(map[tree.BinaryOperator][]*overload, len(binaryOpName))
-	comparisonOpToOverloads = make(map[tree.ComparisonOperator][]*overload, len(comparisonOpName))
+	sameTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*overload, len(comparisonOpName))
+	anyTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*overload, len(comparisonOpName))
 	for _, t := range inputTypes {
 		customizer := typeCustomizers[t]
 		for _, op := range binOps {
@@ -160,15 +166,16 @@ func init() {
 				continue
 			}
 			ov := &overload{
-				Name:    binaryOpName[op],
-				BinOp:   op,
-				IsBinOp: true,
-				OpStr:   binaryOpInfix[op],
-				LTyp:    t,
-				RTyp:    t,
-				LGoType: t.GoTypeName(),
-				RGoType: t.GoTypeName(),
-				RetTyp:  t,
+				Name:      binaryOpName[op],
+				BinOp:     op,
+				IsBinOp:   true,
+				OpStr:     binaryOpInfix[op],
+				LTyp:      t,
+				RTyp:      t,
+				LGoType:   t.GoTypeName(),
+				RGoType:   t.GoTypeName(),
+				RetTyp:    t,
+				RetGoType: t.GoTypeName(),
 			}
 			if customizer != nil {
 				if b, ok := customizer.(binOpTypeCustomizer); ok {
@@ -178,35 +185,6 @@ func init() {
 			binaryOpOverloads = append(binaryOpOverloads, ov)
 			binaryOpToOverloads[op] = append(binaryOpToOverloads[op], ov)
 		}
-		for _, op := range cmpOps {
-			opStr := comparisonOpInfix[op]
-			ov := &overload{
-				Name:    comparisonOpName[op],
-				CmpOp:   op,
-				IsCmpOp: true,
-				OpStr:   opStr,
-				LTyp:    t,
-				RTyp:    t,
-				LGoType: t.GoTypeName(),
-				RGoType: t.GoTypeName(),
-				RetTyp:  coltypes.Bool,
-			}
-			if customizer != nil {
-				if b, ok := customizer.(cmpOpTypeCustomizer); ok {
-					ov.AssignFunc = func(op overload, target, l, r string) string {
-						c := b.getCmpOpCompareFunc()(l, r)
-						if c == "" {
-							return ""
-						}
-						return fmt.Sprintf("%s = %s %s 0", target, c, op.OpStr)
-					}
-					ov.CompareFunc = b.getCmpOpCompareFunc()
-				}
-			}
-			comparisonOpOverloads = append(comparisonOpOverloads, ov)
-			comparisonOpToOverloads[op] = append(comparisonOpToOverloads[op], ov)
-		}
-
 		ov := &overload{
 			IsHashOp: true,
 			LTyp:     t,
@@ -219,6 +197,43 @@ func init() {
 		}
 		hashOverloads = append(hashOverloads, ov)
 	}
+	for _, leftType := range inputTypes {
+		customizer := typeCustomizers[leftType]
+		for _, rightType := range coltypes.CompatibleTypes[leftType] {
+			for _, op := range cmpOps {
+				opStr := comparisonOpInfix[op]
+				ov := &overload{
+					Name:      comparisonOpName[op],
+					CmpOp:     op,
+					IsCmpOp:   true,
+					OpStr:     opStr,
+					LTyp:      leftType,
+					RTyp:      rightType,
+					LGoType:   leftType.GoTypeName(),
+					RGoType:   rightType.GoTypeName(),
+					RetTyp:    coltypes.Bool,
+					RetGoType: coltypes.Bool.GoTypeName(),
+				}
+				if customizer != nil {
+					if b, ok := customizer.(cmpOpTypeCustomizer); ok {
+						ov.AssignFunc = func(op overload, target, l, r string) string {
+							c := b.getCmpOpCompareFunc()(l, r)
+							if c == "" {
+								return ""
+							}
+							return fmt.Sprintf("%s = %s %s 0", target, c, op.OpStr)
+						}
+						ov.CompareFunc = b.getCmpOpCompareFunc()
+					}
+				}
+				comparisonOpOverloads = append(comparisonOpOverloads, ov)
+				anyTypeComparisonOpToOverloads[op] = append(anyTypeComparisonOpToOverloads[op], ov)
+				if leftType == rightType {
+					sameTypeComparisonOpToOverloads[op] = append(sameTypeComparisonOpToOverloads[op], ov)
+				}
+			}
+		}
+	}
 }
 
 // typeCustomizer is a marker interface for something that implements one or
@@ -229,6 +244,8 @@ func init() {
 // (==, <, etc) or binary operator (+, -, etc) semantics.
 type typeCustomizer interface{}
 
+// TODO(rafi): make this map keyed by (leftType, rightType) so we can have
+// customizers for mixed-type operations.
 var typeCustomizers map[coltypes.T]typeCustomizer
 
 // registerTypeCustomizer registers a particular type customizer to a type, for
@@ -350,6 +367,14 @@ func (c intCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
 		return fmt.Sprintf("%[1]s = memhash%[3]d(noescape(unsafe.Pointer(&%[2]s)), %[1]s)", target, v, c.width)
 	}
+}
+
+func (c intCustomizer) getCmpOpCompareFunc() compareFunc {
+	// Always upcast ints for comparison.
+	return func(l, r string) string {
+		return fmt.Sprintf("compareInts(int64(%s), int64(%s))", l, r)
+	}
+
 }
 
 func (c intCustomizer) getBinOpAssignFunc() assignFunc {
