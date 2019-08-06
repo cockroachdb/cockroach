@@ -467,6 +467,25 @@ func updateStatsOnAbort(
 	orig, restored *enginepb.MVCCMetadata,
 	restoredNanos int64,
 ) enginepb.MVCCStats {
+	ms := updateStatsOnClear(
+		key, origMetaKeySize, origMetaValSize, restoredMetaKeySize, restoredMetaValSize, orig, restored, restoredNanos,
+	)
+	ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
+	ms.IntentCount--
+	return ms
+}
+
+// updateStatsOnClear updates stat counters by subtracting a
+// cleared value's key and value byte sizes. If an earlier version
+// was restored, the restored values are added to live bytes and
+// count if the restored value isn't a deletion tombstone.
+func updateStatsOnClear(
+	key roachpb.Key,
+	origMetaKeySize, origMetaValSize, restoredMetaKeySize, restoredMetaValSize int64,
+	orig, restored *enginepb.MVCCMetadata,
+	restoredNanos int64,
+) enginepb.MVCCStats {
+
 	var ms enginepb.MVCCStats
 
 	if isSysLocal(key) {
@@ -486,7 +505,7 @@ func updateStatsOnAbort(
 	// 1. the previous value is a tombstone, so according to rule 2 it accrues
 	// GCBytesAge from its own timestamp on (we need to adjust only for the
 	// implicit meta key that "pops up" at that timestamp), -- or --
-	// 2. it is not, and it has been shadowed by the intent we're now aborting,
+	// 2. it is not, and it has been shadowed by the key we are clearing,
 	// in which case we need to offset its GCBytesAge contribution from
 	// restoredNanos to orig.Timestamp (rule 1).
 	if restored != nil {
@@ -531,8 +550,6 @@ func updateStatsOnAbort(
 	ms.ValBytes -= (orig.ValBytes + origMetaValSize)
 	ms.KeyCount--
 	ms.ValCount--
-	ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
-	ms.IntentCount--
 
 	return ms
 }
@@ -1863,6 +1880,7 @@ func MVCCMerge(
 func MVCCClearTimeRange(
 	ctx context.Context,
 	batch ReadWriter,
+	ms *enginepb.MVCCStats,
 	key, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
 	maxBatchSize int64,
@@ -1936,6 +1954,9 @@ func MVCCClearTimeRange(
 	it := batch.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
 	defer it.Close()
 
+	var clearedMetaKey MVCCKey
+	var clearedMeta enginepb.MVCCMetadata
+	var restoredMeta enginepb.MVCCMetadata
 	for it.Seek(MVCCKey{Key: key}); ; it.Next() {
 		ok, err := it.Valid()
 		if err != nil {
@@ -1943,14 +1964,37 @@ func MVCCClearTimeRange(
 		} else if !ok {
 			break
 		}
+
 		k := it.UnsafeKey()
+
+		if ms != nil && len(clearedMetaKey.Key) > 0 {
+			metaKeySize := int64(clearedMetaKey.EncodedSize())
+			if bytes.Equal(clearedMetaKey.Key, k.Key) {
+				// Since the key matches, our previous clear "restored" this revision of
+				// the this key, so update the stats with this as the "restored" key.
+				valueSize := int64(len(it.Value()))
+				restoredMeta.KeyBytes = mvccVersionTimestampSize
+				restoredMeta.Deleted = valueSize == 0
+				restoredMeta.ValBytes = valueSize
+				restoredMeta.Timestamp = hlc.LegacyTimestamp(k.Timestamp)
+
+				ms.Add(updateStatsOnClear(
+					clearedMetaKey.Key, metaKeySize, 0, metaKeySize, 0, &clearedMeta, &restoredMeta, k.Timestamp.WallTime,
+				))
+			} else {
+				// We cleared a revision of a different key, so nothing was "restored".
+				ms.Add(updateStatsOnClear(clearedMetaKey.Key, metaKeySize, 0, 0, 0, &clearedMeta, nil, 0))
+			}
+			clearedMetaKey.Key = clearedMetaKey.Key[:0]
+		}
+
 		if c := k.Key.Compare(endKey); c >= 0 {
 			break
 		}
 
-		// We need to check for and fail on any intents in our time-range as we do
+		// We need to check for and fail on any intents in our time-range, as we do
 		// not want to clear any running transactions. We don't _expect_ to hit this
-		// since the RevertRange is only intended for non-live key spans but there
+		// since the RevertRange is only intended for non-live key spans, but there
 		// could be an intent leftover.
 		var meta enginepb.MVCCMetadata
 		if !k.IsValue() {
@@ -1973,12 +2017,26 @@ func MVCCClearTimeRange(
 				break
 			}
 			clearMatchingKey(k)
+			if ms != nil {
+				clearedMetaKey.Key = append(clearedMetaKey.Key[:0], k.Key...)
+				clearedMeta.KeyBytes = mvccVersionTimestampSize
+				clearedMeta.ValBytes = int64(len(it.UnsafeValue()))
+				clearedMeta.Deleted = clearedMeta.ValBytes == 0
+				clearedMeta.Timestamp = hlc.LegacyTimestamp(k.Timestamp)
+			}
 		} else {
 			// This key does not match, so we need to flush our run of matching keys.
 			if err := flushClearedKeys(k); err != nil {
 				return nil, err
 			}
 		}
+	}
+
+	if ms != nil && len(clearedMetaKey.Key) > 0 {
+		// If we cleared on the last iteration, no older revision of that key was
+		// "restored", since otherwise we would have iterated over it.
+		origMetaKeySize := int64(clearedMetaKey.EncodedSize())
+		ms.Add(updateStatsOnClear(clearedMetaKey.Key, origMetaKeySize, 0, 0, 0, &clearedMeta, nil, 0))
 	}
 
 	return resume, flushClearedKeys(MVCCKey{Key: endKey})
