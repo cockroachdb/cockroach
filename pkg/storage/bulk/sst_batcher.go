@@ -53,7 +53,7 @@ type SSTBatcher struct {
 	rowCounter RowCounter
 	totalRows  roachpb.BulkOpSummary
 
-	sstWriter     engine.RocksDBSstFileWriter
+	sstWriter     SSTWriter
 	batchStartKey []byte
 	batchEndKey   []byte
 
@@ -115,11 +115,7 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value [
 // Reset clears all state in the batcher and prepares it for reuse.
 func (b *SSTBatcher) Reset() error {
 	b.sstWriter.Close()
-	w, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return err
-	}
-	b.sstWriter = w
+	b.sstWriter = MakeSSTWriter()
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
 	b.flushKey = nil
@@ -299,10 +295,7 @@ func createSplitSSTable(
 	disallowShadowing bool,
 	iter engine.SimpleIterator,
 ) (*sstSpan, *sstSpan, error) {
-	w, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return nil, nil, err
-	}
+	w := MakeSSTWriter()
 	defer w.Close()
 
 	split := false
@@ -330,13 +323,7 @@ func createSplitSSTable(
 				sstBytes:          res,
 				disallowShadowing: disallowShadowing,
 			}
-
-			w.Close()
-			w, err = engine.MakeRocksDBSstFileWriter()
-			if err != nil {
-				return nil, nil, err
-			}
-
+			w = MakeSSTWriter()
 			split = true
 			first = nil
 			last = nil
