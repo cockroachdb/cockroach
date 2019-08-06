@@ -284,7 +284,7 @@ func TestStatusGetFiles(t *testing.T) {
 
 	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -952,7 +952,7 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 
 	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(ctx)
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -982,7 +982,7 @@ func TestNodesGRPCResponse(t *testing.T) {
 
 	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1183,7 +1183,7 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 	rpcContext := newRPCTestContext(ts, rootConfig)
 	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1383,7 +1383,7 @@ func TestListSessionsSecurity(t *testing.T) {
 	rpcContext := newRPCTestContext(ts, rootConfig)
 	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

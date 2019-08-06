@@ -3720,7 +3720,7 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 					// Raft transport, so ConnHealth should usually indicate a real problem if
 					// it gives us an error back. The check can also have false positives if the
 					// node goes down after populating the map, but that matters even less.
-					entry.IsLive = (s.cfg.NodeDialer.ConnHealth(nodeID) == nil)
+					entry.IsLive = (s.cfg.NodeDialer.ConnHealth(nodeID, rpc.SystemClass) == nil)
 					nextMap[nodeID] = entry
 				}
 				s.livenessMap.Store(nextMap)

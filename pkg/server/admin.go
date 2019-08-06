@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -2126,7 +2127,8 @@ func (s *adminServer) dialNode(
 	if err != nil {
 		return nil, err
 	}
-	conn, err := s.server.rpcContext.GRPCDialNode(addr.String(), nodeID).Connect(ctx)
+	conn, err := s.server.rpcContext.GRPCDialNode(
+		addr.String(), nodeID, rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		return nil, err
 	}
