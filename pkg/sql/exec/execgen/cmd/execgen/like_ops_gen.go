@@ -31,17 +31,23 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
 {{range .}}
 {{template "selConstOp" .}}
+{{template "projRConstOp" .}}
 {{end}}
 `
 
 func genLikeOps(wr io.Writer) error {
-	tmpl := template.New("like_ops").Funcs(template.FuncMap{"buildDict": buildDict})
+	tmpl := template.New("like_sel_ops").Funcs(template.FuncMap{"buildDict": buildDict})
 	var err error
 	tmpl, err = tmpl.Parse(selTemplate)
+	if err != nil {
+		return err
+	}
+	tmpl, err = tmpl.Parse(projTemplate)
 	if err != nil {
 		return err
 	}

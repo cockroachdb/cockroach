@@ -850,7 +850,11 @@ func planProjectionExpr(
 		// The projection result will be outputted to a new column which is appended
 		// to the input batch.
 		resultIdx = len(ct)
-		if binOp == tree.In || binOp == tree.NotIn {
+		if binOp == tree.Like || binOp == tree.NotLike {
+			negate := binOp == tree.NotLike
+			op, err = exec.GetLikeProjectionOperator(
+				ctx, leftOp, leftIdx, resultIdx, string(tree.MustBeDString(rConstArg)), negate)
+		} else if binOp == tree.In || binOp == tree.NotIn {
 			negate := binOp == tree.NotIn
 			datumTuple, ok := tree.AsDTuple(rConstArg)
 			if !ok {
