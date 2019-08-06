@@ -250,6 +250,9 @@ func GetSelectionOperator(
 func genSelectionOps(wr io.Writer) error {
 	typToOverloads := make(map[types.T][]*overload)
 	for _, overload := range comparisonOpOverloads {
+		if overload.LTyp != overload.RTyp {
+			continue
+		}
 		typ := overload.LTyp
 		typToOverloads[typ] = append(typToOverloads[typ], overload)
 	}

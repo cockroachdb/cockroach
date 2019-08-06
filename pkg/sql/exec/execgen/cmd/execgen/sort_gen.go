@@ -90,7 +90,7 @@ func init() {
 	registerGenerator(genSortOps, "sort.eg.go")
 	registerGenerator(genQuickSortOps, "quicksort.eg.go")
 	typesToSortOverloads = make(map[types.T]sortOverloads)
-	for _, o := range comparisonOpToOverloads[tree.LT] {
+	for _, o := range sameTypeComparisonOpToOverloads[tree.LT] {
 		typesToSortOverloads[o.LTyp] = sortOverloads{
 			LTyp: o.LTyp,
 			Overloads: []sortOverload{
@@ -98,7 +98,7 @@ func init() {
 				{}},
 		}
 	}
-	for _, o := range comparisonOpToOverloads[tree.GT] {
+	for _, o := range sameTypeComparisonOpToOverloads[tree.GT] {
 		typesToSortOverloads[o.LTyp].Overloads[1] = sortOverload{
 			overload: o, Dir: "distsqlpb.Ordering_Column_DESC", DirString: "Desc"}
 	}

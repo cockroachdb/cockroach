@@ -50,10 +50,39 @@ const (
 // AllTypes is slice of all exec types.
 var AllTypes []T
 
+// CompatibleTypes maps a type to a slice of types that can be used with that
+// type in a binary expression.
+var CompatibleTypes map[T][]T
+
 func init() {
 	for i := Bool; i < Unhandled; i++ {
 		AllTypes = append(AllTypes, i)
 	}
+
+	CompatibleTypes = make(map[T][]T)
+	CompatibleTypes[Bool] = append(CompatibleTypes[Bool], Bool)
+	CompatibleTypes[Bytes] = append(CompatibleTypes[Bytes], Bytes)
+	CompatibleTypes[Decimal] = append(CompatibleTypes[Decimal], Decimal)
+	CompatibleTypes[Int8] = append(CompatibleTypes[Int8], Int8)
+	CompatibleTypes[Int8] = append(CompatibleTypes[Int8], Int16)
+	CompatibleTypes[Int8] = append(CompatibleTypes[Int8], Int32)
+	CompatibleTypes[Int8] = append(CompatibleTypes[Int8], Int64)
+	CompatibleTypes[Int16] = append(CompatibleTypes[Int16], Int8)
+	CompatibleTypes[Int16] = append(CompatibleTypes[Int16], Int16)
+	CompatibleTypes[Int16] = append(CompatibleTypes[Int16], Int32)
+	CompatibleTypes[Int16] = append(CompatibleTypes[Int16], Int64)
+	CompatibleTypes[Int32] = append(CompatibleTypes[Int32], Int8)
+	CompatibleTypes[Int32] = append(CompatibleTypes[Int32], Int16)
+	CompatibleTypes[Int32] = append(CompatibleTypes[Int32], Int32)
+	CompatibleTypes[Int32] = append(CompatibleTypes[Int32], Int64)
+	CompatibleTypes[Int64] = append(CompatibleTypes[Int64], Int8)
+	CompatibleTypes[Int64] = append(CompatibleTypes[Int64], Int16)
+	CompatibleTypes[Int64] = append(CompatibleTypes[Int64], Int32)
+	CompatibleTypes[Int64] = append(CompatibleTypes[Int64], Int64)
+	CompatibleTypes[Float32] = append(CompatibleTypes[Float32], Float32)
+	CompatibleTypes[Float32] = append(CompatibleTypes[Float32], Float64)
+	CompatibleTypes[Float64] = append(CompatibleTypes[Float64], Float32)
+	CompatibleTypes[Float64] = append(CompatibleTypes[Float64], Float64)
 }
 
 // FromGoType returns the type for a Go value, if applicable. Shouldn't be used at

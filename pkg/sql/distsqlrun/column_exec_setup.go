@@ -834,7 +834,7 @@ func planProjectionExpr(
 		resultIdx = len(ct)
 		// The projection result will be outputted to a new column which is appended
 		// to the input batch.
-		op, err = exec.GetProjectionLConstOperator(&ct[rightIdx], binOp, rightOp, rightIdx, lConstArg, resultIdx)
+		op, err = exec.GetProjectionLConstOperator(left.ResolvedType(), &ct[rightIdx], binOp, rightOp, rightIdx, lConstArg, resultIdx)
 		ct = append(ct, *outputType)
 		if sMem, ok := op.(exec.StaticMemoryOperator); ok {
 			memUsed += sMem.EstimateStaticMemoryUsage()
@@ -846,6 +846,7 @@ func planProjectionExpr(
 		return nil, resultIdx, ct, leftMem, err
 	}
 	if rConstArg, rConst := right.(tree.Datum); rConst {
+
 		// Case 2: The right is constant.
 		// The projection result will be outputted to a new column which is appended
 		// to the input batch.
@@ -863,7 +864,7 @@ func planProjectionExpr(
 			}
 			op, err = exec.GetInProjectionOperator(&ct[leftIdx], leftOp, leftIdx, resultIdx, datumTuple, negate)
 		} else {
-			op, err = exec.GetProjectionRConstOperator(&ct[leftIdx], binOp, leftOp, leftIdx, rConstArg, resultIdx)
+			op, err = exec.GetProjectionRConstOperator(&ct[leftIdx], right.ResolvedType(), binOp, leftOp, leftIdx, rConstArg, resultIdx)
 		}
 		ct = append(ct, *outputType)
 		if sMem, ok := op.(exec.StaticMemoryOperator); ok {
@@ -877,7 +878,7 @@ func planProjectionExpr(
 		return nil, resultIdx, nil, leftMem + rightMem, err
 	}
 	resultIdx = len(ct)
-	op, err = exec.GetProjectionOperator(&ct[leftIdx], binOp, rightOp, leftIdx, rightIdx, resultIdx)
+	op, err = exec.GetProjectionOperator(&ct[leftIdx], &ct[rightIdx], binOp, rightOp, leftIdx, rightIdx, resultIdx)
 	ct = append(ct, *outputType)
 	if sMem, ok := op.(exec.StaticMemoryOperator); ok {
 		memUsed += sMem.EstimateStaticMemoryUsage()
@@ -885,10 +886,10 @@ func planProjectionExpr(
 	return op, resultIdx, ct, leftMem + rightMem + memUsed, err
 }
 
-// assertHomogeneousTypes checks that the left and right sides of an expression
+// assertHomogeneousTypes checks that the left and right sides of a BinaryExpr
 // have identical types. (Vectorized execution does not yet handle mixed types.)
-// For BinaryExprs, it also checks that the result type matches, since this is
-// not the case for certain operations like integer division.
+// It also checks that the result type matches, since this is not the case for
+// certain operations like integer division.
 func assertHomogeneousTypes(expr tree.TypedExpr) error {
 	switch t := expr.(type) {
 	case *tree.BinaryExpr:
@@ -900,20 +901,6 @@ func assertHomogeneousTypes(expr tree.TypedExpr) error {
 		}
 		if !left.Identical(result) {
 			return errors.Errorf("BinaryExpr on %s with %s result is unhandled", left, result)
-		}
-	case *tree.ComparisonExpr:
-		left := t.TypedLeft().ResolvedType()
-		right := t.TypedRight().ResolvedType()
-
-		// Special rules for IN and NOT IN expressions. The type checker
-		// handles invalid types for the IN and NOT IN operations at this point,
-		// and we allow a comparison between t and t tuple.
-		if t.Operator == tree.In || t.Operator == tree.NotIn {
-			return nil
-		}
-
-		if !left.Identical(right) {
-			return errors.Errorf("ComparisonExpr on %s and %s is unhandled", left, right)
 		}
 	}
 	return nil
