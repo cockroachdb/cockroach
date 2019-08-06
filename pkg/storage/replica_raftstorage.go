@@ -526,10 +526,6 @@ func snapshot(
 		return OutgoingSnapshot{}, errors.Errorf("couldn't find range descriptor")
 	}
 
-	var snapData roachpb.RaftSnapshotData
-	// Store RangeDescriptor as metadata, it will be retrieved by ApplySnapshot()
-	snapData.RangeDescriptor = desc
-
 	// Read the range metadata from the snapshot instead of the members
 	// of the Range struct because they might be changed concurrently.
 	appliedIndex, _, err := rsl.LoadAppliedIndex(ctx, snap)

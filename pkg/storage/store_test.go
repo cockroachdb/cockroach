@@ -2811,9 +2811,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 	}
 
 	// Generate a minimal fake snapshot.
-	snapData := &roachpb.RaftSnapshotData{
-		RangeDescriptor: *repl1.Desc(),
-	}
+	snapData := &roachpb.RaftSnapshotData{}
 	data, err := protoutil.Marshal(snapData)
 	if err != nil {
 		t.Fatal(err)
@@ -2897,9 +2895,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	}
 
 	// Generate a minimal fake snapshot.
-	snapData := &roachpb.RaftSnapshotData{
-		RangeDescriptor: *repl1.Desc(),
-	}
+	snapData := &roachpb.RaftSnapshotData{}
 	data, err := protoutil.Marshal(snapData)
 	if err != nil {
 		t.Fatal(err)

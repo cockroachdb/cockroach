@@ -906,6 +906,7 @@ DBSstFileWriter* DBSstFileWriterNew() {
   // https://github.com/facebook/rocksdb/blob/972f96b3fbae1a4675043bdf4279c9072ad69645/include/rocksdb/table.h#L198
   table_options.format_version = 0;
   table_options.checksum = rocksdb::kCRC32c;
+  table_options.whole_key_filtering = false;
 
   rocksdb::Options* options = new rocksdb::Options();
   options->comparator = &kComparator;

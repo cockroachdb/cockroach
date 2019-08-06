@@ -66,11 +66,17 @@ func TestValues(t *testing.T) {
 	unsupp := &tree.RangeCond{}
 
 	intVal := func(v int64) *tree.NumVal {
-		return &tree.NumVal{Value: constant.MakeInt64(v)}
+		return tree.NewNumVal(
+			constant.MakeInt64(v),
+			"", /* origString */
+			false /* negative */)
 	}
 	floatVal := func(f float64) *tree.CastExpr {
 		return &tree.CastExpr{
-			Expr: &tree.NumVal{Value: constant.MakeFloat64(f)},
+			Expr: tree.NewNumVal(
+				constant.MakeFloat64(f),
+				"", /* origString */
+				false /* negative */),
 			Type: types.Float,
 		}
 	}

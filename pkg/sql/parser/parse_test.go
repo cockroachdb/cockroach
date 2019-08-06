@@ -2740,11 +2740,11 @@ func TestParsePrecedence(t *testing.T) {
 		return &tree.ComparisonExpr{Operator: tree.RegIMatch, Left: left, Right: right}
 	}
 
-	one := &tree.NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
-	minusone := &tree.NumVal{Value: constant.MakeInt64(1), OrigString: "1", Negative: true}
-	two := &tree.NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
-	minustwo := &tree.NumVal{Value: constant.MakeInt64(2), OrigString: "2", Negative: true}
-	three := &tree.NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
+	one := tree.NewNumVal(constant.MakeInt64(1), "1", false /* negative */)
+	minusone := tree.NewNumVal(constant.MakeInt64(1), "1", true /* negative */)
+	two := tree.NewNumVal(constant.MakeInt64(2), "2", false /* negative */)
+	minustwo := tree.NewNumVal(constant.MakeInt64(2), "2", true /* negative */)
+	three := tree.NewNumVal(constant.MakeInt64(3), "3", false /* negative */)
 	a := tree.NewStrVal("a")
 	b := tree.NewStrVal("b")
 	c := tree.NewStrVal("c")

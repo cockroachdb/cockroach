@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2019 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -18,13 +18,12 @@ import (
 	"strings"
 )
 
-var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+var pgjdbcReleaseTagRegex = regexp.MustCompile(`^REL(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 
-// This test runs hibernate-core's full test suite against a single cockroach
-// node.
+// This test runs pgjdbc's full test suite against a single cockroach node.
 
-func registerHibernate(r *testRegistry) {
-	runHibernate := func(
+func registerPgjdbc(r *testRegistry) {
+	runPgjdbc := func(
 		ctx context.Context,
 		t *test,
 		c *cluster,
@@ -37,14 +36,14 @@ func registerHibernate(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
 
-		t.Status("cloning hibernate and installing prerequisites")
+		t.Status("cloning pgjdbc and installing prerequisites")
 		latestTag, err := repeatGetLatestTag(
-			ctx, c, "hibernate", "hibernate-orm", hibernateReleaseTagRegex,
+			ctx, c, "pgjdbc", "pgjdbc", pgjdbcReleaseTagRegex,
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest Hibernate release is %s.", latestTag)
+		c.l.Printf("Latest pgjdbc release is %s.", latestTag)
 
 		if err := repeatRunE(
 			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -57,13 +56,13 @@ func registerHibernate(r *testRegistry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle`,
+			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless maven`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "remove old Hibernate", `rm -rf /mnt/data1/hibernate`,
+			ctx, c, node, "remove old pgjdbc", `rm -rf /mnt/data1/pgjdbc`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -72,31 +71,30 @@ func registerHibernate(r *testRegistry) {
 			ctx,
 			t.l,
 			c,
-			"https://github.com/hibernate/hibernate-orm.git",
-			"/mnt/data1/hibernate",
+			"https://github.com/pgjdbc/pgjdbc.git",
+			"/mnt/data1/pgjdbc",
 			latestTag,
 			node,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		// In order to get Hibernate's test suite to connect to cockroach, we have
-		// to create a dbBundle as it not possible to specify the individual
-		// properties. So here we just steamroll the file with our own config.
+		// In order to get pgjdbc's test suite to connect to cockroach, we have
+		// to override settings in build.local.properties
 		if err := repeatRunE(
 			ctx,
 			c,
 			node,
 			"configuring tests for cockroach only",
 			fmt.Sprintf(
-				"echo \"%s\" > /mnt/data1/hibernate/gradle/databases.gradle", hibernateDatabaseGradle,
+				"echo \"%s\" > /mnt/data1/pgjdbc/build.local.properties", pgjdbcDatabaseParams,
 			),
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		t.Status("building hibernate (without tests)")
-		// Build hibernate and run a single test, this step involves some
+		t.Status("building pgjdbc (without tests)")
+		// Build pgjdbc and run a single test, this step involves some
 		// downloading, so it needs a retry loop as well. Just building was not
 		// enough as the test libraries are not downloaded unless at least a
 		// single test is invoked.
@@ -104,9 +102,8 @@ func registerHibernate(r *testRegistry) {
 			ctx,
 			c,
 			node,
-			"building hibernate (without tests)",
-			`cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroach `+
-				`--tests org.hibernate.jdbc.util.BasicFormatterTest.*`,
+			"building pgjdbc (without tests)",
+			`cd /mnt/data1/pgjdbc/pgjdbc/ && mvn -Dtest=OidToStringTest test`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -115,37 +112,26 @@ func registerHibernate(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		blacklistName, expectedFailures, _, _ := hibernateBlacklists.getLists(version)
+		blacklistName, expectedFailures, _, _ := pgjdbcBlacklists.getLists(version)
 		if expectedFailures == nil {
-			t.Fatalf("No hibernate blacklist defined for cockroach version %s", version)
+			t.Fatalf("No pgjdbc blacklist defined for cockroach version %s", version)
 		}
 		c.l.Printf("Running cockroach version %s, using blacklist %s", version, blacklistName)
 
-		t.Status("running hibernate test suite, will take at least 3 hours")
-		// When testing, it is helpful to run only a subset of the tests. To do so
-		// add "--tests org.hibernate.test.annotations.lob.*" to the end of the
-		// test run command.
-		// Note that this will take upwards of 3 hours.
-		// Also note that this is expected to return an error, since the test suite
+		t.Status("running pgjdbc test suite")
+		// Note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
 		_ = c.RunE(ctx, node,
-			`cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroach`,
+			`cd /mnt/data1/pgjdbc/pgjdbc/ && mvn test`,
+		)
+
+		_ = c.RunE(ctx, node,
+			`mkdir -p ~/logs/report/pgjdbc-results`,
 		)
 
 		t.Status("collecting the test results")
 		// Copy all of the test results to the cockroach logs directory to be
 		// copied to the artifacts.
-
-		// Copy the html report for the test.
-		if err := repeatRunE(
-			ctx,
-			c,
-			node,
-			"copy html report",
-			`cp /mnt/data1/hibernate/hibernate-core/target/reports/tests/test ~/logs/report -a`,
-		); err != nil {
-			t.Fatal(err)
-		}
 
 		// Copy the individual test result files.
 		if err := repeatRunE(
@@ -153,20 +139,20 @@ func registerHibernate(r *testRegistry) {
 			c,
 			node,
 			"copy test result files",
-			`cp /mnt/data1/hibernate/hibernate-core/target/test-results/test ~/logs/report/results -a`,
+			`cp /mnt/data1/pgjdbc/pgjdbc/target/surefire-reports ~/logs/report/pgjdbc-results -a`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		// Load the list of all test results files and parse them individually.
-		// Files are here: /mnt/data1/hibernate/hibernate-core/target/test-results/test
+		// Files are here: /mnt/data1/pgjdbc/pgjdbc-core/target/test-results/test
 		output, err := repeatRunWithBuffer(
 			ctx,
 			c,
 			t.l,
 			node,
 			"get list of test files",
-			`ls /mnt/data1/hibernate/hibernate-core/target/test-results/test/*.xml`,
+			`ls /mnt/data1/pgjdbc/pgjdbc/target/surefire-reports/*.xml`,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -253,8 +239,7 @@ func registerHibernate(r *testRegistry) {
 			notRunCount++
 		}
 
-		// Log all the test results. We re-order the tests alphabetically here as
-		// gradle picks the test order based on a directory walk.
+		// Log all the test results. We re-order the tests alphabetically here.
 		sort.Strings(allTests)
 		for _, test := range allTests {
 			result, ok := results[test]
@@ -268,7 +253,7 @@ func registerHibernate(r *testRegistry) {
 
 		var bResults strings.Builder
 		fmt.Fprintf(&bResults, "Tests run on Cockroach %s\n", version)
-		fmt.Fprintf(&bResults, "Tests run against Hibernate %s\n", latestTag)
+		fmt.Fprintf(&bResults, "Tests run against pgjdbc %s\n", latestTag)
 		fmt.Fprintf(&bResults, "%d Total Tests Run\n",
 			passExpectedCount+passUnexpectedCount+failExpectedCount+failUnexpectedCount,
 		)
@@ -286,15 +271,15 @@ func registerHibernate(r *testRegistry) {
 		p("failed unexpectedly", failUnexpectedCount)
 		p("expected failed, but not run", notRunCount)
 
-		fmt.Fprintf(&bResults, "For a full summary look at the hibernate artifacts \n")
+		fmt.Fprintf(&bResults, "For a full summary look at the pgjdbc artifacts \n")
 		t.l.Printf("%s\n", bResults.String())
 		t.l.Printf("------------------------\n")
 
 		if failUnexpectedCount > 0 || passUnexpectedCount > 0 || notRunCount > 0 {
-			// Create a new hibernate_blacklist so we can easily update this test.
+			// Create a new pgjdbc_blacklist so we can easily update this test.
 			sort.Strings(currentFailures)
 			var b strings.Builder
-			fmt.Fprintf(&b, "Here is new hibernate blacklist that can be used to update the test:\n\n")
+			fmt.Fprintf(&b, "Here is a new pgjdbc blacklist that can be used to update the test:\n\n")
 			fmt.Fprintf(&b, "var %s = blacklist{\n", blacklistName)
 			for _, test := range currentFailures {
 				issue := expectedFailures[test]
@@ -306,7 +291,7 @@ func registerHibernate(r *testRegistry) {
 			fmt.Fprintf(&b, "}\n\n")
 			t.l.Printf("\n\n%s\n\n", b.String())
 			t.l.Printf("------------------------\n")
-			t.Fatalf("\n%s\nAn updated blacklist (%s) is available in the artifacts' hibernate log\n",
+			t.Fatalf("\n%s\nAn updated blacklist (%s) is available in the artifacts' pgjdbc log\n",
 				bResults.String(),
 				blacklistName,
 			)
@@ -314,25 +299,30 @@ func registerHibernate(r *testRegistry) {
 	}
 
 	r.Add(testSpec{
-		Name:    "hibernate",
+		Name:    "pgjdbc",
 		Cluster: makeClusterSpec(1),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runHibernate(ctx, t, c)
+			runPgjdbc(ctx, t, c)
 		},
 	})
 }
 
-const hibernateDatabaseGradle = `
-ext {
-  db = project.hasProperty('db') ? project.getProperty('db') : 'h2'
-    dbBundle = [
-     cockroach : [
-       'db.dialect' : 'org.hibernate.dialect.PostgreSQL95Dialect',
-       'jdbc.driver': 'org.postgresql.Driver',
-       'jdbc.user'  : 'root',
-       'jdbc.pass'  : '',
-       'jdbc.url'   : 'jdbc:postgresql://localhost:26257/defaultdb?sslmode=disable'
-     ],
-    ]
-}
+const pgjdbcDatabaseParams = `
+server=localhost
+port=26257
+secondaryServer=localhost
+secondaryPort=5433
+secondaryServer2=localhost
+secondaryServerPort2=5434
+database=test
+username=root
+password=
+privilegedUser=root
+privilegedPassword=
+sspiusername=testsspi
+preparethreshold=5
+loggerLevel=DEBUG
+loggerFile=target/pgjdbc-tests.log
+protocolVersion=0
+sslpassword=sslpwd
 `
