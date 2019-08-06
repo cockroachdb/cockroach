@@ -1,7 +1,7 @@
 restore_stmt ::=
-	'RESTORE' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' full_backup_location ( | incremental_backup_location ( ',' incremental_backup_location )*) 'WITH' kv_option_list
-	| 'RESTORE' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' full_backup_location ( | incremental_backup_location ( ',' incremental_backup_location )*) 
-	| 'RESTORE' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' full_backup_location ( | incremental_backup_location ( ',' incremental_backup_location )*) 
-	| 'RESTORE' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' full_backup_location ( | incremental_backup_location ( ',' incremental_backup_location )*) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' kv_option_list
-	| 'RESTORE' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' full_backup_location ( | incremental_backup_location ( ',' incremental_backup_location )*) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 
-	| 'RESTORE' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' full_backup_location ( | incremental_backup_location ( ',' incremental_backup_location )*) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 
+	'RESTORE' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' partitioned_backup_list 'WITH' kv_option_list
+	| 'RESTORE' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' partitioned_backup_list 
+	| 'RESTORE' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' partitioned_backup_list 
+	| 'RESTORE' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' partitioned_backup_list 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' kv_option_list
+	| 'RESTORE' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' partitioned_backup_list 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 
+	| 'RESTORE' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' partitioned_backup_list 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 

@@ -452,6 +452,12 @@ func (u *sqlSymUnion) resolvableFuncRefFromName() tree.ResolvableFunctionReferen
 func (u *sqlSymUnion) rowsFromExpr() *tree.RowsFromExpr {
     return u.val.(*tree.RowsFromExpr)
 }
+func (u *sqlSymUnion) partitionedBackup() tree.PartitionedBackup {
+    return u.val.(tree.PartitionedBackup)
+}
+func (u *sqlSymUnion) partitionedBackups() []tree.PartitionedBackup {
+    return u.val.([]tree.PartitionedBackup)
+}
 func newNameFromStr(s string) *tree.Name {
     return (*tree.Name)(&s)
 }
@@ -699,6 +705,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> reset_stmt reset_session_stmt reset_csetting_stmt
 %type <tree.Statement> resume_stmt
 %type <tree.Statement> restore_stmt
+%type <tree.PartitionedBackup> partitioned_backup
+%type <[]tree.PartitionedBackup> partitioned_backup_list
 %type <tree.Statement> revoke_stmt
 %type <*tree.Select> select_stmt
 %type <tree.Statement> abort_stmt
@@ -1730,9 +1738,9 @@ opt_validate_behavior:
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
-  BACKUP targets TO string_or_placeholder opt_as_of_clause opt_incremental opt_with_options
+  BACKUP targets TO partitioned_backup opt_as_of_clause opt_incremental opt_with_options
   {
-    $$.val = &tree.Backup{Targets: $2.targetList(), To: $4.expr(), IncrementalFrom: $6.exprs(), AsOf: $5.asOfClause(), Options: $7.kvOptions()}
+    $$.val = &tree.Backup{Targets: $2.targetList(), To: $4.partitionedBackup(), IncrementalFrom: $6.exprs(), AsOf: $5.asOfClause(), Options: $7.kvOptions()}
   }
 | BACKUP error // SHOW HELP: BACKUP
 
@@ -1756,15 +1764,35 @@ backup_stmt:
 //
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
-  RESTORE targets FROM string_or_placeholder_list opt_with_options
+  RESTORE targets FROM partitioned_backup_list opt_with_options
   {
-    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.exprs(), Options: $5.kvOptions()}
+    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.partitionedBackups(), Options: $5.kvOptions()}
   }
-| RESTORE targets FROM string_or_placeholder_list as_of_clause opt_with_options
+| RESTORE targets FROM partitioned_backup_list as_of_clause opt_with_options
   {
-    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.exprs(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
+    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.partitionedBackups(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
   }
 | RESTORE error // SHOW HELP: RESTORE
+
+partitioned_backup:
+  string_or_placeholder
+  {
+    $$.val = tree.PartitionedBackup{$1.expr()}
+  }
+| '(' string_or_placeholder_list ')'
+  {
+    $$.val = tree.PartitionedBackup($2.exprs())
+  }
+
+partitioned_backup_list:
+  partitioned_backup
+  {
+    $$.val = []tree.PartitionedBackup{$1.partitionedBackup()}
+  }
+| partitioned_backup_list ',' partitioned_backup
+  {
+    $$.val = append($1.partitionedBackups(), $3.partitionedBackup())
+  }
 
 import_format:
   name

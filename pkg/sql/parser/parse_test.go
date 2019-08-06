@@ -1276,6 +1276,9 @@ func TestParse(t *testing.T) {
 		{`BACKUP DATABASE foo, baz TO 'bar'`},
 		{`BACKUP DATABASE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'`},
 
+		{`BACKUP DATABASE foo TO ($1, $2)`},
+		{`BACKUP DATABASE foo TO ($1, $2) INCREMENTAL FROM 'baz'`},
+
 		{`RESTORE TABLE foo FROM 'bar'`},
 		{`EXPLAIN RESTORE TABLE foo FROM 'bar'`},
 		{`RESTORE TABLE foo FROM $1`},
@@ -1287,6 +1290,12 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN RESTORE DATABASE foo FROM 'bar'`},
 		{`RESTORE DATABASE foo, baz FROM 'bar'`},
 		{`RESTORE DATABASE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
+
+		{`RESTORE DATABASE foo FROM ($1, $2)`},
+		{`RESTORE DATABASE foo FROM ($1, $2), $3`},
+		{`RESTORE DATABASE foo FROM $1, ($2, $3)`},
+		{`RESTORE DATABASE foo FROM ($1, $2), ($3, $4)`},
+		{`RESTORE DATABASE foo FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'`},
 
 		{`BACKUP TABLE foo TO 'bar' WITH key1, key2 = 'value'`},
 		{`RESTORE TABLE foo FROM 'bar' WITH key1, key2 = 'value'`},
@@ -1750,6 +1759,11 @@ func TestParse2(t *testing.T) {
 			`BACKUP DATABASE foo TO 'bar.12' INCREMENTAL FROM 'baz.34'`},
 		{`RESTORE DATABASE foo FROM bar`,
 			`RESTORE DATABASE foo FROM 'bar'`},
+		{`BACKUP DATABASE foo TO ($1)`, `BACKUP DATABASE foo TO $1`},
+
+		{`RESTORE DATABASE foo FROM ($1)`, `RESTORE DATABASE foo FROM $1`},
+		{`RESTORE DATABASE foo FROM ($1), ($2)`, `RESTORE DATABASE foo FROM $1, $2`},
+		{`RESTORE DATABASE foo FROM ($1), ($2, $3)`, `RESTORE DATABASE foo FROM $1, ($2, $3)`},
 
 		{`CREATE CHANGEFEED FOR TABLE foo INTO sink`,
 			`CREATE CHANGEFEED FOR TABLE foo INTO 'sink'`},
