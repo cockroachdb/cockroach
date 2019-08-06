@@ -616,52 +616,58 @@ func TestHide(t *testing.T) {
 func TestMaxSlotIdxSettings(t *testing.T) {
 	maxSettings := 128
 	// Register maxSettings settings to ensure that no errors occur.
-	var err error
-	maxName := batchRegisterSettings(t, "i.Val", maxSettings-1-len(settings.Keys()), &err)
+	maxName, err := batchRegisterSettings(t, "i.Val", maxSettings-1-len(settings.Keys()))
 	if err != nil {
-		t.Errorf("expected no error to register 128 settings, but get error %s", err)
+		t.Errorf("expected no error to register 128 settings, but get error : %s", err)
 	}
 
 	// Change the max slotIdx setting to ensure that no errors occur.
 	sv := &settings.Values{}
 	sv.Init(settings.TestOpaque)
-	{
-		var changes int
-		intSetting, ok := settings.Lookup(maxName)
-		if !ok {
-			t.Errorf("expected lookup setting : %s", maxName)
-		}
-		intSetting.SetOnChange(sv, func() { changes++ })
+	var changes int
+	intSetting, ok := settings.Lookup(maxName)
+	if !ok {
+		t.Errorf("expected lookup setting : %s", maxName)
+	}
+	intSetting.SetOnChange(sv, func() { changes++ })
 
-		u := settings.NewUpdater(sv)
-		if err := u.Set(maxName, settings.EncodeInt(9), "i"); err != nil {
-			t.Fatal(err)
-		}
+	u := settings.NewUpdater(sv)
+	if err := u.Set(maxName, settings.EncodeInt(9), "i"); err != nil {
+		t.Fatal(err)
+	}
 
-		if changes != 1 {
-			t.Errorf("expected the max slot setting changed .")
-		}
+	if changes != 1 {
+		t.Errorf("expected the max slot setting changed .")
 	}
 }
-func batchRegisterSettings(t *testing.T, keyPrefix string, count int, err *error) string {
+
+func TestMaxSettingsPanics(t *testing.T) {
+	maxSettings := 129
+	// Register too many settings, this will cause errors.
+	_, err := batchRegisterSettings(t, "i.Val", maxSettings-1-len(settings.Keys()))
+	expectedErr := "too many settings; increase maxSettings"
+	if err == nil || err.Error() != expectedErr {
+		t.Errorf("expected error :'%s' error, but get : %s", expectedErr, err)
+	}
+}
+func batchRegisterSettings(t *testing.T, keyPrefix string, count int) (name string, err error) {
 	defer func() {
-		// Catch painc error, and convert to error
+		// Catch painc error, and convert to error.
 		if r := recover(); r != nil {
 			// Check exactly what the panic was and create error.
 			switch x := r.(type) {
 			case string:
-				*err = errors.New(x)
+				err = errors.New(x)
 			case error:
-				*err = x
+				err = x
 			default:
-				*err = errors.New("Unknow panic")
+				err = errors.New("Unknow panic")
 			}
 		}
 	}()
-	var name string
 	for i := 0; i < count; i++ {
 		name = fmt.Sprintf("%s_%3d", keyPrefix, i)
 		settings.RegisterValidatedIntSetting(name, "desc", 0, nil)
 	}
-	return name
+	return name, err
 }
