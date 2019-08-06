@@ -31,7 +31,7 @@ type queryBench struct {
 	queryFile       string
 	numRunsPerQuery int
 	useOptimizer    bool
-	useVectorized   bool
+	vectorize       string
 	verbose         bool
 
 	queries []string
@@ -52,14 +52,14 @@ var queryBenchMeta = workload.Meta{
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`query-file`: {RuntimeOnly: true},
 			`optimizer`:  {RuntimeOnly: true},
-			`vectorized`: {RuntimeOnly: true},
+			`vectorize`:  {RuntimeOnly: true},
 			`num-runs`:   {RuntimeOnly: true},
 		}
 		g.flags.StringVar(&g.queryFile, `query-file`, ``, `File of newline separated queries to run`)
 		g.flags.IntVar(&g.numRunsPerQuery, `num-runs`, 0, `Specifies the number of times each query in the query file to be run `+
 			`(note that --duration and --max-ops take precedence, so if duration or max-ops is reached, querybench will exit without honoring --num-runs)`)
 		g.flags.BoolVar(&g.useOptimizer, `optimizer`, true, `Use cost-based optimizer`)
-		g.flags.BoolVar(&g.useVectorized, `vectorized`, false, `Turn experimental vectorized execution on`)
+		g.flags.StringVar(&g.vectorize, `vectorize`, "", `Set vectorize session variable`)
 		g.flags.BoolVar(&g.verbose, `verbose`, true, `Prints out the queries being run as well as histograms`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -121,8 +121,8 @@ func (g *queryBench) Ops(urls []string, reg *histogram.Registry) (workload.Query
 			return workload.QueryLoad{}, err
 		}
 	}
-	if g.useVectorized {
-		_, err := db.Exec("SET experimental_vectorize=on")
+	if g.vectorize != "" {
+		_, err := db.Exec("SET vectorize=%s", g.vectorize)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
