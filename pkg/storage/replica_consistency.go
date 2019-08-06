@@ -544,6 +544,7 @@ func (r *Replica) sha512(
 				return nil, err
 			}
 			kv.Value = v.RawBytes
+			snapshot.KV = append(snapshot.KV, kv)
 		}
 		if _, err := hasher.Write(b); err != nil {
 			return nil, err
