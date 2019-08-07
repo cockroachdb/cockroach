@@ -218,7 +218,7 @@ func decodeTableKeyToCol(
 		} else {
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
 		}
-		vec.Bytes()[idx] = r
+		vec.Bytes().Set(int(idx), r)
 	case types.DateFamily, types.OidFamily:
 		var t int64
 		if dir == sqlbase.IndexDescriptor_ASC {
@@ -325,7 +325,7 @@ func UnmarshalColumnValueToCol(
 	case types.BytesFamily, types.StringFamily:
 		var v []byte
 		v, err = value.GetBytes()
-		vec.Bytes()[idx] = v
+		vec.Bytes().Set(int(idx), v)
 	case types.DateFamily:
 		var v int64
 		v, err = value.GetInt()

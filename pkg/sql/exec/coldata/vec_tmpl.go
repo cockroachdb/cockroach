@@ -23,19 +23,23 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
 // {{/*
 
-// Dummy import to pull in "apd" package.
-var _ apd.Decimal
-
 // _TYPES_T is the template type variable for types.T. It will be replaced by
 // types.Foo for each type Foo in the types.T type.
 const _TYPES_T = types.Unhandled
 
+// Dummy import to pull in "apd" package.
+var _ apd.Decimal
+
 // */}}
+
+// Use execgen package to remove unused import warning.
+var _ interface{} = execgen.GET
 
 func (m *memColumn) Append(args AppendArgs) {
 	switch args.ColType {
@@ -45,15 +49,18 @@ func (m *memColumn) Append(args AppendArgs) {
 		toCol := m._TemplateType()
 		numToAppend := args.SrcEndIdx - args.SrcStartIdx
 		if args.Sel == nil {
-			toCol = append(toCol[:args.DestIdx], fromCol[args.SrcStartIdx:args.SrcEndIdx]...)
+			execgen.APPENDSLICE(toCol, fromCol, int(args.DestIdx), int(args.SrcStartIdx), int(args.SrcEndIdx))
 			m.nulls.Extend(args.Src.Nulls(), args.DestIdx, args.SrcStartIdx, numToAppend)
 		} else {
 			sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-			appendVals := make([]_GOTYPE, len(sel))
-			for i, selIdx := range sel {
-				appendVals[i] = fromCol[selIdx]
+			// TODO(asubiotto): We could be more efficient for fixed width types by
+			// preallocating a destination slice (not so for variable length types).
+			// Improve this.
+			toCol = execgen.SLICE(toCol, 0, int(args.DestIdx))
+			for _, selIdx := range sel {
+				val := execgen.GET(fromCol, int(selIdx))
+				execgen.APPENDVAL(toCol, val)
 			}
-			toCol = append(toCol[:args.DestIdx], appendVals...)
 			// TODO(asubiotto): Change Extend* signatures to allow callers to pass in
 			// SrcEndIdx instead of numToAppend.
 			m.nulls.ExtendWithSel(args.Src.Nulls(), args.DestIdx, args.SrcStartIdx, numToAppend, args.Sel)
@@ -83,23 +90,27 @@ func (m *memColumn) Copy(args CopyArgs) {
 			if args.Nils != nil {
 				if args.Src.MaybeHasNulls() {
 					nulls := args.Src.Nulls()
-					toColSliced := toCol[args.DestIdx:]
+					n := execgen.LEN(toCol)
+					toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
 					for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						if args.Nils[i] || nulls.NullAt64(selIdx) {
 							m.nulls.SetNull64(uint64(i) + args.DestIdx)
 						} else {
-							toColSliced[i] = fromCol[selIdx]
+							v := execgen.GET(fromCol, int(selIdx))
+							execgen.SET(toColSliced, i, v)
 						}
 					}
 					return
 				}
 				// Nils but no Nulls.
-				toColSliced := toCol[args.DestIdx:]
+				n := execgen.LEN(toCol)
+				toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
 				for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 					if args.Nils[i] {
 						m.nulls.SetNull64(uint64(i) + args.DestIdx)
 					} else {
-						toColSliced[i] = fromCol[selIdx]
+						v := execgen.GET(fromCol, int(selIdx))
+						execgen.SET(toColSliced, i, v)
 					}
 				}
 				return
@@ -107,45 +118,53 @@ func (m *memColumn) Copy(args CopyArgs) {
 			// No Nils.
 			if args.Src.MaybeHasNulls() {
 				nulls := args.Src.Nulls()
-				toColSliced := toCol[args.DestIdx:]
+				n := execgen.LEN(toCol)
+				toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
 				for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 					if nulls.NullAt64(selIdx) {
 						m.nulls.SetNull64(uint64(i) + args.DestIdx)
 					} else {
-						toColSliced[i] = fromCol[selIdx]
+						v := execgen.GET(fromCol, int(selIdx))
+						execgen.SET(toColSliced, i, v)
 					}
 				}
 				return
 			}
 			// No Nils or Nulls.
-			toColSliced := toCol[args.DestIdx:]
+			n := execgen.LEN(toCol)
+			toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
 			for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
-				toColSliced[i] = fromCol[selIdx]
+				v := execgen.GET(fromCol, int(selIdx))
+				execgen.SET(toColSliced, i, v)
 			}
 			return
 		} else if args.Sel != nil {
 			sel := args.Sel
 			if args.Src.MaybeHasNulls() {
 				nulls := args.Src.Nulls()
-				toColSliced := toCol[args.DestIdx:]
+				n := execgen.LEN(toCol)
+				toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
 				for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 					if nulls.NullAt64(uint64(selIdx)) {
 						m.nulls.SetNull64(uint64(i) + args.DestIdx)
 					} else {
-						toColSliced[i] = fromCol[selIdx]
+						v := execgen.GET(fromCol, int(selIdx))
+						execgen.SET(toColSliced, i, v)
 					}
 				}
 				return
 			}
 			// No Nulls.
-			toColSliced := toCol[args.DestIdx:]
+			n := execgen.LEN(toCol)
+			toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
 			for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
-				toColSliced[i] = fromCol[selIdx]
+				v := execgen.GET(fromCol, int(selIdx))
+				execgen.SET(toColSliced, i, v)
 			}
 			return
 		}
 		// No Sel or Sel64.
-		copy(toCol[args.DestIdx:], fromCol[args.SrcStartIdx:args.SrcEndIdx])
+		execgen.COPYSLICE(toCol, fromCol, int(args.DestIdx), int(args.SrcStartIdx), int(args.SrcEndIdx))
 		if args.Src.MaybeHasNulls() {
 			// TODO(asubiotto): This should use Extend but Extend only takes uint16
 			// arguments.
@@ -168,7 +187,7 @@ func (m *memColumn) Slice(colType types.T, start uint64, end uint64) Vec {
 	case _TYPES_T:
 		col := m._TemplateType()
 		return &memColumn{
-			col:   col[start:end],
+			col:   execgen.SLICE(col, int(start), int(end)),
 			nulls: m.nulls.Slice(start, end),
 		}
 	// {{end}}
@@ -184,7 +203,9 @@ func (m *memColumn) PrettyValueAt(colIdx uint16, colType types.T) string {
 	switch colType {
 	// {{range .}}
 	case _TYPES_T:
-		return fmt.Sprintf("%v", m._TemplateType()[colIdx])
+		col := m._TemplateType()
+		v := execgen.GET(col, int(colIdx))
+		return fmt.Sprintf("%v", v)
 	// {{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %d", colType))
@@ -196,7 +217,9 @@ func SetValueAt(v Vec, elem interface{}, rowIdx uint16, colType types.T) {
 	switch colType {
 	// {{range .}}
 	case _TYPES_T:
-		v._TemplateType()[rowIdx] = elem.(_GOTYPE)
+		target := v._TemplateType()
+		newVal := elem.(_GOTYPE)
+		execgen.SET(target, int(rowIdx), newVal)
 		// {{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %d", colType))

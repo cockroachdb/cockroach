@@ -52,9 +52,10 @@ func randomVec(rng *rand.Rand, typ types.T, vec coldata.Vec, n int, nullProbabil
 	case types.Bytes:
 		bytes := vec.Bytes()
 		for i := 0; i < n; i++ {
-			bytes[i] = make([]byte, rng.Intn(maxVarLen))
+			randBytes := make([]byte, rng.Intn(maxVarLen))
 			// Read always returns len(bytes[i]) and nil.
-			_, _ = rand.Read(bytes[i])
+			_, _ = rand.Read(randBytes)
+			bytes.Set(i, randBytes)
 		}
 	case types.Decimal:
 		decs := vec.Decimal()

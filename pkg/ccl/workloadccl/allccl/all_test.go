@@ -213,8 +213,9 @@ func hashTableInitialData(
 					_, _ = h.Write(scratch[:8])
 				}
 			case types.Bytes:
-				for _, x := range col.Bytes()[:b.Length()] {
-					_, _ = h.Write(x)
+				colBytes := col.Bytes()
+				for i := 0; i < int(b.Length()); i++ {
+					_, _ = h.Write(colBytes.Get(i))
 				}
 			default:
 				return errors.Errorf(`unhandled type %s`, col.Type())

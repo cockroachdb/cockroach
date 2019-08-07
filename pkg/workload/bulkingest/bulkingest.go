@@ -165,7 +165,7 @@ func (w *bulkingest) Tables() []workload.Table {
 					aCol[rowIdx] = int64(a)
 					bCol[rowIdx] = int64(b)
 					cCol[rowIdx] = int64(c)
-					payloadCol[rowIdx] = payload[off : off+w.payloadBytes]
+					payloadCol.Set(rowIdx, payload[off:off+w.payloadBytes])
 				}
 			},
 		},

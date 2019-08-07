@@ -31,6 +31,7 @@ func genColvec(wr io.Writer) error {
 	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
 	s = strings.Replace(s, "_TYPES_T", "types.{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
+	s = replaceManipulationFuncs(".LTyp", s)
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("vec_op").Parse(s)

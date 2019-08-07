@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
@@ -107,6 +108,11 @@ var _ tree.Datum
 // int64 for types.Int64.
 type _GOTYPE interface{}
 
+// _GOTYPESLICE is the template Go type slice variable for this operator. It
+// will be replaced by the Go slice representation for each type in types.T, for
+// example []int64 for types.Int64.
+type _GOTYPESLICE interface{}
+
 // _TYPES_T is the template type variable for types.T. It will be replaced by
 // types.Foo for each type Foo in the types.T type.
 const _TYPES_T = types.Unhandled
@@ -118,6 +124,9 @@ func _ASSIGN_NE(_, _, _ string) bool {
 }
 
 // */}}
+
+// Use execgen package to remove unused import warning.
+var _ interface{} = execgen.GET
 
 func newSingleOrderedDistinct(
 	input Operator, distinctColIdx int, outputCol []bool, t types.T,
@@ -243,15 +252,15 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 		}
 	} else {
 		// Bounds check elimination.
-		col = col[:n]
+		col = execgen.SLICE(col, 0, int(n))
 		outputCol = outputCol[:n]
-		_ = outputCol[len(col)-1]
+		_ = outputCol[execgen.LEN(col)-1]
 		if nulls != nil {
-			for i := range col {
+			for execgen.RANGE(i, col) {
 				_CHECK_DISTINCT_WITH_NULLS(i, lastVal, col, outputCol)
 			}
 		} else {
-			for i := range col {
+			for execgen.RANGE(i, col) {
 				_CHECK_DISTINCT(i, lastVal, col, outputCol)
 			}
 		}
@@ -270,22 +279,25 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 type partitioner_TYPE struct{}
 
 func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n uint64) {
-	var lastVal _GOTYPE
-	var lastValNull bool
-	var nulls *coldata.Nulls
+	var (
+		lastVal     _GOTYPE
+		lastValNull bool
+		nulls       *coldata.Nulls
+	)
 	if colVec.MaybeHasNulls() {
 		nulls = colVec.Nulls()
 	}
 
-	col := colVec._TemplateType()[:n]
+	col := colVec._TemplateType()
+	col = execgen.SLICE(col, 0, int(n))
 	outputCol = outputCol[:n]
 	outputCol[0] = true
 	if nulls != nil {
-		for i := range col {
+		for execgen.RANGE(i, col) {
 			_CHECK_DISTINCT_WITH_NULLS(i, lastVal, col, outputCol)
 		}
 	} else {
-		for i := range col {
+		for execgen.RANGE(i, col) {
 			_CHECK_DISTINCT(i, lastVal, col, outputCol)
 		}
 	}
@@ -301,7 +313,7 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n uint
 func _CHECK_DISTINCT(i int, lastVal _GOTYPE, col []_GOTYPE, outputCol []bool) { // */}}
 
 	// {{define "checkDistinct"}}
-	v := col[i]
+	v := execgen.GET(col, int(i))
 	var unique bool
 	_ASSIGN_NE(unique, v, lastVal)
 	outputCol[i] = outputCol[i] || unique
@@ -319,7 +331,7 @@ func _CHECK_DISTINCT_WITH_NULLS(i int, lastVal _GOTYPE, col []_GOTYPE, outputCol
 
 	// {{define "checkDistinctWithNulls"}}
 	null := nulls.NullAt(uint16(i))
-	v := col[i]
+	v := execgen.GET(col, int(i))
 	if null != lastValNull {
 		// Either the current value is null and the previous was not or vice-versa.
 		outputCol[i] = true

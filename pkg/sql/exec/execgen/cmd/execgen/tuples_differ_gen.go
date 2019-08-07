@@ -37,6 +37,8 @@ func genTuplesDiffer(wr io.Writer) error {
 	assignNeRe := regexp.MustCompile(`_ASSIGN_NE\((.*),(.*),(.*)\)`)
 	s = assignNeRe.ReplaceAllString(s, "{{.Assign $1 $2 $3}}")
 
+	s = replaceManipulationFuncs(".LTyp", s)
+
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("tuples_differ").Parse(s)
 	if err != nil {
