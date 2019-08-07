@@ -1,4 +1,4 @@
-# LogicTest: local local-opt
+# LogicTest: local
 
 # Check that we auto-retry pushed transactions which can't be refreshed - if
 # they're pushed while we can still auto-retry them.

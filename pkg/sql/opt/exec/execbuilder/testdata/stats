@@ -1,4 +1,4 @@
-# LogicTest: fakedist-opt
+# LogicTest: fakedist
 
 # Tests that verify we retrieve the stats correctly. Note that we can't create
 # statistics if distsql mode is OFF.

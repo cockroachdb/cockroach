@@ -1,4 +1,4 @@
-# LogicTest: fakedist-opt
+# LogicTest: fakedist
 
 statement ok
 CREATE TABLE ab (a INT PRIMARY KEY, b INT); INSERT INTO ab (a, b) VALUES (1, 10)
