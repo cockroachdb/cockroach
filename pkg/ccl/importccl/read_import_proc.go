@@ -377,19 +377,40 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 
 			writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
 			const bufferSize, flushSize = 64 << 20, 16 << 20
-			adder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, bufferSize, flushSize, writeTS)
+
+			// We create two bulk adders so as to combat the excessive flushing of
+			// small SSTs which was observed when using a single adder for both
+			// primary and secondary index kvs. The number of secondary index kvs are
+			// small, and so we expect the indexAdder to flush much less frequently
+			// than the pkIndexAdder.
+			pkIndexAdder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, bufferSize, flushSize, writeTS)
 			if err != nil {
 				return err
 			}
-			defer adder.Close(ctx)
+			pkIndexAdder.SetName("pkIndexAdder")
+			defer pkIndexAdder.Close(ctx)
+
+			indexAdder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, bufferSize, flushSize, writeTS)
+			if err != nil {
+				return err
+			}
+			indexAdder.SetName("indexAdder")
+			defer indexAdder.Close(ctx)
 
 			// Drain the kvCh using the BulkAdder until it closes.
-			if err := ingestKvs(ctx, adder, kvCh); err != nil {
+			if err := ingestKvs(ctx, pkIndexAdder, indexAdder, kvCh); err != nil {
 				return err
 			}
 
-			added := adder.GetSummary()
-			countsBytes, err := protoutil.Marshal(&added)
+			pkAdded := pkIndexAdder.GetSummary()
+			indexAdded := indexAdder.GetSummary()
+			cumulativeAdded := &roachpb.BulkOpSummary{
+				DataSize:      pkAdded.DataSize + indexAdded.DataSize,
+				Rows:          pkAdded.Rows + indexAdded.Rows,
+				IndexEntries:  pkAdded.IndexEntries + indexAdded.IndexEntries,
+				SystemRecords: pkAdded.SystemRecords + indexAdded.SystemRecords}
+
+			countsBytes, err := protoutil.Marshal(cumulativeAdded)
 			if err != nil {
 				return err
 			}
@@ -511,7 +532,10 @@ func wrapRowErr(err error, file string, row int64, code, format string, args ...
 // ingestKvs drains kvs from the channel until it closes, ingesting them using
 // the BulkAdder. It handles the required buffering/sorting/etc.
 func ingestKvs(
-	ctx context.Context, adder storagebase.BulkAdder, kvCh <-chan []roachpb.KeyValue,
+	ctx context.Context,
+	pkIndexAdder storagebase.BulkAdder,
+	indexAdder storagebase.BulkAdder,
+	kvCh <-chan []roachpb.KeyValue,
 ) error {
 	// We insert splits at every index span of the table prior to the invocation
 	// of this method. Since the BulkAdder is split aware when constructing SSTs,
@@ -534,24 +558,44 @@ func ingestKvs(
 	// mentioned above, the KVs sent to the BulkAdder are no longer grouped which
 	// results in flushing a much larger number of small SSTs. This increases the
 	// number of L0 (and total) files, but with a lower memory usage.
-	//
-	// TODO(adityamaru): Once the roachtest import/experimental-direct-ingestion
-	// stabilizes, we can explore a two adder approach where we send primary
-	// indexes to one, and secondary indexes to the other. This should reduce the
-	// number of L0 (and total) files to be comparable to the previous
-	// implementation with pre-buffering.
 	for kvBatch := range kvCh {
 		for _, kv := range kvBatch {
-			if err := adder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
-				if _, ok := err.(storagebase.DuplicateKeyError); ok {
-					return errors.WithStack(err)
+			_, _, indexID, indexErr := sqlbase.DecodeTableIDIndexID(kv.Key)
+			if indexErr != nil {
+				return indexErr
+			}
+
+			// Decide which adder to send the KV to by extracting its index id.
+			//
+			// TODO(adityamaru): There is a potential optimization of plumbing the
+			// different putters, and differentiating based on their type. It might be
+			// more efficient than parsing every kv.
+			if indexID == 1 {
+				if err := pkIndexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
+					if _, ok := err.(storagebase.DuplicateKeyError); ok {
+						return errors.WithStack(err)
+					}
+					return err
 				}
-				return err
+			} else {
+				if err := indexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
+					if _, ok := err.(storagebase.DuplicateKeyError); ok {
+						return errors.WithStack(err)
+					}
+					return err
+				}
 			}
 		}
 	}
 
-	if err := adder.Flush(ctx); err != nil {
+	if err := pkIndexAdder.Flush(ctx); err != nil {
+		if err, ok := err.(storagebase.DuplicateKeyError); ok {
+			return errors.WithStack(err)
+		}
+		return err
+	}
+
+	if err := indexAdder.Flush(ctx); err != nil {
 		if err, ok := err.(storagebase.DuplicateKeyError); ok {
 			return errors.WithStack(err)
 		}

@@ -43,6 +43,8 @@ type BulkAdder interface {
 	// SetDisallowShadowing sets the flag which controls whether shadowing of
 	// existing keys is permitted in the AddSSTable method.
 	SetDisallowShadowing(bool)
+	// SetName sets the name of the adder for the purpose of logging adder stats.
+	SetName(string)
 }
 
 // DuplicateKeyError represents a failed attempt to ingest the same key twice
