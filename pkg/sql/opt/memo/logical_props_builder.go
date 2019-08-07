@@ -107,8 +107,13 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 		rel.Cardinality = props.ZeroCardinality
 	} else if rel.FuncDeps.HasMax1Row() {
 		rel.Cardinality = rel.Cardinality.Limit(1)
-	} else if hardLimit > 0 && hardLimit < math.MaxUint32 {
-		rel.Cardinality = rel.Cardinality.Limit(uint32(hardLimit))
+	} else {
+		if hardLimit > 0 && hardLimit < math.MaxUint32 {
+			rel.Cardinality = rel.Cardinality.Limit(uint32(hardLimit))
+		}
+		if scan.Constraint != nil {
+			b.updateCardinalityFromConstraint(scan.Constraint, rel)
+		}
 	}
 
 	// Statistics
@@ -224,6 +229,8 @@ func (b *logicalPropsBuilder) buildSelectProps(sel *SelectExpr, rel *props.Relat
 		rel.Cardinality = props.ZeroCardinality
 	} else if rel.FuncDeps.HasMax1Row() {
 		rel.Cardinality = rel.Cardinality.Limit(1)
+	} else {
+		b.updateCardinalityFromFilters(sel.Filters, rel)
 	}
 
 	// Statistics
@@ -1531,6 +1538,44 @@ func (b *logicalPropsBuilder) addFiltersToFuncDep(filters FiltersExpr, fdset *pr
 		}
 		constCols := intersection.ExtractConstCols(b.evalCtx)
 		fdset.AddConstants(constCols)
+	}
+}
+
+// updateCardinalityFromFilters determines whether a tight cardinality bound
+// can be determined from the filters, and updates the cardinality accordingly.
+// Specifically, it may be possible to determine a tight bound if the key
+// column(s) are constrained to a finite number of values.
+func (b *logicalPropsBuilder) updateCardinalityFromFilters(
+	filters FiltersExpr, rel *props.Relational,
+) {
+	for i := range filters {
+		filterProps := filters[i].ScalarProps(b.mem)
+		if filterProps.Constraints == nil {
+			continue
+		}
+
+		for j, n := 0, filterProps.Constraints.Length(); j < n; j++ {
+			c := filterProps.Constraints.Constraint(j)
+			b.updateCardinalityFromConstraint(c, rel)
+		}
+	}
+}
+
+// updateCardinalityFromConstraint determines whether a tight cardinality
+// bound can be determined from the constraint, and updates the cardinality
+// accordingly. Specifically, it may be possible to determine a tight bound
+// if the key column(s) are constrained to a finite number of values.
+func (b *logicalPropsBuilder) updateCardinalityFromConstraint(
+	c *constraint.Constraint, rel *props.Relational,
+) {
+	cols := c.Columns.ColSet()
+	if !rel.FuncDeps.ColsAreLaxKey(cols) {
+		return
+	}
+
+	count := c.CalculateMaxResults(b.evalCtx, cols, rel.NotNullCols)
+	if count != 0 && count < math.MaxUint32 {
+		rel.Cardinality = rel.Cardinality.Limit(uint32(count))
 	}
 }
 

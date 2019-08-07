@@ -592,7 +592,7 @@ func (c *Constraint) CalculateMaxResults(
 	// Check if the longest prefix of columns for which all the spans have the
 	// same start and end values covers all columns.
 	prefix := c.Prefix(evalCtx)
-	distinctVals := uint64(1)
+	var distinctVals uint64
 	if prefix < numCols-1 {
 		return 0
 	} else if prefix == numCols-1 {
@@ -624,6 +624,10 @@ func (c *Constraint) CalculateMaxResults(
 			} else {
 				distinctVals += uint64(startVal - endVal)
 			}
+
+			// Add one since both start and end boundaries should be inclusive
+			// (due to Span.PreferInclusive).
+			distinctVals++
 		}
 	} else {
 		distinctVals = uint64(c.Spans.Count())

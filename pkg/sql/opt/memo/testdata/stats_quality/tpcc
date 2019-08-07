@@ -103,6 +103,7 @@ scan item
  ├── save-table-name: new_order_03_scan_1
  ├── columns: i_price:4(decimal) i_name:3(varchar) i_data:5(varchar)  [hidden: i_id:1(int!null)]
  ├── constraint: /1: [/25 - /25] [/50 - /50] [/75 - /75] [/100 - /100] [/125 - /125] [/150 - /150] [/175 - /175] [/200 - /200] [/225 - /225] [/250 - /250] [/275 - /275] [/300 - /300]
+ ├── cardinality: [0 - 12]
  ├── stats: [rows=11.2643678, distinct(1)=11.2643678, null(1)=0, distinct(3)=11.172477, null(3)=0, distinct(4)=11.2585677, null(4)=0, distinct(5)=11.2595726, null(5)=0]
  │   histogram(1)=  0 0.9387 0 0.9387 0 0.9387 0 0.9387 0 0.9387 0 0.9387 0 0.9387 0 0.9387 0 0.9387 0 0.9387 0 0.9387 0 0.9387
  │                <---- 25 ----- 50 ----- 75 ---- 100 ---- 125 ---- 150 ---- 175 ---- 200 ---- 225 ---- 250 ---- 275 ---- 300 -
@@ -136,6 +137,7 @@ ORDER BY s_i_id
 project
  ├── save-table-name: new_order_04_project_1
  ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar) s_dist_05:8(char)  [hidden: s_i_id:1(int!null)]
+ ├── cardinality: [0 - 5]
  ├── stats: [rows=4.98705573, distinct(1)=4.98705573, null(1)=0, distinct(3)=4.85287765, null(3)=0, distinct(8)=4.79176814, null(8)=0, distinct(14)=0.993174353, null(14)=0, distinct(15)=0.993174353, null(15)=0, distinct(16)=0.993174353, null(16)=0, distinct(17)=4.9867867, null(17)=0]
  ├── cost: 6.30369022
  ├── key: (1)
@@ -147,6 +149,7 @@ project
       ├── save-table-name: new_order_04_scan_2
       ├── columns: s_i_id:1(int!null) s_w_id:2(int!null) s_quantity:3(int) s_dist_05:8(char) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar)
       ├── constraint: /2/1: [/4/900 - /4/900] [/4/1000 - /4/1000] [/4/1100 - /4/1100] [/4/1400 - /4/1400] [/4/1500 - /4/1500]
+      ├── cardinality: [0 - 5]
       ├── stats: [rows=4.98705573, distinct(1)=4.98705573, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=4.85287765, null(3)=0, distinct(8)=4.79176814, null(8)=0, distinct(14)=0.993174353, null(14)=0, distinct(15)=0.993174353, null(15)=0, distinct(16)=0.993174353, null(16)=0, distinct(17)=4.9867867, null(17)=0]
       │   histogram(2)=  0 4.9871
       │                <---- 4 --
