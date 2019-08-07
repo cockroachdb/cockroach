@@ -275,7 +275,6 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					1, /* processorID */
 					materializerInput,
 					semtyps,
-					[]int{0},
 					&distsqlpb.PostProcessSpec{},
 					nil, /* output */
 					materializerMetadataSources,
