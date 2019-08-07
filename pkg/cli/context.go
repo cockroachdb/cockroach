@@ -98,7 +98,7 @@ func initCLIDefaults() {
 	debugCtx.inputFile = ""
 	debugCtx.printSystemConfig = false
 	debugCtx.maxResults = 1000
-	debugCtx.ballastSize = base.SizeSpec{}
+	debugCtx.ballastSize = base.SizeSpec{InBytes: 1000000000}
 
 	zoneCtx.zoneConfig = ""
 	zoneCtx.zoneDisableReplication = false
