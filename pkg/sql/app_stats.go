@@ -47,7 +47,8 @@ type appStats struct {
 	st *cluster.Settings
 
 	syncutil.Mutex
-	stmts map[stmtKey]*stmtStats
+	stmts    map[stmtKey]*stmtStats
+	txnStats transactionStats
 }
 
 // stmtStats holds per-statement statistics.
@@ -57,10 +58,23 @@ type stmtStats struct {
 	data roachpb.StatementStatistics
 }
 
+// transactionStats hold per-application transaction statistics.
+type transactionStats struct {
+	syncutil.Mutex
+
+	data roachpb.TxnStats
+}
+
 // stmtStatsEnable determines whether to collect per-statement
 // statistics.
 var stmtStatsEnable = settings.RegisterBoolSetting(
 	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
+)
+
+// txnStatsEnable determines whether to collect per-application transaction
+// statistics.
+var txnStatsEnable = settings.RegisterBoolSetting(
+	"sql.metrics.transaction_details.enabled", "collect per-application transaction statistics", true,
 )
 
 // sqlStatsCollectionLatencyThreshold specifies the minimum amount of time
@@ -199,6 +213,22 @@ func anonymizeStmt(ast tree.Statement) string {
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 }
 
+func (a *appStats) recordTransaction(totalTimeSec float64, committed bool, implicit bool) {
+	if a == nil || !txnStatsEnable.Get(&a.st.SV) {
+		return
+	}
+	a.txnStats.Lock()
+	a.txnStats.data.TxnCount++
+	a.txnStats.data.AggTotalTimeSec += totalTimeSec
+	if committed {
+		a.txnStats.data.CommittedCount++
+	}
+	if implicit {
+		a.txnStats.data.ImplicitCount++
+	}
+	a.txnStats.Unlock()
+}
+
 // sqlStats carries per-application statistics for all applications on
 // each node.
 type sqlStats struct {
@@ -217,7 +247,10 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	if a, ok := s.apps[appName]; ok {
 		return a
 	}
-	a := &appStats{st: s.st, stmts: make(map[stmtKey]*stmtStats)}
+	a := &appStats{
+		st:    s.st,
+		stmts: make(map[stmtKey]*stmtStats),
+	}
 	s.apps[appName] = a
 	return a
 }
@@ -253,8 +286,8 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 			dumpStmtStats(ctx, appName, a.stmts)
 		}
 
-		// Clear the map, to release the memory; make the new map somewhat
-		// already large for the likely future workload.
+		// Clear the map, to release the memory; make the new map somewhat already
+		// large for the likely future workload.
 		a.stmts = make(map[stmtKey]*stmtStats, len(a.stmts)/2)
 		a.Unlock()
 	}

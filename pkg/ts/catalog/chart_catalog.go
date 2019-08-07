@@ -1577,6 +1577,14 @@ var charts = []sectionDescription{
 				},
 				AxisLabel: "Latency",
 			},
+			{
+				Title: "Transaction Latency",
+				Metrics: []string{
+					"sql.txn.latency",
+					"sql.txn.latency.internal",
+				},
+				AxisLabel: "Latency",
+			},
 		},
 	},
 	{

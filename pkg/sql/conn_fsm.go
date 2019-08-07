@@ -268,11 +268,9 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "COMMIT/ROLLBACK, or after a statement running as an implicit txn",
 			Next:        stateNoTxn{},
 			Action: func(args fsm.Args) error {
-				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn()
-				ts.setAdvanceInfo(
-					advanceOne, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
-				return nil
+				return args.Extended.(*txnState).finishTxn(
+					args.Payload.(eventTxnFinishPayload),
+				)
 			},
 		},
 		// Handle the error on COMMIT cases: we move to NoTxn as per Postgres error
@@ -403,11 +401,9 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "ROLLBACK",
 			Next:        stateNoTxn{},
 			Action: func(args fsm.Args) error {
-				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn()
-				ts.setAdvanceInfo(
-					advanceOne, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
-				return nil
+				return args.Extended.(*txnState).finishTxn(
+					args.Payload.(eventTxnFinishPayload),
+				)
 			},
 		},
 		eventNonRetriableErr{IsCommit: fsm.Any}: {
@@ -456,11 +452,9 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "ROLLBACK",
 			Next:        stateNoTxn{},
 			Action: func(args fsm.Args) error {
-				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn()
-				ts.setAdvanceInfo(
-					advanceOne, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
-				return nil
+				return args.Extended.(*txnState).finishTxn(
+					args.Payload.(eventTxnFinishPayload),
+				)
 			},
 		},
 		// ROLLBACK TO SAVEPOINT
@@ -489,11 +483,9 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "COMMIT",
 			Next:        stateNoTxn{},
 			Action: func(args fsm.Args) error {
-				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn()
-				ts.setAdvanceInfo(
-					advanceOne, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
-				return nil
+				return args.Extended.(*txnState).finishTxn(
+					args.Payload.(eventTxnFinishPayload),
+				)
 			},
 		},
 		eventNonRetriableErr{IsCommit: fsm.Any}: {
@@ -545,6 +537,13 @@ func (ts *txnState) noTxnToOpen(
 		payload.tranCtx,
 	)
 	ts.setAdvanceInfo(advCode, noRewind, txnStart)
+	return nil
+}
+
+// finishTxn finishes the transaction. It also calls setAdvanceInfo().
+func (ts *txnState) finishTxn(payload eventTxnFinishPayload) error {
+	ts.finishSQLTxn()
+	ts.setAdvanceInfo(advanceOne, noRewind, payload.toEvent())
 	return nil
 }
 

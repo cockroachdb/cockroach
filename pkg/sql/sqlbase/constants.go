@@ -82,6 +82,7 @@ const (
 	CrdbInternalTableColumnsTableID
 	CrdbInternalTableIndexesTableID
 	CrdbInternalTablesTableID
+	CrdbInternalTxnInfoTableID
 	CrdbInternalZonesTableID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID

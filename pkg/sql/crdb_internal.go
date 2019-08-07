@@ -95,12 +95,12 @@ var crdbInternal = virtualSchema{
 		sqlbase.CrdbInternalTableColumnsTableID:         crdbInternalTableColumnsTable,
 		sqlbase.CrdbInternalTableIndexesTableID:         crdbInternalTableIndexesTable,
 		sqlbase.CrdbInternalTablesTableID:               crdbInternalTablesTable,
+		sqlbase.CrdbInternalTxnInfoTableID:              crdbInternalTxInfoTable,
 		sqlbase.CrdbInternalZonesTableID:                crdbInternalZonesTable,
 	},
 	validWithNoDatabaseContext: true,
 }
 
-// TODO(tbg): prefix with node_.
 var crdbInternalBuildInfoTable = virtualSchemaTable{
 	comment: `detailed identification strings (RAM, local node only)`,
 	schema: `
@@ -134,7 +134,6 @@ CREATE TABLE crdb_internal.node_build_info (
 	},
 }
 
-// TODO(tbg): prefix with node_.
 var crdbInternalRuntimeInfoTable = virtualSchemaTable{
 	comment: `server parameters, useful to construct connection URLs (RAM, local node only)`,
 	schema: `
@@ -565,7 +564,6 @@ func (s stmtList) Less(i, j int) bool {
 	return s[i].stmt < s[j].stmt
 }
 
-// TODO(tbg): prefix with node_.
 var crdbInternalStmtStatsTable = virtualSchemaTable{
 	comment: `statement statistics (RAM; local node only)`,
 	schema: `
@@ -631,6 +629,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				stmtKeys = append(stmtKeys, k)
 			}
 			appStats.Unlock()
+			sort.Sort(stmtKeys)
 
 			// Now retrieve the per-stmt stats proper.
 			for _, stmtKey := range stmtKeys {
@@ -677,6 +676,62 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				if err != nil {
 					return err
 				}
+			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalTxInfoTable = virtualSchemaTable{
+	comment: `per-application transaction statistics (in-memory, not durable; local node only)`,
+	schema: `
+CREATE TABLE crdb_internal.node_txn_stats (
+  node_id            INT NOT NULL,
+  application_name   STRING NOT NULL,
+  txn_count          INT NOT NULL,
+  agg_total_time_sec FLOAT NOT NULL,
+  committed_count    INT NOT NULL,
+  implicit_count     INT NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		if err := p.RequireAdminRole(ctx, "access application statistics"); err != nil {
+			return err
+		}
+
+		sqlStats := p.statsCollector.SQLStats()
+		if sqlStats == nil {
+			return errors.AssertionFailedf(
+				"cannot access sql statistics from this context")
+		}
+
+		leaseMgr := p.LeaseMgr()
+		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.nodeIDContainer.Get())))
+
+		// Retrieve the application names and sort them to ensure the
+		// output is deterministic.
+		var appNames []string
+		sqlStats.Lock()
+		for n := range sqlStats.apps {
+			appNames = append(appNames, n)
+		}
+		sqlStats.Unlock()
+		sort.Strings(appNames)
+
+		for _, appName := range appNames {
+			appStats := sqlStats.getStatsForApplication(appName)
+			s := appStats.txnStats
+			s.Lock()
+			err := addRow(
+				nodeID,
+				tree.NewDString(appName),
+				tree.NewDInt(tree.DInt(s.data.TxnCount)),
+				tree.NewDFloat(tree.DFloat(s.data.AggTotalTimeSec)),
+				tree.NewDInt(tree.DInt(s.data.CommittedCount)),
+				tree.NewDInt(tree.DInt(s.data.ImplicitCount)),
+			)
+			s.Unlock()
+			if err != nil {
+				return err
 			}
 		}
 		return nil
