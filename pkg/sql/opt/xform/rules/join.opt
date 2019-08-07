@@ -38,6 +38,48 @@
 =>
 (LeftJoin $right $left $on $private)
 
+# CommuteSemiJoin generates an inner join that is equivalent to the SemiJoin.
+# Semijoin imposes a partial order on the joining tables but we can convert this
+# a SemiJoin into an InnerJoin by applying a DistinctOn operator on the selected
+# rows of the RHS and by relaxing the partial join order restriction.
+# And so the join orders (A SemiJoin B) and (Distinct(B) InnerJoin A) are both
+# considered by the optimizer. This is useful as a different join order may
+# allow other rules to trigger. A common case is that, it would allow the inner
+# join to use a lookup join in some cases (where A has much higher cardinality than
+# B).
+#
+# We only do this when the On conditions guarantee that for each row in the LHS
+# there is at most one unique matching row in the RHS. This is guaranteed when
+# the On clause is comprised of simple equalities. We need this because a SemiJoin
+# emits a maximum of one row for every matching row in the LHS.
+#
+# Citations: [7] (see section 2.1.1)
+[CommuteSemiJoin, Explore]
+(SemiJoin
+    $left:*
+    $right:*
+    $on:* & (IsSimpleEquality $on)
+    $private:* & (NoJoinHints $private)
+)
+=>
+(Project
+    (InnerJoin
+        $left
+        (DistinctOn
+            $right
+            []
+            (MakeGrouping (IntersectionCols
+                (OutputCols $right)
+                (FilterOuterCols $on))
+            )
+        )
+        $on
+        $private
+    )
+    []
+    (OutputCols $left)
+)
+
 # GenerateMergeJoins creates MergeJoin operators for the join, using the
 # interesting orderings property.
 [GenerateMergeJoins, Explore]

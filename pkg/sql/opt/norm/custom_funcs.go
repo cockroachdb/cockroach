@@ -313,6 +313,11 @@ func (c *CustomFuncs) ColsIntersect(left, right opt.ColSet) bool {
 	return left.Intersects(right)
 }
 
+// IntersectionCols returns the intersection of the left and right column sets.
+func (c *CustomFuncs) IntersectionCols(left, right opt.ColSet) opt.ColSet {
+	return left.Intersection(right)
+}
+
 // UnionCols returns the union of the left and right column sets.
 func (c *CustomFuncs) UnionCols(left, right opt.ColSet) opt.ColSet {
 	return left.Union(right)
