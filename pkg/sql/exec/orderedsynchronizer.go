@@ -20,9 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
-var _ StaticMemoryOperator = &OrderedSynchronizer{}
-var _ Operator = &OrderedSynchronizer{}
-
 // OrderedSynchronizer receives rows from multiple inputs and produces a single
 // stream of rows, ordered according to a set of columns. The rows in each input
 // stream are assumed to be ordered according to the same set of columns.
@@ -39,6 +36,8 @@ type OrderedSynchronizer struct {
 	comparators []vecComparator
 	output      coldata.Batch
 }
+
+var _ StaticMemoryOperator = &OrderedSynchronizer{}
 
 // ChildCount implements the OpNode interface.
 func (o *OrderedSynchronizer) ChildCount() int {

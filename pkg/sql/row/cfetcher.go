@@ -226,6 +226,10 @@ type CFetcher struct {
 		// having to call batch.Vec too often in the tight loop.
 		colvecs []coldata.Vec
 	}
+
+	// estimatedStaticMemoryUsage is the best guess about how much memory the
+	// CFetcher will use.
+	estimatedStaticMemoryUsage int
 }
 
 // Init sets up a Fetcher for a given table and index. If we are using a
@@ -283,6 +287,7 @@ func (rf *CFetcher) Init(
 	}
 	rf.machine.batch = coldata.NewMemBatch(typs)
 	rf.machine.colvecs = rf.machine.batch.ColVecs()
+	rf.estimatedStaticMemoryUsage = exec.EstimateBatchSizeBytes(typs, coldata.BatchSize)
 
 	var err error
 
@@ -1142,4 +1147,10 @@ func (rf *CFetcher) getCurrentColumnFamilyID() (sqlbase.FamilyID, error) {
 		return 0, scrub.WrapError(scrub.IndexKeyDecodingError, err)
 	}
 	return sqlbase.FamilyID(id), nil
+}
+
+// EstimateStaticMemoryUsage estimates how much memory is pre-allocated by the
+// CFetcher.
+func (rf *CFetcher) EstimateStaticMemoryUsage() int {
+	return rf.estimatedStaticMemoryUsage
 }
