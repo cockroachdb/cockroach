@@ -605,7 +605,7 @@ func registerKVRangeLookups(r *testRegistry) {
 		workloadType              rangeLookupWorkloadType
 		maximumRangeLookupsPerSec float64
 	}{
-		{2, splitWorkload, 10.0},
+		{2, splitWorkload, 15.0},
 		// Relocates are expected to fail periodically when relocating random
 		// ranges, so use more workers.
 		{4, relocateWorkload, 50.0},
