@@ -310,7 +310,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 		// Use Int63 so we don't have headaches converting to DInt.
 		rank := uint64(rng.Int63())
-		if err := s.sr.SampleRow(ctx, row, rank); err != nil {
+		if err := s.sr.SampleRow(ctx, s.evalCtx, row, rank); err != nil {
 			return false, err
 		}
 	}

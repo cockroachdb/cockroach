@@ -13,7 +13,9 @@ package stats
 import (
 	"container/heap"
 	"context"
+	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -81,7 +83,7 @@ func (sr *SampleReservoir) Pop() interface{} { panic("unimplemented") }
 
 // SampleRow looks at a row and either drops it or adds it to the reservoir.
 func (sr *SampleReservoir) SampleRow(
-	ctx context.Context, row sqlbase.EncDatumRow, rank uint64,
+	ctx context.Context, evalCtx *tree.EvalContext, row sqlbase.EncDatumRow, rank uint64,
 ) error {
 	if len(sr.samples) < cap(sr.samples) {
 		// We haven't accumulated enough rows yet, just append.
@@ -94,7 +96,7 @@ func (sr *SampleReservoir) SampleRow(
 				return err
 			}
 		}
-		if err := sr.copyRow(ctx, rowCopy, row); err != nil {
+		if err := sr.copyRow(ctx, evalCtx, rowCopy, row); err != nil {
 			return err
 		}
 		sr.samples = append(sr.samples, SampledRow{Row: rowCopy, Rank: rank})
@@ -106,7 +108,7 @@ func (sr *SampleReservoir) SampleRow(
 	}
 	// Replace the max rank if ours is smaller.
 	if len(sr.samples) > 0 && rank < sr.samples[0].Rank {
-		if err := sr.copyRow(ctx, sr.samples[0].Row, row); err != nil {
+		if err := sr.copyRow(ctx, evalCtx, sr.samples[0].Row, row); err != nil {
 			return err
 		}
 		sr.samples[0].Rank = rank
@@ -120,7 +122,9 @@ func (sr *SampleReservoir) Get() []SampledRow {
 	return sr.samples
 }
 
-func (sr *SampleReservoir) copyRow(ctx context.Context, dst, src sqlbase.EncDatumRow) error {
+func (sr *SampleReservoir) copyRow(
+	ctx context.Context, evalCtx *tree.EvalContext, dst, src sqlbase.EncDatumRow,
+) error {
 	for i := range src {
 		// Copy only the decoded datum to ensure that we remove any reference to
 		// the encoded bytes. The encoded bytes would have been scanned in a batch
@@ -131,6 +135,7 @@ func (sr *SampleReservoir) copyRow(ctx context.Context, dst, src sqlbase.EncDatu
 		}
 		beforeSize := dst[i].Size()
 		dst[i] = sqlbase.DatumToEncDatum(&sr.colTypes[i], src[i].Datum)
+		dst[i].Datum = truncateDatum(evalCtx, dst[i].Datum, maxBytesPerSample)
 		// Perform memory accounting.
 		if afterSize := dst[i].Size(); sr.memAcc != nil && afterSize > beforeSize {
 			if err := sr.memAcc.Grow(ctx, int64(afterSize-beforeSize)); err != nil {
@@ -140,4 +145,50 @@ func (sr *SampleReservoir) copyRow(ctx context.Context, dst, src sqlbase.EncDatu
 
 	}
 	return nil
+}
+
+const maxBytesPerSample = 400
+
+// truncateDatum truncates large datums to avoid using excessive memory or disk
+// space.
+func truncateDatum(evalCtx *tree.EvalContext, d tree.Datum, maxBytes int) tree.Datum {
+	if d.Size() <= uintptr(maxBytes) {
+		return d
+	}
+
+	switch t := d.(type) {
+	case *tree.DBitArray:
+		b := tree.DBitArray{BitArray: t.ToWidth(uint(maxBytes * 8))}
+		return &b
+
+	case *tree.DBytes:
+		b := make([]byte, maxBytes)
+		copy(b, []byte(*t)[:maxBytes])
+		return tree.NewDBytes(tree.DBytes(b))
+
+	case *tree.DString:
+		var r rune
+		maxLen := uintptr(maxBytes) / unsafe.Sizeof(r)
+
+		s := make([]rune, maxLen)
+		copy(s, []rune(*t)[:maxLen])
+		return tree.NewDString(string(s))
+
+	case *tree.DCollatedString:
+		var r rune
+		maxLen := uintptr(maxBytes) / unsafe.Sizeof(r)
+
+		contents := make([]rune, maxLen)
+		copy(contents, []rune((*t).Contents)[:maxLen])
+
+		// Note: this will end up being larger than maxBytes due to the key and
+		// locale, so this is just a best-effort attempt to limit the size.
+		return tree.NewDCollatedString(string(contents), t.Locale, &evalCtx.CollationEnv)
+
+	default:
+		// It's not easy to truncate other types (e.g. Decimal).
+		// TODO(rytaft): If the total memory limit is exceeded then the histogram
+		// should not be constructed.
+		return d
+	}
 }
