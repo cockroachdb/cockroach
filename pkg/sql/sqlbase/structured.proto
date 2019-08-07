@@ -84,13 +84,24 @@ message ForeignKeyConstraint {
   // the addition of this value, MATCH SIMPLE will be used.
   optional ForeignKeyReference.Match match = 9 [(gogoproto.nullable) = false];
 
+  // LegacyOriginIndex is the ID of the index used for the FK on the origin
+  // table. In versions 19.1 and earlier, foreign keys were represented by
+  // fields on the index that they use. In versions 19.2 and later, we preserve
+  // the semantics of the older FKs which were tied to indexes by specifying
+  // the index as a field on this proto, since the migration process to have
+  // top-level FK fields on the table descriptor requires two releases. In 20.1,
+  // when all 19.2 nodes will be correctly handling the new FK representation,
+  // we will perform a migration to upgrade all table descriptors.
+  optional uint32 legacy_origin_index = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  // LegacyReferencedIndex is the ID of the index used for the FK on the
+  // referenced side. See the comment for LegacyOriginIndex.
+  optional uint32 legacy_referenced_index = 11 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
   // These fields are set when upgrading an old-style FK (stored on the index)
   // into this kind. The purpose is to permit validation that downgrading this
   // representation to the old representation (which happens when the cluster
   // is in a mixed-version state containing VersionTopLevelForeignKeys) was done
   // without creating any accidental changes to the foreign key references.
-  optional uint32 legacy_origin_index = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID", deprecated = true];
-  optional uint32 legacy_referenced_index = 11 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID", deprecated = true];
+  // They are only read and written in a mixed 19.1/19.2 cluster.
   optional ForeignKeyReference legacy_upgraded_from_origin_reference = 12 [(gogoproto.nullable) = false, deprecated = true];
   optional ForeignKeyReference legacy_upgraded_from_referenced_reference = 13 [(gogoproto.nullable) = false, deprecated = true];
 }
@@ -384,8 +395,8 @@ message ConstraintToUpdate {
   required string name = 2 [(gogoproto.nullable) = false];
   optional TableDescriptor.CheckConstraint check = 3 [(gogoproto.nullable) = false];
   // All fields past 3 haven't been persisted before 19.2.
-  optional ForeignKeyReference foreign_key = 4 [(gogoproto.nullable) = false];
-  optional uint32 foreign_key_index = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  optional ForeignKeyConstraint foreign_key = 4 [(gogoproto.nullable) = false];
+  reserved 5;
   optional uint32 not_null_column = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
 }
 

@@ -46,17 +46,15 @@ func printForeignKeyConstraint(
 	ctx context.Context,
 	buf *bytes.Buffer,
 	dbPrefix string,
-	idx *sqlbase.IndexDescriptor,
+	originTable *sqlbase.TableDescriptor,
+	fk *sqlbase.ForeignKeyConstraint,
 	lCtx *internalLookupCtx,
 ) error {
-	fk := &idx.ForeignKey
-	if !fk.IsSet() {
-		return nil
-	}
 	var refNames []string
+	var originNames []string
 	var fkTableName tree.TableName
 	if lCtx != nil {
-		fkTable, err := lCtx.getTableByID(fk.Table)
+		fkTable, err := lCtx.getTableByID(fk.ReferencedTableID)
 		if err != nil {
 			return err
 		}
@@ -64,20 +62,24 @@ func printForeignKeyConstraint(
 		if err != nil {
 			return err
 		}
-		fkIdx, err := fkTable.FindIndexByID(fk.Index)
+		refNames, err = fkTable.NamesForColumnIDs(fk.ReferencedColumnIDs)
 		if err != nil {
 			return err
 		}
-		refNames = fkIdx.ColumnNames
 		fkTableName = tree.MakeTableName(tree.Name(fkDb.Name), tree.Name(fkTable.Name))
 		fkTableName.ExplicitSchema = fkDb.Name != dbPrefix
+		originNames, err = originTable.NamesForColumnIDs(fk.OriginColumnIDs)
+		if err != nil {
+			return err
+		}
 	} else {
 		refNames = []string{"???"}
-		fkTableName = tree.MakeTableName(tree.Name(""), tree.Name(fmt.Sprintf("[%d as ref]", fk.Table)))
+		originNames = []string{"???"}
+		fkTableName = tree.MakeTableName(tree.Name(""), tree.Name(fmt.Sprintf("[%d as ref]", fk.ReferencedTableID)))
 		fkTableName.ExplicitSchema = false
 	}
 	buf.WriteString("FOREIGN KEY (")
-	formatQuoteNames(buf, idx.ColumnNames[0:idx.ForeignKey.SharedPrefixLen]...)
+	formatQuoteNames(buf, originNames...)
 	buf.WriteString(") REFERENCES ")
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
 	fmtCtx.FormatNode(&fkTableName)
@@ -85,7 +87,6 @@ func printForeignKeyConstraint(
 	buf.WriteString("(")
 	formatQuoteNames(buf, refNames...)
 	buf.WriteByte(')')
-	idx.ColNamesString()
 	// We omit MATCH SIMPLE because it is the default.
 	if fk.Match != sqlbase.ForeignKeyReference_SIMPLE {
 		buf.WriteByte(' ')
@@ -183,24 +184,28 @@ func ShowCreateTable(
 		f.WriteString(" ")
 		f.WriteString(desc.PrimaryKeyString())
 	}
-	allIdx := append(desc.Indexes, desc.PrimaryIndex)
-	for i := range allIdx {
-		idx := &allIdx[i]
-		// TODO (lucy): Possibly include FKs being validated here
-		if fk := &idx.ForeignKey; fk.IsSet() && ignoreFKs != IgnoreFKs {
-			foreignKey := tree.NewFmtCtx(tree.FmtSimple)
-			foreignKey.WriteString(",\n\tCONSTRAINT ")
-			foreignKey.FormatNameP(&fk.Name)
-			foreignKey.WriteString(" ")
-			if err := printForeignKeyConstraint(ctx, &foreignKey.Buffer, dbPrefix, idx, lCtx); err != nil {
+	// TODO (lucy): Possibly include FKs in the mutations list here, or else
+	// exclude check mutations below, for consistency.
+	if ignoreFKs != IgnoreFKs {
+		for i := range desc.OutboundFKs {
+			fkCtx := tree.NewFmtCtx(tree.FmtSimple)
+			fk := &desc.OutboundFKs[i]
+			fkCtx.WriteString(",\n\tCONSTRAINT ")
+			fkCtx.FormatNameP(&fk.Name)
+			fkCtx.WriteString(" ")
+			if err := printForeignKeyConstraint(ctx, &fkCtx.Buffer, dbPrefix, desc, fk, lCtx); err != nil {
 				if ignoreFKs == IgnoreMissingFKs {
 					continue
 				} else { // When ignoreFKs == IncludeFKs.
 					return "", err
 				}
 			}
-			f.WriteString(foreignKey.String())
+			f.WriteString(fkCtx.String())
 		}
+	}
+	allIdx := append(desc.Indexes, desc.PrimaryIndex)
+	for i := range allIdx {
+		idx := &allIdx[i]
 		if idx.ID != desc.PrimaryIndex.ID {
 			// Showing the primary index is handled above.
 			f.WriteString(",\n\t")

@@ -110,7 +110,6 @@ TABLE child
  └── CONSTRAINT fk FOREIGN KEY child (p, q, r) REFERENCES parent (p, q, r) MATCH FULL
 scan child
 
-# TODO(lucy/jordan/radu): the inbound foreign key reference is borked.
 query T
 EXPLAIN (OPT, CATALOG) SELECT * from parent
 ----
@@ -123,5 +122,5 @@ TABLE parent
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
- └── REFERENCED BY CONSTRAINT  FOREIGN KEY child () REFERENCES parent ()
+ └── REFERENCED BY CONSTRAINT fk FOREIGN KEY child (p, q, r) REFERENCES parent (p, q, r)
 scan parent
