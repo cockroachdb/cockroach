@@ -839,22 +839,20 @@ func (sm *replicaStateMachine) ApplySideEffects(
 
 	// Mark the command as applied and return it as an apply.AppliedCommand.
 	if cmd.IsLocal() {
-		if !cmd.Rejected() && cmd.raftCmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex {
-			log.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index")
-		}
-		if cmd.proposal.applied {
-			// If the command already applied then we shouldn't be "finishing" its
-			// application again because it should only be able to apply successfully
-			// once. We expect that when any reproposal for the same command attempts
-			// to apply it will be rejected by the below raft lease sequence or lease
-			// index check in checkForcedErr.
-			if !cmd.Rejected() {
+		if !cmd.Rejected() {
+			if cmd.raftCmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex {
+				log.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index")
+			}
+			if cmd.proposal.applied {
+				// If the command already applied then we shouldn't be "finishing" its
+				// application again because it should only be able to apply successfully
+				// once. We expect that when any reproposal for the same command attempts
+				// to apply it will be rejected by the below raft lease sequence or lease
+				// index check in checkForcedErr.
 				log.Fatalf(ctx, "command already applied: %+v; unexpected successful result", cmd)
 			}
-			cmd.proposal = nil
-		} else {
-			cmd.proposal.applied = true
 		}
+		cmd.proposal.applied = true
 	}
 	return cmd, nil
 }
