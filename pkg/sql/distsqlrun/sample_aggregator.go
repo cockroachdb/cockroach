@@ -229,7 +229,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 				return false, errors.NewAssertionErrorWithWrappedErrf(err, "decoding rank column")
 			}
 			// Retain the rows with the top ranks.
-			if err := s.sr.SampleRow(ctx, row[:s.rankCol], uint64(rank)); err != nil {
+			if err := s.sr.SampleRow(ctx, s.evalCtx, row[:s.rankCol], uint64(rank)); err != nil {
 				return false, err
 			}
 			continue

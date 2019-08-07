@@ -17,6 +17,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -25,13 +26,13 @@ import (
 
 // runSampleTest feeds rows with the given ranks through a reservoir
 // of a given size and verifies the results are correct.
-func runSampleTest(t *testing.T, numSamples int, ranks []int) {
+func runSampleTest(t *testing.T, evalCtx *tree.EvalContext, numSamples int, ranks []int) {
 	ctx := context.Background()
 	var sr SampleReservoir
 	sr.Init(numSamples, []types.T{*types.Int}, nil /* memAcc */)
 	for _, r := range ranks {
 		d := sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(r)))
-		if err := sr.SampleRow(ctx, sqlbase.EncDatumRow{d}, uint64(r)); err != nil {
+		if err := sr.SampleRow(ctx, evalCtx, sqlbase.EncDatumRow{d}, uint64(r)); err != nil {
 			t.Errorf("%v", err)
 		}
 	}
@@ -62,6 +63,7 @@ func runSampleTest(t *testing.T, numSamples int, ranks []int) {
 }
 
 func TestSampleReservoir(t *testing.T) {
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, n := range []int{10, 100, 1000, 10000} {
 		rng, _ := randutil.NewPseudoRand()
 		ranks := make([]int, n)
@@ -70,8 +72,44 @@ func TestSampleReservoir(t *testing.T) {
 		}
 		for _, k := range []int{1, 5, 10, 100} {
 			t.Run(fmt.Sprintf("%d/%d", n, k), func(t *testing.T) {
-				runSampleTest(t, k, ranks)
+				runSampleTest(t, &evalCtx, k, ranks)
 			})
 		}
 	}
+}
+
+func TestTruncateDatum(t *testing.T) {
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	runTest := func(d, expected tree.Datum) {
+		actual := truncateDatum(&evalCtx, d, 10 /* maxBytes */)
+		if actual.Compare(&evalCtx, expected) != 0 {
+			t.Fatalf("expected %s but found %s", expected.String(), actual.String())
+		}
+	}
+
+	original1, err := tree.ParseDBitArray("0110110101111100001100110110101111100001100110110101111" +
+		"10000110011011010111110000110011011010111110000110011011010111110000110")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected1, err := tree.ParseDBitArray("0110110101111100001100110110101111100001100110110101111" +
+		"1000011001101101011111000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runTest(original1, expected1)
+
+	original2 := tree.DBytes("deadbeef1234567890")
+	expected2 := tree.DBytes("deadbeef12")
+	runTest(&original2, &expected2)
+
+	original3 := tree.DString("Hello 世界")
+	expected3 := tree.DString("Hello 世")
+	runTest(&original3, &expected3)
+
+	original4 := tree.NewDCollatedString(`IT was lovely summer weather in the country, and the golden
+corn, the green oats, and the haystacks piled up in the meadows looked beautiful`,
+		"en_US", &tree.CollationEnvironment{})
+	expected4 := tree.NewDCollatedString("IT was lov", "en_US", &tree.CollationEnvironment{})
+	runTest(original4, expected4)
 }
