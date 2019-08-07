@@ -1116,11 +1116,12 @@ func (rf *CFetcher) fillNulls() error {
 // GetRangesInfo returns information about the ranges where the rows came from.
 // The RangeInfo's are deduped and not ordered.
 func (rf *CFetcher) GetRangesInfo() []roachpb.RangeInfo {
-	if rf == nil {
+	f := rf.fetcher.kvBatchFetcher
+	if f == nil {
 		// Not yet initialized.
 		return nil
 	}
-	return rf.fetcher.getRangesInfo()
+	return f.getRangesInfo()
 }
 
 // getCurrentColumnFamilyID returns the column family id of the key in
