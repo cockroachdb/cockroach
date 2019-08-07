@@ -17,38 +17,34 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestEntryApplicationStateBuf verifies the entryApplicationStateBuf behavior.
-func TestApplicationStateBuf(t *testing.T) {
+// TestReplicatedCmdBuf verifies the replicatedCmdBuf behavior.
+func TestReplicatedCmdBuf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var buf cmdAppCtxBuf
+	var buf replicatedCmdBuf
 	// numStates is chosen arbitrarily.
-	const numStates = 5*cmdAppCtxBufNodeSize + 1
+	const numStates = 5*replicatedCmdBufNodeSize + 1
 	// Test that the len field is properly updated.
-	var states []*cmdAppCtx
+	var states []*replicatedCmd
 	for i := 0; i < numStates; i++ {
 		assert.Equal(t, i, int(buf.len))
 		states = append(states, buf.allocate())
 		assert.Equal(t, i+1, int(buf.len))
 	}
-	// Test that last returns the correct value.
-	last := states[len(states)-1]
-	assert.Equal(t, last, buf.last())
 	// Test the iterator.
-	var it cmdAppCtxBufIterator
+	var it replicatedCmdBufSlice
 	i := 0
-	for ok := it.init(&buf); ok; ok = it.next() {
+	for it.init(&buf); it.Valid(); it.Next() {
 		assert.Equal(t, states[i], it.cur())
 		i++
 	}
 	assert.Equal(t, i, numStates) // make sure we saw them all
-	assert.True(t, it.isLast())
 	// Test clear.
 	buf.clear()
-	assert.EqualValues(t, buf, cmdAppCtxBuf{})
+	assert.EqualValues(t, buf, replicatedCmdBuf{})
 	assert.Equal(t, 0, int(buf.len))
-	assert.Panics(t, func() { buf.last() })
-	assert.False(t, it.init(&buf))
+	it.init(&buf)
+	assert.False(t, it.Valid())
 	// Test clear on an empty buffer.
 	buf.clear()
-	assert.EqualValues(t, buf, cmdAppCtxBuf{})
+	assert.EqualValues(t, buf, replicatedCmdBuf{})
 }

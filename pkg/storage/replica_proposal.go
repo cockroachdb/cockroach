@@ -127,19 +127,6 @@ type ProposalData struct {
 // is canceled, it won't be listening to this done channel, and so it can't be
 // counted on to invoke endCmds itself.)
 func (proposal *ProposalData) finishApplication(pr proposalResult) {
-	if proposal.applied {
-		// If the command already applied then we shouldn't be "finishing" its
-		// application again because it should only be able to apply successfully
-		// once. We expect that when any reproposal for the same command attempts
-		// to apply it will be rejected by the below raft lease sequence or lease
-		// index check in checkForcedErr.
-		if pr.Err != nil {
-			return
-		}
-		log.Fatalf(proposal.ctx,
-			"command already applied: %+v; unexpected successful result: %+v", proposal, pr)
-	}
-	proposal.applied = true
 	proposal.ec.done(proposal.Request, pr.Reply, pr.Err)
 	proposal.signalProposalResult(pr)
 	if proposal.sp != nil {
@@ -161,7 +148,8 @@ func (proposal *ProposalData) signalProposalResult(pr proposalResult) {
 
 // TODO(tschottdorf): we should find new homes for the checksum, lease
 // code, and various others below to leave here only the core logic.
-// Not moving anything right now to avoid awkward diffs.
+// Not moving anything right now to avoid awkward diffs. These should
+// all be moved to replica_application_result.go.
 
 func (r *Replica) gcOldChecksumEntriesLocked(now time.Time) {
 	for id, val := range r.mu.checksums {
