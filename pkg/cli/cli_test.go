@@ -2139,12 +2139,13 @@ writing ` + os.DevNull + `
   debug/nodes/1/crdb_internal.gossip_network.txt
   debug/nodes/1/crdb_internal.gossip_nodes.txt
   debug/nodes/1/crdb_internal.leases.txt
-  debug/nodes/1/crdb_internal.node_statement_statistics.txt
   debug/nodes/1/crdb_internal.node_build_info.txt
   debug/nodes/1/crdb_internal.node_metrics.txt
   debug/nodes/1/crdb_internal.node_queries.txt
   debug/nodes/1/crdb_internal.node_runtime_info.txt
   debug/nodes/1/crdb_internal.node_sessions.txt
+  debug/nodes/1/crdb_internal.node_statement_statistics.txt
+  debug/nodes/1/crdb_internal.node_txn_stats.txt
   debug/nodes/1/details.json
   debug/nodes/1/gossip.json
   debug/nodes/1/enginestats.json

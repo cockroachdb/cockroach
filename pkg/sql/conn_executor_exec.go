@@ -362,6 +362,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
+	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS, stmt.NumAnnotations)
 
 	if os.ImplicitTxn.Get() {
@@ -608,7 +609,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 ) error {
 	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
-	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
+	ex.statsCollector.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
 
 	// Prepare the plan. Note, the error is processed below. Everything
 	// between here and there needs to happen even if there's an error.
@@ -635,10 +636,17 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	defer func() {
-		planner.maybeLogStatement(ctx, "exec", ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err())
+		planner.maybeLogStatement(
+			ctx,
+			"exec",
+			ex.extraTxnState.autoRetryCounter,
+			res.RowsAffected(),
+			res.Err(),
+			ex.statsCollector.phaseTimes[sessionQueryReceived],
+		)
 	}()
 
-	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
+	ex.statsCollector.phaseTimes[plannerEndLogicalPlan] = timeutil.Now()
 	ex.sessionTracing.TracePlanEnd(ctx, err)
 
 	// Finally, process the planning error from above.
@@ -667,7 +675,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ex.server.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String())
 	}
 
-	planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
+	ex.statsCollector.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 
 	ex.mu.Lock()
 	queryMeta, ok := ex.mu.ActiveQueries[stmt.queryID]
@@ -699,7 +707,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	bytesRead, rowsRead, err := ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
-	planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
+	ex.statsCollector.phaseTimes[plannerEndExecStmt] = timeutil.Now()
 
 	// Record the statement summary. This also closes the plan if the
 	// plan has not been closed earlier.
@@ -846,6 +854,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 		rwMode = ex.readWriteModeWithSessionDefault(s.Modes.ReadWriteMode)
 		return rwMode, now.GoTime(), nil, nil
 	}
+	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 	p := &ex.planner
 	ex.resetPlanner(ctx, p, nil /* txn */, now.GoTime(), 0 /* numAnnotations */)
 	ts, err := p.EvalAsOfTimestamp(s.Modes.AsOf)
@@ -1267,4 +1276,30 @@ func (ex *connExecutor) validateSavepointName(savepoint tree.Name) error {
 				"with SET force_savepoint_restart=true")
 	}
 	return nil
+}
+
+// recordTransactionStart records the start of the transaction and returns a
+// closure to be called once the transaction finishes.
+func (ex *connExecutor) recordTransactionStart() func(txnEvent) {
+	// We don't need to write down the transaction start time into
+	// ex.statsCollector.phaseTimes because it will be overwritten in
+	// ex.statsCollector.reset() before executing the statements of the
+	// transaction.
+	ex.phaseTimes[transactionStart] = timeutil.Now()
+	implicit := ex.implicitTxn()
+	return func(ev txnEvent) { ex.recordTransaction(ev, implicit) }
+}
+
+func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool) {
+	phaseTimes := ex.statsCollector.phaseTimes
+	phaseTimes[transactionEnd] = timeutil.Now()
+	txnStart := phaseTimes[transactionStart]
+	txnEnd := phaseTimes[transactionEnd]
+	txnTime := txnEnd.Sub(txnStart)
+	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
+	ex.statsCollector.recordTransaction(
+		txnTime.Seconds(),
+		ev,
+		implicit,
+	)
 }
