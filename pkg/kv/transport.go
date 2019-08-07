@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -30,6 +30,7 @@ import (
 // more replicas, depending on error conditions and how many successful
 // responses are required.
 type SendOptions struct {
+	class   rpc.ConnectionClass
 	metrics *DistSenderMetrics
 }
 
@@ -51,7 +52,9 @@ type batchClient struct {
 //
 // TODO(bdarnell): clean up this crufty interface; it was extracted
 // verbatim from the non-abstracted code.
-type TransportFactory func(SendOptions, *nodedialer.Dialer, ReplicaSlice) (Transport, error)
+type TransportFactory func(
+	SendOptions, *nodedialer.Dialer, ReplicaSlice,
+) (Transport, error)
 
 // Transport objects can send RPCs to one or more replicas of a range.
 // All calls to Transport methods are made from a single thread, so
@@ -108,6 +111,7 @@ func grpcTransportFactoryImpl(
 	return &grpcTransport{
 		opts:           opts,
 		nodeDialer:     nodeDialer,
+		class:          opts.class,
 		orderedClients: clients,
 	}, nil
 }
@@ -115,6 +119,7 @@ func grpcTransportFactoryImpl(
 type grpcTransport struct {
 	opts           SendOptions
 	nodeDialer     *nodedialer.Dialer
+	class          rpc.ConnectionClass
 	clientIndex    int
 	orderedClients []batchClient
 }
@@ -222,7 +227,7 @@ func (gt *grpcTransport) NextInternalClient(
 ) (context.Context, roachpb.InternalClient, error) {
 	client := gt.orderedClients[gt.clientIndex]
 	gt.clientIndex++
-	return gt.nodeDialer.DialInternalClient(ctx, client.replica.NodeID)
+	return gt.nodeDialer.DialInternalClient(ctx, client.replica.NodeID, gt.class)
 }
 
 func (gt *grpcTransport) NextReplica() roachpb.ReplicaDescriptor {

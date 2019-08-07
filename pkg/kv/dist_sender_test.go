@@ -45,6 +45,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -3392,6 +3394,100 @@ func TestEvictMetaRange(t *testing.T) {
 				splitKey, testMetaEndKey, cachedRange.StartKey, cachedRange.EndKey)
 		}
 	})
+}
+
+// TestConnectionClass verifies that the dist sender constructs a transport with
+// the appropriate class for a given resolved range.
+func TestConnectionClass(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	// Create a mock range descriptor DB that can resolve made up meta1, node
+	// liveness and user ranges.
+	rDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) (
+		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
+	) {
+		if key.Equal(roachpb.KeyMin) {
+			return []roachpb.RangeDescriptor{{
+				RangeID:  1,
+				StartKey: roachpb.RKeyMin,
+				EndKey:   roachpb.RKey(keys.NodeLivenessPrefix),
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{NodeID: 1, StoreID: 1},
+				},
+			}}, nil, nil
+		} else if bytes.HasPrefix(key, keys.NodeLivenessPrefix) {
+			return []roachpb.RangeDescriptor{{
+				RangeID:  2,
+				StartKey: roachpb.RKey(keys.NodeLivenessPrefix),
+				EndKey:   roachpb.RKey(keys.NodeLivenessKeyMax),
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{NodeID: 1, StoreID: 1},
+				},
+			}}, nil, nil
+		}
+		return []roachpb.RangeDescriptor{{
+			RangeID:  3,
+			StartKey: roachpb.RKey(keys.NodeLivenessKeyMax),
+			EndKey:   roachpb.RKeyMax,
+			InternalReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+			},
+		}}, nil, nil
+	})
+	// Verify that the request carries the class we expect it to for its span.
+	verifyClass := func(class rpc.ConnectionClass, args roachpb.BatchRequest) {
+		span, err := keys.Range(args.Requests)
+		if assert.Nil(t, err) {
+			assert.Equalf(t, rpc.ConnectionClassForKey(span.Key), class,
+				"unexpected class for span key %v", span.Key)
+		}
+	}
+	var testFn simpleSendFn = func(
+		_ context.Context,
+		opts SendOptions,
+		replicas ReplicaSlice,
+		args roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, error) {
+		verifyClass(opts.class, args)
+		return args.CreateReply(), nil
+	}
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		RPCContext: rpcContext,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(testFn),
+		},
+		NodeDialer: nodedialer.New(rpcContext, gossip.AddressResolver(g)),
+		RPCRetryOptions: &retry.Options{
+			MaxRetries: 1,
+		},
+		RangeDescriptorDB: rDB,
+	}
+	ds := NewDistSender(cfg, g)
+
+	// Check the three important cases to ensure they are sent with the correct
+	// ConnectionClass.
+	for _, key := range []roachpb.Key{
+		keys.Meta1Prefix,
+		keys.NodeLivenessKey(1),
+		roachpb.Key(keys.MakeTablePrefix(1234)), // A non-system table
+	} {
+		t.Run(key.String(), func(t *testing.T) {
+			var ba roachpb.BatchRequest
+			ba.Add(&roachpb.GetRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key: key,
+				},
+			})
+			_, err := ds.Send(context.TODO(), ba)
+			require.Nil(t, err)
+		})
+	}
 }
 
 // TestEvictionTokenCoalesce tests when two separate batch requests are a part
