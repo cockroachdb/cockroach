@@ -730,6 +730,11 @@ func (c *cascader) updateRows(
 			if err != nil {
 				return nil, nil, nil, 0, err
 			}
+			// If the default expression is nil, treat it as a SET NULL case.
+			if !column.HasDefault() {
+				referencingIndexValuesByColIDs[columnID] = tree.DNull
+				continue
+			}
 			parsedExpr, err := parser.ParseExpr(*column.DefaultExpr)
 			if err != nil {
 				return nil, nil, nil, 0, err
