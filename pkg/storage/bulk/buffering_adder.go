@@ -40,6 +40,9 @@ type BufferingAdder struct {
 		total      int
 		bufferSize int
 	}
+
+	// name of the BufferingAdder for the purpose of logging only.
+	name string
 }
 
 // MakeBulkAdder makes a storagebase.BulkAdder that buffers and sorts K/Vs passed
@@ -72,10 +75,17 @@ func (b *BufferingAdder) SkipLocalDuplicatesWithSameValues(skip bool) {
 	b.sink.skipDuplicateKeysWithSameValue = skip
 }
 
+// SetName sets the name of the adder being used for the purpose of logging
+// stats.
+func (b *BufferingAdder) SetName(name string) {
+	b.name = name
+}
+
 // Close closes the underlying SST builder.
 func (b *BufferingAdder) Close(ctx context.Context) {
 	log.VEventf(ctx, 2,
-		"bulk adder ingested %s, flushed %d times, %d due to buffer size. Flushed %d files, %d due to ranges, %d due to sst size",
+		"bulk adder %s ingested %s, flushed %d times, %d due to buffer size. Flushed %d files, %d due to ranges, %d due to sst size",
+		b.name,
 		sz(b.sink.totalRows.DataSize),
 		b.flushCounts.total, b.flushCounts.bufferSize,
 		b.sink.flushCounts.total, b.sink.flushCounts.split, b.sink.flushCounts.sstSize,
