@@ -153,30 +153,40 @@ func (t *partitioningTest) parse() error {
 			panic(errors.Errorf("unsupported config: %s", c))
 		}
 
+		var indexName string
 		var subzone config.Subzone
-		if strings.HasPrefix(subzoneShort, "@") {
-			idxDesc, _, err := t.parsed.tableDesc.FindIndexByName(subzoneShort[1:])
-			if err != nil {
-				return errors.Wrapf(err, "could not find index %s", subzoneShort)
+		subzoneParts := strings.Split(subzoneShort, ".")
+		switch len(subzoneParts) {
+		case 1:
+			indexName = subzoneParts[0]
+		case 2:
+			if subzoneParts[0] == "" {
+				indexName = "@primary"
+			} else {
+				indexName = subzoneParts[0]
 			}
-			subzone.IndexID = uint32(idxDesc.ID)
-			if len(constraints) > 0 {
+			subzone.PartitionName = subzoneParts[1]
+		default:
+			panic(errors.Errorf("unsupported config: %s", c))
+		}
+		if !strings.HasPrefix(indexName, "@") {
+			panic(errors.Errorf("unsupported config: %s", c))
+		}
+		idxDesc, _, err := t.parsed.tableDesc.FindIndexByName(indexName[1:])
+		if err != nil {
+			return errors.Wrapf(err, "could not find index %s", indexName)
+		}
+		subzone.IndexID = uint32(idxDesc.ID)
+		if len(constraints) > 0 {
+			if subzone.PartitionName == "" {
 				fmt.Fprintf(&zoneConfigStmts,
 					`ALTER INDEX %s@%s CONFIGURE ZONE USING constraints = '[%s]';`,
 					t.parsed.tableName, idxDesc.Name, constraints,
 				)
-			}
-		} else if strings.HasPrefix(subzoneShort, ".") {
-			subzone.PartitionName = subzoneShort[1:]
-			_, index, err := t.parsed.tableDesc.FindNonDropPartitionByName(subzone.PartitionName)
-			if err != nil {
-				return err
-			}
-			subzone.IndexID = uint32(index.ID)
-			if len(constraints) > 0 {
+			} else {
 				fmt.Fprintf(&zoneConfigStmts,
-					`ALTER PARTITION %s OF TABLE %s CONFIGURE ZONE USING constraints = '[%s]';`,
-					subzone.PartitionName, t.parsed.tableName, constraints,
+					`ALTER PARTITION %s OF INDEX %s@%s CONFIGURE ZONE USING constraints = '[%s]';`,
+					subzone.PartitionName, t.parsed.tableName, idxDesc.Name, constraints,
 				)
 			}
 		}
@@ -765,7 +775,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 				PARTITION p3 VALUES IN (3),
 				PARTITION p4 VALUES IN (4)
 			))`,
-			configs: []string{`@b_idx:+n1`, `.p3:+n2`, `.p4:+n3`},
+			configs: []string{`@b_idx:+n1`, `@b_idx.p3:+n2`, `@b_idx.p4:+n3`},
 			generatedSpans: []string{
 				`@b_idx /2-/2/3`,
 				`   .p3 /2/3-/2/4`,
@@ -783,7 +793,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 				PARTITION p5 VALUES IN (5),
 				PARTITION pd VALUES IN (DEFAULT)
 			))`,
-			configs: []string{`@b_idx`, `.p4:+n2`, `.p5:+n3`, `.pd:+n1`},
+			configs: []string{`@b_idx`, `@b_idx.p4:+n2`, `@b_idx.p5:+n3`, `@b_idx.pd:+n1`},
 			generatedSpans: []string{
 				`.pd /2-/2/4`,
 				`.p4 /2/4-/2/5`,
@@ -798,7 +808,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 				PARTITION pl1 VALUES IN (NULL, 1),
 				PARTITION p3  VALUES IN (3)
 			))`,
-			configs: []string{`@b_idx:+n1`, `.pl1:+n2`, `.p3:+n3`},
+			configs: []string{`@b_idx:+n1`, `@b_idx.pl1:+n2`, `@b_idx.p3:+n3`},
 			generatedSpans: []string{
 				`@b_idx /2-/2/NULL`,
 				`  .pl1 /2/NULL-/2/!NULL`,
@@ -1327,12 +1337,7 @@ func TestRepartitioning(t *testing.T) {
 				for _, name := range test.new.parsed.tableDesc.PartitionNames() {
 					newPartitionNames[name] = struct{}{}
 				}
-				rows := sqlDB.QueryStr(t, "SELECT cli_specifier FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE cli_specifier IS NOT NULL")
-				for _, row := range rows {
-					zs, err := config.ParseCLIZoneSpecifier(row[0])
-					if err != nil {
-						t.Fatal(err)
-					}
+				for _, zs := range sqlutils.GetAllZoneSpecifiers(t, sqlDB) {
 					if !zs.TargetsTable() {
 						// Ignore zone configs that target databases or system ranges.
 						continue
@@ -1379,7 +1384,7 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 		PARTITION p34 VALUES FROM (3) TO (4)
 	)`)
 	sqlDB.Exec(t, `ALTER PARTITION p1 OF TABLE t CONFIGURE ZONE USING DEFAULT`)
-	sqlDB.Exec(t, `ALTER PARTITION p34 OF TABLE t CONFIGURE ZONE USING DEFAULT`)
+	sqlDB.Exec(t, `ALTER PARTITION p34 OF INDEX t@i CONFIGURE ZONE USING DEFAULT`)
 	sqlDB.Exec(t, `ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`)
 	sqlDB.Exec(t, `ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`)
 
@@ -1397,7 +1402,7 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 	expectErr(`ALTER TABLE t PARTITION BY LIST (a) (PARTITION p2 VALUES IN (2))`, partitionErr)
 	expectErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`, partitionErr)
 	expectErr(`ALTER PARTITION p1 OF TABLE t CONFIGURE ZONE USING DEFAULT`, zoneErr)
-	expectErr(`ALTER PARTITION p34 OF TABLE t CONFIGURE ZONE USING DEFAULT`, zoneErr)
+	expectErr(`ALTER PARTITION p34 OF INDEX t@i CONFIGURE ZONE USING DEFAULT`, zoneErr)
 	expectErr(`ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`, zoneErr)
 	expectErr(`ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`, zoneErr)
 

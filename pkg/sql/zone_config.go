@@ -305,31 +305,31 @@ func resolveZone(ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier) (
 func resolveSubzone(
 	zs *tree.ZoneSpecifier, table *sqlbase.TableDescriptor,
 ) (*sqlbase.IndexDescriptor, string, error) {
-	if !zs.TargetsTable() {
+	if !zs.TargetsTable() || zs.TableOrIndex.Index == "" && zs.Partition == "" {
 		return nil, "", nil
 	}
-	partitionName := string(zs.Partition)
-	if indexName := string(zs.TableOrIndex.Index); indexName != "" {
-		index, _, err := table.FindIndexByName(indexName)
+
+	indexName := string(zs.TableOrIndex.Index)
+	var index *sqlbase.IndexDescriptor
+	if indexName == "" {
+		index = &table.PrimaryIndex
+		indexName = index.Name
+	} else {
+		var err error
+		index, _, err = table.FindIndexByName(indexName)
 		if err != nil {
 			return nil, "", err
 		}
-		if partitionName == "" {
-			return index, "", nil
-		}
+	}
+
+	partitionName := string(zs.Partition)
+	if partitionName != "" {
 		if partitioning := index.FindPartitionByName(partitionName); partitioning == nil {
 			return nil, "", fmt.Errorf("partition %q does not exist on index %q", partitionName, indexName)
 		}
-		return index, partitionName, nil
-	} else if partitionName != "" {
-		_, index, err := table.FindNonDropPartitionByName(partitionName)
-		if err != nil {
-			return nil, "", err
-		}
-		zs.TableOrIndex.Index = tree.UnrestrictedName(index.Name)
-		return index, partitionName, nil
 	}
-	return nil, "", nil
+
+	return index, partitionName, nil
 }
 
 func deleteRemovedPartitionZoneConfigs(

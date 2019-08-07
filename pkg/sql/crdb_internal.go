@@ -1857,9 +1857,6 @@ func (p *planner) getAllNames(ctx context.Context) (map[sqlbase.ID]namespaceKey,
 
 // crdbInternalZonesTable decodes and exposes the zone configs in the
 // system.zones table.
-// The cli_specifier column is deprecated and only exists to be used
-// as a hidden field by the CLI for backwards compatibility. Use zone_name
-// instead.
 //
 // TODO(tbg): prefix with kv_.
 var crdbInternalZonesTable = virtualSchemaTable{
@@ -1868,8 +1865,11 @@ var crdbInternalZonesTable = virtualSchemaTable{
 CREATE TABLE crdb_internal.zones (
   zone_id          INT NOT NULL,
   zone_name        STRING,
-  cli_specifier    STRING, -- this column is deprecated in favor of zone_name.
-                           -- It is kept for backwards compatibility with the CLI.
+  range_name       STRING,
+  database_name    STRING,
+  table_name       STRING,
+  index_name       STRING,
+  partition_name   STRING,
   config_yaml      STRING NOT NULL,
   config_sql       STRING, -- this column can be NULL if there is no specifier syntax
                            -- possible (e.g. the object was deleted).
