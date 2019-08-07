@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/apply"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -52,7 +53,9 @@ func (d *replicaDecoder) DecodeAndBind(ctx context.Context, ents []raftpb.Entry)
 	if err := d.decode(ctx, ents); err != nil {
 		return false, err
 	}
-	return d.retrieveLocalProposals(ctx), nil
+	anyLocal := d.retrieveLocalProposals(ctx)
+	d.createTracingSpans(ctx)
+	return anyLocal, nil
 }
 
 // decode decodes the provided entries into the decoder.
@@ -81,23 +84,7 @@ func (d *replicaDecoder) retrieveLocalProposals(ctx context.Context) (anyLocal b
 	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
 		cmd := it.cur()
 		cmd.proposal = d.r.mu.proposals[cmd.idKey]
-		if cmd.IsLocal() && cmd.raftCmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex {
-			// If this entry does not have the most up-to-date view of the
-			// corresponding proposal's maximum lease index then the proposal
-			// must have been reproposed with a higher lease index. (see
-			// tryReproposeWithNewLeaseIndex). In that case, there's a newer
-			// version of the proposal in the pipeline, so don't consider this
-			// entry to have been proposed locally. The entry must necessarily be
-			// rejected by checkForcedErr.
-			cmd.proposal = nil
-		}
-		if cmd.IsLocal() {
-			// We initiated this command, so use the caller-supplied context.
-			cmd.ctx = cmd.proposal.ctx
-			anyLocal = true
-		} else {
-			cmd.ctx = ctx
-		}
+		anyLocal = anyLocal || cmd.IsLocal()
 	}
 	if !anyLocal && d.r.mu.proposalQuota == nil {
 		// Fast-path.
@@ -106,7 +93,16 @@ func (d *replicaDecoder) retrieveLocalProposals(ctx context.Context) (anyLocal b
 	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
 		cmd := it.cur()
 		toRelease := int64(0)
-		if cmd.IsLocal() {
+		shouldRemove := cmd.IsLocal() &&
+			// If this entry does not have the most up-to-date view of the
+			// corresponding proposal's maximum lease index then the proposal
+			// must have been reproposed with a higher lease index. (see
+			// tryReproposeWithNewLeaseIndex). In that case, there's a newer
+			// version of the proposal in the pipeline, so don't remove the
+			// proposal from the map. We expect this entry to be rejected by
+			// checkForcedErr.
+			cmd.raftCmd.MaxLeaseIndex == cmd.proposal.command.MaxLeaseIndex
+		if shouldRemove {
 			// Delete the proposal from the proposals map. There may be reproposals
 			// of the proposal in the pipeline, but those will all have the same max
 			// lease index, meaning that they will all be rejected after this entry
@@ -129,6 +125,21 @@ func (d *replicaDecoder) retrieveLocalProposals(ctx context.Context) (anyLocal b
 		}
 	}
 	return anyLocal
+}
+
+// createTracingSpans creates and assigns a new tracing span for each decoded
+// command. If a command was proposed locally, it will be given a tracing span
+// that follows from its proposal's span.
+func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
+	var it replicatedCmdBufSlice
+	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
+		cmd := it.cur()
+		parentCtx := ctx
+		if cmd.IsLocal() {
+			parentCtx = cmd.proposal.ctx
+		}
+		cmd.ctx, cmd.sp = tracing.ForkCtxSpan(parentCtx, "raft application")
+	}
 }
 
 // NewCommandIter implements the apply.Decoder interface.

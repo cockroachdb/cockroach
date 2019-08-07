@@ -1075,11 +1075,13 @@ func (ec *endCmds) move() endCmds {
 // the timestamp cache using the final timestamp of each command.
 //
 // No-op if the receiver has been zeroed out by a call to move.
+// Idempotent and is safe to call more than once.
 func (ec *endCmds) done(ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	if ec.repl == nil {
 		// The endCmds were cleared.
 		return
 	}
+	defer ec.move() // clear
 
 	// Update the timestamp cache if the request is not being re-evaluated. Each
 	// request is considered in turn; only those marked as affecting the cache are

@@ -126,6 +126,9 @@ type ProposalData struct {
 // order to allow the original client to be canceled. (When the original client
 // is canceled, it won't be listening to this done channel, and so it can't be
 // counted on to invoke endCmds itself.)
+//
+// The method is safe to call more than once, but only the first result will be
+// returned to the client.
 func (proposal *ProposalData) finishApplication(pr proposalResult) {
 	proposal.ec.done(proposal.Request, pr.Reply, pr.Err)
 	proposal.signalProposalResult(pr)
@@ -139,6 +142,9 @@ func (proposal *ProposalData) finishApplication(pr proposalResult) {
 // has not already been signaled. The method can be called even before the
 // proposal has finished replication and command application, and does not
 // release the request's latches.
+//
+// The method is safe to call more than once, but only the first result will be
+// returned to the client.
 func (proposal *ProposalData) signalProposalResult(pr proposalResult) {
 	if proposal.doneCh != nil {
 		proposal.doneCh <- pr

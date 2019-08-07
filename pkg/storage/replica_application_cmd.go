@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -48,9 +50,13 @@ type replicatedCmd struct {
 	// proposal is populated on the proposing Replica only and comes from the
 	// Replica's proposal map.
 	proposal *ProposalData
-	// ctx will be the proposal's context if proposed locally, otherwise it will
-	// be populated with the handleCommittedEntries ctx.
+
+	// ctx is a context that follows from the proposal's context if it was
+	// proposed locally. Otherwise, it will follow from the context passed to
+	// ApplyCommittedEntries. sp is the corresponding tracing span, which is
+	// closed in FinishAndAckOutcome.
 	ctx context.Context
+	sp  opentracing.Span
 
 	// The following fields are set in shouldApplyCommand when we validate that
 	// a command applies given the current lease and GC threshold. The process
@@ -112,10 +118,10 @@ func (c *replicatedCmd) Rejected() bool {
 
 // FinishAndAckOutcome implements the apply.AppliedCommand interface.
 func (c *replicatedCmd) FinishAndAckOutcome() error {
-	if !c.IsLocal() {
-		return nil
+	tracing.FinishSpan(c.sp)
+	if c.IsLocal() {
+		c.proposal.finishApplication(c.response)
 	}
-	c.proposal.finishApplication(c.response)
 	return nil
 }
 
