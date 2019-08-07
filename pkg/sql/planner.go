@@ -619,6 +619,9 @@ type sqlStatsCollector interface {
 		bytesRead, rowsRead int64,
 	)
 
+	// RecordTransaction records information about a transaction.
+	RecordTransaction(totalTimeSec float64, committed bool, implicit bool)
+
 	// SQLStats provides access to the global sqlStats object.
 	SQLStats() *sqlStats
 
