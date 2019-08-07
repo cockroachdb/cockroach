@@ -262,6 +262,12 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaSQLTxnLatency = metric.Metadata{
+		Name:        "sql.txn.latency",
+		Help:        "Latency of SQL transactions",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 
 	// Below are the metadata for the statement started counters.
 
@@ -1905,6 +1911,13 @@ func (s *sqlStatsCollectorImpl) RecordStatement(
 	s.appStats.recordStatement(
 		stmt, samplePlanDescription, distSQLUsed, optUsed, implicitTxn, automaticRetryCount, numRows, err,
 		parseLat, planLat, runLat, svcLat, ovhLat, bytesRead, rowsRead)
+}
+
+// RecordTransaction is part of the sqlStatsCollector interface.
+func (s *sqlStatsCollectorImpl) RecordTransaction(
+	txnID uuid.UUID, totalTimeInSeconds float64, committed bool, implicit bool,
+) {
+	s.appStats.recordTransaction(txnID, totalTimeInSeconds, committed, implicit)
 }
 
 // SQLStats is part of the sqlStatsCollector interface.

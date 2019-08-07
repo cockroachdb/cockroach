@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/logtags"
 	"github.com/pkg/errors"
 )
@@ -617,6 +618,9 @@ type sqlStatsCollector interface {
 		parseLat, planLat, runLat, svcLat, ovhLat float64,
 		bytesRead, rowsRead int64,
 	)
+
+	// RecordTransaction records information about a transaction.
+	RecordTransaction(txnID uuid.UUID, totalTimeInSeconds float64, committed bool, implicit bool)
 
 	// SQLStats provides access to the global sqlStats object.
 	SQLStats() *sqlStats

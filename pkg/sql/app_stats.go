@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -48,6 +49,7 @@ type appStats struct {
 
 	syncutil.Mutex
 	stmts map[stmtKey]*stmtStats
+	txns  map[uuid.UUID]roachpb.TxnInfo
 }
 
 // stmtStats holds per-statement statistics.
@@ -61,6 +63,14 @@ type stmtStats struct {
 // statistics.
 var stmtStatsEnable = settings.RegisterBoolSetting(
 	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
+)
+
+// txnInfoEnable determines whether to collect per-transaction information.
+// TODO(yuzefovich): the collection of per-transaction information is disabled
+// by default at the moment. When we get to adding a transactions page to the
+// Admin UI, turn it on.
+var txnInfoEnable = settings.RegisterBoolSetting(
+	"sql.metrics.transaction_details.enabled", "collect per-transaction information", false,
 )
 
 // sqlStatsCollectionLatencyThreshold specifies the minimum amount of time
@@ -199,6 +209,35 @@ func anonymizeStmt(ast tree.Statement) string {
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 }
 
+func (a *appStats) recordTransaction(
+	txnID uuid.UUID, totalTimeInSeconds float64, committed bool, implicit bool,
+) {
+	if a == nil || !txnInfoEnable.Get(&a.st.SV) {
+		return
+	}
+	a.Lock()
+	if _, ok := a.txns[txnID]; ok {
+		panic(fmt.Sprintf("unexpectedly transaction statistics are already present for txn ID %s", txnID))
+	}
+	a.txns[txnID] = roachpb.TxnInfo{
+		TotalTimeInSeconds: totalTimeInSeconds,
+		Committed:          committed,
+		Implicit:           implicit,
+	}
+	a.Unlock()
+}
+
+func (a *appStats) getStatsForTxn(txnID uuid.UUID) roachpb.TxnInfo {
+	a.Lock()
+	// Retrieve the per-transaction statistic object.
+	t, ok := a.txns[txnID]
+	if !ok {
+		panic(fmt.Sprintf("unexpectedly transaction statistics are not found for txn ID %s", txnID))
+	}
+	a.Unlock()
+	return t
+}
+
 // sqlStats carries per-application statistics for all applications on
 // each node.
 type sqlStats struct {
@@ -217,7 +256,11 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	if a, ok := s.apps[appName]; ok {
 		return a
 	}
-	a := &appStats{st: s.st, stmts: make(map[stmtKey]*stmtStats)}
+	a := &appStats{
+		st:    s.st,
+		stmts: make(map[stmtKey]*stmtStats),
+		txns:  make(map[uuid.UUID]roachpb.TxnInfo),
+	}
 	s.apps[appName] = a
 	return a
 }
@@ -253,9 +296,10 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 			dumpStmtStats(ctx, appName, a.stmts)
 		}
 
-		// Clear the map, to release the memory; make the new map somewhat
+		// Clear the maps, to release the memory; make the new maps somewhat
 		// already large for the likely future workload.
 		a.stmts = make(map[stmtKey]*stmtStats, len(a.stmts)/2)
+		a.txns = make(map[uuid.UUID]roachpb.TxnInfo, len(a.txns)/2)
 		a.Unlock()
 	}
 	s.lastReset = timeutil.Now()

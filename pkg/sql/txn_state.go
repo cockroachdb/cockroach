@@ -370,8 +370,8 @@ const (
 	// txnAborted means that the transaction will not commit. This doesn't mean
 	// that the SQL txn is necessarily "finished" - the connection might be in the
 	// Aborted state.
-	// This event is produced both when entering the Aborted state sometimes when
-	// leaving it.
+	// This event is produced both when entering the Aborted state and sometimes
+	// when leaving it.
 	txnAborted
 	// txnRestart means that the transaction is expecting a retry. The iteration
 	// of the txn just finished will not commit.

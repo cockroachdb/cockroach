@@ -137,3 +137,13 @@ message ExplainTreePlanNode {
   // Children are the nodes that feed into this one, e.g. two scans for a join.
   repeated ExplainTreePlanNode children = 3;
 }
+
+message TxnInfo {
+  optional double total_time_in_seconds = 1 [(gogoproto.nullable) = false];
+
+  optional bool committed = 2 [(gogoproto.nullable) = false];
+
+  optional bool implicit = 3 [(gogoproto.nullable) = false];
+
+  // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
+}
