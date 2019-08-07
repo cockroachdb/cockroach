@@ -350,25 +350,24 @@ full-join (hash)
 opt
 SELECT * FROM xysd WHERE EXISTS(SELECT * FROM uv WHERE x=u)
 ----
-semi-join (hash)
+project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (2-4)
- ├── interesting orderings: (+1) (-3,+4,+1)
- ├── scan xysd
- │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    ├── prune: (1-4)
- │    └── interesting orderings: (+1) (-3,+4,+1)
- ├── scan uv
- │    ├── columns: u:5(int)
- │    └── prune: (5)
- └── filters
-      └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           ├── variable: x [type=int]
-           └── variable: u [type=int]
+ └── inner-join (lookup xysd)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null)
+      ├── key columns: [5] = [1]
+      ├── key: (5)
+      ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(5), (5)==(1)
+      ├── distinct-on
+      │    ├── columns: u:5(int)
+      │    ├── grouping columns: u:5(int)
+      │    ├── key: (5)
+      │    └── scan uv
+      │         ├── columns: u:5(int)
+      │         └── prune: (5)
+      └── filters (true)
 
 # Semi-join-apply.
 opt
@@ -613,31 +612,38 @@ select
 opt
 SELECT * FROM (SELECT count(*) cnt FROM xysd) WHERE EXISTS(SELECT * FROM uv WHERE cnt=1)
 ----
-semi-join (hash)
+project
  ├── columns: cnt:5(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
- ├── select
- │    ├── columns: count_rows:5(int!null)
- │    ├── cardinality: [0 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(5)
- │    ├── scalar-group-by
- │    │    ├── columns: count_rows:5(int)
- │    │    ├── cardinality: [1 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(5)
- │    │    ├── prune: (5)
- │    │    ├── scan xysd@secondary
- │    │    └── aggregations
- │    │         └── count-rows [type=int]
- │    └── filters
- │         └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
- │              ├── variable: count_rows [type=int]
- │              └── const: 1 [type=int]
- ├── scan uv
- └── filters (true)
+ └── inner-join (hash)
+      ├── columns: count_rows:5(int!null)
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(5)
+      ├── select
+      │    ├── columns: count_rows:5(int!null)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(5)
+      │    ├── scalar-group-by
+      │    │    ├── columns: count_rows:5(int)
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(5)
+      │    │    ├── prune: (5)
+      │    │    ├── scan xysd@secondary
+      │    │    └── aggregations
+      │    │         └── count-rows [type=int]
+      │    └── filters
+      │         └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+      │              ├── variable: count_rows [type=int]
+      │              └── const: 1 [type=int]
+      ├── scan uv
+      │    ├── limit: 1
+      │    └── key: ()
+      └── filters (true)
 
 # Calculate semi-join-apply cardinality.
 opt

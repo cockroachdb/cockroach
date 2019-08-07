@@ -2115,57 +2115,62 @@ sort
            │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_address:3(varchar!null) s_nationkey:4(int!null)
            │    │    ├── key: (1)
            │    │    └── fd: (1)-->(2-4)
-           │    ├── semi-join (hash)
+           │    ├── project
            │    │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null)
            │    │    ├── key: (12,13)
-           │    │    ├── project
-           │    │    │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null)
-           │    │    │    ├── key: (12,13)
-           │    │    │    └── select
-           │    │    │         ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int!null) sum:42(float)
-           │    │    │         ├── key: (12,13)
-           │    │    │         ├── fd: (12,13)-->(14,42)
-           │    │    │         ├── group-by
-           │    │    │         │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int) sum:42(float)
-           │    │    │         │    ├── grouping columns: ps_partkey:12(int!null) ps_suppkey:13(int!null)
-           │    │    │         │    ├── key: (12,13)
-           │    │    │         │    ├── fd: (12,13)-->(14,42)
-           │    │    │         │    ├── right-join (hash)
-           │    │    │         │    │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int!null) l_partkey:27(int) l_suppkey:28(int) l_quantity:30(float) l_shipdate:36(date)
-           │    │    │         │    │    ├── fd: (12,13)-->(14)
-           │    │    │         │    │    ├── index-join lineitem
-           │    │    │         │    │    │    ├── columns: l_partkey:27(int!null) l_suppkey:28(int!null) l_quantity:30(float!null) l_shipdate:36(date!null)
-           │    │    │         │    │    │    └── scan lineitem@l_sd
-           │    │    │         │    │    │         ├── columns: l_orderkey:26(int!null) l_linenumber:29(int!null) l_shipdate:36(date!null)
-           │    │    │         │    │    │         ├── constraint: /36/26/29: [/'1994-01-01' - /'1994-12-31']
-           │    │    │         │    │    │         ├── key: (26,29)
-           │    │    │         │    │    │         └── fd: (26,29)-->(36)
-           │    │    │         │    │    ├── scan partsupp
-           │    │    │         │    │    │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int!null)
-           │    │    │         │    │    │    ├── key: (12,13)
-           │    │    │         │    │    │    └── fd: (12,13)-->(14)
-           │    │    │         │    │    └── filters
-           │    │    │         │    │         ├── l_partkey = ps_partkey [type=bool, outer=(12,27), constraints=(/12: (/NULL - ]; /27: (/NULL - ]), fd=(12)==(27), (27)==(12)]
-           │    │    │         │    │         └── l_suppkey = ps_suppkey [type=bool, outer=(13,28), constraints=(/13: (/NULL - ]; /28: (/NULL - ]), fd=(13)==(28), (28)==(13)]
-           │    │    │         │    └── aggregations
-           │    │    │         │         ├── sum [type=float, outer=(30)]
-           │    │    │         │         │    └── variable: l_quantity [type=float]
-           │    │    │         │         └── const-agg [type=int, outer=(14)]
-           │    │    │         │              └── variable: ps_availqty [type=int]
-           │    │    │         └── filters
-           │    │    │              └── ps_availqty > (sum * 0.5) [type=bool, outer=(14,42), constraints=(/14: (/NULL - ])]
-           │    │    ├── select
-           │    │    │    ├── columns: p_partkey:17(int!null) p_name:18(varchar!null)
-           │    │    │    ├── key: (17)
-           │    │    │    ├── fd: (17)-->(18)
-           │    │    │    ├── scan part
-           │    │    │    │    ├── columns: p_partkey:17(int!null) p_name:18(varchar!null)
-           │    │    │    │    ├── key: (17)
-           │    │    │    │    └── fd: (17)-->(18)
-           │    │    │    └── filters
-           │    │    │         └── p_name LIKE 'forest%' [type=bool, outer=(18), constraints=(/18: [/'forest' - /'foresu'); tight)]
-           │    │    └── filters
-           │    │         └── ps_partkey = p_partkey [type=bool, outer=(12,17), constraints=(/12: (/NULL - ]; /17: (/NULL - ]), fd=(12)==(17), (17)==(12)]
+           │    │    └── project
+           │    │         ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) p_partkey:17(int!null) p_name:18(varchar!null)
+           │    │         ├── key: (13,17)
+           │    │         ├── fd: (17)-->(18), (12)==(17), (17)==(12)
+           │    │         └── inner-join (hash)
+           │    │              ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int!null) p_partkey:17(int!null) p_name:18(varchar!null) sum:42(float)
+           │    │              ├── key: (13,17)
+           │    │              ├── fd: (12,13)-->(14,42), (17)-->(18), (12)==(17), (17)==(12)
+           │    │              ├── select
+           │    │              │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int!null) sum:42(float)
+           │    │              │    ├── key: (12,13)
+           │    │              │    ├── fd: (12,13)-->(14,42)
+           │    │              │    ├── group-by
+           │    │              │    │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int) sum:42(float)
+           │    │              │    │    ├── grouping columns: ps_partkey:12(int!null) ps_suppkey:13(int!null)
+           │    │              │    │    ├── key: (12,13)
+           │    │              │    │    ├── fd: (12,13)-->(14,42)
+           │    │              │    │    ├── right-join (hash)
+           │    │              │    │    │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int!null) l_partkey:27(int) l_suppkey:28(int) l_quantity:30(float) l_shipdate:36(date)
+           │    │              │    │    │    ├── fd: (12,13)-->(14)
+           │    │              │    │    │    ├── index-join lineitem
+           │    │              │    │    │    │    ├── columns: l_partkey:27(int!null) l_suppkey:28(int!null) l_quantity:30(float!null) l_shipdate:36(date!null)
+           │    │              │    │    │    │    └── scan lineitem@l_sd
+           │    │              │    │    │    │         ├── columns: l_orderkey:26(int!null) l_linenumber:29(int!null) l_shipdate:36(date!null)
+           │    │              │    │    │    │         ├── constraint: /36/26/29: [/'1994-01-01' - /'1994-12-31']
+           │    │              │    │    │    │         ├── key: (26,29)
+           │    │              │    │    │    │         └── fd: (26,29)-->(36)
+           │    │              │    │    │    ├── scan partsupp
+           │    │              │    │    │    │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int!null)
+           │    │              │    │    │    │    ├── key: (12,13)
+           │    │              │    │    │    │    └── fd: (12,13)-->(14)
+           │    │              │    │    │    └── filters
+           │    │              │    │    │         ├── l_partkey = ps_partkey [type=bool, outer=(12,27), constraints=(/12: (/NULL - ]; /27: (/NULL - ]), fd=(12)==(27), (27)==(12)]
+           │    │              │    │    │         └── l_suppkey = ps_suppkey [type=bool, outer=(13,28), constraints=(/13: (/NULL - ]; /28: (/NULL - ]), fd=(13)==(28), (28)==(13)]
+           │    │              │    │    └── aggregations
+           │    │              │    │         ├── sum [type=float, outer=(30)]
+           │    │              │    │         │    └── variable: l_quantity [type=float]
+           │    │              │    │         └── const-agg [type=int, outer=(14)]
+           │    │              │    │              └── variable: ps_availqty [type=int]
+           │    │              │    └── filters
+           │    │              │         └── ps_availqty > (sum * 0.5) [type=bool, outer=(14,42), constraints=(/14: (/NULL - ])]
+           │    │              ├── select
+           │    │              │    ├── columns: p_partkey:17(int!null) p_name:18(varchar!null)
+           │    │              │    ├── key: (17)
+           │    │              │    ├── fd: (17)-->(18)
+           │    │              │    ├── scan part
+           │    │              │    │    ├── columns: p_partkey:17(int!null) p_name:18(varchar!null)
+           │    │              │    │    ├── key: (17)
+           │    │              │    │    └── fd: (17)-->(18)
+           │    │              │    └── filters
+           │    │              │         └── p_name LIKE 'forest%' [type=bool, outer=(18), constraints=(/18: [/'forest' - /'foresu'); tight)]
+           │    │              └── filters
+           │    │                   └── ps_partkey = p_partkey [type=bool, outer=(12,17), constraints=(/12: (/NULL - ]; /17: (/NULL - ]), fd=(12)==(17), (17)==(12)]
            │    └── filters
            │         └── s_suppkey = ps_suppkey [type=bool, outer=(1,13), constraints=(/1: (/NULL - ]; /13: (/NULL - ]), fd=(1)==(13), (13)==(1)]
            ├── select

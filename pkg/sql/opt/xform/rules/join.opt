@@ -38,6 +38,68 @@
 =>
 (LeftJoin $right $left $on $private)
 
+# CommuteSemiJoin generates an InnerJoin that is equivalent to the SemiJoin.
+# SemiJoins impose a partial order on the joining tables. We can convert a
+# SemiJoin into an InnerJoin by applying a DistinctOn operator on the selected
+# rows of the RHS and then relaxing the partial join order restriction.
+#
+# This allows the join orders (A SemiJoin B) and (Distinct(B*) InnerJoin A) to be
+# both considered by the optimizer. This is useful as a different join order may
+# allow other rules to trigger. A common case is that, it would allow the inner
+# join to use a lookup join in some cases (For example, a different join order
+# would allow the use of a lookup join if A has much higher cardinality than B).
+#
+# We only do this when the On conditions guarantee that for each row in the LHS
+# there is at most one unique matching row in the RHS. We need this because a
+# SemiJoin emits a maximum of one row for every matching row in the LHS.
+# This is an important difference between the behavior of a SemiJoin and an
+# InnerJoin. For each row in the LHS, an InnerJoin emits a matching row for every
+# row in the RHS where the conditions are met. For example consider the tables:
+#
+#   lhs       rhs
+# +-----+   +------+
+#    1         10
+#    2         20
+#
+# If we do an InnerJoin on the table where the On condition is (lhs < rhs),
+# you'll notice that each of the lhs rows are matched twice. And so the output
+# of the InnerJoin would contain 2 rows for each matching row in the LHS.
+# In order to guarantee that there is at most 1 matching row for every row in
+# the LHS, we only commute a SemiJoin into an InnerJoin when the On conditions
+# are only composed of equalities.
+#
+# Note: We only consier the columns of the RHS that are used in the On conditions
+# (B* in the example above). And so we can be certain that
+# ((Distinct(RHS*) InnerJoin LHS) will have at most 1 matching row for each row
+# in the LHS if the On conditions are simple equalities.
+#
+# Citations: [7] (see section 2.1.1)
+[CommuteSemiJoin, Explore]
+(SemiJoin
+    $left:*
+    $right:*
+    $on:* & (IsSimpleEquality $on)
+    $private:* & (NoJoinHints $private)
+)
+=>
+(Project
+    (InnerJoin
+        $left
+        (DistinctOn
+            $right
+            []
+            (MakeGrouping (IntersectionCols
+                (OutputCols $right)
+                (FilterOuterCols $on))
+            )
+        )
+        $on
+        $private
+    )
+    []
+    (OutputCols $left)
+)
+
 # GenerateMergeJoins creates MergeJoin operators for the join, using the
 # interesting orderings property.
 [GenerateMergeJoins, Explore]
