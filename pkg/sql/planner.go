@@ -618,6 +618,9 @@ type sqlStatsCollector interface {
 		bytesRead, rowsRead int64,
 	)
 
+	// RecordTransaction records stats for one transaction.
+	RecordTransaction(txnID string, totalTime float64, committed bool, implicit bool)
+
 	// SQLStats provides access to the global sqlStats object.
 	SQLStats() *sqlStats
 

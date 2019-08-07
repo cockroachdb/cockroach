@@ -581,6 +581,7 @@ func (ex *connExecutor) commitSQLTransaction(
 	}
 
 	if !isRelease {
+		ex.recordTransactionStatistics(true /* committed */)
 		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
 	}
 	return eventTxnReleased{}, nil
@@ -594,6 +595,7 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 		log.Warningf(ctx, "txn rollback failed: %s", err)
 	}
 	// We're done with this txn.
+	ex.recordTransactionStatistics(false /* committed */)
 	return eventTxnFinish{}, eventTxnFinishPayload{commit: false}
 }
 
@@ -909,6 +911,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		if err != nil {
 			return ex.makeErrEvent(err, s)
 		}
+		ex.recordTransactionStart()
 		return eventTxnStart{ImplicitTxn: fsm.False},
 			makeEventTxnStartPayload(
 				pri, mode, sqlTs,
@@ -922,6 +925,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		if ex.sessionData.DefaultReadOnly {
 			mode = tree.ReadOnly
 		}
+		ex.recordTransactionStart()
 		// NB: Implicit transactions are created without a historical timestamp even
 		// though the statement might contain an AOST clause. In these cases the
 		// clause is evaluated and applied execStmtInOpenState.
@@ -957,6 +961,7 @@ func (ex *connExecutor) execStmtInAbortedState(
 		// Note: Postgres replies to COMMIT of failed txn with "ROLLBACK" too.
 		res.ResetStmtType((*tree.RollbackTransaction)(nil))
 
+		ex.recordTransactionStatistics(false /* committed */)
 		return eventTxnFinish{}, eventTxnFinishPayload{commit: false}
 	case *tree.RollbackToSavepoint, *tree.Savepoint:
 		// We accept both the "ROLLBACK TO SAVEPOINT cockroach_restart" and the
@@ -1014,6 +1019,9 @@ func (ex *connExecutor) execStmtInAbortedState(
 		// We start a new txn with the same sql timestamp and isolation as the
 		// current one.
 
+		// TODO(yuzefovich): do we want to record the fact that we are restarting
+		// a transaction?
+		ex.recordTransactionStart()
 		ev := eventTxnStart{
 			ImplicitTxn: fsm.False,
 		}
@@ -1058,6 +1066,7 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 		// Reply to a rollback with the COMMIT tag, by analogy to what we do when we
 		// get a COMMIT in state Aborted.
 		res.ResetStmtType((*tree.CommitTransaction)(nil))
+		ex.recordTransactionStatistics(true /* committed */)
 		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
 	default:
 		ev = eventNonRetriableErr{IsCommit: fsm.False}
@@ -1228,6 +1237,7 @@ func (ex *connExecutor) handleAutoCommit(
 ) (fsm.Event, fsm.EventPayload) {
 	txn := ex.state.mu.txn
 	if txn.IsCommitted() {
+		ex.recordTransactionStatistics(true /* committed */)
 		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
 	}
 
@@ -1285,4 +1295,21 @@ func (ex *connExecutor) validateSavepointName(savepoint tree.Name) error {
 				"with SET force_savepoint_restart=true")
 	}
 	return nil
+}
+
+func (ex *connExecutor) recordTransactionStart() {
+	ex.planner.statsCollector.PhaseTimes()[transactionStart] = timeutil.Now()
+}
+
+func (ex *connExecutor) recordTransactionStatistics(committed bool) {
+	ex.planner.statsCollector.PhaseTimes()[transactionEnd] = timeutil.Now()
+	transactionStart := ex.planner.statsCollector.PhaseTimes()[transactionStart]
+	transactionEnd := ex.planner.statsCollector.PhaseTimes()[transactionEnd]
+	totalTransactionTime := transactionEnd.Sub(transactionStart)
+	ex.planner.statsCollector.RecordTransaction(
+		ex.planner.txn.ID().String(),
+		totalTransactionTime.Seconds(),
+		committed,
+		ex.implicitTxn(),
+	)
 }

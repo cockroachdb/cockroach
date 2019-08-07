@@ -94,6 +94,7 @@ var crdbInternal = virtualSchema{
 		sqlbase.CrdbInternalTableColumnsTableID:         crdbInternalTableColumnsTable,
 		sqlbase.CrdbInternalTableIndexesTableID:         crdbInternalTableIndexesTable,
 		sqlbase.CrdbInternalTablesTableID:               crdbInternalTablesTable,
+		sqlbase.CrdbInternalTxnStatsTableID:             crdbInternalTxnStatsTable,
 		sqlbase.CrdbInternalZonesTableID:                crdbInternalZonesTable,
 	},
 	validWithNoDatabaseContext: true,
@@ -673,6 +674,87 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					tree.MakeDBool(tree.DBool(stmtKey.implicitTxn)),
 				)
 				s.Unlock()
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	},
+}
+
+type txnList []string
+
+func (s txnList) Len() int {
+	return len(s)
+}
+func (s txnList) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+func (s txnList) Less(i, j int) bool {
+	return s[i] < s[j]
+}
+
+// TODO(tbg): prefix with node_.
+var crdbInternalTxnStatsTable = virtualSchemaTable{
+	comment: `transaction statistics (RAM; local node only)`,
+	schema: `
+CREATE TABLE crdb_internal.node_transaction_statistics (
+  node_id             INT NOT NULL,
+  application_name    STRING NOT NULL,
+  txnID               STRING NOT NULL,
+  total_time          FLOAT NOT NULL,
+  committed           BOOL NOT NULL,
+  implicit            BOOL NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		if err := p.RequireAdminRole(ctx, "access application statistics"); err != nil {
+			return err
+		}
+
+		sqlStats := p.statsCollector.SQLStats()
+		if sqlStats == nil {
+			return errors.AssertionFailedf(
+				"cannot access sql statistics from this context")
+		}
+
+		leaseMgr := p.LeaseMgr()
+		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.nodeIDContainer.Get())))
+
+		// Retrieve the application names and sort them to ensure the
+		// output is deterministic.
+		var appNames []string
+		sqlStats.Lock()
+		for n := range sqlStats.apps {
+			appNames = append(appNames, n)
+		}
+		sqlStats.Unlock()
+		sort.Strings(appNames)
+
+		// Now retrieve the application stats proper.
+		for _, appName := range appNames {
+			appStats := sqlStats.getStatsForApplication(appName)
+
+			// Retrieve the transaction IDs and sort them to ensure the output is
+			// deterministic.
+			var txnIDs txnList
+			appStats.Lock()
+			for k := range appStats.txns {
+				txnIDs = append(txnIDs, k)
+			}
+			appStats.Unlock()
+
+			// Now retrieve the per-txn stats proper.
+			for _, txnID := range txnIDs {
+				t := appStats.getStatsForTxn(txnID)
+				err := addRow(
+					nodeID,
+					tree.NewDString(appName),
+					tree.NewDString(txnID),
+					tree.NewDFloat(tree.DFloat(t.TotalTime)),
+					tree.MakeDBool(tree.DBool(t.Committed)),
+					tree.MakeDBool(tree.DBool(t.Implicit)),
+				)
 				if err != nil {
 					return err
 				}
