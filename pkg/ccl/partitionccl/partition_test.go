@@ -1337,17 +1337,11 @@ func TestRepartitioning(t *testing.T) {
 				for _, name := range test.new.parsed.tableDesc.PartitionNames() {
 					newPartitionNames[name] = struct{}{}
 				}
-				for _, zs := range sqlutils.GetAllZoneSpecifiers(t, sqlDB) {
-					if !zs.TargetsTable() {
-						// Ignore zone configs that target databases or system ranges.
-						continue
-					}
-					if zs.TableOrIndex.Table.Table() != test.new.parsed.tableDesc.Name || zs.Partition == "" {
-						// Ignore zone configs that do not target a partition of this table.
-						continue
-					}
-					if _, ok := newPartitionNames[string(zs.Partition)]; !ok {
-						t.Errorf("zone config for removed partition %q exists after repartitioning", zs.Partition)
+				for _, row := range sqlDB.QueryStr(
+					t, "SELECT partition_name FROM crdb_internal.zones WHERE partition_name IS NOT NULL") {
+					partitionName := row[0]
+					if _, ok := newPartitionNames[partitionName]; !ok {
+						t.Errorf("zone config for removed partition %q exists after repartitioning", partitionName)
 					}
 				}
 

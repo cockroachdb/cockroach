@@ -848,7 +848,7 @@ func TestZoneSpecifiers(t *testing.T) {
 		{tableSpecifier("carl", "toys", "", ""), 56, ""},
 		{tableSpecifier("carl", "love", "", ""), -1, `"love" not found`},
 	} {
-		t.Run(fmt.Sprintf("resolve-specifier=%s", ToZoneName(&tc.specifier)), func(t *testing.T) {
+		t.Run(fmt.Sprintf("resolve-specifier=%s", tc.specifier.String()), func(t *testing.T) {
 			err := func() error {
 				id, err := ResolveZoneSpecifier(&tc.specifier, resolveName)
 				if err != nil {
@@ -870,13 +870,13 @@ func TestZoneSpecifiers(t *testing.T) {
 		zoneName string
 		err      string
 	}{
-		{0, ".default", ""},
+		{0, "RANGE default", ""},
 		{41, "", "41 not found"},
-		{42, ".carl", ""},
-		{50, "db", ""},
-		{51, "db.tbl", ""},
-		{55, "carl", ""},
-		{56, "carl.toys", ""},
+		{42, "RANGE carl", ""},
+		{50, "DATABASE db", ""},
+		{51, "TABLE db.public.tbl", ""},
+		{55, "DATABASE carl", ""},
+		{56, "TABLE carl.public.toys", ""},
 		{57, "", "9000 not found"},
 		{58, "", "58 not found"},
 	} {
@@ -888,7 +888,7 @@ func TestZoneSpecifiers(t *testing.T) {
 			if tc.err != "" {
 				return
 			}
-			if e, a := tc.zoneName, ToZoneName(&zs); e != a {
+			if e, a := tc.zoneName, zs.String(); e != a {
 				t.Errorf("expected %q zone name for ID %d, but got %q", e, tc.id, a)
 			}
 		})

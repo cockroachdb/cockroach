@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -287,16 +286,7 @@ func runWideReplication(ctx context.Context, t *test, c *cluster) {
 		// Change every zone to have the same number of replicas as the number of
 		// nodes in the cluster.
 		for _, zone := range zones() {
-			which := "RANGE"
-			if zone[0] == '.' {
-				zone = zone[1:]
-			} else if strings.Count(zone, ".") == 0 {
-				which = "DATABASE"
-			} else {
-				which = "TABLE"
-			}
-			run(fmt.Sprintf(`ALTER %s %s CONFIGURE ZONE USING num_replicas = %d`,
-				which, zone, width))
+			run(fmt.Sprintf(`ALTER %s CONFIGURE ZONE USING num_replicas = %d`, zone, width))
 		}
 	}
 	setReplication(nodes)

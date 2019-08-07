@@ -493,7 +493,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		Options string `json:",omitempty"`
 		User    string
 	}{
-		Target:  config.ToZoneName(&n.zoneSpecifier),
+		Target:  n.zoneSpecifier.String(),
 		Config:  strings.TrimSpace(yamlConfig),
 		Options: optionStr.String(),
 		User:    params.SessionData().User,

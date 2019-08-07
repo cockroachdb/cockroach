@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -38,51 +37,16 @@ func (row ZoneRow) sqlRowString() ([]string, error) {
 	}, nil
 }
 
-// GetAllZoneSpecifiers returns specifiers for all installed zone configs.
-func GetAllZoneSpecifiers(t testing.TB, sqlDB *SQLRunner) []tree.ZoneSpecifier {
-	rows := sqlDB.Query(t, `
-SELECT range_name, database_name, table_name, index_name, partition_name
-FROM crdb_internal.zones`)
-	defer rows.Close()
-
-	var result []tree.ZoneSpecifier
-	for rows.Next() {
-		var rangeName, databaseName, tableName, indexName, partitionName gosql.NullString
-		var zs tree.ZoneSpecifier
-		err := rows.Scan(&rangeName, &databaseName, &tableName, &indexName, &partitionName)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if rangeName.Valid {
-			zs.NamedZone = tree.UnrestrictedName(rangeName.String)
-		}
-		if databaseName.Valid && !tableName.Valid {
-			zs.Database = tree.Name(databaseName.String)
-		}
-		if tableName.Valid {
-			zs.TableOrIndex.Table = *tree.NewTableName(
-				tree.Name(databaseName.String), tree.Name(tableName.String))
-		}
-		if indexName.Valid {
-			zs.TableOrIndex.Index = tree.UnrestrictedName(indexName.String)
-		}
-		if partitionName.Valid {
-			zs.Partition = tree.Name(partitionName.String)
-		}
-		result = append(result, zs)
-	}
-	return result
-}
-
 // RemoveAllZoneConfigs removes all installed zone configs.
 func RemoveAllZoneConfigs(t testing.TB, sqlDB *SQLRunner) {
 	t.Helper()
-	for _, zs := range GetAllZoneSpecifiers(t, sqlDB) {
-		if zs.NamedZone == config.DefaultZoneName {
+	for _, row := range sqlDB.QueryStr(t, "SHOW ALL ZONE CONFIGURATIONS") {
+		zoneName := row[0]
+		if zoneName == fmt.Sprintf("RANGE %s", config.DefaultZoneName) {
 			// The default zone cannot be removed.
 			continue
 		}
-		sqlDB.Exec(t, fmt.Sprintf("ALTER %s CONFIGURE ZONE DISCARD", &zs))
+		DeleteZoneConfig(t, sqlDB, zoneName)
 	}
 }
 

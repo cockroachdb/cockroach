@@ -162,7 +162,7 @@ func generateZoneConfigIntrospectionValues(
 	values[indexNameCol] = tree.DNull
 	values[partitionNameCol] = tree.DNull
 	if zs != nil {
-		values[zoneNameCol] = tree.NewDString(config.ToZoneName(zs))
+		values[zoneNameCol] = tree.NewDString(zs.String())
 		if zs.NamedZone != "" {
 			values[rangeNameCol] = tree.NewDString(string(zs.NamedZone))
 		}
