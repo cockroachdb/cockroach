@@ -1,4 +1,4 @@
-# LogicTest: local local-opt
+# LogicTest: local
 
 # CCL-only statements error out trying to handle the parsed statements.
 

@@ -1,4 +1,4 @@
-# LogicTest: local local-opt
+# LogicTest: local
 
 statement error unrecognized configuration parameter "foo"
 SET foo = bar
@@ -186,10 +186,10 @@ SET vectorize = bogus
 statement ok
 SET optimizer = on
 
-statement ok
+statement error invalid value for parameter "optimizer": "local"
 SET optimizer = local
 
-statement ok
+statement error invalid value for parameter "optimizer": "off"
 SET optimizer = off
 
 statement error invalid value for parameter "optimizer": "bogus"
