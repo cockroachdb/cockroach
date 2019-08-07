@@ -33,7 +33,6 @@ func newSorter(
 ) (resettableOperator, error) {
 	sorters := make([]colSorter, len(orderingCols))
 	partitioners := make([]partitioner, len(orderingCols)-1)
-	isOrderingCol := make([]bool, len(inputTypes))
 
 	var err error
 	for i, ord := range orderingCols {
@@ -47,20 +46,15 @@ func newSorter(
 				return nil, err
 			}
 		}
-		// All ordering columns will have been sorted properly by the time the spool
-		// phase is over - only the columns that weren't sort columns will need to
-		// be reordered.
-		isOrderingCol[ord.ColIdx] = true
 	}
 
 	return &sortOp{
-		input:         input,
-		inputTypes:    inputTypes,
-		sorters:       sorters,
-		partitioners:  partitioners,
-		orderingCols:  orderingCols,
-		isOrderingCol: isOrderingCol,
-		state:         sortSpooling,
+		input:        input,
+		inputTypes:   inputTypes,
+		sorters:      sorters,
+		partitioners: partitioners,
+		orderingCols: orderingCols,
+		state:        sortSpooling,
 	}, nil
 }
 
@@ -176,12 +170,6 @@ type sortOp struct {
 	// orderingCols is the ordered list of column orderings that the sorter should
 	// sort on.
 	orderingCols []distsqlpb.Ordering_Column
-	// isOrderingCol is set to true for every column that will have been pre-sorted
-	// by the time the spool phase is finished. This will be true for all of the
-	// sort columns except for the final one. The rest of the columns will not be
-	// sorted yet, and will need to be sorted before outputting by rearrangement
-	// to the order specified by the order field.
-	isOrderingCol []bool
 	// sorters contains one colSorter per sort column.
 	sorters []colSorter
 	// partitioners contains one partitioner per sort column except for the last,
@@ -198,8 +186,7 @@ type sortOp struct {
 	// state is the current state of the sort.
 	state sortState
 
-	workingSpace []uint64
-	output       coldata.Batch
+	output coldata.Batch
 }
 
 var _ Operator = &sortOp{}
@@ -208,16 +195,13 @@ var _ Operator = &sortOp{}
 type colSorter interface {
 	// init prepares this sorter, given a particular Vec and an order vector,
 	// which must be the same size as the input Vec and will be permuted with
-	// the same swaps as the column. workingSpace is a vector of the same size as
-	// the column that is needed for temporary space.
-	init(col coldata.Vec, order []uint64, workingSpace []uint64)
+	// the same swaps as the column.
+	init(col coldata.Vec, order []uint64)
 	// sort globally sorts this sorter's column.
 	sort(ctx context.Context)
 	// sortPartitions sorts this sorter's column once for every partition in the
 	// partition slice.
 	sortPartitions(ctx context.Context, partitions []uint64)
-	// reorder reorders this sorter's column according to its order vector.
-	reorder()
 }
 
 func (p *sortOp) Init() {
@@ -262,27 +246,15 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 		}
 
 		for j := 0; j < len(p.inputTypes); j++ {
-			if p.isOrderingCol[j] {
-				// The vec is already sorted, so just fill it directly.
-				p.output.ColVec(j).Copy(
-					coldata.CopyArgs{
-						ColType:     p.inputTypes[j],
-						Src:         p.input.getValues(j),
-						SrcStartIdx: p.emitted,
-						SrcEndIdx:   newEmitted,
-					},
-				)
-			} else {
-				p.output.ColVec(j).Copy(
-					coldata.CopyArgs{
-						ColType:     p.inputTypes[j],
-						Src:         p.input.getValues(j),
-						Sel64:       p.order,
-						SrcStartIdx: p.emitted,
-						SrcEndIdx:   p.emitted + uint64(p.output.Length()),
-					},
-				)
-			}
+			p.output.ColVec(j).Copy(
+				coldata.CopyArgs{
+					ColType:     p.inputTypes[j],
+					Src:         p.input.getValues(j),
+					Sel64:       p.order,
+					SrcStartIdx: p.emitted,
+					SrcEndIdx:   p.emitted + uint64(p.output.Length()),
+				},
+			)
 		}
 		p.emitted = newEmitted
 		return p.output
@@ -302,10 +274,8 @@ func (p *sortOp) sort(ctx context.Context) {
 	// underlying memory is insufficient.
 	if p.order == nil || uint64(cap(p.order)) < spooledTuples {
 		p.order = make([]uint64, spooledTuples)
-		p.workingSpace = make([]uint64, spooledTuples)
 	}
 	p.order = p.order[:spooledTuples]
-	p.workingSpace = p.workingSpace[:spooledTuples]
 
 	// Initialize the order vector to the ordinal positions within the input set.
 	for i := uint64(0); i < uint64(len(p.order)); i++ {
@@ -313,7 +283,7 @@ func (p *sortOp) sort(ctx context.Context) {
 	}
 
 	for i := range p.orderingCols {
-		p.sorters[i].init(p.input.getValues(int(p.orderingCols[i].ColIdx)), p.order, p.workingSpace)
+		p.sorters[i].init(p.input.getValues(int(p.orderingCols[i].ColIdx)), p.order)
 	}
 
 	// Now, sort each column in turn.
@@ -359,7 +329,7 @@ func (p *sortOp) sort(ctx context.Context) {
 	// 2  b
 	// 2  a
 	//
-	// Then, for each group in the sorted, first column, we sort the second coldata:
+	// Then, for each group in the sorted, first column, we sort the second column:
 	//
 	// 1 a
 	// 1 b
@@ -373,16 +343,14 @@ func (p *sortOp) sort(ctx context.Context) {
 			// on it, ORing the results together with each subsequent column. This
 			// produces a distinct vector (a boolean vector that has true in each
 			// position that is different from the last position).
-			p.partitioners[i-offset].partition(p.input.getValues(int(p.orderingCols[i-offset].ColIdx)), partitionsCol, spooledTuples)
+			p.partitioners[i-offset].partitionWithOrder(p.input.getValues(int(p.orderingCols[i-offset].ColIdx)), p.order,
+				partitionsCol, spooledTuples)
 		} else {
 			omitNextPartitioning = false
 		}
 		// Convert the distinct vector into a selection vector - a vector of indices
 		// that were true in the distinct vector.
 		partitions = boolVecToSel64(partitionsCol, partitions[:0])
-		// Reorder the column we're about to sort, based on the swaps we've seen in
-		// the sort so far.
-		sorter.reorder()
 		// For each partition (set of tuples that are identical in all of the sort
 		// columns we've seen so far), sort based on the new column.
 		sorter.sortPartitions(ctx, partitions)

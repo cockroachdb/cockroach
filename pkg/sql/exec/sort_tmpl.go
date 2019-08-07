@@ -90,14 +90,12 @@ func newSingleSorter(t types.T, dir distsqlpb.Ordering_Column_Direction) (colSor
 type sort_TYPE_DIROp struct {
 	sortCol       _GOTYPESLICE
 	order         []uint64
-	workingSpace  []uint64
 	cancelChecker CancelChecker
 }
 
-func (s *sort_TYPE_DIROp) init(col coldata.Vec, order []uint64, workingSpace []uint64) {
+func (s *sort_TYPE_DIROp) init(col coldata.Vec, order []uint64) {
 	s.sortCol = col._TemplateType()
 	s.order = order
-	s.workingSpace = workingSpace
 }
 
 func (s *sort_TYPE_DIROp) sort(ctx context.Context) {
@@ -105,35 +103,11 @@ func (s *sort_TYPE_DIROp) sort(ctx context.Context) {
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
-func (s *sort_TYPE_DIROp) reorder() {
-	// Initialize our index vector to the inverse of the order vector. This
-	// creates what is known as a permutation. Position i in the permutation has
-	// the output index for the value at position i in the original ordering of
-	// the data we sorted. For example, if we were sorting the column [d,c,a,b],
-	// the order vector would be [2,3,1,0], and the permutation would be
-	// [3,2,0,1].
-	index := s.workingSpace
-	for idx, ord := range s.order {
-		index[int(ord)] = uint64(idx)
-	}
-	// Once we have our permutation, we apply it to our value column by following
-	// each cycle within the permutation until we reach the identity. This
-	// algorithm takes just O(n) swaps to reorder the sortCol. It also returns
-	// the index array to an ordinal list in the process.
-	for i := range index {
-		for index[i] != uint64(i) {
-			execgen.SWAP(s.sortCol, int(index[i]), i)
-			index[i], index[index[i]] = index[index[i]], index[i]
-		}
-	}
-}
-
 func (s *sort_TYPE_DIROp) sortPartitions(ctx context.Context, partitions []uint64) {
 	if len(partitions) < 1 {
 		panic(fmt.Sprintf("invalid partitions list %v", partitions))
 	}
 	order := s.order
-	sortCol := s.sortCol
 	for i, partitionStart := range partitions {
 		var partitionEnd uint64
 		if i == len(partitions)-1 {
@@ -142,7 +116,6 @@ func (s *sort_TYPE_DIROp) sortPartitions(ctx context.Context, partitions []uint6
 			partitionEnd = partitions[i+1]
 		}
 		s.order = order[partitionStart:partitionEnd]
-		s.sortCol = execgen.SLICE(sortCol, int(partitionStart), int(partitionEnd))
 		n := int(partitionEnd - partitionStart)
 		s.quickSort(ctx, 0, n, maxDepth(n))
 	}
@@ -150,17 +123,15 @@ func (s *sort_TYPE_DIROp) sortPartitions(ctx context.Context, partitions []uint6
 
 func (s *sort_TYPE_DIROp) Less(i, j int) bool {
 	var lt bool
-	arg1 := execgen.GET(s.sortCol, i)
-	arg2 := execgen.GET(s.sortCol, j)
+	// We always indirect via the order vector.
+	arg1 := execgen.GET(s.sortCol, int(s.order[i]))
+	arg2 := execgen.GET(s.sortCol, int(s.order[j]))
 	_ASSIGN_LT("lt", "arg1", "arg2")
 	return lt
 }
 
 func (s *sort_TYPE_DIROp) Swap(i, j int) {
-	// Swap needs to swap the values in the column being sorted, as otherwise
-	// subsequent calls to Less would be incorrect.
-	// We also store the swap order in s.order to swap all the other columns.
-	execgen.SWAP(s.sortCol, i, j)
+	// We don't physically swap the column - we merely edit the order vector.
 	s.order[i], s.order[j] = s.order[j], s.order[i]
 }
 
