@@ -46,6 +46,7 @@ import (
 	"github.com/jackc/pgx/pgproto3"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 func wrongArgCountString(want, got int) string {
@@ -2338,4 +2339,29 @@ func TestFailPrepareFailsTxn(t *testing.T) {
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestOverlyLargeRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanupFn()
+
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	stmt, err := db.Prepare("select $1::text")
+	assert.NoError(t, err)
+
+	// This string will cause the message to exceed pgwire.maxMessageSize.
+	largeString := make([]byte, 128*1024*1024)
+	_, err = stmt.Exec(string(largeString))
+	assert.EqualError(t, err,
+		"pq: message of size 134217741 bytes exceeds maximum of 134217728 bytes. Try sending smaller batches.")
 }

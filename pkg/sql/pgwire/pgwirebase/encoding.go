@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"io/ioutil"
 	"math"
 	"strconv"
 	"time"
@@ -38,7 +39,13 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-const maxMessageSize = 1 << 24
+// maxMessageSize is the maximum size of any varlen string we will accept in the
+// wire protocol. Postgres has a limit of maxint32 on this quantity, but they
+// also have the freedom to not completely die on failures to allocate, so we're
+// a little more conservative.
+// 128 megabytes is twice our range size - exceeding this would cause other
+// problems.
+const maxMessageSize = 128 * 1024 * 1024
 
 // FormatCode represents a pgwire data format.
 //
@@ -102,9 +109,17 @@ func (b *ReadBuffer) ReadUntypedMsg(rd io.Reader) (int, error) {
 	size := int(binary.BigEndian.Uint32(b.tmp[:]))
 	// size includes itself.
 	size -= 4
-	if size > maxMessageSize || size < 0 {
-		return nread, NewProtocolViolationErrorf("message size %d out of bounds (0..%d)",
-			size, maxMessageSize)
+	if size < 0 {
+		err = NewProtocolViolationErrorf("invalid message size %d", size)
+	} else if size > maxMessageSize {
+		err = pgerror.Newf(pgcode.ProgramLimitExceeded,
+			"message of size %d bytes exceeds maximum of %d bytes. "+
+				"Try sending smaller batches.", size, maxMessageSize)
+	}
+	if err != nil {
+		// Consume the desired number of bytes to regain stream synchronization.
+		io.CopyN(ioutil.Discard, rd, int64(size))
+		return 0, err
 	}
 
 	b.reset(size)
