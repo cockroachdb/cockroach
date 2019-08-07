@@ -27,6 +27,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -44,6 +45,9 @@ var _ reflect.SliceHeader
 
 // Dummy import to pull in "bytes" package.
 var _ bytes.Buffer
+
+// _GOTYPESLICE is a template Go type slice variable.
+type _GOTYPESLICE interface{}
 
 // _ASSIGN_HASH is the template equality function for assigning the first input
 // to the result of the hash value of the second input.
@@ -67,8 +71,9 @@ const _SEL_IND = 0
 
 func _CHECK_COL_MAIN(ht *hashTable, buildKeys, probeKeys []interface{}, keyID uint64, i uint16) { // */}}
 	// {{define "checkColMain"}}
-	buildVal := buildKeys[keyID-1]
-	probeVal := probeKeys[_SEL_IND]
+	buildVal := execgen.GET(buildKeys, int(keyID-1))
+	selIdx := _SEL_IND
+	probeVal := execgen.GET(probeKeys, int(selIdx))
 	var unique bool
 	_ASSIGN_NE(unique, buildVal, probeVal)
 
@@ -161,7 +166,7 @@ func _REHASH_BODY(
 	ctx context.Context,
 	ht *hashTable,
 	buckets []uint64,
-	keys []interface{},
+	keys _GOTYPESLICE,
 	nulls *coldata.Nulls,
 	nKeys uint64,
 	_SEL_STRING string,
@@ -175,7 +180,8 @@ func _REHASH_BODY(
 			continue
 		}
 		// {{ end }}
-		v := keys[_SEL_IND]
+		selIdx := _SEL_IND
+		v := execgen.GET(keys, int(selIdx))
 		p := uintptr(buckets[i])
 		_ASSIGN_HASH(p, v)
 		buckets[i] = uint64(p)
@@ -282,6 +288,9 @@ func _DISTINCT_COLLECT_NO_OUTER(
 }
 
 // */}}
+
+// Use execgen package to remove unused import warning.
+var _ interface{} = execgen.GET
 
 // rehash takes an element of a key (tuple representing a row of equality
 // column values) at a given column and computes a new hash by applying a

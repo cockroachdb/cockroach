@@ -30,8 +30,9 @@ func columnByteSize(col coldata.Vec) int64 {
 		return int64(len(col.Float64()) * 8)
 	case types.Bytes:
 		var bytes int64
-		for _, b := range col.Bytes() {
-			bytes += int64(len(b))
+		colBytes := col.Bytes()
+		for i := 0; i < colBytes.Len(); i++ {
+			bytes += int64(len(colBytes.Get(i)))
 		}
 		return bytes
 	default:

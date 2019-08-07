@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/pkg/errors"
 )
@@ -45,6 +46,9 @@ const _TYPES_T = types.Unhandled
 type _GOTYPE interface{}
 
 // */}}
+
+// Use execgen package to remove unused import warning.
+var _ interface{} = execgen.GET
 
 // NewConstOp creates a new operator that produces a constant value constVal of
 // type t at index outputIdx.
@@ -91,11 +95,12 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	col := batch.ColVec(c.outputIdx)._TemplateType()
 	if sel := batch.Selection(); sel != nil {
 		for _, i := range sel[:n] {
-			col[i] = c.constVal
+			execgen.SET(col, int(i), c.constVal)
 		}
 	} else {
-		for i := range col[:n] {
-			col[i] = c.constVal
+		col = execgen.SLICE(col, 0, int(n))
+		for execgen.RANGE(i, col) {
+			execgen.SET(col, i, c.constVal)
 		}
 	}
 	return batch

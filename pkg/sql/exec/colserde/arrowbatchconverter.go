@@ -126,7 +126,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 				c.builders.boolBuilder.AppendValues(vec.Bool()[:n], nil /* valid */)
 				data = c.builders.boolBuilder.NewBooleanArray().Data()
 			case types.Bytes:
-				c.builders.binaryBuilder.AppendValues(vec.Bytes()[:n], nil /* valid */)
+				c.builders.binaryBuilder.AppendValues(vec.Bytes().PrimitiveRepr()[:n], nil /* valid */)
 				data = c.builders.binaryBuilder.NewBinaryArray().Data()
 			default:
 				panic(fmt.Sprintf("unexpected type %s", typ))
@@ -252,7 +252,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 				offsets := bytesArr.ValueOffsets()
 				vecArr := vec.Bytes()
 				for i := 0; i < len(offsets)-1; i++ {
-					vecArr[i] = bytes[offsets[i]:offsets[i+1]]
+					vecArr.Set(i, bytes[offsets[i]:offsets[i+1]])
 				}
 				arr = bytesArr
 			default:

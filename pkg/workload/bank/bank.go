@@ -134,7 +134,7 @@ func (b *bank) Tables() []workload.Table {
 				cb.Reset(bankColTypes, 1)
 				cb.ColVec(0).Int64()[0] = int64(rowIdx) // id
 				cb.ColVec(1).Int64()[0] = 0             // balance
-				cb.ColVec(2).Bytes()[0] = payload       // payload
+				cb.ColVec(2).Bytes().Set(0, payload)    // payload
 			},
 		},
 		Splits: workload.Tuples(
