@@ -36,6 +36,8 @@ func registerKV(r *testRegistry) {
 		blockSize   int
 		encryption  bool
 		sequential  bool
+		duration    time.Duration
+		tags        []string
 	}
 	runKV := func(ctx context.Context, t *test, c *cluster, opts kvOptions) {
 		nodes := c.spec.NodeCount - 1
@@ -48,7 +50,11 @@ func registerKV(r *testRegistry) {
 		m.Go(func(ctx context.Context) error {
 			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
 			splits := " --splits=1000"
-			duration := " --duration=" + ifLocal("10s", "10m")
+			var duration string
+			if opts.duration == 0 {
+				opts.duration = 10 * time.Minute
+			}
+			duration := " --duration=" + ifLocal("10s", opts.duration.String())
 			readPercent := fmt.Sprintf(" --read-percent=%d", opts.readPercent)
 			histograms := " --histograms=" + perfArtifactsDir + "/stats.json"
 			var batchSize string
@@ -115,11 +121,18 @@ func registerKV(r *testRegistry) {
 		// Configs with a sequential access pattern.
 		{nodes: 3, cpus: 32, readPercent: 0, sequential: true},
 		{nodes: 3, cpus: 32, readPercent: 95, sequential: true},
+
+		// Weekly larger scale configurations.
+		{nodes: 32, cpus: 8, readPercent: 0, tags: []string{"weekly"}, duration: time.Hour},
+		{nodes: 32, cpus: 8, readPercent: 95, tags: []string{"weekly"}, duration: time.Hour},
 	} {
 		opts := opts
 
 		var nameParts []string
 		nameParts = append(nameParts, fmt.Sprintf("kv%d", opts.readPercent))
+		if len(opts.tags) > 0 {
+			nameParts = append(nameParts, strings.Join(opts.tags, "/"))
+		}
 		nameParts = append(nameParts, fmt.Sprintf("enc=%t", opts.encryption))
 		nameParts = append(nameParts, fmt.Sprintf("nodes=%d", opts.nodes))
 		if opts.cpus != 8 { // support legacy test name which didn't include cpu
@@ -147,6 +160,7 @@ func registerKV(r *testRegistry) {
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runKV(ctx, t, c, opts)
 			},
+			Tags: opts.tags,
 		})
 	}
 }
