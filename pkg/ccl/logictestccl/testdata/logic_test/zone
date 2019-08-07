@@ -470,15 +470,15 @@ statement ok
 ALTER PARTITION x1_idx OF INDEX t38391@foo CONFIGURE ZONE USING gc.ttlseconds = 31337
 
 query TT
-SHOW ZONE CONFIGURATION FOR PARTITION x1_idx OF TABLE t38391
+SHOW ZONE CONFIGURATION FOR PARTITION x1_idx OF INDEX t38391@foo
 ----
-test.t38391.x1_idx  ALTER PARTITION x1_idx OF INDEX t38391@foo CONFIGURE ZONE USING
-                    range_min_bytes = 16777216,
-                    range_max_bytes = 67108864,
-                    gc.ttlseconds = 31337,
-                    num_replicas = 3,
-                    constraints = '[]',
-                    lease_preferences = '[]'
+test.t38391@foo.x1_idx  ALTER PARTITION x1_idx OF INDEX t38391@foo CONFIGURE ZONE USING
+                        range_min_bytes = 16777216,
+                        range_max_bytes = 67108864,
+                        gc.ttlseconds = 31337,
+                        num_replicas = 3,
+                        constraints = '[]',
+                        lease_preferences = '[]'
 
 statement ok
 CREATE TABLE dup_constraint (x INT PRIMARY KEY);
@@ -496,3 +496,22 @@ CONSTRAINTS='[+region=us-east1, +region=us-west1]'
 statement error pq: incompatible zone constraints: "\+region=us-east1" and "\-region=us-east1"
 ALTER PARTITION p1 OF TABLE dup_constraint CONFIGURE ZONE USING
 CONSTRAINTS='[+region=us-east1, -region=us-east1]'
+
+query TTTTTT rowsort
+SELECT zone_name, range_name, database_name, table_name, index_name, partition_name
+FROM crdb_internal.zones
+----
+.default                default   NULL    NULL    NULL       NULL
+system                  NULL      system  NULL    NULL       NULL
+system.jobs             NULL      system  jobs    NULL       NULL
+.meta                   meta      NULL    NULL    NULL       NULL
+.system                 system    NULL    NULL    NULL       NULL
+.liveness               liveness  NULL    NULL    NULL       NULL
+test.t                  NULL      test    t       NULL       NULL
+test.t@secondary        NULL      test    t       secondary  NULL
+test.t@tertiary         NULL      test    t       tertiary   NULL
+test.t36642@secondary   NULL      test    t36642  secondary  NULL
+test.t36642@tertiary    NULL      test    t36642  tertiary   NULL
+test.t36644@secondary   NULL      test    t36644  secondary  NULL
+test.t36644@tertiary    NULL      test    t36644  tertiary   NULL
+test.t38391@foo.x1_idx  NULL      test    t38391  foo        x1_idx

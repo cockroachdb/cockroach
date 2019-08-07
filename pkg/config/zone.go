@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -83,78 +82,13 @@ func ZoneSpecifierFromID(
 	}, nil
 }
 
-// ParseCLIZoneSpecifier converts a single string s identifying a zone, as would
-// be used to name a zone on the command line, to a ZoneSpecifier. A valid CLI
-// zone specifier is either 1) a database or table reference of the form
-// DATABASE[.TABLE[.PARTITION|@INDEX]], or 2) a special named zone of the form
-// .NAME.
-func ParseCLIZoneSpecifier(s string) (tree.ZoneSpecifier, error) {
-	if len(s) > 0 && s[0] == '.' {
-		name := s[1:]
-		if name == "" {
-			return tree.ZoneSpecifier{}, errors.New("missing zone name")
-		}
-		return tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName(name)}, nil
-	}
-	// ParseTableIndexName is not vulnerable to SQL injection, so passing s
-	// directly is safe. See #8389 for details.
-	parsed, err := parser.ParseTableIndexName(s)
-	if err != nil {
-		return tree.ZoneSpecifier{}, fmt.Errorf("malformed name: %q", s)
-	}
-
-	tn := parsed.Table
-	if tn.Table() == "" {
-		// In this case, the input was parsed as [[CATALOG.]SCHEMA.]INDEX
-		// (this is the syntax when specifying an index, e.g. for ALTER INDEX).
-		tn.TableName = tree.Name(parsed.Index)
-		parsed.Index = ""
-	}
-
-	// To reuse the SQL parsing code, we unfortunately have to abuse TableIndexName
-	// here. A table index name is of the form:
-	//   [[CATALOG.]SCHEMA.]TABLE[@INDEX]
-	// and we want to reinterpret this as
-	//   DATABASE[.TABLE[.PARTITION|@INDEX]]
-	//
-	// To make this conversion we have three cases:
-	//   1) one part:    TABLE -> DATABASE
-	//   2) two parts:   SCHEMA.TABLE -> DATABASE.TABLE
-	//   3) three parts: CATALOG.SCHEMA.TABLE -> DATABASE.TABLE.PARTITION
-
-	if !tn.ExplicitSchema {
-		// Case 1: TABLE -> DATABASE.
-		return tree.ZoneSpecifier{Database: tn.TableName}, nil
-	}
-
-	if !tn.ExplicitCatalog {
-		// Case 2: SCHEMA.TABLE -> DATABASE.TABLE
-		database, table := tn.SchemaName, tn.TableName
-		return tree.ZoneSpecifier{
-			TableOrIndex: tree.TableIndexName{
-				Table: tree.MakeTableName(database, table),
-				Index: parsed.Index,
-			},
-		}, nil
-	}
-
-	// Case 3: CATALOG.SCHEMA.TABLE -> DATABASE.TABLE.PARTITION
-	if parsed.Index != "" {
-		return tree.ZoneSpecifier{}, fmt.Errorf(
-			"index and partition cannot be specified simultaneously: %q", s)
-	}
-	database, table, partition := tn.CatalogName, tn.SchemaName, tn.TableName
-	return tree.ZoneSpecifier{
-		TableOrIndex: tree.TableIndexName{
-			Table: tree.MakeTableName(database, table),
-		},
-		Partition: partition,
-	}, nil
-}
-
-// CLIZoneSpecifier converts a tree.ZoneSpecifier to a CLI zone specifier as
-// described in ParseCLIZoneSpecifier.
-func CLIZoneSpecifier(zs *tree.ZoneSpecifier) string {
+// ToZoneName converts a tree.ZoneSpecifier to a human-friendly zone name. This
+// is only intended for readability and not to be parsed back into a
+// ZoneSpecifier.
+//
+// For RANGE zone specifiers, the name is of the form .NAME. Otherwise, the name
+// is of the form DATABASE[.TABLE[@INDEX][.PARTITION]].
+func ToZoneName(zs *tree.ZoneSpecifier) string {
 	if zs.NamedZone != "" {
 		return "." + string(zs.NamedZone)
 	}
@@ -163,8 +97,8 @@ func CLIZoneSpecifier(zs *tree.ZoneSpecifier) string {
 	}
 	ti := zs.TableOrIndex
 
-	// The table name may have a schema specifier. CLI zone specifiers
-	// do not support this, so strip it.
+	// The table name may have a schema specifier. Zone names do not include this,
+	// so strip it.
 	ctx := tree.NewFmtCtx(tree.FmtSimple)
 	catalog := tree.Name(ti.Table.Catalog())
 	ctx.FormatNode(&catalog)
@@ -172,13 +106,14 @@ func CLIZoneSpecifier(zs *tree.ZoneSpecifier) string {
 	table := tree.UnrestrictedName(ti.Table.Table())
 	ctx.FormatNode(&table)
 
+	if ti.Index != "" && ti.Index != "primary" {
+		ctx.WriteByte('@')
+		ctx.FormatNode(&ti.Index)
+	}
 	if zs.Partition != "" {
 		ctx.WriteByte('.')
 		partition := tree.UnrestrictedName(zs.Partition)
 		ctx.FormatNode(&partition)
-	} else if ti.Index != "" {
-		ctx.WriteByte('@')
-		ctx.FormatNode(&ti.Index)
 	}
 	return ctx.CloseAndGetString()
 }
