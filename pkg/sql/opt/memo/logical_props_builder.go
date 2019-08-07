@@ -298,7 +298,7 @@ func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Rel
 			// arithmetic.
 			composite := false
 			for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {
-				typ := b.mem.Metadata().ColumnMeta(opt.ColumnID(i)).Type
+				typ := b.mem.Metadata().ColumnMeta(i).Type
 				if sqlbase.DatumTypeHasCompositeKeyEncoding(typ) {
 					composite = true
 					break

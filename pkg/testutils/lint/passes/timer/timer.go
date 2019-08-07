@@ -8,20 +8,31 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// TODO(radu): re-enable the checkers using the new staticcheck interfaces.
-// +build lint_todo
-
-package lint
+// Package timer defines an Analyzer that detects correct use of
+// timeutil.Timer.
+package timer
 
 import (
 	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
-	"log"
 
-	"honnef.co/go/tools/lint"
+	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
+	"golang.org/x/tools/go/ast/inspector"
 )
+
+// Doc documents this pass.
+const Doc = `check for correct use of timeutil.Timer`
+
+// Analyzer defines this pass.
+var Analyzer = &analysis.Analyzer{
+	Name:     "timer",
+	Doc:      Doc,
+	Requires: []*analysis.Analyzer{inspect.Analyzer},
+	Run:      run,
+}
 
 // timerChecker assures that timeutil.Timer objects are used correctly, to
 // avoid race conditions and deadlocks. These timers require callers to set
@@ -41,60 +52,41 @@ import (
 //   }
 // }
 //
-type timerChecker struct {
-	timerType types.Type
-}
-
-func (*timerChecker) Name() string {
-	return "timercheck"
-}
-
-func (*timerChecker) Prefix() string {
-	return "T"
-}
-
-const timerChanName = "C"
-
-func (m *timerChecker) Init(program *lint.Program) {
-	timeutilPkg := program.Prog.Package("github.com/cockroachdb/cockroach/pkg/util/timeutil")
-	if timeutilPkg == nil {
-		log.Fatal("timeutil package not found")
-	}
-	timerObject := timeutilPkg.Pkg.Scope().Lookup("Timer")
-	if timerObject == nil {
-		log.Fatal("timeutil.Timer type not found")
-	}
-	m.timerType = timerObject.Type()
-
-	func() {
-		if typ, ok := m.timerType.Underlying().(*types.Struct); ok {
-			for i := 0; i < typ.NumFields(); i++ {
-				if typ.Field(i).Name() == timerChanName {
-					return
-				}
-			}
+func run(pass *analysis.Pass) (interface{}, error) {
+	selectorIsTimer := func(s *ast.SelectorExpr) bool {
+		tv, ok := pass.TypesInfo.Types[s.X]
+		if !ok {
+			return false
 		}
-		log.Fatalf("no field called %q in type %s", timerChanName, m.timerType)
-	}()
-}
-
-func (m *timerChecker) Funcs() map[string]lint.Func {
-	return map[string]lint.Func{
-		"TimeutilTimerRead": m.checkSetTimeutilTimerRead,
+		typ := tv.Type.Underlying()
+		for {
+			ptr, pok := typ.(*types.Pointer)
+			if !pok {
+				break
+			}
+			typ = ptr.Elem()
+		}
+		named, ok := typ.(*types.Named)
+		if !ok {
+			return false
+		}
+		if named.Obj().Type().String() != "github.com/cockroachdb/cockroach/pkg/util/timeutil.Timer" {
+			return false
+		}
+		return true
 	}
-}
 
-func (m *timerChecker) selectorIsTimer(s *ast.SelectorExpr, info *types.Info) bool {
-	selTyp := info.TypeOf(s.X)
-	if ptr, ok := selTyp.(*types.Pointer); ok {
-		selTyp = ptr.Elem()
+	inspect := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+
+	nodeFilter := []ast.Node{
+		(*ast.ForStmt)(nil),
 	}
-	return selTyp == m.timerType
-}
-
-func (m *timerChecker) checkSetTimeutilTimerRead(j *lint.Job) {
-	forAllFiles(j, func(n ast.Node) bool {
-		return walkForStmts(n, func(s ast.Stmt) bool {
+	inspect.Preorder(nodeFilter, func(n ast.Node) {
+		fr, ok := n.(*ast.ForStmt)
+		if !ok {
+			return
+		}
+		walkStmts(fr.Body.List, func(s ast.Stmt) bool {
 			return walkSelectStmts(s, func(s ast.Stmt) bool {
 				comm, ok := s.(*ast.CommClause)
 				if !ok || comm.Comm == nil /* default: */ {
@@ -121,7 +113,7 @@ func (m *timerChecker) checkSetTimeutilTimerRead(j *lint.Job) {
 				if !ok {
 					return true
 				}
-				if !m.selectorIsTimer(selector, j.Program.Info) {
+				if !selectorIsTimer(selector) {
 					return true
 				}
 				selectorName := fmt.Sprint(selector.X)
@@ -143,7 +135,7 @@ func (m *timerChecker) checkSetTimeutilTimerRead(j *lint.Job) {
 						if !ok {
 							return true
 						}
-						if !m.selectorIsTimer(assignSelector, j.Program.Info) {
+						if !selectorIsTimer(assignSelector) {
 							return true
 						}
 						if fmt.Sprint(assignSelector.X) != selectorName {
@@ -167,10 +159,31 @@ func (m *timerChecker) checkSetTimeutilTimerRead(j *lint.Job) {
 					return true
 				})
 				if noRead {
-					j.Errorf(comm, "must set timer.Read = true after reading from timer.C (see timeutil/timer.go)")
+					pass.Reportf(comm.Pos(), "must set timer.Read = true after reading from timer.C (see timeutil/timer.go)")
 				}
 				return true
 			})
 		})
 	})
+
+	return nil, nil
+}
+
+const timerChanName = "C"
+
+func walkSelectStmts(n ast.Node, fn func(ast.Stmt) bool) bool {
+	sel, ok := n.(*ast.SelectStmt)
+	if !ok {
+		return true
+	}
+	return walkStmts(sel.Body.List, fn)
+}
+
+func walkStmts(stmts []ast.Stmt, fn func(ast.Stmt) bool) bool {
+	for _, stmt := range stmts {
+		if !fn(stmt) {
+			return false
+		}
+	}
+	return true
 }

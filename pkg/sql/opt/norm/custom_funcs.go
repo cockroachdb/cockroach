@@ -160,7 +160,7 @@ func (c *CustomFuncs) CanConstructBinary(op opt.Operator, left, right opt.Scalar
 // in an array.
 func (c *CustomFuncs) ArrayType(in memo.RelExpr) *types.T {
 	inCol, _ := c.OutputCols(in).Next(0)
-	inTyp := c.mem.Metadata().ColumnMeta(opt.ColumnID(inCol)).Type
+	inTyp := c.mem.Metadata().ColumnMeta(inCol).Type
 	return types.MakeArray(inTyp)
 }
 
@@ -1004,7 +1004,7 @@ func (c *CustomFuncs) addConjuncts(
 func (c *CustomFuncs) ConstructEmptyValues(cols opt.ColSet) memo.RelExpr {
 	colList := make(opt.ColList, 0, cols.Len())
 	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
-		colList = append(colList, opt.ColumnID(i))
+		colList = append(colList, i)
 	}
 	return c.f.ConstructValues(memo.EmptyScalarListExpr, &memo.ValuesPrivate{
 		Cols: colList,
@@ -1161,7 +1161,7 @@ func (c *CustomFuncs) projectColMapSide(toList, fromList opt.ColList) memo.Proje
 func (c *CustomFuncs) CanMapOnSetOp(src *memo.FiltersItem) bool {
 	filterProps := src.ScalarProps(c.mem)
 	for i, ok := filterProps.OuterCols.Next(0); ok; i, ok = filterProps.OuterCols.Next(i + 1) {
-		colType := c.f.Metadata().ColumnMeta(opt.ColumnID(i)).Type
+		colType := c.f.Metadata().ColumnMeta(i).Type
 		if sqlbase.DatumTypeHasCompositeKeyEncoding(colType) {
 			return false
 		}
@@ -1629,7 +1629,7 @@ func (c *CustomFuncs) SubqueryOrdering(sub *memo.SubqueryPrivate) physical.Order
 // FirstCol returns the first column in the input expression.
 func (c *CustomFuncs) FirstCol(in memo.RelExpr) opt.ColumnID {
 	inCol, _ := c.OutputCols(in).Next(0)
-	return opt.ColumnID(inCol)
+	return inCol
 }
 
 // MakeArrayAggCol returns a ColPrivate with the given type and an "array_agg" label.
