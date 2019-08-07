@@ -583,24 +583,33 @@ type tableLookupFn = *internalLookupCtx
 func newInternalLookupCtx(
 	descs []sqlbase.DescriptorProto, prefix *DatabaseDescriptor,
 ) *internalLookupCtx {
+	wrappedDescs := make([]sqlbase.Descriptor, len(descs))
+	for i, desc := range descs {
+		wrappedDescs[i] = *sqlbase.WrapDescriptor(desc)
+	}
+	return newInternalLookupCtxFromDescriptors(wrappedDescs, prefix)
+}
+
+func newInternalLookupCtxFromDescriptors(
+	descs []sqlbase.Descriptor, prefix *DatabaseDescriptor,
+) *internalLookupCtx {
 	dbNames := make(map[sqlbase.ID]string)
 	dbDescs := make(map[sqlbase.ID]*DatabaseDescriptor)
 	tbDescs := make(map[sqlbase.ID]*TableDescriptor)
 	var tbIDs, dbIDs []sqlbase.ID
 	// Record database descriptors for name lookups.
 	for _, desc := range descs {
-		switch d := desc.(type) {
-		case *sqlbase.DatabaseDescriptor:
-			dbNames[d.ID] = d.Name
-			dbDescs[d.ID] = d
-			if prefix == nil || prefix.ID == d.ID {
-				dbIDs = append(dbIDs, d.ID)
+		if database := desc.GetDatabase(); database != nil {
+			dbNames[database.ID] = database.Name
+			dbDescs[database.ID] = database
+			if prefix == nil || prefix.ID == database.ID {
+				dbIDs = append(dbIDs, database.ID)
 			}
-		case *sqlbase.TableDescriptor:
-			tbDescs[d.ID] = d
-			if prefix == nil || prefix.ID == d.ParentID {
+		} else if table := desc.GetTable(); table != nil {
+			tbDescs[table.ID] = table
+			if prefix == nil || prefix.ID == table.ParentID {
 				// Only make the table visible for iteration if the prefix was included.
-				tbIDs = append(tbIDs, d.ID)
+				tbIDs = append(tbIDs, table.ID)
 			}
 		}
 	}

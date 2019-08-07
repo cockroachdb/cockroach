@@ -1146,7 +1146,7 @@ CREATE TABLE crdb_internal.create_statements (
 				} else {
 					descType = typeTable
 					tn := (*tree.Name)(&table.Name)
-					createNofk, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, true /* ignoreFKs */)
+					createNofk, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, IgnoreFKs)
 					if err != nil {
 						return err
 					}
@@ -1178,7 +1178,7 @@ CREATE TABLE crdb_internal.create_statements (
 							}
 						}
 					}
-					stmt, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, false /* ignoreFKs */)
+					stmt, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, IncludeFKs)
 				}
 				if err != nil {
 					return err
