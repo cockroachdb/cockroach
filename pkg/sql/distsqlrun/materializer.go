@@ -30,13 +30,6 @@ type materializer struct {
 
 	da sqlbase.DatumAlloc
 
-	// outputToInputColIdx is a mapping from output row index to the operator's
-	// internal column schema. For example, if the input operator had 2 columns
-	// [a, b], and the desired output was just [b], outputToInputColIdx would be
-	// [1]: mapping the 0th column of the output row schema onto the 1st column
-	// of the operator's row schema.
-	outputToInputColIdx []int
-
 	// runtime fields --
 
 	// curIdx represents the current index into the column batch: the next row the
@@ -53,10 +46,6 @@ type materializer struct {
 	outputRow      sqlbase.EncDatumRow
 	outputMetadata *distsqlpb.ProducerMetadata
 
-	// ctxCancel will cancel the context that is passed to the input (which will
-	// pass it down further). This allows for the cancellation of the tree rooted
-	// at this materializer when it is closed.
-	ctxCancel context.CancelFunc
 	// cancelFlow will return a function to cancel the context of the flow. It is
 	// a function in order to be lazily evaluated, since the context cancellation
 	// function is only available when Starting. This function differs from
@@ -83,9 +72,6 @@ func newMaterializer(
 	processorID int32,
 	input exec.Operator,
 	typs []types.T,
-	// TODO(yuzefovich): I feel like we should remove outputToInputColIdx
-	// argument since it's always {0, 1, ..., len(typs)-1}.
-	outputToInputColIdx []int,
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
@@ -93,9 +79,8 @@ func newMaterializer(
 	cancelFlow func() context.CancelFunc,
 ) (*materializer, error) {
 	m := &materializer{
-		input:               input,
-		outputToInputColIdx: outputToInputColIdx,
-		row:                 make(sqlbase.EncDatumRow, len(outputToInputColIdx)),
+		input: input,
+		row:   make(sqlbase.EncDatumRow, len(typs)),
 	}
 
 	if err := m.ProcessorBase.Init(
@@ -139,17 +124,7 @@ func (m *materializer) Child(nth int) exec.OpNode {
 
 func (m *materializer) Start(ctx context.Context) context.Context {
 	m.input.Init()
-	ctx = m.ProcessorBase.StartInternal(ctx, materializerProcName)
-	// In general case, ctx that is passed is related to the "flow context" that
-	// will be canceled by m.cancelFlow. However, in some cases (like when there
-	// is a subquery), it appears as if the subquery flow context is not related
-	// to the flow context of the main query, so calling m.cancelFlow will not
-	// shutdown the subquery tree. To work around this, we always use another
-	// context and get another cancellation function, and we will trigger both
-	// upon exit from the materializer.
-	// TODO(yuzefovich): figure out what is the problem here.
-	m.Ctx, m.ctxCancel = context.WithCancel(ctx)
-	return m.Ctx
+	return m.ProcessorBase.StartInternal(ctx, materializerProcName)
 }
 
 // nextAdapter calls next() and saves the returned results in m. For internal
@@ -182,19 +157,19 @@ func (m *materializer) next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 		m.curIdx++
 
 		typs := m.OutputTypes()
-		for outIdx, cIdx := range m.outputToInputColIdx {
-			col := m.batch.ColVec(cIdx)
+		for idx := 0; idx < len(typs); idx++ {
+			col := m.batch.ColVec(idx)
 			// TODO(asubiotto): we shouldn't have to do this check. Figure out who's
 			// not setting nulls.
 			if col.MaybeHasNulls() {
 				if col.Nulls().NullAt(rowIdx) {
-					m.row[outIdx].Datum = tree.DNull
+					m.row[idx].Datum = tree.DNull
 					continue
 				}
 			}
-			ct := typs[outIdx]
+			ct := typs[idx]
 
-			m.row[outIdx].Datum = exec.PhysicalTypeColElemToDatum(col, rowIdx, m.da, ct)
+			m.row[idx].Datum = exec.PhysicalTypeColElemToDatum(col, rowIdx, m.da, ct)
 		}
 		return m.ProcessRowHelper(m.row), nil
 	}
@@ -211,7 +186,6 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 
 func (m *materializer) InternalClose() bool {
 	if m.ProcessorBase.InternalClose() {
-		m.ctxCancel()
 		if m.cancelFlow != nil {
 			m.cancelFlow()()
 		}

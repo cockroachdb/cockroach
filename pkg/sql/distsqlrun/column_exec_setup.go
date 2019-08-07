@@ -66,17 +66,12 @@ func wrapRowSource(
 		// to this operator (e.g. streamIDToOp).
 		toWrapInput = c.input
 	} else {
-		outputToInputColIdx := make([]int, len(inputTypes))
-		for i := range outputToInputColIdx {
-			outputToInputColIdx[i] = i
-		}
 		var err error
 		toWrapInput, err = newMaterializer(
 			flowCtx,
 			processorID,
 			input,
 			inputTypes,
-			outputToInputColIdx,
 			&distsqlpb.PostProcessSpec{},
 			nil, /* output */
 			nil, /* metadataSourcesQueue */
@@ -1328,10 +1323,6 @@ func (s *vectorizedFlowCreator) setupOutput(
 		}
 		// Make the materializer, which will write to the given receiver.
 		columnTypes := s.syncFlowConsumer.Types()
-		outputToInputColIdx := make([]int, len(columnTypes))
-		for i := range outputToInputColIdx {
-			outputToInputColIdx[i] = i
-		}
 		var outputStatsToTrace func()
 		if s.recordingStats {
 			// Make a copy given that vectorizedStatsCollectorsQueue is reset and
@@ -1348,7 +1339,6 @@ func (s *vectorizedFlowCreator) setupOutput(
 			pspec.ProcessorID,
 			op,
 			columnTypes,
-			outputToInputColIdx,
 			&distsqlpb.PostProcessSpec{},
 			s.syncFlowConsumer,
 			metadataSourcesQueue,
