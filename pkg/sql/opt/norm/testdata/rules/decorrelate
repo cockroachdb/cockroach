@@ -5095,11 +5095,13 @@ SELECT * FROM a WHERE k > 1 AND k < 5 AND i > ALL(SELECT y FROM xy)
 ----
 anti-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── cardinality: [0 - 3]
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── constraint: /1: [/2 - /4]
+ │    ├── cardinality: [0 - 3]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── scan xy
