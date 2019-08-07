@@ -71,10 +71,12 @@ SELECT * FROM b WHERE x = 1 AND z = 2 AND rowid >= 5 AND rowid <= 8
 ----
 project
  ├── columns: x:1(int!null) z:2(int!null)
+ ├── cardinality: [0 - 4]
  ├── stats: [rows=8e-06]
  ├── fd: ()-->(1,2)
  └── select
       ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
+      ├── cardinality: [0 - 4]
       ├── stats: [rows=8e-06, distinct(1)=8e-06, null(1)=0, distinct(2)=8e-06, null(2)=0, distinct(3)=8e-06, null(3)=0]
       ├── key: (3)
       ├── fd: ()-->(1,2)
@@ -336,6 +338,7 @@ SELECT * FROM district WHERE d_id > 1 AND d_id < 10 AND d_w_id=10 AND d_name='bo
 ----
 select
  ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string!null)
+ ├── cardinality: [0 - 8]
  ├── stats: [rows=0.08, distinct(1)=0.08, null(1)=0, distinct(2)=0.08, null(2)=0, distinct(3)=0.08, null(3)=0]
  ├── key: (1)
  ├── fd: ()-->(2,3)
@@ -555,6 +558,7 @@ SELECT * FROM c WHERE x >= 0 AND x < 100
 ----
 select
  ├── columns: x:1(int!null) z:2(int!null)
+ ├── cardinality: [0 - 100]
  ├── stats: [rows=99.8990918, distinct(1)=99.8990918, null(1)=0, distinct(2)=65.4824076, null(2)=0]
  ├── key: (1)
  ├── fd: (1)-->(2)
@@ -966,10 +970,12 @@ SELECT * FROM b WHERE x = 1 AND z = 2 AND rowid >= 5 AND rowid <= 8
 ----
 project
  ├── columns: x:1(int!null) z:2(int!null)
+ ├── cardinality: [0 - 4]
  ├── stats: [rows=6.4e-06]
  ├── fd: ()-->(1,2)
  └── select
       ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
+      ├── cardinality: [0 - 4]
       ├── stats: [rows=6.4e-06, distinct(1)=6.4e-06, null(1)=0, distinct(2)=6.4e-06, null(2)=0, distinct(3)=6.4e-06, null(3)=0]
       ├── key: (3)
       ├── fd: ()-->(1,2)
@@ -1025,6 +1031,7 @@ SELECT * FROM c WHERE x >= 0 AND x < 100
 ----
 select
  ├── columns: x:1(int!null) z:2(int!null)
+ ├── cardinality: [0 - 100]
  ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=100, null(2)=0]
  ├── key: (1)
  ├── fd: (1)-->(2)
