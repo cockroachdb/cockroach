@@ -313,7 +313,10 @@ Loop:
 		typ, n, err = c.readBuf.ReadTypedMsg(&c.rd)
 		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
-			break Loop
+			if err = c.stmtBuf.Push(ctx, sql.SendError{Err: err}); err != nil {
+				break Loop
+			}
+			continue
 		}
 		timeReceived := timeutil.Now()
 		log.VEventf(ctx, 2, "pgwire: processing %s", typ)
