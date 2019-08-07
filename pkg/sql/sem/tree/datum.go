@@ -733,6 +733,16 @@ func (d *DInt) Size() uintptr {
 // DFloat is the float Datum.
 type DFloat float64
 
+// MustBeDFloat attempts to retrieve a DFloat from an Expr, panicking if the
+// assertion fails.
+func MustBeDFloat(e Expr) DFloat {
+	switch t := e.(type) {
+	case *DFloat:
+		return *t
+	}
+	panic(errors.AssertionFailedf("expected *DFloat, found %T", e))
+}
+
 // NewDFloat is a helper routine to create a *DFloat initialized from its
 // argument.
 func NewDFloat(d DFloat) *DFloat {
@@ -884,6 +894,16 @@ func (d *DFloat) IsComposite() bool {
 // DDecimal is the decimal Datum.
 type DDecimal struct {
 	apd.Decimal
+}
+
+// MustBeDDecimal attempts to retrieve a DDecimal from an Expr, panicking if the
+// assertion fails.
+func MustBeDDecimal(e Expr) DDecimal {
+	switch t := e.(type) {
+	case *DDecimal:
+		return *t
+	}
+	panic(errors.AssertionFailedf("expected *DDecimal, found %T", e))
 }
 
 // ParseDDecimal parses and returns the *DDecimal Datum value represented by the
