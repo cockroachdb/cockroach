@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/pkg/errors"
 )
@@ -111,7 +112,7 @@ func (p *allSpooler) init() {
 
 func (p *allSpooler) spool(ctx context.Context) {
 	if p.spooled {
-		panic("spool() is called for the second time")
+		execerror.VectorizedInternalPanic("spool() is called for the second time")
 	}
 	p.spooled = true
 	batch := p.input.Next(ctx)
@@ -135,21 +136,21 @@ func (p *allSpooler) spool(ctx context.Context) {
 
 func (p *allSpooler) getValues(i int) coldata.Vec {
 	if !p.spooled {
-		panic("getValues() is called before spool()")
+		execerror.VectorizedInternalPanic("getValues() is called before spool()")
 	}
 	return p.values[i]
 }
 
 func (p *allSpooler) getNumTuples() uint64 {
 	if !p.spooled {
-		panic("getNumTuples() is called before spool()")
+		execerror.VectorizedInternalPanic("getNumTuples() is called before spool()")
 	}
 	return p.spooledTuples
 }
 
 func (p *allSpooler) getPartitionsCol() []bool {
 	if !p.spooled {
-		panic("getPartitionsCol() is called before spool()")
+		execerror.VectorizedInternalPanic("getPartitionsCol() is called before spool()")
 	}
 	return nil
 }
@@ -261,7 +262,9 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 		p.emitted = newEmitted
 		return p.output
 	}
-	panic(fmt.Sprintf("invalid sort state %v", p.state))
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid sort state %v", p.state))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 // sort sorts the spooled tuples, so it must be called after spool() has been
@@ -377,5 +380,7 @@ func (p *sortOp) Child(nth int) OpNode {
 	if nth == 0 {
 		return p.input
 	}
-	panic(fmt.Sprintf("invalid index %d", nth))
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }

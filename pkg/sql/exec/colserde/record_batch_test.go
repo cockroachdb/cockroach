@@ -22,6 +22,7 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/apache/arrow/go/arrow/memory"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/colserde"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,7 +34,7 @@ import (
 // with random values and inserting nulls with probability nullProbability.
 func randomDataFromType(rng *rand.Rand, t types.T, n int, nullProbability float64) *array.Data {
 	if nullProbability < 0 || nullProbability > 1 {
-		panic(fmt.Sprintf("expected a value between 0 and 1 for nullProbability but got %f", nullProbability))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("expected a value between 0 and 1 for nullProbability but got %f", nullProbability))
 	}
 	const (
 		// maxVarLen is the maximum length we allow variable length datatypes (e.g.
@@ -147,7 +148,7 @@ func randomDataFromType(rng *rand.Rand, t types.T, n int, nullProbability float6
 			builder.(*array.FixedSizeBinaryBuilder).AppendValues(data, valid)
 		}
 	default:
-		panic(fmt.Sprintf("unsupported type %s", t))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unsupported type %s", t))
 	}
 	return builder.NewArray().Data()
 }

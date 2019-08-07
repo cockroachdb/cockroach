@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/stretchr/testify/require"
@@ -27,7 +28,8 @@ func TestCancelChecker(t *testing.T) {
 	batch := coldata.NewMemBatch([]types.T{types.Int64})
 	op := NewCancelChecker(NewNoop(NewRepeatableBatchSource(batch)))
 	cancel()
-	require.PanicsWithValue(t, sqlbase.QueryCanceledError, func() {
+	err := execerror.CatchVectorizedRuntimeError(func() {
 		op.Next(ctx)
 	})
+	require.Equal(t, sqlbase.QueryCanceledError, err)
 }

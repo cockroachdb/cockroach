@@ -18,17 +18,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/pkg/errors"
 )
 
-// TestVectorizedErrorPropagation verifies that materializers successfully
+// TestVectorizedInternalPanic verifies that materializers successfully
 // handle panics coming from exec package. It sets up the following chain:
-// RowSource -> columnarizer -> exec error emitter -> materializer,
+// RowSource -> columnarizer -> test panic emitter -> materializer,
 // and makes sure that a panic doesn't occur yet the error is propagated.
-func TestVectorizedErrorPropagation(t *testing.T) {
+func TestVectorizedInternalPanic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -49,7 +49,7 @@ func TestVectorizedErrorPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	vee := exec.NewTestVectorizedErrorEmitter(col)
+	vee := newTestVectorizedPanicEmitter(col, execerror.VectorizedInternalPanic)
 	mat, err := newMaterializer(
 		&flowCtx,
 		1, /* processorID */
@@ -77,18 +77,18 @@ func TestVectorizedErrorPropagation(t *testing.T) {
 		_, meta = mat.Next()
 	}()
 	if panicEmitted {
-		t.Fatalf("VectorizedRuntimeError was not caught by the operators.")
+		t.Fatalf("VectorizedInternalPanic was not caught")
 	}
 	if meta == nil || meta.Err == nil {
-		t.Fatalf("VectorizedRuntimeError was not propagated as metadata.")
+		t.Fatalf("VectorizedInternalPanic was not propagated as metadata")
 	}
 }
 
-// TestNonVectorizedErrorPropagation verifies that materializers do not handle
+// TestNonVectorizedPanicPropagation verifies that materializers do not handle
 // panics coming not from exec package. It sets up the following chain:
-// RowSource -> columnarizer -> distsqlrun error emitter -> materializer,
+// RowSource -> columnarizer -> test panic emitter -> materializer,
 // and makes sure that a panic is emitted all the way through the chain.
-func TestNonVectorizedErrorPropagation(t *testing.T) {
+func TestNonVectorizedPanicPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -109,7 +109,7 @@ func TestNonVectorizedErrorPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nvee := newTestVectorizedErrorEmitter(col)
+	nvee := newTestVectorizedPanicEmitter(col, nil /* panicFn */)
 	mat, err := newMaterializer(
 		&flowCtx,
 		1, /* processorID */
@@ -136,36 +136,44 @@ func TestNonVectorizedErrorPropagation(t *testing.T) {
 		_, _ = mat.Next()
 	}()
 	if !panicEmitted {
-		t.Fatalf("Not VectorizedRuntimeError was caught by the operators.")
+		t.Fatalf("NonVectorizedPanic was caught by the operators")
 	}
 }
 
-// testNonVectorizedErrorEmitter is an exec.Operator that panics on every
+// testVectorizedPanicEmitter is an exec.Operator that panics on every
 // odd-numbered invocation of Next() and returns the next batch from the input
 // on every even-numbered (i.e. it becomes a noop for those iterations). Used
-// for tests only.
-type testNonVectorizedErrorEmitter struct {
+// for tests only. If panicFn is non-nil, it is used; otherwise, the builtin
+// panic function is called.
+type testVectorizedPanicEmitter struct {
 	exec.OneInputNode
 	emitBatch bool
+
+	panicFn func(interface{})
 }
 
-var _ exec.Operator = &testNonVectorizedErrorEmitter{}
+var _ exec.Operator = &testVectorizedPanicEmitter{}
 
-// newTestVectorizedErrorEmitter creates a new TestVectorizedErrorEmitter.
-func newTestVectorizedErrorEmitter(input exec.Operator) exec.Operator {
-	return &testNonVectorizedErrorEmitter{OneInputNode: exec.NewOneInputNode(input)}
+func newTestVectorizedPanicEmitter(input exec.Operator, panicFn func(interface{})) exec.Operator {
+	return &testVectorizedPanicEmitter{
+		OneInputNode: exec.NewOneInputNode(input),
+		panicFn:      panicFn,
+	}
 }
 
 // Init is part of exec.Operator interface.
-func (e *testNonVectorizedErrorEmitter) Init() {
+func (e *testVectorizedPanicEmitter) Init() {
 	e.Input().Init()
 }
 
 // Next is part of exec.Operator interface.
-func (e *testNonVectorizedErrorEmitter) Next(ctx context.Context) coldata.Batch {
+func (e *testVectorizedPanicEmitter) Next(ctx context.Context) coldata.Batch {
 	if !e.emitBatch {
 		e.emitBatch = true
-		panic(errors.New("An error from distsqlrun package"))
+		if e.panicFn != nil {
+			e.panicFn("")
+		}
+		panic("")
 	}
 
 	e.emitBatch = false

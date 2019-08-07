@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -31,7 +32,7 @@ func TestHashJoinerInt64(t *testing.T) {
 	for i, f := range floats {
 		_, err := decs[i].SetFloat64(f)
 		if err != nil {
-			panic(fmt.Sprintf("%v", err))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("%v", err))
 		}
 	}
 

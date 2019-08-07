@@ -19,6 +19,7 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/apache/arrow/go/arrow/memory"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/errors"
 )
@@ -129,7 +130,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 				c.builders.binaryBuilder.AppendValues(vec.Bytes().PrimitiveRepr()[:n], nil /* valid */)
 				data = c.builders.binaryBuilder.NewBinaryArray().Data()
 			default:
-				panic(fmt.Sprintf("unexpected type %s", typ))
+				execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected type %s", typ))
 			}
 			if arrowBitmap != nil {
 				// Overwrite empty null bitmap with the true bitmap.
@@ -174,7 +175,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&floats))
 			datumSize = sizeOfFloat64
 		default:
-			panic(fmt.Sprintf("unsupported type for conversion to arrow data %s", typ))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unsupported type for conversion to arrow data %s", typ))
 		}
 
 		// Cast values.
@@ -256,7 +257,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 				}
 				arr = bytesArr
 			default:
-				panic(fmt.Sprintf("unexpected type %s", typ))
+				execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected type %s", typ))
 			}
 		} else {
 			var col interface{}
@@ -286,7 +287,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 				col = floatArr.Float64Values()
 				arr = floatArr
 			default:
-				panic(
+				execerror.VectorizedInternalPanic(
 					fmt.Sprintf("unsupported type for conversion to column batch %s", d.DataType().Name()),
 				)
 			}

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -178,7 +179,9 @@ func (op *hashGrouper) Child(nth int) OpNode {
 	if nth == 0 {
 		return op.builder.spec.source
 	}
-	panic(fmt.Sprintf("invalid index %d", nth))
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 func (op *hashGrouper) Init() {

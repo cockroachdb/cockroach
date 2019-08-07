@@ -25,6 +25,9 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
+	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
@@ -48,7 +51,7 @@ var _ types.T
 var _ bytes.Buffer
 
 func _ASSIGN_EQ(_, _, _ interface{}) uint64 {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // */}}

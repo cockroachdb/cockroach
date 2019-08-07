@@ -16,6 +16,7 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -94,7 +95,7 @@ func randomVec(rng *rand.Rand, typ types.T, vec coldata.Vec, n int, nullProbabil
 			floats[i] = rng.Float64()
 		}
 	default:
-		panic(fmt.Sprintf("unhandled type %s", typ))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", typ))
 	}
 	vec.Nulls().UnsetNulls()
 	if nullProbability == 0 {
@@ -128,7 +129,7 @@ func RandomBatch(rng *rand.Rand, typs []types.T, n int, nullProbability float64)
 // less than batchSize.
 func randomSel(rng *rand.Rand, batchSize uint16, probOfOmitting float64) []uint16 {
 	if probOfOmitting < 0 || probOfOmitting > 1 {
-		panic(fmt.Sprintf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
 	}
 	sel := make([]uint16, batchSize)
 	used := make([]bool, batchSize)

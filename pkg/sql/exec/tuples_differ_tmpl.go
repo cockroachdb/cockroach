@@ -23,6 +23,9 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
+	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -51,7 +54,7 @@ const _TYPES_T = types.Unhandled
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the second input != the third input.
 func _ASSIGN_NE(_, _, _ string) bool {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // */}}

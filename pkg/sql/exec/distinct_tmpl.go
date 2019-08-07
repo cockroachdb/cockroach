@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -55,7 +56,7 @@ func OrderedDistinctColsToOperators(
 		}
 	}
 	if r, ok = input.(resettableOperator); !ok {
-		panic("unexpectedly an ordered distinct is not a resetter")
+		execerror.VectorizedInternalPanic("unexpectedly an ordered distinct is not a resetter")
 	}
 	distinctChain := distinctChainOps{
 		resettableOperator:         r,
@@ -120,7 +121,7 @@ const _TYPES_T = types.Unhandled
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the second input != the third input.
 func _ASSIGN_NE(_ bool, _, _ _GOTYPE) bool {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // */}}

@@ -19,6 +19,7 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/colserde/arrowserde"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -373,7 +374,7 @@ func schema(fb *flatbuffers.Builder, typs []types.T) flatbuffers.UOffsetT {
 			fbTypOffset = arrowserde.FloatingPointEnd(fb)
 			fbTyp = arrowserde.TypeFloatingPoint
 		default:
-			panic(errors.Errorf(`don't know how to map %s`, typ))
+			execerror.VectorizedInternalPanic(errors.Errorf(`don't know how to map %s`, typ))
 		}
 		arrowserde.FieldStart(fb)
 		arrowserde.FieldAddTypeType(fb, fbTyp)

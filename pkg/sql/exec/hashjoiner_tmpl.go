@@ -27,6 +27,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,13 +53,13 @@ type _GOTYPESLICE interface{}
 // _ASSIGN_HASH is the template equality function for assigning the first input
 // to the result of the hash value of the second input.
 func _ASSIGN_HASH(_, _ interface{}) uint64 {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the the second input != the third input.
 func _ASSIGN_NE(_, _, _ interface{}) uint64 {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // _TYPES_T is the template type variable for types.T. It will be replaced by
@@ -324,7 +325,7 @@ func (ht *hashTable) rehash(
 
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", t))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", t))
 	}
 }
 
@@ -360,7 +361,7 @@ func (ht *hashTable) checkCol(t types.T, keyColIdx int, nToCheck uint16, sel []u
 		}
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", t))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", t))
 	}
 }
 

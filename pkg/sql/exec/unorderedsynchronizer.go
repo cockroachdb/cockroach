@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 )
@@ -153,7 +154,7 @@ func (s *UnorderedSynchronizer) init(ctx context.Context) {
 				inputIdx: inputIdx,
 			}
 			for {
-				if err := CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
+				if err := execerror.CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
 					select {
 					// Non-blocking write to errCh, if an error is present the main
 					// goroutine will use that and cancel all inputs.
@@ -216,7 +217,7 @@ func (s *UnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			// propagate this error through a panic.
 			s.cancelFn()
 			s.internalWaitGroup.Wait()
-			panic(err)
+			execerror.VectorizedInternalPanic(err)
 		}
 	case msg := <-s.batchCh:
 		if msg == nil {
@@ -226,7 +227,7 @@ func (s *UnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			select {
 			case err := <-s.errCh:
 				if err != nil {
-					panic(err)
+					execerror.VectorizedInternalPanic(err)
 				}
 			default:
 			}

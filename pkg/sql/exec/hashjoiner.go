@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -202,7 +203,9 @@ func (hj *hashJoinEqOp) Child(nth int) OpNode {
 	case 1:
 		return hj.spec.right.source
 	}
-	panic(fmt.Sprintf("invalid idx %d", nth))
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid idx %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 var _ Operator = &hashJoinEqOp{}
@@ -264,7 +267,9 @@ func (hj *hashJoinEqOp) Next(ctx context.Context) coldata.Batch {
 		hj.prober.batch.SetSelection(false)
 		return hj.prober.batch
 	default:
-		panic("hash joiner in unhandled state")
+		execerror.VectorizedInternalPanic("hash joiner in unhandled state")
+		// This code is unreachable, but the compiler cannot infer that.
+		return nil
 	}
 }
 

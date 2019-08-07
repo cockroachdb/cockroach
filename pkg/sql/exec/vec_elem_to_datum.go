@@ -15,6 +15,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -60,6 +61,8 @@ func PhysicalTypeColElemToDatum(
 	case semtypes.OidFamily:
 		return da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
 	default:
-		panic(fmt.Sprintf("Unsupported column type %s", ct.String()))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("Unsupported column type %s", ct.String()))
+		// This code is unreachable, but the compiler cannot infer that.
+		return nil
 	}
 }

@@ -12,6 +12,7 @@ package exec
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -227,12 +228,14 @@ type mjBufferedGroup struct {
 var _ coldata.Batch = &mjBufferedGroup{}
 
 func (bg *mjBufferedGroup) Length() uint16 {
-	panic("Length() should not be called on mjBufferedGroup; instead, " +
+	execerror.VectorizedInternalPanic("Length() should not be called on mjBufferedGroup; instead, " +
 		"length field should be accessed directly")
+	// This code is unreachable, but the compiler cannot infer that.
+	return 0
 }
 
 func (bg *mjBufferedGroup) SetLength(uint16) {
-	panic("SetLength(uint16) should not be called on mjBufferedGroup;" +
+	execerror.VectorizedInternalPanic("SetLength(uint16) should not be called on mjBufferedGroup;" +
 		"instead, length field should be accessed directly")
 }
 
@@ -257,19 +260,19 @@ func (bg *mjBufferedGroup) Selection() []uint16 {
 // SetSelection is not implemented because the tuples should only be appended
 // to mjBufferedGroup, and Append does the deselection step.
 func (bg *mjBufferedGroup) SetSelection(bool) {
-	panic("SetSelection(bool) should not be called on mjBufferedGroup")
+	execerror.VectorizedInternalPanic("SetSelection(bool) should not be called on mjBufferedGroup")
 }
 
 // AppendCol is not implemented because mjBufferedGroup is only initialized
 // when the column schema is known.
 func (bg *mjBufferedGroup) AppendCol(types.T) {
-	panic("AppendCol(types.T) should not be called on mjBufferedGroup")
+	execerror.VectorizedInternalPanic("AppendCol(types.T) should not be called on mjBufferedGroup")
 }
 
 // Reset is not implemented because mjBufferedGroup is not reused with
 // different column schemas at the moment.
 func (bg *mjBufferedGroup) Reset(types []types.T, length int) {
-	panic("Reset([]types.T, int) should not be called on mjBufferedGroup")
+	execerror.VectorizedInternalPanic("Reset([]types.T, int) should not be called on mjBufferedGroup")
 }
 
 // reset resets the state of the buffered group so that we can reuse the

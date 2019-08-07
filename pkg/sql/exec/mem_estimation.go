@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -61,7 +62,7 @@ func EstimateBatchSizeBytes(vecTypes []types.T, batchLength int) int {
 			// to hold the arbitrary precision decimal objects.
 			acc += 50
 		default:
-			panic(fmt.Sprintf("unhandled type %s", t))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", t))
 		}
 	}
 	return acc * batchLength

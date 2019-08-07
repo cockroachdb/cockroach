@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -56,13 +57,13 @@ type _GOTYPE interface{}
 // _ASSIGN_EQ is the template equality function for assigning the first input
 // to the result of the the second input == the third input.
 func _ASSIGN_EQ(_, _, _ interface{}) uint64 {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // _ASSIGN_LT is the template equality function for assigning the first input
 // to the result of the the second input < the third input.
 func _ASSIGN_LT(_, _, _ interface{}) uint64 {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // _L_SEL_IND is the template type variable for the loop variable that
@@ -261,7 +262,7 @@ func _PROBE_SWITCH(
 		}
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colType))
 	}
 	// {{end}}
 	// {{/*
@@ -282,7 +283,7 @@ func _LEFT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{ if or $.JoinType.IsLeftOuter $.JoinType.IsLeftAnti }}
 	if lGroup.unmatched {
 		if curLIdx+1 != curLLength {
-			panic(fmt.Sprintf("unexpectedly length %d of the left unmatched group is not 1", curLLength-curLIdx))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unexpectedly length %d of the left unmatched group is not 1", curLLength-curLIdx))
 		}
 		// The row already does not have a match, so we don't need to do any
 		// additional processing.
@@ -322,7 +323,7 @@ func _RIGHT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{ if $.JoinType.IsRightOuter }}
 	if rGroup.unmatched {
 		if curRIdx+1 != curRLength {
-			panic(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curRLength-curRIdx))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curRLength-curRIdx))
 		}
 		// The row already does not have a match, so we don't need to do any
 		// additional processing.
@@ -680,7 +681,7 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 		o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colType))
 	}
 	// {{end}}
 	// {{/*
@@ -838,7 +839,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 		o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colType))
 	}
 	// {{end}}
 	// {{/*
@@ -958,7 +959,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 			}
 		// {{end}}
 		default:
-			panic(fmt.Sprintf("unhandled type %d", colTyp))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colTyp))
 		}
 	}
 	return false
@@ -1257,7 +1258,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 				return o.output
 			}
 		default:
-			panic(fmt.Sprintf("unexpected merge joiner state in Next: %v", o.state))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected merge joiner state in Next: %v", o.state))
 		}
 	}
 }

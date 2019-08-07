@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -98,7 +99,9 @@ func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
 	case topKSortEmitting:
 		return t.emit()
 	}
-	panic(fmt.Sprintf("invalid sort state %v", t.state))
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid sort state %v", t.state))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 // spool reads in the entire input, always storing the top K rows it has seen so
@@ -223,7 +226,7 @@ func (t *topKSorter) compareRow(vecIdx1, vecIdx2 int, rowIdx1, rowIdx2 uint16) i
 			case distsqlpb.Ordering_Column_DESC:
 				return -res
 			default:
-				panic(fmt.Sprintf("unexpected direction value %d", d))
+				execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected direction value %d", d))
 			}
 		}
 	}
