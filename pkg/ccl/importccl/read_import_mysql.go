@@ -318,7 +318,7 @@ func readMysqlCreateTable(
 	if match != "" && !found {
 		return nil, errors.Errorf("table %q not found in file (found tables: %s)", match, strings.Join(names, ", "))
 	}
-	if err := addDelayedFKs(ctx, fkDefs, fks.resolver); err != nil {
+	if err := addDelayedFKs(ctx, fkDefs, fks.resolver, evalCtx.Settings); err != nil {
 		return nil, err
 	}
 	return ret, nil
@@ -497,10 +497,12 @@ type delayedFK struct {
 	def *tree.ForeignKeyConstraintTableDef
 }
 
-func addDelayedFKs(ctx context.Context, defs []delayedFK, resolver fkResolver) error {
+func addDelayedFKs(
+	ctx context.Context, defs []delayedFK, resolver fkResolver, settings *cluster.Settings,
+) error {
 	for _, def := range defs {
 		if err := sql.ResolveFK(
-			ctx, nil, resolver, def.tbl, def.def, map[sqlbase.ID]*sqlbase.MutableTableDescriptor{}, sql.NewTable, tree.ValidationDefault,
+			ctx, nil, resolver, def.tbl, def.def, map[sqlbase.ID]*sqlbase.MutableTableDescriptor{}, sql.NewTable, tree.ValidationDefault, settings,
 		); err != nil {
 			return err
 		}

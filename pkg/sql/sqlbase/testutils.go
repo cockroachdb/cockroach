@@ -45,7 +45,8 @@ import (
 func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDescriptor {
 	// log.VEventf(context.TODO(), 2, "GetTableDescriptor %q %q", database, table)
 	dbNameKey := MakeNameMetadataKey(keys.RootNamespaceID, database)
-	gr, err := kvDB.Get(context.TODO(), dbNameKey)
+	ctx := context.TODO()
+	gr, err := kvDB.Get(ctx, dbNameKey)
 	if err != nil {
 		panic(err)
 	}
@@ -55,7 +56,7 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 	dbDescID := ID(gr.ValueInt())
 
 	tableNameKey := MakeNameMetadataKey(dbDescID, table)
-	gr, err = kvDB.Get(context.TODO(), tableNameKey)
+	gr, err = kvDB.Get(ctx, tableNameKey)
 	if err != nil {
 		panic(err)
 	}
@@ -65,10 +66,18 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 
 	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
 	desc := &Descriptor{}
-	if err := kvDB.GetProto(context.TODO(), descKey, desc); err != nil || (*desc == Descriptor{}) {
-		log.Fatalf(context.TODO(), "proto with id %d missing. err: %v", gr.ValueInt(), err)
+	if err := kvDB.GetProto(ctx, descKey, desc); err != nil || (*desc == Descriptor{}) {
+		log.Fatalf(ctx, "proto with id %d missing. err: %v", gr.ValueInt(), err)
 	}
-	return desc.GetTable()
+	tableDesc := desc.GetTable()
+	if tableDesc == nil {
+		return nil
+	}
+	err = tableDesc.MaybeFillInDescriptor(ctx, kvDB)
+	if err != nil {
+		log.Fatalf(ctx, "failure to fill in descriptor. err: %v", err)
+	}
+	return tableDesc
 }
 
 // GetImmutableTableDescriptor retrieves an immutable table descriptor directly from the KV layer.

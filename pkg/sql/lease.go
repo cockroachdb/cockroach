@@ -194,7 +194,9 @@ func (s LeaseStore) acquire(
 		if err := filterTableState(tableDesc); err != nil {
 			return err
 		}
-		tableDesc.MaybeFillInDescriptor()
+		if err := tableDesc.MaybeFillInDescriptor(ctx, txn); err != nil {
+			return err
+		}
 		// Once the descriptor is set it is immutable and care must be taken
 		// to not modify it.
 		storedLease := &storedTableLease{
@@ -210,7 +212,7 @@ func (s LeaseStore) acquire(
 
 		// ValidateTable instead of Validate, even though we have a txn available,
 		// so we don't block reads waiting for this table version.
-		if err := table.ValidateTable(s.settings); err != nil {
+		if err := table.ValidateTable(); err != nil {
 			return err
 		}
 
@@ -405,7 +407,7 @@ func (s LeaseStore) PublishMultiple(
 				if err := descsToUpdate[id].MaybeIncrementVersion(ctx, txn); err != nil {
 					return err
 				}
-				if err := descsToUpdate[id].ValidateTable(s.settings); err != nil {
+				if err := descsToUpdate[id].ValidateTable(); err != nil {
 					return err
 				}
 
@@ -560,6 +562,9 @@ func (s LeaseStore) getForExpiration(
 		}
 		if !tableDesc.ModificationTime.Less(prevTimestamp) {
 			return errors.AssertionFailedf("unable to read table= (%d, %s)", id, expiration)
+		}
+		if err := tableDesc.MaybeFillInDescriptor(ctx, txn); err != nil {
+			return err
 		}
 		// Create a tableVersionState with the table and without a lease.
 		table = &tableVersionState{
@@ -1731,8 +1736,14 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.G
 					switch union := descriptor.Union.(type) {
 					case *sqlbase.Descriptor_Table:
 						table := union.Table
-						table.MaybeFillInDescriptor()
-						if err := table.ValidateTable(m.settings); err != nil {
+						// Note that we don't need to "fill in" the descriptor here. Nobody
+						// actually reads the table, but it's necessary for the call to
+						// ValidateTable().
+						if err := table.MaybeFillInDescriptor(ctx, nil); err != nil {
+							log.Warningf(ctx, "%s: unable to fill in table descriptor %v", kv.Key, table)
+							return
+						}
+						if err := table.ValidateTable(); err != nil {
 							log.Errorf(ctx, "%s: received invalid table descriptor: %s. Desc: %v",
 								kv.Key, err, table,
 							)
