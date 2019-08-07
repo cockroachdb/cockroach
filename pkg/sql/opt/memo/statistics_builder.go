@@ -556,10 +556,7 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *pro
 	inputColStat := sb.colStatTable(scan.Table, colSet)
 	colStat := sb.copyColStat(colSet, s, inputColStat)
 
-	// If we know that the cardinality is 0 or 1 (e.g., due to an equality
-	// constraint on a key column), don't bother adding the overhead of
-	// creating a histogram.
-	if !relProps.Cardinality.IsZeroOrOne() {
+	if sb.shouldUseHistogram(relProps) {
 		colStat.Histogram = inputColStat.Histogram
 	}
 
@@ -2215,6 +2212,13 @@ func (sb *statisticsBuilder) finalizeFromRowCount(
 	}
 }
 
+func (sb *statisticsBuilder) shouldUseHistogram(relProps *props.Relational) bool {
+	// If we know that the cardinality is below a certain threshold (e.g., due to
+	// a constraint on a key column), don't bother adding the overhead of
+	// creating a histogram.
+	return relProps.Cardinality.Max >= minCardinalityForHistogram
+}
+
 func min(a float64, b float64) float64 {
 	if a < b {
 		return a
@@ -2264,6 +2268,10 @@ const (
 	// When subtracting floating point numbers, avoid precision errors by making
 	// sure the result is greater than or equal to epsilon.
 	epsilon = 1e-10
+
+	// This is the minimum cardinality an expression should have in order to make
+	// it worth adding the overhead of using a histogram.
+	minCardinalityForHistogram = 100
 )
 
 // countJSONPaths returns the number of JSON paths in the specified
@@ -2401,10 +2409,7 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 		sb.updateDistinctCountFromUnappliedConjuncts(col, e, relProps, numConjuncts)
 	}
 
-	// If we know that the cardinality is 0 or 1 (e.g., due to an equality
-	// constraint on a key column), don't bother adding the overhead of
-	// creating a histogram.
-	if relProps.Cardinality.IsZeroOrOne() {
+	if !sb.shouldUseHistogram(relProps) {
 		return constrainedCols, histCols
 	}
 
@@ -2463,10 +2468,7 @@ func (sb *statisticsBuilder) applyConstraintSet(
 			continue
 		}
 
-		// If we know that the cardinality is 0 or 1 (e.g., due to an equality
-		// constraint on a key column), don't bother adding the overhead of
-		// creating a histogram.
-		if relProps.Cardinality.IsZeroOrOne() {
+		if !sb.shouldUseHistogram(relProps) {
 			continue
 		}
 

@@ -903,6 +903,7 @@ SELECT k FROM a WHERE k = ANY (1, 2, 3)
 scan a
  ├── columns: k:1(int!null)
  ├── constraint: /1: [/1 - /3]
+ ├── cardinality: [0 - 3]
  └── key: (1)
 
 opt expect=SimplifyEqualsAnyTuple
@@ -969,6 +970,7 @@ SELECT k FROM a WHERE k = ANY ARRAY[1, 2, 3]
 scan a
  ├── columns: k:1(int!null)
  ├── constraint: /1: [/1 - /3]
+ ├── cardinality: [0 - 3]
  └── key: (1)
 
 opt expect=(SimplifyAnyScalarArray,SimplifyEqualsAnyTuple)
@@ -987,6 +989,7 @@ SELECT k FROM a WHERE k = ANY '{1,2,3}'::INT[]
 scan a
  ├── columns: k:1(int!null)
  ├── constraint: /1: [/1 - /3]
+ ├── cardinality: [0 - 3]
  └── key: (1)
 
 # --------------------------------------------------

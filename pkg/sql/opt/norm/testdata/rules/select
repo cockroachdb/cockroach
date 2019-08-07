@@ -229,6 +229,7 @@ inner-join (hash)
  │         └── ((a.k = 5) AND (a.k > 1)) AND (a.k < 10) [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
  ├── select
  │    ├── columns: e.k:6(int!null) e.i:7(int) t:8(timestamp) tz:9(timestamptz) d:10(date)
+ │    ├── cardinality: [0 - 8]
  │    ├── key: (6)
  │    ├── fd: (6)-->(7-10)
  │    ├── scan e
