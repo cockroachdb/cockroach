@@ -416,18 +416,18 @@ func runStartSingleNode(cmd *cobra.Command, args []string) error {
 	// Now actually set the flag as changed so that the start code
 	// doesn't warn that it was not set.
 	joinFlag.Changed = true
-	return runStart(cmd, args)
+	return runStart(cmd, args, true /*disableReplication*/)
 }
 
 func runStartJoin(cmd *cobra.Command, args []string) error {
-	return runStart(cmd, args)
+	return runStart(cmd, args, false /*disableReplication*/)
 }
 
 // runStart starts the cockroach node using --store as the list of
 // storage devices ("stores") on this machine and --join as the list
 // of other active nodes used to join this node to the cockroach
 // cluster, if this is its first time connecting.
-func runStart(cmd *cobra.Command, args []string) error {
+func runStart(cmd *cobra.Command, args []string, disableReplication bool) error {
 	tBegin := timeutil.Now()
 
 	// First things first: if the user wants background processing,
@@ -710,6 +710,27 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 				s.PeriodicallyCheckForUpdates(ctx)
 			}
 
+			// (Re-)compute the client connection URL. We cannot do this
+			// earlier (e.g. above, in the runStart function) because
+			// at this time the address and port have not been resolved yet.
+			pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
+			if err != nil {
+				log.Errorf(ctx, "failed computing the URL: %v", err)
+				return err
+			}
+
+			initialBoot := s.InitialBoot()
+
+			if disableReplication && initialBoot {
+				// For start-single-node, set the default replication factor to
+				// 1 so as to avoid warning message and unnecessary rebalance
+				// churn.
+				if err := cliDisableReplication(ctx, pgURL.String()); err != nil {
+					log.Errorf(ctx, "could not disable replication: %v", err)
+					return err
+				}
+			}
+
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
 			var buf bytes.Buffer
@@ -718,16 +739,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			fmt.Fprintf(tw, "CockroachDB node starting at %s (took %0.1fs)\n", timeutil.Now(), timeutil.Since(tBegin).Seconds())
 			fmt.Fprintf(tw, "build:\t%s %s @ %s (%s)\n", info.Distribution, info.Tag, info.Time, info.GoVersion)
 			fmt.Fprintf(tw, "webui:\t%s\n", serverCfg.AdminURL())
-
-			// (Re-)compute the client connection URL. We cannot do this
-			// earlier (e.g. above, in the runStart function) because
-			// at this time the address and port have not been resolved yet.
-			pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
-			if err != nil {
-				log.Errorf(ctx, "failed computing the URL: %v", err)
-			} else {
-				fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
-			}
+			fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
 
 			fmt.Fprintf(tw, "RPC client flags:\t%s\n", clientFlagsRPC())
 			if len(serverCfg.SocketFile) != 0 {
@@ -754,7 +766,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			for i, spec := range serverCfg.Stores.Specs {
 				fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
 			}
-			initialBoot := s.InitialBoot()
 			nodeID := s.NodeID()
 			if initialBoot {
 				if nodeID == server.FirstNodeID {
