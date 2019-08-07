@@ -1268,3 +1268,25 @@ func (ex *connExecutor) validateSavepointName(savepoint tree.Name) error {
 	}
 	return nil
 }
+
+func (ex *connExecutor) recordTransactionStart() {
+	// We don't need to write down the transaction start time into
+	// ex.planner.statsCollector.PhaseTimes because it will be overwritten
+	// in ex.resetPlanner() before executing the statements of the transaction.
+	ex.phaseTimes[transactionStart] = timeutil.Now()
+	ex.txnInfo.implicit = ex.implicitTxn()
+}
+
+func (ex *connExecutor) recordTransaction(ev txnEvent) {
+	phaseTimes := ex.planner.statsCollector.PhaseTimes()
+	phaseTimes[transactionEnd] = timeutil.Now()
+	transactionStart := phaseTimes[transactionStart]
+	transactionEnd := phaseTimes[transactionEnd]
+	totalTransactionTime := transactionEnd.Sub(transactionStart)
+	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(totalTransactionTime.Nanoseconds())
+	ex.planner.statsCollector.RecordTransaction(
+		totalTransactionTime.Seconds(),
+		ev == txnCommit,
+		ex.txnInfo.implicit,
+	)
+}

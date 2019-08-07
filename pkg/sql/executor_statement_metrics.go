@@ -48,6 +48,10 @@ const (
 	plannerStartExecStmt    // Execution starts.
 	plannerEndExecStmt      // Execution ends.
 
+	// Transaction phases.
+	transactionStart // Transaction starts.
+	transactionEnd   // Transaction ends.
+
 	// sessionNumPhases must be listed last so that it can be used to
 	// define arrays sufficiently large to hold all the other values.
 	sessionNumPhases
@@ -75,6 +79,7 @@ type EngineMetrics struct {
 	SQLExecLatency        *metric.Histogram
 	DistSQLServiceLatency *metric.Histogram
 	SQLServiceLatency     *metric.Histogram
+	SQLTxnLatency         *metric.Histogram
 
 	// TxnAbortCount counts transactions that were aborted, either due
 	// to non-retriable errors, or retriable errors when the client-side
