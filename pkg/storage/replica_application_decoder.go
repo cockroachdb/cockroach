@@ -14,7 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/apply"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/opentracing/opentracing-go"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -137,8 +139,22 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 		parentCtx := ctx
 		if cmd.IsLocal() {
 			parentCtx = cmd.proposal.ctx
+			cmd.ctx, cmd.sp = tracing.ForkCtxSpan(parentCtx, "raft application")
+		} else if cmd.raftCmd.TraceData != nil {
+			// The proposal isn't local, and trace data is available. Extract
+			// the span context and start a server-side span.
+			spanCtx, err := d.r.AmbientContext.Tracer.Extract(
+				opentracing.TextMap, opentracing.TextMapCarrier(cmd.raftCmd.TraceData))
+			if err != nil {
+				log.Errorf(ctx, "unable to extract trace data from raft command: %s", err)
+			} else {
+				cmd.sp = d.r.AmbientContext.Tracer.StartSpan(
+					"raft application", opentracing.FollowsFrom(spanCtx))
+				cmd.ctx = opentracing.ContextWithSpan(ctx, cmd.sp)
+			}
+		} else {
+			cmd.ctx, cmd.sp = tracing.ForkCtxSpan(ctx, "raft application")
 		}
-		cmd.ctx, cmd.sp = tracing.ForkCtxSpan(parentCtx, "raft application")
 	}
 }
 

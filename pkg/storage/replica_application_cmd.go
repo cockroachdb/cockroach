@@ -53,10 +53,13 @@ type replicatedCmd struct {
 
 	// ctx is a context that follows from the proposal's context if it was
 	// proposed locally. Otherwise, it will follow from the context passed to
-	// ApplyCommittedEntries. sp is the corresponding tracing span, which is
-	// closed in FinishAndAckOutcome.
+	// ApplyCommittedEntries.
 	ctx context.Context
-	sp  opentracing.Span
+	// sp is the tracing span corresponding to ctx. It is closed in
+	// FinishAndAckOutcome. This span "follows from" the proposer's span (even
+	// when the proposer is remote; we marshall tracing info through the
+	// proposal).
+	sp opentracing.Span
 
 	// The following fields are set in shouldApplyCommand when we validate that
 	// a command applies given the current lease and GC threshold. The process
