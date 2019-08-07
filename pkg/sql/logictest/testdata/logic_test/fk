@@ -40,7 +40,7 @@ CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
 statement error type of "customer" \(int\) does not match foreign key "customers"."email" \(string\)
 CREATE TABLE mismatch (customer INT REFERENCES customers (email))
 
-statement error columns cannot be used by multiple foreign key constraints
+statement error column "product" cannot be used by multiple foreign key constraints
 CREATE TABLE orders (
   id INT PRIMARY KEY,
   product STRING REFERENCES products,
@@ -67,7 +67,7 @@ ALTER TABLE orders DROP CONSTRAINT fk_product_ref_products
 statement ok
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE NO ACTION
 
-statement error pq: columns cannot be used by multiple foreign key constraints
+statement error column "product" cannot be used by multiple foreign key constraints
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE NO ACTION
 
 statement ok
@@ -256,9 +256,9 @@ delivery  CREATE TABLE delivery (
           "order" INT8 NULL,
           shipment INT8 NULL,
           item STRING NULL,
+          CONSTRAINT fk_order_ref_orders FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment),
           CONSTRAINT fk_item_ref_products FOREIGN KEY (item) REFERENCES products(upc),
           INDEX delivery_item_idx (item ASC),
-          CONSTRAINT fk_order_ref_orders FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment),
           INDEX delivery_auto_index_fk_order_ref_orders ("order" ASC, shipment ASC),
           FAMILY "primary" (ts, "order", shipment, item, rowid)
 )
@@ -822,8 +822,8 @@ SHOW CREATE TABLE refers
 refers  CREATE TABLE refers (
         a INT8 NULL,
         b INT8 NULL,
-        INDEX another_idx (b ASC),
         CONSTRAINT fk_a_ref_referee FOREIGN KEY (a) REFERENCES referee(id),
+        INDEX another_idx (b ASC),
         INDEX refers_auto_index_fk_a_ref_referee (a ASC),
         INDEX foo (a ASC),
         FAMILY "primary" (a, b, rowid)
@@ -2605,7 +2605,7 @@ statement ok
 DELETE FROM t1 WHERE x IS NULL
 
 statement ok
-DROP TABLE t2, t2 CASCADE
+DROP TABLE t1, t2 CASCADE
 
 subtest test_not_valid_fk
 

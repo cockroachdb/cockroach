@@ -702,10 +702,10 @@ WHERE n.nspname = 'public'
 ORDER BY con.oid
 ----
 oid         conname    connamespace  contype
-178791267   fk         2332901747    f
+2143281868  fk         2332901747    f
 3236224800  check_b    2332901747    c
-3318155331  fk         2332901747    f
 3572320190  primary    2332901747    p
+4089604113  fk         2332901747    f
 4243354484  t1_a_key   2332901747    u
 4243354485  index_key  2332901747    u
 
@@ -719,8 +719,8 @@ ORDER BY con.oid
 conname    contype  condeferrable  condeferred  convalidated  conrelid  contypid  conindid
 fk         f        false          false        true          57        0         450499961
 check_b    c        false          false        true          57        0         0
-fk         f        false          false        true          56        0         450499960
 primary    p        false          false        true          55        0         450499963
+fk         f        false          false        true          56        0         450499960
 t1_a_key   u        false          false        true          55        0         450499960
 index_key  u        false          false        true          55        0         450499961
 
@@ -766,8 +766,8 @@ ORDER BY con.oid
 conname    conislocal  coninhcount  connoinherit  conkey
 fk         true        0            true          {1,2}
 check_b    true        0            true          {2}
-fk         true        0            true          {1}
 primary    true        0            true          {1}
+fk         true        0            true          {1}
 t1_a_key   true        0            true          {2}
 index_key  true        0            true          {3,4}
 
@@ -803,8 +803,8 @@ FROM pg_catalog.pg_depend
 ORDER BY objid
 ----
 classid     objid       objsubid  refclassid  refobjid   refobjsubid  deptype
-4294967230  178791267   0         4294967232  450499961  0            n
-4294967230  3318155331  0         4294967232  450499960  0            n
+4294967230  2143281868  0         4294967232  450499961  0            n
+4294967230  4089604113  0         4294967232  450499960  0            n
 
 # All entries in pg_depend are dependency links from the pg_constraint system
 # table to the pg_class system table.

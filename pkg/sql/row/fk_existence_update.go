@@ -65,16 +65,18 @@ func makeFkExistenceCheckHelperForUpdate(
 	txn *client.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
 	otherTables FkTableMetadata,
+	updateCols []sqlbase.ColumnDescriptor,
 	colMap map[sqlbase.ColumnID]int,
 	alloc *sqlbase.DatumAlloc,
 ) (fkExistenceCheckForUpdate, error) {
 	ret := fkExistenceCheckForUpdate{
-		indexIDsToCheck: make(map[sqlbase.IndexID]struct{}),
+		indexIDsToCheck: map[sqlbase.IndexID]struct{}{0: {}},
 	}
 
 	// Instantiate a helper for the referencing tables.
 	var err error
-	if ret.inbound, err = makeFkExistenceCheckHelperForDelete(txn, table, otherTables, colMap, alloc); err != nil {
+	if ret.inbound, err = makeFkExistenceCheckHelperForDelete(txn, table, otherTables, colMap,
+		alloc); err != nil {
 		return ret, err
 	}
 
@@ -116,10 +118,10 @@ func (fks fkExistenceCheckForUpdate) addIndexChecks(
 	ctx context.Context, oldValues, newValues tree.Datums, traceKV bool,
 ) error {
 	for indexID := range fks.indexIDsToCheck {
-		if err := queueFkExistenceChecksForRow(ctx, fks.checker, fks.inbound.fks, indexID, oldValues, traceKV); err != nil {
+		if err := queueFkExistenceChecksForRow(ctx, fks.checker, fks.inbound.fks[indexID], oldValues, traceKV); err != nil {
 			return err
 		}
-		if err := queueFkExistenceChecksForRow(ctx, fks.checker, fks.outbound.fks, indexID, newValues, traceKV); err != nil {
+		if err := queueFkExistenceChecksForRow(ctx, fks.checker, fks.outbound.fks[indexID], newValues, traceKV); err != nil {
 			return err
 		}
 	}
