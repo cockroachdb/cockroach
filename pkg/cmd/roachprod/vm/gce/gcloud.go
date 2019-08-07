@@ -45,7 +45,7 @@ var projectsWithGC = []string{defaultProject, "andrei-jepsen"}
 
 // init will inject the GCE provider into vm.Providers, but only if the gcloud tool is available on the local path.
 func init() {
-	var p vm.Provider
+	var p vm.Provider = &Provider{}
 	if _, err := exec.LookPath("gcloud"); err != nil {
 		p = flagstub.New(p, "please install the gcloud CLI utilities "+
 			"(https://cloud.google.com/sdk/downloads)")
