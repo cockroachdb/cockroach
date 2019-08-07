@@ -1811,6 +1811,71 @@ func (c *CustomFuncs) ShouldReorderJoins(left, right memo.RelExpr) bool {
 	return size <= c.e.evalCtx.SessionData.ReorderJoinsLimit
 }
 
+// CommuteSemiJoin generates an inner join that is equivalent to the semi join.
+// This is useful because the inner join can possibly use a lookup join if the
+// LHS has a much higher cardinality than the RHS.
+//
+// For example consider the following tables:
+// CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c));
+// CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (f, e));
+//
+// Consider the following query and its equivalent semi-join plan:
+//
+// SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=d)
+// ----
+// semi-join (hash)
+//  ├── columns: a:1(int!null) b:2(int) c:3(int!null)
+//  ├── scan abc
+//  │    └── columns: a:1(int!null) b:2(int) c:3(int!null)
+//  ├── scan def
+//  │    └── columns: d:4(int) e:5(int!null) f:6(int!null)
+//  └── filters
+//       └── eq [type=bool]
+//            ├── variable: a [type=int]
+//            └── variable: d [type=int]
+//
+// Notice how the semi-join only cares about the unique values of
+// the `d` columns of the table `def`. CommuteSemiJoin generates
+// an equivalent inner-join plan that looks like:
+//
+// project
+// ├── columns: a:1(int!null) b:2(int) c:3(int!null)
+// └── inner-join (hash)
+//      ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int!null)
+//      ├── distinct-on
+//      │    ├── columns: d:4(int)
+//      │    ├── grouping columns: d:4(int)
+//      │    └── scan def
+//      │         └── columns: d:4(int)
+//      ├── scan abc
+//      │    └── columns: a:1(int!null) b:2(int) c:3(int!null)
+//      └── filters
+//           └── eq [type=bool]
+//                ├── variable: a [type=int]
+//                └── variable: d [type=int]
+func (c *CustomFuncs) CommuteSemiJoin(
+	grp, left, right memo.RelExpr, on memo.FiltersExpr, joinPrivate *memo.JoinPrivate,
+) {
+	// Build LHS of the join.
+	innerJoinLeft := left
+
+	// Find all the columns needed by the RHS.
+	neededRightCols := right.Relational().OutputCols
+	neededRightCols.IntersectionWith(c.FilterOuterCols(on))
+
+	// Build RHS of the join. The semi-join doesn't care about the columns
+	// of the RHS that aren't referenced in the On conditions, and so we only
+	// need the unique values of all the columns we no need.
+	innerJoinRight := c.e.f.ConstructDistinctOn(right, memo.EmptyAggregationsExpr, c.MakeGrouping(neededRightCols))
+
+	// Construct the Join.
+	innerJoin := c.e.f.ConstructInnerJoin(innerJoinLeft, innerJoinRight, on, joinPrivate)
+
+	// Project only the LHS of the semi-join.
+	proj := memo.ProjectExpr{Input: innerJoin, Projections: memo.EmptyProjectionsExpr, Passthrough: innerJoinLeft.Relational().OutputCols}
+	c.e.mem.AddProjectToGroup(&proj, grp)
+}
+
 // ----------------------------------------------------------------------
 //
 // GroupBy Rules

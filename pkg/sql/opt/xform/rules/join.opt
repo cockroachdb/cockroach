@@ -38,6 +38,17 @@
 =>
 (LeftJoin $right $left $on $private)
 
+# CommuteSemiJoin creates an inner join that is equivalent to the semi join.
+[CommuteSemiJoin, Explore]
+(SemiJoin
+    $left:*
+    $right:*
+    $on:*
+    $private:* & (NoJoinHints $private)
+)
+=>
+(CommuteSemiJoin $left $right $on $private)
+
 # GenerateMergeJoins creates MergeJoin operators for the join, using the
 # interesting orderings property.
 [GenerateMergeJoins, Explore]
