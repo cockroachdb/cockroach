@@ -163,12 +163,15 @@ type CCLOnlyStatement interface {
 }
 
 var _ CCLOnlyStatement = &Backup{}
+var _ CCLOnlyStatement = &ShowBackup{}
 var _ CCLOnlyStatement = &Restore{}
 var _ CCLOnlyStatement = &CreateRole{}
 var _ CCLOnlyStatement = &DropRole{}
 var _ CCLOnlyStatement = &GrantRole{}
 var _ CCLOnlyStatement = &RevokeRole{}
 var _ CCLOnlyStatement = &CreateChangefeed{}
+var _ CCLOnlyStatement = &Import{}
+var _ CCLOnlyStatement = &Export{}
 
 // StatementType implements the Statement interface.
 func (*AlterIndex) StatementType() StatementType { return DDL }
@@ -430,6 +433,8 @@ func (*Explain) StatementTag() string { return "EXPLAIN" }
 // StatementType implements the Statement interface.
 func (*Export) StatementType() StatementType { return Rows }
 
+func (*Export) cclOnlyStatement() {}
+
 // StatementTag returns a short string identifying the type of statement.
 func (*Export) StatementTag() string { return "EXPORT" }
 
@@ -458,6 +463,8 @@ func (n *Import) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Import) StatementTag() string { return "IMPORT" }
+
+func (*Import) cclOnlyStatement() {}
 
 // StatementType implements the Statement interface.
 func (*ParenSelect) StatementType() StatementType { return Rows }
@@ -659,6 +666,8 @@ func (*ShowBackup) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowBackup) StatementTag() string { return "SHOW BACKUP" }
+
+func (*ShowBackup) cclOnlyStatement() {}
 
 // StatementType implements the Statement interface.
 func (*ShowDatabases) StatementType() StatementType { return Rows }

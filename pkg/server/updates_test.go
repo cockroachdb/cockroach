@@ -528,7 +528,7 @@ func TestReportUsage(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Try a correlated subquery to check that feature reporting.
-		if _, err := db.Exec(`SELECT x	FROM (VALUES (1)) AS b(x) WHERE EXISTS(SELECT * FROM (VALUES (1)) AS a(x) WHERE a.x = b.x)`); err != nil {
+		if _, err := db.Exec(`SELECT x FROM (VALUES (1)) AS b(x) WHERE EXISTS(SELECT * FROM (VALUES (1)) AS a(x) WHERE a.x = b.x)`); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -690,19 +690,20 @@ func TestReportUsage(t *testing.T) {
 
 		// Although the query is executed 10 times, due to plan caching
 		// keyed by the SQL text, the planning only occurs once.
+		// TODO(radu): fix this (#39361).
 		"sql.plan.ops.cast.string::inet":                                            1,
 		"sql.plan.ops.bin.jsonb - string":                                           1,
 		"sql.plan.builtins.crdb_internal.force_assertion_error(msg: string) -> int": 1,
 		"sql.plan.ops.array.ind":                                                    1,
 		"sql.plan.ops.array.cons":                                                   1,
 		"sql.plan.ops.array.flatten":                                                1,
+		// The CTE counter is exercised by `WITH a AS (SELECT 1) ...`.
+		"sql.plan.cte": 1,
 
 		// The subquery counter is exercised by `(1, 20, 30, 40) = (SELECT ...)`.
 		"sql.plan.subquery": 1,
 		// The correlated sq counter is exercised by `WHERE EXISTS ( ... )` above.
 		"sql.plan.subquery.correlated": 1,
-		// The CTE counter is exercised by `WITH a AS (SELECT 1) ...`.
-		"sql.plan.cte": 10,
 
 		"unimplemented.#33285.json_object_agg":          10,
 		"unimplemented.pg_catalog.pg_stat_wal_receiver": 10,

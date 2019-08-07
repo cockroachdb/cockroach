@@ -195,8 +195,6 @@ func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
 	m := &ex.metrics.EngineMetrics
 	if planFlags.IsSet(planFlagOptUsed) {
 		m.SQLOptCount.Inc(1)
-	} else if planFlags.IsSet(planFlagOptFallback) {
-		m.SQLOptFallbackCount.Inc(1)
 	}
 
 	if planFlags.IsSet(planFlagOptCacheHit) {
