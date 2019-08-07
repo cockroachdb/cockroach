@@ -176,7 +176,9 @@ func getDescriptorByID(
 			return pgerror.Newf(pgcode.WrongObjectType,
 				"%q is not a table", desc.String())
 		}
-		table.MaybeFillInDescriptor()
+		if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
+			return nil
+		}
 
 		if err := table.Validate(ctx, txn, nil /* clusterVersion */); err != nil {
 			return err
@@ -214,7 +216,11 @@ func GetAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 		}
 		switch t := desc.Union.(type) {
 		case *sqlbase.Descriptor_Table:
-			descs[i] = desc.GetTable()
+			table := desc.GetTable()
+			if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
+				return nil, err
+			}
+			descs[i] = table
 		case *sqlbase.Descriptor_Database:
 			descs[i] = desc.GetDatabase()
 		default:

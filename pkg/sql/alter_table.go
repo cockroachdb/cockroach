@@ -284,6 +284,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return err
 					}
 				}
+				if err := n.tableDesc.Validate(params.ctx, params.p.txn, nil /* clusterVersion */); err != nil {
+					return err
+				}
 
 			default:
 				return errors.AssertionFailedf(
@@ -418,6 +421,21 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
+			output := n.tableDesc.OutboundFKs[:0]
+			for i := range n.tableDesc.OutboundFKs {
+				fk := &n.tableDesc.OutboundFKs[i]
+				if sqlbase.ColumnIDs(fk.OriginColumnIDs).Contains(col.ID) {
+					descriptorChanged = true
+					// Delete reverse refs as well.
+					if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, fk); err != nil {
+						return err
+					}
+					continue
+				}
+				output = append(output, *fk)
+			}
+			n.tableDesc.OutboundFKs = n.tableDesc.OutboundFKs[:len(output)]
+
 			// Drop check constraints which reference the column.
 			validChecks := n.tableDesc.Checks[:0]
 			for _, check := range n.tableDesc.AllActiveAndInactiveChecks() {
@@ -460,6 +478,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"column %q in the middle of being added, try again later", t.Column)
 			}
+			if err := n.tableDesc.Validate(params.ctx, params.p.txn, nil /* clusterVersion */); err != nil {
+				return err
+			}
 
 		case *tree.AlterTableDropConstraint:
 			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
@@ -477,12 +498,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			if err := n.tableDesc.DropConstraint(
 				name, details,
-				func(desc *sqlbase.MutableTableDescriptor, idx *sqlbase.IndexDescriptor) error {
-					return params.p.removeFKBackReference(params.ctx, desc, idx)
+				func(desc *sqlbase.MutableTableDescriptor, ref *sqlbase.ForeignKeyConstraint) error {
+					return params.p.removeFKBackReference(params.ctx, desc, ref)
 				}); err != nil {
 				return err
 			}
 			descriptorChanged = true
+			if err := n.tableDesc.Validate(params.ctx, params.p.txn, nil /* clusterVersion */); err != nil {
+				return err
+			}
 
 		case *tree.AlterTableValidateConstraint:
 			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
@@ -522,18 +546,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 				ck.Validity = sqlbase.ConstraintValidity_Validated
 
 			case sqlbase.ConstraintTypeFK:
-				found := false
-				var fkIdx *sqlbase.IndexDescriptor
-				for _, idx := range n.tableDesc.AllNonDropIndexes() {
-					fk := &idx.ForeignKey
+				var foundFk *sqlbase.ForeignKeyConstraint
+				for i := range n.tableDesc.OutboundFKs {
+					fk := &n.tableDesc.OutboundFKs[i]
 					// If the constraint is still being validated, don't allow VALIDATE CONSTRAINT to run
-					if fk.IsSet() && fk.Name == name && fk.Validity != sqlbase.ConstraintValidity_Validating {
-						found = true
-						fkIdx = idx
+					if fk.Name == name && fk.Validity != sqlbase.ConstraintValidity_Validating {
+						foundFk = fk
 						break
 					}
 				}
-				if !found {
+				if foundFk == nil {
 					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
@@ -542,7 +564,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				); err != nil {
 					return err
 				}
-				fkIdx.ForeignKey.Validity = sqlbase.ConstraintValidity_Validated
+				foundFk.Validity = sqlbase.ConstraintValidity_Validated
 
 			default:
 				return pgerror.Newf(pgcode.WrongObjectType,
@@ -642,7 +664,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			if err := n.tableDesc.RenameConstraint(
-				details, string(t.Constraint), string(t.NewName), depViewRenameError); err != nil {
+				details, string(t.Constraint), string(t.NewName), depViewRenameError, func(desc *MutableTableDescriptor, ref *sqlbase.ForeignKeyConstraint, newName string) error {
+					return params.p.updateFKBackReferenceName(params.ctx, desc, ref, newName)
+				}); err != nil {
 				return err
 			}
 			descriptorChanged = true
@@ -982,4 +1006,41 @@ func (p *planner) removeColumnComment(
 		columnID)
 
 	return err
+}
+
+// updateFKBackReferenceName updates the name of a foreign key reference on
+// the referenced table descriptor.
+// TODO (lucy): This method is meant to be analogous to removeFKBackReference,
+// in that it only updates the backreference, but we should refactor/unify all
+// the places where we update both FKs and their backreferences, so that callers
+// don't have to manually take care of updating both table descriptors.
+func (p *planner) updateFKBackReferenceName(
+	ctx context.Context,
+	tableDesc *sqlbase.MutableTableDescriptor,
+	ref *sqlbase.ForeignKeyConstraint,
+	newName string,
+) error {
+	var referencedTableDesc *sqlbase.MutableTableDescriptor
+	// We don't want to lookup/edit a second copy of the same table.
+	if tableDesc.ID == ref.ReferencedTableID {
+		referencedTableDesc = tableDesc
+	} else {
+		lookup, err := p.Tables().getMutableTableVersionByID(ctx, ref.ReferencedTableID, p.txn)
+		if err != nil {
+			return errors.Errorf("error resolving referenced table ID %d: %v", ref.ReferencedTableID, err)
+		}
+		referencedTableDesc = lookup
+	}
+	if referencedTableDesc.Dropped() {
+		// The referenced table is being dropped. No need to modify it further.
+		return nil
+	}
+	for i := range referencedTableDesc.InboundFKs {
+		backref := &referencedTableDesc.InboundFKs[i]
+		if backref.Name == ref.Name {
+			backref.Name = newName
+			return p.writeSchemaChange(ctx, referencedTableDesc, sqlbase.InvalidMutationID)
+		}
+	}
+	return errors.Errorf("missing backreference for foreign key %s", ref.Name)
 }

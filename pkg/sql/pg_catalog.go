@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 	"golang.org/x/text/collate"
@@ -787,7 +788,18 @@ CREATE TABLE pg_catalog.pg_constraint (
 
 					oid = h.ForeignKeyConstraintOid(db, tree.PublicSchema, table, con.FK)
 					contype = conTypeFK
-					conindid = h.IndexOid(referencedDB, tree.PublicSchema, con.ReferencedTable, con.ReferencedIndex)
+					// Foreign keys don't have a single linked index. Pick the first one
+					// that matches on the referenced table.
+					referencedTable, err := tableLookup.getTableByID(con.FK.ReferencedTableID)
+					if err != nil {
+						return err
+					}
+					if idx, err := sqlbase.FindFKReferencedIndex(referencedTable, con.FK.ReferencedColumnIDs); err != nil {
+						// We couldn't find an index that matched. This shouldn't happen.
+						log.Warningf(ctx, "broken fk reference: %v", err)
+					} else {
+						conindid = h.IndexOid(referencedDB, tree.PublicSchema, con.ReferencedTable, idx)
+					}
 					confrelid = defaultOid(con.ReferencedTable.ID)
 					if r, ok := fkActionMap[con.FK.OnUpdate]; ok {
 						confupdtype = r
@@ -798,27 +810,14 @@ CREATE TABLE pg_catalog.pg_constraint (
 					if r, ok := fkMatchMap[con.FK.Match]; ok {
 						confmatchtype = r
 					}
-					columnIDs := con.Index.ColumnIDs
-					if int(con.FK.SharedPrefixLen) > len(columnIDs) {
-						return errors.AssertionFailedf(
-							"foreign key %q's SharedPrefixLen (%d) is greater than the columns in the index (%d)",
-							con.FK.Name,
-							con.FK.SharedPrefixLen,
-							int32(len(columnIDs)),
-						)
-					}
-					sharedPrefixLen := len(columnIDs)
-					if int(con.FK.SharedPrefixLen) > 0 {
-						sharedPrefixLen = int(con.FK.SharedPrefixLen)
-					}
-					if conkey, err = colIDArrayToDatum(columnIDs[:sharedPrefixLen]); err != nil {
+					if conkey, err = colIDArrayToDatum(con.FK.OriginColumnIDs); err != nil {
 						return err
 					}
-					if confkey, err = colIDArrayToDatum(con.ReferencedIndex.ColumnIDs); err != nil {
+					if confkey, err = colIDArrayToDatum(con.FK.ReferencedColumnIDs); err != nil {
 						return err
 					}
 					var buf bytes.Buffer
-					if err := printForeignKeyConstraint(ctx, &buf, db.Name, con.Index, tableLookup); err != nil {
+					if err := printForeignKeyConstraint(ctx, &buf, db.Name, table, con.FK, tableLookup); err != nil {
 						return err
 					}
 					condef = tree.NewDString(buf.String())
@@ -1062,8 +1061,20 @@ CREATE TABLE pg_catalog.pg_depend (
 					return err
 				}
 
+				// Foreign keys don't have a single linked index. Pick the first one
+				// that matches on the referenced table.
+				referencedTable, err := tableLookup.getTableByID(con.FK.ReferencedTableID)
+				if err != nil {
+					return err
+				}
+				refObjID := oidZero
+				if idx, err := sqlbase.FindFKReferencedIndex(referencedTable, con.FK.ReferencedColumnIDs); err != nil {
+					// We couldn't find an index that matched. This shouldn't happen.
+					log.Warningf(ctx, "broken fk reference: %v", err)
+				} else {
+					refObjID = h.IndexOid(referencedDB, tree.PublicSchema, con.ReferencedTable, idx)
+				}
 				constraintOid := h.ForeignKeyConstraintOid(db, tree.PublicSchema, table, con.FK)
-				refObjID := h.IndexOid(referencedDB, tree.PublicSchema, con.ReferencedTable, con.ReferencedIndex)
 
 				if err := addRow(
 					pgConstraintTableOid, // classid
@@ -2696,9 +2707,8 @@ func (h oidHasher) writeCheckConstraint(check *sqlbase.TableDescriptor_CheckCons
 	h.writeStr(check.Expr)
 }
 
-func (h oidHasher) writeForeignKeyReference(fk *sqlbase.ForeignKeyReference) {
-	h.writeUInt32(uint32(fk.Table))
-	h.writeUInt32(uint32(fk.Index))
+func (h oidHasher) writeForeignKeyConstraint(fk *sqlbase.ForeignKeyConstraint) {
+	h.writeUInt32(uint32(fk.ReferencedTableID))
 	h.writeStr(fk.Name)
 }
 
@@ -2760,13 +2770,13 @@ func (h oidHasher) ForeignKeyConstraintOid(
 	db *sqlbase.DatabaseDescriptor,
 	scName string,
 	table *sqlbase.TableDescriptor,
-	fk *sqlbase.ForeignKeyReference,
+	fk *sqlbase.ForeignKeyConstraint,
 ) *tree.DOid {
 	h.writeTypeTag(fkConstraintTypeTag)
 	h.writeDB(db)
 	h.writeSchema(scName)
 	h.writeTable(table)
-	h.writeForeignKeyReference(fk)
+	h.writeForeignKeyConstraint(fk)
 	return h.getOid()
 }
 
