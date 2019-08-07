@@ -204,32 +204,24 @@ func (ex *connExecutor) populatePrepared(
 	// fallback for all others, so this should be safe for the foreseeable
 	// future.
 	var flags planFlags
-	var isCorrelated bool
 	if optMode := ex.sessionData.OptimizerMode; optMode != sessiondata.OptimizerOff {
 		log.VEvent(ctx, 2, "preparing using optimizer")
 		var err error
-		flags, isCorrelated, err = p.prepareUsingOptimizer(ctx)
+		flags, err = p.prepareUsingOptimizer(ctx)
 		if err == nil {
 			log.VEvent(ctx, 2, "optimizer prepare succeeded")
 			// stmt.Prepared fields have been populated.
 			return flags, nil
 		}
 		log.VEventf(ctx, 1, "optimizer prepare failed: %v", err)
-		if !canFallbackFromOpt(err, optMode, stmt) {
-			return 0, err
-		}
-		flags.Set(planFlagOptFallback)
-		log.VEvent(ctx, 1, "prepare falls back on heuristic planner")
-	} else {
-		log.VEvent(ctx, 2, "optimizer disabled (prepare)")
+		return 0, err
 	}
+	log.VEvent(ctx, 2, "optimizer disabled (prepare)")
 
-	// Fallback on the heuristic planner if the optimizer was not enabled or used:
-	// create a plan for the statement to figure out the typing, then close the
-	// plan.
+	// Fallback on the heuristic planner if the optimizer was not enabled: create
+	// a plan for the statement to figure out the typing, then close the plan.
 	prepared.AnonymizedStr = anonymizeStmt(stmt.AST)
 	if err := p.prepare(ctx, stmt.AST); err != nil {
-		err = enhanceErrWithCorrelation(err, isCorrelated)
 		return 0, err
 	}
 

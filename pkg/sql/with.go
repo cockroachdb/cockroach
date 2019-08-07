@@ -105,6 +105,7 @@ func containsMutations(plan planNode) (bool, error) {
 // is finished resolving names, which pops the environment frame.
 func (p *planner) initWith(ctx context.Context, with *tree.With) (func(p *planner) error, error) {
 	if with != nil {
+		telemetry.Inc(sqltelemetry.CteUseCounter)
 		frame := make(cteNameEnvironmentFrame)
 		p.curPlan.cteNameEnvironment = p.curPlan.cteNameEnvironment.push(frame)
 		for _, cte := range with.CTEList {
@@ -122,8 +123,6 @@ func (p *planner) initWith(ctx context.Context, with *tree.With) (func(p *planne
 		}
 		return popCteNameEnvironment, nil
 	}
-
-	telemetry.Inc(sqltelemetry.CteUseCounter)
 
 	return nil, nil
 }
