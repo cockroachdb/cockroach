@@ -42,14 +42,38 @@ func OrderedDistinctColsToOperators(
 		OneInputNode: NewOneInputNode(input),
 		fn:           func() { copy(distinctCol, zeroBoolColumn) },
 	}
-	var err error
+	var (
+		err error
+		r   resettableOperator
+		ok  bool
+	)
 	for i := range distinctCols {
 		input, err = newSingleOrderedDistinct(input, int(distinctCols[i]), distinctCol, typs[distinctCols[i]])
 		if err != nil {
 			return nil, nil, err
 		}
 	}
-	return input, distinctCol, nil
+	if r, ok = input.(resettableOperator); !ok {
+		panic("unexpectedly an ordered distinct is not a resetter")
+	}
+	distinctChain := distinctChainOps{
+		resettableOperator:         r,
+		estimatedStaticMemoryUsage: EstimateBatchSizeBytes([]types.T{types.Bool}, coldata.BatchSize),
+	}
+	return distinctChain, distinctCol, nil
+}
+
+type distinctChainOps struct {
+	resettableOperator
+
+	estimatedStaticMemoryUsage int
+}
+
+var _ StaticMemoryOperator = &distinctChainOps{}
+var _ resettableOperator = &distinctChainOps{}
+
+func (d *distinctChainOps) EstimateStaticMemoryUsage() int {
+	return d.estimatedStaticMemoryUsage
 }
 
 // NewOrderedDistinct creates a new ordered distinct operator on the given
@@ -159,7 +183,7 @@ type sortedDistinct_TYPEOp struct {
 	lastValNull bool
 }
 
-var _ Operator = &sortedDistinct_TYPEOp{}
+var _ resettableOperator = &sortedDistinct_TYPEOp{}
 
 func (p *sortedDistinct_TYPEOp) Init() {
 	p.input.Init()

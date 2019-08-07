@@ -142,10 +142,15 @@ func newColOperator(
 		}
 		var scanOp *colBatchScan
 		scanOp, err = newColBatchScan(flowCtx, core.TableReader, post)
-		result.op = scanOp
+		if err != nil {
+			return result, err
+		}
+		result.op, result.isStreaming = scanOp, true
 		result.metadataSources = append(result.metadataSources, scanOp)
-		// We will be wrapping colBatchScan with a cancel checker below, so we
-		// need to log its creation separately.
+		// colBatchScan is wrapped with a cancel checker below, so we need to
+		// account for its static memory usage here. We also need to log its
+		// creation separately.
+		result.memUsage += scanOp.EstimateStaticMemoryUsage()
 		log.VEventf(ctx, 1, "made op %T\n", result.op)
 
 		// We want to check for cancellation once per input batch, and wrapping
@@ -154,7 +159,7 @@ func newColOperator(
 		// However, some of the long-running operators (for example, sorter) are
 		// still responsible for doing the cancellation check on their own while
 		// performing long operations.
-		result.op, result.isStreaming = exec.NewCancelChecker(result.op), true
+		result.op = exec.NewCancelChecker(result.op)
 		returnMutations := core.TableReader.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 		columnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
 	case core.Aggregator != nil:

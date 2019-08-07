@@ -94,7 +94,7 @@ EXPLAIN (VEC) SELECT count(*) FROM kv
  │    └── *distsqlrun.materializer
  │         └── *exec.orderedAggregator
  │              └── *exec.oneShotOp
- │                   └── exec.fnOp
+ │                   └── exec.distinctChainOps
  │                        └── *exec.UnorderedSynchronizer
  │                             ├── *exec.countOp
  │                             │    └── *exec.simpleProjectOp
@@ -141,7 +141,7 @@ EXPLAIN (VEC) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
  │    └── *distsqlrun.materializer
  │         └── *exec.orderedAggregator
  │              └── *exec.oneShotOp
- │                   └── exec.fnOp
+ │                   └── exec.distinctChainOps
  │                        └── *exec.UnorderedSynchronizer
  │                             ├── *exec.countOp
  │                             │    └── *exec.simpleProjectOp

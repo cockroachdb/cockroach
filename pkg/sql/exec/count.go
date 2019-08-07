@@ -29,7 +29,6 @@ type countOp struct {
 	count         int64
 }
 
-var _ Operator = &countOp{}
 var _ StaticMemoryOperator = &countOp{}
 
 // NewCountOp returns a new count operator that counts the rows in its input.
