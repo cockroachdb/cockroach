@@ -23,6 +23,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const maxSettings = 128
+
 type dummy struct {
 	msg1       string
 	growsbyone string
@@ -614,9 +616,8 @@ func TestHide(t *testing.T) {
 }
 
 func TestMaxSlotIdxSettings(t *testing.T) {
-	maxSettings := 128
 	// Register maxSettings settings to ensure that no errors occur.
-	maxName, err := batchRegisterSettings(t, "i.Val", maxSettings-1-len(settings.Keys()))
+	maxName, err := batchRegisterSettings(t, t.Name(), maxSettings-1-len(settings.Keys()))
 	if err != nil {
 		t.Errorf("expected no error to register 128 settings, but get error : %s", err)
 	}
@@ -627,7 +628,7 @@ func TestMaxSlotIdxSettings(t *testing.T) {
 	var changes int
 	intSetting, ok := settings.Lookup(maxName)
 	if !ok {
-		t.Errorf("expected lookup setting : %s", maxName)
+		t.Errorf("expected lookup of %s to succeed", maxName)
 	}
 	intSetting.SetOnChange(sv, func() { changes++ })
 
@@ -637,22 +638,22 @@ func TestMaxSlotIdxSettings(t *testing.T) {
 	}
 
 	if changes != 1 {
-		t.Errorf("expected the max slot setting changed .")
+		t.Errorf("expected the max slot setting changed")
 	}
 }
 
 func TestMaxSettingsPanics(t *testing.T) {
-	maxSettings := 129
-	// Register too many settings, this will cause errors.
-	_, err := batchRegisterSettings(t, "i.Val", maxSettings-1-len(settings.Keys()))
+	// Register too many settings which will cause a panic which is caught and converted to an error.
+	_, err := batchRegisterSettings(t, t.Name(), maxSettings-len(settings.Keys()))
 	expectedErr := "too many settings; increase maxSettings"
 	if err == nil || err.Error() != expectedErr {
-		t.Errorf("expected error :'%s' error, but get : %s", expectedErr, err)
+		t.Errorf("expected error %v, but got %v",  expectedErr, err)
 	}
 }
+
 func batchRegisterSettings(t *testing.T, keyPrefix string, count int) (name string, err error) {
 	defer func() {
-		// Catch painc error, and convert to error.
+		// Catch panic and convert it to an error.
 		if r := recover(); r != nil {
 			// Check exactly what the panic was and create error.
 			switch x := r.(type) {
@@ -661,7 +662,7 @@ func batchRegisterSettings(t *testing.T, keyPrefix string, count int) (name stri
 			case error:
 				err = x
 			default:
-				err = errors.New("Unknow panic")
+				err = errors.Errorf("unknown panic: %v", x)
 			}
 		}
 	}()
