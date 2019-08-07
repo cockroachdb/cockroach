@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -90,11 +91,11 @@ type ycsb struct {
 	families    bool
 	splits      int
 
-	workload                                   string
-	requestDistribution                        string
-	scanLengthDistribution                     string
-	minScanLength, maxScanLength               uint64
-	readFreq, insertFreq, updateFreq, scanFreq float32
+	workload                                                        string
+	requestDistribution                                             string
+	scanLengthDistribution                                          string
+	minScanLength, maxScanLength                                    uint64
+	readFreq, insertFreq, updateFreq, scanFreq, readModifyWriteFreq float32
 }
 
 func init() {
@@ -165,8 +166,8 @@ func (g *ycsb) Hooks() workload.Hooks {
 				g.insertFreq = 0.05
 				g.requestDistribution = "zipfian"
 			case "F", "f":
-				// TODO(jeffreyxiao): This is supposed to be a read-modify-write workload.
-				g.insertFreq = 1.0
+				g.readFreq = 0.5
+				g.readModifyWriteFreq = 0.5
 				g.requestDistribution = "zipfian"
 			default:
 				return errors.Errorf("Unknown workload: %q", g.workload)
@@ -296,6 +297,16 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		}
 	}
 
+	readStmts := make([]*gosql.Stmt, numTableFields)
+	for i := 0; i < numTableFields; i++ {
+		q := fmt.Sprintf(`SELECT field%d FROM usertable WHERE ycsb_key = $1`, i)
+		stmt, err := db.Prepare(q)
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
+		readStmts[i] = stmt
+	}
+
 	zipfRng := rand.New(rand.NewSource(g.seed))
 	var requestGen randGenerator
 	var scanLengthGen randGenerator
@@ -339,6 +350,7 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 			hists:           reg.GetHandle(),
 			db:              db,
 			readStmt:        readStmt,
+			readStmts:       readStmts,
 			scanStmt:        scanStmt,
 			insertStmt:      insertStmt,
 			updateStmts:     updateStmts,
@@ -369,6 +381,8 @@ type ycsbWorker struct {
 	// In normal mode this is one statement per field, since the field name cannot
 	// be parametrized. In JSON mode it's a single statement.
 	updateStmts []*gosql.Stmt
+	// Statements to read a specific field. Used for read-modify-write requests.
+	readStmts []*gosql.Stmt
 
 	// The next row index to insert.
 	rowIndex *uint64
@@ -395,9 +409,11 @@ func (yw *ycsbWorker) run(ctx context.Context) error {
 	case readOp:
 		err = yw.readRow(ctx)
 	case insertOp:
-		err = yw.insertRow(ctx, yw.nextInsertKeyIndex(), true)
+		err = yw.insertRow(ctx)
 	case scanOp:
 		err = yw.scanRows(ctx)
+	case readModifyWriteOp:
+		err = yw.readModifyWriteRow(ctx)
 	default:
 		return errors.Errorf(`unknown operation: %s`, op)
 	}
@@ -415,10 +431,11 @@ var readOnly int32
 type operation string
 
 const (
-	updateOp operation = `update`
-	insertOp operation = `insert`
-	readOp   operation = `read`
-	scanOp   operation = `scan`
+	updateOp          operation = `update`
+	insertOp          operation = `insert`
+	readOp            operation = `read`
+	scanOp            operation = `scan`
+	readModifyWriteOp operation = `readModifyWrite`
 )
 
 func (yw *ycsbWorker) hashKey(key uint64) uint64 {
@@ -483,8 +500,9 @@ func (yw *ycsbWorker) randString(length int) string {
 	return string(str)
 }
 
-func (yw *ycsbWorker) insertRow(ctx context.Context, keyIndex uint64, increment bool) error {
+func (yw *ycsbWorker) insertRow(ctx context.Context) error {
 	args := make([]interface{}, numTableFields+1)
+	keyIndex := yw.nextInsertKeyIndex()
 	args[0] = yw.buildKeyName(keyIndex)
 	for i := 1; i <= numTableFields; i++ {
 		args[i] = yw.randString(fieldLength)
@@ -495,16 +513,11 @@ func (yw *ycsbWorker) insertRow(ctx context.Context, keyIndex uint64, increment 
 		return err
 	}
 
-	if increment {
-		count, err := yw.rowCounter.Acknowledge(keyIndex)
-		if err != nil {
-			return err
-		}
-		if err := yw.requestGen.IncrementIMax(count); err != nil {
-			return err
-		}
+	count, err := yw.rowCounter.Acknowledge(keyIndex)
+	if err != nil {
+		return err
 	}
-	return nil
+	return yw.requestGen.IncrementIMax(count)
 }
 
 func (yw *ycsbWorker) updateRow(ctx context.Context) error {
@@ -551,6 +564,36 @@ func (yw *ycsbWorker) scanRows(ctx context.Context) error {
 	return res.Err()
 }
 
+func (yw *ycsbWorker) readModifyWriteRow(ctx context.Context) error {
+	key := yw.nextReadKey()
+	value := yw.randString(fieldLength)
+	fieldIdx := yw.rng.Intn(numTableFields)
+	args := make([]interface{}, 2)
+	args[0] = key
+	return crdb.ExecuteTx(ctx, yw.db, nil, func(tx *gosql.Tx) error {
+		res, err := yw.readStmts[fieldIdx].QueryContext(ctx, key)
+		if err != nil {
+			return err
+		}
+		for res.Next() {
+		}
+		res.Close()
+		if err := res.Err(); err != nil {
+			return err
+		}
+		var updateStmt *gosql.Stmt
+		if yw.config.json {
+			updateStmt = yw.updateStmts[0]
+			args[1] = fmt.Sprintf(`{"field%d": "%s"}`, fieldIdx, value)
+		} else {
+			updateStmt = yw.updateStmts[fieldIdx]
+			args[1] = value
+		}
+		_, err = tx.Stmt(updateStmt).ExecContext(ctx, args...)
+		return err
+	})
+}
+
 // Choose an operation in proportion to the frequencies.
 func (yw *ycsbWorker) chooseOp() operation {
 	p := yw.rng.Float32()
@@ -562,6 +605,10 @@ func (yw *ycsbWorker) chooseOp() operation {
 		return insertOp
 	}
 	p -= yw.config.insertFreq
+	if atomic.LoadInt32(&readOnly) == 0 && p <= yw.config.readModifyWriteFreq {
+		return readModifyWriteOp
+	}
+	p -= yw.config.readModifyWriteFreq
 	// If both scanFreq and readFreq are 0 default to readOp if we've reached
 	// this point because readOnly is true.
 	if p <= yw.config.scanFreq {
