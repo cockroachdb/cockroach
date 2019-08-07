@@ -2225,3 +2225,19 @@ func listen(
 	}
 	return ln, nil
 }
+
+// RunLocalSQL calls fn on a SQL internal executor on this server.
+// This is meant for use for SQL initialization during bootstrapping.
+//
+// The internal SQL interface should be used instead of a regular SQL
+// network connection for SQL initializations when setting up a new
+// sserver, because it's possible for the server to listen on a
+// network interface that is not reachable from loopback. It is also
+// possible for the TLS certificates to be invalid when used locally
+// (e.g. if the hostname in the cert is an advertised address that's
+// only reachable externally).
+func (s *Server) RunLocalSQL(
+	ctx context.Context, fn func(ctx context.Context, sqlExec *sql.InternalExecutor) error,
+) error {
+	return fn(ctx, s.internalExecutor)
+}

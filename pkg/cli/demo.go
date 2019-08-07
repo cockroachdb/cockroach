@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -27,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
-	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -107,27 +105,11 @@ func setupTransientServers(
 	}
 	cleanup = func() { stopper.Stop(ctx) }
 
-	// Set up the default zone configuration. We are using an in-memory store
-	// so we really want to disable replication.
-	cfg := config.DefaultZoneConfig()
-	sysCfg := config.DefaultSystemZoneConfig()
-
-	if demoCtx.nodes < 3 {
-		cfg.NumReplicas = proto.Int32(1)
-		sysCfg.NumReplicas = proto.Int32(1)
-	}
-
 	// Create the first transient server. The others will join this one.
 	args := base.TestServerArgs{
 		PartOfCluster: true,
 		Insecure:      true,
-		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				DefaultZoneConfigOverride:       &cfg,
-				DefaultSystemZoneConfigOverride: &sysCfg,
-			},
-		},
-		Stopper: stopper,
+		Stopper:       stopper,
 	}
 	serverFactory := server.TestServerFactory
 	s := serverFactory.New(args).(*server.TestServer)
@@ -139,6 +121,14 @@ func setupTransientServers(
 		s := serverFactory.New(args).(*server.TestServer)
 		if err := s.Start(args); err != nil {
 			return connURL, adminURL, cleanup, err
+		}
+	}
+
+	if demoCtx.nodes < 3 {
+		// Set up the default zone configuration. We are using an in-memory store
+		// so we really want to disable replication.
+		if err := cliDisableReplication(ctx, s.Server); err != nil {
+			return ``, ``, cleanup, err
 		}
 	}
 
