@@ -104,10 +104,8 @@ scan item
  ├── columns: i_price:4(decimal) i_name:3(varchar) i_data:5(varchar)  [hidden: i_id:1(int!null)]
  ├── constraint: /1: [/25 - /25] [/50 - /50] [/75 - /75] [/100 - /100] [/125 - /125] [/150 - /150] [/175 - /175] [/200 - /200] [/225 - /225] [/250 - /250] [/275 - /275] [/300 - /300]
  ├── cardinality: [0 - 12]
- ├── stats: [rows=11.2643678, distinct(1)=11.2643678, null(1)=0, distinct(3)=11.172477, null(3)=0, distinct(4)=11.2585677, null(4)=0, distinct(5)=11.2595726, null(5)=0]
- │   histogram(1)=  0 0.9387 0 0.9387 0 0.9387 0 0.9387 0 0.9387 0 0.9387 0 0.9387 0 0.9387 0 0.9387 0 0.9387 0 0.9387 0 0.9387
- │                <---- 25 ----- 50 ----- 75 ---- 100 ---- 125 ---- 150 ---- 175 ---- 200 ---- 225 ---- 250 ---- 275 ---- 300 -
- ├── cost: 12.2881609
+ ├── stats: [rows=12, distinct(1)=12, null(1)=0, distinct(3)=11.8957521, null(3)=0, distinct(4)=11.9934177, null(4)=0, distinct(5)=11.9945581, null(5)=0]
+ ├── cost: 13.09
  ├── key: (1)
  ├── fd: (1)-->(3-5)
  ├── ordering: +1
@@ -123,10 +121,10 @@ column_names  row_count  distinct_count  null_count
 {i_price}     12         12              0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{i_data}      11.00          1.09           11.00               1.09                0.00            1.00
-{i_id}        11.00          1.09           11.00               1.09                0.00            1.00
-{i_name}      11.00          1.09           11.00               1.09                0.00            1.00
-{i_price}     11.00          1.09           11.00               1.09                0.00            1.00
+{i_data}      12.00          1.00           12.00               1.00                0.00            1.00
+{i_id}        12.00          1.00           12.00               1.00                0.00            1.00
+{i_name}      12.00          1.00           12.00               1.00                0.00            1.00
+{i_price}     12.00          1.00           12.00               1.00                0.00            1.00
 
 save-tables format=hide-qual database=tpcc save-tables-prefix=new_order_04
 SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_05
@@ -138,8 +136,8 @@ project
  ├── save-table-name: new_order_04_project_1
  ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar) s_dist_05:8(char)  [hidden: s_i_id:1(int!null)]
  ├── cardinality: [0 - 5]
- ├── stats: [rows=4.98705573, distinct(1)=4.98705573, null(1)=0, distinct(3)=4.85287765, null(3)=0, distinct(8)=4.79176814, null(8)=0, distinct(14)=0.993174353, null(14)=0, distinct(15)=0.993174353, null(15)=0, distinct(16)=0.993174353, null(16)=0, distinct(17)=4.9867867, null(17)=0]
- ├── cost: 6.30369022
+ ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(3)=4.86513081, null(3)=0, distinct(8)=4.8037108, null(8)=0, distinct(14)=0.993262137, null(14)=0, distinct(15)=0.993262137, null(15)=0, distinct(16)=0.993262137, null(16)=0, distinct(17)=4.99972957, null(17)=0]
+ ├── cost: 6.32
  ├── key: (1)
  ├── fd: (1)-->(3,8,14-17)
  ├── ordering: +1
@@ -150,10 +148,8 @@ project
       ├── columns: s_i_id:1(int!null) s_w_id:2(int!null) s_quantity:3(int) s_dist_05:8(char) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar)
       ├── constraint: /2/1: [/4/900 - /4/900] [/4/1000 - /4/1000] [/4/1100 - /4/1100] [/4/1400 - /4/1400] [/4/1500 - /4/1500]
       ├── cardinality: [0 - 5]
-      ├── stats: [rows=4.98705573, distinct(1)=4.98705573, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=4.85287765, null(3)=0, distinct(8)=4.79176814, null(8)=0, distinct(14)=0.993174353, null(14)=0, distinct(15)=0.993174353, null(15)=0, distinct(16)=0.993174353, null(16)=0, distinct(17)=4.9867867, null(17)=0]
-      │   histogram(2)=  0 4.9871
-      │                <---- 4 --
-      ├── cost: 6.24381966
+      ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=4.86513081, null(3)=0, distinct(8)=4.8037108, null(8)=0, distinct(14)=0.993262137, null(14)=0, distinct(15)=0.993262137, null(15)=0, distinct(16)=0.993262137, null(16)=0, distinct(17)=4.99972957, null(17)=0]
+      ├── cost: 6.26
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3,8,14-17)
       ├── ordering: +1 opt(2) [actual: +1]
