@@ -295,7 +295,7 @@ func TestTransitions(t *testing.T) {
 			},
 			ev: eventTxnStart{ImplicitTxn: fsm.True},
 			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
-				nil /* historicalTimestamp */, tranCtx),
+				nil /* historicalTimestamp */, tranCtx, func() {} /* recordTransactionStart */),
 			expState: stateOpen{ImplicitTxn: fsm.True, RetryIntent: fsm.False},
 			expAdv: expAdvance{
 				// We expect to stayInPlace; upon starting a txn the statement is
@@ -320,7 +320,7 @@ func TestTransitions(t *testing.T) {
 			},
 			ev: eventTxnStart{ImplicitTxn: fsm.False},
 			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
-				nil /* historicalTimestamp */, tranCtx),
+				nil /* historicalTimestamp */, tranCtx, func() {} /* recordTransactionStart */),
 			expState: stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.False},
 			expAdv: expAdvance{
 				expCode: advanceOne,
@@ -364,7 +364,7 @@ func TestTransitions(t *testing.T) {
 				return s, ts, nil
 			},
 			ev:        eventTxnFinish{},
-			evPayload: eventTxnFinishPayload{commit: true},
+			evPayload: makeEventTxnFinishPayload(true /* commit */, func(bool) {}),
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: advanceOne,
@@ -385,7 +385,7 @@ func TestTransitions(t *testing.T) {
 				return s, ts, nil
 			},
 			ev:        eventTxnFinish{},
-			evPayload: eventTxnFinishPayload{commit: true},
+			evPayload: makeEventTxnFinishPayload(true /* commit */, func(bool) {}),
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: advanceOne,
@@ -630,7 +630,7 @@ func TestTransitions(t *testing.T) {
 				return s, ts, nil
 			},
 			ev:        eventTxnFinish{},
-			evPayload: eventTxnFinishPayload{commit: false},
+			evPayload: makeEventTxnFinishPayload(false /* commit */, func(bool) {}),
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: advanceOne,
@@ -647,7 +647,7 @@ func TestTransitions(t *testing.T) {
 			},
 			ev: eventTxnStart{ImplicitTxn: fsm.False},
 			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
-				nil /* historicalTimestamp */, tranCtx),
+				nil /* historicalTimestamp */, tranCtx, func() {} /* recordTransactionStart */),
 			expState: stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True},
 			expAdv: expAdvance{
 				expCode: advanceOne,
@@ -666,7 +666,7 @@ func TestTransitions(t *testing.T) {
 			},
 			ev: eventTxnStart{ImplicitTxn: fsm.False},
 			evPayload: makeEventTxnStartPayload(pri, tree.ReadOnly, now.GoTime(),
-				&now, tranCtx),
+				&now, tranCtx, func() {} /* recordTransactionStart */),
 			expState: stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.True},
 			expAdv: expAdvance{
 				expCode: advanceOne,
@@ -688,7 +688,7 @@ func TestTransitions(t *testing.T) {
 				return s, ts, err
 			},
 			ev:        eventTxnFinish{},
-			evPayload: eventTxnFinishPayload{commit: false},
+			evPayload: makeEventTxnFinishPayload(false /* commit */, func(bool) {}),
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: advanceOne,
@@ -735,7 +735,7 @@ func TestTransitions(t *testing.T) {
 				return testCon.createCommitWaitState()
 			},
 			ev:        eventTxnFinish{},
-			evPayload: eventTxnFinishPayload{commit: true},
+			evPayload: makeEventTxnFinishPayload(true /* commit */, func(bool) {}),
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: advanceOne,

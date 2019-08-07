@@ -1007,6 +1007,9 @@ func (ex *connExecutor) execStmtInAbortedState(
 		if ex.state.readOnly {
 			rwMode = tree.ReadOnly
 		}
+		// Note that we pass in a noop function as recordTransactionStart argument
+		// because we're restarting a transaction here, and the original start time
+		// has already been recorded.
 		payload := makeEventTxnStartPayload(
 			ex.state.priority, rwMode, ex.state.sqlTimestamp,
 			nil /* historicalTimestamp */, ex.transitionCtx)
@@ -1271,4 +1274,27 @@ func (ex *connExecutor) validateSavepointName(savepoint tree.Name) error {
 				"with SET force_savepoint_restart=true")
 	}
 	return nil
+}
+
+func (ex *connExecutor) recordTransactionStart() {
+	// We don't need to write down the transaction start time into
+	// ex.planner.statsCollector.PhaseTimes because it will be overwritten
+	// in ex.resetPlanner() before executing the statements of the transaction.
+	ex.phaseTimes[transactionStart] = timeutil.Now()
+	ex.txnInfo.ID = ex.state.mu.txn.ID()
+	ex.txnInfo.implicit = ex.implicitTxn()
+}
+
+func (ex *connExecutor) recordTransactionStatistics(ev txnEvent) {
+	phaseTimes := ex.planner.statsCollector.PhaseTimes()
+	phaseTimes[transactionEnd] = timeutil.Now()
+	transactionStart := phaseTimes[transactionStart]
+	transactionEnd := phaseTimes[transactionEnd]
+	totalTransactionTime := transactionEnd.Sub(transactionStart)
+	ex.planner.statsCollector.RecordTransaction(
+		ex.txnInfo.ID.String(),
+		totalTransactionTime.Seconds(),
+		ev == txnCommit,
+		ex.txnInfo.implicit,
+	)
 }
