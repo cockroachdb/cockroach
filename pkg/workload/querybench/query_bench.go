@@ -122,7 +122,7 @@ func (g *queryBench) Ops(urls []string, reg *histogram.Registry) (workload.Query
 		}
 	}
 	if g.vectorize != "" {
-		_, err := db.Exec("SET vectorize=%s", g.vectorize)
+		_, err := db.Exec("SET vectorize=" + g.vectorize)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
