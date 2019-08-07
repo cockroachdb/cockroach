@@ -98,12 +98,12 @@ test
 query TT colnames
 SELECT * FROM [SHOW ZONE CONFIGURATIONS] LIMIT 0
 ----
-zone_name  config_sql
+target  config_sql
 
 query TT colnames
 SELECT * FROM [SHOW ZONE CONFIGURATION FOR TABLE system.users] LIMIT 0
 ----
-zone_name  config_sql
+target  config_sql
 
 query T colnames,rowsort
 SELECT * FROM [SHOW DATABASES]

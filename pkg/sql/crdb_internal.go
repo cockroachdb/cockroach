@@ -1864,7 +1864,7 @@ var crdbInternalZonesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.zones (
   zone_id          INT NOT NULL,
-  zone_name        STRING,
+  target           STRING,
   range_name       STRING,
   database_name    STRING,
   table_name       STRING,
