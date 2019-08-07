@@ -536,9 +536,9 @@ message DataDistributionRequest {
 
 message DataDistributionResponse {
   message ZoneConfig {
-    // zone_name is ".default" for the default zone config.
-    // Otherwise, it's of the form [database.]table[@index[.partition]]
-    string zone_name = 1;
+    // target is the object the zone config applies to, e.g. "DATABASE db" or
+    // "PARTITION north_america OF TABLE users".
+    string target = 1;
 
     config.ZoneConfig config = 2 [(gogoproto.nullable) = false];
 

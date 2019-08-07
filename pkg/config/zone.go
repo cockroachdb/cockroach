@@ -82,42 +82,6 @@ func ZoneSpecifierFromID(
 	}, nil
 }
 
-// ToZoneName converts a tree.ZoneSpecifier to a human-friendly zone name. This
-// is only intended for readability and not to be parsed back into a
-// ZoneSpecifier.
-//
-// For RANGE zone specifiers, the name is of the form .NAME. Otherwise, the name
-// is of the form DATABASE[.TABLE[@INDEX][.PARTITION]].
-func ToZoneName(zs *tree.ZoneSpecifier) string {
-	if zs.NamedZone != "" {
-		return "." + string(zs.NamedZone)
-	}
-	if zs.Database != "" {
-		return zs.Database.String()
-	}
-	ti := zs.TableOrIndex
-
-	// The table name may have a schema specifier. Zone names do not include this,
-	// so strip it.
-	ctx := tree.NewFmtCtx(tree.FmtSimple)
-	catalog := tree.Name(ti.Table.Catalog())
-	ctx.FormatNode(&catalog)
-	ctx.WriteByte('.')
-	table := tree.UnrestrictedName(ti.Table.Table())
-	ctx.FormatNode(&table)
-
-	if ti.Index != "" && ti.Index != "primary" {
-		ctx.WriteByte('@')
-		ctx.FormatNode(&ti.Index)
-	}
-	if zs.Partition != "" {
-		ctx.WriteByte('.')
-		partition := tree.UnrestrictedName(zs.Partition)
-		ctx.FormatNode(&partition)
-	}
-	return ctx.CloseAndGetString()
-}
-
 // ResolveZoneSpecifier converts a zone specifier to the ID of most specific
 // zone whose config applies.
 func ResolveZoneSpecifier(

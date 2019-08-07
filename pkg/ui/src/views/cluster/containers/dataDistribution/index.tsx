@@ -57,7 +57,7 @@ class DataDistribution extends React.Component<DataDistributionProps> {
       <div className="zone-config-list">
         <ul>
           {this.props.sortedZoneConfigs.map((zoneConfig) => (
-            <li key={zoneConfig.zone_name} className="zone-config">
+            <li key={zoneConfig.target} className="zone-config">
               <pre className="zone-config__raw-sql">
                 {zoneConfig.config_sql}
               </pre>
@@ -195,7 +195,7 @@ const sortedZoneConfigs = createSelector(
     if (!dataDistributionState.data) {
       return null;
     }
-    return _.sortBy(dataDistributionState.data.zone_configs, (zc) => zc.zone_name);
+    return _.sortBy(dataDistributionState.data.zone_configs, (zc) => zc.target);
   },
 );
 
