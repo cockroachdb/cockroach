@@ -54,7 +54,7 @@ func showBackupPlanHook(
 	case tree.BackupFileDetails:
 		shower = backupShowerFiles
 	default:
-		shower = backupShowerDefault
+		shower = backupShowerDefault(ctx, backup.ShouldIncludeSchemas)
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -89,60 +89,78 @@ type backupShower struct {
 	fn     func(BackupDescriptor) []tree.Datums
 }
 
-var backupShowerDefault = backupShower{
-	header: sqlbase.ResultColumns{
+func backupShowerHeaders(showSchemas bool) sqlbase.ResultColumns {
+	baseHeaders := sqlbase.ResultColumns{
 		{Name: "database_name", Typ: types.String},
 		{Name: "table_name", Typ: types.String},
 		{Name: "start_time", Typ: types.Timestamp},
 		{Name: "end_time", Typ: types.Timestamp},
 		{Name: "size_bytes", Typ: types.Int},
 		{Name: "rows", Typ: types.Int},
-	},
+	}
+	if showSchemas {
+		baseHeaders = append(baseHeaders, sqlbase.ResultColumn{Name: "create_statement", Typ: types.String})
+	}
+	return baseHeaders
+}
 
-	fn: func(desc BackupDescriptor) []tree.Datums {
-		descs := make(map[sqlbase.ID]string)
-		for _, descriptor := range desc.Descriptors {
-			if database := descriptor.GetDatabase(); database != nil {
-				if _, ok := descs[database.ID]; !ok {
-					descs[database.ID] = database.Name
+func backupShowerDefault(ctx context.Context, showSchemas bool) backupShower {
+	return backupShower{
+		header: backupShowerHeaders(showSchemas),
+		fn: func(desc BackupDescriptor) []tree.Datums {
+			descs := make(map[sqlbase.ID]string)
+			for _, descriptor := range desc.Descriptors {
+				if database := descriptor.GetDatabase(); database != nil {
+					if _, ok := descs[database.ID]; !ok {
+						descs[database.ID] = database.Name
+					}
 				}
 			}
-		}
-		descSizes := make(map[sqlbase.ID]roachpb.BulkOpSummary)
-		for _, file := range desc.Files {
-			// TODO(dan): This assumes each file in the backup only contains
-			// data from a single table, which is usually but not always
-			// correct. It does not account for interleaved tables or if a
-			// BACKUP happened to catch a newly created table that hadn't yet
-			// been split into its own range.
-			_, tableID, err := encoding.DecodeUvarintAscending(file.Span.Key)
-			if err != nil {
-				continue
+			descSizes := make(map[sqlbase.ID]roachpb.BulkOpSummary)
+			for _, file := range desc.Files {
+				// TODO(dan): This assumes each file in the backup only contains
+				// data from a single table, which is usually but not always
+				// correct. It does not account for interleaved tables or if a
+				// BACKUP happened to catch a newly created table that hadn't yet
+				// been split into its own range.
+				_, tableID, err := encoding.DecodeUvarintAscending(file.Span.Key)
+				if err != nil {
+					continue
+				}
+				s := descSizes[sqlbase.ID(tableID)]
+				s.Add(file.EntryCounts)
+				descSizes[sqlbase.ID(tableID)] = s
 			}
-			s := descSizes[sqlbase.ID(tableID)]
-			s.Add(file.EntryCounts)
-			descSizes[sqlbase.ID(tableID)] = s
-		}
-		start := tree.DNull
-		if desc.StartTime.WallTime != 0 {
-			start = tree.MakeDTimestamp(timeutil.Unix(0, desc.StartTime.WallTime), time.Nanosecond)
-		}
-		var rows []tree.Datums
-		for _, descriptor := range desc.Descriptors {
-			if table := descriptor.GetTable(); table != nil {
-				dbName := descs[table.ParentID]
-				rows = append(rows, tree.Datums{
-					tree.NewDString(dbName),
-					tree.NewDString(table.Name),
-					start,
-					tree.MakeDTimestamp(timeutil.Unix(0, desc.EndTime.WallTime), time.Nanosecond),
-					tree.NewDInt(tree.DInt(descSizes[table.ID].DataSize)),
-					tree.NewDInt(tree.DInt(descSizes[table.ID].Rows)),
-				})
+			start := tree.DNull
+			if desc.StartTime.WallTime != 0 {
+				start = tree.MakeDTimestamp(timeutil.Unix(0, desc.StartTime.WallTime), time.Nanosecond)
 			}
-		}
-		return rows
-	},
+			var rows []tree.Datums
+			var row tree.Datums
+			for _, descriptor := range desc.Descriptors {
+				if table := descriptor.GetTable(); table != nil {
+					dbName := descs[table.ParentID]
+					row = tree.Datums{
+						tree.NewDString(dbName),
+						tree.NewDString(table.Name),
+						start,
+						tree.MakeDTimestamp(timeutil.Unix(0, desc.EndTime.WallTime), time.Nanosecond),
+						tree.NewDInt(tree.DInt(descSizes[table.ID].DataSize)),
+						tree.NewDInt(tree.DInt(descSizes[table.ID].Rows)),
+					}
+					if showSchemas {
+						schema, err := sql.ShowCreate(ctx, dbName, desc.Descriptors, table, sql.IgnoreMissingFKs)
+						if err != nil {
+							continue
+						}
+						row = append(row, tree.NewDString(schema))
+					}
+					rows = append(rows, row)
+				}
+			}
+			return rows
+		},
+	}
 }
 
 var backupShowerRanges = backupShower{
