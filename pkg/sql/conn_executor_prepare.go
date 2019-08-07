@@ -152,6 +152,7 @@ func (ex *connExecutor) prepare(
 	// anything other than getting a timestamp.
 	txn := client.NewTxn(ctx, ex.server.cfg.DB, ex.server.cfg.NodeID.Get(), client.RootTxn)
 
+	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 	p := &ex.planner
 	ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */, stmt.NumAnnotations)
 	p.stmt = &stmt

@@ -44,10 +44,11 @@ type stmtKey struct {
 
 // appStats holds per-application statistics.
 type appStats struct {
-	st *cluster.Settings
-
 	syncutil.Mutex
+
+	st    *cluster.Settings
 	stmts map[stmtKey]*stmtStats
+	txns  transactionStats
 }
 
 // stmtStats holds per-statement statistics.
@@ -57,10 +58,24 @@ type stmtStats struct {
 	data roachpb.StatementStatistics
 }
 
+// transactionStats holds per-application transaction statistics.
+type transactionStats struct {
+	mu struct {
+		syncutil.Mutex
+		roachpb.TxnStats
+	}
+}
+
 // stmtStatsEnable determines whether to collect per-statement
 // statistics.
 var stmtStatsEnable = settings.RegisterBoolSetting(
 	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
+)
+
+// txnStatsEnable determines whether to collect per-application transaction
+// statistics.
+var txnStatsEnable = settings.RegisterBoolSetting(
+	"sql.metrics.transaction_details.enabled", "collect per-application transaction statistics", true,
 )
 
 // sqlStatsCollectionLatencyThreshold specifies the minimum amount of time
@@ -122,7 +137,7 @@ func (a *appStats) recordStatement(
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 	bytesRead, rowsRead int64,
 ) {
-	if a == nil || !stmtStatsEnable.Get(&a.st.SV) {
+	if !stmtStatsEnable.Get(&a.st.SV) {
 		return
 	}
 
@@ -199,12 +214,48 @@ func anonymizeStmt(ast tree.Statement) string {
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 }
 
-// sqlStats carries per-application statistics for all applications on
-// each node.
+func (s *transactionStats) getStats() (
+	txnCount int64,
+	txnTimeAvg float64,
+	txnTimeVar float64,
+	committedCount int64,
+	implicitCount int64,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	txnCount = s.mu.TxnCount
+	txnTimeAvg = s.mu.TxnTimeSec.Mean
+	txnTimeVar = s.mu.TxnTimeSec.GetVariance(txnCount)
+	committedCount = s.mu.CommittedCount
+	implicitCount = s.mu.ImplicitCount
+	return txnCount, txnTimeAvg, txnTimeVar, committedCount, implicitCount
+}
+
+func (s *transactionStats) recordTransaction(txnTimeSec float64, ev txnEvent, implicit bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.TxnCount++
+	s.mu.TxnTimeSec.Record(s.mu.TxnCount, txnTimeSec)
+	if ev == txnCommit {
+		s.mu.CommittedCount++
+	}
+	if implicit {
+		s.mu.ImplicitCount++
+	}
+}
+
+func (a *appStats) recordTransaction(txnTimeSec float64, ev txnEvent, implicit bool) {
+	if !txnStatsEnable.Get(&a.st.SV) {
+		return
+	}
+	a.txns.recordTransaction(txnTimeSec, ev, implicit)
+}
+
+// sqlStats carries per-application statistics for all applications.
 type sqlStats struct {
-	st *cluster.Settings
 	syncutil.Mutex
 
+	st *cluster.Settings
 	// lastReset is the time at which the app containers were reset.
 	lastReset time.Time
 	// apps is the container for all the per-application statistics objects.
@@ -217,7 +268,10 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	if a, ok := s.apps[appName]; ok {
 		return a
 	}
-	a := &appStats{st: s.st, stmts: make(map[stmtKey]*stmtStats)}
+	a := &appStats{
+		st:    s.st,
+		stmts: make(map[stmtKey]*stmtStats),
+	}
 	s.apps[appName] = a
 	return a
 }
@@ -253,8 +307,8 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 			dumpStmtStats(ctx, appName, a.stmts)
 		}
 
-		// Clear the map, to release the memory; make the new map somewhat
-		// already large for the likely future workload.
+		// Clear the map, to release the memory; make the new map somewhat already
+		// large for the likely future workload.
 		a.stmts = make(map[stmtKey]*stmtStats, len(a.stmts)/2)
 		a.Unlock()
 	}

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -67,6 +66,8 @@ type extendedEvalContext struct {
 	SchemaChangers *schemaChangerCollection
 
 	schemaAccessors *schemaInterface
+
+	sqlStatsCollector *sqlStatsCollector
 }
 
 // copy returns a deep copy of ctx.
@@ -109,9 +110,6 @@ type planner struct {
 	execCfg *ExecutorConfig
 
 	preparedStatements preparedStatementsAccessor
-
-	// statsCollector is used to collect statistics about SQL statement execution.
-	statsCollector sqlStatsCollector
 
 	// avoidCachedDescriptors, when true, instructs all code that
 	// accesses table/view descriptors to force reading the descriptors
@@ -593,35 +591,4 @@ type txnModesSetter interface {
 	// transaction.
 	// asOfTs, if not empty, is the evaluation of modes.AsOf.
 	setTransactionModes(modes tree.TransactionModes, asOfTs hlc.Timestamp) error
-}
-
-// sqlStatsCollector is the interface used by SQL execution, through the
-// planner, for recording statistics about SQL statements.
-type sqlStatsCollector interface {
-	// PhaseTimes returns that phaseTimes struct that measures the time spent in
-	// each phase of SQL execution.
-	// See executor_statement_metrics.go for details.
-	PhaseTimes() *phaseTimes
-
-	// RecordStatement record stats for one statement.
-	//
-	// samplePlanDescription can be nil, as these are only sampled periodically per unique fingerprint.
-	RecordStatement(
-		stmt *Statement,
-		samplePlanDescription *roachpb.ExplainTreePlanNode,
-		distSQLUsed bool,
-		optUsed bool,
-		implicitTxn bool,
-		automaticRetryCount int,
-		numRows int,
-		err error,
-		parseLat, planLat, runLat, svcLat, ovhLat float64,
-		bytesRead, rowsRead int64,
-	)
-
-	// SQLStats provides access to the global sqlStats object.
-	SQLStats() *sqlStats
-
-	// Reset resets this stats collector with the given phaseTimes array.
-	Reset(sqlStats *sqlStats, appStats *appStats, times *phaseTimes)
 }

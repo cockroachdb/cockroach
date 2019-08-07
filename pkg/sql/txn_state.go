@@ -359,6 +359,7 @@ const (
 	noEvent txnEvent = iota
 
 	// txnStart means that the statement that just ran started a new transaction.
+	// Note that when a transaction is restarted, txnStart event is not emitted.
 	txnStart
 	// txnCommit means that the transaction has committed (successfully). This
 	// doesn't mean that the SQL txn is necessarily "finished" - this event can be
@@ -370,8 +371,8 @@ const (
 	// txnAborted means that the transaction will not commit. This doesn't mean
 	// that the SQL txn is necessarily "finished" - the connection might be in the
 	// Aborted state.
-	// This event is produced both when entering the Aborted state sometimes when
-	// leaving it.
+	// This event is produced both when entering the Aborted state and sometimes
+	// when leaving it.
 	txnAborted
 	// txnRestart means that the transaction is expecting a retry. The iteration
 	// of the txn just finished will not commit.
