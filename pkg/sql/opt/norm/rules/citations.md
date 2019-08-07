@@ -30,3 +30,7 @@ further information, and in some cases proofs, can be found.
     Fundamental Techniques for Order Optimization.
     Sigmod Record. Volume 25 Issue 2, June 1996. Pages 57-67.
     https://cs.uwaterloo.ca/~gweddell/cs798/p57-simmen.pdf
+
+[7] Ahmed, Rafi & W. Lee, Allison & Witkowski, Andrew & Das, Dinesh & Su, Hong & Zaït, Mohamed & Cruanes, Thierry. (2006).
+    Cost-Based Query Transformation in Oracle.. 1026-1036.
+    https://www.researchgate.net/publication/221311318_Cost-Based_Query_Transformation_in_Oracle z
