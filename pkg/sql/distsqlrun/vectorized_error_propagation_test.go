@@ -55,7 +55,6 @@ func TestVectorizedErrorPropagation(t *testing.T) {
 		1, /* processorID */
 		vee,
 		types,
-		[]int{0},
 		&distsqlpb.PostProcessSpec{},
 		nil, /* output */
 		nil, /* metadataSourceQueue */
@@ -116,7 +115,6 @@ func TestNonVectorizedErrorPropagation(t *testing.T) {
 		1, /* processorID */
 		nvee,
 		types,
-		[]int{0},
 		&distsqlpb.PostProcessSpec{},
 		nil, /* output */
 		nil, /* metadataSourceQueue */

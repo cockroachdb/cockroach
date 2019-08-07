@@ -457,7 +457,7 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
 	if f.isVectorized {
-		log.VEventf(ctx, 1, "setting up vectorize flow %d", f.id)
+		log.VEventf(ctx, 1, "setting up vectorize flow %s", f.id.Short())
 		acc := f.EvalCtx.Mon.MakeBoundAccount()
 		f.vectorizedBoundAccount = &acc
 		err := f.setupVectorizedFlow(ctx, f.vectorizedBoundAccount)
@@ -481,8 +481,10 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 
 // startInternal starts the flow. All processors are started, each in their own
 // goroutine. The caller must forward any returned error to syncFlowConsumer if
-// set.
-func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
+// set. A new context is derived and returned, and it must be used when this
+// method returns so that all components running in their own goroutines could
+// listen for a cancellation on the same context.
+func (f *Flow) startInternal(ctx context.Context, doneFn func()) (context.Context, error) {
 	f.doneFn = doneFn
 	log.VEventf(
 		ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
@@ -503,7 +505,7 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 		if err := f.flowRegistry.RegisterFlow(
 			ctx, f.id, f, f.inboundStreams, settingFlowStreamTimeout.Get(&f.FlowCtx.Cfg.Settings.SV),
 		); err != nil {
-			return err
+			return ctx, err
 		}
 	}
 
@@ -523,7 +525,7 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 		}(i)
 	}
 	f.startedGoroutines = len(f.startables) > 0 || len(f.processors) > 0 || !f.isLocal()
-	return nil
+	return ctx, nil
 }
 
 // isLocal returns whether this flow does not have any remote execution.
@@ -540,7 +542,7 @@ func (f *Flow) isLocal() bool {
 // setup error is pushed to the syncFlowConsumer. In this case, a subsequent
 // call to f.Wait() will not block.
 func (f *Flow) Start(ctx context.Context, doneFn func()) error {
-	if err := f.startInternal(ctx, doneFn); err != nil {
+	if _, err := f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
 			f.syncFlowConsumer.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
@@ -569,7 +571,8 @@ func (f *Flow) Run(ctx context.Context, doneFn func()) error {
 	headProc = f.processors[len(f.processors)-1]
 	f.processors = f.processors[:len(f.processors)-1]
 
-	if err := f.startInternal(ctx, doneFn); err != nil {
+	var err error
+	if ctx, err = f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
 			f.syncFlowConsumer.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
