@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -63,7 +64,7 @@ func NewMemBatch(types []types.T) Batch {
 // size. Use for operators that have a precisely-sized output batch.
 func NewMemBatchWithSize(types []types.T, size int) Batch {
 	if max := math.MaxUint16; size > max {
-		panic(fmt.Sprintf(`batches cannot have length larger than %d; requested %d`, max, size))
+		execerror.VectorizedInternalPanic(fmt.Sprintf(`batches cannot have length larger than %d; requested %d`, max, size))
 	}
 	b := &MemBatch{}
 	b.b = make([]Vec, len(types))

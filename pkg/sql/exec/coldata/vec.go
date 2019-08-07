@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -178,7 +179,9 @@ func NewMemColumn(t types.T, n int) Vec {
 	case types.Decimal:
 		return &memColumn{t: t, col: make([]apd.Decimal, n), nulls: nulls}
 	default:
-		panic(fmt.Sprintf("unhandled type %s", t))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", t))
+		// This code is unreachable, but the compiler cannot infer that.
+		return nil
 	}
 }
 
@@ -231,7 +234,9 @@ func (m *memColumn) Col() interface{} {
 }
 
 func (m *memColumn) _TemplateType() []interface{} {
-	panic("don't call this from non template code")
+	execerror.VectorizedInternalPanic("don't call this from non template code")
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 func (m *memColumn) MaybeHasNulls() bool {

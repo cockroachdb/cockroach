@@ -23,6 +23,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
@@ -68,13 +69,13 @@ func (m *memColumn) Append(args AppendArgs) {
 		m.col = toCol
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %s", args.ColType))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", args.ColType))
 	}
 }
 
 func (m *memColumn) Copy(args CopyArgs) {
 	if args.Nils != nil && args.Sel64 == nil {
-		panic("Nils set without Sel64")
+		execerror.VectorizedInternalPanic("Nils set without Sel64")
 	}
 
 	m.Nulls().UnsetNullRange(args.DestIdx, args.DestIdx+(args.SrcEndIdx-args.SrcStartIdx))
@@ -177,7 +178,7 @@ func (m *memColumn) Copy(args CopyArgs) {
 		}
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %s", args.ColType))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", args.ColType))
 	}
 }
 
@@ -192,7 +193,9 @@ func (m *memColumn) Slice(colType types.T, start uint64, end uint64) Vec {
 		}
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colType))
+		// This code is unreachable, but the compiler cannot infer that.
+		return nil
 	}
 }
 
@@ -208,7 +211,9 @@ func (m *memColumn) PrettyValueAt(colIdx uint16, colType types.T) string {
 		return fmt.Sprintf("%v", v)
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colType))
+		// This code is unreachable, but the compiler cannot infer that.
+		return ""
 	}
 }
 
@@ -222,6 +227,6 @@ func SetValueAt(v Vec, elem interface{}, rowIdx uint16, colType types.T) {
 		execgen.SET(target, int(rowIdx), newVal)
 		// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colType))
 	}
 }

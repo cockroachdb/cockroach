@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 )
 
 // T represents an exec physical type - a bytes representation of a particular
@@ -81,7 +82,9 @@ func FromGoType(v interface{}) T {
 	case apd.Decimal:
 		return Decimal
 	default:
-		panic(fmt.Sprintf("type %T not supported yet", t))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("type %T not supported yet", t))
+		// This code is unreachable, but the compiler cannot infer that.
+		return Bool
 	}
 }
 
@@ -107,7 +110,9 @@ func (t T) GoTypeName() string {
 	case Float64:
 		return "float64"
 	default:
-		panic(fmt.Sprintf("unhandled type %d", t))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", t))
+		// This code is unreachable, but the compiler cannot infer that.
+		return ""
 	}
 }
 

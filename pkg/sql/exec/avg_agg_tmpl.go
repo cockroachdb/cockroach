@@ -22,6 +22,7 @@ package exec
 import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
@@ -40,13 +41,13 @@ var _ tree.Datum
 // input to the result of the second input / the third input, where the third
 // input is an int64.
 func _ASSIGN_DIV_INT64(_, _, _ string) {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // _ASSIGN_ADD is the template addition function for assigning the first input
 // to the result of the second input + the third input.
 func _ASSIGN_ADD(_, _, _ string) {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // */}}

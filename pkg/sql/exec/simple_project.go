@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -47,7 +48,9 @@ func (b *projectingBatch) ColVec(i int) coldata.Vec {
 }
 
 func (b *projectingBatch) ColVecs() []coldata.Vec {
-	panic("projectingBatch doesn't support ColVecs()")
+	execerror.VectorizedInternalPanic("projectingBatch doesn't support ColVecs()")
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 func (b *projectingBatch) Width() int {

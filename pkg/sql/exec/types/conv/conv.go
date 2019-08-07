@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -43,7 +44,7 @@ func FromColumnType(ct *semtypes.T) types.T {
 		case 0, 64:
 			return types.Int64
 		}
-		panic(fmt.Sprintf("integer with unknown width %d", ct.Width()))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("integer with unknown width %d", ct.Width()))
 	case semtypes.FloatFamily:
 		return types.Float64
 	}
@@ -118,7 +119,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 				return int64(*d), nil
 			}
 		}
-		panic(fmt.Sprintf("unhandled INT width %d", ct.Width()))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled INT width %d", ct.Width()))
 	case semtypes.DateFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DDate)

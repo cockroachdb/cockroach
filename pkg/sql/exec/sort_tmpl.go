@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -58,7 +59,7 @@ const _TYPES_T = types.Unhandled
 // _ASSIGN_LT is the template equality function for assigning the first input
 // to the result of the second input < the third input.
 func _ASSIGN_LT(_, _, _ string) bool {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // */}}
@@ -105,7 +106,7 @@ func (s *sort_TYPE_DIROp) sort(ctx context.Context) {
 
 func (s *sort_TYPE_DIROp) sortPartitions(ctx context.Context, partitions []uint64) {
 	if len(partitions) < 1 {
-		panic(fmt.Sprintf("invalid partitions list %v", partitions))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("invalid partitions list %v", partitions))
 	}
 	order := s.order
 	for i, partitionStart := range partitions {

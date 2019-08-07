@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 )
 
 // Operator is a column vector operator that produces a Batch as output.
@@ -66,7 +67,9 @@ func (n OneInputNode) Child(nth int) OpNode {
 	if nth == 0 {
 		return n.input
 	}
-	panic(fmt.Sprintf("invalid index %d", nth))
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 // Input returns the single input of this OneInputNode as an Operator.
@@ -84,7 +87,9 @@ func (ZeroInputNode) ChildCount() int {
 
 // Child implements the OpNode interface.
 func (ZeroInputNode) Child(nth int) OpNode {
-	panic(fmt.Sprintf("invalid index %d", nth))
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 // newTwoInputNode returns an OpNode with two Operator inputs.
@@ -108,7 +113,9 @@ func (n *twoInputNode) Child(nth int) OpNode {
 	case 1:
 		return n.inputTwo
 	}
-	panic(fmt.Sprintf("invalid idx %d", nth))
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid idx %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 // StaticMemoryOperator is an interface that streaming operators can implement
