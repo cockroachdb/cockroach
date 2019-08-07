@@ -3318,7 +3318,7 @@ show_histogram_stmt:
 
 // %Help: SHOW BACKUP - list backup contents
 // %Category: CCL
-// %Text: SHOW BACKUP [FILES|RANGES] <location>
+// %Text: SHOW BACKUP [SCHEMAS|FILES|RANGES] <location>
 // %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
   SHOW BACKUP string_or_placeholder
@@ -3326,6 +3326,14 @@ show_backup_stmt:
     $$.val = &tree.ShowBackup{
       Details: tree.BackupDefaultDetails,
       Path:    $3.expr(),
+    }
+  }
+| SHOW BACKUP SCHEMAS string_or_placeholder
+  {
+    $$.val = &tree.ShowBackup{
+      Details: tree.BackupDefaultDetails,
+      ShouldIncludeSchemas: true,
+      Path:    $4.expr(),
     }
   }
 | SHOW BACKUP RANGES string_or_placeholder

@@ -121,6 +121,25 @@ func ShowCreateSequence(
 	return f.CloseAndGetString(), nil
 }
 
+type shouldIgnoreFKs int
+
+const (
+	_ shouldIgnoreFKs = iota
+	// IgnoreFKs will not include any foreign key information in the
+	// create statement.
+	IgnoreFKs
+	// IncludeFKs will include foreign key information in the create
+	// statement, and error if a FK cannot be resolved.
+	IncludeFKs
+	// IgnoreMissingFKs will include foreign key information only if they
+	// can be resolved. If not, it will ignore those constraints.
+	// This is used in the case when showing the create statement for
+	// tables stored in backups. Not all relevant tables may have been
+	// included in the back up, so some foreign key information may be
+	// impossible to retrieve.
+	IgnoreMissingFKs
+)
+
 // ShowCreateTable returns a valid SQL representation of the CREATE
 // TABLE statement used to create the given table.
 //
@@ -135,7 +154,7 @@ func ShowCreateTable(
 	dbPrefix string,
 	desc *sqlbase.TableDescriptor,
 	lCtx *internalLookupCtx,
-	ignoreFKs bool,
+	ignoreFKs shouldIgnoreFKs,
 ) (string, error) {
 	a := &sqlbase.DatumAlloc{}
 
@@ -168,13 +187,19 @@ func ShowCreateTable(
 	for i := range allIdx {
 		idx := &allIdx[i]
 		// TODO (lucy): Possibly include FKs being validated here
-		if fk := &idx.ForeignKey; fk.IsSet() && !ignoreFKs {
-			f.WriteString(",\n\tCONSTRAINT ")
-			f.FormatNameP(&fk.Name)
-			f.WriteString(" ")
-			if err := printForeignKeyConstraint(ctx, &f.Buffer, dbPrefix, idx, lCtx); err != nil {
-				return "", err
+		if fk := &idx.ForeignKey; fk.IsSet() && ignoreFKs != IgnoreFKs {
+			foreignKey := tree.NewFmtCtx(tree.FmtSimple)
+			foreignKey.WriteString(",\n\tCONSTRAINT ")
+			foreignKey.FormatNameP(&fk.Name)
+			foreignKey.WriteString(" ")
+			if err := printForeignKeyConstraint(ctx, &foreignKey.Buffer, dbPrefix, idx, lCtx); err != nil {
+				if ignoreFKs == IgnoreMissingFKs {
+					continue
+				} else { // When ignoreFKs == IncludeFKs.
+					return "", err
+				}
 			}
+			f.WriteString(foreignKey.String())
 		}
 		if idx.ID != desc.PrimaryIndex.ID {
 			// Showing the primary index is handled above.
@@ -392,4 +417,34 @@ func ShowCreatePartitioning(
 	buf.WriteString(indentStr)
 	buf.WriteString(")")
 	return nil
+}
+
+// ShowCreate returns a valid SQL representation of the CREATE
+// statement used to create the descriptor passed in. The
+//
+// The names of the tables references by foreign keys, and the
+// interleaved parent if any, are prefixed by their own database name
+// unless it is equal to the given dbPrefix. This allows us to elide
+// the prefix when the given table references other tables in the
+// current database.
+func ShowCreate(
+	ctx context.Context,
+	dbPrefix string,
+	allDescs []sqlbase.Descriptor,
+	desc *sqlbase.TableDescriptor,
+	ignoreFKs shouldIgnoreFKs,
+) (string, error) {
+	var stmt string
+	var err error
+	tn := (*tree.Name)(&desc.Name)
+	if desc.IsView() {
+		stmt, err = ShowCreateView(ctx, tn, desc)
+	} else if desc.IsSequence() {
+		stmt, err = ShowCreateSequence(ctx, tn, desc)
+	} else {
+		lCtx := newInternalLookupCtxFromDescriptors(allDescs, nil /* want all tables */)
+		stmt, err = ShowCreateTable(ctx, tn, dbPrefix, desc, lCtx, ignoreFKs)
+	}
+
+	return stmt, err
 }
