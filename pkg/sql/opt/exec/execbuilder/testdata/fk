@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 # To get an unvalidated foreign key for testing, use the loophole that we
 # currently don't support adding a validated FK in the same transaction as

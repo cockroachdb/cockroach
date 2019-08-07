@@ -38,8 +38,6 @@ type SessionData struct {
 	// ForceSplitAt indicates whether checks to prevent incorrect usage of ALTER
 	// TABLE ... SPLIT AT should be skipped.
 	ForceSplitAt bool
-	// OptimizerMode indicates whether to use the optimizer for query planning.
-	OptimizerMode OptimizerMode
 	// OptimizerFKs indicates whether we should use the new paths to plan foreign
 	// key checks in the optimizer.
 	OptimizerFKs bool
@@ -301,54 +299,6 @@ func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 		return 0, false
 	}
 	return m, true
-}
-
-// OptimizerMode controls if and when the Executor uses the optimizer.
-type OptimizerMode int64
-
-const (
-	// OptimizerOff means that we don't use the optimizer.
-	OptimizerOff = iota
-	// OptimizerOn means that we use the optimizer for all supported statements.
-	OptimizerOn
-	// OptimizerLocal means that we use the optimizer for all supported
-	// statements, but we don't try to distribute the resulting plan.
-	OptimizerLocal
-	// OptimizerAlways means that we attempt to use the optimizer always, even
-	// for unsupported statements which result in errors. This mode is useful
-	// for testing.
-	OptimizerAlways
-)
-
-func (m OptimizerMode) String() string {
-	switch m {
-	case OptimizerOff:
-		return "off"
-	case OptimizerOn:
-		return "on"
-	case OptimizerLocal:
-		return "local"
-	case OptimizerAlways:
-		return "always"
-	default:
-		return fmt.Sprintf("invalid (%d)", m)
-	}
-}
-
-// OptimizerModeFromString converts a string into a OptimizerMode
-func OptimizerModeFromString(val string) (_ OptimizerMode, ok bool) {
-	switch strings.ToUpper(val) {
-	case "OFF":
-		return OptimizerOff, true
-	case "ON":
-		return OptimizerOn, true
-	case "LOCAL":
-		return OptimizerLocal, true
-	case "ALWAYS":
-		return OptimizerAlways, true
-	default:
-		return 0, false
-	}
 }
 
 // SerialNormalizationMode controls if and when the Executor uses DistSQL.

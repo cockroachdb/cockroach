@@ -1,7 +1,0 @@
-# LogicTest: local
-
-# Check that plans that fail during expansion/optimization do not cause
-# memory leaks. #17274
-
-statement error pgcode 42P01 relation "nonexistent" does not exist
-SELECT * FROM [SHOW JOBS], [SHOW CREATE TABLE nonexistent];
