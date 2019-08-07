@@ -380,31 +380,6 @@ func (n *createTableNode) Close(ctx context.Context) {
 	}
 }
 
-type indexMatch bool
-
-const (
-	matchExact  indexMatch = true
-	matchPrefix indexMatch = false
-)
-
-// Referenced cols must be unique, thus referenced indexes must match exactly.
-// Referencing cols have no uniqueness requirement and thus may match a strict
-// prefix of an index.
-func matchesIndex(
-	cols []sqlbase.ColumnDescriptor, idx sqlbase.IndexDescriptor, exact indexMatch,
-) bool {
-	if len(cols) > len(idx.ColumnIDs) || (exact && len(cols) != len(idx.ColumnIDs)) {
-		return false
-	}
-
-	for i := range cols {
-		if cols[i].ID != idx.ColumnIDs[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // resolveFK on the planner calls resolveFK() on the current txn.
 //
 // The caller must make sure the planner is configured to look up
@@ -417,7 +392,7 @@ func (p *planner) resolveFK(
 	ts FKTableState,
 	validationBehavior tree.ValidationBehavior,
 ) error {
-	return ResolveFK(ctx, p.txn, p, tbl, d, backrefs, ts, validationBehavior)
+	return ResolveFK(ctx, p.txn, p, tbl, d, backrefs, ts, validationBehavior, p.ExecCfg().Settings)
 }
 
 func qualifyFKColErrorWithDB(
@@ -453,7 +428,7 @@ const (
 // It may, in doing so, add to or alter descriptors in the passed in `backrefs`
 // map of other tables that need to be updated when this table is created.
 // Constraints that are not known to hold for existing data are created
-// "unvalidated", but when table is empty (e.g. during creating on), no existing
+// "unvalidated", but when table is empty (e.g. during creation), no existing
 // data implies no existing violations, and thus the constraint can be created
 // without the unvalidated flag.
 //
@@ -482,8 +457,10 @@ func ResolveFK(
 	backrefs map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
 	ts FKTableState,
 	validationBehavior tree.ValidationBehavior,
+	settings *cluster.Settings,
 ) error {
-	for _, col := range d.FromCols {
+	originColumnIDs := make(sqlbase.ColumnIDs, len(d.FromCols))
+	for i, col := range d.FromCols {
 		col, _, err := tbl.FindColumnByName(col)
 		if err != nil {
 			return err
@@ -491,6 +468,7 @@ func ResolveFK(
 		if err := col.CheckCanBeFKRef(); err != nil {
 			return err
 		}
+		originColumnIDs[i] = col.ID
 	}
 
 	target, err := ResolveMutableExistingObject(ctx, sc, &d.Table, true /*required*/, ResolveRequireTableDesc)
@@ -557,33 +535,9 @@ func ResolveFK(
 		constraintName = fmt.Sprintf("fk_%s_ref_%s", string(d.FromCols[0]), target.Name)
 	}
 
-	// We can't keep a reference to the index in the slice and at the same time
-	// add a new index to that slice without losing the reference. Instead, keep
-	// the index's index into target's list of indexes. If it is a primary index,
-	// targetIdxIndex is set to -1. Also store the targetIndex's ID so we
-	// don't have to do the lookup twice.
-	targetIdxIndex := -1
-	var targetIdxID sqlbase.IndexID
-	if matchesIndex(targetCols, target.PrimaryIndex, matchExact) {
-		targetIdxID = target.PrimaryIndex.ID
-	} else {
-		found := false
-		// Find the index corresponding to the referenced column.
-		for i, idx := range target.Indexes {
-			if idx.Unique && matchesIndex(targetCols, idx, matchExact) {
-				targetIdxIndex = i
-				targetIdxID = idx.ID
-				found = true
-				break
-			}
-		}
-		if !found {
-			return pgerror.Newf(
-				pgcode.InvalidForeignKey,
-				"there is no unique constraint matching given keys for referenced table %s",
-				target.Name,
-			)
-		}
+	targetColIDs := make(sqlbase.ColumnIDs, len(targetCols))
+	for i := range targetCols {
+		targetColIDs[i] = targetCols[i].ID
 	}
 
 	// Don't add a SET NULL action on an index that has any column that is NOT
@@ -615,99 +569,118 @@ func ResolveFK(
 		}
 	}
 
-	ref := sqlbase.ForeignKeyReference{
-		Table:           target.ID,
-		Index:           targetIdxID,
-		Name:            constraintName,
-		SharedPrefixLen: int32(len(srcCols)),
-		OnDelete:        sqlbase.ForeignKeyReferenceActionValue[d.Actions.Delete],
-		OnUpdate:        sqlbase.ForeignKeyReferenceActionValue[d.Actions.Update],
-		Match:           sqlbase.CompositeKeyMatchMethodValue[d.Match],
-	}
-
-	if ts != NewTable {
-		if validationBehavior == tree.ValidationSkip {
-			ref.Validity = sqlbase.ConstraintValidity_Unvalidated
-		} else {
-			ref.Validity = sqlbase.ConstraintValidity_Validating
-		}
-	}
-	backref := sqlbase.ForeignKeyReference{Table: tbl.ID}
-
-	var idx *sqlbase.IndexDescriptor
-	found := false
-	if matchesIndex(srcCols, tbl.PrimaryIndex, matchPrefix) {
-		if tbl.PrimaryIndex.ForeignKey.IsSet() {
-			return pgerror.Newf(pgcode.InvalidForeignKey,
-				"columns cannot be used by multiple foreign key constraints")
-		}
-		idx = &tbl.PrimaryIndex
-		found = true
+	var legacyOriginIndexID sqlbase.IndexID
+	// Search for an index on the origin table that matches. If one doesn't exist,
+	// we create one automatically if the table to alter is new or empty.
+	originIdx, err := sqlbase.FindFKOriginIndex(tbl.TableDesc(), originColumnIDs)
+	if err == nil {
+		// If there was no error, we found a suitable index.
+		legacyOriginIndexID = originIdx.ID
 	} else {
-		for i := range tbl.Indexes {
-			if matchesIndex(srcCols, tbl.Indexes[i], matchPrefix) {
-				if tbl.Indexes[i].ForeignKey.IsSet() {
-					return pgerror.Newf(pgcode.InvalidForeignKey,
-						"columns cannot be used by multiple foreign key constraints")
-				}
-				idx = &tbl.Indexes[i]
-				found = true
-				break
-			}
-		}
-	}
-	if found {
-		if ts == NewTable {
-			idx.ForeignKey = ref
-		} else {
-			tbl.AddForeignKeyValidationMutation(&ref, idx.ID)
-		}
-		backref.Index = idx.ID
-	} else {
-		// Avoid unexpected index builds from ALTER TABLE ADD CONSTRAINT.
+		// No existing suitable index was found.
 		if ts == NonEmptyTable {
-			return pgerror.Newf(pgcode.InvalidForeignKey,
-				"foreign key requires an existing index on columns %s", colNames(srcCols))
+			var colNames bytes.Buffer
+			colNames.WriteString(`("`)
+			for i, id := range originColumnIDs {
+				if i != 0 {
+					colNames.WriteString(`", "`)
+				}
+				col, err := tbl.TableDesc().FindColumnByID(id)
+				if err != nil {
+					return err
+				}
+				colNames.WriteString(col.Name)
+			}
+			colNames.WriteString(`")`)
+			return pgerror.Newf(pgcode.ForeignKeyViolation,
+				"foreign key requires an existing index on columns %s", colNames.String())
 		}
-		added, err := addIndexForFK(tbl, srcCols, constraintName, ref, ts)
+		id, err := addIndexForFK(tbl, srcCols, constraintName, ts)
 		if err != nil {
 			return err
 		}
-		backref.Index = added
+		legacyOriginIndexID = id
 	}
 
+	referencedIdx, err := sqlbase.FindFKReferencedIndex(target.TableDesc(), targetColIDs)
+	if err != nil {
+		return err
+	}
+	legacyReferencedIndexID := referencedIdx.ID
+
+	var validity sqlbase.ConstraintValidity
+	if ts != NewTable {
+		if validationBehavior == tree.ValidationSkip {
+			validity = sqlbase.ConstraintValidity_Unvalidated
+		} else {
+			validity = sqlbase.ConstraintValidity_Validating
+		}
+	}
+
+	ref := sqlbase.ForeignKeyConstraint{
+		OriginTableID:         tbl.ID,
+		OriginColumnIDs:       originColumnIDs,
+		ReferencedColumnIDs:   targetColIDs,
+		ReferencedTableID:     target.ID,
+		Name:                  constraintName,
+		Validity:              validity,
+		OnDelete:              sqlbase.ForeignKeyReferenceActionValue[d.Actions.Delete],
+		OnUpdate:              sqlbase.ForeignKeyReferenceActionValue[d.Actions.Update],
+		Match:                 sqlbase.CompositeKeyMatchMethodValue[d.Match],
+		LegacyOriginIndex:     legacyOriginIndexID,
+		LegacyReferencedIndex: legacyReferencedIndexID,
+	}
+
+	if !settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
+		legacyUpgradedFromOriginReference := sqlbase.ForeignKeyReference{
+			Table:           target.ID,
+			Index:           legacyReferencedIndexID,
+			Name:            constraintName,
+			Validity:        validity,
+			SharedPrefixLen: int32(len(originColumnIDs)),
+			OnDelete:        sqlbase.ForeignKeyReferenceActionValue[d.Actions.Delete],
+			OnUpdate:        sqlbase.ForeignKeyReferenceActionValue[d.Actions.Update],
+			Match:           sqlbase.CompositeKeyMatchMethodValue[d.Match],
+		}
+		ref.LegacyUpgradedFromOriginReference = legacyUpgradedFromOriginReference
+		legacyUpgradedFromReferencedReference := sqlbase.ForeignKeyReference{
+			Table: tbl.ID,
+			Index: legacyOriginIndexID,
+		}
+		ref.LegacyUpgradedFromReferencedReference = legacyUpgradedFromReferencedReference
+	}
+
+	if ts == NewTable {
+		tbl.OutboundFKs = append(tbl.OutboundFKs, ref)
+	} else {
+		tbl.AddForeignKeyValidationMutation(&ref)
+	}
+
+	// If the table is being created or was created earlier in the same
+	// transaction, add the backreference now so it happens in the same
+	// transaction too
 	// TODO (lucy): Should the IsNewTable() case be handled in runSchemaChangesInTxn instead?
 	if ts == NewTable || tbl.IsNewTable() {
-		if targetIdxIndex > -1 {
-			target.Indexes[targetIdxIndex].ReferencedBy = append(target.Indexes[targetIdxIndex].ReferencedBy, backref)
-		} else {
-			target.PrimaryIndex.ReferencedBy = append(target.PrimaryIndex.ReferencedBy, backref)
-		}
+		target.InboundFKs = append(target.InboundFKs, ref)
 	}
 
 	// Multiple FKs from the same column would potentially result in ambiguous or
 	// unexpected behavior with conflicting CASCADE/RESTRICT/etc behaviors.
+	// TODO(jordan,lucy): can we lift this restriction?
 	colsInFKs := make(map[sqlbase.ColumnID]struct{})
 
-	fks, err := tbl.AllActiveAndInactiveForeignKeys()
-	if err != nil {
-		return err
-	}
-	for id, fk := range fks {
-		idx, err := tbl.FindIndexByID(id)
-		if err != nil {
-			return err
-		}
-		numCols := len(idx.ColumnIDs)
-		if fk.SharedPrefixLen > 0 {
-			numCols = int(fk.SharedPrefixLen)
-		}
-		for i := 0; i < numCols; i++ {
-			if _, ok := colsInFKs[idx.ColumnIDs[i]]; ok {
-				return pgerror.Newf(pgcode.InvalidForeignKey,
-					"column %q cannot be used by multiple foreign key constraints", idx.ColumnNames[i])
+	fks := tbl.AllActiveAndInactiveForeignKeys()
+	for _, fk := range fks {
+		for _, id := range fk.OriginColumnIDs {
+			if _, ok := colsInFKs[id]; ok {
+				col, err := tbl.FindColumnByID(id)
+				if err != nil {
+					return errors.AssertionFailedf("trying to add foreign key for column %d that doesn't exist", id)
+				}
+				return pgerror.Newf(pgcode.ForeignKeyViolation,
+					"column %q cannot be used by multiple foreign key constraints", col.Name)
 			}
-			colsInFKs[idx.ColumnIDs[i]] = struct{}{}
+			colsInFKs[id] = struct{}{}
 		}
 	}
 
@@ -720,7 +693,6 @@ func addIndexForFK(
 	tbl *sqlbase.MutableTableDescriptor,
 	srcCols []sqlbase.ColumnDescriptor,
 	constraintName string,
-	ref sqlbase.ForeignKeyReference,
 	ts FKTableState,
 ) (sqlbase.IndexID, error) {
 	// No existing index for the referencing columns found, so we add one.
@@ -735,7 +707,6 @@ func addIndexForFK(
 	}
 
 	if ts == NewTable {
-		idx.ForeignKey = ref
 		if err := tbl.AddIndex(idx, false); err != nil {
 			return 0, err
 		}
@@ -743,13 +714,6 @@ func addIndexForFK(
 			return 0, err
 		}
 		added := tbl.Indexes[len(tbl.Indexes)-1]
-
-		// Since we just added the index, we can assume it is the last one rather than
-		// searching all the indexes again. That said, we sanity check that it matches
-		// in case a refactor ever violates that assumption.
-		if !matchesIndex(srcCols, added, matchPrefix) {
-			panic("no matching index and auto-generated index failed to match")
-		}
 		return added.ID, nil
 	}
 
@@ -764,22 +728,7 @@ func addIndexForFK(
 		return 0, err
 	}
 	id := tbl.Mutations[len(tbl.Mutations)-1].GetIndex().ID
-	tbl.AddForeignKeyValidationMutation(&ref, id)
 	return id, nil
-}
-
-// colNames converts a []colDesc to a human-readable string for use in error messages.
-func colNames(cols []sqlbase.ColumnDescriptor) string {
-	var s bytes.Buffer
-	s.WriteString(`("`)
-	for i := range cols {
-		if i != 0 {
-			s.WriteString(`", "`)
-		}
-		s.WriteString(cols[i].Name)
-	}
-	s.WriteString(`")`)
-	return s.String()
 }
 
 func (p *planner) addInterleave(
@@ -1339,7 +1288,7 @@ func MakeTableDesc(
 			desc.Checks = append(desc.Checks, ck)
 
 		case *tree.ForeignKeyConstraintTableDef:
-			if err := ResolveFK(ctx, txn, fkResolver, &desc, d, affected, NewTable, tree.ValidationDefault); err != nil {
+			if err := ResolveFK(ctx, txn, fkResolver, &desc, d, affected, NewTable, tree.ValidationDefault, st); err != nil {
 				return desc, err
 			}
 
@@ -1551,14 +1500,14 @@ func validateComputedColumn(
 		)
 	}
 
-	dependencies := make(map[string]struct{})
+	dependencies := make(map[sqlbase.ColumnID]struct{})
 	// First, check that no column in the expression is a computed column.
 	if err := iterColDescriptorsInExpr(desc, d.Computed.Expr, func(c *sqlbase.ColumnDescriptor) error {
 		if c.IsComputed() {
 			return pgerror.New(pgcode.InvalidTableDefinition,
 				"computed columns cannot reference other computed columns")
 		}
-		dependencies[c.Name] = struct{}{}
+		dependencies[c.ID] = struct{}{}
 
 		return nil
 	}); err != nil {
@@ -1568,15 +1517,16 @@ func validateComputedColumn(
 	// TODO(justin,bram): allow depending on columns like this. We disallow it
 	// for now because cascading changes must hook into the computed column
 	// update path.
-	if err := desc.ForeachNonDropIndex(func(idx *sqlbase.IndexDescriptor) error {
-		for _, name := range idx.ColumnNames {
-			if _, ok := dependencies[name]; !ok {
+	for i := range desc.OutboundFKs {
+		fk := &desc.OutboundFKs[i]
+		for _, id := range fk.OriginColumnIDs {
+			if _, ok := dependencies[id]; !ok {
 				// We don't depend on this column.
 				continue
 			}
 			for _, action := range []sqlbase.ForeignKeyReference_Action{
-				idx.ForeignKey.OnDelete,
-				idx.ForeignKey.OnUpdate,
+				fk.OnDelete,
+				fk.OnUpdate,
 			} {
 				switch action {
 				case sqlbase.ForeignKeyReference_CASCADE,
@@ -1587,9 +1537,6 @@ func validateComputedColumn(
 				}
 			}
 		}
-		return nil
-	}); err != nil {
-		return err
 	}
 
 	// Replace column references with typed dummies to allow typechecking.

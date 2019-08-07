@@ -493,9 +493,9 @@ COPY t (a, b, c) FROM stdin;
 	i INT8 NOT NULL,
 	k INT8 NULL,
 	CONSTRAINT a_pkey PRIMARY KEY (i ASC),
+	CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES b(j),
 	CONSTRAINT a_k_fkey FOREIGN KEY (k) REFERENCES a(i),
 	INDEX a_auto_index_a_k_fkey (k ASC),
-	CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES b(j),
 	FAMILY "primary" (i, k)
 )`}, {
 					`CREATE TABLE b (

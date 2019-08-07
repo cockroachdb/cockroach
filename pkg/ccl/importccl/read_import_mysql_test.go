@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -42,6 +43,7 @@ var testEvalCtx = &tree.EvalContext{
 		DataConversion: sessiondata.DataConversionConfig{Location: time.UTC},
 	},
 	StmtTimestamp: timeutil.Unix(100000000, 0),
+	Settings:      cluster.MakeTestingClusterSettings(),
 }
 
 func descForTable(
@@ -54,6 +56,8 @@ func descForTable(
 	}
 	nanos := testEvalCtx.StmtTimestamp.UnixNano()
 
+	settings := testEvalCtx.Settings
+
 	var stmt *tree.CreateTable
 
 	if len(parsed) == 2 {
@@ -63,7 +67,7 @@ func descForTable(
 		ts := hlc.Timestamp{WallTime: nanos}
 		priv := sqlbase.NewDefaultPrivilegeDescriptor()
 		desc, err := sql.MakeSequenceTableDesc(
-			name, tree.SequenceOptions{}, parent, id-1, ts, priv, nil, /* settings */
+			name, tree.SequenceOptions{}, parent, id-1, ts, priv, settings,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -72,7 +76,7 @@ func descForTable(
 	} else {
 		stmt = parsed[0].AST.(*tree.CreateTable)
 	}
-	table, err := MakeSimpleTableDescriptor(context.TODO(), nil, stmt, parent, id, fks, nanos)
+	table, err := MakeSimpleTableDescriptor(context.TODO(), settings, stmt, parent, id, fks, nanos)
 	if err != nil {
 		t.Fatalf("could not interpret %q: %v", create, err)
 	}
