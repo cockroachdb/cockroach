@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: local-opt
 
 query IITTITTT colnames
 SELECT * FROM crdb_internal.partitions
