@@ -141,6 +141,53 @@ func (o overload) UnaryAssign(target, v string) string {
 	return fmt.Sprintf("%s = %s(%s)", target, o.OpStr, v)
 }
 
+type castOverload struct {
+	FromTyp    types.T
+	ToTyp      types.T
+	ToGoTyp    string
+	AssignFunc castAssignFunc
+}
+
+func (o castOverload) Assign(to, from string) string {
+	return o.AssignFunc(to, from)
+}
+
+type castAssignFunc func(to, from string) string
+
+func castIdentity(to, from string) string {
+	return fmt.Sprintf("%s = %s", to, from)
+}
+
+func intToDecimal(to, from string) string {
+	convStr := `
+    %[1]s = *apd.New(int64(%[2]s), 0)
+  `
+	return fmt.Sprintf(convStr, to, from)
+}
+
+func intToFloat(floatSize int) func(string, string) string {
+	return func(to, from string) string {
+		convStr := `
+			%[1]s = float%[3]d(%[2]s)
+			`
+		return fmt.Sprintf(convStr, to, from, floatSize)
+	}
+}
+
+func floatToInt(intSize int, floatSize int) func(string, string) string {
+	return func(to, from string) string {
+		convStr := `
+			if math.IsNaN(float64(%[2]s)) || %[2]s <= float%[4]d(math.MinInt%[3]d) || %[2]s >= float%[4]d(math.MaxInt%[3]d) {
+				panic("Cannot float to int conversion out of range")
+			}
+			%[1]s = int%[3]d(%[2]s)
+		`
+		return fmt.Sprintf(convStr, to, from, intSize, floatSize)
+	}
+}
+
+var castOverloads map[types.T][]castOverload
+
 func init() {
 	registerTypeCustomizers()
 
@@ -217,6 +264,210 @@ func init() {
 			}
 		}
 		hashOverloads = append(hashOverloads, ov)
+	}
+
+	// Build cast overloads.
+	castOverloads = make(map[types.T][]castOverload)
+	_ = castOverloads
+	for _, from := range inputTypes {
+		switch from {
+		// TODO (rohany): How do we handle casting between different widths of the same type?
+		case types.Bool:
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case types.Bool:
+					ov.AssignFunc = castIdentity
+				case types.Bytes:
+					// TODO (rohany): Implement bool -> string casting.
+					continue
+				case types.Decimal:
+					// TODO (rohany): Implement bool -> decimal casting.
+					continue
+				case types.Int8:
+					fallthrough
+				case types.Int16:
+					fallthrough
+				case types.Int32:
+					fallthrough
+				case types.Int64:
+					fallthrough
+				case types.Float32:
+					fallthrough
+				case types.Float64:
+					ov.AssignFunc = func(to, from string) string {
+						convStr := `
+							%[1]s = 0
+							if %[2]s {
+								%[1]s = 1
+							}
+						`
+						return fmt.Sprintf(convStr, to, from)
+					}
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		case types.Bytes:
+			// TODO (rohany): It's unclear what to do here in the bytes case.
+			// There are different conversion rules for the multiple things
+			// that a bytes type can implemented, but we don't know each of the
+			// things is contained here. Additionally, we don't really know
+			// what to do even if it is a bytes to bytes operation here.
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case types.Bool:
+				case types.Bytes:
+				case types.Decimal:
+				case types.Int8:
+				case types.Int16:
+				case types.Int32:
+				case types.Int64:
+				case types.Float32:
+				case types.Float64:
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		case types.Decimal:
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case types.Bool:
+				case types.Bytes:
+				case types.Decimal:
+					ov.AssignFunc = castIdentity
+				case types.Int8:
+				case types.Int16:
+				case types.Int32:
+				case types.Int64:
+				case types.Float32:
+				case types.Float64:
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		case types.Int8:
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case types.Bool:
+				case types.Bytes:
+				case types.Decimal:
+					ov.AssignFunc = intToDecimal
+				case types.Int8:
+					ov.AssignFunc = castIdentity
+				case types.Int16:
+				case types.Int32:
+				case types.Int64:
+				case types.Float32:
+					ov.AssignFunc = intToFloat(32)
+				case types.Float64:
+					ov.AssignFunc = intToFloat(64)
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		case types.Int16:
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case types.Bool:
+				case types.Bytes:
+				case types.Decimal:
+					ov.AssignFunc = intToDecimal
+				case types.Int8:
+				case types.Int16:
+					ov.AssignFunc = castIdentity
+				case types.Int32:
+				case types.Int64:
+				case types.Float32:
+					ov.AssignFunc = intToFloat(32)
+				case types.Float64:
+					ov.AssignFunc = intToFloat(64)
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		case types.Int32:
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case types.Bool:
+				case types.Bytes:
+				case types.Decimal:
+					ov.AssignFunc = intToDecimal
+				case types.Int8:
+				case types.Int16:
+				case types.Int32:
+					ov.AssignFunc = castIdentity
+				case types.Int64:
+				case types.Float32:
+					ov.AssignFunc = intToFloat(32)
+				case types.Float64:
+					ov.AssignFunc = intToFloat(64)
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		case types.Int64:
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case types.Bool:
+				case types.Bytes:
+				case types.Decimal:
+					ov.AssignFunc = intToDecimal
+				case types.Int8:
+				case types.Int16:
+				case types.Int32:
+				case types.Int64:
+					ov.AssignFunc = castIdentity
+				case types.Float32:
+					ov.AssignFunc = intToFloat(32)
+				case types.Float64:
+					ov.AssignFunc = intToFloat(64)
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		case types.Float32:
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case types.Bool:
+				case types.Bytes:
+				case types.Decimal:
+				case types.Int8:
+					ov.AssignFunc = floatToInt(8, 32)
+				case types.Int16:
+					ov.AssignFunc = floatToInt(16, 32)
+				case types.Int32:
+					ov.AssignFunc = floatToInt(32, 32)
+				case types.Int64:
+					ov.AssignFunc = floatToInt(64, 32)
+				case types.Float32:
+					ov.AssignFunc = castIdentity
+				case types.Float64:
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		case types.Float64:
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case types.Bool:
+				case types.Bytes:
+				case types.Decimal:
+				case types.Int8:
+					ov.AssignFunc = floatToInt(8, 64)
+				case types.Int16:
+					ov.AssignFunc = floatToInt(16, 64)
+				case types.Int32:
+					ov.AssignFunc = floatToInt(32, 64)
+				case types.Int64:
+					ov.AssignFunc = floatToInt(64, 64)
+				case types.Float32:
+				case types.Float64:
+					ov.AssignFunc = castIdentity
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		}
 	}
 }
 
@@ -482,6 +733,7 @@ func registerTypeCustomizers() {
 var _ = overload{}.Assign
 var _ = overload{}.Compare
 var _ = overload{}.UnaryAssign
+var _ = castOverload{}.Assign
 
 // buildDict is a template function that builds a dictionary out of its
 // arguments. The argument to this function should be an alternating sequence of
