@@ -49,7 +49,7 @@ func MakeValue(meta enginepb.MVCCMetadata) roachpb.Value {
 
 // IsIntentOf returns true if the meta record is an intent of the supplied
 // transaction.
-func IsIntentOf(meta enginepb.MVCCMetadata, txn *roachpb.Transaction) bool {
+func IsIntentOf(meta *enginepb.MVCCMetadata, txn *roachpb.Transaction) bool {
 	return meta.Txn != nil && txn != nil && meta.Txn.ID == txn.ID
 }
 
@@ -362,7 +362,7 @@ func updateStatsOnResolve(
 	key roachpb.Key,
 	prevValSize int64,
 	origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64,
-	orig, meta enginepb.MVCCMetadata,
+	orig, meta *enginepb.MVCCMetadata,
 	commit bool,
 ) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
@@ -457,24 +457,6 @@ func updateStatsOnResolve(
 	return ms
 }
 
-// updateStatsOnAbort updates stat counters by subtracting an
-// aborted value's key and value byte sizes. If an earlier version
-// was restored, the restored values are added to live bytes and
-// count if the restored value isn't a deletion tombstone.
-func updateStatsOnAbort(
-	key roachpb.Key,
-	origMetaKeySize, origMetaValSize, restoredMetaKeySize, restoredMetaValSize int64,
-	orig, restored *enginepb.MVCCMetadata,
-	restoredNanos int64,
-) enginepb.MVCCStats {
-	ms := updateStatsOnClear(
-		key, origMetaKeySize, origMetaValSize, restoredMetaKeySize, restoredMetaValSize, orig, restored, restoredNanos,
-	)
-	ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
-	ms.IntentCount--
-	return ms
-}
-
 // updateStatsOnClear updates stat counters by subtracting a
 // cleared value's key and value byte sizes. If an earlier version
 // was restored, the restored values are added to live bytes and
@@ -550,6 +532,10 @@ func updateStatsOnClear(
 	ms.ValBytes -= (orig.ValBytes + origMetaValSize)
 	ms.KeyCount--
 	ms.ValCount--
+	if orig.Txn != nil {
+		ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
+		ms.IntentCount--
+	}
 
 	return ms
 }
@@ -837,7 +823,7 @@ func mvccGetInternal(
 		timestamp = metaTimestamp.Prev()
 	}
 
-	ownIntent := IsIntentOf(*meta, txn) // false if txn == nil
+	ownIntent := IsIntentOf(meta, txn) // false if txn == nil
 	if !timestamp.Less(metaTimestamp) && meta.Txn != nil && !ownIntent {
 		// Trying to read the last value, but it's another transaction's intent;
 		// the reader will have to act on this.
@@ -2581,7 +2567,7 @@ func mvccResolveWriteIntent(
 		// Update stat counters related to resolving the intent.
 		if ms != nil {
 			ms.Add(updateStatsOnResolve(intent.Key, prevValSize, origMetaKeySize, origMetaValSize,
-				metaKeySize, metaValSize, *meta, buf.newMeta, commit))
+				metaKeySize, metaValSize, meta, &buf.newMeta, commit))
 		}
 
 		// Log the logical MVCC operation.
@@ -2635,7 +2621,7 @@ func mvccResolveWriteIntent(
 		}
 		// Clear stat counters attributable to the intent we're aborting.
 		if ms != nil {
-			ms.Add(updateStatsOnAbort(intent.Key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, 0))
+			ms.Add(updateStatsOnClear(intent.Key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, 0))
 		}
 		return true, nil
 	}
@@ -2656,7 +2642,7 @@ func mvccResolveWriteIntent(
 
 	// Update stat counters with older version.
 	if ms != nil {
-		ms.Add(updateStatsOnAbort(intent.Key, origMetaKeySize, origMetaValSize,
+		ms.Add(updateStatsOnClear(intent.Key, origMetaKeySize, origMetaValSize,
 			metaKeySize, metaValSize, meta, &buf.newMeta, unsafeNextKey.Timestamp.WallTime))
 	}
 
