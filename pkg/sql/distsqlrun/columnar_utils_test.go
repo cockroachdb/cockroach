@@ -87,16 +87,11 @@ func verifyColOperator(
 		return err
 	}
 
-	outputToInputColIdx := make([]int, len(outputTypes))
-	for i := range outputTypes {
-		outputToInputColIdx[i] = i
-	}
 	outColOp, err := newMaterializer(
 		flowCtx,
 		int32(len(inputs))+2,
 		result.op,
 		outputTypes,
-		outputToInputColIdx,
 		&distsqlpb.PostProcessSpec{},
 		nil, /* output */
 		nil, /* metadataSourcesQueue */

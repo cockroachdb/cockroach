@@ -1662,7 +1662,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:1466e9d841b30213a2bdb0db95ff122e996983a7ad7a5fea4ef5ba88f13cf070"
+  digest = "1:d135e09e7eba1cee20690a3d6e193e505753b705d8b991da1087e984194cc103"
   name = "golang.org/x/tools"
   packages = [
     "cmd/goyacc",
@@ -1670,9 +1670,11 @@
     "container/intsets",
     "cover",
     "go/analysis",
+    "go/analysis/analysistest",
     "go/analysis/internal/analysisflags",
     "go/analysis/internal/checker",
     "go/analysis/internal/facts",
+    "go/analysis/multichecker",
     "go/analysis/passes/asmdecl",
     "go/analysis/passes/assign",
     "go/analysis/passes/atomic",
@@ -2041,7 +2043,12 @@
     "golang.org/x/tools/cmd/goyacc",
     "golang.org/x/tools/cmd/stringer",
     "golang.org/x/tools/container/intsets",
+    "golang.org/x/tools/go/analysis",
+    "golang.org/x/tools/go/analysis/analysistest",
+    "golang.org/x/tools/go/analysis/multichecker",
+    "golang.org/x/tools/go/analysis/passes/inspect",
     "golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow",
+    "golang.org/x/tools/go/ast/inspector",
     "golang.org/x/tools/go/buildutil",
     "google.golang.org/api/iterator",
     "google.golang.org/api/option",
@@ -2060,7 +2067,6 @@
     "google.golang.org/grpc/status",
     "gopkg.in/yaml.v2",
     "honnef.co/go/tools/cmd/staticcheck",
-    "honnef.co/go/tools/lint",
     "vitess.io/vitess/go/sqltypes",
     "vitess.io/vitess/go/vt/sqlparser",
   ]

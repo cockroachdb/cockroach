@@ -8,50 +8,67 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// TODO(radu): re-enable the checkers using the new staticcheck interfaces.
-// +build lint_todo
-
-package lint
+// Package unconvert defines an Analyzer that detects unnecessary type
+// conversions.
+package unconvert
 
 import (
 	"go/ast"
 	"go/token"
 	"go/types"
 
-	"honnef.co/go/tools/lint"
+	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
+	"golang.org/x/tools/go/ast/inspector"
 )
 
+// Doc documents this pass.
+const Doc = `check for unnecessary type conversions`
+
+// Analyzer defines this pass.
+var Analyzer = &analysis.Analyzer{
+	Name:     "unconvert",
+	Doc:      Doc,
+	Requires: []*analysis.Analyzer{inspect.Analyzer},
+	Run:      run,
+}
+
 // Adapted from https://github.com/mdempsky/unconvert/blob/beb68d938016d2dec1d1b078054f4d3db25f97be/unconvert.go#L371-L414.
-func checkUnconvert(j *lint.Job) {
-	forAllFiles(j, func(n ast.Node) bool {
+func run(pass *analysis.Pass) (interface{}, error) {
+	inspect := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+
+	nodeFilter := []ast.Node{
+		(*ast.CallExpr)(nil),
+	}
+	inspect.Preorder(nodeFilter, func(n ast.Node) {
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
-			return true
+			return
 		}
 		if len(call.Args) != 1 || call.Ellipsis != token.NoPos {
-			return true
+			return
 		}
-		ft, ok := j.Program.Info.Types[call.Fun]
+		ft, ok := pass.TypesInfo.Types[call.Fun]
 		if !ok {
-			j.Errorf(call.Fun, "missing type")
-			return true
+			pass.Reportf(call.Pos(), "missing type")
+			return
 		}
 		if !ft.IsType() {
 			// Function call; not a conversion.
-			return true
+			return
 		}
-		at, ok := j.Program.Info.Types[call.Args[0]]
+		at, ok := pass.TypesInfo.Types[call.Args[0]]
 		if !ok {
-			j.Errorf(call.Args[0], "missing type")
-			return true
+			pass.Reportf(call.Pos(), "missing type")
+			return
 		}
 		if !types.Identical(ft.Type, at.Type) {
 			// A real conversion.
-			return true
+			return
 		}
-		if isUntypedValue(call.Args[0], j.Program.Info) {
+		if isUntypedValue(call.Args[0], pass.TypesInfo) {
 			// Workaround golang.org/issue/13061.
-			return true
+			return
 		}
 		// Adapted from https://github.com/mdempsky/unconvert/blob/beb68d938016d2dec1d1b078054f4d3db25f97be/unconvert.go#L416-L430.
 		//
@@ -61,12 +78,13 @@ func checkUnconvert(j *lint.Job) {
 		// anything about these, so skip over them.
 		if ident, ok := call.Fun.(*ast.Ident); ok {
 			if ident.Name == "_cgoCheckPointer" {
-				return false
+				return
 			}
 		}
-		j.Errorf(n, "unnecessary conversion")
-		return true
+		pass.Reportf(call.Pos(), "unnecessary conversion")
 	})
+
+	return nil, nil
 }
 
 // Cribbed from https://github.com/mdempsky/unconvert/blob/beb68d938016d2dec1d1b078054f4d3db25f97be/unconvert.go#L557-L607.

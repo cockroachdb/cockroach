@@ -53,7 +53,6 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		1, /* processorID */
 		c,
 		typs,
-		[]int{0, 1},
 		&distsqlpb.PostProcessSpec{},
 		nil, /* output */
 		nil, /* metadataSourcesQueue */
@@ -139,7 +138,6 @@ func TestMaterializeTypes(t *testing.T) {
 		1, /* processorID */
 		c,
 		types,
-		outputToInputColIdx,
 		&distsqlpb.PostProcessSpec{},
 		nil, /* output */
 		nil, /* metadataSourcesQueue */
@@ -194,7 +192,6 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 			1, /* processorID */
 			c,
 			types,
-			[]int{0, 1},
 			&distsqlpb.PostProcessSpec{},
 			nil, /* output */
 			nil, /* metadataSourcesQueue */

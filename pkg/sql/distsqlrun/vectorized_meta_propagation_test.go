@@ -71,7 +71,6 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		2, /* processorID */
 		noop,
 		types,
-		[]int{0},
 		&distsqlpb.PostProcessSpec{},
 		nil, /* output */
 		[]distsqlpb.MetadataSource{col},

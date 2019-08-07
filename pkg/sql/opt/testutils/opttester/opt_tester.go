@@ -1165,8 +1165,8 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 	jsonStats := make([]stats.JSONStatistic, outputCols.Len())
 	i := 0
 	for col, ok := outputCols.Next(0); ok; col, ok = outputCols.Next(col + 1) {
-		colMeta := rel.Memo().Metadata().ColumnMeta(opt.ColumnID(col))
-		colName := colNameGen.GenerateName(opt.ColumnID(col))
+		colMeta := rel.Memo().Metadata().ColumnMeta(col)
+		colName := colNameGen.GenerateName(col)
 
 		columns[i] = &testcat.Column{
 			Ordinal:  i,

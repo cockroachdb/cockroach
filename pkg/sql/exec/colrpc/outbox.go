@@ -155,6 +155,7 @@ func (o *Outbox) Run(
 
 	log.VEvent(ctx, 2, "Outbox starting normal operation")
 	o.runWithStream(ctx, stream, cancelFn)
+	log.VEvent(ctx, 2, "Outbox exiting")
 }
 
 // handleStreamErr is a utility method used to handle an error when calling
