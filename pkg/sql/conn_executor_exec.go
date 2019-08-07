@@ -580,7 +580,7 @@ func (ex *connExecutor) commitSQLTransaction(
 	}
 
 	if !isRelease {
-		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
+		return eventTxnFinish{}, makeEventTxnFinishPayload(true /* commit */, ex.recordTransactionStatistics)
 	}
 	return eventTxnReleased{}, nil
 }
@@ -593,7 +593,7 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 		log.Warningf(ctx, "txn rollback failed: %s", err)
 	}
 	// We're done with this txn.
-	return eventTxnFinish{}, eventTxnFinishPayload{commit: false}
+	return eventTxnFinish{}, makeEventTxnFinishPayload(false /* commit */, ex.recordTransactionStatistics)
 }
 
 // dispatchToExecutionEngine executes the statement, writes the result to res
@@ -899,7 +899,8 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			makeEventTxnStartPayload(
 				pri, mode, sqlTs,
 				historicalTs,
-				ex.transitionCtx)
+				ex.transitionCtx,
+				ex.recordTransactionStart)
 	case *tree.CommitTransaction, *tree.ReleaseSavepoint,
 		*tree.RollbackTransaction, *tree.SetTransaction, *tree.Savepoint:
 		return ex.makeErrEvent(errNoTransactionInProgress, stmt.AST)
@@ -917,7 +918,8 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				mode,
 				ex.server.cfg.Clock.PhysicalTime(),
 				nil, /* historicalTimestamp */
-				ex.transitionCtx)
+				ex.transitionCtx,
+				ex.recordTransactionStart)
 	}
 }
 
@@ -943,7 +945,7 @@ func (ex *connExecutor) execStmtInAbortedState(
 		// Note: Postgres replies to COMMIT of failed txn with "ROLLBACK" too.
 		res.ResetStmtType((*tree.RollbackTransaction)(nil))
 
-		return eventTxnFinish{}, eventTxnFinishPayload{commit: false}
+		return eventTxnFinish{}, makeEventTxnFinishPayload(false /* commit */, ex.recordTransactionStatistics)
 	case *tree.RollbackToSavepoint, *tree.Savepoint:
 		// We accept both the "ROLLBACK TO SAVEPOINT cockroach_restart" and the
 		// "SAVEPOINT cockroach_restart" commands to indicate client intent to
@@ -1007,9 +1009,13 @@ func (ex *connExecutor) execStmtInAbortedState(
 		if ex.state.readOnly {
 			rwMode = tree.ReadOnly
 		}
+		// Note that we pass in a noop function as recordTransactionStart argument
+		// because we're restarting a transaction here, and the original start time
+		// has already been recorded.
 		payload := makeEventTxnStartPayload(
 			ex.state.priority, rwMode, ex.state.sqlTimestamp,
-			nil /* historicalTimestamp */, ex.transitionCtx)
+			nil /* historicalTimestamp */, ex.transitionCtx,
+			func() {} /* recordTransactionStart */)
 		return ev, payload
 	default:
 		ev := eventNonRetriableErr{IsCommit: fsm.False}
@@ -1044,7 +1050,7 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 		// Reply to a rollback with the COMMIT tag, by analogy to what we do when we
 		// get a COMMIT in state Aborted.
 		res.ResetStmtType((*tree.CommitTransaction)(nil))
-		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
+		return eventTxnFinish{}, makeEventTxnFinishPayload(true /* commit */, ex.recordTransactionStatistics)
 	default:
 		ev = eventNonRetriableErr{IsCommit: fsm.False}
 		payload = eventNonRetriableErrPayload{
@@ -1214,7 +1220,7 @@ func (ex *connExecutor) handleAutoCommit(
 ) (fsm.Event, fsm.EventPayload) {
 	txn := ex.state.mu.txn
 	if txn.IsCommitted() {
-		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
+		return eventTxnFinish{}, makeEventTxnFinishPayload(true /* commit */, ex.recordTransactionStatistics)
 	}
 
 	if knob := ex.server.cfg.TestingKnobs.BeforeAutoCommit; knob != nil {
@@ -1271,4 +1277,25 @@ func (ex *connExecutor) validateSavepointName(savepoint tree.Name) error {
 				"with SET force_savepoint_restart=true")
 	}
 	return nil
+}
+
+func (ex *connExecutor) recordTransactionStart() {
+	// We don't need to write down the transaction start time into
+	// ex.planner.statsCollector.PhaseTimes because it will be overwritten
+	// in ex.resetPlanner() before executing the statements of the transaction.
+	ex.phaseTimes[transactionStart] = timeutil.Now()
+}
+
+func (ex *connExecutor) recordTransactionStatistics(committed bool) {
+	phaseTimes := ex.planner.statsCollector.PhaseTimes()
+	phaseTimes[transactionEnd] = timeutil.Now()
+	transactionStart := phaseTimes[transactionStart]
+	transactionEnd := phaseTimes[transactionEnd]
+	totalTransactionTime := transactionEnd.Sub(transactionStart)
+	ex.planner.statsCollector.RecordTransaction(
+		ex.state.mu.txn.ID().String(),
+		totalTransactionTime.Seconds(),
+		committed,
+		ex.implicitTxn(),
+	)
 }

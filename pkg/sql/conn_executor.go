@@ -328,11 +328,11 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 			}
 		}
 	})
-	s.PeriodicallyClearStmtStats(ctx, stopper)
+	s.PeriodicallyClearSQLStats(ctx, stopper)
 }
 
-// ResetStatementStats resets the executor's collected statement statistics.
-func (s *Server) ResetStatementStats(ctx context.Context) {
+// ResetSQLStats resets the executor's collected sql statistics.
+func (s *Server) ResetSQLStats(ctx context.Context) {
 	s.sqlStats.resetStats(ctx)
 }
 
@@ -650,18 +650,18 @@ func (s *Server) newConnExecutorWithTxn(
 	return ex, nil
 }
 
-var maxStmtStatReset = settings.RegisterNonNegativeDurationSetting(
+var maxSQLStatReset = settings.RegisterNonNegativeDurationSetting(
 	"diagnostics.forced_stat_reset.interval",
 	"interval after which pending diagnostics statistics should be discarded even if not reported",
 	time.Hour*2, // 2 x diagnosticReportFrequency
 )
 
-// PeriodicallyClearStmtStats runs a loop to ensure that sql stats are reset.
+// PeriodicallyClearSQLStats runs a loop to ensure that sql stats are reset.
 // Usually we expect those stats to be reset by diagnostics reporting, after it
 // generates its reports. However if the diagnostics loop crashes and stops
 // resetting stats, this loop ensures stats do not accumulate beyond a
 // the diagnostics.forced_stat_reset.interval limit.
-func (s *Server) PeriodicallyClearStmtStats(ctx context.Context, stopper *stop.Stopper) {
+func (s *Server) PeriodicallyClearSQLStats(ctx context.Context, stopper *stop.Stopper) {
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		var timer timeutil.Timer
 		for {
@@ -670,10 +670,10 @@ func (s *Server) PeriodicallyClearStmtStats(ctx context.Context, stopper *stop.S
 			last := s.sqlStats.lastReset
 			s.sqlStats.Unlock()
 
-			next := last.Add(maxStmtStatReset.Get(&s.cfg.Settings.SV))
+			next := last.Add(maxSQLStatReset.Get(&s.cfg.Settings.SV))
 			wait := next.Sub(timeutil.Now())
 			if wait < 0 {
-				s.ResetStatementStats(ctx)
+				s.ResetSQLStats(ctx)
 			} else {
 				timer.Reset(wait)
 				select {
@@ -905,8 +905,8 @@ type connExecutor struct {
 	// safe to use when a statement is not being parallelized. It must be reset
 	// before using.
 	planner planner
-	// phaseTimes tracks session-level phase times. It is copied-by-value
-	// to each planner in session.newPlanner.
+	// phaseTimes tracks session- and transaction-level phase times. It is
+	// copied-by-value to each planner in ex.resetPlanner().
 	phaseTimes phaseTimes
 
 	// mu contains of all elements of the struct that can be changed

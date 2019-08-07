@@ -124,6 +124,11 @@ type eventTxnStartPayload struct {
 	txnSQLTimestamp     time.Time
 	readOnly            tree.ReadWriteMode
 	historicalTimestamp *hlc.Timestamp
+
+	// recordTransactionStart is a function that records the time of the start of
+	// the transaction and will be called as the last action of starting a
+	// transaction.
+	recordTransactionStart func()
 }
 
 func makeEventTxnStartPayload(
@@ -132,13 +137,15 @@ func makeEventTxnStartPayload(
 	txnSQLTimestamp time.Time,
 	historicalTimestamp *hlc.Timestamp,
 	tranCtx transitionCtx,
+	recordTransactionStart func(),
 ) eventTxnStartPayload {
 	return eventTxnStartPayload{
-		pri:                 pri,
-		readOnly:            readOnly,
-		txnSQLTimestamp:     txnSQLTimestamp,
-		historicalTimestamp: historicalTimestamp,
-		tranCtx:             tranCtx,
+		pri:                    pri,
+		readOnly:               readOnly,
+		txnSQLTimestamp:        txnSQLTimestamp,
+		historicalTimestamp:    historicalTimestamp,
+		tranCtx:                tranCtx,
+		recordTransactionStart: recordTransactionStart,
 	}
 }
 
@@ -151,6 +158,19 @@ type eventTxnFinish struct{}
 type eventTxnFinishPayload struct {
 	// commit is set if the transaction committed, false if it was aborted.
 	commit bool
+
+	// recordTransactionStatistics is a function that records statistics about
+	// the transaction and will be called right before finishing the transaction.
+	recordTransactionStatistics func()
+}
+
+func makeEventTxnFinishPayload(
+	commit bool, recordTransactionStatistics func(commit bool),
+) eventTxnFinishPayload {
+	return eventTxnFinishPayload{
+		commit:                      commit,
+		recordTransactionStatistics: func() { recordTransactionStatistics(commit) },
+	}
 }
 
 // toEvent turns the eventTxnFinishPayload into a txnEvent.
@@ -268,11 +288,9 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "COMMIT/ROLLBACK, or after a statement running as an implicit txn",
 			Next:        stateNoTxn{},
 			Action: func(args fsm.Args) error {
-				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn()
-				ts.setAdvanceInfo(
-					advanceOne, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
-				return nil
+				return args.Extended.(*txnState).finishTxn(
+					args.Payload.(eventTxnFinishPayload),
+				)
 			},
 		},
 		// Handle the error on COMMIT cases: we move to NoTxn as per Postgres error
@@ -403,11 +421,9 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "ROLLBACK",
 			Next:        stateNoTxn{},
 			Action: func(args fsm.Args) error {
-				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn()
-				ts.setAdvanceInfo(
-					advanceOne, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
-				return nil
+				return args.Extended.(*txnState).finishTxn(
+					args.Payload.(eventTxnFinishPayload),
+				)
 			},
 		},
 		eventNonRetriableErr{IsCommit: fsm.Any}: {
@@ -456,11 +472,9 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "ROLLBACK",
 			Next:        stateNoTxn{},
 			Action: func(args fsm.Args) error {
-				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn()
-				ts.setAdvanceInfo(
-					advanceOne, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
-				return nil
+				return args.Extended.(*txnState).finishTxn(
+					args.Payload.(eventTxnFinishPayload),
+				)
 			},
 		},
 		// ROLLBACK TO SAVEPOINT
@@ -489,11 +503,9 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Description: "COMMIT",
 			Next:        stateNoTxn{},
 			Action: func(args fsm.Args) error {
-				ts := args.Extended.(*txnState)
-				ts.finishSQLTxn()
-				ts.setAdvanceInfo(
-					advanceOne, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
-				return nil
+				return args.Extended.(*txnState).finishTxn(
+					args.Payload.(eventTxnFinishPayload),
+				)
 			},
 		},
 		eventNonRetriableErr{IsCommit: fsm.Any}: {
@@ -521,7 +533,7 @@ func cleanupAndFinish(args fsm.Args) error {
 }
 
 // noTxnToOpen implements the side effects of starting a txn. It also calls
-// setAdvanceInfo().
+// setAdvanceInfo() and recordTransactionStart().
 func (ts *txnState) noTxnToOpen(
 	connCtx context.Context, ev eventTxnStart, payload eventTxnStartPayload,
 ) error {
@@ -545,6 +557,16 @@ func (ts *txnState) noTxnToOpen(
 		payload.tranCtx,
 	)
 	ts.setAdvanceInfo(advCode, noRewind, txnStart)
+	payload.recordTransactionStart()
+	return nil
+}
+
+// finishTxn finishes the transaction. It also calls setAdvanceInfo() and
+// recordTransactionStatistics().
+func (ts *txnState) finishTxn(payload eventTxnFinishPayload) error {
+	payload.recordTransactionStatistics()
+	ts.finishSQLTxn()
+	ts.setAdvanceInfo(advanceOne, noRewind, payload.toEvent())
 	return nil
 }
 
