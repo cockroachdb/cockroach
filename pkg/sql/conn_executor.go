@@ -305,6 +305,8 @@ func makeMetrics(internal bool) Metrics {
 				6*metricsSampleInterval),
 			SQLServiceLatency: metric.NewLatency(getMetricMeta(MetaSQLServiceLatency, internal),
 				6*metricsSampleInterval),
+			SQLTxnLatency: metric.NewLatency(getMetricMeta(MetaSQLTxnLatency, internal),
+				6*metricsSampleInterval),
 
 			TxnAbortCount: metric.NewCounter(getMetricMeta(MetaTxnAbort, internal)),
 			FailureCount:  metric.NewCounter(getMetricMeta(MetaFailure, internal)),
@@ -328,11 +330,11 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 			}
 		}
 	})
-	s.PeriodicallyClearStmtStats(ctx, stopper)
+	s.PeriodicallyClearSQLStats(ctx, stopper)
 }
 
-// ResetStatementStats resets the executor's collected statement statistics.
-func (s *Server) ResetStatementStats(ctx context.Context) {
+// ResetSQLStats resets the executor's collected sql statistics.
+func (s *Server) ResetSQLStats(ctx context.Context) {
 	s.sqlStats.resetStats(ctx)
 }
 
@@ -650,18 +652,18 @@ func (s *Server) newConnExecutorWithTxn(
 	return ex, nil
 }
 
-var maxStmtStatReset = settings.RegisterNonNegativeDurationSetting(
+var maxSQLStatReset = settings.RegisterNonNegativeDurationSetting(
 	"diagnostics.forced_stat_reset.interval",
 	"interval after which pending diagnostics statistics should be discarded even if not reported",
 	time.Hour*2, // 2 x diagnosticReportFrequency
 )
 
-// PeriodicallyClearStmtStats runs a loop to ensure that sql stats are reset.
+// PeriodicallyClearSQLStats runs a loop to ensure that sql stats are reset.
 // Usually we expect those stats to be reset by diagnostics reporting, after it
 // generates its reports. However if the diagnostics loop crashes and stops
 // resetting stats, this loop ensures stats do not accumulate beyond a
 // the diagnostics.forced_stat_reset.interval limit.
-func (s *Server) PeriodicallyClearStmtStats(ctx context.Context, stopper *stop.Stopper) {
+func (s *Server) PeriodicallyClearSQLStats(ctx context.Context, stopper *stop.Stopper) {
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		var timer timeutil.Timer
 		for {
@@ -670,10 +672,10 @@ func (s *Server) PeriodicallyClearStmtStats(ctx context.Context, stopper *stop.S
 			last := s.sqlStats.lastReset
 			s.sqlStats.Unlock()
 
-			next := last.Add(maxStmtStatReset.Get(&s.cfg.Settings.SV))
+			next := last.Add(maxSQLStatReset.Get(&s.cfg.Settings.SV))
 			wait := next.Sub(timeutil.Now())
 			if wait < 0 {
-				s.ResetStatementStats(ctx)
+				s.ResetSQLStats(ctx)
 			} else {
 				timer.Reset(wait)
 				select {
@@ -905,8 +907,8 @@ type connExecutor struct {
 	// safe to use when a statement is not being parallelized. It must be reset
 	// before using.
 	planner planner
-	// phaseTimes tracks session-level phase times. It is copied-by-value
-	// to each planner in session.newPlanner.
+	// phaseTimes tracks session- and transaction-level phase times. It is
+	// copied-by-value to each planner in ex.resetPlanner().
 	phaseTimes phaseTimes
 
 	// mu contains of all elements of the struct that can be changed
@@ -935,6 +937,15 @@ type connExecutor struct {
 	// draining is set if we've received a DrainRequest. Once this is set, we're
 	// going to find a suitable time to close the connection.
 	draining bool
+
+	// txnInfo contains information about the current (or last) transaction. It
+	// is used to record information about transactions and is stored here
+	// separately from the state so that txn in state could be safely reset and
+	// the information could be recorded afterwards.
+	txnInfo struct {
+		// implicit indicates whether the transaction is implicit.
+		implicit bool
+	}
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -1939,6 +1950,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	case noEvent:
 	case txnStart:
 		ex.extraTxnState.autoRetryCounter = 0
+		ex.recordTransactionStart()
 	case txnCommit:
 		if res.Err() != nil {
 			err := errorutil.UnexpectedWithIssueErrorf(
@@ -2009,6 +2021,12 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	default:
 		return advanceInfo{}, errors.AssertionFailedf(
 			"unexpected event: %v", errors.Safe(advInfo.txnEvent))
+	}
+
+	// After txn is finished, we record the information about it.
+	switch advInfo.txnEvent {
+	case txnCommit, txnAborted:
+		ex.recordTransaction(advInfo.txnEvent)
 	}
 
 	return advInfo, nil

@@ -208,6 +208,50 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Transaction Latency: 99th percentile"
+      tooltip={
+        `The 99th percentile of total transaction time over a 1 minute period.
+        Values are displayed individually for each node.`
+      }
+    >
+      <Axis units={AxisUnits.Duration} label="latency">
+        {
+          _.map(nodeIDs, (node) => (
+            <Metric
+              key={node}
+              name="cr.node.sql.txn.latency-p99"
+              title={nodeDisplayName(nodesSummary, node)}
+              sources={[node]}
+              downsampleMax
+            />
+          ))
+        }
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Transaction Latency: 90th percentile"
+      tooltip={
+        `The 90th percentile of total transaction time over a 1 minute period.
+        Values are displayed individually for each node.`
+      }
+    >
+      <Axis units={AxisUnits.Duration} label="latency">
+        {
+          _.map(nodeIDs, (node) => (
+            <Metric
+              key={node}
+              name="cr.node.sql.txn.latency-p90"
+              title={nodeDisplayName(nodesSummary, node)}
+              sources={[node]}
+              downsampleMax
+            />
+          ))
+        }
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Schema Changes"
       sources={nodeSources}
       tooltip={`The total number of DDL statements per second ${tooltipSelection}.`}

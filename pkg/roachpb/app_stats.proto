@@ -137,3 +137,16 @@ message ExplainTreePlanNode {
   // Children are the nodes that feed into this one, e.g. two scans for a join.
   repeated ExplainTreePlanNode children = 3;
 }
+
+// TxnStats contains statistics about transactions of one application.
+message TxnStats {
+  optional int64 txn_count = 1 [(gogoproto.nullable) = false];
+
+  optional double agg_total_time_sec = 2 [(gogoproto.nullable) = false];
+
+  optional int64 committed_count = 3 [(gogoproto.nullable) = false];
+
+  optional int64 implicit_count = 4 [(gogoproto.nullable) = false];
+
+  // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
+}
