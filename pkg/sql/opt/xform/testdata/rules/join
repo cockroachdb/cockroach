@@ -2303,3 +2303,199 @@ union-all
       │    └── filters (true)
       └── projections
            └── const: 1 [type=int]
+
+exec-ddl
+CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (f, e));
+----
+
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE def INJECT STATISTICS '[
+  {
+    "columns": ["f"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+----
+
+# Test the CommuteSemiJoinRule creates an appropriate inner join.
+opt
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=d)
+----
+project
+ ├── columns: a:1(int) b:2(int) c:3(int)
+ └── inner-join (hash)
+      ├── columns: a:1(int!null) b:2(int) c:3(int) d:5(int!null)
+      ├── fd: (1)==(5), (5)==(1)
+      ├── distinct-on
+      │    ├── columns: d:5(int)
+      │    ├── grouping columns: d:5(int)
+      │    ├── key: (5)
+      │    └── scan def
+      │         └── columns: d:5(int)
+      ├── scan abc
+      │    └── columns: a:1(int) b:2(int) c:3(int)
+      └── filters
+           └── a = d [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+
+opt disable=CommuteSemiJoin format=show-all
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
+----
+semi-join (lookup def)
+ ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── key columns: [1 3] = [7 6]
+ ├── stats: [rows=100]
+ ├── cost: 713.03
+ ├── prune: (2)
+ ├── interesting orderings: (+1,+2) (+2,+3)
+ ├── scan t.public.abc
+ │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
+ │    ├── stats: [rows=100]
+ │    ├── cost: 107.02
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1,+2) (+2,+3)
+ └── filters (true)
+
+# This test doesn't test anything but is here to highlight some interesting behavior.
+# The above plan is essentially equivalent to this one except this one has a much lower
+# cost which I think is incorrect. I believe this is because when we collect stats for the
+# joins, the semi join incorrectly collects statistics and assumes that the filters on a
+# semi-join have no effect. And so the cardinality of the semi join is much higher than
+# what it should be.
+# Also, it also looks like the inner join cardinality estimates are off
+# as well. In the presence of filters they look like they are underestimating the rowcount of
+# the join. Its these two factors that make the optimizer pick the inner join plan over the
+# above semi-join one. I don't expect this is be very costly, but this is a potential blocker
+# for the CommuteSemiJoin rule and so I wanted to bring it up.
+# TODO(ridwanmsharif): Is this acceptable? Also remove this before merging.
+opt format=show-all
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
+----
+project
+ ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── stats: [rows=100]
+ ├── cost: 508.246
+ ├── prune: (2)
+ ├── interesting orderings: (+1,+2) (+2,+3)
+ └── inner-join (lookup def)
+      ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int) t.public.abc.c:3(int!null) t.public.def.d:5(int) t.public.def.e:6(int!null) t.public.def.f:7(int!null)
+      ├── key columns: [1 3] = [7 6]
+      ├── stats: [rows=0.1, distinct(1)=0.1, null(1)=0, distinct(3)=0.1, null(3)=0, distinct(6)=0.1, null(6)=0, distinct(7)=0.1, null(7)=0]
+      ├── cost: 507.236
+      ├── fd: (6,7)-->(5), (1)==(7), (7)==(1), (3)==(6), (6)==(3)
+      ├── interesting orderings: (+1,+2) (+2,+3)
+      ├── scan t.public.abc
+      │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
+      │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=1]
+      │    ├── cost: 107.02
+      │    ├── prune: (1-3)
+      │    └── interesting orderings: (+1,+2) (+2,+3)
+      └── filters (true)
+
+exec-ddl
+CREATE TABLE customers (id INT PRIMARY KEY, name STRING)
+----
+
+exec-ddl
+CREATE TABLE orders (id INT PRIMARY KEY, cust_id INT REFERENCES customers (id), order_date DATE, INDEX (order_date) STORING (cust_id))
+----
+
+exec-ddl
+ALTER TABLE customers INJECT STATISTICS '[
+  {
+    "columns": ["id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE orders INJECT STATISTICS '[
+  {
+    "columns": ["id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000
+  },
+  {
+    "columns": ["cust_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 10000000
+  },
+  {
+    "columns": ["order_date"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000
+  }
+]'
+----
+
+opt disable=CommuteSemiJoin
+SELECT *
+FROM customers c
+WHERE EXISTS(SELECT * FROM orders o WHERE o.cust_id=c.id AND o.order_date='2019-01-01')
+----
+semi-join (merge)
+ ├── columns: id:1(int!null) name:2(string)
+ ├── left ordering: +1
+ ├── right ordering: +4
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan c
+ │    ├── columns: c.id:1(int!null) name:2(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
+ ├── sort
+ │    ├── columns: o.id:3(int!null) cust_id:4(int) order_date:5(date!null)
+ │    ├── key: (3)
+ │    ├── fd: ()-->(5), (3)-->(4)
+ │    ├── ordering: +4 opt(5) [actual: +4]
+ │    └── scan o@secondary
+ │         ├── columns: o.id:3(int!null) cust_id:4(int) order_date:5(date!null)
+ │         ├── constraint: /5/3: [/'2019-01-01' - /'2019-01-01']
+ │         ├── key: (3)
+ │         └── fd: ()-->(5), (3)-->(4)
+ └── filters (true)
+
+# The CommuteSemiJoin rule allows a much better plan because we can use
+# a lookup join.
+opt
+SELECT *
+FROM customers c
+WHERE EXISTS(SELECT * FROM orders o WHERE o.cust_id=c.id AND o.order_date='2019-01-01')
+----
+project
+ ├── columns: id:1(int!null) name:2(string)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inner-join (lookup customers)
+      ├── columns: c.id:1(int!null) name:2(string) cust_id:4(int!null)
+      ├── key columns: [4] = [1]
+      ├── key: (4)
+      ├── fd: (1)-->(2), (1)==(4), (4)==(1)
+      ├── distinct-on
+      │    ├── columns: cust_id:4(int)
+      │    ├── grouping columns: cust_id:4(int)
+      │    ├── key: (4)
+      │    └── scan o@secondary
+      │         ├── columns: cust_id:4(int) order_date:5(date!null)
+      │         ├── constraint: /5/3: [/'2019-01-01' - /'2019-01-01']
+      │         └── fd: ()-->(5)
+      └── filters (true)
