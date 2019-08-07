@@ -1,4 +1,4 @@
-# LogicTest: local-opt fakedist-opt
+# LogicTest: local fakedist
 
 ## This test file contains various complex queries that ORMs issue during
 ## startup or general use, that pre-CBO code can't handle. This file should be

@@ -1,4 +1,4 @@
-# LogicTest: fakedist fakedist-opt
+# LogicTest: fakedist
 
 # ------------------------------------------------------------------------------
 # Zigzag join tests on non-inverted indexes.
