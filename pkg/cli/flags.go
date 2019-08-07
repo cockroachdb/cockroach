@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -249,13 +248,6 @@ func init() {
 			return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
 		})
 	}
-
-	// start-single-node starts with default replication of 1.
-	AddPersistentPreRunE(startSingleNodeCmd, func(cmd *cobra.Command, _ []string) error {
-		serverCfg.DefaultSystemZoneConfig.NumReplicas = proto.Int32(1)
-		serverCfg.DefaultZoneConfig.NumReplicas = proto.Int32(1)
-		return nil
-	})
 
 	// Map any flags registered in the standard "flag" package into the
 	// top-level cockroach command.
