@@ -255,7 +255,8 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 			// boundaries of the chunks (stored in s.chunks) to sort further.
 			copy(s.partitionCol, zeroBoolColumn)
 			for i, orderedCol := range s.alreadySortedCols {
-				s.partitioners[i].partition(s.batch.ColVec(int(orderedCol.ColIdx)), s.partitionCol, uint64(s.batch.Length()))
+				s.partitioners[i].partition(s.batch.ColVec(int(orderedCol.ColIdx)), s.partitionCol,
+					uint64(s.batch.Length()))
 			}
 			s.chunks = boolVecToSel64(s.partitionCol, s.chunks[:0])
 
