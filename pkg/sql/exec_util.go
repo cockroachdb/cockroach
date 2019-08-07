@@ -1907,6 +1907,13 @@ func (s *sqlStatsCollectorImpl) RecordStatement(
 		parseLat, planLat, runLat, svcLat, ovhLat, bytesRead, rowsRead)
 }
 
+// RecordTransaction is part of the sqlStatsCollector interface.
+func (s *sqlStatsCollectorImpl) RecordTransaction(
+	txnID string, totalTime float64, committed bool, implicit bool,
+) {
+	s.appStats.recordTransaction(txnID, totalTime, committed, implicit)
+}
+
 // SQLStats is part of the sqlStatsCollector interface.
 func (s *sqlStatsCollectorImpl) SQLStats() *sqlStats {
 	return s.sqlStats

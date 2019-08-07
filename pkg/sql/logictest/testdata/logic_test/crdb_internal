@@ -33,6 +33,7 @@ node_queries
 node_runtime_info
 node_sessions
 node_statement_statistics
+node_transaction_statistics
 partitions
 predefined_comments
 ranges
@@ -569,4 +570,3 @@ query T
 SELECT crdb_internal.cluster_name()
 ----
 testclustername
-

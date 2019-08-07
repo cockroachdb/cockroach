@@ -905,8 +905,8 @@ type connExecutor struct {
 	// safe to use when a statement is not being parallelized. It must be reset
 	// before using.
 	planner planner
-	// phaseTimes tracks session-level phase times. It is copied-by-value
-	// to each planner in session.newPlanner.
+	// phaseTimes tracks session- and transaction-level phase times. It is
+	// copied-by-value to each planner in ex.resetPlanner().
 	phaseTimes phaseTimes
 
 	// mu contains of all elements of the struct that can be changed

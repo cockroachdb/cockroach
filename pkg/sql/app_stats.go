@@ -48,6 +48,7 @@ type appStats struct {
 
 	syncutil.Mutex
 	stmts map[stmtKey]*stmtStats
+	txns  map[string]roachpb.TransactionStatistics
 }
 
 // stmtStats holds per-statement statistics.
@@ -61,6 +62,11 @@ type stmtStats struct {
 // statistics.
 var stmtStatsEnable = settings.RegisterBoolSetting(
 	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
+)
+
+// txnStatsEnable determines whether to collect per-transaction statistics.
+var txnStatsEnable = settings.RegisterBoolSetting(
+	"sql.metrics.transaction_details.enabled", "collect per-transaction statistics", true,
 )
 
 // sqlStatsCollectionLatencyThreshold specifies the minimum amount of time
@@ -199,6 +205,36 @@ func anonymizeStmt(ast tree.Statement) string {
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 }
 
+func (a *appStats) recordTransaction(
+	txnID string, totalTime float64, committed bool, implicit bool,
+) {
+	if a == nil || !txnStatsEnable.Get(&a.st.SV) {
+		return
+	}
+	a.Lock()
+	if _, ok := a.txns[txnID]; ok {
+		panic(fmt.Sprintf("unexpectedly transaction statistics are already present for txn ID %s", txnID))
+	}
+	a.txns[txnID] = roachpb.TransactionStatistics{
+		TotalTime: totalTime,
+		Committed: committed,
+		Implicit:  implicit,
+	}
+	a.Unlock()
+}
+
+func (a *appStats) getStatsForTxn(txnID string) roachpb.TransactionStatistics {
+	a.Lock()
+	// Retrieve the per-transaction statistic object.
+	t, ok := a.txns[txnID]
+	if !ok {
+		// TODO(yuzefovich): what should we do here?
+		panic(fmt.Sprintf("unexpectedly transaction statistics are not found for txn ID %s", txnID))
+	}
+	a.Unlock()
+	return t
+}
+
 // sqlStats carries per-application statistics for all applications on
 // each node.
 type sqlStats struct {
@@ -217,7 +253,7 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	if a, ok := s.apps[appName]; ok {
 		return a
 	}
-	a := &appStats{st: s.st, stmts: make(map[stmtKey]*stmtStats)}
+	a := &appStats{st: s.st, stmts: make(map[stmtKey]*stmtStats), txns: make(map[string]roachpb.TransactionStatistics)}
 	s.apps[appName] = a
 	return a
 }
@@ -253,9 +289,10 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 			dumpStmtStats(ctx, appName, a.stmts)
 		}
 
-		// Clear the map, to release the memory; make the new map somewhat
+		// Clear the maps, to release the memory; make the new maps somewhat
 		// already large for the likely future workload.
 		a.stmts = make(map[stmtKey]*stmtStats, len(a.stmts)/2)
+		a.txns = make(map[string]roachpb.TransactionStatistics, len(a.txns)/2)
 		a.Unlock()
 	}
 	s.lastReset = timeutil.Now()

@@ -2140,6 +2140,7 @@ writing ` + os.DevNull + `
   debug/nodes/1/crdb_internal.gossip_nodes.txt
   debug/nodes/1/crdb_internal.leases.txt
   debug/nodes/1/crdb_internal.node_statement_statistics.txt
+  debug/nodes/1/crdb_internal.node_transaction_statistics.txt
   debug/nodes/1/crdb_internal.node_build_info.txt
   debug/nodes/1/crdb_internal.node_metrics.txt
   debug/nodes/1/crdb_internal.node_queries.txt
