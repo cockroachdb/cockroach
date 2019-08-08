@@ -34,6 +34,7 @@ func declareKeysRevertRange(
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(desc.RangeID)})
 }
 
 // isEmptyKeyTimeRange checks if the span has no writes in (since,until].
@@ -95,7 +96,21 @@ func RevertRange(
 	}
 
 	if resume != nil {
+		log.VEventf(ctx, 2, "hit limit while clearing keys, resume span [%v, %v)", resume.Key, resume.EndKey)
 		reply.ResumeSpan = resume
+
+		// If, and only if, we're returning a resume span do we want to return >0
+		// NumKeys. Distsender will reduce the limit for subsequent requests by the
+		// amount returned, but that doesn't really make sense for RevertRange:
+		// there isn't some combined result set size we're trying to hit across many
+		// requests; just because some earlier range ran X Clears that does not mean
+		// we want the next range to run fewer than the limit chosen for the batch
+		// size reasons. On the otherhand, we have to pass MaxKeys though if we
+		// return a resume span to cause distsender to stop after this request, as
+		// currently response combining's handling of resume spans prefers that
+		// there only be one. Thus we just set it to MaxKeys when, and only when,
+		// we're returning a ResumeSpan.
+		reply.NumKeys = cArgs.MaxKeys
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
 
