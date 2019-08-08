@@ -1860,12 +1860,12 @@ func TestImportIntoCSV(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
 
 		sqlDB.Exec(t,
-			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]),
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s) WITH experimental_direct_ingestion`, testFiles.files[0]),
 		)
 
 		sqlDB.ExpectErr(
-			t, `ingested key collides with an existing one: /Table/115/1/0/0`,
-			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]),
+			t, `ingested key collides with an existing one: /Table/\d+/1/0/0`,
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s) WITH experimental_direct_ingestion`, testFiles.files[0]),
 		)
 	})
 
@@ -1905,7 +1905,7 @@ func TestImportIntoCSV(t *testing.T) {
 		)
 
 		sqlDB.ExpectErr(
-			t, `ingested key collides with an existing one: /Table/119/1/0/0`,
+			t, `ingested key collides with an existing one: /Table/\d+/1/0/0`,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.fileWithShadowKeys[0]),
 		)
 	})
@@ -1921,7 +1921,7 @@ func TestImportIntoCSV(t *testing.T) {
 		)
 
 		sqlDB.ExpectErr(
-			t, `ingested key collides with an existing one: /Table/121/1/0/0`,
+			t, `ingested key collides with an existing one: /Table/\d+/1/0/0`,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s) WITH experimental_direct_ingestion`, testFiles.fileWithShadowKeys[0]),
 		)
 	})
