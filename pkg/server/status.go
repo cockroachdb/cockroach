@@ -615,13 +615,17 @@ func (s *statusServer) Details(
 		return status.Details(ctx, req)
 	}
 
+	remoteNodeID := s.gossip.NodeID.Get()
 	resp := &serverpb.DetailsResponse{
-		NodeID:     s.gossip.NodeID.Get(),
+		NodeID:     remoteNodeID,
 		BuildInfo:  build.GetInfo(),
 		SystemInfo: s.si.systemInfo(ctx),
 	}
-	if addr, err := s.gossip.GetNodeIDAddress(s.gossip.NodeID.Get()); err == nil {
+	if addr, err := s.gossip.GetNodeIDAddress(remoteNodeID); err == nil {
 		resp.Address = *addr
+	}
+	if addr, err := s.gossip.GetNodeIDSQLAddress(remoteNodeID); err == nil {
+		resp.SQLAddress = *addr
 	}
 
 	// If Ready is not set, the client doesn't want to know whether this node is

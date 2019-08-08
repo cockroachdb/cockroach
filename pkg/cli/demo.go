@@ -134,7 +134,7 @@ func setupTransientServers(
 	if err := s.Start(args); err != nil {
 		return connURL, adminURL, cleanup, err
 	}
-	args.JoinAddr = s.ServingAddr()
+	args.JoinAddr = s.ServingRPCAddr()
 	for i := 0; i < demoCtx.nodes-1; i++ {
 		s := serverFactory.New(args).(*server.TestServer)
 		if err := s.Start(args); err != nil {
@@ -149,7 +149,7 @@ func setupTransientServers(
 	url := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(security.RootUser),
-		Host:     s.ServingAddr(),
+		Host:     s.ServingSQLAddr(),
 		RawQuery: options.Encode(),
 	}
 	if gen != nil {

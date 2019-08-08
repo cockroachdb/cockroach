@@ -54,7 +54,7 @@ func TestStatsWithLowTTL(t *testing.T) {
 	r.Exec(t, `INSERT INTO t SELECT k, 2*k, 3*k FROM generate_series(0, $1) AS g(k)`, numRows-1)
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(t,
-		s.ServingAddr(),
+		s.ServingSQLAddr(),
 		"TestStatsWithLowTTL",
 		url.User(security.RootUser),
 	)
