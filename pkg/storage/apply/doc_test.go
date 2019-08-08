@@ -54,7 +54,7 @@ func ExampleTask() {
 	//  decoding command 7; local=true
 	//
 	// ApplyCommittedEntries:
-	//  committing batch with commands=[1 2 3 4]
+	//  applying batch with commands=[1 2 3 4]
 	//  applying side-effects of command 1
 	//  applying side-effects of command 2
 	//  applying side-effects of command 3
@@ -63,10 +63,10 @@ func ExampleTask() {
 	//  finishing and acknowledging command 2; rejected=false
 	//  finishing and acknowledging command 3; rejected=true
 	//  finishing and acknowledging command 4; rejected=false
-	//  committing batch with commands=[5]
+	//  applying batch with commands=[5]
 	//  applying side-effects of command 5
 	//  finishing and acknowledging command 5; rejected=false
-	//  committing batch with commands=[6 7]
+	//  applying batch with commands=[6 7]
 	//  applying side-effects of command 6
 	//  applying side-effects of command 7
 	//  finishing and acknowledging command 6; rejected=true

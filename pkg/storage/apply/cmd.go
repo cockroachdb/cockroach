@@ -47,7 +47,8 @@ type AppliedCommand interface {
 	// completed. It also acknowledges the outcome of the command to its
 	// client if it was proposed locally. An error will immediately stall
 	// entry application, so one must only be returned if the state machine
-	// is no longer able to make progress.
+	// is no longer able to make progress. The method will be called exactly
+	// once per Command.
 	FinishAndAckOutcome() error
 }
 
