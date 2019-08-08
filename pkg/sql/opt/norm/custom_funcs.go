@@ -156,10 +156,9 @@ func (c *CustomFuncs) CanConstructBinary(op opt.Operator, left, right opt.Scalar
 	return memo.BinaryOverloadExists(op, left.DataType(), right.DataType())
 }
 
-// ArrayType returns the type of the first output column wrapped
+// ArrayType returns the type of the given column wrapped
 // in an array.
-func (c *CustomFuncs) ArrayType(in memo.RelExpr) *types.T {
-	inCol, _ := c.OutputCols(in).Next(0)
+func (c *CustomFuncs) ArrayType(inCol opt.ColumnID) *types.T {
 	inTyp := c.mem.Metadata().ColumnMeta(inCol).Type
 	return types.MakeArray(inTyp)
 }
@@ -1626,10 +1625,9 @@ func (c *CustomFuncs) SubqueryOrdering(sub *memo.SubqueryPrivate) physical.Order
 	return oc
 }
 
-// FirstCol returns the first column in the input expression.
-func (c *CustomFuncs) FirstCol(in memo.RelExpr) opt.ColumnID {
-	inCol, _ := c.OutputCols(in).Next(0)
-	return inCol
+// SubqueryRequestedCol returns the requested column from a SubqueryPrivate.
+func (c *CustomFuncs) SubqueryRequestedCol(sub *memo.SubqueryPrivate) opt.ColumnID {
+	return sub.RequestedCol
 }
 
 // MakeArrayAggCol returns a ColPrivate with the given type and an "array_agg" label.
