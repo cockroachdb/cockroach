@@ -1561,6 +1561,7 @@ bins = \
   bin/cockroach-short \
   bin/docgen \
   bin/execgen \
+  bin/fuzz \
   bin/generate-binary \
   bin/terraformgen \
   bin/github-post \
@@ -1620,6 +1621,11 @@ $(testbins): bin/%: bin/%.d | bin/prereqs $(SUBMODULES_TARGET)
 bin/prereqs: ./pkg/cmd/prereqs/*.go
 	@echo go install -v ./pkg/cmd/prereqs
 	@$(GO_INSTALL) -v ./pkg/cmd/prereqs
+
+.PHONY: fuzz
+fuzz: ## Run fuzz tests.
+fuzz: bin/fuzz
+	bin/fuzz $(TESTFLAGS) -tests $(TESTS) -timeout $(TESTTIMEOUT) $(PKG)
 
 .PRECIOUS: bin/%.d
 bin/%.d: ;
