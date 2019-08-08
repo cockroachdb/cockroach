@@ -34,6 +34,11 @@ func (node ZoneSpecifier) TargetsIndex() bool {
 	return node.TargetsTable() && node.TableOrIndex.Index != ""
 }
 
+// TargetsPartition returns whether the zone specifier targets a partition.
+func (node ZoneSpecifier) TargetsPartition() bool {
+	return node.TargetsTable() && node.Partition != ""
+}
+
 // Format implements the NodeFormatter interface.
 func (node *ZoneSpecifier) Format(ctx *FmtCtx) {
 	if node.NamedZone != "" {
@@ -79,6 +84,9 @@ func (node *ShowZoneConfig) Format(ctx *FmtCtx) {
 // statement.
 type SetZoneConfig struct {
 	ZoneSpecifier
+	// AllIndexes indicates that the zone configuration should be applied across
+	// all of a tables indexes. (ALTER PARTITION ... OF INDEX <tablename>@*)
+	AllIndexes bool
 	SetDefault bool
 	YAMLConfig Expr
 	Options    KVOptions

@@ -418,6 +418,12 @@ var specs = []stmtSpec{
 		unlink:  []string{"variable", "value"},
 	},
 	{
+		name:    "alter_zone_partition_stmt",
+		inline:  []string{"table_index_name", "set_zone_config", "var_set_list"},
+		replace: map[string]string{"var_name": "variable", "var_value": "value", "standalone_index_name": "index_name"},
+		unlink:  []string{"variable", "value"},
+	},
+	{
 		name:   "backup",
 		stmt:   "backup_stmt",
 		inline: []string{"table_pattern_list", "name_list", "opt_as_of_clause", "opt_incremental", "opt_with_options"},

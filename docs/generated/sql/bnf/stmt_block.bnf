@@ -275,6 +275,7 @@ abort_stmt ::=
 
 alter_ddl_stmt ::=
 	alter_table_stmt
+	| alter_partition_stmt
 	| alter_index_stmt
 	| alter_view_stmt
 	| alter_sequence_stmt
@@ -939,6 +940,9 @@ alter_table_stmt ::=
 	| alter_zone_table_stmt
 	| alter_rename_table_stmt
 
+alter_partition_stmt ::=
+	alter_zone_partition_stmt
+
 alter_index_stmt ::=
 	alter_oneindex_stmt
 	| alter_split_index_stmt
@@ -1252,11 +1256,15 @@ alter_scatter_stmt ::=
 
 alter_zone_table_stmt ::=
 	'ALTER' 'TABLE' table_name set_zone_config
-	| 'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name set_zone_config
 
 alter_rename_table_stmt ::=
 	'ALTER' 'TABLE' relation_expr 'RENAME' 'TO' table_name
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'RENAME' 'TO' table_name
+
+alter_zone_partition_stmt ::=
+	'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name set_zone_config
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' '*' set_zone_config
 
 alter_oneindex_stmt ::=
 	'ALTER' 'INDEX' table_index_name alter_index_cmds
@@ -1280,7 +1288,6 @@ alter_rename_index_stmt ::=
 
 alter_zone_index_stmt ::=
 	'ALTER' 'INDEX' table_index_name set_zone_config
-	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
 
 alter_rename_view_stmt ::=
 	'ALTER' 'VIEW' relation_expr 'RENAME' 'TO' view_name
