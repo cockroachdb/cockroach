@@ -836,7 +836,7 @@ type logicQuery struct {
 // https://github.com/gregrahn/sqllogictest/ for a github mirror of the
 // sqllogictest source.
 type logicTest struct {
-	t        *testing.T
+	rootT    *testing.T
 	subtestT *testing.T
 	cfg      testClusterConfig
 	// the number of nodes in the cluster.
@@ -883,6 +883,13 @@ type logicTest struct {
 
 	curPath   string
 	curLineNo int
+}
+
+func (t *logicTest) t() *testing.T {
+	if t.subtestT != nil {
+		return t.subtestT
+	}
+	return t.rootT
 }
 
 func (t *logicTest) traceStart(filename string) {
@@ -978,7 +985,7 @@ func (t *logicTest) setUser(user string) func() {
 	}
 
 	addr := t.cluster.Server(t.nodeIdx).ServingSQLAddr()
-	pgURL, cleanupFunc := sqlutils.PGUrl(t.t, addr, "TestLogic", url.User(user))
+	pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(user))
 	pgURL.Path = "test"
 	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
@@ -1077,7 +1084,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 	stats.DefaultRefreshInterval = time.Millisecond
 
-	t.cluster = serverutils.StartTestCluster(t.t, cfg.numNodes, params)
+	t.cluster = serverutils.StartTestCluster(t.rootT, cfg.numNodes, params)
 	if cfg.useFakeSpanResolver {
 		fakeResolver := distsqlutils.FakeResolverForTestCluster(t.cluster)
 		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
@@ -1100,7 +1107,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 			t.Fatalf("invalid distsql mode override: %s", cfg.overrideDistSQLMode)
 		}
 		// Wait until all servers are aware of the setting.
-		testutils.SucceedsSoon(t.t, func() error {
+		testutils.SucceedsSoon(t.rootT, func() error {
 			for i := 0; i < t.cluster.NumServers(); i++ {
 				var m string
 				err := t.cluster.ServerConn(i % t.cluster.NumServers()).QueryRow(
@@ -1252,7 +1259,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 			}
 		} else {
 			t.emit(fmt.Sprintf("subtest %s", subtest.name))
-			t.t.Run(subtest.name, func(subtestT *testing.T) {
+			t.rootT.Run(subtest.name, func(subtestT *testing.T) {
 				t.subtestT = subtestT
 				defer func() {
 					t.subtestT = nil
@@ -1264,7 +1271,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 		}
 	}
 
-	if (*rewriteResultsInTestfiles || *rewriteSQL) && !t.t.Failed() {
+	if (*rewriteResultsInTestfiles || *rewriteSQL) && !t.rootT.Failed() {
 		// Rewrite the test file.
 		file, err := os.Create(path)
 		if err != nil {
@@ -1594,7 +1601,7 @@ func (t *logicTest) processSubtest(
 			if !s.skip {
 				for i := 0; i < repeat; i++ {
 					if query.retry && !*rewriteResultsInTestfiles {
-						testutils.SucceedsSoon(t.t, func() error {
+						testutils.SucceedsSoon(t.rootT, func() error {
 							return t.execQuery(query)
 						})
 					} else {
@@ -1757,13 +1764,15 @@ func (t *logicTest) verifyError(
 		errString := pgerror.FullError(err)
 		newErr := errors.Errorf("%s: %s\nexpected:\n%s\n\ngot:\n%s", pos, sql, expectErr, errString)
 		if err != nil && strings.Contains(errString, expectErr) {
-			if t.subtestT != nil {
-				t.subtestT.Logf("The output string contained the input regexp. Perhaps you meant to write:\n"+
-					"query error %s", regexp.QuoteMeta(errString))
-			} else {
-				t.t.Logf("The output string contained the input regexp. Perhaps you meant to write:\n"+
-					"query error %s", regexp.QuoteMeta(errString))
-			}
+			t.t().Logf("The output string contained the input regexp. Perhaps you meant to write:\n"+
+				"query error %s", regexp.QuoteMeta(errString))
+		}
+		// We can't rewrite the error, but we can at least print the regexp.
+		if *rewriteResultsInTestfiles {
+			r := regexp.QuoteMeta(errString)
+			r = strings.Trim(r, "\n ")
+			r = strings.ReplaceAll(r, "\n", "\\n")
+			t.t().Logf("Error regexp: %s\n", r)
 		}
 		return (err == nil) == (expectErr == ""), newErr
 	}
@@ -1852,7 +1861,7 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	}
 	res, err := t.db.Exec(stmt.sql)
 	if err == nil {
-		sqlutils.VerifyStatementPrettyRoundtrip(t.t, stmt.sql)
+		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), stmt.sql)
 	}
 	if err == nil && stmt.expectCount >= 0 {
 		var count int64
@@ -1897,7 +1906,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	}
 	rows, err := t.db.Query(query.sql)
 	if err == nil {
-		sqlutils.VerifyStatementPrettyRoundtrip(t.t, query.sql)
+		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), query.sql)
 	}
 	if _, err := t.verifyError(query.sql, query.pos, query.expectErr, query.expectErrCode, err); err != nil {
 		return err
@@ -2257,7 +2266,7 @@ func RunLogicTest(t *testing.T, globs ...string) {
 						}
 					}
 					lt := logicTest{
-						t:               t,
+						rootT:           t,
 						verbose:         verbose,
 						perErrorSummary: make(map[string][]string),
 					}
@@ -2412,15 +2421,12 @@ func (t *logicTest) signalIgnoredError(err error, pos string, sql string) {
 // "FAIL" marker when -show-sql is set. It also registers the error to the
 // failure counter.
 func (t *logicTest) Error(args ...interface{}) {
+	t.t().Helper()
 	if *showSQL {
 		t.outf("\t-- FAIL")
 	}
 	log.Error(context.Background(), "\n", fmt.Sprint(args...))
-	if t.subtestT != nil {
-		t.subtestT.Error("\n", fmt.Sprint(args...))
-	} else {
-		t.t.Error("\n", fmt.Sprint(args...))
-	}
+	t.t().Error("\n", fmt.Sprint(args...))
 	t.failures++
 }
 
@@ -2428,32 +2434,25 @@ func (t *logicTest) Error(args ...interface{}) {
 // per-query "FAIL" marker when -show-sql is set. It also registers the error to
 // the failure counter.
 func (t *logicTest) Errorf(format string, args ...interface{}) {
+	t.t().Helper()
 	if *showSQL {
 		t.outf("\t-- FAIL")
 	}
 	log.Errorf(context.Background(), format, args...)
-	if t.subtestT != nil {
-		t.subtestT.Errorf("\n"+format, args...)
-	} else {
-		t.t.Errorf("\n"+format, args...)
-	}
+	t.t().Errorf("\n"+format, args...)
 	t.failures++
 }
 
 // Fatal is a wrapper around testing.T.Fatal that ensures the fatal error message
 // is printed on its own line when -show-sql is set.
 func (t *logicTest) Fatal(args ...interface{}) {
+	t.t().Helper()
 	if *showSQL {
 		fmt.Println()
 	}
 	log.Error(context.Background(), args...)
-	if t.subtestT != nil {
-		t.subtestT.Logf("\n%s:%d: error while processing", t.curPath, t.curLineNo)
-		t.subtestT.Fatal(args...)
-	} else {
-		t.t.Logf("\n%s:%d: error while processing", t.curPath, t.curLineNo)
-		t.t.Fatal(args...)
-	}
+	t.t().Logf("\n%s:%d: error while processing", t.curPath, t.curLineNo)
+	t.t().Fatal(args...)
 }
 
 // Fatalf is a wrapper around testing.T.Fatalf that ensures the fatal error
@@ -2462,12 +2461,9 @@ func (t *logicTest) Fatalf(format string, args ...interface{}) {
 	if *showSQL {
 		fmt.Println()
 	}
-	log.Errorf(context.Background(), format, args...)
-	if t.subtestT != nil {
-		t.subtestT.Fatalf(format, args...)
-	} else {
-		t.t.Fatalf(format, args...)
-	}
+	log.Error(context.Background(), args...)
+	t.t().Logf("\n%s:%d: error while processing", t.curPath, t.curLineNo)
+	t.t().Fatalf(format, args...)
 }
 
 // finishOne marks completion of a single test. It handles
