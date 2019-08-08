@@ -230,8 +230,15 @@ func (cockroachComparer) Compare(a, b []byte) int {
 		panic(fmt.Sprintf("invalid keys: compare expects internal keys with 8b suffix: a: %v b: %v", a, b))
 	}
 
-	keyA, tsA, okA := enginepb.SplitMVCCKey(a[:len(a)-8])
-	keyB, tsB, okB := enginepb.SplitMVCCKey(b[:len(b)-8])
+	return MVCCKeyCompare(a[:len(a)-8], b[:len(b)-8])
+}
+
+// MVCCKeyCompare compares cockroach keys, including the MVCC timestamps.
+// This assumes these are the keys cockroach usually works with i.e. "user" keys
+// from the point of view of rocksdb.
+func MVCCKeyCompare(a, b []byte) int {
+	keyA, tsA, okA := enginepb.SplitMVCCKey(a)
+	keyB, tsB, okB := enginepb.SplitMVCCKey(b)
 	if !okA || !okB {
 		// This should never happen unless there is some sort of corruption of
 		// the keys. This is a little bizarre, but the behavior exactly matches

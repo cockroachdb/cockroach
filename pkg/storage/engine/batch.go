@@ -314,6 +314,12 @@ func (b *RocksDBBatchBuilder) ApplyRepr(repr []byte) error {
 // EncodeKey encodes an engine.MVCC key into the RocksDB representation. This
 // encoding must match with the encoding in engine/db.cc:EncodeKey().
 func EncodeKey(key MVCCKey) []byte {
+	return EncodeKeyToBuf(nil, key)
+}
+
+// EncodeKeyToBuf encodes an engine.MVCC key into the RocksDB representation.
+// This encoding must match with the encoding in engine/db.cc:EncodeKey().
+func EncodeKeyToBuf(buf []byte, key MVCCKey) []byte {
 	// TODO(dan): Unify this with (*RocksDBBatchBuilder).encodeKey.
 
 	const (
@@ -331,23 +337,29 @@ func EncodeKey(key MVCCKey) []byte {
 		}
 	}
 
-	dbKey := make([]byte, len(key.Key)+timestampLength+timestampEncodedLengthLen)
-	copy(dbKey, key.Key)
+	sz := len(key.Key) + timestampLength + timestampEncodedLengthLen
+	if cap(buf) < sz {
+		buf = make([]byte, sz)
+	} else {
+		buf = buf[:sz]
+	}
+
+	copy(buf, key.Key)
 
 	pos := len(key.Key)
 	if timestampLength > 0 {
-		dbKey[pos] = 0
+		buf[pos] = 0
 		pos += timestampSentinelLen
-		putUint64(dbKey[pos:], uint64(key.Timestamp.WallTime))
+		putUint64(buf[pos:], uint64(key.Timestamp.WallTime))
 		pos += walltimeEncodedLen
 		if key.Timestamp.Logical != 0 {
-			putUint32(dbKey[pos:], uint32(key.Timestamp.Logical))
+			putUint32(buf[pos:], uint32(key.Timestamp.Logical))
 			pos += logicalEncodedLen
 		}
 	}
-	dbKey[len(dbKey)-1] = byte(timestampLength)
+	buf[len(buf)-1] = byte(timestampLength)
 
-	return dbKey
+	return buf
 }
 
 // DecodeMVCCKey decodes an engine.MVCCKey from its serialized representation. This
