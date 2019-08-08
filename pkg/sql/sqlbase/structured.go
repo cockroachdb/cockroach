@@ -484,11 +484,11 @@ func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
 		f.WriteString("INVERTED ")
 	}
 	f.WriteString("INDEX ")
+	f.FormatNameP(&desc.Name)
 	if *tableName != AnonymousTable {
-		f.WriteString("ON ")
+		f.WriteString(" ON ")
 		f.FormatNode(tableName)
 	}
-	f.FormatNameP(&desc.Name)
 	f.WriteString(" (")
 	desc.ColNamesFormat(f)
 	f.WriteByte(')')
