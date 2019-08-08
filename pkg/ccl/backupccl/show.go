@@ -149,7 +149,7 @@ func backupShowerDefault(ctx context.Context, showSchemas bool) backupShower {
 						tree.NewDInt(tree.DInt(descSizes[table.ID].Rows)),
 					}
 					if showSchemas {
-						schema, err := sql.ShowCreate(ctx, dbName, desc.Descriptors, table, sql.IgnoreMissingFKs)
+						schema, err := sql.ShowCreate(ctx, dbName, desc.Descriptors, table, sql.OmitMissingFKClausesFromCreate)
 						if err != nil {
 							continue
 						}
