@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pmezard/go-difflib/difflib"
 )
 
 // Makes an IndexDescriptor with all columns being ascending.
@@ -1363,6 +1364,14 @@ func (m fakeProtoGetter) GetProto(
 type oldFormatUpgradedPair struct {
 	oldFormat        TableDescriptor
 	expectedUpgraded TableDescriptor
+	// This field being true indicates that we're testing a situation where the
+	// on-disk descriptor (aka oldFormat) was actually already upgraded. This
+	// allows us to test upgrades that have one side that's already been upgraded
+	// and one side that hasn't.
+	// Test cases that have this set only need to set oldFormat, and the test
+	// harness will take care of duplicating oldFormat to expectedUpgraded to
+	// save on typing.
+	oldFormatWasAlreadyUpgraded bool
 }
 
 // This test exercises the foreign key representation upgrade and downgrade
@@ -1670,6 +1679,161 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 			// the above, since it's a self-referencing table.
 			referenced: oldFormatUpgradedPair{},
 		},
+		3: {
+			// In this test, the origin table is already upgraded. This ensures that
+			// the upgrade path can deal with a mismatch between upgraded and
+			// non-upgraded foreign key tables.
+			name: "origin-is-upgraded-already",
+			origin: oldFormatUpgradedPair{
+				oldFormatWasAlreadyUpgraded: true,
+				oldFormat: TableDescriptor{
+					ID:      1,
+					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					Indexes: []IndexDescriptor{
+						{
+							ID:        1,
+							ColumnIDs: ColumnIDs{1},
+						},
+					},
+					OutboundFKs: []ForeignKeyConstraint{
+						{
+							OriginTableID:       1,
+							OriginColumnIDs:     ColumnIDs{1},
+							ReferencedTableID:   2,
+							ReferencedColumnIDs: ColumnIDs{2},
+							Name:                "foo",
+							Validity:            ConstraintValidity_Validated,
+							OnDelete:            ForeignKeyReference_NO_ACTION,
+							OnUpdate:            ForeignKeyReference_NO_ACTION,
+							Match:               ForeignKeyReference_SIMPLE,
+							// These are set manually because we're simulating what would
+							// happen when we see an upgraded on-disk TD, which for the
+							// duration of 19.2 will always have these fields set.
+							LegacyOriginIndex:     1,
+							LegacyReferencedIndex: 2,
+						},
+					},
+				},
+			},
+			// Our referenced table is *not* upgraded.
+			referenced: oldFormatUpgradedPair{
+				oldFormat: TableDescriptor{
+					ID:      2,
+					Columns: []ColumnDescriptor{{ID: 2}},
+					PrimaryIndex: IndexDescriptor{
+						ColumnIDs: ColumnIDs{2},
+						ID:        2,
+						ReferencedBy: []ForeignKeyReference{
+							{
+								Table: 1,
+								Index: 1,
+							},
+						},
+					},
+				},
+				expectedUpgraded: TableDescriptor{
+					ID:      2,
+					Columns: []ColumnDescriptor{{ID: 2}},
+					PrimaryIndex: IndexDescriptor{
+						ColumnIDs: ColumnIDs{2},
+						ID:        2,
+					},
+					InboundFKs: []ForeignKeyConstraint{
+						{
+							OriginTableID:       1,
+							OriginColumnIDs:     ColumnIDs{1},
+							ReferencedTableID:   2,
+							ReferencedColumnIDs: ColumnIDs{2},
+							Name:                "foo",
+							Validity:            ConstraintValidity_Validated,
+							OnDelete:            ForeignKeyReference_NO_ACTION,
+							OnUpdate:            ForeignKeyReference_NO_ACTION,
+							Match:               ForeignKeyReference_SIMPLE,
+						},
+					},
+				},
+			},
+		},
+		4: {
+			// In this test, the referenced table is already upgraded.
+			name: "referenced-is-upgraded-already",
+			// Origin table has *not* been upgraded.
+			origin: oldFormatUpgradedPair{
+				oldFormat: TableDescriptor{
+					ID:      1,
+					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					Indexes: []IndexDescriptor{
+						{
+							ID:        1,
+							ColumnIDs: ColumnIDs{1},
+							ForeignKey: ForeignKeyReference{
+								Table:           2,
+								Index:           2,
+								Name:            "foo",
+								Validity:        ConstraintValidity_Validated,
+								SharedPrefixLen: 1,
+								OnDelete:        ForeignKeyReference_NO_ACTION,
+								OnUpdate:        ForeignKeyReference_NO_ACTION,
+								Match:           ForeignKeyReference_SIMPLE,
+							},
+						},
+					},
+				},
+				expectedUpgraded: TableDescriptor{
+					ID:      1,
+					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					Indexes: []IndexDescriptor{
+						{
+							ID:        1,
+							ColumnIDs: ColumnIDs{1},
+						},
+					},
+					OutboundFKs: []ForeignKeyConstraint{
+						{
+							OriginTableID:       1,
+							OriginColumnIDs:     ColumnIDs{1},
+							ReferencedTableID:   2,
+							ReferencedColumnIDs: ColumnIDs{2},
+							Name:                "foo",
+							Validity:            ConstraintValidity_Validated,
+							OnDelete:            ForeignKeyReference_NO_ACTION,
+							OnUpdate:            ForeignKeyReference_NO_ACTION,
+							Match:               ForeignKeyReference_SIMPLE,
+						},
+					},
+				},
+			},
+			// Our referenced table is already upgraded.
+			referenced: oldFormatUpgradedPair{
+				oldFormatWasAlreadyUpgraded: true,
+				oldFormat: TableDescriptor{
+					ID:      2,
+					Columns: []ColumnDescriptor{{ID: 2}},
+					PrimaryIndex: IndexDescriptor{
+						ColumnIDs: ColumnIDs{2},
+						ID:        2,
+					},
+					InboundFKs: []ForeignKeyConstraint{
+						{
+							OriginTableID:       1,
+							OriginColumnIDs:     ColumnIDs{1},
+							ReferencedTableID:   2,
+							ReferencedColumnIDs: ColumnIDs{2},
+							Name:                "foo",
+							Validity:            ConstraintValidity_Validated,
+							OnDelete:            ForeignKeyReference_NO_ACTION,
+							OnUpdate:            ForeignKeyReference_NO_ACTION,
+							Match:               ForeignKeyReference_SIMPLE,
+							// These are set manually because we're simulating what would
+							// happen when we see an upgraded on-disk TD, which for the
+							// duration of 19.2 will always have these fields set.
+							LegacyOriginIndex:     1,
+							LegacyReferencedIndex: 2,
+						},
+					},
+				},
+			},
+		},
 	}
 
 	// Set the self-referencing test case's referenced tables to the origin tables
@@ -1690,7 +1854,13 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 		//
 		// Additionally verify that downgrading on a cluster version that's
 		// sufficiently new is a no-op.
-		for i, pair := range tables {
+		for i := range tables {
+			if tables[i].oldFormatWasAlreadyUpgraded {
+				// If a test case has this flag set, it expects old format and the
+				// expected result to be identical.
+				tables[i].expectedUpgraded = *protoutil.Clone(&tables[i].oldFormat).(*TableDescriptor)
+			}
+			pair := tables[i]
 			name := "origin"
 			if i == 1 {
 				name = "referenced"
@@ -1701,8 +1871,17 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !wasUpgraded {
-					t.Fatalf("expected proto to be upgraded")
+				if pair.oldFormatWasAlreadyUpgraded {
+					// In this case, we expect the descriptor to *not* have been upgraded.
+					// This could have been done with a more concise boolean, but it would
+					// have been not very readable.
+					if wasUpgraded {
+						t.Fatalf("expected proto to not be upgraded")
+					}
+				} else {
+					if !wasUpgraded {
+						t.Fatalf("expected proto to be upgraded")
+					}
 				}
 
 				// The upgraded proto will also have a copy of the old foreign key
@@ -1719,8 +1898,16 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 					pair.expectedUpgraded.InboundFKs[i].LegacyReferencedIndex = upgraded.InboundFKs[i].LegacyReferencedIndex
 				}
 				if !reflect.DeepEqual(upgraded, &pair.expectedUpgraded) {
-					t.Fatalf("upgrade didn't match original %s %s", proto.MarshalTextString(upgraded),
-						proto.MarshalTextString(&pair.expectedUpgraded))
+					diff := difflib.UnifiedDiff{
+						A:       difflib.SplitLines(proto.MarshalTextString(upgraded)),
+						B:       difflib.SplitLines(proto.MarshalTextString(&pair.expectedUpgraded)),
+						Context: 100,
+					}
+					text, err := difflib.GetUnifiedDiffString(diff)
+					if err != nil {
+						t.Fatalf("upgrade didn't match original, failed to make diff i%s", err)
+					}
+					t.Fatalf("upgrade didn't match original. diff:\n%s", text)
 				}
 				for i := range upgraded.OutboundFKs {
 					pair.expectedUpgraded.OutboundFKs[i].LegacyUpgradedFromOriginReference = ForeignKeyReference{}
@@ -1733,20 +1920,27 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 					pair.expectedUpgraded.InboundFKs[i].LegacyReferencedIndex = 0
 				}
 
-				wasDowngraded, downgraded, err := upgraded.maybeDowngradeForeignKeyRepresentation(ctx, mixedVersionSettings)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !wasDowngraded {
-					t.Fatalf("expected proto to be downgraded")
+				if !pair.oldFormatWasAlreadyUpgraded {
+					// Check that the upgraded table descriptor properly downgrades. We
+					// dont perform this check in test cases that start with a pre-upgraded
+					// table descriptor, since we'll never be in a situation where we're
+					// trying to downgrade something that we read from disk that was already
+					// upgraded.
+					wasDowngraded, downgraded, err := upgraded.maybeDowngradeForeignKeyRepresentation(ctx, mixedVersionSettings)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !wasDowngraded {
+						t.Fatalf("expected proto to be downgraded")
+					}
+
+					if !reflect.DeepEqual(downgraded, &pair.oldFormat) {
+						t.Fatalf("downgrade didn't match original %s %s", proto.MarshalTextString(downgraded),
+							proto.MarshalTextString(&pair.oldFormat))
+					}
 				}
 
-				if !reflect.DeepEqual(downgraded, &pair.oldFormat) {
-					t.Fatalf("downgrade didn't match original %s %s", proto.MarshalTextString(downgraded),
-						proto.MarshalTextString(&pair.oldFormat))
-				}
-
-				wasDowngraded, _, err = upgraded.maybeDowngradeForeignKeyRepresentation(ctx, newVersionSettings)
+				wasDowngraded, _, err := upgraded.maybeDowngradeForeignKeyRepresentation(ctx, newVersionSettings)
 				if err != nil {
 					t.Fatal(err)
 				}
