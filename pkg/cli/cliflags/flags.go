@@ -612,6 +612,7 @@ Also, if you use equal signs in the file path to a store, you must use the
 		Description: `
 The Size to fill Store upto(using a ballast file):
 Negative value means denotes amount of space that should be left after filling the disk.
+If the Size is left unspecified, it defaults to 1GB.
 <PRE>
 
   --size=20GiB
