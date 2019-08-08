@@ -411,7 +411,7 @@ func importPlanHook(
 
 			// Validate target columns.
 			var intoCols []string
-			var isTargetCol = make(map[string]bool, len(importStmt.IntoCols))
+			var isTargetCol = make(map[string]bool)
 			for _, name := range importStmt.IntoCols {
 				var err error
 				if _, err = found.FindActiveColumnByName(name.String()); err != nil {
@@ -430,7 +430,7 @@ func importPlanHook(
 					return errors.Errorf("cannot IMPORT INTO a table with a DEFAULT expression for any of its columns")
 				}
 
-				if !isTargetCol[col.Name] && !col.IsNullable() {
+				if len(isTargetCol) != 0 && !isTargetCol[col.Name] && !col.IsNullable() {
 					return errors.Errorf("all non-target columns in IMPORT INTO must be nullable")
 				}
 			}
