@@ -847,7 +847,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 // TableDescriptor object that is the downgraded descriptor. The receiver is not
 // modified in either case.
 func (desc *TableDescriptor) maybeDowngradeForeignKeyRepresentation(
-	ctx context.Context, protoGetter protoGetter, clusterSettings *cluster.Settings,
+	ctx context.Context, clusterSettings *cluster.Settings,
 ) (bool, *TableDescriptor, error) {
 	downgradeUnnecessary := clusterSettings.Version.IsActive(cluster.VersionTopLevelForeignKeys)
 	if downgradeUnnecessary {
@@ -855,18 +855,14 @@ func (desc *TableDescriptor) maybeDowngradeForeignKeyRepresentation(
 	}
 	descCopy := protoutil.Clone(desc).(*TableDescriptor)
 	changed := false
-	otherTables := make(map[ID]*TableDescriptor)
 
 	// No need to process mutations, since only descriptors written on a 19.2
 	// cluster (after finalizing the upgrade) have foreign key mutations.
 	for _, fk := range descCopy.OutboundFKs {
-		if _, ok := otherTables[fk.ReferencedTableID]; !ok {
-			tbl, err := GetTableDescFromID(ctx, protoGetter, fk.ReferencedTableID)
-			if err != nil {
-				return false, nil, err
-			}
-			otherTables[fk.ReferencedTableID] = tbl
-		}
+		// If this foreign key was just added to the descriptor (since the last time
+		// it was read from disk), the Legacy* fields should have been populated
+		// to ensure compatibility.
+		// TODO(lucy): Do this in a follow-up PR.
 		ref := ForeignKeyReference{
 			Table:           fk.ReferencedTableID,
 			Index:           fk.LegacyReferencedIndex,
@@ -894,6 +890,9 @@ func (desc *TableDescriptor) maybeDowngradeForeignKeyRepresentation(
 	descCopy.OutboundFKs = nil
 
 	for _, fk := range descCopy.InboundFKs {
+		// If this foreign key was just added to the descriptor (since the last time
+		// it was read from disk), the Legacy* fields should have been populated
+		// to ensure compatibility.
 		backref := ForeignKeyReference{
 			Table: fk.OriginTableID,
 			Index: fk.LegacyOriginIndex,
