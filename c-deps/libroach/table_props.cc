@@ -19,6 +19,7 @@ namespace cockroach {
 
 namespace {
 
+// This is re-implemented in sst_writer.go and should be kept in sync.
 class TimeBoundTblPropCollector : public rocksdb::TablePropertiesCollector {
  public:
   const char* Name() const override { return "TimeBoundTblPropCollector"; }
