@@ -633,6 +633,10 @@ type importResumer struct {
 	settings       *cluster.Settings
 	res            roachpb.BulkOpSummary
 	statsRefresher *stats.Refresher
+
+	testingKnobs struct {
+		forceFailure bool
+	}
 }
 
 // Prepares descriptors for newly created tables being imported into.
@@ -899,6 +903,10 @@ func (r *importResumer) Resume(
 	if err != nil {
 		return err
 	}
+	if r.testingKnobs.forceFailure {
+		return errors.New("testing injected failure")
+	}
+
 	r.res = res
 	r.statsRefresher = p.ExecCfg().StatsRefresher
 	return nil
