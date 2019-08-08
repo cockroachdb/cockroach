@@ -11,9 +11,9 @@
 // {{/*
 // +build execgen_template
 //
-// This file is the execgen template for distinct.eg.go. It's formatted in a
-// special way, so it's both valid Go and a valid text/template input. This
-// permits editing this file with editor support.
+// This file is the execgen template for any_not_null_agg.eg.go. It's formatted
+// in a special way, so it's both valid Go and a valid text/template input.
+// This permits editing this file with editor support.
 //
 // */}}
 
@@ -21,8 +21,8 @@ package exec
 
 import (
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/pkg/errors"
 )

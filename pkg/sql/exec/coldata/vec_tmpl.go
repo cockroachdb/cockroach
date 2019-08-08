@@ -23,7 +23,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 

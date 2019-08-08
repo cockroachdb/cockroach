@@ -14,6 +14,7 @@ import (
 	"io"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -61,5 +62,5 @@ func genOverloadsTestUtils(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genOverloadsTestUtils, "overloads_test_utils.eg.go")
+	execgen.RegisterGenerator(genOverloadsTestUtils, "overloads_test_utils.eg.go")
 }

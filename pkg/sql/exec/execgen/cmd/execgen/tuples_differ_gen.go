@@ -17,6 +17,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -48,5 +49,5 @@ func genTuplesDiffer(wr io.Writer) error {
 	return tmpl.Execute(wr, comparisonOpToOverloads[tree.NE])
 }
 func init() {
-	registerGenerator(genTuplesDiffer, "tuples_differ.eg.go")
+	execgen.RegisterGenerator(genTuplesDiffer, "tuples_differ.eg.go")
 }

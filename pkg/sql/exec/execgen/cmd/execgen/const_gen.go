@@ -16,6 +16,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -43,5 +44,5 @@ func genConstOps(wr io.Writer) error {
 	return tmpl.Execute(wr, types.AllTypes)
 }
 func init() {
-	registerGenerator(genConstOps, "const.eg.go")
+	execgen.RegisterGenerator(genConstOps, "const.eg.go")
 }

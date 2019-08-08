@@ -17,6 +17,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -54,5 +55,5 @@ func genDistinctOps(wr io.Writer) error {
 	return tmpl.Execute(wr, comparisonOpToOverloads[tree.NE])
 }
 func init() {
-	registerGenerator(genDistinctOps, "distinct.eg.go")
+	execgen.RegisterGenerator(genDistinctOps, "distinct.eg.go")
 }

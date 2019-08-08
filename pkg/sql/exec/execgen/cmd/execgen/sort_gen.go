@@ -17,6 +17,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -92,8 +93,8 @@ func genQuickSortOps(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genSortOps, "sort.eg.go")
-	registerGenerator(genQuickSortOps, "quicksort.eg.go")
+	execgen.RegisterGenerator(genSortOps, "sort.eg.go")
+	execgen.RegisterGenerator(genQuickSortOps, "quicksort.eg.go")
 	typesToSortOverloads = make(map[types.T]map[bool]sortOverloads)
 	for _, o := range comparisonOpToOverloads[tree.LT] {
 		typesToSortOverloads[o.LTyp] = make(map[bool]sortOverloads)

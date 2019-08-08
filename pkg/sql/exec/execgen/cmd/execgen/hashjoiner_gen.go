@@ -16,6 +16,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -84,5 +85,5 @@ func genHashJoiner(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genHashJoiner, "hashjoiner.eg.go")
+	execgen.RegisterGenerator(genHashJoiner, "hashjoiner.eg.go")
 }

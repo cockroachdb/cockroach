@@ -16,6 +16,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -209,5 +210,5 @@ func genMergeJoinOps(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genMergeJoinOps, "mergejoiner.eg.go")
+	execgen.RegisterGenerator(genMergeJoinOps, "mergejoiner.eg.go")
 }

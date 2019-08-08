@@ -16,6 +16,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -51,5 +52,5 @@ func genSelectIn(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genSelectIn, "select_in.eg.go")
+	execgen.RegisterGenerator(genSelectIn, "select_in.eg.go")
 }

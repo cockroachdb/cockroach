@@ -16,6 +16,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -103,5 +104,5 @@ func genRowsToVec(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genRowsToVec, "rowstovec.eg.go")
+	execgen.RegisterGenerator(genRowsToVec, "rowstovec.eg.go")
 }

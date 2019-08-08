@@ -15,6 +15,8 @@ import (
 	"io/ioutil"
 	"strings"
 	"text/template"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 )
 
 type rowNumberTmplInfo struct {
@@ -46,5 +48,5 @@ func genRowNumberOp(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genRowNumberOp, "row_number.eg.go")
+	execgen.RegisterGenerator(genRowNumberOp, "row_number.eg.go")
 }

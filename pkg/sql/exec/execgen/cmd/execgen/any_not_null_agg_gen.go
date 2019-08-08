@@ -17,6 +17,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -52,5 +53,5 @@ func genAnyNotNullAgg(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genAnyNotNullAgg, "any_not_null_agg.eg.go")
+	execgen.RegisterGenerator(genAnyNotNullAgg, "any_not_null_agg.eg.go")
 }

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package main
+package execgen
 
 import (
 	"bytes"
@@ -50,7 +50,8 @@ type generator func(io.Writer) error
 
 var generators = make(map[string]generator)
 
-func registerGenerator(g generator, filename string) {
+// RegisterGenerator registers generator g with execgen.
+func RegisterGenerator(g generator, filename string) {
 	if _, ok := generators[filename]; ok {
 		panic(fmt.Sprintf("%s generator already registered", filename))
 	}

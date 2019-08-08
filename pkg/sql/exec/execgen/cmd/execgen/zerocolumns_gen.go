@@ -16,6 +16,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -37,5 +38,5 @@ func genZeroColumns(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genZeroColumns, "zerocolumns.eg.go")
+	execgen.RegisterGenerator(genZeroColumns, "zerocolumns.eg.go")
 }

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -81,5 +82,5 @@ func genMinMaxAgg(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genMinMaxAgg, "min_max_agg.eg.go")
+	execgen.RegisterGenerator(genMinMaxAgg, "min_max_agg.eg.go")
 }

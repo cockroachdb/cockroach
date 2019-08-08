@@ -18,6 +18,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -103,5 +104,5 @@ func genAvgAgg(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genAvgAgg, "avg_agg.eg.go")
+	execgen.RegisterGenerator(genAvgAgg, "avg_agg.eg.go")
 }

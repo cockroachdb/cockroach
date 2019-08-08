@@ -17,6 +17,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -48,5 +49,5 @@ func genVecComparators(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genVecComparators, "vec_comparators.eg.go")
+	execgen.RegisterGenerator(genVecComparators, "vec_comparators.eg.go")
 }

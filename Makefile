@@ -1588,7 +1588,6 @@ testbins = \
   bin/logictestccl
 
 # Mappings for binaries that don't live in pkg/cmd.
-execgen-package = ./pkg/sql/exec/execgen/cmd/execgen
 langgen-package = ./pkg/sql/opt/optgen/cmd/langgen
 optgen-package = ./pkg/sql/opt/optgen/cmd/optgen
 logictest-package = ./pkg/sql/logictest

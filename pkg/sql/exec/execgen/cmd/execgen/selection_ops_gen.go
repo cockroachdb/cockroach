@@ -14,6 +14,7 @@ import (
 	"io"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -263,5 +264,5 @@ func genSelectionOps(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genSelectionOps, "selection_ops.eg.go")
+	execgen.RegisterGenerator(genSelectionOps, "selection_ops.eg.go")
 }

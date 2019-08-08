@@ -16,6 +16,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -42,5 +43,5 @@ func genColvec(wr io.Writer) error {
 	return tmpl.Execute(wr, comparisonOpToOverloads[tree.NE])
 }
 func init() {
-	registerGenerator(genColvec, "vec.eg.go")
+	execgen.RegisterGenerator(genColvec, "vec.eg.go")
 }

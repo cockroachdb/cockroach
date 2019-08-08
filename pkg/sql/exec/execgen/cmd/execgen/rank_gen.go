@@ -17,6 +17,8 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/execgen"
 )
 
 type rankTmplInfo struct {
@@ -89,5 +91,5 @@ func genRankOps(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genRankOps, "rank.eg.go")
+	execgen.RegisterGenerator(genRankOps, "rank.eg.go")
 }
