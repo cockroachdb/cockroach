@@ -104,7 +104,8 @@ type Factory interface {
 	//
 	// memo, rightProps, and right are the memo, required physical properties, and
 	// RelExpr of the right side of the join that will be repeatedly modified,
-	// re-planned and executed for every row from the left side.
+	// re-planned and executed for every row from the left side. The rightProps
+	// always includes a presentation.
 	//
 	// fakeRight is a pre-planned node that is the right side of the join with
 	// all outer columns replaced by NULL. The physical properties of this node
