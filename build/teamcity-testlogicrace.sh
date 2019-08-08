@@ -25,7 +25,7 @@ build/builder.sh \
 	stdbuf -oL -eL \
 	make testrace \
 	PKG=./pkg/sql/logictest \
-	TESTS='^TestLogic/local-opt$$' \
+	TESTS='^TestLogic/local$$' \
 	TESTFLAGS='-optimizer-cost-perturbation=0.9 -v' \
 	ENABLE_ROCKSDB_ASSERTIONS=1 \
 	2>&1 \
@@ -48,7 +48,7 @@ for file in $LOGICTESTS; do
 	        stdbuf -oL -eL \
 	        make testrace \
 	        PKG=./pkg/sql/logictest \
-	        TESTS='^TestLogic/local-opt/'${file}'$$' \
+	        TESTS='^TestLogic/local/'${file}'$$' \
 	        TESTFLAGS='-disable-opt-rule-probability=0.5 -v' \
 	        ENABLE_ROCKSDB_ASSERTIONS=1 \
 	        2>&1 \

@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 # ------------------------------------------------------------------------------
 # Numeric References Tests.
 # These are put at the beginning of the file to ensure the numeric table

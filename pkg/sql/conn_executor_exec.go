@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -659,13 +658,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
 	distributePlan := false
-	// If we use the optimizer and we are in "local" mode, don't try to
-	// distribute.
-	if ex.sessionData.OptimizerMode != sessiondata.OptimizerLocal {
-		planner.prepareForDistSQLSupportCheck()
-		distributePlan = shouldDistributePlan(
-			ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.plan)
-	}
+	planner.prepareForDistSQLSupportCheck()
+	distributePlan = shouldDistributePlan(
+		ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.plan)
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan)
 
 	if ex.server.cfg.TestingKnobs.BeforeExecute != nil {
@@ -727,25 +722,16 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 	// in error cases.
 	planner.curPlan = planTop{AST: stmt.AST}
 
-	if optMode := ex.sessionData.OptimizerMode; optMode != sessiondata.OptimizerOff {
-		log.VEvent(ctx, 2, "generating optimizer plan")
-		var result *planTop
-		var err error
-		result, err = planner.makeOptimizerPlan(ctx)
-		if err != nil {
-			log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
-			return err
-		}
-		planner.curPlan = *result
-		return nil
+	log.VEvent(ctx, 2, "generating optimizer plan")
+	var result *planTop
+	var err error
+	result, err = planner.makeOptimizerPlan(ctx)
+	if err != nil {
+		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
+		return err
 	}
-
-	log.VEvent(ctx, 2, "optimizer disabled")
-	// Use the heuristic planner.
-	optFlags := planner.curPlan.flags
-	err := planner.makePlan(ctx)
-	planner.curPlan.flags |= optFlags
-	return err
+	planner.curPlan = *result
+	return nil
 }
 
 // saveLogicalPlanDescription returns whether we should save this as a sample logical plan
