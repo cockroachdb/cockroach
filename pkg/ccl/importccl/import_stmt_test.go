@@ -1515,7 +1515,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// Verify a failed IMPORT INTO won't prevent a subsequent IMPORT INTO.
 	t.Run("import-into-checkpoint-leftover", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE checkpoint; USE checkpoint")
-		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -1528,12 +1528,12 @@ func TestImportIntoCSV(t *testing.T) {
 		forceFailure = true
 		sqlDB.ExpectErr(
 			t, `testing injected failure`,
-			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]),
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[1]),
 		)
 		forceFailure = false
 
 		// Expect it to succeed on re-attempt.
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]))
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[1]))
 	})
 
 	// Tests for user specified target columns in IMPORT INTO statements.
