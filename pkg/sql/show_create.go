@@ -201,21 +201,29 @@ func ShowCreateTable(
 			}
 			f.WriteString(foreignKey.String())
 		}
-		if idx.ID != desc.PrimaryIndex.ID {
-			// Showing the primary index is handled above.
-			f.WriteString(",\n\t")
-			f.WriteString(idx.SQLString(&sqlbase.AnonymousTable))
-			// Showing the INTERLEAVE and PARTITION BY for the primary index are
-			// handled last.
-			if err := showCreateInterleave(ctx, idx, &f.Buffer, dbPrefix, lCtx); err != nil {
-				return "", err
+		// Only add indexes to the create_statement column, and not to the
+		// create_nofks column if they are not associated with an INTERLEAVE
+		// statement.
+			if idx.ID != desc.PrimaryIndex.ID && (len(idx.Interleave.Ancestors) == 0 || ignoreFKs != IgnoreFKs) {
+				// Showing the primary index is handled above.
+				f.WriteString(",\n\t")
+				f.WriteString(idx.SQLString(&sqlbase.AnonymousTable))
+				// Showing the INTERLEAVE and PARTITION BY for the primary index are
+				// handled last.
+
+				// Add interleave indexes only to the create_table columns, and not the
+				// create_nofks column.
+				if len(idx.Interleave.Ancestors) == 0 || ignoreFKs != IgnoreFKs {
+					if err := showCreateInterleave(ctx, idx, &f.Buffer, dbPrefix, lCtx); err != nil {
+						return "", err
+					}
+				}
+				if err := ShowCreatePartitioning(
+					a, desc, idx, &idx.Partitioning, &f.Buffer, 1 /* indent */, 0, /* colOffset */
+				); err != nil {
+					return "", err
+				}
 			}
-			if err := ShowCreatePartitioning(
-				a, desc, idx, &idx.Partitioning, &f.Buffer, 1 /* indent */, 0, /* colOffset */
-			); err != nil {
-				return "", err
-			}
-		}
 	}
 
 	for _, fam := range desc.Families {
