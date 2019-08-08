@@ -201,14 +201,28 @@ func ShowCreateTable(
 			}
 			f.WriteString(foreignKey.String())
 		}
-		if idx.ID != desc.PrimaryIndex.ID {
+		// Only add indexes to the create_statement column, and not to the
+		// create_nofks column if they are not associated with an INTERLEAVE
+		// statement.
+		includeInCreateStatement := len(idx.Interleave.Ancestors) == 0
+		if ignoreFKs != IgnoreFKs {
+			// If we choose not to ignore the Foreign Keys, then we do want to
+			// include any foreign key statements within the create statement
+			includeInCreateStatement = true
+		}
+		if idx.ID != desc.PrimaryIndex.ID && includeInCreateStatement {
 			// Showing the primary index is handled above.
 			f.WriteString(",\n\t")
 			f.WriteString(idx.SQLString(&sqlbase.AnonymousTable))
 			// Showing the INTERLEAVE and PARTITION BY for the primary index are
 			// handled last.
-			if err := showCreateInterleave(ctx, idx, &f.Buffer, dbPrefix, lCtx); err != nil {
-				return "", err
+
+			// Add interleave or Foreign Key indexes only to the create_table columns,
+			// and not the create_nofks column.
+			if includeInCreateStatement {
+				if err := showCreateInterleave(ctx, idx, &f.Buffer, dbPrefix, lCtx); err != nil {
+					return "", err
+				}
 			}
 			if err := ShowCreatePartitioning(
 				a, desc, idx, &idx.Partitioning, &f.Buffer, 1 /* indent */, 0, /* colOffset */
@@ -218,6 +232,42 @@ func ShowCreateTable(
 		}
 	}
 
+	// Create the FAMILY and CONSTRAINTs of the CREATE statement
+	makeFamily(desc, f)
+	makeConstraint(desc, f)
+
+	if err := showCreateInterleave(ctx, &desc.PrimaryIndex, &f.Buffer, dbPrefix, lCtx); err != nil {
+		return "", err
+	}
+	if err := ShowCreatePartitioning(
+		a, desc, &desc.PrimaryIndex, &desc.PrimaryIndex.Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
+	); err != nil {
+		return "", err
+	}
+
+	return f.CloseAndGetString(), nil
+}
+
+// makeConstraint creates the CONSTRAINT statements for a CREATE statement,
+// writing them to tree.FmtCtx f
+func makeConstraint(desc *sqlbase.TableDescriptor, f *tree.FmtCtx) {
+	for _, e := range desc.AllActiveAndInactiveChecks() {
+		f.WriteString(",\n\t")
+		if len(e.Name) > 0 {
+			f.WriteString("CONSTRAINT ")
+			formatQuoteNames(&f.Buffer, e.Name)
+			f.WriteString(" ")
+		}
+		f.WriteString("CHECK (")
+		f.WriteString(e.Expr)
+		f.WriteString(")")
+	}
+	f.WriteString("\n)")
+}
+
+// makeFamily creates the FAMILY statements for a CREATE statement, writing them
+// to tree.FmtCtx f
+func makeFamily(desc *sqlbase.TableDescriptor, f *tree.FmtCtx) {
 	for _, fam := range desc.Families {
 		activeColumnNames := make([]string, 0, len(fam.ColumnNames))
 		for i, colID := range fam.ColumnIDs {
@@ -231,31 +281,6 @@ func ShowCreateTable(
 		formatQuoteNames(&f.Buffer, activeColumnNames...)
 		f.WriteString(")")
 	}
-
-	for _, e := range desc.AllActiveAndInactiveChecks() {
-		f.WriteString(",\n\t")
-		if len(e.Name) > 0 {
-			f.WriteString("CONSTRAINT ")
-			formatQuoteNames(&f.Buffer, e.Name)
-			f.WriteString(" ")
-		}
-		f.WriteString("CHECK (")
-		f.WriteString(e.Expr)
-		f.WriteString(")")
-	}
-
-	f.WriteString("\n)")
-
-	if err := showCreateInterleave(ctx, &desc.PrimaryIndex, &f.Buffer, dbPrefix, lCtx); err != nil {
-		return "", err
-	}
-	if err := ShowCreatePartitioning(
-		a, desc, &desc.PrimaryIndex, &desc.PrimaryIndex.Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
-	); err != nil {
-		return "", err
-	}
-
-	return f.CloseAndGetString(), nil
 }
 
 // formatQuoteNames quotes and adds commas between names.

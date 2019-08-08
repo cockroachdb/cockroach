@@ -1194,32 +1194,8 @@ CREATE TABLE crdb_internal.create_statements (
 						return err
 					}
 					allIdx := append(table.Indexes, table.PrimaryIndex)
-					for i := range allIdx {
-						idx := &allIdx[i]
-						if fk := &idx.ForeignKey; fk.IsSet() {
-							f := tree.NewFmtCtx(tree.FmtSimple)
-							f.WriteString("ALTER TABLE ")
-							f.FormatNode(tn)
-							f.WriteString(" ADD CONSTRAINT ")
-							f.FormatNameP(&fk.Name)
-							f.WriteByte(' ')
-							if err := printForeignKeyConstraint(ctx, &f.Buffer, contextName, idx, lCtx); err != nil {
-								return err
-							}
-							if err := alterStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
-								return err
-							}
-
-							f = tree.NewFmtCtx(tree.FmtSimple)
-							f.WriteString("ALTER TABLE ")
-							f.FormatNode(tn)
-							f.WriteString(" VALIDATE CONSTRAINT ")
-							f.FormatNameP(&fk.Name)
-
-							if err := validateStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
-								return err
-							}
-						}
+					if err := makeCreateStatement(ctx, tn, contextName, lCtx, allIdx, table, alterStmts, validateStmts); err != nil {
+						return err
 					}
 					stmt, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, IncludeFKs)
 				}
@@ -1257,6 +1233,113 @@ CREATE TABLE crdb_internal.create_statements (
 				)
 			})
 	},
+}
+
+func makeCreateStatement(
+	ctx context.Context,
+	tn *tree.Name,
+	contextName string,
+	lCtx tableLookupFn,
+	allIdx []sqlbase.IndexDescriptor,
+	table *sqlbase.TableDescriptor,
+	alterStmts *tree.DArray,
+	validateStmts *tree.DArray,
+) error {
+	for i := range allIdx {
+		idx := &allIdx[i]
+		if fk := &idx.ForeignKey; fk.IsSet() {
+			f := tree.NewFmtCtx(tree.FmtSimple)
+			// Create ALTER TABLE commands for Foreign Key Constraints.
+			f.WriteString("ALTER TABLE ")
+			f.FormatNode(tn)
+			f.WriteString(" ADD CONSTRAINT ")
+			f.FormatNameP(&fk.Name)
+			f.WriteByte(' ')
+			if err := printForeignKeyConstraint(ctx, &f.Buffer, contextName, idx, lCtx); err != nil {
+				return err
+			}
+			if err := alterStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
+				return err
+			}
+
+			// Validate the Foreign Key Constraints
+			f = tree.NewFmtCtx(tree.FmtSimple)
+			f.WriteString("ALTER TABLE ")
+			f.FormatNode(tn)
+			f.WriteString(" VALIDATE CONSTRAINT ")
+			f.FormatNameP(&fk.Name)
+
+			if err := validateStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
+				return err
+			}
+		}
+		// Create CREATE INDEX commands for INTERLEAVE tables. These commands
+		// are included in the ALTER TABLE statements.
+		if len(idx.Interleave.Ancestors) > 0 {
+			f := tree.NewFmtCtx(tree.FmtSimple)
+			intl := idx.Interleave
+			// Get the parent table information.
+			parentTableID := intl.Ancestors[len(intl.Ancestors)-1].TableID
+			var parentName, tableName tree.TableName
+			if lCtx != nil {
+				parentTable, err := lCtx.getTableByID(parentTableID)
+				if err != nil {
+					return err
+				}
+				parentDbDesc, err := lCtx.getDatabaseByID(parentTable.ParentID)
+				if err != nil {
+					return err
+				}
+				tableDbDesc, err := lCtx.getDatabaseByID(table.ParentID)
+				if err != nil {
+					return err
+				}
+				parentName = tree.MakeTableName(tree.Name(parentDbDesc.Name), tree.Name(parentTable.Name))
+				tableName = tree.MakeTableName(tree.Name(tableDbDesc.Name), tree.Name(table.Name))
+				parentName.ExplicitSchema = parentDbDesc.Name != contextName
+				tableName.ExplicitSchema = tableDbDesc.Name != contextName
+			} else {
+				parentName = tree.MakeTableName(tree.Name(""), tree.Name(fmt.Sprintf("[%d as parent]", parentTableID)))
+				tableName = tree.MakeTableName(tree.Name(""), tree.Name(fmt.Sprintf("[%d as parent]", table.ID)))
+				parentName.ExplicitCatalog = false
+				parentName.ExplicitSchema = false
+				tableName.ExplicitCatalog = false
+				tableName.ExplicitSchema = false
+			}
+			var sharedPrefixLen int
+			for _, ancestor := range intl.Ancestors {
+				sharedPrefixLen += int(ancestor.SharedPrefixLen)
+			}
+			// Write the CREATE INDEX statements.
+			makeCreateWithInterleave(f, idx, tableName, parentName, sharedPrefixLen)
+			if err := alterStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func makeCreateWithInterleave(
+	f *tree.FmtCtx,
+	idx *sqlbase.IndexDescriptor,
+	tableName tree.TableName,
+	parentName tree.TableName,
+	sharedPrefixLen int,
+) {
+	f.WriteString("CREATE ")
+	f.WriteString(idx.SQLString(&tableName))
+	f.WriteString(" INTERLEAVE IN PARENT ")
+	parentName.Format(f)
+	f.WriteString(" (")
+	// Get all of the columns and write them.
+	comma := ""
+	for _, name := range idx.ColumnNames[:sharedPrefixLen] {
+		f.WriteString(comma)
+		f.FormatNameP(&name)
+		comma = ", "
+	}
+	f.WriteString(")")
 }
 
 // crdbInternalTableColumnsTable exposes the column descriptors.
