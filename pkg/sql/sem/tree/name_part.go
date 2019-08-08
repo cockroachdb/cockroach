@@ -306,7 +306,7 @@ func (u *UnresolvedObjectName) String() string { return AsString(u) }
 // would only figure that out during name resolution. This method is temporary,
 // while we change all the code paths to only use TableName after resolution.
 func (u *UnresolvedObjectName) ToTableName() TableName {
-	return TableName{tblName{
+	return TableName{TblName{
 		TableName: Name(u.Parts[0]),
 		TableNamePrefix: TableNamePrefix{
 			SchemaName:      Name(u.Parts[1]),

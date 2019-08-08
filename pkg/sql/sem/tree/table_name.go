@@ -23,10 +23,10 @@ package tree
 // and can be default-constructed but cannot be instantiated with a
 // non-default value; this encourages the use of the constructors below.
 type TableName struct {
-	tblName
+	TblName
 }
 
-type tblName struct {
+type TblName struct {
 	// TableName is the unqualified name for the object
 	// (table/view/sequence/function/type).
 	TableName Name
@@ -134,7 +134,7 @@ func (*TableName) tableExpr() {}
 
 // MakeTableName creates a new table name qualified with just a schema.
 func MakeTableName(db, tbl Name) TableName {
-	return TableName{tblName{
+	return TableName{TblName{
 		TableName: tbl,
 		TableNamePrefix: TableNamePrefix{
 			CatalogName:     db,
@@ -154,7 +154,7 @@ func NewTableName(db, tbl Name) *TableName {
 
 // MakeTableNameWithSchema creates a new fully qualified table name.
 func MakeTableNameWithSchema(db, schema, tbl Name) TableName {
-	return TableName{tblName{
+	return TableName{TblName{
 		TableName: tbl,
 		TableNamePrefix: TableNamePrefix{
 			CatalogName:     db,
@@ -167,7 +167,7 @@ func MakeTableNameWithSchema(db, schema, tbl Name) TableName {
 
 // MakeUnqualifiedTableName creates a new base table name.
 func MakeUnqualifiedTableName(tbl Name) TableName {
-	return TableName{tblName{
+	return TableName{TblName{
 		TableName: tbl,
 	}}
 }
@@ -179,7 +179,7 @@ func NewUnqualifiedTableName(tbl Name) *TableName {
 }
 
 func makeTableNameFromUnresolvedName(n *UnresolvedName) TableName {
-	return TableName{tblName{
+	return TableName{TblName{
 		TableName:       Name(n.Parts[0]),
 		TableNamePrefix: makeTableNamePrefixFromUnresolvedName(n),
 	}}

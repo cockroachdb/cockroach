@@ -1,0 +1,63 @@
+# Test the interleaving of indexes within tables
+
+sql
+CREATE DATABASE d;
+CREATE TABLE d.t1 (a INT, b INT, PRIMARY KEY (a));
+CREATE INDEX b_idx ON d.t1(a, b) INTERLEAVE IN PARENT d.t1 (a);
+----
+CREATE INDEX
+
+dump d t1
+----
+----
+CREATE TABLE t1 (
+	a INT8 NOT NULL,
+	b INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (a ASC),
+	FAMILY "primary" (a, b)
+);
+
+CREATE INDEX b_idx ON t1 (a ASC, b ASC) INTERLEAVE IN PARENT t1 (a);
+
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
+----
+----
+
+sql
+CREATE DATABASE e;
+CREATE TABLE e.t2 (a INT, b INT, PRIMARY KEY (a));
+CREATE TABLE e.t3 (a INT, b INT, PRIMARY KEY (a));
+CREATE INDEX b_idx ON e.t2(a, b) INTERLEAVE IN PARENT e.t3 (a);
+INSERT INTO e.t2 VALUES (1, 2);
+INSERT INTO e.t3 VALUES (3, 4);
+----
+INSERT 1
+
+dump e
+----
+----
+CREATE TABLE t3 (
+	a INT8 NOT NULL,
+	b INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (a ASC),
+	FAMILY "primary" (a, b)
+);
+
+CREATE TABLE t2 (
+	a INT8 NOT NULL,
+	b INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (a ASC),
+	FAMILY "primary" (a, b)
+);
+
+INSERT INTO t3 (a, b) VALUES
+	(3, 4);
+
+INSERT INTO t2 (a, b) VALUES
+	(1, 2);
+
+CREATE INDEX b_idx ON t2 (a ASC, b ASC) INTERLEAVE IN PARENT t3 (a);
+
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
+----
+----

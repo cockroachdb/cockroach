@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"reflect"
 	"testing"
 
@@ -2000,4 +2001,34 @@ func TestDefaultExprNil(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestSQLString(t *testing.T) {
+	colNames := []string{"derp", "foo"}
+	indexName := "idx"
+	tableName := tree.TableName{TblName: tree.TblName{TableName: "t1", TableNamePrefix:tree.TableNamePrefix{CatalogName: "d", SchemaName:"public", ExplicitCatalog:true, ExplicitSchema:false}}}
+	index := IndexDescriptor{Name: indexName,
+		ID:0x0,
+		Unique:false,
+		ColumnNames:colNames,
+		ColumnDirections:[]IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+		StoreColumnNames:[]string(nil),
+		ColumnIDs:[]ColumnID(nil),
+		ExtraColumnIDs:[]ColumnID(nil),
+		StoreColumnIDs:[]ColumnID(nil),
+		CompositeColumnIDs:[]ColumnID(nil),
+		ForeignKey:ForeignKeyReference{Table:0x0, Index:0x0, Name:"", Validity:0, SharedPrefixLen:0, OnDelete:0, OnUpdate:0, Match:0},
+		ReferencedBy:[]ForeignKeyReference(nil),
+		Interleave:InterleaveDescriptor{Ancestors:[]InterleaveDescriptor_Ancestor(nil)},
+		InterleavedBy:[]ForeignKeyReference(nil),
+		Partitioning:PartitioningDescriptor{NumColumns:0x0, List:[]PartitioningDescriptor_List(nil), Range:[]PartitioningDescriptor_Range(nil)},
+		Type:0}
+	expected := fmt.Sprintf("INDEX %s ON t1 (%s ASC, %s ASC)", indexName, colNames[0], colNames[1])
+	if got := index.SQLString(&tableName); got != expected {
+		t.Errorf("Expected '%s', but got '%s'", expected, got)
+	}
+	expected = fmt.Sprintf("INDEX %s (%s ASC, %s ASC)", indexName, colNames[0], colNames[1])
+	if got := index.SQLString(&AnonymousTable); got != expected {
+		t.Errorf("Expected '%s', but got '%s'", expected, got)
+	}
 }

@@ -1198,6 +1198,7 @@ CREATE TABLE crdb_internal.create_statements (
 						idx := &allIdx[i]
 						if fk := &idx.ForeignKey; fk.IsSet() {
 							f := tree.NewFmtCtx(tree.FmtSimple)
+							// Create ALTER TABLE commands for Foreign Key Constraints.
 							f.WriteString("ALTER TABLE ")
 							f.FormatNode(tn)
 							f.WriteString(" ADD CONSTRAINT ")
@@ -1210,6 +1211,7 @@ CREATE TABLE crdb_internal.create_statements (
 								return err
 							}
 
+							// Validate the Foreign Key Constraints
 							f = tree.NewFmtCtx(tree.FmtSimple)
 							f.WriteString("ALTER TABLE ")
 							f.FormatNode(tn)
@@ -1217,6 +1219,63 @@ CREATE TABLE crdb_internal.create_statements (
 							f.FormatNameP(&fk.Name)
 
 							if err := validateStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
+								return err
+							}
+						}
+						// Create CREATE INDEX commands for INTERLEAVE tables. These commands
+						// are included in the ALTER TABLE statements.
+						if len(idx.Interleave.Ancestors) > 0 {
+							f := tree.NewFmtCtx(tree.FmtSimple)
+							intl := idx.Interleave
+							// Get the parent table information.
+							parentTableID := intl.Ancestors[len(intl.Ancestors)-1].TableID
+							var parentName, tableName tree.TableName
+							if lCtx != nil {
+								parentTable, err := lCtx.getTableByID(parentTableID)
+								if err != nil {
+									return err
+								}
+								parentDbDesc, err := lCtx.getDatabaseByID(parentTable.ParentID)
+								if err != nil {
+									return err
+								}
+								tableDbDesc, err := lCtx.getDatabaseByID(table.ParentID)
+								if err != nil {
+									return err
+								}
+								parentName = tree.MakeTableName(tree.Name(parentDbDesc.Name), tree.Name(parentTable.Name))
+								tableName  = tree.MakeTableName(tree.Name(tableDbDesc.Name), tree.Name(table.Name))
+								parentName.ExplicitSchema = parentDbDesc.Name != contextName
+								tableName.ExplicitSchema = tableDbDesc.Name != contextName
+							} else {
+								parentName = tree.MakeTableName(tree.Name(""), tree.Name(fmt.Sprintf("[%d as parent]", parentTableID)))
+								tableName = tree.MakeTableName(tree.Name(""), tree.Name(fmt.Sprintf("[%d as parent]", table.ID)))
+								parentName.ExplicitCatalog = false
+								parentName.ExplicitSchema = false
+								tableName.ExplicitCatalog = false
+								tableName.ExplicitSchema = false
+							}
+							var sharedPrefixLen int
+							for _, ancestor := range intl.Ancestors {
+								sharedPrefixLen += int(ancestor.SharedPrefixLen)
+							}
+							// Write the CREATE INDEX statements.
+							f.WriteString("CREATE ")
+							f.WriteString(idx.SQLString(&tableName))
+							f.WriteString(" INTERLEAVE IN PARENT ")
+							fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+							parentName.Format(f)
+							f.WriteString(fmtCtx.CloseAndGetString())
+							f.WriteString(" (")
+							// Get all of the columns and write them.
+							for i, name := range idx.ColumnNames[:sharedPrefixLen] {
+								if i > 0 {
+									f.WriteString(", ")
+								}
+								f.FormatNameP(&name)
+							}
+							f.WriteString(")")
+							if err := alterStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
 								return err
 							}
 						}
