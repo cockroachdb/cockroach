@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -931,6 +932,32 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 		return nil
 	}
 
+	var revert []*sqlbase.TableDescriptor
+	for _, tbl := range details.Tables {
+		if !tbl.IsNew {
+			revert = append(revert, tbl.Desc)
+		}
+	}
+
+	// NB: if a revert fails it will abort the rest of this failure txn, which is
+	// also what brings tables back online. We _could_ change the error handling
+	// or just move the revert into Resume()'s error return path, however it isn't
+	// clear that just bringing a table back online with partially imported data
+	// that may or may not be partially reverted is actually a good idea. It seems
+	// better to do the revert here so that the table comes back if and only if,
+	// it was rolled back to its pre-IMPORT state, and instead provide a manual
+	// admin knob (e.g. ALTER TABLE REVERT TO SYSTEM TIME) if anything goes wrong.
+	if len(revert) > 0 {
+		// Sanity check Walltime so it doesn't become a TRUNCATE if there's a bug.
+		if details.Walltime == 0 {
+			return errors.Errorf("invalid pre-IMPORT time to rollback")
+		}
+		ts := hlc.Timestamp{WallTime: details.Walltime}.Prev()
+		if err := sql.RevertTables(ctx, txn.DB(), revert, ts, sql.RevertTableDefaultBatchSize); err != nil {
+			return errors.Wrap(err, "rolling back partially completed IMPORT")
+		}
+	}
+
 	b := txn.NewBatch()
 	for _, tbl := range details.Tables {
 		tableDesc := *tbl.Desc
@@ -947,11 +974,6 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 			b.CPut(sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.Name), nil, tableDesc.ID)
 		} else {
 			// IMPORT did not create this table, so we should not drop it.
-			// TODO(dt): consider trying to delete whatever was ingested before
-			// returning the table to public. Unfortunately the ingestion isn't
-			// transactional, so there is no clean way to just rollback our changes,
-			// but we could iterate by time to delete before returning to public.
-			// TODO(dt): re-validate any FKs?
 			tableDesc.Version++
 			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
 		}
