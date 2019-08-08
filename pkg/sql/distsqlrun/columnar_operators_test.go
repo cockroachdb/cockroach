@@ -36,8 +36,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 	nRows := 100
 	maxCols := 5
 	maxNum := 10
-	// TODO (yuzefovich): change nullProbability to non 0 value.
-	nullProbability := 0.0
+	nullProbability := 0.2
 	typs := make([]types.T, maxCols)
 	for i := range typs {
 		typs[i] = *types.Int
