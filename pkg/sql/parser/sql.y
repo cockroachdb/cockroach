@@ -604,6 +604,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> alter_database_stmt
 %type <tree.Statement> alter_user_stmt
 %type <tree.Statement> alter_range_stmt
+%type <tree.Statement> alter_partition_stmt
 
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
@@ -617,6 +618,9 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> alter_relocate_stmt
 %type <tree.Statement> alter_relocate_lease_stmt
 %type <tree.Statement> alter_zone_table_stmt
+
+// ALTER PARTITION
+%type <tree.Statement> alter_zone_partition_stmt
 
 // ALTER DATABASE
 %type <tree.Statement> alter_rename_database_stmt
@@ -1096,12 +1100,13 @@ alter_stmt:
 | ALTER error         // SHOW HELP: ALTER
 
 alter_ddl_stmt:
-  alter_table_stmt    // EXTEND WITH HELP: ALTER TABLE
-| alter_index_stmt    // EXTEND WITH HELP: ALTER INDEX
-| alter_view_stmt     // EXTEND WITH HELP: ALTER VIEW
-| alter_sequence_stmt // EXTEND WITH HELP: ALTER SEQUENCE
-| alter_database_stmt // EXTEND WITH HELP: ALTER DATABASE
-| alter_range_stmt    // EXTEND WITH HELP: ALTER RANGE
+  alter_table_stmt     // EXTEND WITH HELP: ALTER TABLE
+| alter_index_stmt     // EXTEND WITH HELP: ALTER INDEX
+| alter_view_stmt      // EXTEND WITH HELP: ALTER VIEW
+| alter_sequence_stmt  // EXTEND WITH HELP: ALTER SEQUENCE
+| alter_database_stmt  // EXTEND WITH HELP: ALTER DATABASE
+| alter_range_stmt     // EXTEND WITH HELP: ALTER RANGE
+| alter_partition_stmt // EXTEND WITH HELP: ALTER PARTITION
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -1129,7 +1134,6 @@ alter_ddl_stmt:
 //   ALTER TABLE ... PARTITION BY LIST ( <name...> ) ( <listspec> )
 //   ALTER TABLE ... PARTITION BY NOTHING
 //   ALTER TABLE ... CONFIGURE ZONE <zoneconfig>
-//   ALTER PARTITION ... OF TABLE ... CONFIGURE ZONE <zoneconfig>
 //
 // Column qualifiers:
 //   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
@@ -1156,7 +1160,26 @@ alter_table_stmt:
 // ALTER TABLE has its error help token here because the ALTER TABLE
 // prefix is spread over multiple non-terminals.
 | ALTER TABLE error     // SHOW HELP: ALTER TABLE
-| ALTER PARTITION error // SHOW HELP: ALTER TABLE
+
+// %Help: ALTER PARTITION - apply zone configurations to a partition
+// %Category: DDL
+// %Text:
+// ALTER PARTITION <name> <command>
+//
+// Commands:
+//   ALTER PARTITION ... OF TABLE ... CONFIGURE ZONE <zoneconfig>
+//   ALTER PARTITION ... OF INDEX ... CONFIGURE ZONE <zoneconfig>
+//
+// Zone configurations:
+//   DISCARD
+//   USING <var> = <expr> [, ...]
+//   USING <var> = COPY FROM PARENT [, ...]
+//   { TO | = } <expr>
+//
+// %SeeAlso: WEBDOCS/configure-zone.html
+alter_partition_stmt:
+  alter_zone_partition_stmt
+| ALTER PARTITION error // SHOW HELP: ALTER PARTITION
 
 // %Help: ALTER VIEW - change the definition of a view
 // %Category: DDL
@@ -1245,7 +1268,6 @@ alter_range_stmt:
 //   ALTER INDEX ... UNSPLIT AT <selectclause>
 //   ALTER INDEX ... UNSPLIT ALL
 //   ALTER INDEX ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
-//   ALTER PARTITION ... OF INDEX ... CONFIGURE ZONE <zoneconfig>
 //
 // Zone configurations:
 //   DISCARD
@@ -1432,16 +1454,6 @@ alter_zone_table_stmt:
     }
     $$.val = s
   }
-| ALTER PARTITION partition_name OF TABLE table_name set_zone_config
-  {
-    name := $6.unresolvedObjectName().ToTableName()
-    s := $7.setZoneConfig()
-    s.ZoneSpecifier = tree.ZoneSpecifier{
-       TableOrIndex: tree.TableIndexName{Table: name},
-       Partition: tree.Name($3),
-    }
-    $$.val = s
-  }
 
 alter_zone_index_stmt:
   ALTER INDEX table_index_name set_zone_config
@@ -1452,6 +1464,18 @@ alter_zone_index_stmt:
     }
     $$.val = s
   }
+
+alter_zone_partition_stmt:
+  ALTER PARTITION partition_name OF TABLE table_name set_zone_config
+  {
+    name := $6.unresolvedObjectName().ToTableName()
+    s := $7.setZoneConfig()
+    s.ZoneSpecifier = tree.ZoneSpecifier{
+       TableOrIndex: tree.TableIndexName{Table: name},
+       Partition: tree.Name($3),
+    }
+    $$.val = s
+  }
 | ALTER PARTITION partition_name OF INDEX table_index_name set_zone_config
   {
     s := $7.setZoneConfig()
@@ -1459,6 +1483,17 @@ alter_zone_index_stmt:
        TableOrIndex: $6.tableIndexName(),
        Partition: tree.Name($3),
     }
+    $$.val = s
+  }
+| ALTER PARTITION partition_name OF INDEX table_name '@' '*' set_zone_config
+  {
+    name := $6.unresolvedObjectName().ToTableName()
+    s := $9.setZoneConfig()
+    s.ZoneSpecifier = tree.ZoneSpecifier{
+       TableOrIndex: tree.TableIndexName{Table: name},
+       Partition: tree.Name($3),
+    }
+    s.AllIndexes = true
     $$.val = s
   }
 
