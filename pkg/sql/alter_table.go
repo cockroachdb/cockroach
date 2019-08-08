@@ -1037,7 +1037,7 @@ func (p *planner) updateFKBackReferenceName(
 	}
 	for i := range referencedTableDesc.InboundFKs {
 		backref := &referencedTableDesc.InboundFKs[i]
-		if backref.Name == ref.Name {
+		if backref.Name == ref.Name && backref.OriginTableID == tableDesc.ID {
 			backref.Name = newName
 			return p.writeSchemaChange(ctx, referencedTableDesc, sqlbase.InvalidMutationID)
 		}

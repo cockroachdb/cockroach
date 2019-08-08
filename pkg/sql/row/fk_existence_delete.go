@@ -90,6 +90,8 @@ func makeFkExistenceCheckHelperForDelete(
 			return fkExistenceCheckForDelete{}, errors.AssertionFailedf(
 				"failed to find forward fk for backward fk %v", ref)
 		}
+		// This will never be on an actual table descriptor, so we don't need to
+		// populate all the legacy index fields.
 		fakeRef := &sqlbase.ForeignKeyConstraint{
 			ReferencedTableID:   ref.OriginTableID,
 			ReferencedColumnIDs: ref.OriginColumnIDs,

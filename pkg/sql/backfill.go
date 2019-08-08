@@ -1231,6 +1231,8 @@ func runSchemaChangesInTxn(
 				case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
 					tableDesc.Checks = append(tableDesc.Checks, &t.Constraint.Check)
 				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+					// TODO(lucy): currently we add the backreference in ResolveFK.
+					// Ideally we would add both sides in the same place.
 					tableDesc.OutboundFKs = append(tableDesc.OutboundFKs, t.Constraint.ForeignKey)
 				default:
 					return errors.AssertionFailedf(

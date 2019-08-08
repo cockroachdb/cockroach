@@ -151,142 +151,57 @@ func (p *planner) dropIndexByName(
 		}
 	}
 
-	// Queue the mutation.
-	if len(idx.Interleave.Ancestors) > 0 {
-		if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
-			return err
+	// Check for foreign key mutations referencing this index.
+	for _, m := range tableDesc.Mutations {
+		if c := m.GetConstraint(); c != nil &&
+			c.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY &&
+			c.ForeignKey.LegacyOriginIndex == idx.ID {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"referencing constraint %q in the middle of being added, try again later", c.ForeignKey.Name)
 		}
 	}
 
-	// Now, we have to make sure that all of the foreign keys that point at the
-	// table that this index is a part of still have sufficient unique indexes to
-	// continue being semantically valid.
-
-	// First check if there's indexes for the outgoing FKs.
-	// TODO(jordan, radu): remove this restriction.
-
-	// An FK can be removed by DROP CASCADE only if it is not being added/validated.
-	removableFKs := make(map[string]struct{})
+	// Index for updating the FK slices in place when removing FKs.
+	sliceIdx := 0
 	for i := range tableDesc.OutboundFKs {
+		tableDesc.OutboundFKs[sliceIdx] = tableDesc.OutboundFKs[i]
+		sliceIdx++
 		fk := &tableDesc.OutboundFKs[i]
-		if fk.Validity != sqlbase.ConstraintValidity_Validating {
-			removableFKs[fk.Name] = struct{}{}
-		}
-	}
-	fksToDrop := make(map[string]struct{})
-	for _, fk := range tableDesc.AllActiveAndInactiveForeignKeys() {
-		// First, check if the index we're dropping matches this outbound FK.
-		if !sqlbase.ColumnIDs(fk.OriginColumnIDs).EqualSets(idx.ColumnIDs) {
-			// If there's no match, then there's no need to check anything further.
-			continue
-		}
-		foundOtherIndexThatSatisfiesFK := false
-		for _, otherIdx := range tableDesc.Indexes {
-			// Skip ourselves.
-			if otherIdx.ID == idx.ID {
-				continue
-			}
-			if sqlbase.ColumnIDs(fk.OriginColumnIDs).EqualSets(otherIdx.ColumnIDs) {
-				foundOtherIndexThatSatisfiesFK = true
-				break
-			}
-		}
-		if sqlbase.ColumnIDs(fk.OriginColumnIDs).EqualSets(tableDesc.PrimaryIndex.ColumnIDs) {
-			foundOtherIndexThatSatisfiesFK = true
-		}
-		if !foundOtherIndexThatSatisfiesFK {
-			if _, ok := removableFKs[fk.Name]; !ok {
-				// TODO (lucy): !!! improve this error message
-				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					"constraint %q in the middle of being added, try again later", fk.Name)
-			}
+		if fk.LegacyOriginIndex == idx.ID {
 			if behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint {
 				return errors.Errorf("index %q is in use as a foreign key constraint", idx.Name)
 			}
-			// Now, drop the reference from the table that the index we're
-			// dropping.
-			fksToDrop[fk.Name] = struct{}{}
+			sliceIdx--
 			if err := p.removeFKBackReference(ctx, tableDesc, fk); err != nil {
 				return err
 			}
 		}
 	}
-	outputIdx := 0
-	for i := range tableDesc.OutboundFKs {
-		tableDesc.OutboundFKs[outputIdx] = tableDesc.OutboundFKs[i]
-		if _, ok := fksToDrop[(tableDesc.OutboundFKs[i]).Name]; !ok {
-			outputIdx++
-		}
-	}
-	tableDesc.OutboundFKs = tableDesc.OutboundFKs[:outputIdx]
+	tableDesc.OutboundFKs = tableDesc.OutboundFKs[:sliceIdx]
 
-	inputIdx := 0
+	sliceIdx = 0
 	for i := range tableDesc.InboundFKs {
-		ref := &tableDesc.InboundFKs[i]
-		// We're updating the tableDesc.InboundFKs list in place, since during this
-		// loop we're going to remove those inbound FKs that are only matched by the
-		// index that we're dropping (if we're in cascade mode).
-		tableDesc.InboundFKs[inputIdx] = *ref
-		inputIdx++
-		// First, check if the index we're dropping matches this inbound FK.
-		if !sqlbase.ColumnIDs(ref.ReferencedColumnIDs).EqualSets(idx.ColumnIDs) {
-			// If there's no match, then there's no need to check anything further.
-			continue
-		}
-
-		foundOtherIndexThatSatisfiesFK := false
-		for _, otherIdx := range tableDesc.Indexes {
-			// Skip ourselves.
-			if otherIdx.ID == idx.ID {
-				continue
-			}
-			// Skip non-unique indexes, which can't satisfy FKs.
-			if !otherIdx.Unique {
-				continue
-			}
-			if sqlbase.ColumnIDs(ref.ReferencedColumnIDs).EqualSets(otherIdx.ColumnIDs) {
-				foundOtherIndexThatSatisfiesFK = true
-				break
-			}
-		}
-		if sqlbase.ColumnIDs(ref.ReferencedColumnIDs).EqualSets(tableDesc.PrimaryIndex.ColumnIDs) {
-			foundOtherIndexThatSatisfiesFK = true
-		}
-
-		if !foundOtherIndexThatSatisfiesFK {
-			if err := p.canRemoveFKBackreference(ctx, idx.Name, ref, behavior); err != nil {
-				return err
-			}
-			// Now, drop the backreference from the table that the index we're
-			// dropping. All we have to do is decrement our inputIdx, which
-			// effectively deletes the element that we're currently looking at from
-			// the list.
-			inputIdx--
-
-			// Now, we must delete the forward reference from the other table.
-			originTable, err := p.Tables().getMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
+		tableDesc.InboundFKs[sliceIdx] = tableDesc.InboundFKs[i]
+		sliceIdx++
+		fk := &tableDesc.InboundFKs[i]
+		if fk.LegacyReferencedIndex == idx.ID {
+			err := p.canRemoveFKBackreference(ctx, idx.Name, fk, behavior)
 			if err != nil {
 				return err
 			}
-			foundIdx := -1
-			for i, fk := range originTable.OutboundFKs {
-				if fk.ReferencedTableID == tableDesc.ID &&
-					sqlbase.ColumnIDs(fk.ReferencedColumnIDs).EqualSets(ref.ReferencedColumnIDs) &&
-					sqlbase.ColumnIDs(fk.OriginColumnIDs).EqualSets(ref.OriginColumnIDs) {
-					foundIdx = i
-				}
-			}
-			if foundIdx == -1 {
-				return errors.AssertionFailedf("missing forward ref for backref %v", ref)
-			}
-			originTable.OutboundFKs = append(originTable.OutboundFKs[:foundIdx], originTable.OutboundFKs[foundIdx+1:]...)
-			if err := p.writeSchemaChange(ctx, originTable, sqlbase.InvalidMutationID); err != nil {
+			sliceIdx--
+			if err := p.removeFKForBackReference(ctx, tableDesc, fk); err != nil {
 				return err
 			}
 		}
 	}
-	tableDesc.InboundFKs = tableDesc.InboundFKs[:inputIdx]
+	tableDesc.InboundFKs = tableDesc.InboundFKs[:sliceIdx]
 
+	if len(idx.Interleave.Ancestors) > 0 {
+		if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
+			return err
+		}
+	}
 	for _, ref := range idx.InterleavedBy {
 		if err := p.removeInterleave(ctx, ref); err != nil {
 			return err
@@ -372,7 +287,6 @@ func (p *planner) dropIndexByName(
 	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
 		return err
 	}
-	// TODO (lucy): this might not work
 	mutationID, err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc)
 	if err != nil {
 		return err

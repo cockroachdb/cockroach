@@ -392,7 +392,7 @@ func (p *planner) resolveFK(
 	ts FKTableState,
 	validationBehavior tree.ValidationBehavior,
 ) error {
-	return ResolveFK(ctx, p.txn, p, tbl, d, backrefs, ts, validationBehavior)
+	return ResolveFK(ctx, p.txn, p, tbl, d, backrefs, ts, validationBehavior, p.ExecCfg().Settings)
 }
 
 func qualifyFKColErrorWithDB(
@@ -457,6 +457,7 @@ func ResolveFK(
 	backrefs map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
 	ts FKTableState,
 	validationBehavior tree.ValidationBehavior,
+	settings *cluster.Settings,
 ) error {
 	originColumnIDs := make(sqlbase.ColumnIDs, len(d.FromCols))
 	for i, col := range d.FromCols {
@@ -573,28 +574,15 @@ func ResolveFK(
 		}
 	}
 
-	ref := sqlbase.ForeignKeyConstraint{
-		OriginTableID:       tbl.ID,
-		OriginColumnIDs:     originColumnIDs,
-		ReferencedTableID:   target.ID,
-		ReferencedColumnIDs: targetColIDs,
-		Name:                constraintName,
-		OnDelete:            sqlbase.ForeignKeyReferenceActionValue[d.Actions.Delete],
-		OnUpdate:            sqlbase.ForeignKeyReferenceActionValue[d.Actions.Update],
-		Match:               sqlbase.CompositeKeyMatchMethodValue[d.Match],
-	}
-
-	if ts != NewTable {
-		if validationBehavior == tree.ValidationSkip {
-			ref.Validity = sqlbase.ConstraintValidity_Unvalidated
-		} else {
-			ref.Validity = sqlbase.ConstraintValidity_Validating
-		}
-	}
-
+	var legacyOriginIndexID sqlbase.IndexID
 	// Search for an index on the origin table that matches. If one doesn't exist,
 	// we create one automatically if the table to alter is new or empty.
-	if _, err := sqlbase.FindFKOriginIndex(tbl.TableDesc(), originColumnIDs); err != nil {
+	originIdx, err := sqlbase.FindFKOriginIndex(tbl.TableDesc(), originColumnIDs)
+	if err == nil {
+		// If there was no error, we found a suitable index.
+		legacyOriginIndexID = originIdx.ID
+	} else {
+		// No existing suitable index was found.
 		if ts == NonEmptyTable {
 			var colNames bytes.Buffer
 			colNames.WriteString(`("`)
@@ -612,9 +600,59 @@ func ResolveFK(
 			return pgerror.Newf(pgcode.ForeignKeyViolation,
 				"foreign key requires an existing index on columns %s", colNames.String())
 		}
-		if _, err := addIndexForFK(tbl, srcCols, constraintName, ts); err != nil {
+		id, err := addIndexForFK(tbl, srcCols, constraintName, ts)
+		if err != nil {
 			return err
 		}
+		legacyOriginIndexID = id
+	}
+
+	referencedIdx, err := sqlbase.FindFKReferencedIndex(target.TableDesc(), targetColIDs)
+	if err != nil {
+		return err
+	}
+	legacyReferencedIndexID := referencedIdx.ID
+
+	var validity sqlbase.ConstraintValidity
+	if ts != NewTable {
+		if validationBehavior == tree.ValidationSkip {
+			validity = sqlbase.ConstraintValidity_Unvalidated
+		} else {
+			validity = sqlbase.ConstraintValidity_Validating
+		}
+	}
+
+	ref := sqlbase.ForeignKeyConstraint{
+		OriginTableID:         tbl.ID,
+		OriginColumnIDs:       originColumnIDs,
+		ReferencedColumnIDs:   targetColIDs,
+		ReferencedTableID:     target.ID,
+		Name:                  constraintName,
+		Validity:              validity,
+		OnDelete:              sqlbase.ForeignKeyReferenceActionValue[d.Actions.Delete],
+		OnUpdate:              sqlbase.ForeignKeyReferenceActionValue[d.Actions.Update],
+		Match:                 sqlbase.CompositeKeyMatchMethodValue[d.Match],
+		LegacyOriginIndex:     legacyOriginIndexID,
+		LegacyReferencedIndex: legacyReferencedIndexID,
+	}
+
+	if !settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
+		legacyUpgradedFromOriginReference := sqlbase.ForeignKeyReference{
+			Table:           target.ID,
+			Index:           legacyReferencedIndexID,
+			Name:            constraintName,
+			Validity:        validity,
+			SharedPrefixLen: int32(len(originColumnIDs)),
+			OnDelete:        sqlbase.ForeignKeyReferenceActionValue[d.Actions.Delete],
+			OnUpdate:        sqlbase.ForeignKeyReferenceActionValue[d.Actions.Update],
+			Match:           sqlbase.CompositeKeyMatchMethodValue[d.Match],
+		}
+		ref.LegacyUpgradedFromOriginReference = legacyUpgradedFromOriginReference
+		legacyUpgradedFromReferencedReference := sqlbase.ForeignKeyReference{
+			Table: tbl.ID,
+			Index: legacyOriginIndexID,
+		}
+		ref.LegacyUpgradedFromReferencedReference = legacyUpgradedFromReferencedReference
 	}
 
 	if ts == NewTable {
@@ -1255,7 +1293,7 @@ func MakeTableDesc(
 			desc.Checks = append(desc.Checks, ck)
 
 		case *tree.ForeignKeyConstraintTableDef:
-			if err := ResolveFK(ctx, txn, fkResolver, &desc, d, affected, NewTable, tree.ValidationDefault); err != nil {
+			if err := ResolveFK(ctx, txn, fkResolver, &desc, d, affected, NewTable, tree.ValidationDefault, st); err != nil {
 				return desc, err
 			}
 
