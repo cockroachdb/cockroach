@@ -191,10 +191,14 @@ func (node *ShowQueries) Format(ctx *FmtCtx) {
 type ShowJobs struct {
 	// If non-nil, a select statement that provides the job ids to be shown.
 	Jobs *Select
+
 	// If Automatic is true, show only automatically-generated jobs such
 	// as automatic CREATE STATISTICS jobs. If Automatic is false, show
 	// only non-automatically-generated jobs.
 	Automatic bool
+
+	// Whether to block and wait for completion of all running jobs to be displayed.
+	Block bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -207,6 +211,9 @@ func (node *ShowJobs) Format(ctx *FmtCtx) {
 	if node.Jobs != nil {
 		ctx.WriteString(" ")
 		ctx.FormatNode(node.Jobs)
+	}
+	if node.Block {
+		ctx.WriteString(" WHEN COMPLETE")
 	}
 }
 

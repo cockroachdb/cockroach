@@ -484,7 +484,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> CACHE CANCEL CASCADE CASE CAST CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMIT
-%token <str> COMMITTED COMPACT CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
+%token <str> COMMITTED COMPACT COMPLETE CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
 %token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONVERSION COPY COVERING CREATE
 %token <str> CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
@@ -3496,6 +3496,10 @@ show_jobs_stmt:
   {
     $$.val = &tree.ShowJobs{Jobs: $3.slct()}
   }
+| SHOW JOBS WHEN COMPLETE select_stmt
+  {
+    $$.val = &tree.ShowJobs{Jobs: $5.slct(), Block: true}
+  }
 | SHOW JOBS select_stmt error // SHOW HELP: SHOW JOBS
 | SHOW JOB a_expr
   {
@@ -3503,6 +3507,15 @@ show_jobs_stmt:
       Jobs: &tree.Select{
         Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
       },
+    }
+  }
+| SHOW JOB WHEN COMPLETE a_expr
+  {
+    $$.val = &tree.ShowJobs{
+      Jobs: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$5.expr()}}},
+      },
+      Block: true,
     }
   }
 | SHOW JOB error // SHOW HELP: SHOW JOBS
@@ -9056,6 +9069,7 @@ unreserved_keyword:
 | COMMIT
 | COMMITTED
 | COMPACT
+| COMPLETE
 | CONFLICT
 | CONFIGURATION
 | CONFIGURATIONS

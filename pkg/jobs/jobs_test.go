@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1210,4 +1211,128 @@ func TestRunAndWaitForTerminalState(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestShowJobWhenComplete(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.TODO()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	registry := s.JobRegistry().(*jobs.Registry)
+	mockJob := jobs.Record{Details: jobspb.ImportDetails{}, Progress: jobspb.ImportProgress{}}
+	done := make(chan struct{})
+	defer close(done)
+	jobs.RegisterConstructor(
+		jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+			return jobs.FakeResumer{
+				OnResume: func() error {
+					<-done
+					return nil
+				},
+			}
+		})
+
+	type row struct {
+		id     int64
+		status string
+	}
+	var out row
+
+	t.Run("show job", func(t *testing.T) {
+		// Start a job and cancel it so it is in state finished and then query it with
+		// SHOW JOB WHEN COMPLETE.
+		job, _, err := registry.StartJob(ctx, nil, mockJob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		group := ctxgroup.WithContext(ctx)
+		group.GoCtx(func(ctx context.Context) error {
+			if err := db.QueryRowContext(
+				ctx,
+				`SELECT job_id, status
+				 FROM [SHOW JOB WHEN COMPLETE $1]`,
+				*job.ID()).Scan(&out.id, &out.status); err != nil {
+				return err
+			}
+			if out.status != "canceled" {
+				return errors.Errorf(
+					"Expected status 'canceled' but got '%s'", out.status)
+			}
+			if *job.ID() != out.id {
+				return errors.Errorf(
+					"Expected job id %d but got %d", job.ID(), out.id)
+			}
+			return nil
+		})
+		// Give a chance for the above group to schedule in order to test that
+		// SHOW JOBS WHEN COMPLETE does block until the job is canceled.
+		time.Sleep(2 * time.Millisecond)
+		if _, err = db.ExecContext(ctx, "CANCEL JOB $1", *job.ID()); err == nil {
+			err = group.Wait()
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("show jobs", func(t *testing.T) {
+		// Start two jobs and cancel the first one to make sure the
+		// query still blocks until the second job is also canceled.
+		var jobs [2]*jobs.Job
+		for i := range jobs {
+			job, _, err := registry.StartJob(ctx, nil, mockJob)
+			if err != nil {
+				t.Fatal(err)
+			}
+			jobs[i] = job
+		}
+		if _, err := db.ExecContext(ctx, "CANCEL JOB $1", *jobs[0].ID()); err != nil {
+			t.Fatal(err)
+		}
+		group := ctxgroup.WithContext(ctx)
+		group.GoCtx(func(ctx context.Context) error {
+			rows, err := db.QueryContext(ctx,
+				`SELECT job_id, status
+				 FROM [SHOW JOBS WHEN COMPLETE (SELECT $1 UNION SELECT $2)]`,
+				*jobs[0].ID(), *jobs[1].ID())
+			if err != nil {
+				return err
+			}
+			var cnt int
+			for rows.Next() {
+				if err := rows.Scan(&out.id, &out.status); err != nil {
+					return err
+				}
+				cnt += 1
+				switch out.id {
+				case *jobs[0].ID():
+				case *jobs[1].ID():
+					// SHOW JOBS WHEN COMPLETE finishes only after all jobs are
+					// canceled.
+					if out.status != "canceled" {
+						return errors.Errorf(
+							"Expected status 'canceled' but got '%s'",
+							out.status)
+					}
+				default:
+					return errors.Errorf(
+						"Expected either id:%d or id:%d but got: %d",
+						*jobs[0].ID(), *jobs[1].ID(), out.id)
+				}
+			}
+			if cnt != 2 {
+				return errors.Errorf("Expected 2 results but found %d", cnt)
+			}
+			return nil
+		})
+		// Give a chance for the above group to schedule in order to test that
+		// SHOW JOBS WHEN COMPLETE does block until the job is canceled.
+		time.Sleep(2 * time.Millisecond)
+		var err error
+		if _, err = db.ExecContext(ctx, "CANCEL JOB $1", *jobs[1].ID()); err == nil {
+			err = group.Wait()
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
 }
