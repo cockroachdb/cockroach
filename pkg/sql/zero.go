@@ -28,11 +28,6 @@ func newZeroNode(columns sqlbase.ResultColumns) *zeroNode {
 	return &zeroNode{columns: columns}
 }
 
-// NewZeroNode is the exported version of newZeroNode. Used by CCL.
-func NewZeroNode(columns sqlbase.ResultColumns) PlanNode {
-	return newZeroNode(columns)
-}
-
 func (*zeroNode) startExec(runParams) error    { return nil }
 func (*zeroNode) Next(runParams) (bool, error) { return false, nil }
 func (*zeroNode) Values() tree.Datums          { return nil }
