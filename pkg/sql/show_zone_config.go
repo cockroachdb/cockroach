@@ -28,7 +28,7 @@ import (
 // These must match crdb_internal.zones.
 var showZoneConfigColumns = sqlbase.ResultColumns{
 	{Name: "zone_id", Typ: types.Int, Hidden: true},
-	{Name: "zone_name", Typ: types.String},
+	{Name: "target", Typ: types.String},
 	{Name: "range_name", Typ: types.String, Hidden: true},
 	{Name: "database_name", Typ: types.String, Hidden: true},
 	{Name: "table_name", Typ: types.String, Hidden: true},
@@ -42,7 +42,7 @@ var showZoneConfigColumns = sqlbase.ResultColumns{
 // These must match showZoneConfigColumns.
 const (
 	zoneIDCol int = iota
-	zoneNameCol
+	targetCol
 	rangeNameCol
 	databaseNameCol
 	tableNameCol
@@ -66,7 +66,7 @@ func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (p
 					ctx,
 					"show-all-zone-configurations",
 					p.txn,
-					`SELECT * FROM crdb_internal.zones WHERE zone_name IS NOT NULL`,
+					`SELECT * FROM crdb_internal.zones`,
 				)
 				if err != nil {
 					return nil, err
@@ -155,14 +155,14 @@ func generateZoneConfigIntrospectionValues(
 	values[zoneIDCol] = zoneID
 
 	// Populate the zone specifier columns.
-	values[zoneNameCol] = tree.DNull
+	values[targetCol] = tree.DNull
 	values[rangeNameCol] = tree.DNull
 	values[databaseNameCol] = tree.DNull
 	values[tableNameCol] = tree.DNull
 	values[indexNameCol] = tree.DNull
 	values[partitionNameCol] = tree.DNull
 	if zs != nil {
-		values[zoneNameCol] = tree.NewDString(config.ToZoneName(zs))
+		values[targetCol] = tree.NewDString(zs.String())
 		if zs.NamedZone != "" {
 			values[rangeNameCol] = tree.NewDString(string(zs.NamedZone))
 		}
