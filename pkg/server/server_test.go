@@ -542,9 +542,11 @@ func TestListenerFileCreation(t *testing.T) {
 	}
 
 	li := listenerInfo{
-		advertise: s.ServingAddr(),
-		http:      s.HTTPAddr(),
-		listen:    s.Addr(),
+		advertiseRPC: s.ServingRPCAddr(),
+		listenHTTP:   s.HTTPAddr(),
+		listenRPC:    s.RPCAddr(),
+		listenSQL:    s.SQLAddr(),
+		advertiseSQL: s.ServingSQLAddr(),
 	}
 	expectedFiles := li.Iter()
 

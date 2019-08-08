@@ -44,7 +44,10 @@ import (
 // - the underlying context parameters must receive defaults in
 //   initCLIDefaults() even when they are otherwise overridden by the
 //   flags logic, because some tests to not use the flag logic at all.
-var serverListenPort, serverAdvertiseAddr, serverAdvertisePort string
+var serverListenPort string
+var serverAdvertiseAddr, serverAdvertisePort string
+var serverSQLAddr, serverSQLPort string
+var serverSQLAdvertiseAddr, serverSQLAdvertisePort string
 var serverHTTPAddr, serverHTTPPort string
 var localityAdvertiseHosts localityList
 
@@ -54,6 +57,11 @@ func initPreFlagsDefaults() {
 	serverListenPort = base.DefaultPort
 	serverAdvertiseAddr = ""
 	serverAdvertisePort = ""
+
+	serverSQLAddr = ""
+	serverSQLPort = ""
+	serverSQLAdvertiseAddr = ""
+	serverSQLAdvertisePort = ""
 
 	serverHTTPAddr = ""
 	serverHTTPPort = base.DefaultHTTPPort
@@ -235,7 +243,7 @@ func init() {
 	for _, cmd := range StartCmds {
 		AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
 			// Finalize the configuration of network and logging settings.
-			if err := extraServerFlagInit(); err != nil {
+			if err := extraServerFlagInit(cmd); err != nil {
 				return err
 			}
 			return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
@@ -310,6 +318,8 @@ func init() {
 		// Server flags.
 		VarFlag(f, addrSetter{&startCtx.serverListenAddr, &serverListenPort}, cliflags.ListenAddr)
 		VarFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)
+		VarFlag(f, addrSetter{&serverSQLAddr, &serverSQLPort}, cliflags.ListenSQLAddr)
+		VarFlag(f, addrSetter{&serverSQLAdvertiseAddr, &serverSQLAdvertisePort}, cliflags.SQLAdvertiseAddr)
 		VarFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
 
 		// Backward-compatibility flags.
@@ -616,7 +626,7 @@ func init() {
 	}
 }
 
-func extraServerFlagInit() error {
+func extraServerFlagInit(cmd *cobra.Command) error {
 	// Construct the main RPC listen address.
 	serverCfg.Addr = net.JoinHostPort(startCtx.serverListenAddr, serverListenPort)
 
@@ -628,6 +638,35 @@ func extraServerFlagInit() error {
 		serverAdvertisePort = serverListenPort
 	}
 	serverCfg.AdvertiseAddr = net.JoinHostPort(serverAdvertiseAddr, serverAdvertisePort)
+
+	// Fill in the defaults for --sql-addr.
+	if serverSQLAddr == "" {
+		serverSQLAddr = startCtx.serverListenAddr
+	}
+	if serverSQLPort == "" {
+		serverSQLPort = serverListenPort
+	}
+	serverCfg.SQLAddr = net.JoinHostPort(serverSQLAddr, serverSQLPort)
+	serverCfg.SplitListenSQL = cmd.Flags().Lookup(cliflags.ListenSQLAddr.Name).Changed
+
+	// Fill in the defaults for --advertise-sql-addr.
+	advSpecified := cmd.Flags().Lookup(cliflags.AdvertiseAddr.Name).Changed ||
+		cmd.Flags().Lookup(cliflags.AdvertiseHost.Name).Changed
+	if serverSQLAdvertiseAddr == "" {
+		if advSpecified {
+			serverSQLAdvertiseAddr = serverAdvertiseAddr
+		} else {
+			serverSQLAdvertiseAddr = serverSQLAddr
+		}
+	}
+	if serverSQLAdvertisePort == "" {
+		if advSpecified && !serverCfg.SplitListenSQL {
+			serverSQLAdvertisePort = serverAdvertisePort
+		} else {
+			serverSQLAdvertisePort = serverSQLPort
+		}
+	}
+	serverCfg.SQLAdvertiseAddr = net.JoinHostPort(serverSQLAdvertiseAddr, serverSQLAdvertisePort)
 
 	// Fill in the defaults for --http-addr.
 	if serverHTTPAddr == "" {
@@ -651,6 +690,8 @@ func extraServerFlagInit() error {
 func extraClientFlagInit() {
 	serverCfg.Addr = net.JoinHostPort(cliCtx.clientConnHost, cliCtx.clientConnPort)
 	serverCfg.AdvertiseAddr = serverCfg.Addr
+	serverCfg.SQLAddr = net.JoinHostPort(cliCtx.clientConnHost, cliCtx.clientConnPort)
+	serverCfg.SQLAdvertiseAddr = serverCfg.SQLAddr
 	if serverHTTPAddr == "" {
 		serverHTTPAddr = startCtx.serverListenAddr
 	}

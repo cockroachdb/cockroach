@@ -282,6 +282,9 @@ message NodeDescriptor {
   optional int64 started_at = 7 [(gogoproto.nullable) = false];
   repeated LocalityAddress locality_address = 8 [(gogoproto.nullable) = false];
   optional string cluster_name = 9 [(gogoproto.nullable) = false];
+  // The SQL address. If empty, indicates that the base address field
+  // is also used to accept SQL connections.
+  optional util.UnresolvedAddr sql_address = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "SQLAddress"];
 }
 
 // LocalityAddress holds the private address accessible only from other nodes

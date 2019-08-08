@@ -155,7 +155,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 
 			// Create a gosql.DB for this worker.
 			pgURL, cleanupGoDB := sqlutils.PGUrl(
-				t, tc.Server(0).ServingAddr(), fmt.Sprintf("%d", idx), url.User(security.RootUser),
+				t, tc.Server(0).ServingSQLAddr(), fmt.Sprintf("%d", idx), url.User(security.RootUser),
 			)
 			defer cleanupGoDB()
 

@@ -61,8 +61,19 @@ type Server struct {
 	*http.Server
 }
 
-// MakeServer constructs a Server that tracks active connections, closing them
-// when signaled by stopper.
+// MakeServer constructs a Server that tracks active connections,
+// closing them when signaled by stopper.
+//
+// It can serve two different purposes simultaneously:
+//
+// - to serve as actual HTTP server, using the .Serve(net.Listener) method.
+// - to serve as plain TCP server, using the .ServeWith(...) method.
+//
+// The latter is used e.g. to accept SQL client connections.
+//
+// When the HTTP facility is not used, the Go HTTP server object is
+// still used internally to maintain/register the connections via the
+// ConnState() method, for convenience.
 func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handler) Server {
 	var mu syncutil.Mutex
 	activeConns := make(map[net.Conn]struct{})

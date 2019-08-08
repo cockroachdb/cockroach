@@ -248,7 +248,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	grpcConn, err := tc.Server(0).RPCContext().GRPCDialNode(
-		tc.Server(0).ServingAddr(),
+		tc.Server(0).ServingRPCAddr(),
 		tc.Server(0).NodeID(),
 	).Connect(ctx)
 	if err != nil {

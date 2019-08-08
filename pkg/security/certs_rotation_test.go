@@ -83,7 +83,7 @@ func TestRotateCerts(t *testing.T) {
 
 	// Create a client by calling sql.Open which loads the certificates but do not use it yet.
 	createTestClient := func() *gosql.DB {
-		pgUrl := makeSecurePGUrl(s.ServingAddr(), security.RootUser, certsDir, security.EmbeddedCACert, security.EmbeddedRootCert, security.EmbeddedRootKey)
+		pgUrl := makeSecurePGUrl(s.ServingSQLAddr(), security.RootUser, certsDir, security.EmbeddedCACert, security.EmbeddedRootCert, security.EmbeddedRootKey)
 		goDB, err := gosql.Open("postgres", pgUrl)
 		if err != nil {
 			t.Fatal(err)

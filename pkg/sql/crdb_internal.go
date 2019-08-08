@@ -1968,19 +1968,22 @@ var crdbInternalGossipNodesTable = virtualSchemaTable{
 	comment: "locally known gossiped node details (RAM; local node only)",
 	schema: `
 CREATE TABLE crdb_internal.gossip_nodes (
-  node_id         		INT NOT NULL,
-  network         		STRING NOT NULL,
-  address         		STRING NOT NULL,
-  advertise_address   STRING NOT NULL,
-  attrs           		JSON NOT NULL,
-  locality        		STRING NOT NULL,
-  cluster_name        STRING NOT NULL,
-  server_version  		STRING NOT NULL,
-  build_tag       		STRING NOT NULL,
-  started_at     	 		TIMESTAMP NOT NULL,
-  is_live          BOOL NOT NULL,
-  ranges          		INT NOT NULL,
-  leases        	  	INT NOT NULL
+  node_id               INT NOT NULL,
+  network               STRING NOT NULL,
+  address               STRING NOT NULL,
+  advertise_address     STRING NOT NULL,
+  sql_network           STRING NOT NULL,
+  sql_address           STRING NOT NULL,
+  advertise_sql_address STRING NOT NULL,
+  attrs                 JSON NOT NULL,
+  locality              STRING NOT NULL,
+  cluster_name          STRING NOT NULL,
+  server_version        STRING NOT NULL,
+  build_tag             STRING NOT NULL,
+  started_at            TIMESTAMP NOT NULL,
+  is_live               BOOL NOT NULL,
+  ranges                INT NOT NULL,
+  leases                INT NOT NULL
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -2058,16 +2061,30 @@ CREATE TABLE crdb_internal.gossip_nodes (
 				attrs.Add(json.FromString(a))
 			}
 
-			addr, err := g.GetNodeIDAddress(d.NodeID)
+			listenAddrRPC := d.Address
+			listenAddrSQL := d.SQLAddress
+			if listenAddrSQL.IsEmpty() {
+				// Pre-19.2 node or same address for both.
+				listenAddrSQL = listenAddrRPC
+			}
+
+			advAddrRPC, err := g.GetNodeIDAddress(d.NodeID)
+			if err != nil {
+				return err
+			}
+			advAddrSQL, err := g.GetNodeIDSQLAddress(d.NodeID)
 			if err != nil {
 				return err
 			}
 
 			if err := addRow(
 				tree.NewDInt(tree.DInt(d.NodeID)),
-				tree.NewDString(d.Address.NetworkField),
-				tree.NewDString(d.Address.AddressField),
-				tree.NewDString(addr.String()),
+				tree.NewDString(listenAddrRPC.NetworkField),
+				tree.NewDString(listenAddrRPC.AddressField),
+				tree.NewDString(advAddrRPC.String()),
+				tree.NewDString(listenAddrSQL.NetworkField),
+				tree.NewDString(listenAddrSQL.AddressField),
+				tree.NewDString(advAddrSQL.String()),
 				tree.NewDJSON(attrs.Build()),
 				tree.NewDString(d.Locality.String()),
 				tree.NewDString(d.ClusterName),

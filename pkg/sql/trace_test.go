@@ -305,7 +305,7 @@ func TestTrace(t *testing.T) {
 							// TODO(andrei): Pull the check for an empty session_trace out of
 							// the sub-tests so we can use cluster.ServerConn(i) here.
 							pgURL, cleanup := sqlutils.PGUrl(
-								t, cluster.Server(i).ServingAddr(), "TestTrace", url.User(security.RootUser))
+								t, cluster.Server(i).ServingSQLAddr(), "TestTrace", url.User(security.RootUser))
 							defer cleanup()
 							sqlDB, err := gosql.Open("postgres", pgURL.String())
 							if err != nil {
