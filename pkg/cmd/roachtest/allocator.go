@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -259,7 +260,14 @@ func runWideReplication(ctx context.Context, t *test, c *cluster) {
 	defer db.Close()
 
 	zones := func() []string {
+		oldVersion := false
 		rows, err := db.Query(`SELECT target FROM crdb_internal.zones`)
+		// TODO(solon): Remove this block once we are no longer running roachtest
+		// against version 19.1 and earlier.
+		if err != nil && strings.Contains(err.Error(), `column "target" does not exist`) {
+			oldVersion = true
+			rows, err = db.Query(`SELECT zone_name FROM crdb_internal.zones`)
+		}
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -269,6 +277,19 @@ func runWideReplication(ctx context.Context, t *test, c *cluster) {
 			var name string
 			if err := rows.Scan(&name); err != nil {
 				t.Fatal(err)
+			}
+			// TODO(solon): Remove this block once we are no longer running roachtest
+			// against version 19.1 and earlier.
+			if oldVersion {
+				which := "RANGE"
+				if name[0] == '.' {
+					name = name[1:]
+				} else if strings.Count(name, ".") == 0 {
+					which = "DATABASE"
+				} else {
+					which = "TABLE"
+				}
+				name = fmt.Sprintf("%s %s", which, name)
 			}
 			results = append(results, name)
 		}
