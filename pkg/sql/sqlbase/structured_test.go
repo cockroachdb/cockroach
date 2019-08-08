@@ -1733,7 +1733,7 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 					pair.expectedUpgraded.InboundFKs[i].LegacyReferencedIndex = 0
 				}
 
-				wasDowngraded, downgraded, err := upgraded.maybeDowngradeForeignKeyRepresentation(ctx, txn, mixedVersionSettings)
+				wasDowngraded, downgraded, err := upgraded.maybeDowngradeForeignKeyRepresentation(ctx, mixedVersionSettings)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -1746,7 +1746,7 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 						proto.MarshalTextString(&pair.oldFormat))
 				}
 
-				wasDowngraded, _, err = upgraded.maybeDowngradeForeignKeyRepresentation(ctx, txn, newVersionSettings)
+				wasDowngraded, _, err = upgraded.maybeDowngradeForeignKeyRepresentation(ctx, newVersionSettings)
 				if err != nil {
 					t.Fatal(err)
 				}
