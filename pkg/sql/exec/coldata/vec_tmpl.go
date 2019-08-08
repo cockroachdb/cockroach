@@ -23,7 +23,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -36,10 +35,9 @@ const _TYPES_T = types.Unhandled
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
 
-// */}}
+import "github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 
-// Use execgen package to remove unused import warning.
-var _ interface{} = execgen.GET
+// */}}
 
 func (m *memColumn) Append(args AppendArgs) {
 	switch args.ColType {
