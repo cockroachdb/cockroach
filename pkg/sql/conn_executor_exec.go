@@ -815,7 +815,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	// Note that we're not cleaning up right away because postqueries might
 	// need to have access to the main query tree.
 	defer cleanup()
-	if recv.commErr != nil {
+	if recv.commErr != nil || res.Err() != nil {
 		return recv.bytesRead, recv.rowsRead, recv.commErr
 	}
 
