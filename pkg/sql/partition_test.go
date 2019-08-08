@@ -98,7 +98,10 @@ func TestRemovePartitioningOSS(t *testing.T) {
 		t.Fatal(err)
 	}
 	sqlDB.Exec(t, `INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, zoneConfigBytes)
-	for _, p := range []string{"t.kv.p1", "t.kv@foo.p2"} {
+	for _, p := range []string{
+		"PARTITION p1 OF INDEX t.public.kv@primary",
+		"PARTITION p2 OF INDEX t.public.kv@foo",
+	} {
 		if exists := sqlutils.ZoneConfigExists(t, sqlDB, p); !exists {
 			t.Fatalf("zone config for %s does not exist", p)
 		}
