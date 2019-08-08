@@ -494,7 +494,10 @@ show_partitions_stmt ::=
 	| 'SHOW' 'PARTITIONS' 'FROM' 'INDEX' table_index_name
 
 show_jobs_stmt ::=
-	'SHOW' opt_automatic 'JOBS'
+	'SHOW' 'AUTOMATIC' 'JOBS'
+	| 'SHOW' 'JOBS'
+	| 'SHOW' 'JOBS' select_stmt
+	| 'SHOW' 'JOB' a_expr
 
 show_queries_stmt ::=
 	'SHOW' opt_cluster 'QUERIES'
@@ -1165,10 +1168,6 @@ for_grantee_clause ::=
 table_index_name ::=
 	table_name '@' index_name
 	| standalone_index_name
-
-opt_automatic ::=
-	'AUTOMATIC'
-	| 
 
 opt_cluster ::=
 	'CLUSTER'

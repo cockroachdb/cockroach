@@ -903,7 +903,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.ComparisonOperator> sub_type
 %type <tree.Expr> numeric_only
 %type <tree.AliasClause> alias_clause opt_alias_clause
-%type <bool> opt_ordinality opt_compact opt_automatic
+%type <bool> opt_ordinality opt_compact
 %type <*tree.Order> sortby
 %type <tree.IndexElem> index_elem create_as_param
 %type <tree.TableExpr> table_ref func_table
@@ -3513,18 +3513,35 @@ opt_cluster:
 
 // %Help: SHOW JOBS - list background jobs
 // %Category: Misc
-// %Text: SHOW [AUTOMATIC] JOBS
+// %Text:
+// SHOW [AUTOMATIC] JOBS
+// SHOW JOB <jobid>
 // %SeeAlso: CANCEL JOBS, PAUSE JOBS, RESUME JOBS
 show_jobs_stmt:
-  SHOW opt_automatic JOBS
+  SHOW AUTOMATIC JOBS
   {
-    $$.val = &tree.ShowJobs{Automatic: $2.bool()}
+    $$.val = &tree.ShowJobs{Automatic: true}
   }
-| SHOW opt_automatic JOBS error // SHOW HELP: SHOW JOBS
-
-opt_automatic:
-  AUTOMATIC { $$.val = true }
-| /* EMPTY */ { $$.val = false }
+| SHOW JOBS
+  {
+    $$.val = &tree.ShowJobs{Automatic: false}
+  }
+| SHOW AUTOMATIC JOBS error // SHOW HELP: SHOW JOBS
+| SHOW JOBS error // SHOW HELP: SHOW JOBS
+| SHOW JOBS select_stmt
+  {
+    $$.val = &tree.ShowJobs{Jobs: $3.slct()}
+  }
+| SHOW JOBS select_stmt error // SHOW HELP: SHOW JOBS
+| SHOW JOB a_expr
+  {
+    $$.val = &tree.ShowJobs{
+      Jobs: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
+      },
+    }
+  }
+| SHOW JOB error // SHOW HELP: SHOW JOBS
 
 // %Help: SHOW TRACE - display an execution trace
 // %Category: Misc
