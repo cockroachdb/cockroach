@@ -104,10 +104,6 @@ func backupRestoreTestSetupWithParams(
 	if _, err := workloadsql.Setup(ctx, sqlDB.DB.(*gosql.DB), bankData, l); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if err := workloadsql.Split(ctx, sqlDB.DB.(*gosql.DB), bankData.Tables()[0], 1 /* concurrency */); err != nil {
-		// This occasionally flakes, so ignore errors.
-		t.Logf("failed to split: %+v", err)
-	}
 
 	if err := tc.WaitForFullReplication(); err != nil {
 		t.Fatal(err)
