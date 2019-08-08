@@ -441,3 +441,77 @@ INSERT INTO t (i, j) VALUES
 		t.Fatalf("unexpected output: %s", out)
 	}
 }
+
+func TestDumpInterleaved(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	const create = `
+CREATE DATABASE d;
+CREATE TABLE d.t1 (a INT, b INT, PRIMARY KEY (a));
+CREATE INDEX b_idx ON d.t1(a, b) INTERLEAVE IN PARENT d.t1 (a);
+CREATE TABLE d.customers (id INT PRIMARY KEY, name STRING(50));
+CREATE TABLE d.orders (
+	customer INT,
+	id INT,
+	total DECIMAL(20, 5),
+	PRIMARY KEY (customer, id),
+	CONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES d.customers
+) INTERLEAVE IN PARENT d.customers (customer);
+`
+
+	_, err := c.RunWithCaptureArgs([]string{"sql", "-e", create})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dump1, err := c.RunWithCaptureArgs([]string{"dump", "d", "t1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const want1 = `dump d t1
+CREATE TABLE t1 (
+	a INT8 NOT NULL,
+	b INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (a ASC),
+	FAMILY "primary" (a, b)
+);
+
+CREATE INDEX b_idx ON t1 (a ASC, b ASC) INTERLEAVE IN PARENT t1 (a);
+
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
+`
+	if dump1 != want1 {
+		t.Fatalf("expected: %s\ngot: %s", want1, dump1)
+	}
+
+	dump2, err := c.RunWithCaptureArgs([]string{"dump", "d", "orders"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const want2 = `dump d orders
+CREATE TABLE orders (
+	customer INT8 NOT NULL,
+	id INT8 NOT NULL,
+	total DECIMAL(20,5) NULL,
+	CONSTRAINT "primary" PRIMARY KEY (customer ASC, id ASC),
+	FAMILY "primary" (customer, id, total)
+) INTERLEAVE IN PARENT customers (customer);
+
+ALTER TABLE orders ADD CONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES customers(id);
+CREATE UNIQUE INDEX "primary" ON customers (customer ASC, id ASC) INTERLEAVE IN PARENT customers (customer);
+
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
+ALTER TABLE orders VALIDATE CONSTRAINT fk_customer;
+`
+
+	if dump2 != want2 {
+		t.Fatalf("expected: %s\ngot: %s", want2, dump2)
+	}
+}
