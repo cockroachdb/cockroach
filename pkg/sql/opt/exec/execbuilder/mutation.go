@@ -420,21 +420,32 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 				details.WriteString("Key (")
 				for i := 0; i < fk.ColumnCount(); i++ {
 					if i > 0 {
-						details.WriteString(" ,")
+						details.WriteString(", ")
 					}
 					col := origin.Table.Column(fk.OriginColumnOrdinal(origin.Table, i))
 					details.WriteString(string(col.ColName()))
 				}
 				details.WriteString(")=(")
+				sawNull := false
 				for i, col := range c.KeyCols {
 					if i > 0 {
 						details.WriteString(", ")
 					}
+					d := row[query.getColumnOrdinal(col)]
+					if d == tree.DNull {
+						sawNull = true
+						break
+					}
 					details.WriteString(row[query.getColumnOrdinal(col)].String())
 				}
-				details.WriteString(") is not present in table ")
-				lex.EncodeEscapedSQLIdent(&details, string(referenced.Alias.TableName))
-				details.WriteByte('.')
+				if sawNull {
+					details.Reset()
+					details.WriteString("MATCH FULL does not allow mixing of null and nonnull key values.")
+				} else {
+					details.WriteString(") is not present in table ")
+					lex.EncodeEscapedSQLIdent(&details, string(referenced.Alias.TableName))
+					details.WriteByte('.')
+				}
 			} else {
 				// Generate an error of the form:
 				//   ERROR:  delete on table "parent" violates foreign key constraint "child_child_p_fkey" on table "child"
