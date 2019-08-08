@@ -40,10 +40,18 @@ func Setup(
 		return 0, err
 	}
 
+	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
+	for _, table := range gen.Tables() {
+		if err := Split(ctx, db, table, splitConcurrency); err != nil {
+			return 0, err
+		}
+	}
+
 	var hooks workload.Hooks
 	if h, ok := gen.(workload.Hookser); ok {
 		hooks = h.Hooks()
 	}
+
 	if hooks.PostLoad != nil {
 		if err := hooks.PostLoad(db); err != nil {
 			return 0, errors.Wrapf(err, "Could not postload")
