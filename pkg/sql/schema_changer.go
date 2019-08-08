@@ -296,7 +296,9 @@ func (sc *SchemaChanger) AcquireLease(
 		lease = sc.createSchemaChangeLease()
 		tableDesc.Lease = &lease
 		b := txn.NewBatch()
-		writeDescToBatch(ctx, false /* kvTrace */, sc.settings, b, tableDesc.GetID(), tableDesc)
+		if err := writeDescToBatch(ctx, false /* kvTrace */, sc.settings, b, tableDesc.GetID(), tableDesc); err != nil {
+			return err
+		}
 		return txn.Run(ctx, b)
 	})
 	return lease, err
@@ -334,7 +336,9 @@ func (sc *SchemaChanger) ReleaseLease(
 			return err
 		}
 		b := txn.NewBatch()
-		writeDescToBatch(ctx, false /* kvTrace */, sc.settings, b, tableDesc.GetID(), tableDesc)
+		if err := writeDescToBatch(ctx, false /* kvTrace */, sc.settings, b, tableDesc.GetID(), tableDesc); err != nil {
+			return err
+		}
 		return txn.Run(ctx, b)
 	})
 }
@@ -366,7 +370,9 @@ func (sc *SchemaChanger) ExtendLease(
 			return err
 		}
 		b := txn.NewBatch()
-		writeDescToBatch(ctx, false /* kvTrace */, sc.settings, b, tableDesc.GetID(), tableDesc)
+		if err := writeDescToBatch(ctx, false /* kvTrace */, sc.settings, b, tableDesc.GetID(), tableDesc); err != nil {
+			return err
+		}
 		return txn.Run(ctx, b)
 	}); err != nil {
 		return err
@@ -1658,7 +1664,9 @@ func (sc *SchemaChanger) createRollbackJob(
 
 			// write descriptor, the version has already been incremented.
 			b := txn.NewBatch()
-			writeDescToBatch(ctx, false /* kvTrace */, sc.settings, b, tableDesc.GetID(), tableDesc)
+			if err := writeDescToBatch(ctx, false /* kvTrace */, sc.settings, b, tableDesc.GetID(), tableDesc); err != nil {
+				return nil, err
+			}
 			if err := txn.Run(ctx, b); err != nil {
 				return nil, err
 			}
