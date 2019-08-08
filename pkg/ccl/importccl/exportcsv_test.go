@@ -55,9 +55,6 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	zoneConfig := config.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(5000)
 	config.TestingSetZoneConfig(last+1, zoneConfig)
-	if err := workloadsql.Split(ctx, conn, wk.Tables()[0], 1 /* concurrency */); err != nil {
-		t.Fatal(err)
-	}
 	db.Exec(t, "ALTER TABLE bank SCATTER")
 	db.Exec(t, "SELECT 'force a scan to repopulate range cache' FROM [SELECT count(*) FROM bank]")
 
