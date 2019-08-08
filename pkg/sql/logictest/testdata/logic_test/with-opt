@@ -1,4 +1,4 @@
-# LogicTest: local-opt fakedist-opt
+# LogicTest: local fakedist
 
 statement ok
 CREATE TABLE x(a) AS SELECT generate_series(1, 3)

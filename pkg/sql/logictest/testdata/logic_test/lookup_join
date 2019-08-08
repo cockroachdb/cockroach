@@ -1,4 +1,4 @@
-# LogicTest: fakedist-opt local-opt
+# LogicTest: fakedist local
 
 statement ok
 CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c));

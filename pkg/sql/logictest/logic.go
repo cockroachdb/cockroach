@@ -260,7 +260,7 @@ import (
 //                files that lack LogicTest directives; must be one
 //                of `logicTestConfigs`.
 //                Example:
-//                  -config local-opt,fakedist-opt
+//                  -config local,fakedist
 //
 // Error mode:
 //
@@ -380,8 +380,6 @@ type testClusterConfig struct {
 	numNodes            int
 	useFakeSpanResolver bool
 	// if non-empty, overrides the default optimizer mode.
-	overrideOptimizerMode string
-	// if non-empty, overrides the default distsql mode.
 	overrideDistSQLMode string
 	// if non-empty, overrides the default vectorize mode.
 	overrideVectorize string
@@ -412,32 +410,97 @@ type testClusterConfig struct {
 // If no configs are indicated, the default one is used (unless overridden
 // via -config).
 var logicTestConfigs = []testClusterConfig{
-	{name: "local", numNodes: 1, overrideDistSQLMode: "off", overrideOptimizerMode: "off"},
-	{name: "local-v1.1@v1.0-noupgrade", numNodes: 1,
-		overrideDistSQLMode: "off", overrideOptimizerMode: "off",
+	{
+		name:                "local",
+		numNodes:            1,
+		overrideDistSQLMode: "off",
+		overrideAutoStats:   "false",
+	},
+	{
+		name:                "local-v1.1@v1.0-noupgrade",
+		numNodes:            1,
+		overrideDistSQLMode: "off",
+		overrideAutoStats:   "false",
 		bootstrapVersion: cluster.ClusterVersion{
 			Version: roachpb.Version{Major: 1},
 		},
 		serverVersion:  roachpb.Version{Major: 1, Minor: 1},
 		disableUpgrade: true,
 	},
-	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "off", overrideOptimizerMode: "on", overrideAutoStats: "false"},
-	{name: "local-vec", numNodes: 1, overrideOptimizerMode: "on", overrideVectorize: "experimental_on"},
-	{name: "fakedist", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
-	{name: "fakedist-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideAutoStats: "false"},
-	{name: "fakedist-vec", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideAutoStats: "false", overrideVectorize: "experimental_on"},
-	{name: "fakedist-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",
-		distSQLMetadataTestEnabled: true, skipShort: true},
-	{name: "fakedist-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",
-		distSQLUseDisk: true, skipShort: true},
-	{name: "5node-local", numNodes: 5, overrideDistSQLMode: "off", overrideOptimizerMode: "off"},
-	{name: "5node-dist", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
-	{name: "5node-dist-vec", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideVectorize: "experimental_on", overrideAutoStats: "false"},
-	{name: "5node-dist-opt", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideAutoStats: "false"},
-	{name: "5node-dist-metadata", numNodes: 5, overrideDistSQLMode: "on", distSQLMetadataTestEnabled: true,
-		skipShort: true, overrideOptimizerMode: "off"},
-	{name: "5node-dist-disk", numNodes: 5, overrideDistSQLMode: "on", distSQLUseDisk: true, skipShort: true,
-		overrideOptimizerMode: "off"},
+	{
+		name:              "local-vec",
+		numNodes:          1,
+		overrideAutoStats: "false",
+		overrideVectorize: "experimental_on",
+	},
+	{
+		name:                "fakedist",
+		numNodes:            3,
+		useFakeSpanResolver: true,
+		overrideDistSQLMode: "on",
+		overrideAutoStats:   "false",
+	},
+	{
+		name:                "fakedist-vec",
+		numNodes:            3,
+		useFakeSpanResolver: true,
+		overrideDistSQLMode: "on",
+		overrideAutoStats:   "false",
+		overrideVectorize:   "experimental_on",
+	},
+	{
+		name:                       "fakedist-metadata",
+		numNodes:                   3,
+		useFakeSpanResolver:        true,
+		overrideDistSQLMode:        "on",
+		overrideAutoStats:          "false",
+		distSQLMetadataTestEnabled: true,
+		skipShort:                  true,
+	},
+	{
+		name:                "fakedist-disk",
+		numNodes:            3,
+		useFakeSpanResolver: true,
+		overrideDistSQLMode: "on",
+		overrideAutoStats:   "false",
+		distSQLUseDisk:      true,
+		skipShort:           true,
+	},
+	{
+		name:                "5node-local",
+		numNodes:            5,
+		overrideDistSQLMode: "off",
+		overrideAutoStats:   "false",
+	},
+	{
+		name:                "5node-dist",
+		numNodes:            5,
+		overrideDistSQLMode: "on",
+		overrideAutoStats:   "false",
+	},
+	{
+		name:                "5node-dist-vec",
+		numNodes:            5,
+		overrideDistSQLMode: "on",
+		overrideVectorize:   "experimental_on",
+		overrideAutoStats:   "false",
+	},
+	{
+		name:                       "5node-dist-metadata",
+		numNodes:                   5,
+		overrideDistSQLMode:        "on",
+		distSQLMetadataTestEnabled: true,
+		skipShort:                  true,
+		overrideAutoStats:          "false",
+	},
+	{
+		name:                "5node-dist-disk",
+		numNodes:            5,
+		overrideDistSQLMode: "on",
+		distSQLUseDisk:      true,
+		skipShort:           true,
+		overrideAutoStats:   "false",
+	},
 }
 
 func parseTestConfig(names []string) []logicTestConfigIdx {
@@ -455,9 +518,7 @@ func parseTestConfig(names []string) []logicTestConfigIdx {
 var (
 	defaultConfigNames = []string{
 		"local",
-		"local-opt",
 		"fakedist",
-		"fakedist-opt",
 		"fakedist-metadata",
 		"fakedist-disk",
 	}
@@ -922,12 +983,6 @@ func (t *logicTest) setUser(user string) func() {
 	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
-	}
-	// Enable the cost-based optimizer rather than the heuristic planner.
-	if optMode := t.cfg.overrideOptimizerMode; optMode != "" {
-		if _, err := db.Exec(fmt.Sprintf("SET OPTIMIZER = %s;", optMode)); err != nil {
-			t.Fatal(err)
-		}
 	}
 	// The default value for extra_float_digits assumed by tests is
 	// 0. However, lib/pq by default configures this to 2 during

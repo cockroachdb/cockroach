@@ -160,12 +160,6 @@ func TestTrace(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				// TODO(justin): remove this and make sure the new results make sense.
-				// The optimizer elides some renders that the heuristic planner does
-				// not which makes the results different.
-				if _, err := sqlDB.Exec("SET OPTIMIZER = OFF"); err != nil {
-					t.Fatal(err)
-				}
 				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
 					t.Fatal(err)
 				}
@@ -197,12 +191,6 @@ func TestTrace(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				// TODO(justin): remove this and make sure the new results make sense.
-				// The optimizer elides some renders that the heuristic planner does
-				// not which makes the results different.
-				if _, err := sqlDB.Exec("SET OPTIMIZER = off"); err != nil {
-					t.Fatal(err)
-				}
 				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
 					t.Fatal(err)
 				}

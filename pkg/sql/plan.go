@@ -455,11 +455,6 @@ func (p *planTop) close(ctx context.Context) {
 	}
 }
 
-// columns retrieves the plan's columns.
-func (p *planTop) columns() sqlbase.ResultColumns {
-	return planColumns(p.plan)
-}
-
 // autoCommitNode is implemented by planNodes that might be able to commit the
 // KV txn in which they operate. Some nodes might want to do this to take
 // advantage of the 1PC optimization in case they're running as an implicit

@@ -45,6 +45,7 @@ var retiredSettings = map[string]struct{}{
 	"server.heap_profile.system_memory_threshold_fraction": {},
 	"timeseries.storage.10s_resolution_ttl":                {},
 	"changefeed.push.enabled":                              {},
+	"sql.defaults.optimizer":                               {},
 }
 
 // Register adds a setting to the registry.

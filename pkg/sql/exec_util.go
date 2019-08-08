@@ -115,18 +115,6 @@ var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
 	"set to true to enable session tracing", false,
 )
 
-// OptimizerClusterMode controls the cluster default for when the cost-based optimizer is used.
-var OptimizerClusterMode = settings.RegisterEnumSetting(
-	"sql.defaults.optimizer",
-	"default cost-based optimizer mode",
-	"on",
-	map[int64]string{
-		int64(sessiondata.OptimizerLocal): "local",
-		int64(sessiondata.OptimizerOff):   "off",
-		int64(sessiondata.OptimizerOn):    "on",
-	},
-)
-
 // ReorderJoinsLimitClusterSettingName is the name of the cluster setting for
 // the maximum number of joins to reorder.
 const ReorderJoinsLimitClusterSettingName = "sql.defaults.reorder_joins_limit"
@@ -1822,10 +1810,6 @@ func (m *sessionDataMutator) SetVectorize(val sessiondata.VectorizeExecMode) {
 
 func (m *sessionDataMutator) SetVectorizeRowCountThreshold(val uint64) {
 	m.data.VectorizeRowCountThreshold = val
-}
-
-func (m *sessionDataMutator) SetOptimizerMode(val sessiondata.OptimizerMode) {
-	m.data.OptimizerMode = val
 }
 
 func (m *sessionDataMutator) SetOptimizerFKs(val bool) {

@@ -56,7 +56,6 @@ type kv struct {
 	zipfian                              bool
 	splits                               int
 	secondaryIndex                       bool
-	useOpt                               bool
 	targetCompressionRatio               float64
 }
 
@@ -110,7 +109,6 @@ var kvMeta = workload.Meta{
 			`Number of splits to perform before starting normal operations.`)
 		g.flags.BoolVar(&g.secondaryIndex, `secondary-index`, false,
 			`Add a secondary index to the schema`)
-		g.flags.BoolVar(&g.useOpt, `use-opt`, true, `Use cost-based optimizer`)
 		g.flags.Float64Var(&g.targetCompressionRatio, `target-compression-ratio`, 1.0,
 			`Target compression ratio for data blocks. Must be >= 1.0`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
@@ -205,13 +203,6 @@ func (w *kv) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, er
 	mcp, err := workload.NewMultiConnPool(cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
-	}
-
-	if !w.useOpt {
-		_, err := mcp.Get().Exec("SET optimizer=off")
-		if err != nil {
-			return workload.QueryLoad{}, err
-		}
 	}
 
 	// Read statement

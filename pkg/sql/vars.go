@@ -425,21 +425,19 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	// This is deprecated; the only allowable setting is "on".
 	`optimizer`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			mode, ok := sessiondata.OptimizerModeFromString(s)
-			if !ok {
-				return newVarValueError(`optimizer`, s, "on", "off", "local", "always")
+			if strings.ToUpper(s) != "ON" {
+				return newVarValueError(`optimizer`, s, "on")
 			}
-			m.SetOptimizerMode(mode)
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return evalCtx.SessionData.OptimizerMode.String()
+			return "on"
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return sessiondata.OptimizerMode(
-				OptimizerClusterMode.Get(sv)).String()
+			return "on"
 		},
 	},
 
