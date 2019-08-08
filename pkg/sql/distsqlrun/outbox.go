@@ -219,6 +219,11 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 		var err error
 		conn, err = m.flowCtx.Cfg.NodeDialer.Dial(ctx, m.nodeID)
 		if err != nil {
+			// Log any Dial errors. This does not have a verbosity check due to being
+			// a critical part of query execution: if this step doesn't work, the
+			// receiving side might end up hanging or timing out.
+			// TODO(asubiotto): Does a retry policy here make sense?
+			log.Infof(ctx, "outbox: connection dial error: %+v", err)
 			return err
 		}
 		client := distsqlpb.NewDistSQLClient(conn)
