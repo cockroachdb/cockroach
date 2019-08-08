@@ -156,27 +156,25 @@ merge-join  ·               ·          (x, y)  ·
  ├── scan   ·               ·          (x, y)  +x
  │          table           a@primary  ·       ·
  │          spans           ALL        ·       ·
- └── scan   ·               ·          (x, z)  +x
+ └── scan   ·               ·          (x)     +x
 ·           table           b@primary  ·       ·
 ·           spans           ALL        ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x-1 = a.x)
 ----
-hash-join       ·                  ·                (x, y)           ·
- │              type               semi             ·                ·
- │              equality           (x) = (column5)  ·                ·
- │              left cols are key  ·                ·                ·
- ├── scan       ·                  ·                (x, y)           ·
- │              table              a@primary        ·                ·
- │              spans              ALL              ·                ·
- └── render     ·                  ·                (column5, x, z)  ·
-      │         render 0           x - 1            ·                ·
-      │         render 1           x                ·                ·
-      │         render 2           z                ·                ·
-      └── scan  ·                  ·                (x, z)           ·
-·               table              b@primary        ·                ·
-·               spans              ALL              ·                ·
+hash-join       ·                  ·                (x, y)     ·
+ │              type               semi             ·          ·
+ │              equality           (x) = (column5)  ·          ·
+ │              left cols are key  ·                ·          ·
+ ├── scan       ·                  ·                (x, y)     ·
+ │              table              a@primary        ·          ·
+ │              spans              ALL              ·          ·
+ └── render     ·                  ·                (column5)  ·
+      │         render 0           x - 1            ·          ·
+      └── scan  ·                  ·                (x)        ·
+·               table              b@primary        ·          ·
+·               spans              ALL              ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM b WHERE b.x = a.x)
@@ -188,27 +186,25 @@ merge-join  ·               ·          (x, y)  ·
  ├── scan   ·               ·          (x, y)  +x
  │          table           a@primary  ·       ·
  │          spans           ALL        ·       ·
- └── scan   ·               ·          (x, z)  +x
+ └── scan   ·               ·          (x)     +x
 ·           table           b@primary  ·       ·
 ·           spans           ALL        ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b.x)
 ----
-hash-join       ·                  ·                (x, z)           ·
- │              type               anti             ·                ·
- │              equality           (x) = (column5)  ·                ·
- │              left cols are key  ·                ·                ·
- ├── scan       ·                  ·                (x, z)           ·
- │              table              b@primary        ·                ·
- │              spans              ALL              ·                ·
- └── render     ·                  ·                (column5, x, y)  ·
-      │         render 0           x - 1            ·                ·
-      │         render 1           x                ·                ·
-      │         render 2           y                ·                ·
-      └── scan  ·                  ·                (x, y)           ·
-·               table              a@primary        ·                ·
-·               spans              ALL              ·                ·
+hash-join       ·                  ·                (x, z)     ·
+ │              type               anti             ·          ·
+ │              equality           (x) = (column5)  ·          ·
+ │              left cols are key  ·                ·          ·
+ ├── scan       ·                  ·                (x, z)     ·
+ │              table              b@primary        ·          ·
+ │              spans              ALL              ·          ·
+ └── render     ·                  ·                (column5)  ·
+      │         render 0           x - 1            ·          ·
+      └── scan  ·                  ·                (x)        ·
+·               table              a@primary        ·          ·
+·               spans              ALL              ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT x FROM b)
