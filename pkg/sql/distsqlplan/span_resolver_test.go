@@ -52,12 +52,8 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	// Replicate the row ranges on all of the first 3 nodes. Save the 4th node in
 	// a pristine state, with empty caches.
 	for i := 0; i < 3; i++ {
-		var err error
-		rowRanges[i], err = tc.AddReplicas(
-			rowRanges[i].StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
-		if err != nil {
-			t.Fatal(err)
-		}
+		rowRanges[i] = tc.AddReplicasOrFatal(
+			t, rowRanges[i].StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
 	}
 
 	// Scatter the leases around; node i gets range i.
