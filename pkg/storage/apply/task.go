@@ -32,21 +32,31 @@ type StateMachine interface {
 	NewBatch() Batch
 	// ApplySideEffects applies the in-memory side-effects of a Command to
 	// the replicated state machine. The method will be called in the order
-	// that the commands are committed to the state machine's log. It will
-	// always be called with a Command that has been checked and whose Batch
-	// has already been committed.
+	// that the commands are committed to the state machine's log. Once the
+	// in-memory side-effects of the Command are applied, an AppliedCommand
+	// is returned so that it can be finished and acknowledged.
+	//
+	// The method will always be called with a Command that has been checked
+	// and whose persistent state transition has been applied to the state
+	// machine. Because this method is called after applying the persistent
+	// state transition for a Command, it may not be called in the case of
+	// an untimely crash. This means that applying these side-effects will
+	// typically update the in-memory representation of the state machine
+	// to the same state that it would be in if the process restarted.
 	ApplySideEffects(CheckedCommand) (AppliedCommand, error)
 }
 
-// Batch accumulates a series of updates from Commands and applies them all
-// at once to its StateMachine when committed. Groups of Commands will be
+// Batch accumulates a series of updates from Commands and performs them
+// all at once to its StateMachine when applied. Groups of Commands will be
 // staged in the Batch such that one or more trivial Commands are staged or
 // exactly one non-trivial Command is staged.
 type Batch interface {
-	// Stage inserts a Command into the Batch.
+	// Stage inserts a Command into the Batch. In doing so, the Command is
+	// checked for rejection and a CheckedCommand is returned.
 	Stage(Command) (CheckedCommand, error)
-	// Commit commits the updates staged in the Batch to the StateMachine.
-	Commit(context.Context) error
+	// ApplyToStateMachine applies the persistent state transitions staged
+	// in the Batch to the StateMachine, atomically.
+	ApplyToStateMachine(context.Context) error
 	// Close closes the batch and releases any resources that it holds.
 	Close()
 }
@@ -149,12 +159,12 @@ func (t *Task) applyOneBatch(ctx context.Context, iter CommandIterator) error {
 		return err
 	}
 
-	// Commit the batch to the storage engine.
-	if err := batch.Commit(ctx); err != nil {
+	// Apply the persistent state transitions to the state machine.
+	if err := batch.ApplyToStateMachine(ctx); err != nil {
 		return err
 	}
 
-	// Apply the side-effects of each command.
+	// Apply the side-effects of each command to the state machine.
 	appliedIter, err := mapCheckedCmdIter(stagedIter, t.sm.ApplySideEffects)
 	if err != nil {
 		return err

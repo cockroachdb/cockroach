@@ -136,11 +136,11 @@ func (b *testBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error) {
 	ccmd := checkedCmd{cmd: cmd, rejected: cmd.shouldReject}
 	return &ccmd, nil
 }
-func (b *testBatch) Commit(_ context.Context) error {
+func (b *testBatch) ApplyToStateMachine(_ context.Context) error {
 	b.sm.batches = append(b.sm.batches, b.staged)
 	b.sm.applied = append(b.sm.applied, b.staged...)
 	if logging {
-		fmt.Printf(" committing batch with commands=%v\n", b.staged)
+		fmt.Printf(" applying batch with commands=%v\n", b.staged)
 	}
 	return nil
 }

@@ -634,10 +634,12 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	}
 }
 
-// Commit implements the apply.Batch interface. The method handles the
-// second phase of applying a command to the replica state machine. It writes
-// the application batch's accumulated RocksDB batch to the storage engine.
-func (b *replicaAppBatch) Commit(ctx context.Context) error {
+// ApplyToStateMachine implements the apply.Batch interface. The method handles
+// the second phase of applying a command to the replica state machine. It
+// writes the application batch's accumulated RocksDB batch to the storage
+// engine. This encompasses the persistent state transition portion of entry
+// application.
+func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	if log.V(4) {
 		log.Infof(ctx, "flushing batch %v of %d entries", b.state, b.entries)
 	}
