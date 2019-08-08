@@ -801,8 +801,12 @@ func (r *subqueryHoister) hoistAll(scalar opt.ScalarExpr) opt.ScalarExpr {
 		}
 
 		// Replace the Subquery operator with a Variable operator referring to
-		// the first (and only) column in the hoisted query.
+		// the output column of the hoisted query.
 		colID, _ := subqueryProps.OutputCols.Next(0)
+		switch t := scalar.(type) {
+		case *memo.ArrayFlattenExpr:
+			colID = t.RequestedCol
+		}
 		return r.f.ConstructVariable(colID)
 	}
 
