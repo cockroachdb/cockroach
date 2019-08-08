@@ -566,3 +566,30 @@ ALTER PARTITION p1 OF INDEX "my database".public.show_test@primary CONFIGURE ZON
   constraints = '[+dc=dc1]';
 ALTER PARTITION p2 OF INDEX "my database".public.show_test@primary CONFIGURE ZONE USING
   constraints = '[+dc=dc2]'
+
+subtest alter_all_partitions
+
+statement ok
+CREATE TABLE t2 (x INT PRIMARY KEY) PARTITION BY LIST (x) (
+  PARTITION p1 VALUES IN (1),
+  PARTITION p2 VALUES IN (2)
+);
+CREATE INDEX x1 ON t2 (x) PARTITION BY LIST (x) (
+  PARTITION p1 VALUES IN (1),
+  PARTITION p2 VALUES IN (2)
+);
+CREATE INDEX x2 ON t2 (x) PARTITION BY LIST (x) (
+  PARTITION p1 VALUES IN (1),
+  PARTITION p2 VALUES IN (2)
+);
+ALTER ALL PARTITIONS p1 OF TABLE t2 CONFIGURE ZONE USING num_replicas = 1
+
+query TT
+SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE target LIKE '%t2@%'
+----
+PARTITION p1 OF INDEX "my database".public.t2@primary  ALTER PARTITION p1 OF INDEX "my database".public.t2@primary CONFIGURE ZONE USING
+                                                       num_replicas = 1
+PARTITION p1 OF INDEX "my database".public.t2@x1       ALTER PARTITION p1 OF INDEX "my database".public.t2@x1 CONFIGURE ZONE USING
+                                                       num_replicas = 1
+PARTITION p1 OF INDEX "my database".public.t2@x2       ALTER PARTITION p1 OF INDEX "my database".public.t2@x2 CONFIGURE ZONE USING
+                                                       num_replicas = 1

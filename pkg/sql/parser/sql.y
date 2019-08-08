@@ -1442,6 +1442,17 @@ alter_zone_table_stmt:
     }
     $$.val = s
   }
+| ALTER ALL PARTITIONS partition_name OF TABLE table_name set_zone_config
+  {
+    name := $7.unresolvedObjectName().ToTableName()
+    s := $8.setZoneConfig()
+    s.ZoneSpecifier = tree.ZoneSpecifier{
+       TableOrIndex: tree.TableIndexName{Table: name},
+       Partition: tree.Name($4),
+    }
+    s.SetAll = true
+    $$.val = s
+  }
 
 alter_zone_index_stmt:
   ALTER INDEX table_index_name set_zone_config

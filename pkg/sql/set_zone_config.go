@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 type optionValue struct {
@@ -41,6 +41,7 @@ type setZoneConfigNode struct {
 	yamlConfig    tree.TypedExpr
 	options       map[tree.Name]optionValue
 	setDefault    bool
+	setAll        bool
 
 	run setZoneConfigRun
 }
@@ -153,6 +154,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		yamlConfig:    yamlConfig,
 		options:       options,
 		setDefault:    n.SetDefault,
+		setAll:        n.SetAll,
 	}, nil
 }
 
@@ -241,276 +243,306 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		return err
 	}
 
-	// resolveZone determines the ID of the target object of the zone
-	// specifier. This ought to succeed regardless of whether there is
-	// already a zone config for the target object.
-	targetID, err := resolveZone(
-		params.ctx, params.p.txn, &n.zoneSpecifier)
-	if err != nil {
-		return err
-	}
-	if targetID != keys.SystemDatabaseID && sqlbase.IsSystemConfigID(targetID) {
-		return pgerror.Newf(pgcode.CheckViolation,
-			`cannot set zone configs for system config tables; `+
-				`try setting your config on the entire "system" database instead`)
-	} else if targetID == keys.RootNamespaceID && deleteZone {
-		return pgerror.Newf(pgcode.CheckViolation,
-			"cannot remove default zone")
-	}
-
-	// resolveSubzone determines the sub-parts of the zone
-	// specifier. This ought to succeed regardless of whether there is
-	// already a zone config.
-	index, partition, err := resolveSubzone(&n.zoneSpecifier, table)
-	if err != nil {
-		return err
-	}
-
-	// Retrieve the partial zone configuration
-	partialZone, err := getZoneConfigRaw(params.ctx, params.p.txn, targetID)
-	if err != nil {
-		return err
-	}
-
-	// No zone was found. Possibly a SubzonePlaceholder depending on the index.
-	if partialZone == nil {
-		partialZone = config.NewZoneConfig()
-		if index != nil {
-			subzonePlaceholder = true
-		}
-	}
-
-	var partialSubzone *config.Subzone
-	if index != nil {
-		partialSubzone = partialZone.GetSubzone(uint32(index.ID), partition)
-		if partialSubzone == nil {
-			partialSubzone = &config.Subzone{Config: *config.NewZoneConfig()}
-		}
-	}
-
-	// Retrieve the zone configuration.
-	//
-	// If the statement was USING DEFAULT, we want to ignore the zone
-	// config that exists on targetID and instead skip to the inherited
-	// default (whichever applies -- a database if targetID is a table,
-	// default if targetID is a database, etc.). For this, we use the last
-	// parameter getInheritedDefault to GetZoneConfigInTxn().
-	// These zones are only used for validations. The merged zone is will
-	// not be written.
-	_, completeZone, completeSubzone, err := GetZoneConfigInTxn(params.ctx, params.p.txn,
-		uint32(targetID), index, partition, n.setDefault)
-
-	if err == errNoZoneConfigApplies {
-		// No zone config yet.
-		//
-		// GetZoneConfigInTxn will fail with errNoZoneConfigApplies when
-		// the target ID is not a database object, i.e. one of the system
-		// ranges (liveness, meta, etc.), and did not have a zone config
-		// already.
-		completeZone = protoutil.Clone(params.extendedEvalCtx.ExecCfg.DefaultZoneConfig).(*config.ZoneConfig)
-	} else if err != nil {
-		return err
-	}
-
-	// Copy the fields set by the INHERIT field command.
-	partialZone.CopyFromZone(*completeZone, copyFromParentList)
-
-	if deleteZone {
-		if index != nil {
-			didDelete := completeZone.DeleteSubzone(uint32(index.ID), partition)
-			_ = partialZone.DeleteSubzone(uint32(index.ID), partition)
-			if !didDelete {
-				// If we didn't do any work, return early. We'd otherwise perform an
-				// update that would make it look like one row was affected.
-				return nil
+	// If this is an ALTER ALL PARTITIONS statement, we need to find all indexes
+	// with the specified partition name and apply the zone configuration to all
+	// of them.
+	var specifiers []tree.ZoneSpecifier
+	if table != nil && n.zoneSpecifier.Partition != "" && n.setAll {
+		for _, idx := range table.AllNonDropIndexes() {
+			if p := idx.FindPartitionByName(string(n.zoneSpecifier.Partition)); p != nil {
+				zs := n.zoneSpecifier
+				zs.TableOrIndex.Index = tree.UnrestrictedName(idx.Name)
+				specifiers = append(specifiers, zs)
 			}
-		} else {
-			completeZone.DeleteTableConfig()
-			partialZone.DeleteTableConfig()
 		}
 	} else {
-		// Validate the user input.
-		if len(yamlConfig) == 0 || yamlConfig[len(yamlConfig)-1] != '\n' {
-			// YAML values must always end with a newline character. If there is none,
-			// for UX convenience add one.
-			yamlConfig += "\n"
-		}
+		specifiers = append(specifiers, n.zoneSpecifier)
+	}
 
-		// Determine where to load the configuration.
-		newZone := *completeZone
-		if completeSubzone != nil {
-			newZone = completeSubzone.Config
+	applyZoneConfig := func(zs tree.ZoneSpecifier) error {
+		// resolveZone determines the ID of the target object of the zone
+		// specifier. This ought to succeed regardless of whether there is
+		// already a zone config for the target object.
+		targetID, err := resolveZone(params.ctx, params.p.txn, &zs)
+		if err != nil {
+			return err
 		}
-
-		// Determine where to load the partial configuration.
-		// finalZone is where the new changes are unmarshalled onto.
-		// It must be a fresh ZoneConfig if a new subzone is being created.
-		// If an existing subzone is being modified, finalZone is overridden.
-		finalZone := *partialZone
-		if partialSubzone != nil {
-			finalZone = partialSubzone.Config
-		}
-
-		// ALTER RANGE default USING DEFAULT sets the default to the in
-		// memory default value.
-		if n.setDefault && keys.RootNamespaceID == uint32(targetID) {
-			finalZone = *protoutil.Clone(params.extendedEvalCtx.ExecCfg.DefaultZoneConfig).(*config.ZoneConfig)
-		} else if n.setDefault {
-			finalZone = *config.NewZoneConfig()
-		}
-		// Load settings from YAML. If there was no YAML (e.g. because the
-		// query specified CONFIGURE ZONE USING), the YAML string will be
-		// empty, in which case the unmarshaling will be a no-op. This is
-		// innocuous.
-		if err := yaml.UnmarshalStrict([]byte(yamlConfig), &newZone); err != nil {
+		if targetID != keys.SystemDatabaseID && sqlbase.IsSystemConfigID(targetID) {
 			return pgerror.Newf(pgcode.CheckViolation,
-				"could not parse zone config: %v", err)
-		}
-
-		// Load settings from YAML into the partial zone as well.
-		if err := yaml.UnmarshalStrict([]byte(yamlConfig), &finalZone); err != nil {
+				`cannot set zone configs for system config tables; `+
+					`try setting your config on the entire "system" database instead`)
+		} else if targetID == keys.RootNamespaceID && deleteZone {
 			return pgerror.Newf(pgcode.CheckViolation,
-				"could not parse zone config: %v", err)
+				"cannot remove default zone")
 		}
 
-		// Load settings from var = val assignments. If there were no such
-		// settings, (e.g. because the query specified CONFIGURE ZONE = or
-		// USING DEFAULT), the setter slice will be empty and this will be
-		// a no-op. This is innocuous.
-		for _, setter := range setters {
-			// A setter may fail with an error-via-panic. Catch those.
-			if err := func() (err error) {
-				defer func() {
-					if p := recover(); p != nil {
-						if errP, ok := p.(error); ok {
-							// Catch and return the error.
-							err = errP
-						} else {
-							// Nothing we know about, let it continue as a panic.
-							panic(p)
-						}
-					}
-				}()
-
-				setter(&newZone)
-				setter(&finalZone)
-				return nil
-			}(); err != nil {
-				return err
-			}
-		}
-
-		// Validate that there are no conflicts in the zone setup.
-		if err := validateNoRepeatKeysInZone(&newZone); err != nil {
+		// resolveSubzone determines the sub-parts of the zone
+		// specifier. This ought to succeed regardless of whether there is
+		// already a zone config.
+		index, partition, err := resolveSubzone(&zs, table)
+		if err != nil {
 			return err
 		}
 
-		// Validate that the result makes sense.
-		if err := validateZoneAttrsAndLocalities(
-			params.ctx,
-			params.extendedEvalCtx.StatusServer.Nodes,
-			&newZone,
-		); err != nil {
+		// Retrieve the partial zone configuration
+		partialZone, err := getZoneConfigRaw(params.ctx, params.p.txn, targetID)
+		if err != nil {
 			return err
 		}
 
-		// Are we operating on an index?
-		if index == nil {
-			// No: the final zone config is the one we just processed.
-			completeZone = &newZone
-			partialZone = &finalZone
-		} else {
-			// If the zone config for targetID was a subzone placeholder, it'll have
-			// been skipped over by GetZoneConfigInTxn. We need to load it regardless
-			// to avoid blowing away other subzones.
-
-			// TODO(ridwanmsharif): How is this supposed to change? getZoneConfigRaw
-			// gives no guarantees about completeness. Some work might need to happen
-			// here to complete the missing fields. The reason is because we don't know
-			// here if a zone is a placeholder or not. Can we do a GetConfigInTxn here?
-			// And if it is a placeholder, we use getZoneConfigRaw to create one.
-			completeZone, err = getZoneConfigRaw(params.ctx, params.p.txn, targetID)
-			if err != nil {
-				return err
-			} else if completeZone == nil {
-				completeZone = config.NewZoneConfig()
+		// No zone was found. Possibly a SubzonePlaceholder depending on the index.
+		if partialZone == nil {
+			partialZone = config.NewZoneConfig()
+			if index != nil {
+				subzonePlaceholder = true
 			}
-			completeZone.SetSubzone(config.Subzone{
-				IndexID:       uint32(index.ID),
-				PartitionName: partition,
-				Config:        newZone,
-			})
+		}
 
-			// The partial zone might just be empty. If so,
-			// replace it with a SubzonePlaceholder.
-			if subzonePlaceholder {
+		var partialSubzone *config.Subzone
+		if index != nil {
+			partialSubzone = partialZone.GetSubzone(uint32(index.ID), partition)
+			if partialSubzone == nil {
+				partialSubzone = &config.Subzone{Config: *config.NewZoneConfig()}
+			}
+		}
+
+		// Retrieve the zone configuration.
+		//
+		// If the statement was USING DEFAULT, we want to ignore the zone
+		// config that exists on targetID and instead skip to the inherited
+		// default (whichever applies -- a database if targetID is a table,
+		// default if targetID is a database, etc.). For this, we use the last
+		// parameter getInheritedDefault to GetZoneConfigInTxn().
+		// These zones are only used for validations. The merged zone is will
+		// not be written.
+		_, completeZone, completeSubzone, err := GetZoneConfigInTxn(params.ctx, params.p.txn,
+			uint32(targetID), index, partition, n.setDefault)
+
+		if err == errNoZoneConfigApplies {
+			// No zone config yet.
+			//
+			// GetZoneConfigInTxn will fail with errNoZoneConfigApplies when
+			// the target ID is not a database object, i.e. one of the system
+			// ranges (liveness, meta, etc.), and did not have a zone config
+			// already.
+			completeZone = protoutil.Clone(params.extendedEvalCtx.ExecCfg.DefaultZoneConfig).(*config.ZoneConfig)
+		} else if err != nil {
+			return err
+		}
+
+		// Copy the fields set by the INHERIT field command.
+		partialZone.CopyFromZone(*completeZone, copyFromParentList)
+
+		if deleteZone {
+			if index != nil {
+				didDelete := completeZone.DeleteSubzone(uint32(index.ID), partition)
+				_ = partialZone.DeleteSubzone(uint32(index.ID), partition)
+				if !didDelete {
+					// If we didn't do any work, return early. We'd otherwise perform an
+					// update that would make it look like one row was affected.
+					return nil
+				}
+			} else {
+				completeZone.DeleteTableConfig()
 				partialZone.DeleteTableConfig()
 			}
+		} else {
+			// Validate the user input.
+			if len(yamlConfig) == 0 || yamlConfig[len(yamlConfig)-1] != '\n' {
+				// YAML values must always end with a newline character. If there is none,
+				// for UX convenience add one.
+				yamlConfig += "\n"
+			}
 
-			partialZone.SetSubzone(config.Subzone{
-				IndexID:       uint32(index.ID),
-				PartitionName: partition,
-				Config:        finalZone,
-			})
+			// Determine where to load the configuration.
+			newZone := *completeZone
+			if completeSubzone != nil {
+				newZone = completeSubzone.Config
+			}
+
+			// Determine where to load the partial configuration.
+			// finalZone is where the new changes are unmarshalled onto.
+			// It must be a fresh ZoneConfig if a new subzone is being created.
+			// If an existing subzone is being modified, finalZone is overridden.
+			finalZone := *partialZone
+			if partialSubzone != nil {
+				finalZone = partialSubzone.Config
+			}
+
+			// ALTER RANGE default USING DEFAULT sets the default to the in
+			// memory default value.
+			if n.setDefault && keys.RootNamespaceID == uint32(targetID) {
+				finalZone = *protoutil.Clone(params.extendedEvalCtx.ExecCfg.DefaultZoneConfig).(*config.ZoneConfig)
+			} else if n.setDefault {
+				finalZone = *config.NewZoneConfig()
+			}
+			// Load settings from YAML. If there was no YAML (e.g. because the
+			// query specified CONFIGURE ZONE USING), the YAML string will be
+			// empty, in which case the unmarshaling will be a no-op. This is
+			// innocuous.
+			if err := yaml.UnmarshalStrict([]byte(yamlConfig), &newZone); err != nil {
+				return pgerror.Newf(pgcode.CheckViolation,
+					"could not parse zone config: %v", err)
+			}
+
+			// Load settings from YAML into the partial zone as well.
+			if err := yaml.UnmarshalStrict([]byte(yamlConfig), &finalZone); err != nil {
+				return pgerror.Newf(pgcode.CheckViolation,
+					"could not parse zone config: %v", err)
+			}
+
+			// Load settings from var = val assignments. If there were no such
+			// settings, (e.g. because the query specified CONFIGURE ZONE = or
+			// USING DEFAULT), the setter slice will be empty and this will be
+			// a no-op. This is innocuous.
+			for _, setter := range setters {
+				// A setter may fail with an error-via-panic. Catch those.
+				if err := func() (err error) {
+					defer func() {
+						if p := recover(); p != nil {
+							if errP, ok := p.(error); ok {
+								// Catch and return the error.
+								err = errP
+							} else {
+								// Nothing we know about, let it continue as a panic.
+								panic(p)
+							}
+						}
+					}()
+
+					setter(&newZone)
+					setter(&finalZone)
+					return nil
+				}(); err != nil {
+					return err
+				}
+			}
+
+			// Validate that there are no conflicts in the zone setup.
+			if err := validateNoRepeatKeysInZone(&newZone); err != nil {
+				return err
+			}
+
+			// Validate that the result makes sense.
+			if err := validateZoneAttrsAndLocalities(
+				params.ctx,
+				params.extendedEvalCtx.StatusServer.Nodes,
+				&newZone,
+			); err != nil {
+				return err
+			}
+
+			// Are we operating on an index?
+			if index == nil {
+				// No: the final zone config is the one we just processed.
+				completeZone = &newZone
+				partialZone = &finalZone
+			} else {
+				// If the zone config for targetID was a subzone placeholder, it'll have
+				// been skipped over by GetZoneConfigInTxn. We need to load it regardless
+				// to avoid blowing away other subzones.
+
+				// TODO(ridwanmsharif): How is this supposed to change? getZoneConfigRaw
+				// gives no guarantees about completeness. Some work might need to happen
+				// here to complete the missing fields. The reason is because we don't know
+				// here if a zone is a placeholder or not. Can we do a GetConfigInTxn here?
+				// And if it is a placeholder, we use getZoneConfigRaw to create one.
+				completeZone, err = getZoneConfigRaw(params.ctx, params.p.txn, targetID)
+				if err != nil {
+					return err
+				} else if completeZone == nil {
+					completeZone = config.NewZoneConfig()
+				}
+				completeZone.SetSubzone(config.Subzone{
+					IndexID:       uint32(index.ID),
+					PartitionName: partition,
+					Config:        newZone,
+				})
+
+				// The partial zone might just be empty. If so,
+				// replace it with a SubzonePlaceholder.
+				if subzonePlaceholder {
+					partialZone.DeleteTableConfig()
+				}
+
+				partialZone.SetSubzone(config.Subzone{
+					IndexID:       uint32(index.ID),
+					PartitionName: partition,
+					Config:        finalZone,
+				})
+			}
+
+			// Finally revalidate everything. Validate only the completeZone config.
+			if err := completeZone.Validate(); err != nil {
+				return pgerror.Newf(pgcode.CheckViolation,
+					"could not validate zone config: %v", err)
+			}
 		}
 
-		// Finally revalidate everything. Validate only the completeZone config.
-		if err := completeZone.Validate(); err != nil {
-			return pgerror.Newf(pgcode.CheckViolation,
-				"could not validate zone config: %v", err)
+		// Write the partial zone configuration.
+		hasNewSubzones := !deleteZone && index != nil
+		execConfig := params.extendedEvalCtx.ExecCfg
+		zoneToWrite := partialZone
+
+		// Finally check for the extra protection partial zone configs would
+		// require from changes made to parent zones. The extra protections are:
+		//
+		// RangeMinBytes and RangeMaxBytes must be set together
+		// LeasePreferences cannot be set unless Constraints are explicitly set
+		// Per-replica constraints cannot be set unless num_replicas is explicitly set
+		if err := zoneToWrite.ValidateTandemFields(); err != nil {
+			err = errors.Wrap(err, "could not validate zone config")
+			err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+			err = errors.WithHint(err,
+				"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] to populate the field")
+			return err
+		}
+		n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
+			targetID, table, zoneToWrite, execConfig, hasNewSubzones)
+		if err != nil {
+			return err
+		}
+
+		// Record that the change has occurred for auditing.
+		var eventLogType EventLogType
+		info := struct {
+			Target  string
+			Config  string `json:",omitempty"`
+			Options string `json:",omitempty"`
+			User    string
+		}{
+			Target:  tree.AsStringWithFQNames(&zs, params.Ann()),
+			Config:  strings.TrimSpace(yamlConfig),
+			Options: optionStr.String(),
+			User:    params.SessionData().User,
+		}
+		if deleteZone {
+			eventLogType = EventLogRemoveZoneConfig
+		} else {
+			eventLogType = EventLogSetZoneConfig
+		}
+		return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+			params.ctx,
+			params.p.txn,
+			eventLogType,
+			int32(targetID),
+			int32(params.extendedEvalCtx.NodeID),
+			info,
+		)
+	}
+	for _, zs := range specifiers {
+		// Note(solon): Currently the zone configurations are applied serially for
+		// each specifier. This could certainly be made more efficient. For
+		// instance, we should only need to write to the system.zones table once
+		// rather than once for every specifier. However, the number of specifiers
+		// is expected to be low--it's bounded by the number of indexes on the
+		// table--so I'm holding off on adding that complexity unless we find it's
+		// necessary.
+		if err := applyZoneConfig(zs); err != nil {
+			return err
 		}
 	}
-
-	// Write the partial zone configuration.
-	hasNewSubzones := !deleteZone && index != nil
-	execConfig := params.extendedEvalCtx.ExecCfg
-	zoneToWrite := partialZone
-
-	// Finally check for the extra protection partial zone configs would
-	// require from changes made to parent zones. The extra protections are:
-	//
-	// RangeMinBytes and RangeMaxBytes must be set together
-	// LeasePreferences cannot be set unless Constraints are explicitly set
-	// Per-replica constraints cannot be set unless num_replicas is explicitly set
-	if err := zoneToWrite.ValidateTandemFields(); err != nil {
-		err = errors.Wrap(err, "could not validate zone config")
-		err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
-		err = errors.WithHint(err,
-			"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] to populate the field")
-		return err
-	}
-	n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
-		targetID, table, zoneToWrite, execConfig, hasNewSubzones)
-	if err != nil {
-		return err
-	}
-
-	// Record that the change has occurred for auditing.
-	var eventLogType EventLogType
-	info := struct {
-		Target  string
-		Config  string `json:",omitempty"`
-		Options string `json:",omitempty"`
-		User    string
-	}{
-		Target:  tree.AsStringWithFQNames(&n.zoneSpecifier, params.Ann()),
-		Config:  strings.TrimSpace(yamlConfig),
-		Options: optionStr.String(),
-		User:    params.SessionData().User,
-	}
-	if deleteZone {
-		eventLogType = EventLogRemoveZoneConfig
-	} else {
-		eventLogType = EventLogSetZoneConfig
-	}
-	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		params.ctx,
-		params.p.txn,
-		eventLogType,
-		int32(targetID),
-		int32(params.extendedEvalCtx.NodeID),
-		info,
-	)
+	return nil
 }
 
 func (n *setZoneConfigNode) Next(runParams) (bool, error) { return false, nil }

@@ -80,6 +80,7 @@ func (node *ShowZoneConfig) Format(ctx *FmtCtx) {
 type SetZoneConfig struct {
 	ZoneSpecifier
 	SetDefault bool
+	SetAll     bool
 	YAMLConfig Expr
 	Options    KVOptions
 }
