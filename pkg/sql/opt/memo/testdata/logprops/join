@@ -363,8 +363,8 @@ semi-join (hash)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
- │    ├── columns: u:5(int) v:6(int!null)
- │    └── prune: (5,6)
+ │    ├── columns: u:5(int)
+ │    └── prune: (5)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            ├── variable: x [type=int]
@@ -387,18 +387,16 @@ semi-join-apply
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── offset
- │    ├── columns: u:5(int) v:6(int!null)
+ │    ├── columns: v:6(int!null)
  │    ├── outer: (1)
  │    ├── fd: ()-->(6)
- │    ├── prune: (5)
  │    ├── select
- │    │    ├── columns: u:5(int) v:6(int!null)
+ │    │    ├── columns: v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── fd: ()-->(6)
- │    │    ├── prune: (5)
  │    │    ├── scan uv
- │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    └── prune: (5,6)
+ │    │    │    ├── columns: v:6(int!null)
+ │    │    │    └── prune: (6)
  │    │    └── filters
  │    │         └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │              ├── variable: v [type=int]
@@ -423,19 +421,17 @@ semi-join-apply
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── semi-join (hash)
- │    ├── columns: u:5(int) v:6(int!null)
+ │    ├── columns: v:6(int!null)
  │    ├── outer: (1)
  │    ├── fd: ()-->(6)
- │    ├── prune: (5)
  │    ├── scan uv
- │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    └── prune: (5,6)
+ │    │    ├── columns: v:6(int!null)
+ │    │    └── prune: (6)
  │    ├── scan mn
- │    │    ├── columns: m:8(int!null) n:9(int)
+ │    │    ├── columns: m:8(int!null)
  │    │    ├── key: (8)
- │    │    ├── fd: (8)-->(9), (9)~~>(8)
- │    │    ├── prune: (8,9)
- │    │    └── interesting orderings: (+8) (+9,+8)
+ │    │    ├── prune: (8)
+ │    │    └── interesting orderings: (+8)
  │    └── filters
  │         ├── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
  │         │    ├── variable: x [type=int]
@@ -462,8 +458,8 @@ anti-join (hash)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
- │    ├── columns: u:5(int) v:6(int!null)
- │    └── prune: (5,6)
+ │    ├── columns: u:5(int)
+ │    └── prune: (5)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            ├── variable: x [type=int]
@@ -486,18 +482,16 @@ anti-join-apply
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── offset
- │    ├── columns: u:5(int) v:6(int!null)
+ │    ├── columns: v:6(int!null)
  │    ├── outer: (1)
  │    ├── fd: ()-->(6)
- │    ├── prune: (5)
  │    ├── select
- │    │    ├── columns: u:5(int) v:6(int!null)
+ │    │    ├── columns: v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── fd: ()-->(6)
- │    │    ├── prune: (5)
  │    │    ├── scan uv
- │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    └── prune: (5,6)
+ │    │    │    ├── columns: v:6(int!null)
+ │    │    │    └── prune: (6)
  │    │    └── filters
  │    │         └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │              ├── variable: v [type=int]
@@ -643,8 +637,6 @@ semi-join (hash)
  │              ├── variable: count_rows [type=int]
  │              └── const: 1 [type=int]
  ├── scan uv
- │    ├── columns: u:6(int) v:7(int!null)
- │    └── prune: (6,7)
  └── filters (true)
 
 # Calculate semi-join-apply cardinality.
@@ -666,19 +658,17 @@ semi-join-apply
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── limit
- │    ├── columns: u:5(int!null) v:6(int!null)
+ │    ├── columns: u:5(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 5]
  │    ├── fd: ()-->(5)
- │    ├── prune: (6)
  │    ├── select
- │    │    ├── columns: u:5(int!null) v:6(int!null)
+ │    │    ├── columns: u:5(int!null)
  │    │    ├── outer: (1)
  │    │    ├── fd: ()-->(5)
- │    │    ├── prune: (6)
  │    │    ├── scan uv
- │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    └── prune: (5,6)
+ │    │    │    ├── columns: u:5(int)
+ │    │    │    └── prune: (5)
  │    │    └── filters
  │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  │    │              ├── variable: x [type=int]
@@ -702,8 +692,8 @@ anti-join (hash)
  │    └── tuple [type=tuple{int}]
  │         └── const: 2 [type=int]
  ├── scan uv
- │    ├── columns: u:2(int) v:3(int!null)
- │    └── prune: (2,3)
+ │    ├── columns: u:2(int)
+ │    └── prune: (2)
  └── filters
       └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
            ├── variable: u [type=int]
@@ -728,19 +718,17 @@ anti-join-apply
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── limit
- │    ├── columns: u:5(int!null) v:6(int!null)
+ │    ├── columns: u:5(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 5]
  │    ├── fd: ()-->(5)
- │    ├── prune: (6)
  │    ├── select
- │    │    ├── columns: u:5(int!null) v:6(int!null)
+ │    │    ├── columns: u:5(int!null)
  │    │    ├── outer: (1)
  │    │    ├── fd: ()-->(5)
- │    │    ├── prune: (6)
  │    │    ├── scan uv
- │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    └── prune: (5,6)
+ │    │    │    ├── columns: u:5(int)
+ │    │    │    └── prune: (5)
  │    │    └── filters
  │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  │    │              ├── variable: x [type=int]
