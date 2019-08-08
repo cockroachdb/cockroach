@@ -129,8 +129,9 @@ func (n *renameTableNode) startExec(params runParams) error {
 	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
 	}
-	writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), p.EvalContext().Settings,
-		b, descID, tableDesc)
+	if err := writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), p.EvalContext().Settings, b, descID, tableDesc.TableDesc()); err != nil {
+		return err
+	}
 	b.CPut(newTbKey, descID, nil)
 
 	if err := p.txn.Run(ctx, b); err != nil {
