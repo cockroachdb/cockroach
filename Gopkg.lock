@@ -1311,7 +1311,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:a00ca3a2402bb841b2b0cc9606e7b08df8af1bc50f6bca6fece1bd9f083247ae"
+  digest = "1:87181865d8ba4479e412d0ee0091bc34da5ce84a5beb9487f18e7b1a90fb031c"
   name = "github.com/petermattis/pebble"
   packages = [
     ".",
@@ -1330,7 +1330,7 @@
     "vfs",
   ]
   pruneopts = "UT"
-  revision = "fcb9ed13025a2407eb66dd0bc6b370868b52cc17"
+  revision = "532c1b32141230575d62419f43330eaa26853104"
 
 [[projects]]
   digest = "1:e39a5ee8fcbec487f8fc68863ef95f2b025e0739b0e4aa55558a2b4cf8f0ecf0"
@@ -2019,6 +2019,7 @@
     "github.com/openzipkin-contrib/zipkin-go-opentracing",
     "github.com/petermattis/goid",
     "github.com/petermattis/pebble",
+    "github.com/petermattis/pebble/cache",
     "github.com/petermattis/pebble/sstable",
     "github.com/pkg/errors",
     "github.com/pmezard/go-difflib/difflib",
