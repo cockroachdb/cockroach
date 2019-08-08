@@ -94,7 +94,7 @@ func reduceSQL(path, contains string, verbose bool) (string, error) {
 	}
 
 	interesting := func(f reduce.File) bool {
-		cmd := exec.Command(path, "demo")
+		cmd := exec.Command(path, "demo", "--empty")
 		sql := string(f)
 		if !strings.HasSuffix(sql, ";") {
 			sql += ";"
