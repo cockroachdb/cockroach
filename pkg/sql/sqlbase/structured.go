@@ -897,14 +897,14 @@ func maybeUpgradeForeignKeyRepOnIndex(
 	return changed, nil
 }
 
-// maybeDowngradeForeignKeyRepresentation non-destructively downgrades the
+// MaybeDowngradeForeignKeyRepresentation non-destructively downgrades the
 // receiver into the old foreign key representation (the ForeignKey
 // and ReferencedBy fields on IndexDescriptor if and only if the cluster version
 // has not yet been upgraded to VersionTopLevelForeignKeys. It returns true in
 // the first position if the downgrade occurred, along with a new
 // TableDescriptor object that is the downgraded descriptor. The receiver is not
 // modified in either case.
-func (desc *TableDescriptor) maybeDowngradeForeignKeyRepresentation(
+func (desc *TableDescriptor) MaybeDowngradeForeignKeyRepresentation(
 	ctx context.Context, clusterSettings *cluster.Settings,
 ) (bool, *TableDescriptor, error) {
 	downgradeUnnecessary := clusterSettings.Version.IsActive(cluster.VersionTopLevelForeignKeys)
