@@ -651,6 +651,40 @@ func (l *internalLookupCtx) getParentName(table *TableDescriptor) string {
 	return parentName
 }
 
+// GetParentAsTableName returns a TreeTable object of the parent table for a
+// given table ID. Used to get the parent table of a table with interleaved
+// indexes.
+func (l *internalLookupCtx) getParentAsTableName(
+	parentTableID sqlbase.ID, dbPrefix string,
+) (tree.TableName, error) {
+	var parentName tree.TableName
+	parentTable, err := l.getTableByID(parentTableID)
+	if err != nil {
+		return tree.TableName{}, err
+	}
+	parentDbDesc, err := l.getDatabaseByID(parentTable.ParentID)
+	if err != nil {
+		return tree.TableName{}, err
+	}
+	parentName = tree.MakeTableName(tree.Name(parentDbDesc.Name), tree.Name(parentTable.Name))
+	parentName.ExplicitSchema = parentDbDesc.Name != dbPrefix
+	return parentName, nil
+}
+
+// GetTableAsTableName returns a TableName object fot a given TableDescriptor.
+func (l *internalLookupCtx) getTableAsTableName(
+	table *sqlbase.TableDescriptor, dbPrefix string,
+) (tree.TableName, error) {
+	var tableName tree.TableName
+	tableDbDesc, err := l.getDatabaseByID(table.ParentID)
+	if err != nil {
+		return tree.TableName{}, err
+	}
+	tableName = tree.MakeTableName(tree.Name(tableDbDesc.Name), tree.Name(table.Name))
+	tableName.ExplicitSchema = tableDbDesc.Name != dbPrefix
+	return tableName, nil
+}
+
 // The versions below are part of the work for #34240.
 // TODO(radu): clean these up when everything is switched over.
 

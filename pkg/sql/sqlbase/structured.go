@@ -504,6 +504,10 @@ func (desc *IndexDescriptor) ColNamesFormat(ctx *tree.FmtCtx) {
 	}
 }
 
+// TODO (tyler): This method needs more thorough testing, probably in
+// todo: structured_test.go. Or possibly replace it with a format method taking
+// todo: a format context as argument
+
 // ColNamesString returns a string describing the column names and directions
 // in this index.
 func (desc *IndexDescriptor) ColNamesString() string {
@@ -511,6 +515,8 @@ func (desc *IndexDescriptor) ColNamesString() string {
 	desc.ColNamesFormat(f)
 	return f.CloseAndGetString()
 }
+
+// TODO (tyler): Same comment as ColNamesString above.
 
 // SQLString returns the SQL string describing this index. If non-empty,
 // "ON tableName" is included in the output in the correct place.
@@ -523,11 +529,11 @@ func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
 		f.WriteString("INVERTED ")
 	}
 	f.WriteString("INDEX ")
+	f.FormatNameP(&desc.Name)
 	if *tableName != AnonymousTable {
-		f.WriteString("ON ")
+		f.WriteString(" ON ")
 		f.FormatNode(tableName)
 	}
-	f.FormatNameP(&desc.Name)
 	f.WriteString(" (")
 	desc.ColNamesFormat(f)
 	f.WriteByte(')')
