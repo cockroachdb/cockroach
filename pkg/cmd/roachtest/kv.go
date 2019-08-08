@@ -589,7 +589,6 @@ func registerKVRangeLookups(r *testRegistry) {
 								kv.kv
 							SPLIT AT
 								VALUES (CAST(floor(random() * 9223372036854775808) AS INT))
-							WITH EXPIRATION '1s'
 						`)
 						if err != nil && !pgerror.IsSQLRetryableError(err) {
 							return err
@@ -618,7 +617,7 @@ func registerKVRangeLookups(r *testRegistry) {
 		workloadType              rangeLookupWorkloadType
 		maximumRangeLookupsPerSec float64
 	}{
-		{2, splitWorkload, 10.0},
+		{2, splitWorkload, 15.0},
 		// Relocates are expected to fail periodically when relocating random
 		// ranges, so use more workers.
 		{4, relocateWorkload, 50.0},
@@ -635,8 +634,9 @@ func registerKVRangeLookups(r *testRegistry) {
 			panic("unexpected")
 		}
 		r.Add(testSpec{
-			Name:    fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
-			Cluster: makeClusterSpec(nodes+1, cpu(cpus)),
+			Name:       fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
+			MinVersion: "v19.2.0",
+			Cluster:    makeClusterSpec(nodes+1, cpu(cpus)),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runRangeLookups(ctx, t, c, item.workers, item.workloadType, item.maximumRangeLookupsPerSec)
 			},
