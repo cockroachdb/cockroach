@@ -201,15 +201,13 @@ func ShowCreateTable(
 			}
 			f.WriteString(foreignKey.String())
 		}
-		if idx.ID != desc.PrimaryIndex.ID {
+		// Only add indexes to CREATE TABLE statement if they are not associated
+		// with an INTERLEAVE statement.
+		if idx.ID != desc.PrimaryIndex.ID && len(idx.Interleave.Ancestors) == 0 {
 			// Showing the primary index is handled above.
 			f.WriteString(",\n\t")
 			f.WriteString(idx.SQLString(&sqlbase.AnonymousTable))
-			// Showing the INTERLEAVE and PARTITION BY for the primary index are
-			// handled last.
-			if err := showCreateInterleave(ctx, idx, &f.Buffer, dbPrefix, lCtx); err != nil {
-				return "", err
-			}
+			// Showing the PARTITION BY for the primary index are handled last.
 			if err := ShowCreatePartitioning(
 				a, desc, idx, &idx.Partitioning, &f.Buffer, 1 /* indent */, 0, /* colOffset */
 			); err != nil {

@@ -64,7 +64,9 @@ func TestValidateAddrs(t *testing.T) {
 	// For the host name resolution error we can reliably expect "no such host"
 	// below, but before we test anything we need to ensure we indeed have
 	// a reliably non-resolvable host name.
-	_, err = net.DefaultResolver.LookupIPAddr(context.Background(), "nonexistent.example.com")
+	var derp []net.IPAddr
+	derp, err = net.DefaultResolver.LookupIPAddr(context.Background(), "nonexistent.example.com")
+	fmt.Println("DERP: ", derp)
 	if err == nil {
 		t.Fatal("expected host resolution failure, got no error")
 	}
