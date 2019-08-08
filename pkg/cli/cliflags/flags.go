@@ -809,6 +809,21 @@ The line length where sqlfmt will try to wrap.`,
 		Description: `How many in-memory nodes to create for the demo.`,
 	}
 
+	DemoNodeLocality = FlagInfo{
+		Name: "demo-locality",
+		Description: `
+Locality information for each demo node. The input is a comma separated
+list of key-value pairs, where the i'th pair is the locality setting
+for the i'th demo cockroach node. For example:
+<PRE>
+
+	--demo-locality=region=us-east1,region=us-east2,region=us-east3
+
+Assigns node 1's region to us-east1, node 2's region to us-east2,
+and node 3's region to us-east3.
+`,
+	}
+
 	UseEmptyDatabase = FlagInfo{
 		Name: "empty",
 		Description: `

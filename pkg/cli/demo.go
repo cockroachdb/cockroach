@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -129,6 +131,13 @@ func setupTransientServers(
 		},
 		Stopper: stopper,
 	}
+	if len(demoCtx.localities.Tiers) != 0 {
+		if len(demoCtx.localities.Tiers) != demoCtx.nodes {
+			return "", "", cleanup, errors.Errorf("number of localities specified must equal number of nodes.")
+		}
+		args.Locality = roachpb.Locality{Tiers: []roachpb.Tier{demoCtx.localities.Tiers[0]}}
+	}
+
 	serverFactory := server.TestServerFactory
 	s := serverFactory.New(args).(*server.TestServer)
 	if err := s.Start(args); err != nil {
@@ -136,6 +145,9 @@ func setupTransientServers(
 	}
 	args.JoinAddr = s.ServingAddr()
 	for i := 0; i < demoCtx.nodes-1; i++ {
+		if len(demoCtx.localities.Tiers) != 0 {
+			args.Locality = roachpb.Locality{Tiers: []roachpb.Tier{demoCtx.localities.Tiers[i+1]}}
+		}
 		s := serverFactory.New(args).(*server.TestServer)
 		if err := s.Start(args); err != nil {
 			return connURL, adminURL, cleanup, err
