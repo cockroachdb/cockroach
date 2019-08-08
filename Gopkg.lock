@@ -2076,6 +2076,7 @@
     "golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow",
     "golang.org/x/tools/go/ast/inspector",
     "golang.org/x/tools/go/buildutil",
+    "golang.org/x/tools/go/packages",
     "google.golang.org/api/iterator",
     "google.golang.org/api/option",
     "google.golang.org/grpc",
