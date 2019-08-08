@@ -2912,9 +2912,11 @@ func CheckForKeyCollisions(existingIter Iterator, sstIter Iterator) error {
 			if err := protoutil.Unmarshal(cStringToGoBytes(intentErr), &e); err != nil {
 				return errors.Wrap(err, "failed to decode write intent error")
 			}
-
 			return &e
+		} else if err.Error() == "InlineError" {
+			return errors.Errorf("inline values are unsupported when checking for key collisions")
 		}
+		err = errors.Wrap(&RocksDBError{msg: cToGoKey(state.key).String()}, "ingested key collides with an existing one")
 	}
 
 	return err

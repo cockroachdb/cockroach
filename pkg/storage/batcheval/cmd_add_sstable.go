@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -154,9 +155,13 @@ func checkForKeyCollisions(
 	mvccEndKey engine.MVCCKey,
 	data []byte,
 ) error {
+	// We could get a spansetBatch so fetch the underlying rocksDBBatchEngine as
+	// we need access to the underlying C.DBIterator later, and the
+	// dbIteratorGetter is not implemented by a spansetBatch.
+	rocksDBEngine := spanset.GetDBEngine(batch, roachpb.Span{Key: mvccStartKey.Key, EndKey: mvccEndKey.Key})
 
 	// Create iterator over the existing data.
-	existingDataIter := batch.NewIterator(engine.IterOptions{UpperBound: mvccEndKey.Key})
+	existingDataIter := rocksDBEngine.NewIterator(engine.IterOptions{UpperBound: mvccEndKey.Key})
 	defer existingDataIter.Close()
 	existingDataIter.Seek(mvccStartKey)
 	if ok, err := existingDataIter.Valid(); err != nil {
