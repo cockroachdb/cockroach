@@ -112,6 +112,8 @@ type Registry struct {
 		// used to cancel a job in that way.
 		jobs map[int64]context.CancelFunc
 	}
+
+	TestingResumerCreationKnobs map[jobspb.Type]func(Resumer) Resumer
 }
 
 // planHookMaker is a wrapper around sql.NewInternalPlanner. It returns an
@@ -198,7 +200,7 @@ func (r *Registry) StartJob(
 	ctx context.Context, resultsCh chan<- tree.Datums, record Record,
 ) (*Job, <-chan error, error) {
 	j := r.NewJob(record)
-	resumer, err := createResumer(j, r.settings)
+	resumer, err := r.createResumer(j, r.settings)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -402,7 +404,7 @@ func (r *Registry) getJobFn(ctx context.Context, txn *client.Txn, id int64) (*Jo
 	if err != nil {
 		return nil, nil, err
 	}
-	resumer, err := createResumer(job, r.settings)
+	resumer, err := r.createResumer(job, r.settings)
 	if err != nil {
 		return job, nil, errors.Errorf("job %d is not controllable", id)
 	}
@@ -506,11 +508,14 @@ func RegisterConstructor(typ jobspb.Type, fn Constructor) {
 	constructors[typ] = fn
 }
 
-func createResumer(job *Job, settings *cluster.Settings) (Resumer, error) {
+func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer, error) {
 	payload := job.Payload()
 	fn := constructors[payload.Type()]
 	if fn == nil {
 		return nil, errors.Errorf("no resumer are available for %s", payload.Type())
+	}
+	if wrapper := r.TestingResumerCreationKnobs[payload.Type()]; wrapper != nil {
+		return wrapper(fn(job, settings)), nil
 	}
 	return fn(job, settings), nil
 }
@@ -735,7 +740,7 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 		r.register(*id, cancel)
 
 		resultsCh := make(chan tree.Datums)
-		resumer, err := createResumer(job, r.settings)
+		resumer, err := r.createResumer(job, r.settings)
 		if err != nil {
 			return err
 		}
