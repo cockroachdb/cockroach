@@ -1134,6 +1134,74 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 	assertEq(t, engine, "after intent rewrite", aggMS, &expMS)
 }
 
+// TestMVCCStatsTxnSysPutAbort prevents regression of a bug that, when aborting
+// an intent on a sys key, would lead to undercounting `ms.IntentBytes` and
+// `ms.IntentCount`.
+func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
+
+	assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+
+	key := keys.RangeDescriptorKey(roachpb.RKey("a"))
+
+	ts1 := hlc.Timestamp{WallTime: 1E9}
+	txn := &roachpb.Transaction{
+		TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
+		OrigTimestamp: ts1,
+	}
+
+	// Write a system intent at ts1.
+	val1 := roachpb.MakeValueFromString("value")
+	if err := MVCCPut(ctx, engine, aggMS, key, txn.OrigTimestamp, val1, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize())
+	require.EqualValues(t, mKeySize, 11)
+
+	mValSize := int64((&enginepb.MVCCMetadata{
+		Timestamp: hlc.LegacyTimestamp(ts1),
+		Deleted:   false,
+		Txn:       &txn.TxnMeta,
+	}).Size())
+	require.EqualValues(t, mValSize, 46)
+
+	vKeySize := mvccVersionTimestampSize
+	require.EqualValues(t, vKeySize, 12)
+
+	vVal1Size := int64(len(val1.RawBytes))
+	require.EqualValues(t, vVal1Size, 10)
+
+	val2 := roachpb.MakeValueFromString("longvalue")
+	vVal2Size := int64(len(val2.RawBytes))
+	require.EqualValues(t, vVal2Size, 14)
+
+	expMS := enginepb.MVCCStats{
+		LastUpdateNanos: 1E9,
+		SysBytes:        mKeySize + mValSize + vKeySize + vVal1Size, // 11+44+12+10 = 77
+		SysCount:        1,
+	}
+	assertEq(t, engine, "after first put", aggMS, &expMS)
+
+	// Now abort the intent.
+	txn.Status = roachpb.ABORTED
+	if err := MVCCResolveWriteIntent(ctx, engine, aggMS, roachpb.Intent{
+		Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	expMS = enginepb.MVCCStats{
+		LastUpdateNanos: 1E9,
+	}
+	assertEq(t, engine, "after aborting", aggMS, &expMS)
+}
+
 // TestMVCCStatsSysPutPut prevents regression of a bug that, when writing a new
 // value on top of an existing system key, would undercount.
 func TestMVCCStatsSysPutPut(t *testing.T) {
@@ -1267,14 +1335,14 @@ func (s *randomTest) step(t *testing.T) {
 		s.TS = hlc.Timestamp{}
 	}
 
-	if s.Txn != nil {
+	restart := s.Txn != nil && s.rng.Intn(2) == 0
+	if restart {
 		// TODO(tschottdorf): experiment with s.TS != s.Txn.TS. Which of those
 		// cases are reasonable and which should we catch and error out?
 		//
 		// Note that we already exercise txn.Timestamp > s.TS since we call
 		// Forward() here (while s.TS may move backwards).
-		s.Txn.Timestamp.Forward(s.TS)
-		s.Txn.Sequence++
+		s.Txn.Restart(0, 0, s.TS)
 	}
 	s.cycle++
 
@@ -1351,7 +1419,8 @@ func TestMVCCStatsRandomized(t *testing.T) {
 	}
 	actions["EnsureTxn"] = func(s *state) string {
 		if s.Txn == nil {
-			s.Txn = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: s.TS}}
+			txn := roachpb.MakeTransaction("test", nil, 0, s.TS, 0)
+			s.Txn = &txn
 		}
 		return ""
 	}
