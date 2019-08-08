@@ -1007,15 +1007,15 @@ func (rf *CFetcher) processValueBytes(
 	}
 
 	var (
-		colIDDiff              uint32
-		lastColID              sqlbase.ColumnID
-		typeOffset, dataOffset int
-		typ                    encoding.Type
-		lastColIDIndex         int
-		lastNeededColIndex     int
+		colIDDiff          uint32
+		lastColID          sqlbase.ColumnID
+		dataOffset         int
+		typ                encoding.Type
+		lastColIDIndex     int
+		lastNeededColIndex int
 	)
 	for len(valueBytes) > 0 && rf.machine.remainingValueColsByIdx.Len() > 0 {
-		typeOffset, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
+		_, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
 		}
@@ -1062,7 +1062,7 @@ func (rf *CFetcher) processValueBytes(
 
 		valTyp := &table.cols[idx].Type
 		valueBytes, err = colencoding.DecodeTableValueToCol(vec, rf.machine.rowIdx, typ, dataOffset, valTyp,
-			valueBytes[typeOffset:])
+			valueBytes)
 		if err != nil {
 			return "", "", err
 		}
