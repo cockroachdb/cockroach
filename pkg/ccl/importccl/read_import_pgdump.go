@@ -395,7 +395,7 @@ func getTableName2(u *tree.UnresolvedObjectName) (string, error) {
 type pgDumpReader struct {
 	tables map[string]*row.DatumRowConverter
 	descs  map[string]*distsqlpb.ReadImportDataSpec_ImportTable
-	kvCh   chan []roachpb.KeyValue
+	kvCh   chan row.KVBatch
 	opts   roachpb.PgDumpOptions
 }
 
@@ -403,7 +403,7 @@ var _ inputConverter = &pgDumpReader{}
 
 // newPgDumpReader creates a new inputConverter for pg_dump files.
 func newPgDumpReader(
-	kvCh chan []roachpb.KeyValue,
+	kvCh chan row.KVBatch,
 	opts roachpb.PgDumpOptions,
 	descs map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
@@ -621,7 +621,7 @@ func (m *pgDumpReader) readFile(
 			}
 			kv := roachpb.KeyValue{Key: key}
 			kv.Value.SetInt(val)
-			m.kvCh <- []roachpb.KeyValue{kv}
+			m.kvCh <- row.KVBatch{KVs: []roachpb.KeyValue{kv}}
 		default:
 			if log.V(3) {
 				log.Infof(ctx, "ignoring %T stmt: %v", i, i)

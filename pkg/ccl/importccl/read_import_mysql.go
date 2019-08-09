@@ -45,14 +45,14 @@ import (
 type mysqldumpReader struct {
 	evalCtx  *tree.EvalContext
 	tables   map[string]*row.DatumRowConverter
-	kvCh     chan []roachpb.KeyValue
+	kvCh     chan row.KVBatch
 	debugRow func(tree.Datums)
 }
 
 var _ inputConverter = &mysqldumpReader{}
 
 func newMysqldumpReader(
-	kvCh chan []roachpb.KeyValue,
+	kvCh chan row.KVBatch,
 	tables map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
 ) (*mysqldumpReader, error) {

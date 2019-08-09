@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -167,7 +168,7 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 			b.Fatal(err)
 		}
 
-		kvCh := make(chan []roachpb.KeyValue)
+		kvCh := make(chan row.KVBatch)
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {
 			defer close(kvCh)
@@ -178,8 +179,8 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 			return wc.Worker(ctx, evalCtx, finishedBatchFn)
 		})
 		for kvBatch := range kvCh {
-			for i := range kvBatch {
-				kv := &kvBatch[i]
+			for i := range kvBatch.KVs {
+				kv := &kvBatch.KVs[i]
 				bytes += int64(len(kv.Key) + len(kv.Value.RawBytes))
 			}
 		}

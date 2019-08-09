@@ -31,7 +31,7 @@ type mysqloutfileReader struct {
 var _ inputConverter = &mysqloutfileReader{}
 
 func newMysqloutfileReader(
-	kvCh chan []roachpb.KeyValue,
+	kvCh chan row.KVBatch,
 	opts roachpb.MySQLOutfileOptions,
 	tableDesc *sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,

@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -65,7 +65,7 @@ func ToSSTable(t workload.Table, tableID sqlbase.ID, ts time.Time) ([]byte, erro
 		return nil, err
 	}
 
-	kvCh := make(chan []roachpb.KeyValue)
+	kvCh := make(chan row.KVBatch)
 	wc := importccl.NewWorkloadKVConverter(
 		tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh)
 
@@ -88,7 +88,7 @@ func ToSSTable(t workload.Table, tableID sqlbase.ID, ts time.Time) ([]byte, erro
 		}
 		defer ba.Close(ctx)
 		for kvBatch := range kvCh {
-			for _, kv := range kvBatch {
+			for _, kv := range kvBatch.KVs {
 				if err := ba.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
 					return err
 				}
