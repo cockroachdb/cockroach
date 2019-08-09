@@ -30,7 +30,7 @@ func TestVotersLearnersAll(t *testing.T) {
 		{{Type: learner}, {Type: nil}, {Type: learner}},
 	}
 	for i, test := range tests {
-		r := MakeReplicaDescriptors(&test)
+		r := MakeReplicaDescriptors(test)
 		for _, voter := range r.Voters() {
 			assert.Equal(t, ReplicaType_VOTER, voter.GetType(), "testcase %d", i)
 		}
@@ -74,7 +74,7 @@ func TestReplicaDescriptorsRemove(t *testing.T) {
 		},
 	}
 	for i, test := range tests {
-		r := MakeReplicaDescriptors(&test.replicas)
+		r := MakeReplicaDescriptors(test.replicas)
 		lenBefore := len(r.All())
 		removedDesc, ok := r.RemoveReplica(test.remove.NodeID, test.remove.StoreID)
 		assert.Equal(t, test.expected, ok, "testcase %d", i)
