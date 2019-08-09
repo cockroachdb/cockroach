@@ -1,5 +1,3 @@
-# LogicTest: local fakedist fakedist-metadata fakedist-disk
-
 # Disable automatic stats to avoid flakiness.
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
@@ -245,8 +243,10 @@ CREATE TABLE delivery (
   ts TIMESTAMP DEFAULT now(),
   "order" int,
   shipment int,
-  item STRING REFERENCES products (upc),
+  item STRING,
   FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment),
+  FOREIGN KEY (item) REFERENCES products (upc),
+  INDEX ("order", shipment),
   INDEX (item)
 )
 
@@ -260,8 +260,8 @@ delivery  CREATE TABLE delivery (
           item STRING NULL,
           CONSTRAINT fk_order_ref_orders FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment),
           CONSTRAINT fk_item_ref_products FOREIGN KEY (item) REFERENCES products(upc),
+          INDEX delivery_order_shipment_idx ("order" ASC, shipment ASC),
           INDEX delivery_item_idx (item ASC),
-          INDEX delivery_auto_index_fk_order_ref_orders ("order" ASC, shipment ASC),
           FAMILY "primary" (ts, "order", shipment, item, rowid)
 )
 
@@ -369,7 +369,7 @@ UPDATE products SET sku = '780', upc = 'blah' WHERE sku = '750'
 statement error pgcode 23503 foreign key violation: values \['885155001450'\] in columns \[upc\] referenced in table "delivery"
 DELETE FROM products WHERE sku = '750'
 
-statement error "products" is referenced by foreign key from table "orders"
+statement error "products" is referenced by foreign key from table "delivery"
 TRUNCATE products
 
 query I
@@ -755,11 +755,19 @@ CREATE TABLE a (id SERIAL NOT NULL, self_id INT, b_id INT NOT NULL, PRIMARY KEY 
 statement ok
 CREATE TABLE b (id SERIAL NOT NULL, PRIMARY KEY (id))
 
-# The index needed for the fk constraint is automatically added because the table is empty
+# NOTE: this test diverges from the main fk test here because of the issue #39037, which
+# breaks the auto-creation of origin indexes in the mixed-version 19.1/19.2 state.
+# TODO(lucy): reset this test to normal once that limitations is fixed.
+
+statement ok
+CREATE INDEX ON a(self_id)
+
 statement ok
 ALTER TABLE a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES a;
 
-# The index needed for the fk constraint is automatically added because the table is empty
+statement ok
+CREATE INDEX ON a(b_id)
+
 statement ok
 ALTER TABLE a ADD CONSTRAINT fk_b FOREIGN KEY (b_id) REFERENCES b;
 
@@ -1234,6 +1242,13 @@ CREATE TABLE no_default_table (
  ,delete_no_default INT
  ,update_no_default INT
 );
+
+# TODO(lucy): remove after #39037 is resolved.
+statement ok
+CREATE INDEX ON no_default_table(delete_no_default)
+
+statement ok
+CREATE INDEX ON no_default_table(update_no_default)
 
 statement ok
 ALTER TABLE no_default_table ADD CONSTRAINT no_default_delete_set_default
@@ -1759,9 +1774,14 @@ CREATE TABLE b (
  ,a_x STRING NULL
 );
 
+
+# TODO(lucy): remove after #39037 is resolved.
+statement ok
+CREATE INDEX ON b(a_y, a_x)
+
 # Add the constraint separately so that it's unvalidated, so we can test VALIDATE CONSTRAINT.
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x)
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x) NOT VALID
 
 statement ok
 INSERT INTO a (x, y) VALUES ('x1', 'y1')
@@ -1813,9 +1833,13 @@ CREATE TABLE b (
  ,a_z STRING NULL
 );
 
+# TODO(lucy): remove after #39037 is resolved.
+statement ok
+CREATE INDEX ON b(a_z, a_y, a_x)
+
 # Add the constraint separately so that it's unvalidated, so we can test VALIDATE CONSTRAINT.
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) NOT VALID
 
 statement ok
 INSERT INTO a (x, y, z) VALUES ('x1', 'y1', 'z1')
@@ -2463,6 +2487,10 @@ CREATE TABLE parent_composite_index (a_id INT NOT NULL, b_id INT NOT NULL, PRIMA
 
 statement ok
 CREATE TABLE child_composite_index (id SERIAL NOT NULL, parent_a_id INT, parent_b_id INT, PRIMARY KEY (id))
+
+# TODO(lucy): remove after #39037 is resolved.
+statement ok
+CREATE INDEX ON child_composite_index (parent_a_id, parent_b_id)
 
 # The (composite) index needed for the fk constraint is automatically added because the table is empty
 statement ok
