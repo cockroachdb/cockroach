@@ -715,6 +715,91 @@ func TestConcurrentBatch(t *testing.T) {
 	}
 }
 
+// TestRocksDBSstFileWriterTruncate ensures that sum of the chunks created by
+// calling Truncate on a RocksDBSstFileWriter is equivalent to an SST built
+// without ever calling Truncate.
+func TestRocksDBSstFileWriterTruncate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Truncate will be used on this writer.
+	sst1, err := MakeRocksDBSstFileWriter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sst1.Close()
+
+	// Truncate will not be used on this writer.
+	sst2, err := MakeRocksDBSstFileWriter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sst2.Close()
+
+	const keyLen = 10
+	const valLen = 950
+	ts := hlc.Timestamp{WallTime: 1}
+	key := MVCCKey{Key: roachpb.Key(make([]byte, keyLen)), Timestamp: ts}
+	value := make([]byte, valLen)
+
+	var resBuf1, resBuf2 []byte
+	const entries = 100000
+	const truncateChunk = entries / 10
+	for i := 0; i < entries; i++ {
+		key.Key = []byte(fmt.Sprintf("%09d", i))
+		copy(value, key.Key)
+
+		if err := sst1.Put(key, value); err != nil {
+			t.Fatal(err)
+		}
+		if err := sst2.Put(key, value); err != nil {
+			t.Fatal(err)
+		}
+
+		if i > 0 && i%truncateChunk == 0 {
+			sst1Chunk, err := sst1.Truncate()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("iteration %d, truncate chunk\tlen=%d", i, len(sst1Chunk))
+
+			// Even though we added keys, it is not guaranteed strictly by the
+			// contract of Truncate that a byte slice will be returned. This is
+			// because the keys may be in un-flushed blocks. This test had been tuned
+			// such that every other batch chunk is always large enough to require at
+			// least one block to be flushed.
+			empty := len(sst1Chunk) == 0
+			if i%(2*truncateChunk) == 0 {
+				if empty {
+					t.Fatalf("expected non-empty SST chunk during iteration %d", i)
+				}
+				resBuf1 = append(resBuf1, sst1Chunk...)
+			} else {
+				if !empty {
+					t.Fatalf("expected empty SST chunk during iteration %d", i)
+				}
+			}
+		}
+	}
+
+	sst1FinishBuf, err := sst1.Finish()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resBuf1 = append(resBuf1, sst1FinishBuf...)
+	t.Logf("truncated sst final chunk\t\tlen=%d", len(sst1FinishBuf))
+
+	resBuf2, err = sst2.Finish()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("non-truncated sst final chunk\tlen=%d", len(resBuf2))
+
+	if !bytes.Equal(resBuf1, resBuf2) {
+		t.Errorf("expected SST made up of truncate chunks (len=%d) to be equivalent to SST that "+
+			"was not (len=%d)", len(sst1FinishBuf), len(resBuf2))
+	}
+}
+
 func BenchmarkRocksDBSstFileWriter(b *testing.B) {
 	dir, err := ioutil.TempDir("", "BenchmarkRocksDBSstFileWriter")
 	if err != nil {
@@ -757,7 +842,7 @@ func BenchmarkRocksDBSstFileWriter(b *testing.B) {
 		kv.Key.Key = []byte(fmt.Sprintf("%09d", i))
 		copy(kv.Value, kv.Key.Key)
 		b.StartTimer()
-		if err := sst.Add(kv); err != nil {
+		if err := sst.Put(kv.Key, kv.Value); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -800,7 +885,7 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 		for i := 0; i < entries; i++ {
 			kv.Key.Key = []byte(fmt.Sprintf("%09d", i))
 			copy(kv.Value, kv.Key.Key)
-			if err := sst.Add(kv); err != nil {
+			if err := sst.Put(kv.Key, kv.Value); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -1336,13 +1421,7 @@ func TestRocksDBDeleteRangeCompaction(t *testing.T) {
 		defer sst.Close()
 
 		for i := 0; i < numEntries; i++ {
-			kv := MVCCKeyValue{
-				Key: MVCCKey{
-					Key: makeKey(string(p), i),
-				},
-				Value: randutil.RandBytes(rnd, valueSize),
-			}
-			if err := sst.Add(kv); err != nil {
+			if err := sst.Put(MVCCKey{Key: makeKey(string(p), i)}, randutil.RandBytes(rnd, valueSize)); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1464,12 +1543,7 @@ func BenchmarkRocksDBDeleteRangeIterate(b *testing.B) {
 						defer sst.Close()
 
 						for i := 0; i < entries; i++ {
-							kv := MVCCKeyValue{
-								Key: MVCCKey{
-									Key: makeKey(i),
-								},
-							}
-							if err := sst.Add(kv); err != nil {
+							if err := sst.Put(MVCCKey{Key: makeKey(i)}, nil); err != nil {
 								b.Fatal(err)
 							}
 						}
@@ -1588,10 +1662,10 @@ func TestSstFileWriterTimeBound(t *testing.T) {
 			t.Fatal(sst)
 		}
 		defer sst.Close()
-		if err := sst.Add(MVCCKeyValue{
-			Key:   MVCCKey{Key: []byte("key"), Timestamp: hlc.Timestamp{WallTime: walltime}},
-			Value: []byte("value"),
-		}); err != nil {
+		if err := sst.Put(
+			MVCCKey{Key: []byte("key"), Timestamp: hlc.Timestamp{WallTime: walltime}},
+			[]byte("value"),
+		); err != nil {
 			t.Fatal(err)
 		}
 		sstContents, err := sst.Finish()
