@@ -41,7 +41,7 @@ func TestVotersLearnersAll(t *testing.T) {
 	}
 }
 
-func TestReplicaDescriptorsRemove(t *testing.T) {
+func TestReplicaDescriptorsRemoveAdd(t *testing.T) {
 	tests := []struct {
 		replicas []ReplicaDescriptor
 		remove   ReplicationTarget
@@ -64,10 +64,10 @@ func TestReplicaDescriptorsRemove(t *testing.T) {
 		{
 			// Make sure we sort after the swap in removal.
 			replicas: []ReplicaDescriptor{
-				{NodeID: 1, StoreID: 1},
-				{NodeID: 2, StoreID: 2},
-				{NodeID: 3, StoreID: 3},
-				{NodeID: 4, StoreID: 4, Type: ReplicaTypeLearner()},
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+				{NodeID: 4, StoreID: 4, ReplicaID: 4, Type: ReplicaTypeLearner()},
 			},
 			remove:   ReplicationTarget{NodeID: 2, StoreID: 2},
 			expected: true,
@@ -75,6 +75,7 @@ func TestReplicaDescriptorsRemove(t *testing.T) {
 	}
 	for i, test := range tests {
 		r := MakeReplicaDescriptors(&test.replicas)
+		golden := r.DeepCopy()
 		lenBefore := len(r.All())
 		removedDesc, ok := r.RemoveReplica(test.remove.NodeID, test.remove.StoreID)
 		assert.Equal(t, test.expected, ok, "testcase %d", i)
@@ -90,6 +91,11 @@ func TestReplicaDescriptorsRemove(t *testing.T) {
 		}
 		for _, learner := range r.Learners() {
 			assert.Equal(t, ReplicaType_LEARNER, learner.GetType(), "testcase %d", i)
+		}
+
+		if ok {
+			r.AddReplica(removedDesc)
+			assert.Equal(t, golden, r)
 		}
 	}
 }

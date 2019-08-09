@@ -50,8 +50,9 @@ type ReplicaDescriptors struct {
 // the slice header on the heap (which is the common case for *RangeDescriptors)
 // then this is a net win.
 func MakeReplicaDescriptors(replicas *[]ReplicaDescriptor) ReplicaDescriptors {
-	sort.Sort((*byTypeThenReplicaID)(replicas))
-	return ReplicaDescriptors{wrapped: *replicas}
+	d := ReplicaDescriptors{wrapped: *replicas}
+	d.sort()
+	return d
 }
 
 func (d ReplicaDescriptors) String() string {
@@ -180,9 +181,14 @@ func (d ReplicaDescriptors) DeepCopy() ReplicaDescriptors {
 	}
 }
 
+func (d *ReplicaDescriptors) sort() {
+	sort.Sort((*byTypeThenReplicaID)(&d.wrapped))
+}
+
 // AddReplica adds the given replica to this set.
 func (d *ReplicaDescriptors) AddReplica(r ReplicaDescriptor) {
 	d.wrapped = append(d.wrapped, r)
+	d.sort()
 }
 
 // RemoveReplica removes the matching replica from this set. If it wasn't found
@@ -205,7 +211,7 @@ func (d *ReplicaDescriptors) RemoveReplica(
 	removed := d.wrapped[len(d.wrapped)-1]
 	d.wrapped = d.wrapped[:len(d.wrapped)-1]
 	// The swap may have broken our sortedness invariant, so re-sort.
-	sort.Sort((*byTypeThenReplicaID)(&d.wrapped))
+	d.sort()
 	return removed, true
 }
 
