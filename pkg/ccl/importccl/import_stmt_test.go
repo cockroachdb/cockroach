@@ -1227,8 +1227,17 @@ func TestImportIntoCSV(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+
+	var forceFailure bool
+	for i := range tc.Servers {
+		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*importResumer)
+				r.testingKnobs.forceFailure = forceFailure
+				return r
+			},
+		}
+	}
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -1412,16 +1421,8 @@ func TestImportIntoCSV(t *testing.T) {
 			insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
 			numExistingRows := len(insert)
 
-			if tx, err := db.Begin(); err != nil {
-				t.Fatal(err)
-			} else {
-				for i, v := range insert {
-					sqlDB.Exec(t, fmt.Sprintf("INSERT INTO t (a, b) VALUES (%d, %s)", i, v))
-				}
-
-				if err := tx.Commit(); err != nil {
-					t.Fatal(err)
-				}
+			for i, v := range insert {
+				sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
 			}
 
 			var result int
@@ -1493,16 +1494,8 @@ func TestImportIntoCSV(t *testing.T) {
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
 		numExistingRows := len(insert)
 
-		if tx, err := db.Begin(); err != nil {
-			t.Fatal(err)
-		} else {
-			for i, v := range insert {
-				sqlDB.Exec(t, fmt.Sprintf("INSERT INTO pk.t (a, b) VALUES (%d, %s)", i, v))
-			}
-
-			if err := tx.Commit(); err != nil {
-				t.Fatal(err)
-			}
+		for i, v := range insert {
+			sqlDB.Exec(t, "INSERT INTO pk.t (a, b) VALUES ($1, $2)", i, v)
 		}
 
 		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO pk.t (a, b) CSV DATA (%s)`, strings.Join(testFiles.files, ", ")))
@@ -1522,31 +1515,25 @@ func TestImportIntoCSV(t *testing.T) {
 	// Verify a failed IMPORT INTO won't prevent a subsequent IMPORT INTO.
 	t.Run("import-into-checkpoint-leftover", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE checkpoint; USE checkpoint")
-		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
 
-		if tx, err := db.Begin(); err != nil {
-			t.Fatal(err)
-		} else {
-			for i, v := range insert {
-				sqlDB.Exec(t, fmt.Sprintf("INSERT INTO t (a, b) VALUES (%d, %s)", i, v))
-			}
-
-			if err := tx.Commit(); err != nil {
-				t.Fatal(err)
-			}
+		for i, v := range insert {
+			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
 		}
 
-		// Specify wrong table name.
+		// Hit a failure during import.
+		forceFailure = true
 		sqlDB.ExpectErr(
-			t, `pq: relation "bad" does not exist`,
-			fmt.Sprintf(`IMPORT INTO bad (a, b) CSV DATA (%s)`, testFiles.files[0]),
+			t, `testing injected failure`,
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[1]),
 		)
+		forceFailure = false
 
-		// Expect it to succeed with correct columns.
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]))
+		// Expect it to succeed on re-attempt.
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[1]))
 	})
 
 	// Tests for user specified target columns in IMPORT INTO statements.
@@ -1616,16 +1603,8 @@ func TestImportIntoCSV(t *testing.T) {
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
 
-		if tx, err := db.Begin(); err != nil {
-			t.Fatal(err)
-		} else {
-			for i, v := range insert {
-				sqlDB.Exec(t, fmt.Sprintf("INSERT INTO t (a, b) VALUES (%d, %s)", i+1000, v))
-			}
-
-			if err := tx.Commit(); err != nil {
-				t.Fatal(err)
-			}
+		for i, v := range insert {
+			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i+1000, v)
 		}
 
 		sqlDB.Exec(t, fmt.Sprintf("IMPORT INTO t (a) CSV DATA (%s)", testFiles.files[0]))
@@ -1674,16 +1653,8 @@ func TestImportIntoCSV(t *testing.T) {
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
 
-		if tx, err := db.Begin(); err != nil {
-			t.Fatal(err)
-		} else {
-			for i, v := range insert {
-				sqlDB.Exec(t, fmt.Sprintf("INSERT INTO t (a, b, c) VALUES (%d, %s, %d)", i, v, i))
-			}
-
-			if err := tx.Commit(); err != nil {
-				t.Fatal(err)
-			}
+		for i, v := range insert {
+			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
 		}
 
 		stripFilenameQuotes := testFiles.files[0][1 : len(testFiles.files[0])-1]
@@ -1700,21 +1671,6 @@ func TestImportIntoCSV(t *testing.T) {
 	t.Run("fewer-table-cols-than-csv", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE targetcols; USE targetcols")
 		sqlDB.Exec(t, `CREATE TABLE t (a INT)`)
-
-		// Insert the test data
-		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
-
-		if tx, err := db.Begin(); err != nil {
-			t.Fatal(err)
-		} else {
-			for i := range insert {
-				sqlDB.Exec(t, fmt.Sprintf("INSERT INTO t (a) VALUES (%d)", i))
-			}
-
-			if err := tx.Commit(); err != nil {
-				t.Fatal(err)
-			}
-		}
 
 		stripFilenameQuotes := testFiles.files[0][1 : len(testFiles.files[0])-1]
 		sqlDB.ExpectErr(
@@ -1734,16 +1690,8 @@ func TestImportIntoCSV(t *testing.T) {
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
 
-		if tx, err := db.Begin(); err != nil {
-			t.Fatal(err)
-		} else {
-			for i, v := range insert {
-				sqlDB.Exec(t, fmt.Sprintf("INSERT INTO t (a, b) VALUES (%d, %s)", i, v))
-			}
-
-			if err := tx.Commit(); err != nil {
-				t.Fatal(err)
-			}
+		for i, v := range insert {
+			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
 		}
 
 		sqlDB.Exec(t, fmt.Sprintf("IMPORT INTO t CSV DATA (%s)", testFiles.files[0]))
@@ -1773,16 +1721,8 @@ func TestImportIntoCSV(t *testing.T) {
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
 
-		if tx, err := db.Begin(); err != nil {
-			t.Fatal(err)
-		} else {
-			for i, v := range insert {
-				sqlDB.Exec(t, fmt.Sprintf("INSERT INTO t (a, b) VALUES (%d, %s)", i, v))
-			}
-
-			if err := tx.Commit(); err != nil {
-				t.Fatal(err)
-			}
+		for i, v := range insert {
+			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
 		}
 
 		sqlDB.ExpectErr(
@@ -1805,16 +1745,8 @@ func TestImportIntoCSV(t *testing.T) {
 		numExistingRows := len(insert)
 		insertedRows := rowsPerFile * 3
 
-		if tx, err := db.Begin(); err != nil {
-			t.Fatal(err)
-		} else {
-			for i, v := range insert {
-				sqlDB.Exec(t, fmt.Sprintf("INSERT INTO t (a, b) VALUES (%d, %s)", i, v))
-			}
-
-			if err := tx.Commit(); err != nil {
-				t.Fatal(err)
-			}
+		for i, v := range insert {
+			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
 		}
 
 		// Expect it to succeed with correct columns.

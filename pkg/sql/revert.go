@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -64,6 +65,12 @@ func RevertTables(
 			}
 		}
 		spans = append(spans, tables[i].TableSpan())
+	}
+
+	for i := range tables {
+		// This is a) rare and b) probably relevant if we are looking at logs so it
+		// probably makes sense to log it without a verbosity filter.
+		log.Infof(ctx, "reverting table %s (%d) to time %v", tables[i].Name, tables[i].ID, targetTime)
 	}
 
 	// TODO(dt): pre-split requests up using a rangedesc cache and run batches in
