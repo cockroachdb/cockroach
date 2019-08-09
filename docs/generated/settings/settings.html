@@ -27,6 +27,12 @@
 <tr><td><code>kv.allocator.load_based_rebalancing</code></td><td>enumeration</td><td><code>leases and replicas</code></td><td>whether to rebalance based on the distribution of QPS across stores [off = 0, leases = 1, leases and replicas = 2]</td></tr>
 <tr><td><code>kv.allocator.qps_rebalance_threshold</code></td><td>float</td><td><code>0.25</code></td><td>minimum fraction away from the mean a store's QPS (such as queries per second) can be before it is considered overfull or underfull</td></tr>
 <tr><td><code>kv.allocator.range_rebalance_threshold</code></td><td>float</td><td><code>0.05</code></td><td>minimum fraction away from the mean a store's range count can be before it is considered overfull or underfull</td></tr>
+<tr><td><code>kv.bulk_ingest.batch_size</code></td><td>byte size</td><td><code>16 MiB</code></td><td>the maximum size of the payload in an AddSSTable request</td></tr>
+<tr><td><code>kv.bulk_ingest.buffer_increment</code></td><td>byte size</td><td><code>32 MiB</code></td><td>the size by which the BulkAdder attempts to grow its buffer before flushing</td></tr>
+<tr><td><code>kv.bulk_ingest.index_buffer_size</code></td><td>byte size</td><td><code>32 MiB</code></td><td>the initial size of the BulkAdder buffer handling secondary index imports</td></tr>
+<tr><td><code>kv.bulk_ingest.max_index_buffer_size</code></td><td>byte size</td><td><code>512 MiB</code></td><td>the maximum size of the BulkAdder buffer handling secondary index imports</td></tr>
+<tr><td><code>kv.bulk_ingest.max_pk_buffer_size</code></td><td>byte size</td><td><code>128 MiB</code></td><td>the maximum size of the BulkAdder buffer handling primary index imports</td></tr>
+<tr><td><code>kv.bulk_ingest.pk_buffer_size</code></td><td>byte size</td><td><code>32 MiB</code></td><td>the initial size of the BulkAdder buffer handling primary index imports</td></tr>
 <tr><td><code>kv.bulk_io_write.addsstable_max_rate</code></td><td>float</td><td><code>1.7976931348623157E+308</code></td><td>maximum number of AddSSTable requests per second for a single store</td></tr>
 <tr><td><code>kv.bulk_io_write.concurrent_addsstable_requests</code></td><td>integer</td><td><code>1</code></td><td>number of AddSSTable requests a store will handle concurrently before queuing</td></tr>
 <tr><td><code>kv.bulk_io_write.concurrent_export_requests</code></td><td>integer</td><td><code>3</code></td><td>number of export requests a store will handle concurrently before queuing</td></tr>
@@ -37,7 +43,6 @@
 <tr><td><code>kv.closed_timestamp.follower_reads_enabled</code></td><td>boolean</td><td><code>true</code></td><td>allow (all) replicas to serve consistent historical reads based on closed timestamp information</td></tr>
 <tr><td><code>kv.closed_timestamp.target_duration</code></td><td>duration</td><td><code>30s</code></td><td>if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration</td></tr>
 <tr><td><code>kv.follower_read.target_multiple</code></td><td>float</td><td><code>3</code></td><td>if above 1, encourages the distsender to perform a read against the closest replica if a request is older than kv.closed_timestamp.target_duration * (1 + kv.closed_timestamp.close_fraction * this) less a clock uncertainty interval. This value also is used to create follower_timestamp(). (WARNING: may compromise cluster stability or correctness; do not edit without supervision)</td></tr>
-<tr><td><code>kv.import.batch_size</code></td><td>byte size</td><td><code>32 MiB</code></td><td>the maximum size of the payload in an AddSSTable request (WARNING: may compromise cluster stability or correctness; do not edit without supervision)</td></tr>
 <tr><td><code>kv.learner_replicas.enabled</code></td><td>boolean</td><td><code>true</code></td><td>use learner replicas for replica addition</td></tr>
 <tr><td><code>kv.raft.command.max_size</code></td><td>byte size</td><td><code>64 MiB</code></td><td>maximum size of a raft command</td></tr>
 <tr><td><code>kv.raft_log.disable_synchronization_unsafe</code></td><td>boolean</td><td><code>false</code></td><td>set to true to disable synchronization on Raft log writes to persistent storage. Setting to true risks data loss or data corruption on server crashes. The setting is meant for internal testing only and SHOULD NOT be used in production.</td></tr>
@@ -61,7 +66,9 @@
 <tr><td><code>rocksdb.ingest_backpressure.max_delay</code></td><td>duration</td><td><code>5s</code></td><td>maximum amount of time to backpressure a single SST ingestion</td></tr>
 <tr><td><code>rocksdb.ingest_backpressure.pending_compaction_threshold</code></td><td>byte size</td><td><code>64 GiB</code></td><td>pending compaction estimate above which to backpressure SST ingestions</td></tr>
 <tr><td><code>rocksdb.min_wal_sync_interval</code></td><td>duration</td><td><code>0s</code></td><td>minimum duration between syncs of the RocksDB WAL</td></tr>
-<tr><td><code>schemachanger.backfiller.buffer_size</code></td><td>byte size</td><td><code>196 MiB</code></td><td>amount to buffer in memory during backfills</td></tr>
+<tr><td><code>schemachanger.backfiller.buffer_increment</code></td><td>byte size</td><td><code>32 MiB</code></td><td>the size by which the BulkAdder attempts to grow its buffer before flushing</td></tr>
+<tr><td><code>schemachanger.backfiller.buffer_size</code></td><td>byte size</td><td><code>32 MiB</code></td><td>the initial size of the BulkAdder buffer handling index backfills</td></tr>
+<tr><td><code>schemachanger.backfiller.max_buffer_size</code></td><td>byte size</td><td><code>512 MiB</code></td><td>the maximum size of the BulkAdder buffer handling index backfills</td></tr>
 <tr><td><code>schemachanger.backfiller.max_sst_size</code></td><td>byte size</td><td><code>16 MiB</code></td><td>target size for ingested files during backfills</td></tr>
 <tr><td><code>schemachanger.bulk_index_backfill.batch_size</code></td><td>integer</td><td><code>50000</code></td><td>number of rows to process at a time during bulk index backfill</td></tr>
 <tr><td><code>schemachanger.lease.duration</code></td><td>duration</td><td><code>5m0s</code></td><td>the duration of a schema change lease</td></tr>

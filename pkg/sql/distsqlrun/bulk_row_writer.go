@@ -75,7 +75,7 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan []roachpb.Key
 	writeTS := sp.spec.Table.CreateAsOfTime
 	const bufferSize = 64 << 20
 	adder, err := sp.flowCtx.Cfg.BulkAdder(
-		ctx, sp.flowCtx.Cfg.DB, writeTS, storagebase.BulkAdderOptions{BufferSize: bufferSize},
+		ctx, sp.flowCtx.Cfg.DB, writeTS, storagebase.BulkAdderOptions{MinBufferSize: bufferSize},
 	)
 	if err != nil {
 		return err

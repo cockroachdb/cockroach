@@ -81,7 +81,7 @@ func ToSSTable(t workload.Table, tableID sqlbase.ID, ts time.Time) ([]byte, erro
 		sstTS := hlc.Timestamp{WallTime: ts.UnixNano()}
 		const sstSize = math.MaxUint64
 		ba, err := bulk.MakeBulkAdder(
-			&ssts, nil /* rangeCache */, sstTS, storagebase.BulkAdderOptions{SSTSize: sstSize, BufferSize: sstSize},
+			ctx, &ssts, nil /* rangeCache */, sstTS, storagebase.BulkAdderOptions{SSTSize: sstSize, MinBufferSize: sstSize}, nil, /* bulkMon */
 		)
 		if err != nil {
 			return err
