@@ -36,10 +36,15 @@ resulting image `cockroachdb/cockroach` can be run via `docker run` in the
 usual fashion. To be more specific, the steps to do this are:
 
 ```
-go/src/github.com/cockroachdb/cockroach $ ./build/builder.sh make build TYPE=release-linux-gnu
+go/src/github.com/cockroachdb/cockroach $ ./build/builder.sh mkrelease linux-gnu
 go/src/github.com/cockroachdb/cockroach $ cp ./cockroach-linux-2.6.32-gnu-amd64 build/deploy/cockroach
 go/src/github.com/cockroachdb/cockroach $ cd build/deploy && docker build -t cockroachdb/cockroach .
 ```
+
+The list of valid/recognized targets is available in the script
+`build/build/mkrelease.sh`, for example `amd64-linux-gnu` and
+`amd64-darwin`. Note that this script supports experimental targets
+which may or may not work (and are not officially supported).
 
 # Upgrading / extending the Docker image
 
