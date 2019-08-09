@@ -968,7 +968,7 @@ func TestImportCSVStmt(t *testing.T) {
 			schema,
 			testFiles.filesWithDups,
 			``,
-			"primary or unique index has duplicate keys",
+			"duplicate key in primary index",
 		},
 		{
 			"no-database",
@@ -2329,7 +2329,7 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	const query = `IMPORT TABLE liveness.t (i INT8 PRIMARY KEY) CSV DATA ($1) WITH sstsize = '500B'`
+	const query = `IMPORT TABLE liveness.t (i INT8 PRIMARY KEY) CSV DATA ($1) WITH sstsize = '500B', experimental_sorted_ingestion`
 
 	// Start an IMPORT and wait until it's done one addsstable.
 	allowResponse = make(chan struct{})

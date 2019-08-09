@@ -62,6 +62,7 @@ const (
 	importOptionSkipFKs    = "skip_foreign_keys"
 
 	importOptionDirectIngest = "experimental_direct_ingestion"
+	importOptionSortedIngest = "experimental_sorted_ingestion"
 
 	pgCopyDelimiter = "delimiter"
 	pgCopyNull      = "nullif"
@@ -87,6 +88,7 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	importOptionSkipFKs: sql.KVStringOptRequireNoValue,
 
 	importOptionDirectIngest: sql.KVStringOptRequireNoValue,
+	importOptionSortedIngest: sql.KVStringOptRequireNoValue,
 
 	pgMaxRowSize: sql.KVStringOptRequireValue,
 }
@@ -372,6 +374,11 @@ func importPlanHook(
 		}
 
 		_, ingestDirectly := opts[importOptionDirectIngest]
+		_, ingestSorted := opts[importOptionSortedIngest]
+		if ingestDirectly && ingestSorted {
+			return pgerror.Newf(pgcode.Syntax, "cannot use %q with %q", importOptionDirectIngest, importOptionSortedIngest)
+		}
+		ingestDirectly = !ingestSorted
 
 		var tableDetails []jobspb.ImportDetails_Table
 		jobDesc, err := importJobDescription(p, importStmt, nil, files, opts)
