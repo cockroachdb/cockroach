@@ -13,6 +13,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"strconv"
@@ -147,8 +148,20 @@ func (*internalServer) Batch(
 func (*internalServer) RangeFeed(
 	_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFeedServer,
 ) error {
-	panic("unimplemented")
+	return nil
 }
+
+// alwaysOperational is a mock implementation of OperationalCheck
+// that always returns true.
+type alwaysOperational struct{}
+
+func (alwaysOperational) Operational() bool { return true }
+
+// mockOperationalCheck is a mock implementation of OperationalCheck
+// that can be turned on and off.
+type mockOperationalCheck bool
+
+func (c *mockOperationalCheck) Operational() bool { return bool(*c) }
 
 // TestInternalServerAddress verifies that RPCContext uses AdvertiseAddr, not Addr, to
 // determine whether to apply the local server optimization.
@@ -169,12 +182,51 @@ func TestInternalServerAddress(t *testing.T) {
 	serverCtx.NodeID.Set(context.TODO(), 1)
 
 	internal := &internalServer{}
-	serverCtx.SetLocalInternalServer(internal)
+	serverCtx.SetLocalInternalServer(internal, alwaysOperational{})
 
-	exp := internalClientAdapter{internal}
+	exp := internalClientAdapter{internal, alwaysOperational{}}
 	if ic := serverCtx.GetLocalInternalClientForAddr(serverCtx.Config.AdvertiseAddr, 1); ic != exp {
 		t.Fatalf("expected %+v, got %+v", exp, ic)
 	}
+}
+
+// TestInternalServerOperational verifies that the internalClientAdapter
+// respects its provided operational check in each of its methods.
+func TestInternalServerOperational(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	internal := &internalServer{}
+	operational := mockOperationalCheck(false)
+	adapter := internalClientAdapter{internal, &operational}
+
+	// Check both adapter methods before the adapter is operational.
+	// Both should fail with notOperational errors.
+	exp := adapter.notOperationalError()
+	// Batch.
+	var ba roachpb.BatchRequest
+	br, err := adapter.Batch(ctx, &ba)
+	require.Nil(t, br)
+	require.EqualError(t, err, exp.Error())
+	// RangeFeed.
+	var rfReq roachpb.RangeFeedRequest
+	stream, err := adapter.RangeFeed(ctx, &rfReq)
+	require.Nil(t, stream)
+	require.EqualError(t, err, exp.Error())
+
+	// Enable the adapter. Neither method should fail.
+	operational = true
+	// Batch.
+	br, err = adapter.Batch(ctx, &ba)
+	require.Nil(t, br)
+	require.NoError(t, err)
+	// RangeFeed.
+	stream, err = adapter.RangeFeed(ctx, &rfReq)
+	require.NotNil(t, stream)
+	require.NoError(t, err)
+	event, err := stream.Recv()
+	require.Nil(t, event)
+	require.Equal(t, io.EOF, err)
 }
 
 // TestHeartbeatHealth verifies that the health status changes after
@@ -336,7 +388,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	// Ensure that the local Addr returns ErrNotHeartbeated without having dialed
 	// a connection but the local AdvertiseAddr successfully returns no error when
 	// an internal server has been registered.
-	clientCtx.SetLocalInternalServer(&internalServer{})
+	clientCtx.SetLocalInternalServer(&internalServer{}, alwaysOperational{})
 
 	if err := clientCtx.TestingConnHealth(clientCtx.Addr, clientNodeID); err != ErrNotHeartbeated {
 		t.Errorf("wanted ErrNotHeartbeated, not %v", err)

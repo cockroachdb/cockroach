@@ -41,11 +41,13 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/encoding"
 	encodingproto "google.golang.org/grpc/encoding/proto"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 func init() {
@@ -530,13 +532,27 @@ func (ctx *Context) GetLocalInternalClientForAddr(
 	return nil
 }
 
+// OperationalCheck is a check capable of determining whether a component
+// should be operational or not.
+type OperationalCheck interface {
+	Operational() bool
+}
+
 type internalClientAdapter struct {
 	roachpb.InternalServer
+	OperationalCheck
+}
+
+func (internalClientAdapter) notOperationalError() error {
+	return grpcstatus.Errorf(codes.Unavailable, "internal client adapter not operational")
 }
 
 func (a internalClientAdapter) Batch(
 	ctx context.Context, ba *roachpb.BatchRequest, _ ...grpc.CallOption,
 ) (*roachpb.BatchResponse, error) {
+	if !a.Operational() {
+		return nil, a.notOperationalError()
+	}
 	return a.InternalServer.Batch(ctx, ba)
 }
 
@@ -596,6 +612,9 @@ var _ roachpb.Internal_RangeFeedServer = rangeFeedClientAdapter{}
 func (a internalClientAdapter) RangeFeed(
 	ctx context.Context, args *roachpb.RangeFeedRequest, _ ...grpc.CallOption,
 ) (roachpb.Internal_RangeFeedClient, error) {
+	if !a.Operational() {
+		return nil, a.notOperationalError()
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	rfAdapter := rangeFeedClientAdapter{
 		ctx:    ctx,
@@ -624,8 +643,10 @@ func IsLocal(iface roachpb.InternalClient) bool {
 }
 
 // SetLocalInternalServer sets the context's local internal batch server.
-func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer) {
-	ctx.localInternalClient = internalClientAdapter{internalServer}
+func (ctx *Context) SetLocalInternalServer(
+	internalServer roachpb.InternalServer, check OperationalCheck,
+) {
+	ctx.localInternalClient = internalClientAdapter{internalServer, check}
 }
 
 // removeConn removes the given connection from the pool. The supplied connKeys

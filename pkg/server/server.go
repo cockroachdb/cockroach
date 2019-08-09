@@ -1111,9 +1111,12 @@ func (s *Server) Start(ctx context.Context) error {
 	s.startTime = timeutil.Now()
 	s.startMonitoringForwardClockJumps(ctx)
 
-	// Connect the node as loopback handler for RPC requests to the
-	// local node.
-	s.rpcContext.SetLocalInternalServer(s.node)
+	// Connect the node as loopback handler for RPC requests to the local node.
+	// Provide the Server's grpcServer as the adapter's OperationalCheck to
+	// ensure that they are both enabled at the same time. We don't want this
+	// adapter enabled until the rpc server is operational as well (i.e. after
+	// the server has finished initialization).
+	s.rpcContext.SetLocalInternalServer(s.node, s.grpc)
 
 	// Load the TLS configuration for the HTTP server.
 	uiTLSConfig, err := s.cfg.GetUIServerTLSConfig()

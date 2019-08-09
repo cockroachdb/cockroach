@@ -57,7 +57,10 @@ func (s *grpcServer) setMode(mode serveMode) {
 	s.mode.set(mode)
 }
 
-func (s *grpcServer) operational() bool {
+// Operational returns whether the grpcServer is currently operational
+// based on the current server mode. Non-operational grpc servers will
+// only serve a subset of RPC methods.
+func (s *grpcServer) Operational() bool {
 	sMode := s.mode.get()
 	return sMode == modeOperational || sMode == modeDraining
 }
@@ -71,7 +74,7 @@ var rpcsAllowedWhileBootstrapping = map[string]struct{}{
 
 // intercept implements filtering rules for each server state.
 func (s *grpcServer) intercept(fullName string) error {
-	if s.operational() {
+	if s.Operational() {
 		return nil
 	}
 	if _, allowed := rpcsAllowedWhileBootstrapping[fullName]; !allowed {
