@@ -1035,7 +1035,9 @@ func WriteTableDescs(
 			// TODO(dt): support restoring privs.
 			desc.Privileges = sqlbase.NewDefaultPrivilegeDescriptor()
 			wroteDBs[desc.ID] = desc
-			sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, desc.ID, desc)
+			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, desc.ID, desc); err != nil {
+				return err
+			}
 			b.CPut(sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, desc.Name), desc.ID, nil)
 		}
 		for i := range tables {
@@ -1055,7 +1057,9 @@ func WriteTableDescs(
 				// TODO(dt): Make this more configurable.
 				tables[i].Privileges = parentDB.GetPrivileges()
 			}
-			sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, tables[i].ID, tables[i])
+			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, tables[i].ID, tables[i]); err != nil {
+				return err
+			}
 			b.CPut(sqlbase.MakeNameMetadataKey(tables[i].ParentID, tables[i].Name), tables[i].ID, nil)
 		}
 		for _, kv := range extra {
@@ -1653,7 +1657,9 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 	b := txn.NewBatch()
 	for _, tableDesc := range details.TableDescs {
 		tableDesc.State = sqlbase.TableDescriptor_DROP
-		sql.WriteNewDescToBatch(ctx, false /* kvTrace */, r.settings, b, tableDesc.ID, tableDesc)
+		if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, r.settings, b, tableDesc.ID, tableDesc); err != nil {
+			return err
+		}
 	}
 	return txn.Run(ctx, b)
 }

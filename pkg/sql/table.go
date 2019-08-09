@@ -849,7 +849,5 @@ func (p *planner) writeTableDescToBatch(
 		return err
 	}
 
-	writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), p.execCfg.Settings,
-		b, tableDesc.GetID(), tableDesc)
-	return nil
+	return writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), p.execCfg.Settings, b, tableDesc.GetID(), tableDesc.TableDesc())
 }
