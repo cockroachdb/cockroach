@@ -31,11 +31,55 @@ import (
 
 var importBatchSize = func() *settings.ByteSizeSetting {
 	s := settings.RegisterByteSizeSetting(
-		"kv.import.batch_size",
+		"kv.bulk_ingest.batch_size",
 		"the maximum size of the payload in an AddSSTable request",
+		16<<20,
+	)
+	return s
+}()
+
+var importPKAdderBufferSize = func() *settings.ByteSizeSetting {
+	s := settings.RegisterByteSizeSetting(
+		"kv.bulk_ingest.pk_buffer_size",
+		"the initial size of the BulkAdder buffer handling primary index imports",
 		32<<20,
 	)
-	s.SetSensitive()
+	return s
+}()
+
+var importPKAdderMaxBufferSize = func() *settings.ByteSizeSetting {
+	s := settings.RegisterByteSizeSetting(
+		"kv.bulk_ingest.max_pk_buffer_size",
+		"the maximum size of the BulkAdder buffer handling primary index imports",
+		128<<20,
+	)
+	return s
+}()
+
+var importIndexAdderBufferSize = func() *settings.ByteSizeSetting {
+	s := settings.RegisterByteSizeSetting(
+		"kv.bulk_ingest.index_buffer_size",
+		"the initial size of the BulkAdder buffer handling secondary index imports",
+		32<<20,
+	)
+	return s
+}()
+
+var importIndexAdderMaxBufferSize = func() *settings.ByteSizeSetting {
+	s := settings.RegisterByteSizeSetting(
+		"kv.bulk_ingest.max_index_buffer_size",
+		"the maximum size of the BulkAdder buffer handling secondary index imports",
+		512<<20,
+	)
+	return s
+}()
+
+var importBufferIncrementSize = func() *settings.ByteSizeSetting {
+	s := settings.RegisterByteSizeSetting(
+		"kv.bulk_ingest.buffer_increment",
+		"the size by which the BulkAdder attempts to grow its buffer before flushing",
+		32<<20,
+	)
 	return s
 }()
 
@@ -67,6 +111,19 @@ func MaxImportBatchSize(st *cluster.Settings) int64 {
 		return maxCommandSize - commandMetadataEstimate
 	}
 	return desiredSize
+}
+
+// ImportBufferConfigSizes determines the minimum, maximum and step size for the
+// BulkAdder buffer used in import.
+func ImportBufferConfigSizes(st *cluster.Settings, isPKAdder bool) (int64, int64, int64) {
+	if isPKAdder {
+		return importPKAdderBufferSize.Get(&st.SV),
+			importPKAdderMaxBufferSize.Get(&st.SV),
+			importBufferIncrementSize.Get(&st.SV)
+	}
+	return importIndexAdderBufferSize.Get(&st.SV),
+		importIndexAdderMaxBufferSize.Get(&st.SV),
+		importBufferIncrementSize.Get(&st.SV)
 }
 
 // evalImport bulk loads key/value entries.
