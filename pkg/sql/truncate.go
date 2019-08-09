@@ -346,6 +346,7 @@ func reassignReferencedTables(
 			fk := &table.OutboundFKs[i]
 			if fk.ReferencedTableID == oldID {
 				fk.ReferencedTableID = newID
+				fk.LegacyUpgradedFromOriginReference.Table = newID
 				changed = true
 			}
 		}
@@ -353,6 +354,7 @@ func reassignReferencedTables(
 			fk := &table.InboundFKs[i]
 			if fk.OriginTableID == oldID {
 				fk.OriginTableID = newID
+				fk.LegacyUpgradedFromReferencedReference.Table = newID
 				changed = true
 			}
 		}
