@@ -470,7 +470,8 @@ func (c *ComponentSpan) MarkAsStuck(ctx context.Context) context.Context {
 		return ctx
 	}
 	ctx, newC := startComponentSpanInner(
-		ctx, c.Span.Tracer(), c.component, c.operation+" [stuck]", true /* stuck */)
+		ctx, c.Span.Tracer(), nil, /* parentOverride */
+		c.component, c.operation+" [stuck]", true /* stuck */)
 	*c = newC
 	return ctx
 }
@@ -502,18 +503,38 @@ func StartComponentSpan(
 	ctx context.Context, tracer opentracing.Tracer, component string, operation string,
 ) (context.Context, ComponentSpan) {
 	incSpanCount(component, 1)
-	return startComponentSpanInner(ctx, tracer, component, operation, false /* stuck */)
+	return startComponentSpanInner(ctx, tracer, nil, /* parentOverride */
+		component, operation, false /* stuck */)
+}
+
+func StartComponentSpanChildOf(
+	ctx context.Context,
+	tracer opentracing.Tracer,
+	parentOverride opentracing.StartSpanOption,
+	component string,
+	operation string,
+) (context.Context, ComponentSpan) {
+	incSpanCount(component, 1)
+	return startComponentSpanInner(ctx, tracer, parentOverride, component, operation, false /* stuck */)
 }
 
 func startComponentSpanInner(
-	ctx context.Context, tracer opentracing.Tracer, component string, operation string, stuck bool,
+	ctx context.Context,
+	tracer opentracing.Tracer,
+	parentOverride opentracing.StartSpanOption,
+	component string,
+	operation string,
+	stuck bool,
 ) (context.Context, ComponentSpan) {
 	t := tracer.(*Tracer)
-	// Get parent span if one exists and determine whether it's recording.
 	var parentIsRecording bool
-	pSpan := opentracing.SpanFromContext(ctx)
-	if pSpan != nil {
-		parentIsRecording = IsRecording(pSpan)
+	var pSpan opentracing.Span
+	if parentOverride == nil {
+		// Get parent span if one exists and determine whether it's recording.
+		pSpan = opentracing.SpanFromContext(ctx)
+		if pSpan != nil {
+			parentIsRecording = IsRecording(pSpan)
+		}
 	}
 
 	// Determine whether this component should be recorded based on
@@ -554,7 +575,11 @@ func startComponentSpanInner(
 	// black hole span, then create a new span that's recordable.
 	var cSpan opentracing.Span
 	if pSpan == nil || IsBlackHoleSpan(pSpan) {
-		cSpan = t.StartSpan(operation, Recordable, LogTagsFromCtx(ctx))
+		if parentOverride == nil {
+			cSpan = t.StartSpan(operation, Recordable, LogTagsFromCtx(ctx))
+		} else {
+			cSpan = t.StartSpan(operation, Recordable, LogTagsFromCtx(ctx), parentOverride)
+		}
 	} else {
 		// Otherwise, start a child span which uses its own recording group.
 		cSpan = StartChildSpan(operation, pSpan, logtags.FromContext(ctx), separateRecording)
@@ -632,7 +657,8 @@ func StartEventLog(
 		ev.mu.finished = true
 		return ev
 	}
-	_, sp := startComponentSpanInner(ctx, tracer, component, operation, false /* stuck */)
+	_, sp := startComponentSpanInner(ctx, tracer, nil, /* parentOverride */
+		component, operation, false /* stuck */)
 	ev := &EventLog{}
 	ev.mu.sp = sp
 

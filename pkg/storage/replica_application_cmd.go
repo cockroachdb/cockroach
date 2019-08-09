@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -60,7 +59,7 @@ type replicatedCmd struct {
 	// FinishAndAckOutcome. This span "follows from" the proposer's span (even
 	// when the proposer is remote; we marshall tracing info through the
 	// proposal).
-	sp opentracing.Span
+	sp tracing.ComponentSpan
 
 	// The following fields are set in shouldApplyCommand when we validate that
 	// a command applies given the current lease and GC threshold. The process
@@ -155,7 +154,7 @@ func (c *replicatedCmd) AckSuccess() error {
 
 // FinishAndAckOutcome implements the apply.AppliedCommand interface.
 func (c *replicatedCmd) FinishAndAckOutcome(ctx context.Context) error {
-	tracing.FinishSpan(c.sp)
+	c.sp.Finish()
 	if c.IsLocal() {
 		c.proposal.finishApplication(ctx, c.response)
 	}

@@ -140,7 +140,8 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
 		cmd := it.cur()
 		if cmd.IsLocal() {
-			cmd.ctx, cmd.sp = tracing.ForkCtxSpan(cmd.proposal.ctx, opName)
+			cmd.ctx, cmd.sp = tracing.StartComponentSpan(
+				cmd.proposal.ctx, d.r.AmbientContext.Tracer, "storage.replica.raft.process", opName)
 		} else if cmd.raftCmd.TraceData != nil {
 			// The proposal isn't local, and trace data is available. Extract
 			// the span context and start a server-side span.
@@ -149,12 +150,14 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 			if err != nil {
 				log.Errorf(ctx, "unable to extract trace data from raft command: %s", err)
 			} else {
-				cmd.sp = d.r.AmbientContext.Tracer.StartSpan(
-					"raft application", opentracing.FollowsFrom(spanCtx))
-				cmd.ctx = opentracing.ContextWithSpan(ctx, cmd.sp)
+				cmd.ctx, cmd.sp = tracing.StartComponentSpanChildOf(
+					ctx, d.r.AmbientContext.Tracer, opentracing.FollowsFrom(spanCtx),
+					"storage.replica.raft.process", opName,
+				)
 			}
 		} else {
-			cmd.ctx, cmd.sp = tracing.ForkCtxSpan(ctx, opName)
+			cmd.ctx, cmd.sp = tracing.StartComponentSpan(
+				ctx, d.r.AmbientContext.Tracer, "storage.replica.raft.process", opName)
 		}
 	}
 }
