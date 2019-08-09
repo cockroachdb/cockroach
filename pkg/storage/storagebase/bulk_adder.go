@@ -19,9 +19,36 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
+// BulkAdderOptions is used to configure the behavior of a BulkAdder.
+type BulkAdderOptions struct {
+	// Name is used in logging messages to identify this adder or the process on
+	// behalf of which it is adding data.
+	Name string
+
+	// SSTSize is the size at which an SST will be flushed and a new one started.
+	// SSTs are also split during a buffer flush to avoid spanning range bounds so
+	// they may be smaller than this limit.
+	SSTSize int64
+
+	// BufferSize is the maximum amount of data to buffer before flushing SSTs.
+	BufferSize int64
+
+	// SkipLocalDuplicates configures handling of duplicate keys within a local
+	// sorted batch. When true if the same key/value pair is added more than once
+	// subsequent additions will be ignored instead of producing an error. If an
+	// attempt to add the same key has a differnet value, it is always an error.
+	// Once a batch is flushed – explicitly or automatically – local duplicate
+	// detection does not apply.
+	SkipDuplicates bool
+
+	// DisallowShadowing controls whether shadowing of existing keys is permitted
+	// when the SSTables produced by this adder are ingested.
+	DisallowShadowing bool
+}
+
 // BulkAdderFactory describes a factory function for BulkAdders.
 type BulkAdderFactory func(
-	ctx context.Context, db *client.DB, bufferBytes, flushBytes int64, timestamp hlc.Timestamp,
+	ctx context.Context, db *client.DB, timestamp hlc.Timestamp, opts BulkAdderOptions,
 ) (BulkAdder, error)
 
 // BulkAdder describes a bulk-adding helper that can be used to add lots of KVs.
@@ -36,18 +63,6 @@ type BulkAdder interface {
 	GetSummary() roachpb.BulkOpSummary
 	// Close closes the underlying buffers/writers.
 	Close(ctx context.Context)
-	// SkipLocalDuplicates configures handling of duplicate keys within a local
-	// sorted batch. Once a batch is flushed – explicitly or automatically – local
-	// duplicate detection does not apply.
-	SkipLocalDuplicates(bool)
-	// SkipLocalDuplicatesWithSameValues configures handling of duplicate keys
-	// with the same value within a local sorted batch.
-	SkipLocalDuplicatesWithSameValues(bool)
-	// SetDisallowShadowing sets the flag which controls whether shadowing of
-	// existing keys is permitted in the AddSSTable method.
-	SetDisallowShadowing(bool)
-	// SetName sets the name of the adder for the purpose of logging adder stats.
-	SetName(string)
 }
 
 // DuplicateKeyError represents a failed attempt to ingest the same key twice

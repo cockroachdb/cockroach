@@ -376,19 +376,15 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			defer tracing.FinishSpan(span)
 
 			writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
-			const bufferSize, flushSize = 64 << 20, 16 << 20
+			const bufferSize = 64 << 20
+			flushSize := storageccl.MaxImportBatchSize(cp.flowCtx.Cfg.Settings)
 
 			// We create two bulk adders so as to combat the excessive flushing of
 			// small SSTs which was observed when using a single adder for both
 			// primary and secondary index kvs. The number of secondary index kvs are
 			// small, and so we expect the indexAdder to flush much less frequently
 			// than the pkIndexAdder.
-			pkIndexAdder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, bufferSize, flushSize, writeTS)
-			if err != nil {
-				return err
-			}
-			pkIndexAdder.SetName("pkIndexAdder")
-			pkIndexAdder.SetDisallowShadowing(true)
+			//
 			// AddSSTable with disallowShadowing=true does not consider a KV with the
 			// same ts and value to be a collision. This is to support the resumption
 			// of IMPORT jobs which might re-import some already ingested, but not
@@ -397,16 +393,31 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			// To provide a similar behavior with KVs within the same SST, we silently
 			// skip over duplicates with the same value, instead of throwing a
 			// uniqueness error.
-			pkIndexAdder.SkipLocalDuplicatesWithSameValues(true)
-			defer pkIndexAdder.Close(ctx)
 
-			indexAdder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, bufferSize, flushSize, writeTS)
+			pkIndexAdder, err := cp.flowCtx.Cfg.BulkAdder(
+				ctx, cp.flowCtx.Cfg.DB, writeTS, storagebase.BulkAdderOptions{
+					Name:              "pkAdder",
+					DisallowShadowing: true,
+					SkipDuplicates:    true,
+					BufferSize:        bufferSize,
+					SSTSize:           flushSize,
+				})
 			if err != nil {
 				return err
 			}
-			indexAdder.SetName("indexAdder")
-			indexAdder.SetDisallowShadowing(true)
-			indexAdder.SkipLocalDuplicatesWithSameValues(true)
+			defer pkIndexAdder.Close(ctx)
+
+			indexAdder, err := cp.flowCtx.Cfg.BulkAdder(
+				ctx, cp.flowCtx.Cfg.DB, writeTS, storagebase.BulkAdderOptions{
+					Name:              "indexAdder",
+					DisallowShadowing: true,
+					SkipDuplicates:    true,
+					BufferSize:        bufferSize,
+					SSTSize:           flushSize,
+				})
+			if err != nil {
+				return err
+			}
 			defer indexAdder.Close(ctx)
 
 			// Drain the kvCh using the BulkAdder until it closes.

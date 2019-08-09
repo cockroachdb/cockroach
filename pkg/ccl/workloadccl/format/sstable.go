@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -79,7 +80,9 @@ func ToSSTable(t workload.Table, tableID sqlbase.ID, ts time.Time) ([]byte, erro
 	g.GoCtx(func(ctx context.Context) error {
 		sstTS := hlc.Timestamp{WallTime: ts.UnixNano()}
 		const sstSize = math.MaxInt64
-		ba, err := bulk.MakeBulkAdder(&ssts, nil /* rangeCache */, sstSize, sstSize, sstTS)
+		ba, err := bulk.MakeBulkAdder(
+			&ssts, nil /* rangeCache */, sstTS, storagebase.BulkAdderOptions{SSTSize: sstSize, BufferSize: sstSize},
+		)
 		if err != nil {
 			return err
 		}
