@@ -12,7 +12,6 @@ package roachpb
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -49,9 +48,8 @@ type ReplicaDescriptors struct {
 // we're trading one allocation for another. However, if the caller already has
 // the slice header on the heap (which is the common case for *RangeDescriptors)
 // then this is a net win.
-func MakeReplicaDescriptors(replicas *[]ReplicaDescriptor) ReplicaDescriptors {
-	sort.Sort((*byTypeThenReplicaID)(replicas))
-	return ReplicaDescriptors{wrapped: *replicas}
+func MakeReplicaDescriptors(replicas []ReplicaDescriptor) ReplicaDescriptors {
+	return ReplicaDescriptors{wrapped: replicas}
 }
 
 func (d ReplicaDescriptors) String() string {
@@ -71,15 +69,29 @@ func (d ReplicaDescriptors) All() []ReplicaDescriptor {
 	return d.wrapped
 }
 
-// Voters returns the voter replicas in the set.
+// Voters returns the voter replicas in the set. This may allocate, but it also
+// may return the underlying slice as a performance optimization, so it's not
+// safe to modify the returned value.
 func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
-	// Note that the wrapped replicas are sorted first by type.
+	// Fastpath, most of the time, everything is a voter, so special case that and
+	// save the alloc.
+	fastpath := true
 	for i := range d.wrapped {
-		if d.wrapped[i].GetType() == ReplicaType_LEARNER {
-			return d.wrapped[:i]
+		if d.wrapped[i].GetType() != ReplicaType_VOTER {
+			fastpath = false
+			break
 		}
 	}
-	return d.wrapped
+	if fastpath {
+		return d.wrapped
+	}
+	voters := make([]ReplicaDescriptor, 0, len(d.wrapped))
+	for i := range d.wrapped {
+		if d.wrapped[i].GetType() == ReplicaType_VOTER {
+			voters = append(voters, d.wrapped[i])
+		}
+	}
+	return voters
 }
 
 // Learners returns the learner replicas in the set.
@@ -155,13 +167,13 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 //
 // For some related mega-comments, see Replica.sendSnapshot.
 func (d ReplicaDescriptors) Learners() []ReplicaDescriptor {
-	// Note that the wrapped replicas are sorted first by type.
+	learners := make([]ReplicaDescriptor, 0, len(d.wrapped))
 	for i := range d.wrapped {
 		if d.wrapped[i].GetType() == ReplicaType_LEARNER {
-			return d.wrapped[i:]
+			learners = append(learners, d.wrapped[i])
 		}
 	}
-	return nil
+	return learners
 }
 
 // AsProto returns the protobuf representation of these replicas, suitable for
@@ -204,24 +216,17 @@ func (d *ReplicaDescriptors) RemoveReplica(
 	d.wrapped[idx], d.wrapped[len(d.wrapped)-1] = d.wrapped[len(d.wrapped)-1], d.wrapped[idx]
 	removed := d.wrapped[len(d.wrapped)-1]
 	d.wrapped = d.wrapped[:len(d.wrapped)-1]
-	// The swap may have broken our sortedness invariant, so re-sort.
-	sort.Sort((*byTypeThenReplicaID)(&d.wrapped))
 	return removed, true
 }
 
 // QuorumSize returns the number of voter replicas required for quorum in a raft
 // group consisting of this set of replicas.
 func (d ReplicaDescriptors) QuorumSize() int {
-	return (len(d.Voters()) / 2) + 1
-}
-
-type byTypeThenReplicaID []ReplicaDescriptor
-
-func (x *byTypeThenReplicaID) Len() int      { return len(*x) }
-func (x *byTypeThenReplicaID) Swap(i, j int) { (*x)[i], (*x)[j] = (*x)[j], (*x)[i] }
-func (x *byTypeThenReplicaID) Less(i, j int) bool {
-	if (*x)[i].GetType() == (*x)[j].GetType() {
-		return (*x)[i].ReplicaID < (*x)[j].ReplicaID
+	var numVoters int
+	for i := range d.wrapped {
+		if d.wrapped[i].GetType() == ReplicaType_VOTER {
+			numVoters++
+		}
 	}
-	return (*x)[i].GetType() < (*x)[j].GetType()
+	return (numVoters / 2) + 1
 }

@@ -295,8 +295,9 @@ func (rq *replicateQueue) processOneChange(
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
+	voterReplicas := desc.Replicas().Voters()
 	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(
-		desc.RangeID, desc.Replicas().Voters())
+		desc.RangeID, voterReplicas)
 	{
 		quorum := desc.Replicas().QuorumSize()
 		if lr := len(liveVoterReplicas); lr < quorum {
@@ -315,7 +316,6 @@ func (rq *replicateQueue) processOneChange(
 	if action == AllocatorRemoveLearner {
 		return rq.removeLearner(ctx, repl, dryRun)
 	}
-	voterReplicas := desc.Replicas().Voters()
 
 	switch action {
 	case AllocatorNoop, AllocatorRangeUnavailable:

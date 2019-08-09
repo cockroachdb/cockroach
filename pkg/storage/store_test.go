@@ -1413,7 +1413,7 @@ func TestStoreRangeIDAllocation(t *testing.T) {
 		replicas := []roachpb.ReplicaDescriptor{{StoreID: store.StoreID()}}
 		desc, err := store.NewRangeDescriptor(context.Background(),
 			roachpb.RKey(fmt.Sprintf("%03d", i)), roachpb.RKey(fmt.Sprintf("%03d", i+1)),
-			roachpb.MakeReplicaDescriptors(&replicas))
+			roachpb.MakeReplicaDescriptors(replicas))
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -1587,6 +1587,6 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 		},
 	}
 	act := crt.String()
-	exp := `ADD_REPLICA((n1,s2):3LEARNER): updated=(n4,s5):6,(n1,s2):3LEARNER,(n7,s8):9LEARNER next=10`
+	exp := `ADD_REPLICA((n1,s2):3LEARNER): updated=(n1,s2):3LEARNER,(n4,s5):6,(n7,s8):9LEARNER next=10`
 	require.Equal(t, exp, act)
 }

@@ -1017,7 +1017,7 @@ func (r *Replica) promoteLearnerReplicaToVoter(
 		}
 
 		updatedDesc := *desc
-		updatedDesc.SetReplicas(roachpb.MakeReplicaDescriptors(&newReplicas))
+		updatedDesc.SetReplicas(roachpb.MakeReplicaDescriptors(newReplicas))
 		err := execChangeReplicasTxn(ctx, r.store, roachpb.ADD_REPLICA, desc, rDesc, &updatedDesc, reason, details)
 		return &updatedDesc, err
 	}

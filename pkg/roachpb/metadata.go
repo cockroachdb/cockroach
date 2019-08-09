@@ -126,7 +126,7 @@ func (r *RangeDescriptor) ContainsKeyRange(start, end RKey) bool {
 // Replicas returns the set of nodes/stores on which replicas of this range are
 // stored.
 func (r *RangeDescriptor) Replicas() ReplicaDescriptors {
-	return MakeReplicaDescriptors(&r.InternalReplicas)
+	return MakeReplicaDescriptors(r.InternalReplicas)
 }
 
 // SetReplicas overwrites the set of nodes/stores on which replicas of this

@@ -1108,7 +1108,7 @@ func changeReplicasTrigger(
 		desc = *change.Desc
 	} else {
 		desc = *rec.Desc()
-		desc.SetReplicas(roachpb.MakeReplicaDescriptors(&change.DeprecatedUpdatedReplicas))
+		desc.SetReplicas(roachpb.MakeReplicaDescriptors(change.DeprecatedUpdatedReplicas))
 		desc.NextReplicaID = change.DeprecatedNextReplicaID
 	}
 
