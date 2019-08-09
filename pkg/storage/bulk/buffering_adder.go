@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 // BufferingAdder is a wrapper for an SSTBatcher that allows out-of-order calls
@@ -45,40 +45,35 @@ type BufferingAdder struct {
 	name string
 }
 
-// MakeBulkAdder makes a storagebase.BulkAdder that buffers and sorts K/Vs passed
-// to add into SSTs that are then ingested.
+// MakeBulkAdder makes a storagebase.BulkAdder that buffers and sorts K/Vs
+// passed to add into SSTs that are then ingested. rangeCache if set is
+// consulted to avoid generating an SST that will span a range boundary and thus
+// encounter an error and need to be split and retired to be applied.
 func MakeBulkAdder(
 	db sender,
 	rangeCache *kv.RangeDescriptorCache,
-	flushBytes, sstBytes int64,
 	timestamp hlc.Timestamp,
+	opts storagebase.BulkAdderOptions,
 ) (*BufferingAdder, error) {
-	if flushBytes <= 0 || sstBytes <= 0 {
-		return nil, errors.Errorf("flush size and sst bytes must be > 0")
+	if opts.BufferSize == 0 {
+		opts.BufferSize = 32 << 20
+	}
+	if opts.SSTSize == 0 {
+		opts.SSTSize = 32 << 20
 	}
 	b := &BufferingAdder{
-		sink:      SSTBatcher{db: db, maxSize: sstBytes, rc: rangeCache},
+		name: opts.Name,
+		sink: SSTBatcher{
+			db:                db,
+			maxSize:           int64(opts.SSTSize),
+			rc:                rangeCache,
+			skipDuplicates:    opts.SkipDuplicates,
+			disallowShadowing: opts.DisallowShadowing,
+		},
 		timestamp: timestamp,
-		flushSize: int(flushBytes),
+		flushSize: int(opts.BufferSize),
 	}
 	return b, nil
-}
-
-// SkipLocalDuplicates configures skipping of duplicate keys in local batches.
-func (b *BufferingAdder) SkipLocalDuplicates(skip bool) {
-	b.sink.skipDuplicateKeys = skip
-}
-
-// SkipLocalDuplicatesWithSameValues configures skipping of duplicate keys with
-// the same value in local batches.
-func (b *BufferingAdder) SkipLocalDuplicatesWithSameValues(skip bool) {
-	b.sink.skipDuplicateKeysWithSameValue = skip
-}
-
-// SetName sets the name of the adder being used for the purpose of logging
-// stats.
-func (b *BufferingAdder) SetName(name string) {
-	b.name = name
 }
 
 // Close closes the underlying SST builder.
@@ -157,10 +152,4 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 // GetSummary returns this batcher's total added rows/bytes/etc.
 func (b *BufferingAdder) GetSummary() roachpb.BulkOpSummary {
 	return b.sink.GetSummary()
-}
-
-// SetDisallowShadowing controls whether or not shadowing of existing keys is
-// permitted.
-func (b *BufferingAdder) SetDisallowShadowing(disallowShadowing bool) {
-	b.sink.disallowShadowing = disallowShadowing
 }

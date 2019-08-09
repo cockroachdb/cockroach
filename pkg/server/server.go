@@ -537,8 +537,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ClusterName:    s.cfg.ClusterName,
 
 		TempStorage: tempEngine,
-		BulkAdder: func(ctx context.Context, db *client.DB, bufferSize, flushSize int64, ts hlc.Timestamp) (storagebase.BulkAdder, error) {
-			return bulk.MakeBulkAdder(db, s.distSender.RangeDescriptorCache(), bufferSize, flushSize, ts)
+		BulkAdder: func(
+			ctx context.Context, db *client.DB, ts hlc.Timestamp, opts storagebase.BulkAdderOptions,
+		) (storagebase.BulkAdder, error) {
+			return bulk.MakeBulkAdder(db, s.distSender.RangeDescriptorCache(), ts, opts)
 		},
 		DiskMonitor: s.cfg.TempStorageConfig.Mon,
 
