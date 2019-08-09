@@ -79,12 +79,16 @@ func newIndexBackfiller(
 func (ib *indexBackfiller) prepare(ctx context.Context) error {
 	bufferSize := backfillerBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
 	sstSize := backillerSSTSize.Get(&ib.flowCtx.Cfg.Settings.SV)
-	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, bufferSize, sstSize, ib.spec.ReadAsOf)
+	opts := storagebase.BulkAdderOptions{
+		SSTSize:        uint64(sstSize),
+		BufferSize:     uint64(bufferSize),
+		SkipDuplicates: ib.ContainsInvertedIndex(),
+	}
+	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, ib.spec.ReadAsOf, opts)
 	if err != nil {
 		return err
 	}
 	ib.adder = adder
-	ib.adder.SkipLocalDuplicates(ib.ContainsInvertedIndex())
 	return nil
 }
 
