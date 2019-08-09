@@ -278,14 +278,27 @@ func (e *NotBootstrappedError) Error() string {
 	return "store has not been bootstrapped"
 }
 
+// ReplicaVisitOrder specifies the order in which the storeReplicaVisitor will
+// visit the replicas.
+type ReplicaVisitorOrder int
+
+const (
+	// VisitOrderRandom means random replica order.
+	VisitOrderRandom ReplicaVisitorOrder = iota
+	// VisitOrderByRangeID means replicas are visited in range id order.
+	VisitOrderByRangeID
+	// VisitOrderByKey means replicas are visited in range key order.
+	VisitOrderByKey
+)
+
 // A storeReplicaVisitor calls a visitor function for each of a store's
 // initialized Replicas (in unspecified order). It provides an option
 // to visit replicas in increasing RangeID order.
 type storeReplicaVisitor struct {
 	store   *Store
 	repls   []*Replica // Replicas to be visited
-	ordered bool       // Option to visit replicas in sorted order
-	visited int        // Number of visited ranges, -1 before first call to Visit()
+	order   ReplicaVisitorOrder
+	visited int // Number of visited ranges, -1 before first call to Visit()
 }
 
 // Len implements sort.Interface.
@@ -301,13 +314,14 @@ func (rs storeReplicaVisitor) Swap(i, j int) { rs.repls[i], rs.repls[j] = rs.rep
 func newStoreReplicaVisitor(store *Store) *storeReplicaVisitor {
 	return &storeReplicaVisitor{
 		store:   store,
+		order:   VisitOrderRandom,
 		visited: -1,
 	}
 }
 
 // InOrder tells the visitor to visit replicas in increasing RangeID order.
-func (rs *storeReplicaVisitor) InOrder() *storeReplicaVisitor {
-	rs.ordered = true
+func (rs *storeReplicaVisitor) InOrder(order ReplicaVisitorOrder) *storeReplicaVisitor {
+	rs.order = order
 	return rs
 }
 
@@ -317,24 +331,32 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 	// stale) view of all Replicas without holding the Store lock. In particular,
 	// no locks are acquired during the copy process.
 	rs.repls = nil
-	rs.store.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
-		rs.repls = append(rs.repls, (*Replica)(v))
-		return true
-	})
-
-	if rs.ordered {
-		// If the replicas were requested in sorted order, perform the sort.
-		sort.Sort(rs)
+	if rs.order != VisitOrderByKey {
+		rs.store.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
+			rs.repls = append(rs.repls, (*Replica)(v))
+			return true
+		})
+		if rs.order == VisitOrderByRangeID {
+			sort.Sort(rs)
+		} else { // Iterate in random order.
+			// The Replicas are already in "unspecified order" due to map iteration,
+			// but we want to make sure it's completely random to prevent issues in
+			// tests where stores are scanning replicas in lock-step and one store is
+			// winning the race and getting a first crack at processing the replicas on
+			// its queues.
+			//
+			// TODO(peter): Re-evaluate whether this is necessary after we allow
+			// rebalancing away from the leaseholder. See TestRebalance_3To5Small.
+			shuffle.Shuffle(rs)
+		}
 	} else {
-		// The Replicas are already in "unspecified order" due to map iteration,
-		// but we want to make sure it's completely random to prevent issues in
-		// tests where stores are scanning replicas in lock-step and one store is
-		// winning the race and getting a first crack at processing the replicas on
-		// its queues.
-		//
-		// TODO(peter): Re-evaluate whether this is necessary after we allow
-		// rebalancing away from the leaseholder. See TestRebalance_3To5Small.
-		shuffle.Shuffle(rs)
+		// We're asked to iterate n key order, so we use the btree.
+		rs.store.mu.RLock()
+		rs.store.mu.replicasByKey.Ascend(func(item btree.Item) bool {
+			rs.repls = append(rs.repls, item.(*Replica))
+			return true // Keep iterating.
+		})
+		rs.store.mu.RUnlock()
 	}
 
 	rs.visited = 0
@@ -1848,9 +1870,8 @@ func (s *Store) recordNewPerSecondStats(newQPS, newWPS float64) {
 
 // VisitReplicas invokes the visitor on the Store's Replicas until the visitor returns false.
 // Replicas which are added to the Store after iteration begins may or may not be observed.
-func (s *Store) VisitReplicas(visitor func(*Replica) bool) {
-	v := newStoreReplicaVisitor(s)
-	v.Visit(visitor)
+func (s *Store) VisitReplicas(order ReplicaVisitorOrder, visitor func(*Replica) bool) {
+	newStoreReplicaVisitor(s).InOrder(order).Visit(visitor)
 }
 
 // WriteLastUpTimestamp records the supplied timestamp into the "last up" key
