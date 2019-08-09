@@ -117,7 +117,7 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 		{StoreID: learnerStoreID, Type: roachpb.ReplicaTypeLearner()},
 	}
 	desc := roachpb.RangeDescriptor{}
-	desc.SetReplicas(roachpb.MakeReplicaDescriptors(&replicas))
+	desc.SetReplicas(roachpb.MakeReplicaDescriptors(replicas))
 	cArgs := CommandArgs{
 		EvalCtx: &mockEvalCtx{
 			storeID: learnerStoreID,
