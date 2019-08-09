@@ -417,6 +417,15 @@ var logicTestConfigs = []testClusterConfig{
 		overrideAutoStats:   "false",
 	},
 	{
+		name:                "local-mixed-19.1-19.2",
+		numNodes:            1,
+		overrideDistSQLMode: "off",
+		overrideAutoStats:   "false",
+		bootstrapVersion:    cluster.ClusterVersion{Version: roachpb.Version{Major: 19, Minor: 1}},
+		serverVersion:       roachpb.Version{Major: 19, Minor: 2},
+		disableUpgrade:      true,
+	},
+	{
 		name:                "local-v1.1@v1.0-noupgrade",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
@@ -518,6 +527,7 @@ func parseTestConfig(names []string) []logicTestConfigIdx {
 var (
 	defaultConfigNames = []string{
 		"local",
+		"local-mixed-19.1-19.2",
 		"fakedist",
 		"fakedist-metadata",
 		"fakedist-disk",
