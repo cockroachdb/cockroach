@@ -1311,7 +1311,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:87181865d8ba4479e412d0ee0091bc34da5ce84a5beb9487f18e7b1a90fb031c"
+  digest = "1:734e71eca8396da1dfe9c6d6331c9b85dc1a8119ddbc7ebb29c224824f52033a"
   name = "github.com/petermattis/pebble"
   packages = [
     ".",
@@ -1330,7 +1330,7 @@
     "vfs",
   ]
   pruneopts = "UT"
-  revision = "532c1b32141230575d62419f43330eaa26853104"
+  revision = "eb27354f6b1a03c0e197d9475c8527a801e79103"
 
 [[projects]]
   digest = "1:e39a5ee8fcbec487f8fc68863ef95f2b025e0739b0e4aa55558a2b4cf8f0ecf0"
