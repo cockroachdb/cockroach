@@ -208,8 +208,8 @@ func GetAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 		return nil, err
 	}
 
-	descs := make([]sqlbase.DescriptorProto, len(kvs))
-	for i, kv := range kvs {
+	descs := make([]sqlbase.DescriptorProto, 0, len(kvs))
+	for _, kv := range kvs {
 		desc := &sqlbase.Descriptor{}
 		if err := kv.ValueProto(desc); err != nil {
 			return nil, err
@@ -220,9 +220,9 @@ func GetAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 			if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
 				return nil, err
 			}
-			descs[i] = table
+			descs = append(descs, table)
 		case *sqlbase.Descriptor_Database:
-			descs[i] = desc.GetDatabase()
+			descs = append(descs, desc.GetDatabase())
 		default:
 			return nil, errors.AssertionFailedf("Descriptor.Union has unexpected type %T", t)
 		}

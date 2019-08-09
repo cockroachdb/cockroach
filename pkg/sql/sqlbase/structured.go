@@ -789,6 +789,11 @@ func (desc *TableDescriptor) MaybeFillInDescriptor(
 func (desc *TableDescriptor) maybeUpgradeForeignKeyRepresentation(
 	ctx context.Context, protoGetter protoGetter,
 ) (bool, error) {
+	if desc.Dropped() {
+		// If the table has been dropped, it's permitted to have corrupted foreign
+		// keys, so we have no chance to properly upgrade it. Just return as-is.
+		return false, nil
+	}
 	otherUnupgradedTables := make(map[ID]*TableDescriptor)
 	changed := false
 	// No need to process mutations, since only descriptors written on a 19.2
