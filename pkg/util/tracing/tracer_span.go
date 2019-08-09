@@ -526,6 +526,9 @@ func (s *span) getTags() map[string]string {
 
 func (s *span) getTagsLocked() map[string]string {
 	result := make(map[string]string)
+	if s.startTags == nil {
+		panic("!!!")
+	}
 	for _, tag := range s.startTags.Get() {
 		result[tag.Key()] = stringifyTagValue(tag.Value())
 	}
