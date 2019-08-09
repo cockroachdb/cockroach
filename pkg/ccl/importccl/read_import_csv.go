@@ -28,7 +28,7 @@ import (
 
 type csvInputReader struct {
 	evalCtx      *tree.EvalContext
-	kvCh         chan []roachpb.KeyValue
+	kvCh         chan row.KVBatch
 	recordCh     chan csvRecord
 	batchSize    int
 	batch        csvRecord
@@ -42,7 +42,7 @@ type csvInputReader struct {
 var _ inputConverter = &csvInputReader{}
 
 func newCSVInputReader(
-	kvCh chan []roachpb.KeyValue,
+	kvCh chan row.KVBatch,
 	opts roachpb.CSVOptions,
 	walltime int64,
 	tableDesc *sqlbase.TableDescriptor,

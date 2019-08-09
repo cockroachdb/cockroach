@@ -71,7 +71,7 @@ func (sp *bulkRowWriter) OutputTypes() []types.T {
 	return CTASPlanResultTypes
 }
 
-func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan []roachpb.KeyValue) error {
+func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) error {
 	writeTS := sp.spec.Table.CreateAsOfTime
 	const bufferSize = 64 << 20
 	adder, err := sp.flowCtx.Cfg.BulkAdder(
@@ -86,7 +86,7 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan []roachpb.Key
 	// the BulkAdder. It handles the required buffering/sorting/etc.
 	ingestKvs := func() error {
 		for kvBatch := range kvCh {
-			for _, kv := range kvBatch {
+			for _, kv := range kvBatch.KVs {
 				if err := adder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
 					if _, ok := err.(storagebase.DuplicateKeyError); ok {
 						return errors.WithStack(err)
@@ -115,7 +115,7 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan []roachpb.Key
 }
 
 func (sp *bulkRowWriter) convertLoop(
-	ctx context.Context, kvCh chan []roachpb.KeyValue, conv *row.DatumRowConverter,
+	ctx context.Context, kvCh chan row.KVBatch, conv *row.DatumRowConverter,
 ) error {
 	defer close(kvCh)
 
@@ -180,13 +180,12 @@ func (sp *bulkRowWriter) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "bulkRowWriter")
 	defer tracing.FinishSpan(span)
 
-	var kvCh chan []roachpb.KeyValue
+	kvCh := make(chan row.KVBatch, 10)
 	var g ctxgroup.Group
 
 	// Create a new evalCtx per converter so each go routine gets its own
 	// collationenv, which can't be accessed in parallel.
 	evalCtx := sp.flowCtx.EvalCtx.Copy()
-	kvCh = make(chan []roachpb.KeyValue, 10)
 
 	sp.input.Start(ctx)
 

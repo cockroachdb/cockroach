@@ -39,7 +39,7 @@ type pgCopyReader struct {
 var _ inputConverter = &pgCopyReader{}
 
 func newPgCopyReader(
-	kvCh chan []roachpb.KeyValue,
+	kvCh chan row.KVBatch,
 	opts roachpb.PgCopyOptions,
 	tableDesc *sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,
