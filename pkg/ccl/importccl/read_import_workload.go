@@ -37,13 +37,13 @@ import (
 type workloadReader struct {
 	evalCtx *tree.EvalContext
 	table   *sqlbase.TableDescriptor
-	kvCh    chan []roachpb.KeyValue
+	kvCh    chan row.KVBatch
 }
 
 var _ inputConverter = &workloadReader{}
 
 func newWorkloadReader(
-	kvCh chan []roachpb.KeyValue, table *sqlbase.TableDescriptor, evalCtx *tree.EvalContext,
+	kvCh chan row.KVBatch, table *sqlbase.TableDescriptor, evalCtx *tree.EvalContext,
 ) *workloadReader {
 	return &workloadReader{evalCtx: evalCtx, table: table, kvCh: kvCh}
 }
@@ -198,7 +198,7 @@ type WorkloadKVConverter struct {
 	rows           workload.BatchedTuples
 	batchIdxAtomic int64
 	batchEnd       int
-	kvCh           chan []roachpb.KeyValue
+	kvCh           chan row.KVBatch
 }
 
 // NewWorkloadKVConverter returns a WorkloadKVConverter for the given table and
@@ -207,7 +207,7 @@ func NewWorkloadKVConverter(
 	tableDesc *sqlbase.TableDescriptor,
 	rows workload.BatchedTuples,
 	batchStart, batchEnd int,
-	kvCh chan []roachpb.KeyValue,
+	kvCh chan row.KVBatch,
 ) *WorkloadKVConverter {
 	return &WorkloadKVConverter{
 		tableDesc:      tableDesc,

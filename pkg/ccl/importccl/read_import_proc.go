@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -263,7 +264,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 // wrapper, doing the correct DrainAndClose error handling logic.
 func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	group := ctxgroup.WithContext(ctx)
-	kvCh := make(chan []roachpb.KeyValue, 10)
+	kvCh := make(chan row.KVBatch, 10)
 	evalCtx := cp.flowCtx.NewEvalCtx()
 
 	var singleTable *sqlbase.TableDescriptor
@@ -372,9 +373,7 @@ func (s sampleRate) sample(kv roachpb.KeyValue) bool {
 	return prob > s.rnd.Float64()
 }
 
-func (cp *readImportDataProcessor) emitKvs(
-	ctx context.Context, kvCh <-chan []roachpb.KeyValue,
-) error {
+func (cp *readImportDataProcessor) emitKvs(ctx context.Context, kvCh <-chan row.KVBatch) error {
 	ctx, span := tracing.ChildSpan(ctx, "sendImportKVs")
 	defer tracing.FinishSpan(span)
 
@@ -404,7 +403,7 @@ func (cp *readImportDataProcessor) emitKvs(
 	}
 
 	for kvBatch := range kvCh {
-		for _, kv := range kvBatch {
+		for _, kv := range kvBatch.KVs {
 			// Allow KV pairs to be dropped if they belong to a completed span.
 			if completedSpans.Contains(kv.Key) {
 				continue
@@ -486,9 +485,7 @@ func (cp *readImportDataProcessor) presplitTableBoundaries(ctx context.Context) 
 
 // ingestKvs drains kvs from the channel until it closes, ingesting them using
 // the BulkAdder. It handles the required buffering/sorting/etc.
-func (cp *readImportDataProcessor) ingestKvs(
-	ctx context.Context, kvCh <-chan []roachpb.KeyValue,
-) error {
+func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan row.KVBatch) error {
 	ctx, span := tracing.ChildSpan(ctx, "ingestKVs")
 	defer tracing.FinishSpan(span)
 
@@ -550,7 +547,7 @@ func (cp *readImportDataProcessor) ingestKvs(
 	// results in flushing a much larger number of small SSTs. This increases the
 	// number of L0 (and total) files, but with a lower memory usage.
 	for kvBatch := range kvCh {
-		for _, kv := range kvBatch {
+		for _, kv := range kvBatch.KVs {
 			_, _, indexID, indexErr := sqlbase.DecodeTableIDIndexID(kv.Key)
 			if indexErr != nil {
 				return indexErr
