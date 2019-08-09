@@ -115,8 +115,9 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			if err := d.Validate(); err != nil {
 				return err
 			}
-			writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), p.execCfg.Settings,
-				b, descriptor.GetID(), descriptor)
+			if err := writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), p.execCfg.Settings, b, descriptor.GetID(), descriptor); err != nil {
+				return err
+			}
 
 		case *sqlbase.MutableTableDescriptor:
 			if !d.Dropped() {

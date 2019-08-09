@@ -1926,7 +1926,7 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 					// table descriptor, since we'll never be in a situation where we're
 					// trying to downgrade something that we read from disk that was already
 					// upgraded.
-					wasDowngraded, downgraded, err := upgraded.maybeDowngradeForeignKeyRepresentation(ctx, mixedVersionSettings)
+					wasDowngraded, downgraded, err := upgraded.MaybeDowngradeForeignKeyRepresentation(ctx, mixedVersionSettings)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -1938,9 +1938,24 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 						t.Fatalf("downgrade didn't match original %s %s", proto.MarshalTextString(downgraded),
 							proto.MarshalTextString(&pair.oldFormat))
 					}
+
+					// Check that the downgrade is idempotent as well. Downgrading the table
+					// again shouldn't change it.
+					wasDowngradedAgain, downgradedAgain, err := downgraded.MaybeDowngradeForeignKeyRepresentation(ctx, mixedVersionSettings)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if wasDowngradedAgain {
+						t.Fatalf("expected proto to not be downgraded a second time")
+					}
+
+					if !reflect.DeepEqual(downgradedAgain, downgraded) {
+						t.Fatalf("downgrade wasn't idempotent %s %s", proto.MarshalTextString(downgradedAgain),
+							proto.MarshalTextString(downgraded))
+					}
 				}
 
-				wasDowngraded, _, err := upgraded.maybeDowngradeForeignKeyRepresentation(ctx, newVersionSettings)
+				wasDowngraded, _, err := upgraded.MaybeDowngradeForeignKeyRepresentation(ctx, newVersionSettings)
 				if err != nil {
 					t.Fatal(err)
 				}
