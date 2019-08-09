@@ -297,11 +297,14 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (index int64, pE
 		// based range leases). This shouldn't happen often, but has been seen
 		// before (#12591).
 		replID := p.command.ProposerReplica.ReplicaID
-		if crt.ChangeType == roachpb.REMOVE_REPLICA && crt.Replica.ReplicaID == replID {
-			msg := fmt.Sprintf("received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt)
-			log.Error(p.ctx, msg)
-			return 0, roachpb.NewErrorf("%s: %s", r, msg)
+		for _, rDesc := range crt.Removed() {
+			if rDesc.ReplicaID == replID {
+				msg := fmt.Sprintf("received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt)
+				log.Error(p.ctx, msg)
+				return 0, roachpb.NewErrorf("%s: %s", r, msg)
+			}
 		}
+
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
 		version = raftVersionSideloaded

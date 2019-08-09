@@ -42,6 +42,7 @@ const (
 	VersionGenerationComparable
 	VersionLearnerReplicas
 	VersionTopLevelForeignKeys
+	VersionAtomicChangeReplicasTrigger
 
 	// Add new versions here (step one of two).
 
@@ -503,6 +504,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// continue to upgrade old-style descriptors on-demand.
 		Key:     VersionTopLevelForeignKeys,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 7},
+	},
+	{
+		// VersionAtomicChangeReplicasTrigger is <TODO>.
+		//
+		// It enables use of updated fields in ChangeReplicasTrigger that will
+		// support atomic replication changes.
+		Key:     VersionAtomicChangeReplicasTrigger,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 8},
 	},
 
 	// Add new versions here (step two of two).

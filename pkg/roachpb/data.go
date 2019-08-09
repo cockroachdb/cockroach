@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -1301,10 +1302,45 @@ func writeTooOldRetryTimestamp(txn *Transaction, err *WriteTooOldError) hlc.Time
 var _ fmt.Stringer = &ChangeReplicasTrigger{}
 
 func (crt ChangeReplicasTrigger) String() string {
+	var nextReplicaID ReplicaID
+	var afterReplicas []ReplicaDescriptor
+	added, removed := crt.Added(), crt.Removed()
 	if crt.Desc != nil {
-		return fmt.Sprintf("%s(%s): updated=%s next=%d", crt.ChangeType, crt.Replica, crt.Desc.Replicas(), crt.Desc.NextReplicaID)
+		nextReplicaID = crt.Desc.NextReplicaID
+		// NB: we don't want to mutate InternalReplicas, so we don't call
+		// .Replicas()
+		afterReplicas = crt.Desc.InternalReplicas
+	} else {
+		nextReplicaID = crt.DeprecatedNextReplicaID
+		afterReplicas = crt.DeprecatedUpdatedReplicas
 	}
-	return fmt.Sprintf("%s(%s): updated=%s next=%d", crt.ChangeType, crt.Replica, crt.DeprecatedUpdatedReplicas, crt.DeprecatedNextReplicaID)
+	var chgS strings.Builder
+	if len(added) > 0 {
+		fmt.Fprintf(&chgS, "%s%s", ADD_REPLICA, added)
+	}
+	if len(removed) > 0 {
+		if chgS.Len() > 0 {
+			chgS.WriteString(", ")
+		}
+		fmt.Fprintf(&chgS, "%s%s", REMOVE_REPLICA, removed)
+	}
+	return fmt.Sprintf("%s: after=%s next=%d", chgS.String(), afterReplicas, nextReplicaID)
+}
+
+// Added returns the replicas added by this change (if there are any).
+func (crt ChangeReplicasTrigger) Added() []ReplicaDescriptor {
+	if len(crt.InternalAddedReplicas)+len(crt.InternalRemovedReplicas) == 0 && crt.DeprecatedChangeType == ADD_REPLICA {
+		return []ReplicaDescriptor{crt.DeprecatedReplica}
+	}
+	return crt.InternalAddedReplicas
+}
+
+// Removed returns the replicas removed by this change (if there are any).
+func (crt ChangeReplicasTrigger) Removed() []ReplicaDescriptor {
+	if len(crt.InternalAddedReplicas)+len(crt.InternalRemovedReplicas) == 0 && crt.DeprecatedChangeType == REMOVE_REPLICA {
+		return []ReplicaDescriptor{crt.DeprecatedReplica}
+	}
+	return crt.InternalRemovedReplicas
 }
 
 // LeaseSequence is a custom type for a lease sequence number.
