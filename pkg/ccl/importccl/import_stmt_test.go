@@ -56,6 +56,8 @@ func TestImportData(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
+
 	tests := []struct {
 		name   string
 		create string

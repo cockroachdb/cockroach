@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-const maxSettings = 128
+const maxSettings = 256
 
 // Values is a container that stores values for all registered settings.
 // Each setting is assigned a unique slot (up to maxSettings).
