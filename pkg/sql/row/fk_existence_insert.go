@@ -64,15 +64,15 @@ func makeFkExistenceCheckHelperForInsert(
 			return h, errors.AssertionFailedf("referenced table %d not in provided table map %+v", ref.ReferencedTableID,
 				otherTables)
 		}
-		searchIdx, err := sqlbase.FindFKReferencedIndex(searchTable.TableDesc(), ref.ReferencedColumnIDs)
+		searchIdx, err := searchTable.TableDesc().FindIndexByID(ref.LegacyReferencedIndex)
 		if err != nil {
 			return h, errors.NewAssertionErrorWithWrappedErrf(err,
-				"failed to find search index for fk %q", ref.Name)
+				"failed to find search index %d for fk %q", ref.LegacyReferencedIndex, ref.Name)
 		}
-		mutatedIdx, err := sqlbase.FindFKOriginIndex(table.TableDesc(), ref.OriginColumnIDs)
+		mutatedIdx, err := table.TableDesc().FindIndexByID(ref.LegacyOriginIndex)
 		if err != nil {
 			return h, errors.NewAssertionErrorWithWrappedErrf(err,
-				"failed to find search index for fk %q", ref.Name)
+				"failed to find search index %d for fk %q", ref.LegacyOriginIndex, ref.Name)
 		}
 		fk, err := makeFkExistenceCheckBaseHelper(txn, otherTables, ref, searchIdx, mutatedIdx, colMap, alloc, CheckInserts)
 		if err == errSkipUnusedFK {

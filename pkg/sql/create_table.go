@@ -539,11 +539,6 @@ func ResolveFK(
 	for i := range targetCols {
 		targetColIDs[i] = targetCols[i].ID
 	}
-	// Search for a unique index on the referenced table that matches our foreign
-	// key columns. If one doesn't exist, we can't create the FK.
-	if _, err := sqlbase.FindFKReferencedIndex(target.TableDesc(), targetColIDs); err != nil {
-		return err
-	}
 
 	// Don't add a SET NULL action on an index that has any column that is NOT
 	// NULL.

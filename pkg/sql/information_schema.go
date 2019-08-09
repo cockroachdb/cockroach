@@ -818,7 +818,7 @@ CREATE TABLE information_schema.referential_constraints (
 				if r, ok := matchOptionMap[fk.Match]; ok {
 					matchType = r
 				}
-				referencedIdx, err := sqlbase.FindFKReferencedIndex(refTable, fk.ReferencedColumnIDs)
+				referencedIdx, err := refTable.FindIndexByID(fk.LegacyReferencedIndex)
 				if err != nil {
 					return err
 				}

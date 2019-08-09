@@ -1049,11 +1049,11 @@ func (c *cascader) cascadeAll(
 			if err != nil {
 				return err
 			}
-			referencedIndex, err := sqlbase.FindFKReferencedIndex(elem.table.TableDesc(), ref.ReferencedColumnIDs)
+			referencedIndex, err := elem.table.TableDesc().FindIndexByID(ref.LegacyReferencedIndex)
 			if err != nil {
 				return err
 			}
-			referencingIndex, err := sqlbase.FindFKOriginIndex(referencingTable.Desc.TableDesc(), ref.OriginColumnIDs)
+			referencingIndex, err := referencingTable.Desc.TableDesc().FindIndexByID(ref.LegacyOriginIndex)
 			if err != nil {
 				return err
 			}

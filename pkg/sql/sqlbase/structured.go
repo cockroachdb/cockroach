@@ -72,32 +72,6 @@ func (c ColumnIDs) Len() int           { return len(c) }
 func (c ColumnIDs) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 func (c ColumnIDs) Less(i, j int) bool { return c[i] < c[j] }
 
-// EqualSets returns true if this column ids slice contains all of the same ids
-// as the other column ids slice, order agnostic.
-func (c ColumnIDs) EqualSets(other ColumnIDs) bool {
-	if len(c) != len(other) {
-		return false
-	}
-	return c.HasPrefix(other)
-	/*
-		for i := range c {
-			if c[i]
-		}
-		thisCopy := make(ColumnIDs, len(c))
-		otherCopy := make(ColumnIDs, len(other))
-		copy(thisCopy, c)
-		copy(otherCopy, other)
-		sort.Sort(thisCopy)
-		sort.Sort(otherCopy)
-		for i := range thisCopy {
-			if c[i] != otherCopy[i] {
-				return false
-			}
-		}
-		return true
-	*/
-}
-
 // Contains returns true if needle is contained within the input list.
 func (c ColumnIDs) Contains(needle ColumnID) bool {
 	for i := range c {
@@ -109,12 +83,12 @@ func (c ColumnIDs) Contains(needle ColumnID) bool {
 }
 
 // HasPrefix returns true if the input list is a prefix of this list.
-func (c ColumnIDs) HasPrefix(other ColumnIDs) bool {
-	if len(other) > len(c) {
+func (c ColumnIDs) HasPrefix(input ColumnIDs) bool {
+	if len(input) > len(c) {
 		return false
 	}
-	for i := range other {
-		if other[i] != c[i] {
+	for i := range input {
+		if input[i] != c[i] {
 			return false
 		}
 	}
@@ -890,7 +864,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 		}
 
 		otherTable := otherUnupgradedTables[ref.Table]
-		originIndex, err := otherUnupgradedTables.FindIndexByID(ref.Index)
+		originIndex, err := otherTable.FindIndexByID(ref.Index)
 		if err != nil {
 			return false, err
 		}
@@ -2751,8 +2725,14 @@ func (desc *TableDescriptor) FindFKForBackRef(
 ) (*ForeignKeyConstraint, error) {
 	for i := range desc.OutboundFKs {
 		fk := &desc.OutboundFKs[i]
-		if fk.ReferencedTableID == referencedTableID &&
-			fk.Name == backref.Name {
+		if fk.ReferencedTableID == referencedTableID && fk.Name == backref.Name {
+			if fk.LegacyReferencedIndex != backref.LegacyReferencedIndex ||
+				fk.LegacyOriginIndex != backref.LegacyOriginIndex {
+				return nil, errors.AssertionFailedf("fk found for backref %s but pinned indexes were different: "+
+					"%d != %d || %d != %d", fk.Name, fk.LegacyOriginIndex, backref.LegacyOriginIndex,
+					fk.LegacyReferencedIndex, backref.LegacyReferencedIndex)
+			}
+
 			return fk, nil
 		}
 	}

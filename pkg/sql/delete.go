@@ -436,20 +436,13 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 		for i := range tableDesc.InboundFKs {
 			fk := &tableDesc.InboundFKs[i]
 			if _, ok := interleavedIdxs[fk.OriginTableID]; !ok {
+				// This table is referenced by a foreign key that lives outside of the
+				// interleaved hierarchy,  so we can't fast path delete.
 				return false
 			}
-			for i := range fkTables[fk.OriginTableID].Desc.OutboundFKs {
-				outboundFK := &fkTables[fk.OriginTableID].Desc.OutboundFKs[i]
-				if outboundFK.ReferencedTableID != tableDesc.ID {
-					continue
-				}
-				if sqlbase.ColumnIDs(outboundFK.ReferencedColumnIDs).EqualSets(fk.ReferencedColumnIDs) {
-					// All of these references MUST be ON DELETE CASCADE.
-					if outboundFK.OnDelete != sqlbase.ForeignKeyReference_CASCADE {
-						return false
-					}
-					break
-				}
+			// All of these references MUST be ON DELETE CASCADE.
+			if fk.OnDelete != sqlbase.ForeignKeyReference_CASCADE {
+				return false
 			}
 		}
 	}

@@ -75,21 +75,6 @@ func makeFkExistenceCheckHelperForDelete(
 		// Fake a forward foreign key constraint. The HP requires an index on the
 		// reverse table, which won't be required by the CBO. So in HP, fail if we
 		// don't have this precondition.
-		var foundFK *sqlbase.ForeignKeyConstraint
-		for i := range originTable.Desc.OutboundFKs {
-			fk := &originTable.Desc.OutboundFKs[i]
-			if fk.ReferencedTableID != table.ID {
-				continue
-			}
-			if sqlbase.ColumnIDs(fk.ReferencedColumnIDs).EqualSets(ref.ReferencedColumnIDs) {
-				foundFK = fk
-				break
-			}
-		}
-		if foundFK == nil {
-			return fkExistenceCheckForDelete{}, errors.AssertionFailedf(
-				"failed to find forward fk for backward fk %v", ref)
-		}
 		// This will never be on an actual table descriptor, so we don't need to
 		// populate all the legacy index fields.
 		fakeRef := &sqlbase.ForeignKeyConstraint{
@@ -99,18 +84,18 @@ func makeFkExistenceCheckHelperForDelete(
 			OriginColumnIDs:     ref.ReferencedColumnIDs,
 			// N.B.: Back-references always must have SIMPLE match method, because ... TODO(jordan): !!!
 			Match:    sqlbase.ForeignKeyReference_SIMPLE,
-			OnDelete: foundFK.OnDelete,
-			OnUpdate: foundFK.OnUpdate,
+			OnDelete: ref.OnDelete,
+			OnUpdate: ref.OnUpdate,
 		}
-		searchIdx, err := sqlbase.FindFKOriginIndex(originTable.Desc.TableDesc(), ref.OriginColumnIDs)
+		searchIdx, err := originTable.Desc.TableDesc().FindIndexByID(ref.LegacyOriginIndex)
 		if err != nil {
 			return fkExistenceCheckForDelete{}, errors.NewAssertionErrorWithWrappedErrf(
-				err, "failed to find available index for deletion")
+				err, "failed to find index %d (table %d) for deletion", ref.LegacyOriginIndex, ref.OriginTableID)
 		}
-		mutatedIdx, err := sqlbase.FindFKReferencedIndex(table.TableDesc(), ref.ReferencedColumnIDs)
+		mutatedIdx, err := table.TableDesc().FindIndexByID(ref.LegacyReferencedIndex)
 		if err != nil {
 			return fkExistenceCheckForDelete{}, errors.NewAssertionErrorWithWrappedErrf(
-				err, "failed to find available index for deletion")
+				err, "failed to find available index %d (table %d) for deletion", ref.LegacyReferencedIndex, ref.ReferencedTableID)
 		}
 		fk, err := makeFkExistenceCheckBaseHelper(txn, otherTables, fakeRef, searchIdx, mutatedIdx, colMap, alloc,
 			CheckDeletes)
