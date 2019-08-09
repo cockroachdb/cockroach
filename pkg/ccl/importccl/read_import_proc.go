@@ -12,6 +12,7 @@ import (
 	"compress/bzip2"
 	"compress/gzip"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -213,6 +215,12 @@ func newReadImportDataProcessor(
 	if err := cp.out.Init(&distsqlpb.PostProcessSpec{}, csvOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}
+
+	// Make a child memory monitor to ensure we have enough memory available to
+	// perform the IMPORT.
+	cp.bulkMon = distsqlrun.NewMonitor(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, fmt.Sprintf("bulk-monitor-%d", processorID))
+	cp.memAcc = cp.bulkMon.MakeBoundAccount()
+
 	return cp, nil
 }
 
@@ -230,6 +238,8 @@ type readImportDataProcessor struct {
 	spec        distsqlpb.ReadImportDataSpec
 	out         distsqlrun.ProcOutputHelper
 	output      distsqlrun.RowReceiver
+	bulkMon     *mon.BytesMonitor
+	memAcc      mon.BoundAccount
 }
 
 var _ distsqlrun.Processor = &readImportDataProcessor{}
@@ -250,6 +260,8 @@ func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {
 func (cp *readImportDataProcessor) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "readImportDataProcessor")
 	defer tracing.FinishSpan(span)
+	defer cp.bulkMon.Stop(ctx)
+	defer cp.memAcc.Close(ctx)
 
 	if err := cp.doRun(ctx); err != nil {
 		distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)
@@ -377,6 +389,12 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 
 			writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
 			const bufferSize, flushSize = 64 << 20, 16 << 20
+
+			// Check to see if we have enough memory to reserve two adders with
+			// bufferSize.
+			if err := cp.memAcc.Grow(ctx, bufferSize*2); err != nil {
+				return errors.Wrap(err, "not enough memory to alloc BulkAdders in IMPORT")
+			}
 
 			// We create two bulk adders so as to combat the excessive flushing of
 			// small SSTs which was observed when using a single adder for both
