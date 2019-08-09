@@ -438,8 +438,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 			confChangeCtx := ConfChangeContext{
 				CommandID: string(p.idKey),
 				Payload:   p.encodedCommand,
-				// TODO(tbg): unused, remove this field.
-				Replica: crt.DeprecatedReplica,
 			}
 			encodedCtx, err := protoutil.Marshal(&confChangeCtx)
 			if err != nil {
