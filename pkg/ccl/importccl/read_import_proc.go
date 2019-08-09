@@ -376,7 +376,8 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			defer tracing.FinishSpan(span)
 
 			writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
-			const bufferSize, flushSize = 64 << 20, 16 << 20
+			const bufferSize = 64 << 20
+			flushSize := storageccl.MaxImportBatchSize(cp.flowCtx.Cfg.Settings)
 
 			// We create two bulk adders so as to combat the excessive flushing of
 			// small SSTs which was observed when using a single adder for both
@@ -579,14 +580,14 @@ func ingestKvs(
 			if indexID == 1 {
 				if err := pkIndexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
 					if _, ok := err.(storagebase.DuplicateKeyError); ok {
-						return errors.WithStack(err)
+						return errors.Wrap(err, "duplicate key in primary index")
 					}
 					return err
 				}
 			} else {
 				if err := indexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
 					if _, ok := err.(storagebase.DuplicateKeyError); ok {
-						return errors.WithStack(err)
+						return errors.Wrap(err, "duplicate key in index")
 					}
 					return err
 				}
@@ -596,14 +597,14 @@ func ingestKvs(
 
 	if err := pkIndexAdder.Flush(ctx); err != nil {
 		if err, ok := err.(storagebase.DuplicateKeyError); ok {
-			return errors.WithStack(err)
+			return errors.Wrap(err, "duplicate key in primary index")
 		}
 		return err
 	}
 
 	if err := indexAdder.Flush(ctx); err != nil {
 		if err, ok := err.(storagebase.DuplicateKeyError); ok {
-			return errors.WithStack(err)
+			return errors.Wrap(err, "duplicate key in index")
 		}
 		return err
 	}
