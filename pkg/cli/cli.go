@@ -195,6 +195,7 @@ func init() {
 		userCmd,
 		nodeCmd,
 		dumpCmd,
+		dashboardCmd,
 
 		// Miscellaneous commands.
 		// TODO(pmattis): stats

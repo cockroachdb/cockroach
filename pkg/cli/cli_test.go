@@ -1562,6 +1562,7 @@ Available Commands:
   node              list, inspect or remove nodes
   dump              dump sql tables
 
+  dashboard         open a local browser pointing to the remote web UI
   demo              open a demo sql shell
   gen               generate auxiliary files
   version           output version information

@@ -456,6 +456,7 @@ func init() {
 		genHAProxyCmd,
 		quitCmd,
 		sqlShellCmd,
+		dashboardCmd,
 		/* StartCmds are covered above */
 	}
 	clientCmds = append(clientCmds, userCmds...)
@@ -540,7 +541,7 @@ func init() {
 	StringFlag(dumpCmd.Flags(), &dumpCtx.asOf, cliflags.DumpTime, dumpCtx.asOf)
 
 	// Commands that establish a SQL connection.
-	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd, demoCmd}
+	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd, demoCmd, dashboardCmd}
 	sqlCmds = append(sqlCmds, userCmds...)
 	sqlCmds = append(sqlCmds, demoCmd.Commands()...)
 	for _, cmd := range sqlCmds {
