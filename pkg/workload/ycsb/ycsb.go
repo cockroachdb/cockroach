@@ -572,9 +572,9 @@ func (yw *ycsbWorker) readModifyWriteRow(ctx context.Context) error {
 	fieldIdx := yw.rng.Intn(numTableFields)
 	var args [2]interface{}
 	args[0] = key
-	return crdb.ExecuteTx(ctx, yw.db, nil, func(tx *gosql.Tx) error {
+	err := crdb.ExecuteTx(ctx, yw.db, nil, func(tx *gosql.Tx) error {
 		var oldValue []byte
-		if err := yw.readFieldStmts[fieldIdx].QueryRowContext(ctx, key).Scan(&oldValue); err != nil {
+		if err := tx.StmtContext(ctx, yw.readFieldStmts[fieldIdx]).QueryRowContext(ctx, key).Scan(&oldValue); err != nil {
 			return err
 		}
 		var updateStmt *gosql.Stmt
@@ -585,9 +585,17 @@ func (yw *ycsbWorker) readModifyWriteRow(ctx context.Context) error {
 			updateStmt = yw.updateStmts[fieldIdx]
 			args[1] = newValue
 		}
-		_, err := tx.Stmt(updateStmt).ExecContext(ctx, args[:]...)
+		_, err := tx.StmtContext(ctx, updateStmt).ExecContext(ctx, args[:]...)
 		return err
 	})
+	if err == gosql.ErrNoRows {
+		// Sometimes a context cancellation during a transaction can result in
+		// sql.ErrNoRows instead of the appropriate context.DeadlineExceeded. In
+		// this case, we just return ctx.Err(). See
+		// https://github.com/lib/pq/issues/874.
+		return ctx.Err()
+	}
+	return err
 }
 
 // Choose an operation in proportion to the frequencies.
