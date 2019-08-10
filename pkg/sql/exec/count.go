@@ -13,8 +13,8 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 // countOp is an operator that counts the number of input rows it receives,
@@ -36,12 +36,12 @@ func NewCountOp(input Operator) Operator {
 	c := &countOp{
 		OneInputNode: NewOneInputNode(input),
 	}
-	c.internalBatch = coldata.NewMemBatchWithSize([]types.T{types.Int64}, 1)
+	c.internalBatch = coldata.NewMemBatchWithSize([]coltypes.T{coltypes.Int64}, 1)
 	return c
 }
 
 func (c *countOp) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]types.T{types.Int64}, 1)
+	return EstimateBatchSizeBytes([]coltypes.T{coltypes.Int64}, 1)
 }
 
 func (c *countOp) Init() {

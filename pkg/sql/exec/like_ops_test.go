@@ -16,9 +16,9 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -99,7 +99,7 @@ func BenchmarkLikeOps(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]types.T{types.Bytes})
+	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Bytes})
 	col := batch.ColVec(0).Bytes()
 	width := 64
 	for i := 0; i < coldata.BatchSize; i++ {

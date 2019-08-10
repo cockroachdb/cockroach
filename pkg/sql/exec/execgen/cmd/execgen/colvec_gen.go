@@ -20,7 +20,7 @@ import (
 )
 
 func genColvec(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/sql/exec/coldata/vec_tmpl.go")
+	d, err := ioutil.ReadFile("pkg/col/coldata/vec_tmpl.go")
 	if err != nil {
 		return err
 	}
@@ -29,7 +29,7 @@ func genColvec(wr io.Writer) error {
 
 	// Replace the template variables.
 	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "types.{{.LTyp}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 	s = replaceManipulationFuncs(".LTyp", s)
 

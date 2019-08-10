@@ -13,9 +13,9 @@ package exec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/pkg/errors"
 )
 
@@ -89,9 +89,9 @@ type orderedAggregator struct {
 	done bool
 
 	aggCols  [][]uint32
-	aggTypes [][]types.T
+	aggTypes [][]coltypes.T
 
-	outputTypes []types.T
+	outputTypes []coltypes.T
 
 	// scratch is the Batch to output and variables related to it. Aggregate
 	// function operators write directly to this output batch.
@@ -125,7 +125,7 @@ var _ StaticMemoryOperator = &orderedAggregator{}
 // that the aggregate function should work on.
 func NewOrderedAggregator(
 	input Operator,
-	colTypes []types.T,
+	colTypes []coltypes.T,
 	aggFns []distsqlpb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
@@ -187,10 +187,10 @@ func NewOrderedAggregator(
 }
 
 func makeAggregateFuncs(
-	aggTyps [][]types.T, aggFns []distsqlpb.AggregatorSpec_Func,
-) ([]aggregateFunc, []types.T, error) {
+	aggTyps [][]coltypes.T, aggFns []distsqlpb.AggregatorSpec_Func,
+) ([]aggregateFunc, []coltypes.T, error) {
 	funcs := make([]aggregateFunc, len(aggFns))
-	outTyps := make([]types.T, len(aggFns))
+	outTyps := make([]coltypes.T, len(aggFns))
 
 	for i := range aggFns {
 		var err error
@@ -218,7 +218,7 @@ func makeAggregateFuncs(
 		case distsqlpb.AggregatorSpec_COUNT_ROWS, distsqlpb.AggregatorSpec_COUNT:
 			// TODO(jordan): this is a somewhat of a hack. The aggregate functions
 			// should come with their own output types, somehow.
-			outTyps[i] = types.Int64
+			outTyps[i] = coltypes.Int64
 		default:
 			// Output types are the input types for now.
 			outTyps[i] = aggTyps[i][0]
@@ -341,11 +341,11 @@ func (a *orderedAggregator) reset() {
 
 // extractAggTypes returns a nested array representing the input types
 // corresponding to each aggregation function.
-func extractAggTypes(aggCols [][]uint32, colTypes []types.T) [][]types.T {
-	aggTyps := make([][]types.T, len(aggCols))
+func extractAggTypes(aggCols [][]uint32, colTypes []coltypes.T) [][]coltypes.T {
+	aggTyps := make([][]coltypes.T, len(aggCols))
 
 	for aggIdx := range aggCols {
-		aggTyps[aggIdx] = make([]types.T, len(aggCols[aggIdx]))
+		aggTyps[aggIdx] = make([]coltypes.T, len(aggCols[aggIdx]))
 		for i, colIdx := range aggCols[aggIdx] {
 			aggTyps[aggIdx][i] = colTypes[colIdx]
 		}

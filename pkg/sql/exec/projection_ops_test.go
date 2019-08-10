@@ -17,10 +17,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestProjPlusInt64Int64ConstOp(t *testing.T) {
@@ -51,7 +51,7 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64})
+	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64})
 	col := batch.ColVec(0).Int64()
 	for i := int64(0); i < coldata.BatchSize; i++ {
 		col[i] = 1
@@ -105,7 +105,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	constVal := float64(31.37)
 	constArg := tree.NewDFloat(tree.DFloat(constVal))
 	outputIdx := 5
-	op, err := GetProjectionRConstOperator(semtypes.Float, binOp, input, colIdx, constArg, outputIdx)
+	op, err := GetProjectionRConstOperator(types.Float, binOp, input, colIdx, constArg, outputIdx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -121,7 +121,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 }
 
 func TestGetProjectionOperator(t *testing.T) {
-	ct := semtypes.Int2
+	ct := types.Int2
 	binOp := tree.Mult
 	var input Operator
 	col1Idx := 5
@@ -150,7 +150,7 @@ func benchmarkProjOp(
 ) {
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64, types.Int64})
+	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
 	col1 := batch.ColVec(0).Int64()
 	col2 := batch.ColVec(1).Int64()
 	for i := int64(0); i < coldata.BatchSize; i++ {

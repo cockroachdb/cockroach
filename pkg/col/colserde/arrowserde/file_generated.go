@@ -2,9 +2,7 @@
 
 package arrowserde
 
-import (
-	flatbuffers "github.com/google/flatbuffers/go"
-)
+import flatbuffers "github.com/google/flatbuffers/go"
 
 /// ----------------------------------------------------------------------
 /// Arrow File metadata
@@ -104,13 +102,17 @@ func FooterAddSchema(builder *flatbuffers.Builder, schema flatbuffers.UOffsetT) 
 func FooterAddDictionaries(builder *flatbuffers.Builder, dictionaries flatbuffers.UOffsetT) {
 	builder.PrependUOffsetTSlot(2, flatbuffers.UOffsetT(dictionaries), 0)
 }
-func FooterStartDictionariesVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
+func FooterStartDictionariesVector(
+	builder *flatbuffers.Builder, numElems int,
+) flatbuffers.UOffsetT {
 	return builder.StartVector(24, numElems, 8)
 }
 func FooterAddRecordBatches(builder *flatbuffers.Builder, recordBatches flatbuffers.UOffsetT) {
 	builder.PrependUOffsetTSlot(3, flatbuffers.UOffsetT(recordBatches), 0)
 }
-func FooterStartRecordBatchesVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
+func FooterStartRecordBatchesVector(
+	builder *flatbuffers.Builder, numElems int,
+) flatbuffers.UOffsetT {
 	return builder.StartVector(24, numElems, 8)
 }
 func FooterEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
@@ -158,7 +160,9 @@ func (rcv *Block) MutateBodyLength(n int64) bool {
 	return rcv._tab.MutateInt64(rcv._tab.Pos+flatbuffers.UOffsetT(16), n)
 }
 
-func CreateBlock(builder *flatbuffers.Builder, offset int64, metaDataLength int32, bodyLength int64) flatbuffers.UOffsetT {
+func CreateBlock(
+	builder *flatbuffers.Builder, offset int64, metaDataLength int32, bodyLength int64,
+) flatbuffers.UOffsetT {
 	builder.Prep(8, 24)
 	builder.PrependInt64(bodyLength)
 	builder.Pad(4)

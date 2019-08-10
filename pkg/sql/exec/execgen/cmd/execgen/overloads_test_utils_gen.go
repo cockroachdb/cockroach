@@ -14,7 +14,7 @@ import (
 	"io"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 const overloadsTestUtilsTemplate = `
@@ -29,7 +29,7 @@ import (
 
 {{define "opName"}}perform{{.Name}}{{.LTyp}}{{end}}
 
-{{/* The outer range is a types.T, and the inner is the overloads associated
+{{/* The outer range is a coltypes.T, and the inner is the overloads associated
      with that type. */}}
 {{range .}}
 {{range .}}
@@ -52,7 +52,7 @@ func genOverloadsTestUtils(wr io.Writer) error {
 		return err
 	}
 
-	typToOverloads := make(map[types.T][]*overload)
+	typToOverloads := make(map[coltypes.T][]*overload)
 	for _, overload := range binaryOpOverloads {
 		typ := overload.LTyp
 		typToOverloads[typ] = append(typToOverloads[typ], overload)

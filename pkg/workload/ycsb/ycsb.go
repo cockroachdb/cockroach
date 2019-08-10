@@ -23,7 +23,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -184,9 +184,9 @@ func (g *ycsb) Hooks() workload.Hooks {
 	}
 }
 
-var usertableColTypes = []types.T{
-	types.Bytes, types.Bytes, types.Bytes, types.Bytes, types.Bytes, types.Bytes,
-	types.Bytes, types.Bytes, types.Bytes, types.Bytes, types.Bytes,
+var usertableColTypes = []coltypes.T{
+	coltypes.Bytes, coltypes.Bytes, coltypes.Bytes, coltypes.Bytes, coltypes.Bytes, coltypes.Bytes,
+	coltypes.Bytes, coltypes.Bytes, coltypes.Bytes, coltypes.Bytes, coltypes.Bytes,
 }
 
 // Tables implements the Generator interface.

@@ -13,7 +13,7 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 )
 
 // fnOp is an operator that executes an arbitrary function for its side-effects,

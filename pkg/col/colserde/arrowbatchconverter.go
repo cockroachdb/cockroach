@@ -18,15 +18,15 @@ import (
 	"github.com/apache/arrow/go/arrow"
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/apache/arrow/go/arrow/memory"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/errors"
 )
 
 // ArrowBatchConverter converts batches to arrow column data
 // ([]*array.Data) and back again.
 type ArrowBatchConverter struct {
-	typs []types.T
+	typs []coltypes.T
 
 	// builders are the set of builders that need to be kept around in order to
 	// construct arrow representations of certain types when they cannot be simply
@@ -52,7 +52,7 @@ type ArrowBatchConverter struct {
 // NewArrowBatchConverter converts coldata.Batches to []*array.Data and back
 // again according to the schema specified by typs. Converting data that does
 // not conform to typs results in undefined behavior.
-func NewArrowBatchConverter(typs []types.T) (*ArrowBatchConverter, error) {
+func NewArrowBatchConverter(typs []coltypes.T) (*ArrowBatchConverter, error) {
 	for _, t := range typs {
 		if _, supported := supportedTypes[t]; !supported {
 			return nil, errors.Errorf("unsupported type %v", t.String())
@@ -80,17 +80,17 @@ const (
 	sizeOfFloat64 = int(unsafe.Sizeof(float64(0)))
 )
 
-var supportedTypes = func() map[types.T]struct{} {
-	typs := make(map[types.T]struct{})
-	for _, t := range []types.T{
-		types.Bool,
-		types.Bytes,
-		types.Int8,
-		types.Int16,
-		types.Int32,
-		types.Int64,
-		types.Float32,
-		types.Float64,
+var supportedTypes = func() map[coltypes.T]struct{} {
+	typs := make(map[coltypes.T]struct{})
+	for _, t := range []coltypes.T{
+		coltypes.Bool,
+		coltypes.Bytes,
+		coltypes.Int8,
+		coltypes.Int16,
+		coltypes.Int32,
+		coltypes.Int64,
+		coltypes.Float32,
+		coltypes.Float64,
 	} {
 		typs[t] = struct{}{}
 	}
@@ -117,15 +117,15 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			arrowBitmap = n.NullBitmap()
 		}
 
-		if typ == types.Bool || typ == types.Bytes {
-			// Bools and Bytes are handled differently from other types. Refer to the
+		if typ == coltypes.Bool || typ == coltypes.Bytes {
+			// Bools and Bytes are handled differently from other coltypes. Refer to the
 			// comment on ArrowBatchConverter.builders for more information.
 			var data *array.Data
 			switch typ {
-			case types.Bool:
+			case coltypes.Bool:
 				c.builders.boolBuilder.AppendValues(vec.Bool()[:n], nil /* valid */)
 				data = c.builders.boolBuilder.NewBooleanArray().Data()
-			case types.Bytes:
+			case coltypes.Bytes:
 				c.builders.binaryBuilder.AppendValues(vec.Bytes().PrimitiveRepr()[:n], nil /* valid */)
 				data = c.builders.binaryBuilder.NewBinaryArray().Data()
 			default:
@@ -149,27 +149,27 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		)
 
 		switch typ {
-		case types.Int8:
+		case coltypes.Int8:
 			ints := vec.Int8()[:n]
 			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
 			datumSize = sizeOfInt8
-		case types.Int16:
+		case coltypes.Int16:
 			ints := vec.Int16()[:n]
 			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
 			datumSize = sizeOfInt16
-		case types.Int32:
+		case coltypes.Int32:
 			ints := vec.Int32()[:n]
 			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
 			datumSize = sizeOfInt32
-		case types.Int64:
+		case coltypes.Int64:
 			ints := vec.Int64()[:n]
 			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
 			datumSize = sizeOfInt64
-		case types.Float32:
+		case coltypes.Float32:
 			floats := vec.Float32()[:n]
 			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&floats))
 			datumSize = sizeOfFloat32
-		case types.Float64:
+		case coltypes.Float64:
 			floats := vec.Float64()[:n]
 			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&floats))
 			datumSize = sizeOfFloat64
@@ -231,16 +231,16 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 		d := data[i]
 
 		var arr array.Interface
-		if typ == types.Bool || typ == types.Bytes {
+		if typ == coltypes.Bool || typ == coltypes.Bytes {
 			switch typ {
-			case types.Bool:
+			case coltypes.Bool:
 				boolArr := array.NewBooleanData(d)
 				vecArr := vec.Bool()
 				for i := 0; i < boolArr.Len(); i++ {
 					vecArr[i] = boolArr.Value(i)
 				}
 				arr = boolArr
-			case types.Bytes:
+			case coltypes.Bytes:
 				bytesArr := array.NewBinaryData(d)
 				bytes := bytesArr.ValueBytes()
 				if bytes == nil {
@@ -261,27 +261,27 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 		} else {
 			var col interface{}
 			switch typ {
-			case types.Int8:
+			case coltypes.Int8:
 				intArr := array.NewInt8Data(d)
 				col = intArr.Int8Values()
 				arr = intArr
-			case types.Int16:
+			case coltypes.Int16:
 				intArr := array.NewInt16Data(d)
 				col = intArr.Int16Values()
 				arr = intArr
-			case types.Int32:
+			case coltypes.Int32:
 				intArr := array.NewInt32Data(d)
 				col = intArr.Int32Values()
 				arr = intArr
-			case types.Int64:
+			case coltypes.Int64:
 				intArr := array.NewInt64Data(d)
 				col = intArr.Int64Values()
 				arr = intArr
-			case types.Float32:
+			case coltypes.Float32:
 				floatArr := array.NewFloat32Data(d)
 				col = floatArr.Float32Values()
 				arr = floatArr
-			case types.Float64:
+			case coltypes.Float64:
 				floatArr := array.NewFloat64Data(d)
 				col = floatArr.Float64Values()
 				arr = floatArr

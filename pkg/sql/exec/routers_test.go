@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -29,7 +29,7 @@ import (
 )
 
 // getDataAndFullSelection is a test helper that generates tuples representing
-// a one-column types.Int64 batch where each element is its ordinal and an
+// a one-column coltypes.Int64 batch where each element is its ordinal and an
 // accompanying selection vector that selects every index in tuples.
 func getDataAndFullSelection() (tuples, []uint16) {
 	data := make(tuples, coldata.BatchSize)
@@ -95,7 +95,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-				[]types.T{types.Int64}, unblockEventsChan, tc.blockedThreshold, tc.outputBatchSize,
+				[]coltypes.T{coltypes.Int64}, unblockEventsChan, tc.blockedThreshold, tc.outputBatchSize,
 			)
 			in := newOpTestInput(tc.inputBatchSize, data)
 			out := newOpTestOutput(o, []int{0}, data[:len(tc.selection)])
@@ -176,7 +176,7 @@ func TestRouterOutputNext(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var wg sync.WaitGroup
 			batchChan := make(chan coldata.Batch)
-			o := newRouterOutputOp([]types.T{types.Int64}, unblockedEventsChan)
+			o := newRouterOutputOp([]coltypes.T{coltypes.Int64}, unblockedEventsChan)
 			in := newOpTestInput(coldata.BatchSize, data)
 			in.Init()
 			wg.Add(1)
@@ -226,7 +226,7 @@ func TestRouterOutputNext(t *testing.T) {
 	}
 
 	t.Run("NextAfterZeroBatchDoesntBlock", func(t *testing.T) {
-		o := newRouterOutputOp([]types.T{types.Int64}, unblockedEventsChan)
+		o := newRouterOutputOp([]coltypes.T{coltypes.Int64}, unblockedEventsChan)
 		o.addBatch(o.zeroBatch, fullSelection)
 		o.Next(ctx)
 		o.Next(ctx)
@@ -255,7 +255,7 @@ func TestRouterOutputNext(t *testing.T) {
 
 		ch := make(chan struct{}, 2)
 		o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-			[]types.T{types.Int64}, ch, blockThreshold, coldata.BatchSize,
+			[]coltypes.T{coltypes.Int64}, ch, blockThreshold, coldata.BatchSize,
 		)
 		in := newOpTestInput(smallBatchSize, data)
 		out := newOpTestOutput(o, []int{0}, expected)
@@ -307,7 +307,7 @@ func TestRouterOutputRandom(t *testing.T) {
 		outputSize       = 1 + rng.Intn(maxValues-1)
 	)
 
-	typs := []types.T{types.Int64, types.Int64}
+	typs := []coltypes.T{coltypes.Int64, coltypes.Int64}
 
 	dataLen := 1 + rng.Intn(maxValues-1)
 	data := make(tuples, dataLen)
@@ -484,7 +484,7 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		}
 	}
 
-	r := newHashRouterWithOutputs(in, []types.T{types.Int64}, []int{0}, nil /* ch */, outputs)
+	r := newHashRouterWithOutputs(in, []coltypes.T{coltypes.Int64}, []int{0}, nil /* ch */, outputs)
 	for r.processNextBatch(ctx) {
 	}
 
@@ -517,12 +517,12 @@ func TestHashRouterCancellation(t *testing.T) {
 	}
 
 	// Never-ending input of 0s.
-	batch := coldata.NewMemBatch([]types.T{types.Int64})
+	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
 	batch.SetLength(coldata.BatchSize)
 	in := NewRepeatableBatchSource(batch)
 
 	unbufferedCh := make(chan struct{})
-	r := newHashRouterWithOutputs(in, []types.T{types.Int64}, []int{0}, unbufferedCh, outputs)
+	r := newHashRouterWithOutputs(in, []coltypes.T{coltypes.Int64}, []int{0}, unbufferedCh, outputs)
 
 	t.Run("BeforeRun", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -610,7 +610,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 	sel := randomSel(rng, coldata.BatchSize, rng.Float64())
 
 	data, _ := getDataAndFullSelection()
-	typs := []types.T{types.Int64}
+	typs := []coltypes.T{coltypes.Int64}
 
 	r, routerOutputs := NewHashRouter(
 		newOpFixedSelTestInput(sel, uint16(len(sel)), data), typs, []int{0}, 1, /* numOutputs */
@@ -657,7 +657,7 @@ func TestHashRouterRandom(t *testing.T) {
 		numOutputs       = 1 + rng.Intn(maxOutputs-1)
 	)
 
-	typs := []types.T{types.Int64, types.Int64}
+	typs := []coltypes.T{coltypes.Int64, coltypes.Int64}
 	dataLen := 1 + rng.Intn(maxValues-1)
 	data := make(tuples, dataLen)
 	for i := range data {
@@ -779,7 +779,7 @@ func BenchmarkHashRouter(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	ctx := context.Background()
 
-	types := []types.T{types.Int64}
+	types := []coltypes.T{coltypes.Int64}
 
 	// Use only one type. Note: the more types you use, the more you inflate the
 	// numbers.

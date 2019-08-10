@@ -52,8 +52,8 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -129,11 +129,11 @@ func (w *bulkingest) Tables() []workload.Table {
 	}
 	schema += ")"
 
-	var bulkingestColTypes = []types.T{
-		types.Int64,
-		types.Int64,
-		types.Int64,
-		types.Bytes,
+	var bulkingestColTypes = []coltypes.T{
+		coltypes.Int64,
+		coltypes.Int64,
+		coltypes.Int64,
+		coltypes.Bytes,
 	}
 
 	table := workload.Table{

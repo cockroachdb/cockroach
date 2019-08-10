@@ -21,7 +21,7 @@ func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata", true,
+		"github.com/cockroachdb/cockroach/pkg/col/coldata", true,
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/sql/sqlbase",
 			"github.com/cockroachdb/cockroach/pkg/sql/sem/tree",

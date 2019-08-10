@@ -15,7 +15,7 @@ import (
 	"io"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 // likeTemplate depends on the selConstOp template from selection_ops_gen. We
@@ -30,8 +30,8 @@ import (
   "context"
 	"regexp"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 {{range .}}
@@ -58,8 +58,8 @@ func genLikeOps(wr io.Writer) error {
 	overloads := []overload{
 		{
 			Name:    "Prefix",
-			LTyp:    types.Bytes,
-			RTyp:    types.Bytes,
+			LTyp:    coltypes.Bytes,
+			RTyp:    coltypes.Bytes,
 			RGoType: "[]byte",
 			AssignFunc: func(_ overload, target, l, r string) string {
 				return fmt.Sprintf("%s = bytes.HasPrefix(%s, %s)", target, l, r)
@@ -67,8 +67,8 @@ func genLikeOps(wr io.Writer) error {
 		},
 		{
 			Name:    "Suffix",
-			LTyp:    types.Bytes,
-			RTyp:    types.Bytes,
+			LTyp:    coltypes.Bytes,
+			RTyp:    coltypes.Bytes,
 			RGoType: "[]byte",
 			AssignFunc: func(_ overload, target, l, r string) string {
 				return fmt.Sprintf("%s = bytes.HasSuffix(%s, %s)", target, l, r)
@@ -76,8 +76,8 @@ func genLikeOps(wr io.Writer) error {
 		},
 		{
 			Name:    "Regexp",
-			LTyp:    types.Bytes,
-			RTyp:    types.Bytes,
+			LTyp:    coltypes.Bytes,
+			RTyp:    coltypes.Bytes,
 			RGoType: "*regexp.Regexp",
 			AssignFunc: func(_ overload, target, l, r string) string {
 				return fmt.Sprintf("%s = %s.Match(%s)", target, r, l)
@@ -85,8 +85,8 @@ func genLikeOps(wr io.Writer) error {
 		},
 		{
 			Name:    "NotPrefix",
-			LTyp:    types.Bytes,
-			RTyp:    types.Bytes,
+			LTyp:    coltypes.Bytes,
+			RTyp:    coltypes.Bytes,
 			RGoType: "[]byte",
 			AssignFunc: func(_ overload, target, l, r string) string {
 				return fmt.Sprintf("%s = !bytes.HasPrefix(%s, %s)", target, l, r)
@@ -94,8 +94,8 @@ func genLikeOps(wr io.Writer) error {
 		},
 		{
 			Name:    "NotSuffix",
-			LTyp:    types.Bytes,
-			RTyp:    types.Bytes,
+			LTyp:    coltypes.Bytes,
+			RTyp:    coltypes.Bytes,
 			RGoType: "[]byte",
 			AssignFunc: func(_ overload, target, l, r string) string {
 				return fmt.Sprintf("%s = !bytes.HasSuffix(%s, %s)", target, l, r)
@@ -103,8 +103,8 @@ func genLikeOps(wr io.Writer) error {
 		},
 		{
 			Name:    "NotRegexp",
-			LTyp:    types.Bytes,
-			RTyp:    types.Bytes,
+			LTyp:    coltypes.Bytes,
+			RTyp:    coltypes.Bytes,
 			RGoType: "*regexp.Regexp",
 			AssignFunc: func(_ overload, target, l, r string) string {
 				return fmt.Sprintf("%s = !%s.Match(%s)", target, r, l)

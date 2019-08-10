@@ -13,7 +13,7 @@ package coldata
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
@@ -24,7 +24,7 @@ func TestMemColumnSlice(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 
-	c := NewMemColumn(types.Int64, BatchSize)
+	c := NewMemColumn(coltypes.Int64, BatchSize)
 
 	ints := c.Int64()
 	for i := uint16(0); i < BatchSize; i++ {
@@ -42,7 +42,7 @@ func TestMemColumnSlice(t *testing.T) {
 		endSlice = uint16(1 + rng.Intn(BatchSize))
 	}
 
-	slice := c.Slice(types.Int64, uint64(startSlice), uint64(endSlice))
+	slice := c.Slice(coltypes.Int64, uint64(startSlice), uint64(endSlice))
 	sliceInts := slice.Int64()
 	// Verify that every other value is null.
 	for i, j := startSlice, uint16(0); i < endSlice; i, j = i+1, j+1 {
@@ -112,7 +112,7 @@ func TestNullRanges(t *testing.T) {
 		},
 	}
 
-	c := NewMemColumn(types.Int64, BatchSize)
+	c := NewMemColumn(coltypes.Int64, BatchSize)
 	for _, tc := range tcs {
 		c.Nulls().UnsetNulls()
 		c.Nulls().SetNullRange(tc.start, tc.end)
@@ -133,7 +133,7 @@ func TestNullRanges(t *testing.T) {
 
 func TestAppend(t *testing.T) {
 	// TODO(asubiotto): Test nulls.
-	const typ = types.Int64
+	const typ = coltypes.Int64
 
 	src := NewMemColumn(typ, BatchSize)
 	sel := make([]uint16, len(src.Int64()))
@@ -217,7 +217,7 @@ func TestAppend(t *testing.T) {
 
 func TestCopy(t *testing.T) {
 	// TODO(asubiotto): Test nulls.
-	const typ = types.Int64
+	const typ = coltypes.Int64
 
 	src := NewMemColumn(typ, BatchSize)
 	srcInts := src.Int64()
@@ -300,7 +300,7 @@ func TestCopy(t *testing.T) {
 }
 
 func TestCopyNulls(t *testing.T) {
-	const typ = types.Int64
+	const typ = coltypes.Int64
 
 	// Set up the destination vector.
 	dst := NewMemColumn(typ, BatchSize)
@@ -354,7 +354,7 @@ func TestCopyNulls(t *testing.T) {
 }
 
 func BenchmarkAppend(b *testing.B) {
-	const typ = types.Int64
+	const typ = coltypes.Int64
 
 	src := NewMemColumn(typ, BatchSize)
 	sel := make([]uint16, len(src.Int64()))
@@ -392,7 +392,7 @@ func BenchmarkAppend(b *testing.B) {
 }
 
 func BenchmarkCopy(b *testing.B) {
-	const typ = types.Int64
+	const typ = coltypes.Int64
 
 	src := NewMemColumn(typ, BatchSize)
 	sel := make([]uint16, len(src.Int64()))

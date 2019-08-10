@@ -15,29 +15,29 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/colrpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 type callbackRemoteComponentCreator struct {
-	newOutboxFn func(exec.Operator, []types.T, []distsqlpb.MetadataSource) (*colrpc.Outbox, error)
-	newInboxFn  func(typs []types.T) (*colrpc.Inbox, error)
+	newOutboxFn func(exec.Operator, []coltypes.T, []distsqlpb.MetadataSource) (*colrpc.Outbox, error)
+	newInboxFn  func(typs []coltypes.T) (*colrpc.Inbox, error)
 }
 
 func (c callbackRemoteComponentCreator) newOutbox(
-	input exec.Operator, typs []types.T, metadataSources []distsqlpb.MetadataSource,
+	input exec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource,
 ) (*colrpc.Outbox, error) {
 	return c.newOutboxFn(input, typs, metadataSources)
 }
 
-func (c callbackRemoteComponentCreator) newInbox(typs []types.T) (*colrpc.Inbox, error) {
+func (c callbackRemoteComponentCreator) newInbox(typs []coltypes.T) (*colrpc.Inbox, error) {
 	return c.newInboxFn(typs)
 }
 
@@ -160,10 +160,10 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 		},
 	}
 
-	inboxToNumInputTypes := make(map[*colrpc.Inbox][]types.T)
+	inboxToNumInputTypes := make(map[*colrpc.Inbox][]coltypes.T)
 	outboxCreated := false
 	componentCreator := callbackRemoteComponentCreator{
-		newOutboxFn: func(op exec.Operator, typs []types.T, sources []distsqlpb.MetadataSource) (*colrpc.Outbox, error) {
+		newOutboxFn: func(op exec.Operator, typs []coltypes.T, sources []distsqlpb.MetadataSource) (*colrpc.Outbox, error) {
 			require.False(t, outboxCreated)
 			outboxCreated = true
 			// Verify that there is only one metadata source: the inbox that is the
@@ -174,7 +174,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			require.Len(t, inboxToNumInputTypes[sources[0].(*colrpc.Inbox)], numInputTypesToOutbox)
 			return colrpc.NewOutbox(op, typs, sources)
 		},
-		newInboxFn: func(typs []types.T) (*colrpc.Inbox, error) {
+		newInboxFn: func(typs []coltypes.T) (*colrpc.Inbox, error) {
 			inbox, err := colrpc.NewInbox(typs)
 			inboxToNumInputTypes[inbox] = typs
 			return inbox, err
