@@ -574,7 +574,7 @@ func (yw *ycsbWorker) readModifyWriteRow(ctx context.Context) error {
 	args[0] = key
 	return crdb.ExecuteTx(ctx, yw.db, nil, func(tx *gosql.Tx) error {
 		var oldValue []byte
-		if err := yw.readFieldStmts[fieldIdx].QueryRowContext(ctx, key).Scan(&oldValue); err != nil {
+		if err := tx.StmtContext(ctx, yw.readFieldStmts[fieldIdx]).QueryRowContext(ctx, key).Scan(&oldValue); err != nil {
 			return err
 		}
 		var updateStmt *gosql.Stmt
@@ -585,7 +585,7 @@ func (yw *ycsbWorker) readModifyWriteRow(ctx context.Context) error {
 			updateStmt = yw.updateStmts[fieldIdx]
 			args[1] = newValue
 		}
-		_, err := tx.Stmt(updateStmt).ExecContext(ctx, args[:]...)
+		_, err := tx.StmtContext(ctx, updateStmt).ExecContext(ctx, args[:]...)
 		return err
 	})
 }
