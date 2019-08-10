@@ -15,9 +15,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -30,12 +30,12 @@ type mjTestCase struct {
 	description     string
 	joinType        sqlbase.JoinType
 	leftTuples      []tuple
-	leftTypes       []types.T
+	leftTypes       []coltypes.T
 	leftOutCols     []uint32
 	leftEqCols      []uint32
 	leftDirections  []distsqlpb.Ordering_Column_Direction
 	rightTuples     []tuple
-	rightTypes      []types.T
+	rightTypes      []coltypes.T
 	rightOutCols    []uint32
 	rightEqCols     []uint32
 	rightDirections []distsqlpb.Ordering_Column_Direction
@@ -68,8 +68,8 @@ func TestMergeJoiner(t *testing.T) {
 	tcs := []mjTestCase{
 		{
 			description:     "basic test",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {2}, {3}, {4}},
 			rightTuples:     tuples{{1}, {2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
@@ -81,8 +81,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "basic test, no out cols",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {2}, {3}, {4}},
 			rightTuples:     tuples{{1}, {2}, {3}, {4}},
 			leftOutCols:     []uint32{},
@@ -94,8 +94,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "basic test, out col on left",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {2}, {3}, {4}},
 			rightTuples:     tuples{{1}, {2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
@@ -107,8 +107,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "basic test, out col on right",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {2}, {3}, {4}},
 			rightTuples:     tuples{{1}, {2}, {3}, {4}},
 			leftOutCols:     []uint32{},
@@ -120,8 +120,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "basic test, L missing",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {3}, {4}},
 			rightTuples:     tuples{{1}, {2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
@@ -133,8 +133,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "basic test, R missing",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {2}, {3}, {4}},
 			rightTuples:     tuples{{1}, {3}, {4}},
 			leftOutCols:     []uint32{0},
@@ -146,8 +146,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "basic test, L duplicate",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {1}, {2}, {3}, {4}},
 			rightTuples:     tuples{{1}, {2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
@@ -159,8 +159,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "basic test, R duplicate",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {2}, {3}, {4}},
 			rightTuples:     tuples{{1}, {1}, {2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
@@ -172,8 +172,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "basic test, R duplicate 2",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {2}},
 			rightTuples:     tuples{{1}, {1}, {2}},
 			leftOutCols:     []uint32{0},
@@ -185,8 +185,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "basic test, L+R duplicates",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {1}, {2}, {3}, {4}},
 			rightTuples:     tuples{{1}, {1}, {2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
@@ -198,8 +198,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "basic test, L+R duplicate, multiple runs",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {2}, {2}, {2}, {3}, {4}},
 			rightTuples:     tuples{{1}, {1}, {2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
@@ -211,8 +211,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "cross product test, batch size = 1024 (col.BatchSize)",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {1}, {1}, {1}},
 			rightTuples:     tuples{{1}, {1}, {1}, {1}},
 			leftOutCols:     []uint32{0},
@@ -224,8 +224,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "cross product test, batch size = 4 (small even)",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {1}, {1}, {1}},
 			rightTuples:     tuples{{1}, {1}, {1}, {1}},
 			leftOutCols:     []uint32{0},
@@ -238,8 +238,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "cross product test, batch size = 3 (small odd)",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {1}, {1}, {1}},
 			rightTuples:     tuples{{1}, {1}, {1}, {1}},
 			leftOutCols:     []uint32{0},
@@ -252,8 +252,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "cross product test, batch size = 1 (unit)",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {1}, {1}, {1}},
 			rightTuples:     tuples{{1}, {1}, {1}, {1}},
 			leftOutCols:     []uint32{0},
@@ -266,8 +266,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "multi output column test, basic",
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, 10}, {2, 20}, {3, 30}, {4, 40}},
 			rightTuples:     tuples{{1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0, 1},
@@ -279,8 +279,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "multi output column test, batch size = 1",
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, 10}, {2, 20}, {3, 30}, {4, 40}},
 			rightTuples:     tuples{{1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0, 1},
@@ -293,8 +293,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "multi output column test, test output coldata projection",
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, 10}, {2, 20}, {3, 30}, {4, 40}},
 			rightTuples:     tuples{{1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0},
@@ -306,8 +306,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "multi output column test, test output coldata projection",
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, 10}, {2, 20}, {3, 30}, {4, 40}},
 			rightTuples:     tuples{{1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{1},
@@ -319,8 +319,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "multi output column test, L run",
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, 10}, {2, 20}, {2, 21}, {3, 30}, {4, 40}},
 			rightTuples:     tuples{{1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0, 1},
@@ -332,8 +332,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "multi output column test, L run, batch size = 1",
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, 10}, {2, 20}, {2, 21}, {3, 30}, {4, 40}},
 			rightTuples:     tuples{{1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0, 1},
@@ -346,8 +346,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "multi output column test, R run",
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, 10}, {2, 20}, {3, 30}, {4, 40}},
 			rightTuples:     tuples{{1, 11}, {1, 111}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0, 1},
@@ -359,8 +359,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "multi output column test, R run, batch size = 1",
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, 10}, {2, 20}, {3, 30}, {4, 40}},
 			rightTuples:     tuples{{1, 11}, {1, 111}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0, 1},
@@ -373,8 +373,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "logic test",
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{-1, -1}, {0, 4}, {2, 1}, {3, 4}, {5, 4}},
 			rightTuples:     tuples{{0, 5}, {1, 3}, {3, 2}, {4, 6}},
 			leftOutCols:     []uint32{1},
@@ -386,8 +386,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "multi output column test, batch size = 1 and runs (to test saved output), reordered out columns",
-			leftTypes:    []types.T{types.Int64, types.Int64},
-			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:   tuples{{1, 10}, {1, 10}, {1, 10}, {2, 20}, {3, 30}, {4, 40}},
 			rightTuples:  tuples{{1, 11}, {1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:  []uint32{1, 0},
@@ -410,8 +410,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "multi output column test, batch size = 1 and runs (to test saved output), reordered out columns that dont start at 0",
-			leftTypes:    []types.T{types.Int64, types.Int64},
-			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:   tuples{{1, 10}, {1, 10}, {1, 10}, {2, 20}, {3, 30}, {4, 40}},
 			rightTuples:  tuples{{1, 11}, {1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:  []uint32{1, 0},
@@ -434,8 +434,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "equality column is correctly indexed",
-			leftTypes:    []types.T{types.Int64, types.Int64},
-			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:   tuples{{10, 1}, {10, 1}, {10, 1}, {20, 2}, {30, 3}, {40, 4}},
 			rightTuples:  tuples{{1, 11}, {1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:  []uint32{1, 0},
@@ -457,8 +457,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "multi column equality basic test",
-			leftTypes:    []types.T{types.Int64, types.Int64},
-			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:   tuples{{1, 10}, {2, 20}, {3, 30}, {4, 40}},
 			rightTuples:  tuples{{1, 10}, {2, 20}, {3, 13}, {4, 14}},
 			leftOutCols:  []uint32{0, 1},
@@ -473,8 +473,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "multi column equality runs",
-			leftTypes:    []types.T{types.Int64, types.Int64},
-			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:   tuples{{1, 10}, {1, 10}, {1, 10}, {2, 20}, {3, 30}, {4, 40}},
 			rightTuples:  tuples{{1, 10}, {1, 10}, {2, 20}, {3, 13}, {4, 14}},
 			leftOutCols:  []uint32{0, 1},
@@ -494,8 +494,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "multi column non-consecutive equality cols",
-			leftTypes:    []types.T{types.Int64, types.Int64, types.Int64},
-			rightTypes:   []types.T{types.Int64, types.Int64, types.Int64},
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			leftTuples:   tuples{{1, 123, 1}, {1, 234, 10}},
 			rightTuples:  tuples{{1, 1, 345}, {1, 10, 456}},
 			leftOutCols:  []uint32{0, 2, 1},
@@ -510,8 +510,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "multi column equality: new batch ends run",
-			leftTypes:    []types.T{types.Int64, types.Int64},
-			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:   tuples{{1, 1}, {1, 1}, {3, 3}, {4, 3}},
 			rightTuples:  tuples{{1, 1}, {1, 2}, {3, 3}, {3, 3}},
 			leftOutCols:  []uint32{0, 1},
@@ -528,8 +528,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "multi column equality: reordered eq columns",
-			leftTypes:    []types.T{types.Int64, types.Int64},
-			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:   tuples{{1, 1}, {1, 1}, {3, 3}, {4, 3}},
 			rightTuples:  tuples{{1, 1}, {1, 2}, {3, 3}, {3, 3}},
 			leftOutCols:  []uint32{0, 1},
@@ -546,8 +546,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "cross batch, distinct group",
-			leftTypes:    []types.T{types.Int64, types.Int64},
-			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:   tuples{{1, 2}, {1, 2}, {1, 2}, {2, 2}},
 			rightTuples:  tuples{{1, 2}},
 			leftOutCols:  []uint32{0, 1},
@@ -563,8 +563,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "templating basic test",
-			leftTypes:    []types.T{types.Bool, types.Int16, types.Float64},
-			rightTypes:   []types.T{types.Bool, types.Int16, types.Float64},
+			leftTypes:    []coltypes.T{coltypes.Bool, coltypes.Int16, coltypes.Float64},
+			rightTypes:   []coltypes.T{coltypes.Bool, coltypes.Int16, coltypes.Float64},
 			leftTuples:   tuples{{true, int16(10), 1.2}, {true, int16(20), 2.2}, {true, int16(30), 3.2}},
 			rightTuples:  tuples{{true, int16(10), 1.2}, {false, int16(20), 2.2}, {true, int16(30), 3.9}},
 			leftOutCols:  []uint32{0, 1, 2},
@@ -578,8 +578,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "templating cross product test",
-			leftTypes:    []types.T{types.Bool, types.Int16, types.Float64},
-			rightTypes:   []types.T{types.Bool, types.Int16, types.Float64},
+			leftTypes:    []coltypes.T{coltypes.Bool, coltypes.Int16, coltypes.Float64},
+			rightTypes:   []coltypes.T{coltypes.Bool, coltypes.Int16, coltypes.Float64},
 			leftTuples:   tuples{{false, int16(10), 1.2}, {true, int16(20), 2.2}, {true, int16(30), 3.2}},
 			rightTuples:  tuples{{false, int16(10), 1.2}, {true, int16(20), 2.3}, {true, int16(20), 2.4}, {true, int16(31), 3.9}},
 			leftOutCols:  []uint32{0, 1, 2},
@@ -595,8 +595,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "templating cross product test, output batch size 1",
-			leftTypes:    []types.T{types.Bool, types.Int16, types.Float64},
-			rightTypes:   []types.T{types.Bool, types.Int16, types.Float64},
+			leftTypes:    []coltypes.T{coltypes.Bool, coltypes.Int16, coltypes.Float64},
+			rightTypes:   []coltypes.T{coltypes.Bool, coltypes.Int16, coltypes.Float64},
 			leftTuples:   tuples{{false, int16(10), 1.2}, {true, int16(20), 2.2}, {true, int16(30), 3.2}},
 			rightTuples:  tuples{{false, int16(10), 1.2}, {true, int16(20), 2.3}, {true, int16(20), 2.4}, {true, int16(31), 3.9}},
 			leftOutCols:  []uint32{0, 1, 2},
@@ -613,8 +613,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "templating cross product test, output batch size 2",
-			leftTypes:    []types.T{types.Bool, types.Int16, types.Float64},
-			rightTypes:   []types.T{types.Bool, types.Int16, types.Float64},
+			leftTypes:    []coltypes.T{coltypes.Bool, coltypes.Int16, coltypes.Float64},
+			rightTypes:   []coltypes.T{coltypes.Bool, coltypes.Int16, coltypes.Float64},
 			leftTuples:   tuples{{false, int16(10), 1.2}, {true, int16(20), 2.2}, {true, int16(30), 3.2}},
 			rightTuples:  tuples{{false, int16(10), 1.2}, {true, int16(20), 2.3}, {true, int16(20), 2.4}, {true, int16(31), 3.9}},
 			leftOutCols:  []uint32{0, 1, 2},
@@ -631,8 +631,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "templating reordered eq columns",
-			leftTypes:    []types.T{types.Bool, types.Int16, types.Float64},
-			rightTypes:   []types.T{types.Bool, types.Int16, types.Float64},
+			leftTypes:    []coltypes.T{coltypes.Bool, coltypes.Int16, coltypes.Float64},
+			rightTypes:   []coltypes.T{coltypes.Bool, coltypes.Int16, coltypes.Float64},
 			leftTuples:   tuples{{false, int16(10), 1.2}, {true, int16(20), 2.2}, {true, int16(30), 3.2}},
 			rightTuples:  tuples{{false, int16(10), 1.2}, {true, int16(20), 2.3}, {true, int16(20), 2.4}, {true, int16(31), 3.9}},
 			leftOutCols:  []uint32{0, 1, 2},
@@ -648,8 +648,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "templating reordered eq columns non symmetrical",
-			leftTypes:    []types.T{types.Bool, types.Int16, types.Float64},
-			rightTypes:   []types.T{types.Int16, types.Float64, types.Bool},
+			leftTypes:    []coltypes.T{coltypes.Bool, coltypes.Int16, coltypes.Float64},
+			rightTypes:   []coltypes.T{coltypes.Int16, coltypes.Float64, coltypes.Bool},
 			leftTuples:   tuples{{false, int16(10), 1.2}, {true, int16(20), 2.2}, {true, int16(30), 3.2}},
 			rightTuples:  tuples{{int16(10), 1.2, false}, {int16(20), 2.2, true}, {int16(21), 2.2, true}, {int16(30), 3.2, false}},
 			leftOutCols:  []uint32{0, 1, 2},
@@ -665,8 +665,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "null handling",
-			leftTypes:    []types.T{types.Int64},
-			rightTypes:   []types.T{types.Int64},
+			leftTypes:    []coltypes.T{coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64},
 			leftTuples:   tuples{{nil}, {0}},
 			rightTuples:  tuples{{nil}, {0}},
 			leftOutCols:  []uint32{0},
@@ -680,8 +680,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "null handling multi column, nulls on left",
-			leftTypes:    []types.T{types.Int64, types.Int64},
-			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:   tuples{{nil, 0}, {0, nil}},
 			rightTuples:  tuples{{nil, nil}, {0, 1}},
 			leftOutCols:  []uint32{0, 1},
@@ -695,8 +695,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:  "null handling multi column, nulls on right",
-			leftTypes:    []types.T{types.Int64, types.Int64},
-			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:   tuples{{nil, 0}, {0, 1}},
 			rightTuples:  tuples{{nil, nil}, {0, nil}},
 			leftOutCols:  []uint32{0, 1},
@@ -710,8 +710,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "desc test",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{4}, {3}, {2}, {1}},
 			rightTuples:     tuples{{4}, {2}, {1}},
 			leftOutCols:     []uint32{0},
@@ -725,8 +725,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "desc nulls test",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{4}, {3}, {nil}, {1}},
 			rightTuples:     tuples{{4}, {nil}, {2}, {1}},
 			leftOutCols:     []uint32{0},
@@ -740,8 +740,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "desc nulls test end on 0",
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{9}, {9}, {8}, {0}, {nil}},
 			rightTuples:     tuples{{9}, {9}, {8}, {0}, {nil}},
 			leftOutCols:     []uint32{0},
@@ -755,8 +755,8 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			description:     "non-equality columns with nulls",
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, nil}, {2, 2}, {2, 2}, {3, nil}, {4, nil}},
 			rightTuples:     tuples{{1, 1}, {2, nil}, {2, nil}, {3, nil}, {4, 4}, {4, 4}},
 			leftOutCols:     []uint32{0, 1},
@@ -769,8 +769,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "basic LEFT OUTER JOIN test, L and R exhausted at the same time",
 			joinType:        sqlbase.JoinType_LEFT_OUTER,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {2}, {3}, {4}, {4}},
 			rightTuples:     tuples{{0}, {2}, {3}, {4}, {4}},
 			leftOutCols:     []uint32{0},
@@ -783,8 +783,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "basic LEFT OUTER JOIN test, R exhausted first",
 			joinType:        sqlbase.JoinType_LEFT_OUTER,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {1}, {3}, {5}, {6}, {7}},
 			rightTuples:     tuples{{2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
@@ -797,8 +797,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "basic LEFT OUTER JOIN test, L exhausted first",
 			joinType:        sqlbase.JoinType_LEFT_OUTER,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{3}, {5}, {6}, {7}},
 			rightTuples:     tuples{{2}, {3}, {4}, {6}, {8}, {9}},
 			leftOutCols:     []uint32{0},
@@ -811,8 +811,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "multi output column LEFT OUTER JOIN test with nulls",
 			joinType:        sqlbase.JoinType_LEFT_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, 10}, {2, 20}, {3, nil}, {4, 40}},
 			rightTuples:     tuples{{1, nil}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0, 1},
@@ -825,8 +825,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "null in equality column LEFT OUTER JOIN",
 			joinType:        sqlbase.JoinType_LEFT_OUTER,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{nil}, {nil}, {1}, {3}},
 			rightTuples:     tuples{{nil, 1}, {1, 1}, {2, 2}, {3, 3}},
 			leftOutCols:     []uint32{0},
@@ -839,8 +839,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "multi equality column LEFT OUTER JOIN test with nulls",
 			joinType:        sqlbase.JoinType_LEFT_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, 10}, {2, 20}, {4, 40}},
 			rightTuples:     tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, nil}, {2, 20}, {3, 30}},
 			leftOutCols:     []uint32{0, 1},
@@ -853,8 +853,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "multi equality column (long runs on left) LEFT OUTER JOIN test with nulls",
 			joinType:        sqlbase.JoinType_LEFT_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, 9}, {1, 10}, {1, 10}, {1, 11}, {2, 20}, {2, 20}, {2, 21}, {2, 22}, {2, 22}},
 			rightTuples:     tuples{{1, 8}, {1, 11}, {1, 11}, {2, 21}, {2, 23}},
 			leftOutCols:     []uint32{0, 1},
@@ -867,8 +867,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "3 equality column LEFT OUTER JOIN test with nulls DESC ordering",
 			joinType:        sqlbase.JoinType_LEFT_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
 			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
 			leftTuples:      tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
@@ -883,8 +883,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "3 equality column LEFT OUTER JOIN test with nulls mixed ordering",
 			joinType:        sqlbase.JoinType_LEFT_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_ASC},
 			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
 			leftTuples:      tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
@@ -899,8 +899,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "single column DESC with nulls on the left LEFT OUTER JOIN",
 			joinType:        sqlbase.JoinType_LEFT_OUTER,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
 			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
 			leftTuples:      tuples{{1}, {1}, {1}, {nil}, {nil}, {nil}},
@@ -915,8 +915,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "basic RIGHT OUTER JOIN test, L and R exhausted at the same time",
 			joinType:        sqlbase.JoinType_RIGHT_OUTER,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{-1}, {2}, {3}, {4}, {4}},
 			rightTuples:     tuples{{1}, {2}, {3}, {4}, {4}},
 			leftOutCols:     []uint32{0},
@@ -929,8 +929,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "basic RIGHT OUTER JOIN test, R exhausted first",
 			joinType:        sqlbase.JoinType_RIGHT_OUTER,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {1}, {3}, {5}, {6}, {7}},
 			rightTuples:     tuples{{2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
@@ -943,8 +943,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "basic RIGHT OUTER JOIN test, L exhausted first",
 			joinType:        sqlbase.JoinType_RIGHT_OUTER,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{3}, {5}, {6}, {7}},
 			rightTuples:     tuples{{2}, {3}, {4}, {6}, {8}, {9}},
 			leftOutCols:     []uint32{0},
@@ -957,8 +957,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "multi output column RIGHT OUTER JOIN test with nulls",
 			joinType:        sqlbase.JoinType_RIGHT_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, nil}, {3, 13}, {4, 14}},
 			rightTuples:     tuples{{1, 10}, {2, 20}, {3, nil}, {4, 40}},
 			leftOutCols:     []uint32{0, 1},
@@ -971,8 +971,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "null in equality column RIGHT OUTER JOIN",
 			joinType:        sqlbase.JoinType_RIGHT_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{nil, 1}, {1, 1}, {2, 2}, {3, 3}},
 			rightTuples:     tuples{{nil}, {nil}, {1}, {3}},
 			leftOutCols:     []uint32{0, 1},
@@ -985,8 +985,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "multi equality column RIGHT OUTER JOIN test with nulls",
 			joinType:        sqlbase.JoinType_RIGHT_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, nil}, {2, 20}, {3, 30}},
 			rightTuples:     tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, 10}, {2, 20}, {4, 40}},
 			leftOutCols:     []uint32{0, 1},
@@ -999,8 +999,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "multi equality column (long runs on right) RIGHT OUTER JOIN test with nulls",
 			joinType:        sqlbase.JoinType_RIGHT_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, 8}, {1, 11}, {1, 11}, {2, 21}, {2, 23}},
 			rightTuples:     tuples{{1, 9}, {1, 10}, {1, 10}, {1, 11}, {2, 20}, {2, 20}, {2, 21}, {2, 22}, {2, 22}},
 			leftOutCols:     []uint32{0, 1},
@@ -1013,8 +1013,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "3 equality column RIGHT OUTER JOIN test with nulls DESC ordering",
 			joinType:        sqlbase.JoinType_RIGHT_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
 			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
 			leftTuples:      tuples{{4, 3, 3}, {nil, 2, nil}, {nil, 1, 3}},
@@ -1029,8 +1029,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "3 equality column RIGHT OUTER JOIN test with nulls mixed ordering",
 			joinType:        sqlbase.JoinType_RIGHT_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_ASC},
 			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
 			leftTuples:      tuples{{4, 3, 3}, {nil, 2, nil}, {nil, 1, 3}},
@@ -1045,8 +1045,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "single column DESC with nulls on the right RIGHT OUTER JOIN",
 			joinType:        sqlbase.JoinType_RIGHT_OUTER,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
 			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
 			leftTuples:      tuples{{1}},
@@ -1061,8 +1061,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "basic FULL OUTER JOIN test, L and R exhausted at the same time",
 			joinType:        sqlbase.JoinType_FULL_OUTER,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{-1}, {2}, {3}, {4}, {4}},
 			rightTuples:     tuples{{1}, {2}, {3}, {4}, {4}},
 			leftOutCols:     []uint32{0},
@@ -1075,8 +1075,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "basic FULL OUTER JOIN test, R exhausted first",
 			joinType:        sqlbase.JoinType_FULL_OUTER,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {1}, {3}, {5}, {6}, {7}},
 			rightTuples:     tuples{{2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
@@ -1089,8 +1089,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "basic FULL OUTER JOIN test, L exhausted first",
 			joinType:        sqlbase.JoinType_FULL_OUTER,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{3}, {5}, {6}, {7}},
 			rightTuples:     tuples{{2}, {3}, {4}, {6}, {8}, {9}},
 			leftOutCols:     []uint32{0},
@@ -1103,8 +1103,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "multi output column FULL OUTER JOIN test with nulls",
 			joinType:        sqlbase.JoinType_FULL_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, nil}, {3, 13}, {4, 14}},
 			rightTuples:     tuples{{1, 10}, {2, 20}, {3, nil}, {4, 40}},
 			leftOutCols:     []uint32{0, 1},
@@ -1117,8 +1117,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "null in equality column FULL OUTER JOIN",
 			joinType:        sqlbase.JoinType_FULL_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{nil, 1}, {1, 1}, {2, 2}, {3, 3}},
 			rightTuples:     tuples{{nil}, {nil}, {1}, {3}},
 			leftOutCols:     []uint32{0, 1},
@@ -1131,8 +1131,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "multi equality column FULL OUTER JOIN test with nulls",
 			joinType:        sqlbase.JoinType_FULL_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, nil}, {2, 20}, {3, 30}},
 			rightTuples:     tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, 10}, {2, 20}, {4, 40}},
 			leftOutCols:     []uint32{0, 1},
@@ -1145,8 +1145,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "multi equality column (long runs on right) FULL OUTER JOIN test with nulls",
 			joinType:        sqlbase.JoinType_FULL_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, 8}, {1, 11}, {1, 11}, {2, 21}, {2, 23}},
 			rightTuples:     tuples{{1, 9}, {1, 10}, {1, 10}, {1, 11}, {2, 20}, {2, 20}, {2, 21}, {2, 22}, {2, 22}},
 			leftOutCols:     []uint32{0, 1},
@@ -1159,8 +1159,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "3 equality column FULL OUTER JOIN test with nulls DESC ordering",
 			joinType:        sqlbase.JoinType_FULL_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
 			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
 			leftTuples:      tuples{{4, 3, 3}, {nil, 2, nil}, {nil, 1, 3}},
@@ -1175,8 +1175,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "3 equality column FULL OUTER JOIN test with nulls mixed ordering",
 			joinType:        sqlbase.JoinType_FULL_OUTER,
-			leftTypes:       []types.T{types.Int64, types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_ASC},
 			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
 			leftTuples:      tuples{{4, 3, 3}, {nil, 2, nil}, {nil, 1, 3}},
@@ -1191,8 +1191,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "single column DESC with nulls on the right FULL OUTER JOIN",
 			joinType:        sqlbase.JoinType_FULL_OUTER,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
 			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
 			leftTuples:      tuples{{1}},
@@ -1207,8 +1207,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "basic LEFT SEMI JOIN test, L and R exhausted at the same time",
 			joinType:        sqlbase.JoinType_LEFT_SEMI,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {2}, {3}, {4}, {4}},
 			rightTuples:     tuples{{-1}, {2}, {3}, {4}, {4}},
 			leftOutCols:     []uint32{0},
@@ -1221,8 +1221,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "basic LEFT SEMI JOIN test, R exhausted first",
 			joinType:        sqlbase.JoinType_LEFT_SEMI,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {1}, {3}, {5}, {6}, {7}},
 			rightTuples:     tuples{{2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
@@ -1235,8 +1235,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "basic LEFT SEMI JOIN test, L exhausted first",
 			joinType:        sqlbase.JoinType_LEFT_SEMI,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{3}, {5}, {6}, {7}},
 			rightTuples:     tuples{{2}, {3}, {3}, {3}, {4}, {6}, {8}, {9}},
 			leftOutCols:     []uint32{0},
@@ -1249,8 +1249,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "multi output column LEFT SEMI JOIN test with nulls",
 			joinType:        sqlbase.JoinType_LEFT_SEMI,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, 10}, {2, 20}, {3, nil}, {4, 40}},
 			rightTuples:     tuples{{1, nil}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0, 1},
@@ -1263,8 +1263,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "null in equality column LEFT SEMI JOIN",
 			joinType:        sqlbase.JoinType_LEFT_SEMI,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{nil}, {nil}, {1}, {3}},
 			rightTuples:     tuples{{nil, 1}, {1, 1}, {2, 2}, {3, 3}},
 			leftOutCols:     []uint32{0},
@@ -1277,8 +1277,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "multi equality column LEFT SEMI JOIN test with nulls",
 			joinType:        sqlbase.JoinType_LEFT_SEMI,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, 10}, {2, 20}, {4, 40}},
 			rightTuples:     tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, nil}, {2, 20}, {3, 30}},
 			leftOutCols:     []uint32{0, 1},
@@ -1291,8 +1291,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "multi equality column (long runs on left) LEFT SEMI JOIN test with nulls",
 			joinType:        sqlbase.JoinType_LEFT_SEMI,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, 9}, {1, 10}, {1, 10}, {1, 11}, {1, 11}, {1, 11}, {2, 20}, {2, 20}, {2, 21}, {2, 22}, {2, 22}},
 			rightTuples:     tuples{{1, 8}, {1, 11}, {1, 11}, {2, 21}, {2, 23}},
 			leftOutCols:     []uint32{0, 1},
@@ -1305,8 +1305,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "3 equality column LEFT SEMI JOIN test with nulls DESC ordering",
 			joinType:        sqlbase.JoinType_LEFT_SEMI,
-			leftTypes:       []types.T{types.Int64, types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
 			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
 			leftTuples:      tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
@@ -1321,8 +1321,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "3 equality column LEFT SEMI JOIN test with nulls mixed ordering",
 			joinType:        sqlbase.JoinType_LEFT_SEMI,
-			leftTypes:       []types.T{types.Int64, types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_ASC},
 			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
 			leftTuples:      tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
@@ -1337,8 +1337,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "single column DESC with nulls on the left LEFT SEMI JOIN",
 			joinType:        sqlbase.JoinType_LEFT_SEMI,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
 			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
 			leftTuples:      tuples{{1}, {1}, {1}, {nil}, {nil}, {nil}},
@@ -1353,8 +1353,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "basic LEFT ANTI JOIN test, L and R exhausted at the same time",
 			joinType:        sqlbase.JoinType_LEFT_ANTI,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {2}, {3}, {4}, {4}},
 			rightTuples:     tuples{{-1}, {2}, {4}, {4}},
 			leftOutCols:     []uint32{0},
@@ -1367,8 +1367,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "basic LEFT ANTI JOIN test, R exhausted first",
 			joinType:        sqlbase.JoinType_LEFT_ANTI,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{1}, {1}, {3}, {5}, {6}, {7}},
 			rightTuples:     tuples{{2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
@@ -1381,8 +1381,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "basic LEFT ANTI JOIN test, L exhausted first",
 			joinType:        sqlbase.JoinType_LEFT_ANTI,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftTuples:      tuples{{3}, {5}, {6}, {7}},
 			rightTuples:     tuples{{2}, {3}, {3}, {3}, {4}, {6}, {8}, {9}},
 			leftOutCols:     []uint32{0},
@@ -1395,8 +1395,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "multi output column LEFT ANTI JOIN test with nulls",
 			joinType:        sqlbase.JoinType_LEFT_ANTI,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, 10}, {2, 20}, {3, nil}, {4, 40}},
 			rightTuples:     tuples{{1, nil}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0, 1},
@@ -1409,8 +1409,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "null in equality column LEFT ANTI JOIN",
 			joinType:        sqlbase.JoinType_LEFT_ANTI,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{nil}, {nil}, {1}, {3}},
 			rightTuples:     tuples{{nil, 1}, {1, 1}, {2, 2}, {3, 3}},
 			leftOutCols:     []uint32{0},
@@ -1423,8 +1423,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "multi equality column LEFT ANTI JOIN test with nulls",
 			joinType:        sqlbase.JoinType_LEFT_ANTI,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, 10}, {2, 20}, {4, 40}},
 			rightTuples:     tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, nil}, {2, 20}, {3, 30}},
 			leftOutCols:     []uint32{0, 1},
@@ -1437,8 +1437,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "multi equality column (long runs on left) LEFT ANTI JOIN test with nulls",
 			joinType:        sqlbase.JoinType_LEFT_ANTI,
-			leftTypes:       []types.T{types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			leftTuples:      tuples{{1, 9}, {1, 10}, {1, 10}, {1, 11}, {1, 11}, {1, 11}, {2, 20}, {2, 20}, {2, 21}, {2, 22}, {2, 22}},
 			rightTuples:     tuples{{1, 8}, {1, 11}, {1, 11}, {2, 21}, {2, 23}},
 			leftOutCols:     []uint32{0, 1},
@@ -1451,8 +1451,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "3 equality column LEFT ANTI JOIN test with nulls DESC ordering",
 			joinType:        sqlbase.JoinType_LEFT_ANTI,
-			leftTypes:       []types.T{types.Int64, types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
 			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
 			leftTuples:      tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
@@ -1467,8 +1467,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "3 equality column LEFT ANTI JOIN test with nulls mixed ordering",
 			joinType:        sqlbase.JoinType_LEFT_ANTI,
-			leftTypes:       []types.T{types.Int64, types.Int64, types.Int64},
-			rightTypes:      []types.T{types.Int64, types.Int64, types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_ASC},
 			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
 			leftTuples:      tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
@@ -1483,8 +1483,8 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			description:     "single column DESC with nulls on the left LEFT ANTI JOIN",
 			joinType:        sqlbase.JoinType_LEFT_ANTI,
-			leftTypes:       []types.T{types.Int64},
-			rightTypes:      []types.T{types.Int64},
+			leftTypes:       []coltypes.T{coltypes.Int64},
+			rightTypes:      []coltypes.T{coltypes.Int64},
 			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
 			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
 			leftTuples:      tuples{{1}, {1}, {1}, {nil}, {nil}, {nil}},
@@ -1552,7 +1552,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 			t.Run(fmt.Sprintf("numInputBatches=%d", numInputBatches),
 				func(t *testing.T) {
 					nTuples := coldata.BatchSize * numInputBatches
-					typs := []types.T{types.Int64}
+					typs := []coltypes.T{coltypes.Int64}
 					cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
 					groups := cols[0].Int64()
 					for i := range groups {
@@ -1614,7 +1614,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 			t.Run(fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
 				func(t *testing.T) {
 					nTuples := coldata.BatchSize * numInputBatches
-					typs := []types.T{types.Int64, types.Int64}
+					typs := []coltypes.T{coltypes.Int64, coltypes.Int64}
 					cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples), coldata.NewMemColumn(typs[1], nTuples)}
 					for i := range cols[0].Int64() {
 						cols[0].Int64()[i] = int64(i / groupSize)
@@ -1680,7 +1680,7 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 				t.Run(fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
 					func(t *testing.T) {
 						nTuples := coldata.BatchSize * numInputBatches
-						typs := []types.T{types.Int64}
+						typs := []coltypes.T{coltypes.Int64}
 						cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
 						groups := cols[0].Int64()
 						for i := range groups {
@@ -1731,7 +1731,7 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 			t.Run(fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
 				func(t *testing.T) {
 					nTuples := coldata.BatchSize * numInputBatches
-					typs := []types.T{types.Int64}
+					typs := []coltypes.T{coltypes.Int64}
 					cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
 					groups := cols[0].Int64()
 					for i := range groups {
@@ -1784,7 +1784,7 @@ type expectedGroup struct {
 }
 
 func newBatchesOfRandIntRows(
-	nTuples int, typs []types.T, maxRunLength int64, skipValues bool, randomIncrement int64,
+	nTuples int, typs []coltypes.T, maxRunLength int64, skipValues bool, randomIncrement int64,
 ) ([]coldata.Vec, []coldata.Vec, []expectedGroup) {
 	rng, _ := randutil.NewPseudoRand()
 	lCols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
@@ -1851,7 +1851,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 					t.Run(fmt.Sprintf("numInputBatches=%dmaxRunLength=%dskipValues=%trandomIncrement=%d", numInputBatches, maxRunLength, skipValues, randomIncrement),
 						func(t *testing.T) {
 							nTuples := coldata.BatchSize * numInputBatches
-							typs := []types.T{types.Int64}
+							typs := []coltypes.T{coltypes.Int64}
 							lCols, rCols, exp := newBatchesOfRandIntRows(nTuples, typs, maxRunLength, skipValues, randomIncrement)
 							leftSource := newChunkingBatchSource(typs, lCols, uint64(nTuples))
 							rightSource := newChunkingBatchSource(typs, rCols, uint64(nTuples))
@@ -1939,10 +1939,10 @@ func newBatchOfRepeatedIntRows(nCols int, batch coldata.Batch, numRepeats int) c
 func BenchmarkMergeJoiner(b *testing.B) {
 	ctx := context.Background()
 	nCols := 4
-	sourceTypes := make([]types.T, nCols)
+	sourceTypes := make([]coltypes.T, nCols)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
-		sourceTypes[colIdx] = types.Int64
+		sourceTypes[colIdx] = coltypes.Int64
 	}
 
 	batch := coldata.NewMemBatch(sourceTypes)

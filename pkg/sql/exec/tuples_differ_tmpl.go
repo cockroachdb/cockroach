@@ -22,9 +22,9 @@ package exec
 import (
 	"bytes"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
 )
@@ -40,13 +40,13 @@ var _ bytes.Buffer
 var _ tree.Datum
 
 // _GOTYPE is the template Go type variable for this operator. It will be
-// replaced by the Go type equivalent for each type in types.T, for example
-// int64 for types.Int64.
+// replaced by the Go type equivalent for each type in coltypes.T, for example
+// int64 for coltypes.Int64.
 type _GOTYPE interface{}
 
-// _TYPES_T is the template type variable for types.T. It will be replaced by
-// types.Foo for each type Foo in the types.T type.
-const _TYPES_T = types.Unhandled
+// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
+// coltypes.Foo for each type Foo in the coltypes.T type.
+const _TYPES_T = coltypes.Unhandled
 
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the second input != the third input.
@@ -62,7 +62,12 @@ var _ interface{} = execgen.GET
 // tuplesDiffer takes in two ColVecs as well as tuple indices to check whether
 // the tuples differ.
 func tuplesDiffer(
-	t types.T, aColVec coldata.Vec, aTupleIdx int, bColVec coldata.Vec, bTupleIdx int, differ *bool,
+	t coltypes.T,
+	aColVec coldata.Vec,
+	aTupleIdx int,
+	bColVec coldata.Vec,
+	bTupleIdx int,
+	differ *bool,
 ) error {
 	switch t {
 	// {{range .}}

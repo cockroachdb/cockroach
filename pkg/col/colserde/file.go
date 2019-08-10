@@ -17,9 +17,9 @@ import (
 	"io/ioutil"
 
 	"github.com/apache/arrow/go/arrow/array"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/colserde/arrowserde"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/colserde/arrowserde"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	flatbuffers "github.com/google/flatbuffers/go"
@@ -43,7 +43,7 @@ type FileSerializer struct {
 	scratch [4]byte
 
 	w    *countingWriter
-	typs []types.T
+	typs []coltypes.T
 	fb   *flatbuffers.Builder
 	a    *ArrowBatchConverter
 	rb   *RecordBatchSerializer
@@ -51,9 +51,9 @@ type FileSerializer struct {
 	recordBatches []fileBlock
 }
 
-// NewFileSerializer creates a FileSerializer for the given types. The caller is
+// NewFileSerializer creates a FileSerializer for the given coltypes. The caller is
 // responsible for closing the given writer.
-func NewFileSerializer(w io.Writer, typs []types.T) (*FileSerializer, error) {
+func NewFileSerializer(w io.Writer, typs []coltypes.T) (*FileSerializer, error) {
 	a, err := NewArrowBatchConverter(typs)
 	if err != nil {
 		return nil, err
@@ -160,7 +160,7 @@ type FileDeserializer struct {
 
 	idx  int
 	end  int
-	typs []types.T
+	typs []coltypes.T
 	a    *ArrowBatchConverter
 	rb   *RecordBatchSerializer
 
@@ -215,7 +215,7 @@ func (d *FileDeserializer) Close() error {
 }
 
 // Typs returns the in-memory columnar types for the data stored in this file.
-func (d *FileDeserializer) Typs() []types.T {
+func (d *FileDeserializer) Typs() []coltypes.T {
 	return d.typs
 }
 
@@ -262,7 +262,7 @@ func (d *FileDeserializer) readBackward(n int) ([]byte, error) {
 // init verifies the file magic and headers. After init, the `idx` and `end`
 // fields are set to the range of record batches and dictionary batches
 // described by the arrow spec's streaming format.
-func (d *FileDeserializer) init() ([]types.T, error) {
+func (d *FileDeserializer) init() ([]coltypes.T, error) {
 	// Check the header magic
 	if magic, err := d.read(8); err != nil {
 		return nil, pgerror.Wrap(err, pgcode.DataException, `verifying arrow file header magic`)
@@ -290,7 +290,7 @@ func (d *FileDeserializer) init() ([]types.T, error) {
 
 	var schema arrowserde.Schema
 	footer.Schema(&schema)
-	typs := make([]types.T, schema.FieldsLength())
+	typs := make([]coltypes.T, schema.FieldsLength())
 	var field arrowserde.Field
 	for i := range typs {
 		schema.Fields(&field, i)
@@ -324,50 +324,50 @@ func (w *countingWriter) Write(buf []byte) (int, error) {
 	return n, err
 }
 
-func schema(fb *flatbuffers.Builder, typs []types.T) flatbuffers.UOffsetT {
+func schema(fb *flatbuffers.Builder, typs []coltypes.T) flatbuffers.UOffsetT {
 	fieldOffsets := make([]flatbuffers.UOffsetT, len(typs))
 	for idx, typ := range typs {
 		var fbTyp byte
 		var fbTypOffset flatbuffers.UOffsetT
 		switch typ {
-		case types.Bool:
+		case coltypes.Bool:
 			arrowserde.BoolStart(fb)
 			fbTypOffset = arrowserde.BoolEnd(fb)
 			fbTyp = arrowserde.TypeBool
-		case types.Bytes:
+		case coltypes.Bytes:
 			arrowserde.BinaryStart(fb)
 			fbTypOffset = arrowserde.BinaryEnd(fb)
 			fbTyp = arrowserde.TypeBinary
-		case types.Int8:
+		case coltypes.Int8:
 			arrowserde.IntStart(fb)
 			arrowserde.IntAddBitWidth(fb, 8)
 			arrowserde.IntAddIsSigned(fb, 1)
 			fbTypOffset = arrowserde.IntEnd(fb)
 			fbTyp = arrowserde.TypeInt
-		case types.Int16:
+		case coltypes.Int16:
 			arrowserde.IntStart(fb)
 			arrowserde.IntAddBitWidth(fb, 16)
 			arrowserde.IntAddIsSigned(fb, 1)
 			fbTypOffset = arrowserde.IntEnd(fb)
 			fbTyp = arrowserde.TypeInt
-		case types.Int32:
+		case coltypes.Int32:
 			arrowserde.IntStart(fb)
 			arrowserde.IntAddBitWidth(fb, 32)
 			arrowserde.IntAddIsSigned(fb, 1)
 			fbTypOffset = arrowserde.IntEnd(fb)
 			fbTyp = arrowserde.TypeInt
-		case types.Int64:
+		case coltypes.Int64:
 			arrowserde.IntStart(fb)
 			arrowserde.IntAddBitWidth(fb, 64)
 			arrowserde.IntAddIsSigned(fb, 1)
 			fbTypOffset = arrowserde.IntEnd(fb)
 			fbTyp = arrowserde.TypeInt
-		case types.Float32:
+		case coltypes.Float32:
 			arrowserde.FloatingPointStart(fb)
 			arrowserde.FloatingPointAddPrecision(fb, arrowserde.PrecisionSINGLE)
 			fbTypOffset = arrowserde.FloatingPointEnd(fb)
 			fbTyp = arrowserde.TypeFloatingPoint
-		case types.Float64:
+		case coltypes.Float64:
 			arrowserde.FloatingPointStart(fb)
 			arrowserde.FloatingPointAddPrecision(fb, arrowserde.PrecisionDOUBLE)
 			fbTypOffset = arrowserde.FloatingPointEnd(fb)
@@ -394,7 +394,7 @@ func schema(fb *flatbuffers.Builder, typs []types.T) flatbuffers.UOffsetT {
 	return arrowserde.SchemaEnd(fb)
 }
 
-func schemaMessage(fb *flatbuffers.Builder, typs []types.T) flatbuffers.UOffsetT {
+func schemaMessage(fb *flatbuffers.Builder, typs []coltypes.T) flatbuffers.UOffsetT {
 	schemaOffset := schema(fb, typs)
 	arrowserde.MessageStart(fb)
 	arrowserde.MessageAddVersion(fb, arrowserde.MetadataVersionV1)
@@ -404,7 +404,7 @@ func schemaMessage(fb *flatbuffers.Builder, typs []types.T) flatbuffers.UOffsetT
 }
 
 func fileFooter(
-	fb *flatbuffers.Builder, typs []types.T, recordBatches []fileBlock,
+	fb *flatbuffers.Builder, typs []coltypes.T, recordBatches []fileBlock,
 ) flatbuffers.UOffsetT {
 	schemaOffset := schema(fb, typs)
 	arrowserde.FooterStartRecordBatchesVector(fb, len(recordBatches))
@@ -422,30 +422,30 @@ func fileFooter(
 	return arrowserde.FooterEnd(fb)
 }
 
-func typeFromField(field *arrowserde.Field) (types.T, error) {
+func typeFromField(field *arrowserde.Field) (coltypes.T, error) {
 	var typeTab flatbuffers.Table
 	field.Type(&typeTab)
 	typeType := field.TypeType()
 	switch typeType {
 	case arrowserde.TypeBool:
-		return types.Bool, nil
+		return coltypes.Bool, nil
 	case arrowserde.TypeBinary:
-		return types.Bytes, nil
+		return coltypes.Bytes, nil
 	case arrowserde.TypeInt:
 		var intType arrowserde.Int
 		intType.Init(typeTab.Bytes, typeTab.Pos)
 		if intType.IsSigned() > 0 {
 			switch intType.BitWidth() {
 			case 8:
-				return types.Int8, nil
+				return coltypes.Int8, nil
 			case 16:
-				return types.Int16, nil
+				return coltypes.Int16, nil
 			case 32:
-				return types.Int32, nil
+				return coltypes.Int32, nil
 			case 64:
-				return types.Int64, nil
+				return coltypes.Int64, nil
 			default:
-				return types.Unhandled, errors.Errorf(`unhandled bit width %d`, intType.BitWidth())
+				return coltypes.Unhandled, errors.Errorf(`unhandled bit width %d`, intType.BitWidth())
 			}
 		}
 	case arrowserde.TypeFloatingPoint:
@@ -453,17 +453,17 @@ func typeFromField(field *arrowserde.Field) (types.T, error) {
 		floatType.Init(typeTab.Bytes, typeTab.Pos)
 		switch floatType.Precision() {
 		case arrowserde.PrecisionDOUBLE:
-			return types.Float64, nil
+			return coltypes.Float64, nil
 		case arrowserde.PrecisionSINGLE:
-			return types.Float32, nil
+			return coltypes.Float32, nil
 		default:
-			return types.Unhandled, errors.Errorf(`unhandled float precision %d`, floatType.Precision())
+			return coltypes.Unhandled, errors.Errorf(`unhandled float precision %d`, floatType.Precision())
 		}
 	}
 	// It'd be nice if this error could include more details, but flatbuffers
 	// doesn't make a String method or anything like that.
 	if typeName, ok := arrowserde.EnumNamesType[typeType]; ok {
-		return types.Unhandled, errors.Errorf(`unknown type: %s`, typeName)
+		return coltypes.Unhandled, errors.Errorf(`unknown type: %s`, typeName)
 	}
-	return types.Unhandled, errors.Errorf(`unknown type: %d`, typeType)
+	return coltypes.Unhandled, errors.Errorf(`unknown type: %d`, typeType)
 }

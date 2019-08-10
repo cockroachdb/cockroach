@@ -16,9 +16,9 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -30,7 +30,7 @@ func TestSortChunks(t *testing.T) {
 		description string
 		tuples      tuples
 		expected    tuples
-		typ         []types.T
+		typ         []coltypes.T
 		ordCols     []distsqlpb.Ordering_Column
 		matchLen    int
 	}{
@@ -38,7 +38,7 @@ func TestSortChunks(t *testing.T) {
 			description: `tuples already ordered`,
 			tuples:      tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			expected:    tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
-			typ:         []types.T{types.Int64},
+			typ:         []coltypes.T{coltypes.Int64},
 			ordCols:     []distsqlpb.Ordering_Column{{ColIdx: 0}},
 			matchLen:    1,
 		},
@@ -46,7 +46,7 @@ func TestSortChunks(t *testing.T) {
 			description: `three chunks`,
 			tuples:      tuples{{1, 2}, {1, 2}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, 1}},
 			expected:    tuples{{1, 1}, {1, 2}, {1, 2}, {1, 3}, {5, 5}, {6, 1}, {6, 6}},
-			typ:         []types.T{types.Int64, types.Int64},
+			typ:         []coltypes.T{coltypes.Int64, coltypes.Int64},
 			ordCols:     []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 			matchLen:    1,
 		},
@@ -66,7 +66,7 @@ func TestSortChunks(t *testing.T) {
 				{0, 2, 0},
 				{0, 2, 1},
 			},
-			typ:      []types.T{types.Int64, types.Int64, types.Int64},
+			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 1,
 		},
@@ -86,7 +86,7 @@ func TestSortChunks(t *testing.T) {
 				{1, 1, 1},
 				{1, 2, 1},
 			},
-			typ:      []types.T{types.Int64, types.Int64, types.Int64},
+			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 1,
 		},
@@ -106,7 +106,7 @@ func TestSortChunks(t *testing.T) {
 				{0, 2, 0},
 				{0, 2, 1},
 			},
-			typ:      []types.T{types.Int64, types.Int64, types.Int64},
+			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 2,
 		},
@@ -126,7 +126,7 @@ func TestSortChunks(t *testing.T) {
 				{1, 1, 1},
 				{1, 2, 1},
 			},
-			typ:      []types.T{types.Int64, types.Int64, types.Int64},
+			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 2,
 		},
@@ -146,7 +146,7 @@ func TestSortChunks(t *testing.T) {
 				{1, 1, 1},
 				{0, 1, 2},
 			},
-			typ:      []types.T{types.Int64, types.Int64, types.Int64},
+			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 2}, {ColIdx: 1}, {ColIdx: 0}},
 			matchLen: 1,
 		},
@@ -170,7 +170,7 @@ func TestSortChunks(t *testing.T) {
 				{1, 1, 2},
 				{1, 2, 2},
 			},
-			typ:      []types.T{types.Int64, types.Int64, types.Int64},
+			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 2}, {ColIdx: 0}, {ColIdx: 1}},
 			matchLen: 2,
 		},
@@ -191,9 +191,9 @@ func TestSortChunksRandomized(t *testing.T) {
 	nTups := 8
 	maxCols := 5
 	// TODO(yuzefovich): randomize types as well.
-	typs := make([]types.T, maxCols)
+	typs := make([]coltypes.T, maxCols)
 	for i := range typs {
-		typs[i] = types.Int64
+		typs[i] = coltypes.Int64
 	}
 
 	for nCols := 1; nCols < maxCols; nCols++ {
@@ -236,9 +236,9 @@ func BenchmarkSortChunks(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	sorterConstructors := []func(Operator, []types.T, []distsqlpb.Ordering_Column, int) (Operator, error){
+	sorterConstructors := []func(Operator, []coltypes.T, []distsqlpb.Ordering_Column, int) (Operator, error){
 		NewSortChunks,
-		func(input Operator, inputTypes []types.T, orderingCols []distsqlpb.Ordering_Column, _ int) (Operator, error) {
+		func(input Operator, inputTypes []coltypes.T, orderingCols []distsqlpb.Ordering_Column, _ int) (Operator, error) {
 			return NewSorter(input, inputTypes, orderingCols)
 		},
 	}
@@ -258,9 +258,9 @@ func BenchmarkSortChunks(b *testing.B) {
 								// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize (rows /
 								// batch) * nCols (number of columns / row).
 								b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols))
-								typs := make([]types.T, nCols)
+								typs := make([]coltypes.T, nCols)
 								for i := range typs {
-									typs[i] = types.Int64
+									typs[i] = coltypes.Int64
 								}
 								batch := coldata.NewMemBatch(typs)
 								batch.SetLength(coldata.BatchSize)

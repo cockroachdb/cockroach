@@ -18,17 +18,17 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/colrpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/vecbuiltins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -51,7 +51,7 @@ func wrapRowSource(
 	ctx context.Context,
 	flowCtx *FlowCtx,
 	input exec.Operator,
-	inputTypes []semtypes.T,
+	inputTypes []types.T,
 	newToWrap func(RowSource) (RowSource, error),
 ) (*columnarizer, error) {
 	var (
@@ -93,7 +93,7 @@ func wrapRowSource(
 
 type newColOperatorResult struct {
 	op              exec.Operator
-	outputTypes     []types.T
+	outputTypes     []coltypes.T
 	memUsage        int
 	metadataSources []distsqlpb.MetadataSource
 	isStreaming     bool
@@ -109,11 +109,11 @@ func newColOperator(
 	post := &spec.Post
 
 	// Planning additional operators for the PostProcessSpec (filters and render
-	// expressions) requires knowing the operator's output column types. Currently
+	// expressions) requires knowing the operator's output column coltypes. Currently
 	// this must be set for any core spec which might require post-processing. In
 	// the future we may want to make these column types part of the Operator
 	// interface.
-	var columnTypes []semtypes.T
+	var columnTypes []types.T
 
 	// By default, we safely assume that an operator is not streaming. Note that
 	// projections, renders, filters, limits, offsets as well as all internal
@@ -174,7 +174,7 @@ func newColOperator(
 			// Ideally the optimizer would not plan a scan in this unusual case.
 			result.op, result.isStreaming, err = exec.NewSingleTupleNoInputOp(), true, nil
 			// We make columnTypes non-nil so that sanity check doesn't panic.
-			columnTypes = make([]semtypes.T, 0)
+			columnTypes = make([]types.T, 0)
 			break
 		}
 		if len(aggSpec.GroupCols) == 0 &&
@@ -183,7 +183,7 @@ func newColOperator(
 			aggSpec.Aggregations[0].Func == distsqlpb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
 			result.op, result.isStreaming, err = exec.NewCountOp(inputs[0]), true, nil
-			columnTypes = []semtypes.T{*semtypes.Int}
+			columnTypes = []types.T{*types.Int}
 			break
 		}
 
@@ -204,10 +204,10 @@ func newColOperator(
 			return result, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
 		}
 
-		aggTyps := make([][]semtypes.T, len(aggSpec.Aggregations))
+		aggTyps := make([][]types.T, len(aggSpec.Aggregations))
 		aggCols := make([][]uint32, len(aggSpec.Aggregations))
 		aggFns := make([]distsqlpb.AggregatorSpec_Func, len(aggSpec.Aggregations))
-		columnTypes = make([]semtypes.T, len(aggSpec.Aggregations))
+		columnTypes = make([]types.T, len(aggSpec.Aggregations))
 		for i, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
 				return result, errors.Newf("distinct aggregation not supported")
@@ -218,7 +218,7 @@ func newColOperator(
 			if len(agg.Arguments) > 0 {
 				return result, errors.Newf("aggregates with arguments not supported")
 			}
-			aggTyps[i] = make([]semtypes.T, len(agg.ColIdx))
+			aggTyps[i] = make([]types.T, len(agg.ColIdx))
 			for j, colIdx := range agg.ColIdx {
 				aggTyps[i][j] = spec.Input[0].ColumnTypes[colIdx]
 			}
@@ -227,7 +227,7 @@ func newColOperator(
 			switch agg.Func {
 			case distsqlpb.AggregatorSpec_SUM:
 				switch aggTyps[i][0].Family() {
-				case semtypes.IntFamily:
+				case types.IntFamily:
 					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
 					// at the end, mod issues with overflow. Perhaps to avoid the overflow
 					// issues, at first, we could plan SUM for all types besides Int64.
@@ -245,8 +245,8 @@ func newColOperator(
 			}
 			columnTypes[i] = *retType
 		}
-		var typs []types.T
-		typs, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		var typs []coltypes.T
+		typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
 			return result, err
 		}
@@ -282,8 +282,8 @@ func newColOperator(
 		}
 
 		columnTypes = spec.Input[0].ColumnTypes
-		var typs []types.T
-		typs, err = conv.FromColumnTypes(columnTypes)
+		var typs []coltypes.T
+		typs, err = typeconv.FromColumnTypes(columnTypes)
 		if err != nil {
 			return result, err
 		}
@@ -294,7 +294,7 @@ func newColOperator(
 		if err := checkNumIn(inputs, 1); err != nil {
 			return result, err
 		}
-		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
+		columnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
 		result.op, result.isStreaming = exec.NewOrdinalityOp(inputs[0]), true
 
 	case core.HashJoiner != nil:
@@ -302,12 +302,12 @@ func newColOperator(
 			return result, err
 		}
 
-		var leftTypes, rightTypes []types.T
-		leftTypes, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		var leftTypes, rightTypes []coltypes.T
+		leftTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
 			return result, err
 		}
-		rightTypes, err = conv.FromColumnTypes(spec.Input[1].ColumnTypes)
+		rightTypes, err = typeconv.FromColumnTypes(spec.Input[1].ColumnTypes)
 		if err != nil {
 			return result, err
 		}
@@ -356,7 +356,7 @@ func newColOperator(
 			return result, err
 		}
 
-		columnTypes = make([]semtypes.T, nLeftCols+nRightCols)
+		columnTypes = make([]types.T, nLeftCols+nRightCols)
 		copy(columnTypes, spec.Input[0].ColumnTypes)
 		if core.HashJoiner.Type != sqlbase.JoinType_LEFT_SEMI {
 			// TODO(yuzefovich): update this conditional once LEFT ANTI is supported.
@@ -384,12 +384,12 @@ func newColOperator(
 			return result, errors.AssertionFailedf("unexpectedly %s merge join was planned", core.MergeJoiner.Type.String())
 		}
 
-		var leftTypes, rightTypes []types.T
-		leftTypes, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		var leftTypes, rightTypes []coltypes.T
+		leftTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
 			return result, err
 		}
-		rightTypes, err = conv.FromColumnTypes(spec.Input[1].ColumnTypes)
+		rightTypes, err = typeconv.FromColumnTypes(spec.Input[1].ColumnTypes)
 		if err != nil {
 			return result, err
 		}
@@ -436,7 +436,7 @@ func newColOperator(
 			return result, err
 		}
 
-		columnTypes = make([]semtypes.T, nLeftCols+nRightCols)
+		columnTypes = make([]types.T, nLeftCols+nRightCols)
 		copy(columnTypes, spec.Input[0].ColumnTypes)
 		if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI &&
 			core.MergeJoiner.Type != sqlbase.JoinType_LEFT_ANTI {
@@ -491,8 +491,8 @@ func newColOperator(
 			return result, err
 		}
 		input := inputs[0]
-		var inputTypes []types.T
-		inputTypes, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		var inputTypes []coltypes.T
+		inputTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
 			return result, err
 		}
@@ -533,8 +533,8 @@ func newColOperator(
 		}
 
 		input := inputs[0]
-		var typs []types.T
-		typs, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		var typs []coltypes.T
+		typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
 			return result, err
 		}
@@ -582,7 +582,7 @@ func newColOperator(
 			result.op = exec.NewSimpleProjectOp(result.op, int(wf.OutputColIdx+1), projection)
 		}
 
-		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
+		columnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
 
 	default:
 		return result, errors.Newf("unsupported processor core %q", core)
@@ -612,7 +612,7 @@ func newColOperator(
 	if post.Projection {
 		result.op = exec.NewSimpleProjectOp(result.op, len(columnTypes), post.OutputColumns)
 		// Update output columnTypes.
-		newTypes := make([]semtypes.T, 0, len(post.OutputColumns))
+		newTypes := make([]types.T, 0, len(post.OutputColumns))
 		for _, j := range post.OutputColumns {
 			newTypes = append(newTypes, columnTypes[j])
 		}
@@ -642,7 +642,7 @@ func newColOperator(
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}
 		result.op = exec.NewSimpleProjectOp(result.op, len(columnTypes), renderedCols)
-		newTypes := make([]semtypes.T, 0, len(renderedCols))
+		newTypes := make([]types.T, 0, len(renderedCols))
 		for _, j := range renderedCols {
 			newTypes = append(newTypes, columnTypes[j])
 		}
@@ -657,13 +657,13 @@ func newColOperator(
 	if err != nil {
 		return result, err
 	}
-	result.outputTypes, err = conv.FromColumnTypes(columnTypes)
+	result.outputTypes, err = typeconv.FromColumnTypes(columnTypes)
 	return result, err
 }
 
 func (r *newColOperatorResult) planFilterExpr(
-	flowCtx *FlowCtx, filter distsqlpb.Expression, columnTypes []semtypes.T,
-) ([]semtypes.T, error) {
+	flowCtx *FlowCtx, filter distsqlpb.Expression, columnTypes []types.T,
+) ([]types.T, error) {
 	var (
 		helper       exprHelper
 		selectionMem int
@@ -672,7 +672,7 @@ func (r *newColOperatorResult) planFilterExpr(
 	if err != nil {
 		return columnTypes, err
 	}
-	var filterColumnTypes []semtypes.T
+	var filterColumnTypes []types.T
 	r.op, _, filterColumnTypes, selectionMem, err = planSelectionOperators(flowCtx.NewEvalCtx(), helper.expr, columnTypes, r.op)
 	if err != nil {
 		return columnTypes, errors.Wrapf(err, "unable to columnarize filter expression %q", filter.Expr)
@@ -691,8 +691,8 @@ func (r *newColOperatorResult) planFilterExpr(
 }
 
 func planSelectionOperators(
-	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
-) (op exec.Operator, resultIdx int, ct []semtypes.T, memUsed int, err error) {
+	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []types.T, input exec.Operator,
+) (op exec.Operator, resultIdx int, ct []types.T, memUsed int, err error) {
 	if err := assertHomogeneousTypes(expr); err != nil {
 		return op, resultIdx, ct, memUsed, err
 	}
@@ -748,8 +748,8 @@ func planSelectionOperators(
 // of the expression's result (if any, otherwise -1) and the column types of the
 // resulting batches.
 func planProjectionOperators(
-	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
-) (op exec.Operator, resultIdx int, ct []semtypes.T, memUsed int, err error) {
+	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []types.T, input exec.Operator,
+) (op exec.Operator, resultIdx int, ct []types.T, memUsed int, err error) {
 	if err := assertHomogeneousTypes(expr); err != nil {
 		return op, resultIdx, ct, memUsed, err
 	}
@@ -790,11 +790,11 @@ func planProjectionOperators(
 		ct := columnTypes
 		resultIdx = len(ct)
 		ct = append(ct, *datumType)
-		if datumType.Family() == semtypes.UnknownFamily {
+		if datumType.Family() == types.UnknownFamily {
 			return exec.NewConstNullOp(input, resultIdx), resultIdx, ct, memUsed, nil
 		}
-		typ := conv.FromColumnType(datumType)
-		constVal, err := conv.GetDatumToPhysicalFn(datumType)(t)
+		typ := typeconv.FromColumnType(datumType)
+		constVal, err := typeconv.GetDatumToPhysicalFn(datumType)(t)
 		if err != nil {
 			return nil, resultIdx, ct, memUsed, err
 		}
@@ -811,11 +811,11 @@ func planProjectionOperators(
 func planProjectionExpr(
 	ctx *tree.EvalContext,
 	binOp tree.Operator,
-	outputType *semtypes.T,
+	outputType *types.T,
 	left, right tree.TypedExpr,
-	columnTypes []semtypes.T,
+	columnTypes []types.T,
 	input exec.Operator,
-) (op exec.Operator, resultIdx int, ct []semtypes.T, memUsed int, err error) {
+) (op exec.Operator, resultIdx int, ct []types.T, memUsed int, err error) {
 	resultIdx = -1
 	// There are 3 cases. Either the left is constant, the right is constant,
 	// or neither are constant.
@@ -886,7 +886,7 @@ func planProjectionExpr(
 }
 
 // assertHomogeneousTypes checks that the left and right sides of an expression
-// have identical types. (Vectorized execution does not yet handle mixed types.)
+// have identical coltypes. (Vectorized execution does not yet handle mixed coltypes.)
 // For BinaryExprs, it also checks that the result type matches, since this is
 // not the case for certain operations like integer division.
 func assertHomogeneousTypes(expr tree.TypedExpr) error {
@@ -1006,19 +1006,19 @@ type opDAGWithMetaSources struct {
 // remoteComponentCreator is an interface that abstracts the constructors for
 // several components in a remote flow. Mostly for testing purposes.
 type remoteComponentCreator interface {
-	newOutbox(input exec.Operator, typs []types.T, metadataSources []distsqlpb.MetadataSource) (*colrpc.Outbox, error)
-	newInbox(typs []types.T) (*colrpc.Inbox, error)
+	newOutbox(input exec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource) (*colrpc.Outbox, error)
+	newInbox(typs []coltypes.T) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
 
 func (vectorizedRemoteComponentCreator) newOutbox(
-	input exec.Operator, typs []types.T, metadataSources []distsqlpb.MetadataSource,
+	input exec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource,
 ) (*colrpc.Outbox, error) {
 	return colrpc.NewOutbox(input, typs, metadataSources)
 }
 
-func (vectorizedRemoteComponentCreator) newInbox(typs []types.T) (*colrpc.Inbox, error) {
+func (vectorizedRemoteComponentCreator) newInbox(typs []coltypes.T) (*colrpc.Inbox, error) {
 	return colrpc.NewInbox(typs)
 }
 
@@ -1077,7 +1077,7 @@ func newVectorizedFlowCreator(
 // metadataSourcesQueue.
 func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	op exec.Operator,
-	outputTyps []types.T,
+	outputTyps []coltypes.T,
 	stream *distsqlpb.StreamEndpointSpec,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
 ) (exec.OpNode, error) {
@@ -1115,7 +1115,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 // PASS_THROUGH routers separately.
 func (s *vectorizedFlowCreator) setupRouter(
 	input exec.Operator,
-	outputTyps []types.T,
+	outputTyps []coltypes.T,
 	output *distsqlpb.OutputRouterSpec,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
 ) error {
@@ -1199,7 +1199,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			if err := s.checkInboundStreamID(inputStream.StreamID); err != nil {
 				return nil, nil, memUsed, err
 			}
-			typs, err := conv.FromColumnTypes(input.ColumnTypes)
+			typs, err := typeconv.FromColumnTypes(input.ColumnTypes)
 			if err != nil {
 				return nil, nil, memUsed, err
 			}
@@ -1234,7 +1234,7 @@ func (s *vectorizedFlowCreator) setupInput(
 	op = inputStreamOps[0]
 	if len(inputStreamOps) > 1 {
 		statsInputs := inputStreamOps
-		typs, err := conv.FromColumnTypes(input.ColumnTypes)
+		typs, err := typeconv.FromColumnTypes(input.ColumnTypes)
 		if err != nil {
 			return nil, nil, memUsed, err
 		}
@@ -1274,7 +1274,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 	flowCtx *FlowCtx,
 	pspec *distsqlpb.ProcessorSpec,
 	op exec.Operator,
-	opOutputTypes []types.T,
+	opOutputTypes []coltypes.T,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
 ) error {
 	output := &pspec.Output[0]

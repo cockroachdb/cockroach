@@ -11,8 +11,8 @@
 package sqlsmith
 
 import (
-	exectypes "github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -66,7 +66,7 @@ func (s *Smither) randType() *types.T {
 // vectorization).
 func (s *Smither) allowedType(types ...*types.T) bool {
 	for _, t := range types {
-		if s.vectorizable && conv.FromColumnType(t) == exectypes.Unhandled {
+		if s.vectorizable && typeconv.FromColumnType(t) == coltypes.Unhandled {
 			return false
 		}
 	}

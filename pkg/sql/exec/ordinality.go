@@ -13,8 +13,8 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 // ordinalityOp is an operator that implements WITH ORDINALITY, which adds
@@ -33,7 +33,7 @@ type ordinalityOp struct {
 var _ StaticMemoryOperator = &ordinalityOp{}
 
 func (c *ordinalityOp) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]types.T{types.Int64}, coldata.BatchSize)
+	return EstimateBatchSizeBytes([]coltypes.T{coltypes.Int64}, coldata.BatchSize)
 }
 
 const colNotAppended = -1
@@ -56,7 +56,7 @@ func (c *ordinalityOp) Next(ctx context.Context) coldata.Batch {
 	bat := c.input.Next(ctx)
 	if c.ordinalityCol == colNotAppended {
 		c.ordinalityCol = bat.Width()
-		bat.AppendCol(types.Int64)
+		bat.AppendCol(coltypes.Int64)
 	}
 	vec := bat.ColVec(c.ordinalityCol).Int64()
 	sel := bat.Selection()

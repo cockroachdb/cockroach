@@ -24,9 +24,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
 )
@@ -35,7 +35,7 @@ import (
 // a slice of columns, creates a chain of distinct operators and returns the
 // last distinct operator in that chain as well as its output column.
 func OrderedDistinctColsToOperators(
-	input Operator, distinctCols []uint32, typs []types.T,
+	input Operator, distinctCols []uint32, typs []coltypes.T,
 ) (Operator, []bool, error) {
 	distinctCol := make([]bool, coldata.BatchSize)
 	// zero the boolean column on every iteration.
@@ -59,7 +59,7 @@ func OrderedDistinctColsToOperators(
 	}
 	distinctChain := distinctChainOps{
 		resettableOperator:         r,
-		estimatedStaticMemoryUsage: EstimateBatchSizeBytes([]types.T{types.Bool}, coldata.BatchSize),
+		estimatedStaticMemoryUsage: EstimateBatchSizeBytes([]coltypes.T{coltypes.Bool}, coldata.BatchSize),
 	}
 	return distinctChain, distinctCol, nil
 }
@@ -78,8 +78,10 @@ func (d *distinctChainOps) EstimateStaticMemoryUsage() int {
 }
 
 // NewOrderedDistinct creates a new ordered distinct operator on the given
-// input columns with the given types.
-func NewOrderedDistinct(input Operator, distinctCols []uint32, typs []types.T) (Operator, error) {
+// input columns with the given coltypes.
+func NewOrderedDistinct(
+	input Operator, distinctCols []uint32, typs []coltypes.T,
+) (Operator, error) {
 	op, outputCol, err := OrderedDistinctColsToOperators(input, distinctCols, typs)
 	if err != nil {
 		return nil, err
@@ -104,18 +106,18 @@ var _ apd.Decimal
 var _ tree.Datum
 
 // _GOTYPE is the template Go type variable for this operator. It will be
-// replaced by the Go type equivalent for each type in types.T, for example
-// int64 for types.Int64.
+// replaced by the Go type equivalent for each type in coltypes.T, for example
+// int64 for coltypes.Int64.
 type _GOTYPE interface{}
 
 // _GOTYPESLICE is the template Go type slice variable for this operator. It
-// will be replaced by the Go slice representation for each type in types.T, for
-// example []int64 for types.Int64.
+// will be replaced by the Go slice representation for each type in coltypes.T, for
+// example []int64 for coltypes.Int64.
 type _GOTYPESLICE interface{}
 
-// _TYPES_T is the template type variable for types.T. It will be replaced by
-// types.Foo for each type Foo in the types.T type.
-const _TYPES_T = types.Unhandled
+// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
+// coltypes.Foo for each type Foo in the coltypes.T type.
+const _TYPES_T = coltypes.Unhandled
 
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the second input != the third input.
@@ -129,7 +131,7 @@ func _ASSIGN_NE(_ bool, _, _ _GOTYPE) bool {
 var _ interface{} = execgen.GET
 
 func newSingleOrderedDistinct(
-	input Operator, distinctColIdx int, outputCol []bool, t types.T,
+	input Operator, distinctColIdx int, outputCol []bool, t coltypes.T,
 ) (Operator, error) {
 	switch t {
 	// {{range .}}
@@ -163,7 +165,7 @@ type partitioner interface {
 }
 
 // newPartitioner returns a new partitioner on type t.
-func newPartitioner(t types.T) (partitioner, error) {
+func newPartitioner(t coltypes.T) (partitioner, error) {
 	switch t {
 	// {{range .}}
 	case _TYPES_T:

@@ -14,7 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 // column is an interface that represents a raw array of a Go native type.
@@ -23,7 +23,7 @@ type column interface{}
 // AppendArgs represents the arguments passed in to Vec.Append.
 type AppendArgs struct {
 	// ColType is the type of both the destination and source slices.
-	ColType types.T
+	ColType coltypes.T
 	// Src is the data being appended.
 	Src Vec
 	// Sel is an optional slice specifying indices to append to the destination
@@ -43,7 +43,7 @@ type AppendArgs struct {
 // CopyArgs represents the arguments passed in to Vec.Copy.
 type CopyArgs struct {
 	// ColType is the type of both the destination and source slices.
-	ColType types.T
+	ColType coltypes.T
 	// Src is the data being copied.
 	Src Vec
 	// Sel is an optional slice specifying indices to copy to the destination
@@ -73,10 +73,10 @@ type CopyArgs struct {
 }
 
 // Vec is an interface that represents a column vector that's accessible by
-// Go native types.
+// Go native coltypes.
 type Vec interface {
 	// Type returns the type of data stored in this Vec.
-	Type() types.T
+	Type() coltypes.T
 
 	// TODO(jordan): is a bitmap or slice of bools better?
 	// Bool returns a bool list.
@@ -127,11 +127,11 @@ type Vec interface {
 
 	// Slice returns a new Vec representing a slice of the current Vec from
 	// [start, end).
-	Slice(colType types.T, start uint64, end uint64) Vec
+	Slice(colType coltypes.T, start uint64, end uint64) Vec
 
 	// PrettyValueAt returns a "pretty"value for the idx'th value in this Vec.
 	// It uses the reflect package and is not suitable for calling in hot paths.
-	PrettyValueAt(idx uint16, colType types.T) string
+	PrettyValueAt(idx uint16, colType coltypes.T) string
 
 	// MaybeHasNulls returns true if the column possibly has any null values, and
 	// returns false if the column definitely has no null values.
@@ -149,40 +149,40 @@ var _ Vec = &memColumn{}
 // memColumn is a simple pass-through implementation of Vec that just casts
 // a generic interface{} to the proper type when requested.
 type memColumn struct {
-	t     types.T
+	t     coltypes.T
 	col   column
 	nulls Nulls
 }
 
 // NewMemColumn returns a new memColumn, initialized with a length.
-func NewMemColumn(t types.T, n int) Vec {
+func NewMemColumn(t coltypes.T, n int) Vec {
 	nulls := NewNulls(n)
 
 	switch t {
-	case types.Bool:
+	case coltypes.Bool:
 		return &memColumn{t: t, col: make([]bool, n), nulls: nulls}
-	case types.Bytes:
+	case coltypes.Bytes:
 		return &memColumn{t: t, col: NewBytes(n), nulls: nulls}
-	case types.Int8:
+	case coltypes.Int8:
 		return &memColumn{t: t, col: make([]int8, n), nulls: nulls}
-	case types.Int16:
+	case coltypes.Int16:
 		return &memColumn{t: t, col: make([]int16, n), nulls: nulls}
-	case types.Int32:
+	case coltypes.Int32:
 		return &memColumn{t: t, col: make([]int32, n), nulls: nulls}
-	case types.Int64:
+	case coltypes.Int64:
 		return &memColumn{t: t, col: make([]int64, n), nulls: nulls}
-	case types.Float32:
+	case coltypes.Float32:
 		return &memColumn{t: t, col: make([]float32, n), nulls: nulls}
-	case types.Float64:
+	case coltypes.Float64:
 		return &memColumn{t: t, col: make([]float64, n), nulls: nulls}
-	case types.Decimal:
+	case coltypes.Decimal:
 		return &memColumn{t: t, col: make([]apd.Decimal, n), nulls: nulls}
 	default:
 		panic(fmt.Sprintf("unhandled type %s", t))
 	}
 }
 
-func (m *memColumn) Type() types.T {
+func (m *memColumn) Type() coltypes.T {
 	return m.t
 }
 

@@ -11,8 +11,8 @@
 package exec
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 // circularGroupsBuffer is a struct designed to store the groups' slices for a
@@ -203,7 +203,7 @@ func (b *circularGroupsBuffer) getGroups() ([]group, []group) {
 	return leftGroups[startIdx:endIdx], rightGroups[startIdx:endIdx]
 }
 
-func newMJBufferedGroup(types []types.T) *mjBufferedGroup {
+func newMJBufferedGroup(types []coltypes.T) *mjBufferedGroup {
 	bg := &mjBufferedGroup{
 		colVecs: make([]coldata.Vec, len(types)),
 	}
@@ -262,14 +262,14 @@ func (bg *mjBufferedGroup) SetSelection(bool) {
 
 // AppendCol is not implemented because mjBufferedGroup is only initialized
 // when the column schema is known.
-func (bg *mjBufferedGroup) AppendCol(types.T) {
-	panic("AppendCol(types.T) should not be called on mjBufferedGroup")
+func (bg *mjBufferedGroup) AppendCol(coltypes.T) {
+	panic("AppendCol(coltypes.T) should not be called on mjBufferedGroup")
 }
 
 // Reset is not implemented because mjBufferedGroup is not reused with
 // different column schemas at the moment.
-func (bg *mjBufferedGroup) Reset(types []types.T, length int) {
-	panic("Reset([]types.T, int) should not be called on mjBufferedGroup")
+func (bg *mjBufferedGroup) Reset(types []coltypes.T, length int) {
+	panic("Reset([]coltypes.T, int) should not be called on mjBufferedGroup")
 }
 
 // reset resets the state of the buffered group so that we can reuse the

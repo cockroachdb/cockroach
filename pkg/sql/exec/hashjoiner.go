@@ -14,8 +14,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -73,7 +73,7 @@ type hashJoinerSourceSpec struct {
 
 	// sourceTypes specify the types of the input columns of the source table for
 	// the hash joiner.
-	sourceTypes []types.T
+	sourceTypes []coltypes.T
 
 	// source specifies the input operator to the hash join.
 	source Operator
@@ -369,7 +369,7 @@ type hashTable struct {
 	// index + 1.
 	vals []coldata.Vec
 	// valTypes stores the corresponding types of the val columns.
-	valTypes []types.T
+	valTypes []coltypes.T
 	// valCols stores the union of the keyCols and outCols.
 	valCols []uint32
 	// keyCols stores the indices of vals which are key columns.
@@ -378,7 +378,7 @@ type hashTable struct {
 	// outCols stores the indices of vals which are output columns.
 	outCols []uint32
 	// outTypes stores the types of the output columns.
-	outTypes []types.T
+	outTypes []coltypes.T
 
 	// size returns the total number of keyCols the hashTable currently stores.
 	size uint64
@@ -417,7 +417,7 @@ type hashTable struct {
 
 func makeHashTable(
 	bucketSize uint64,
-	sourceTypes []types.T,
+	sourceTypes []coltypes.T,
 	eqCols []uint32,
 	outCols []uint32,
 	allowNullEquality bool,
@@ -440,7 +440,7 @@ func makeHashTable(
 	cols := make([]coldata.Vec, 0, nCols)
 	nKeep := uint32(0)
 
-	keepTypes := make([]types.T, 0, nCols)
+	keepTypes := make([]coltypes.T, 0, nCols)
 	keepCols := make([]uint32, 0, nCols)
 
 	for i := 0; i < nCols; i++ {
@@ -456,7 +456,7 @@ func makeHashTable(
 
 	// Extract and types and indices of the	 eqCols and outCols.
 	nKeys := len(eqCols)
-	keyTypes := make([]types.T, nKeys)
+	keyTypes := make([]coltypes.T, nKeys)
 	keys := make([]uint32, nKeys)
 	for i, colIdx := range eqCols {
 		keyTypes[i] = sourceTypes[colIdx]
@@ -464,7 +464,7 @@ func makeHashTable(
 	}
 
 	nOutCols := len(outCols)
-	outTypes := make([]types.T, nOutCols)
+	outTypes := make([]coltypes.T, nOutCols)
 	outs := make([]uint32, nOutCols)
 	for i, colIdx := range outCols {
 		outTypes[i] = sourceTypes[colIdx]
@@ -739,10 +739,10 @@ func makeHashJoinProber(
 	buildRightSide bool,
 	buildDistinct bool,
 ) *hashJoinProber {
-	// Prepare the output batch by allocating with the correct column types.
+	// Prepare the output batch by allocating with the correct column coltypes.
 	nBuildCols := uint32(len(build.sourceTypes))
 
-	var outColTypes []types.T
+	var outColTypes []coltypes.T
 	var buildColOffset, probeColOffset uint32
 	if buildRightSide {
 		outColTypes = append(probe.sourceTypes, build.sourceTypes...)
@@ -1022,8 +1022,8 @@ func NewEqHashJoinerOp(
 	rightEqCols []uint32,
 	leftOutCols []uint32,
 	rightOutCols []uint32,
-	leftTypes []types.T,
-	rightTypes []types.T,
+	leftTypes []coltypes.T,
+	rightTypes []coltypes.T,
 	buildRightSide bool,
 	buildDistinct bool,
 	joinType sqlbase.JoinType,

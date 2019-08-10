@@ -13,8 +13,8 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 // coalescerOp consumes the input operator and coalesces the resulting batches
@@ -22,7 +22,7 @@ import (
 type coalescerOp struct {
 	OneInputNode
 
-	inputTypes []types.T
+	inputTypes []coltypes.T
 
 	group  coldata.Batch
 	buffer coldata.Batch
@@ -31,8 +31,8 @@ type coalescerOp struct {
 var _ StaticMemoryOperator = &coalescerOp{}
 
 // NewCoalescerOp creates a new coalescer operator on the given input operator
-// with the given column types.
-func NewCoalescerOp(input Operator, colTypes []types.T) Operator {
+// with the given column coltypes.
+func NewCoalescerOp(input Operator, colTypes []coltypes.T) Operator {
 	return &coalescerOp{
 		OneInputNode: NewOneInputNode(input),
 		inputTypes:   colTypes,
