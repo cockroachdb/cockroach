@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 // Batch is the type that columnar operators receive and produce. It
@@ -39,12 +39,12 @@ type Batch interface {
 	// SetSelection sets whether this batch is using its selection vector or not.
 	SetSelection(bool)
 	// AppendCol appends a Vec with the specified type to this batch.
-	AppendCol(types.T)
+	AppendCol(coltypes.T)
 	// Reset modifies the caller in-place to have the given length and columns
-	// with the given types. If it's possible, Reset will reuse the existing
+	// with the given coltypes. If it's possible, Reset will reuse the existing
 	// columns and allocations, invalidating existing references to the Batch or
 	// its Vecs. However, Reset does _not_ zero out the column data.
-	Reset(types []types.T, length int)
+	Reset(types []coltypes.T, length int)
 }
 
 var _ Batch = &MemBatch{}
@@ -55,13 +55,13 @@ const BatchSize = 1024
 
 // NewMemBatch allocates a new in-memory Batch.
 // TODO(jordan): pool these allocations.
-func NewMemBatch(types []types.T) Batch {
+func NewMemBatch(types []coltypes.T) Batch {
 	return NewMemBatchWithSize(types, BatchSize)
 }
 
 // NewMemBatchWithSize allocates a new in-memory Batch with the given column
 // size. Use for operators that have a precisely-sized output batch.
-func NewMemBatchWithSize(types []types.T, size int) Batch {
+func NewMemBatchWithSize(types []coltypes.T, size int) Batch {
 	if max := math.MaxUint16; size > max {
 		panic(fmt.Sprintf(`batches cannot have length larger than %d; requested %d`, max, size))
 	}
@@ -127,12 +127,12 @@ func (m *MemBatch) SetLength(n uint16) {
 }
 
 // AppendCol implements the Batch interface.
-func (m *MemBatch) AppendCol(t types.T) {
+func (m *MemBatch) AppendCol(t coltypes.T) {
 	m.b = append(m.b, NewMemColumn(t, BatchSize))
 }
 
 // Reset implements the Batch interface.
-func (m *MemBatch) Reset(types []types.T, length int) {
+func (m *MemBatch) Reset(types []coltypes.T, length int) {
 	// The columns are always sized the same as the selection vector, so use it as
 	// a shortcut for the capacity (like a go slice, the batch's `Length` could be
 	// shorter than the capacity). We could be more defensive and type switch

@@ -21,8 +21,8 @@ package exec
 
 import (
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
 )
@@ -44,7 +44,7 @@ func _ASSIGN_ADD(_, _, _ string) {
 
 // */}}
 
-func newSumAgg(t types.T) (aggregateFunc, error) {
+func newSumAgg(t coltypes.T) (aggregateFunc, error) {
 	switch t {
 	// {{range .}}
 	case _TYPES_T:

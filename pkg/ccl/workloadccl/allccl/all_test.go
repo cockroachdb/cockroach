@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -192,7 +192,7 @@ func hashTableInitialData(
 		data.FillBatch(batchIdx, b, a)
 		for _, col := range b.ColVecs() {
 			switch col.Type() {
-			case types.Bool:
+			case coltypes.Bool:
 				for _, x := range col.Bool()[:b.Length()] {
 					if x {
 						scratch[0] = 1
@@ -201,18 +201,18 @@ func hashTableInitialData(
 					}
 					_, _ = h.Write(scratch[:1])
 				}
-			case types.Int64:
+			case coltypes.Int64:
 				for _, x := range col.Int64()[:b.Length()] {
 					binary.LittleEndian.PutUint64(scratch[:8], uint64(x))
 					_, _ = h.Write(scratch[:8])
 				}
-			case types.Float64:
+			case coltypes.Float64:
 				for _, x := range col.Float64()[:b.Length()] {
 					bits := math.Float64bits(x)
 					binary.LittleEndian.PutUint64(scratch[:8], bits)
 					_, _ = h.Write(scratch[:8])
 				}
-			case types.Bytes:
+			case coltypes.Bytes:
 				colBytes := col.Bytes()
 				for i := 0; i < int(b.Length()); i++ {
 					_, _ = h.Write(colBytes.Get(i))

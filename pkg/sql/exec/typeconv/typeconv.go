@@ -8,55 +8,55 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package conv
+package typeconv
 
 import (
 	"fmt"
 	"reflect"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
 )
 
 // FromColumnType returns the T that corresponds to the input ColumnType.
-func FromColumnType(ct *semtypes.T) types.T {
+func FromColumnType(ct *types.T) coltypes.T {
 	switch ct.Family() {
-	case semtypes.BoolFamily:
-		return types.Bool
-	case semtypes.BytesFamily, semtypes.StringFamily:
-		return types.Bytes
-	case semtypes.DateFamily, semtypes.OidFamily:
-		return types.Int64
-	case semtypes.DecimalFamily:
-		return types.Decimal
-	case semtypes.IntFamily:
+	case types.BoolFamily:
+		return coltypes.Bool
+	case types.BytesFamily, types.StringFamily:
+		return coltypes.Bytes
+	case types.DateFamily, types.OidFamily:
+		return coltypes.Int64
+	case types.DecimalFamily:
+		return coltypes.Decimal
+	case types.IntFamily:
 		switch ct.Width() {
 		case 8:
-			return types.Int8
+			return coltypes.Int8
 		case 16:
-			return types.Int16
+			return coltypes.Int16
 		case 32:
-			return types.Int32
+			return coltypes.Int32
 		case 0, 64:
-			return types.Int64
+			return coltypes.Int64
 		}
 		panic(fmt.Sprintf("integer with unknown width %d", ct.Width()))
-	case semtypes.FloatFamily:
-		return types.Float64
+	case types.FloatFamily:
+		return coltypes.Float64
 	}
-	return types.Unhandled
+	return coltypes.Unhandled
 }
 
 // FromColumnTypes calls FromColumnType on each element of cts, returning the
 // resulting slice.
-func FromColumnTypes(cts []semtypes.T) ([]types.T, error) {
-	typs := make([]types.T, len(cts))
+func FromColumnTypes(cts []types.T) ([]coltypes.T, error) {
+	typs := make([]coltypes.T, len(cts))
 	for i := range typs {
 		typs[i] = FromColumnType(&cts[i])
-		if typs[i] == types.Unhandled {
+		if typs[i] == coltypes.Unhandled {
 			return nil, errors.Errorf("unsupported type %s", cts[i].String())
 		}
 	}
@@ -65,9 +65,9 @@ func FromColumnTypes(cts []semtypes.T) ([]types.T, error) {
 
 // GetDatumToPhysicalFn returns a function for converting a datum of the given
 // ColumnType to the corresponding Go type.
-func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) {
+func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
 	switch ct.Family() {
-	case semtypes.BoolFamily:
+	case types.BoolFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DBool)
 			if !ok {
@@ -75,7 +75,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			}
 			return bool(*d), nil
 		}
-	case semtypes.BytesFamily:
+	case types.BytesFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DBytes)
 			if !ok {
@@ -83,7 +83,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			}
 			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
 		}
-	case semtypes.IntFamily:
+	case types.IntFamily:
 		switch ct.Width() {
 		case 8:
 			return func(datum tree.Datum) (interface{}, error) {
@@ -119,7 +119,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			}
 		}
 		panic(fmt.Sprintf("unhandled INT width %d", ct.Width()))
-	case semtypes.DateFamily:
+	case types.DateFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DDate)
 			if !ok {
@@ -127,7 +127,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			}
 			return d.UnixEpochDaysWithOrig(), nil
 		}
-	case semtypes.FloatFamily:
+	case types.FloatFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DFloat)
 			if !ok {
@@ -135,7 +135,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			}
 			return float64(*d), nil
 		}
-	case semtypes.OidFamily:
+	case types.OidFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DOid)
 			if !ok {
@@ -143,7 +143,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			}
 			return int64(d.DInt), nil
 		}
-	case semtypes.StringFamily:
+	case types.StringFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			// Handle other STRING-related OID types, like oid.T_name.
 			wrapper, ok := datum.(*tree.DOidWrapper)
@@ -157,7 +157,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			}
 			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
 		}
-	case semtypes.DecimalFamily:
+	case types.DecimalFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DDecimal)
 			if !ok {

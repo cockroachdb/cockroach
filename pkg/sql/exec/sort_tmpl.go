@@ -25,10 +25,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -46,13 +46,13 @@ var _ apd.Decimal
 var _ tree.Datum
 
 // _GOTYPESLICE is the template Go type slice variable for this operator. It
-// will be replaced by the Go slice representation for each type in types.T, for
-// example []int64 for types.Int64.
+// will be replaced by the Go slice representation for each type in coltypes.T, for
+// example []int64 for coltypes.Int64.
 type _GOTYPESLICE interface{}
 
-// _TYPES_T is the template type variable for types.T. It will be replaced by
-// types.Foo for each type Foo in the types.T type.
-const _TYPES_T = types.Unhandled
+// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
+// coltypes.Foo for each type Foo in the coltypes.T type.
+const _TYPES_T = coltypes.Unhandled
 
 // _ISNULL is the template type variable for whether the sorter handles nulls
 // or not. It will be replaced by the appropriate boolean.
@@ -69,7 +69,7 @@ func _ASSIGN_LT(_, _, _ string) bool {
 // Use execgen package to remove unused import warning.
 var _ interface{} = execgen.GET
 
-func isSorterSupported(t types.T, dir distsqlpb.Ordering_Column_Direction) bool {
+func isSorterSupported(t coltypes.T, dir distsqlpb.Ordering_Column_Direction) bool {
 	switch t {
 	// {{range $typ, $ := . }} {{/* for each type */}}
 	case _TYPES_T:
@@ -87,7 +87,9 @@ func isSorterSupported(t types.T, dir distsqlpb.Ordering_Column_Direction) bool 
 	}
 }
 
-func newSingleSorter(t types.T, dir distsqlpb.Ordering_Column_Direction, hasNulls bool) colSorter {
+func newSingleSorter(
+	t coltypes.T, dir distsqlpb.Ordering_Column_Direction, hasNulls bool,
+) colSorter {
 	switch t {
 	// {{range $typ, $ := . }} {{/* for each type */}}
 	case _TYPES_T:

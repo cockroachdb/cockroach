@@ -13,23 +13,23 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type defaultBuiltinFuncOperator struct {
 	OneInputNode
 	evalCtx        *tree.EvalContext
 	funcExpr       *tree.FuncExpr
-	columnTypes    []semtypes.T
+	columnTypes    []types.T
 	inputCols      []int
 	outputIdx      int
-	outputType     *semtypes.T
-	outputPhysType types.T
+	outputType     *types.T
+	outputPhysType coltypes.T
 	converter      func(tree.Datum) (interface{}, error)
 
 	row tree.Datums
@@ -102,7 +102,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 func NewBuiltinFunctionOperator(
 	evalCtx *tree.EvalContext,
 	funcExpr *tree.FuncExpr,
-	columnTypes []semtypes.T,
+	columnTypes []types.T,
 	inputCols []int,
 	outputIdx int,
 	input Operator,
@@ -119,8 +119,8 @@ func NewBuiltinFunctionOperator(
 		outputIdx:      outputIdx,
 		columnTypes:    columnTypes,
 		outputType:     outputType,
-		outputPhysType: conv.FromColumnType(outputType),
-		converter:      conv.GetDatumToPhysicalFn(outputType),
+		outputPhysType: typeconv.FromColumnType(outputType),
+		converter:      typeconv.GetDatumToPhysicalFn(outputType),
 		row:            make(tree.Datums, len(inputCols)),
 		inputCols:      inputCols,
 	}

@@ -21,13 +21,13 @@ package exec
 
 import (
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/pkg/errors"
 )
 
-func newAnyNotNullAgg(t types.T) (aggregateFunc, error) {
+func newAnyNotNullAgg(t coltypes.T) (aggregateFunc, error) {
 	switch t {
 	// {{range .}}
 	case _TYPES_T:
@@ -46,13 +46,13 @@ func newAnyNotNullAgg(t types.T) (aggregateFunc, error) {
 var _ apd.Decimal
 
 // _GOTYPESLICE is the template Go type slice variable for this operator. It
-// will be replaced by the Go slice representation for each type in types.T, for
-// example []int64 for types.Int64.
+// will be replaced by the Go slice representation for each type in coltypes.T, for
+// example []int64 for coltypes.Int64.
 type _GOTYPESLICE interface{}
 
-// _TYPES_T is the template type variable for types.T. It will be replaced by
-// types.Foo for each type Foo in the types.T type.
-const _TYPES_T = types.Unhandled
+// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
+// coltypes.Foo for each type Foo in the coltypes.T type.
+const _TYPES_T = coltypes.Unhandled
 
 // */}}
 

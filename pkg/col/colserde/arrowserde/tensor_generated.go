@@ -2,9 +2,7 @@
 
 package arrowserde
 
-import (
-	flatbuffers "github.com/google/flatbuffers/go"
-)
+import flatbuffers "github.com/google/flatbuffers/go"
 
 type SparseTensorIndex = byte
 const (
@@ -291,7 +289,9 @@ func (rcv *SparseTensorIndexCOO) IndicesBuffer(obj *Buffer) *Buffer {
 func SparseTensorIndexCOOStart(builder *flatbuffers.Builder) {
 	builder.StartObject(1)
 }
-func SparseTensorIndexCOOAddIndicesBuffer(builder *flatbuffers.Builder, indicesBuffer flatbuffers.UOffsetT) {
+func SparseTensorIndexCOOAddIndicesBuffer(
+	builder *flatbuffers.Builder, indicesBuffer flatbuffers.UOffsetT,
+) {
 	builder.PrependStructSlot(0, flatbuffers.UOffsetT(indicesBuffer), 0)
 }
 func SparseTensorIndexCOOEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
@@ -405,10 +405,14 @@ func (rcv *SparseMatrixIndexCSR) IndicesBuffer(obj *Buffer) *Buffer {
 func SparseMatrixIndexCSRStart(builder *flatbuffers.Builder) {
 	builder.StartObject(2)
 }
-func SparseMatrixIndexCSRAddIndptrBuffer(builder *flatbuffers.Builder, indptrBuffer flatbuffers.UOffsetT) {
+func SparseMatrixIndexCSRAddIndptrBuffer(
+	builder *flatbuffers.Builder, indptrBuffer flatbuffers.UOffsetT,
+) {
 	builder.PrependStructSlot(0, flatbuffers.UOffsetT(indptrBuffer), 0)
 }
-func SparseMatrixIndexCSRAddIndicesBuffer(builder *flatbuffers.Builder, indicesBuffer flatbuffers.UOffsetT) {
+func SparseMatrixIndexCSRAddIndicesBuffer(
+	builder *flatbuffers.Builder, indicesBuffer flatbuffers.UOffsetT,
+) {
 	builder.PrependStructSlot(1, flatbuffers.UOffsetT(indicesBuffer), 0)
 }
 func SparseMatrixIndexCSREnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {

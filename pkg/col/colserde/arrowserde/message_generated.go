@@ -2,9 +2,7 @@
 
 package arrowserde
 
-import (
-	flatbuffers "github.com/google/flatbuffers/go"
-)
+import flatbuffers "github.com/google/flatbuffers/go"
 
 /// ----------------------------------------------------------------------
 /// The root Message type
@@ -79,7 +77,9 @@ func (rcv *FieldNode) MutateNullCount(n int64) bool {
 	return rcv._tab.MutateInt64(rcv._tab.Pos+flatbuffers.UOffsetT(8), n)
 }
 
-func CreateFieldNode(builder *flatbuffers.Builder, length int64, nullCount int64) flatbuffers.UOffsetT {
+func CreateFieldNode(
+	builder *flatbuffers.Builder, length int64, nullCount int64,
+) flatbuffers.UOffsetT {
 	builder.Prep(8, 16)
 	builder.PrependInt64(nullCount)
 	builder.PrependInt64(length)
@@ -191,7 +191,9 @@ func RecordBatchStartNodesVector(builder *flatbuffers.Builder, numElems int) fla
 func RecordBatchAddBuffers(builder *flatbuffers.Builder, buffers flatbuffers.UOffsetT) {
 	builder.PrependUOffsetTSlot(2, flatbuffers.UOffsetT(buffers), 0)
 }
-func RecordBatchStartBuffersVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
+func RecordBatchStartBuffersVector(
+	builder *flatbuffers.Builder, numElems int,
+) flatbuffers.UOffsetT {
 	return builder.StartVector(16, numElems, 8)
 }
 func RecordBatchEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {

@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
@@ -84,8 +84,8 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			rightInput,
 			[]uint32{0},
 			[]uint32{0},
-			[]types.T{types.Int64},
-			[]types.T{types.Int64},
+			[]coltypes.T{coltypes.Int64},
+			[]coltypes.T{coltypes.Int64},
 			[]distsqlpb.Ordering_Column{{ColIdx: 0}},
 			[]distsqlpb.Ordering_Column{{ColIdx: 0}},
 		)
@@ -124,7 +124,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 }
 
 func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) Operator {
-	batch := coldata.NewMemBatchWithSize([]types.T{types.Int64}, batchSize)
+	batch := coldata.NewMemBatchWithSize([]coltypes.T{coltypes.Int64}, batchSize)
 	vec := batch.ColVec(0).Int64()
 	for i := 0; i < batchSize; i++ {
 		vec[i] = int64(i)

@@ -23,9 +23,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/pkg/errors"
 )
 
@@ -36,13 +36,13 @@ import (
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
 
-// _TYPES_T is the template type variable for types.T. It will be replaced by
-// types.Foo for each type Foo in the types.T type.
-const _TYPES_T = types.Unhandled
+// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
+// coltypes.Foo for each type Foo in the coltypes.T type.
+const _TYPES_T = coltypes.Unhandled
 
 // _GOTYPE is the template Go type variable for this operator. It will be
-// replaced by the Go type equivalent for each type in types.T, for example
-// int64 for types.Int64.
+// replaced by the Go type equivalent for each type in coltypes.T, for example
+// int64 for coltypes.Int64.
 type _GOTYPE interface{}
 
 // */}}
@@ -52,7 +52,9 @@ var _ interface{} = execgen.GET
 
 // NewConstOp creates a new operator that produces a constant value constVal of
 // type t at index outputIdx.
-func NewConstOp(input Operator, t types.T, constVal interface{}, outputIdx int) (Operator, error) {
+func NewConstOp(
+	input Operator, t coltypes.T, constVal interface{}, outputIdx int,
+) (Operator, error) {
 	switch t {
 	// {{range .}}
 	case _TYPES_T:
@@ -73,7 +75,7 @@ func NewConstOp(input Operator, t types.T, constVal interface{}, outputIdx int) 
 type const_TYPEOp struct {
 	OneInputNode
 
-	typ       types.T
+	typ       coltypes.T
 	outputIdx int
 	constVal  _GOTYPE
 }
@@ -134,7 +136,7 @@ func (c constNullOp) Next(ctx context.Context) coldata.Batch {
 	}
 
 	if batch.Width() == c.outputIdx {
-		batch.AppendCol(types.Int8)
+		batch.AppendCol(coltypes.Int8)
 	}
 	col := batch.ColVec(c.outputIdx)
 	nulls := col.Nulls()

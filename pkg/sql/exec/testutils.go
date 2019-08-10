@@ -13,7 +13,7 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 )
 
 // BatchBuffer exposes a buffer of coldata.Batches through an Operator

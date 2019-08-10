@@ -13,7 +13,7 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 )
 
 // boolVecToSelOp transforms a boolean column into a selection vector by adding

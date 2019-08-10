@@ -13,9 +13,9 @@ package exec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
 // NewWindowSortingPartitioner creates a new exec.Operator that orders input
@@ -25,7 +25,7 @@ import (
 // every tuple that is the first within its partition.
 func NewWindowSortingPartitioner(
 	input Operator,
-	inputTyps []types.T,
+	inputTyps []coltypes.T,
 	partitionIdxs []uint32,
 	ordCols []distsqlpb.Ordering_Column,
 	partitionColIdx int,
@@ -73,7 +73,7 @@ func (p *windowSortingPartitioner) Next(ctx context.Context) coldata.Batch {
 		return b
 	}
 	if p.partitionColIdx == b.Width() {
-		b.AppendCol(types.Bool)
+		b.AppendCol(coltypes.Bool)
 	} else if p.partitionColIdx > b.Width() {
 		panic("unexpected: column partitionColIdx is neither present nor the next to be appended")
 	}

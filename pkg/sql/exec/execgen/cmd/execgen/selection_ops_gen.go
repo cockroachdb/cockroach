@@ -14,7 +14,7 @@ import (
 	"io"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 const selTemplate = `
@@ -25,11 +25,11 @@ import (
   "context"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -173,7 +173,7 @@ func (p {{template "opName" .}}) Init() {
 }
 {{end}}
 
-{{/* The outer range is a types.T, and the inner is the overloads associated
+{{/* The outer range is a coltypes.T, and the inner is the overloads associated
      with that type. */}}
 {{range .}}
 {{range .}}
@@ -185,19 +185,19 @@ func (p {{template "opName" .}}) Init() {
 // GetSelectionConstOperator returns the appropriate constant selection operator
 // for the given column type and comparison.
 func GetSelectionConstOperator(
-	ct *semtypes.T,
+	ct *types.T,
 	cmpOp tree.ComparisonOperator,
 	input Operator,
 	colIdx int,
 	constArg tree.Datum,
 ) (Operator, error) {
-	c, err := conv.GetDatumToPhysicalFn(ct)(constArg)
+	c, err := typeconv.GetDatumToPhysicalFn(ct)(constArg)
 	if err != nil {
 		return nil, err
 	}
-	switch t := conv.FromColumnType(ct); t {
+	switch t := typeconv.FromColumnType(ct); t {
 	{{range $typ, $overloads := .}}
-	case types.{{$typ}}:
+	case coltypes.{{$typ}}:
 		switch cmpOp {
 		{{range $overloads}}
 		case tree.{{.Name}}:
@@ -219,15 +219,15 @@ func GetSelectionConstOperator(
 // GetSelectionOperator returns the appropriate two column selection operator
 // for the given column type and comparison.
 func GetSelectionOperator(
-	ct *semtypes.T,
+	ct *types.T,
 	cmpOp tree.ComparisonOperator,
 	input Operator,
 	col1Idx int,
 	col2Idx int,
 ) (Operator, error) {
-	switch t := conv.FromColumnType(ct); t {
+	switch t := typeconv.FromColumnType(ct); t {
 	{{range $typ, $overloads := .}}
-	case types.{{$typ}}:
+	case coltypes.{{$typ}}:
 		switch cmpOp {
 		{{range $overloads}}
 		case tree.{{.Name}}:
@@ -248,7 +248,7 @@ func GetSelectionOperator(
 `
 
 func genSelectionOps(wr io.Writer) error {
-	typToOverloads := make(map[types.T][]*overload)
+	typToOverloads := make(map[coltypes.T][]*overload)
 	for _, overload := range comparisonOpOverloads {
 		typ := overload.LTyp
 		typToOverloads[typ] = append(typToOverloads[typ], overload)

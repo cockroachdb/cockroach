@@ -14,7 +14,7 @@ import (
 	"io"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 const projTemplate = `
@@ -26,11 +26,11 @@ import (
   "math"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -49,7 +49,7 @@ type {{template "opRConstName" .}} struct {
 }
 
 func (p {{template "opRConstName" .}}) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]types.T{types.{{.RetTyp}}}, coldata.BatchSize)
+	return EstimateBatchSizeBytes([]coltypes.T{coltypes.{{.RetTyp}}}, coldata.BatchSize)
 }
 
 func (p {{template "opRConstName" .}}) Next(ctx context.Context) coldata.Batch {
@@ -59,7 +59,7 @@ func (p {{template "opRConstName" .}}) Next(ctx context.Context) coldata.Batch {
 		return batch
 	}
 	if p.outputIdx == batch.Width() {
-		batch.AppendCol(types.{{.RetTyp}})
+		batch.AppendCol(coltypes.{{.RetTyp}})
 	}
 	vec := batch.ColVec(p.colIdx)
 	col := vec.{{.LTyp}}()
@@ -102,7 +102,7 @@ type {{template "opLConstName" .}} struct {
 }
 
 func (p {{template "opLConstName" .}}) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]types.T{types.{{.RetTyp}}}, coldata.BatchSize)
+	return EstimateBatchSizeBytes([]coltypes.T{coltypes.{{.RetTyp}}}, coldata.BatchSize)
 }
 
 func (p {{template "opLConstName" .}}) Next(ctx context.Context) coldata.Batch {
@@ -112,7 +112,7 @@ func (p {{template "opLConstName" .}}) Next(ctx context.Context) coldata.Batch {
 		return batch
 	}
 	if p.outputIdx == batch.Width() {
-		batch.AppendCol(types.{{.RetTyp}})
+		batch.AppendCol(coltypes.{{.RetTyp}})
 	}
 	vec := batch.ColVec(p.colIdx)
 	col := vec.{{.RTyp}}()
@@ -155,7 +155,7 @@ type {{template "opName" .}} struct {
 }
 
 func (p {{template "opName" .}}) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]types.T{types.{{.RetTyp}}}, coldata.BatchSize)
+	return EstimateBatchSizeBytes([]coltypes.T{coltypes.{{.RetTyp}}}, coldata.BatchSize)
 }
 
 func (p {{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
@@ -165,7 +165,7 @@ func (p {{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 		return batch
 	}
 	if p.outputIdx == batch.Width() {
-		batch.AppendCol(types.{{.RetTyp}})
+		batch.AppendCol(coltypes.{{.RetTyp}})
 	}
 	projVec := batch.ColVec(p.outputIdx)
 	projCol := projVec.{{.RetTyp}}()
@@ -201,7 +201,7 @@ func (p {{template "opName" .}}) Init() {
 }
 {{end}}
 
-{{/* The outer range is a types.T, and the inner is the overloads associated
+{{/* The outer range is a coltypes.T, and the inner is the overloads associated
      with that type. */}}
 {{range .TypToOverloads}}
 {{range .}}
@@ -217,20 +217,20 @@ func (p {{template "opName" .}}) Init() {
 // GetProjectionConstOperator returns the appropriate constant projection
 // operator for the given column type and comparison.
 func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
-	ct *semtypes.T,
+	ct *types.T,
 	op tree.Operator,
 	input Operator,
 	colIdx int,
 	constArg tree.Datum,
   outputIdx int,
 ) (Operator, error) {
-	c, err := conv.GetDatumToPhysicalFn(ct)(constArg)
+	c, err := typeconv.GetDatumToPhysicalFn(ct)(constArg)
 	if err != nil {
 		return nil, err
 	}
-	switch t := conv.FromColumnType(ct); t {
+	switch t := typeconv.FromColumnType(ct); t {
 	{{range $typ, $overloads := $.TypToOverloads}}
-	case types.{{$typ}}:
+	case coltypes.{{$typ}}:
 		switch op.(type) {
 		case tree.BinaryOperator:
 			switch op {
@@ -277,16 +277,16 @@ func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
 // GetProjectionOperator returns the appropriate projection operator for the
 // given column type and comparison.
 func GetProjectionOperator(
-	ct *semtypes.T,
+	ct *types.T,
 	op tree.Operator,
 	input Operator,
 	col1Idx int,
 	col2Idx int,
   outputIdx int,
 ) (Operator, error) {
-	switch t := conv.FromColumnType(ct); t {
+	switch t := typeconv.FromColumnType(ct); t {
 	{{range $typ, $overloads := .TypToOverloads}}
-	case types.{{$typ}}:
+	case coltypes.{{$typ}}:
 		switch op.(type) {
 		case tree.BinaryOperator:
 			switch op {
@@ -331,7 +331,7 @@ func GetProjectionOperator(
 `
 
 type genInput struct {
-	TypToOverloads map[types.T][]*overload
+	TypToOverloads map[coltypes.T][]*overload
 	// ConstSides is a boolean array that contains two elements, true and false.
 	// It's used by the template to generate both variants of the const projection
 	// op - once where the left is const, and one where the right is const.
@@ -348,7 +348,7 @@ func genProjectionOps(wr io.Writer) error {
 	allOverloads = append(allOverloads, binaryOpOverloads...)
 	allOverloads = append(allOverloads, comparisonOpOverloads...)
 
-	typToOverloads := make(map[types.T][]*overload)
+	typToOverloads := make(map[coltypes.T][]*overload)
 	for _, overload := range allOverloads {
 		typ := overload.LTyp
 		typToOverloads[typ] = append(typToOverloads[typ], overload)

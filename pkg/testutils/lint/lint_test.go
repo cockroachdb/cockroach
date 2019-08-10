@@ -1436,6 +1436,8 @@ func TestLint(t *testing.T) {
 		vetCmd(t, crdb.Dir, "roachlint", []string{pkgScope}, []stream.Filter{
 			// Ignore generated files.
 			stream.GrepNot(`pkg/.*\.pb\.go:`),
+			stream.GrepNot(`pkg/col/coldata/.*\.eg\.go:`),
+			stream.GrepNot(`pkg/col/colserde/arrowserde/.*_generated\.go:`),
 			stream.GrepNot(`pkg/sql/exec/.*\.eg\.go:`),
 			stream.GrepNot(`pkg/sql/exec/.*_generated\.go:`),
 			stream.GrepNot(`pkg/sql/pgwire/hba/conf.go:`),

@@ -26,9 +26,9 @@ import (
 	"reflect"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -61,9 +61,9 @@ func _ASSIGN_NE(_, _, _ interface{}) uint64 {
 	panic("")
 }
 
-// _TYPES_T is the template type variable for types.T. It will be replaced by
-// types.Foo for each type Foo in the types.T type.
-const _TYPES_T = types.Unhandled
+// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
+// coltypes.Foo for each type Foo in the coltypes.T type.
+const _TYPES_T = coltypes.Unhandled
 
 // _SEL_IND is the template type variable for the loop variable that's either
 // i or sel[i] depending on whether we're in a selection or not.
@@ -299,7 +299,7 @@ func (ht *hashTable) rehash(
 	ctx context.Context,
 	buckets []uint64,
 	keyIdx int,
-	t types.T,
+	t coltypes.T,
 	col coldata.Vec,
 	nKeys uint64,
 	sel []uint16,
@@ -333,7 +333,7 @@ func (ht *hashTable) rehash(
 // to differs. If the bucket has reached the end, the key is rejected. If the
 // hashTable disallows null equality, then if any element in the key is null,
 // there is no match.
-func (ht *hashTable) checkCol(t types.T, keyColIdx int, nToCheck uint16, sel []uint16) {
+func (ht *hashTable) checkCol(t coltypes.T, keyColIdx int, nToCheck uint16, sel []uint16) {
 	switch t {
 	// {{range $neType := .NETemplate}}
 	case _TYPES_T:

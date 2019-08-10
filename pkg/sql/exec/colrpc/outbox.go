@@ -16,12 +16,12 @@ import (
 	"io"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/colserde"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
@@ -47,7 +47,7 @@ type Dialer interface {
 type Outbox struct {
 	exec.OneInputNode
 
-	typs []types.T
+	typs []coltypes.T
 	// batch is the last batch received from the input.
 	batch coldata.Batch
 
@@ -66,7 +66,7 @@ type Outbox struct {
 
 // NewOutbox creates a new Outbox.
 func NewOutbox(
-	input exec.Operator, typs []types.T, metadataSources []distsqlpb.MetadataSource,
+	input exec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource,
 ) (*Outbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {

@@ -11,7 +11,7 @@
 // {{/*
 // +build execgen_template
 //
-// This file is the execgen template for colvec.eg.go. It's formatted in a
+// This file is the execgen template for vec.eg.go. It's formatted in a
 // special way, so it's both valid Go and a valid text/template input. This
 // permits editing this file with editor support.
 //
@@ -23,17 +23,21 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	// */}}
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	// HACK: crlfmt removes the "*/}}" comment if it's the last line in the import
+	// block. This was picked because it sorts after "pkg/sql/exec/execgen" and
+	// has no deps.
+	_ "github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 )
 
 // {{/*
 
-// _TYPES_T is the template type variable for types.T. It will be replaced by
-// types.Foo for each type Foo in the types.T type.
-const _TYPES_T = types.Unhandled
+// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
+// coltypes.Foo for each type Foo in the coltypes.T type.
+const _TYPES_T = coltypes.Unhandled
 
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
@@ -180,7 +184,7 @@ func (m *memColumn) Copy(args CopyArgs) {
 	}
 }
 
-func (m *memColumn) Slice(colType types.T, start uint64, end uint64) Vec {
+func (m *memColumn) Slice(colType coltypes.T, start uint64, end uint64) Vec {
 	switch colType {
 	// {{range .}}
 	case _TYPES_T:
@@ -195,7 +199,7 @@ func (m *memColumn) Slice(colType types.T, start uint64, end uint64) Vec {
 	}
 }
 
-func (m *memColumn) PrettyValueAt(colIdx uint16, colType types.T) string {
+func (m *memColumn) PrettyValueAt(colIdx uint16, colType coltypes.T) string {
 	if m.nulls.NullAt(colIdx) {
 		return "NULL"
 	}
@@ -212,7 +216,7 @@ func (m *memColumn) PrettyValueAt(colIdx uint16, colType types.T) string {
 }
 
 // Helper to set the value in a Vec when the type is unknown.
-func SetValueAt(v Vec, elem interface{}, rowIdx uint16, colType types.T) {
+func SetValueAt(v Vec, elem interface{}, rowIdx uint16, colType coltypes.T) {
 	switch colType {
 	// {{range .}}
 	case _TYPES_T:

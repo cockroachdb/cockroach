@@ -17,7 +17,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -68,11 +68,11 @@ type overload struct {
 	BinOp tree.BinaryOperator
 	// OpStr is the string form of whichever of CmpOp and BinOp are set.
 	OpStr   string
-	LTyp    types.T
-	RTyp    types.T
+	LTyp    coltypes.T
+	RTyp    coltypes.T
 	LGoType string
 	RGoType string
-	RetTyp  types.T
+	RetTyp  coltypes.T
 
 	AssignFunc  assignFunc
 	CompareFunc compareFunc
@@ -144,8 +144,8 @@ func (o overload) UnaryAssign(target, v string) string {
 func init() {
 	registerTypeCustomizers()
 
-	// Build overload definitions for basic types.
-	inputTypes := types.AllTypes
+	// Build overload definitions for basic coltypes.
+	inputTypes := coltypes.AllTypes
 	binOps := []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div}
 	cmpOps := []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE}
 	binaryOpToOverloads = make(map[tree.BinaryOperator][]*overload, len(binaryOpName))
@@ -155,7 +155,7 @@ func init() {
 		for _, op := range binOps {
 			// Skip types that don't have associated binary ops.
 			switch t {
-			case types.Bytes, types.Bool:
+			case coltypes.Bytes, coltypes.Bool:
 				continue
 			}
 			ov := &overload{
@@ -188,7 +188,7 @@ func init() {
 				RTyp:    t,
 				LGoType: t.GoTypeName(),
 				RGoType: t.GoTypeName(),
-				RetTyp:  types.Bool,
+				RetTyp:  coltypes.Bool,
 			}
 			if customizer != nil {
 				if b, ok := customizer.(cmpOpTypeCustomizer); ok {
@@ -228,11 +228,11 @@ func init() {
 // (==, <, etc) or binary operator (+, -, etc) semantics.
 type typeCustomizer interface{}
 
-var typeCustomizers map[types.T]typeCustomizer
+var typeCustomizers map[coltypes.T]typeCustomizer
 
 // registerTypeCustomizer registers a particular type customizer to a type, for
 // usage by templates.
-func registerTypeCustomizer(t types.T, customizer typeCustomizer) {
+func registerTypeCustomizer(t coltypes.T, customizer typeCustomizer) {
 	typeCustomizers[t] = customizer
 }
 
@@ -466,16 +466,16 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 }
 
 func registerTypeCustomizers() {
-	typeCustomizers = make(map[types.T]typeCustomizer)
-	registerTypeCustomizer(types.Bool, boolCustomizer{})
-	registerTypeCustomizer(types.Bytes, bytesCustomizer{})
-	registerTypeCustomizer(types.Decimal, decimalCustomizer{})
-	registerTypeCustomizer(types.Float32, floatCustomizer{width: 32})
-	registerTypeCustomizer(types.Float64, floatCustomizer{width: 64})
-	registerTypeCustomizer(types.Int8, intCustomizer{width: 8})
-	registerTypeCustomizer(types.Int16, intCustomizer{width: 16})
-	registerTypeCustomizer(types.Int32, intCustomizer{width: 32})
-	registerTypeCustomizer(types.Int64, intCustomizer{width: 64})
+	typeCustomizers = make(map[coltypes.T]typeCustomizer)
+	registerTypeCustomizer(coltypes.Bool, boolCustomizer{})
+	registerTypeCustomizer(coltypes.Bytes, bytesCustomizer{})
+	registerTypeCustomizer(coltypes.Decimal, decimalCustomizer{})
+	registerTypeCustomizer(coltypes.Float32, floatCustomizer{width: 32})
+	registerTypeCustomizer(coltypes.Float64, floatCustomizer{width: 64})
+	registerTypeCustomizer(coltypes.Int8, intCustomizer{width: 8})
+	registerTypeCustomizer(coltypes.Int16, intCustomizer{width: 16})
+	registerTypeCustomizer(coltypes.Int32, intCustomizer{width: 32})
+	registerTypeCustomizer(coltypes.Int64, intCustomizer{width: 64})
 }
 
 // Avoid unused warning for functions which are only used in templates.
@@ -508,8 +508,8 @@ func buildDict(values ...interface{}) (map[string]interface{}, error) {
 // intersection is determined to be the maximum common set of LTyp types shared
 // by each overloads.
 func intersectOverloads(allOverloads ...[]*overload) [][]*overload {
-	inputTypes := types.AllTypes
-	keepTypes := make(map[types.T]bool, len(inputTypes))
+	inputTypes := coltypes.AllTypes
+	keepTypes := make(map[coltypes.T]bool, len(inputTypes))
 
 	for _, t := range inputTypes {
 		keepTypes[t] = true

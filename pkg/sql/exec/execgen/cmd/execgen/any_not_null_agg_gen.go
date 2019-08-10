@@ -17,7 +17,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 func genAnyNotNullAgg(wr io.Writer) error {
@@ -29,7 +29,7 @@ func genAnyNotNullAgg(wr io.Writer) error {
 	s := string(t)
 
 	s = strings.Replace(s, "_GOTYPESLICE", "{{.GoTypeSliceName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "types.{{.}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.}}", -1)
 
@@ -48,7 +48,7 @@ func genAnyNotNullAgg(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, types.AllTypes)
+	return tmpl.Execute(wr, coltypes.AllTypes)
 }
 
 func init() {
