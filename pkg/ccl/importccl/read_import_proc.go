@@ -14,9 +14,11 @@ import (
 	"context"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -526,6 +528,47 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 	}
 	defer indexAdder.Close(ctx)
 
+	// Setup progress tracking:
+	//  - offsets maps source file IDs to offsets in the slices below.
+	//  - writtenRow contains LastRow of batch most recently added to the buffer.
+	//  - writtenFraction contains % of the input finished as of last batch.
+	//  - pkFlushedRow contains `writtenRow` as of the last pk adder flush.
+	//  - idxFlushedRow contains `writtenRow` as of the last index adder flush.
+	// In pkFlushedRow, idxFlushedRow and writtenFaction values are written via
+	// `atomic` so the progress reporting go goroutine can read them.
+	writtenRow := make([]uint64, len(cp.spec.Uri))
+	writtenFraction := make([]uint32, len(cp.spec.Uri))
+
+	pkFlushedRow := make([]uint64, len(cp.spec.Uri))
+	idxFlushedRow := make([]uint64, len(cp.spec.Uri))
+
+	// When the PK adder flushes, everything written has been flushed, swe set
+	// pkFlushedRow to writtenRow. Additionally if the indexAdder is empty then we
+	// can treat it as flushed as well (in case we're not adding anything to it).
+	pkIndexAdder.SetOnFlush(func() {
+		for _, i := range writtenRow {
+			atomic.StoreUint64(&pkFlushedRow[i], writtenRow[i])
+		}
+		if indexAdder.IsEmpty() {
+			for _, i := range writtenRow {
+				atomic.StoreUint64(&idxFlushedRow[i], writtenRow[i])
+			}
+		}
+	})
+	indexAdder.SetOnFlush(func() {
+		for _, i := range writtenRow {
+			atomic.StoreUint64(&idxFlushedRow[i], writtenRow[i])
+		}
+	})
+
+	// offsets maps input file ID to a slot in our progress tracking slices.
+	offsets := make(map[int32]int, len(cp.spec.Uri))
+	var offset int
+	for i := range cp.spec.Uri {
+		offsets[i] = offset
+		offset++
+	}
+
 	// We insert splits at every index span of the table above. Since the
 	// BulkAdder is split aware when constructing SSTs, there is no risk of worst
 	// case overlap behavior in the resulting AddSSTable calls.
@@ -574,6 +617,9 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 				}
 			}
 		}
+		offset := offsets[kvBatch.Source]
+		writtenRow[offset] = kvBatch.LastRow
+		atomic.StoreUint32(&writtenFraction[offset], math.Float32bits(kvBatch.Progress))
 	}
 
 	if err := pkIndexAdder.Flush(ctx); err != nil {
