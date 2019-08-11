@@ -341,74 +341,11 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, progFn, cp.flowCtx.Cfg.Settings)
 	})
 	if cp.spec.IngestDirectly {
-		if err := cp.presplitTableBoundaries(ctx); err != nil {
-			return err
-		}
-
 		// IngestDirectly means this reader will just ingest the KVs that the
 		// producer emitted to the chan, and the only result we push into distsql at
 		// the end is one row containing an encoded BulkOpSummary.
 		group.GoCtx(func(ctx context.Context) error {
-			ctx, span := tracing.ChildSpan(ctx, "ingestKVs")
-			defer tracing.FinishSpan(span)
-
-			writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
-			const bufferSize = 64 << 20
-			flushSize := storageccl.MaxImportBatchSize(cp.flowCtx.Cfg.Settings)
-
-			// We create two bulk adders so as to combat the excessive flushing of
-			// small SSTs which was observed when using a single adder for both
-			// primary and secondary index kvs. The number of secondary index kvs are
-			// small, and so we expect the indexAdder to flush much less frequently
-			// than the pkIndexAdder.
-			pkIndexAdder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, bufferSize, flushSize, writeTS)
-			if err != nil {
-				return err
-			}
-			pkIndexAdder.SetName("pkIndexAdder")
-			pkIndexAdder.SetDisallowShadowing(true)
-			// AddSSTable with disallowShadowing=true does not consider a KV with the
-			// same ts and value to be a collision. This is to support the resumption
-			// of IMPORT jobs which might re-import some already ingested, but not
-			// checkpointed KVs.
-			//
-			// To provide a similar behavior with KVs within the same SST, we silently
-			// skip over duplicates with the same value, instead of throwing a
-			// uniqueness error.
-			pkIndexAdder.SkipLocalDuplicatesWithSameValues(true)
-			defer pkIndexAdder.Close(ctx)
-
-			indexAdder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, bufferSize, flushSize, writeTS)
-			if err != nil {
-				return err
-			}
-			indexAdder.SetName("indexAdder")
-			indexAdder.SetDisallowShadowing(true)
-			indexAdder.SkipLocalDuplicatesWithSameValues(true)
-			defer indexAdder.Close(ctx)
-
-			// Drain the kvCh using the BulkAdder until it closes.
-			if err := ingestKvs(ctx, pkIndexAdder, indexAdder, kvCh); err != nil {
-				return err
-			}
-
-			addedSummary := pkIndexAdder.GetSummary()
-			addedSummary.Add(indexAdder.GetSummary())
-			countsBytes, err := protoutil.Marshal(&addedSummary)
-			if err != nil {
-				return err
-			}
-			cs, err := cp.out.EmitRow(ctx, sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
-				sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
-			})
-			if err != nil {
-				return err
-			}
-			if cs != distsqlrun.NeedMoreRows {
-				return errors.New("unexpected closure of consumer")
-			}
-			return nil
+			return cp.ingestKvs(ctx, kvCh)
 		})
 	} else {
 		// Sample KVs
@@ -544,16 +481,54 @@ func (cp *readImportDataProcessor) presplitTableBoundaries(ctx context.Context) 
 
 // ingestKvs drains kvs from the channel until it closes, ingesting them using
 // the BulkAdder. It handles the required buffering/sorting/etc.
-func ingestKvs(
-	ctx context.Context,
-	pkIndexAdder storagebase.BulkAdder,
-	indexAdder storagebase.BulkAdder,
-	kvCh <-chan []roachpb.KeyValue,
+func (cp *readImportDataProcessor) ingestKvs(
+	ctx context.Context, kvCh <-chan []roachpb.KeyValue,
 ) error {
-	// We insert splits at every index span of the table prior to the invocation
-	// of this method. Since the BulkAdder is split aware when constructing SSTs,
-	// there is no risk of worst case overlap behavior in the resulting AddSSTable
-	// calls.
+	ctx, span := tracing.ChildSpan(ctx, "ingestKVs")
+	defer tracing.FinishSpan(span)
+
+	if err := cp.presplitTableBoundaries(ctx); err != nil {
+		return err
+	}
+
+	writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
+	const bufferSize = 64 << 20
+	flushSize := storageccl.MaxImportBatchSize(cp.flowCtx.Cfg.Settings)
+
+	// We create two bulk adders so as to combat the excessive flushing of
+	// small SSTs which was observed when using a single adder for both
+	// primary and secondary index kvs. The number of secondary index kvs are
+	// small, and so we expect the indexAdder to flush much less frequently
+	// than the pkIndexAdder.
+	pkIndexAdder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, bufferSize, flushSize, writeTS)
+	if err != nil {
+		return err
+	}
+	pkIndexAdder.SetName("pkIndexAdder")
+	pkIndexAdder.SetDisallowShadowing(true)
+	// AddSSTable with disallowShadowing=true does not consider a KV with the
+	// same ts and value to be a collision. This is to support the resumption
+	// of IMPORT jobs which might re-import some already ingested, but not
+	// checkpointed KVs.
+	//
+	// To provide a similar behavior with KVs within the same SST, we silently
+	// skip over duplicates with the same value, instead of throwing a
+	// uniqueness error.
+	pkIndexAdder.SkipLocalDuplicatesWithSameValues(true)
+	defer pkIndexAdder.Close(ctx)
+
+	indexAdder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, bufferSize, flushSize, writeTS)
+	if err != nil {
+		return err
+	}
+	indexAdder.SetName("indexAdder")
+	indexAdder.SetDisallowShadowing(true)
+	indexAdder.SkipLocalDuplicatesWithSameValues(true)
+	defer indexAdder.Close(ctx)
+
+	// We insert splits at every index span of the table above. Since the
+	// BulkAdder is split aware when constructing SSTs, there is no risk of worst
+	// case overlap behavior in the resulting AddSSTable calls.
 	//
 	// NB: We are getting rid of the pre-buffering stage which constructed
 	// separate buckets for each table's primary data, and flushed to the
@@ -613,6 +588,23 @@ func ingestKvs(
 			return errors.Wrap(err, "duplicate key in index")
 		}
 		return err
+	}
+
+	addedSummary := pkIndexAdder.GetSummary()
+	addedSummary.Add(indexAdder.GetSummary())
+	countsBytes, err := protoutil.Marshal(&addedSummary)
+	if err != nil {
+		return err
+	}
+	cs, err := cp.out.EmitRow(ctx, sqlbase.EncDatumRow{
+		sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
+		sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
+	})
+	if err != nil {
+		return err
+	}
+	if cs != distsqlrun.NeedMoreRows {
+		return errors.New("unexpected closure of consumer")
 	}
 	return nil
 }
