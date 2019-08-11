@@ -525,14 +525,17 @@ func (s *span) getTags() map[string]string {
 }
 
 func (s *span) getTagsLocked() map[string]string {
-	result := make(map[string]string)
-	if s.startTags == nil {
-		panic("!!!")
-	}
-	for _, tag := range s.startTags.Get() {
-		result[tag.Key()] = stringifyTagValue(tag.Value())
+	var result map[string]string
+	if s.startTags != nil {
+		result = make(map[string]string)
+		for _, tag := range s.startTags.Get() {
+			result[tag.Key()] = stringifyTagValue(tag.Value())
+		}
 	}
 	for k, v := range s.mu.tags {
+		if result == nil {
+			result = make(map[string]string)
+		}
 		result[k] = stringifyTagValue(v)
 	}
 	return result
