@@ -497,7 +497,8 @@ func (cp *readImportDataProcessor) ingestKvs(
 	}
 
 	writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
-	const bufferSize, flushSize = 64 << 20, 16 << 20
+	const bufferSize = 64 << 20
+	flushSize := storageccl.MaxImportBatchSize(cp.flowCtx.Cfg.Settings)
 
 	// We create two bulk adders so as to combat the excessive flushing of
 	// small SSTs which was observed when using a single adder for both
