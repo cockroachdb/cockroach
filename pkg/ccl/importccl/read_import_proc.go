@@ -299,13 +299,13 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, cp.spec.WalltimeNanos, singleTable, singleTableTargetCols, evalCtx)
 		}
 	case roachpb.IOFileFormat_MysqlOutfile:
-		conv, err = newMysqloutfileReader(kvCh, cp.spec.Format.MysqlOut, singleTable, evalCtx)
+		conv, err = newMysqloutfileReader(kvCh, cp.spec.Format.MysqlOut, singleTable, evalCtx, cp.spec.WalltimeNanos)
 	case roachpb.IOFileFormat_Mysqldump:
-		conv, err = newMysqldumpReader(kvCh, cp.spec.Tables, evalCtx)
+		conv, err = newMysqldumpReader(kvCh, cp.spec.Tables, evalCtx, cp.spec.WalltimeNanos)
 	case roachpb.IOFileFormat_PgCopy:
-		conv, err = newPgCopyReader(kvCh, cp.spec.Format.PgCopy, singleTable, evalCtx)
+		conv, err = newPgCopyReader(kvCh, cp.spec.Format.PgCopy, singleTable, evalCtx, cp.spec.WalltimeNanos)
 	case roachpb.IOFileFormat_PgDump:
-		conv, err = newPgDumpReader(kvCh, cp.spec.Format.PgDump, cp.spec.Tables, evalCtx)
+		conv, err = newPgDumpReader(kvCh, cp.spec.Format.PgDump, cp.spec.Tables, evalCtx, cp.spec.WalltimeNanos)
 	default:
 		err = errors.Errorf("Requested IMPORT format (%d) not supported by this node", cp.spec.Format.Format)
 	}

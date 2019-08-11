@@ -43,8 +43,9 @@ func newPgCopyReader(
 	opts roachpb.PgCopyOptions,
 	tableDesc *sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,
+	walltime int64,
 ) (*pgCopyReader, error) {
-	conv, err := row.NewDatumRowConverter(tableDesc, nil /* targetColNames */, evalCtx, kvCh)
+	conv, err := row.NewDatumRowConverter(tableDesc, noTargetCols, walltime, evalCtx, kvCh)
 	if err != nil {
 		return nil, err
 	}

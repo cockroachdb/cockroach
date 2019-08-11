@@ -188,7 +188,8 @@ func (sp *bulkRowWriter) Run(ctx context.Context) {
 
 	sp.input.Start(ctx)
 
-	conv, err := row.NewDatumRowConverter(&sp.spec.Table, nil /* targetColNames */, evalCtx, kvCh)
+	ts := sp.spec.Table.CreateAsOfTime.WallTime
+	conv, err := row.NewDatumRowConverter(&sp.spec.Table, nil /* targetColNames */, ts, evalCtx, kvCh)
 	if err != nil {
 		DrainAndClose(
 			ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)

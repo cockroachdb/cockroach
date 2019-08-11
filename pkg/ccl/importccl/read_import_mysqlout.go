@@ -35,8 +35,9 @@ func newMysqloutfileReader(
 	opts roachpb.MySQLOutfileOptions,
 	tableDesc *sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,
+	walltime int64,
 ) (*mysqloutfileReader, error) {
-	conv, err := row.NewDatumRowConverter(tableDesc, nil /* targetColNames */, evalCtx, kvCh)
+	conv, err := row.NewDatumRowConverter(tableDesc, noTargetCols, walltime, evalCtx, kvCh)
 	if err != nil {
 		return nil, err
 	}

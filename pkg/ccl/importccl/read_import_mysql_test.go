@@ -91,7 +91,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 	table := descForTable(t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 10, 20, NoFKs)
 	tables := map[string]*distsqlpb.ReadImportDataSpec_ImportTable{"simple": {Desc: table}}
 
-	converter, err := newMysqldumpReader(make(chan []roachpb.KeyValue, 10), tables, testEvalCtx)
+	converter, err := newMysqldumpReader(make(chan []roachpb.KeyValue, 10), tables, testEvalCtx, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
