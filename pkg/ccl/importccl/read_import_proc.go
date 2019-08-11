@@ -350,69 +350,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	} else {
 		// Sample KVs
 		group.GoCtx(func(ctx context.Context) error {
-
-			ctx, span := tracing.ChildSpan(ctx, "sendImportKVs")
-			defer tracing.FinishSpan(span)
-
-			var fn sampleFunc
-			var sampleAll bool
-			if cp.spec.SampleSize == 0 {
-				sampleAll = true
-			} else {
-				sr := sampleRate{
-					rnd:        rand.New(rand.NewSource(rand.Int63())),
-					sampleSize: float64(cp.spec.SampleSize),
-				}
-				fn = sr.sample
-			}
-
-			// Populate the split-point spans which have already been imported.
-			var completedSpans roachpb.SpanGroup
-			job, err := cp.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
-			if err != nil {
-				return err
-			}
-			progress := job.Progress()
-			if details, ok := progress.Details.(*jobspb.Progress_Import); ok {
-				completedSpans.Add(details.Import.SpanProgress...)
-			} else {
-				return errors.Errorf("unexpected progress type %T", progress)
-			}
-
-			for kvBatch := range kvCh {
-				for _, kv := range kvBatch {
-					// Allow KV pairs to be dropped if they belong to a completed span.
-					if completedSpans.Contains(kv.Key) {
-						continue
-					}
-
-					rowRequired := sampleAll || keys.IsDescriptorKey(kv.Key)
-					if rowRequired || fn(kv) {
-						var row sqlbase.EncDatumRow
-						if rowRequired {
-							row = sqlbase.EncDatumRow{
-								sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Key))),
-								sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
-							}
-						} else {
-							// Don't send the value for rows returned for sampling
-							row = sqlbase.EncDatumRow{
-								sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Key))),
-								sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
-							}
-						}
-
-						cs, err := cp.out.EmitRow(ctx, row)
-						if err != nil {
-							return err
-						}
-						if cs != distsqlrun.NeedMoreRows {
-							return errors.New("unexpected closure of consumer")
-						}
-					}
-				}
-			}
-			return nil
+			return cp.emitKvs(ctx, kvCh)
 		})
 	}
 
@@ -432,6 +370,73 @@ func (s sampleRate) sample(kv roachpb.KeyValue) bool {
 	sz := float64(len(kv.Key) + len(kv.Value.RawBytes))
 	prob := sz / s.sampleSize
 	return prob > s.rnd.Float64()
+}
+
+func (cp *readImportDataProcessor) emitKvs(
+	ctx context.Context, kvCh <-chan []roachpb.KeyValue,
+) error {
+	ctx, span := tracing.ChildSpan(ctx, "sendImportKVs")
+	defer tracing.FinishSpan(span)
+
+	var fn sampleFunc
+	var sampleAll bool
+	if cp.spec.SampleSize == 0 {
+		sampleAll = true
+	} else {
+		sr := sampleRate{
+			rnd:        rand.New(rand.NewSource(rand.Int63())),
+			sampleSize: float64(cp.spec.SampleSize),
+		}
+		fn = sr.sample
+	}
+
+	// Populate the split-point spans which have already been imported.
+	var completedSpans roachpb.SpanGroup
+	job, err := cp.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
+	if err != nil {
+		return err
+	}
+	progress := job.Progress()
+	if details, ok := progress.Details.(*jobspb.Progress_Import); ok {
+		completedSpans.Add(details.Import.SpanProgress...)
+	} else {
+		return errors.Errorf("unexpected progress type %T", progress)
+	}
+
+	for kvBatch := range kvCh {
+		for _, kv := range kvBatch {
+			// Allow KV pairs to be dropped if they belong to a completed span.
+			if completedSpans.Contains(kv.Key) {
+				continue
+			}
+
+			rowRequired := sampleAll || keys.IsDescriptorKey(kv.Key)
+			if rowRequired || fn(kv) {
+				var row sqlbase.EncDatumRow
+				if rowRequired {
+					row = sqlbase.EncDatumRow{
+						sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Key))),
+						sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
+					}
+				} else {
+					// Don't send the value for rows returned for sampling
+					row = sqlbase.EncDatumRow{
+						sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Key))),
+						sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
+					}
+				}
+
+				cs, err := cp.out.EmitRow(ctx, row)
+				if err != nil {
+					return err
+				}
+				if cs != distsqlrun.NeedMoreRows {
+					return errors.New("unexpected closure of consumer")
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func makeRowErr(file string, row int64, code, format string, args ...interface{}) error {
