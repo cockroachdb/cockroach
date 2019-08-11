@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Statement, error) {
@@ -88,6 +89,11 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 
 	flags := cat.Flags{AvoidDescriptorCaches: true, NoTableStats: true}
 	tn := n.Index.Table
+
+	// Throw a more descriptive error if the user did not use the index hint syntax.
+	if tn.TableName == "" {
+		return nil, errors.New("no table specified. Specify a table using the hint syntax of table@index")
+	}
 
 	dataSource, resName, err := d.catalog.ResolveDataSource(d.ctx, flags, &tn)
 	if err != nil {
