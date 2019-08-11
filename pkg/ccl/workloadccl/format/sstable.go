@@ -66,7 +66,7 @@ func ToSSTable(t workload.Table, tableID sqlbase.ID, ts time.Time) ([]byte, erro
 
 	kvCh := make(chan []roachpb.KeyValue)
 	wc := importccl.NewWorkloadKVConverter(
-		tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh)
+		tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh, ts.UnixNano())
 
 	var ssts addSSTableSender
 	g := ctxgroup.WithContext(ctx)

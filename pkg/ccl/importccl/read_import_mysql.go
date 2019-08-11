@@ -55,6 +55,7 @@ func newMysqldumpReader(
 	kvCh chan []roachpb.KeyValue,
 	tables map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
+	walltime int64,
 ) (*mysqldumpReader, error) {
 	res := &mysqldumpReader{evalCtx: evalCtx, kvCh: kvCh}
 
@@ -64,7 +65,7 @@ func newMysqldumpReader(
 			converters[name] = nil
 			continue
 		}
-		conv, err := row.NewDatumRowConverter(table.Desc, nil /* targetColNames */, evalCtx, kvCh)
+		conv, err := row.NewDatumRowConverter(table.Desc, noTargetCols, walltime, evalCtx, kvCh)
 		if err != nil {
 			return nil, err
 		}

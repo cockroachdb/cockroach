@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -182,6 +183,8 @@ type DatumRowConverter struct {
 	VisibleColTypes       []*types.T
 	defaultExprs          []tree.TypedExpr
 	computedIVarContainer sqlbase.RowIndexedVarContainer
+	// added to rowIdx to avoid rowId collisions on multiple incremental IMPORTs.
+	rowIDBase uint64
 }
 
 const kvDatumRowConverterBatchSize = 5000
@@ -190,6 +193,7 @@ const kvDatumRowConverterBatchSize = 5000
 func NewDatumRowConverter(
 	tableDesc *sqlbase.TableDescriptor,
 	targetColNames tree.NameList,
+	rowIDWalltimeNanos int64,
 	evalCtx *tree.EvalContext,
 	kvCh chan<- []roachpb.KeyValue,
 ) (*DatumRowConverter, error) {
@@ -199,6 +203,9 @@ func NewDatumRowConverter(
 		KvCh:      kvCh,
 		EvalCtx:   evalCtx,
 	}
+
+	const precision = uint64(10 * time.Microsecond)
+	c.rowIDBase = uint64(rowIDWalltimeNanos) / precision
 
 	var targetColDescriptors []sqlbase.ColumnDescriptor
 	var err error
@@ -299,7 +306,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, fileIndex int32, rowIndex i
 		// number in the node id portion. The 15 bits in that portion should account
 		// for up to 32k CSV files in a single IMPORT. In the case of > 32k files,
 		// the data is xor'd so the final bits are flipped instead of set.
-		c.Datums[c.hidden] = tree.NewDInt(builtins.GenerateUniqueID(fileIndex, uint64(rowIndex)))
+		c.Datums[c.hidden] = tree.NewDInt(builtins.GenerateUniqueID(fileIndex, uint64(rowIndex)+c.rowIDBase))
 	}
 
 	// TODO(justin): we currently disallow computed columns in import statements.

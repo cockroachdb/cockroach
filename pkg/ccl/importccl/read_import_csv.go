@@ -12,7 +12,6 @@ import (
 	"context"
 	"io"
 	"runtime"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -163,22 +162,21 @@ type csvRecord struct {
 	rowOffset int
 }
 
+var noTargetCols tree.NameList
+
 // convertRecordWorker converts CSV records into KV pairs and sends them on the
 // kvCh chan.
 func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 	// Create a new evalCtx per converter so each go routine gets its own
 	// collationenv, which can't be accessed in parallel.
 	evalCtx := c.evalCtx.Copy()
-	conv, err := row.NewDatumRowConverter(c.tableDesc, c.targetCols, evalCtx, c.kvCh)
+	conv, err := row.NewDatumRowConverter(c.tableDesc, c.targetCols, c.walltime, evalCtx, c.kvCh)
 	if err != nil {
 		return err
 	}
 	if conv.EvalCtx.SessionData == nil {
 		panic("uninitialized session data")
 	}
-
-	const precision = uint64(10 * time.Microsecond)
-	timestamp := uint64(c.walltime) / precision
 
 	for batch := range c.recordCh {
 		for batchIdx, record := range batch.r {
@@ -204,8 +202,7 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 				datumIdx++
 			}
 
-			rowIndex := int64(timestamp) + rowNum
-			if err := conv.Row(ctx, batch.fileIndex, rowIndex); err != nil {
+			if err := conv.Row(ctx, batch.fileIndex, rowNum); err != nil {
 				return wrapRowErr(err, batch.file, rowNum, pgcode.Uncategorized, "")
 			}
 		}

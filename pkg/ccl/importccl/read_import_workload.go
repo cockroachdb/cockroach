@@ -35,9 +35,10 @@ import (
 )
 
 type workloadReader struct {
-	evalCtx *tree.EvalContext
-	table   *sqlbase.TableDescriptor
-	kvCh    chan []roachpb.KeyValue
+	evalCtx  *tree.EvalContext
+	table    *sqlbase.TableDescriptor
+	kvCh     chan []roachpb.KeyValue
+	walltime int64
 }
 
 var _ inputConverter = &workloadReader{}
@@ -175,7 +176,7 @@ func (w *workloadReader) readFiles(
 
 		numTotalBatches += conf.BatchEnd - conf.BatchBegin
 		wc := NewWorkloadKVConverter(
-			w.table, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh)
+			w.table, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh, w.walltime)
 		wcs = append(wcs, wc)
 	}
 	for _, wc := range wcs {
@@ -199,6 +200,7 @@ type WorkloadKVConverter struct {
 	batchIdxAtomic int64
 	batchEnd       int
 	kvCh           chan []roachpb.KeyValue
+	walltime       int64
 }
 
 // NewWorkloadKVConverter returns a WorkloadKVConverter for the given table and
@@ -208,6 +210,7 @@ func NewWorkloadKVConverter(
 	rows workload.BatchedTuples,
 	batchStart, batchEnd int,
 	kvCh chan []roachpb.KeyValue,
+	walltime int64,
 ) *WorkloadKVConverter {
 	return &WorkloadKVConverter{
 		tableDesc:      tableDesc,
@@ -215,6 +218,7 @@ func NewWorkloadKVConverter(
 		batchIdxAtomic: int64(batchStart) - 1,
 		batchEnd:       batchEnd,
 		kvCh:           kvCh,
+		walltime:       walltime,
 	}
 }
 
@@ -231,7 +235,7 @@ func NewWorkloadKVConverter(
 func (w *WorkloadKVConverter) Worker(
 	ctx context.Context, evalCtx *tree.EvalContext, finishedBatchFn func(),
 ) error {
-	conv, err := row.NewDatumRowConverter(w.tableDesc, nil /* targetColNames */, evalCtx, w.kvCh)
+	conv, err := row.NewDatumRowConverter(w.tableDesc, noTargetCols, w.walltime, evalCtx, w.kvCh)
 	if err != nil {
 		return err
 	}

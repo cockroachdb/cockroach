@@ -407,11 +407,12 @@ func newPgDumpReader(
 	opts roachpb.PgDumpOptions,
 	descs map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
+	walltime int64,
 ) (*pgDumpReader, error) {
 	converters := make(map[string]*row.DatumRowConverter, len(descs))
 	for name, table := range descs {
 		if table.Desc.IsTable() {
-			conv, err := row.NewDatumRowConverter(table.Desc, nil /* targetColNames */, evalCtx, kvCh)
+			conv, err := row.NewDatumRowConverter(table.Desc, noTargetCols, walltime, evalCtx, kvCh)
 			if err != nil {
 				return nil, err
 			}
