@@ -340,34 +340,11 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 
 		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, progFn, cp.flowCtx.Cfg.Settings)
 	})
-
-	// TODO(jeffreyxiao): Remove this check in 20.1.
-	// If the cluster supports sticky bits, then we should use the sticky bit to
-	// ensure that the splits are not automatically split by the merge queue. If
-	// the cluster does not support sticky bits, we disable the merge queue via
-	// gossip, so we can just set the split to expire immediately.
-	stickyBitEnabled := cp.flowCtx.Cfg.Settings.Version.IsActive(cluster.VersionStickyBit)
-	expirationTime := hlc.Timestamp{}
-	if stickyBitEnabled {
-		expirationTime = cp.flowCtx.Cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
-	}
-
 	if cp.spec.IngestDirectly {
-		for _, tbl := range cp.spec.Tables {
-			for _, span := range tbl.Desc.AllIndexSpans() {
-				if err := cp.flowCtx.Cfg.DB.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
-					return err
-				}
-
-				log.VEventf(ctx, 1, "scattering index range %s", span.Key)
-				scatterReq := &roachpb.AdminScatterRequest{
-					RequestHeader: roachpb.RequestHeaderFromSpan(span),
-				}
-				if _, pErr := client.SendWrapped(ctx, cp.flowCtx.Cfg.DB.NonTransactionalSender(), scatterReq); pErr != nil {
-					log.Errorf(ctx, "failed to scatter span %s: %s", span.Key, pErr)
-				}
-			}
+		if err := cp.presplitTableBoundaries(ctx); err != nil {
+			return err
 		}
+
 		// IngestDirectly means this reader will just ingest the KVs that the
 		// producer emitted to the chan, and the only result we push into distsql at
 		// the end is one row containing an encoded BulkOpSummary.
@@ -534,6 +511,35 @@ func wrapRowErr(err error, file string, row int64, code, format string, args ...
 		err = pgerror.WithCandidateCode(err, code)
 	}
 	return err
+}
+
+func (cp *readImportDataProcessor) presplitTableBoundaries(ctx context.Context) error {
+	// TODO(jeffreyxiao): Remove this check in 20.1.
+	// If the cluster supports sticky bits, then we should use the sticky bit to
+	// ensure that the splits are not automatically split by the merge queue. If
+	// the cluster does not support sticky bits, we disable the merge queue via
+	// gossip, so we can just set the split to expire immediately.
+	stickyBitEnabled := cp.flowCtx.Cfg.Settings.Version.IsActive(cluster.VersionStickyBit)
+	expirationTime := hlc.Timestamp{}
+	if stickyBitEnabled {
+		expirationTime = cp.flowCtx.Cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+	}
+	for _, tbl := range cp.spec.Tables {
+		for _, span := range tbl.Desc.AllIndexSpans() {
+			if err := cp.flowCtx.Cfg.DB.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
+				return err
+			}
+
+			log.VEventf(ctx, 1, "scattering index range %s", span.Key)
+			scatterReq := &roachpb.AdminScatterRequest{
+				RequestHeader: roachpb.RequestHeaderFromSpan(span),
+			}
+			if _, pErr := client.SendWrapped(ctx, cp.flowCtx.Cfg.DB.NonTransactionalSender(), scatterReq); pErr != nil {
+				log.Errorf(ctx, "failed to scatter span %s: %s", span.Key, pErr)
+			}
+		}
+	}
+	return nil
 }
 
 // ingestKvs drains kvs from the channel until it closes, ingesting them using
