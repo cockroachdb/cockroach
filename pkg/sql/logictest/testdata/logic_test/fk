@@ -1759,7 +1759,7 @@ CREATE TABLE b (
 
 # Add the constraint separately so that it's unvalidated, so we can test VALIDATE CONSTRAINT.
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x)
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x) NOT VALID
 
 statement ok
 INSERT INTO a (x, y) VALUES ('x1', 'y1')
@@ -1813,7 +1813,7 @@ CREATE TABLE b (
 
 # Add the constraint separately so that it's unvalidated, so we can test VALIDATE CONSTRAINT.
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) NOT VALID
 
 statement ok
 INSERT INTO a (x, y, z) VALUES ('x1', 'y1', 'z1')
