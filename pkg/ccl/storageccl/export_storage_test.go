@@ -525,7 +525,7 @@ func TestWorkloadStorage(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 
 	rows, payloadBytes, ranges := 4, 12, 1
-	gen := bank.FromConfig(rows, payloadBytes, ranges)
+	gen := bank.FromConfig(rows, rows, payloadBytes, ranges)
 	bankTable := gen.Tables()[0]
 	bankURL := func(extraParams ...map[string]string) *url.URL {
 		params := url.Values{`version`: []string{gen.Meta().Version}}
