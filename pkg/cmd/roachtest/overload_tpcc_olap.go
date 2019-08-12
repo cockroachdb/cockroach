@@ -103,7 +103,6 @@ func registerTPCCOverloadSpec(r *testRegistry, s tpccOLAPSpec) {
 		Run:        s.run,
 		MinVersion: "v19.2.0",
 		Timeout:    20 * time.Minute,
-		Skip:       "fails due to node liveness starvation",
 	})
 }
 
