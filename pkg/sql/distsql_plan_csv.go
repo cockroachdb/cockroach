@@ -17,6 +17,7 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -648,17 +649,8 @@ func DistIngest(
 	var res roachpb.BulkOpSummary
 
 	// The direct-ingest readers will emit a binary encoded BulkOpSummary.
-	p.PlanToStreamColMap = []int{0}
-	p.ResultTypes = []types.T{*types.Bytes}
-
-	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
-		var counts roachpb.BulkOpSummary
-		if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
-			return err
-		}
-		res.Add(counts)
-		return nil
-	})
+	p.PlanToStreamColMap = []int{0, 1}
+	p.ResultTypes = []types.T{*types.Bytes, *types.Bytes}
 
 	dsp.FinalizePlan(planCtx, &p)
 
@@ -671,6 +663,33 @@ func DistIngest(
 	); err != nil {
 		return roachpb.BulkOpSummary{}, err
 	}
+
+	rowProgress := make([]uint64, len(from))
+	fractionProgress := make([]uint32, len(from))
+
+	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+		summaryBytes, progressBytes := *row[0].(*tree.DBytes), *row[1].(*tree.DBytes)
+		if len(progressBytes) > 0 {
+			var progressPart distsqlpb.ReadImportDataSpec_Progress
+			if err := protoutil.Unmarshal([]byte(progressBytes), &progressPart); err != nil {
+				return err
+			}
+			for i, v := range progressPart.CompletedRow {
+				atomic.StoreUint64(&rowProgress[i], v)
+			}
+			for i, v := range progressPart.CompletedFraction {
+				atomic.StoreUint32(&fractionProgress[i], math.Float32bits(v))
+			}
+		}
+		if len(summaryBytes) > 0 {
+			var counts roachpb.BulkOpSummary
+			if err := protoutil.Unmarshal([]byte(summaryBytes), &counts); err != nil {
+				return err
+			}
+			res.Add(counts)
+		}
+		return nil
+	})
 
 	recv := MakeDistSQLReceiver(
 		ctx,
