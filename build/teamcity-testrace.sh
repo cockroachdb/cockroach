@@ -49,7 +49,7 @@ for pkg in $pkgspec; do
 		PKG="$pkg" \
 		TESTTIMEOUT=45m \
 		TESTFLAGS='-v' \
-		ENABLE_ROCKSDB_ASSERTIONS=1 2>&1 \
+		USE_ROCKSDB_ASSERTIONS=1 2>&1 \
 		| tee -a artifacts/testrace.log \
 		| go-test-teamcity
 done
