@@ -856,14 +856,14 @@ oid   typname        typnamespace  typowner  typlen  typbyval  typtype
 18    char           1307062959    NULL      -1      false     b
 19    name           1307062959    NULL      -1      false     b
 20    int8           1307062959    NULL      8       true      b
-21    int2           1307062959    NULL      8       true      b
+21    int2           1307062959    NULL      2       true      b
 22    int2vector     1307062959    NULL      -1      false     b
-23    int4           1307062959    NULL      8       true      b
+23    int4           1307062959    NULL      4       true      b
 24    regproc        1307062959    NULL      8       true      b
 25    text           1307062959    NULL      -1      false     b
 26    oid            1307062959    NULL      8       true      b
 30    oidvector      1307062959    NULL      -1      false     b
-700   float4         1307062959    NULL      8       true      b
+700   float4         1307062959    NULL      4       true      b
 701   float8         1307062959    NULL      8       true      b
 705   unknown        1307062959    NULL      0       true      b
 869   inet           1307062959    NULL      24      true      b
