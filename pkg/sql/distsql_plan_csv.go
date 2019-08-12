@@ -17,6 +17,7 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -645,20 +646,9 @@ func DistIngest(
 		p.ResultRouters[i] = pIdx
 	}
 
-	var res roachpb.BulkOpSummary
-
 	// The direct-ingest readers will emit a binary encoded BulkOpSummary.
-	p.PlanToStreamColMap = []int{0}
-	p.ResultTypes = []types.T{*types.Bytes}
-
-	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
-		var counts roachpb.BulkOpSummary
-		if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
-			return err
-		}
-		res.Add(counts)
-		return nil
-	})
+	p.PlanToStreamColMap = []int{0, 1}
+	p.ResultTypes = []types.T{*types.Bytes, *types.Bytes}
 
 	dsp.FinalizePlan(planCtx, &p)
 
@@ -672,9 +662,32 @@ func DistIngest(
 		return roachpb.BulkOpSummary{}, err
 	}
 
+	rowProgress := make([]uint64, len(from))
+	fractionProgress := make([]uint32, len(from))
+	metaFn := func(_ context.Context, meta *distsqlpb.ProducerMetadata) {
+		if meta.BulkProcessorProgress != nil {
+			for i, v := range meta.BulkProcessorProgress.CompletedRow {
+				atomic.StoreUint64(&rowProgress[i], v)
+			}
+			for i, v := range meta.BulkProcessorProgress.CompletedFraction {
+				atomic.StoreUint32(&fractionProgress[i], math.Float32bits(v))
+			}
+		}
+	}
+
+	var res roachpb.BulkOpSummary
+	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+		var counts roachpb.BulkOpSummary
+		if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
+			return err
+		}
+		res.Add(counts)
+		return nil
+	})
+
 	recv := MakeDistSQLReceiver(
 		ctx,
-		rowResultWriter,
+		&metadataCallbackWriter{rowResultWriter: rowResultWriter, fn: metaFn},
 		tree.Rows,
 		nil, /* rangeCache */
 		nil, /* leaseCache */

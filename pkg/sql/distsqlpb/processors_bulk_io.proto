@@ -79,6 +79,10 @@ message JobProgress {
 }
 
 message ReadImportDataSpec {
+  message Progress {
+    map<int32, uint64> completed_row = 1;
+    map<int32, float> completed_fraction = 2;
+  }
   reserved 1;
   optional roachpb.IOFileFormat format = 8 [(gogoproto.nullable) = false];
   // sample_size is the rate at which to output rows, based on an input row's size.

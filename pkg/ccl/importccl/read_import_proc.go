@@ -569,9 +569,46 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 		offset++
 	}
 
+	// stopProgress will be closed when there is no more progress to report.
+	stopProgres := make(chan struct{})
 	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		tick := time.NewTicker(time.Second * 10)
+		defer tick.Stop()
+		done := ctx.Done()
+		for {
+			select {
+			case <-done:
+				return ctx.Err()
+			case <-stopProgres:
+				return nil
+			case <-tick.C:
+				var prog distsqlpb.RemoteProducerMetadata_BulkProcessorProgress
+				prog.CompletedRow = make(map[int32]uint64)
+				prog.CompletedFraction = make(map[int32]float32)
+				for file, offset := range offsets {
+					pk := atomic.LoadUint64(&pkFlushedRow[offset])
+					idx := atomic.LoadUint64(&idxFlushedRow[offset])
+					// On resume we'll be able to skip up the last row for which both the
+					// PK and index adders have flushed KVs.
+					if idx > pk {
+						prog.CompletedRow[file] = pk
+					} else {
+						prog.CompletedRow[file] = idx
+					}
+					prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
+				}
+				meta := &distsqlpb.ProducerMetadata{BulkProcessorProgress: &prog}
+				if !distsqlrun.EmitHelper(ctx, &cp.out, nil /* row */, meta, func(_ context.Context) {}) {
+					return errors.New("consumer closed")
+				}
+			}
+		}
+	})
 
 	g.GoCtx(func(ctx context.Context) error {
+		defer close(stopProgres)
+
 		// We insert splits at every index span of the table above. Since the
 		// BulkAdder is split aware when constructing SSTs, there is no risk of worst
 		// case overlap behavior in the resulting AddSSTable calls.
@@ -645,6 +682,18 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 		return err
 	}
 
+	var prog distsqlpb.ReadImportDataSpec_Progress
+	prog.CompletedRow = make(map[int32]uint64)
+	prog.CompletedFraction = make(map[int32]float32)
+	for i := range cp.spec.Uri {
+		prog.CompletedFraction[i] = 1.0
+		prog.CompletedRow[i] = math.MaxUint64
+	}
+	progBytes, err := protoutil.Marshal(&prog)
+	if err != nil {
+		return err
+	}
+
 	addedSummary := pkIndexAdder.GetSummary()
 	addedSummary.Add(indexAdder.GetSummary())
 	countsBytes, err := protoutil.Marshal(&addedSummary)
@@ -653,7 +702,7 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 	}
 	cs, err := cp.out.EmitRow(ctx, sqlbase.EncDatumRow{
 		sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
-		sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
+		sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(progBytes))),
 	})
 	if err != nil {
 		return err
