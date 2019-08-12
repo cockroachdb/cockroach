@@ -51,6 +51,22 @@ func TestSortChunks(t *testing.T) {
 			matchLen:    1,
 		},
 		{
+			description: `simple nulls asc`,
+			tuples:      tuples{{1, 2}, {1, nil}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, nil}},
+			expected:    tuples{{1, nil}, {1, 1}, {1, 2}, {1, 3}, {5, 5}, {6, nil}, {6, 6}},
+			typ:         []types.T{types.Int64, types.Int64},
+			ordCols:     []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
+			matchLen:    1,
+		},
+		{
+			description: `simple nulls desc`,
+			tuples:      tuples{{1, 2}, {1, nil}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, nil}},
+			expected:    tuples{{1, 3}, {1, 2}, {1, 1}, {1, nil}, {5, 5}, {6, 6}, {6, nil}},
+			typ:         []types.T{types.Int64, types.Int64},
+			ordCols:     []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1, Direction: distsqlpb.Ordering_Column_DESC}},
+			matchLen:    1,
+		},
+		{
 			description: `one chunk, matchLen 1, three ordering columns`,
 			tuples: tuples{
 				{0, 1, 2},
