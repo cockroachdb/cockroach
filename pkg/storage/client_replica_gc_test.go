@@ -70,7 +70,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 				return nil
 			}
 			crt := et.InternalCommitTrigger.GetChangeReplicasTrigger()
-			if crt == nil || crt.ChangeType != roachpb.REMOVE_REPLICA {
+			if crt == nil || crt.DeprecatedChangeType != roachpb.REMOVE_REPLICA {
 				return nil
 			}
 			testutils.SucceedsSoon(t, func() error {

@@ -591,6 +591,10 @@ func RunCommitTrigger(
 		return trigger, err
 	}
 	if crt := ct.GetChangeReplicasTrigger(); crt != nil {
+		// TODO(tbg): once we support atomic replication changes, check that
+		// crt.Added() and crt.Removed() don't intersect (including mentioning
+		// the same replica more than once individually) because it would be
+		// silly (though possible) to have to attach semantics to that.
 		return changeReplicasTrigger(ctx, rec, batch, crt), nil
 	}
 	if ct.GetModifiedSpanTrigger() != nil {
