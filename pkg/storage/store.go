@@ -2134,8 +2134,44 @@ func splitPostApply(
 		log.Fatalf(ctx, "unable to find RHS replica: %+v", err)
 	}
 	{
-		rightRng.mu.Lock()
 		// Already holding raftMu, see above.
+		rightRng.mu.Lock()
+		// The right hand side of the split may have been removed and re-added
+		// in the meantime, and the replicaID in RightDesc may be stale.
+		// Consequently the call below may fail with a RaftGroupDeletedError. In
+		// general, this protects earlier incarnations of the replica that were
+		// since replicaGC'ed from reneging on promises made earlier (for
+		// example, once the HardState is removed, a replica could cast a
+		// different vote for the same term).
+		//
+		// It is safe to circumvent that in this case because the RHS must have
+		// remained uninitialized (the LHS blocks all user data, and since our
+		// Raft logs start at a nonzero index a snapshot must go through before
+		// any log entries are appended). This means the data in that range is
+		// just a HardState which we "logically" snapshot by assigning it data
+		// formerly located within the LHS.
+		//
+		// Note that if we ever have a way to replicaGC uninitialized replicas,
+		// the RHS may have been gc'ed and so the HardState would be gone. In
+		// that case, the requirement that the HardState remains would have been
+		// violated if the bypass below were used, which is why we place an
+		// assertion.
+		//
+		// See:
+		// https://github.com/cockroachdb/cockroach/issues/21146#issuecomment-365757329
+		tombstoneKey := keys.RaftTombstoneKey(rightRng.RangeID)
+		var tombstone roachpb.RaftTombstone
+		if ok, err := engine.MVCCGetProto(
+			ctx, r.store.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
+		); err != nil {
+			log.Fatalf(ctx, "unable to load tombstone for RHS: %+v", err)
+		} else if ok {
+			log.Fatalf(ctx, "split trigger found right-hand side with tombstone %+v: %v", tombstone, rightRng)
+		}
+		// NB: the safety argument above implies that we don't have to worry
+		// about restoring the existing minReplicaID if it's nonzero. No
+		// promises have been made, so none need to be kept.
+		rightRng.mu.minReplicaID = 0
 		err := rightRng.initRaftMuLockedReplicaMuLocked(&split.RightDesc, r.store.Clock(), 0)
 		rightRng.mu.Unlock()
 		if err != nil {
@@ -2534,6 +2570,15 @@ func (s *Store) removeReplicaImpl(
 
 	if _, err := s.GetReplica(rep.RangeID); err != nil {
 		return err
+	}
+
+	if !rep.IsInitialized() {
+		// The split trigger relies on the fact that it can bypass the tombstone
+		// check for the RHS, but this is only true as long as we never delete
+		// its HardState.
+		//
+		// See the comment in splitPostApply for details.
+		log.Fatalf(ctx, "can not replicaGC uninitialized replicas")
 	}
 
 	// During merges, the context might have the subsuming range, so we explicitly
