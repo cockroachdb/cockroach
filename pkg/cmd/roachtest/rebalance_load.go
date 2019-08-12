@@ -162,6 +162,16 @@ func isLoadEvenlyDistributed(l *logger, db *gosql.DB, numNodes int) (bool, error
 			`from [show ranges from table kv.kv] ` +
 			`group by lease_holder;`)
 	if err != nil {
+		// TODO(rafi): Remove experimental_ranges query once we stop testing 19.1 or
+		// earlier.
+		if strings.Contains(err.Error(), "syntax error at or near \"ranges\"") {
+			rows, err = db.Query(
+				`select lease_holder, count(*) ` +
+					`from [show experimental_ranges from table kv.kv] ` +
+					`group by lease_holder;`)
+		}
+	}
+	if err != nil {
 		return false, err
 	}
 	defer rows.Close()
