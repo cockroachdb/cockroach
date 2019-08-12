@@ -73,8 +73,10 @@ func (sp *bulkRowWriter) OutputTypes() []types.T {
 
 func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan []roachpb.KeyValue) error {
 	writeTS := sp.spec.Table.CreateAsOfTime
-	const bufferSize, flushSize = 64 << 20, 16 << 20
-	adder, err := sp.flowCtx.Cfg.BulkAdder(ctx, sp.flowCtx.Cfg.DB, bufferSize, flushSize, writeTS)
+	const bufferSize = 64 << 20
+	adder, err := sp.flowCtx.Cfg.BulkAdder(
+		ctx, sp.flowCtx.Cfg.DB, writeTS, storagebase.BulkAdderOptions{BufferSize: bufferSize},
+	)
 	if err != nil {
 		return err
 	}

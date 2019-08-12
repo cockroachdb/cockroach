@@ -45,21 +45,17 @@ type SSTBatcher struct {
 	flushKey        roachpb.Key
 	rc              *kv.RangeDescriptorCache
 
-	// skips duplicate keys (iff they are buffered together). This
-	// is true when used to backfill an inverted index. An array in JSONB with
-	// multiple values which are the same, will all correspond to the same kv in
-	// the inverted index. The method which generates these kvs does not dedup,
-	// thus we rely on the SSTBatcher to dedup them (by skipping), rather than
-	// throwing a DuplicateKeyError.
-	skipDuplicateKeys bool
-
-	// skips duplicate keys with the same value (iff they are buffered together).
-	// This is true when used with IMPORT. Import generally prohibits the
-	// ingestion of KVs which will shadow existing data, with the exception of
-	// duplicates having the same value and timestamp. To maintain uniform
-	// behavior, duplicates in the same batch with equal values will not raise a
-	// DuplicateKeyError.
-	skipDuplicateKeysWithSameValue bool
+	// skips duplicate keys (iff they are buffered together). This is true when
+	// used to backfill an inverted index. An array in JSONB with multiple values
+	// which are the same, will all correspond to the same kv in the inverted
+	// index. The method which generates these kvs does not dedup, thus we rely on
+	// the SSTBatcher to dedup them (by skipping), rather than throwing a
+	// DuplicateKeyError. This is also true when used with IMPORT. Import
+	// generally prohibits the ingestion of KVs which will shadow existing data,
+	// with the exception of duplicates having the same value and timestamp. To
+	// maintain uniform behavior, duplicates in the same batch with equal values
+	// will not raise a DuplicateKeyError.
+	skipDuplicates bool
 
 	maxSize int64
 	// rows written in the current batch.
@@ -78,7 +74,7 @@ type SSTBatcher struct {
 		sstSize int
 	}
 
-	// allows ingestion of keys where the MVCC.Key would shadow an exisiting row.
+	// allows ingestion of keys where the MVCC.Key would shadow an existing row.
 	disallowShadowing bool
 }
 
@@ -95,12 +91,7 @@ func MakeSSTBatcher(ctx context.Context, db sender, flushBytes int64) (*SSTBatch
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value []byte) error {
 	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) {
-		if b.skipDuplicateKeys {
-			return nil
-		}
-
-		sameValue := len(b.batchEndValue) > 0 && bytes.Equal(b.batchEndValue, value)
-		if b.skipDuplicateKeysWithSameValue && sameValue {
+		if b.skipDuplicates && bytes.Equal(b.batchEndValue, value) {
 			return nil
 		}
 
