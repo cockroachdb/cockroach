@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"os"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -27,8 +28,124 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/petermattis/pebble"
+	"github.com/cockroachdb/datadriven"
 )
+
+// put gives a quick interface for writing a KV pair to a rocksDBMap in tests.
+func (r *rocksDBMap) put(k []byte, v []byte) error {
+	return r.store.Put(r.makeKeyWithTimestamp(k), v)
+}
+
+// Helper function to run a datadriven test for a provided diskMap
+func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine diskmap.Factory) {
+	diskMaps := make(map[string]diskmap.SortedDiskMap)
+
+	datadriven.RunTest(t, filename, func(d *datadriven.TestData) string {
+		if len(d.CmdArgs) < 1 {
+			return "no map name specified"
+		}
+
+		switch d.Cmd {
+		case "new-map":
+			duplicates := false
+			for _, arg := range d.CmdArgs[1:] {
+				if arg.Key == "duplicates" {
+					if len(arg.Vals) < 1 || (arg.Vals[0] != "true" && arg.Vals[0] != "false") {
+						return "usage: new-map <name> [duplicates={true, false}]"
+					} else if arg.Vals[0] == "true" {
+						duplicates = true
+					}
+				}
+			}
+			if duplicates {
+				diskMaps[d.CmdArgs[0].Key] = engine.NewSortedDiskMultiMap()
+			} else {
+				diskMaps[d.CmdArgs[0].Key] = engine.NewSortedDiskMap()
+			}
+
+			return ""
+		}
+
+		diskMap, ok := diskMaps[d.CmdArgs[0].Key]
+
+		if !ok {
+			return fmt.Sprintf("unknown map: %s", d.CmdArgs[0].Key)
+		}
+
+		switch d.Cmd {
+		case "close-map":
+			diskMap.Close(ctx)
+			return ""
+
+		case "batch":
+
+			batch := diskMap.NewBatchWriter()
+			defer func() {
+				if err := batch.Close(ctx); err != nil {
+					t.Fatal(err)
+				}
+			}()
+
+			for _, line := range strings.Split(d.Input, "\n") {
+				parts := strings.Fields(line)
+				if len(parts) == 0 {
+					continue
+				}
+				switch parts[0] {
+				case "put":
+					if len(parts) != 3 {
+						return fmt.Sprintf("put <key> <value>\n")
+					}
+					err := batch.Put([]byte(strings.TrimSpace(parts[1])), []byte(strings.TrimSpace(parts[2])))
+					if err != nil {
+						return err.Error()
+					}
+				default:
+					return fmt.Sprintf("unknown op: %s", parts[0])
+				}
+			}
+			return ""
+
+		case "iter":
+			iter := diskMap.NewIterator()
+			defer iter.Close()
+			var b bytes.Buffer
+			for _, line := range strings.Split(d.Input, "\n") {
+				parts := strings.Fields(line)
+				if len(parts) == 0 {
+					continue
+				}
+				switch parts[0] {
+				case "next":
+					iter.Next()
+
+				case "rewind":
+					iter.Rewind()
+
+				case "seek":
+					if len(parts) != 2 {
+						return fmt.Sprintf("seek <key>\n")
+					}
+					iter.Seek([]byte(strings.TrimSpace(parts[1])))
+				default:
+					return fmt.Sprintf("unknown op: %s", parts[0])
+				}
+				valid, err := iter.Valid()
+				if valid && err == nil {
+					fmt.Fprintf(&b, "%s:%s\n", iter.Key(), iter.Value())
+				} else if err != nil {
+					fmt.Fprintf(&b, "err=%v\n", err)
+				} else {
+					fmt.Fprintf(&b, ".\n")
+				}
+			}
+			return b.String()
+		default:
+			// No other commands supported.
+			return fmt.Sprintf("unsupported command: %s", d.Cmd)
+		}
+	})
+}
 
 func TestRocksDBMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -36,93 +153,16 @@ func TestRocksDBMap(t *testing.T) {
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 
-	diskMap := newRocksDBMap(e, false /* allowDuplicates */)
-	defer diskMap.Close(ctx)
+	runTestForEngine(ctx, t, "testdata/diskmap", &rocksDBTempEngine{db: e.RocksDB})
+}
 
-	batchWriter := diskMap.NewBatchWriterCapacity(64)
-	defer func() {
-		err := batchWriter.Close(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}()
+func TestRocksDBMultiMap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	defer e.Close()
 
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-
-	numKeysToWrite := 1 << 12
-	keys := make([]string, numKeysToWrite)
-	for i := 0; i < numKeysToWrite; i++ {
-		k := []byte(fmt.Sprintf("%d", rng.Int()))
-		v := []byte(fmt.Sprintf("%d", rng.Int()))
-
-		keys[i] = string(k)
-		// Use batch on every other write.
-		if i%2 == 0 {
-			if err := diskMap.Put(k, v); err != nil {
-				t.Fatal(err)
-			}
-			// Check key was inserted properly.
-			if b, err := diskMap.Get(k); err != nil {
-				t.Fatal(err)
-			} else if !bytes.Equal(b, v) {
-				t.Fatalf("expected %v for value of key %v but got %v", v, k, b)
-			}
-		} else {
-			if err := batchWriter.Put(k, v); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-
-	sort.StringSlice(keys).Sort()
-
-	if err := batchWriter.Flush(); err != nil {
-		t.Fatal(err)
-	}
-
-	i := diskMap.NewIterator()
-	defer i.Close()
-
-	checkKeyAndPopFirst := func(k []byte) error {
-		if !bytes.Equal([]byte(keys[0]), k) {
-			return fmt.Errorf("expected %v but got %v", []byte(keys[0]), k)
-		}
-		keys = keys[1:]
-		return nil
-	}
-
-	i.Rewind()
-	if ok, err := i.Valid(); err != nil {
-		t.Fatal(err)
-	} else if !ok {
-		t.Fatal("unexpectedly invalid")
-	}
-	lastKey := i.Key()
-	if err := checkKeyAndPopFirst(lastKey); err != nil {
-		t.Fatal(err)
-	}
-	i.Next()
-
-	numKeysRead := 1
-	for ; ; i.Next() {
-		if ok, err := i.Valid(); err != nil {
-			t.Fatal(err)
-		} else if !ok {
-			break
-		}
-		curKey := i.Key()
-		if err := checkKeyAndPopFirst(curKey); err != nil {
-			t.Fatal(err)
-		}
-		if bytes.Compare(curKey, lastKey) < 0 {
-			t.Fatalf("expected keys in sorted order but %v is larger than %v", curKey, lastKey)
-		}
-		lastKey = curKey
-		numKeysRead++
-	}
-	if numKeysRead != numKeysToWrite {
-		t.Fatalf("expected to read %d keys but only read %d", numKeysToWrite, numKeysRead)
-	}
+	runTestForEngine(ctx, t, "testdata/diskmap_duplicates", &rocksDBTempEngine{db: e.RocksDB})
 }
 
 func TestRocksDBMapClose(t *testing.T) {
@@ -177,7 +217,7 @@ func TestRocksDBMapClose(t *testing.T) {
 	const letters = "abcdefghijklmnopqrstuvwxyz"
 	for i := range letters {
 		k := []byte{letters[i]}
-		if err := diskMap.Put(k, k); err != nil {
+		if err := diskMap.put(k, k); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -213,170 +253,6 @@ func TestRocksDBMapClose(t *testing.T) {
 		}
 		return nil
 	})
-}
-
-// TestRocksDBMapSandbox verifies that multiple instances of a RocksDBMap
-// initialized with the same RocksDB storage engine cannot read or write
-// another instance's data.
-func TestRocksDBMapSandbox(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	e := NewInMem(roachpb.Attributes{}, 1<<20)
-	defer e.Close()
-
-	diskMaps := make([]*rocksDBMap, 3)
-	for i := 0; i < len(diskMaps); i++ {
-		diskMaps[i] = newRocksDBMap(e, false /* allowDuplicates */)
-	}
-
-	// Put [0,10) as a key into each diskMap with the value specifying which
-	// diskMap inserted this value.
-	numKeys := 10
-	for i := 0; i < numKeys; i++ {
-		for j := 0; j < len(diskMaps); j++ {
-			if err := diskMaps[j].Put([]byte{byte(i)}, []byte{byte(j)}); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-
-	// Verify that an iterator created from a diskMap is constrained to the
-	// diskMap's keyspace and that the keys in the keyspace were all written
-	// by the expected diskMap.
-	t.Run("KeyspaceSandbox", func(t *testing.T) {
-		for j := 0; j < len(diskMaps); j++ {
-			func() {
-				i := diskMaps[j].NewIterator()
-				defer i.Close()
-				numRead := 0
-				for i.Rewind(); ; i.Next() {
-					if ok, err := i.Valid(); err != nil {
-						t.Fatal(err)
-					} else if !ok {
-						break
-					}
-					numRead++
-					if numRead > numKeys {
-						t.Fatal("read too many keys")
-					}
-					if int(i.Value()[0]) != j {
-						t.Fatalf(
-							"key %s in %d's keyspace was clobbered by %d", i.Key(), j, i.Value()[0],
-						)
-					}
-				}
-				if numRead < numKeys {
-					t.Fatalf("only read %d keys in %d's keyspace", numRead, j)
-				}
-			}()
-		}
-	})
-
-	// Verify that a diskMap cleans up its keyspace when closed.
-	t.Run("KeyspaceDelete", func(t *testing.T) {
-		for j := 0; j < len(diskMaps); j++ {
-			diskMaps[j].Close(ctx)
-			numKeysRemaining := 0
-			func() {
-				i := e.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
-				defer i.Close()
-				for i.Seek(NilKey); ; i.Next() {
-					if ok, err := i.Valid(); err != nil {
-						t.Fatal(err)
-					} else if !ok {
-						break
-					}
-					if int(i.Value()[0]) == j {
-						t.Fatalf("key %s belonging to %d was not deleted", i.Key(), j)
-					}
-					numKeysRemaining++
-				}
-				expectedKeysRemaining := (len(diskMaps) - 1 - j) * numKeys
-				if numKeysRemaining != expectedKeysRemaining {
-					t.Fatalf(
-						"expected %d keys to remain but counted %d",
-						expectedKeysRemaining,
-						numKeysRemaining,
-					)
-				}
-			}()
-		}
-	})
-}
-
-// TestRocksDBStore tests that the allowDuplicates setting allows duplicate
-// keys to be put.
-func TestRocksDBStore(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	e := NewInMem(roachpb.Attributes{}, 1<<20)
-	defer e.Close()
-
-	var (
-		v1 = []byte("v1")
-		v2 = []byte("v2")
-		k1 = []byte("k1")
-	)
-
-	tests := []struct {
-		allowDuplicates bool
-		// expect is a map containing the expected number of found values for key k1.
-		expect map[string]int
-	}{
-		{
-			true,
-			map[string]int{
-				string(v1): 4,
-				string(v2): 2,
-			},
-		},
-		{
-			false,
-			map[string]int{
-				string(v1): 1,
-				// v1 is the final Put, so it should overwrite the previous v2.
-				string(v2): 0,
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(fmt.Sprintf("AllowDuplicates=%v", tc.allowDuplicates), func(t *testing.T) {
-			diskStore := newRocksDBMap(e, tc.allowDuplicates)
-			defer diskStore.Close(ctx)
-
-			batchWriter := diskStore.NewBatchWriter()
-			_ = diskStore.Put(k1, v1)
-			_ = diskStore.Put(k1, v1)
-			_ = diskStore.Put(k1, v2)
-			_ = batchWriter.Put(k1, v2)
-			_ = batchWriter.Put(k1, v1)
-			_ = batchWriter.Put(k1, v1)
-			if err := batchWriter.Close(ctx); err != nil {
-				t.Fatal(err)
-			}
-
-			i := diskStore.NewIterator()
-			defer i.Close()
-
-			for i.Rewind(); ; i.Next() {
-				if ok, err := i.Valid(); err != nil {
-					t.Fatal(err)
-				} else if !ok {
-					break
-				}
-				if !bytes.Equal(i.Key(), k1) {
-					t.Fatalf("unexpected key: %s", i.Key())
-				}
-				tc.expect[string(i.Value())]--
-			}
-			for k, v := range tc.expect {
-				if v != 0 {
-					t.Errorf("expected 0, got %d for %s", v, k)
-				}
-			}
-		})
-	}
 }
 
 func BenchmarkRocksDBMapWrite(b *testing.B) {
@@ -443,7 +319,7 @@ func BenchmarkRocksDBMapIteration(b *testing.B) {
 	}
 	defer tempEngine.Close()
 
-	diskMap := tempEngine.NewSortedDiskMap()
+	diskMap := tempEngine.NewSortedDiskMap().(*rocksDBMap)
 	defer diskMap.Close(context.Background())
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -452,7 +328,7 @@ func BenchmarkRocksDBMapIteration(b *testing.B) {
 		for i := 0; i < inputSize; i++ {
 			k := fmt.Sprintf("%d", rng.Int())
 			v := fmt.Sprintf("%d", rng.Int())
-			if err := diskMap.Put([]byte(k), []byte(v)); err != nil {
+			if err := diskMap.put([]byte(k), []byte(v)); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -478,294 +354,33 @@ func BenchmarkRocksDBMapIteration(b *testing.B) {
 func TestPebbleMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	dir, err := ioutil.TempDir("", "TestPebbleMap")
-	if err != nil {
-		t.Fatal(err)
-	}
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
 
 	e, err := NewPebbleTempEngine(base.TempStorageConfig{Path: dir}, base.StoreSpec{})
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	defer e.Close()
 
-	diskMap := e.NewSortedDiskMap()
-	defer diskMap.Close(ctx)
+	runTestForEngine(ctx, t, "testdata/diskmap", e)
 
-	batchWriter := diskMap.NewBatchWriterCapacity(64)
-	defer func() {
-		err := batchWriter.Close(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-
-	numKeysToWrite := 1 << 12
-	keys := make([]string, numKeysToWrite)
-	for i := 0; i < numKeysToWrite; i++ {
-		k := []byte(fmt.Sprintf("%d", rng.Int()))
-		v := []byte(fmt.Sprintf("%d", rng.Int()))
-
-		keys[i] = string(k)
-		// Use batch on every other write.
-		if i%2 == 0 {
-			if err := diskMap.Put(k, v); err != nil {
-				t.Fatal(err)
-			}
-			// Check key was inserted properly.
-			if b, err := diskMap.Get(k); err != nil {
-				t.Fatal(err)
-			} else if !bytes.Equal(b, v) {
-				t.Fatalf("expected %v for value of key %v but got %v", v, k, b)
-			}
-		} else {
-			if err := batchWriter.Put(k, v); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-
-	sort.StringSlice(keys).Sort()
-
-	if err := batchWriter.Flush(); err != nil {
-		t.Fatal(err)
-	}
-
-	i := diskMap.NewIterator()
-	defer i.Close()
-
-	checkKeyAndPopFirst := func(k []byte) error {
-		if !bytes.Equal([]byte(keys[0]), k) {
-			return fmt.Errorf("expected %v but got %v", []byte(keys[0]), k)
-		}
-		keys = keys[1:]
-		return nil
-	}
-
-	i.Rewind()
-	if ok, err := i.Valid(); err != nil {
-		t.Fatal(err)
-	} else if !ok {
-		t.Fatal("unexpectedly invalid")
-	}
-	lastKey := i.Key()
-	if err := checkKeyAndPopFirst(lastKey); err != nil {
-		t.Fatal(err)
-	}
-	i.Next()
-
-	numKeysRead := 1
-	for ; ; i.Next() {
-		if ok, err := i.Valid(); err != nil {
-			t.Fatal(err)
-		} else if !ok {
-			break
-		}
-		curKey := i.Key()
-		if err := checkKeyAndPopFirst(curKey); err != nil {
-			t.Fatal(err)
-		}
-		if bytes.Compare(curKey, lastKey) < 0 {
-			t.Fatalf("expected keys in sorted order but %v is larger than %v", curKey, lastKey)
-		}
-		lastKey = curKey
-		numKeysRead++
-	}
-	if numKeysRead != numKeysToWrite {
-		t.Fatalf("expected to read %d keys but only read %d", numKeysToWrite, numKeysRead)
-	}
 }
 
-// TestPebbleMapSandbox verifies that multiple instances of a RocksDBMap
-// initialized with the same RocksDB storage engine cannot read or write
-// another instance's data.
-func TestPebbleMapSandbox(t *testing.T) {
+func TestPebbleMultiMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	dir, err := ioutil.TempDir("", "TestPebbleMapSandbox")
-	if err != nil {
-		t.Fatal(err)
-	}
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
 
 	e, err := NewPebbleTempEngine(base.TempStorageConfig{Path: dir}, base.StoreSpec{})
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	defer e.Close()
 
-	diskMaps := make([]diskmap.SortedDiskMap, 3)
-	for i := 0; i < len(diskMaps); i++ {
-		diskMaps[i] = e.NewSortedDiskMap()
-	}
+	runTestForEngine(ctx, t, "testdata/diskmap_duplicates_pebble", e)
 
-	// Put [0,10) as a key into each diskMap with the value specifying which
-	// diskMap inserted this value.
-	numKeys := 10
-	for i := 0; i < numKeys; i++ {
-		for j := 0; j < len(diskMaps); j++ {
-			if err := diskMaps[j].Put([]byte{byte(i)}, []byte{byte(j)}); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-
-	// Verify that an iterator created from a diskMap is constrained to the
-	// diskMap's keyspace and that the keys in the keyspace were all written
-	// by the expected diskMap.
-	t.Run("KeyspaceSandbox", func(t *testing.T) {
-		for j := 0; j < len(diskMaps); j++ {
-			func() {
-				i := diskMaps[j].NewIterator()
-				defer i.Close()
-				numRead := 0
-				for i.Rewind(); ; i.Next() {
-					if ok, err := i.Valid(); err != nil {
-						t.Fatal(err)
-					} else if !ok {
-						break
-					}
-					numRead++
-					if numRead > numKeys {
-						t.Fatal("read too many keys")
-					}
-					if int(i.Value()[0]) != j {
-						t.Fatalf(
-							"key %s in %d's keyspace was clobbered by %d", i.Key(), j, i.Value()[0],
-						)
-					}
-				}
-				if numRead < numKeys {
-					t.Fatalf("only read %d keys in %d's keyspace", numRead, j)
-				}
-			}()
-		}
-	})
-
-	// Verify that a diskMap cleans up its keyspace when closed.
-	t.Run("KeyspaceDelete", func(t *testing.T) {
-		for j := 0; j < len(diskMaps); j++ {
-			diskMaps[j].Close(ctx)
-			numKeysRemaining := 0
-			func() {
-				i := e.(*pebbleTempEngine).db.NewIter(&pebble.IterOptions{UpperBound: roachpb.KeyMax})
-				defer func() {
-					if err := i.Close(); err != nil {
-						t.Fatal(err)
-					}
-				}()
-				for i.SeekGE(EncodeKey(NilKey)); ; i.Next() {
-					if !i.Valid() {
-						break
-					}
-					if int(i.Value()[0]) == j {
-						t.Fatalf("key %s belonging to %d was not deleted", i.Key(), j)
-					}
-					numKeysRemaining++
-				}
-				expectedKeysRemaining := (len(diskMaps) - 1 - j) * numKeys
-				if numKeysRemaining != expectedKeysRemaining {
-					t.Fatalf(
-						"expected %d keys to remain but counted %d",
-						expectedKeysRemaining,
-						numKeysRemaining,
-					)
-				}
-			}()
-		}
-	})
-}
-
-// TestPebbleStore tests that the allowDuplicates setting allows duplicate
-// keys to be put.
-func TestPebbleStore(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	dir, err := ioutil.TempDir("", "TestPebbleStore")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	e, err := NewPebbleTempEngine(base.TempStorageConfig{Path: dir}, base.StoreSpec{})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer e.Close()
-
-	var (
-		v1 = []byte("v1")
-		v2 = []byte("v2")
-		k1 = []byte("k1")
-	)
-
-	tests := []struct {
-		allowDuplicates bool
-		// expect is a map containing the expected number of found values for key k1.
-		expect map[string]int
-	}{
-		{
-			true,
-			map[string]int{
-				string(v1): 4,
-				string(v2): 2,
-			},
-		},
-		{
-			false,
-			map[string]int{
-				string(v1): 1,
-				// v1 is the final Put, so it should overwrite the previous v2.
-				string(v2): 0,
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(fmt.Sprintf("AllowDuplicates=%v", tc.allowDuplicates), func(t *testing.T) {
-			var diskStore diskmap.SortedDiskMap
-			if tc.allowDuplicates {
-				diskStore = e.NewSortedDiskMultiMap()
-			} else {
-				diskStore = e.NewSortedDiskMap()
-			}
-			defer diskStore.Close(ctx)
-
-			batchWriter := diskStore.NewBatchWriter()
-			_ = diskStore.Put(k1, v1)
-			_ = diskStore.Put(k1, v1)
-			_ = diskStore.Put(k1, v2)
-			_ = batchWriter.Put(k1, v2)
-			_ = batchWriter.Put(k1, v1)
-			_ = batchWriter.Put(k1, v1)
-			if err := batchWriter.Close(ctx); err != nil {
-				t.Fatal(err)
-			}
-
-			i := diskStore.NewIterator()
-			defer i.Close()
-
-			for i.Rewind(); ; i.Next() {
-				if ok, err := i.Valid(); err != nil {
-					t.Fatal(err)
-				} else if !ok {
-					break
-				}
-				if !bytes.Equal(i.Key(), k1) {
-					t.Fatalf("unexpected key: %s", i.Key())
-				}
-				tc.expect[string(i.Value())]--
-			}
-			for k, v := range tc.expect {
-				if v != 0 {
-					t.Errorf("expected 0, got %d for %s", v, k)
-				}
-			}
-		})
-	}
 }
 
 func BenchmarkPebbleMapWrite(b *testing.B) {
