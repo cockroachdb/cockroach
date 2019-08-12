@@ -162,9 +162,16 @@ message ChangeReplicasTrigger {
 
   option (gogoproto.goproto_stringer) = false;
 
-  ReplicaChangeType change_type = 1;
+  // TODO(tbg): remove once we know that no trigger using this will ever be
+  // applied (this will require something like #39182).
+  //
+  // TODO(tbg): when removing this, also rename internal_x_replicas to just
+  // x_replicas and remove the getter.
+  ReplicaChangeType deprecated_change_type = 1;
   // The replica being modified.
-  ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
+  // TODO(tbg): remove once we know that no trigger using this will ever be
+  // applied (this will require something like #39182).
+  ReplicaDescriptor deprecated_replica = 2 [(gogoproto.nullable) = false];
   // The new replica list with this change applied.
   repeated ReplicaDescriptor deprecated_updated_replicas = 3 [(gogoproto.nullable) = false];
   // The next replica id to use with this change applied.
@@ -175,6 +182,14 @@ message ChangeReplicasTrigger {
   // TODO(jeffreyxiao): Remove deprecated_updated_replicas and
   // deprecated_next_replica_id in 20.1.
   RangeDescriptor desc = 5;
+  // The new replicas added in this change (all reflected in desc, which is necessarily
+  // set when this field is used). Must not specify the same replica more than once or
+  // overlap with the removed replicas below.
+  repeated ReplicaDescriptor internal_added_replicas = 6 [(gogoproto.nullable) = false];
+  // The replicas removed in this change (all reflected in desc, which is necessarily
+  // set when this field is used). Must not specify the same replica more than once or
+  // overlap with the added replicas above.
+  repeated ReplicaDescriptor internal_removed_replicas = 7 [(gogoproto.nullable) = false];
 }
 
 // ModifiedSpanTrigger indicates that a specific span has been modified.

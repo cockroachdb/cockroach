@@ -1218,14 +1218,34 @@ func execChangeReplicasTxn(
 			return err
 		}
 
+		var crt *roachpb.ChangeReplicasTrigger
+		if !store.ClusterSettings().Version.IsActive(cluster.VersionAtomicChangeReplicasTrigger) {
+			crt = &roachpb.ChangeReplicasTrigger{
+				DeprecatedChangeType: changeType,
+				DeprecatedReplica:    repDesc,
+				Desc:                 updatedDesc,
+			}
+		} else {
+			var added, removed []roachpb.ReplicaDescriptor
+			switch changeType {
+			case roachpb.ADD_REPLICA:
+				added = append(added, repDesc)
+			case roachpb.REMOVE_REPLICA:
+				removed = append(removed, repDesc)
+			default:
+				return errors.Errorf("unknown change type: %d", changeType)
+			}
+			crt = &roachpb.ChangeReplicasTrigger{
+				Desc:                    updatedDesc,
+				InternalAddedReplicas:   added,
+				InternalRemovedReplicas: removed,
+			}
+		}
+
 		b.AddRawRequest(&roachpb.EndTransactionRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
-				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
-					ChangeType: changeType,
-					Replica:    repDesc,
-					Desc:       updatedDesc,
-				},
+				ChangeReplicasTrigger: crt,
 			},
 		})
 		if err := txn.Run(ctx, b); err != nil {
