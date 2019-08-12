@@ -96,7 +96,7 @@ func backupRestoreTestSetupWithParams(
 	if numAccounts == 0 {
 		splits = 0
 	}
-	bankData := bank.FromConfig(numAccounts, payloadSize, splits)
+	bankData := bank.FromConfig(numAccounts, numAccounts, payloadSize, splits)
 
 	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE data`)
