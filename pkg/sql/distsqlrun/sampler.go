@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -172,7 +171,6 @@ func (s *samplerProcessor) pushTrailingMeta(ctx context.Context) {
 func (s *samplerProcessor) Run(ctx context.Context) {
 	s.input.Start(ctx)
 	s.StartInternal(ctx, samplerProcName)
-	defer tracing.FinishSpan(s.span)
 
 	earlyExit, err := s.mainLoop(s.Ctx)
 	if err != nil {
