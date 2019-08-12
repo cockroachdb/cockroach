@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math"
 	"os"
@@ -815,6 +816,7 @@ func TestRangesResponse(t *testing.T) {
 	}
 	if len(response.Ranges) == 0 {
 		t.Errorf("didn't get any ranges")
+		// If all fields are unset, assume it's an old client that wants everything.
 	}
 	for _, ri := range response.Ranges {
 		// Do some simple validation based on the fact that this is a
@@ -839,6 +841,43 @@ func TestRangesResponse(t *testing.T) {
 		if len(ri.LeaseHistory) == 0 {
 			t.Error("expected at least one lease history entry")
 		}
+	}
+}
+
+func TestRangesStreaming(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	ts, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer ts.Stopper().Stop(ctx)
+	conn, err := ts.RPCContext().GRPCDialNode(ts.ServingRPCAddr(), ts.NodeID()).Connect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	client := serverpb.NewStatusClient(conn)
+	req := serverpb.RangesRequest{
+		RangeIDs:  nil, // all ranges
+		DescInfo:  true,
+		LeaseInfo: true,
+	}
+	sc, err := client.RangesStream(ctx, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	responses := 0
+	for {
+		_, err := sc.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		responses++
+	}
+	if responses < 10 {
+		t.Fatalf("expected a bunch of range responses, got %d", responses)
 	}
 }
 

@@ -60,7 +60,10 @@ func (s *statusServer) ProblemRanges(
 				status, err := s.dialNode(ctx, nodeID)
 				var rangesResponse *serverpb.RangesResponse
 				if err == nil {
-					req := &serverpb.RangesRequest{}
+					req := &serverpb.RangesRequest{
+						AllInfo:  false,
+						Ordering: serverpb.RangesRequest_RANDOM,
+					}
 					rangesResponse, err = status.Ranges(ctx, req)
 				}
 				response := nodeResponse{

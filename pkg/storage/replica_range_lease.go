@@ -499,6 +499,13 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *roachpb.Error) *leaseReque
 	return h
 }
 
+// GetLeaseStatus is an exported version of leaseStatus().
+func (r *Replica) GetLeaseStatus() storagepb.LeaseStatus {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.leaseStatus(*r.mu.state.Lease, r.Clock().Now(), r.mu.minLeaseProposedTS)
+}
+
 // leaseStatus returns lease status. If the lease is epoch-based,
 // the liveness field will be set to the liveness used to compute
 // its state, unless state == leaseError.

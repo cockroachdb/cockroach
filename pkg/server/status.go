@@ -28,6 +28,7 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/pprof"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1093,7 +1094,13 @@ func (s *statusServer) RaftDebug(
 		nodeID := node.Desc.NodeID
 		go func() {
 			defer wg.Done()
-			ranges, err := s.Ranges(ctx, &serverpb.RangesRequest{NodeId: nodeID.String(), RangeIDs: req.RangeIDs})
+			ranges, err := s.Ranges(ctx,
+				&serverpb.RangesRequest{
+					NodeId:   nodeID.String(),
+					RangeIDs: req.RangeIDs,
+					AllInfo:  true,
+					Ordering: serverpb.RangesRequest_RANDOM,
+				})
 
 			mu.Lock()
 			defer mu.Unlock()
@@ -1176,6 +1183,13 @@ func (s *statusServer) Ranges(
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
 
+	includeRawKeys := debug.GatewayRemoteAllowed(ctx, s.st)
+	if req.DescInfo && !includeRawKeys {
+		// If DescInfo was specified, we expect to be on an authenticated
+		// connection.
+		return nil, remoteDebuggingErr
+	}
+
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
@@ -1218,71 +1232,102 @@ func (s *statusServer) Ranges(
 		return state
 	}
 
-	includeRawKeys := debug.GatewayRemoteAllowed(ctx, s.st)
-
-	constructRangeInfo := func(
-		desc roachpb.RangeDescriptor, rep *storage.Replica, storeID roachpb.StoreID, metrics storage.ReplicaMetrics,
-	) serverpb.RangeInfo {
-		raftStatus := rep.RaftStatus()
-		raftState := convertRaftStatus(raftStatus)
-		leaseHistory := rep.GetLeaseHistory()
-		var span serverpb.PrettySpan
-		if includeRawKeys {
-			span.StartKey = desc.StartKey.String()
-			span.EndKey = desc.EndKey.String()
-		} else {
-			span.StartKey = omittedKeyStr
-			span.EndKey = omittedKeyStr
-		}
-		state := rep.State()
-		if !includeRawKeys {
-			state.ReplicaState.Desc.StartKey = nil
-			state.ReplicaState.Desc.EndKey = nil
-		}
-		return serverpb.RangeInfo{
-			Span:          span,
-			RaftState:     raftState,
-			State:         state,
-			SourceNodeID:  nodeID,
-			SourceStoreID: storeID,
-			LeaseHistory:  leaseHistory,
-			Stats: serverpb.RangeStatistics{
-				QueriesPerSecond: rep.QueriesPerSecond(),
-				WritesPerSecond:  rep.WritesPerSecond(),
-			},
-			Problems: serverpb.RangeProblems{
-				Unavailable:            metrics.Unavailable,
-				LeaderNotLeaseHolder:   metrics.Leader && metrics.LeaseValid && !metrics.Leaseholder,
-				NoRaftLeader:           !storage.HasRaftLeader(raftStatus) && !metrics.Quiescent,
-				Underreplicated:        metrics.Underreplicated,
-				Overreplicated:         metrics.Overreplicated,
-				NoLease:                metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
-				QuiescentEqualsTicking: raftStatus != nil && metrics.Quiescent == metrics.Ticking,
-				RaftLogTooLarge:        metrics.RaftLogTooLarge,
-			},
-			LatchesLocal:  metrics.LatchInfoLocal,
-			LatchesGlobal: metrics.LatchInfoGlobal,
-			LeaseStatus:   metrics.LeaseStatus,
-			Quiescent:     metrics.Quiescent,
-			Ticking:       metrics.Ticking,
-		}
-	}
-
 	isLiveMap := s.nodeLiveness.GetIsLiveMap()
 	clusterNodes := s.storePool.ClusterNodeCount()
 
+	constructRangeInfo := func(
+		desc roachpb.RangeDescriptor, rep *storage.Replica, storeID roachpb.StoreID,
+	) serverpb.RangeInfo {
+		// If all fields are unset, assume it's an old client that wants everything.
+		if !(req.AllInfo || req.LeaseInfo || req.DescInfo) {
+			req.AllInfo = true
+		}
+
+		res := serverpb.RangeInfo{}
+		if req.AllInfo {
+			req.DescInfo = true
+			req.LeaseInfo = true
+		}
+
+		var metrics *storage.ReplicaMetrics
+		if req.AllInfo {
+			metrics = new(storage.ReplicaMetrics)
+			*metrics = rep.Metrics(ctx, rep.Clock().Now(), isLiveMap, clusterNodes)
+			raftStatus := rep.RaftStatus()
+			raftState := convertRaftStatus(raftStatus)
+			leaseHistory := rep.GetLeaseHistory()
+			var span serverpb.PrettySpan
+			if includeRawKeys {
+				span.StartKey = desc.StartKey.String()
+				span.EndKey = desc.EndKey.String()
+			} else {
+				span.StartKey = omittedKeyStr
+				span.EndKey = omittedKeyStr
+			}
+			state := rep.State()
+			if !includeRawKeys {
+				state.ReplicaState.Desc.StartKey = nil
+				state.ReplicaState.Desc.EndKey = nil
+			}
+
+			ri := serverpb.RangeInfo{
+				Span:          span,
+				RaftState:     raftState,
+				State:         state,
+				SourceNodeID:  nodeID,
+				SourceStoreID: storeID,
+				LeaseHistory:  leaseHistory,
+				Stats: serverpb.RangeStatistics{
+					QueriesPerSecond: rep.QueriesPerSecond(),
+					WritesPerSecond:  rep.WritesPerSecond(),
+				},
+				Problems: serverpb.RangeProblems{
+					Unavailable:            metrics.Unavailable,
+					LeaderNotLeaseHolder:   metrics.Leader && metrics.LeaseValid && !metrics.Leaseholder,
+					NoRaftLeader:           !storage.HasRaftLeader(raftStatus) && !metrics.Quiescent,
+					Underreplicated:        metrics.Underreplicated,
+					Overreplicated:         metrics.Overreplicated,
+					NoLease:                metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
+					QuiescentEqualsTicking: raftStatus != nil && metrics.Quiescent == metrics.Ticking,
+					RaftLogTooLarge:        metrics.RaftLogTooLarge,
+				},
+				LatchesLocal:  metrics.LatchInfoLocal,
+				LatchesGlobal: metrics.LatchInfoGlobal,
+				Quiescent:     metrics.Quiescent,
+				Ticking:       metrics.Ticking,
+			}
+			res.XXX_Merge(&ri)
+		}
+		if req.LeaseInfo {
+			if metrics != nil {
+				res.LeaseStatus = metrics.LeaseStatus
+			} else {
+				res.LeaseStatus = rep.GetLeaseStatus()
+			}
+		}
+		if req.DescInfo {
+			res.Desc = desc
+		}
+
+		return res
+	}
+
 	ranges := make([]serverpb.RangeInfo, 0, 1000)
 	err = s.stores.VisitStores(func(store *storage.Store) error {
-		timestamp := store.Clock().Now()
 		if len(req.RangeIDs) == 0 {
 			// All ranges requested.
-			store.VisitReplicas(storage.VisitOrderRandom, func(r *storage.Replica) bool {
+			ordering := storage.VisitOrderRandom
+			if req.Ordering == serverpb.RangesRequest_BY_KEY {
+				// Read the ranges in order, although we'll also sort them again later
+				// anyway if there's more than one store.
+				ordering = storage.VisitOrderByKey
+			}
+			store.VisitReplicas(ordering, func(r *storage.Replica) bool {
 				ranges = append(ranges,
 					constructRangeInfo(
 						*r.Desc(),
 						r,
 						store.Ident.StoreID,
-						r.Metrics(ctx, timestamp, isLiveMap, clusterNodes),
 					))
 				return true // continue iterating
 			})
@@ -1301,7 +1346,6 @@ func (s *statusServer) Ranges(
 					*rep.Desc(),
 					rep,
 					store.Ident.StoreID,
-					rep.Metrics(ctx, timestamp, isLiveMap, clusterNodes),
 				))
 		}
 		return nil
@@ -1309,8 +1353,31 @@ func (s *statusServer) Ranges(
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.Internal, err.Error())
 	}
+	if req.Ordering == serverpb.RangesRequest_BY_KEY && s.stores.GetStoreCount() > 1 {
+		sort.Slice(ranges, func(i, j int) bool {
+			l := ranges[i]
+			r := ranges[j]
+			return l.Desc.StartKey.Less(r.Desc.StartKey)
+		})
+	}
 	output.Ranges = ranges
 	return &output, nil
+}
+
+// RangesStream is the streaming version of Ranges.
+func (s *statusServer) RangesStream(
+	req *serverpb.RangesRequest, rpc serverpb.Status_RangesStreamServer,
+) error {
+	ranges, err := s.Ranges(rpc.Context(), req)
+	if err != nil {
+		return err
+	}
+	for i := range ranges.Ranges {
+		if err := rpc.Send(&ranges.Ranges[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // HotRanges returns the hottest ranges on each store on the requested node(s).
@@ -1414,6 +1481,8 @@ func (s *statusServer) Range(
 
 	rangesRequest := &serverpb.RangesRequest{
 		RangeIDs: []roachpb.RangeID{roachpb.RangeID(req.RangeId)},
+		AllInfo:  true,
+		Ordering: serverpb.RangesRequest_RANDOM,
 	}
 
 	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
