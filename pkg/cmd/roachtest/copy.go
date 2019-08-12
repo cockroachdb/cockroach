@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	_ "github.com/lib/pq"
@@ -44,6 +45,7 @@ func registerCopy(r *testRegistry) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
+			fetchCockroachVersion(c)
 			t.Status("importing Bank fixture")
 			c.Run(ctx, c.Node(1), fmt.Sprintf(
 				"./workload fixtures load bank --rows=%d --payload-bytes=%d {pgurl:1}",
@@ -59,7 +61,14 @@ func registerCopy(r *testRegistry) {
 				var count int
 				const q = "SELECT count(*) FROM [SHOW RANGES FROM TABLE bank.bank]"
 				if err := db.QueryRow(q).Scan(&count); err != nil {
-					t.Fatalf("failed to get range count: %v", err)
+					// TODO: Remove experimental_ranges query once we stop testing 19.1 or
+					// earlier.
+					if strings.Contains(err.Error(), "syntax error at or near \"ranges\"") {
+						err = db.QueryRow("SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE bank.bank]").Scan(&count)
+					}
+					if err != nil {
+						t.Fatalf("failed to get range count: %v", err)
+					}
 				}
 				return count
 			}

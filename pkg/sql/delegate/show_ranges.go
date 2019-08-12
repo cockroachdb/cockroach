@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// delegateShowRanges implements the SHOW EXPERIMENTAL_RANGES statement:
+// delegateShowRanges implements the SHOW RANGES statement:
 //   SHOW RANGES FROM TABLE t
 //   SHOW RANGES FROM INDEX t@idx
 //   SHOW RANGES FROM DATABASE db
