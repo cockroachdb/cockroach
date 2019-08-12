@@ -1271,32 +1271,22 @@ func (s *statusServer) Ranges(
 	isLiveMap := s.nodeLiveness.GetIsLiveMap()
 	clusterNodes := s.storePool.ClusterNodeCount()
 
+	ranges := make([]serverpb.RangeInfo, 0, 1000)
 	err = s.stores.VisitStores(func(store *storage.Store) error {
 		timestamp := store.Clock().Now()
 		if len(req.RangeIDs) == 0 {
 			// All ranges requested.
-
-			// Use IterateRangeDescriptors to read from the engine only
-			// because it's already exported.
-			err := storage.IterateRangeDescriptors(ctx, store.Engine(),
-				func(desc roachpb.RangeDescriptor) (bool, error) {
-					rep, err := store.GetReplica(desc.RangeID)
-					if _, skip := err.(*roachpb.RangeNotFoundError); skip {
-						return true, nil // continue
-					}
-					if err != nil {
-						return true, err
-					}
-					output.Ranges = append(output.Ranges,
-						constructRangeInfo(
-							desc,
-							rep,
-							store.Ident.StoreID,
-							rep.Metrics(ctx, timestamp, isLiveMap, clusterNodes),
-						))
-					return false, nil
-				})
-			return err
+			store.VisitReplicas(storage.VisitOrderRandom, func(r *storage.Replica) bool {
+				ranges = append(ranges,
+					constructRangeInfo(
+						*r.Desc(),
+						r,
+						store.Ident.StoreID,
+						r.Metrics(ctx, timestamp, isLiveMap, clusterNodes),
+					))
+				return true // continue iterating
+			})
+			return nil // continue iterating
 		}
 
 		// Specific ranges requested:
@@ -1306,10 +1296,9 @@ func (s *statusServer) Ranges(
 				// Not found: continue.
 				continue
 			}
-			desc := rep.Desc()
-			output.Ranges = append(output.Ranges,
+			ranges = append(ranges,
 				constructRangeInfo(
-					*desc,
+					*rep.Desc(),
 					rep,
 					store.Ident.StoreID,
 					rep.Metrics(ctx, timestamp, isLiveMap, clusterNodes),
@@ -1320,6 +1309,7 @@ func (s *statusServer) Ranges(
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.Internal, err.Error())
 	}
+	output.Ranges = ranges
 	return &output, nil
 }
 
