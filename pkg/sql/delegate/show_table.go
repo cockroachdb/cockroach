@@ -20,12 +20,23 @@ import (
 
 func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, error) {
 	const showCreateQuery = `
-     SELECT %[3]s AS table_name,
-            create_statement
-       FROM %[4]s.crdb_internal.create_statements
-      WHERE (database_name IS NULL OR database_name = %[1]s)
-        AND schema_name = %[5]s
-        AND descriptor_name = %[2]s`
+    SELECT
+			%[3]s AS table_name,
+			array_to_string(
+				array_cat(
+					ARRAY[create_statement],
+					zone_configuration_statements
+				),
+				e';\n'
+			)
+				AS create_statement
+		FROM
+			%[4]s.crdb_internal.create_statements
+		WHERE
+			(database_name IS NULL OR database_name = %[1]s)
+			AND schema_name = %[5]s
+			AND descriptor_name = %[2]s
+	`
 
 	return d.showTableDetails(n.Name, showCreateQuery)
 }
