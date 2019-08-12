@@ -579,57 +579,66 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 		offset++
 	}
 
-	// We insert splits at every index span of the table above. Since the
-	// BulkAdder is split aware when constructing SSTs, there is no risk of worst
-	// case overlap behavior in the resulting AddSSTable calls.
-	//
-	// NB: We are getting rid of the pre-buffering stage which constructed
-	// separate buckets for each table's primary data, and flushed to the
-	// BulkAdder when the bucket was full. This is because, a tpcc 1k IMPORT would
-	// OOM when maintaining this buffer. Two big wins we got from this
-	// pre-buffering stage were:
-	//
-	// 1. We avoided worst case overlapping behavior in the AddSSTable calls as a
-	// result of flushing keys with the same TableIDIndexID prefix, together.
-	//
-	// 2. Secondary index KVs which were few and filled the bucket infrequently
-	// were flushed rarely, resulting in fewer L0 (and total) files.
-	//
-	// While we continue to achieve the first property as a result of the splits
-	// mentioned above, the KVs sent to the BulkAdder are no longer grouped which
-	// results in flushing a much larger number of small SSTs. This increases the
-	// number of L0 (and total) files, but with a lower memory usage.
-	for kvBatch := range kvCh {
-		for _, kv := range kvBatch.KVs {
-			_, _, indexID, indexErr := sqlbase.DecodeTableIDIndexID(kv.Key)
-			if indexErr != nil {
-				return indexErr
-			}
+	g := ctxgroup.WithContext(ctx)
 
-			// Decide which adder to send the KV to by extracting its index id.
-			//
-			// TODO(adityamaru): There is a potential optimization of plumbing the
-			// different putters, and differentiating based on their type. It might be
-			// more efficient than parsing every kv.
-			if indexID == 1 {
-				if err := pkIndexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
-					if _, ok := err.(storagebase.DuplicateKeyError); ok {
-						return errors.Wrap(err, "duplicate key in primary index")
-					}
-					return err
+	g.GoCtx(func(ctx context.Context) error {
+		// We insert splits at every index span of the table above. Since the
+		// BulkAdder is split aware when constructing SSTs, there is no risk of worst
+		// case overlap behavior in the resulting AddSSTable calls.
+		//
+		// NB: We are getting rid of the pre-buffering stage which constructed
+		// separate buckets for each table's primary data, and flushed to the
+		// BulkAdder when the bucket was full. This is because, a tpcc 1k IMPORT would
+		// OOM when maintaining this buffer. Two big wins we got from this
+		// pre-buffering stage were:
+		//
+		// 1. We avoided worst case overlapping behavior in the AddSSTable calls as a
+		// result of flushing keys with the same TableIDIndexID prefix, together.
+		//
+		// 2. Secondary index KVs which were few and filled the bucket infrequently
+		// were flushed rarely, resulting in fewer L0 (and total) files.
+		//
+		// While we continue to achieve the first property as a result of the splits
+		// mentioned above, the KVs sent to the BulkAdder are no longer grouped which
+		// results in flushing a much larger number of small SSTs. This increases the
+		// number of L0 (and total) files, but with a lower memory usage.
+		for kvBatch := range kvCh {
+			for _, kv := range kvBatch.KVs {
+				_, _, indexID, indexErr := sqlbase.DecodeTableIDIndexID(kv.Key)
+				if indexErr != nil {
+					return indexErr
 				}
-			} else {
-				if err := indexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
-					if _, ok := err.(storagebase.DuplicateKeyError); ok {
-						return errors.Wrap(err, "duplicate key in index")
+
+				// Decide which adder to send the KV to by extracting its index id.
+				//
+				// TODO(adityamaru): There is a potential optimization of plumbing the
+				// different putters, and differentiating based on their type. It might be
+				// more efficient than parsing every kv.
+				if indexID == 1 {
+					if err := pkIndexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
+						if _, ok := err.(storagebase.DuplicateKeyError); ok {
+							return errors.Wrap(err, "duplicate key in primary index")
+						}
+						return err
 					}
-					return err
+				} else {
+					if err := indexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
+						if _, ok := err.(storagebase.DuplicateKeyError); ok {
+							return errors.Wrap(err, "duplicate key in index")
+						}
+						return err
+					}
 				}
 			}
+			offset := offsets[kvBatch.Source]
+			writtenRow[offset] = kvBatch.LastRow
+			atomic.StoreUint32(&writtenFraction[offset], math.Float32bits(kvBatch.Progress))
 		}
-		offset := offsets[kvBatch.Source]
-		writtenRow[offset] = kvBatch.LastRow
-		atomic.StoreUint32(&writtenFraction[offset], math.Float32bits(kvBatch.Progress))
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	if err := pkIndexAdder.Flush(ctx); err != nil {
