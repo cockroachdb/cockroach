@@ -550,17 +550,16 @@ func registerKVRangeLookups(r *testRegistry) {
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			defer close(doneWorkload)
-			cmd := fmt.Sprintf("./workload init kv {pgurl:1-%d}", nodes)
+			cmd := fmt.Sprintf("./workload init kv {pgurl:1-%d} --splits=1000", nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
 			close(doneInit)
 			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
-			splits := " --splits=1000"
 			duration := " --duration=" + ifLocal("10s", "10m")
 			readPercent := " --read-percent=50"
 			// We run kv with --tolerate-errors, since the relocate workload is
 			// expected to create `result is ambiguous (removing replica)` errors.
 			cmd = fmt.Sprintf("./workload run kv --tolerate-errors"+
-				concurrency+splits+duration+readPercent+
+				concurrency+duration+readPercent+
 				" {pgurl:1-%d}", nodes)
 			start := timeutil.Now()
 			c.Run(ctx, c.Node(nodes+1), cmd)
