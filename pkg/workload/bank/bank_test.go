@@ -47,7 +47,7 @@ func TestBank(t *testing.T) {
 			sqlDB := sqlutils.MakeSQLRunner(db)
 			sqlDB.Exec(t, `DROP TABLE IF EXISTS bank`)
 
-			bank := FromConfig(test.rows, defaultPayloadBytes, test.ranges)
+			bank := FromConfig(test.rows, test.rows, defaultPayloadBytes, test.ranges)
 			bankTable := bank.Tables()[0]
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, bankTable.Name, bankTable.Schema))
 
