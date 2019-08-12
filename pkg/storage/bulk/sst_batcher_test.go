@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -42,7 +43,7 @@ func TestAddBatched(t *testing.T) {
 	})
 }
 
-func runTestImport(t *testing.T, batchSize int64) {
+func runTestImport(t *testing.T, batchSize uint64) {
 
 	ctx := context.Background()
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -127,7 +128,9 @@ func runTestImport(t *testing.T, batchSize int64) {
 			}
 
 			ts := hlc.Timestamp{WallTime: 100}
-			b, err := bulk.MakeBulkAdder(kvDB, mockCache, batchSize, batchSize, ts)
+			b, err := bulk.MakeBulkAdder(
+				kvDB, mockCache, ts, storagebase.BulkAdderOptions{BufferSize: batchSize, SSTSize: batchSize},
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
