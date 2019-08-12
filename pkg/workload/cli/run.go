@@ -348,13 +348,6 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		log.Infof(ctx, "retrying after error while creating load: %v", err)
 	}
 
-	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
-	for _, table := range gen.Tables() {
-		if err := workloadsql.Split(ctx, initDB, table, splitConcurrency); err != nil {
-			return err
-		}
-	}
-
 	start := timeutil.Now()
 	errCh := make(chan error)
 	var rampDone chan struct{}

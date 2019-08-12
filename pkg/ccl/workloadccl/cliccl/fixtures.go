@@ -318,13 +318,6 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 		return err
 	}
 
-	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
-	for _, table := range gen.Tables() {
-		if err := workloadsql.Split(ctx, sqlDB, table, splitConcurrency); err != nil {
-			return errors.Wrapf(err, `splitting %s`, table.Name)
-		}
-	}
-
 	if hooks, ok := gen.(workload.Hookser); *fixturesRunChecks && ok {
 		if consistencyCheckFn := hooks.Hooks().CheckConsistency; consistencyCheckFn != nil {
 			log.Info(ctx, "fixture is imported; now running consistency checks (ctrl-c to abort)")
@@ -355,13 +348,6 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 	}
 	if _, err := workloadsql.Setup(ctx, sqlDB, gen, l); err != nil {
 		return err
-	}
-
-	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
-	for _, table := range gen.Tables() {
-		if err := workloadsql.Split(ctx, sqlDB, table, splitConcurrency); err != nil {
-			return errors.Wrapf(err, `splitting %s`, table.Name)
-		}
 	}
 
 	if hooks, ok := gen.(workload.Hookser); *fixturesRunChecks && ok {
