@@ -1568,17 +1568,18 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 
 	l := ReplicaType_LEARNER
 	v := ReplicaType_VOTER
-	repl := ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3, Type: &l}
+	repl1 := ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3, Type: &l}
+	repl2 := ReplicaDescriptor{NodeID: 4, StoreID: 5, ReplicaID: 6, Type: &v}
 	crt := ChangeReplicasTrigger{
-		ChangeType: ADD_REPLICA,
-		Replica:    repl,
+		InternalAddedReplicas:   []ReplicaDescriptor{repl1},
+		InternalRemovedReplicas: []ReplicaDescriptor{repl2},
 		Desc: &RangeDescriptor{
 			RangeID:  1,
 			StartKey: RKey("a"),
 			EndKey:   RKey("b"),
 			InternalReplicas: []ReplicaDescriptor{
-				repl,
-				{NodeID: 4, StoreID: 5, ReplicaID: 6, Type: &v},
+				repl1,
+				repl2,
 				{NodeID: 7, StoreID: 8, ReplicaID: 9, Type: &l},
 			},
 			NextReplicaID:        10,
@@ -1587,6 +1588,6 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 		},
 	}
 	act := crt.String()
-	exp := `ADD_REPLICA((n1,s2):3LEARNER): updated=(n4,s5):6,(n1,s2):3LEARNER,(n7,s8):9LEARNER next=10`
+	exp := "ADD_REPLICA[(n1,s2):3LEARNER], REMOVE_REPLICA[(n4,s5):6]: after=[(n1,s2):3LEARNER (n4,s5):6 (n7,s8):9LEARNER] next=10"
 	require.Equal(t, exp, act)
 }
