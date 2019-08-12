@@ -340,165 +340,17 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 
 		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, progFn, cp.flowCtx.Cfg.Settings)
 	})
-
-	// TODO(jeffreyxiao): Remove this check in 20.1.
-	// If the cluster supports sticky bits, then we should use the sticky bit to
-	// ensure that the splits are not automatically split by the merge queue. If
-	// the cluster does not support sticky bits, we disable the merge queue via
-	// gossip, so we can just set the split to expire immediately.
-	stickyBitEnabled := cp.flowCtx.Cfg.Settings.Version.IsActive(cluster.VersionStickyBit)
-	expirationTime := hlc.Timestamp{}
-	if stickyBitEnabled {
-		expirationTime = cp.flowCtx.Cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
-	}
-
 	if cp.spec.IngestDirectly {
-		for _, tbl := range cp.spec.Tables {
-			for _, span := range tbl.Desc.AllIndexSpans() {
-				if err := cp.flowCtx.Cfg.DB.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
-					return err
-				}
-
-				log.VEventf(ctx, 1, "scattering index range %s", span.Key)
-				scatterReq := &roachpb.AdminScatterRequest{
-					RequestHeader: roachpb.RequestHeaderFromSpan(span),
-				}
-				if _, pErr := client.SendWrapped(ctx, cp.flowCtx.Cfg.DB.NonTransactionalSender(), scatterReq); pErr != nil {
-					log.Errorf(ctx, "failed to scatter span %s: %s", span.Key, pErr)
-				}
-			}
-		}
 		// IngestDirectly means this reader will just ingest the KVs that the
 		// producer emitted to the chan, and the only result we push into distsql at
 		// the end is one row containing an encoded BulkOpSummary.
 		group.GoCtx(func(ctx context.Context) error {
-			ctx, span := tracing.ChildSpan(ctx, "ingestKVs")
-			defer tracing.FinishSpan(span)
-
-			writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
-			const bufferSize = 64 << 20
-			flushSize := storageccl.MaxImportBatchSize(cp.flowCtx.Cfg.Settings)
-
-			// We create two bulk adders so as to combat the excessive flushing of
-			// small SSTs which was observed when using a single adder for both
-			// primary and secondary index kvs. The number of secondary index kvs are
-			// small, and so we expect the indexAdder to flush much less frequently
-			// than the pkIndexAdder.
-			pkIndexAdder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, bufferSize, flushSize, writeTS)
-			if err != nil {
-				return err
-			}
-			pkIndexAdder.SetName("pkIndexAdder")
-			pkIndexAdder.SetDisallowShadowing(true)
-			// AddSSTable with disallowShadowing=true does not consider a KV with the
-			// same ts and value to be a collision. This is to support the resumption
-			// of IMPORT jobs which might re-import some already ingested, but not
-			// checkpointed KVs.
-			//
-			// To provide a similar behavior with KVs within the same SST, we silently
-			// skip over duplicates with the same value, instead of throwing a
-			// uniqueness error.
-			pkIndexAdder.SkipLocalDuplicatesWithSameValues(true)
-			defer pkIndexAdder.Close(ctx)
-
-			indexAdder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, bufferSize, flushSize, writeTS)
-			if err != nil {
-				return err
-			}
-			indexAdder.SetName("indexAdder")
-			indexAdder.SetDisallowShadowing(true)
-			indexAdder.SkipLocalDuplicatesWithSameValues(true)
-			defer indexAdder.Close(ctx)
-
-			// Drain the kvCh using the BulkAdder until it closes.
-			if err := ingestKvs(ctx, pkIndexAdder, indexAdder, kvCh); err != nil {
-				return err
-			}
-
-			addedSummary := pkIndexAdder.GetSummary()
-			addedSummary.Add(indexAdder.GetSummary())
-			countsBytes, err := protoutil.Marshal(&addedSummary)
-			if err != nil {
-				return err
-			}
-			cs, err := cp.out.EmitRow(ctx, sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
-				sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
-			})
-			if err != nil {
-				return err
-			}
-			if cs != distsqlrun.NeedMoreRows {
-				return errors.New("unexpected closure of consumer")
-			}
-			return nil
+			return cp.ingestKvs(ctx, kvCh)
 		})
 	} else {
 		// Sample KVs
 		group.GoCtx(func(ctx context.Context) error {
-
-			ctx, span := tracing.ChildSpan(ctx, "sendImportKVs")
-			defer tracing.FinishSpan(span)
-
-			var fn sampleFunc
-			var sampleAll bool
-			if cp.spec.SampleSize == 0 {
-				sampleAll = true
-			} else {
-				sr := sampleRate{
-					rnd:        rand.New(rand.NewSource(rand.Int63())),
-					sampleSize: float64(cp.spec.SampleSize),
-				}
-				fn = sr.sample
-			}
-
-			// Populate the split-point spans which have already been imported.
-			var completedSpans roachpb.SpanGroup
-			job, err := cp.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
-			if err != nil {
-				return err
-			}
-			progress := job.Progress()
-			if details, ok := progress.Details.(*jobspb.Progress_Import); ok {
-				completedSpans.Add(details.Import.SpanProgress...)
-			} else {
-				return errors.Errorf("unexpected progress type %T", progress)
-			}
-
-			for kvBatch := range kvCh {
-				for _, kv := range kvBatch {
-					// Allow KV pairs to be dropped if they belong to a completed span.
-					if completedSpans.Contains(kv.Key) {
-						continue
-					}
-
-					rowRequired := sampleAll || keys.IsDescriptorKey(kv.Key)
-					if rowRequired || fn(kv) {
-						var row sqlbase.EncDatumRow
-						if rowRequired {
-							row = sqlbase.EncDatumRow{
-								sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Key))),
-								sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
-							}
-						} else {
-							// Don't send the value for rows returned for sampling
-							row = sqlbase.EncDatumRow{
-								sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Key))),
-								sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
-							}
-						}
-
-						cs, err := cp.out.EmitRow(ctx, row)
-						if err != nil {
-							return err
-						}
-						if cs != distsqlrun.NeedMoreRows {
-							return errors.New("unexpected closure of consumer")
-						}
-					}
-				}
-			}
-			return nil
+			return cp.emitKvs(ctx, kvCh)
 		})
 	}
 
@@ -520,6 +372,73 @@ func (s sampleRate) sample(kv roachpb.KeyValue) bool {
 	return prob > s.rnd.Float64()
 }
 
+func (cp *readImportDataProcessor) emitKvs(
+	ctx context.Context, kvCh <-chan []roachpb.KeyValue,
+) error {
+	ctx, span := tracing.ChildSpan(ctx, "sendImportKVs")
+	defer tracing.FinishSpan(span)
+
+	var fn sampleFunc
+	var sampleAll bool
+	if cp.spec.SampleSize == 0 {
+		sampleAll = true
+	} else {
+		sr := sampleRate{
+			rnd:        rand.New(rand.NewSource(rand.Int63())),
+			sampleSize: float64(cp.spec.SampleSize),
+		}
+		fn = sr.sample
+	}
+
+	// Populate the split-point spans which have already been imported.
+	var completedSpans roachpb.SpanGroup
+	job, err := cp.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
+	if err != nil {
+		return err
+	}
+	progress := job.Progress()
+	if details, ok := progress.Details.(*jobspb.Progress_Import); ok {
+		completedSpans.Add(details.Import.SpanProgress...)
+	} else {
+		return errors.Errorf("unexpected progress type %T", progress)
+	}
+
+	for kvBatch := range kvCh {
+		for _, kv := range kvBatch {
+			// Allow KV pairs to be dropped if they belong to a completed span.
+			if completedSpans.Contains(kv.Key) {
+				continue
+			}
+
+			rowRequired := sampleAll || keys.IsDescriptorKey(kv.Key)
+			if rowRequired || fn(kv) {
+				var row sqlbase.EncDatumRow
+				if rowRequired {
+					row = sqlbase.EncDatumRow{
+						sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Key))),
+						sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
+					}
+				} else {
+					// Don't send the value for rows returned for sampling
+					row = sqlbase.EncDatumRow{
+						sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Key))),
+						sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
+					}
+				}
+
+				cs, err := cp.out.EmitRow(ctx, row)
+				if err != nil {
+					return err
+				}
+				if cs != distsqlrun.NeedMoreRows {
+					return errors.New("unexpected closure of consumer")
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func makeRowErr(file string, row int64, code, format string, args ...interface{}) error {
 	return pgerror.NewWithDepthf(1, code,
 		"%q: row %d: "+format, append([]interface{}{file, row}, args...)...)
@@ -536,18 +455,85 @@ func wrapRowErr(err error, file string, row int64, code, format string, args ...
 	return err
 }
 
+func (cp *readImportDataProcessor) presplitTableBoundaries(ctx context.Context) error {
+	// TODO(jeffreyxiao): Remove this check in 20.1.
+	// If the cluster supports sticky bits, then we should use the sticky bit to
+	// ensure that the splits are not automatically split by the merge queue. If
+	// the cluster does not support sticky bits, we disable the merge queue via
+	// gossip, so we can just set the split to expire immediately.
+	stickyBitEnabled := cp.flowCtx.Cfg.Settings.Version.IsActive(cluster.VersionStickyBit)
+	expirationTime := hlc.Timestamp{}
+	if stickyBitEnabled {
+		expirationTime = cp.flowCtx.Cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+	}
+	for _, tbl := range cp.spec.Tables {
+		for _, span := range tbl.Desc.AllIndexSpans() {
+			if err := cp.flowCtx.Cfg.DB.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
+				return err
+			}
+
+			log.VEventf(ctx, 1, "scattering index range %s", span.Key)
+			scatterReq := &roachpb.AdminScatterRequest{
+				RequestHeader: roachpb.RequestHeaderFromSpan(span),
+			}
+			if _, pErr := client.SendWrapped(ctx, cp.flowCtx.Cfg.DB.NonTransactionalSender(), scatterReq); pErr != nil {
+				log.Errorf(ctx, "failed to scatter span %s: %s", span.Key, pErr)
+			}
+		}
+	}
+	return nil
+}
+
 // ingestKvs drains kvs from the channel until it closes, ingesting them using
 // the BulkAdder. It handles the required buffering/sorting/etc.
-func ingestKvs(
-	ctx context.Context,
-	pkIndexAdder storagebase.BulkAdder,
-	indexAdder storagebase.BulkAdder,
-	kvCh <-chan []roachpb.KeyValue,
+func (cp *readImportDataProcessor) ingestKvs(
+	ctx context.Context, kvCh <-chan []roachpb.KeyValue,
 ) error {
-	// We insert splits at every index span of the table prior to the invocation
-	// of this method. Since the BulkAdder is split aware when constructing SSTs,
-	// there is no risk of worst case overlap behavior in the resulting AddSSTable
-	// calls.
+	ctx, span := tracing.ChildSpan(ctx, "ingestKVs")
+	defer tracing.FinishSpan(span)
+
+	if err := cp.presplitTableBoundaries(ctx); err != nil {
+		return err
+	}
+
+	writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
+	const bufferSize = 64 << 20
+	flushSize := storageccl.MaxImportBatchSize(cp.flowCtx.Cfg.Settings)
+
+	// We create two bulk adders so as to combat the excessive flushing of
+	// small SSTs which was observed when using a single adder for both
+	// primary and secondary index kvs. The number of secondary index kvs are
+	// small, and so we expect the indexAdder to flush much less frequently
+	// than the pkIndexAdder.
+	pkIndexAdder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, bufferSize, flushSize, writeTS)
+	if err != nil {
+		return err
+	}
+	pkIndexAdder.SetName("pkIndexAdder")
+	pkIndexAdder.SetDisallowShadowing(true)
+	// AddSSTable with disallowShadowing=true does not consider a KV with the
+	// same ts and value to be a collision. This is to support the resumption
+	// of IMPORT jobs which might re-import some already ingested, but not
+	// checkpointed KVs.
+	//
+	// To provide a similar behavior with KVs within the same SST, we silently
+	// skip over duplicates with the same value, instead of throwing a
+	// uniqueness error.
+	pkIndexAdder.SkipLocalDuplicatesWithSameValues(true)
+	defer pkIndexAdder.Close(ctx)
+
+	indexAdder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, bufferSize, flushSize, writeTS)
+	if err != nil {
+		return err
+	}
+	indexAdder.SetName("indexAdder")
+	indexAdder.SetDisallowShadowing(true)
+	indexAdder.SkipLocalDuplicatesWithSameValues(true)
+	defer indexAdder.Close(ctx)
+
+	// We insert splits at every index span of the table above. Since the
+	// BulkAdder is split aware when constructing SSTs, there is no risk of worst
+	// case overlap behavior in the resulting AddSSTable calls.
 	//
 	// NB: We are getting rid of the pre-buffering stage which constructed
 	// separate buckets for each table's primary data, and flushed to the
@@ -607,6 +593,23 @@ func ingestKvs(
 			return errors.Wrap(err, "duplicate key in index")
 		}
 		return err
+	}
+
+	addedSummary := pkIndexAdder.GetSummary()
+	addedSummary.Add(indexAdder.GetSummary())
+	countsBytes, err := protoutil.Marshal(&addedSummary)
+	if err != nil {
+		return err
+	}
+	cs, err := cp.out.EmitRow(ctx, sqlbase.EncDatumRow{
+		sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
+		sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
+	})
+	if err != nil {
+		return err
+	}
+	if cs != distsqlrun.NeedMoreRows {
+		return errors.New("unexpected closure of consumer")
 	}
 	return nil
 }
