@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -87,6 +89,20 @@ func setupTransientServers(
 	cleanup = func() {}
 	ctx := context.Background()
 
+	if demoCtx.nodes <= 0 {
+		return "", "", cleanup, errors.Errorf("must have a positive number of nodes")
+	}
+
+	var nodeLocalityTiers []roachpb.Tier
+	if len(demoCtx.localities.Tiers) != 0 {
+		// Error out of localities don't line up with requested node
+		// count before doing any sort of setup.
+		if len(demoCtx.localities.Tiers) != demoCtx.nodes {
+			return "", "", cleanup, errors.Errorf("number of localities specified must equal number of nodes")
+		}
+		nodeLocalityTiers = demoCtx.localities.Tiers
+	}
+
 	// Set up logging. For demo/transient server we use non-standard
 	// behavior where we avoid file creation if possible.
 	df := cmd.Flags().Lookup(cliflags.LogDir.Name)
@@ -129,16 +145,24 @@ func setupTransientServers(
 		},
 		Stopper: stopper,
 	}
+
 	serverFactory := server.TestServerFactory
-	s := serverFactory.New(args).(*server.TestServer)
-	if err := s.Start(args); err != nil {
-		return connURL, adminURL, cleanup, err
-	}
-	args.JoinAddr = s.ServingRPCAddr()
-	for i := 0; i < demoCtx.nodes-1; i++ {
-		s := serverFactory.New(args).(*server.TestServer)
-		if err := s.Start(args); err != nil {
+	var s *server.TestServer
+	for i := 0; i < demoCtx.nodes; i++ {
+		// All the nodes connect to the address of the first server created.
+		if s != nil {
+			args.JoinAddr = s.ServingRPCAddr()
+		}
+		if nodeLocalityTiers != nil {
+			args.Locality = roachpb.Locality{Tiers: nodeLocalityTiers[i : i+1]}
+		}
+		serv := serverFactory.New(args).(*server.TestServer)
+		if err := serv.Start(args); err != nil {
 			return connURL, adminURL, cleanup, err
+		}
+		// Remember the first server created.
+		if i == 0 {
+			s = serv
 		}
 	}
 
