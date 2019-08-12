@@ -525,12 +525,11 @@ func (db *DB) AdminTransferLease(
 func (db *DB) AdminChangeReplicas(
 	ctx context.Context,
 	key interface{},
-	changeType roachpb.ReplicaChangeType,
-	targets []roachpb.ReplicationTarget,
 	expDesc roachpb.RangeDescriptor,
+	chgs []roachpb.ReplicationChange,
 ) (*roachpb.RangeDescriptor, error) {
 	b := &Batch{}
-	b.adminChangeReplicas(key, changeType, targets, expDesc)
+	b.adminChangeReplicas(key, expDesc, chgs)
 	if err := getOneErr(db.Run(ctx, b), b); err != nil {
 		return nil, err
 	}

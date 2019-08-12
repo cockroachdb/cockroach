@@ -2038,12 +2038,12 @@ func TestConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		res1, err1 = db.AdminChangeReplicas(
-			ctx, key, roachpb.ADD_REPLICA, targets1, expects1)
+			ctx, key, expects1, roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, targets1))
 		wg.Done()
 	}()
 	go func() {
 		res2, err2 = db.AdminChangeReplicas(
-			ctx, key, roachpb.ADD_REPLICA, targets2, expects2)
+			ctx, key, expects2, roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, targets2))
 		wg.Done()
 	}()
 	wg.Wait()
@@ -2118,7 +2118,8 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	require.Nil(t, err)
 	addReplicas := func() error {
 		_, err := db.AdminChangeReplicas(
-			ctx, key, roachpb.ADD_REPLICA, pickTargets(), rangeInfo.Desc)
+			ctx, key, rangeInfo.Desc, roachpb.MakeReplicationChanges(
+				roachpb.ADD_REPLICA, pickTargets()))
 		return err
 	}
 	wg.Add(actors)
@@ -2160,7 +2161,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	responseFilter := func(ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
 		if ba.IsSingleRequest() {
 			changeReplicas, ok := ba.Requests[0].GetInner().(*roachpb.AdminChangeReplicasRequest)
-			if ok && changeReplicas.ChangeType == roachpb.ADD_REPLICA && useSeenAdd.Load().(bool) {
+			if ok && changeReplicas.Changes()[0].ChangeType == roachpb.ADD_REPLICA && useSeenAdd.Load().(bool) {
 				seenAdd <- struct{}{}
 			}
 		}
