@@ -1,22 +1,17 @@
-FROM debian:9.8-slim
+# use a scratch image with glibc/passwd/certs
+FROM gcr.io/distroless/base
 
-# For deployment, we need
-# libc6 - dynamically linked by cockroach binary
-# ca-certificates - to authenticate TLS connections for telemetry and
-#                   bulk-io with S3/GCS/Azure
-# tzdata - for time zone functions
-RUN apt-get update && \
-	apt-get -y upgrade && \
-	apt-get install -y libc6 ca-certificates tzdata && \
-	rm -rf /var/lib/apt/lists/*
-
-RUN mkdir -p /cockroach
-COPY cockroach.sh cockroach /cockroach/
-# Set working directory so that relative paths
-# are resolved appropriately when passed as args.
-WORKDIR /cockroach/
-
+# set the right release channel
 ENV COCKROACH_CHANNEL=official-docker
 
+# copy in the cockroach binary with correct permissions
+COPY --chown=nonroot cockroach /
+
+# exposed network ports
 EXPOSE 26257 8080
-ENTRYPOINT ["/cockroach/cockroach.sh"]
+
+# run as non-privileged user
+USER nonroot
+
+# entrypoint command
+ENTRYPOINT ["/cockroach"]
