@@ -162,7 +162,14 @@ func runLoadSplits(ctx context.Context, t *test, c *cluster, params splitParams)
 			var ranges int
 			const q = "SELECT count(*) FROM [SHOW RANGES FROM TABLE kv.kv]"
 			if err := db.QueryRow(q).Scan(&ranges); err != nil {
-				t.Fatalf("failed to get range count: %v", err)
+				// TODO(rafi): Remove experimental_ranges query once we stop testing
+				// 19.1 or earlier.
+				if strings.Contains(err.Error(), "syntax error at or near \"ranges\"") {
+					err = db.QueryRow("SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE kv.kv]").Scan(&ranges)
+				}
+				if err != nil {
+					t.Fatalf("failed to get range count: %v", err)
+				}
 			}
 			return ranges
 		}
