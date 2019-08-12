@@ -47,5 +47,15 @@ func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
 		whereClause = fmt.Sprintf(`WHERE job_id in (%s)`, n.Jobs.String())
 	}
 
-	return parse(fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause))
+	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)
+	if n.Block {
+		sqlStmt = fmt.Sprintf(
+			`SELECT * FROM [%s]
+			 WHERE
+			    IF(finished IS NULL,
+			      IF(pg_sleep(1), crdb_internal.force_retry('24h'), 0),
+			      0
+			    ) = 0`, sqlStmt)
+	}
+	return parse(sqlStmt)
 }
