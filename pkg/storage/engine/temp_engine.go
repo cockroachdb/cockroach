@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/petermattis/pebble"
 	"github.com/petermattis/pebble/cache"
+	"github.com/petermattis/pebble/vfs"
 )
 
 type rocksDBTempEngine struct {
@@ -45,6 +46,10 @@ func (r *rocksDBTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 func NewTempEngine(
 	tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, error) {
+	if tempStorage.Engine == base.EngineTypePebble {
+		return NewPebbleTempEngine(tempStorage, storeSpec)
+	}
+
 	if tempStorage.InMemory {
 		// TODO(arjun): Limit the size of the store once #16750 is addressed.
 		// Technically we do not pass any attributes to temporary store.
@@ -98,8 +103,6 @@ func (r *pebbleTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 func NewPebbleTempEngine(
 	tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, error) {
-	// TODO(itsbilal): Account for tempStorage.isMemory
-
 	// Default options as copied over from pebble/cmd/pebble/db.go
 	opts := &pebble.Options{
 		// Pebble doesn't currently support 0-size caches, so use a 128MB cache for
@@ -125,7 +128,13 @@ func NewPebbleTempEngine(
 		},
 	}
 
-	p, err := pebble.Open(tempStorage.Path, opts)
+	path := tempStorage.Path
+	if tempStorage.InMemory {
+		opts.FS = vfs.NewMem()
+		path = ""
+	}
+
+	p, err := pebble.Open(path, opts)
 	if err != nil {
 		return nil, err
 	}

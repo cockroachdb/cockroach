@@ -368,6 +368,10 @@ func initTempStorageConfig(
 			tempStorageMaxSizeBytes = base.DefaultTempStorageMaxSizeBytes
 		}
 	}
+	storageEngine := base.EngineTypeRocksDB
+	if startCtx.tempEngine == enginePebble {
+		storageEngine = base.EngineTypePebble
+	}
 
 	// Initialize a base.TempStorageConfig based on first store's spec and
 	// cli flags.
@@ -376,6 +380,7 @@ func initTempStorageConfig(
 		st,
 		firstStore,
 		startCtx.tempDir,
+		storageEngine,
 		tempStorageMaxSizeBytes,
 		specIdx,
 	)
