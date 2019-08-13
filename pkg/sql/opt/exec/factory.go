@@ -64,6 +64,7 @@ type Factory interface {
 		maxResults uint64,
 		reqOrdering OutputOrdering,
 		rowCount float64,
+		prefixSkipLen int,
 	) (Node, error)
 
 	// ConstructVirtualScan returns a node that represents the scan of a virtual

@@ -191,7 +191,15 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		FormatPrivate(f, e.Private(), required)
 		f.Buffer.WriteByte(')')
 
-	case *ScanExpr, *VirtualScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
+	case *ScanExpr:
+		if t.IsIndexSkipScan() {
+			fmt.Fprintf(f.Buffer, "%v (index-skip on the first %d col(s))", e.Op(), t.PrefixSkipLen)
+		} else {
+			fmt.Fprintf(f.Buffer, "%v", e.Op())
+		}
+		FormatPrivate(f, e.Private(), required)
+
+	case *VirtualScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
 		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr, *SequenceSelectExpr,
 		*WindowExpr, *OpaqueRelExpr, *OpaqueMutationExpr, *OpaqueDDLExpr,
 		*AlterTableSplitExpr, *AlterTableUnsplitExpr, *AlterTableUnsplitAllExpr,

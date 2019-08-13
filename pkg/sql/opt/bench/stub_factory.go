@@ -42,6 +42,7 @@ func (f *stubFactory) ConstructScan(
 	maxResults uint64,
 	reqOrdering exec.OutputOrdering,
 	rowCount float64,
+	prefixSkipLen int,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }

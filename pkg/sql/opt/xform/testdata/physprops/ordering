@@ -1136,18 +1136,8 @@ SELECT * FROM (SELECT DISTINCT ON (a) a, b, c FROM abc ORDER BY a, b) ORDER BY c
 sort
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── ordering: +3
- └── distinct-on
-      ├── columns: a:1(int!null) b:2(int) c:3(int)
-      ├── grouping columns: a:1(int!null)
-      ├── internal-ordering: +1,+2
-      ├── scan abc
-      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      │    └── ordering: +1,+2
-      └── aggregations
-           ├── first-agg [type=int]
-           │    └── variable: b [type=int]
-           └── first-agg [type=int]
-                └── variable: c [type=int]
+ └── scan (index-skip on the first 1 col(s)) abc
+      └── columns: a:1(int!null) b:2(int) c:3(int)
 
 # --------------------------------------------------
 # Insert operator.

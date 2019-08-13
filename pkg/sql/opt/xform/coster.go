@@ -278,7 +278,33 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		// practice, this will only happen when this is a primary index scan.
 		return hugeCost
 	}
-	rowCount := scan.Relational().Stats.RowCount
+	stats := scan.Relational().Stats
+	rowCount := stats.RowCount
+	seekNextRowCost := seqIOCostFactor
+
+	// If we're performing an index skip scan, we only ever scan the distinct rows.
+	if scan.IsIndexSkipScan() {
+		md := c.mem.Metadata()
+		table := md.Table(scan.Table)
+		index := table.Index(scan.Index)
+
+		var indexSkipCols opt.ColSet
+		for i := 0; i < scan.PrefixSkipLen; i++ {
+			indexSkipCols.Add(scan.Table.ColumnID(index.Column(i).Ordinal))
+		}
+
+		colStat, ok := c.mem.RequestColStat(scan, indexSkipCols)
+		if !ok {
+			// I don't think we can ever get here. Since we don't allow the memo
+			// to be optimized twice, the coster should never be used after
+			// logPropsBuilder.clear() is called.
+			panic(errors.AssertionFailedf("could not request the stats for ColSet %v", indexSkipCols))
+		}
+
+		rowCount = colStat.DistinctCount
+		seekNextRowCost = randIOCostFactor
+	}
+
 	perRowCost := c.rowScanCost(scan.Table, scan.Index, scan.Cols.Len())
 
 	if ordering.ScanIsReverse(scan, &required.Ordering) {
@@ -295,7 +321,9 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	if scan.Constraint == nil || scan.Constraint.IsUnconstrained() {
 		preferConstrainedScanCost = cpuCostFactor
 	}
-	return memo.Cost(rowCount)*(seqIOCostFactor+perRowCost) + preferConstrainedScanCost
+
+	perRowScanCost := perRowCost + memo.Cost(seekNextRowCost)
+	return memo.Cost(rowCount)*perRowScanCost + preferConstrainedScanCost
 }
 
 func (c *coster) computeVirtualScanCost(scan *memo.VirtualScanExpr) memo.Cost {

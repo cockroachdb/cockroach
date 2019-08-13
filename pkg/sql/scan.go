@@ -124,6 +124,12 @@ type scanNode struct {
 	// output. When there are no statistics to make the estimation, it will be
 	// set to zero.
 	estimatedRowCount uint64
+
+	// prefixSkipLen specifies the length of the index that we are doing an
+	// index-skip-scan over. By default this value is 0 which indicates that the
+	// scan is not an index-skip-scan. When greater than 0, we scan the first row
+	// for each of the distinct first prefixSkipLen values of the index.
+	prefixSkipLen int
 }
 
 // scanVisibility represents which table columns should be included in a scan.

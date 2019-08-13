@@ -466,6 +466,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		b.indexConstraintMaxResults(scan),
 		res.reqOrdering(scan),
 		rowCount,
+		scan.PrefixSkipLen,
 	)
 	if err != nil {
 		return execPlan{}, err

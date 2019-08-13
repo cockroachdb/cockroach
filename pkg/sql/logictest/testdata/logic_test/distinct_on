@@ -1,3 +1,5 @@
+# LogicTest: local 5node-dist 5node-dist-metadata 5node-dist-disk
+
 statement ok
 CREATE TABLE xyz (
   x INT,
