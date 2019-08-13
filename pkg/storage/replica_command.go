@@ -889,20 +889,15 @@ func (r *Replica) ChangeReplicas(
 	}
 }
 
-func (r *Replica) addReplica(
-	ctx context.Context,
-	target roachpb.ReplicationTarget,
-	desc *roachpb.RangeDescriptor,
-	priority SnapshotRequest_Priority,
-	reason storagepb.RangeLogEventReason,
-	details string,
-) (*roachpb.RangeDescriptor, error) {
+func validateReplicationChanges(
+	desc *roachpb.RangeDescriptor, target roachpb.ReplicationTarget,
+) error {
 	for _, rDesc := range desc.Replicas().All() {
 		if rDesc.NodeID == target.NodeID {
 			// Two replicas from the same range are not allowed on the same node, even
 			// in different stores.
 			if rDesc.StoreID != target.StoreID {
-				return nil, errors.Errorf("%s: unable to add replica %v; node already has a replica", r, target)
+				return errors.Errorf("unable to add replica %v; node already has a replica in %s", target, desc)
 			}
 
 			// Looks like we found a replica with the same store and node id. If the
@@ -911,14 +906,28 @@ func (r *Replica) addReplica(
 			// interrupted or else we hit a race between the replicate queue and
 			// AdminChangeReplicas.
 			if rDesc.GetType() == roachpb.ReplicaType_LEARNER {
-				return nil, errors.Errorf(
-					"%s: unable to add replica %v which is already present as a learner", r, target)
+				return errors.Errorf(
+					"unable to add replica %v which is already present as a learner in %s", target, desc)
 			}
 
 			// Otherwise, we already had a full voter replica. Can't add another to
 			// this store.
-			return nil, errors.Errorf("%s: unable to add replica %v which is already present", r, target)
+			return errors.Errorf("unable to add replica %v which is already present in %s", target, desc)
 		}
+	}
+	return nil
+}
+
+func (r *Replica) addReplica(
+	ctx context.Context,
+	target roachpb.ReplicationTarget,
+	desc *roachpb.RangeDescriptor,
+	priority SnapshotRequest_Priority,
+	reason storagepb.RangeLogEventReason,
+	details string,
+) (*roachpb.RangeDescriptor, error) {
+	if err := validateReplicationChanges(desc, target); err != nil {
+		return nil, err
 	}
 
 	settings := r.ClusterSettings()
