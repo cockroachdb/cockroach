@@ -122,7 +122,7 @@ func TestStmtBuf(t *testing.T) {
 
 	// Now rewind.
 	expPos = 1
-	buf.rewind(ctx, expPos)
+	buf.Rewind(ctx, expPos)
 	cmd, pos, err = buf.CurCmd()
 	if err != nil {
 		t.Fatal(err)
@@ -258,7 +258,7 @@ func TestStmtBufPreparedStmt(t *testing.T) {
 	assertPrepareStmt(t, cmd, "p2")
 
 	// Rewind to the first prepared stmt.
-	buf.rewind(ctx, CmdPos(1))
+	buf.Rewind(ctx, CmdPos(1))
 	cmd, _, err = buf.CurCmd()
 	if err != nil {
 		t.Fatal(err)
