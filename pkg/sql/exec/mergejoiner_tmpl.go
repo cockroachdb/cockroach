@@ -1063,8 +1063,6 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource() {
 		toBuild:     o.proberState.lLength - o.proberState.lIdx,
 		nullGroup:   true,
 	}
-	o.builderState.lBatch = o.proberState.lBatch
-	o.builderState.rBatch = o.proberState.rBatch
 
 	o.proberState.lIdx = o.proberState.lLength
 	// {{ end }}
@@ -1111,8 +1109,6 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustRightSource() {
 		toBuild:     o.proberState.rLength - o.proberState.rIdx,
 		unmatched:   true,
 	}
-	o.builderState.lBatch = o.proberState.lBatch
-	o.builderState.rBatch = o.proberState.rBatch
 
 	o.proberState.rIdx = o.proberState.rLength
 	// {{ end }}
@@ -1141,6 +1137,19 @@ func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	o.outputReady = true
 	// {{ if or $.JoinType.IsInner $.JoinType.IsLeftSemi }}
 	o.setBuilderSourceToBufferedGroup()
+	// {{ else }}
+	// First we make sure that batches of the builder state are always set. This
+	// is needed because the batches are accessed outside of _LEFT_SWITCH and
+	// _RIGHT_SWITCH (before the merge joiner figures out whether there are any
+	// groups to be built).
+	o.builderState.lBatch = o.proberState.lBatch
+	o.builderState.rBatch = o.proberState.rBatch
+	// Next, we need to make sure that builder state is set up for a case when
+	// neither exhaustLeftSource nor exhaustRightSource is called below. In such
+	// scenario the merge joiner is done, so it'll be outputting zero-length
+	// batches from now on.
+	o.builderState.lGroups = o.builderState.lGroups[:0]
+	o.builderState.rGroups = o.builderState.rGroups[:0]
 	// {{ end }}
 	// {{ if or $.JoinType.IsLeftOuter $.JoinType.IsLeftAnti }}
 	// At least one of the sources is finished. If it was the right one,
