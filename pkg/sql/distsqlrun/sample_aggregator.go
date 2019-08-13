@@ -135,7 +135,6 @@ func (s *sampleAggregator) pushTrailingMeta(ctx context.Context) {
 func (s *sampleAggregator) Run(ctx context.Context) {
 	s.input.Start(ctx)
 	s.StartInternal(ctx, sampleAggregatorProcName)
-	defer tracing.FinishSpan(s.span)
 
 	earlyExit, err := s.mainLoop(s.Ctx)
 	if err != nil {
