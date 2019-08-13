@@ -667,25 +667,8 @@ func (r *testRunner) runTest(
 	// timeout.
 	success := false
 	done := make(chan struct{})
-	var collectClusterLogsOnce sync.Once
 	go func() {
 		defer close(done) // closed only after we've grabbed the debug info below
-
-		defer func() {
-			// Detect replica divergence (i.e. ranges in which replicas have arrived
-			// at the same log position with different states).
-			c.FailOnReplicaDivergence(ctx, t)
-			// Detect dead nodes in an inner defer. Note that this will call
-			// t.printfAndFail() when appropriate, which will cause the code below to
-			// enter the t.Failed() branch.
-			c.FailOnDeadNodes(ctx, t)
-
-			if !t.Failed() {
-				success = true
-				return
-			}
-			collectClusterLogsOnce.Do(func() { r.collectClusterLogs(ctx, c, t.l) })
-		}()
 
 		// This is the call to actually run the test.
 		t.spec.Run(runCtx, t, c)
@@ -712,13 +695,26 @@ func (r *testRunner) runTest(
 		case <-time.After(5 * time.Minute):
 			msg := "test timed out and afterwards failed to respond to cancelation"
 			t.l.PrintfCtx(ctx, msg)
-			collectClusterLogsOnce.Do(func() { r.collectClusterLogs(ctx, c, t.l) })
+			r.collectClusterLogs(ctx, c, t.l)
 			// We return an error here because the test goroutine is still running, so
 			// we want to alert the caller of this unusual situation.
 			return false, fmt.Errorf(msg)
 		}
 	}
-	return success, nil
+
+	// Detect replica divergence (i.e. ranges in which replicas have arrived
+	// at the same log position with different states).
+	c.FailOnReplicaDivergence(ctx, t)
+	// Detect dead nodes in an inner defer. Note that this will call
+	// t.printfAndFail() when appropriate, which will cause the code below to
+	// enter the t.Failed() branch.
+	c.FailOnDeadNodes(ctx, t)
+
+	if t.Failed() {
+		r.collectClusterLogs(ctx, c, t.l)
+		return false, nil
+	}
+	return true, nil
 }
 
 func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, l *logger) {
