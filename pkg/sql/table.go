@@ -821,13 +821,8 @@ func (p *planner) writeTableDescToBatch(
 	}
 
 	if tableDesc.IsNewTable() {
-		if err := runSchemaChangesInTxn(ctx,
-			p.txn,
-			p.Tables(),
-			p.execCfg,
-			p.EvalContext(),
-			tableDesc,
-			p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		if err := runSchemaChangesInTxn(
+			ctx, p, tableDesc, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 		); err != nil {
 			return err
 		}
