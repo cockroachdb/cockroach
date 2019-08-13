@@ -44,7 +44,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type readFileFunc func(context.Context, io.Reader, int32, string, progressFn) error
+type readFileFunc func(context.Context, *fileReader, int32, string, progressFn) error
 
 // readInputFile reads each of the passed dataFiles using the passed func. The
 // key part of dataFiles is the unique index of the data file among all files in
@@ -65,8 +65,9 @@ func readInputFiles(
 	done := ctx.Done()
 
 	var totalBytes, readBytes int64
+	fileSizes := make(map[int32]int64, len(dataFiles))
 	// Attempt to fetch total number of bytes for all files.
-	for _, dataFile := range dataFiles {
+	for id, dataFile := range dataFiles {
 		conf, err := storageccl.ExportStorageConfFromURI(dataFile)
 		if err != nil {
 			return err
@@ -83,6 +84,7 @@ func readInputFiles(
 			totalBytes = 0
 			break
 		}
+		fileSizes[id] = sz
 		totalBytes += sz
 	}
 	updateFromFiles := progressFn != nil && totalBytes == 0
@@ -106,28 +108,32 @@ func readInputFiles(
 				return err
 			}
 			defer es.Close()
-			f, err := es.ReadFile(ctx, "")
+			raw, err := es.ReadFile(ctx, "")
 			if err != nil {
 				return err
 			}
-			defer f.Close()
-			bc := &byteCounter{r: f}
-			src, err := decompressingReader(bc, dataFile, format.Compression)
+			defer raw.Close()
+
+			src := &fileReader{total: fileSizes[dataFileIndex], counter: byteCounter{r: raw}}
+			decompressed, err := decompressingReader(&src.counter, dataFile, format.Compression)
 			if err != nil {
 				return err
 			}
-			defer src.Close()
+			defer decompressed.Close()
+			src.Reader = decompressed
 
 			wrappedProgressFn := func(finished bool) error { return nil }
 			if updateFromBytes {
 				const progressBytes = 100 << 20
+				var lastReported int64
 				wrappedProgressFn = func(finished bool) error {
+					progressed := src.counter.n - lastReported
 					// progressBytes is the number of read bytes at which to report job progress. A
 					// low value may cause excessive updates in the job table which can lead to
 					// very large rows due to MVCC saving each version.
-					if finished || bc.n > progressBytes {
-						readBytes += bc.n
-						bc.n = 0
+					if finished || progressed > progressBytes {
+						readBytes += progressed
+						lastReported = src.counter.n
 						if err := progressFn(float32(readBytes) / float32(totalBytes)); err != nil {
 							return err
 						}
@@ -193,6 +199,19 @@ func (b *byteCounter) Read(p []byte) (int, error) {
 	n, err := b.r.Read(p)
 	b.n += int64(n)
 	return n, err
+}
+
+type fileReader struct {
+	io.Reader
+	total   int64
+	counter byteCounter
+}
+
+func (f fileReader) ReadFraction() float32 {
+	if f.total == 0 {
+		return 0.0
+	}
+	return float32(f.counter.n) / float32(f.total)
 }
 
 var csvOutputTypes = []types.T{

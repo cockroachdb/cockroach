@@ -106,10 +106,11 @@ func TestMysqldumpDataReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer in.Close()
+	wrapped := &fileReader{Reader: in, counter: byteCounter{r: in}}
 
 	noop := func(_ bool) error { return nil }
 
-	if err := converter.readFile(ctx, in, 1, "", noop); err != nil {
+	if err := converter.readFile(ctx, wrapped, 1, "", noop); err != nil {
 		t.Fatal(err)
 	}
 	converter.inputFinished(ctx)

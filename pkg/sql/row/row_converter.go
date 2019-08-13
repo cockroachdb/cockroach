@@ -194,6 +194,10 @@ type DatumRowConverter struct {
 	VisibleColTypes       []*types.T
 	defaultExprs          []tree.TypedExpr
 	computedIVarContainer sqlbase.RowIndexedVarContainer
+
+	// FractionFn is used to set the progress header in KVBatches.
+	CompletedRowFn func() uint64
+	FractionFn     func() float32
 }
 
 const kvDatumRowConverterBatchSize = 5000
@@ -350,6 +354,12 @@ func (c *DatumRowConverter) Row(ctx context.Context, fileIndex int32, rowIndex i
 func (c *DatumRowConverter) SendBatch(ctx context.Context) error {
 	if len(c.KvBatch.KVs) == 0 {
 		return nil
+	}
+	if c.FractionFn != nil {
+		c.KvBatch.Progress = c.FractionFn()
+	}
+	if c.CompletedRowFn != nil {
+		c.KvBatch.LastRow = c.CompletedRowFn()
 	}
 	select {
 	case c.KvCh <- c.KvBatch:
