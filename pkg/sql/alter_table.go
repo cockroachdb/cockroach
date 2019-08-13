@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -233,7 +234,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				} else {
 					ck.Validity = sqlbase.ConstraintValidity_Unvalidated
 				}
-				n.tableDesc.AddCheckMutation(ck)
+				n.tableDesc.AddCheckMutation(ck, sqlbase.DescriptorMutation_ADD)
 
 			case *tree.ForeignKeyConstraintTableDef:
 				for _, colName := range d.FromCols {
@@ -495,7 +496,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				name, details,
 				func(desc *sqlbase.MutableTableDescriptor, ref *sqlbase.ForeignKeyConstraint) error {
 					return params.p.removeFKBackReference(params.ctx, desc, ref)
-				}); err != nil {
+				}, params.ExecCfg().Settings); err != nil {
 				return err
 			}
 			descriptorChanged = true
@@ -838,7 +839,13 @@ func applyColumnMutation(
 		for i := range tableDesc.Mutations {
 			if constraint := tableDesc.Mutations[i].GetConstraint(); constraint != nil &&
 				constraint.ConstraintType == sqlbase.ConstraintToUpdate_NOT_NULL {
-				return nil
+				if tableDesc.Mutations[i].Direction == sqlbase.DescriptorMutation_ADD {
+					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"constraint in the middle of being added")
+				} else {
+					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"constraint in the middle of being dropped, try again later")
+				}
 			}
 		}
 
@@ -850,22 +857,44 @@ func applyColumnMutation(
 		for k := range info {
 			inuseNames[k] = struct{}{}
 		}
-		tableDesc.AddNotNullValidationMutation(string(t.Column), col.ID, inuseNames)
+		tableDesc.AddNotNullMutation(
+			string(t.Column), col.ID, inuseNames, sqlbase.DescriptorMutation_ADD,
+		)
 
 	case *tree.AlterTableDropNotNull:
 		if col.Nullable {
 			return nil
 		}
-		// See if there's already a mutation to add a not null constraint
+		// See if there's already a mutation to add/drop a not null constraint.
 		for i := range tableDesc.Mutations {
 			if constraint := tableDesc.Mutations[i].GetConstraint(); constraint != nil &&
 				constraint.ConstraintType == sqlbase.ConstraintToUpdate_NOT_NULL {
-				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					"constraint in the middle of being added, try again later")
+				if tableDesc.Mutations[i].Direction == sqlbase.DescriptorMutation_ADD {
+					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"constraint in the middle of being added, try again later")
+				} else {
+					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"constraint in the middle of being dropped")
+				}
 			}
 		}
-		// TODO (lucy): As with FKs and check constraints, move this to the schema changer
-		col.Nullable = true
+		info, err := tableDesc.GetConstraintInfo(params.ctx, nil)
+		if err != nil {
+			return err
+		}
+		inuseNames := make(map[string]struct{}, len(info))
+		for k := range info {
+			inuseNames[k] = struct{}{}
+		}
+		// For backward compatibility with 19.1, don't queue a mutation unless the
+		// cluster has been fully upgraded to 19.2.
+		if params.ExecCfg().Settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
+			col.Nullable = true
+		} else {
+			tableDesc.AddNotNullMutation(
+				string(t.Column), col.ID, inuseNames, sqlbase.DescriptorMutation_DROP,
+			)
+		}
 
 	case *tree.AlterTableDropStored:
 		if !col.IsComputed() {

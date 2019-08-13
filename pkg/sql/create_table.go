@@ -659,7 +659,7 @@ func ResolveFK(
 	if ts == NewTable || !settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
 		tbl.OutboundFKs = append(tbl.OutboundFKs, ref)
 	} else {
-		tbl.AddForeignKeyValidationMutation(&ref)
+		tbl.AddForeignKeyMutation(&ref, sqlbase.DescriptorMutation_ADD)
 	}
 
 	// If the table is being created or was created earlier in the same
