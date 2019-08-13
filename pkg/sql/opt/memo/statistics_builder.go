@@ -451,11 +451,11 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	stats = &props.Statistics{}
 	if tab.StatisticCount() == 0 {
 		// No statistics.
-		stats.RowCount = unknownRowCount
+		sb.setRowCount(stats, unknownRowCount, false /* available */)
 	} else {
 		// Get the RowCount from the most recent statistic. Stats are ordered
 		// with most recent first.
-		stats.RowCount = float64(tab.Statistic(0).RowCount())
+		sb.setRowCount(stats, float64(tab.Statistic(0).RowCount()), true /* available */)
 
 		// Make sure the row count is at least 1. The stats may be stale, and we
 		// can end up with weird and inefficient plans if we estimate 0 rows.
@@ -509,7 +509,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	}
 
 	inputStats := sb.makeTableStatistics(scan.Table)
-	s.RowCount = inputStats.RowCount
+	sb.setRowCount(s, inputStats.RowCount, inputStats.Available)
 
 	if scan.Constraint != nil {
 		// Calculate distinct counts and histograms for constrained columns
@@ -586,7 +586,7 @@ func (sb *statisticsBuilder) buildVirtualScan(scan *VirtualScanExpr, relProps *p
 
 	inputStats := sb.makeTableStatistics(scan.Table)
 
-	s.RowCount = inputStats.RowCount
+	sb.setRowCount(s, inputStats.RowCount, inputStats.Available)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -632,7 +632,7 @@ func (sb *statisticsBuilder) buildSelect(sel *SelectExpr, relProps *props.Relati
 	// Calculate selectivity and row count
 	// -----------------------------------
 	inputStats := &sel.Input.Relational().Stats
-	s.RowCount = inputStats.RowCount
+	sb.setRowCount(s, inputStats.RowCount, inputStats.Available)
 	inputRowCount := s.RowCount
 	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, sel, s))
 	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols.Difference(histCols), sel, s))
@@ -695,7 +695,7 @@ func (sb *statisticsBuilder) buildProject(prj *ProjectExpr, relProps *props.Rela
 
 	inputStats := &prj.Input.Relational().Stats
 
-	s.RowCount = inputStats.RowCount
+	sb.setRowCount(s, inputStats.RowCount, inputStats.Available)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -790,12 +790,13 @@ func (sb *statisticsBuilder) buildJoin(
 	leftCols := h.leftProps.OutputCols.Copy()
 	rightCols := h.rightProps.OutputCols.Copy()
 	equivReps := h.filtersFD.EquivReps()
+	available := leftStats.Available && rightStats.Available
 
 	// Estimating selectivity for semi-join and anti-join is error-prone.
 	// For now, just propagate stats from the left side.
 	switch h.joinType {
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		s.RowCount = leftStats.RowCount
+		sb.setRowCount(s, leftStats.RowCount, available)
 		s.Selectivity = 1
 		return
 	}
@@ -803,21 +804,21 @@ func (sb *statisticsBuilder) buildJoin(
 	// Shortcut if there are no ON conditions. Note that for lookup join, there
 	// are implicit equality conditions on KeyCols.
 	if h.filterIsTrue {
-		s.RowCount = leftStats.RowCount * rightStats.RowCount
+		sb.setRowCount(s, leftStats.RowCount*rightStats.RowCount, available)
 		switch h.joinType {
 		case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 		case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 			// All rows from left side should be in the result.
-			s.RowCount = max(s.RowCount, leftStats.RowCount)
+			sb.setRowCount(s, max(s.RowCount, leftStats.RowCount), available)
 
 		case opt.RightJoinOp:
 			// All rows from right side should be in the result.
-			s.RowCount = max(s.RowCount, rightStats.RowCount)
+			sb.setRowCount(s, max(s.RowCount, rightStats.RowCount), available)
 
 		case opt.FullJoinOp:
 			// All rows from both sides should be in the result.
-			s.RowCount = max(s.RowCount, leftStats.RowCount)
-			s.RowCount = max(s.RowCount, rightStats.RowCount)
+			sb.setRowCount(s, max(s.RowCount, leftStats.RowCount), available)
+			sb.setRowCount(s, max(s.RowCount, rightStats.RowCount), available)
 		}
 		s.Selectivity = 1
 		return
@@ -827,19 +828,19 @@ func (sb *statisticsBuilder) buildJoin(
 	if h.filters.IsFalse() {
 		switch h.joinType {
 		case opt.InnerJoinOp, opt.InnerJoinApplyOp:
-			s.RowCount = 0
+			sb.setRowCount(s, 0 /* rowCount */, available)
 
 		case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 			// All rows from left side should be in the result.
-			s.RowCount = leftStats.RowCount
+			sb.setRowCount(s, leftStats.RowCount, available)
 
 		case opt.RightJoinOp:
 			// All rows from right side should be in the result.
-			s.RowCount = rightStats.RowCount
+			sb.setRowCount(s, rightStats.RowCount, available)
 
 		case opt.FullJoinOp:
 			// All rows from both sides should be in the result.
-			s.RowCount = leftStats.RowCount + rightStats.RowCount
+			sb.setRowCount(s, leftStats.RowCount+rightStats.RowCount, available)
 		}
 		s.Selectivity = 0
 		return
@@ -863,7 +864,7 @@ func (sb *statisticsBuilder) buildJoin(
 
 	// Calculate selectivity and row count
 	// -----------------------------------
-	s.RowCount = leftStats.RowCount * rightStats.RowCount
+	sb.setRowCount(s, leftStats.RowCount*rightStats.RowCount, available)
 	inputRowCount := s.RowCount
 	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols, join, s))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filtersFD, join, s))
@@ -910,18 +911,18 @@ func (sb *statisticsBuilder) buildJoin(
 	switch h.joinType {
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		// All rows from left side should be in the result.
-		s.RowCount = max(innerJoinRowCount, leftStats.RowCount)
+		sb.setRowCount(s, max(innerJoinRowCount, leftStats.RowCount), available)
 
 	case opt.RightJoinOp:
 		// All rows from right side should be in the result.
-		s.RowCount = max(innerJoinRowCount, rightStats.RowCount)
+		sb.setRowCount(s, max(innerJoinRowCount, rightStats.RowCount), available)
 
 	case opt.FullJoinOp:
 		// All rows from both sides should be in the result.
 		// T(A FOJ B) = T(A LOJ B) + T(A ROJ B) - T(A IJ B)
 		leftJoinRowCount := max(innerJoinRowCount, leftStats.RowCount)
 		rightJoinRowCount := max(innerJoinRowCount, rightStats.RowCount)
-		s.RowCount = leftJoinRowCount + rightJoinRowCount - innerJoinRowCount
+		sb.setRowCount(s, leftJoinRowCount+rightJoinRowCount-innerJoinRowCount, available)
 	}
 
 	// Loop through all colSets added in this step, and adjust null counts and
@@ -1234,7 +1235,7 @@ func (sb *statisticsBuilder) buildIndexJoin(indexJoin *IndexJoinExpr, relProps *
 
 	inputStats := &indexJoin.Input.Relational().Stats
 
-	s.RowCount = inputStats.RowCount
+	sb.setRowCount(s, inputStats.RowCount, inputStats.Available)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -1317,7 +1318,7 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	// will have a row count smaller than or equal to the left/right index
 	// row counts, and where the left and right sides are indexes on the same
 	// table. Their row count should be the same, so use either row count.
-	s.RowCount = leftStats.RowCount
+	sb.setRowCount(s, leftStats.RowCount, leftStats.Available)
 
 	// Calculate distinct counts for constrained columns.
 	// Note that fixed columns (i.e. columns constrained to constant values)
@@ -1402,7 +1403,7 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 
 	if groupingColSet.Empty() {
 		// ScalarGroupBy or GroupBy with empty grouping columns.
-		s.RowCount = 1
+		sb.setRowCount(s, 1 /* rowCount */, true /* available */)
 	} else {
 		// Estimate the row count based on the distinct count of the grouping
 		// columns.
@@ -1410,11 +1411,10 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 		// TODO(itsbilal): Update null count here, using a formula similar to the
 		// ones in colStatGroupBy.
 		colStat := sb.copyColStatFromChild(groupingColSet, groupNode, s)
-		s.RowCount = colStat.DistinctCount
 
 		// Non-scalar GroupBy should never increase the number of rows.
 		inputStats := sb.statsFromChild(groupNode, 0 /* childIdx */)
-		s.RowCount = min(s.RowCount, inputStats.RowCount)
+		sb.setRowCount(s, min(colStat.DistinctCount, inputStats.RowCount), inputStats.Available)
 	}
 
 	sb.finalizeFromCardinality(relProps)
@@ -1481,18 +1481,19 @@ func (sb *statisticsBuilder) buildSetNode(setNode RelExpr, relProps *props.Relat
 
 	leftStats := sb.statsFromChild(setNode, 0 /* childIdx */)
 	rightStats := sb.statsFromChild(setNode, 1 /* childIdx */)
+	available := leftStats.Available && rightStats.Available
 
 	// These calculations are an upper bound on the row count. It's likely that
 	// there is some overlap between the two sets, but not full overlap.
 	switch setNode.Op() {
 	case opt.UnionOp, opt.UnionAllOp:
-		s.RowCount = leftStats.RowCount + rightStats.RowCount
+		sb.setRowCount(s, leftStats.RowCount+rightStats.RowCount, available)
 
 	case opt.IntersectOp, opt.IntersectAllOp:
-		s.RowCount = min(leftStats.RowCount, rightStats.RowCount)
+		sb.setRowCount(s, min(leftStats.RowCount, rightStats.RowCount), available)
 
 	case opt.ExceptOp, opt.ExceptAllOp:
-		s.RowCount = leftStats.RowCount
+		sb.setRowCount(s, leftStats.RowCount, available)
 	}
 
 	switch setNode.Op() {
@@ -1502,7 +1503,7 @@ func (sb *statisticsBuilder) buildSetNode(setNode RelExpr, relProps *props.Relat
 		setPrivate := setNode.Private().(*SetPrivate)
 		outputCols := setPrivate.OutCols.ToSet()
 		colStat := sb.colStatSetNodeImpl(outputCols, setNode, relProps)
-		s.RowCount = colStat.DistinctCount
+		sb.setRowCount(s, colStat.DistinctCount, available)
 	}
 
 	sb.finalizeFromCardinality(relProps)
@@ -1576,7 +1577,7 @@ func (sb *statisticsBuilder) buildValues(values *ValuesExpr, relProps *props.Rel
 		return
 	}
 
-	s.RowCount = float64(len(values.Rows))
+	sb.setRowCount(s, float64(len(values.Rows)), true /* available */)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -1641,7 +1642,7 @@ func (sb *statisticsBuilder) buildLimit(limit *LimitExpr, relProps *props.Relati
 	inputStats := &limit.Input.Relational().Stats
 
 	// Copy row count from input.
-	s.RowCount = inputStats.RowCount
+	sb.setRowCount(s, inputStats.RowCount, inputStats.Available)
 
 	// Update row count if limit is a constant and row count is non-zero.
 	if cnst, ok := limit.Limit.(*ConstExpr); ok && inputStats.RowCount > 0 {
@@ -1686,7 +1687,7 @@ func (sb *statisticsBuilder) buildOffset(offset *OffsetExpr, relProps *props.Rel
 	inputStats := &offset.Input.Relational().Stats
 
 	// Copy row count from input.
-	s.RowCount = inputStats.RowCount
+	sb.setRowCount(s, inputStats.RowCount, inputStats.Available)
 
 	// Update row count if offset is a constant and row count is non-zero.
 	if cnst, ok := offset.Offset.(*ConstExpr); ok && inputStats.RowCount > 0 {
@@ -1734,7 +1735,7 @@ func (sb *statisticsBuilder) buildMax1Row(max1Row *Max1RowExpr, relProps *props.
 		return
 	}
 
-	s.RowCount = 1
+	sb.setRowCount(s, 1 /* rowCount */, true /* available */)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -1765,7 +1766,7 @@ func (sb *statisticsBuilder) buildOrdinality(ord *OrdinalityExpr, relProps *prop
 
 	inputStats := &ord.Input.Relational().Stats
 
-	s.RowCount = inputStats.RowCount
+	sb.setRowCount(s, inputStats.RowCount, inputStats.Available)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -1817,7 +1818,7 @@ func (sb *statisticsBuilder) buildWindow(window *WindowExpr, relProps *props.Rel
 	inputStats := &window.Input.Relational().Stats
 
 	// The row count of a window is equal to the row count of its input.
-	s.RowCount = inputStats.RowCount
+	sb.setRowCount(s, inputStats.RowCount, inputStats.Available)
 
 	sb.finalizeFromCardinality(relProps)
 }
@@ -1883,23 +1884,24 @@ func (sb *statisticsBuilder) buildProjectSet(
 
 	// The row count of a zip operation is equal to the maximum row count of its
 	// children.
+	var zipRowCount float64
 	for i := range projectSet.Zip {
 		if fn, ok := projectSet.Zip[i].Func.(*FunctionExpr); ok {
 			if fn.Overload.Generator != nil {
 				// TODO(rytaft): We may want to estimate the number of rows based on
 				// the type of generator function and its parameters.
-				s.RowCount = unknownGeneratorRowCount
+				zipRowCount = unknownGeneratorRowCount
 				break
 			}
 		}
 
 		// A scalar function generates one row.
-		s.RowCount = 1
+		zipRowCount = 1
 	}
 
 	// Multiply by the input row count to get the total.
 	inputStats := &projectSet.Input.Relational().Stats
-	s.RowCount *= inputStats.RowCount
+	sb.setRowCount(s, zipRowCount*inputStats.RowCount, inputStats.Available)
 
 	sb.finalizeFromCardinality(relProps)
 }
@@ -2012,7 +2014,7 @@ func (sb *statisticsBuilder) buildMutation(mutation RelExpr, relProps *props.Rel
 
 	inputStats := sb.statsFromChild(mutation, 0 /* childIdx */)
 
-	s.RowCount = inputStats.RowCount
+	sb.setRowCount(s, inputStats.RowCount, inputStats.Available)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2041,7 +2043,7 @@ func (sb *statisticsBuilder) colStatMutation(
 
 func (sb *statisticsBuilder) buildSequenceSelect(relProps *props.Relational) {
 	s := &relProps.Stats
-	s.RowCount = 1
+	sb.setRowCount(s, 1 /* rowCount */, true /* available */)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2063,7 +2065,7 @@ func (sb *statisticsBuilder) colStatSequenceSelect(
 
 func (sb *statisticsBuilder) buildUnknown(relProps *props.Relational) {
 	s := &relProps.Stats
-	s.RowCount = unknownGeneratorRowCount
+	sb.setRowCount(s, unknownGeneratorRowCount, false /* available */)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2082,6 +2084,15 @@ func (sb *statisticsBuilder) colStatUnknown(
 /////////////////////////////////////////////////
 // General helper functions for building stats //
 /////////////////////////////////////////////////
+
+// setRowCount is a convenience function used to ensure that when RowCount is
+// set in s, Available is also set.
+func (sb *statisticsBuilder) setRowCount(
+	s *props.Statistics, rowCount float64, available bool,
+) {
+	s.RowCount = rowCount
+	s.Available = available
+}
 
 // copyColStatFromChild copies the column statistic for the given colSet from
 // the first child of ev into ev. colStatFromChild may trigger recursive
