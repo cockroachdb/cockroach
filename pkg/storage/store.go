@@ -407,7 +407,6 @@ type Store struct {
 	raftEntryCache     *raftentry.Cache
 	limiters           batcheval.Limiters
 	txnWaitMetrics     *txnwait.Metrics
-	sss                SSTSnapshotStorage
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -861,16 +860,6 @@ func NewStore(
 	s.limiters.ConcurrentExportRequests = limit.MakeConcurrentRequestLimiter(
 		"exportRequestLimiter", int(ExportRequestsLimit.Get(&cfg.Settings.SV)),
 	)
-
-	// The snapshot storage is usually empty at this point since it is cleared
-	// after each snapshot application, except when the node crashed right before
-	// it can clean it up. If this fails it's not a correctness issue since the
-	// storage is also cleared before receiving a snapshot.
-	s.sss = NewSSTSnapshotStorage(s.engine, s.limiters.BulkIOWriteRate)
-	if err := s.sss.Clear(); err != nil {
-		log.Warningf(ctx, "failed to clear snapshot storage: %v", err)
-	}
-
 	// On low-CPU instances, a default limit value may still allow ExportRequests
 	// to tie up all cores so cap limiter at cores-1 when setting value is higher.
 	exportCores := runtime.NumCPU() - 1
