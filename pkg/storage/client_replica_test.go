@@ -1783,6 +1783,13 @@ func TestSystemZoneConfigs(t *testing.T) {
 	testutils.SucceedsSoon(t, waitForReplicas)
 	log.Info(ctx, "TestSystemZoneConfig: down-replication of timeseries ranges succeeded")
 
+	// Up-replicate the system.jobs table to demonstrate that it is configured
+	// independently from the system database.
+	sqlutils.SetZoneConfig(t, sqlDB, "TABLE system.jobs", "num_replicas: 7")
+	expectedReplicas += 2
+	testutils.SucceedsSoon(t, waitForReplicas)
+	log.Info(ctx, "TestSystemZoneConfig: up-replication of jobs table succeeded")
+
 	// Finally, verify the system ranges. Note that in a new cluster there are
 	// two system ranges, which we have to take into account here.
 	sqlutils.SetZoneConfig(t, sqlDB, "RANGE system", "num_replicas: 7")
