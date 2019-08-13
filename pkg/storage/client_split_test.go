@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -3190,4 +3191,102 @@ func TestStoreSplitDisappearingReplicas(t *testing.T) {
 			t.Fatalf("%q: split unexpected error: %s", key, pErr)
 		}
 	}
+}
+
+// Regression test for #21146. This verifies the behavior of when the
+// application of some split command (part of the lhs's log) is delayed on some
+// store and meanwhile the rhs has rebalanced away and back, ending up with a
+// larger ReplicaID than the split thinks it will have.
+func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	blockPromoteCh := make(chan struct{})
+	knobs := base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+		ReplicaAddStopAfterLearnerSnapshot: func() bool {
+			<-blockPromoteCh
+			return false
+		},
+		ReplicaAddSkipLearnerRollback: func() bool {
+			return true
+		},
+	}}
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
+
+	k := tc.ScratchRange(t)
+	desc := tc.LookupRangeOrFatal(t, k)
+
+	// First construct a range with a learner replica and split it, ending up with
+	// an orphaned learner on each side of the split. After the learner is
+	// created, but before the split, block all incoming raft traffic to the
+	// learner on the lhs of the split.
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		_, err := tc.AddReplicas(k, tc.Target(1))
+		return err
+	})
+
+	store, _ := getFirstStoreReplica(t, tc.Server(1), k)
+	tc.Servers[1].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
+		rangeID:            desc.RangeID,
+		RaftMessageHandler: store,
+	})
+
+	_, kRHS := k, k.Next()
+	descLHS, descRHS := tc.SplitRangeOrFatal(t, kRHS)
+
+	close(blockPromoteCh)
+	if err := g.Wait(); !testutils.IsError(err, `descriptor changed`) {
+		t.Fatalf(`expected "descriptor changed" error got: %+v`, err)
+	}
+
+	// Now repeatedly remove and re-add the learner on the rhs, so it has a
+	// different replicaID than the split trigger expects.
+	for i := 0; i < 5; i++ {
+		_, err := tc.RemoveReplicas(kRHS, tc.Target(1))
+		require.NoError(t, err)
+		_, err = tc.AddReplicas(kRHS, tc.Target(1))
+		if !testutils.IsError(err, `snapshot intersects existing range`) {
+			t.Fatalf(`expected snapshot intersects existing range" error got: %+v`, err)
+		}
+	}
+
+	// Wait for there to be an in-memory, uninitialized learner replica with the
+	// lastest ReplicaID. Note: it cannot become initialized at this point because
+	// it needs a snapshot to do that and snapshots will intersect the lhs replica
+	// (which doesn't know about the split because we've blocked its raft
+	// traffic, and so it still covers the pre-split keyspace).
+	descRHS = tc.LookupRangeOrFatal(t, kRHS)
+	learnerDesc, ok := descRHS.GetReplicaDescriptor(store.StoreID())
+	require.True(t, ok)
+	testutils.SucceedsSoon(t, func() error {
+		repl, err := store.GetReplica(descRHS.RangeID)
+		if err != nil {
+			return err
+		}
+		if replicaID := roachpb.ReplicaID(repl.RaftStatus().ID); replicaID != learnerDesc.ReplicaID {
+			return errors.Errorf("expected %d got %d", learnerDesc.ReplicaID, replicaID)
+		}
+		return nil
+	})
+
+	// Re-enable raft and wait for the lhs to catch up to the post-split
+	// descriptor. This used to panic with "raft group deleted".
+	tc.Servers[1].RaftTransport().Listen(store.StoreID(), store)
+	testutils.SucceedsSoon(t, func() error {
+		repl, err := store.GetReplica(descLHS.RangeID)
+		if err != nil {
+			return err
+		}
+		if desc := repl.Desc(); !descLHS.Equal(desc) {
+			return errors.Errorf("expected %s got %s", &descLHS, desc)
+		}
+		return nil
+	})
 }
