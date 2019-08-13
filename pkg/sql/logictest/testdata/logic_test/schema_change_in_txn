@@ -1573,3 +1573,67 @@ x  x_b_key  UNIQUE       UNIQUE (b ASC)       true
 
 statement ok
 DROP TABLE x, y
+
+subtest drop_constraint_in_txn
+
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT c CHECK (a > 0)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT c
+
+# Since the check constraint is dropped in the schema changer after the
+# transaction commits, it's still enforced during the rest of the transaction.
+statement error pq: failed to satisfy CHECK constraint \(a > 0\)
+INSERT INTO t VALUES (0)
+
+statement ok
+ROLLBACK
+
+statement ok
+ALTER TABLE t ALTER COLUMN a SET NOT NULL
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ALTER COLUMN a DROP NOT NULL
+
+# Since the non-null constraint is dropped in the schema changer after the
+# transaction commits, it's still enforced during the rest of the transaction.
+# The error is about a check constraint because we generate a check constraint
+# when dropping not-null constraints in the schema changer.
+statement error failed to satisfy CHECK constraint \(a IS NOT NULL\)
+INSERT INTO t VALUES (NULL)
+
+statement ok
+ROLLBACK
+
+statement ok
+CREATE TABLE t2 (b INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT fk FOREIGN KEY (a) REFERENCES t2
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT fk
+
+# Since the foreign key constraint is dropped in the schema changer after the
+# transaction commits, it's still enforced during the rest of the transaction.
+statement error pgcode 23503 value \[1\] not found in t2@primary \[b\]
+INSERT INTO t VALUES (1)
+
+statement ok
+ROLLBACK
+
+statement ok
+DROP TABLE t

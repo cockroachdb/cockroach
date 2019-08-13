@@ -658,17 +658,9 @@ func ResolveFK(
 
 	if ts == NewTable || !settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
 		tbl.OutboundFKs = append(tbl.OutboundFKs, ref)
-	} else {
-		tbl.AddForeignKeyValidationMutation(&ref)
-	}
-
-	// If the table is being created or was created earlier in the same
-	// transaction, add the backreference now so it happens in the same
-	// transaction too. (The forward reference will be installed in
-	// runSchemaChangesInTxn()).
-	// TODO (lucy): Ideally the backreference would also be installed there.
-	if ts == NewTable || tbl.IsNewTable() || !settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
 		target.InboundFKs = append(target.InboundFKs, ref)
+	} else {
+		tbl.AddForeignKeyMutation(&ref, sqlbase.DescriptorMutation_ADD)
 	}
 
 	// Multiple FKs from the same column would potentially result in ambiguous or

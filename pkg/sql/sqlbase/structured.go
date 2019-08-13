@@ -676,11 +676,11 @@ func (desc *TableDescriptor) AllActiveAndInactiveChecks() []*TableDescriptor_Che
 	// previous versions.)
 	checks := make([]*TableDescriptor_CheckConstraint, 0, len(desc.Checks))
 	for _, c := range desc.Checks {
-		// While a check constraint is being validated for existing rows, the
-		// check constraint is present both on the table descriptor and in the
-		// mutations list in the Validating state, so those constraints are excluded
-		// here to avoid double-counting.
-		if c.Validity != ConstraintValidity_Validating {
+		// While a constraint is being validated for existing rows or being dropped,
+		// the constraint is present both on the table descriptor and in the
+		// mutations list in the Validating or Dropping state, so those constraints
+		// are excluded here to avoid double-counting.
+		if c.Validity != ConstraintValidity_Validating && c.Validity != ConstraintValidity_Dropping {
 			checks = append(checks, c)
 		}
 	}
@@ -701,11 +701,11 @@ func (desc *TableDescriptor) AllActiveAndInactiveForeignKeys() []*ForeignKeyCons
 	fks := make([]*ForeignKeyConstraint, 0, len(desc.OutboundFKs))
 	for i := range desc.OutboundFKs {
 		fk := &desc.OutboundFKs[i]
-		// While a foreign key constraint is being validated for existing rows, the
-		// foreign key reference is present both on the table descriptor and in the
-		// mutations list in the Validating state, so those FKs are excluded here to
-		// avoid double-counting.
-		if fk.Validity != ConstraintValidity_Validating {
+		// While a constraint is being validated for existing rows or being dropped,
+		// the constraint is present both on the table descriptor and in the
+		// mutations list in the Validating or Dropping state, so those constraints
+		// are excluded here to avoid double-counting.
+		if fk.Validity != ConstraintValidity_Validating && fk.Validity != ConstraintValidity_Dropping {
 			fks = append(fks, fk)
 		}
 	}
@@ -2524,11 +2524,13 @@ func (desc *MutableTableDescriptor) RenameIndexDescriptor(
 	return fmt.Errorf("index with id = %d does not exist", id)
 }
 
-// DropConstraint drops a constraint.
+// DropConstraint drops a constraint, either by removing it from the table
+// descriptor or by queuing a mutation for a schema change.
 func (desc *MutableTableDescriptor) DropConstraint(
 	name string,
 	detail ConstraintDetail,
 	removeFK func(*MutableTableDescriptor, *ForeignKeyConstraint) error,
+	settings *cluster.Settings,
 ) error {
 	switch detail.Kind {
 	case ConstraintTypePK:
@@ -2541,36 +2543,66 @@ func (desc *MutableTableDescriptor) DropConstraint(
 
 	case ConstraintTypeCheck:
 		if detail.CheckConstraint.Validity == ConstraintValidity_Validating {
-			return unimplemented.Newf("rename-constraint-check-mutation",
-				"constraint %q in the middle of being added, try again later",
-				tree.ErrNameStringP(&detail.CheckConstraint.Name))
+			return unimplemented.Newf("drop-constraint-check-mutation",
+				"constraint %q in the middle of being added, try again later", name)
+		}
+		if detail.CheckConstraint.Validity == ConstraintValidity_Dropping {
+			return unimplemented.Newf("drop-constraint-check-mutation",
+				"constraint %q in the middle of being dropped", name)
 		}
 		for i, c := range desc.Checks {
 			if c.Name == name {
-				desc.Checks = append(desc.Checks[:i], desc.Checks[i+1:]...)
-				break
+				// If the constraint is unvalidated, there's no assumption that it must
+				// hold for all rows, so it can be dropped immediately.
+				// We also drop the constraint immediately instead of queuing a mutation
+				// unless the cluster is fully upgraded to 19.2, for backward
+				// compatibility.
+				if detail.CheckConstraint.Validity == ConstraintValidity_Unvalidated ||
+					!settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
+					desc.Checks = append(desc.Checks[:i], desc.Checks[i+1:]...)
+					return nil
+				}
+				c.Validity = ConstraintValidity_Dropping
+				desc.AddCheckMutation(c, DescriptorMutation_DROP)
+				return nil
 			}
 		}
-		return nil
+		return errors.Errorf("constraint %q not found on table %q", name, desc.Name)
 
 	case ConstraintTypeFK:
-		if err := removeFK(desc, detail.FK); err != nil {
-			return err
+		if detail.FK.Validity == ConstraintValidity_Validating {
+			return unimplemented.Newf("drop-constraint-fk-mutation",
+				"constraint %q in the middle of being added, try again later", name)
+		}
+		if detail.FK.Validity == ConstraintValidity_Dropping {
+			return unimplemented.Newf("drop-constraint-fk-mutation",
+				"constraint %q in the middle of being dropped", name)
 		}
 		// Search through the descriptor's foreign key constraints and delete the
 		// one that we're supposed to be deleting.
-		foundIdx := -1
-		for i, ref := range desc.OutboundFKs {
+		for i := range desc.OutboundFKs {
+			ref := &desc.OutboundFKs[i]
 			if ref.Name == name {
-				foundIdx = i
-				break
+				// If the constraint is unvalidated, there's no assumption that it must
+				// hold for all rows, so it can be dropped immediately.
+				// We also drop the constraint immediately instead of queuing a mutation
+				// unless the cluster is fully upgraded to 19.2, for backward
+				// compatibility.
+				if detail.FK.Validity == ConstraintValidity_Unvalidated ||
+					!settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
+					// Remove the backreference.
+					if err := removeFK(desc, detail.FK); err != nil {
+						return err
+					}
+					desc.OutboundFKs = append(desc.OutboundFKs[:i], desc.OutboundFKs[i+1:]...)
+					return nil
+				}
+				ref.Validity = ConstraintValidity_Dropping
+				desc.AddForeignKeyMutation(ref, DescriptorMutation_DROP)
+				return nil
 			}
 		}
-		if foundIdx == -1 {
-			return errors.AssertionFailedf("constraint %q not found on table %q", name, desc.Name)
-		}
-		desc.OutboundFKs = append(desc.OutboundFKs[:foundIdx], desc.OutboundFKs[foundIdx+1:]...)
-		return nil
+		return errors.AssertionFailedf("constraint %q not found on table %q", name, desc.Name)
 
 	default:
 		return unimplemented.Newf(fmt.Sprintf("drop-constraint-%s", detail.Kind),
@@ -2826,25 +2858,30 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 		}
 		// Nothing else to be done. The column/index was already removed from the
 		// set of column/index descriptors at mutation creation time.
+		// Constraints to be dropped are dropped before column/index backfills.
 	}
 	return nil
 }
 
 // AddCheckMutation adds a check constraint mutation to desc.Mutations.
-func (desc *MutableTableDescriptor) AddCheckMutation(ck *TableDescriptor_CheckConstraint) {
+func (desc *MutableTableDescriptor) AddCheckMutation(
+	ck *TableDescriptor_CheckConstraint, direction DescriptorMutation_Direction,
+) {
 	m := DescriptorMutation{
 		Descriptor_: &DescriptorMutation_Constraint{
 			Constraint: &ConstraintToUpdate{
 				ConstraintType: ConstraintToUpdate_CHECK, Name: ck.Name, Check: *ck,
 			},
 		},
-		Direction: DescriptorMutation_ADD,
+		Direction: direction,
 	}
 	desc.addMutation(m)
 }
 
-// AddForeignKeyValidationMutation adds a foreign key constraint validation mutation to desc.Mutations.
-func (desc *MutableTableDescriptor) AddForeignKeyValidationMutation(fk *ForeignKeyConstraint) {
+// AddForeignKeyMutation adds a foreign key constraint mutation to desc.Mutations.
+func (desc *MutableTableDescriptor) AddForeignKeyMutation(
+	fk *ForeignKeyConstraint, direction DescriptorMutation_Direction,
+) {
 	m := DescriptorMutation{
 		Descriptor_: &DescriptorMutation_Constraint{
 			Constraint: &ConstraintToUpdate{
@@ -2853,17 +2890,17 @@ func (desc *MutableTableDescriptor) AddForeignKeyValidationMutation(fk *ForeignK
 				ForeignKey:     *fk,
 			},
 		},
-		Direction: DescriptorMutation_ADD,
+		Direction: direction,
 	}
 	desc.addMutation(m)
 }
 
-// makeNotNullCheckConstraint creates a dummy check constraint equivalent to a
+// MakeNotNullCheckConstraint creates a dummy check constraint equivalent to a
 // NOT NULL constraint on a column, so that NOT NULL constraints can be added
 // and dropped correctly in the schema changer. This function mutates inuseNames
 // to add the new constraint name.
-func makeNotNullCheckConstraint(
-	colName string, colID ColumnID, inuseNames map[string]struct{},
+func MakeNotNullCheckConstraint(
+	colName string, colID ColumnID, inuseNames map[string]struct{}, validity ConstraintValidity,
 ) *TableDescriptor_CheckConstraint {
 	name := fmt.Sprintf("%s_auto_not_null", colName)
 	// If generated name isn't unique, attempt to add a number to the end to
@@ -2892,33 +2929,33 @@ func makeNotNullCheckConstraint(
 	return &TableDescriptor_CheckConstraint{
 		Name:                name,
 		Expr:                tree.Serialize(expr),
-		Validity:            ConstraintValidity_Validating,
+		Validity:            validity,
 		ColumnIDs:           []ColumnID{colID},
 		IsNonNullConstraint: true,
 	}
 }
 
-// AddNotNullValidationMutation adds a not null constraint validation mutation
-// to desc.Mutations. Similarly to other schema elements, adding a non-null
+// AddNotNullMutation adds a not null constraint mutation to desc.Mutations.
+// Similarly to other schema elements, adding or dropping a non-null
 // constraint requires a multi-state schema change, including a bulk validation
 // step, before the Nullable flag can be set to false on the descriptor. This is
 // done by adding a dummy check constraint of the form "x IS NOT NULL" that is
 // treated like other check constraints being added, until the completion of the
 // schema change, at which the check constraint is deleted. This function
 // mutates inuseNames to add the new constraint name.
-func (desc *MutableTableDescriptor) AddNotNullValidationMutation(
-	colName string, colID ColumnID, inuseNames map[string]struct{},
+func (desc *MutableTableDescriptor) AddNotNullMutation(
+	ck *TableDescriptor_CheckConstraint, direction DescriptorMutation_Direction,
 ) {
-	ck := makeNotNullCheckConstraint(colName, colID, inuseNames)
 	m := DescriptorMutation{
 		Descriptor_: &DescriptorMutation_Constraint{
 			Constraint: &ConstraintToUpdate{
 				ConstraintType: ConstraintToUpdate_NOT_NULL,
-				NotNullColumn:  colID,
+				Name:           ck.Name,
+				NotNullColumn:  ck.ColumnIDs[0],
 				Check:          *ck,
 			},
 		},
-		Direction: DescriptorMutation_ADD,
+		Direction: direction,
 	}
 	desc.addMutation(m)
 }
