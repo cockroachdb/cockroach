@@ -308,19 +308,33 @@ ALTER TABLE delivery DROP CONSTRAINT fk_item_ref_products
 statement ok
 UPDATE products SET upc = 'blah' WHERE sku = '780'
 
-statement error pgcode 23503 foreign key violation: "delivery" row item='885155001450', rowid=[0-9]* has no match in "products"
+statement ok
 ALTER TABLE delivery ADD FOREIGN KEY (item) REFERENCES products (upc)
 
 query TTTTB
 SHOW CONSTRAINTS FROM delivery
 ----
-delivery  fk_order_ref_orders  FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment)  true
+delivery  fk_item_ref_products  FOREIGN KEY  FOREIGN KEY (item) REFERENCES products(upc)                      false
+delivery  fk_order_ref_orders   FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment)  true
+
+statement error pgcode 23503 foreign key violation: "delivery" row item='885155001450', rowid=[0-9]* has no match in "products"
+ALTER TABLE delivery VALIDATE CONSTRAINT fk_item_ref_products
+
+query TTTTB
+SHOW CONSTRAINTS FROM delivery
+----
+delivery  fk_item_ref_products  FOREIGN KEY  FOREIGN KEY (item) REFERENCES products(upc)                      false
+delivery  fk_order_ref_orders   FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment)  true
 
 statement ok
 UPDATE products SET upc = '885155001450' WHERE sku = '780'
 
+# Changing referenced non-pk index fails once again with constraint re-added.
+statement error pgcode 23503 foreign key violation: values \['885155001450'\] in columns \[upc\] referenced in table "delivery"
+UPDATE products SET upc = 'blah' WHERE sku = '780'
+
 statement ok
-ALTER TABLE delivery ADD FOREIGN KEY (item) REFERENCES products (upc)
+ALTER TABLE delivery VALIDATE CONSTRAINT fk_item_ref_products
 
 query TTTTB
 SHOW CONSTRAINTS FROM delivery
@@ -757,19 +771,11 @@ CREATE TABLE a (id SERIAL NOT NULL, self_id INT, b_id INT NOT NULL, PRIMARY KEY 
 statement ok
 CREATE TABLE b (id SERIAL NOT NULL, PRIMARY KEY (id))
 
-# NOTE: this test diverges from the main fk test here because of the issue #39037, which
-# breaks the auto-creation of origin indexes in the mixed-version 19.1/19.2 state.
-# TODO(lucy): reset this test to normal once that limitations is fixed.
-
-statement ok
-CREATE INDEX ON a(self_id)
-
+# The index needed for the fk constraint is automatically added because the table is empty
 statement ok
 ALTER TABLE a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES a;
 
-statement ok
-CREATE INDEX ON a(b_id)
-
+# The index needed for the fk constraint is automatically added because the table is empty
 statement ok
 ALTER TABLE a ADD CONSTRAINT fk_b FOREIGN KEY (b_id) REFERENCES b;
 
@@ -1245,13 +1251,6 @@ CREATE TABLE no_default_table (
  ,update_no_default INT
 );
 
-# TODO(lucy): remove after #39037 is resolved.
-statement ok
-CREATE INDEX ON no_default_table(delete_no_default)
-
-statement ok
-CREATE INDEX ON no_default_table(update_no_default)
-
 statement ok
 ALTER TABLE no_default_table ADD CONSTRAINT no_default_delete_set_default
   FOREIGN KEY (delete_no_default) REFERENCES a (id)
@@ -1457,52 +1456,6 @@ ALTER TABLE t ADD FOREIGN KEY (a, b) REFERENCES t (a, b)
 statement ok
 DROP TABLE t
 
-subtest unvalidated_fk_plan
-
-# To get an unvalidated foreign key for testing, use the loophole that we
-# currently don't support adding a validated FK in the same transaction as
-# CREATE TABLE
-
-statement ok
-CREATE TABLE a (
-  x STRING NULL,
-  y STRING NULL,
-  z STRING NULL,
-  CONSTRAINT "primary" PRIMARY KEY (z, y, x)
-)
-
-statement ok
-CREATE TABLE b (
-  a_y STRING NULL,
-  a_x STRING NULL,
-  a_z STRING NULL,
-  INDEX idx (a_z, a_y, a_x)
-)
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y1', 'z1')
-
-statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) NOT VALID
-
-statement error pq: foreign key violation: "b" row a_z='z1', a_y='y1', a_x='x2', rowid=[0-9]* has no match in "a"
-ALTER TABLE b VALIDATE CONSTRAINT fk_ref
-
-# Verify that the optimizer doesn't use an unvalidated constraint to simplify plans.
-query TTT
-SELECT
-  s.a_z, s.a_y, s.a_x
-FROM
-  (SELECT * FROM b WHERE a_z IS NOT NULL AND a_y IS NOT NULL AND a_x IS NOT NULL) AS s
-  LEFT JOIN a AS t ON s.a_z = t.z AND s.a_y = t.y AND s.a_x = t.x
-WHERE
-  t.z IS NULL
-----
-z1 y1 x2
-
-statement ok
-DROP TABLE a, b
-
 subtest Composite_Simple
 # Originally from 26748.
 
@@ -1645,120 +1598,6 @@ INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y2', 'z2')
 statement ok
 DROP TABLE b, a
 
-subtest Composite_Simple_Add_Constraint_Valid
-# Test ADD CONSTRAINT validation by inserting valid rows before the constraint is added.
-
-statement ok
-CREATE TABLE a (
-  x STRING NULL
- ,y STRING NULL
- ,z STRING NULL
- ,CONSTRAINT "primary" PRIMARY KEY (z, y, x)
-);
-
-statement ok
-CREATE TABLE b (
-  a_y STRING NULL
- ,a_x STRING NULL
- ,a_z STRING NULL
- ,INDEX idx (a_z, a_y, a_x)
-);
-
-statement ok
-INSERT INTO a (x, y, z) VALUES ('x1', 'y1', 'z1')
-
-# All of these are allowed because we do composite matching using MATCH SIMPLE.
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', NULL, NULL)
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', NULL)
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, 'z1')
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', 'y1', NULL)
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', NULL, 'z1')
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', 'z1')
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, NULL)
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', NULL, NULL)
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y2', NULL)
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, 'z2')
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', NULL)
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', NULL, 'z2')
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y2', 'z2')
-
-statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
-
-statement ok
-DROP TABLE b, a
-
-subtest Composite_Simple_Add_Constraint_Invalid
-# Test ADD CONSTRAINT validation by inserting invalid rows before the constraint is added, one at a time.
-
-statement ok
-CREATE TABLE a (
-  x STRING NULL
- ,y STRING NULL
- ,z STRING NULL
- ,CONSTRAINT "primary" PRIMARY KEY (z, y, x)
-);
-
-statement ok
-CREATE TABLE b (
-  a_y STRING NULL
- ,a_x STRING NULL
- ,a_z STRING NULL
- ,INDEX idx (a_z, a_y, a_x)
-);
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y1', 'z1')
-
-statement error foreign key violation: "b" row a_z='z1', a_y='y1', a_x='x2', rowid=[0-9]* has no match in "a"
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
-
-statement ok
-TRUNCATE b
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z1')
-
-statement error foreign key violation: "b" row a_z='z1', a_y='y2', a_x='x2', rowid=[0-9]* has no match in "a"
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
-
-statement ok
-TRUNCATE b
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z2')
-
-statement error foreign key violation: "b" row a_z='z2', a_y='y2', a_x='x2', rowid=[0-9]* has no match in "a"
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
-
-statement ok
-DROP TABLE b, a
-
 subtest Composite_Simple_Unvalidated
 # Test inserting into table with an unvalidated constraint, and running VALIDATE CONSTRAINT later
 
@@ -1772,18 +1611,13 @@ CREATE TABLE a (
 
 statement ok
 CREATE TABLE b (
-  a_y STRING NULL
+ a_y STRING NULL
  ,a_x STRING NULL
 );
 
-
-# TODO(lucy): remove after #39037 is resolved.
-statement ok
-CREATE INDEX ON b(a_y, a_x)
-
 # Add the constraint separately so that it's unvalidated, so we can test VALIDATE CONSTRAINT.
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x) NOT VALID
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x)
 
 statement ok
 INSERT INTO a (x, y) VALUES ('x1', 'y1')
@@ -1835,13 +1669,9 @@ CREATE TABLE b (
  ,a_z STRING NULL
 );
 
-# TODO(lucy): remove after #39037 is resolved.
-statement ok
-CREATE INDEX ON b(a_z, a_y, a_x)
-
 # Add the constraint separately so that it's unvalidated, so we can test VALIDATE CONSTRAINT.
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) NOT VALID
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
 
 statement ok
 INSERT INTO a (x, y, z) VALUES ('x1', 'y1', 'z1')
@@ -1928,7 +1758,78 @@ ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 statement ok
 DROP TABLE b, a
 
-#subtest Composite_Simple_Validate_Constraint_Invalid
+subtest Composite_Simple_Validate_Constraint_Invalid
+# Test VALIDATE CONSTRAINT by inserting invalid rows before the constraint is added, one at a time.
+
+statement ok
+CREATE TABLE a (
+  x STRING NULL
+ ,y STRING NULL
+ ,z STRING NULL
+ ,CONSTRAINT "primary" PRIMARY KEY (z, y, x)
+);
+
+statement ok
+CREATE TABLE b (
+  a_y STRING NULL
+ ,a_x STRING NULL
+ ,a_z STRING NULL
+ ,INDEX idx (a_z, a_y, a_x)
+);
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y1', 'z1')
+
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
+
+# Verify that the optimizer doesn't use an unvalidated constraint to simplify plans.
+query TTT
+SELECT
+  s.a_z, s.a_y, s.a_x
+FROM
+  (SELECT * FROM b WHERE a_z IS NOT NULL AND a_y IS NOT NULL AND a_x IS NOT NULL) AS s
+  LEFT JOIN a AS t ON s.a_z = t.z AND s.a_y = t.y AND s.a_x = t.x
+WHERE
+  t.z IS NULL
+----
+z1 y1 x2
+
+statement error foreign key violation: "b" row a_z='z1', a_y='y1', a_x='x2', rowid=[0-9]* has no match in "a"
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+TRUNCATE b
+
+statement ok
+ALTER TABLE b DROP CONSTRAINT fk_ref
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z1')
+
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
+
+statement error foreign key violation: "b" row a_z='z1', a_y='y2', a_x='x2', rowid=[0-9]* has no match in "a"
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+TRUNCATE b
+
+statement ok
+ALTER TABLE b DROP CONSTRAINT fk_ref
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z2')
+
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
+
+statement error foreign key violation: "b" row a_z='z2', a_y='y2', a_x='x2', rowid=[0-9]* has no match in "a"
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+DROP TABLE b, a
 
 subtest Composite_Full
 # Originally from 26748.
@@ -1936,20 +1837,17 @@ subtest Composite_Full
 # Test composite key with two columns.
 statement ok
 CREATE TABLE a (
-  x STRING NULL,
-  y STRING NULL,
-  CONSTRAINT "primary" PRIMARY KEY (y, x)
+  x STRING NULL
+ ,y STRING NULL
+ ,CONSTRAINT "primary" PRIMARY KEY (y, x)
 );
 
 statement ok
 CREATE TABLE b (
-  a_y STRING NULL,
-  a_x STRING NULL
+ a_y STRING NULL
+ ,a_x STRING NULL
+ ,CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x) MATCH FULL
 );
-
-# Add the constraint separately so that it's unvalidated, so we can test VALIDATE CONSTRAINT.
-statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x) MATCH FULL NOT VALID
 
 statement ok
 INSERT INTO a (x, y) VALUES ('x1', 'y1')
@@ -1980,21 +1878,19 @@ DROP TABLE b, a
 # Test composite key with three columns.
 statement ok
 CREATE TABLE a (
-  x STRING NULL,
-  y STRING NULL,
-  z STRING NULL,
-  CONSTRAINT "primary" PRIMARY KEY (z, y, x)
+  x STRING NULL
+ ,y STRING NULL
+ ,z STRING NULL
+ ,CONSTRAINT "primary" PRIMARY KEY (z, y, x)
 );
 
 statement ok
 CREATE TABLE b (
-  a_y STRING NULL,
-  a_x STRING NULL,
-  a_z STRING NULL
+  a_y STRING NULL
+ ,a_x STRING NULL
+ ,a_z STRING NULL
+ ,CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 );
-
-statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
 
 statement ok
 INSERT INTO a (x, y, z) VALUES ('x1', 'y1', 'z1')
@@ -2057,138 +1953,6 @@ INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', 'z1')
 # This statement should still be allowed.
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, NULL)
-
-statement ok
-DROP TABLE b, a
-
-subtest Composite_Full_Add_Constraint_Valid
-# Test ADD CONSTRAINT validation by inserting valid rows before the constraint is added.
-
-statement ok
-CREATE TABLE a (
-  x STRING NULL
- ,y STRING NULL
- ,z STRING NULL
- ,CONSTRAINT "primary" PRIMARY KEY (z, y, x)
-);
-
-statement ok
-CREATE TABLE b (
-  a_y STRING NULL
- ,a_x STRING NULL
- ,a_z STRING NULL
- ,INDEX idx (a_z, a_y, a_x)
-);
-
-statement ok
-INSERT INTO a (x, y, z) VALUES ('x1', 'y1', 'z1')
-
-# This statement should still be allowed.
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, NULL)
-
-statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
-
-statement ok
-DROP TABLE b, a
-
-subtest Composite_Full_Validate_Constraint_Invalid
-# Test VALIDATE CONSTRAINT by inserting invalid rows before the constraint is added, one at a time.
-
-statement ok
-CREATE TABLE a (
-  x STRING NULL
- ,y STRING NULL
- ,z STRING NULL
- ,CONSTRAINT "primary" PRIMARY KEY (z, y, x)
-);
-
-statement ok
-CREATE TABLE b (
-  a_y STRING NULL
- ,a_x STRING NULL
- ,a_z STRING NULL
- ,INDEX idx (a_z, a_y, a_x)
-);
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', NULL, NULL)
-
-statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
-
-statement ok
-TRUNCATE b
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', NULL)
-
-statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
-
-statement ok
-TRUNCATE b
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, 'z1')
-
-statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
-
-statement ok
-TRUNCATE b
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', 'y1', NULL)
-
-statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
-
-statement ok
-TRUNCATE b
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', NULL, 'z1')
-
-statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
-
-statement ok
-TRUNCATE b
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', 'z1')
-
-statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
-
-statement ok
-TRUNCATE b
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y1', 'z1')
-
-statement error foreign key violation: "b" row a_z='z1', a_y='y1', a_x='x2', rowid=[0-9]* has no match in "a"
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
-
-statement ok
-TRUNCATE b
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z1')
-
-statement error foreign key violation: "b" row a_z='z1', a_y='y2', a_x='x2', rowid=[0-9]* has no match in "a"
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
-
-statement ok
-TRUNCATE b
-
-statement ok
-INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z2')
-
-statement error foreign key violation: "b" row a_z='z2', a_y='y2', a_x='x2', rowid=[0-9]* has no match in "a"
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
 DROP TABLE b, a
@@ -2206,13 +1970,13 @@ CREATE TABLE a (
 
 statement ok
 CREATE TABLE b (
-  a_y STRING NULL
+ a_y STRING NULL
  ,a_x STRING NULL
 );
 
 # Add the constraint separately so that it's unvalidated, so we can test VALIDATE CONSTRAINT.
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x) MATCH FULL NOT VALID
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x) MATCH FULL
 
 statement ok
 INSERT INTO a (x, y) VALUES ('x1', 'y1')
@@ -2261,7 +2025,7 @@ CREATE TABLE b (
 
 # Add the constraint separately so that it's unvalidated, so we can test VALIDATE CONSTRAINT.
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
 INSERT INTO a (x, y, z) VALUES ('x1', 'y1', 'z1')
@@ -2354,7 +2118,7 @@ statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', NULL, NULL)
 
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
@@ -2369,7 +2133,7 @@ statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', NULL)
 
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
@@ -2384,7 +2148,7 @@ statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, 'z1')
 
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
@@ -2399,7 +2163,7 @@ statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', 'y1', NULL)
 
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
@@ -2414,7 +2178,7 @@ statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', NULL, 'z1')
 
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
@@ -2429,7 +2193,7 @@ statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', 'z1')
 
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
@@ -2444,7 +2208,7 @@ statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y1', 'z1')
 
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement error pq: foreign key violation: "b" row a_z='z1', a_y='y1', a_x='x2', rowid=[0-9]* has no match in "a"
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
@@ -2459,7 +2223,7 @@ statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z1')
 
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement error pq: foreign key violation: "b" row a_z='z1', a_y='y2', a_x='x2', rowid=[0-9]* has no match in "a"
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
@@ -2474,7 +2238,7 @@ statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z2')
 
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement error pq: foreign key violation: "b" row a_z='z2', a_y='y2', a_x='x2', rowid=[0-9]* has no match in "a"
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
@@ -2489,10 +2253,6 @@ CREATE TABLE parent_composite_index (a_id INT NOT NULL, b_id INT NOT NULL, PRIMA
 
 statement ok
 CREATE TABLE child_composite_index (id SERIAL NOT NULL, parent_a_id INT, parent_b_id INT, PRIMARY KEY (id))
-
-# TODO(lucy): remove after #39037 is resolved.
-statement ok
-CREATE INDEX ON child_composite_index (parent_a_id, parent_b_id)
 
 # The (composite) index needed for the fk constraint is automatically added because the table is empty
 statement ok
@@ -2638,44 +2398,3 @@ DELETE FROM t1 WHERE x IS NULL
 
 statement ok
 DROP TABLE t1, t2 CASCADE
-
-subtest test_not_valid_fk
-
-statement ok
-CREATE TABLE person (id INT PRIMARY KEY, age INT, name STRING)
-
-statement ok
-CREATE TABLE pet (id INT PRIMARY KEY, name STRING)
-
-statement ok
-INSERT INTO pet VALUES (0, 'crookshanks')
-
-statement error pq: foreign key violation: "pet" row id=0 has no match in "person"
-ALTER TABLE pet ADD CONSTRAINT fk_constraint FOREIGN KEY (id) REFERENCES person (id)
-
-statement ok
-ALTER TABLE pet ADD CONSTRAINT fk_constraint FOREIGN KEY (id) REFERENCES person (id) NOT VALID
-
-query TTTTB
-SHOW CONSTRAINTS FROM pet
-----
-pet  fk_constraint  FOREIGN KEY  FOREIGN KEY (id) REFERENCES person(id)  false
-pet  primary        PRIMARY KEY  PRIMARY KEY (id ASC)                    true
-
-statement error pq: foreign key violation: "pet" row id=0 has no match in "person"
-ALTER TABLE pet VALIDATE CONSTRAINT fk_constraint
-
-statement ok
-INSERT INTO person VALUES (0, 18, 'Hermione Granger')
-
-statement ok
-ALTER TABLE pet VALIDATE CONSTRAINT fk_constraint
-
-query TTTTB
-SHOW CONSTRAINTS FROM pet
-----
-pet  fk_constraint  FOREIGN KEY  FOREIGN KEY (id) REFERENCES person(id)  true
-pet  primary        PRIMARY KEY  PRIMARY KEY (id ASC)                    true
-
-statement ok
-DROP TABLE person, pet
