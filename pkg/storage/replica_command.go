@@ -936,6 +936,9 @@ func (r *Replica) ChangeReplicas(
 	// final voters and removes any undesirable replicas.
 	desc, err := r.finalizeChangeReplicas(ctx, desc, priority, reason, details, chgs)
 	if err != nil {
+		if fn := r.store.cfg.TestingKnobs.ReplicaAddSkipLearnerRollback; fn != nil && fn() {
+			return nil, err
+		}
 		// Don't leave a learner replica lying around if we didn't succeed in
 		// promoting it to a voter.
 		targets := chgs.Additions()
