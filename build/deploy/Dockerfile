@@ -5,7 +5,7 @@ FROM gcr.io/distroless/base
 ENV COCKROACH_CHANNEL=official-docker
 
 # copy in the cockroach binary with correct permissions
-COPY --chown=nonroot cockroach /
+COPY --chown=nonroot cockroach /cockroach/
 
 # exposed network ports
 EXPOSE 26257 8080
@@ -14,4 +14,4 @@ EXPOSE 26257 8080
 USER nonroot
 
 # entrypoint command
-ENTRYPOINT ["/cockroach"]
+ENTRYPOINT ["/cockroach/cockroach"]
