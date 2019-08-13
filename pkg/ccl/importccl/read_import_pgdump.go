@@ -444,11 +444,16 @@ func (m *pgDumpReader) readFiles(
 }
 
 func (m *pgDumpReader) readFile(
-	ctx context.Context, input io.Reader, inputIdx int32, inputName string, progressFn progressFn,
+	ctx context.Context, input *fileReader, inputIdx int32, inputName string, progressFn progressFn,
 ) error {
 	var inserts, count int64
 	ps := newPostgreStream(input, int(m.opts.MaxRowSize))
 	semaCtx := &tree.SemaContext{}
+	for _, conv := range m.tables {
+		conv.KvBatch.Source = inputIdx
+		conv.FractionFn = input.ReadFraction
+	}
+
 	for {
 		stmt, err := ps.Next()
 		if err == io.EOF {
