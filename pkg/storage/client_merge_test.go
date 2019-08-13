@@ -2489,12 +2489,14 @@ func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 		// immediately because there are no overlapping replicas that would interfere
 		// with the widening of the existing LHS replica.
 		if _, err := mtc.dbs[0].AdminChangeReplicas(
-			ctx, lhsDesc.StartKey.AsRawKey(), roachpb.ADD_REPLICA,
-			[]roachpb.ReplicationTarget{{
-				NodeID:  mtc.idents[2].NodeID,
-				StoreID: mtc.idents[2].StoreID,
-			}},
+			ctx, lhsDesc.StartKey.AsRawKey(),
 			*lhsDesc,
+			roachpb.MakeReplicationChanges(
+				roachpb.ADD_REPLICA,
+				roachpb.ReplicationTarget{
+					NodeID:  mtc.idents[2].NodeID,
+					StoreID: mtc.idents[2].StoreID,
+				}),
 		); !testutils.IsError(err, "cannot apply snapshot: snapshot intersects existing range") {
 			t.Fatal(err)
 		}

@@ -643,10 +643,7 @@ func (b *Batch) adminTransferLease(key interface{}, target roachpb.StoreID) {
 // adminChangeReplicas is only exported on DB. It is here for symmetry with the
 // other operations.
 func (b *Batch) adminChangeReplicas(
-	key interface{},
-	changeType roachpb.ReplicaChangeType,
-	targets []roachpb.ReplicationTarget,
-	expDesc roachpb.RangeDescriptor,
+	key interface{}, expDesc roachpb.RangeDescriptor, chgs []roachpb.ReplicationChange,
 ) {
 	k, err := marshalKey(key)
 	if err != nil {
@@ -657,10 +654,10 @@ func (b *Batch) adminChangeReplicas(
 		RequestHeader: roachpb.RequestHeader{
 			Key: k,
 		},
-		ChangeType: changeType,
-		Targets:    targets,
-		ExpDesc:    expDesc,
+		ExpDesc: expDesc,
 	}
+	req.AddChanges(chgs...)
+
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
 }
