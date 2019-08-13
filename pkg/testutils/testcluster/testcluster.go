@@ -389,7 +389,7 @@ func (tc *TestCluster) changeReplicas(
 		return roachpb.RangeDescriptor{}, errors.Wrap(err, "range descriptor lookup error")
 	}
 	desc, err := tc.Servers[0].DB().AdminChangeReplicas(
-		ctx, startKey.AsRawKey(), changeType, targets, beforeDesc,
+		ctx, startKey.AsRawKey(), beforeDesc, roachpb.MakeReplicationChanges(changeType, targets...),
 	)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, errors.Wrap(err, "AdminChangeReplicas error")

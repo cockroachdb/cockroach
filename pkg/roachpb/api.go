@@ -1185,3 +1185,46 @@ func (e *RangeFeedEvent) MustSetValue(value interface{}) {
 		panic(fmt.Sprintf("%T excludes %T", e, value))
 	}
 }
+
+// MakeReplicationChanges returns a slice of changes of the given type with an
+// item for each target.
+func MakeReplicationChanges(
+	changeType ReplicaChangeType, targets ...ReplicationTarget,
+) []ReplicationChange {
+	chgs := make([]ReplicationChange, 0, len(targets))
+	for _, target := range targets {
+		chgs = append(chgs, ReplicationChange{
+			ChangeType: changeType,
+			Target:     target,
+		})
+	}
+	return chgs
+}
+
+// AddChanges adds a batch of changes to the request in a backwards-compatible
+// way.
+func (acrr *AdminChangeReplicasRequest) AddChanges(chgs ...ReplicationChange) {
+	acrr.InternalChanges = append(acrr.InternalChanges, chgs...)
+
+	acrr.DeprecatedChangeType = chgs[0].ChangeType
+	for _, chg := range chgs {
+		acrr.DeprecatedTargets = append(acrr.DeprecatedTargets, chg.Target)
+	}
+}
+
+// Changes returns the changes requested by this AdminChangeReplicasRequest, taking
+// the deprecated method of doing so into account.
+func (acrr *AdminChangeReplicasRequest) Changes() []ReplicationChange {
+	if len(acrr.InternalChanges) > 0 {
+		return acrr.InternalChanges
+	}
+
+	sl := make([]ReplicationChange, len(acrr.DeprecatedTargets))
+	for _, target := range acrr.DeprecatedTargets {
+		sl = append(sl, ReplicationChange{
+			ChangeType: acrr.DeprecatedChangeType,
+			Target:     target,
+		})
+	}
+	return sl
+}
