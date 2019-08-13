@@ -29,14 +29,33 @@ func ExampleTask() {
 	dec.nonLocal[6] = true
 	dec.shouldReject[3] = true
 	dec.shouldReject[6] = true
+	fmt.Print(`
+Setting up a batch of seven log entries:
+ - index 2 and 6 are non-local
+ - index 3 and 6 will be rejected
+ - index 5 is not trivial
+`)
 
 	t := apply.MakeTask(sm, dec)
 	defer t.Close()
 
-	fmt.Println("Decode:")
+	fmt.Println("\nDecode (note that index 2 and 6 are not local):")
 	if err := t.Decode(ctx, ents); err != nil {
 		panic(err)
 	}
+
+	fmt.Println("\nAckCommittedEntriesBeforeApplication:")
+	if err := t.AckCommittedEntriesBeforeApplication(ctx, 10 /* maxIndex */); err != nil {
+		panic(err)
+	}
+	fmt.Print(`
+Above, only index 1 and 4 get acked early. The command at 5 is
+non-trivial, so the first batch contains only 1, 2, 3, and 4. An entry
+must be in the first batch to qualify for acking early. 2 is not local
+(so there's nobody to ack), and 3 is rejected. We can't ack rejected
+commands early because the state machine is free to handle them any way
+it likes.
+`)
 
 	fmt.Println("\nApplyCommittedEntries:")
 	if err := t.ApplyCommittedEntries(ctx); err != nil {
@@ -44,7 +63,12 @@ func ExampleTask() {
 	}
 	// Output:
 	//
-	// Decode:
+	// Setting up a batch of seven log entries:
+	//  - index 2 and 6 are non-local
+	//  - index 3 and 6 will be rejected
+	//  - index 5 is not trivial
+	//
+	// Decode (note that index 2 and 6 are not local):
 	//  decoding command 1; local=true
 	//  decoding command 2; local=false
 	//  decoding command 3; local=true
@@ -53,16 +77,27 @@ func ExampleTask() {
 	//  decoding command 6; local=false
 	//  decoding command 7; local=true
 	//
+	// AckCommittedEntriesBeforeApplication:
+	//  acknowledging command 1 before application
+	//  acknowledging command 4 before application
+	//
+	// Above, only index 1 and 4 get acked early. The command at 5 is
+	// non-trivial, so the first batch contains only 1, 2, 3, and 4. An entry
+	// must be in the first batch to qualify for acking early. 2 is not local
+	// (so there's nobody to ack), and 3 is rejected. We can't ack rejected
+	// commands early because the state machine is free to handle them any way
+	// it likes.
+	//
 	// ApplyCommittedEntries:
 	//  applying batch with commands=[1 2 3 4]
 	//  applying side-effects of command 1
 	//  applying side-effects of command 2
 	//  applying side-effects of command 3
 	//  applying side-effects of command 4
-	//  finishing and acknowledging command 1; rejected=false
+	//  finishing command 1; rejected=false
 	//  finishing and acknowledging command 2; rejected=false
 	//  finishing and acknowledging command 3; rejected=true
-	//  finishing and acknowledging command 4; rejected=false
+	//  finishing command 4; rejected=false
 	//  applying batch with commands=[5]
 	//  applying side-effects of command 5
 	//  finishing and acknowledging command 5; rejected=false
