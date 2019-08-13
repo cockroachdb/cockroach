@@ -107,7 +107,7 @@ func (c *csvInputReader) flushBatch(ctx context.Context, finished bool, progFn p
 }
 
 func (c *csvInputReader) readFile(
-	ctx context.Context, input io.Reader, inputIdx int32, inputName string, progressFn progressFn,
+	ctx context.Context, input *fileReader, inputIdx int32, inputName string, progressFn progressFn,
 ) error {
 	cr := csv.NewReader(input)
 	if c.opts.Comma != 0 {
@@ -128,6 +128,7 @@ func (c *csvInputReader) readFile(
 		record, err := cr.Read()
 		finished := err == io.EOF
 		if finished || len(c.batch.r) >= c.batchSize {
+			c.batch.progress = input.ReadFraction()
 			if err := c.flushBatch(ctx, finished, progressFn); err != nil {
 				return err
 			}
@@ -161,6 +162,7 @@ type csvRecord struct {
 	file      string
 	fileIndex int32
 	rowOffset int
+	progress  float32
 }
 
 // convertRecordWorker converts CSV records into KV pairs and sends them on the
@@ -181,6 +183,13 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 	timestamp := uint64(c.walltime) / precision
 
 	for batch := range c.recordCh {
+		if conv.KvBatch.Source != batch.fileIndex {
+			if err := conv.SendBatch(ctx); err != nil {
+				return err
+			}
+			conv.KvBatch.Source = batch.fileIndex
+		}
+		conv.KvBatch.Progress = batch.progress
 		for batchIdx, record := range batch.r {
 			rowNum := int64(batch.rowOffset + batchIdx)
 			datumIdx := 0

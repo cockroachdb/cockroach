@@ -258,7 +258,7 @@ func (c copyData) String() string {
 }
 
 func (d *pgCopyReader) readFile(
-	ctx context.Context, input io.Reader, inputIdx int32, inputName string, progressFn progressFn,
+	ctx context.Context, input *fileReader, inputIdx int32, inputName string, progressFn progressFn,
 ) error {
 	s := bufio.NewScanner(input)
 	s.Split(bufio.ScanLines)
@@ -268,6 +268,8 @@ func (d *pgCopyReader) readFile(
 		d.opts.Delimiter,
 		d.opts.Null,
 	)
+	d.conv.KvBatch.Source = inputIdx
+	d.conv.FractionFn = input.ReadFraction
 
 	for count := int64(1); ; count++ {
 		row, err := c.Next()
