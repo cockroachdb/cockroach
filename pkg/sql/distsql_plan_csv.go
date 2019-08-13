@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"sort"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -655,8 +657,9 @@ func DistIngest(
 	if err := job.FractionProgressed(ctx,
 		func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 			prog := details.(*jobspb.Progress_Import).Import
-			prog.ReadProgress = make([]float32, len(inputSpecs))
-			return prog.Completed()
+			prog.ReadProgress = make([]float32, len(from))
+			prog.CompletedRow = make([]uint64, len(from))
+			return 0.0
 		},
 	); err != nil {
 		return roachpb.BulkOpSummary{}, err
@@ -696,10 +699,50 @@ func DistIngest(
 		evalCtx.Tracing,
 	)
 	defer recv.Release()
-	// Copy the evalCtx, as dsp.Run() might change it.
-	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, nil, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
-	if err := rowResultWriter.Err(); err != nil {
+
+	stopProgress := make(chan struct{})
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		tick := time.NewTicker(time.Second * 10)
+		defer tick.Stop()
+		done := ctx.Done()
+		for {
+			select {
+			case <-stopProgress:
+				return nil
+			case <-done:
+				return ctx.Err()
+			case <-tick.C:
+				if err := job.FractionProgressed(ctx,
+					func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+						var overall float32
+						prog := details.(*jobspb.Progress_Import).Import
+						for i := range rowProgress {
+							prog.CompletedRow[i] = atomic.LoadUint64(&rowProgress[i])
+						}
+						for i := range fractionProgress {
+							fileProgress := math.Float32frombits(atomic.LoadUint32(&fractionProgress[i]))
+							prog.ReadProgress[i] = fileProgress
+							overall += fileProgress
+						}
+						return overall / float32(len(from))
+					},
+				); err != nil {
+					return err
+				}
+			}
+		}
+	})
+
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(stopProgress)
+		// Copy the evalCtx, as dsp.Run() might change it.
+		evalCtxCopy := *evalCtx
+		dsp.Run(planCtx, nil, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
+		return rowResultWriter.Err()
+	})
+
+	if err := g.Wait(); err != nil {
 		return roachpb.BulkOpSummary{}, err
 	}
 
