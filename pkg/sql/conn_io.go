@@ -479,12 +479,15 @@ func (buf *StmtBuf) ltrim(ctx context.Context, pos CmdPos) {
 	}
 }
 
-// AdvanceOne advances the cursor one Command over. The command over which the
-// cursor will be positioned when this returns may not be in the buffer yet.
-func (buf *StmtBuf) AdvanceOne() {
+// AdvanceOne advances the cursor one Command over. The command over which
+// the cursor will be positioned when this returns may not be in the buffer
+// yet. The previous CmdPos is returned.
+func (buf *StmtBuf) AdvanceOne() CmdPos {
 	buf.mu.Lock()
+	prev := buf.mu.curPos
 	buf.mu.curPos++
 	buf.mu.Unlock()
+	return prev
 }
 
 // seekToNextBatch moves the cursor position to the start of the next batch of
@@ -535,8 +538,8 @@ func (buf *StmtBuf) seekToNextBatch() error {
 	return nil
 }
 
-// rewind resets the buffer's position to pos.
-func (buf *StmtBuf) rewind(ctx context.Context, pos CmdPos) {
+// Rewind resets the buffer's position to pos.
+func (buf *StmtBuf) Rewind(ctx context.Context, pos CmdPos) {
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
 	if pos < buf.mu.startPos {
@@ -833,7 +836,7 @@ type rewindCapability struct {
 // unlocks the respective ClientComm.
 func (rc *rewindCapability) rewindAndUnlock(ctx context.Context) {
 	rc.cl.RTrim(ctx, rc.rewindPos)
-	rc.buf.rewind(ctx, rc.rewindPos)
+	rc.buf.Rewind(ctx, rc.rewindPos)
 	rc.cl.Close()
 }
 
