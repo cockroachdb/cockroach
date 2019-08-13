@@ -199,6 +199,34 @@ func (sb *statisticsBuilder) statsFromChild(e RelExpr, childIdx int) *props.Stat
 	return &e.Child(childIdx).(RelExpr).Relational().Stats
 }
 
+// availabilityFromInput determines the availability of the underlying table
+// statistics from the children of the expression.
+func (sb *statisticsBuilder) availabilityFromInput(e RelExpr) bool {
+	switch t := e.(type) {
+	case *ScanExpr:
+		return sb.makeTableStatistics(t.Table).Available
+
+	case *VirtualScanExpr:
+		return sb.makeTableStatistics(t.Table).Available
+
+	case *LookupJoinExpr:
+		ensureLookupJoinInputProps(t, sb)
+		return t.lookupProps.Stats.Available && t.Input.Relational().Stats.Available
+
+	case *ZigzagJoinExpr:
+		ensureZigzagJoinInputProps(t, sb)
+		return t.leftProps.Stats.Available
+	}
+
+	available := true
+	for i, n := 0, e.ChildCount(); i < n; i++ {
+		if child, ok := e.Child(i).(RelExpr); ok {
+			available = available && child.Relational().Stats.Available
+		}
+	}
+	return available
+}
+
 // colStatFromInput retrieves a column statistic from the input(s) of a Scan,
 // Select, or Join. The input to the Scan is the "raw" table.
 func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *props.ColumnStatistic {
@@ -207,6 +235,9 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 
 	switch t := e.(type) {
 	case *ScanExpr:
+		return sb.colStatTable(t.Table, colSet)
+
+	case *VirtualScanExpr:
 		return sb.colStatTable(t.Table, colSet)
 
 	case *SelectExpr:
@@ -451,10 +482,12 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	stats = &props.Statistics{}
 	if tab.StatisticCount() == 0 {
 		// No statistics.
+		stats.Available = false
 		stats.RowCount = unknownRowCount
 	} else {
 		// Get the RowCount from the most recent statistic. Stats are ordered
 		// with most recent first.
+		stats.Available = true
 		stats.RowCount = float64(tab.Statistic(0).RowCount())
 
 		// Make sure the row count is at least 1. The stats may be stale, and we
@@ -507,6 +540,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = sb.availabilityFromInput(scan)
 
 	inputStats := sb.makeTableStatistics(scan.Table)
 	s.RowCount = inputStats.RowCount
@@ -583,6 +617,7 @@ func (sb *statisticsBuilder) buildVirtualScan(scan *VirtualScanExpr, relProps *p
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = sb.availabilityFromInput(scan)
 
 	inputStats := sb.makeTableStatistics(scan.Table)
 
@@ -609,6 +644,7 @@ func (sb *statisticsBuilder) buildSelect(sel *SelectExpr, relProps *props.Relati
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = sb.availabilityFromInput(sel)
 
 	// Update stats based on equivalencies in the filter conditions. Note that
 	// EquivReps from the Select FD should not be used, as they include
@@ -692,6 +728,7 @@ func (sb *statisticsBuilder) buildProject(prj *ProjectExpr, relProps *props.Rela
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = sb.availabilityFromInput(prj)
 
 	inputStats := &prj.Input.Relational().Stats
 
@@ -784,6 +821,7 @@ func (sb *statisticsBuilder) buildJoin(
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = sb.availabilityFromInput(join)
 
 	leftStats := &h.leftProps.Stats
 	rightStats := &h.rightProps.Stats
@@ -1231,6 +1269,7 @@ func (sb *statisticsBuilder) buildIndexJoin(indexJoin *IndexJoinExpr, relProps *
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = sb.availabilityFromInput(indexJoin)
 
 	inputStats := &indexJoin.Input.Relational().Stats
 
@@ -1309,6 +1348,7 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = sb.availabilityFromInput(zigzag)
 
 	leftStats := zigzag.leftProps.Stats
 	equivReps := h.filtersFD.EquivReps()
@@ -1397,6 +1437,7 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = sb.availabilityFromInput(groupNode)
 
 	groupingColSet := groupNode.Private().(*GroupingPrivate).GroupingCols
 
@@ -1410,11 +1451,10 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 		// TODO(itsbilal): Update null count here, using a formula similar to the
 		// ones in colStatGroupBy.
 		colStat := sb.copyColStatFromChild(groupingColSet, groupNode, s)
-		s.RowCount = colStat.DistinctCount
 
 		// Non-scalar GroupBy should never increase the number of rows.
 		inputStats := sb.statsFromChild(groupNode, 0 /* childIdx */)
-		s.RowCount = min(s.RowCount, inputStats.RowCount)
+		s.RowCount = min(colStat.DistinctCount, inputStats.RowCount)
 	}
 
 	sb.finalizeFromCardinality(relProps)
@@ -1478,6 +1518,7 @@ func (sb *statisticsBuilder) buildSetNode(setNode RelExpr, relProps *props.Relat
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = sb.availabilityFromInput(setNode)
 
 	leftStats := sb.statsFromChild(setNode, 0 /* childIdx */)
 	rightStats := sb.statsFromChild(setNode, 1 /* childIdx */)
@@ -1575,6 +1616,7 @@ func (sb *statisticsBuilder) buildValues(values *ValuesExpr, relProps *props.Rel
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = sb.availabilityFromInput(values)
 
 	s.RowCount = float64(len(values.Rows))
 	sb.finalizeFromCardinality(relProps)
@@ -1637,6 +1679,7 @@ func (sb *statisticsBuilder) buildLimit(limit *LimitExpr, relProps *props.Relati
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = sb.availabilityFromInput(limit)
 
 	inputStats := &limit.Input.Relational().Stats
 
@@ -1682,6 +1725,7 @@ func (sb *statisticsBuilder) buildOffset(offset *OffsetExpr, relProps *props.Rel
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = sb.availabilityFromInput(offset)
 
 	inputStats := &offset.Input.Relational().Stats
 
@@ -1733,6 +1777,7 @@ func (sb *statisticsBuilder) buildMax1Row(max1Row *Max1RowExpr, relProps *props.
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = true
 
 	s.RowCount = 1
 	sb.finalizeFromCardinality(relProps)
@@ -1762,6 +1807,7 @@ func (sb *statisticsBuilder) buildOrdinality(ord *OrdinalityExpr, relProps *prop
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = sb.availabilityFromInput(ord)
 
 	inputStats := &ord.Input.Relational().Stats
 
@@ -1813,6 +1859,7 @@ func (sb *statisticsBuilder) buildWindow(window *WindowExpr, relProps *props.Rel
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = sb.availabilityFromInput(window)
 
 	inputStats := &window.Input.Relational().Stats
 
@@ -1880,26 +1927,28 @@ func (sb *statisticsBuilder) buildProjectSet(
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = sb.availabilityFromInput(projectSet)
 
 	// The row count of a zip operation is equal to the maximum row count of its
 	// children.
+	var zipRowCount float64
 	for i := range projectSet.Zip {
 		if fn, ok := projectSet.Zip[i].Func.(*FunctionExpr); ok {
 			if fn.Overload.Generator != nil {
 				// TODO(rytaft): We may want to estimate the number of rows based on
 				// the type of generator function and its parameters.
-				s.RowCount = unknownGeneratorRowCount
+				zipRowCount = unknownGeneratorRowCount
 				break
 			}
 		}
 
 		// A scalar function generates one row.
-		s.RowCount = 1
+		zipRowCount = 1
 	}
 
 	// Multiply by the input row count to get the total.
 	inputStats := &projectSet.Input.Relational().Stats
-	s.RowCount *= inputStats.RowCount
+	s.RowCount = zipRowCount * inputStats.RowCount
 
 	sb.finalizeFromCardinality(relProps)
 }
@@ -2009,6 +2058,7 @@ func (sb *statisticsBuilder) buildMutation(mutation RelExpr, relProps *props.Rel
 		// Short cut if cardinality is 0.
 		return
 	}
+	s.Available = sb.availabilityFromInput(mutation)
 
 	inputStats := sb.statsFromChild(mutation, 0 /* childIdx */)
 
@@ -2041,6 +2091,7 @@ func (sb *statisticsBuilder) colStatMutation(
 
 func (sb *statisticsBuilder) buildSequenceSelect(relProps *props.Relational) {
 	s := &relProps.Stats
+	s.Available = true
 	s.RowCount = 1
 	sb.finalizeFromCardinality(relProps)
 }
@@ -2063,6 +2114,7 @@ func (sb *statisticsBuilder) colStatSequenceSelect(
 
 func (sb *statisticsBuilder) buildUnknown(relProps *props.Relational) {
 	s := &relProps.Stats
+	s.Available = false
 	s.RowCount = unknownGeneratorRowCount
 	sb.finalizeFromCardinality(relProps)
 }
