@@ -1771,9 +1771,8 @@ func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
 		mergeErrCh <- tc.Server(0).DB().AdminMerge(ctx, scratchStartKey)
 	}()
 	go func() {
-		targets := []roachpb.ReplicationTarget{tc.Target(1)}
 		_, err := tc.Server(0).DB().AdminChangeReplicas(
-			ctx, scratchStartKey, roachpb.ADD_REPLICA, targets, beforeDesc)
+			ctx, scratchStartKey, beforeDesc, roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, tc.Target(1)))
 		addErrCh <- err
 	}()
 	mergeErr := <-mergeErrCh
@@ -1826,9 +1825,8 @@ func TestStoreRangeMergeResplitAddReplicaRace(t *testing.T) {
 	assert.Equal(t, origDesc.Replicas().All(), resplitDesc.Replicas().All())
 	assert.NotEqual(t, origDesc.Generation, resplitDesc.Generation)
 
-	targets := []roachpb.ReplicationTarget{tc.Target(1)}
 	_, err := tc.Server(0).DB().AdminChangeReplicas(
-		ctx, scratchStartKey, roachpb.ADD_REPLICA, targets, origDesc)
+		ctx, scratchStartKey, origDesc, roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, tc.Target(1)))
 	if !testutils.IsError(err, `descriptor changed`) {
 		t.Fatalf(`expected "descriptor changed" error got: %+v`, err)
 	}
@@ -2318,12 +2316,14 @@ func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 		// immediately because there are no overlapping replicas that would interfere
 		// with the widening of the existing LHS replica.
 		if _, err := mtc.dbs[0].AdminChangeReplicas(
-			ctx, lhsDesc.StartKey.AsRawKey(), roachpb.ADD_REPLICA,
-			[]roachpb.ReplicationTarget{{
-				NodeID:  mtc.idents[2].NodeID,
-				StoreID: mtc.idents[2].StoreID,
-			}},
+			ctx, lhsDesc.StartKey.AsRawKey(),
 			*lhsDesc,
+			roachpb.MakeReplicationChanges(
+				roachpb.ADD_REPLICA,
+				roachpb.ReplicationTarget{
+					NodeID:  mtc.idents[2].NodeID,
+					StoreID: mtc.idents[2].StoreID,
+				}),
 		); !testutils.IsError(err, "descriptor changed") {
 			t.Fatal(err)
 		}

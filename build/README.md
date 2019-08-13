@@ -41,6 +41,11 @@ go/src/github.com/cockroachdb/cockroach $ cp ./cockroach-linux-2.6.32-gnu-amd64 
 go/src/github.com/cockroachdb/cockroach $ cd build/deploy && docker build -t cockroachdb/cockroach .
 ```
 
+The list of valid/recognized targets is available in the script
+`build/build/mkrelease.sh`, for example `amd64-linux-gnu` and
+`amd64-darwin`. Note that this script supports experimental targets
+which may or may not work (and are not officially supported).
+
 # Upgrading / extending the Docker image
 
 Process:
