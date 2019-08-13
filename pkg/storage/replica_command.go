@@ -994,8 +994,6 @@ func (r *Replica) promoteLearnerReplicaToVoter(
 		if rDesc.GetType() != roachpb.ReplicaType_LEARNER {
 			return nil, errors.Errorf(`%s: cannot promote replica of type %s`, r, rDesc.Type)
 		}
-		rDesc.Type = roachpb.ReplicaTypeVoter()
-		newReplicas[i] = rDesc
 
 		// Note that raft snapshot queue will refuse to send a snapshot to a learner
 		// replica if its store is already sending a snapshot to that replica. That
@@ -1025,6 +1023,9 @@ func (r *Replica) promoteLearnerReplicaToVoter(
 				return desc, nil
 			}
 		}
+
+		rDesc.Type = roachpb.ReplicaTypeVoter()
+		newReplicas[i] = rDesc
 
 		updatedDesc := *desc
 		updatedDesc.SetReplicas(roachpb.MakeReplicaDescriptors(&newReplicas))
