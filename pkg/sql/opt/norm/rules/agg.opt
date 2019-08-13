@@ -5,6 +5,10 @@
 
 # EliminateAggDistinct removes AggDistinct for aggregations where DISTINCT
 # never modifies the result; for example: min(DISTINCT x).
+# TODO(ridwanmsharif): Consider either removing this normalization rule as
+#  having the AggDistinct is useful if we can use an index-skip scan.
+#  My instinct here is to just move this and make it an exploration rule
+#  as it is useful when we're not in the index-skip-scan path.
 [EliminateAggDistinct, Normalize]
 (Min | Max | BoolAnd | BoolOr
     (AggDistinct $in:*)

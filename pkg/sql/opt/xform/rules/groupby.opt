@@ -61,3 +61,78 @@
 )
 =>
 (GenerateStreamingGroupBy (OpName) $input $aggs $private)
+
+# GenerateIndexSkipScan creates an index-skip-scan expression
+# when we have a DistinctOn a prefix of the index.
+[GenerateIndexSkipScan, Explore]
+(DistinctOn
+    (Scan $scanPrivate:*) & ^(IsIndexSkipScan $scanPrivate)
+    $aggregations:*
+    $groupingPrivate:* &
+        (IsIndexPrefix $scanPrivate $groupingCols: (GroupingCols $groupingPrivate)) &
+        (ScanCanProvideOrdering $scanPrivate (ExtractGroupingOrdering $groupingPrivate))
+)
+=>
+(Scan
+    (PruneScanPrivate
+        (SynthesizeSkipScanPrivate $scanPrivate (ColSetLen $groupingCols))
+        (UnionCols
+            $groupingCols
+            (AggregationCols $aggregations)
+        )
+    )
+)
+
+# GenerateIndexSkipScanThroughProjection creates an index-skip scan
+# in place of the scan that is underneath a projection and a DistinctOn
+# when possible.
+[GenerateIndexSkipScanThroughProjection, Explore]
+(DistinctOn
+    (Project
+        (Scan $scanPrivate:*) & ^(IsIndexSkipScan $scanPrivate)
+        $projections:*
+        $passthrough:*
+    )
+    $aggregations:*
+    $groupingPrivate:* &
+        (IsIndexPrefix $scanPrivate $groupingCols: (GroupingCols $groupingPrivate)) &
+        (ScanCanProvideOrdering $scanPrivate (ExtractGroupingOrdering $groupingPrivate))
+)
+=>
+(Project
+    (Scan
+        (PruneScanPrivate
+            (SynthesizeSkipScanPrivate $scanPrivate (ColSetLen $groupingCols))
+            (UnionCols
+                $groupingCols
+                (AggregationCols $aggregations)
+            )
+        )
+    )
+    $projections
+    $passthrough
+)
+
+# GenerateIndexSkipScanThroughAggregates converts the scan to an index-skip-scan
+# by leveraging the AggDistinct clause in the aggregate.
+# We can't do this if there is more an one aggregate as the index-skip-scan would
+# omit rows the other aggregations would require. Similarly, we can't do this when
+# there are grouping columns specified.
+[GenerateIndexSkipScanThroughAggregates, Explore]
+(GroupBy | ScalarGroupBy
+    (Scan $scanPrivate:*) & ^(IsIndexSkipScan $scanPrivate)
+    $aggregations:[
+        (AggregationsItem
+            $aggregate:* & (HasDistinctOnIndexPrefix $aggregate $scanPrivate)
+        )
+    ]
+    $groupingPrivate:* &
+        (HasNoGroupingCols $groupingPrivate) &
+        (ScanCanProvideOrdering $scanPrivate (ExtractGroupingOrdering $groupingPrivate))
+)
+=>
+((OpName)
+    (Scan (SynthesizeSingleColSkipScanPrivate $scanPrivate))
+    (RemoveAggDistinct $aggregations)
+    $groupingPrivate
+)

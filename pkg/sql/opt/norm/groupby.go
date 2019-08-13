@@ -168,7 +168,7 @@ func (c *CustomFuncs) RemoveAggDistinctForKeys(
 			// Remove AggDistinct. We rely on the fact that AggDistinct must be
 			// directly "under" the Aggregate.
 			// TODO(radu): this will need to be revisited when we add more modifiers.
-			newAggs[i].Agg = c.replaceAggInputVar(item.Agg, v)
+			newAggs[i].Agg = c.ReplaceAggInputVar(item.Agg, v)
 			newAggs[i].Col = aggs[i].Col
 		} else {
 			newAggs[i] = *item
@@ -178,10 +178,10 @@ func (c *CustomFuncs) RemoveAggDistinctForKeys(
 	return newAggs
 }
 
-// replaceAggInputVar swaps out the aggregated variable in an aggregate with v. In
+// ReplaceAggInputVar swaps out the aggregated variable in an aggregate with v. In
 // the case of aggregates with multiple arguments (like string_agg) the other arguments
 // are kept the same.
-func (c *CustomFuncs) replaceAggInputVar(agg opt.ScalarExpr, v opt.ScalarExpr) opt.ScalarExpr {
+func (c *CustomFuncs) ReplaceAggInputVar(agg opt.ScalarExpr, v opt.ScalarExpr) opt.ScalarExpr {
 	switch agg.ChildCount() {
 	case 1:
 		return c.f.DynamicConstruct(agg.Op(), v).(opt.ScalarExpr)

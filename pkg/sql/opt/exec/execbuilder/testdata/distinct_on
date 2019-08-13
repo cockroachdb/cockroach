@@ -156,12 +156,9 @@ render          ·            ·            (b, c, a)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (pk1) pk1, pk2 FROM xyz
 ----
-distinct   ·            ·            (pk1, pk2)  weak-key(pk1); +pk1
- │         distinct on  pk1          ·           ·
- │         order key    pk1          ·           ·
- └── scan  ·            ·            (pk1, pk2)  +pk1
-·          table        xyz@primary  ·           ·
-·          spans        ALL          ·           ·
+scan  ·      ·            (pk1, pk2)  ·
+·     table  xyz@primary  ·           ·
+·     spans  ALL          ·           ·
 
 # Ensure the distinctNode advertises an a+ ordering.
 # TODO(radu): set the ordering in the render node to fix this.

@@ -1025,6 +1025,10 @@ func newProcessor(
 		if core.TableReader.IsCheck {
 			return newScrubTableReader(flowCtx, processorID, core.TableReader, post, outputs[0])
 		}
+		if core.TableReader.PrefixSkipLen > 0 {
+			newIndexTableReaderSpec := synthesizeIndexSkipSpec(core.TableReader)
+			return newIndexSkipTableReader(flowCtx, processorID, newIndexTableReaderSpec, post, outputs[0])
+		}
 		return newTableReader(flowCtx, processorID, core.TableReader, post, outputs[0])
 	}
 	if core.JoinReader != nil {

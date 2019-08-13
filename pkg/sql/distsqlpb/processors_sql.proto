@@ -116,6 +116,12 @@ message TableReaderSpec {
   // older than this value.
   //
   optional uint64 max_timestamp_age_nanos = 9 [(gogoproto.nullable) = false];
+
+  // Indicates the length of the prefix of the current index over which
+  // we are doing an index-skip-scan. It is the length of the prefix of the
+  // index that we are performing a distinct over. By default, this is 0
+  // indicating that in index-skip-scan is not being used.
+  optional uint32 prefix_skip_len = 10 [(gogoproto.nullable) = false];
 }
 
 // IndexSkipTableReaderSpec is the specification for a table reader that

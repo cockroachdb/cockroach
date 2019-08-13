@@ -77,6 +77,7 @@ func (ef *execFactory) ConstructScan(
 	maxResults uint64,
 	reqOrdering exec.OutputOrdering,
 	rowCount float64,
+	prefixSkipLen int,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
@@ -122,6 +123,7 @@ func (ef *execFactory) ConstructScan(
 	}
 	scan.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
 	scan.estimatedRowCount = uint64(rowCount)
+	scan.prefixSkipLen = prefixSkipLen
 	scan.createdByOpt = true
 	return scan, nil
 }
