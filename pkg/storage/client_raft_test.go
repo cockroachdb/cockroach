@@ -4518,3 +4518,107 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	require.Nil(t, pErr, "expected to succeed after healing the partition")
 	mtc.waitForValues(keyA, []int64{3, 3, 3})
 }
+
+// TestAckWriteBeforeApplication tests that the success of transactional writes
+// is acknowledged after those writes have been committed to a Range's Raft log
+// but before those writes have been applied to its replicated state machine.
+func TestAckWriteBeforeApplication(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for _, tc := range []struct {
+		repls            int
+		expAckBeforeAppl bool
+	}{
+		// In a single-replica Range, each handleRaftReady iteration will append
+		// new entries to the Raft log and immediately apply them. This prevents
+		// "early acknowledgement" from being possible or useful. See the comment
+		// on apply.Task.AckCommittedEntriesBeforeApplication.
+		{1, false},
+		// In a three-replica Range, each handleRaftReady iteration will append
+		// a set of entries to the Raft log and then apply the previous set of
+		// entries. This makes "early acknowledgement" a major optimization, as
+		// it pulls the entire latency required to append the next set of entries
+		// to the Raft log out of the client-perceived latency of the previous
+		// set of entries.
+		{3, true},
+	} {
+		t.Run(fmt.Sprintf("numRepls=%d", tc.repls), func(t *testing.T) {
+			var filterActive int32
+			var magicTS hlc.Timestamp
+			blockPreApplication, blockPostApplication := make(chan struct{}), make(chan struct{})
+			applyFilterFn := func(ch chan struct{}) storagebase.ReplicaApplyFilter {
+				return func(filterArgs storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
+					if atomic.LoadInt32(&filterActive) == 1 && filterArgs.Timestamp == magicTS {
+						<-ch
+					}
+					return 0, nil
+				}
+			}
+
+			tsc := storage.TestStoreConfig(nil)
+			tsc.TestingKnobs.TestingApplyFilter = applyFilterFn(blockPreApplication)
+			tsc.TestingKnobs.TestingPostApplyFilter = applyFilterFn(blockPostApplication)
+
+			mtc := &multiTestContext{storeConfig: &tsc}
+			defer mtc.Stop()
+			mtc.Start(t, tc.repls)
+
+			// Replicate the Range, if necessary.
+			key := roachpb.Key("a")
+			rangeID := mtc.stores[0].LookupReplica(roachpb.RKey(key)).RangeID
+			for i := 1; i < tc.repls; i++ {
+				mtc.replicateRange(rangeID, i)
+			}
+
+			// Begin peforming a write on the Range.
+			magicTS = mtc.stores[0].Clock().Now()
+			atomic.StoreInt32(&filterActive, 1)
+			ch := make(chan *roachpb.Error, 1)
+			go func() {
+				ctx := context.Background()
+				put := putArgs(key, []byte("val"))
+				_, pErr := client.SendWrappedWith(ctx, mtc.stores[0].TestSender(), roachpb.Header{
+					Timestamp: magicTS,
+				}, put)
+				ch <- pErr
+			}()
+
+			expResult := func() {
+				t.Helper()
+				if pErr := <-ch; pErr != nil {
+					t.Fatalf("unexpected proposal result error: %v", pErr)
+				}
+			}
+			dontExpResult := func() {
+				t.Helper()
+				select {
+				case <-time.After(10 * time.Millisecond):
+					// Expected.
+				case pErr := <-ch:
+					t.Fatalf("unexpected proposal acknowledged before TestingApplyFilter: %v", pErr)
+				}
+			}
+
+			// The result should be blocked on the pre-apply filter.
+			dontExpResult()
+
+			// Release the pre-apply filter.
+			close(blockPreApplication)
+			// Depending on the cluster configuration, The result may not be blocked
+			// on the post-apply filter because it may be able to acknowledges the
+			// client before applying.
+			if tc.expAckBeforeAppl {
+				expResult()
+			} else {
+				dontExpResult()
+			}
+
+			// Stop blocking Raft application to allow everything to shut down cleanly.
+			// This also confirms that the proposal does eventually apply.
+			close(blockPostApplication)
+			// If we didn't expect an acknowledgement before, we do now.
+			if !tc.expAckBeforeAppl {
+				expResult()
+			}
+		})
+	}
+}

@@ -89,7 +89,11 @@ evaluated KV" (see docs/RFCS/20160420_proposer_evaluated_kv.md). With the
 completion of that change, client responses are determined before replication
 begins. The only remaining work to be done after replication of a command
 succeeds is to determine whether it will be rejected and replaced by an empty
-command.
+command. To facilitate this acknowledgement as early as possible, this package
+provides the ability to acknowledge a series of commands before applying them to
+the state machine. Outcomes are determined before performing any durable work by
+stepping commands through an in-memory "ephemeral" copy of the state machine.
+For more, see Task.AckCommittedEntriesBeforeApplication.
 
 A final challenge comes from the desire to properly prioritize the application
 of commands across multiple state machines in systems like CockroachDB where
