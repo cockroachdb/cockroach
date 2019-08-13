@@ -329,6 +329,9 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 		}
 
 		progFn := func(pct float32) error {
+			if cp.spec.IngestDirectly {
+				return nil
+			}
 			return job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 				d := details.(*jobspb.Progress_Import).Import
 				slotpct := pct * cp.spec.Progress.Contribution
