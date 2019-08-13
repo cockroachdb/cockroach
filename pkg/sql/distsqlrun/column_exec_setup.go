@@ -101,7 +101,7 @@ type newColOperatorResult struct {
 
 // newColOperator creates a new columnar operator according to the given spec.
 func newColOperator(
-	ctx context.Context, flowCtx *FlowCtx, spec *distsqlpb.ProcessorSpec, inputs []exec.Operator,
+	ctx context.Context, flowCtx *FlowCtx, spec *distsqlpb.ProcessorSpec, inputs []exec.Operator, memo map[string]int,
 ) (result newColOperatorResult, err error) {
 	log.VEventf(ctx, 2, "planning col operator for spec %q", spec)
 
@@ -369,7 +369,7 @@ func newColOperator(
 			if core.HashJoiner.Type != sqlbase.JoinType_INNER {
 				return result, errors.Newf("can't plan non-inner hash join with on expressions")
 			}
-			columnTypes, err = result.planFilterExpr(flowCtx, core.HashJoiner.OnExpr, columnTypes)
+			columnTypes, err = result.planFilterExpr(flowCtx, map[string]int{}, core.HashJoiner.OnExpr, columnTypes)
 		}
 
 	case core.MergeJoiner != nil:
@@ -449,7 +449,7 @@ func newColOperator(
 			if core.MergeJoiner.Type != sqlbase.JoinType_INNER {
 				return result, errors.Errorf("can't plan non-inner merge joins with on expressions")
 			}
-			columnTypes, err = result.planFilterExpr(flowCtx, core.MergeJoiner.OnExpr, columnTypes)
+			columnTypes, err = result.planFilterExpr(flowCtx, map[string]int{}, core.MergeJoiner.OnExpr, columnTypes)
 		}
 
 	case core.JoinReader != nil:
@@ -605,7 +605,9 @@ func newColOperator(
 	}
 
 	if !post.Filter.Empty() {
-		if columnTypes, err = result.planFilterExpr(flowCtx, post.Filter, columnTypes); err != nil {
+		// TODO (rohany): why can't we use the same map here?
+		// why does the filter op re-do projections on stuff?
+		if columnTypes, err = result.planFilterExpr(flowCtx, map[string]int{}, post.Filter, columnTypes); err != nil {
 			return result, err
 		}
 	}
@@ -631,7 +633,7 @@ func newColOperator(
 			}
 			var outputIdx int
 			result.op, outputIdx, columnTypes, renderMem, err = planProjectionOperators(
-				flowCtx.NewEvalCtx(), helper.expr, columnTypes, result.op)
+				flowCtx.NewEvalCtx(), memo, helper.expr, columnTypes, result.op)
 			if err != nil {
 				return result, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
 			}
@@ -662,7 +664,7 @@ func newColOperator(
 }
 
 func (r *newColOperatorResult) planFilterExpr(
-	flowCtx *FlowCtx, filter distsqlpb.Expression, columnTypes []semtypes.T,
+	flowCtx *FlowCtx, memo map[string]int, filter distsqlpb.Expression, columnTypes []semtypes.T,
 ) ([]semtypes.T, error) {
 	var (
 		helper       exprHelper
@@ -673,7 +675,7 @@ func (r *newColOperatorResult) planFilterExpr(
 		return columnTypes, err
 	}
 	var filterColumnTypes []semtypes.T
-	r.op, _, filterColumnTypes, selectionMem, err = planSelectionOperators(flowCtx.NewEvalCtx(), helper.expr, columnTypes, r.op)
+	r.op, _, filterColumnTypes, selectionMem, err = planSelectionOperators(flowCtx.NewEvalCtx(), memo, helper.expr, columnTypes, r.op)
 	if err != nil {
 		return columnTypes, errors.Wrapf(err, "unable to columnarize filter expression %q", filter.Expr)
 	}
@@ -691,7 +693,7 @@ func (r *newColOperatorResult) planFilterExpr(
 }
 
 func planSelectionOperators(
-	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
+	ctx *tree.EvalContext, memo map[string]int, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
 ) (op exec.Operator, resultIdx int, ct []semtypes.T, memUsed int, err error) {
 	if err := assertHomogeneousTypes(expr); err != nil {
 		return op, resultIdx, ct, memUsed, err
@@ -700,14 +702,14 @@ func planSelectionOperators(
 	case *tree.IndexedVar:
 		return exec.NewBoolVecToSelOp(input, t.Idx), -1, columnTypes, memUsed, nil
 	case *tree.AndExpr:
-		leftOp, _, ct, memUsage, err := planSelectionOperators(ctx, t.TypedLeft(), columnTypes, input)
+		leftOp, _, ct, memUsage, err := planSelectionOperators(ctx, memo, t.TypedLeft(), columnTypes, input)
 		if err != nil {
 			return nil, resultIdx, ct, memUsage, err
 		}
-		return planSelectionOperators(ctx, t.TypedRight(), ct, leftOp)
+		return planSelectionOperators(ctx, memo, t.TypedRight(), ct, leftOp)
 	case *tree.ComparisonExpr:
 		cmpOp := t.Operator
-		leftOp, leftIdx, ct, memUsageLeft, err := planProjectionOperators(ctx, t.TypedLeft(), columnTypes, input)
+		leftOp, leftIdx, ct, memUsageLeft, err := planProjectionOperators(ctx, memo, t.TypedLeft(), columnTypes, input)
 		if err != nil {
 			return nil, resultIdx, ct, memUsageLeft, err
 		}
@@ -732,7 +734,7 @@ func planSelectionOperators(
 			op, err := exec.GetSelectionConstOperator(typ, cmpOp, leftOp, leftIdx, constArg)
 			return op, resultIdx, ct, memUsageLeft, err
 		}
-		rightOp, rightIdx, ct, memUsageRight, err := planProjectionOperators(ctx, t.TypedRight(), ct, leftOp)
+		rightOp, rightIdx, ct, memUsageRight, err := planProjectionOperators(ctx, memo, t.TypedRight(), ct, leftOp)
 		if err != nil {
 			return nil, resultIdx, ct, memUsageLeft + memUsageRight, err
 		}
@@ -748,19 +750,43 @@ func planSelectionOperators(
 // of the expression's result (if any, otherwise -1) and the column types of the
 // resulting batches.
 func planProjectionOperators(
-	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
+	ctx *tree.EvalContext, memo map[string]int, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
 ) (op exec.Operator, resultIdx int, ct []semtypes.T, memUsed int, err error) {
 	if err := assertHomogeneousTypes(expr); err != nil {
 		return op, resultIdx, ct, memUsed, err
 	}
+
+	if saved, ok := memo[expr.String()]; ok {
+		return input, saved, columnTypes, memUsed, nil
+	}
+
+	defer func() {
+		switch expr.(type) {
+		case *tree.IndexedVar:
+			// Don't memoize indexed vars, as some indexed var formatting
+			// does not uniquely identify indexed vars. Additionally, these
+			// expressions are already memoized, in a sense, so we
+			// don't need to do anything here.
+			// TODO (rohany): this actually seems like a problem in general
+			// with aggregates that we can't really get around.
+		default:
+			if _, ok := memo[expr.String()]; !ok && op != nil && resultIdx != -1 {
+				//fmt.Println("Remembering", expr.String(), resultIdx)
+				memo[expr.String()] = resultIdx
+			}
+		}
+	}()
+
 	resultIdx = -1
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
 		return input, t.Idx, columnTypes, memUsed, nil
 	case *tree.ComparisonExpr:
-		return planProjectionExpr(ctx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(), columnTypes, input)
+		op, resultIdx, ct, memUsed, err = planProjectionExpr(ctx, memo, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(), columnTypes, input)
+		return op, resultIdx, ct, memUsed, err
 	case *tree.BinaryExpr:
-		return planProjectionExpr(ctx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(), columnTypes, input)
+		op, resultIdx, ct, memUsed, err = planProjectionExpr(ctx, memo, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(), columnTypes, input)
+		return op, resultIdx, ct, memUsed, err
 	case *tree.FuncExpr:
 		var (
 			inputCols     []int
@@ -773,7 +799,11 @@ func planProjectionOperators(
 			// TODO(rohany): This could be done better, especially in the case of
 			// constant arguments, because the vectorized engine right now
 			// creates a new column full of the constant value.
-			op, resultIdx, ct, projectionMem, err = planProjectionOperators(ctx, e.(tree.TypedExpr), ct, op)
+			if result, ok := memo[e.String()]; ok {
+				resultIdx, projectionMem = result, 0
+			} else {
+				op, resultIdx, ct, projectionMem, err = planProjectionOperators(ctx, memo, e.(tree.TypedExpr), ct, op)
+			}
 			if err != nil {
 				return nil, resultIdx, nil, memUsed, err
 			}
@@ -810,6 +840,7 @@ func planProjectionOperators(
 
 func planProjectionExpr(
 	ctx *tree.EvalContext,
+	memo map[string]int,
 	binOp tree.Operator,
 	outputType *semtypes.T,
 	left, right tree.TypedExpr,
@@ -827,7 +858,7 @@ func planProjectionExpr(
 		// operators such as - and /, though, so we still need this case.
 		var rightOp exec.Operator
 		var rightIdx int
-		rightOp, rightIdx, ct, memUsed, err = planProjectionOperators(ctx, right, columnTypes, input)
+		rightOp, rightIdx, ct, memUsed, err = planProjectionOperators(ctx, memo, right, columnTypes, input)
 		if err != nil {
 			return nil, resultIdx, ct, memUsed, err
 		}
@@ -841,7 +872,7 @@ func planProjectionExpr(
 		}
 		return op, resultIdx, ct, memUsed, err
 	}
-	leftOp, leftIdx, ct, leftMem, err := planProjectionOperators(ctx, left, columnTypes, input)
+	leftOp, leftIdx, ct, leftMem, err := planProjectionOperators(ctx, memo, left, columnTypes, input)
 	if err != nil {
 		return nil, resultIdx, ct, leftMem, err
 	}
@@ -872,7 +903,7 @@ func planProjectionExpr(
 		return op, resultIdx, ct, leftMem + memUsed, err
 	}
 	// Case 3: neither are constant.
-	rightOp, rightIdx, ct, rightMem, err := planProjectionOperators(ctx, right, ct, leftOp)
+	rightOp, rightIdx, ct, rightMem, err := planProjectionOperators(ctx, memo, right, ct, leftOp)
 	if err != nil {
 		return nil, resultIdx, nil, leftMem + rightMem, err
 	}
@@ -1397,6 +1428,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 		queue = append(queue, i)
 	}
 
+	// memo table for remembering columns where expressions have been output to.
+	memo := make(map[string]int)
+
 	inputs := make([]exec.Operator, 0, 2)
 	for len(queue) > 0 {
 		pspec := &processorSpecs[queue[0]]
@@ -1424,7 +1458,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			inputs = append(inputs, input)
 		}
 
-		result, err := newColOperator(ctx, flowCtx, pspec, inputs)
+		result, err := newColOperator(ctx, flowCtx, pspec, inputs, memo)
 		if err != nil {
 			return nil, errors.Wrapf(err, "unable to vectorize execution plan")
 		}
