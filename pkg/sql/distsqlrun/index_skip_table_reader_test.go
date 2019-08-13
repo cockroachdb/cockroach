@@ -165,7 +165,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 		expected  string
 	}{
 		{
-			desc:      "Distinct scan simple",
+			// Distinct scan simple.
+			desc:      "SimpleForward",
 			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
 				Spans: []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
@@ -177,7 +178,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[0] [1] [2] [3] [4] [5] [6] [7] [8] [9]]",
 		},
 		{
-			desc:      "Distinct scan on interleaved table parent",
+			// Distinct scan on interleaved table parent.
+			desc:      "InterleavedParent",
 			tableDesc: td5,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
 				Spans: []distsqlpb.TableReaderSpan{{Span: td5.PrimaryIndexSpan()}},
@@ -189,7 +191,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[0] [1] [2] [3] [4] [5] [6] [7] [8] [9]]",
 		},
 		{
-			desc:      "Distinct scan on interleaved table child",
+			// Distinct scan on interleaved table child.
+			desc:      "InterleavedChild",
 			tableDesc: td6,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
 				Spans: []distsqlpb.TableReaderSpan{{Span: td6.PrimaryIndexSpan()}},
@@ -201,7 +204,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[1] [2] [3] [4] [5] [6] [7] [8] [9] [10]]",
 		},
 		{
-			desc:      "Distinct scan with multiple spans",
+			// Distinct scan with multiple spans.
+			desc:      "MultipleSpans",
 			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
 				Spans: []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
@@ -213,7 +217,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[0] [1] [2] [5] [6] [7]]",
 		},
 		{
-			desc:      "Distinct scan with multiple spans and filter",
+			// Distinct scan with multiple spans and filter,
+			desc:      "MultipleSpansWithFilter",
 			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
 				Spans: []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
@@ -226,7 +231,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[5] [6]]",
 		},
 		{
-			desc:      "Distinct scan with filter",
+			// Distinct scan with filter.
+			desc:      "Filter",
 			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
 				Spans: []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
@@ -239,7 +245,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[4] [5] [6]]",
 		},
 		{
-			desc:      "Distinct scan with multiple requested columns",
+			// Distinct scan with multiple requested columns.
+			desc:      "MultipleOutputCols",
 			tableDesc: td2,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
 				Spans: []distsqlpb.TableReaderSpan{{Span: td2.PrimaryIndexSpan()}},
@@ -251,7 +258,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[0 1] [1 2] [2 3] [3 4]]",
 		},
 		{
-			desc:      "Distinct scan on table with NULLs",
+			// Distinct scan on table with NULLs.
+			desc:      "Nulls",
 			tableDesc: td3,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
 				Spans: []distsqlpb.TableReaderSpan{{Span: td3.PrimaryIndexSpan()}},
@@ -263,7 +271,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[0] [1] [2] [3]]",
 		},
 		{
-			desc:      "Distinct scan on secondary index",
+			// Distinct scan on secondary index",
+			desc:      "SecondaryIdx",
 			tableDesc: td4,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
 				Spans:    []distsqlpb.TableReaderSpan{{Span: td4.IndexSpan(2)}},
@@ -276,7 +285,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[1] [2] [3] [4] [5] [6] [7] [8] [9] [10]]",
 		},
 		{
-			desc:      "Distinct reverse scan simple",
+			// Distinct reverse scan simple.
+			desc:      "SimpleReverse",
 			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
 				Spans:   []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
@@ -289,7 +299,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[9] [8] [7] [6] [5] [4] [3] [2] [1] [0]]",
 		},
 		{
-			desc:      "Distinct reverse scan with multiple spans",
+			// Distinct reverse scan with multiple spans.
+			desc:      "MultipleSpansReverse",
 			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
 				Spans:   []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
@@ -302,7 +313,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[7] [6] [5] [2] [1] [0]]",
 		},
 		{
-			desc:      "Distinct reverse scan with multiple spans and filter",
+			// Distinct reverse scan with multiple spans and filter.
+			desc:      "MultipleSpansWithFilterReverse",
 			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
 				Spans:   []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
@@ -316,47 +328,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[6] [5]]",
 		},
 		{
-			desc:      "Distinct reverse scan simple",
-			tableDesc: td1,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:   []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
-				Reverse: true,
-			},
-			post: distsqlpb.PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{0},
-			},
-			expected: "[[9] [8] [7] [6] [5] [4] [3] [2] [1] [0]]",
-		},
-		{
-			desc:      "Distinct reverse scan with multiple spans",
-			tableDesc: td1,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:   []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
-				Reverse: true,
-			},
-			post: distsqlpb.PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{0},
-			},
-			expected: "[[7] [6] [5] [2] [1] [0]]",
-		},
-		{
-			desc:      "Distinct reverse scan with multiple spans and filter",
-			tableDesc: td1,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:   []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
-				Reverse: true,
-			},
-			post: distsqlpb.PostProcessSpec{
-				Filter:        distsqlpb.Expression{Expr: "@1 > 3 AND @1 < 7"},
-				Projection:    true,
-				OutputColumns: []uint32{0},
-			},
-			expected: "[[6] [5]]",
-		},
-		{
-			desc:      "Distinct reverse scan on interleaved parent",
+			// Distinct reverse scan on interleaved parent.
+			desc:      "InterleavedParentReverse",
 			tableDesc: td5,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
 				Spans:   []distsqlpb.TableReaderSpan{{Span: td5.PrimaryIndexSpan()}},
@@ -369,7 +342,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[9] [8] [7] [6] [5] [4] [3] [2] [1] [0]]",
 		},
 		{
-			desc:      "Distinct reverse scan with multiple spans on interleaved parent",
+			// Distinct reverse scan with multiple spans on interleaved parent.
+			desc:      "InterleavedParentMultipleSpansReverse",
 			tableDesc: td5,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
 				Spans:   []distsqlpb.TableReaderSpan{makeIndexSpan(td5, 0, 3), makeIndexSpan(td5, 5, 8)},
@@ -382,7 +356,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[7] [6] [5] [2] [1] [0]]",
 		},
 		{
-			desc:      "Distinct reverse scan on interleaved child",
+			// Distinct reverse scan on interleaved child.
+			desc:      "InterleavedChildReverse",
 			tableDesc: td6,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
 				Spans:   []distsqlpb.TableReaderSpan{{Span: td6.PrimaryIndexSpan()}},
