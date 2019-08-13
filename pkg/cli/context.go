@@ -265,6 +265,8 @@ var startCtx struct {
 
 	// temporary directory to use to spill computation results to disk.
 	tempDir string
+	// storage engine to use for temporary storage (eg. rocksdb, pebble)
+	tempEngine storageEngine
 	// directory to use for remotely-initiated operations that can
 	// specify node-local I/O paths, like BACKUP/RESTORE/IMPORT.
 	externalIODir string

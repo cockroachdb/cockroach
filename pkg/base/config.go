@@ -660,6 +660,8 @@ const (
 // pertaining to temp storage flags, specifically --temp-dir and
 // --max-disk-temp-storage.
 type TempStorageConfig struct {
+	// Engine specifies whether to use rocksdb or pebble for temp storage.
+	Engine string
 	// InMemory specifies whether the temporary storage will remain
 	// in-memory or occupy a temporary subdirectory on-disk.
 	InMemory bool
@@ -683,6 +685,7 @@ func TempStorageConfigFromEnv(
 	st *cluster.Settings,
 	firstStore StoreSpec,
 	parentDir string,
+	engine string,
 	maxSizeBytes int64,
 	specIdx int,
 ) TempStorageConfig {
@@ -713,6 +716,7 @@ func TempStorageConfigFromEnv(
 	}
 
 	return TempStorageConfig{
+		Engine:   engine,
 		InMemory: inMem,
 		Mon:      &monitor,
 		SpecIdx:  specIdx,

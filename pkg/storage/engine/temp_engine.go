@@ -50,6 +50,10 @@ func NewTempEngine(
 		// Technically we do not pass any attributes to temporary store.
 		db := NewInMem(roachpb.Attributes{} /* attrs */, 0 /* cacheSize */).RocksDB
 		return &rocksDBTempEngine{db: db}, nil
+	} else if tempStorage.Engine == "pebble" {
+		// TODO(itsbilal): Fix this conditional to support pebble temp engines when
+		// that is implemented.
+		return NewPebbleTempEngine(tempStorage, storeSpec)
 	}
 
 	cfg := RocksDBConfig{

@@ -395,6 +395,9 @@ func init() {
 		// refers to becomes known.
 		VarFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
 		StringFlag(f, &startCtx.tempDir, cliflags.TempDir, startCtx.tempDir)
+		VarFlag(f, &startCtx.tempEngine, cliflags.TempEngine)
+		// Hide the tempEngine flag while it's experimental.
+		_ = f.MarkHidden(cliflags.TempEngine.Name)
 		StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir, startCtx.externalIODir)
 
 		VarFlag(f, serverCfg.SQLAuditLogDirName, cliflags.SQLAuditLogDirName)
