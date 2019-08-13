@@ -159,6 +159,12 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 			cmd.ctx, cmd.sp = tracing.StartComponentSpan(
 				ctx, d.r.AmbientContext.Tracer, "storage.replica.raft.process", opName)
 		}
+		cmd.sp.SetTag("repl_eval", cmd.replicatedResult())
+		cmd.sp.SetTag("write_batch", (*stringifyWriteBatch)(cmd.raftCmd.WriteBatch))
+		if cmd.raftCmd.LogicalOpLog != nil {
+			cmd.sp.SetTag("logical_ops", cmd.raftCmd.LogicalOpLog)
+		}
+
 	}
 }
 
