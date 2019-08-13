@@ -181,7 +181,7 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 			}
 		}
 
-		key, err := t.fetcher.PartialKey(t.keyPrefixLen)
+		prefixKey, err := t.fetcher.PartialKey(t.keyPrefixLen)
 		if err != nil {
 			t.MoveToDraining(err)
 			return nil, &distsqlpb.ProducerMetadata{Err: err}
@@ -199,20 +199,15 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		}
 
 		if !t.reverse {
-			// 0xff is the largest prefix marker for any encoded key. To ensure that
-			// our new key is larger than any value with the same prefix, we place
-			// 0xff at all other index column values, and one more to guard against
-			// 0xff present as a value in the table (0xff encodes a type of null).
-			for i := 0; i < (t.indexLen - t.keyPrefixLen + 1); i++ {
-				key = append(key, 0xff)
-			}
-			t.spans[t.currentSpan].Key = key
+			// If this is a forward scan, skip to the end of the current prefix's
+			// keyspace on the next seek.
+			t.spans[t.currentSpan].Key = prefixKey.PrefixEnd()
 		} else {
 			// In the case of reverse, this is much easier. The reverse fetcher
 			// returns the key retrieved, in this case the first key smaller
 			// than EndKey in the current span. Since EndKey is exclusive, we
 			// just set the retrieved key as EndKey for the next scan.
-			t.spans[t.currentSpan].EndKey = key
+			t.spans[t.currentSpan].EndKey = prefixKey
 		}
 
 		// If the changes we made turned our current span invalid, mark that
