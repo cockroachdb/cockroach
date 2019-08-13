@@ -199,6 +199,8 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		}
 
 		if !t.reverse {
+			// Modifying key in place would corrupt our current row, so make a copy.
+			key = append([]byte(nil), key...)
 			// 0xff is the largest prefix marker for any encoded key. To ensure that
 			// our new key is larger than any value with the same prefix, we place
 			// 0xff at all other index column values, and one more to guard against
