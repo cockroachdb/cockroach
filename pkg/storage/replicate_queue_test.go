@@ -170,10 +170,14 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 		return nil
 	})
 
-	if err := verifyRangeLog(
+	infos, err := filterRangeLog(
 		tc.Conns[0], storagepb.RangeLogEventType_add, storagepb.ReasonRangeUnderReplicated,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if len(infos) < 1 {
+		t.Fatalf("found no upreplication due to underreplication in the range logs")
 	}
 }
 
@@ -249,47 +253,45 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 		return nil
 	})
 
-	if err := verifyRangeLog(
+	infos, err := filterRangeLog(
 		tc.Conns[0], storagepb.RangeLogEventType_remove, storagepb.ReasonRangeOverReplicated,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if len(infos) < 1 {
+		t.Fatalf("found no downreplication due to over-replication in the range logs")
 	}
 }
 
-func verifyRangeLog(
+func filterRangeLog(
 	conn *gosql.DB, eventType storagepb.RangeLogEventType, reason storagepb.RangeLogEventReason,
-) error {
+) ([]storagepb.RangeLogEvent_Info, error) {
 	rows, err := conn.Query(
-		"SELECT info FROM system.rangelog WHERE \"eventType\" = $1;", eventType.String())
+		`SELECT info FROM system.rangelog WHERE "eventType" = $1 AND info LIKE concat('%', $2, '%');`, eventType.String(), reason)
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	var sl []storagepb.RangeLogEvent_Info
 	defer rows.Close()
 	var numEntries int
 	for rows.Next() {
 		numEntries++
 		var infoStr string
 		if err := rows.Scan(&infoStr); err != nil {
-			return err
+			return nil, err
 		}
 		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr), &info); err != nil {
-			return errors.Errorf("error unmarshalling info string %q: %s", infoStr, err)
+			return nil, errors.Errorf("error unmarshalling info string %q: %s", infoStr, err)
 		}
-		if a, e := info.Reason, reason; a != e {
-			return errors.Errorf("expected range log event reason %s, got %s from info %v", e, a, info)
-		}
-		if info.Details == "" {
-			return errors.Errorf("got empty range log event details: %v", info)
-		}
+		sl = append(sl, info)
 	}
 	if err := rows.Err(); err != nil {
-		return err
+		return nil, err
 	}
-	if numEntries == 0 {
-		return errors.New("no range log entries found for up-replication events")
-	}
-	return nil
+	return sl, nil
 }
 
 func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
