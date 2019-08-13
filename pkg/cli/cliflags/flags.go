@@ -729,6 +729,14 @@ If this flag is unspecified, the temporary subdirectory will be located under
 the root of the first store.`,
 	}
 
+	TempEngine = FlagInfo{
+		Name: "temp-engine",
+		Description: `
+Storage engine to use for temporary storage. Options are rocksdb (default), or
+experiemental-pebble.
+`,
+	}
+
 	ExternalIODir = FlagInfo{
 		Name: "external-io-dir",
 		Description: `
