@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -29,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 )
@@ -107,33 +105,12 @@ func (w *workloadReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
 	_ roachpb.IOFileFormat,
-	progressFn func(float32) error,
+	_ func(float32) error,
 	_ *cluster.Settings,
 ) error {
-	progress := jobs.ProgressUpdateBatcher{Report: func(ctx context.Context, pct float32) error {
-		return progressFn(pct)
-	}}
-
-	var numTotalBatches int64
-	var finishedBatchesAtomic int64
-	const batchesPerProgress = 1000
-	finishedBatchFn := func() {
-		finishedBatches := atomic.AddInt64(&finishedBatchesAtomic, 1)
-		if finishedBatches%batchesPerProgress == 0 {
-			progressDelta := float32(batchesPerProgress) / float32(numTotalBatches)
-			// TODO(dan): (*ProgressUpdateBatcher).Add also has logic to only report
-			// job progress periodically. See if we can unify them (potentially by
-			// making Add cheap enough to call every time inside `finishedBatchFn`, if
-			// it's not already). It also seems to me that it would be more natural
-			// for Add to take the overall progress than a delta.
-			if err := progress.Add(ctx, progressDelta); err != nil {
-				log.Warningf(ctx, "failed to update progress: %+v", err)
-			}
-		}
-	}
 
 	wcs := make([]*WorkloadKVConverter, 0, len(dataFiles))
-	for _, fileName := range dataFiles {
+	for fileID, fileName := range dataFiles {
 		file, err := url.Parse(fileName)
 		if err != nil {
 			return err
@@ -169,21 +146,18 @@ func (w *workloadReader) readFiles(
 			return errors.Wrapf(err, `unknown table %s for generator %s`, conf.Table, meta.Name)
 		}
 
-		numTotalBatches += conf.BatchEnd - conf.BatchBegin
 		wc := NewWorkloadKVConverter(
-			w.table, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh)
+			fileID, w.table, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh)
 		wcs = append(wcs, wc)
 	}
+
 	for _, wc := range wcs {
 		if err := ctxgroup.GroupWorkers(ctx, runtime.NumCPU(), func(ctx context.Context) error {
 			evalCtx := w.evalCtx.Copy()
-			return wc.Worker(ctx, evalCtx, finishedBatchFn)
+			return wc.Worker(ctx, evalCtx)
 		}); err != nil {
 			return err
 		}
-	}
-	if err := progress.Done(ctx); err != nil {
-		log.Warningf(ctx, "failed to update progress: %+v", err)
 	}
 	return nil
 }
@@ -195,11 +169,17 @@ type WorkloadKVConverter struct {
 	batchIdxAtomic int64
 	batchEnd       int
 	kvCh           chan row.KVBatch
+
+	// For progress reporting
+	fileID                int32
+	totalBatches          float32
+	finishedBatchesAtomic int64
 }
 
 // NewWorkloadKVConverter returns a WorkloadKVConverter for the given table and
 // range of batches, emitted converted kvs to the given channel.
 func NewWorkloadKVConverter(
+	fileID int32,
 	tableDesc *sqlbase.TableDescriptor,
 	rows workload.BatchedTuples,
 	batchStart, batchEnd int,
@@ -211,6 +191,8 @@ func NewWorkloadKVConverter(
 		batchIdxAtomic: int64(batchStart) - 1,
 		batchEnd:       batchEnd,
 		kvCh:           kvCh,
+		totalBatches:   float32(batchEnd - batchStart),
+		fileID:         fileID,
 	}
 }
 
@@ -224,14 +206,15 @@ func NewWorkloadKVConverter(
 // minimzing the amount of overlapping SSTs ingested.
 //
 // This worker needs its own EvalContext and DatumAlloc.
-func (w *WorkloadKVConverter) Worker(
-	ctx context.Context, evalCtx *tree.EvalContext, finishedBatchFn func(),
-) error {
+func (w *WorkloadKVConverter) Worker(ctx context.Context, evalCtx *tree.EvalContext) error {
 	conv, err := row.NewDatumRowConverter(w.tableDesc, nil /* targetColNames */, evalCtx, w.kvCh)
 	if err != nil {
 		return err
 	}
-
+	conv.KvBatch.Source = w.fileID
+	conv.FractionFn = func() float32 {
+		return float32(atomic.LoadInt64(&w.finishedBatchesAtomic)) / w.totalBatches
+	}
 	var alloc sqlbase.DatumAlloc
 	var a bufalloc.ByteAllocator
 	cb := coldata.NewMemBatchWithSize(nil, 0)
@@ -267,7 +250,7 @@ func (w *WorkloadKVConverter) Worker(
 				return err
 			}
 		}
-		finishedBatchFn()
+		atomic.AddInt64(&w.finishedBatchesAtomic, 1)
 	}
 	return conv.SendBatch(ctx)
 }
