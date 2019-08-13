@@ -1132,12 +1132,14 @@ func (m *multiTestContext) changeReplicas(
 		}
 
 		_, err := m.dbs[0].AdminChangeReplicas(
-			ctx, startKey.AsRawKey(), changeType,
-			[]roachpb.ReplicationTarget{{
-				NodeID:  m.idents[dest].NodeID,
-				StoreID: m.idents[dest].StoreID,
-			}},
+			ctx, startKey.AsRawKey(),
 			desc,
+			roachpb.MakeReplicationChanges(
+				changeType,
+				roachpb.ReplicationTarget{
+					NodeID:  m.idents[dest].NodeID,
+					StoreID: m.idents[dest].StoreID,
+				}),
 		)
 
 		if err == nil || testutils.IsError(err, alreadyDoneErr) {

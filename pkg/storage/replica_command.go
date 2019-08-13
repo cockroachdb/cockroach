@@ -1752,8 +1752,9 @@ func (s *Store) AdminRelocateRange(
 				NodeID:  targetStore.Node.NodeID,
 				StoreID: targetStore.StoreID,
 			}
-			newDesc, err := s.DB().AdminChangeReplicas(ctx, startKey, roachpb.ADD_REPLICA,
-				[]roachpb.ReplicationTarget{target}, rangeDesc)
+			newDesc, err := s.DB().AdminChangeReplicas(
+				ctx, startKey, rangeDesc,
+				roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, target))
 			if err != nil {
 				returnErr := errors.Wrapf(err, "while adding target %v", target)
 				if !canRetry(err) {
@@ -1794,8 +1795,11 @@ func (s *Store) AdminRelocateRange(
 			// the lease first in such scenarios. The first specified target should be
 			// the leaseholder now, so we can always transfer the lease there.
 			transferLease()
-			newDesc, err := s.DB().AdminChangeReplicas(ctx, startKey, roachpb.REMOVE_REPLICA,
-				[]roachpb.ReplicationTarget{target}, rangeDesc)
+			newDesc, err := s.DB().AdminChangeReplicas(ctx, startKey, rangeDesc,
+				roachpb.MakeReplicationChanges(
+					roachpb.REMOVE_REPLICA,
+					target),
+			)
 			if err != nil {
 				log.Warningf(ctx, "while removing target %v: %+v", target, err)
 				if !canRetry(err) {
@@ -1855,7 +1859,8 @@ func removeLearners(
 		targets[i].StoreID = learners[i].StoreID
 	}
 	log.VEventf(ctx, 2, `removing learner replicas %v from %v`, targets, desc)
-	newDesc, err := db.AdminChangeReplicas(ctx, desc.StartKey, roachpb.REMOVE_REPLICA, targets, *desc)
+	newDesc, err := db.AdminChangeReplicas(ctx, desc.StartKey, *desc,
+		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, targets...))
 	if err != nil {
 		return nil, errors.Wrapf(err, `removing learners from %s`, desc)
 	}

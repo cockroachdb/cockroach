@@ -525,12 +525,28 @@ func (db *DB) AdminTransferLease(
 func (db *DB) AdminChangeReplicas(
 	ctx context.Context,
 	key interface{},
-	changeType roachpb.ReplicaChangeType,
-	targets []roachpb.ReplicationTarget,
 	expDesc roachpb.RangeDescriptor,
+	chgs []roachpb.ReplicationChange,
 ) (*roachpb.RangeDescriptor, error) {
+	if ctx.Value("testing") == nil {
+		// Disallow trying to add and remove replicas in the same set of
+		// changes. This will only work when the node receiving the request is
+		// running 19.2 (code, not cluster version).
+		//
+		// TODO(tbg): remove this when 19.2 is released.
+		var typ *roachpb.ReplicaChangeType
+		for i := range chgs {
+			chg := &chgs[i]
+			if typ == nil {
+				typ = &chg.ChangeType
+			} else if *typ != chg.ChangeType {
+				return nil, errors.Errorf("can not mix %s and %s", *typ, chg.ChangeType)
+			}
+		}
+	}
+
 	b := &Batch{}
-	b.adminChangeReplicas(key, changeType, targets, expDesc)
+	b.adminChangeReplicas(key, expDesc, chgs)
 	if err := getOneErr(db.Run(ctx, b), b); err != nil {
 		return nil, err
 	}

@@ -747,6 +747,14 @@ message AdminTransferLeaseResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// A ReplicationChange specifies the type and target of a replication change operation.
+message ReplicationChange {
+  option (gogoproto.equal) = true;
+
+  ReplicaChangeType change_type = 1;
+  ReplicationTarget target = 2 [(gogoproto.nullable) = false];
+}
+
 // An AdminChangeReplicasRequest is the argument to the AdminChangeReplicas()
 // method. A change replicas operation allows adding or removing a set of
 // replicas for a range.
@@ -754,8 +762,14 @@ message AdminChangeReplicasRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  ReplicaChangeType change_type = 2;
-  repeated ReplicationTarget targets = 3 [(gogoproto.nullable) = false];
+  // Never access directly: use .Changes()
+  //
+  // TODO(tbg): remove in 20.1
+  ReplicaChangeType deprecated_change_type = 2;
+  // Never access directly: use .Changes()
+  //
+  // TODO(tbg): remove in 20.1
+  repeated ReplicationTarget deprecated_targets = 3 [(gogoproto.nullable) = false];
   // ExpDesc is the expected current range descriptor to modify. If the range
   // descriptor is not identical to ExpDesc for the request will fail.
   //
@@ -766,6 +780,11 @@ message AdminChangeReplicasRequest {
   // it is possible that an error will occur after partial application of the
   // change. Changes are applied in the order they appear in the request.
   RangeDescriptor exp_desc = 4 [(gogoproto.nullable) = false];
+
+  // The changes to apply to exp_desc. Never access directly: use .Changes().
+  //
+  // TODO(tbg): rename to 'changes' in 20.1 and remove Changes().
+  repeated ReplicationChange internal_changes = 5 [(gogoproto.nullable) = false];
 }
 
 message AdminChangeReplicasResponse {

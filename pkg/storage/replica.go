@@ -1313,11 +1313,11 @@ func (r *Replica) executeAdminBatch(
 	case *roachpb.AdminChangeReplicasRequest:
 		var err error
 		expDesc := &tArgs.ExpDesc
-		for _, target := range tArgs.Targets {
+		for _, chg := range tArgs.Changes() {
 			// Update expDesc to the outcome of the previous run to enable detection
 			// of concurrent updates while applying a series of changes.
 			expDesc, err = r.ChangeReplicas(
-				ctx, tArgs.ChangeType, target, expDesc, storagepb.ReasonAdminRequest, "")
+				ctx, chg.ChangeType, chg.Target, expDesc, storagepb.ReasonAdminRequest, "")
 			if err != nil {
 				break
 			}
