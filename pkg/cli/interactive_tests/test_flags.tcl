@@ -80,14 +80,5 @@ interrupt
 eexpect ":/# "
 end_test
 
-start_test "Check that start-single-node disables replication properly"
-system "rm -rf logs/db"
-start_server $argv
-send "$argv sql -e 'show zone configuration for range default'\r"
-eexpect "num_replicas = 1"
-eexpect ":/# "
-stop_server $argv
-end_test
-
 send "exit 0\r"
 eexpect eof
