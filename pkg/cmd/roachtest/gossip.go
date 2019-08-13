@@ -355,6 +355,7 @@ func runGossipRestartNodeOne(ctx context.Context, t *test, c *cluster) {
 	run(`ALTER DATABASE system %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 	run(`ALTER RANGE meta %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 	run(`ALTER RANGE liveness %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
+	run(`ALTER TABLE system.jobs %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 
 	var lastReplCount int
 	if err := retry.ForDuration(2*time.Minute, func() error {
