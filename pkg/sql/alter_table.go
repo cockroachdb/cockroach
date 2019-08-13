@@ -284,9 +284,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return err
 					}
 				}
-				if err := n.tableDesc.Validate(params.ctx, params.p.txn); err != nil {
-					return err
-				}
+				// TODO(lucy): Validate() can't be called here because it reads the
+				// referenced table descs, which may have to be upgraded to the new FK
+				// representation. That requires reading the original table descriptor
+				// (which the backreference points to) from KV, but we haven't written
+				// the updated table desc yet. We can restore the call to Validate()
+				// after running a migration of all table descriptors, making it
+				// unnecessary to read the original table desc from KV.
+				// if err := n.tableDesc.Validate(params.ctx, params.p.txn); err != nil {
+				// 	return err
+				// }
 
 			default:
 				return errors.AssertionFailedf(
