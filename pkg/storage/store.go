@@ -3394,12 +3394,11 @@ func (s *Store) processRaftRequestWithReplica(
 	return nil
 }
 
-// processRaftSnapshotRequest processes the incoming snapshot Raft request on
-// the request's specified replica. This snapshot can be preemptive or not. If
-// not, the function makes sure to handle any updated Raft Ready state. It also
-// adds and later removes the (potentially) necessary placeholder to protect
-// against concurrent access to the keyspace encompassed by the snapshot but not
-// yet guarded by the replica.
+// processRaftSnapshotRequest processes the incoming non-preemptive snapshot
+// Raft request on the request's specified replica. The function makes sure to
+// handle any updated Raft Ready state. It also adds and later removes the
+// (potentially) necessary placeholder to protect against concurrent access to
+// the keyspace encompassed by the snapshot but not yet guarded by the replica.
 func (s *Store) processRaftSnapshotRequest(
 	ctx context.Context, snapHeader *SnapshotRequest_Header, inSnap IncomingSnapshot,
 ) *roachpb.Error {
