@@ -722,6 +722,17 @@ func (r *testRunner) runTest(
 }
 
 func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, l *logger) {
+	// NB: fetch the logs even when we have a debug zip because
+	// debug zip can't ever get the logs for down nodes.
+	// We only save artifacts for failed tests in CI, so this
+	// duplication is acceptable.
+	// NB: fetch the logs *first* in case one of the other steps
+	// below has problems. For example, `debug zip` is known to
+	// hang sometimes at the time of writing, see:
+	// https://github.com/cockroachdb/cockroach/issues/39620
+	if err := c.FetchLogs(ctx); err != nil {
+		l.Printf("failed to download logs: %s", err)
+	}
 	l.PrintfCtx(ctx, "collecting cluster logs")
 	if err := c.FetchDebugZip(ctx); err != nil {
 		l.Printf("failed to download logs: %s", err)
@@ -737,13 +748,6 @@ func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, l *logg
 	}
 	if err := c.CopyRoachprodState(ctx); err != nil {
 		l.Printf("failed to copy roachprod state: %s", err)
-	}
-	// NB: fetch the logs even when we have a debug zip because
-	// debug zip can't ever get the logs for down nodes.
-	// We only save artifacts for failed tests in CI, so this
-	// duplication is acceptable.
-	if err := c.FetchLogs(ctx); err != nil {
-		l.Printf("failed to download logs: %s", err)
 	}
 }
 
