@@ -138,6 +138,11 @@ message IndexSkipTableReaderSpec {
   optional ScanVisibility visibility = 4 [(gogoproto.nullable) = false];
 
   optional bool reverse = 5 [(gogoproto.nullable) = false];
+
+  // Indicates the length of the prefix of the current index over which
+  // we are doing an index-skip-scan. It is the length of the prefix of the
+  // index that we are performing a distinct over.
+  optional uint32 prefix_skip_len = 6 [(gogoproto.nullable) = false];
 }
 
 // JoinReaderSpec is the specification for a "join reader". A join reader

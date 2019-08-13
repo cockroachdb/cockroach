@@ -80,6 +80,7 @@ func newIndexSkipTableReader(
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
 	t.ignoreMisplannedRanges = flowCtx.local
 	t.reverse = spec.Reverse
+	t.keyPrefixLen = int(spec.PrefixSkipLen)
 
 	if err := t.Init(
 		t,
@@ -96,9 +97,6 @@ func newIndexSkipTableReader(
 	); err != nil {
 		return nil, err
 	}
-
-	neededColumns := t.out.neededColumns()
-	t.keyPrefixLen = neededColumns.Len()
 
 	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
 
@@ -120,7 +118,7 @@ func newIndexSkipTableReader(
 		ColIdxMap:        columnIdxMap,
 		IsSecondaryIndex: isSecondaryIndex,
 		Cols:             cols,
-		ValNeededForCol:  neededColumns,
+		ValNeededForCol:  t.out.neededColumns(),
 	}
 
 	if err := t.fetcher.Init(t.reverse, true, /* returnRangeInfo */
