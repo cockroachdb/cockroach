@@ -1218,6 +1218,12 @@ func (r *Replica) completeSnapshotLogTruncationConstraint(
 	r.mu.snapshotLogTruncationConstraints[snapUUID] = item
 }
 
+func (r *Replica) getAndGCSnapshotLogTruncationConstraints(now time.Time) (minSnapIndex uint64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.getAndGCSnapshotLogTruncationConstraintsLocked(now)
+}
+
 func (r *Replica) getAndGCSnapshotLogTruncationConstraintsLocked(
 	now time.Time,
 ) (minSnapIndex uint64) {

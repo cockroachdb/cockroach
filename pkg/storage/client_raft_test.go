@@ -1157,6 +1157,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableMergeQueue = true
+	sc.TestingKnobs.DisableReplicateQueue = true
 	// Disable the replica GC queue so that it doesn't accidentally pick up the
 	// removed replica and GC it. We'll explicitly enable it later in the test.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
@@ -1472,7 +1473,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if lease, _ := repl.GetLease(); lease.Replica != repDesc {
+			if lease, _ := repl.GetLease(); !lease.Replica.Equal(repDesc) {
 				return errors.Errorf("lease not transferred yet; found %v", lease)
 			}
 			return nil
@@ -1539,8 +1540,8 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 }
 
 // TestStoreRangeUpReplicate verifies that the replication queue will notice
-// under-replicated ranges and replicate them. Also tests that preemptive
-// snapshots which contain sideloaded proposals don't panic the receiving end.
+// under-replicated ranges and replicate them. Also tests that snapshots which
+// contain sideloaded proposals don't panic the receiving end.
 func TestStoreRangeUpReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer storage.SetMockAddSSTable()()
@@ -1580,9 +1581,8 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 				return errors.Errorf("expected 0 reservations, but found %d", n)
 			}
 			if len(r.Desc().InternalReplicas) != 3 {
-				// This fails even after the preemptive snapshot has arrived and
-				// only goes through once the replica has properly caught up to
-				// the fully replicated descriptor.
+				// This fails even after the snapshot has arrived and only goes through
+				// once the replica has applied the conf change.
 				return errors.Errorf("not fully initialized")
 			}
 		}
@@ -1590,23 +1590,33 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	})
 
 	var generated int64
-	var normalApplied int64
-	var preemptiveApplied int64
+	var learnerApplied, raftApplied int64
 	for _, s := range mtc.stores {
 		m := s.Metrics()
 		generated += m.RangeSnapshotsGenerated.Count()
-		normalApplied += m.RangeSnapshotsNormalApplied.Count()
-		preemptiveApplied += m.RangeSnapshotsPreemptiveApplied.Count()
+		learnerApplied += m.RangeSnapshotsLearnerApplied.Count()
+		raftApplied += m.RangeSnapshotsNormalApplied.Count()
 	}
 	if generated == 0 {
 		t.Fatalf("expected at least 1 snapshot, but found 0")
 	}
-
-	if normalApplied != 0 {
-		t.Fatalf("expected 0 normal snapshots, but found %d", normalApplied)
+	var replicaCount int64
+	mtc.stores[0].VisitReplicas(func(_ *storage.Replica) bool {
+		replicaCount++
+		return true
+	})
+	// It's hard to make generalizations about exactly how many snapshots happen
+	// of each type. Almost all of them are learner snaps, but there is a race
+	// where the raft snapshot queue sometimes starts the snapshot first. Further,
+	// if the raft snapshot is at a higher index, we may even reject the learner
+	// snap. We definitely get at least one snapshot per replica and the race is
+	// rare enough that the majority of them should be learner snaps.
+	if expected := 2 * replicaCount; expected < learnerApplied+raftApplied {
+		t.Fatalf("expected at least %d snapshots, but found %d learner snaps and %d raft snaps",
+			expected, learnerApplied, raftApplied)
 	}
-	if generated != preemptiveApplied {
-		t.Fatalf("expected %d preemptive snapshots, but found %d", generated, preemptiveApplied)
+	if raftApplied > learnerApplied {
+		t.Fatalf("expected more learner snaps %d than raft snaps %d", learnerApplied, raftApplied)
 	}
 }
 
@@ -1655,11 +1665,6 @@ func TestUnreplicateFirstRange(t *testing.T) {
 
 // TestChangeReplicasDescriptorInvariant tests that a replica change aborts if
 // another change has been made to the RangeDescriptor since it was initiated.
-//
-// TODO(tschottdorf): If this test is flaky because the snapshot count does not
-// increase, it's likely because with proposer-evaluated KV, less gets proposed
-// and so sometimes Raft discards the preemptive snapshot (though we count that
-// case in stats already) or doesn't produce a Ready.
 func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mtc := &multiTestContext{
@@ -1706,7 +1711,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		return nil
 	})
 
-	before := mtc.stores[2].Metrics().RangeSnapshotsPreemptiveApplied.Count()
+	before := mtc.stores[2].Metrics().RangeSnapshotsLearnerApplied.Count()
 	// Attempt to add replica to the third store with the original descriptor.
 	// This should fail because the descriptor is stale.
 	expectedErr := `change replicas of r1 failed: descriptor changed: \[expected\]`
@@ -1714,29 +1719,26 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		t.Fatalf("got unexpected error: %+v", err)
 	}
 
-	testutils.SucceedsSoon(t, func() error {
-		after := mtc.stores[2].Metrics().RangeSnapshotsPreemptiveApplied.Count()
-		// The failed ChangeReplicas call should have applied a preemptive snapshot.
-		if after != before+1 {
-			return errors.Errorf(
-				"ChangeReplicas call should have applied a preemptive snapshot, before %d after %d",
-				before, after)
-		}
-		return nil
-	})
+	after := mtc.stores[2].Metrics().RangeSnapshotsLearnerApplied.Count()
+	// The failed ChangeReplicas call should NOT have applied a learner snapshot.
+	if after != before {
+		t.Fatalf(
+			"ChangeReplicas call should not have applied a learner snapshot, before %d after %d",
+			before, after)
+	}
 
-	before = mtc.stores[2].Metrics().RangeSnapshotsPreemptiveApplied.Count()
+	before = mtc.stores[2].Metrics().RangeSnapshotsLearnerApplied.Count()
 	// Add to third store with fresh descriptor.
 	if err := addReplica(2, repl.Desc()); err != nil {
 		t.Fatal(err)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		after := mtc.stores[2].Metrics().RangeSnapshotsPreemptiveApplied.Count()
-		// The failed ChangeReplicas call should have applied a preemptive snapshot.
+		after := mtc.stores[2].Metrics().RangeSnapshotsLearnerApplied.Count()
+		// The failed ChangeReplicas call should have applied a learner snapshot.
 		if after != before+1 {
 			return errors.Errorf(
-				"ChangeReplicas call should have applied a preemptive snapshot, before %d after %d",
+				"ChangeReplicas call should have applied a learner snapshot, before %d after %d",
 				before, after)
 		}
 		r := mtc.stores[2].LookupReplica(roachpb.RKey("a"))
@@ -2439,7 +2441,7 @@ outer:
 					if err != nil {
 						t.Fatal(err)
 					}
-					if lease, _ := repl.GetLease(); lease.Replica == repDesc {
+					if lease, _ := repl.GetLease(); lease.Replica.Equal(repDesc) {
 						mtc.transferLease(context.TODO(), rangeID, leaderIdx, replicaIdx)
 					}
 					mtc.unreplicateRange(rangeID, leaderIdx)
@@ -3763,42 +3765,6 @@ func TestTransferRaftLeadership(t *testing.T) {
 		}
 		return nil
 	})
-}
-
-// TestFailedPreemptiveSnapshot verifies that ChangeReplicas is
-// aborted if we are unable to send a preemptive snapshot.
-func TestFailedPreemptiveSnapshot(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	mtc := &multiTestContext{}
-	defer mtc.Stop()
-	mtc.Start(t, 2)
-
-	// Replicate a range onto the two stores. This replication is
-	// important because if there was only one node to begin with, the
-	// ChangeReplicas would fail because it was unable to achieve quorum
-	// even if the preemptive snapshot failure were ignored.
-	mtc.replicateRange(1, 1)
-
-	// Now try to add a third. It should fail because we cannot send a
-	// preemptive snapshot to it.
-	rep, err := mtc.stores[0].GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const expErr = "snapshot failed: failed to resolve n3: unknown peer 3"
-	if _, err := rep.ChangeReplicas(
-		context.Background(),
-		roachpb.ADD_REPLICA,
-		roachpb.ReplicationTarget{NodeID: 3, StoreID: 3},
-		rep.Desc(),
-		storagepb.ReasonRangeUnderReplicated,
-		"",
-	); !testutils.IsError(err, expErr) {
-		t.Fatalf("expected %s; got %v", expErr, err)
-	} else if !storage.IsSnapshotError(err) {
-		t.Fatalf("expected preemptive snapshot failed error; got %T: %+v", err, err)
-	}
 }
 
 // Test that a single blocked replica does not block other replicas.

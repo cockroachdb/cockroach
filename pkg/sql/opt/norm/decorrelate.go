@@ -697,11 +697,7 @@ func (c *CustomFuncs) ConstructNoColsRow() memo.RelExpr {
 // referenceSingleColumn returns a Variable operator that refers to the one and
 // only column that is projected by the input expression.
 func (c *CustomFuncs) referenceSingleColumn(in memo.RelExpr) opt.ScalarExpr {
-	cols := in.Relational().OutputCols
-	if cols.Len() != 1 {
-		panic(errors.AssertionFailedf("expression does not have exactly one column"))
-	}
-	colID, _ := cols.Next(0)
+	colID := in.Relational().OutputCols.SingleColumn()
 	return c.f.ConstructVariable(colID)
 }
 
@@ -801,8 +797,14 @@ func (r *subqueryHoister) hoistAll(scalar opt.ScalarExpr) opt.ScalarExpr {
 		}
 
 		// Replace the Subquery operator with a Variable operator referring to
-		// the first (and only) column in the hoisted query.
-		colID, _ := subqueryProps.OutputCols.Next(0)
+		// the output column of the hoisted query.
+		var colID opt.ColumnID
+		switch t := scalar.(type) {
+		case *memo.ArrayFlattenExpr:
+			colID = t.RequestedCol
+		default:
+			colID = subqueryProps.OutputCols.SingleColumn()
+		}
 		return r.f.ConstructVariable(colID)
 	}
 
