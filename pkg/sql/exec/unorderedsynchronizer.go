@@ -15,8 +15,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 )
 
@@ -87,7 +87,7 @@ func (s *UnorderedSynchronizer) Child(nth int) OpNode {
 // these spawned goroutines will have completed on any error or zero-length
 // batch received from Next.
 func NewUnorderedSynchronizer(
-	inputs []Operator, typs []types.T, wg *sync.WaitGroup,
+	inputs []Operator, typs []coltypes.T, wg *sync.WaitGroup,
 ) *UnorderedSynchronizer {
 	readNextBatch := make([]chan struct{}, len(inputs))
 	for i := range readNextBatch {

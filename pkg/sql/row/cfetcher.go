@@ -17,18 +17,18 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,7 +57,7 @@ type cTableInfo struct {
 	cols []sqlbase.ColumnDescriptor
 
 	// The exec types corresponding to the table columns in cols.
-	typs []types.T
+	typs []coltypes.T
 
 	// The ordered list of ColumnIDs that are required.
 	neededColsList []int
@@ -92,8 +92,8 @@ type cTableInfo struct {
 	// id pair at the start of the key.
 	knownPrefixLength int
 
-	keyValTypes []semtypes.T
-	extraTypes  []semtypes.T
+	keyValTypes []types.T
+	extraTypes  []types.T
 
 	da sqlbase.DatumAlloc
 }
@@ -263,10 +263,10 @@ func (rf *CFetcher) Init(
 	}
 	sort.Sort(m)
 	colDescriptors := tableArgs.Cols
-	typs := make([]types.T, len(colDescriptors))
+	typs := make([]coltypes.T, len(colDescriptors))
 	for i := range typs {
-		typs[i] = conv.FromColumnType(&colDescriptors[i].Type)
-		if typs[i] == types.Unhandled {
+		typs[i] = typeconv.FromColumnType(&colDescriptors[i].Type)
+		if typs[i] == coltypes.Unhandled {
 			return errors.Errorf("unhandled type %+v", &colDescriptors[i].Type)
 		}
 	}
@@ -784,7 +784,7 @@ func (rf *CFetcher) pushState(state fetcherState) {
 
 // getDatumAt returns the converted datum object at the given (colIdx, rowIdx).
 // This function is meant for tracing and should not be used in hot paths.
-func (rf *CFetcher) getDatumAt(colIdx int, rowIdx uint16, typ semtypes.T) tree.Datum {
+func (rf *CFetcher) getDatumAt(colIdx int, rowIdx uint16, typ types.T) tree.Datum {
 	if rf.machine.colvecs[colIdx].Nulls().NullAt(rowIdx) {
 		return tree.DNull
 	}

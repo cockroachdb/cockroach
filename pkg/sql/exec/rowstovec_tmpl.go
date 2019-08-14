@@ -23,12 +23,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // {{/*
@@ -37,7 +37,7 @@ import (
 var _ apd.Decimal
 
 const (
-	_FAMILY = semtypes.Family(0)
+	_FAMILY = types.Family(0)
 	_WIDTH  = int32(0)
 )
 
@@ -48,7 +48,7 @@ func _ROWS_TO_COL_VEC(
 ) error { // */}}
 	// {{define "rowsToColVec"}}
 	col := vec._TemplateType()
-	datumToPhysicalFn := conv.GetDatumToPhysicalFn(columnType)
+	datumToPhysicalFn := typeconv.GetDatumToPhysicalFn(columnType)
 	for i := range rows {
 		row := rows[i]
 		if row[columnIdx].Datum == nil {
@@ -85,7 +85,7 @@ func EncDatumRowsToColVec(
 	rows sqlbase.EncDatumRows,
 	vec coldata.Vec,
 	columnIdx int,
-	columnType *semtypes.T,
+	columnType *types.T,
 	alloc *sqlbase.DatumAlloc,
 ) error {
 

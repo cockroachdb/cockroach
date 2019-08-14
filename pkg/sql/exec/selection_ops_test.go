@@ -17,10 +17,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 )
 
@@ -65,7 +65,7 @@ func TestGetSelectionConstOperator(t *testing.T) {
 	colIdx := 3
 	constVal := int64(31)
 	constArg := tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(constVal))
-	op, err := GetSelectionConstOperator(semtypes.Date, cmpOp, input, colIdx, constArg)
+	op, err := GetSelectionConstOperator(types.Date, cmpOp, input, colIdx, constArg)
 	if err != nil {
 		t.Error(err)
 	}
@@ -80,7 +80,7 @@ func TestGetSelectionConstOperator(t *testing.T) {
 }
 
 func TestGetSelectionOperator(t *testing.T) {
-	ct := semtypes.Int2
+	ct := types.Int2
 	cmpOp := tree.GE
 	var input Operator
 	col1Idx := 5
@@ -102,7 +102,7 @@ func TestGetSelectionOperator(t *testing.T) {
 func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]types.T{types.Int64})
+	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
 	col := batch.ColVec(0).Int64()
 	for i := int64(0); i < coldata.BatchSize; i++ {
 		if float64(i) < coldata.BatchSize*selectivity {
@@ -156,7 +156,7 @@ func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
 func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64})
+	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64})
 	col1 := batch.ColVec(0).Int64()
 	col2 := batch.ColVec(1).Int64()
 	for i := int64(0); i < coldata.BatchSize; i++ {

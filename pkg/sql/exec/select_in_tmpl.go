@@ -24,12 +24,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -41,8 +41,8 @@ type _TYPE interface{}
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
 
-// Dummy import to pull in "types" package
-var _ types.T
+// Dummy import to pull in "coltypes" package
+var _ coltypes.T
 
 // Dummy import to pull in "bytes" package
 var _ bytes.Buffer
@@ -66,12 +66,12 @@ const (
 )
 
 func GetInProjectionOperator(
-	ct *semtypes.T, input Operator, colIdx int, resultIdx int, datumTuple *tree.DTuple, negate bool,
+	ct *types.T, input Operator, colIdx int, resultIdx int, datumTuple *tree.DTuple, negate bool,
 ) (Operator, error) {
 	var err error
-	switch t := conv.FromColumnType(ct); t {
+	switch t := typeconv.FromColumnType(ct); t {
 	// {{range .}}
-	case types._TYPE:
+	case coltypes._TYPE:
 		obj := &projectInOp_TYPE{
 			OneInputNode: NewOneInputNode(input),
 			colIdx:       colIdx,
@@ -90,12 +90,12 @@ func GetInProjectionOperator(
 }
 
 func GetInOperator(
-	ct *semtypes.T, input Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
+	ct *types.T, input Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
 ) (Operator, error) {
 	var err error
-	switch t := conv.FromColumnType(ct); t {
+	switch t := typeconv.FromColumnType(ct); t {
 	// {{range .}}
-	case types._TYPE:
+	case coltypes._TYPE:
 		obj := &selectInOp_TYPE{
 			OneInputNode: NewOneInputNode(input),
 			colIdx:       colIdx,
@@ -134,11 +134,11 @@ type projectInOp_TYPE struct {
 var _ StaticMemoryOperator = &projectInOp_TYPE{}
 
 func (p *projectInOp_TYPE) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]types.T{types.Bool}, coldata.BatchSize)
+	return EstimateBatchSizeBytes([]coltypes.T{coltypes.Bool}, coldata.BatchSize)
 }
 
-func fillDatumRow_TYPE(ct *semtypes.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
-	conv := conv.GetDatumToPhysicalFn(ct)
+func fillDatumRow_TYPE(ct *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
+	conv := typeconv.GetDatumToPhysicalFn(ct)
 	var result []_GOTYPE
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -257,7 +257,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 	}
 
 	if pi.outputIdx == batch.Width() {
-		batch.AppendCol(types.Bool)
+		batch.AppendCol(coltypes.Bool)
 	}
 
 	vec := batch.ColVec(pi.colIdx)

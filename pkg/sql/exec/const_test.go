@@ -13,7 +13,7 @@ package exec
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 func TestConst(t *testing.T) {
@@ -29,7 +29,7 @@ func TestConst(t *testing.T) {
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, []int{0, 1},
 			func(input []Operator) (Operator, error) {
-				return NewConstOp(input[0], types.Int64, int64(9), 1)
+				return NewConstOp(input[0], coltypes.Int64, int64(9), 1)
 			})
 	}
 }

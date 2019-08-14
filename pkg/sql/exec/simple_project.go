@@ -13,8 +13,8 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 // simpleProjectOp is an operator that implements "simple projection" - removal of
@@ -54,7 +54,7 @@ func (b *projectingBatch) Width() int {
 	return len(b.projection)
 }
 
-func (b *projectingBatch) AppendCol(t types.T) {
+func (b *projectingBatch) AppendCol(t coltypes.T) {
 	b.Batch.AppendCol(t)
 	b.projection = append(b.projection, uint32(b.Batch.Width())-1)
 }

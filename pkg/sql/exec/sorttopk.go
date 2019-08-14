@@ -15,9 +15,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
 const (
@@ -29,7 +29,7 @@ const (
 // columns given in orderingCols and returns the first K rows. The inputTypes
 // must correspond 1-1 with the columns in the input operator.
 func NewTopKSorter(
-	input Operator, inputTypes []types.T, orderingCols []distsqlpb.Ordering_Column, k uint16,
+	input Operator, inputTypes []coltypes.T, orderingCols []distsqlpb.Ordering_Column, k uint16,
 ) Operator {
 	return &topKSorter{
 		OneInputNode: NewOneInputNode(input),
@@ -60,7 +60,7 @@ const (
 type topKSorter struct {
 	OneInputNode
 	orderingCols []distsqlpb.Ordering_Column
-	inputTypes   []types.T
+	inputTypes   []coltypes.T
 	k            uint16 // TODO(solon): support larger k values
 
 	// state is the current state of the sort.

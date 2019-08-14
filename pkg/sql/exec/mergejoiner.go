@@ -13,9 +13,9 @@ package exec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -137,7 +137,7 @@ type mergeJoinInput struct {
 
 	// sourceTypes specify the types of the input columns of the source table for
 	// the merge joiner.
-	sourceTypes []types.T
+	sourceTypes []coltypes.T
 
 	// The distincter is used in the finishGroup phase, and is used only to
 	// determine where the current group ends, in the case that the group ended
@@ -190,8 +190,8 @@ func NewMergeJoinOp(
 	right Operator,
 	leftOutCols []uint32,
 	rightOutCols []uint32,
-	leftTypes []types.T,
-	rightTypes []types.T,
+	leftTypes []coltypes.T,
+	rightTypes []coltypes.T,
 	leftOrdering []distsqlpb.Ordering_Column,
 	rightOrdering []distsqlpb.Ordering_Column,
 ) (Operator, error) {
@@ -249,8 +249,8 @@ func newMergeJoinBase(
 	right Operator,
 	leftOutCols []uint32,
 	rightOutCols []uint32,
-	leftTypes []types.T,
-	rightTypes []types.T,
+	leftTypes []coltypes.T,
+	rightTypes []coltypes.T,
 	leftOrdering []distsqlpb.Ordering_Column,
 	rightOrdering []distsqlpb.Ordering_Column,
 ) (mergeJoinBase, error) {
@@ -325,7 +325,7 @@ func (o *mergeJoinBase) Init() {
 }
 
 func (o *mergeJoinBase) initWithBatchSize(outBatchSize uint16) {
-	outColTypes := make([]types.T, len(o.left.sourceTypes)+len(o.right.sourceTypes))
+	outColTypes := make([]coltypes.T, len(o.left.sourceTypes)+len(o.right.sourceTypes))
 	copy(outColTypes, o.left.sourceTypes)
 	copy(outColTypes[len(o.left.sourceTypes):], o.right.sourceTypes)
 

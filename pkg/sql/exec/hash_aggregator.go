@@ -14,9 +14,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -55,7 +55,7 @@ import (
 // the NewOrderedAggregator function.
 func NewHashAggregator(
 	input Operator,
-	colTypes []types.T,
+	colTypes []coltypes.T,
 	aggFns []distsqlpb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,

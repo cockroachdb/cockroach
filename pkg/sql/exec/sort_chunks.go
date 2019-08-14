@@ -14,9 +14,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
 // NewSortChunks returns a new sort chunks operator, which sorts its input on
@@ -24,7 +24,7 @@ import (
 // the columns in the input operator. The input tuples must be sorted on first
 // matchLen columns.
 func NewSortChunks(
-	input Operator, inputTypes []types.T, orderingCols []distsqlpb.Ordering_Column, matchLen int,
+	input Operator, inputTypes []coltypes.T, orderingCols []distsqlpb.Ordering_Column, matchLen int,
 ) (Operator, error) {
 	if matchLen == len(orderingCols) {
 		// input is already ordered on all orderingCols, so there is nothing more
@@ -149,7 +149,7 @@ const (
 type chunker struct {
 	OneInputNode
 	// inputTypes contains the types of all of the columns from input.
-	inputTypes []types.T
+	inputTypes []coltypes.T
 	// inputDone indicates whether input has been fully consumed.
 	inputDone bool
 	// alreadySortedCols indicates the columns on which the input is already
@@ -191,7 +191,7 @@ type chunker struct {
 var _ spooler = &chunker{}
 
 func newChunker(
-	input Operator, inputTypes []types.T, alreadySortedCols []distsqlpb.Ordering_Column,
+	input Operator, inputTypes []coltypes.T, alreadySortedCols []distsqlpb.Ordering_Column,
 ) (*chunker, error) {
 	var err error
 	partitioners := make([]partitioner, len(alreadySortedCols))

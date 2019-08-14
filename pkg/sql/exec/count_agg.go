@@ -10,7 +10,7 @@
 
 package exec
 
-import "github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+import "github.com/cockroachdb/cockroach/pkg/col/coldata"
 
 // newCountRowAgg creates a COUNT(*) aggregate, which counts every row in the
 // result unconditionally.

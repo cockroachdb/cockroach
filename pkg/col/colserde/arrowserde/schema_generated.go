@@ -2,9 +2,7 @@
 
 package arrowserde
 
-import (
-	flatbuffers "github.com/google/flatbuffers/go"
-)
+import flatbuffers "github.com/google/flatbuffers/go"
 
 type MetadataVersion = int16
 const (
@@ -1220,7 +1218,9 @@ func FieldStartChildrenVector(builder *flatbuffers.Builder, numElems int) flatbu
 func FieldAddCustomMetadata(builder *flatbuffers.Builder, customMetadata flatbuffers.UOffsetT) {
 	builder.PrependUOffsetTSlot(6, flatbuffers.UOffsetT(customMetadata), 0)
 }
-func FieldStartCustomMetadataVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
+func FieldStartCustomMetadataVector(
+	builder *flatbuffers.Builder, numElems int,
+) flatbuffers.UOffsetT {
 	return builder.StartVector(4, numElems, 4)
 }
 func FieldEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
@@ -1364,7 +1364,9 @@ func SchemaStartFieldsVector(builder *flatbuffers.Builder, numElems int) flatbuf
 func SchemaAddCustomMetadata(builder *flatbuffers.Builder, customMetadata flatbuffers.UOffsetT) {
 	builder.PrependUOffsetTSlot(2, flatbuffers.UOffsetT(customMetadata), 0)
 }
-func SchemaStartCustomMetadataVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
+func SchemaStartCustomMetadataVector(
+	builder *flatbuffers.Builder, numElems int,
+) flatbuffers.UOffsetT {
 	return builder.StartVector(4, numElems, 4)
 }
 func SchemaEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {

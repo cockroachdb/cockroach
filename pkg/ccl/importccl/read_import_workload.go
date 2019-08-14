@@ -18,15 +18,15 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	sqltypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -58,42 +58,38 @@ func (w *workloadReader) inputFinished(ctx context.Context) {
 // makeDatumFromColOffset tries to fast-path a few workload-generated types into
 // directly datums, to dodge making a string and then the parsing it.
 func makeDatumFromColOffset(
-	alloc *sqlbase.DatumAlloc,
-	hint *sqltypes.T,
-	evalCtx *tree.EvalContext,
-	col coldata.Vec,
-	rowIdx int,
+	alloc *sqlbase.DatumAlloc, hint *types.T, evalCtx *tree.EvalContext, col coldata.Vec, rowIdx int,
 ) (tree.Datum, error) {
 	if col.Nulls().NullAt64(uint64(rowIdx)) {
 		return tree.DNull, nil
 	}
 	switch col.Type() {
-	case types.Bool:
+	case coltypes.Bool:
 		return tree.MakeDBool(tree.DBool(col.Bool()[rowIdx])), nil
-	case types.Int64:
+	case coltypes.Int64:
 		switch hint.Family() {
-		case sqltypes.IntFamily:
+		case types.IntFamily:
 			return alloc.NewDInt(tree.DInt(col.Int64()[rowIdx])), nil
-		case sqltypes.DecimalFamily:
+		case types.DecimalFamily:
 			d := *apd.New(col.Int64()[rowIdx], 0)
 			return alloc.NewDDecimal(tree.DDecimal{Decimal: d}), nil
 		}
-	case types.Float64:
+	case coltypes.Float64:
 		switch hint.Family() {
-		case sqltypes.FloatFamily:
+		case types.FloatFamily:
 			return alloc.NewDFloat(tree.DFloat(col.Float64()[rowIdx])), nil
-		case sqltypes.DecimalFamily:
+		case types.DecimalFamily:
 			var d apd.Decimal
 			if _, err := d.SetFloat64(col.Float64()[rowIdx]); err != nil {
 				return nil, err
 			}
 			return alloc.NewDDecimal(tree.DDecimal{Decimal: d}), nil
 		}
-	case types.Bytes:
+	case coltypes.Bytes:
 		switch hint.Family() {
-		case sqltypes.BytesFamily:
+		case types.BytesFamily:
 			return alloc.NewDBytes(tree.DBytes(col.Bytes().Get(rowIdx))), nil
-		case sqltypes.StringFamily:
+		case types.StringFamily:
 			data := col.Bytes().Get(rowIdx)
 			str := *(*string)(unsafe.Pointer(&data))
 			return alloc.NewDString(tree.DString(str)), nil

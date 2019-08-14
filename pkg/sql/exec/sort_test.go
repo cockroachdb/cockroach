@@ -18,9 +18,9 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -32,85 +32,85 @@ func TestSort(t *testing.T) {
 		tuples   tuples
 		expected tuples
 		ordCols  []distsqlpb.Ordering_Column
-		typ      []types.T
+		typ      []coltypes.T
 	}{
 		{
 			tuples:   tuples{{1}, {2}, {nil}, {4}, {5}, {nil}},
 			expected: tuples{{nil}, {nil}, {1}, {2}, {4}, {5}},
-			typ:      []types.T{types.Int64},
+			typ:      []coltypes.T{coltypes.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1, 2}, {1, 1}, {1, nil}, {2, nil}, {2, 3}, {2, nil}, {5, 1}},
 			expected: tuples{{1, nil}, {1, 1}, {1, 2}, {2, nil}, {2, nil}, {2, 3}, {5, 1}},
-			typ:      []types.T{types.Int64, types.Int64},
+			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 		},
 		{
 			tuples:   tuples{{1, 2}, {1, 1}, {1, nil}, {2, nil}, {2, 3}, {2, nil}, {5, 1}},
 			expected: tuples{{5, 1}, {2, 3}, {2, nil}, {2, nil}, {1, 2}, {1, 1}, {1, nil}},
-			typ:      []types.T{types.Int64, types.Int64},
+			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_DESC}, {ColIdx: 1, Direction: distsqlpb.Ordering_Column_DESC}},
 		},
 		{
 			tuples:   tuples{{nil, nil}, {nil, 3}, {1, nil}, {nil, 1}, {1, 2}, {nil, nil}, {5, nil}},
 			expected: tuples{{nil, nil}, {nil, nil}, {nil, 1}, {nil, 3}, {1, nil}, {1, 2}, {5, nil}},
-			typ:      []types.T{types.Int64, types.Int64},
+			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 		},
 		{
 			tuples:   tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			expected: tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
-			typ:      []types.T{types.Int64},
+			typ:      []coltypes.T{coltypes.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			expected: tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
-			typ:      []types.T{types.Int64},
+			typ:      []coltypes.T{coltypes.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1, 1}, {3, 2}, {2, 3}, {4, 4}, {5, 5}, {6, 6}, {7, 7}},
 			expected: tuples{{1, 1}, {2, 3}, {3, 2}, {4, 4}, {5, 5}, {6, 6}, {7, 7}},
-			typ:      []types.T{types.Int64, types.Int64},
+			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1, 1}, {5, 2}, {3, 3}, {7, 4}, {2, 5}, {6, 6}, {4, 7}},
 			expected: tuples{{1, 1}, {2, 5}, {3, 3}, {4, 7}, {5, 2}, {6, 6}, {7, 4}},
-			typ:      []types.T{types.Int64, types.Int64},
+			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1}, {5}, {3}, {3}, {2}, {6}, {4}},
 			expected: tuples{{1}, {2}, {3}, {3}, {4}, {5}, {6}},
-			typ:      []types.T{types.Int64},
+			typ:      []coltypes.T{coltypes.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{false}, {true}},
 			expected: tuples{{false}, {true}},
-			typ:      []types.T{types.Bool},
+			typ:      []coltypes.T{coltypes.Bool},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{true}, {false}},
 			expected: tuples{{false}, {true}},
-			typ:      []types.T{types.Bool},
+			typ:      []coltypes.T{coltypes.Bool},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{3.2}, {2.0}, {2.4}, {math.NaN()}, {math.Inf(-1)}, {math.Inf(1)}},
 			expected: tuples{{math.NaN()}, {math.Inf(-1)}, {2.0}, {2.4}, {3.2}, {math.Inf(1)}},
-			typ:      []types.T{types.Float64},
+			typ:      []coltypes.T{coltypes.Float64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 
 		{
 			tuples:   tuples{{0, 1, 0}, {1, 2, 0}, {2, 3, 2}, {3, 7, 1}, {4, 2, 2}},
 			expected: tuples{{0, 1, 0}, {1, 2, 0}, {3, 7, 1}, {4, 2, 2}, {2, 3, 2}},
-			typ:      []types.T{types.Int64, types.Int64, types.Int64},
+			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 2}, {ColIdx: 1}},
 		},
 
@@ -132,7 +132,7 @@ func TestSort(t *testing.T) {
 				{0, 1, 0},
 				{0, 1, 1},
 			},
-			typ:     []types.T{types.Int64, types.Int64, types.Int64},
+			typ:     []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			ordCols: []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 		},
 	}
@@ -153,9 +153,9 @@ func TestSortRandomized(t *testing.T) {
 	k := uint16(4)
 	maxCols := 5
 	// TODO(yuzefovich): randomize types as well.
-	typs := make([]types.T, maxCols)
+	typs := make([]coltypes.T, maxCols)
 	for i := range typs {
-		typs[i] = types.Int64
+		typs[i] = coltypes.Int64
 	}
 
 	for nCols := 1; nCols < maxCols; nCols++ {
@@ -208,31 +208,31 @@ func TestAllSpooler(t *testing.T) {
 
 	tcs := []struct {
 		tuples tuples
-		typ    []types.T
+		typ    []coltypes.T
 	}{
 		{
 			tuples: tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
-			typ:    []types.T{types.Int64},
+			typ:    []coltypes.T{coltypes.Int64},
 		},
 		{
 			tuples: tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
-			typ:    []types.T{types.Int64},
+			typ:    []coltypes.T{coltypes.Int64},
 		},
 		{
 			tuples: tuples{{1, 1}, {3, 2}, {2, 3}, {4, 4}, {5, 5}, {6, 6}, {7, 7}},
-			typ:    []types.T{types.Int64, types.Int64},
+			typ:    []coltypes.T{coltypes.Int64, coltypes.Int64},
 		},
 		{
 			tuples: tuples{{1, 1}, {5, 2}, {3, 3}, {7, 4}, {2, 5}, {6, 6}, {4, 7}},
-			typ:    []types.T{types.Int64, types.Int64},
+			typ:    []coltypes.T{coltypes.Int64, coltypes.Int64},
 		},
 		{
 			tuples: tuples{{1}, {5}, {3}, {3}, {2}, {6}, {4}},
-			typ:    []types.T{types.Int64},
+			typ:    []coltypes.T{coltypes.Int64},
 		},
 		{
 			tuples: tuples{{0, 1, 0}, {1, 2, 0}, {2, 3, 2}, {3, 7, 1}, {4, 2, 2}},
-			typ:    []types.T{types.Int64, types.Int64, types.Int64},
+			typ:    []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 		},
 		{
 			tuples: tuples{
@@ -242,7 +242,7 @@ func TestAllSpooler(t *testing.T) {
 				{0, 0, 1},
 				{0, 0, 0},
 			},
-			typ: []types.T{types.Int64, types.Int64, types.Int64},
+			typ: []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 		},
 	}
 	for _, tc := range tcs {
@@ -282,9 +282,9 @@ func BenchmarkSort(b *testing.B) {
 					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize (rows /
 					// batch) * nCols (number of columns / row).
 					b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize) * nCols))
-					typs := make([]types.T, nCols)
+					typs := make([]coltypes.T, nCols)
 					for i := range typs {
-						typs[i] = types.Int64
+						typs[i] = coltypes.Int64
 					}
 					batch := coldata.NewMemBatch(typs)
 					batch.SetLength(coldata.BatchSize)
@@ -338,9 +338,9 @@ func BenchmarkAllSpooler(b *testing.B) {
 				// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
 				// batch) * nCols (number of columns / row).
 				b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols))
-				typs := make([]types.T, nCols)
+				typs := make([]coltypes.T, nCols)
 				for i := range typs {
-					typs[i] = types.Int64
+					typs[i] = coltypes.Int64
 				}
 				batch := coldata.NewMemBatch(typs)
 				batch.SetLength(coldata.BatchSize)

@@ -13,8 +13,8 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 // deselectorOp consumes the input operator, and if resulting batches have a
@@ -23,7 +23,7 @@ import (
 // selection vector, it is a noop.
 type deselectorOp struct {
 	OneInputNode
-	inputTypes []types.T
+	inputTypes []coltypes.T
 
 	output coldata.Batch
 }
@@ -31,8 +31,8 @@ type deselectorOp struct {
 var _ Operator = &deselectorOp{}
 
 // NewDeselectorOp creates a new deselector operator on the given input
-// operator with the given column types.
-func NewDeselectorOp(input Operator, colTypes []types.T) Operator {
+// operator with the given column coltypes.
+func NewDeselectorOp(input Operator, colTypes []coltypes.T) Operator {
 	return &deselectorOp{
 		OneInputNode: NewOneInputNode(input),
 		inputTypes:   colTypes,
