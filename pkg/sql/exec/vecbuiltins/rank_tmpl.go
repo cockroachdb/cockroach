@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 )
 
 // {{/*
@@ -32,13 +33,13 @@ import (
 // _UPDATE_RANK_ is the template function for updating the state of rank
 // operators.
 func _UPDATE_RANK_() {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // _UPDATE_RANK_INCREMENT is the template function for updating the state of
 // rank operators.
 func _UPDATE_RANK_INCREMENT() {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // */}}
@@ -87,7 +88,7 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	if r.partitionColIdx == batch.Width() {
 		batch.AppendCol(coltypes.Bool)
 	} else if r.partitionColIdx > batch.Width() {
-		panic("unexpected: column partitionColIdx is neither present nor the next to be appended")
+		execerror.VectorizedInternalPanic("unexpected: column partitionColIdx is neither present nor the next to be appended")
 	}
 	partitionCol := batch.ColVec(r.partitionColIdx).Bool()
 	// {{ end }}
@@ -95,7 +96,7 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	if r.outputColIdx == batch.Width() {
 		batch.AppendCol(coltypes.Int64)
 	} else if r.outputColIdx > batch.Width() {
-		panic("unexpected: column outputColIdx is neither present nor the next to be appended")
+		execerror.VectorizedInternalPanic("unexpected: column outputColIdx is neither present nor the next to be appended")
 	}
 	rankCol := batch.ColVec(r.outputColIdx).Int64()
 	sel := batch.Selection()

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -69,7 +70,7 @@ func (c *CancelChecker) check(ctx context.Context) {
 func (c *CancelChecker) checkEveryCall(ctx context.Context) {
 	select {
 	case <-ctx.Done():
-		panic(sqlbase.QueryCanceledError)
+		execerror.NonVectorizedPanic(sqlbase.QueryCanceledError)
 	default:
 	}
 }

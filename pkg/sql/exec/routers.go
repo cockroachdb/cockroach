@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -75,7 +76,9 @@ func (o *routerOutputOp) Child(nth int) OpNode {
 	if nth == 0 {
 		return o.input
 	}
-	panic(fmt.Sprintf("invalid index %d", nth))
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 var _ Operator = &routerOutputOp{}
@@ -396,7 +399,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 			}
 		}
 
-		if err := CatchVectorizedRuntimeError(processNextBatch); err != nil {
+		if err := execerror.CatchVectorizedRuntimeError(processNextBatch); err != nil {
 			cancelOutputs(err)
 			return
 		}

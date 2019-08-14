@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
@@ -207,7 +208,7 @@ func (o *Outbox) sendBatches(
 			return true, nil
 		}
 
-		if err := exec.CatchVectorizedRuntimeError(nextBatch); err != nil {
+		if err := execerror.CatchVectorizedRuntimeError(nextBatch); err != nil {
 			log.Errorf(ctx, "Outbox Next error: %+v", err)
 			return false, err
 		}
