@@ -760,7 +760,8 @@ func (rq *replicateQueue) addReplica(
 	if dryRun {
 		return nil
 	}
-	if _, err := repl.addReplica(ctx, target, desc, priority, reason, details); err != nil {
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, target)
+	if _, err := repl.addAndRemoveReplicas(ctx, desc, priority, reason, details, chgs); err != nil {
 		return err
 	}
 	rangeUsageInfo := rangeUsageInfoForRepl(repl)

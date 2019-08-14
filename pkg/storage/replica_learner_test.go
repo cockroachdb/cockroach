@@ -542,10 +542,8 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 			}
 			formattedTrace := tracing.FormatRecordedSpans(trace)
 			expectedMessages := []string{
-				`could not promote n3,s3 to voter, rolling back: change replicas of r\d+ failed: descriptor changed`,
-				// TODO(dan): Consider skipping the rollback when trying to promote a
-				// learner to a voter results in a "descriptor changed" error.
-				`failed to rollback learner n3,s3, abandoning it for the replicate queue: change replicas of r\d+ failed: descriptor changed`,
+				`could not promote .*n3,s3.* to voter, rolling back: change replicas of r\d+ failed: descriptor changed`,
+				`learner to roll back not found`,
 			}
 			return testutils.MatchInOrder(formattedTrace, expectedMessages...)
 		}()
