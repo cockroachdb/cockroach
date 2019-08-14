@@ -379,6 +379,15 @@ func registerTPCC(r *testRegistry) {
 		EstimatedMax:   2500,
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes:        9,
+		CPUs:         4,
+		Distribution: multiRegion,
+		LoadConfig:   multiLoadgen,
+
+		LoadWarehouses: 2000,
+		EstimatedMax:   1000,
+	})
+	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes:      9,
 		CPUs:       4,
 		Chaos:      true,
