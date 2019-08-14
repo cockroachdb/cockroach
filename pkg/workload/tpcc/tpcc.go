@@ -551,12 +551,12 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 
 	fmt.Printf("Initializing %d workers and preparing statements...\n", w.workers)
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
-	ql.WorkerFns = make([]func(context.Context) error, w.workers)
+	ql.WorkerFns = make([]func(context.Context) error, 0, w.workers)
 	var group errgroup.Group
 	// Limit the amount of workers we initialize in parallel, to avoid running out
 	// of memory (#36897).
 	sem := make(chan struct{}, 100)
-	for workerIdx := range ql.WorkerFns {
+	for workerIdx := 0; workerIdx < w.workers; workerIdx++ {
 		workerIdx := workerIdx
 		warehouse := w.wPart.totalElems[workerIdx%len(w.wPart.totalElems)]
 
@@ -568,11 +568,14 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		dbs := partitionDBs[p]
 		db := dbs[warehouse%len(dbs)]
 
+		// NB: ql.WorkerFns is sized so this never re-allocs.
+		ql.WorkerFns = append(ql.WorkerFns, nil)
+		idx := len(ql.WorkerFns) - 1
 		sem <- struct{}{}
 		group.Go(func() error {
 			worker, err := newWorker(context.TODO(), w, db, reg.GetHandle(), warehouse)
 			if err == nil {
-				ql.WorkerFns[workerIdx] = worker.run
+				ql.WorkerFns[idx] = worker.run
 			}
 			<-sem
 			return err
