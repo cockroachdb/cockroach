@@ -980,7 +980,7 @@ type grpcKeepaliveTestCase struct {
 func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) error {
 	var cKeepalive keepalive.ClientParameters
 	if c.cKeepalive {
-		cKeepalive = clientTestingKeepalive
+		cKeepalive = clientKeepalive
 	}
 	var sKeepalive keepalive.ServerParameters
 	if c.sKeepalive {
