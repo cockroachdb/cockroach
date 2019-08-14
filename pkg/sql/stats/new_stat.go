@@ -22,6 +22,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
+// InsertNewStats is used to restore an old statistic
+// and re-insert it into system.table_statistics with
+// a new statistic_id and an updated created_at time.
+// Currently used when restoring a backup with table
+// statistics.
+func InsertNewStats(
+	ctx context.Context,
+	executor sqlutil.InternalExecutor,
+	txn *client.Txn,
+	oldTableStat []*TableStatistic,
+) error {
+	var err error
+	for _, oldStat := range oldTableStat {
+		err = InsertNewStat(
+			ctx,
+			executor,
+			txn,
+			oldStat.TableID,
+			oldStat.Name,
+			oldStat.ColumnIDs,
+			int64(oldStat.RowCount),
+			int64(oldStat.DistinctCount),
+			int64(oldStat.NullCount),
+			oldStat.Histogram,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // InsertNewStat inserts a new statistic in the system table.
 // The caller is responsible for calling GossipTableStatAdded to notify the stat
 // caches.
