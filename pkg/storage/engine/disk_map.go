@@ -112,19 +112,6 @@ func (r *rocksDBMap) makeKeyWithTimestamp(k []byte) MVCCKey {
 	return mvccKey
 }
 
-// Put implements the SortedDiskMap interface.
-func (r *rocksDBMap) Put(k []byte, v []byte) error {
-	return r.store.Put(r.makeKeyWithTimestamp(k), v)
-}
-
-// Get implements the SortedDiskMap interface.
-func (r *rocksDBMap) Get(k []byte) ([]byte, error) {
-	if r.allowDuplicates {
-		return nil, errors.New("Get not supported if allowDuplicates is true")
-	}
-	return r.store.Get(r.makeKey(k))
-}
-
 // NewIterator implements the SortedDiskMap interface.
 func (r *rocksDBMap) NewIterator() diskmap.SortedDiskMapIterator {
 	// NOTE: prefix is only false because we can't use the normal prefix
@@ -333,19 +320,6 @@ func (r *pebbleMap) makeKeyWithSequence(k []byte) []byte {
 		byteKey = encoding.EncodeUint64Ascending(byteKey, uint64(r.keyID))
 	}
 	return byteKey
-}
-
-// Put implements the SortedDiskMap interface.
-func (r *pebbleMap) Put(k []byte, v []byte) error {
-	return r.store.Set(r.makeKeyWithSequence(k), v, pebble.NoSync)
-}
-
-// Get implements the SortedDiskMap interface.
-func (r *pebbleMap) Get(k []byte) ([]byte, error) {
-	if r.allowDuplicates {
-		return nil, errors.New("Get not supported if allowDuplicates is true")
-	}
-	return r.store.Get(r.makeKey(k))
 }
 
 // NewIterator implements the SortedDiskMap interface.
