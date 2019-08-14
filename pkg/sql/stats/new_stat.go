@@ -22,6 +22,35 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
+// InsertNewStats inserts a slice of statistics at the current time into the
+// system table.
+func InsertNewStats(
+	ctx context.Context,
+	executor sqlutil.InternalExecutor,
+	txn *client.Txn,
+	tableStats []*TableStatistic,
+) error {
+	var err error
+	for _, statistic := range tableStats {
+		err = InsertNewStat(
+			ctx,
+			executor,
+			txn,
+			statistic.TableID,
+			statistic.Name,
+			statistic.ColumnIDs,
+			int64(statistic.RowCount),
+			int64(statistic.DistinctCount),
+			int64(statistic.NullCount),
+			statistic.Histogram,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // InsertNewStat inserts a new statistic in the system table.
 // The caller is responsible for calling GossipTableStatAdded to notify the stat
 // caches.
