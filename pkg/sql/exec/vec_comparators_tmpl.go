@@ -24,9 +24,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -94,10 +94,10 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx uint16
 
 // {{end}}
 
-func GetVecComparator(t types.T, numVecs int) vecComparator {
+func GetVecComparator(t coltypes.T, numVecs int) vecComparator {
 	switch t {
 	// {{range .}}
-	case types._TYPE:
+	case coltypes._TYPE:
 		return &_TYPEVecComparator{
 			vecs:  make([]_GOTYPESLICE, numVecs),
 			nulls: make([]*coldata.Nulls, numVecs),

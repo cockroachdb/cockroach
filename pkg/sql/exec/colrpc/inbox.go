@@ -17,11 +17,11 @@ import (
 	"sync"
 
 	"github.com/apache/arrow/go/arrow/array"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/colserde"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -44,7 +44,7 @@ type flowStreamServer interface {
 // closing the stream.
 type Inbox struct {
 	exec.ZeroInputNode
-	typs []types.T
+	typs []coltypes.T
 
 	zeroBatch coldata.Batch
 
@@ -108,7 +108,7 @@ type Inbox struct {
 var _ exec.StaticMemoryOperator = &Inbox{}
 
 // NewInbox creates a new Inbox.
-func NewInbox(typs []types.T) (*Inbox, error) {
+func NewInbox(typs []coltypes.T) (*Inbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
 		return nil, err

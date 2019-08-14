@@ -22,9 +22,9 @@ package vecbuiltins
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
 // {{/*
@@ -85,7 +85,7 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 
 	// {{ if .HasPartition }}
 	if r.partitionColIdx == batch.Width() {
-		batch.AppendCol(types.Bool)
+		batch.AppendCol(coltypes.Bool)
 	} else if r.partitionColIdx > batch.Width() {
 		panic("unexpected: column partitionColIdx is neither present nor the next to be appended")
 	}
@@ -93,7 +93,7 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	// {{ end }}
 
 	if r.outputColIdx == batch.Width() {
-		batch.AppendCol(types.Int64)
+		batch.AppendCol(coltypes.Int64)
 	} else if r.outputColIdx > batch.Width() {
 		panic("unexpected: column outputColIdx is neither present nor the next to be appended")
 	}

@@ -16,10 +16,10 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -31,7 +31,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	var (
 		ctx      = context.Background()
 		input    = exec.NewBatchBuffer()
-		typs     = []types.T{types.Int64}
+		typs     = []coltypes.T{coltypes.Int64}
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
 	outbox, err := NewOutbox(input, typs, nil)
@@ -76,7 +76,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 	var (
 		ctx   = context.Background()
 		input = exec.NewBatchBuffer()
-		typs  = []types.T{types.Int64}
+		typs  = []coltypes.T{coltypes.Int64}
 	)
 
 	// Define common function that returns both an Outbox and a pointer to a

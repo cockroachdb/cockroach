@@ -14,8 +14,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -26,7 +26,7 @@ import (
 type OrderedSynchronizer struct {
 	inputs      []Operator
 	ordering    sqlbase.ColumnOrdering
-	columnTypes []types.T
+	columnTypes []coltypes.T
 
 	// inputBatches stores the current batch for each input.
 	inputBatches []coldata.Batch
@@ -51,7 +51,7 @@ func (o *OrderedSynchronizer) Child(nth int) OpNode {
 
 // NewOrderedSynchronizer creates a new OrderedSynchronizer.
 func NewOrderedSynchronizer(
-	inputs []Operator, typs []types.T, ordering sqlbase.ColumnOrdering,
+	inputs []Operator, typs []coltypes.T, ordering sqlbase.ColumnOrdering,
 ) *OrderedSynchronizer {
 	return &OrderedSynchronizer{
 		inputs:      inputs,

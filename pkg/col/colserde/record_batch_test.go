@@ -21,8 +21,8 @@ import (
 	"github.com/apache/arrow/go/arrow"
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/apache/arrow/go/arrow/memory"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/colserde"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -31,7 +31,7 @@ import (
 
 // randomDataFromType creates an *array.Data of length n and type t, filling it
 // with random values and inserting nulls with probability nullProbability.
-func randomDataFromType(rng *rand.Rand, t types.T, n int, nullProbability float64) *array.Data {
+func randomDataFromType(rng *rand.Rand, t coltypes.T, n int, nullProbability float64) *array.Data {
 	if nullProbability < 0 || nullProbability > 1 {
 		panic(fmt.Sprintf("expected a value between 0 and 1 for nullProbability but got %f", nullProbability))
 	}
@@ -51,7 +51,7 @@ func randomDataFromType(rng *rand.Rand, t types.T, n int, nullProbability float6
 
 	var builder array.Builder
 	switch t {
-	case types.Bool:
+	case coltypes.Bool:
 		builder = array.NewBooleanBuilder(memory.DefaultAllocator)
 		data := make([]bool, n)
 		for i := range data {
@@ -60,49 +60,49 @@ func randomDataFromType(rng *rand.Rand, t types.T, n int, nullProbability float6
 			}
 		}
 		builder.(*array.BooleanBuilder).AppendValues(data, valid)
-	case types.Int8:
+	case coltypes.Int8:
 		builder = array.NewInt8Builder(memory.DefaultAllocator)
 		data := make([]int8, n)
 		for i := range data {
 			data[i] = int8(rng.Uint64())
 		}
 		builder.(*array.Int8Builder).AppendValues(data, valid)
-	case types.Int16:
+	case coltypes.Int16:
 		builder = array.NewInt16Builder(memory.DefaultAllocator)
 		data := make([]int16, n)
 		for i := range data {
 			data[i] = int16(rng.Uint64())
 		}
 		builder.(*array.Int16Builder).AppendValues(data, valid)
-	case types.Int32:
+	case coltypes.Int32:
 		builder = array.NewInt32Builder(memory.DefaultAllocator)
 		data := make([]int32, n)
 		for i := range data {
 			data[i] = int32(rng.Uint64())
 		}
 		builder.(*array.Int32Builder).AppendValues(data, valid)
-	case types.Int64:
+	case coltypes.Int64:
 		builder = array.NewInt64Builder(memory.DefaultAllocator)
 		data := make([]int64, n)
 		for i := range data {
 			data[i] = int64(rng.Uint64())
 		}
 		builder.(*array.Int64Builder).AppendValues(data, valid)
-	case types.Float32:
+	case coltypes.Float32:
 		builder = array.NewFloat32Builder(memory.DefaultAllocator)
 		data := make([]float32, n)
 		for i := range data {
 			data[i] = rng.Float32() * math.MaxFloat32
 		}
 		builder.(*array.Float32Builder).AppendValues(data, valid)
-	case types.Float64:
+	case coltypes.Float64:
 		builder = array.NewFloat64Builder(memory.DefaultAllocator)
 		data := make([]float64, n)
 		for i := range data {
 			data[i] = rng.Float64() * math.MaxFloat64
 		}
 		builder.(*array.Float64Builder).AppendValues(data, valid)
-	case types.Bytes:
+	case coltypes.Bytes:
 		// Bytes can be represented 3 different ways. As variable-length bytes,
 		// variable-length strings, or fixed-width bytes.
 		representation := rng.Intn(3)
@@ -156,14 +156,14 @@ func TestRecordBatchSerializer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t.Run("UnsupportedSchema", func(t *testing.T) {
-		_, err := colserde.NewRecordBatchSerializer([]types.T{})
+		_, err := colserde.NewRecordBatchSerializer([]coltypes.T{})
 		require.True(t, testutils.IsError(err, "zero length"), err)
 	})
 
 	// Serializing and Deserializing an invalid schema is undefined.
 
 	t.Run("SerializeDifferentColumnLengths", func(t *testing.T) {
-		s, err := colserde.NewRecordBatchSerializer([]types.T{types.Int64, types.Int64})
+		s, err := colserde.NewRecordBatchSerializer([]coltypes.T{coltypes.Int64, coltypes.Int64})
 		require.NoError(t, err)
 		b := array.NewInt64Builder(memory.DefaultAllocator)
 		b.AppendValues([]int64{1, 2}, nil /* valid */)
@@ -186,8 +186,8 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	)
 
 	var (
-		supportedTypes  = make([]types.T, 0, len(types.AllTypes))
-		typs            = make([]types.T, rng.Intn(maxTypes)+1)
+		supportedTypes  = make([]coltypes.T, 0, len(coltypes.AllTypes))
+		typs            = make([]coltypes.T, rng.Intn(maxTypes)+1)
 		data            = make([]*array.Data, len(typs))
 		dataLen         = rng.Intn(maxDataLen) + 1
 		nullProbability = rng.Float64()
@@ -195,8 +195,8 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	)
 
 	// We do not support decimals yet.
-	for _, t := range types.AllTypes {
-		if t == types.Decimal {
+	for _, t := range coltypes.AllTypes {
+		if t == coltypes.Decimal {
 			continue
 		}
 		supportedTypes = append(supportedTypes, t)
@@ -251,7 +251,7 @@ func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
 	var (
-		typs             = []types.T{types.Int64}
+		typs             = []coltypes.T{coltypes.Int64}
 		buf              = bytes.Buffer{}
 		deserializedData []*array.Data
 	)

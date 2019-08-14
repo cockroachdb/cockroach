@@ -11,8 +11,8 @@
 package vecbuiltins
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
 // TODO(yuzefovich): add benchmarks.
@@ -24,14 +24,14 @@ import (
 // (if there is no such column, a new column is appended).
 func NewRankOperator(
 	input exec.Operator,
-	inputTyps []types.T,
+	inputTyps []coltypes.T,
 	dense bool,
 	orderingCols []uint32,
 	outputColIdx int,
 	partitionColIdx int,
 ) (exec.Operator, error) {
 	if len(orderingCols) == 0 {
-		return exec.NewConstOp(input, types.Int64, int64(1), outputColIdx)
+		return exec.NewConstOp(input, coltypes.Int64, int64(1), outputColIdx)
 	}
 	op, outputCol, err := exec.OrderedDistinctColsToOperators(input, orderingCols, inputTyps)
 	if err != nil {

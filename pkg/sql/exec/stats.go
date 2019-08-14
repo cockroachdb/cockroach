@@ -13,7 +13,7 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/execpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )

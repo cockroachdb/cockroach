@@ -13,7 +13,7 @@ package exec
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -193,11 +193,11 @@ func GetLikeProjectionOperator(
 			outputIdx:    resultIdx,
 		}, nil
 	case likeNeverMatch:
-		return NewConstOp(input, types.Bool, false, resultIdx)
+		return NewConstOp(input, coltypes.Bool, false, resultIdx)
 	case likeAlwaysMatch:
 		// Matches everything.
 		// TODO(solon): Replace this with a NOT NULL operator.
-		return NewConstOp(input, types.Bool, true, resultIdx)
+		return NewConstOp(input, coltypes.Bool, true, resultIdx)
 	case likeSuffix:
 		return &projSuffixBytesBytesConstOp{
 			OneInputNode: NewOneInputNode(input),
