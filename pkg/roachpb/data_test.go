@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -502,22 +503,74 @@ func TestTransactionUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Updating an empty Transaction copies all fields.
 	var txn2 Transaction
 	txn2.Update(&txn)
 
-	if err := zerofields.NoZeroField(txn2); err != nil {
-		t.Fatal(err)
-	}
+	expTxn2 := txn
+	require.Equal(t, expTxn2, txn2)
 
+	// Updating a Transaction at an earlier epoch replaces all epoch-scoped fields.
 	var txn3 Transaction
-	txn3.ID = uuid.MakeV4()
+	txn3.ID = txn.ID
+	txn3.Epoch = txn.Epoch - 1
+	txn3.Status = STAGING
 	txn3.Name = "carl"
 	txn3.Priority = 123
 	txn3.Update(&txn)
 
-	if err := zerofields.NoZeroField(txn3); err != nil {
-		t.Fatal(err)
-	}
+	expTxn3 := txn
+	expTxn3.Name = "carl"
+	require.Equal(t, expTxn3, txn3)
+
+	// Updating a Transaction at the same epoch forwards all epoch-scoped fields.
+	var txn4 Transaction
+	txn4.ID = txn.ID
+	txn4.Epoch = txn.Epoch
+	txn4.Status = STAGING
+	txn4.Sequence = txn.Sequence + 10
+	txn4.Name = "carl"
+	txn4.Priority = 123
+	txn4.Update(&txn)
+
+	expTxn4 := txn
+	expTxn4.Name = "carl"
+	expTxn4.Sequence = txn.Sequence + 10
+	require.Equal(t, expTxn4, txn4)
+
+	// Updating a Transaction at a future epoch ignores all epoch-scoped fields.
+	var txn5 Transaction
+	txn5.ID = txn.ID
+	txn5.Epoch = txn.Epoch + 1
+	txn5.Status = PENDING
+	txn5.Sequence = txn.Sequence - 10
+	txn5.Name = "carl"
+	txn5.Priority = 123
+	txn5.Update(&txn)
+
+	expTxn5 := txn
+	expTxn5.Name = "carl"
+	expTxn5.Epoch = txn.Epoch + 1
+	expTxn5.Status = PENDING
+	expTxn5.Sequence = txn.Sequence - 10
+	expTxn5.IntentSpans = nil
+	expTxn5.InFlightWrites = nil
+	expTxn5.WriteTooOld = false
+	expTxn5.OrigTimestampWasObserved = false
+	require.Equal(t, expTxn5, txn5)
+
+	// Updating a different transaction fatals.
+	var exited bool
+	log.SetExitFunc(true /* hideStack */, func(int) { exited = true })
+	defer log.ResetExitFunc()
+
+	var txn6 Transaction
+	txn6.ID = uuid.MakeV4()
+	origTxn6 := txn6
+	txn6.Update(&txn)
+
+	require.Equal(t, origTxn6, txn6)
+	require.True(t, exited)
 }
 
 func TestTransactionUpdateMinTimestamp(t *testing.T) {
@@ -609,6 +662,22 @@ func TestTransactionClone(t *testing.T) {
 	if !reflect.DeepEqual(nonZeroTxn, txn) {
 		t.Fatalf("e = %v, v = %v", nonZeroTxn, txn)
 	}
+}
+
+func TestTransactionRestart(t *testing.T) {
+	txn := nonZeroTxn
+	txn.Restart(1, 1, makeTS(25, 1))
+
+	expTxn := nonZeroTxn
+	expTxn.Epoch++
+	expTxn.Sequence = 0
+	expTxn.Timestamp = makeTS(25, 1)
+	expTxn.OrigTimestamp = makeTS(25, 1)
+	expTxn.WriteTooOld = false
+	expTxn.OrigTimestampWasObserved = false
+	expTxn.IntentSpans = nil
+	expTxn.InFlightWrites = nil
+	require.Equal(t, expTxn, txn)
 }
 
 // TestTransactionRecordRoundtrips tests a few properties about Transaction

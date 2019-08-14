@@ -934,8 +934,12 @@ func (t *Transaction) Restart(
 	// - the conflicting transaction's upgradePriority
 	t.UpgradePriority(MakePriority(userPriority))
 	t.UpgradePriority(upgradePriority)
-	t.WriteTooOld = false
+	// Reset all epoch-scoped state.
 	t.Sequence = 0
+	t.WriteTooOld = false
+	t.OrigTimestampWasObserved = false
+	t.IntentSpans = nil
+	t.InFlightWrites = nil
 }
 
 // BumpEpoch increments the transaction's epoch, allowing for an in-place
@@ -978,30 +982,68 @@ func (t *Transaction) Update(o *Transaction) {
 	if t.ID == (uuid.UUID{}) {
 		*t = *o
 		return
+	} else if t.ID != o.ID {
+		log.Fatalf(context.Background(), "updating txn %v with different txn %v", t, o)
+		return
 	}
 	if len(t.Key) == 0 {
 		t.Key = o.Key
 	}
-	if !t.Status.IsFinalized() {
-		if (t.Epoch < o.Epoch) || (t.Epoch == o.Epoch && o.Status != PENDING) {
+
+	// Update epoch-scoped state, depending on the two transactions' epochs.
+	if t.Epoch < o.Epoch {
+		// Replace all epoch-scoped state.
+		t.Epoch = o.Epoch
+		t.Status = o.Status
+		t.WriteTooOld = o.WriteTooOld
+		t.OrigTimestampWasObserved = o.OrigTimestampWasObserved
+		t.Sequence = o.Sequence
+		t.IntentSpans = o.IntentSpans
+		t.InFlightWrites = o.InFlightWrites
+	} else if t.Epoch == o.Epoch {
+		// Forward all epoch-scoped state.
+		switch t.Status {
+		case PENDING:
 			t.Status = o.Status
+		case STAGING:
+			if o.Status != PENDING {
+				t.Status = o.Status
+			}
+		case ABORTED:
+			if o.Status == COMMITTED {
+				log.Warningf(context.Background(), "updating ABORTED txn %v with COMMITTED txn %v", t, o)
+			}
+		case COMMITTED:
+			// Nothing to do.
+		}
+
+		// If the refreshed timestamp move forward, overwrite
+		// WriteTooOld, otherwise the flags are cumulative.
+		if t.RefreshedTimestamp.Less(o.RefreshedTimestamp) {
+			t.WriteTooOld = o.WriteTooOld
+			t.OrigTimestampWasObserved = o.OrigTimestampWasObserved
+		} else {
+			t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
+			t.OrigTimestampWasObserved = t.OrigTimestampWasObserved || o.OrigTimestampWasObserved
+		}
+
+		if t.Sequence < o.Sequence {
+			t.Sequence = o.Sequence
+		}
+		if len(o.IntentSpans) > 0 {
+			t.IntentSpans = o.IntentSpans
+		}
+		if len(o.InFlightWrites) > 0 {
+			t.InFlightWrites = o.InFlightWrites
+		}
+	} else /* t.Epoch > o.Epoch */ {
+		// Ignore epoch-specific state from previous epoch.
+		if o.Status == COMMITTED {
+			log.Warningf(context.Background(), "updating txn %v with COMMITTED txn at earlier epoch %v", t, o)
 		}
 	}
 
-	// If the epoch or refreshed timestamp move forward, overwrite
-	// WriteTooOld, otherwise the flags are cumulative.
-	if t.Epoch < o.Epoch || t.RefreshedTimestamp.Less(o.RefreshedTimestamp) {
-		t.WriteTooOld = o.WriteTooOld
-		t.OrigTimestampWasObserved = o.OrigTimestampWasObserved
-	} else {
-		t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
-		t.OrigTimestampWasObserved = t.OrigTimestampWasObserved || o.OrigTimestampWasObserved
-	}
-
-	if t.Epoch < o.Epoch {
-		t.Epoch = o.Epoch
-	}
-
+	// Forward each of the transaction timestamps.
 	t.Timestamp.Forward(o.Timestamp)
 	t.LastHeartbeat.Forward(o.LastHeartbeat)
 	t.OrigTimestamp.Forward(o.OrigTimestamp)
@@ -1026,17 +1068,9 @@ func (t *Transaction) Update(o *Transaction) {
 	for _, v := range o.ObservedTimestamps {
 		t.UpdateObservedTimestamp(v.NodeID, v.Timestamp)
 	}
-	t.UpgradePriority(o.Priority)
 
-	if t.Sequence < o.Sequence {
-		t.Sequence = o.Sequence
-	}
-	if len(o.IntentSpans) > 0 {
-		t.IntentSpans = o.IntentSpans
-	}
-	if len(o.InFlightWrites) > 0 {
-		t.InFlightWrites = o.InFlightWrites
-	}
+	// Ratchet the transaction priority.
+	t.UpgradePriority(o.Priority)
 }
 
 // UpgradePriority sets transaction priority to the maximum of current
