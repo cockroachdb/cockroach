@@ -115,7 +115,6 @@ func (h *txnHeartbeater) init(
 	asyncAbortCallbackLocked func(context.Context),
 ) {
 	h.AmbientContext = ac
-	h.AmbientContext.AddLogTag("txn-hb", txn.Short())
 	h.stopper = stopper
 	h.clock = clock
 	h.heartbeatInterval = heartbeatInterval
@@ -208,6 +207,9 @@ func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) error {
 	log.VEventf(ctx, 2, "coordinator spawns heartbeat loop")
 	h.mu.loopStarted = true
 	h.mu.txnEnd = make(chan struct{})
+	// NB: we can't do this in init() because the txn isn't populated yet then
+	// (it's zero).
+	h.AmbientContext.AddLogTag("txn-hb", h.mu.txn.Short())
 
 	// Create a new context so that the heartbeat loop doesn't inherit the
 	// caller's cancelation.
