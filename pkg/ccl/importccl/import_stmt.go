@@ -981,7 +981,6 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 			b.CPut(sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.Name), nil, tableDesc.ID)
 		} else {
 			// IMPORT did not create this table, so we should not drop it.
-			tableDesc.Version++
 			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
 		}
 		// Note that this CPut is safe with respect to mixed-version descriptor
