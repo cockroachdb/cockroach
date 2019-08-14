@@ -19,6 +19,7 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -37,7 +38,7 @@ func (a avgAggTmplInfo) AssignDivInt64(target, l, r string) string {
 		return fmt.Sprintf(
 			`%s.SetInt64(%s)
 if _, err := tree.DecimalCtx.Quo(&%s, &%s, &%s); err != nil {
-			panic(err)
+			execerror.VectorizedInternalPanic(err)
 		}`,
 			target, r, target, l, target,
 		)
@@ -47,7 +48,9 @@ if _, err := tree.DecimalCtx.Quo(&%s, &%s, &%s); err != nil {
 	case coltypes.Float64:
 		return fmt.Sprintf("%s = %s / float64(%s)", target, l, r)
 	default:
-		panic("unsupported avg agg type")
+		execerror.VectorizedInternalPanic("unsupported avg agg type")
+		// This code is unreachable, but the compiler cannot infer that.
+		return ""
 	}
 }
 

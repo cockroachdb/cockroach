@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"regexp"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/pkg/errors"
 )
 
@@ -52,7 +53,7 @@ var generators = make(map[string]generator)
 
 func registerGenerator(g generator, filename string) {
 	if _, ok := generators[filename]; ok {
-		panic(fmt.Sprintf("%s generator already registered", filename))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("%s generator already registered", filename))
 	}
 	generators[filename] = g
 }

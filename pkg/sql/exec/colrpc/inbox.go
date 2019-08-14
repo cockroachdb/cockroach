@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -260,7 +261,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 				i.streamMu.Unlock()
 			}
 			i.closeLocked()
-			panic(err)
+			execerror.VectorizedInternalPanic(err)
 		}
 	}()
 
@@ -269,7 +270,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 	// termination). DrainMeta will use the stream to read any remaining metadata
 	// after Next returns a zero-length batch during normal execution.
 	if err := i.maybeInitLocked(ctx); err != nil {
-		panic(err)
+		execerror.VectorizedInternalPanic(err)
 	}
 
 	for {
@@ -293,7 +294,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 				return i.zeroBatch
 			}
 			i.errCh <- err
-			panic(err)
+			execerror.VectorizedInternalPanic(err)
 		}
 		if len(m.Data.Metadata) != 0 {
 			for _, rpm := range m.Data.Metadata {
@@ -312,10 +313,10 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		}
 		i.scratch.data = i.scratch.data[:0]
 		if err := i.serializer.Deserialize(&i.scratch.data, m.Data.RawBytes); err != nil {
-			panic(err)
+			execerror.VectorizedInternalPanic(err)
 		}
 		if err := i.converter.ArrowToBatch(i.scratch.data, i.scratch.b); err != nil {
-			panic(err)
+			execerror.VectorizedInternalPanic(err)
 		}
 		return i.scratch.b
 	}

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
 )
@@ -39,7 +40,7 @@ var _ tree.Datum
 // _ASSIGN_ADD is the template addition function for assigning the first input
 // to the result of the second input + the third input.
 func _ASSIGN_ADD(_, _, _ string) {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // */}}

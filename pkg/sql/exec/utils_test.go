@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -218,7 +219,7 @@ func newOpTestSelInput(rng *rand.Rand, batchSize uint16, tuples tuples) *opTestI
 
 func (s *opTestInput) Init() {
 	if len(s.tuples) == 0 {
-		panic("empty tuple source")
+		execerror.VectorizedInternalPanic("empty tuple source")
 	}
 
 	typs := make([]coltypes.T, len(s.tuples[0]))
@@ -259,7 +260,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 	tupleLen := len(tups[0])
 	for i := range tups {
 		if len(tups[i]) != tupleLen {
-			panic(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
+			execerror.VectorizedInternalPanic(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
 				tups[i], tupleLen))
 		}
 	}
@@ -312,7 +313,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 					d := apd.Decimal{}
 					_, err := d.SetFloat64(rng.Float64())
 					if err != nil {
-						panic(fmt.Sprintf("%v", err))
+						execerror.VectorizedInternalPanic(fmt.Sprintf("%v", err))
 					}
 					col.Index(int(outputIdx)).Set(reflect.ValueOf(d))
 				} else if typ == coltypes.Bytes {
@@ -322,7 +323,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 				} else if val, ok := quick.Value(reflect.TypeOf(vec.Col()).Elem(), rng); ok {
 					setColVal(vec, int(outputIdx), val.Interface())
 				} else {
-					panic(fmt.Sprintf("could not generate a random value of type %T\n.", vec.Type()))
+					execerror.VectorizedInternalPanic(fmt.Sprintf("could not generate a random value of type %T\n.", vec.Type()))
 				}
 			} else {
 				setColVal(vec, int(outputIdx), tups[j][i])
@@ -365,7 +366,7 @@ func newOpFixedSelTestInput(sel []uint16, batchSize uint16, tuples tuples) *opFi
 
 func (s *opFixedSelTestInput) Init() {
 	if len(s.tuples) == 0 {
-		panic("empty tuple source")
+		execerror.VectorizedInternalPanic("empty tuple source")
 	}
 
 	typs := make([]coltypes.T, len(s.tuples[0]))
@@ -386,7 +387,7 @@ func (s *opFixedSelTestInput) Init() {
 	tupleLen := len(s.tuples[0])
 	for _, i := range s.sel {
 		if len(s.tuples[i]) != tupleLen {
-			panic(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
+			execerror.VectorizedInternalPanic(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
 				s.tuples[i], tupleLen))
 		}
 	}
