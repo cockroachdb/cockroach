@@ -22,6 +22,7 @@ package exec
 import (
 	"bytes"
 	"context"
+	"math"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -49,6 +50,9 @@ var _ coltypes.T
 
 // Dummy import to pull in "bytes" package
 var _ bytes.Buffer
+
+// Dummy import to pull in "math" package.
+var _ = math.MaxInt64
 
 func _ASSIGN_EQ(_, _, _ interface{}) uint64 {
 	execerror.VectorizedInternalPanic("")

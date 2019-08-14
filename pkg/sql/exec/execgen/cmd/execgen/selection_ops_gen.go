@@ -23,6 +23,7 @@ package exec
 import (
 	"bytes"
   "context"
+  "math"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"

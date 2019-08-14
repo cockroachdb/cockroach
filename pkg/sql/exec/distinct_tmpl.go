@@ -22,6 +22,7 @@ package exec
 import (
 	"bytes"
 	"context"
+	"math"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -105,6 +106,9 @@ var _ apd.Decimal
 
 // Dummy import to pull in "tree" package.
 var _ tree.Datum
+
+// Dummy import to pull in "math" package.
+var _ = math.MaxInt64
 
 // _GOTYPE is the template Go type variable for this operator. It will be
 // replaced by the Go type equivalent for each type in coltypes.T, for example

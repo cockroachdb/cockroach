@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"reflect"
 	"unsafe"
 
@@ -46,6 +47,9 @@ var _ reflect.SliceHeader
 
 // Dummy import to pull in "bytes" package.
 var _ bytes.Buffer
+
+// Dummy import to pull in "math" package.
+var _ = math.MaxInt64
 
 // _GOTYPESLICE is a template Go type slice variable.
 type _GOTYPESLICE interface{}
