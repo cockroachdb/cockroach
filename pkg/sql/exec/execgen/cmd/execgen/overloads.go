@@ -87,7 +87,7 @@ type overload struct {
 }
 
 type assignFunc func(op overload, target, l, r string) string
-type compareFunc func(l, r string) string
+type compareFunc func(target, l, r string) string
 
 var binaryOpOverloads []*overload
 var comparisonOpOverloads []*overload
@@ -124,11 +124,12 @@ func (o overload) Assign(target, l, r string) string {
 }
 
 // Compare produces a Go source string that assigns the "target" variable to the
-// result of comparing the two inputs, l and r.
+// result of comparing the two inputs, l and r. The target will be negative,
+// zero, or positive depending if l is less-than, equal-to, or greater-than r.
 func (o overload) Compare(target, l, r string) string {
 	if o.CompareFunc != nil {
-		if ret := o.CompareFunc(l, r); ret != "" {
-			return fmt.Sprintf("%s = %s", target, ret)
+		if ret := o.CompareFunc(target, l, r); ret != "" {
+			return ret
 		}
 	}
 	// Default compare form assumes an infix operator.
@@ -217,11 +218,23 @@ func init() {
 				if customizer != nil {
 					if b, ok := customizer.(cmpOpTypeCustomizer); ok {
 						ov.AssignFunc = func(op overload, target, l, r string) string {
-							c := b.getCmpOpCompareFunc()(l, r)
-							if c == "" {
+							cmp := b.getCmpOpCompareFunc()("cmpResult", l, r)
+							if cmp == "" {
 								return ""
 							}
-							return fmt.Sprintf("%s = %s %s 0", target, c, op.OpStr)
+							args := map[string]string{"Target": target, "Cmp": cmp, "Op": op.OpStr}
+							buf := strings.Builder{}
+							t := template.Must(template.New("").Parse(`
+								{
+									var cmpResult int
+									{{.Cmp}}
+									{{.Target}} = cmpResult {{.Op}} 0
+								}
+							`))
+							if err := t.Execute(&buf, args); err != nil {
+								execerror.VectorizedInternalPanic(err)
+							}
+							return buf.String()
 						}
 						ov.CompareFunc = b.getCmpOpCompareFunc()
 					}
@@ -291,8 +304,24 @@ type floatCustomizer struct{ width int }
 type intCustomizer struct{ width int }
 
 func (boolCustomizer) getCmpOpCompareFunc() compareFunc {
-	return func(l, r string) string {
-		return fmt.Sprintf("tree.CompareBools(%s, %s)", l, r)
+	return func(target, l, r string) string {
+		args := map[string]string{"Target": target, "Left": l, "Right": r}
+		buf := strings.Builder{}
+		// Inline the code from tree.CompareBools
+		t := template.Must(template.New("").Parse(`
+			if !{{.Left}} && {{.Right}} {
+				{{.Target}} = -1
+			}	else if {{.Left}} && !{{.Right}} {
+				{{.Target}} = 1
+			}	else {
+				{{.Target}} = 0
+			}
+		`))
+
+		if err := t.Execute(&buf, args); err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+		return buf.String()
 	}
 }
 
@@ -309,8 +338,8 @@ func (boolCustomizer) getHashAssignFunc() assignFunc {
 }
 
 func (bytesCustomizer) getCmpOpCompareFunc() compareFunc {
-	return func(l, r string) string {
-		return fmt.Sprintf("bytes.Compare(%s, %s)", l, r)
+	return func(target, l, r string) string {
+		return fmt.Sprintf("%s = bytes.Compare(%s, %s)", target, l, r)
 	}
 }
 
@@ -325,8 +354,8 @@ func (bytesCustomizer) getHashAssignFunc() assignFunc {
 }
 
 func (decimalCustomizer) getCmpOpCompareFunc() compareFunc {
-	return func(l, r string) string {
-		return fmt.Sprintf("tree.CompareDecimals(&%s, &%s)", l, r)
+	return func(target, l, r string) string {
+		return fmt.Sprintf("%s = tree.CompareDecimals(&%s, &%s)", target, l, r)
 	}
 }
 
@@ -357,9 +386,37 @@ func (c floatCustomizer) getHashAssignFunc() assignFunc {
 }
 
 func (c floatCustomizer) getCmpOpCompareFunc() compareFunc {
-	// Float comparisons need special handling for NaN.
-	return func(l, r string) string {
-		return fmt.Sprintf("compareFloats(float64(%s), float64(%s))", l, r)
+	return func(target, l, r string) string {
+		args := map[string]string{"Target": target, "Left": l, "Right": r}
+		buf := strings.Builder{}
+		// In SQL, NaN is treated as less than all other float values. In Go, any
+		// comparison with NaN returns false. To allow floats of different sizes to
+		// be compared, always upcast to float64.
+		t := template.Must(template.New("").Parse(`
+			{
+				a, b := float64({{.Left}}), float64({{.Right}})
+				if a < b {
+					{{.Target}} = -1
+				} else if a > b {
+					{{.Target}} = 1
+				}	else if a == b {
+					{{.Target}} = 0
+				}	else if math.IsNaN(a) {
+					if math.IsNaN(b) {
+						{{.Target}} = 0
+					} else {
+						{{.Target}} = -1
+					}
+				}	else {
+					{{.Target}} = 1
+				}
+			}
+		`))
+
+		if err := t.Execute(&buf, args); err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+		return buf.String()
 	}
 }
 
@@ -370,9 +427,27 @@ func (c intCustomizer) getHashAssignFunc() assignFunc {
 }
 
 func (c intCustomizer) getCmpOpCompareFunc() compareFunc {
-	// Always upcast ints for comparison.
-	return func(l, r string) string {
-		return fmt.Sprintf("compareInts(int64(%s), int64(%s))", l, r)
+	return func(target, l, r string) string {
+		args := map[string]string{"Target": target, "Left": l, "Right": r}
+		buf := strings.Builder{}
+		// To allow ints of different sizes to be compared, always upcast to int64.
+		t := template.Must(template.New("").Parse(`
+			{
+				a, b := int64({{.Left}}), int64({{.Right}})
+				if a < b {
+					{{.Target}} = -1
+				} else if a > b {
+					{{.Target}} = 1
+				}	else {
+					{{.Target}} = 0
+				}
+			}
+		`))
+
+		if err := t.Execute(&buf, args); err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+		return buf.String()
 	}
 
 }
