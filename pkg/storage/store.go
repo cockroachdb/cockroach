@@ -2156,6 +2156,17 @@ func splitPostApply(
 		// about restoring the existing minReplicaID if it's nonzero. No
 		// promises have been made, so none need to be kept.
 		rightRng.mu.minReplicaID = 0
+		rightDesc, ok := split.RightDesc.GetReplicaDescriptor(r.StoreID())
+		if !ok {
+			log.Fatalf(ctx, "replica descriptor of local store not found in right hand side of split")
+		}
+		// We also have to potentially wind back the replicaID to avoid an error
+		// below. We can't overwrite unconditionally since usually the replicaID is
+		// zero (and thus special) and in that case, moving it forward out-of-band
+		// results in an broken state.
+		if rightRng.mu.replicaID > rightDesc.ReplicaID {
+			rightRng.mu.replicaID = rightDesc.ReplicaID
+		}
 		err := rightRng.initRaftMuLockedReplicaMuLocked(&split.RightDesc, r.store.Clock(), 0)
 		rightRng.mu.Unlock()
 		if err != nil {
