@@ -137,6 +137,17 @@ type lazyCertificateManager struct {
 	err  error
 }
 
+// EngineType specifies type of storage engine (eg. rocksdb, pebble).
+type EngineType int
+
+// Engine types.
+const (
+	// Denotes RocksDB as the underlying storage engine type.
+	EngineTypeRocksDB EngineType = iota
+	// Denotes Pebble as the underlying storage engine type.
+	EngineTypePebble
+)
+
 // Config is embedded by server.Config. A base config is not meant to be used
 // directly, but embedding configs should call cfg.InitDefaults().
 type Config struct {
@@ -660,6 +671,8 @@ const (
 // pertaining to temp storage flags, specifically --temp-dir and
 // --max-disk-temp-storage.
 type TempStorageConfig struct {
+	// Engine specifies whether to use rocksdb or pebble for temp storage.
+	Engine EngineType
 	// InMemory specifies whether the temporary storage will remain
 	// in-memory or occupy a temporary subdirectory on-disk.
 	InMemory bool
@@ -683,6 +696,7 @@ func TempStorageConfigFromEnv(
 	st *cluster.Settings,
 	firstStore StoreSpec,
 	parentDir string,
+	engine EngineType,
 	maxSizeBytes int64,
 	specIdx int,
 ) TempStorageConfig {
@@ -713,6 +727,7 @@ func TempStorageConfigFromEnv(
 	}
 
 	return TempStorageConfig{
+		Engine:   engine,
 		InMemory: inMem,
 		Mon:      &monitor,
 		SpecIdx:  specIdx,
