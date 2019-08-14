@@ -23,6 +23,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/reduce"
 	"github.com/cockroachdb/cockroach/pkg/testutils/reduce/reducesql"
@@ -33,6 +34,7 @@ var (
 	path     = flags.String("path", "./cockroach", "path to cockroach binary")
 	verbose  = flags.Bool("v", false, "log progress")
 	contains = flags.String("contains", "", "error regex to search for")
+	unknown  = flags.Bool("unknown", false, "print unknown types during walk")
 )
 
 func usage() {
@@ -49,6 +51,7 @@ func main() {
 		fmt.Print("missing contains\n\n")
 		usage()
 	}
+	reducesql.LogUnknown = *unknown
 	out, err := reduceSQL(*path, *contains, *verbose)
 	if err != nil {
 		log.Fatal(err)
@@ -61,13 +64,37 @@ func reduceSQL(path, contains string, verbose bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	input, err := ioutil.ReadAll(os.Stdin)
+	var input []byte
+	{
+		done := make(chan struct{}, 1)
+		go func() {
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				log.Fatal("timeout waiting for input on stdin")
+			}
+		}()
+		input, err = ioutil.ReadAll(os.Stdin)
+		done <- struct{}{}
+		if err != nil {
+			return "", err
+		}
+	}
+
+	// Pretty print the input so the file size comparison is useful.
+	inputSQL, err := reducesql.Pretty(input)
 	if err != nil {
 		return "", err
 	}
 
+	var logger io.Writer
+	if verbose {
+		logger = os.Stderr
+		fmt.Fprintf(logger, "input SQL pretty printed, %d bytes -> %d bytes\n", len(input), len(inputSQL))
+	}
+
 	interesting := func(f reduce.File) bool {
-		cmd := exec.Command(path, "demo")
+		cmd := exec.Command(path, "demo", "--empty")
 		sql := string(f)
 		if !strings.HasSuffix(sql, ";") {
 			sql += ";"
@@ -85,10 +112,6 @@ func reduceSQL(path, contains string, verbose bool) (string, error) {
 		return containsRE.Match(out)
 	}
 
-	var logger io.Writer
-	if verbose {
-		logger = os.Stderr
-	}
-	out, err := reduce.Reduce(logger, reduce.File(input), interesting, reducesql.SQLPasses...)
+	out, err := reduce.Reduce(logger, reduce.File(inputSQL), interesting, reducesql.SQLPasses...)
 	return string(out), err
 }

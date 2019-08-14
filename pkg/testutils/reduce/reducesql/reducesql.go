@@ -11,6 +11,7 @@
 package reducesql
 
 import (
+	"bytes"
 	"fmt"
 	"go/constant"
 	"regexp"
@@ -71,23 +72,24 @@ type sqlWalker struct {
 // nothing is mutated. It returns the number of transformations it could have
 // performed. It is safe to mutate AST nodes directly because the string is
 // reparsed into a new AST each time.
-func walkSQL(match func(transform int, node interface{}) (matched int)) reduce.Pass {
+func walkSQL(name string, match func(transform int, node interface{}) (matched int)) reduce.Pass {
 	w := sqlWalker{
 		match: match,
 	}
-	return reduce.MakeIntPass(w.Transform)
+	return reduce.MakeIntPass(name, w.Transform)
 }
 
 // replaceStatement is like walkSQL, except if it returns a non-nil
 // replacement, the top-level SQL statement is completely replaced with the
 // return value.
 func replaceStatement(
+	name string,
 	replace func(transform int, node interface{}) (matched int, replacement tree.NodeFormatter),
 ) reduce.Pass {
 	w := sqlWalker{
 		replace: replace,
 	}
-	return reduce.MakeIntPass(w.Transform)
+	return reduce.MakeIntPass(name, w.Transform)
 }
 
 var (
@@ -123,21 +125,44 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 			}
 			i -= matches
 
+			if node == nil {
+				continue
+			}
+			if _, ok := node.(tree.Datum); ok {
+				continue
+			}
+
 			switch node := node.(type) {
 			case *tree.AliasedTableExpr:
 				walk(node.Expr)
+			case *tree.AndExpr:
+				walk(node.Left, node.Right)
 			case *tree.AnnotateTypeExpr:
 				walk(node.Expr)
 			case *tree.Array:
 				walk(node.Exprs)
 			case *tree.BinaryExpr:
 				walk(node.Left, node.Right)
+			case *tree.CaseExpr:
+				walk(node.Expr, node.Else)
+				for _, w := range node.Whens {
+					walk(w.Cond, w.Val)
+				}
 			case *tree.CastExpr:
 				walk(node.Expr)
+			case *tree.CoalesceExpr:
+				for _, expr := range node.Exprs {
+					walk(expr)
+				}
 			case *tree.ColumnTableDef:
+			case *tree.ComparisonExpr:
+				walk(node.Left, node.Right)
 			case *tree.CreateTable:
 				for _, def := range node.Defs {
 					walk(def)
+				}
+				if node.AsSource != nil {
+					walk(node.AsSource)
 				}
 			case *tree.CTE:
 				walk(node.Stmt)
@@ -155,13 +180,21 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 			case *tree.IndexTableDef:
 			case *tree.JoinTableExpr:
 				walk(node.Left, node.Right, node.Cond)
+			case *tree.NotExpr:
+				walk(node.Expr)
 			case *tree.NumVal:
 			case *tree.OnJoinCond:
 				walk(node.Expr)
+			case *tree.OrExpr:
+				walk(node.Left, node.Right)
 			case *tree.ParenExpr:
 				walk(node.Expr)
 			case *tree.ParenSelect:
 				walk(node.Select)
+			case *tree.RowsFromExpr:
+				for _, expr := range node.Items {
+					walk(expr)
+				}
 			case *tree.Select:
 				if node.With != nil {
 					walk(node.With)
@@ -184,15 +217,24 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 				for _, expr := range node {
 					walk(expr)
 				}
+			case *tree.SetVar:
+				for _, expr := range node.Values {
+					walk(expr)
+				}
 			case *tree.StrVal:
 			case *tree.Subquery:
 				walk(node.Select)
 			case *tree.TableName:
+			case *tree.Tuple:
+				for _, expr := range node.Exprs {
+					walk(expr)
+				}
 			case *tree.UnaryExpr:
 				walk(node.Expr)
 			case *tree.UniqueConstraintTableDef:
 			case *tree.UnionClause:
 				walk(node.Left, node.Right)
+			case tree.UnqualifiedStar:
 			case *tree.UnresolvedName:
 			case *tree.ValuesClause:
 				for _, row := range node.Rows {
@@ -250,10 +292,29 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 	return sb.String(), true, nil
 }
 
+// Pretty formats input SQL into a standard format. Input SQL should be run
+// through this before reducing so file size comparisons are useful.
+func Pretty(s []byte) ([]byte, error) {
+	stmts, err := parser.Parse(string(s))
+	if err != nil {
+		return nil, err
+	}
+
+	var sb bytes.Buffer
+	for i, stmt := range stmts {
+		if i > 0 {
+			sb.WriteString("\n\n")
+		}
+		sb.WriteString(tree.Pretty(stmt.AST))
+		sb.WriteString(";")
+	}
+	return sb.Bytes(), nil
+}
+
 var (
 	// Mutations.
 
-	removeLimit = walkSQL(func(xfi int, node interface{}) int {
+	removeLimit = walkSQL("remove LIMIT", func(xfi int, node interface{}) int {
 		xf := xfi == 0
 		switch node := node.(type) {
 		case *tree.Delete:
@@ -280,7 +341,7 @@ var (
 		}
 		return 0
 	})
-	removeOrderBy = walkSQL(func(xfi int, node interface{}) int {
+	removeOrderBy = walkSQL("remove ORDER BY", func(xfi int, node interface{}) int {
 		xf := xfi == 0
 		switch node := node.(type) {
 		case *tree.Delete:
@@ -321,7 +382,7 @@ var (
 		}
 		return 0
 	})
-	removeOrderByExprs = walkSQL(func(xfi int, node interface{}) int {
+	removeOrderByExprs = walkSQL("remove ORDER BY exprs", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
 		case *tree.Delete:
 			n := len(node.OrderBy)
@@ -356,7 +417,7 @@ var (
 		}
 		return 0
 	})
-	removeGroupBy = walkSQL(func(xfi int, node interface{}) int {
+	removeGroupBy = walkSQL("remove GROUP BY", func(xfi int, node interface{}) int {
 		xf := xfi == 0
 		switch node := node.(type) {
 		case *tree.SelectClause:
@@ -369,7 +430,7 @@ var (
 		}
 		return 0
 	})
-	removeGroupByExprs = walkSQL(func(xfi int, node interface{}) int {
+	removeGroupByExprs = walkSQL("remove GROUP BY exprs", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
 		case *tree.SelectClause:
 			n := len(node.GroupBy)
@@ -380,7 +441,7 @@ var (
 		}
 		return 0
 	})
-	nullExprs = walkSQL(func(xfi int, node interface{}) int {
+	nullExprs = walkSQL("nullify SELECT exprs", func(xfi int, node interface{}) int {
 		xf := xfi == 0
 		switch node := node.(type) {
 		case *tree.SelectClause:
@@ -393,7 +454,7 @@ var (
 		}
 		return 0
 	})
-	removeSelectExprs = walkSQL(func(xfi int, node interface{}) int {
+	removeSelectExprs = walkSQL("remove SELECT exprs", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
 		case *tree.SelectClause:
 			n := len(node.Exprs)
@@ -404,7 +465,7 @@ var (
 		}
 		return 0
 	})
-	removeWithSelectExprs = walkSQL(func(xfi int, node interface{}) int {
+	removeWithSelectExprs = walkSQL("remove WITH SELECT exprs", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
 		case *tree.CTE:
 			if len(node.Name.Cols) < 1 {
@@ -427,7 +488,7 @@ var (
 		}
 		return 0
 	})
-	removeValuesCols = walkSQL(func(xfi int, node interface{}) int {
+	removeValuesCols = walkSQL("remove VALUES cols", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
 		case *tree.AliasedTableExpr:
 			subq, ok := node.Expr.(*tree.Subquery)
@@ -502,7 +563,7 @@ var (
 		}
 		return 0
 	})
-	removeSelectAsExprs = walkSQL(func(xfi int, node interface{}) int {
+	removeSelectAsExprs = walkSQL("remove SELECT AS exprs", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
 		case *tree.AliasedTableExpr:
 			if len(node.As.Cols) < 1 {
@@ -525,7 +586,7 @@ var (
 		}
 		return 0
 	})
-	removeWith = walkSQL(func(xfi int, node interface{}) int {
+	removeWith = walkSQL("remove WITH", func(xfi int, node interface{}) int {
 		xf := xfi == 0
 		switch node := node.(type) {
 		case *tree.Delete:
@@ -559,7 +620,7 @@ var (
 		}
 		return 0
 	})
-	removeCreateDefs = walkSQL(func(xfi int, node interface{}) int {
+	removeCreateDefs = walkSQL("remove CREATE defs", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
 		case *tree.CreateTable:
 			n := len(node.Defs)
@@ -570,7 +631,7 @@ var (
 		}
 		return 0
 	})
-	removeCreateNullDefs = walkSQL(func(xfi int, node interface{}) int {
+	removeCreateNullDefs = walkSQL("remove CREATE NULL defs", func(xfi int, node interface{}) int {
 		xf := xfi == 0
 		switch node := node.(type) {
 		case *tree.ColumnTableDef:
@@ -583,7 +644,7 @@ var (
 		}
 		return 0
 	})
-	removeIndexCols = walkSQL(func(xfi int, node interface{}) int {
+	removeIndexCols = walkSQL("remove INDEX cols", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
 		case *tree.IndexTableDef:
 			n := len(node.Columns)
@@ -594,7 +655,7 @@ var (
 		}
 		return 0
 	})
-	removeWindowPartitions = walkSQL(func(xfi int, node interface{}) int {
+	removeWindowPartitions = walkSQL("remove WINDOW partitions", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
 		case *tree.WindowDef:
 			n := len(node.Partitions)
@@ -605,7 +666,7 @@ var (
 		}
 		return 0
 	})
-	removeValuesRows = walkSQL(func(xfi int, node interface{}) int {
+	removeValuesRows = walkSQL("remove VALUES rows", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
 		case *tree.ValuesClause:
 			n := len(node.Rows)
@@ -616,7 +677,7 @@ var (
 		}
 		return 0
 	})
-	removeWithCTEs = walkSQL(func(xfi int, node interface{}) int {
+	removeWithCTEs = walkSQL("remove WITH CTEs", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
 		case *tree.With:
 			n := len(node.CTEList)
@@ -627,7 +688,7 @@ var (
 		}
 		return 0
 	})
-	removeCTENames = walkSQL(func(xfi int, node interface{}) int {
+	removeCTENames = walkSQL("remove CTE names", func(xfi int, node interface{}) int {
 		xf := xfi == 0
 		switch node := node.(type) {
 		case *tree.CTE:
@@ -640,7 +701,7 @@ var (
 		}
 		return 0
 	})
-	removeFroms = walkSQL(func(xfi int, node interface{}) int {
+	removeFroms = walkSQL("remove FROMs", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
 		case *tree.SelectClause:
 			n := len(node.From.Tables)
@@ -651,7 +712,7 @@ var (
 		}
 		return 0
 	})
-	simplifyVal = walkSQL(func(xfi int, node interface{}) int {
+	simplifyVal = walkSQL("simplify vals", func(xfi int, node interface{}) int {
 		xf := xfi == 0
 		switch node := node.(type) {
 		case *tree.StrVal:
@@ -671,7 +732,7 @@ var (
 		}
 		return 0
 	})
-	removeWhere = walkSQL(func(xfi int, node interface{}) int {
+	removeWhere = walkSQL("remove WHERE", func(xfi int, node interface{}) int {
 		xf := xfi == 0
 		switch node := node.(type) {
 		case *tree.SelectClause:
@@ -684,7 +745,7 @@ var (
 		}
 		return 0
 	})
-	removeHaving = walkSQL(func(xfi int, node interface{}) int {
+	removeHaving = walkSQL("remove HAVING", func(xfi int, node interface{}) int {
 		xf := xfi == 0
 		switch node := node.(type) {
 		case *tree.SelectClause:
@@ -697,7 +758,7 @@ var (
 		}
 		return 0
 	})
-	removeDistinct = walkSQL(func(xfi int, node interface{}) int {
+	removeDistinct = walkSQL("remove DISTINCT", func(xfi int, node interface{}) int {
 		xf := xfi == 0
 		switch node := node.(type) {
 		case *tree.SelectClause:
@@ -710,7 +771,7 @@ var (
 		}
 		return 0
 	})
-	unparenthesize = walkSQL(func(xfi int, node interface{}) int {
+	unparenthesize = walkSQL("unparenthesize", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
 		case tree.Exprs:
 			n := 0
@@ -726,7 +787,7 @@ var (
 		}
 		return 0
 	})
-	nullifyFuncArgs = walkSQL(func(xfi int, node interface{}) int {
+	nullifyFuncArgs = walkSQL("nullify function args", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
 		case *tree.FuncExpr:
 			n := 0
@@ -742,7 +803,7 @@ var (
 		}
 		return 0
 	})
-	simplifyOnCond = walkSQL(func(xfi int, node interface{}) int {
+	simplifyOnCond = walkSQL("simplify ON conditions", func(xfi int, node interface{}) int {
 		xf := xfi == 0
 		switch node := node.(type) {
 		case *tree.OnJoinCond:
@@ -758,7 +819,7 @@ var (
 
 	// Replacements.
 
-	removeStatement = replaceStatement(func(xfi int, node interface{}) (int, tree.NodeFormatter) {
+	removeStatement = replaceStatement("remove statements", func(xfi int, node interface{}) (int, tree.NodeFormatter) {
 		xf := xfi == 0
 		if _, ok := node.(tree.Statement); ok {
 			if xf {
@@ -768,7 +829,7 @@ var (
 		}
 		return 0, nil
 	})
-	replaceStmt = replaceStatement(func(xfi int, node interface{}) (int, tree.NodeFormatter) {
+	replaceStmt = replaceStatement("replace statements", func(xfi int, node interface{}) (int, tree.NodeFormatter) {
 		xf := xfi == 0
 		switch node := node.(type) {
 		case *tree.ParenSelect:
@@ -794,7 +855,7 @@ var (
 	// Regexes.
 
 	removeCastsRE = regexp.MustCompile(`:::?[a-zA-Z0-9]+`)
-	removeCasts   = reduce.MakeIntPass(func(s string, i int) (string, bool, error) {
+	removeCasts   = reduce.MakeIntPass("remove casts", func(s string, i int) (string, bool, error) {
 		out := removeCastsRE.ReplaceAllStringFunc(s, func(found string) string {
 			i--
 			if i == -1 {
@@ -805,7 +866,7 @@ var (
 		return out, i < 0, nil
 	})
 	removeAliasesRE = regexp.MustCompile(`\sAS\s+\w+`)
-	removeAliases   = reduce.MakeIntPass(func(s string, i int) (string, bool, error) {
+	removeAliases   = reduce.MakeIntPass("remove aliases", func(s string, i int) (string, bool, error) {
 		out := removeAliasesRE.ReplaceAllStringFunc(s, func(found string) string {
 			i--
 			if i == -1 {
@@ -816,7 +877,7 @@ var (
 		return out, i < 0, nil
 	})
 	removeDBSchemaRE = regexp.MustCompile(`\w+\.\w+\.`)
-	removeDBSchema   = reduce.MakeIntPass(func(s string, i int) (string, bool, error) {
+	removeDBSchema   = reduce.MakeIntPass("remove DB schema", func(s string, i int) (string, bool, error) {
 		// Remove the database and schema from "default.public.xxx".
 		out := removeDBSchemaRE.ReplaceAllStringFunc(s, func(found string) string {
 			i--
