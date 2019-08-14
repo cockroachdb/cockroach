@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -80,7 +81,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 		} else {
 			res, err = b.funcExpr.ResolvedOverload().Fn(b.evalCtx, b.row)
 			if err != nil {
-				panic(err)
+				execerror.NonVectorizedPanic(err)
 			}
 		}
 
@@ -90,7 +91,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 		} else {
 			converted, err := b.converter(res)
 			if err != nil {
-				panic(err)
+				execerror.VectorizedInternalPanic(err)
 			}
 			coldata.SetValueAt(batch.ColVec(b.outputIdx), converted, rowIdx, b.outputPhysType)
 		}

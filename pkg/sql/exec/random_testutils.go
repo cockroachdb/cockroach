@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 )
 
 // maxVarLen specifies a length limit for variable length types (e.g. byte slices).
@@ -94,7 +95,7 @@ func randomVec(rng *rand.Rand, typ coltypes.T, vec coldata.Vec, n int, nullProba
 			floats[i] = rng.Float64()
 		}
 	default:
-		panic(fmt.Sprintf("unhandled type %s", typ))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", typ))
 	}
 	vec.Nulls().UnsetNulls()
 	if nullProbability == 0 {
@@ -128,7 +129,7 @@ func RandomBatch(rng *rand.Rand, typs []coltypes.T, n int, nullProbability float
 // less than batchSize.
 func randomSel(rng *rand.Rand, batchSize uint16, probOfOmitting float64) []uint16 {
 	if probOfOmitting < 0 || probOfOmitting > 1 {
-		panic(fmt.Sprintf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
 	}
 	sel := make([]uint16, batchSize)
 	used := make([]bool, batchSize)

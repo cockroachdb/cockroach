@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -46,7 +47,7 @@ var _ tree.Datum
 // _COMPARE is the template equality function for assigning the first input
 // to the result of comparing second and third inputs.
 func _COMPARE(_, _, _ string) bool {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // */}}
@@ -104,5 +105,7 @@ func GetVecComparator(t coltypes.T, numVecs int) vecComparator {
 		}
 		// {{end}}
 	}
-	panic(fmt.Sprintf("unhandled type %v", t))
+	execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %v", t))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }

@@ -24,6 +24,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
+	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
@@ -51,7 +54,7 @@ const _TYPES_T = coltypes.Unhandled
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the second input != the third input.
 func _ASSIGN_NE(_, _, _ string) bool {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // */}}

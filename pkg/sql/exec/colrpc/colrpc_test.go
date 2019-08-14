@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -256,7 +257,7 @@ func TestOutboxInbox(t *testing.T) {
 		var readerErr error
 		for {
 			var outputBatch coldata.Batch
-			if err := exec.CatchVectorizedRuntimeError(func() {
+			if err := execerror.CatchVectorizedRuntimeError(func() {
 				outputBatch = inbox.Next(readerCtx)
 			}); err != nil {
 				readerErr = err

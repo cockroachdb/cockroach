@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -210,7 +211,9 @@ func NewMergeJoinOp(
 	case sqlbase.JoinType_LEFT_ANTI:
 		return &mergeJoinLeftAntiOp{base}, err
 	default:
-		panic("unsupported join type")
+		execerror.VectorizedInternalPanic("unsupported join type")
+		// This code is unreachable, but the compiler cannot infer that.
+		return nil, nil
 	}
 }
 
