@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -162,7 +163,7 @@ func (o *OrderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {
 			case encoding.Descending:
 				return -res
 			default:
-				panic(fmt.Sprintf("unexpected direction value %d", d))
+				execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected direction value %d", d))
 			}
 		}
 	}

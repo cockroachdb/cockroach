@@ -18,6 +18,7 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -314,7 +315,7 @@ func (decimalCustomizer) getCmpOpCompareFunc() compareFunc {
 
 func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op overload, target, l, r string) string {
-		return fmt.Sprintf("if _, err := tree.DecimalCtx.%s(&%s, &%s, &%s); err != nil { panic(err) }",
+		return fmt.Sprintf("if _, err := tree.DecimalCtx.%s(&%s, &%s, &%s); err != nil { execerror.NonVectorizedPanic(err) }",
 			binaryOpDecMethod[op.BinOp], target, l, r)
 	}
 }
@@ -324,7 +325,7 @@ func (decimalCustomizer) getHashAssignFunc() assignFunc {
 		return fmt.Sprintf(`
 			d, err := %[2]s.Float64()
 			if err != nil {
-				panic(fmt.Sprintf("%%v", err))
+				execerror.NonVectorizedPanic(err)
 			}
 
 			%[1]s = f64hash(noescape(unsafe.Pointer(&d)), %[1]s)
@@ -364,7 +365,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				{
 					result := {{.Left}} + {{.Right}}
 					if (result < {{.Left}}) != ({{.Right}} < 0) {
-						panic(tree.ErrIntOutOfRange)
+						execerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
 					}
 					{{.Target}} = result
 				}
@@ -375,7 +376,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				{
 					result := {{.Left}} - {{.Right}}
 					if (result < {{.Left}}) != ({{.Right}} > 0) {
-						panic(tree.ErrIntOutOfRange)
+						execerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
 					}
 					{{.Target}} = result
 				}
@@ -403,7 +404,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				upperBound = "math.MaxInt32"
 				lowerBound = "math.MinInt32"
 			default:
-				panic(fmt.Sprintf("unhandled integer width %d", c.width))
+				execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled integer width %d", c.width))
 			}
 
 			args["UpperBound"] = upperBound
@@ -415,9 +416,9 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 						if {{.Left}} != 0 && {{.Right}} != 0 {
 							sameSign := ({{.Left}} < 0) == ({{.Right}} < 0)
 							if (result < 0) == sameSign {
-								panic(tree.ErrIntOutOfRange)
+								execerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
 							} else if result/{{.Right}} != {{.Left}} {
-								panic(tree.ErrIntOutOfRange)
+								execerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
 							}
 						}
 					}
@@ -437,29 +438,29 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 			case 64:
 				minInt = "math.MinInt64"
 			default:
-				panic(fmt.Sprintf("unhandled integer width %d", c.width))
+				execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled integer width %d", c.width))
 			}
 
 			args["MinInt"] = minInt
 			t = template.Must(template.New("").Parse(`
 				{
 					if {{.Right}} == 0 {
-						panic(tree.ErrDivByZero)
+						execerror.NonVectorizedPanic(tree.ErrDivByZero)
 					}
 					result := {{.Left}} / {{.Right}}
 					if {{.Left}} == {{.MinInt}} && {{.Right}} == -1 {
-						panic(tree.ErrIntOutOfRange)
+						execerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
 					}
 					{{.Target}} = result
 				}
 			`))
 
 		default:
-			panic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
 		}
 
 		if err := t.Execute(&buf, args); err != nil {
-			panic(err)
+			execerror.VectorizedInternalPanic(err)
 		}
 		return buf.String()
 	}

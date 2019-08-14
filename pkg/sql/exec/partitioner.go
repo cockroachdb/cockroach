@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 )
 
 // NewWindowSortingPartitioner creates a new exec.Operator that orders input
@@ -75,7 +76,7 @@ func (p *windowSortingPartitioner) Next(ctx context.Context) coldata.Batch {
 	if p.partitionColIdx == b.Width() {
 		b.AppendCol(coltypes.Bool)
 	} else if p.partitionColIdx > b.Width() {
-		panic("unexpected: column partitionColIdx is neither present nor the next to be appended")
+		execerror.VectorizedInternalPanic("unexpected: column partitionColIdx is neither present nor the next to be appended")
 	}
 	partitionVec := b.ColVec(p.partitionColIdx).Bool()
 	sel := b.Selection()

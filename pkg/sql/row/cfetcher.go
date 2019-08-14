@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -558,7 +559,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInitFetch:
 			moreKeys, kv, newSpan, err := rf.fetcher.nextKV(ctx)
 			if err != nil {
-				return nil, exec.NewStorageError(err)
+				return nil, execerror.NewStorageError(err)
 			}
 			if !moreKeys {
 				rf.machine.state[0] = stateEmitLastBatch
@@ -660,7 +661,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			for {
 				moreRows, kv, _, err := rf.fetcher.nextKV(ctx)
 				if err != nil {
-					return nil, exec.NewStorageError(err)
+					return nil, execerror.NewStorageError(err)
 				}
 				if debugState {
 					log.Infof(ctx, "found kv %s, seeking to prefix %s", kv.Key, rf.machine.seekPrefix)
@@ -683,7 +684,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateFetchNextKVWithUnfinishedRow:
 			moreKVs, kv, _, err := rf.fetcher.nextKV(ctx)
 			if err != nil {
-				return nil, exec.NewStorageError(err)
+				return nil, execerror.NewStorageError(err)
 			}
 			if !moreKVs {
 				// No more data. Finalize the row and exit.
