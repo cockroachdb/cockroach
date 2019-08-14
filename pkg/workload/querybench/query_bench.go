@@ -64,6 +64,15 @@ var queryBenchMeta = workload.Meta{
 	},
 }
 
+// vectorizeSetting19_1Translation is a mapping from the 19.2+ vectorize session
+// variable value to the 19.1 syntax.
+var vectorizeSetting19_1Translation = map[string]string{
+	"experimental_on":     "on",
+	"experimental_always": "always",
+	// Translate auto as on, this was not an option in 19.1.
+	"auto": "on",
+}
+
 // Meta implements the Generator interface.
 func (*queryBench) Meta() workload.Meta { return queryBenchMeta }
 
@@ -115,6 +124,16 @@ func (g *queryBench) Ops(urls []string, reg *histogram.Registry) (workload.Query
 
 	if g.vectorize != "" {
 		_, err := db.Exec("SET vectorize=" + g.vectorize)
+		if err != nil && strings.Contains(err.Error(), "unrecognized configuration") {
+			if _, ok := vectorizeSetting19_1Translation[g.vectorize]; !ok {
+				// Unrecognized setting value.
+				return workload.QueryLoad{}, err
+			}
+			// Fall back to using the pre-19.2 syntax.
+			// TODO(asubiotto): Remove this once we stop running this test against
+			//  19.1.
+			_, err = db.Exec("SET experimental_vectorize=" + vectorizeSetting19_1Translation[g.vectorize])
+		}
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
