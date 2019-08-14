@@ -1673,20 +1673,22 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+2)
 
 	oldGeneration = repl.Desc().GetGeneration()
-	if _, err := repl.ChangeReplicas(
+	oldDesc := repl.Desc()
+	newDesc, err := repl.ChangeReplicas(
 		context.Background(),
 		roachpb.REMOVE_REPLICA,
 		roachpb.ReplicationTarget{
 			NodeID:  mtc.idents[1].NodeID,
 			StoreID: mtc.idents[1].StoreID,
 		},
-		repl.Desc(),
+		oldDesc,
 		storagepb.ReasonRangeOverReplicated,
 		"",
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+1)
+	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+1, "\nold: %+v\nnew: %+v", oldDesc, newDesc)
 }
 
 func TestSystemZoneConfigs(t *testing.T) {

@@ -5990,7 +5990,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 		storagepb.ReasonRebalance,
 		"",
 	); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
-		t.Fatalf("must not be able to add second replica to same node (err=%s)", err)
+		t.Fatalf("must not be able to add second replica to same node (err=%+v)", err)
 	}
 }
 

@@ -1212,6 +1212,29 @@ func (acrr *AdminChangeReplicasRequest) AddChanges(chgs ...ReplicationChange) {
 	}
 }
 
+// ReplicationChanges is a slice of ReplicationChange.
+type ReplicationChanges []ReplicationChange
+
+func (rc ReplicationChanges) byType(typ ReplicaChangeType) []ReplicationTarget {
+	var sl []ReplicationTarget
+	for _, chg := range rc {
+		if chg.ChangeType == typ {
+			sl = append(sl, chg.Target)
+		}
+	}
+	return sl
+}
+
+// Additions returns a slice of all contained replication changes that add replicas.
+func (rc ReplicationChanges) Additions() []ReplicationTarget {
+	return rc.byType(ADD_REPLICA)
+}
+
+// Removals returns a slice of all contained replication changes that remove replicas.
+func (rc ReplicationChanges) Removals() []ReplicationTarget {
+	return rc.byType(REMOVE_REPLICA)
+}
+
 // Changes returns the changes requested by this AdminChangeReplicasRequest, taking
 // the deprecated method of doing so into account.
 func (acrr *AdminChangeReplicasRequest) Changes() []ReplicationChange {
