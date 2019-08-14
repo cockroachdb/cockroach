@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -489,6 +490,22 @@ func CheckTableExists(
 	}
 	if res.Exists() {
 		return sqlbase.NewRelationAlreadyExistsError(name)
+	}
+	return nil
+}
+
+// remapTableIDInStatistics changes all the table IDs in each statistic to
+// reference the updated table ID. The table IDs may change because the
+// backed up table may not have the same ID as the restored table.
+func remapTableIDInStatistics(
+	tableStatistics []*stats.TableStatistic, tableRewrites TableRewriteMap,
+) error {
+	for _, stat := range tableStatistics {
+		tableRewrite, ok := tableRewrites[stat.TableID]
+		if !ok {
+			return errors.Errorf("missing table rewrite for stat referencing table %d", stat.TableID)
+		}
+		stat.TableID = tableRewrite.TableID
 	}
 	return nil
 }
@@ -1159,6 +1176,7 @@ func restore(
 	gossip *gossip.Gossip,
 	settings *cluster.Settings,
 	backupDescs []BackupDescriptor,
+	latestBackupDesc BackupDescriptor,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
 	sqlDescs []sqlbase.Descriptor,
@@ -1193,6 +1211,18 @@ func restore(
 				dbDesc.ID = rewrite.TableID
 				databases = append(databases, dbDesc)
 			}
+		}
+	}
+
+	// Update the ID references in the table statistics.
+	backedUpStatistics := latestBackupDesc.Statistics
+	if backedUpStatistics != nil {
+		stats := make([]*stats.TableStatistic, len(backedUpStatistics.TableStatistics))
+		for i := range latestBackupDesc.Statistics.TableStatistics {
+			stats[i] = &latestBackupDesc.Statistics.TableStatistics[i]
+		}
+		if err := remapTableIDInStatistics(stats, tableRewrites); err != nil {
+			return mu.res, nil, nil, err
 		}
 	}
 
@@ -1584,13 +1614,13 @@ func doRestorePlan(
 
 func loadBackupSQLDescs(
 	ctx context.Context, details jobspb.RestoreDetails, settings *cluster.Settings,
-) ([]BackupDescriptor, []sqlbase.Descriptor, error) {
+) ([]BackupDescriptor, BackupDescriptor, []sqlbase.Descriptor, error) {
 	backupDescs, err := loadBackupDescs(ctx, details.URIs, settings)
 	if err != nil {
-		return nil, nil, err
+		return nil, BackupDescriptor{}, nil, err
 	}
 
-	allDescs, _ := loadSQLDescsFromBackupsAtTime(backupDescs, details.EndTime)
+	allDescs, latestBackupDesc := loadSQLDescsFromBackupsAtTime(backupDescs, details.EndTime)
 
 	var sqlDescs []sqlbase.Descriptor
 	for _, desc := range allDescs {
@@ -1598,7 +1628,7 @@ func loadBackupSQLDescs(
 			sqlDescs = append(sqlDescs, desc)
 		}
 	}
-	return backupDescs, sqlDescs, nil
+	return backupDescs, latestBackupDesc, sqlDescs, nil
 }
 
 type restoreResumer struct {
@@ -1607,7 +1637,33 @@ type restoreResumer struct {
 	res            roachpb.BulkOpSummary
 	databases      []*sqlbase.DatabaseDescriptor
 	tables         []*sqlbase.TableDescriptor
+	exec           sqlutil.InternalExecutor
+	latestStats    []*stats.TableStatistic
 	statsRefresher *stats.Refresher
+}
+
+// getRelevantStats extracts the stats stored in the backup which correspond
+// to any of the given tables.
+func getRelevantStats(
+	backup BackupDescriptor, tables []*sqlbase.TableDescriptor,
+) []*stats.TableStatistic {
+	if backup.Statistics == nil {
+		return make([]*stats.TableStatistic, 0)
+	}
+
+	relevantTableStatistics := make([]*stats.TableStatistic, 0, len(backup.Statistics.TableStatistics))
+	relevantTables := make(map[sqlbase.ID]bool)
+
+	for _, d := range tables {
+		relevantTables[d.ID] = true
+	}
+	for i, stat := range backup.Statistics.TableStatistics {
+		if relevantTables[stat.TableID] {
+			relevantTableStatistics = append(relevantTableStatistics, &backup.Statistics.TableStatistics[i])
+		}
+	}
+
+	return relevantTableStatistics
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -1617,7 +1673,7 @@ func (r *restoreResumer) Resume(
 	details := r.job.Details().(jobspb.RestoreDetails)
 	p := phs.(sql.PlanHookState)
 
-	backupDescs, sqlDescs, err := loadBackupSQLDescs(ctx, details, r.settings)
+	backupDescs, latestBackupDesc, sqlDescs, err := loadBackupSQLDescs(ctx, details, r.settings)
 	if err != nil {
 		return err
 	}
@@ -1628,6 +1684,7 @@ func (r *restoreResumer) Resume(
 		p.ExecCfg().Gossip,
 		p.ExecCfg().Settings,
 		backupDescs,
+		latestBackupDesc,
 		details.BackupLocalityInfo,
 		details.EndTime,
 		sqlDescs,
@@ -1639,6 +1696,8 @@ func (r *restoreResumer) Resume(
 	r.res = res
 	r.databases = databases
 	r.tables = tables
+	r.exec = p.ExecCfg().InternalExecutor
+	r.latestStats = getRelevantStats(latestBackupDesc, tables)
 	r.statsRefresher = p.ExecCfg().StatsRefresher
 	return err
 }
@@ -1667,6 +1726,10 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 // OnSuccess is part of the jobs.Resumer interface.
 func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 	log.Event(ctx, "making tables live")
+
+	if err := stats.ReinsertStat(ctx, r.exec, txn, r.latestStats); err != nil {
+		return errors.Wrapf(err, "count not reinsert table statistics")
+	}
 
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly

@@ -3053,3 +3053,61 @@ func TestCreateStatsAfterRestore(t *testing.T) {
 			{"__auto__", "{payload}", "1", "1", "0"},
 		})
 }
+
+func TestBackupCreatedStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
+	sqlDB.Exec(t, `BACKUP data.bank TO $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
+	sqlDB.Exec(t, `RESTORE data.bank FROM $1 WITH skip_missing_foreign_keys, into_db = $2`,
+		localFoo, "data 2")
+
+	sqlDB.CheckQueryResultsRetry(t,
+		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
+	FROM [SHOW STATISTICS FOR TABLE "data 2".bank] WHERE statistics_name='bank_stats'`,
+		[][]string{
+			{"bank_stats", "{id}", "1", "1", "0"},
+			{"bank_stats", "{balance}", "1", "1", "0"},
+			{"bank_stats", "{payload}", "1", "1", "0"},
+		})
+}
+
+// Ensure that statistics are restored from correct backup.
+func TestBackupCreatedStatsFromIncrementalBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const incremental1Foo = "nodelocal:///incremental1foo"
+	const incremental2Foo = "nodelocal:///incremental2foo"
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+	var beforeTs string
+
+	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
+	sqlDB.Exec(t, `BACKUP data.bank TO $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `INSERT INTO data.bank VALUES (2, 2), (4, 4)`)
+	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&beforeTs)
+	sqlDB.Exec(t, `BACKUP data.bank TO $1 INCREMENTAL FROM $2 WITH revision_history`, incremental1Foo, localFoo)
+	sqlDB.Exec(t, `INSERT INTO data.bank VALUES (3, 3), (5, 2)`)
+	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
+	sqlDB.Exec(t, `BACKUP data.bank TO $1 INCREMENTAL FROM $2, $3 WITH revision_history`, incremental2Foo, localFoo, incremental1Foo)
+
+	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
+	sqlDB.Exec(t, fmt.Sprintf(`RESTORE data.bank FROM "%s", "%s", "%s" AS OF SYSTEM TIME %s WITH skip_missing_foreign_keys, into_db = "%s"`,
+		localFoo, incremental1Foo, incremental2Foo, beforeTs, "data 2"))
+
+	sqlDB.CheckQueryResultsRetry(t,
+		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
+	FROM [SHOW STATISTICS FOR TABLE "data 2".bank] WHERE statistics_name='bank_stats'`,
+		[][]string{
+			{"bank_stats", "{id}", "3", "3", "0"},
+			{"bank_stats", "{balance}", "3", "3", "0"},
+			{"bank_stats", "{payload}", "3", "2", "2"},
+		})
+}

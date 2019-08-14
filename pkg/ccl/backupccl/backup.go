@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -994,6 +995,8 @@ func backupPlanHook(
 			return err
 		}
 
+		statsCache := p.ExecCfg().TableStatsCache
+		tableStatistics := make([]stats.TableStatistic, 0)
 		var tables []*sqlbase.TableDescriptor
 		for _, desc := range targetDescs {
 			if dbDesc := desc.GetDatabase(); dbDesc != nil {
@@ -1006,6 +1009,15 @@ func backupPlanHook(
 					return err
 				}
 				tables = append(tables, tableDesc)
+
+				// Collect all the table stats for this table.
+				tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc.GetID())
+				if err != nil {
+					return err
+				}
+				for _, tableStatistic := range tableStatisticsAcc {
+					tableStatistics = append(tableStatistics, *tableStatistic)
+				}
 			}
 		}
 
@@ -1142,6 +1154,7 @@ func backupPlanHook(
 			BuildInfo:         build.GetInfo(),
 			NodeID:            p.ExecCfg().NodeID.Get(),
 			ClusterID:         p.ExecCfg().ClusterID(),
+			Statistics:        &BackupDescriptor_Statistics{TableStatistics: tableStatistics},
 		}
 
 		// Sanity check: re-run the validation that RESTORE will do, but this time
