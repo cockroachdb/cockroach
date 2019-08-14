@@ -761,18 +761,26 @@ func prepareExistingTableDescForIngestion(
 func (r *importResumer) prepareTableDescsForIngestion(
 	ctx context.Context, p sql.PlanHookState, details jobspb.ImportDetails,
 ) error {
-	importDetails := details
-	var hasExistingTables bool
 	err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		var err error
+		importDetails := details
+		importDetails.Tables = make([]jobspb.ImportDetails_Table, len(details.Tables))
+
 		newTableDescToIdx := make(map[*sqlbase.TableDescriptor]int, len(importDetails.Tables))
+		var hasExistingTables bool
+		var err error
 		var newTableDescs []jobspb.ImportDetails_Table
-		for i, table := range importDetails.Tables {
+		var desc *sqlbase.TableDescriptor
+		for i, table := range details.Tables {
 			if !table.IsNew {
-				importDetails.Tables[i].Desc, err = prepareExistingTableDescForIngestion(ctx, txn, table.Desc, p)
+				desc, err = prepareExistingTableDescForIngestion(ctx, txn, table.Desc, p)
 				if err != nil {
 					return err
 				}
+				importDetails.Tables[i] = jobspb.ImportDetails_Table{Desc: desc, Name: table.Name,
+					SeqVal:     table.SeqVal,
+					IsNew:      table.IsNew,
+					TargetCols: table.TargetCols}
+
 				hasExistingTables = true
 			} else {
 				newTableDescToIdx[table.Desc] = i
@@ -793,8 +801,12 @@ func (r *importResumer) prepareTableDescsForIngestion(
 			if err != nil {
 				return err
 			}
-			for _, v := range res {
-				importDetails.Tables[newTableDescToIdx[v]].Desc = v
+			for i, table := range res {
+				importDetails.Tables[i] = jobspb.ImportDetails_Table{Desc: table,
+					Name:       details.Tables[i].Name,
+					SeqVal:     details.Tables[i].SeqVal,
+					IsNew:      details.Tables[i].IsNew,
+					TargetCols: details.Tables[i].TargetCols}
 			}
 		}
 
@@ -811,9 +823,9 @@ func (r *importResumer) prepareTableDescsForIngestion(
 
 		// Update the job once all descs have been prepared for ingestion.
 		err = r.job.WithTxn(txn).SetDetails(ctx, importDetails)
+
 		return err
 	})
-
 	return err
 }
 
