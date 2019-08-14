@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -44,6 +45,9 @@ var _ tree.Datum
 
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
+
+// Dummy import to pull in "math" package.
+var _ = math.MaxInt64
 
 // _TYPES_T is the template type variable for coltypes.T. It will be replaced by
 // coltypes.Foo for each type Foo in the coltypes.T type.
