@@ -1090,6 +1090,9 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 // situation occurs when two replicas need snapshots at the same time.
 func TestConcurrentRaftSnapshots(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/39652")
+
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
