@@ -823,6 +823,9 @@ func (r *testRunner) getWork(
 		if err := c.WipeE(ctx, l); err != nil {
 			return testToRunRes{}, nil, err
 		}
+		if err := c.RunL(ctx, l, c.All(), "rm -rf "+perfArtifactsDir); err != nil {
+			return testToRunRes{}, nil, errors.Wrapf(err, "failed to remove perf artifacts dir")
+		}
 		// Overwrite the spec of the cluster with the one coming from the test. In
 		// particular, this overwrites the reuse policy to reflect what the test
 		// intends to do with it.
