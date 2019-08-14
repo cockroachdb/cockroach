@@ -476,7 +476,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		err = errors.Wrap(err, "could not validate zone config")
 		err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 		err = errors.WithHint(err,
-			"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] so populate the field")
+			"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] to populate the field")
 		return err
 	}
 	n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
