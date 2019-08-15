@@ -188,6 +188,10 @@ func TestShowBackup(t *testing.T) {
 
 	// Foreign keys that were not included in the backup are not mentioned in
 	// the create statement.
+	// TODO(lucy, jordan): This doesn't work in the mixed 19.1/19.2 state,
+	// probably because when we upgrade the backup descriptor tables using the
+	// other tables, we don't account for missing tables. It's not clear why
+	// this *does* work in the 19.2 state; this needs investigation.
 	{
 		missingFK := localFoo + "/missingFK"
 		sqlDB.Exec(t, `BACKUP data2.FKRefTable TO $1;`, missingFK)
