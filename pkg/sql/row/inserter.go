@@ -112,7 +112,8 @@ func insertInvertedPutFn(
 }
 
 type putter interface {
-	CPut(key, value, expValue interface{})
+	CPut(key, value interface{}, expValue *roachpb.Value)
+	CPutDeprecated(key, value, expValue interface{})
 	Put(key, value interface{})
 	InitPut(key, value interface{}, failOnTombstones bool)
 	Del(key ...interface{})

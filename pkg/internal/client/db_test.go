@@ -17,9 +17,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
+
+func strToValue(s string) *roachpb.Value {
+	v := roachpb.MakeValueFromBytes([]byte(s))
+	return &v
+}
 
 func setup(t *testing.T) (serverutils.TestServerInterface, *client.DB) {
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -103,7 +109,7 @@ func TestDB_CPut(t *testing.T) {
 	if err := db.Put(ctx, "aa", "1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.CPut(ctx, "aa", "2", "1"); err != nil {
+	if err := db.CPut(ctx, "aa", "2", strToValue("1")); err != nil {
 		t.Fatal(err)
 	}
 	result, err := db.Get(ctx, "aa")
@@ -112,7 +118,7 @@ func TestDB_CPut(t *testing.T) {
 	}
 	checkResult(t, []byte("2"), result.ValueBytes())
 
-	if err = db.CPut(ctx, "aa", "3", "1"); err == nil {
+	if err = db.CPut(ctx, "aa", "3", strToValue("1")); err == nil {
 		t.Fatal("expected error from conditional put")
 	}
 	result, err = db.Get(ctx, "aa")
@@ -121,7 +127,7 @@ func TestDB_CPut(t *testing.T) {
 	}
 	checkResult(t, []byte("2"), result.ValueBytes())
 
-	if err = db.CPut(ctx, "bb", "4", "1"); err == nil {
+	if err = db.CPut(ctx, "bb", "4", strToValue("1")); err == nil {
 		t.Fatal("expected error from conditional put")
 	}
 	result, err = db.Get(ctx, "bb")
