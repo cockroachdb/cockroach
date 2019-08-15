@@ -465,11 +465,24 @@ func (tp *txnPipeliner) updateWriteTracking(
 		return
 	}
 
-	// If the transaction is no longer pending, clear the in-flight writes set
-	// and immediately return.
-	// TODO(nvanbenschoten): Do we have to handle missing Txn's anymore?
-	if br.Txn.Status != roachpb.PENDING {
-		tp.ifWrites.clear(false /* reuse */)
+	// Similarly, if the transaction is now finalized, we don't need to
+	// accurately update the write tracking.
+	if br.Txn.Status.IsFinalized() {
+		switch br.Txn.Status {
+		case roachpb.ABORTED:
+			// If the transaction is now ABORTED, add all intent writes from
+			// the batch directly to the write footprint. We don't know which
+			// of these succeeded.
+			ba.IntentSpanIterate(nil, tp.footprint.insert)
+		case roachpb.COMMITTED:
+			// If the transaction is now COMMITTED, it must not have any more
+			// in-flight writes, so clear them. Technically we should move all
+			// of these to the write footprint, but since the transaction is
+			// already committed, there's no reason to.
+			tp.ifWrites.clear(false /* reuse */)
+		default:
+			panic("unexpected")
+		}
 		return
 	}
 
