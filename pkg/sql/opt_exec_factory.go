@@ -1340,6 +1340,7 @@ func (ef *execFactory) ConstructUpdate(
 	returnColOrdSet exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	passthrough sqlbase.ResultColumns,
+	skipFKChecks bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
@@ -1357,6 +1358,11 @@ func (ef *execFactory) ConstructUpdate(
 
 	// Construct the check helper if there are any check constraints.
 	checkHelper := sqlbase.NewInputCheckHelper(checks, tabDesc)
+
+	checkFKs := row.CheckFKs
+	if skipFKChecks {
+		checkFKs = row.SkipFKs
+	}
 
 	// Determine the foreign key tables involved in the update.
 	fkTables, err := row.MakeFkMetadata(
@@ -1383,6 +1389,7 @@ func (ef *execFactory) ConstructUpdate(
 		updateColDescs,
 		fetchColDescs,
 		row.UpdaterDefault,
+		checkFKs,
 		ef.planner.EvalContext(),
 		&ef.planner.alloc,
 	)
@@ -1529,6 +1536,7 @@ func (ef *execFactory) ConstructUpsert(
 		updateColDescs,
 		fetchColDescs,
 		row.UpdaterDefault,
+		row.CheckFKs,
 		ef.planner.EvalContext(),
 		&ef.planner.alloc,
 	)

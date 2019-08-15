@@ -1028,6 +1028,7 @@ type ForeignKeyConstraint struct {
 	validated    bool
 	matchMethod  tree.CompositeKeyMatchMethod
 	deleteAction tree.ReferenceAction
+	updateAction tree.ReferenceAction
 
 	id cat.StableID
 }
@@ -1090,6 +1091,11 @@ func (fk *ForeignKeyConstraint) MatchMethod() tree.CompositeKeyMatchMethod {
 // DeleteReferenceAction is part of the cat.ForeignKeyConstraint interface.
 func (fk *ForeignKeyConstraint) DeleteReferenceAction() tree.ReferenceAction {
 	return fk.deleteAction
+}
+
+// UpdateReferenceAction is part of the cat.ForeignKeyConstraint interface.
+func (fk *ForeignKeyConstraint) UpdateReferenceAction() tree.ReferenceAction {
+	return fk.updateAction
 }
 
 // ID is part of the cat.ForeignKeyConstraint interface.

@@ -107,3 +107,69 @@ DELETE FROM child2 WHERE p1 = 10 AND p2 = 100
 
 statement ok
 DELETE FROM parent2 WHERE p1 = 10 AND p2 = 100
+
+statement ok
+DROP TABLE child_u
+
+statement ok
+DROP TABLE parent
+
+statement ok
+DROP TABLE child2
+
+statement ok
+DROP TABLE parent2
+
+# Update
+# ------
+
+statement ok
+CREATE TABLE parent (x INT, p INT PRIMARY KEY, u INT UNIQUE)
+
+statement ok
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p))
+
+statement ok
+INSERT INTO parent (p, u) VALUES (1, 10), (2, 20)
+
+statement ok
+INSERT INTO child VALUES (1, 1)
+
+# Updating the referenced table
+statement error update on table "parent" violates foreign key constraint on table "child"
+UPDATE parent SET p = 3 WHERE p = 1
+
+statement ok
+UPDATE parent SET p = 3 WHERE p = 2
+
+statement ok
+UPDATE parent SET p = 3 WHERE p = 10
+
+# Updating the referencing table
+statement ok
+UPDATE child SET p = 3 WHERE p = 1
+
+statement ok
+DELETE FROM child
+
+statement ok
+DELETE FROM parent
+
+statement ok
+INSERT INTO parent (p, u) VALUES (2, 10), (3, 20)
+
+statement ok
+INSERT INTO child (c, p) VALUES (200, 2)
+
+# These two test cases are sort of undefined behaviour, since their
+# success/failure depends on the order in which the updates are performed.
+statement error already encountered an error
+UPDATE parent SET p = p + 1
+
+statement ok
+UPDATE parent SET p = p - 1
+
+# This case illustrates why it's insufficient to just check the "old" values,
+# even in the absence of temporary unique constraint violations.
+statement ok
+UPDATE parent SET p = p

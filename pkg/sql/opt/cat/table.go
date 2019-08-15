@@ -243,8 +243,12 @@ type ForeignKeyConstraint interface {
 	MatchMethod() tree.CompositeKeyMatchMethod
 
 	// DeleteReferenceAction returns the action to be performed if the foreign key
-	// constraint would be violated.
+	// constraint would be violated by a delete.
 	DeleteReferenceAction() tree.ReferenceAction
+
+	// UpdateReferenceAction returns the action to be performed if the foreign key
+	// constraint would be violated by an update.
+	UpdateReferenceAction() tree.ReferenceAction
 
 	// ID returns a stable identifier that is unique within both the origin and
 	// referenced tables.

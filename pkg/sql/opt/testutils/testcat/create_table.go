@@ -344,6 +344,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 		validated:                true,
 		matchMethod:              d.Match,
 		deleteAction:             d.Actions.Delete,
+		updateAction:             d.Actions.Update,
 		id:                       id,
 	}
 	tab.outboundFKs = append(tab.outboundFKs, fk)

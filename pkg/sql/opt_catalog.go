@@ -517,6 +517,12 @@ type optTable struct {
 
 var _ cat.Table = &optTable{}
 
+// pair is a one-to-one function from pairs of integers to integers. See
+// https://en.wikipedia.org/wiki/Pairing_function.
+func pair(n, m int) int {
+	return (n+m)*(n+m+1)/2 + m
+}
+
 func newOptTable(
 	desc *sqlbase.ImmutableTableDescriptor, stats []*stats.TableStatistic, tblZone *config.ZoneConfig,
 ) (*optTable, error) {
@@ -569,6 +575,8 @@ func newOptTable(
 				validity:        fk.Validity,
 				match:           fk.Match,
 				deleteAction:    fk.OnDelete,
+				updateAction:    fk.OnUpdate,
+				id:              cat.StableID(pair(int(idxDesc.ID), int(fk.Index))),
 			})
 		}
 		for j := range idxDesc.ReferencedBy {
@@ -585,6 +593,8 @@ func newOptTable(
 				validity:     fk.Validity,
 				match:        fk.Match,
 				deleteAction: fk.OnDelete,
+				updateAction: fk.OnUpdate,
+				id:           cat.StableID(pair(int(fk.Index), int(idxDesc.ID))),
 			})
 		}
 	}
@@ -1157,6 +1167,7 @@ type optForeignKeyConstraint struct {
 	validity     sqlbase.ConstraintValidity
 	match        sqlbase.ForeignKeyReference_Match
 	deleteAction sqlbase.ForeignKeyReference_Action
+	updateAction sqlbase.ForeignKeyReference_Action
 
 	id cat.StableID
 }
@@ -1233,6 +1244,11 @@ func (fk *optForeignKeyConstraint) MatchMethod() tree.CompositeKeyMatchMethod {
 // DeleteReferenceAction is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) DeleteReferenceAction() tree.ReferenceAction {
 	return sqlbase.ForeignKeyReferenceActionType[fk.deleteAction]
+}
+
+// UpdateReferenceAction is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) UpdateReferenceAction() tree.ReferenceAction {
+	return sqlbase.ForeignKeyReferenceActionType[fk.updateAction]
 }
 
 // ID is part of the cat.ForeignKeyConstraint interface.

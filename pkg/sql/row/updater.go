@@ -77,20 +77,23 @@ func MakeUpdater(
 	updateCols []sqlbase.ColumnDescriptor,
 	requestedCols []sqlbase.ColumnDescriptor,
 	updateType rowUpdaterType,
+	checkFKs checkFKConstraints,
 	evalCtx *tree.EvalContext,
 	alloc *sqlbase.DatumAlloc,
 ) (Updater, error) {
 	rowUpdater, err := makeUpdaterWithoutCascader(
-		txn, tableDesc, fkTables, updateCols, requestedCols, updateType, alloc,
+		txn, tableDesc, fkTables, updateCols, requestedCols, updateType, checkFKs, alloc,
 	)
 	if err != nil {
 		return Updater{}, err
 	}
-	rowUpdater.cascader, err = makeUpdateCascader(
-		txn, tableDesc, fkTables, updateCols, evalCtx, alloc,
-	)
-	if err != nil {
-		return Updater{}, err
+	if checkFKs == CheckFKs {
+		rowUpdater.cascader, err = makeUpdateCascader(
+			txn, tableDesc, fkTables, updateCols, evalCtx, alloc,
+		)
+		if err != nil {
+			return Updater{}, err
+		}
 	}
 	return rowUpdater, nil
 }
@@ -110,6 +113,7 @@ func makeUpdaterWithoutCascader(
 	updateCols []sqlbase.ColumnDescriptor,
 	requestedCols []sqlbase.ColumnDescriptor,
 	updateType rowUpdaterType,
+	checkFKs checkFKConstraints,
 	alloc *sqlbase.DatumAlloc,
 ) (Updater, error) {
 	updateColIDtoRowIndex := ColIDtoRowIndexFromCols(updateCols)
@@ -260,10 +264,12 @@ func makeUpdaterWithoutCascader(
 		}
 	}
 
-	var err error
-	if ru.Fks, err = makeFkExistenceCheckHelperForUpdate(txn, tableDesc, fkTables,
-		ru.FetchColIDtoRowIndex, alloc); err != nil {
-		return Updater{}, err
+	if checkFKs == CheckFKs {
+		var err error
+		if ru.Fks, err = makeFkExistenceCheckHelperForUpdate(txn, tableDesc, fkTables,
+			ru.FetchColIDtoRowIndex, alloc); err != nil {
+			return Updater{}, err
+		}
 	}
 	return ru, nil
 }
@@ -354,30 +360,30 @@ func (ru *Updater) UpdateRow(
 			return nil, err
 		}
 
-		ru.Fks.addCheckForIndex(ru.Helper.TableDesc.PrimaryIndex.ID, ru.Helper.TableDesc.PrimaryIndex.Type)
-		for i := range ru.Helper.Indexes {
-			if !bytes.Equal(newSecondaryIndexEntries[i].Key, oldSecondaryIndexEntries[i].Key) {
-				ru.Fks.addCheckForIndex(ru.Helper.Indexes[i].ID, ru.Helper.Indexes[i].Type)
+		if ru.Fks.checker != nil && checkFKs == CheckFKs {
+			ru.Fks.addCheckForIndex(ru.Helper.TableDesc.PrimaryIndex.ID, ru.Helper.TableDesc.PrimaryIndex.Type)
+			for i := range ru.Helper.Indexes {
+				if !bytes.Equal(newSecondaryIndexEntries[i].Key, oldSecondaryIndexEntries[i].Key) {
+					ru.Fks.addCheckForIndex(ru.Helper.Indexes[i].ID, ru.Helper.Indexes[i].Type)
+				}
 			}
-		}
 
-		if ru.cascader != nil {
-			if err := ru.cascader.txn.Run(ctx, batch); err != nil {
-				return nil, ConvertBatchError(ctx, ru.Helper.TableDesc, batch)
+			if ru.cascader != nil {
+				if err := ru.cascader.txn.Run(ctx, batch); err != nil {
+					return nil, ConvertBatchError(ctx, ru.Helper.TableDesc, batch)
+				}
+				if err := ru.cascader.cascadeAll(
+					ctx,
+					ru.Helper.TableDesc,
+					tree.Datums(oldValues),
+					tree.Datums(ru.newValues),
+					ru.FetchColIDtoRowIndex,
+					traceKV,
+				); err != nil {
+					return nil, err
+				}
 			}
-			if err := ru.cascader.cascadeAll(
-				ctx,
-				ru.Helper.TableDesc,
-				tree.Datums(oldValues),
-				tree.Datums(ru.newValues),
-				ru.FetchColIDtoRowIndex,
-				traceKV,
-			); err != nil {
-				return nil, err
-			}
-		}
 
-		if checkFKs == CheckFKs {
 			if err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues, traceKV); err != nil {
 				return nil, err
 			}

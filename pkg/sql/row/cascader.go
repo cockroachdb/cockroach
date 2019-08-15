@@ -476,6 +476,7 @@ func (c *cascader) addRowUpdater(
 		table.Columns,
 		nil, /* requestedCol */
 		UpdaterDefault,
+		CheckFKs,
 		c.alloc,
 	)
 	if err != nil {
