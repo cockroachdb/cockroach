@@ -546,10 +546,19 @@ func RewriteTableDescs(
 		// TODO(lucy): deal with outbound foreign key mutations here as well.
 		origFKs := table.OutboundFKs
 		table.OutboundFKs = nil
-		for _, fk := range origFKs {
+		for i := range origFKs {
+			fk := &origFKs[i]
 			to := fk.ReferencedTableID
 			if indexRewrite, ok := tableRewrites[to]; ok {
 				fk.ReferencedTableID = indexRewrite.TableID
+				fk.OriginTableID = tableRewrite.TableID
+				// Also update the table ID on the old FK proto that exists for
+				// validation, if applicable, so that the validation doesn't fail when
+				// we downgrade the table descriptors for 19.1 nodes.
+				// TODO(lucy, jordan): Remove this in 20.1.
+				if fk.LegacyUpgradedFromOriginReference.Table != 0 {
+					fk.LegacyUpgradedFromOriginReference.Table = indexRewrite.TableID
+				}
 			} else {
 				// If indexRewrite doesn't exist, the user has specified
 				// restoreOptSkipMissingFKs. Error checking in the case the user hasn't has
@@ -560,15 +569,24 @@ func RewriteTableDescs(
 			// TODO(dt): if there is an existing (i.e. non-restoring) table with
 			// a db and name matching the one the FK pointed to at backup, should
 			// we update the FK to point to it?
-			table.OutboundFKs = append(table.OutboundFKs, fk)
+			table.OutboundFKs = append(table.OutboundFKs, *fk)
 		}
 
 		origInboundFks := table.InboundFKs
 		table.InboundFKs = nil
-		for _, ref := range origInboundFks {
+		for i := range origInboundFks {
+			ref := &origInboundFks[i]
 			if refRewrite, ok := tableRewrites[ref.OriginTableID]; ok {
+				ref.ReferencedTableID = tableRewrite.TableID
 				ref.OriginTableID = refRewrite.TableID
-				table.InboundFKs = append(table.InboundFKs, ref)
+				// Also update the table ID on the old FK proto that exists for
+				// validation, if applicable, so that the validation doesn't fail when
+				// we downgrade the table descriptors for 19.1 nodes.
+				// TODO(lucy, jordan): Remove this in 20.1.
+				if ref.LegacyUpgradedFromReferencedReference.Table != 0 {
+					ref.LegacyUpgradedFromReferencedReference.Table = refRewrite.TableID
+				}
+				table.InboundFKs = append(table.InboundFKs, *ref)
 			}
 		}
 
@@ -1226,7 +1244,18 @@ func restore(
 	// Get TableRekeys to use when importing raw data.
 	var rekeys []roachpb.ImportRequest_TableRekey
 	for i := range tables {
-		newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(tables[i]))
+		// Downgrade all tables that we're writing to the cluster, if we're in a
+		// mixed 19.1/19.2 state.
+		// TODO(lucy, jordan): Remove in 20.1.
+		downgraded, newDesc, err := tables[i].MaybeDowngradeForeignKeyRepresentation(restoreCtx, settings)
+		if err != nil {
+			return mu.res, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err, "downgrading table %d", tables[i].ID)
+		}
+		tableToSerialize := tables[i]
+		if downgraded {
+			tableToSerialize = newDesc
+		}
+		newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(tableToSerialize))
 		if err != nil {
 			return mu.res, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"marshaling descriptor")
@@ -1556,6 +1585,19 @@ func doRestorePlan(
 		return err
 	}
 
+	// Before marshaling table descriptors in RestoreDetails, possibly downgrade
+	// them to the old 19.1 representation.
+	// TODO(lucy, jordan): Remove in 20.1.
+	for i := range tables {
+		downgraded, newDesc, err := tables[i].MaybeDowngradeForeignKeyRepresentation(ctx, p.ExecCfg().Settings)
+		if err != nil {
+			return err
+		}
+		if downgraded {
+			tables[i] = newDesc
+		}
+	}
+
 	_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 		Description: description,
 		Username:    p.User(),
@@ -1654,6 +1696,9 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 		return err
 	}
 	b := txn.NewBatch()
+	// These table descriptors could be using either the old or the new foreign
+	// key representation, but it doesn't matter since the table is being dropped
+	// anyway.
 	for _, tableDesc := range details.TableDescs {
 		tableDesc.State = sqlbase.TableDescriptor_DROP
 		if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, r.settings, b, tableDesc.ID, tableDesc); err != nil {
