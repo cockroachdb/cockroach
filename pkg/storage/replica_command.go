@@ -869,25 +869,15 @@ func IsSnapshotError(err error) bool {
 // reservation is fulfilled when the snapshot is applied.
 func (r *Replica) ChangeReplicas(
 	ctx context.Context,
-	changeType roachpb.ReplicaChangeType,
-	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
 	reason storagepb.RangeLogEventReason,
 	details string,
+	chgs []roachpb.ReplicationChange,
 ) (updatedDesc *roachpb.RangeDescriptor, _ error) {
 	if desc == nil {
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
 
-	var chgs []roachpb.ReplicationChange
-	switch changeType {
-	case roachpb.ADD_REPLICA:
-		chgs = roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, target)
-	case roachpb.REMOVE_REPLICA:
-		chgs = roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target)
-	default:
-		return nil, errors.Errorf(`unknown change type: %s`, changeType)
-	}
 	return r.addAndRemoveReplicas(ctx, desc, SnapshotRequest_REBALANCE, reason, details, chgs)
 }
 

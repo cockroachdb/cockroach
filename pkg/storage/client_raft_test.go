@@ -277,17 +277,11 @@ func TestReplicateRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := repl.ChangeReplicas(
-		context.Background(),
-		roachpb.ADD_REPLICA,
-		roachpb.ReplicationTarget{
-			NodeID:  mtc.stores[1].Ident.NodeID,
-			StoreID: mtc.stores[1].Ident.StoreID,
-		},
-		repl.Desc(),
-		storagepb.ReasonRangeUnderReplicated,
-		"",
-	); err != nil {
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+		NodeID:  mtc.stores[1].Ident.NodeID,
+		StoreID: mtc.stores[1].Ident.StoreID,
+	})
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 	// Verify no intent remains on range descriptor key.
@@ -367,16 +361,13 @@ func TestRestoreReplicas(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	target := roachpb.ReplicationTarget{
+		NodeID:  mtc.stores[1].Ident.NodeID,
+		StoreID: mtc.stores[1].Ident.StoreID,
+	}
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, target)
 	if _, err := firstRng.ChangeReplicas(
-		context.Background(),
-		roachpb.ADD_REPLICA,
-		roachpb.ReplicationTarget{
-			NodeID:  mtc.stores[1].Ident.NodeID,
-			StoreID: mtc.stores[1].Ident.StoreID,
-		},
-		firstRng.Desc(),
-		storagepb.ReasonRangeUnderReplicated,
-		"",
+		context.Background(), firstRng.Desc(), storagepb.ReasonRangeUnderReplicated, "", chgs,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -461,16 +452,12 @@ func TestFailedReplicaChange(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+		NodeID:  mtc.stores[1].Ident.NodeID,
+		StoreID: mtc.stores[1].Ident.StoreID,
+	})
 	if _, err := repl.ChangeReplicas(
-		context.Background(),
-		roachpb.ADD_REPLICA,
-		roachpb.ReplicationTarget{
-			NodeID:  mtc.stores[1].Ident.NodeID,
-			StoreID: mtc.stores[1].Ident.StoreID,
-		},
-		repl.Desc(),
-		storagepb.ReasonRangeUnderReplicated,
-		"",
+		context.Background(), repl.Desc(), storagepb.ReasonRangeUnderReplicated, "", chgs,
 	); !testutils.IsError(err, "boom") {
 		t.Fatalf("did not get expected error: %+v", err)
 	}
@@ -490,15 +477,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	mtc.manualClock.Increment(10 * base.DefaultTxnHeartbeatInterval.Nanoseconds())
 
 	if _, err := repl.ChangeReplicas(
-		context.Background(),
-		roachpb.ADD_REPLICA,
-		roachpb.ReplicationTarget{
-			NodeID:  mtc.stores[1].Ident.NodeID,
-			StoreID: mtc.stores[1].Ident.StoreID,
-		},
-		repl.Desc(),
-		storagepb.ReasonRangeUnderReplicated,
-		"",
+		context.Background(), repl.Desc(), storagepb.ReasonRangeUnderReplicated, "", chgs,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -562,17 +541,11 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	}
 
 	// Now add the second replica.
-	if _, err := repl.ChangeReplicas(
-		context.Background(),
-		roachpb.ADD_REPLICA,
-		roachpb.ReplicationTarget{
-			NodeID:  mtc.stores[1].Ident.NodeID,
-			StoreID: mtc.stores[1].Ident.StoreID,
-		},
-		repl.Desc(),
-		storagepb.ReasonRangeUnderReplicated,
-		"",
-	); err != nil {
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+		NodeID:  mtc.stores[1].Ident.NodeID,
+		StoreID: mtc.stores[1].Ident.StoreID,
+	})
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1214,18 +1187,12 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		_, err = rep2.ChangeReplicas(
-			context.Background(),
-			roachpb.ADD_REPLICA,
-			roachpb.ReplicationTarget{
-				NodeID:  mtc.stores[2].Ident.NodeID,
-				StoreID: mtc.stores[2].Ident.StoreID,
-			},
-			&desc,
-			storagepb.ReasonRangeUnderReplicated,
-			"",
-		)
+		target := roachpb.ReplicationTarget{
+			NodeID:  mtc.stores[2].Ident.NodeID,
+			StoreID: mtc.stores[2].Ident.StoreID,
+		}
+		chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, target)
+		_, err = rep2.ChangeReplicas(context.Background(), &desc, storagepb.ReasonRangeUnderReplicated, "", chgs)
 		return err
 	}
 
@@ -1685,17 +1652,11 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	}
 
 	addReplica := func(storeNum int, desc *roachpb.RangeDescriptor) error {
-		_, err := repl.ChangeReplicas(
-			context.Background(),
-			roachpb.ADD_REPLICA,
-			roachpb.ReplicationTarget{
-				NodeID:  mtc.stores[storeNum].Ident.NodeID,
-				StoreID: mtc.stores[storeNum].Ident.StoreID,
-			},
-			desc,
-			storagepb.ReasonRangeUnderReplicated,
-			"",
-		)
+		chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+			NodeID:  mtc.stores[storeNum].Ident.NodeID,
+			StoreID: mtc.stores[storeNum].Ident.StoreID,
+		})
+		_, err := repl.ChangeReplicas(context.Background(), desc, storagepb.ReasonRangeUnderReplicated, "", chgs)
 		return err
 	}
 
@@ -2752,17 +2713,11 @@ func TestRemovePlaceholderRace(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		for _, action := range []roachpb.ReplicaChangeType{roachpb.REMOVE_REPLICA, roachpb.ADD_REPLICA} {
 			for {
-				if _, err := repl.ChangeReplicas(
-					ctx,
-					action,
-					roachpb.ReplicationTarget{
-						NodeID:  mtc.stores[1].Ident.NodeID,
-						StoreID: mtc.stores[1].Ident.StoreID,
-					},
-					repl.Desc(),
-					storagepb.ReasonUnknown,
-					"",
-				); err != nil {
+				chgs := roachpb.MakeReplicationChanges(action, roachpb.ReplicationTarget{
+					NodeID:  mtc.stores[1].Ident.NodeID,
+					StoreID: mtc.stores[1].Ident.StoreID,
+				})
+				if _, err := repl.ChangeReplicas(ctx, repl.Desc(), storagepb.ReasonUnknown, "", chgs); err != nil {
 					if storage.IsSnapshotError(err) {
 						continue
 					} else {
@@ -2852,20 +2807,15 @@ func TestReplicaGCRace(t *testing.T) {
 	}
 	ctx := repl.AnnotateCtx(context.Background())
 
+	target := roachpb.ReplicationTarget{
+		NodeID:  toStore.Ident.NodeID,
+		StoreID: toStore.Ident.StoreID,
+	}
 	// Add the victim replica. Note that it will receive a snapshot and raft log
 	// replays, but will not process the configuration change containing the new
 	// range descriptor, preventing it from learning of the new NextReplicaID.
-	if _, err := repl.ChangeReplicas(
-		ctx,
-		roachpb.ADD_REPLICA,
-		roachpb.ReplicationTarget{
-			NodeID:  toStore.Ident.NodeID,
-			StoreID: toStore.Ident.StoreID,
-		},
-		repl.Desc(),
-		storagepb.ReasonRangeUnderReplicated,
-		"",
-	); err != nil {
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, target)
+	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2913,17 +2863,8 @@ func TestReplicaGCRace(t *testing.T) {
 	})
 
 	// Remove the victim replica and manually GC it.
-	if _, err := repl.ChangeReplicas(
-		ctx,
-		roachpb.REMOVE_REPLICA,
-		roachpb.ReplicationTarget{
-			NodeID:  toStore.Ident.NodeID,
-			StoreID: toStore.Ident.StoreID,
-		},
-		repl.Desc(),
-		storagepb.ReasonRangeOverReplicated,
-		"",
-	); err != nil {
+	chgs[0].ChangeType = roachpb.REMOVE_REPLICA
+	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), storagepb.ReasonRangeOverReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -4074,17 +4015,11 @@ func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
 	ctx := repl.AnnotateCtx(context.Background())
 
 	deleteStore := mtc.stores[2]
-	if _, err := repl.ChangeReplicas(
-		ctx,
-		roachpb.REMOVE_REPLICA,
-		roachpb.ReplicationTarget{
-			NodeID:  deleteStore.Ident.NodeID,
-			StoreID: deleteStore.Ident.StoreID,
-		},
-		repl.Desc(),
-		storagepb.ReasonRebalance,
-		"",
-	); err != nil {
+	chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, roachpb.ReplicationTarget{
+		NodeID:  deleteStore.Ident.NodeID,
+		StoreID: deleteStore.Ident.StoreID,
+	})
+	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), storagepb.ReasonRebalance, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
