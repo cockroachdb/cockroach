@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type testClusterWithHelpers struct {
@@ -391,6 +392,18 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	}
 	tc := setupMixedCluster(t, knobs, versions, dir)
 	defer tc.TestCluster.Stopper().Stop(ctx)
+
+	{
+		// Regression test for the fix for this issue:
+		// https://github.com/cockroachdb/cockroach/pull/39640#pullrequestreview-275532068
+		//
+		// This can be removed when VersionLearnerReplicas is always-on.
+		k := tc.ScratchRange(t)
+		tc.AddReplicasOrFatal(t, k, tc.Target(2))
+		log.Infof(ctx, "TBG====")
+		_, err := tc.RemoveReplicas(k, tc.Target(2))
+		require.NoError(t, err)
+	}
 
 	// Set CLUSTER SETTING cluster.preserve_downgrade_option to oldVersion to prevent upgrade.
 	if err := tc.setDowngrade(0, oldVersion.String()); err != nil {

@@ -975,8 +975,10 @@ func (r *Replica) addAndRemoveReplicas(
 		if len(chgs) != 1 {
 			return nil, errors.Errorf("need exactly one change, got %+v", chgs)
 		}
-		target := chgs[0].Target
-		return r.addReplicaLegacyPreemptiveSnapshot(ctx, target, desc, priority, reason, details)
+		if chgs[0].ChangeType == roachpb.ADD_REPLICA {
+			target := chgs[0].Target
+			return r.addReplicaLegacyPreemptiveSnapshot(ctx, target, desc, priority, reason, details)
+		}
 	}
 
 	if adds := chgs.Additions(); len(adds) > 0 {
