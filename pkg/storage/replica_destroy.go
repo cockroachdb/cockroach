@@ -65,13 +65,12 @@ func (s destroyStatus) Removed() bool {
 func (r *Replica) preDestroyRaftMuLocked(
 	ctx context.Context,
 	reader engine.Reader,
-	writer engine.Writer,
+	batch engine.Batch,
 	nextReplicaID roachpb.ReplicaID,
-	rangeIDLocalOnly bool,
-	mustClearRange bool,
+	destroyData bool,
 ) error {
 	desc := r.Desc()
-	err := clearRangeData(desc, reader, writer, rangeIDLocalOnly, mustClearRange)
+	err := clearRangeData(ctx, desc, reader, batch, destroyData)
 	if err != nil {
 		return err
 	}
@@ -81,7 +80,7 @@ func (r *Replica) preDestroyRaftMuLocked(
 	// NB: Legacy tombstones (which are in the replicated key space) are wiped
 	// in clearRangeData, but that's OK since we're writing a new one in the same
 	// batch (and in particular, sequenced *after* the wipe).
-	return r.setTombstoneKey(ctx, writer, nextReplicaID)
+	return r.setTombstoneKey(ctx, batch, nextReplicaID)
 }
 
 func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCStats) error {
@@ -110,27 +109,22 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 	if r.raftMu.sideloaded != nil {
 		return r.raftMu.sideloaded.Clear(ctx)
 	}
-
 	return nil
 }
 
 // destroyRaftMuLocked deletes data associated with a replica, leaving a
-// tombstone.
+// tombstone. If `destroyData` is true, data in all of the range's keyspaces
+// will be deleted. Otherwise, only data in the range-ID local keyspace will be
+// deleted. Requires that Replica.raftMu is held.
 func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb.ReplicaID) error {
 	startTime := timeutil.Now()
 
 	ms := r.GetMVCCStats()
 
+	const destroyData = true
 	batch := r.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
-	if err := r.preDestroyRaftMuLocked(
-		ctx,
-		r.Engine(),
-		batch,
-		nextReplicaID,
-		false, /* rangeIDLocalOnly */
-		false, /* mustClearRange */
-	); err != nil {
+	if err := r.preDestroyRaftMuLocked(ctx, r.Engine(), batch, nextReplicaID, destroyData); err != nil {
 		return err
 	}
 	preTime := timeutil.Now()
@@ -181,7 +175,7 @@ func (r *Replica) cancelPendingCommandsLocked() {
 // ID that it hasn't yet received a RangeDescriptor for if it receives raft
 // requests for that replica ID (as seen in #14231).
 func (r *Replica) setTombstoneKey(
-	ctx context.Context, eng engine.Writer, externalNextReplicaID roachpb.ReplicaID,
+	ctx context.Context, eng engine.ReadWriter, externalNextReplicaID roachpb.ReplicaID,
 ) error {
 	r.mu.Lock()
 	nextReplicaID := r.mu.state.Desc.NextReplicaID
@@ -197,7 +191,6 @@ func (r *Replica) setTombstoneKey(
 	tombstone := &roachpb.RaftTombstone{
 		NextReplicaID: nextReplicaID,
 	}
-	// "Blind" because ms == nil and timestamp == hlc.Timestamp{}.
-	return engine.MVCCBlindPutProto(ctx, eng, nil, tombstoneKey,
-		hlc.Timestamp{}, tombstone, nil)
+	return engine.MVCCPutProto(ctx, eng, nil, tombstoneKey,
+		hlc.Timestamp{}, nil, tombstone)
 }
