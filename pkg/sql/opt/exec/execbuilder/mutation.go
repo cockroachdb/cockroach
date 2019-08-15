@@ -141,6 +141,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		}
 	}
 
+	disableExecFKs := len(upd.Checks) > 0
 	node, err := b.factory.ConstructUpdate(
 		input.root,
 		tab,
@@ -149,8 +150,13 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		returnColOrds,
 		checkOrds,
 		passthroughCols,
+		disableExecFKs,
 	)
 	if err != nil {
+		return execPlan{}, err
+	}
+
+	if err := b.buildFKChecks(upd.Checks); err != nil {
 		return execPlan{}, err
 	}
 
@@ -412,7 +418,12 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 				// Generate an error of the form:
 				//   ERROR:  insert on table "child" violates foreign key constraint "foo"
 				//   DETAIL: Key (child_p)=(2) is not present in table "parent".
-				msg.WriteString("insert on table ")
+				switch c.CreatorOp {
+				case opt.InsertOp:
+					msg.WriteString("insert on table ")
+				case opt.UpdateOp:
+					msg.WriteString("update on table ")
+				}
 				lex.EncodeEscapedSQLIdent(&msg, string(origin.Alias.TableName))
 				msg.WriteString(" violates foreign key constraint ")
 				lex.EncodeEscapedSQLIdent(&msg, fk.Name())
@@ -450,7 +461,12 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 				// Generate an error of the form:
 				//   ERROR:  delete on table "parent" violates foreign key constraint "child_child_p_fkey" on table "child"
 				//   DETAIL: Key (p)=(1) is still referenced from table "child".
-				msg.WriteString("delete on table ")
+				switch c.CreatorOp {
+				case opt.DeleteOp:
+					msg.WriteString("delete on table ")
+				case opt.UpdateOp:
+					msg.WriteString("update on table ")
+				}
 				lex.EncodeEscapedSQLIdent(&msg, string(referenced.Alias.TableName))
 				msg.WriteString(" violates foreign key constraint")
 				// TODO(justin): get the name of the FK constraint (it's not populated

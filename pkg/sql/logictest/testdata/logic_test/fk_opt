@@ -335,11 +335,11 @@ statement ok
 INSERT INTO orders VALUES (2, 1, '780', 1)
 
 # Try to point to missing FK.
-statement error pgcode 23503 foreign key violation: value \['790'\] not found in products@primary \[sku\]
+statement error pgcode 23503 update on table "orders" violates foreign key constraint "fk_product_ref_products"
 UPDATE orders SET product = '790' WHERE id = 2
 
 # Try to point to missing fk *while changing PK*.
-statement error pgcode 23503 foreign key violation: value \['790'\] not found in products@primary \[sku\]
+statement error pgcode 23503 update on table "orders" violates foreign key constraint "fk_product_ref_products"
 UPDATE orders SET id = 3, product = '790' WHERE id = 2
 
 # Change PK while leaving everything else is fine though.
@@ -403,7 +403,7 @@ statement ok
 UPDATE products SET sku = '770' WHERE sku = '750'
 
 # Changing referenced PK fails.
-statement error pgcode 23503 foreign key violation: values \['780'\] in columns \[sku\] referenced in table "orders"
+statement error pgcode 23503 update on table "products" violates foreign key constraint on table "orders"
 UPDATE products SET sku = '770' WHERE sku = '780'
 
 # No-op change to existing data is fine.
@@ -411,7 +411,7 @@ statement ok
 UPDATE products SET upc = '885155001450' WHERE sku = '780'
 
 # Changing referenced non-pk index fails.
-statement error pgcode 23503 foreign key violation: values \['885155001450'\] in columns \[upc\] referenced in table "delivery"
+statement error pgcode 23503 update on table "products" violates foreign key constraint on table "delivery"
 UPDATE products SET upc = 'blah' WHERE sku = '780'
 
 statement ok
@@ -477,7 +477,7 @@ statement ok
 UPDATE products SET sku = '750', vendor = 'roomba' WHERE sku = '780'
 
 # Changing PK and referenced secondary index is not ok.
-statement error pgcode 23503 foreign key violation: values \['885155001450'\] in columns \[upc\] referenced in table "delivery"
+statement error pgcode 23503 update on table "products" violates foreign key constraint on table "delivery"
 UPDATE products SET sku = '780', upc = 'blah' WHERE sku = '750'
 
 statement error pgcode 23503 foreign key violation: values \['885155001450'\] in columns \[upc\] referenced in table "delivery"|delete on table "products" violates foreign key constraint on table "delivery"
@@ -718,7 +718,7 @@ INSERT INTO refpairs VALUES (100, 'two'), (200, 'two')
 statement ok
 INSERT INTO refpairs VALUES (100, 'one', 3), (200, 'two', null)
 
-statement error pgcode 23503 foreign key violation: values \[200 'two'\] in columns \[src dest\] referenced in table "refpairs"
+statement error pgcode 23503 update on table "pairs" violates foreign key constraint on table "refpairs"
 UPDATE pairs SET dest = 'too' WHERE id = 2
 
 statement error pgcode 23503 delete on table "pairs" violates foreign key constraint on table "refpairs"
@@ -2738,3 +2738,144 @@ pet  primary        PRIMARY KEY  PRIMARY KEY (id ASC)                    true
 
 statement ok
 DROP TABLE person, pet
+
+statement ok
+DROP TABLE child
+
+# Update
+# ------
+
+statement ok
+CREATE TABLE parent (x INT, p INT PRIMARY KEY, u INT UNIQUE)
+
+statement ok
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p))
+
+statement ok
+INSERT INTO parent (p, u) VALUES (1, 10), (2, 20)
+
+statement ok
+INSERT INTO child VALUES (1, 1)
+
+# Updating the referenced table
+statement error update on table "parent" violates foreign key constraint on table "child"
+UPDATE parent SET p = 3 WHERE p = 1
+
+statement ok
+UPDATE parent SET p = 3 WHERE p = 2
+
+statement ok
+UPDATE parent SET p = 3 WHERE p = 10
+
+# Updating the referencing table
+statement ok
+UPDATE child SET p = 3 WHERE p = 1
+
+statement ok
+DELETE FROM child
+
+statement ok
+DELETE FROM parent
+
+statement ok
+INSERT INTO parent (p, u) VALUES (2, 10), (3, 20)
+
+statement ok
+INSERT INTO child (c, p) VALUES (200, 2)
+
+# These two test cases are sort of undefined behaviour, since their
+# success/failure depends on the order in which the updates are performed.
+statement error duplicate key value \(p\)=\(3\) violates unique constraint "primary"
+UPDATE parent SET p = p + 1
+
+statement ok
+UPDATE parent SET p = p - 1
+
+# This case illustrates why it's insufficient to just check the "old" values,
+# even in the absence of temporary unique constraint violations. In this case,
+# the "new" and "old" values are the same, so we have to remove the new values
+# from the old.
+statement ok
+UPDATE parent SET p = p
+
+statement ok
+CREATE TABLE self (x INT PRIMARY KEY, y INT NOT NULL REFERENCES self(x))
+
+statement ok
+INSERT INTO self VALUES (1, 2), (2, 3), (3, 4), (4, 1)
+
+statement error update on table "self" violates foreign key constraint "fk_y_ref_self"
+UPDATE self SET y = 5 WHERE y = 1
+
+statement error update on table "self" violates foreign key constraint on table "self"
+UPDATE self SET x = 5 WHERE y = 1
+
+statement ok
+TRUNCATE self
+
+statement ok
+INSERT INTO self VALUES (1, 1)
+
+statement ok
+UPDATE self SET x = 5, y = 5
+
+statement ok
+CREATE TABLE two (a int, b int, primary key (a, b))
+
+statement ok
+INSERT INTO two VALUES (1, 1), (1, 3), (3, 3)
+
+statement ok
+CREATE TABLE fam (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  FAMILY (a, b, c),
+  FAMILY (d, e),
+  FOREIGN KEY (c, d) REFERENCES two (a, b)
+)
+
+statement ok
+INSERT INTO fam VALUES (10, 10, 1, 1, 10)
+
+# Ensure that we fetch all relevant columns for a foreign key. Here we have
+# FKs that span column families.
+
+# NOTE: when we no longer require indexes to be created for FKs, ensure that
+# these still scan all the relevant FK columns.
+statement ok
+UPDATE fam SET d = 3
+
+statement ok
+UPDATE fam SET c = 3
+
+statement ok
+CREATE TABLE match_full (
+  a INT,
+  b INT,
+  FOREIGN KEY (a, b) REFERENCES two (a, b) MATCH FULL
+)
+
+statement ok
+INSERT INTO match_full VALUES (1, 1)
+
+statement error update on table "match_full" violates foreign key constraint "fk_a_ref_two"
+UPDATE match_full SET a = NULL
+
+statement ok
+UPDATE match_full SET a = NULL, b = NULL
+
+statement ok
+CREATE TABLE match_simple (
+  a INT,
+  b INT,
+  FOREIGN KEY (a, b) REFERENCES two (a, b) MATCH SIMPLE
+)
+
+statement ok
+INSERT INTO match_simple VALUES (1, 1)
+
+statement ok
+UPDATE match_simple SET a = NULL

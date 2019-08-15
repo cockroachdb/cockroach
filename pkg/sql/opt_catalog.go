@@ -570,6 +570,7 @@ func newOptTable(
 			validity:          fk.Validity,
 			match:             fk.Match,
 			deleteAction:      fk.OnDelete,
+			updateAction:      fk.OnUpdate,
 		})
 	}
 	for i := range ot.desc.InboundFKs {
@@ -583,6 +584,7 @@ func newOptTable(
 			validity:          fk.Validity,
 			match:             fk.Match,
 			deleteAction:      fk.OnDelete,
+			updateAction:      fk.OnUpdate,
 		})
 	}
 
@@ -1153,6 +1155,9 @@ type optForeignKeyConstraint struct {
 	validity     sqlbase.ConstraintValidity
 	match        sqlbase.ForeignKeyReference_Match
 	deleteAction sqlbase.ForeignKeyReference_Action
+	updateAction sqlbase.ForeignKeyReference_Action
+
+	id cat.StableID
 }
 
 var _ cat.ForeignKeyConstraint = &optForeignKeyConstraint{}
@@ -1217,6 +1222,16 @@ func (fk *optForeignKeyConstraint) MatchMethod() tree.CompositeKeyMatchMethod {
 // DeleteReferenceAction is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) DeleteReferenceAction() tree.ReferenceAction {
 	return sqlbase.ForeignKeyReferenceActionType[fk.deleteAction]
+}
+
+// UpdateReferenceAction is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) UpdateReferenceAction() tree.ReferenceAction {
+	return sqlbase.ForeignKeyReferenceActionType[fk.updateAction]
+}
+
+// ID is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) ID() cat.StableID {
+	return fk.id
 }
 
 // optVirtualTable is similar to optTable but is used with virtual tables.
