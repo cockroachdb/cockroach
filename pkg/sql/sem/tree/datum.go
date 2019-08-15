@@ -2525,6 +2525,10 @@ func AsJSON(d Datum) (json.JSON, error) {
 		return builder.Build(), nil
 	case *DTuple:
 		builder := json.NewObjectBuilder(len(t.D))
+		// We need to make sure that t.typ is initialized before getting the tuple
+		// labels (it is valid for t.typ be left uninitialized when instantiating a
+		// DTuple).
+		t.ResolvedType()
 		labels := t.typ.TupleLabels()
 		for i, e := range t.D {
 			j, err := AsJSON(e)
