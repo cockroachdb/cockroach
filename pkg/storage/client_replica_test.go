@@ -1630,16 +1630,17 @@ func TestDrainRangeRejection(t *testing.T) {
 
 	drainingIdx := 1
 	mtc.stores[drainingIdx].SetDraining(true)
-	if _, err := repl.ChangeReplicas(
-		context.Background(),
-		roachpb.ADD_REPLICA,
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA,
 		roachpb.ReplicationTarget{
 			NodeID:  mtc.idents[drainingIdx].NodeID,
 			StoreID: mtc.idents[drainingIdx].StoreID,
-		},
+		})
+	if _, err := repl.ChangeReplicas(
+		context.Background(),
 		repl.Desc(),
 		storagepb.ReasonRangeUnderReplicated,
 		"",
+		chgs,
 	); !testutils.IsError(err, "store is draining") {
 		t.Fatalf("unexpected error: %+v", err)
 	}
@@ -1657,34 +1658,19 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	}
 
 	oldGeneration := repl.Desc().GetGeneration()
-	if _, err := repl.ChangeReplicas(
-		context.Background(),
-		roachpb.ADD_REPLICA,
-		roachpb.ReplicationTarget{
-			NodeID:  mtc.idents[1].NodeID,
-			StoreID: mtc.idents[1].StoreID,
-		},
-		repl.Desc(),
-		storagepb.ReasonRangeUnderReplicated,
-		"",
-	); err != nil {
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+		NodeID:  mtc.idents[1].NodeID,
+		StoreID: mtc.idents[1].StoreID,
+	})
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+2)
 
 	oldGeneration = repl.Desc().GetGeneration()
 	oldDesc := repl.Desc()
-	newDesc, err := repl.ChangeReplicas(
-		context.Background(),
-		roachpb.REMOVE_REPLICA,
-		roachpb.ReplicationTarget{
-			NodeID:  mtc.idents[1].NodeID,
-			StoreID: mtc.idents[1].StoreID,
-		},
-		oldDesc,
-		storagepb.ReasonRangeOverReplicated,
-		"",
-	)
+	chgs[0].ChangeType = roachpb.REMOVE_REPLICA
+	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, storagepb.ReasonRangeOverReplicated, "", chgs)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2226,8 +2212,8 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	var changedDesc *roachpb.RangeDescriptor // only populated if changeErr == nil
 	change := func() {
 		<-seenAdd
-		changedDesc, changeErr = r1.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA,
-			makeReplicationTargets(2)[0], &expDescAfterAdd, "replicate", "testing")
+		chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, makeReplicationTargets(2)...)
+		changedDesc, changeErr = r1.ChangeReplicas(ctx, &expDescAfterAdd, "replicate", "testing", chgs)
 	}
 	relocate := func() {
 		relocateErr = db.AdminRelocateRange(ctx, key, makeReplicationTargets(1, 2, 4))
