@@ -783,7 +783,7 @@ func (rq *replicateQueue) removeReplica(
 		return nil
 	}
 	chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target)
-	if _, err := repl.ChangeReplicas(ctx, desc, reason, details, chgs); err != nil {
+	if _, err := repl.ChangeReplicas(ctx, desc, SnapshotRequest_REBALANCE, reason, details, chgs); err != nil {
 		return err
 	}
 	rangeUsageInfo := rangeUsageInfoForRepl(repl)

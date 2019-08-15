@@ -1321,7 +1321,7 @@ func (r *Replica) executeAdminBatch(
 			//
 			// TODO(tbg): stop unrolling this once atomic replication changes are
 			// ready. Do any callers prefer unrolling though? We could add a flag.
-			expDesc, err = r.ChangeReplicas(ctx, expDesc, storagepb.ReasonAdminRequest, "", chgs[i:i+1])
+			expDesc, err = r.ChangeReplicas(ctx, expDesc, SnapshotRequest_REBALANCE, storagepb.ReasonAdminRequest, "", chgs[i:i+1])
 			if err != nil {
 				break
 			}

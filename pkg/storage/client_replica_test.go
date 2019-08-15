@@ -1635,13 +1635,7 @@ func TestDrainRangeRejection(t *testing.T) {
 			NodeID:  mtc.idents[drainingIdx].NodeID,
 			StoreID: mtc.idents[drainingIdx].StoreID,
 		})
-	if _, err := repl.ChangeReplicas(
-		context.Background(),
-		repl.Desc(),
-		storagepb.ReasonRangeUnderReplicated,
-		"",
-		chgs,
-	); !testutils.IsError(err, "store is draining") {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
 		t.Fatalf("unexpected error: %+v", err)
 	}
 }
@@ -1662,7 +1656,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 		NodeID:  mtc.idents[1].NodeID,
 		StoreID: mtc.idents[1].StoreID,
 	})
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+2)
@@ -1670,7 +1664,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	oldGeneration = repl.Desc().GetGeneration()
 	oldDesc := repl.Desc()
 	chgs[0].ChangeType = roachpb.REMOVE_REPLICA
-	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, storagepb.ReasonRangeOverReplicated, "", chgs)
+	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeOverReplicated, "", chgs)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2206,7 +2200,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	change := func() {
 		<-seenAdd
 		chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, makeReplicationTargets(2)...)
-		changedDesc, changeErr = r1.ChangeReplicas(ctx, &expDescAfterAdd, "replicate", "testing", chgs)
+		changedDesc, changeErr = r1.ChangeReplicas(ctx, &expDescAfterAdd, storage.SnapshotRequest_REBALANCE, "replicate", "testing", chgs)
 	}
 	relocate := func() {
 		relocateErr = db.AdminRelocateRange(ctx, key, makeReplicationTargets(1, 2, 4))
