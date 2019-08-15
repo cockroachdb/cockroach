@@ -117,6 +117,9 @@ func TestTypes(t *testing.T) {
 		{MakeCollatedString(MakeQChar(20), enCollate),
 			MakeScalar(CollatedStringFamily, oid.T_char, 0, 20, enCollate)},
 
+		{MakeCollatedString(Name, enCollate), &T{InternalType: InternalType{
+			Family: CollatedStringFamily, Oid: oid.T_name, Locale: &enCollate}}},
+
 		// DATE
 		{Date, &T{InternalType: InternalType{
 			Family: DateFamily, Oid: oid.T_date, Locale: &emptyLocale}}},
