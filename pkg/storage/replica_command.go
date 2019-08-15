@@ -870,6 +870,7 @@ func IsSnapshotError(err error) bool {
 func (r *Replica) ChangeReplicas(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
+	priority SnapshotRequest_Priority,
 	reason storagepb.RangeLogEventReason,
 	details string,
 	chgs []roachpb.ReplicationChange,
@@ -878,7 +879,7 @@ func (r *Replica) ChangeReplicas(
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
 
-	return r.addAndRemoveReplicas(ctx, desc, SnapshotRequest_REBALANCE, reason, details, chgs)
+	return r.addAndRemoveReplicas(ctx, desc, priority, reason, details, chgs)
 }
 
 func validateReplicationChanges(
