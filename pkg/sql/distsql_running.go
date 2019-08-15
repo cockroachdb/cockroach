@@ -1016,37 +1016,12 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	dsp.FinalizePlan(postqueryPlanCtx, &postqueryPhysPlan)
 
 	postqueryRecv := recv.clone()
-	var postqueryRowReceiver postqueryRowResultWriter
-	postqueryRecv.resultWriter = &postqueryRowReceiver
+	// TODO(yuzefovich): at the moment, errOnlyResultWriter is sufficient here,
+	// but it may not be the case when we support cascades through the optimizer.
+	postqueryRecv.resultWriter = &errOnlyResultWriter{}
 	dsp.Run(postqueryPlanCtx, planner.txn, &postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)()
 	if postqueryRecv.commErr != nil {
 		return postqueryRecv.commErr
 	}
-	return postqueryRowReceiver.Err()
-}
-
-// postqueryRowResultWriter is a lightweight version of RowResultWriter that
-// can only write errors. It is used only for executing postqueries and is
-// sufficient for that case since those can only return errors.
-type postqueryRowResultWriter struct {
-	err error
-}
-
-var _ rowResultWriter = &postqueryRowResultWriter{}
-
-func (r *postqueryRowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
-	return errors.Errorf("unexpectedly AddRow is called on postqueryRowResultWriter")
-}
-
-func (r *postqueryRowResultWriter) IncrementRowsAffected(n int) {
-	// TODO(yuzefovich): this probably will need to change when we support
-	// cascades.
-}
-
-func (r *postqueryRowResultWriter) SetError(err error) {
-	r.err = err
-}
-
-func (r *postqueryRowResultWriter) Err() error {
-	return r.err
+	return postqueryRecv.resultWriter.Err()
 }
