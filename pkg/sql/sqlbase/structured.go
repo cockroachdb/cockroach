@@ -286,6 +286,29 @@ type protoGetter interface {
 	GetProto(ctx context.Context, key interface{}, msg protoutil.Message) error
 }
 
+// MapProtoGetter is a protoGetter that has a hard-coded map of keys to prot
+// messages.
+type MapProtoGetter struct {
+	Protos map[interface{}]protoutil.Message
+}
+
+// GetProto implements the protoGetter interface.
+func (m MapProtoGetter) GetProto(
+	ctx context.Context, key interface{}, msg protoutil.Message,
+) error {
+	msg.Reset()
+	if other, ok := m.Protos[string(key.(roachpb.Key))]; ok {
+		bytes := make([]byte, other.Size())
+		if _, err := other.MarshalTo(bytes); err != nil {
+			return err
+		}
+		if err := protoutil.Unmarshal(bytes, msg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // GetDatabaseDescFromID retrieves the database descriptor for the database
 // ID passed in using an existing proto getter. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a database.
@@ -760,14 +783,14 @@ func (desc *TableDescriptor) MaybeFillInDescriptor(
 	desc.maybeUpgradeFormatVersion()
 	desc.Privileges.MaybeFixPrivileges(desc.ID)
 	if protoGetter != nil {
-		if _, err := desc.maybeUpgradeForeignKeyRepresentation(ctx, protoGetter); err != nil {
+		if _, err := desc.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// maybeUpgradeForeignKeyRepresentation destructively modifies the input table
+// MaybeUpgradeForeignKeyRepresentation destructively modifies the input table
 // descriptor by replacing all old-style foreign key references (the ForeignKey
 // and ReferencedBy fields on IndexDescriptor) with new-style foreign key
 // references (the InboundFKs and OutboundFKs fields on TableDescriptor). It
@@ -776,7 +799,7 @@ func (desc *TableDescriptor) MaybeFillInDescriptor(
 // the first position if the descriptor was upgraded at all (i.e. had old-style
 // references on it) and an error if the descriptor was unable to be upgraded
 // for some reason.
-func (desc *TableDescriptor) maybeUpgradeForeignKeyRepresentation(
+func (desc *TableDescriptor) MaybeUpgradeForeignKeyRepresentation(
 	ctx context.Context, protoGetter protoGetter,
 ) (bool, error) {
 	if desc.Dropped() {

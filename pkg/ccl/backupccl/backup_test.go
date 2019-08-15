@@ -1573,6 +1573,9 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.Exec(t, `RESTORE DATABASE store from $1 WITH OPTIONS ('skip_missing_views')`, localFoo)
 		db.CheckQueryResults(t, `SELECT * FROM store.early_customers`, origEarlyCustomers)
 		db.CheckQueryResults(t, `SELECT * FROM store.referencing_early_customers`, origEarlyCustomers)
+		// TODO(lucy, jordan): DROP DATABASE CASCADE doesn't work in the mixed 19.1/
+		// 19.2 state, which is unrelated to backup/restore. See #39504 for a
+		// description of that problem, which is yet to be investigated.
 		db.Exec(t, `DROP DATABASE store CASCADE`)
 
 		// Test when some tables (views) are skipped and others are restored

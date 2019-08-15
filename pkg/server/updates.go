@@ -494,6 +494,7 @@ func (s *Server) collectSchemaInfo(ctx context.Context) ([]sqlbase.TableDescript
 	redactor := stringRedactor{}
 	for _, kv := range kvs {
 		var desc sqlbase.Descriptor
+		// TODO(jordan,lucy): does this need an upgrade?
 		if err := kv.ValueProto(&desc); err != nil {
 			return nil, errors.Wrapf(err, "%s: unable to unmarshal SQL descriptor", kv.Key)
 		}
