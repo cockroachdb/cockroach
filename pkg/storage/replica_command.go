@@ -1658,14 +1658,12 @@ func updateRangeDescriptor(
 		}
 		newValue = newBytes
 	}
-	var ov interface{}
 	if oldValue != nil {
 		// If the old value was fetched from kv, it may have a checksum set. This
 		// panics CPut, so clear it.
 		oldValue.ClearChecksum()
-		ov = oldValue
 	}
-	b.CPut(descKey, newValue, ov)
+	b.CPut(descKey, newValue, oldValue)
 	return nil
 }
 
