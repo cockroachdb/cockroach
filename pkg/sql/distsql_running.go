@@ -448,6 +448,19 @@ type rowResultWriter interface {
 	Err() error
 }
 
+type metadataResultWriter interface {
+	AddMeta(ctx context.Context, meta *distsqlpb.ProducerMetadata)
+}
+
+type metadataCallbackWriter struct {
+	rowResultWriter
+	fn func(ctx context.Context, meta *distsqlpb.ProducerMetadata)
+}
+
+func (w *metadataCallbackWriter) AddMeta(ctx context.Context, meta *distsqlpb.ProducerMetadata) {
+	w.fn(ctx, meta)
+}
+
 // errOnlyResultWriter is a rowResultWriter that only supports receiving an
 // error. All other functions that deal with producing results panic.
 type errOnlyResultWriter struct {
@@ -617,6 +630,9 @@ func (r *DistSQLReceiver) Push(
 			r.rowsRead += meta.Metrics.RowsRead
 			meta.Metrics.Release()
 			meta.Release()
+		}
+		if metaWriter, ok := r.resultWriter.(metadataResultWriter); ok {
+			metaWriter.AddMeta(r.ctx, meta)
 		}
 		return r.status
 	}
