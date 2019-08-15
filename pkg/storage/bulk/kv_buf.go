@@ -38,6 +38,7 @@ type kvBufEntry struct {
 	valSpan uint64
 }
 
+// entryOverhead is the slice header overhead per KV pair
 const entryOverhead = 16
 
 const (

@@ -497,19 +497,26 @@ func (cp *readImportDataProcessor) ingestKvs(
 	}
 
 	writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
-	const bufferSize = 64 << 20
+
 	flushSize := storageccl.MaxImportBatchSize(cp.flowCtx.Cfg.Settings)
 
-	// We create two bulk adders so as to combat the excessive flushing of
-	// small SSTs which was observed when using a single adder for both
-	// primary and secondary index kvs. The number of secondary index kvs are
-	// small, and so we expect the indexAdder to flush much less frequently
-	// than the pkIndexAdder.
+	// We create two bulk adders so as to combat the excessive flushing of small
+	// SSTs which was observed when using a single adder for both primary and
+	// secondary index kvs. The number of secondary index kvs are small, and so we
+	// expect the indexAdder to flush much less frequently than the pkIndexAdder.
+	//
+	// It is highly recommended that the cluster setting controlling the max size
+	// of the pkIndexAdder buffer be set below that of the indexAdder buffer.
+	// Otherwise, as a consequence of filling up faster the pkIndexAdder buffer
+	// will hog memory as it tries to grow more aggressively.
+	minBufferSize, maxBufferSize, stepSize := storageccl.ImportBufferConfigSizes(cp.flowCtx.Cfg.Settings, true /* isPKAdder */)
 	pkIndexAdder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, writeTS, storagebase.BulkAdderOptions{
 		Name:              "pkAdder",
 		DisallowShadowing: true,
 		SkipDuplicates:    true,
-		BufferSize:        bufferSize,
+		MinBufferSize:     uint64(minBufferSize),
+		MaxBufferSize:     uint64(maxBufferSize),
+		StepBufferSize:    uint64(stepSize),
 		SSTSize:           uint64(flushSize),
 	})
 	if err != nil {
@@ -517,11 +524,14 @@ func (cp *readImportDataProcessor) ingestKvs(
 	}
 	defer pkIndexAdder.Close(ctx)
 
+	minBufferSize, maxBufferSize, stepSize = storageccl.ImportBufferConfigSizes(cp.flowCtx.Cfg.Settings, false /* isPKAdder */)
 	indexAdder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, writeTS, storagebase.BulkAdderOptions{
 		Name:              "indexAdder",
 		DisallowShadowing: true,
 		SkipDuplicates:    true,
-		BufferSize:        bufferSize,
+		MinBufferSize:     uint64(minBufferSize),
+		MaxBufferSize:     uint64(maxBufferSize),
+		StepBufferSize:    uint64(stepSize),
 		SSTSize:           uint64(flushSize),
 	})
 	if err != nil {

@@ -23,7 +23,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const maxSettings = 128
+const maxSettings = 256
 
 type dummy struct {
 	msg1       string
