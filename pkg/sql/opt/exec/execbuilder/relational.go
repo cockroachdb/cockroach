@@ -448,6 +448,13 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	needed, output := b.getColumns(scan.Cols, scan.Table)
 	res := execPlan{outputCols: output}
 
+	rowCount := scan.Relational().Stats.RowCount
+	if !scan.Relational().Stats.Available {
+		// When there are no statistics available, we construct a scan node with
+		// the estimated row count of zero rows.
+		rowCount = 0
+	}
+
 	root, err := b.factory.ConstructScan(
 		tab,
 		tab.Index(scan.Index),
@@ -458,7 +465,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		ordering.ScanIsReverse(scan, &scan.RequiredPhysical().Ordering),
 		b.indexConstraintMaxResults(scan),
 		res.reqOrdering(scan),
-		scan.Relational().Stats.RowCount,
+		rowCount,
 	)
 	if err != nil {
 		return execPlan{}, err
