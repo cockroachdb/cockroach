@@ -468,7 +468,7 @@ func (tp *txnPipeliner) updateWriteTracking(
 	// If the transaction is no longer pending, clear the in-flight writes set
 	// and immediately return.
 	// TODO(nvanbenschoten): Do we have to handle missing Txn's anymore?
-	if br.Txn != nil && br.Txn.Status != roachpb.PENDING {
+	if br.Txn.Status != roachpb.PENDING {
 		tp.ifWrites.clear(false /* reuse */)
 		return
 	}
