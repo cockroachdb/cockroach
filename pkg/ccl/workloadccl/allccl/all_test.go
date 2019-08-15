@@ -44,6 +44,8 @@ func bigInitialData(meta workload.Meta) bool {
 func TestAllRegisteredImportFixture(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	sqlMemoryPoolSize := int64(1000 << 20) // 1GiB
+
 	for _, meta := range workload.Registered() {
 		meta := meta
 		gen := meta.New()
@@ -81,7 +83,8 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-				UseDatabase: "d",
+				UseDatabase:       "d",
+				SQLMemoryPoolSize: sqlMemoryPoolSize,
 			})
 			defer s.Stopper().Stop(ctx)
 			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)

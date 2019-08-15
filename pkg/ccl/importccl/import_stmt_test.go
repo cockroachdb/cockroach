@@ -56,6 +56,8 @@ func TestImportData(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
+
 	tests := []struct {
 		name   string
 		create string
@@ -784,7 +786,7 @@ func TestImportCSVStmt(t *testing.T) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 
 	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
 	if util.RaceEnabled {
@@ -1241,7 +1243,7 @@ func TestImportIntoCSV(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 
 	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
 	if util.RaceEnabled {
@@ -2214,7 +2216,7 @@ func TestImportWorkerFailure(t *testing.T) {
 // restart in that issue was caused by node liveness and that the work
 // already performed (the splits and addsstables) somehow caused the second
 // error. However this does not appear to be the case, as running many stress
-// iterations with differing constants (rows, sstsize, kv.import.batch_size)
+// iterations with differing constants (rows, sstsize, kv.bulk_ingest.batch_size)
 // was not able to fail in the way listed by the second bug.
 func TestImportLivenessWithRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -2248,7 +2250,7 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	// Prevent hung HTTP connections in leaktest.
 	sqlDB.Exec(t, `SET CLUSTER SETTING cloudstorage.timeout = '3s'`)
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '300B'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '300B'`)
 	sqlDB.Exec(t, `CREATE DATABASE liveness`)
 
 	const rows = 5000
@@ -2379,7 +2381,7 @@ func TestImportLivenessWithLeniency(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING cloudstorage.timeout = '3s'`)
 	// We want to know exactly how much leniency is configured.
 	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.registry.leniency = '1m'`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '300B'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '300B'`)
 	sqlDB.Exec(t, `CREATE DATABASE liveness`)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2488,7 +2490,7 @@ func TestImportMysql(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 
 	files := getMysqldumpTestdata(t)
@@ -2615,7 +2617,7 @@ func TestImportMysqlOutfile(t *testing.T) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 
 	testRows, configs := getMysqlOutfileTestdata(t)
@@ -2676,7 +2678,7 @@ func TestImportPgCopy(t *testing.T) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 
 	testRows, configs := getPgCopyTestdata(t)
@@ -2742,7 +2744,7 @@ func TestImportPgDump(t *testing.T) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 
 	simplePgTestRows, simpleFile := getSimplePostgresDumpTestdata(t)

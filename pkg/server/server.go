@@ -540,7 +540,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		BulkAdder: func(
 			ctx context.Context, db *client.DB, ts hlc.Timestamp, opts storagebase.BulkAdderOptions,
 		) (storagebase.BulkAdder, error) {
-			return bulk.MakeBulkAdder(db, s.distSender.RangeDescriptorCache(), ts, opts)
+			// Attach a child memory monitor to enable control over the BulkAdder's
+			// memory usage.
+			bulkMon := distsqlrun.NewMonitor(ctx, &rootSQLMemoryMonitor, fmt.Sprintf("bulk-monitor"))
+			return bulk.MakeBulkAdder(ctx, db, s.distSender.RangeDescriptorCache(), ts, opts, bulkMon)
 		},
 		DiskMonitor: s.cfg.TempStorageConfig.Mon,
 

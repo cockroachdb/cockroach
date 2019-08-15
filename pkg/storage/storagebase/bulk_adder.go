@@ -30,8 +30,17 @@ type BulkAdderOptions struct {
 	// they may be smaller than this limit.
 	SSTSize uint64
 
-	// BufferSize is the maximum amount of data to buffer before flushing SSTs.
-	BufferSize uint64
+	// MinBufferSize is the initial size of the BulkAdder buffer. It indicates the
+	// amount of memory we require to be able to buffer data before flushing for
+	// SST creation.
+	MinBufferSize uint64
+
+	// BufferSize is the maximum size we can grow the BulkAdder buffer to.
+	MaxBufferSize uint64
+
+	// StepBufferSize is the increment in which we will attempt to grow the
+	// BulkAdder buffer if the memory monitor permits.
+	StepBufferSize uint64
 
 	// SkipLocalDuplicates configures handling of duplicate keys within a local
 	// sorted batch. When true if the same key/value pair is added more than once
