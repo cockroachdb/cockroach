@@ -20,6 +20,21 @@ SELECT 'A' COLLATE en
 A
 
 query T
+SELECT ('A' COLLATE de) COLLATE en
+----
+A
+
+query T
+SELECT NAME 'A' COLLATE en
+----
+A
+
+query T
+SELECT (NAME 'A' COLLATE de) COLLATE en
+----
+A
+
+query T
 SELECT NULL COLLATE en
 ----
 NULL
