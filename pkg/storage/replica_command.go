@@ -797,89 +797,152 @@ func IsSnapshotError(err error) bool {
 	})
 }
 
-// ChangeReplicas adds or removes a replica of a range. The change is performed
-// in a distributed transaction and takes effect when that transaction is
-// committed.
+// ChangeReplicas atomically changes the replicas that are a member of a range.
+// The change is performed in a distributed transaction and takes effect when
+// that transaction is committed. This transaction confirms that the supplied
+// RangeDescriptor is up to date and that the supplied slice of
+// ReplicationChanges is a valid transition, meaning that replicas being added
+// are not present, that replicas being removed are present, that no replica is
+// altered more than once, and that no attempt is made at removing the
+// leaseholder (which in particular implies that we can never remove all
+// replicas).
 //
-// The supplied RangeDescriptor is used as a form of optimistic lock. See the
-// comment of "adminSplitWithDescriptor" for more information on this pattern.
+// NB: at the time of writing, atomic replication changes are not implemented
+// yet. Only a single change is supported, everything else returns an error.
+//
 // The returned RangeDescriptor is the new value of the range's descriptor
-// following the successful commit of the transaction. It can be used when
-// making a series of changes to detect and prevent races between concurrent
-// actors.
+// following the successful commit of the transaction.
 //
-// Changing the replicas for a range is complicated. A change is initiated by
-// the "replicate" queue when it encounters a range which has too many replicas,
-// too few replicas or requires rebalancing. Removal of a replica is divided
-// into four phases, described below. Addition of a replica is divided into two
-// sets of the same four phases: first to add it as a raft learner and then to
-// promote it to a raft voter after sending it a snapshot. For more information
-// on learner replicas, see `(ReplicaDescriptors).Learners`.
+// In general, ChangeReplicas will carry out the following steps.
 //
-// The first phase, which occurs in Replica.ChangeReplicas, is performed via a
-// distributed transaction which updates the range descriptor and the meta range
-// addressing information. This transaction includes a special
-// ChangeReplicasTrigger on the EndTransaction request. A ConditionalPut of the
-// RangeDescriptor implements the optimistic lock on the RangeDescriptor
-// mentioned previously. Like all transactions, the requests within the
-// transaction are replicated via Raft, including the EndTransaction request.
+// 1. Run a distributed transaction that adds all new replicas as learner replicas.
+//    Learner replicas receive the log, but do not have voting rights. They are
+//    used to catch up these new replicas before turning them into voters, which
+//    is important for the continued availability of the range throughout the
+//    replication change.
 //
-// The second phase of processing occurs when the batch containing the
-// EndTransaction is proposed to raft. This proposing occurs on whatever replica
-// received the batch, usually, but not always the range lease holder.
-// defaultProposeRaftCommandLocked notices that the EndTransaction contains a
-// ChangeReplicasTrigger and proposes a ConfChange to Raft (via
-// raft.RawNode.ProposeConfChange).
+//    The distributed transaction updates both copies of the range descriptor
+//    (the one on the range and that in the meta ranges) to that effect, and
+//    commits with a special trigger instructing Raft (via ProposeConfCHange) to
+//    tie a corresponding replication configuration change which goes into
+//    effect (on each replica) when the transaction commit is applied to the
+//    state. Applying the command also updates each replica's local view of
+//    the state to reflect the new descriptor.
 //
-// The ConfChange is propagated to all of the replicas similar to a normal Raft
-// command, though additional processing is done inside of Raft. A Replica
-// encounters the ConfChange in Replica.handleRaftReady and executes it using
-// raft.RawNode.ApplyConfChange. If a new replica was added the Raft leader will
-// start sending it heartbeat messages and attempting to bring it up to date. If
-// a replica was removed, it is at this point that the Raft leader will stop
-// communicating with it.
+//    If no replicas are being added, this first step is elided.
 //
-// The fourth phase of change replicas occurs when each replica for the range
-// encounters the ChangeReplicasTrigger when applying the EndTransaction
-// request. The replica will update its local range descriptor so as to contain
-// the new set of replicas. If the replica is the one that is being removed, it
-// will queue itself for removal with replicaGCQueue.
+// 2. Send Raft snapshots to all learner replicas. This would happen automatically
+//    by the existing recovery mechanisms (raft snapshot queue), but it is done
+//    explicitly as a convenient way to ensure learners are caught up before the
+//    next step is entered. (We ensure that work is not duplicated between the
+//    snapshot queue and the explicit snapshot).
+//    Snapshots are subject to both bandwidth rate limiting and throttling.
 //
-// Note that a removed replica may not see the EndTransaction containing the
-// ChangeReplicasTrigger. The ConfChange operation will be applied as soon as a
-// quorum of nodes have committed it. If the removed replica is down or the
-// message is dropped for some reason the removed replica will not be notified.
-// The replica GC queue will eventually discover and cleanup this state.
+//    If no replicas are being added, this step is similarly  elided.
 //
-// When a new replica is added, it will have to catch up to the state of the
-// other replicas. In the common case, a "learner snapshot" is sent after the
-// replica is added as a learner, but before it is promoted to a voter. If this
-// fails, the raft leader will request a snapshot. See Replica.sendSnapshot.
+// 3. Carry out a distributed transaction similar to that which added the
+//    learner replicas, except this time it (atomically) changes all learners to
+//    voters and removes any replicas for which this was requested. If only one
+//    replica is being changed, raft can chose the simple configuration change
+//    protocol; otherwise it has to use joint consensus. In this latter mechanism,
+//    a first configuration change is made which results in a configuration ("joint
+//    configuration") in which a quorum of both the old replicas and the new
+//    replica sets is required for decision making. Since this joint configuration
+//    is not represented in the RangeDescriptor (which is the source of truth of
+//    the replication configuration), additional information about the joint state
+//    is persisted in a replicated key located on the range. Raft will
+//    automatically transition out of this joint configuration as soon as it has
+//    properly been applied (and we clear the extra replicated state atomically);
+//    ChangeReplicas ensures the final configuration is active before returning.
 //
-// Note that Replica.ChangeReplicas returns when the distributed transaction has
-// been committed to a quorum of replicas in the range. The actual replication
-// of data occurs asynchronously via a snapshot or application of Raft log
-// entries. This is important for the replicate queue to be aware of. A node can
-// process hundreds or thousands of ChangeReplicas operations per second even
-// though the actual replication of data proceeds at a much slower base. In
-// order to avoid having this background replication and overwhelming the
-// system, replication is throttled via a reservation system. When allocating a
-// new replica for a range, the replicate queue reserves space for that replica
-// on the target store via a ReservationRequest. (See StorePool.reserve). The
-// reservation is fulfilled when the snapshot is applied.
+//    TODO(tbg): figure out how the "waiting to transition out of the joint config"
+//    will happen. We want Raft to auto-transition out (rather than doing it
+//    manually) because that way we know we'll leave that joint state even if the
+//    coordinator crashes etc. On the other hand, the polling seems a little
+//    difficult to do idiomatically. If many replication changes are carried out
+//    back to back, what do we wait for? We only need to know that some replica
+//    (typically the leader) has transitioned out (i.e. there's no requirement that
+//    the local replica has done so). It seems most straightforward to stash the
+//    joint state in an inline key that can be read through KV (mutated below
+//    Raft), and make sure the generation of the replication change is preserved.
+//    Then we just need to poll that the key goes away or has a larger generation
+//    (indicating that we transitioned out of "our" conf change and into another
+//    joint config driven by someone else). We can avoid the poll in the common
+//    case by proposing an empty entry first.
+//
+// A replica that learns that it was removed will queue itself for replicaGC.
+// Note that a removed replica may never apply the configuration change removing
+// it and thus this trigger may not fire. This is because said replica may not
+// have been a part of the quorum that committed the configuration change; if
+// the leader applies it before the removed replica receives it, it will never
+// do so. However, typically the removed replica will campaign at which point
+// its former peers will tell it to add itself to the replica GC queue as well,
+// unless all peers have since moved elsewhere, too. In that last and rare case,
+// the replica GC queue will eventually discover the replica on its own; it has
+// optimizations that handle "abandoned-looking" replicas more eagerly than
+// healthy ones.
 func (r *Replica) ChangeReplicas(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	priority SnapshotRequest_Priority,
 	reason storagepb.RangeLogEventReason,
 	details string,
-	chgs []roachpb.ReplicationChange,
+	chgs roachpb.ReplicationChanges,
 ) (updatedDesc *roachpb.RangeDescriptor, _ error) {
 	if desc == nil {
+		// TODO(tbg): is this check just FUD?
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
 
-	return r.addAndRemoveReplicas(ctx, desc, priority, reason, details, chgs)
+	if len(chgs) != 1 {
+		// TODO(tbg): lift this restriction when atomic membership changes are
+		// plumbed into raft.
+		return nil, errors.Errorf("need exactly one change, got %+v", chgs)
+	}
+
+	if err := validateReplicationChanges(desc, chgs); err != nil {
+		return nil, err
+	}
+
+	settings := r.ClusterSettings()
+	useLearners := useLearnerReplicas.Get(&settings.SV)
+	useLearners = useLearners && settings.Version.IsActive(cluster.VersionLearnerReplicas)
+	if !useLearners {
+		// NB: we will never use atomic replication changes while learners are not
+		// also active.
+		if len(chgs) != 1 {
+			return nil, errors.Errorf("need exactly one change, got %+v", chgs)
+		}
+		target := chgs[0].Target
+		return r.addReplicaLegacyPreemptiveSnapshot(ctx, target, desc, priority, reason, details)
+	}
+
+	if adds := chgs.Additions(); len(adds) > 0 {
+		// For all newly added nodes, first add raft learner replicas. They accept raft traffic
+		// (so they can catch up) but don't get to vote (so they don't affect quorum and thus
+		// don't introduce fragility into the system). For details see:
+		_ = roachpb.ReplicaDescriptors.Learners
+		var err error
+		desc, err = addLearnerReplicas(ctx, r.store, desc, reason, details, chgs.Additions())
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Catch up any learners, then run the atomic replication change that adds the
+	// final voters and removes any undesirable replicas.
+	desc, err := r.finalizeChangeReplicas(ctx, desc, priority, reason, details, chgs)
+	if err != nil {
+		// Don't leave a learner replica lying around if we didn't succeed in
+		// promoting it to a voter.
+		targets := chgs.Additions()
+		log.Infof(ctx, "could not promote %v to voter, rolling back: %v", targets, err)
+		for _, target := range targets {
+			r.tryRollBackLearnerReplica(ctx, r.Desc(), target, reason, details)
+		}
+		return nil, err
+	}
+	return desc, nil
 }
 
 func validateReplicationChanges(
@@ -933,69 +996,6 @@ func validateReplicationChanges(
 		return errors.Errorf("removing %v which is not in %s", chg.Target, desc)
 	}
 	return nil
-}
-
-// addAndRemoveReplicas validates the incoming changes, adds learner replicas for
-// all replica additions, sends a snapshot to each, and then runs an atomic replication
-// change that promotes the learners to voters and removes any replicas for which this
-// was requested.
-func (r *Replica) addAndRemoveReplicas(
-	ctx context.Context,
-	desc *roachpb.RangeDescriptor,
-	priority SnapshotRequest_Priority,
-	reason storagepb.RangeLogEventReason,
-	details string,
-	chgs roachpb.ReplicationChanges,
-) (*roachpb.RangeDescriptor, error) {
-	if len(chgs) != 1 {
-		// TODO(tbg): lift this restriction when atomic membership changes are
-		// plumbed into raft.
-		return nil, errors.Errorf("need exactly one change, got %+v", chgs)
-	}
-
-	if err := validateReplicationChanges(desc, chgs); err != nil {
-		return nil, err
-	}
-
-	settings := r.ClusterSettings()
-	useLearners := useLearnerReplicas.Get(&settings.SV)
-	useLearners = useLearners && settings.Version.IsActive(cluster.VersionLearnerReplicas)
-	if !useLearners {
-		// NB: we will never use atomic replication changes while learners are not
-		// also active.
-		if len(chgs) != 1 {
-			return nil, errors.Errorf("need exactly one change, got %+v", chgs)
-		}
-		target := chgs[0].Target
-		return r.addReplicaLegacyPreemptiveSnapshot(ctx, target, desc, priority, reason, details)
-	}
-
-	if adds := chgs.Additions(); len(adds) > 0 {
-		// For all newly added nodes, first add raft learner replicas. They accept raft traffic
-		// (so they can catch up) but don't get to vote (so they don't affect quorum and thus
-		// don't introduce fragility into the system). For details see:
-		_ = roachpb.ReplicaDescriptors.Learners
-		var err error
-		desc, err = addLearnerReplicas(ctx, r.store, desc, reason, details, chgs.Additions())
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Catch up any learners, then run the atomic replication change that adds the
-	// final voters and removes any undesirable replicas.
-	desc, err := r.finalizeChangeReplicas(ctx, desc, priority, reason, details, chgs)
-	if err != nil {
-		// Don't leave a learner replica lying around if we didn't succeed in
-		// promoting it to a voter.
-		targets := chgs.Additions()
-		log.Infof(ctx, "could not promote %v to voter, rolling back: %v", targets, err)
-		for _, target := range targets {
-			r.tryRollBackLearnerReplica(ctx, r.Desc(), target, reason, details)
-		}
-		return nil, err
-	}
-	return desc, nil
 }
 
 // addLearnerReplicas adds learners to the given replication targets.
