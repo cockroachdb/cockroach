@@ -330,7 +330,15 @@ func (o *mergeJoinBase) Init() {
 func (o *mergeJoinBase) initWithBatchSize(outBatchSize uint16) {
 	outColTypes := make([]coltypes.T, len(o.left.sourceTypes)+len(o.right.sourceTypes))
 	copy(outColTypes, o.left.sourceTypes)
-	copy(outColTypes[len(o.left.sourceTypes):], o.right.sourceTypes)
+	if len(o.right.outCols) == 0 {
+		// We do not have output columns from the right input in case of LEFT SEMI
+		// and LEFT ANTI joins, and we should not have the corresponding columns in
+		// the output batch, so we only have the types from the left input in
+		// outColTypes.
+		outColTypes = outColTypes[:len(o.left.sourceTypes)]
+	} else {
+		copy(outColTypes[len(o.left.sourceTypes):], o.right.sourceTypes)
+	}
 
 	o.output = coldata.NewMemBatchWithSize(outColTypes, int(outBatchSize))
 	o.left.source.Init()

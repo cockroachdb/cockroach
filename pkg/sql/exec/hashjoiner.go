@@ -750,10 +750,21 @@ func makeHashJoinProber(
 	var outColTypes []coltypes.T
 	var buildColOffset, probeColOffset uint32
 	if buildRightSide {
-		outColTypes = append(probe.sourceTypes, build.sourceTypes...)
+		if len(build.outCols) == 0 {
+			// We do not have output columns from the right side in case of LEFT SEMI
+			// and LEFT ANTI joins, and we should not have the corresponding columns
+			// in the output batch, so we only have the types from the left side in
+			// outColTypes.
+			outColTypes = probe.sourceTypes
+		} else {
+			outColTypes = append(probe.sourceTypes, build.sourceTypes...)
+		}
 		buildColOffset = uint32(len(probe.sourceTypes))
 		probeColOffset = 0
 	} else {
+		// Note that we don't need to check whether probe.outCols is non-empty
+		// before populating outColTypes because LEFT SEMI and LEFT ANTI joins will
+		// always build the right side.
 		outColTypes = append(build.sourceTypes, probe.sourceTypes...)
 		buildColOffset = 0
 		probeColOffset = nBuildCols
