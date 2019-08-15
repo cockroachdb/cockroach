@@ -293,6 +293,7 @@ func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error 
 			tu.updateCols,
 			requestedCols,
 			row.UpdaterDefault,
+			row.CheckFKs,
 			evalCtx,
 			tu.alloc,
 		)

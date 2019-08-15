@@ -103,6 +103,7 @@ func (tu *optTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) err
 		tu.updateCols,
 		tu.fetchCols,
 		row.UpdaterDefault,
+		row.CheckFKs,
 		evalCtx,
 		tu.alloc,
 	)

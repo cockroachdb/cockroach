@@ -97,6 +97,9 @@ func makeFkExistenceCheckHelperForUpdate(
 func (fks fkExistenceCheckForUpdate) addCheckForIndex(
 	indexID sqlbase.IndexID, descriptorType sqlbase.IndexDescriptor_Type,
 ) {
+	if fks.checker == nil {
+		return
+	}
 	if descriptorType == sqlbase.IndexDescriptor_FORWARD {
 		// We ignore FK existence checks for inverted indexes.
 		//
