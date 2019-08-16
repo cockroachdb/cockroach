@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -34,8 +35,8 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	tc.Start(t, stopper)
 
 	// Set zone configs.
-	config.TestingSetZoneConfig(2000, config.ZoneConfig{RangeMaxBytes: proto.Int64(32 << 20)})
-	config.TestingSetZoneConfig(2002, config.ZoneConfig{RangeMaxBytes: proto.Int64(32 << 20)})
+	config.TestingSetZoneConfig(2000, zonepb.ZoneConfig{RangeMaxBytes: proto.Int64(32 << 20)})
+	config.TestingSetZoneConfig(2002, zonepb.ZoneConfig{RangeMaxBytes: proto.Int64(32 << 20)})
 
 	testCases := []struct {
 		start, end roachpb.RKey
@@ -84,7 +85,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		repl.mu.Lock()
 		repl.mu.state.Stats = &enginepb.MVCCStats{KeyBytes: test.bytes}
 		repl.mu.Unlock()
-		zoneConfig := config.DefaultZoneConfig()
+		zoneConfig := zonepb.DefaultZoneConfig()
 		zoneConfig.RangeMaxBytes = proto.Int64(test.maxBytes)
 		repl.SetZoneConfig(&zoneConfig)
 
