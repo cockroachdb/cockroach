@@ -197,8 +197,8 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
-			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
-				// No cleanup required; emitHelper() took care of it.
+			if !EmitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+				// No cleanup required; EmitHelper() took care of it.
 				return true, nil
 			}
 			continue
@@ -214,7 +214,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 			meta := &distsqlpb.ProducerMetadata{SamplerProgress: &distsqlpb.RemoteProducerMetadata_SamplerProgress{
 				RowsProcessed: uint64(SamplerProgressInterval),
 			}}
-			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+			if !EmitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 				return true, nil
 			}
 
@@ -321,7 +321,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	for _, sample := range s.sr.Get() {
 		copy(outRow, sample.Row)
 		outRow[s.rankCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(sample.Rank))}
-		if !emitHelper(ctx, &s.out, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
+		if !EmitHelper(ctx, &s.out, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
 			return true, nil
 		}
 	}
@@ -342,7 +342,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 			return false, err
 		}
 		outRow[s.sketchCol] = sqlbase.EncDatum{Datum: tree.NewDBytes(tree.DBytes(data))}
-		if !emitHelper(ctx, &s.out, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
+		if !EmitHelper(ctx, &s.out, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
 			return true, nil
 		}
 	}
@@ -351,7 +351,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	meta := &distsqlpb.ProducerMetadata{SamplerProgress: &distsqlpb.RemoteProducerMetadata_SamplerProgress{
 		RowsProcessed: uint64(rowCount % SamplerProgressInterval),
 	}}
-	if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+	if !EmitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 		return true, nil
 	}
 

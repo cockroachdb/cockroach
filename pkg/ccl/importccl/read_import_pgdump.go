@@ -395,7 +395,7 @@ func getTableName2(u *tree.UnresolvedObjectName) (string, error) {
 type pgDumpReader struct {
 	tables map[string]*row.DatumRowConverter
 	descs  map[string]*distsqlpb.ReadImportDataSpec_ImportTable
-	kvCh   chan []roachpb.KeyValue
+	kvCh   chan row.KVBatch
 	opts   roachpb.PgDumpOptions
 }
 
@@ -403,7 +403,7 @@ var _ inputConverter = &pgDumpReader{}
 
 // newPgDumpReader creates a new inputConverter for pg_dump files.
 func newPgDumpReader(
-	kvCh chan []roachpb.KeyValue,
+	kvCh chan row.KVBatch,
 	opts roachpb.PgDumpOptions,
 	descs map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
@@ -444,11 +444,16 @@ func (m *pgDumpReader) readFiles(
 }
 
 func (m *pgDumpReader) readFile(
-	ctx context.Context, input io.Reader, inputIdx int32, inputName string, progressFn progressFn,
+	ctx context.Context, input *fileReader, inputIdx int32, inputName string, progressFn progressFn,
 ) error {
 	var inserts, count int64
 	ps := newPostgreStream(input, int(m.opts.MaxRowSize))
 	semaCtx := &tree.SemaContext{}
+	for _, conv := range m.tables {
+		conv.KvBatch.Source = inputIdx
+		conv.FractionFn = input.ReadFraction
+	}
+
 	for {
 		stmt, err := ps.Next()
 		if err == io.EOF {
@@ -621,7 +626,9 @@ func (m *pgDumpReader) readFile(
 			}
 			kv := roachpb.KeyValue{Key: key}
 			kv.Value.SetInt(val)
-			m.kvCh <- []roachpb.KeyValue{kv}
+			m.kvCh <- row.KVBatch{
+				Source: inputIdx, KVs: []roachpb.KeyValue{kv}, Progress: input.ReadFraction(),
+			}
 		default:
 			if log.V(3) {
 				log.Infof(ctx, "ignoring %T stmt: %v", i, i)

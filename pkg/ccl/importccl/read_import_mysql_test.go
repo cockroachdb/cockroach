@@ -21,10 +21,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -91,7 +91,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 	table := descForTable(t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 10, 20, NoFKs)
 	tables := map[string]*distsqlpb.ReadImportDataSpec_ImportTable{"simple": {Desc: table}}
 
-	converter, err := newMysqldumpReader(make(chan []roachpb.KeyValue, 10), tables, testEvalCtx)
+	converter, err := newMysqldumpReader(make(chan row.KVBatch, 10), tables, testEvalCtx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,10 +106,11 @@ func TestMysqldumpDataReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer in.Close()
+	wrapped := &fileReader{Reader: in, counter: byteCounter{r: in}}
 
 	noop := func(_ bool) error { return nil }
 
-	if err := converter.readFile(ctx, in, 1, "", noop); err != nil {
+	if err := converter.readFile(ctx, wrapped, 1, "", noop); err != nil {
 		t.Fatal(err)
 	}
 	converter.inputFinished(ctx)

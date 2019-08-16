@@ -54,7 +54,11 @@ type BufferingAdder struct {
 
 	bulkMon *mon.BytesMonitor
 	memAcc  mon.BoundAccount
+
+	onFlush func()
 }
+
+var _ storagebase.BulkAdder = &BufferingAdder{}
 
 // MakeBulkAdder makes a storagebase.BulkAdder that buffers and sorts K/Vs
 // passed to add into SSTs that are then ingested. rangeCache if set is
@@ -117,6 +121,11 @@ func MakeBulkAdder(
 	return b, nil
 }
 
+// SetOnFlush sets a callback to run after the buffering adder flushes.
+func (b *BufferingAdder) SetOnFlush(fn func()) {
+	b.onFlush = fn
+}
+
 // Close closes the underlying SST builder.
 func (b *BufferingAdder) Close(ctx context.Context) {
 	log.VEventf(ctx, 2,
@@ -171,9 +180,17 @@ func (b *BufferingAdder) CurrentBufferFill() float32 {
 	return float32(b.curBuf.MemSize) / float32(b.curBufferSize)
 }
 
+// IsEmpty returns true if the adder has no un-flushed data in its buffer.
+func (b *BufferingAdder) IsEmpty() bool {
+	return b.curBuf.Len() == 0
+}
+
 // Flush flushes any buffered kvs to the batcher.
 func (b *BufferingAdder) Flush(ctx context.Context) error {
 	if b.curBuf.Len() == 0 {
+		if b.onFlush != nil {
+			b.onFlush()
+		}
 		return nil
 	}
 	if err := b.sink.Reset(); err != nil {
@@ -208,7 +225,9 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 			sz(b.curBuf.MemSize), files, sz(written/int64(files)), dueToSplits, dueToSize,
 		)
 	}
-
+	if b.onFlush != nil {
+		b.onFlush()
+	}
 	b.curBuf.Reset()
 	return nil
 }

@@ -44,7 +44,7 @@ type Processor interface {
 type ProcOutputHelper struct {
 	numInternalCols int
 	// output can be optionally passed in for use with EmitRow and
-	// emitHelper.
+	// EmitHelper.
 	// If output is nil, one can invoke ProcessRow to obtain the
 	// post-processed row directly.
 	output   RowReceiver
@@ -205,7 +205,7 @@ func (h *ProcOutputHelper) neededColumns() (colIdxs util.FastIntSet) {
 	return colIdxs
 }
 
-// emitHelper is a utility wrapper on top of ProcOutputHelper.EmitRow().
+// EmitHelper is a utility wrapper on top of ProcOutputHelper.EmitRow().
 // It takes a row to emit and, if anything happens other than the normal
 // situation where the emitting succeeds and the consumer still needs rows, both
 // the (potentially many) inputs and the output are properly closed after
@@ -227,7 +227,7 @@ func (h *ProcOutputHelper) neededColumns() (colIdxs util.FastIntSet) {
 //
 // Returns true if more rows are needed, false otherwise. If false is returned
 // both the inputs and the output have been properly closed.
-func emitHelper(
+func EmitHelper(
 	ctx context.Context,
 	output *ProcOutputHelper,
 	row sqlbase.EncDatumRow,
@@ -241,7 +241,7 @@ func emitHelper(
 	var consumerStatus ConsumerStatus
 	if meta != nil {
 		if row != nil {
-			panic("both row data and metadata in the same emitHelper call")
+			panic("both row data and metadata in the same EmitHelper call")
 		}
 		// Bypass EmitRow() and send directly to output.output.
 		foundErr := meta.Err != nil
@@ -285,7 +285,7 @@ func emitHelper(
 // rendering processing; the output has not been closed and it's the caller's
 // responsibility to push the error to the output.
 //
-// Note: check out emitHelper() for a useful wrapper.
+// Note: check out EmitHelper() for a useful wrapper.
 func (h *ProcOutputHelper) EmitRow(
 	ctx context.Context, row sqlbase.EncDatumRow,
 ) (ConsumerStatus, error) {

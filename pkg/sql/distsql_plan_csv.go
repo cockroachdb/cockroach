@@ -17,6 +17,8 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -30,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -645,12 +648,37 @@ func DistIngest(
 		p.ResultRouters[i] = pIdx
 	}
 
-	var res roachpb.BulkOpSummary
-
 	// The direct-ingest readers will emit a binary encoded BulkOpSummary.
-	p.PlanToStreamColMap = []int{0}
-	p.ResultTypes = []types.T{*types.Bytes}
+	p.PlanToStreamColMap = []int{0, 1}
+	p.ResultTypes = []types.T{*types.Bytes, *types.Bytes}
 
+	dsp.FinalizePlan(planCtx, &p)
+
+	if err := job.FractionProgressed(ctx,
+		func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			prog := details.(*jobspb.Progress_Import).Import
+			prog.ReadProgress = make([]float32, len(from))
+			prog.CompletedRow = make([]uint64, len(from))
+			return 0.0
+		},
+	); err != nil {
+		return roachpb.BulkOpSummary{}, err
+	}
+
+	rowProgress := make([]uint64, len(from))
+	fractionProgress := make([]uint32, len(from))
+	metaFn := func(_ context.Context, meta *distsqlpb.ProducerMetadata) {
+		if meta.BulkProcessorProgress != nil {
+			for i, v := range meta.BulkProcessorProgress.CompletedRow {
+				atomic.StoreUint64(&rowProgress[i], v)
+			}
+			for i, v := range meta.BulkProcessorProgress.CompletedFraction {
+				atomic.StoreUint32(&fractionProgress[i], math.Float32bits(v))
+			}
+		}
+	}
+
+	var res roachpb.BulkOpSummary
 	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		var counts roachpb.BulkOpSummary
 		if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
@@ -660,21 +688,9 @@ func DistIngest(
 		return nil
 	})
 
-	dsp.FinalizePlan(planCtx, &p)
-
-	if err := job.FractionProgressed(ctx,
-		func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-			prog := details.(*jobspb.Progress_Import).Import
-			prog.ReadProgress = make([]float32, len(inputSpecs))
-			return prog.Completed()
-		},
-	); err != nil {
-		return roachpb.BulkOpSummary{}, err
-	}
-
 	recv := MakeDistSQLReceiver(
 		ctx,
-		rowResultWriter,
+		&metadataCallbackWriter{rowResultWriter: rowResultWriter, fn: metaFn},
 		tree.Rows,
 		nil, /* rangeCache */
 		nil, /* leaseCache */
@@ -683,10 +699,50 @@ func DistIngest(
 		evalCtx.Tracing,
 	)
 	defer recv.Release()
-	// Copy the evalCtx, as dsp.Run() might change it.
-	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, nil, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
-	if err := rowResultWriter.Err(); err != nil {
+
+	stopProgress := make(chan struct{})
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		tick := time.NewTicker(time.Second * 10)
+		defer tick.Stop()
+		done := ctx.Done()
+		for {
+			select {
+			case <-stopProgress:
+				return nil
+			case <-done:
+				return ctx.Err()
+			case <-tick.C:
+				if err := job.FractionProgressed(ctx,
+					func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+						var overall float32
+						prog := details.(*jobspb.Progress_Import).Import
+						for i := range rowProgress {
+							prog.CompletedRow[i] = atomic.LoadUint64(&rowProgress[i])
+						}
+						for i := range fractionProgress {
+							fileProgress := math.Float32frombits(atomic.LoadUint32(&fractionProgress[i]))
+							prog.ReadProgress[i] = fileProgress
+							overall += fileProgress
+						}
+						return overall / float32(len(from))
+					},
+				); err != nil {
+					return err
+				}
+			}
+		}
+	})
+
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(stopProgress)
+		// Copy the evalCtx, as dsp.Run() might change it.
+		evalCtxCopy := *evalCtx
+		dsp.Run(planCtx, nil, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
+		return rowResultWriter.Err()
+	})
+
+	if err := g.Wait(); err != nil {
 		return roachpb.BulkOpSummary{}, err
 	}
 
