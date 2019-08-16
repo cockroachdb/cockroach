@@ -30,8 +30,9 @@ import (
 )
 
 const (
-	// The size of the timestamp portion of MVCC version keys (used to update stats).
-	mvccVersionTimestampSize int64 = 12
+	// MVCCVersionTimestampSize is the size of the timestamp portion of MVCC
+	// version keys (used to update stats).
+	MVCCVersionTimestampSize int64 = 12
 )
 
 var (
@@ -109,7 +110,7 @@ func (k MVCCKey) EncodedSize() int {
 		// Note that this isn't quite accurate: timestamps consume between 8-13
 		// bytes. Fixing this only adjusts the accounting for timestamps, not the
 		// actual on disk storage.
-		n += int(mvccVersionTimestampSize)
+		n += int(MVCCVersionTimestampSize)
 	}
 	return n
 }
@@ -300,7 +301,7 @@ func updateStatsOnPut(
 			// previous value that is a tombstone: according to rule two its age
 			// contributions are anchored to its own timestamp, so moving some values
 			// higher up doesn't affect the contributions tied to that key.
-			ms.LiveBytes += mvccVersionTimestampSize + prevValSize
+			ms.LiveBytes += MVCCVersionTimestampSize + prevValSize
 		}
 
 		// Note that there is an interesting special case here: it's possible that
@@ -315,7 +316,7 @@ func updateStatsOnPut(
 		if prevIsValue {
 			// Make the previous non-deletion value non-live again, as explained in the
 			// sibling block above.
-			ms.LiveBytes -= mvccVersionTimestampSize + prevValSize
+			ms.LiveBytes -= MVCCVersionTimestampSize + prevValSize
 		}
 
 		// If the original version wasn't a deletion, it becomes non-live at meta.Timestamp
@@ -424,7 +425,7 @@ func updateStatsOnResolve(
 	prevIsValue := prevValSize > 0
 
 	if prevIsValue {
-		ms.LiveBytes += mvccVersionTimestampSize + prevValSize
+		ms.LiveBytes += MVCCVersionTimestampSize + prevValSize
 	}
 
 	ms.AgeTo(meta.Timestamp.WallTime)
@@ -432,7 +433,7 @@ func updateStatsOnResolve(
 	if prevIsValue {
 		// The previous non-deletion value becomes non-live at meta.Timestamp.
 		// See the sibling code above.
-		ms.LiveBytes -= mvccVersionTimestampSize + prevValSize
+		ms.LiveBytes -= MVCCVersionTimestampSize + prevValSize
 	}
 
 	// At meta.Timestamp, the new meta key appears.
@@ -766,9 +767,9 @@ func mvccGetMetadata(
 
 	meta.Reset()
 	// For values, the size of keys is always accounted for as
-	// mvccVersionTimestampSize. The size of the metadata key is
+	// MVCCVersionTimestampSize. The size of the metadata key is
 	// accounted for separately.
-	meta.KeyBytes = mvccVersionTimestampSize
+	meta.KeyBytes = MVCCVersionTimestampSize
 	meta.ValBytes = int64(len(iter.UnsafeValue()))
 	meta.Deleted = meta.ValBytes == 0
 	meta.Timestamp = hlc.LegacyTimestamp(unsafeKey.Timestamp)
@@ -1554,9 +1555,9 @@ func mvccPutInternal(
 
 	// Write the mvcc metadata now that we have sizes for the latest
 	// versioned value. For values, the size of keys is always accounted
-	// for as mvccVersionTimestampSize. The size of the metadata key is
+	// for as MVCCVersionTimestampSize. The size of the metadata key is
 	// accounted for separately.
-	newMeta.KeyBytes = mvccVersionTimestampSize
+	newMeta.KeyBytes = MVCCVersionTimestampSize
 	newMeta.ValBytes = int64(len(value))
 	newMeta.Deleted = value == nil
 
@@ -1567,7 +1568,7 @@ func mvccPutInternal(
 			return err
 		}
 	} else {
-		// Per-key stats count the full-key once and mvccVersionTimestampSize for
+		// Per-key stats count the full-key once and MVCCVersionTimestampSize for
 		// each versioned value. We maintain that accounting even when the MVCC
 		// metadata is implicit.
 		metaKeySize = int64(metaKey.EncodedSize())
@@ -1860,7 +1861,7 @@ func MVCCMerge(
 	if err == nil {
 		if err = engine.Merge(metaKey, data); err == nil && ms != nil {
 			ms.Add(updateStatsOnMerge(
-				key, int64(len(rawBytes))+mvccVersionTimestampSize, timestamp.WallTime))
+				key, int64(len(rawBytes))+MVCCVersionTimestampSize, timestamp.WallTime))
 		}
 	}
 	buf.release()
@@ -1979,7 +1980,7 @@ func MVCCClearTimeRange(
 				// Since the key matches, our previous clear "restored" this revision of
 				// the this key, so update the stats with this as the "restored" key.
 				valueSize := int64(len(it.Value()))
-				restoredMeta.KeyBytes = mvccVersionTimestampSize
+				restoredMeta.KeyBytes = MVCCVersionTimestampSize
 				restoredMeta.Deleted = valueSize == 0
 				restoredMeta.ValBytes = valueSize
 				restoredMeta.Timestamp = hlc.LegacyTimestamp(k.Timestamp)
@@ -2025,7 +2026,7 @@ func MVCCClearTimeRange(
 			clearMatchingKey(k)
 			if ms != nil {
 				clearedMetaKey.Key = append(clearedMetaKey.Key[:0], k.Key...)
-				clearedMeta.KeyBytes = mvccVersionTimestampSize
+				clearedMeta.KeyBytes = MVCCVersionTimestampSize
 				clearedMeta.ValBytes = int64(len(it.UnsafeValue()))
 				clearedMeta.Deleted = clearedMeta.ValBytes == 0
 				clearedMeta.Timestamp = hlc.LegacyTimestamp(k.Timestamp)
@@ -2651,7 +2652,7 @@ func mvccResolveWriteIntent(
 	// Update the keyMetadata with the next version.
 	buf.newMeta = enginepb.MVCCMetadata{
 		Deleted:  valueSize == 0,
-		KeyBytes: mvccVersionTimestampSize,
+		KeyBytes: MVCCVersionTimestampSize,
 		ValBytes: valueSize,
 	}
 	if err := engine.Clear(metaKey); err != nil {
@@ -2889,7 +2890,7 @@ func MVCCGarbageCollect(
 						fromNS = unsafeIterKey.Timestamp.WallTime
 					}
 
-					ms.Add(updateStatsOnGC(gcKey.Key, mvccVersionTimestampSize,
+					ms.Add(updateStatsOnGC(gcKey.Key, MVCCVersionTimestampSize,
 						valSize, nil, fromNS))
 				}
 				count++
@@ -3094,7 +3095,7 @@ func ComputeStatsGo(
 		if implicitMeta {
 			// No MVCCMetadata entry for this series of keys.
 			meta.Reset()
-			meta.KeyBytes = mvccVersionTimestampSize
+			meta.KeyBytes = MVCCVersionTimestampSize
 			meta.ValBytes = int64(len(unsafeValue))
 			meta.Deleted = len(unsafeValue) == 0
 			meta.Timestamp.WallTime = unsafeKey.Timestamp.WallTime
@@ -3138,7 +3139,7 @@ func ComputeStatsGo(
 			}
 		}
 
-		totalBytes := int64(len(unsafeValue)) + mvccVersionTimestampSize
+		totalBytes := int64(len(unsafeValue)) + MVCCVersionTimestampSize
 		if isSys {
 			ms.SysBytes += totalBytes
 		} else {
@@ -3155,8 +3156,8 @@ func ComputeStatsGo(
 					ms.IntentCount++
 					ms.IntentAge += nowNanos/1E9 - meta.Timestamp.WallTime/1E9
 				}
-				if meta.KeyBytes != mvccVersionTimestampSize {
-					return ms, errors.Errorf("expected mvcc metadata key bytes to equal %d; got %d", mvccVersionTimestampSize, meta.KeyBytes)
+				if meta.KeyBytes != MVCCVersionTimestampSize {
+					return ms, errors.Errorf("expected mvcc metadata key bytes to equal %d; got %d", MVCCVersionTimestampSize, meta.KeyBytes)
 				}
 				if meta.ValBytes != int64(len(unsafeValue)) {
 					return ms, errors.Errorf("expected mvcc metadata val bytes to equal %d; got %d", len(unsafeValue), meta.ValBytes)
@@ -3176,7 +3177,7 @@ func ComputeStatsGo(
 				// Update for the next version we may end up looking at.
 				accrueGCAgeNanos = unsafeKey.Timestamp.WallTime
 			}
-			ms.KeyBytes += mvccVersionTimestampSize
+			ms.KeyBytes += MVCCVersionTimestampSize
 			ms.ValBytes += int64(len(unsafeValue))
 			ms.ValCount++
 		}

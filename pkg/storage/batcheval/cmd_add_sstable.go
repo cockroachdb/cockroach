@@ -72,6 +72,7 @@ func EvalAddSSTable(
 		}
 	}
 
+	// Get the MVCCStats for the SST being ingested.
 	var stats enginepb.MVCCStats
 	if args.MVCCStats != nil {
 		stats = *args.MVCCStats
@@ -135,7 +136,7 @@ func EvalAddSSTable(
 	// Callers can trigger such a re-computation to fixup any discrepancies (and
 	// remove the ContainsEstimates flag) after they are done ingesting files by
 	// sending an explicit recompute.
-	stats.ContainsEstimates = true
+	stats.ContainsEstimates = !args.DisallowShadowing
 	ms.Add(stats)
 
 	return result.Result{

@@ -523,7 +523,7 @@ func TestMVCCPutNewEpochLowerSequence(t *testing.T) {
 	aggMeta := &enginepb.MVCCMetadata{
 		Txn:           &txn.TxnMeta,
 		Timestamp:     hlc.LegacyTimestamp{WallTime: 1},
-		KeyBytes:      mvccVersionTimestampSize,
+		KeyBytes:      MVCCVersionTimestampSize,
 		ValBytes:      int64(len(value2.RawBytes)),
 		IntentHistory: nil,
 	}
@@ -5273,7 +5273,7 @@ func TestMVCCIdempotentTransactions(t *testing.T) {
 	aggMeta := &enginepb.MVCCMetadata{
 		Txn:       &txn.TxnMeta,
 		Timestamp: hlc.LegacyTimestamp(ts1),
-		KeyBytes:  mvccVersionTimestampSize,
+		KeyBytes:  MVCCVersionTimestampSize,
 		ValBytes:  int64(len(newValue.RawBytes)),
 		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
 			{Sequence: 0, Value: value.RawBytes},
@@ -5402,7 +5402,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	aggMeta := &enginepb.MVCCMetadata{
 		Txn:       &txn.TxnMeta,
 		Timestamp: hlc.LegacyTimestamp(ts1),
-		KeyBytes:  mvccVersionTimestampSize,
+		KeyBytes:  MVCCVersionTimestampSize,
 		ValBytes:  int64(len(value.RawBytes)),
 	}
 	metaKey := mvccKey(key)
@@ -5429,7 +5429,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	aggMeta = &enginepb.MVCCMetadata{
 		Txn:       &txn.TxnMeta,
 		Timestamp: hlc.LegacyTimestamp(ts2),
-		KeyBytes:  mvccVersionTimestampSize,
+		KeyBytes:  MVCCVersionTimestampSize,
 		ValBytes:  int64(len(newValue.RawBytes)),
 		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
 			{Sequence: 1, Value: value.RawBytes},
@@ -5456,7 +5456,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	aggMeta = &enginepb.MVCCMetadata{
 		Txn:       &txn.TxnMeta,
 		Timestamp: hlc.LegacyTimestamp(ts2),
-		KeyBytes:  mvccVersionTimestampSize,
+		KeyBytes:  MVCCVersionTimestampSize,
 		ValBytes:  0,
 		Deleted:   true,
 		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
@@ -5485,7 +5485,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	aggMeta = &enginepb.MVCCMetadata{
 		Txn:       &txn.TxnMeta,
 		Timestamp: hlc.LegacyTimestamp(ts2),
-		KeyBytes:  mvccVersionTimestampSize,
+		KeyBytes:  MVCCVersionTimestampSize,
 		ValBytes:  int64(len(value.RawBytes)),
 		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
 			{Sequence: 1, Value: value.RawBytes},

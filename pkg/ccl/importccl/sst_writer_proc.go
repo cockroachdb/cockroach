@@ -220,7 +220,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 					// can never be any shadow keys, and this check could be turned off.
 					// Plumb a user option to toggle this if the overhead without
 					// colliding keys becomes more significant.
-					if err := bulk.AddSSTable(ctx, sp.db, sst.span.Key, sst.span.EndKey, sst.data, true /* disallowShadowing */); err != nil {
+					if err := bulk.AddSSTable(ctx, sp.db, sst.span.Key, sst.span.EndKey, sst.data, true /* disallowShadowing */, nil /* ms */); err != nil {
 						return err
 					}
 
