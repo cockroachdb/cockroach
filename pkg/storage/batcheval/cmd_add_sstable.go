@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 )
 
@@ -72,15 +73,32 @@ func EvalAddSSTable(
 		}
 	}
 
+	// Get the MVCCStats for the SST being ingested.
 	var stats enginepb.MVCCStats
 	if args.MVCCStats != nil {
 		stats = *args.MVCCStats
-	} else {
+	}
+
+	// Stats are computed on-the-fly when shadowing of keys is disallowed. If we
+	// took the fast path and race is enabled, assert the stats were correctly
+	// computed.
+	verifyFastPath := args.DisallowShadowing && util.RaceEnabled
+	if args.MVCCStats == nil || verifyFastPath {
 		log.VEventf(ctx, 2, "computing MVCCStats for SSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
 
 		computed, err := engine.ComputeStatsGo(dataIter, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "computing SSTable MVCC stats")
+		}
+
+		if verifyFastPath {
+			// Update the timestamp to that of the recently computed stats to get the
+			// diff passing.
+			stats.LastUpdateNanos = computed.LastUpdateNanos
+			if !stats.Equal(computed) {
+				log.Fatalf(ctx, "fast-path MVCCStats computation gave wrong result: diff(fast, computed) = %s",
+					pretty.Diff(stats, computed))
+			}
 		}
 		stats = computed
 	}
@@ -135,7 +153,7 @@ func EvalAddSSTable(
 	// Callers can trigger such a re-computation to fixup any discrepancies (and
 	// remove the ContainsEstimates flag) after they are done ingesting files by
 	// sending an explicit recompute.
-	stats.ContainsEstimates = true
+	stats.ContainsEstimates = !args.DisallowShadowing
 	ms.Add(stats)
 
 	return result.Result{
