@@ -1183,7 +1183,7 @@ func removeDeadReplicas(
 				StoreID:   storeIdent.StoreID,
 				ReplicaID: desc.NextReplicaID,
 			}}
-			newDesc.SetReplicas(roachpb.MakeReplicaDescriptors(&replicas))
+			newDesc.SetReplicas(roachpb.MakeReplicaDescriptors(replicas))
 			newDesc.NextReplicaID++
 			fmt.Printf("Replica %s -> %s\n", &desc, &newDesc)
 			newDescs = append(newDescs, newDesc)
