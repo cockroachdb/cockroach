@@ -38,7 +38,9 @@ ignored = [
 
 [[constraint]]
   name = "go.etcd.io/etcd"
-  branch = "master"
+  # branch = "master"
+  branch = "joint-auto-leave"
+  source = "https://github.com/tbg/etcd"
 
 # Used for the API client; we want the latest.
 [[constraint]]
