@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -49,7 +50,7 @@ type Reporter struct {
 	// Contains the list of the stores of the current node
 	localStores *storage.Stores
 	// Constraints constructed from the locality information
-	localityConstraints []config.Constraints
+	localityConstraints []zonepb.Constraints
 	// The store that is the current meta 1 leaseholder
 	meta1LeaseHolder *storage.Store
 	// Latest zone config
@@ -250,19 +251,19 @@ func (stats *Reporter) updateLatestConfig() {
 }
 
 func (stats *Reporter) updateLocalityConstraints() error {
-	localityConstraintsByName := make(map[string]config.Constraints, 16)
+	localityConstraintsByName := make(map[string]zonepb.Constraints, 16)
 	for _, sd := range stats.storePool.GetStores() {
-		c := config.Constraints{
-			Constraints: make([]config.Constraint, 0),
+		c := zonepb.Constraints{
+			Constraints: make([]zonepb.Constraint, 0),
 		}
 		for _, t := range sd.Node.Locality.Tiers {
 			c.Constraints = append(
 				c.Constraints,
-				config.Constraint{Type: config.Constraint_REQUIRED, Key: t.Key, Value: t.Value})
+				zonepb.Constraint{Type: zonepb.Constraint_REQUIRED, Key: t.Key, Value: t.Value})
 			localityConstraintsByName[c.String()] = c
 		}
 	}
-	stats.localityConstraints = make([]config.Constraints, 0, len(localityConstraintsByName))
+	stats.localityConstraints = make([]zonepb.Constraints, 0, len(localityConstraintsByName))
 	for _, c := range localityConstraintsByName {
 		stats.localityConstraints = append(stats.localityConstraints, c)
 	}
@@ -303,7 +304,7 @@ func visitZones(
 	ctx context.Context,
 	r roachpb.RangeDescriptor,
 	cfg *config.SystemConfig,
-	visitor func(context.Context, *config.ZoneConfig, ZoneKey) bool,
+	visitor func(context.Context, *zonepb.ZoneConfig, ZoneKey) bool,
 ) (bool, error) {
 	id, keySuffix := config.DecodeKeyIntoZoneIDAndSuffix(r.StartKey)
 	zone, err := getZoneByID(id, cfg)
@@ -341,7 +342,7 @@ func visitAncestors(
 	ctx context.Context,
 	id uint32,
 	cfg *config.SystemConfig,
-	visitor func(context.Context, *config.ZoneConfig, ZoneKey) bool,
+	visitor func(context.Context, *zonepb.ZoneConfig, ZoneKey) bool,
 ) (bool, error) {
 	// Check to see if it's a table. If so, inherit from the database.
 	// For all other cases, inherit from the default.
@@ -379,7 +380,7 @@ func visitAncestors(
 func visitDefaultZone(
 	ctx context.Context,
 	cfg *config.SystemConfig,
-	visitor func(context.Context, *config.ZoneConfig, ZoneKey) bool,
+	visitor func(context.Context, *zonepb.ZoneConfig, ZoneKey) bool,
 ) bool {
 	zone, err := getZoneByID(keys.RootNamespaceID, cfg)
 	if err != nil {
@@ -392,12 +393,12 @@ func visitDefaultZone(
 }
 
 // getZoneByID returns a zone given its id. Inheritance does not apply.
-func getZoneByID(id uint32, cfg *config.SystemConfig) (*config.ZoneConfig, error) {
+func getZoneByID(id uint32, cfg *config.SystemConfig) (*zonepb.ZoneConfig, error) {
 	zoneVal := cfg.GetValue(config.MakeZoneKey(id))
 	if zoneVal == nil {
 		return nil, nil
 	}
-	zone := new(config.ZoneConfig)
+	zone := new(zonepb.ZoneConfig)
 	if err := zoneVal.GetProto(zone); err != nil {
 		return nil, err
 	}
@@ -407,7 +408,7 @@ func getZoneByID(id uint32, cfg *config.SystemConfig) (*config.ZoneConfig, error
 // processRange returns the list of constraints violated by a range. The range
 // is represented by the descriptors of the replicas' stores.
 func processRange(
-	ctx context.Context, storeDescs []roachpb.StoreDescriptor, constraintGroups []config.Constraints,
+	ctx context.Context, storeDescs []roachpb.StoreDescriptor, constraintGroups []zonepb.Constraints,
 ) []ConstraintRepr {
 	var res []ConstraintRepr
 	// Evaluate all zone constraints for the stores (i.e. replicas) of the given range.
@@ -428,7 +429,7 @@ func processRange(
 // constraintSatisfied checks that a range (represented by its replicas' stores)
 // satisfies a constraint.
 func constraintSatisfied(
-	c config.Constraint, replicasRequiredToMatch int, storeDescs []roachpb.StoreDescriptor,
+	c zonepb.Constraint, replicasRequiredToMatch int, storeDescs []roachpb.StoreDescriptor,
 ) bool {
 	passCount := 0
 	for _, storeDesc := range storeDescs {
@@ -439,11 +440,11 @@ func constraintSatisfied(
 		}
 
 		storeMatches := true
-		match := config.StoreMatchesConstraint(storeDesc, c)
-		if c.Type == config.Constraint_REQUIRED && !match {
+		match := zonepb.StoreMatchesConstraint(storeDesc, c)
+		if c.Type == zonepb.Constraint_REQUIRED && !match {
 			storeMatches = false
 		}
-		if c.Type == config.Constraint_PROHIBITED && match {
+		if c.Type == zonepb.Constraint_PROHIBITED && match {
 			storeMatches = false
 		}
 

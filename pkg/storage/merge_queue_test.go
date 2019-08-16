@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -42,8 +43,8 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 		return keys.MakeTablePrefix(keys.MaxReservedDescID + i)
 	}
 
-	config.TestingSetZoneConfig(keys.MaxReservedDescID+1, *config.NewZoneConfig())
-	config.TestingSetZoneConfig(keys.MaxReservedDescID+2, *config.NewZoneConfig())
+	config.TestingSetZoneConfig(keys.MaxReservedDescID+1, *zonepb.NewZoneConfig())
+	config.TestingSetZoneConfig(keys.MaxReservedDescID+2, *zonepb.NewZoneConfig())
 
 	// Disable merges for table ID 4.
 	if err := testCtx.gossip.AddInfo(
@@ -175,7 +176,7 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 			repl := &Replica{}
 			repl.mu.state.Desc = &roachpb.RangeDescriptor{StartKey: tc.startKey, EndKey: tc.endKey}
 			repl.mu.state.Stats = &enginepb.MVCCStats{KeyBytes: tc.bytes}
-			zoneConfig := config.DefaultZoneConfigRef()
+			zoneConfig := zonepb.DefaultZoneConfigRef()
 			zoneConfig.RangeMinBytes = proto.Int64(tc.minBytes)
 			repl.SetZoneConfig(zoneConfig)
 			shouldQ, priority := mq.shouldQueue(ctx, hlc.Timestamp{}, repl, config.NewSystemConfig(zoneConfig))

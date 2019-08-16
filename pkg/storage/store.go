@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -156,8 +157,8 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	sc := StoreConfig{
-		DefaultZoneConfig:           config.DefaultZoneConfigRef(),
-		DefaultSystemZoneConfig:     config.DefaultSystemZoneConfigRef(),
+		DefaultZoneConfig:           zonepb.DefaultZoneConfigRef(),
+		DefaultSystemZoneConfig:     zonepb.DefaultSystemZoneConfigRef(),
 		Settings:                    st,
 		AmbientCtx:                  log.AmbientContext{Tracer: st.Tracer},
 		Clock:                       clock,
@@ -602,8 +603,8 @@ type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
 
-	DefaultZoneConfig       *config.ZoneConfig
-	DefaultSystemZoneConfig *config.ZoneConfig
+	DefaultZoneConfig       *zonepb.ZoneConfig
+	DefaultSystemZoneConfig *zonepb.ZoneConfig
 	Settings                *cluster.Settings
 	Clock                   *hlc.Clock
 	DB                      *client.DB

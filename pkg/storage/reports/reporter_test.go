@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -48,13 +49,13 @@ type zone struct {
 	constraints string
 }
 
-func (z zone) toZoneConfig() config.ZoneConfig {
-	cfg := config.NewZoneConfig()
+func (z zone) toZoneConfig() zonepb.ZoneConfig {
+	cfg := zonepb.NewZoneConfig()
 	if z.replicas != 0 {
 		cfg.NumReplicas = proto.Int32(z.replicas)
 	}
 	if z.constraints != "" {
-		var constraintsList config.ConstraintsList
+		var constraintsList zonepb.ConstraintsList
 		if err := yaml.UnmarshalStrict([]byte(z.constraints), &constraintsList); err != nil {
 			panic(err)
 		}
@@ -543,9 +544,9 @@ func processTestCase(
 			sysCfgBuilder.addTableDesc(tableID, tableDesc)
 
 			// Create the table's zone config.
-			var tableZone *config.ZoneConfig
+			var tableZone *zonepb.ZoneConfig
 			if table.zone != nil {
-				tableZone = new(config.ZoneConfig)
+				tableZone = new(zonepb.ZoneConfig)
 				*tableZone = table.zone.toZoneConfig()
 			}
 			// Add subzones for the PK partitions.
@@ -680,11 +681,11 @@ func makeTableDesc(t table, tableID int, dbID int) (sqlbase.TableDescriptor, err
 // objects: A mapping from object name to ZoneKey that gets populated with all the new subzones.
 func addIndexSubzones(
 	idx index,
-	parent *config.ZoneConfig,
+	parent *zonepb.ZoneConfig,
 	tableDesc sql.TableDescriptor,
 	idxID int,
 	objects map[string]ZoneKey,
-) *config.ZoneConfig {
+) *zonepb.ZoneConfig {
 	res := parent
 
 	ensureParent := func() {
@@ -692,13 +693,13 @@ func addIndexSubzones(
 			return
 		}
 		// Create a placeholder zone config.
-		res = config.NewZoneConfig()
+		res = zonepb.NewZoneConfig()
 		res.DeleteTableConfig()
 	}
 
 	if idx.zone != nil {
 		ensureParent()
-		res.SetSubzone(config.Subzone{
+		res.SetSubzone(zonepb.Subzone{
 			IndexID:       uint32(idxID),
 			PartitionName: "",
 			Config:        idx.zone.toZoneConfig(),
@@ -710,7 +711,7 @@ func addIndexSubzones(
 	for _, p := range idx.partitions {
 		if p.zone != nil {
 			ensureParent()
-			res.SetSubzone(config.Subzone{
+			res.SetSubzone(zonepb.Subzone{
 				IndexID:       uint32(idxID),
 				PartitionName: p.name,
 				Config:        p.zone.toZoneConfig(),
@@ -730,18 +731,18 @@ func addIndexSubzones(
 // systemConfigBuilder build a system config. Clients will call some setters and then call build().
 type systemConfigBuilder struct {
 	kv                []roachpb.KeyValue
-	defaultZoneConfig *config.ZoneConfig
+	defaultZoneConfig *zonepb.ZoneConfig
 
 	// ts is used for the creation time of synthesized descriptors
 	ts hlc.Timestamp
 }
 
-func (b *systemConfigBuilder) setDefaultZoneConfig(cfg config.ZoneConfig) {
+func (b *systemConfigBuilder) setDefaultZoneConfig(cfg zonepb.ZoneConfig) {
 	b.defaultZoneConfig = &cfg
 	b.addZone(keys.RootNamespaceID, cfg)
 }
 
-func (b *systemConfigBuilder) addZone(id int, cfg config.ZoneConfig) {
+func (b *systemConfigBuilder) addZone(id int, cfg zonepb.ZoneConfig) {
 	k := config.MakeZoneKey(uint32(id))
 	var v roachpb.Value
 	if err := v.SetProto(&cfg); err != nil {
@@ -925,14 +926,14 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 
 	// Collect all the zones that exist at cluster bootstrap.
 	systemZoneIDs := make([]int, 0, 10)
-	systemZones := make([]config.ZoneConfig, 0, 10)
+	systemZones := make([]zonepb.ZoneConfig, 0, 10)
 	{
 		rows, err := db.Query("select id, config from system.zones")
 		require.NoError(t, err)
 		for rows.Next() {
 			var zoneID int
 			var buf []byte
-			cfg := config.ZoneConfig{}
+			cfg := zonepb.ZoneConfig{}
 			require.NoError(t, rows.Scan(&zoneID, &buf))
 			require.NoError(t, protoutil.Unmarshal(buf, &cfg))
 			systemZoneIDs = append(systemZoneIDs, zoneID)

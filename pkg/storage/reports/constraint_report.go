@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -121,7 +122,7 @@ func (k ConstraintStatusKey) Less(other ConstraintStatusKey) bool {
 // MakeConstraintRepr creates a canonical string representation for a
 // constraint. The constraint is identified by the group it belongs to and the
 // index within the group.
-func MakeConstraintRepr(constraintGroup config.Constraints, constraintIdx int) ConstraintRepr {
+func MakeConstraintRepr(constraintGroup zonepb.Constraints, constraintIdx int) ConstraintRepr {
 	cstr := constraintGroup.Constraints[constraintIdx].String()
 	if constraintGroup.NumReplicas == 0 {
 		return ConstraintRepr(cstr)
@@ -162,7 +163,7 @@ func (r *replicationConstraintStatsReportSaver) EnsureEntry(
 }
 
 func (r *replicationConstraintStatsReportSaver) ensureEntries(
-	key ZoneKey, zone *config.ZoneConfig,
+	key ZoneKey, zone *zonepb.ZoneConfig,
 ) {
 	for _, group := range zone.Constraints {
 		for i := range group.Constraints {
@@ -426,10 +427,10 @@ func (v *constraintConformanceVisitor) visit(ctx context.Context, r roachpb.Rang
 	storeDescs := v.storeResolver(r)
 
 	// Find the applicable constraints, which may be inherited.
-	var constraints []config.Constraints
+	var constraints []zonepb.Constraints
 	var zKey ZoneKey
 	_, err := visitZones(ctx, r, v.cfg,
-		func(_ context.Context, zone *config.ZoneConfig, key ZoneKey) bool {
+		func(_ context.Context, zone *zonepb.ZoneConfig, key ZoneKey) bool {
 			if zone.Constraints == nil {
 				return false
 			}

@@ -14,7 +14,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -82,8 +82,8 @@ func TestRemovePartitioningOSS(t *testing.T) {
 
 	// Hack in partition zone configs. This also requires a CCL binary to do
 	// properly.
-	zoneConfig := config.ZoneConfig{
-		Subzones: []config.Subzone{
+	zoneConfig := zonepb.ZoneConfig{
+		Subzones: []zonepb.Subzone{
 			{
 				IndexID:       uint32(tableDesc.PrimaryIndex.ID),
 				PartitionName: "p1",

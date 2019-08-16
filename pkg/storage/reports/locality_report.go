@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -265,7 +266,7 @@ func (r *replicationCriticalLocalitiesReportSaver) upsertLocality(
 // criticalLocalitiesVisitor is a visitor that, when passed to visitRanges(), builds
 // a LocalityReport.
 type criticalLocalitiesVisitor struct {
-	localityConstraints []config.Constraints
+	localityConstraints []zonepb.Constraints
 	cfg                 *config.SystemConfig
 	storeResolver       StoreResolver
 	nodeChecker         nodeChecker
@@ -277,7 +278,7 @@ var _ rangeVisitor = &criticalLocalitiesVisitor{}
 
 func makeLocalityStatsVisitor(
 	ctx context.Context,
-	localityConstraints []config.Constraints,
+	localityConstraints []zonepb.Constraints,
 	cfg *config.SystemConfig,
 	storeResolver StoreResolver,
 	nodeChecker nodeChecker,
@@ -312,7 +313,7 @@ func processLocalityForRange(
 	ctx context.Context,
 	r roachpb.RangeDescriptor,
 	rep *replicationCriticalLocalitiesReportSaver,
-	c *config.Constraints,
+	c *zonepb.Constraints,
 	cfg *config.SystemConfig,
 	nodeChecker nodeChecker,
 	storeDescs []roachpb.StoreDescriptor,
@@ -320,7 +321,7 @@ func processLocalityForRange(
 	// Get the zone.
 	var zKey ZoneKey
 	found, err := visitZones(ctx, r, cfg,
-		func(_ context.Context, zone *config.ZoneConfig, key ZoneKey) bool {
+		func(_ context.Context, zone *zonepb.ZoneConfig, key ZoneKey) bool {
 			if !zoneChangesReplication(zone) {
 				return false
 			}
@@ -362,7 +363,7 @@ func processLocalityForRange(
 		storeHasConstraint := true
 		for _, constraint := range c.Constraints {
 			// For required constraints - consider unavailable nodes as not matching.
-			if !config.StoreMatchesConstraint(storeDesc, constraint) {
+			if !zonepb.StoreMatchesConstraint(storeDesc, constraint) {
 				storeHasConstraint = false
 				break
 			}
