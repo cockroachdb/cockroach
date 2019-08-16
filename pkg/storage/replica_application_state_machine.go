@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/apply"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -513,6 +514,14 @@ func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCm
 // runPreApplyTriggers runs any triggers that must fire before a command is
 // applied. It may modify the command's ReplicatedEvalResult.
 func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *replicatedCmd) error {
+	if cmd.decodedConfChange != nil && cmd.cc.AsV2().LeaveJoint() {
+		if err := engine.MVCCDelete(
+			ctx, b.batch, &b.stats, keys.RangeDescriptorJointKey(b.r.Desc().StartKey), hlc.Timestamp{}, nil, /* txn */
+		); err != nil {
+			return err
+		}
+	}
+
 	res := cmd.replicatedResult()
 
 	// AddSSTable ingestions run before the actual batch gets written to the
@@ -998,10 +1007,15 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 			log.Fatalf(ctx, "unexpected replication change from command %s", &cmd.raftCmd)
 		}
 		return nil
-	case raftpb.EntryConfChange:
+	case raftpb.EntryConfChange, raftpb.EntryConfChangeV2:
 		if cmd.replicatedResult().ChangeReplicas == nil {
-			// The command was rejected.
-			cmd.cc = raftpb.ConfChange{}
+			// The command was rejected or raft is transitioning out of a joint
+			// configuration. In the latter case, there aren't any changes so
+			// leave the command alone (since it originates from raft, we never
+			// reject it). In the former case, make sure the changes are nixed.
+			if len(cmd.cc.AsV2().Changes) > 0 {
+				cmd.cc = raftpb.ConfChange{}
+			}
 		}
 		return sm.r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 			raftGroup.ApplyConfChange(cmd.cc)

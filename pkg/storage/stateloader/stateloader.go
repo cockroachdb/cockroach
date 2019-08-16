@@ -642,3 +642,52 @@ func (rsl StateLoader) SynthesizeHardState(
 	err := rsl.SetHardState(ctx, eng, newHS)
 	return errors.Wrapf(err, "writing HardState %+v", &newHS)
 }
+
+func raftConfState(
+	desc roachpb.RangeDescriptor, jointDesc *roachpb.RangeDescriptor,
+) (raftpb.ConfState, error) {
+	var cs raftpb.ConfState
+
+	var outgoingVoters map[roachpb.ReplicaID]struct{}
+	if jointDesc != nil {
+		cs.AutoLeave = true
+
+		sl := jointDesc.Replicas().Voters()
+		outgoingVoters = make(map[roachpb.ReplicaID]struct{}, len(sl))
+		for _, rep := range sl {
+			outgoingVoters[rep.ReplicaID] = struct{}{}
+			cs.VotersOutgoing = append(cs.VotersOutgoing, uint64(rep.ReplicaID))
+		}
+	}
+
+	// The incoming config is taken verbatim from 'desc' when the config is not
+	// joint. If it is, the voters are still taken verbatim, but some of the
+	// learners which are also in the outgoing config must be put into
+	// LearnersNext instead of Learners.
+	for _, rep := range desc.Replicas().Voters() {
+		cs.Voters = append(cs.Voters, uint64(rep.ReplicaID))
+	}
+	for _, rep := range desc.Replicas().Learners() {
+		if _, ok := outgoingVoters[rep.ReplicaID]; ok {
+			cs.LearnersNext = append(cs.LearnersNext, uint64(rep.ReplicaID))
+		} else {
+			cs.Learners = append(cs.Learners, uint64(rep.ReplicaID))
+		}
+	}
+	return cs, nil
+}
+
+func (rsl StateLoader) LoadConfState(
+	ctx context.Context, eng engine.Reader, desc *roachpb.RangeDescriptor,
+) (raftpb.ConfState, error) {
+	jointDesc := &roachpb.RangeDescriptor{}
+	found, err := engine.MVCCGetProto(
+		ctx, eng, keys.RangeDescriptorJointKey(desc.StartKey), hlc.Timestamp{}, jointDesc, engine.MVCCGetOptions{})
+	if err != nil {
+		return raftpb.ConfState{}, err
+	}
+	if !found {
+		jointDesc = nil
+	}
+	return raftConfState(*desc, jointDesc)
+}
