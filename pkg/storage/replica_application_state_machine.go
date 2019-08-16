@@ -560,9 +560,10 @@ func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *replicat
 		if err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to get replica for merge")
 		}
-		const destroyData = false
+		const rangeIDLocalOnly = true
+		const mustClearRange = false
 		if err := rhsRepl.preDestroyRaftMuLocked(
-			ctx, b.batch, b.batch, merge.RightDesc.NextReplicaID, destroyData,
+			ctx, b.batch, b.batch, merge.RightDesc.NextReplicaID, rangeIDLocalOnly, mustClearRange,
 		); err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to destroy range before merge")
 		}

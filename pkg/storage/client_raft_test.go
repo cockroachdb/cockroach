@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1038,6 +1039,7 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 		RangeSize:  100,
 		State:      storagepb.ReplicaState{Desc: rep.Desc()},
 	}
+	header.RaftMessageRequest.Message.Snapshot.Data = uuid.UUID{}.GetBytes()
 	// Cause this stream to return an error as soon as we ask it for something.
 	// This injects an error into HandleSnapshotStream when we try to send the
 	// "snapshot accepted" message.
