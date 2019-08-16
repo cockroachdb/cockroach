@@ -122,8 +122,8 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 			// Now wait until the heartbeat loop notices that the transaction is aborted.
 			testutils.SucceedsSoon(t, func() error {
-				if txn.GetTxnCoordMeta(ctx).Txn.Status != roachpb.ABORTED {
-					return fmt.Errorf("txn not aborted yet")
+				if txn.Sender().(*kv.TxnCoordSender).IsTracking() {
+					return fmt.Errorf("txn heartbeat loop running")
 				}
 				return nil
 			})

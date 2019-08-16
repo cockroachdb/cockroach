@@ -42,8 +42,8 @@ const (
 	opTxnCoordSender = "txn coordinator send"
 )
 
-// txnState represents states relating to whether Begin/EndTxn requests need to
-// be sent.
+// txnState represents states relating to whether an EndTransaction request
+// needs to be sent.
 //go:generate stringer -type=txnState
 type txnState int
 
@@ -484,14 +484,13 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 	if typ == client.RootTxn {
 		tcs.interceptorAlloc.txnHeartbeater.init(
 			tcf.AmbientContext,
-			&tcs.mu.Mutex,
-			&tcs.mu.txn,
+			tcs.stopper,
 			tcs.clock,
+			&tcs.metrics,
 			tcs.heartbeatInterval,
 			&tcs.interceptorAlloc.txnLockGatekeeper,
-			&tcs.metrics,
-			tcs.stopper,
-			tcs.cleanupTxnLocked,
+			&tcs.mu.Mutex,
+			&tcs.mu.txn,
 		)
 		tcs.interceptorAlloc.txnCommitter = txnCommitter{
 			st:      tcf.st,
@@ -609,12 +608,17 @@ func (tc *TxnCoordSender) GetMeta(
 	for _, reqInt := range tc.interceptorStack {
 		reqInt.populateMetaLocked(&meta)
 	}
-	if opt == client.OnlyPending && meta.Txn.Status != roachpb.PENDING {
+	switch opt {
+	case client.AnyTxnStatus:
+		// Nothing to check.
+	case client.OnlyPending:
+		// Check the coordinator's proto status.
 		rejectErr := tc.maybeRejectClientLocked(ctx, nil /* ba */)
-		if rejectErr == nil {
-			log.Fatal(ctx, "expected non-nil rejectErr")
+		if rejectErr != nil {
+			return roachpb.TxnCoordMeta{}, rejectErr.GoError()
 		}
-		return roachpb.TxnCoordMeta{}, rejectErr.GoError()
+	default:
+		panic("unreachable")
 	}
 	return meta, nil
 }
@@ -863,9 +867,7 @@ func (tc *TxnCoordSender) maybeSleepForLinearizable(
 func (tc *TxnCoordSender) maybeRejectClientLocked(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
-	if singleRollback := ba != nil &&
-		ba.IsSingleEndTransactionRequest() &&
-		!ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest).Commit; singleRollback {
+	if ba != nil && ba.IsSingleAbortTransactionRequest() {
 		// As a special case, we allow rollbacks to be sent at any time. Any
 		// rollback attempt moves the TxnCoordSender state to txnFinalized, but higher
 		// layers are free to retry rollbacks if they want (and they do, for
@@ -873,17 +875,33 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		return nil
 	}
 
-	if tc.mu.txnState == txnFinalized {
+	// Check the transaction coordinator state.
+	switch tc.mu.txnState {
+	case txnPending:
+		// All good.
+	case txnError:
+		return tc.mu.storedErr
+	case txnFinalized:
 		msg := fmt.Sprintf("client already committed or rolled back the transaction. "+
 			"Trying to execute: %s", ba)
 		stack := string(debug.Stack())
 		log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
 		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(msg), &tc.mu.txn)
 	}
-	if tc.mu.txnState == txnError {
-		return tc.mu.storedErr
-	}
-	if tc.mu.txn.Status == roachpb.ABORTED {
+
+	// Check the transaction proto state, along with any finalized transaction
+	// status observed by the transaction heartbeat loop.
+	protoStatus := tc.mu.txn.Status
+	hbObservedStatus := tc.interceptorAlloc.txnHeartbeater.mu.finalObservedStatus
+	switch {
+	case protoStatus == roachpb.ABORTED:
+		// The transaction was rolled back synchronously.
+		fallthrough
+	case protoStatus != roachpb.COMMITTED && hbObservedStatus == roachpb.ABORTED:
+		// The transaction heartbeat observed an aborted transaction record and
+		// this was not due to a synchronous transaction commit and transaction
+		// record garbage collection.
+		// See the comment on txnHeartbeater.mu.finalizedStatus for more details.
 		abortedErr := roachpb.NewErrorWithTxn(
 			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_CLIENT_REJECT), &tc.mu.txn)
 		if tc.typ == client.LeafTxn {
@@ -891,16 +909,18 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 			// root) rather than TransactionRetryWithProtoRefreshError.
 			return abortedErr
 		}
+		// Root txns handle retriable errors.
 		newTxn := roachpb.PrepareTransactionForRetry(
-			ctx, abortedErr,
-			// priority is not used for aborted errors
-			roachpb.NormalUserPriority,
-			tc.clock)
+			ctx, abortedErr, roachpb.NormalUserPriority, tc.clock)
 		return roachpb.NewError(roachpb.NewTransactionRetryWithProtoRefreshError(
 			abortedErr.Message, tc.mu.txn.ID, newTxn))
-	}
-	if tc.mu.txn.Status != roachpb.PENDING {
-		return roachpb.NewErrorf("(see issue #37866) unexpected txn state: %s", tc.mu.txn)
+	case protoStatus != roachpb.PENDING || hbObservedStatus != roachpb.PENDING:
+		// The transaction proto is in an unexpected state.
+		return roachpb.NewErrorf(
+			"(see issue #37866) unexpected txn state: %s; heartbeat observed status: %s",
+			tc.mu.txn, hbObservedStatus)
+	default:
+		// All good.
 	}
 	return nil
 }
@@ -1004,6 +1024,7 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 		// Abort the old txn. The client is not supposed to use use this
 		// TxnCoordSender any more.
 		tc.interceptorAlloc.txnHeartbeater.abortTxnAsyncLocked(ctx)
+		tc.cleanupTxnLocked(ctx)
 		return retErr
 	}
 
@@ -1238,4 +1259,11 @@ func (tc *TxnCoordSender) SerializeTxn() *roachpb.Transaction {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.mu.txn.Clone()
+}
+
+// IsTracking returns true if the heartbeat loop is running.
+func (tc *TxnCoordSender) IsTracking() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.interceptorAlloc.txnHeartbeater.heartbeatLoopRunningLocked()
 }
