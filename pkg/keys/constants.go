@@ -316,6 +316,10 @@ const (
 	ZonesTableConfigColumnID = 2
 	ZonesTableConfigColFamID = 2
 
+	DescriptorTablePrimaryKeyIndexID  = 1
+	DescriptorTableDescriptorColID    = 2
+	DescriptorTableDescriptorColFamID = 2
+
 	// Reserved IDs for other system tables. Note that some of these IDs refer
 	// to "Ranges" instead of a Table - these IDs are needed to store custom
 	// configuration for non-table ranges (e.g. Zone Configs).
