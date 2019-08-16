@@ -195,9 +195,6 @@ type StoreTestingKnobs struct {
 	// This ensures the `*Replica` will be materialized on the Store when it
 	// returns.
 	ReplicaAddStopAfterLearnerSnapshot func() bool
-	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
-	// applying a snapshot.
-	BeforeSnapshotSSTIngestion func(IncomingSnapshot, SnapshotRequest_Type, []string) error
 
 	// MaxApplicationBatchSize enforces a maximum size on application batches.
 	// This can be useful for testing conditions which require commands to be
