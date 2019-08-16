@@ -446,34 +446,71 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 			}
 
 			added, removed := crt.Added(), crt.Removed()
-			if len(added)+len(removed) != 1 {
-				log.Fatalf(context.TODO(), "atomic replication changes not supported yet")
+
+			replToSingle := func(rDesc roachpb.ReplicaDescriptor, typ roachpb.ReplicaChangeType) raftpb.ConfChangeSingle {
+				var changeType raftpb.ConfChangeType
+				if typ == roachpb.ADD_REPLICA {
+					replTyp := rDesc.GetType()
+					switch replTyp {
+					case roachpb.ReplicaType_VOTER:
+						changeType = raftpb.ConfChangeAddNode
+					case roachpb.ReplicaType_LEARNER:
+						changeType = raftpb.ConfChangeAddLearnerNode
+					default:
+						panic(errors.Errorf("unknown replica type %v", typ))
+					}
+				} else {
+					changeType = raftpb.ConfChangeRemoveNode
+				}
+				return raftpb.ConfChangeSingle{
+					NodeID: uint64(rDesc.ReplicaID),
+					Type:   changeType,
+				}
 			}
 
-			var changeType raftpb.ConfChangeType
-			var replicaID roachpb.ReplicaID
-			if len(added) > 0 {
-				replicaID = added[0].ReplicaID
-				typ := added[0].GetType()
-				switch typ {
-				case roachpb.ReplicaType_VOTER:
-					changeType = raftpb.ConfChangeAddNode
-				case roachpb.ReplicaType_LEARNER:
-					changeType = raftpb.ConfChangeAddLearnerNode
-				default:
-					panic(errors.Errorf("unknown replica type %v", typ))
+			var cc raftpb.ConfChangeI
+			if joint := len(added)+len(removed) > 1; joint {
+				// TODO(tbg): use this branch for all changes once we know that
+				// the cluster version is 19.2.
+				var sl []raftpb.ConfChangeSingle
+				for _, rDesc := range added {
+					sl = append(sl, replToSingle(rDesc, roachpb.ADD_REPLICA))
+				}
+				for _, rDesc := range removed {
+					sl = append(sl, replToSingle(rDesc, roachpb.REMOVE_REPLICA))
+				}
+				cc = raftpb.ConfChangeV2{
+					Transition: raftpb.ConfChangeTransitionAuto,
+					Changes:    sl,
+					Context:    encodedCtx,
 				}
 			} else {
-				changeType, replicaID = raftpb.ConfChangeRemoveNode, removed[0].ReplicaID
+				var changeType raftpb.ConfChangeType
+				var replicaID roachpb.ReplicaID
+				if len(added) > 0 {
+					replicaID = added[0].ReplicaID
+					typ := added[0].GetType()
+					switch typ {
+					case roachpb.ReplicaType_VOTER:
+						changeType = raftpb.ConfChangeAddNode
+					case roachpb.ReplicaType_LEARNER:
+						changeType = raftpb.ConfChangeAddLearnerNode
+					default:
+						panic(errors.Errorf("unknown replica type %v", typ))
+					}
+				} else {
+					changeType, replicaID = raftpb.ConfChangeRemoveNode, removed[0].ReplicaID
+				}
+
+				cc = raftpb.ConfChange{
+					Type:    changeType,
+					NodeID:  uint64(replicaID),
+					Context: encodedCtx,
+				}
 			}
 
-			confChange := raftpb.ConfChange{
-				Type:    changeType,
-				NodeID:  uint64(replicaID),
-				Context: encodedCtx,
-			}
 			if err := raftGroup.ProposeConfChange(
-				confChange,
+				cc,
 			); err != nil && err != raft.ErrProposalDropped {
 				// Silently ignore dropped proposals (they were always silently
 				// ignored prior to the introduction of ErrProposalDropped).

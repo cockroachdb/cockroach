@@ -12,21 +12,30 @@ package storage_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
+	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/raft/quorum"
+	"go.etcd.io/etcd/raft/tracker"
 )
 
+// TestAtomicMembershipChange is a simple smoke test for atomic membership
+// changes.
 func TestAtomicMembershipChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	// This is a simple smoke test to spot obvious issues with atomic replica changes.
-	// These aren't implemented at the time of writing. The compound change below is
-	// internally unwound and executed step by step (see executeAdminBatch()).
 	ctx := context.Background()
 
 	args := base.TestClusterArgs{
@@ -39,18 +48,32 @@ func TestAtomicMembershipChange(t *testing.T) {
 	expDesc, err := tc.AddReplicas(k, tc.Target(1), tc.Target(2))
 	require.NoError(t, err)
 
-	// Range is now on s1,s2,s3. "Atomically" add it to s4 while removing from s3.
-	// This isn't really atomic yet.
+	// Range is now on s1,s2,s3. Atomically add s4 and remove s3.
 
 	chgs := []roachpb.ReplicationChange{
 		{ChangeType: roachpb.ADD_REPLICA, Target: tc.Target(3)},
 		{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(2)},
 	}
-	// TODO(tbg): when 19.2 is out, remove this "feature gate" here and in
-	// AdminChangeReplicas.
-	ctx = context.WithValue(ctx, "testing", "testing")
-	desc, err := tc.Servers[0].DB().AdminChangeReplicas(ctx, k, expDesc, chgs)
+
+	repl, err := tc.Servers[0].Stores().GetReplicaForRangeID(expDesc.RangeID)
 	require.NoError(t, err)
+	desc, err := repl.ChangeReplicas(ctx, &expDesc, storage.SnapshotRequest_REBALANCE, storagepb.ReasonRebalance, "testing", chgs)
+	require.NoError(t, err)
+
+	// TODO(tbg): switch to this branch once AdminChangeReplicas generically uses
+	// atomic replication changes. At the tiem of writing, it executes each change
+	// individually.
+	if false {
+		desc, err := tc.Servers[0].DB().AdminChangeReplicas(
+			// TODO(tbg): when 19.2 is out, remove this "feature gate" here and in
+			// AdminChangeReplicas.
+			context.WithValue(ctx, "testing", "testing"),
+			k, expDesc, chgs,
+		)
+		var _ = desc // pacify linters
+		require.NoError(t, err)
+	}
+
 	var stores []roachpb.StoreID
 	for _, rDesc := range desc.Replicas().All() {
 		stores = append(stores, rDesc.StoreID)
@@ -58,4 +81,37 @@ func TestAtomicMembershipChange(t *testing.T) {
 	exp := []roachpb.StoreID{1, 2, 4}
 	// TODO(tbg): test more details and scenarios (learners etc).
 	require.Equal(t, exp, stores)
+
+	descJointKey := keys.RangeDescriptorJointKey(desc.StartKey)
+	testutils.SucceedsSoon(t, func() error {
+		for _, idx := range []int{0, 1, 3} {
+			// Verify that all replicas leave the joint config automatically (raft does
+			// this).
+			repl, err := tc.Servers[idx].Stores().GetReplicaForRangeID(expDesc.RangeID)
+			require.NoError(t, err)
+			act := repl.RaftStatus().Config
+			exp := tracker.Config{
+				Voters: quorum.JointConfig{
+					{1: {}, 2: {}, 4: {}},
+					{},
+				},
+			}
+			if sl := pretty.Diff(exp, act); len(sl) > 0 {
+				return errors.Errorf("exp != act:\n%s", strings.Join(sl, "\n"))
+			}
+			// Verify that on a replica which has the correct config, we also see that the
+			// joint config is no longer persisted. This is deleted *just* before the conf
+			// change is handed to Raft, so the test fails instantly at this point if there
+			// is still a joint range descriptor.
+			var desc roachpb.RangeDescriptor
+			ok, err := engine.MVCCGetProto(ctx, repl.Engine(), descJointKey, hlc.Timestamp{}, &desc, engine.MVCCGetOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ok {
+				t.Fatalf("still have joint descriptor %+v", desc)
+			}
+		}
+		return nil
+	})
 }
