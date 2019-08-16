@@ -68,8 +68,10 @@ type SystemConfig struct {
 	DefaultZoneConfig *zonepb.ZoneConfig
 	mu                struct {
 		syncutil.RWMutex
-		zoneCache        map[uint32]zoneEntry
-		shouldSplitCache map[uint32]bool
+		zoneCache map[uint32]zoneEntry
+		// A cache keeping track of descriptor ids that are known to not need
+		// range splits.
+		shouldntSplitCache map[uint32]struct{}
 	}
 }
 
@@ -78,7 +80,7 @@ func NewSystemConfig(defaultZoneConfig *zonepb.ZoneConfig) *SystemConfig {
 	sc := &SystemConfig{}
 	sc.DefaultZoneConfig = defaultZoneConfig
 	sc.mu.zoneCache = map[uint32]zoneEntry{}
-	sc.mu.shouldSplitCache = map[uint32]bool{}
+	sc.mu.shouldntSplitCache = map[uint32]struct{}{}
 	return sc
 }
 
@@ -105,36 +107,15 @@ func (s *SystemConfig) Equal(other *SystemConfigEntries) bool {
 	return true
 }
 
-// GetDesc looks for the descriptor value given a key, if a zone is created in
-// a test without creating a Descriptor, a dummy descriptor is returned.
-// If the key is invalid in decoding an ID, GetDesc panics.
-func (s *SystemConfig) GetDesc(key roachpb.Key) *roachpb.Value {
-	if getVal := s.GetValue(key); getVal != nil {
-		return getVal
-	}
-
-	id, err := keys.DecodeDescMetadataID(key)
-	if err != nil {
-		// No ID found for key. No roachpb.Value corresponds to this key.
-		panic(err)
-	}
-
+// idRequiresTestingSplit is an unfortunate method that deals with low-level
+// tests that install zone configs without actually creating a corresponding
+// table. They expect a split point around that zone, but were it not for this,
+// they wouldn't get it.
+func (s *SystemConfig) idRequiresTestingSplit(id uint32) bool {
 	testingLock.Lock()
-	_, ok := testingZoneConfig[uint32(id)]
+	_, ok := testingZoneConfig[id]
 	testingLock.Unlock()
-
-	if ok {
-		// A test installed a zone config for this ID, but no descriptor.
-		// Synthesize an empty descriptor to force split to occur, or else the
-		// zone config won't apply to any ranges. Most tests that use
-		// TestingSetZoneConfig are too low-level to create tables and zone
-		// configs through proper channels.
-		//
-		// Getting here outside tests is impossible.
-		val := roachpb.MakeValueFromBytes(nil)
-		return &val
-	}
-	return nil
+	return ok
 }
 
 // GetValue searches the kv list for 'key' and returns its
@@ -374,7 +355,7 @@ var staticSplits = []roachpb.RKey{
 	roachpb.RKey(keys.NodeLivenessKeyMax),           // end of node liveness span
 	roachpb.RKey(keys.TimeseriesPrefix),             // start of timeseries span
 	roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()), // end of timeseries span
-	roachpb.RKey(keys.TableDataMin),                 // end of system ranges / start of system config tables
+	roachpb.RKey(keys.SystemConfigSplitKey),         // end of system ranges / start of system config tables
 }
 
 // StaticSplits are predefined split points in the system keyspace.
@@ -396,138 +377,187 @@ func StaticSplits() []roachpb.RKey {
 // ComputeSplitKey takes a start and end key and returns the first key at which
 // to split the span [start, end). Returns nil if no splits are required.
 //
-// Splits are required between user tables (i.e. /table/<id>), at the start
-// of the system-config tables (i.e. /table/0), and at certain points within the
+// Splits are required between user tables (i.e. /table/<id>), between
+// indexes/partitions that have zone configs applied to them, at the start of
+// the system-config tables (i.e. /table/0), and at certain points within the
 // system ranges that come before the system tables. The system-config range is
 // somewhat special in that it can contain multiple SQL tables
 // (/table/0-/table/<max-system-config-desc>) within a single range.
-func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) (rr roachpb.RKey) {
-	// Before dealing with splits necessitated by SQL tables, handle all of the
-	// static splits earlier in the keyspace. Note that this list must be kept in
-	// the proper order (ascending in the keyspace) for the logic below to work.
-	//
-	// For new clusters, the static splits correspond to ranges created at
-	// bootstrap time. Older stores might be used with a version with more
-	// staticSplits though, in which case this code is useful.
-	for _, split := range staticSplits {
-		if startKey.Less(split) {
-			if split.Less(endKey) {
-				// The split point is contained within [startKey, endKey), so we need to
-				// create the split.
-				return split
-			}
-			// [startKey, endKey) is contained between the previous split point and
-			// this split point.
-			return nil
-		}
-		// [startKey, endKey) is somewhere greater than this split point. Continue.
-	}
-
-	// If the above iteration over the static split points didn't decide anything,
-	// the key range must be somewhere in the SQL table part of the keyspace.
-	startID, _, ok := DecodeObjectID(startKey)
-	if !ok || startID <= keys.MaxSystemConfigDescID {
-		// The start key is either:
-		// - not part of the structured data span
-		// - part of the system span
-		// In either case, start looking for splits at the first ID usable
-		// by the user data span.
-		startID = keys.MaxSystemConfigDescID + 1
-	}
-
-	// Build key prefixes for sequential table IDs until we reach endKey. Note
-	// that there are two disjoint sets of sequential keys: non-system reserved
-	// tables have sequential IDs, as do user tables, but the two ranges contain a
-	// gap.
-
-	// findSplitKey returns the first possible split key between the given range
-	// of IDs.
-	findSplitKey := func(startID, endID uint32) roachpb.RKey {
-		// endID could be smaller than startID if we don't have user tables.
-		for id := startID; id <= endID; id++ {
-			tableKey := roachpb.RKey(keys.MakeTablePrefix(id))
-			// This logic is analogous to the well-commented static split logic above.
-			if startKey.Less(tableKey) && s.shouldSplit(id) {
-				if tableKey.Less(endKey) {
-					return tableKey
+func (s *SystemConfig) ComputeSplitKey(
+	ctx context.Context, startKey, endKey roachpb.RKey,
+) roachpb.RKey {
+	// If the span we want to split starts in the static splits region, deal with
+	// it.
+	// Since v19.1, these split points are created at startup for new clusters, so
+	// this function is not expected to be called for these spans.
+	// In theory, stores created by an older version benefit from this code if
+	// they had never gone through the split queue.
+	maxStaticSplit := staticSplits[len(staticSplits)-1]
+	if startKey.Less(maxStaticSplit) {
+		for _, split := range staticSplits {
+			if startKey.Less(split) {
+				if split.Less(endKey) {
+					// The split point is contained within [startKey, endKey), so we need to
+					// create the split.
+					return split
 				}
+				// [startKey, endKey) is contained between the previous split point and
+				// this split point.
 				return nil
 			}
+		}
+	}
 
-			zoneVal := s.GetValue(MakeZoneKey(id))
-			if zoneVal == nil {
-				continue
+	// If the span starts below user space, deal with it.
+	// Here we split at every table or pseudo-table boundary. Same as above, most
+	// of these split points are created at cluster bootstrap, but there's
+	// migrations (new system tables) that benefit from this code.
+	userTableMin := roachpb.RKey(keys.UserTableDataMin)
+	if startKey.Less(userTableMin) {
+		startID, _, ok := DecodeObjectID(startKey)
+		if !ok || startID <= keys.MaxSystemConfigDescID {
+			// We don't split in the system config range.
+			startID = keys.MaxSystemConfigDescID + 1
+		}
+		// We're going to split at every table boundary between
+		// MaxSystemConfigDescID+1 and the largest system table id (inclusive).
+		endID, err := s.GetLargestObjectID(keys.MaxReservedDescID)
+		if err != nil {
+			log.Fatalf(ctx, "unable to determine largest reserved object ID from system config: %s", err)
+		}
+		for id := startID; id <= endID; id++ {
+			// This code is not equipped to deal with subzones (which would require
+			// splits), so assume that the system zones (to the extent that they
+			// exist) don't have them.
+			s.assertNoSubzones(ctx, id)
+			tableKey := roachpb.RKey(keys.MakeTablePrefix(id))
+			if startKey.Less(tableKey) {
+				if tableKey.Less(endKey) {
+					// The split point is contained within [startKey, endKey), so we need to
+					// create the split.
+					return tableKey
+				}
+				// [startKey, endKey) is contained between the previous split point and
+				// this split point.
+				return nil
 			}
-			var zone zonepb.ZoneConfig
-			if err := zoneVal.GetProto(&zone); err != nil {
+		}
+	}
+
+	return s.findUserspaceSplitKey(ctx, startKey, endKey)
+}
+
+// findUserspaceSplitKey returns the first possible split point for the
+// [startKey-endKey) by only considering user-space splits (i.e. between tables
+// and possibly indexes and partitions). Ultimately the decision of where to
+// split is delegate to sqlbase.
+func (s *SystemConfig) findUserspaceSplitKey(
+	ctx context.Context, startKey, endKey roachpb.RKey,
+) roachpb.RKey {
+	startID, _, ok := DecodeObjectID(startKey)
+	if !ok {
+		log.Fatalf(ctx, "failed to decode user-space span: %s-%s", startKey, endKey)
+	}
+	// We might have been given a key that's technically below user space
+	// (e.g. the start of the last system table). We're going to start searching for
+	// splits in the user space key range.
+	if startID < keys.MinUserDescID {
+		startID = keys.MinUserDescID
+	}
+
+	endID, err := s.GetLargestObjectID(0 /* maxID */)
+	if err != nil {
+		log.Fatalf(ctx, "unable to determine largest object ID from system config: %s", err)
+	}
+
+	// Iterate over all the tables in between startKey and endKey.
+	// endID could be smaller than startID if we don't have user tables.
+	for id := startID; id <= endID; id++ {
+		if s.idRequiresTestingSplit(id) {
+			tableKey := roachpb.RKey(keys.MakeTablePrefix(id))
+			if startKey.Less(tableKey) && tableKey.Less(endKey) {
+				return tableKey
+			}
+		}
+		if s.shouldntSplit(id) {
+			continue
+		}
+
+		// Read the zone config for the table.
+		zoneVal := s.GetValue(MakeZoneKey(id))
+		var zone *zonepb.ZoneConfig
+		if zoneVal != nil {
+			zone = new(zonepb.ZoneConfig)
+			if err := zoneVal.GetProto(zone); err != nil {
 				// An error while decoding the zone proto is unfortunate, but logging a
 				// message here would be excessively spammy. Just move on, which
 				// effectively assumes there are no subzones for this table.
-				continue
-			}
-			// This logic is analogous to the well-commented static split logic above.
-			for _, s := range zone.SubzoneSplits() {
-				subzoneKey := append(tableKey, s...)
-				if startKey.Less(subzoneKey) {
-					if subzoneKey.Less(endKey) {
-						return subzoneKey
-					}
-					return nil
-				}
+				zone = nil
 			}
 		}
-		return nil
-	}
 
-	// If the startKey falls within the non-system reserved range, compute those
-	// keys first.
-	if startID <= keys.MaxReservedDescID {
-		endID, err := s.GetLargestObjectID(keys.MaxReservedDescID)
+		descVal := s.GetValue(keys.DescMetadataKey(id))
+		if descVal == nil {
+			continue
+		}
+
+		// Here we delegate to SQL to give us the split points for this table.
+		tableSplits, err := sqlbase.SplitKeysForTable(descVal, zone)
 		if err != nil {
-			log.Errorf(context.TODO(), "unable to determine largest reserved object ID from system config: %s", err)
-			return nil
+			log.Fatalf(ctx, "unexpected failure to compute split keys: %s", err)
 		}
-		if splitKey := findSplitKey(startID, endID); splitKey != nil {
-			return splitKey
+		if tableSplits == nil {
+			// SQL just told us that this descriptor is not a table.
+			// Remember to not attempt it again.
+			s.cacheNonSplittableDesc(id)
+			continue
 		}
-		startID = keys.MaxReservedDescID + 1
+		// Return the smallest splitKey above the startKey.
+		for _, k := range tableSplits {
+			if startKey.Less(k) && k.Less(endKey) {
+				return k
+			}
+		}
 	}
-
-	// Find the split key in the user space.
-	endID, err := s.GetLargestObjectID(0)
-	if err != nil {
-		log.Errorf(context.TODO(), "unable to determine largest object ID from system config: %s", err)
-		return nil
-	}
-	return findSplitKey(startID, endID)
+	return nil
 }
 
 // NeedsSplit returns whether the range [startKey, endKey) needs a split due
-// to zone configs.
-func (s *SystemConfig) NeedsSplit(startKey, endKey roachpb.RKey) bool {
-	return len(s.ComputeSplitKey(startKey, endKey)) > 0
+// to table boundaries or zone configs.
+func (s *SystemConfig) NeedsSplit(ctx context.Context, startKey, endKey roachpb.RKey) bool {
+	return len(s.ComputeSplitKey(ctx, startKey, endKey)) > 0
 }
 
 // shouldSplit checks if the ID is eligible for a split at all.
 // It uses the internal cache to find a value, and tries to find
-// it using the hook if ID isn't found in the cache.
-func (s *SystemConfig) shouldSplit(ID uint32) bool {
+// it using the hook ifkeeping ID isn't found in the cache.
+func (s *SystemConfig) shouldntSplit(ID uint32) bool {
 	s.mu.RLock()
-	shouldSplit, ok := s.mu.shouldSplitCache[ID]
+	_, ok := s.mu.shouldntSplitCache[ID]
 	s.mu.RUnlock()
-	if !ok {
-		// Check if the descriptor ID is not one of the reserved
-		// IDs that refer to ranges but not any actual descriptors.
-		shouldSplit = true
-		if ID >= keys.MinUserDescID {
-			desc := s.GetDesc(keys.DescMetadataKey(ID))
-			if desc != nil {
-				shouldSplit = sqlbase.ShouldSplitAtID(ID, desc)
-			}
-		}
-		s.mu.Lock()
-		s.mu.shouldSplitCache[ID] = shouldSplit
-		s.mu.Unlock()
+	return ok
+}
+
+// cacheNonSplittableDesc remembers that id corresponds to a descriptor that
+// doesn't need any splits.
+func (s *SystemConfig) cacheNonSplittableDesc(id uint32) {
+	s.mu.Lock()
+	s.mu.shouldntSplitCache[id] = struct{}{}
+	s.mu.Unlock()
+}
+
+// assertNoSubzones fatals if the config for zone id contains any subzones.
+func (s *SystemConfig) assertNoSubzones(ctx context.Context, id uint32) {
+	zoneVal := s.GetValue(MakeZoneKey(id))
+	var zone *zonepb.ZoneConfig
+	if zoneVal == nil {
+		return
 	}
-	return shouldSplit
+	zone = new(zonepb.ZoneConfig)
+	if err := zoneVal.GetProto(zone); err != nil {
+		return
+	}
+	if len(zone.Subzones) != 0 {
+		log.Fatalf(ctx, "unexpected subzones for table: %d", id)
+	}
 }

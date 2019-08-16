@@ -30,8 +30,9 @@ import (
 func TestSplitQueueShouldQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
 	// Set zone configs.
@@ -92,7 +93,8 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		// Testing using shouldSplitRange instead of shouldQueue to avoid using the splitFinder
 		// This tests the merge queue behavior too as a result. For splitFinder tests,
 		// see split/split_test.go.
-		shouldQ, priority := shouldSplitRange(repl.Desc(), repl.GetMVCCStats(), repl.GetMaxBytes(), cfg)
+		shouldQ, priority := shouldSplitRange(
+			ctx, repl.Desc(), repl.GetMVCCStats(), repl.GetMaxBytes(), cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}
