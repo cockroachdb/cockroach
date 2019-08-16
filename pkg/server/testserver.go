@@ -318,6 +318,14 @@ func (ts *TestServer) PGServer() *pgwire.Server {
 	return nil
 }
 
+// RaftTransport returns the RaftTransport used by the TestServer.
+func (ts *TestServer) RaftTransport() *storage.RaftTransport {
+	if ts != nil {
+		return ts.raftTransport
+	}
+	return nil
+}
+
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
