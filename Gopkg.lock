@@ -1519,8 +1519,8 @@
   revision = "b5bfa59ec0adc420475f97f89b58045c721d761c"
 
 [[projects]]
-  branch = "master"
-  digest = "1:7b2765d91bece066a1cb4928d8b39cce152a6a08602e13b1169648c2f200cfff"
+  branch = "crl-bump"
+  digest = "1:a982c802e9fced15a22448839db3fea22853a3b711f55e3388deb1cd1b8e8b9f"
   name = "go.etcd.io/etcd"
   packages = [
     "raft",
@@ -1530,7 +1530,8 @@
     "raft/tracker",
   ]
   pruneopts = "UT"
-  revision = "4a4629fd9f01d4e2669c4f537a56a0019d95617e"
+  revision = "81d090463b9619e7a3a3e7faa4959f1f10af0b08"
+  source = "https://github.com/tbg/etcd"
 
 [[projects]]
   digest = "1:3b5a3bc35810830ded5e26ef9516e933083a2380d8e57371fdfde3c70d7c6952"
