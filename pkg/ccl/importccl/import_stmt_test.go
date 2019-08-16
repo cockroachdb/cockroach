@@ -1588,7 +1588,7 @@ func TestImportIntoCSV(t *testing.T) {
 
 			err := sqlDB.DB.QueryRowContext(ctx, `SELECT 1 FROM checkpoint.t`).Scan(&unused)
 
-			if !testutils.IsError(err, "table in unknown state: IMPORTING") {
+			if !testutils.IsError(err, "table \"t\" is offline: importing") {
 				return err
 			}
 			return nil

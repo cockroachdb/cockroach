@@ -549,10 +549,11 @@ message TableDescriptor {
     ADD = 1;
     // Descriptor is being dropped.
     DROP = 2;
-    // Descriptor is being ingested.
-    IMPORTING = 3;
+    // Descriptor is offline (e.g. for bulk-ingestion). See offline_reason.
+    OFFLINE = 3;
   }
   optional State state = 19 [(gogoproto.nullable) = false];
+  optional string offline_reason = 38 [(gogoproto.nullable) = false];
 
   message CheckConstraint {
     optional string expr = 1 [(gogoproto.nullable) = false];
