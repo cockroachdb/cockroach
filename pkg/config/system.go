@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -36,10 +37,6 @@ var (
 	// testingLargestIDHook is a function used to bypass GetLargestObjectID
 	// in tests.
 	testingLargestIDHook func(uint32) uint32
-
-	// SplitAtIDHook is a function that is used to check if a given
-	// descriptor comes from a database or a table view.
-	SplitAtIDHook func(uint32, *SystemConfig) bool
 )
 
 type zoneEntry struct {
@@ -523,7 +520,10 @@ func (s *SystemConfig) shouldSplit(ID uint32) bool {
 		// IDs that refer to ranges but not any actual descriptors.
 		shouldSplit = true
 		if ID >= keys.MinUserDescID {
-			shouldSplit = SplitAtIDHook(ID, s)
+			desc := s.GetDesc(keys.DescMetadataKey(ID))
+			if desc != nil {
+				shouldSplit = sqlbase.ShouldSplitAtID(ID, desc)
+			}
 		}
 		s.mu.Lock()
 		s.mu.shouldSplitCache[ID] = shouldSplit
