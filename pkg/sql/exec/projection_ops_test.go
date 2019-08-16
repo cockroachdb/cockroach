@@ -105,11 +105,33 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	constVal := float64(31.37)
 	constArg := tree.NewDFloat(tree.DFloat(constVal))
 	outputIdx := 5
-	op, err := GetProjectionRConstOperator(types.Float, binOp, input, colIdx, constArg, outputIdx)
+	op, err := GetProjectionRConstOperator(types.Float, types.Float, binOp, input, colIdx, constArg, outputIdx)
 	if err != nil {
 		t.Error(err)
 	}
 	expected := &projMultFloat64Float64ConstOp{
+		OneInputNode: NewOneInputNode(input),
+		colIdx:       colIdx,
+		constArg:     constVal,
+		outputIdx:    outputIdx,
+	}
+	if !reflect.DeepEqual(op, expected) {
+		t.Errorf("got %+v, expected %+v", op, expected)
+	}
+}
+
+func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
+	binOp := tree.GE
+	var input Operator
+	colIdx := 3
+	constVal := int16(31)
+	constArg := tree.NewDInt(tree.DInt(constVal))
+	outputIdx := 5
+	op, err := GetProjectionRConstOperator(types.Int, types.Int2, binOp, input, colIdx, constArg, outputIdx)
+	if err != nil {
+		t.Error(err)
+	}
+	expected := &projGEInt64Int16ConstOp{
 		OneInputNode: NewOneInputNode(input),
 		colIdx:       colIdx,
 		constArg:     constVal,
@@ -127,7 +149,7 @@ func TestGetProjectionOperator(t *testing.T) {
 	col1Idx := 5
 	col2Idx := 7
 	outputIdx := 9
-	op, err := GetProjectionOperator(ct, binOp, input, col1Idx, col2Idx, outputIdx)
+	op, err := GetProjectionOperator(ct, ct, binOp, input, col1Idx, col2Idx, outputIdx)
 	if err != nil {
 		t.Error(err)
 	}

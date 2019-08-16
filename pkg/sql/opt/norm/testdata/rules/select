@@ -449,10 +449,9 @@ semi-join (merge)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── columns: x:6(int!null)
  │    ├── constraint: /6: [/6 - ]
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── filters (true)
 
@@ -472,10 +471,9 @@ anti-join (merge)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── columns: x:6(int!null)
  │    ├── constraint: /6: [/6 - ]
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── filters (true)
 

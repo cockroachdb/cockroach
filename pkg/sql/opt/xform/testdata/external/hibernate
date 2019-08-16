@@ -189,9 +189,7 @@ inner-join (hash)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4)
  │    ├── scan calls3_
- │    │    ├── columns: calls3_.id:15(int!null) phone_id:18(int)
- │    │    ├── key: (15)
- │    │    └── fd: (15)-->(18)
+ │    │    └── columns: phone_id:18(int)
  │    └── filters
  │         └── phone0_.id = phone_id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
  ├── inner-join (merge)
@@ -253,9 +251,7 @@ project
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2-4)
       │    ├── scan calls3_
-      │    │    ├── columns: calls3_.id:15(int!null) phone_id:18(int)
-      │    │    ├── key: (15)
-      │    │    └── fd: (15)-->(18)
+      │    │    └── columns: phone_id:18(int)
       │    └── filters
       │         └── phone0_.id = phone_id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
       ├── inner-join (merge)
@@ -328,9 +324,7 @@ inner-join (hash)
  │    │    └── filters
  │    │         └── address = $1 [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
  │    ├── scan phones2_
- │    │    ├── columns: phones2_.id:10(int!null) person_id:13(int)
- │    │    ├── key: (10)
- │    │    └── fd: (10)-->(13)
+ │    │    └── columns: person_id:13(int)
  │    └── filters
  │         └── person0_.id = person_id [type=bool, outer=(1,13), constraints=(/1: (/NULL - ]; /13: (/NULL - ]), fd=(1)==(13), (13)==(1)]
  ├── select
@@ -1070,9 +1064,7 @@ semi-join (hash)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  ├── scan phones1_
- │    ├── columns: phones1_.id:7(int!null) person_id:10(int)
- │    ├── key: (7)
- │    └── fd: (7)-->(10)
+ │    └── columns: person_id:10(int)
  └── filters
       └── person0_.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
 
@@ -1267,9 +1259,7 @@ anti-join (hash)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  ├── scan phones1_
- │    ├── columns: phones1_.id:7(int!null) person_id:10(int)
- │    ├── key: (7)
- │    └── fd: (7)-->(10)
+ │    └── columns: person_id:10(int)
  └── filters
       └── person0_.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
 
@@ -1302,9 +1292,7 @@ semi-join (hash)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  ├── scan phones1_
- │    ├── columns: phones1_.id:7(int!null) person_id:10(int)
- │    ├── key: (7)
- │    └── fd: (7)-->(10)
+ │    └── columns: person_id:10(int)
  └── filters
       └── person0_.id = person_id [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
 
@@ -1333,9 +1321,7 @@ anti-join (hash)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  ├── scan calls1_
- │    ├── columns: calls1_.id:6(int!null) phone_id:9(int)
- │    ├── key: (6)
- │    └── fd: (6)-->(9)
+ │    └── columns: phone_id:9(int)
  └── filters
       └── phone0_.id = phone_id [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
 

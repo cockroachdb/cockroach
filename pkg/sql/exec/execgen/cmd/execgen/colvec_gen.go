@@ -39,7 +39,7 @@ func genColvec(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, comparisonOpToOverloads[tree.NE])
+	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.NE])
 }
 func init() {
 	registerGenerator(genColvec, "vec.eg.go")
