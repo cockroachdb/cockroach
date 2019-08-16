@@ -1687,13 +1687,13 @@ func TestImportIntoCSV(t *testing.T) {
 	// import of all columns in the exisiting table.
 	t.Run("no-target-cols-specified", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE targetcols; USE targetcols")
-		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
 
 		for i, v := range insert {
-			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
+			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i+rowsPerFile, v)
 		}
 
 		sqlDB.Exec(t, fmt.Sprintf("IMPORT INTO t CSV DATA (%s)", testFiles.files[0]))
