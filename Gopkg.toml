@@ -38,7 +38,13 @@ ignored = [
 
 [[constraint]]
   name = "go.etcd.io/etcd"
-  branch = "master"
+  # We're stopping just shy of 4a2b4c8f7e0a3754fdd5a3341a27c2431c2a5385
+  # which picks up a fix to an inefficiency that at the time of writing
+  # triggers a bug:
+  # https://github.com/cockroachdb/cockroach/issues/40207
+  #
+  # branch = "master"
+  revision = "9b29151d3072511f574e7272a5348504086013fa"
 
 # Used for the API client; we want the latest.
 [[constraint]]
