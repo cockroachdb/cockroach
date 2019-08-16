@@ -122,8 +122,6 @@ func (ssss *SSTSnapshotStorageScratch) WriteSST(
 	return sssf.Close()
 }
 
-var _ = (*SSTSnapshotStorageScratch).WriteSST // pacify staticcheck
-
 // SSTs returns the names of the files created.
 func (ssss *SSTSnapshotStorageScratch) SSTs() []string {
 	return ssss.ssts
