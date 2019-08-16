@@ -23,7 +23,7 @@ import (
 )
 
 // MakePrettyScannerForNamedTables create a PrettyScanner that, beside what the
-// PrettyScanner is generally uble to decode, can also decode keys of the form
+// PrettyScanner is generally able to decode, can also decode keys of the form
 // "/<table name>/<index name>/1/2/3/..." using supplied maps from names to ids.
 func MakePrettyScannerForNamedTables(
 	tableNameToID map[string]int, idxNameToID map[string]int,
