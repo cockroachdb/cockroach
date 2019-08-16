@@ -360,6 +360,7 @@ func (r *testRunner) runWorker(
 	}()
 
 	var c *cluster // The cluster currently being used.
+	var err error
 	// When this method returns we'll destroy the cluster we had at the time.
 	// Note that, if debug was set, c has been set to nil.
 	defer func() {
@@ -401,9 +402,7 @@ func (r *testRunner) runWorker(
 				c = nil
 			}
 		}
-
 		var testToRun testToRunRes
-		var err error
 		wStatus.SetTest(nil /* test */, testToRunRes{})
 		wStatus.SetStatus("getting work")
 		testToRun, c, err = r.getWork(
@@ -452,7 +451,6 @@ func (r *testRunner) runWorker(
 		l.PrintfCtx(ctx, "starting test: %s:%d", testToRun.spec.Name, testToRun.runNum)
 		var success bool
 		success, err = r.runTest(ctx, t, testToRun.runNum, c, testRunnerLogPath, stdout, testL)
-		testL.close()
 		if err != nil {
 			shout(ctx, l, stdout, "test returned error: %s: %s", t.Name(), err)
 			// Mark the test as failed if it isn't already.
@@ -466,6 +464,7 @@ func (r *testRunner) runWorker(
 			}
 			l.PrintfCtx(ctx, msg)
 		}
+		testL.close()
 		if err != nil || t.Failed() {
 			failureMsg := fmt.Sprintf("%s (%d) - ", testToRun.spec.Name, testToRun.runNum)
 			if err != nil {
