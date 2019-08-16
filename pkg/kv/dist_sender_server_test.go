@@ -1055,7 +1055,7 @@ func TestParallelSender(t *testing.T) {
 	}
 
 	getPSCount := func() int64 {
-		return s.DistSender().Metrics().AsyncSentCount.Count()
+		return s.DistSenderI().(*kv.DistSender).Metrics().AsyncSentCount.Count()
 	}
 	psCount := getPSCount()
 
