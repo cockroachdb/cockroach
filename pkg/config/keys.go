@@ -19,15 +19,12 @@ import (
 // MakeZoneKeyPrefix returns the key prefix for id's row in the system.zones
 // table.
 func MakeZoneKeyPrefix(id uint32) roachpb.Key {
-	k := keys.MakeTablePrefix(uint32(keys.ZonesTableID))
-	k = encoding.EncodeUvarintAscending(k, uint64(keys.ZonesTablePrimaryIndexID))
-	return encoding.EncodeUvarintAscending(k, uint64(id))
+	return keys.ZoneKeyPrefix(id)
 }
 
 // MakeZoneKey returns the key for id's entry in the system.zones table.
 func MakeZoneKey(id uint32) roachpb.Key {
-	k := MakeZoneKeyPrefix(id)
-	return keys.MakeFamilyKey(k, uint32(keys.ZonesTableConfigColFamID))
+	return keys.ZoneKey(id)
 }
 
 // DecodeObjectID decodes the object ID from the front of key. It returns the

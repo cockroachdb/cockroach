@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -36,10 +37,6 @@ var (
 	// testingLargestIDHook is a function used to bypass GetLargestObjectID
 	// in tests.
 	testingLargestIDHook func(uint32) uint32
-
-	// SplitAtIDHook is a function that is used to check if a given
-	// descriptor comes from a database or a table view.
-	SplitAtIDHook func(uint32, *SystemConfig) bool
 )
 
 type zoneEntry struct {
@@ -519,19 +516,28 @@ func (s *SystemConfig) NeedsSplit(startKey, endKey roachpb.RKey) bool {
 // It uses the internal cache to find a value, and tries to find
 // it using the hook if ID isn't found in the cache.
 func (s *SystemConfig) shouldSplit(ID uint32) bool {
-	s.mu.RLock()
-	shouldSplit, ok := s.mu.shouldSplitCache[ID]
-	s.mu.RUnlock()
-	if !ok {
-		// Check if the descriptor ID is not one of the reserved
-		// IDs that refer to ranges but not any actual descriptors.
-		shouldSplit = true
-		if ID >= keys.MinUserDescID {
-			shouldSplit = SplitAtIDHook(ID, s)
+	// Check the cache.
+	{
+		s.mu.RLock()
+		shouldSplit, ok := s.mu.shouldSplitCache[ID]
+		s.mu.RUnlock()
+		if ok {
+			return shouldSplit
 		}
-		s.mu.Lock()
-		s.mu.shouldSplitCache[ID] = shouldSplit
-		s.mu.Unlock()
 	}
+
+	var shouldSplit bool
+	if ID < keys.MinUserDescID {
+		// The ID might be one of the reserved IDs that refer to ranges but not any
+		// actual descriptors.
+		shouldSplit = true
+	} else {
+		desc := s.GetDesc(keys.DescMetadataKey(ID))
+		shouldSplit = desc != nil && sqlbase.ShouldSplitAtID(ID, desc)
+	}
+	// Populate the cache.
+	s.mu.Lock()
+	s.mu.shouldSplitCache[ID] = shouldSplit
+	s.mu.Unlock()
 	return shouldSplit
 }

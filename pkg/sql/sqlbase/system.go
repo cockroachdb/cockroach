@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,28 +23,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-func init() {
-	// We use a hook to avoid a dependency on the sqlbase package. We
-	// should probably move keys/protos elsewhere.
-	config.SplitAtIDHook = SplitAtIDHook
-}
-
-// SplitAtIDHook determines whether a specific descriptor ID
+// ShouldSplitAtID determines whether a specific descriptor ID
 // should be considered for a split at all. If it is a database
 // or a view table descriptor, it should not be considered.
-func SplitAtIDHook(id uint32, cfg *config.SystemConfig) bool {
-	descVal := cfg.GetDesc(MakeDescMetadataKey(ID(id)))
-	if descVal == nil {
-		return false
-	}
+func ShouldSplitAtID(id uint32, rawDesc *roachpb.Value) bool {
 	var desc Descriptor
-	if err := descVal.GetProto(&desc); err != nil {
+	if err := rawDesc.GetProto(&desc); err != nil {
 		return false
 	}
 	if dbDesc := desc.GetDatabase(); dbDesc != nil {
 		return false
 	}
-	if tableDesc := desc.Table(descVal.Timestamp); tableDesc != nil {
+	if tableDesc := desc.Table(rawDesc.Timestamp); tableDesc != nil {
 		if viewStr := tableDesc.GetViewQuery(); viewStr != "" {
 			return false
 		}
@@ -407,12 +396,15 @@ var (
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Int},
-			{Name: "descriptor", ID: 2, Type: *types.Bytes, Nullable: true},
+			{Name: "descriptor", ID: keys.DescriptorTableDescriptorColID, Type: *types.Bytes, Nullable: true},
 		},
 		NextColumnID: 3,
 		Families: []ColumnFamilyDescriptor{
+			// The id of the first col fam is hardcoded in keys.MakeDescMetadataKey().
 			{Name: "primary", ID: 0, ColumnNames: []string{"id"}, ColumnIDs: singleID1},
-			{Name: "fam_2_descriptor", ID: 2, ColumnNames: []string{"descriptor"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_2_descriptor", ID: keys.DescriptorTableDescriptorColFamID,
+				ColumnNames: []string{"descriptor"},
+				ColumnIDs:   []ColumnID{keys.DescriptorTableDescriptorColID}, DefaultColumnID: keys.DescriptorTableDescriptorColID},
 		},
 		PrimaryIndex:   pk("id"),
 		NextFamilyID:   3,
@@ -1258,7 +1250,7 @@ func createZoneConfigKV(keyID int, zoneConfig *zonepb.ZoneConfig) roachpb.KeyVal
 		panic(fmt.Sprintf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
 	}
 	return roachpb.KeyValue{
-		Key:   config.MakeZoneKey(uint32(keyID)),
+		Key:   keys.ZoneKey(uint32(keyID)),
 		Value: value,
 	}
 }
