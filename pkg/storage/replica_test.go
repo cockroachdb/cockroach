@@ -5979,11 +5979,10 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	target := roachpb.ReplicationTarget{
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
 		NodeID:  tc.store.Ident.NodeID,
 		StoreID: 9999,
-	}
-	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, target)
+	})
 	if _, err := tc.repl.ChangeReplicas(context.Background(), tc.repl.Desc(), SnapshotRequest_REBALANCE, storagepb.ReasonRebalance, "", chgs); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
 		t.Fatalf("must not be able to add second replica to same node (err=%+v)", err)
 	}
