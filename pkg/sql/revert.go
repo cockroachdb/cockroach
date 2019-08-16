@@ -45,7 +45,7 @@ func RevertTables(
 	// Check that all the tables are revertable -- i.e. offline and that their
 	// full interleave hierarchy is being reverted.
 	for i := range tables {
-		if tables[i].State != sqlbase.TableDescriptor_IMPORTING {
+		if tables[i].State != sqlbase.TableDescriptor_OFFLINE {
 			return errors.New("only offline tables can be reverted")
 		}
 

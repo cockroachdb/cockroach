@@ -643,7 +643,7 @@ type importResumer struct {
 	statsRefresher *stats.Refresher
 
 	testingKnobs struct {
-		forceFailure bool
+		afterImport func() error
 	}
 }
 
@@ -686,7 +686,9 @@ func prepareNewTableDescsForIngestion(
 	}
 
 	for i := range tableDescs {
-		tableDescs[i].State = sqlbase.TableDescriptor_IMPORTING
+		tableDescs[i].State = sqlbase.TableDescriptor_OFFLINE
+		tableDescs[i].OfflineReason = "importing"
+
 	}
 
 	var seqValKVs []roachpb.KeyValue
@@ -730,7 +732,8 @@ func prepareExistingTableDescForIngestion(
 	// Take the table offline for import.
 	// TODO(dt): audit everywhere we get table descs (leases or otherwise) to
 	// ensure that filtering by state handles IMPORTING correctly.
-	importing.State = sqlbase.TableDescriptor_IMPORTING
+	importing.State = sqlbase.TableDescriptor_OFFLINE
+	importing.OfflineReason = "importing"
 	// TODO(dt): de-validate all the FKs.
 
 	if err := txn.SetSystemConfigTrigger(); err != nil {
@@ -923,8 +926,10 @@ func (r *importResumer) Resume(
 	if err != nil {
 		return err
 	}
-	if r.testingKnobs.forceFailure {
-		return errors.New("testing injected failure")
+	if r.testingKnobs.afterImport != nil {
+		if err := r.testingKnobs.afterImport(); err != nil {
+			return err
+		}
 	}
 
 	r.res = res

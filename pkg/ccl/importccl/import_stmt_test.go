@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1231,11 +1232,26 @@ func TestImportIntoCSV(t *testing.T) {
 	conn := tc.Conns[0]
 
 	var forceFailure bool
+	var importBodyFinished chan struct{}
+	var delayImportFinish chan struct{}
+
 	for i := range tc.Servers {
 		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
-				r.testingKnobs.forceFailure = forceFailure
+				r.testingKnobs.afterImport = func() error {
+					if importBodyFinished != nil {
+						importBodyFinished <- struct{}{}
+					}
+					if delayImportFinish != nil {
+						<-delayImportFinish
+					}
+
+					if forceFailure {
+						return errors.New("testing injected failure")
+					}
+					return nil
+				}
 				return r
 			},
 		}
@@ -1262,7 +1278,7 @@ func TestImportIntoCSV(t *testing.T) {
 	testNum := -1
 	insertedRows := numFiles * rowsPerFile
 
-	for i, tc := range []struct {
+	for _, tc := range []struct {
 		name    string
 		query   string // must have one `%s` for the files list.
 		files   []string
@@ -1272,13 +1288,6 @@ func TestImportIntoCSV(t *testing.T) {
 		{
 			"simple-import-into",
 			`IMPORT INTO t (a, b) CSV DATA (%s)`,
-			testFiles.files,
-			``,
-			"",
-		},
-		{
-			"import-into-intodb",
-			`IMPORT INTO csv1.t (a, b) CSV DATA (%s)`,
 			testFiles.files,
 			``,
 			"",
@@ -1409,10 +1418,8 @@ func TestImportIntoCSV(t *testing.T) {
 			if strings.Contains(tc.name, "bzip") && len(testFiles.bzipFiles) == 0 {
 				t.Skip("bzip2 not available on PATH?")
 			}
-			intodb := fmt.Sprintf(`csv%d`, i)
-			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s`, intodb))
-			sqlDB.Exec(t, fmt.Sprintf(`SET DATABASE = %s`, intodb))
 			sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
 
 			var unused string
 			var restored struct {
@@ -1439,7 +1446,7 @@ func TestImportIntoCSV(t *testing.T) {
 				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
 			)
 
-			jobPrefix := fmt.Sprintf(`IMPORT INTO %s.public.t(a, b)`, intodb)
+			jobPrefix := fmt.Sprintf(`IMPORT INTO defaultdb.public.t(a, b)`)
 			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
 				Username:    security.RootUser,
 				Description: fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?param=value", "")),
@@ -1489,21 +1496,21 @@ func TestImportIntoCSV(t *testing.T) {
 
 	// Verify unique_rowid is replaced for tables without primary keys.
 	t.Run("import-into-unique_rowid", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE DATABASE pk")
-		sqlDB.Exec(t, `CREATE TABLE pk.t (a INT, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
 		numExistingRows := len(insert)
 
 		for i, v := range insert {
-			sqlDB.Exec(t, "INSERT INTO pk.t (a, b) VALUES ($1, $2)", i, v)
+			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
 		}
 
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO pk.t (a, b) CSV DATA (%s)`, strings.Join(testFiles.files, ", ")))
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, strings.Join(testFiles.files, ", ")))
 		// Verify the rowids are being generated as expected.
 		sqlDB.CheckQueryResults(t,
-			`SELECT count(*) FROM pk.t`,
+			`SELECT count(*) FROM t`,
 			sqlDB.QueryStr(t, `
 			SELECT count(*) + $3 FROM
 			(SELECT * FROM
@@ -1516,8 +1523,8 @@ func TestImportIntoCSV(t *testing.T) {
 
 	// Verify a failed IMPORT INTO won't prevent a subsequent IMPORT INTO.
 	t.Run("import-into-checkpoint-leftover", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE DATABASE checkpoint; USE checkpoint")
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -1538,6 +1545,53 @@ func TestImportIntoCSV(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[1]))
 	})
 
+	// Verify that during IMPORT INTO the table is offline.
+	t.Run("offline-state", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
+
+		// Insert the test data
+		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
+
+		for i, v := range insert {
+			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
+		}
+
+		// Hit a failure during import.
+		importBodyFinished = make(chan struct{})
+		delayImportFinish = make(chan struct{})
+		defer func() {
+			importBodyFinished = nil
+			delayImportFinish = nil
+		}()
+
+		var unused interface{}
+
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			defer close(importBodyFinished)
+			_, err := sqlDB.DB.ExecContext(ctx, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[1]))
+			return err
+		})
+		g.GoCtx(func(ctx context.Context) error {
+			defer close(delayImportFinish)
+			<-importBodyFinished
+
+			err := sqlDB.DB.QueryRowContext(ctx, `SELECT 1 FROM t`).Scan(&unused)
+			if !testutils.IsError(err, "table \"t\" is offline: importing") {
+				return err
+			}
+			return nil
+		})
+		if err := g.Wait(); err != nil {
+			t.Fatal(err)
+		}
+		t.Skip()
+
+		// Expect it to succeed on re-attempt.
+		sqlDB.QueryRow(t, `SELECT 1 FROM t`).Scan(&unused)
+	})
+
 	// Tests for user specified target columns in IMPORT INTO statements.
 	//
 	// Tests IMPORT INTO with various target column sets, and an implicit PK
@@ -1552,55 +1606,46 @@ func TestImportIntoCSV(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		sqlDB.Exec(t, `CREATE DATABASE targetcols`)
-		sqlDB.Exec(t, `SET DATABASE = targetcols`)
-		createQuery := `CREATE TABLE target%d (a INT8,
+		createQuery := `CREATE TABLE t (a INT8,
 			b INT8,
 			c STRING,
 			d INT8,
 			e INT8,
 			f STRING)`
-		var testNum int
 
 		data = "1,5,e,7,12,teststr"
 		t.Run(data, func(t *testing.T) {
-			sqlDB.Exec(t, fmt.Sprintf(createQuery, testNum))
-			query := fmt.Sprintf(`IMPORT INTO target%d (a) CSV DATA ($1)`, testNum)
-			sqlDB.Exec(t, query, srv.URL)
-			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT * FROM target%d`, testNum),
+			sqlDB.Exec(t, createQuery)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+
+			sqlDB.Exec(t, `IMPORT INTO t (a) CSV DATA ($1)`, srv.URL)
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`,
 				sqlDB.QueryStr(t, `SELECT 1, NULL, NULL, NULL, NULL, 'NULL'`),
 			)
-			testNum++
 		})
 		t.Run(data, func(t *testing.T) {
-			sqlDB.Exec(t, fmt.Sprintf(createQuery, testNum))
-			query := fmt.Sprintf(`IMPORT INTO target%d (a, f) CSV DATA ($1) WITH experimental_direct_ingestion`, testNum)
-			sqlDB.Exec(t, query, srv.URL)
-			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT * FROM target%d`, testNum),
+			sqlDB.Exec(t, createQuery)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+
+			sqlDB.Exec(t, `IMPORT INTO t (a, f) CSV DATA ($1) WITH experimental_direct_ingestion`, srv.URL)
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`,
 				sqlDB.QueryStr(t, `SELECT 1, NULL, NULL, NULL, NULL, 'teststr'`),
 			)
-			testNum++
 		})
 		t.Run(data, func(t *testing.T) {
-			sqlDB.Exec(t, fmt.Sprintf(createQuery, testNum))
-			query := fmt.Sprintf(`IMPORT INTO target%d (d, e, f) CSV DATA ($1)`, testNum)
-			sqlDB.Exec(t, query, srv.URL)
-			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT * FROM target%d`, testNum),
+			sqlDB.Exec(t, createQuery)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, `IMPORT INTO t (d, e, f) CSV DATA ($1)`, srv.URL)
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`,
 				sqlDB.QueryStr(t, `SELECT NULL, NULL, NULL, 7, 12, 'teststr'`),
 			)
-			testNum++
 		})
-
-		sqlDB.Exec(t, "DROP DATABASE targetcols")
 	})
 
 	// Tests IMPORT INTO with a target column set, and an explicit PK.
 	t.Run("target-cols-with-explicit-pk", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE DATABASE targetcols; USE targetcols")
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -1625,16 +1670,14 @@ func TestImportIntoCSV(t *testing.T) {
 		if result != expectedNulls {
 			t.Fatalf("expected %d rows, got %d", expectedNulls, result)
 		}
-
-		sqlDB.Exec(t, "DROP DATABASE targetcols")
 	})
 
 	// Tests IMPORT INTO with a target column set which does not include all PKs.
 	// As a result the non-target column is non-nullable, which is not allowed
 	// until we support DEFAULT expressions.
 	t.Run("target-cols-excluding-explicit-pk", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE DATABASE targetcols; USE targetcols")
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		// Expect an error if attempting to IMPORT INTO a target list which does
 		// not include all the PKs of the table.
@@ -1642,15 +1685,13 @@ func TestImportIntoCSV(t *testing.T) {
 			t, `pq: all non-target columns in IMPORT INTO must be nullable`,
 			fmt.Sprintf(`IMPORT INTO t (b) CSV DATA (%s)`, testFiles.files[0]),
 		)
-
-		sqlDB.Exec(t, "DROP DATABASE targetcols")
 	})
 
 	// Tests behavior when the existing table being imported into has more columns
 	// in its schema then the source CSV file.
 	t.Run("more-table-cols-than-csv", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE DATABASE targetcols; USE targetcols")
 		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING, c INT)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -1664,30 +1705,26 @@ func TestImportIntoCSV(t *testing.T) {
 			t, fmt.Sprintf("pq: %s: row 1: expected 3 fields, got 2", stripFilenameQuotes),
 			fmt.Sprintf(`IMPORT INTO t (a, b, c) CSV DATA (%s)`, testFiles.files[0]),
 		)
-
-		sqlDB.Exec(t, "DROP DATABASE targetcols")
 	})
 
 	// Tests behvior when the existing table being imported into has fewer columns
 	// in its schema then the source CSV file.
 	t.Run("fewer-table-cols-than-csv", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE DATABASE targetcols; USE targetcols")
 		sqlDB.Exec(t, `CREATE TABLE t (a INT)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		stripFilenameQuotes := testFiles.files[0][1 : len(testFiles.files[0])-1]
 		sqlDB.ExpectErr(
 			t, fmt.Sprintf("pq: %s: row 1: expected 1 fields, got 2", stripFilenameQuotes),
 			fmt.Sprintf(`IMPORT INTO t (a) CSV DATA (%s)`, testFiles.files[0]),
 		)
-
-		sqlDB.Exec(t, "DROP DATABASE targetcols")
 	})
 
 	// Tests IMPORT INTO without any target columns specified. This implies an
 	// import of all columns in the exisiting table.
 	t.Run("no-target-cols-specified", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE DATABASE targetcols; USE targetcols")
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -1710,15 +1747,13 @@ func TestImportIntoCSV(t *testing.T) {
 		if expect := numExistingRows + rowsPerFile; result != expect {
 			t.Fatalf("expected %d rows, got %d", expect, result)
 		}
-
-		sqlDB.Exec(t, "DROP DATABASE targetcols")
 	})
 
 	// IMPORT INTO does not support DEFAULT expressions for either target or
 	// non-target columns.
 	t.Run("import-into-check-no-default-cols", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE DATABASE targetcols; USE targetcols")
 		sqlDB.Exec(t, `CREATE TABLE t (a INT DEFAULT 1, b STRING)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -1731,16 +1766,14 @@ func TestImportIntoCSV(t *testing.T) {
 			t, fmt.Sprintf("pq: cannot IMPORT INTO a table with a DEFAULT expression for any of its columns"),
 			fmt.Sprintf(`IMPORT INTO t (a) CSV DATA (%s)`, testFiles.files[0]),
 		)
-
-		sqlDB.Exec(t, "DROP DATABASE targetcols")
 	})
 
 	// This tests that consecutive imports from unique data sources into an
 	// existing table without an explicit PK, do not overwrite each other. It
 	// exercises the row_id generation in IMPORT.
 	t.Run("multiple-import-into-without-pk", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE DATABASE multiple; USE multiple")
 		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -1768,8 +1801,8 @@ func TestImportIntoCSV(t *testing.T) {
 	// file twice in the same IMPORT, into a table without a PK. It exercises the
 	// row_id generation logic.
 	t.Run("multiple-file-import-into-without-pk", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE DATABASE nokeycollision; USE nokeycollision")
 		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		sqlDB.Exec(t,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s, %s)`, testFiles.files[0], testFiles.files[0]),
@@ -1790,8 +1823,8 @@ func TestImportIntoCSV(t *testing.T) {
 	// twice. The ts across imports is different, and so this is considered a
 	// collision.
 	t.Run("import-into-same-file-diff-imports", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE DATABASE keycollision; USE keycollision")
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		sqlDB.Exec(t,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s) WITH experimental_direct_ingestion`, testFiles.files[0]),
@@ -1813,8 +1846,8 @@ func TestImportIntoCSV(t *testing.T) {
 	// This test attempts to ingest duplicate keys in the same SST, with the same
 	// value, and succeeds in doing so.
 	t.Run("import-into-dups-in-sst", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE DATABASE sameimport; USE sameimport")
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		sqlDB.Exec(t,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s) WITH experimental_direct_ingestion`, testFiles.fileWithDupKeySameValue[0]),
@@ -1831,8 +1864,8 @@ func TestImportIntoCSV(t *testing.T) {
 	// This tests key collision detection when using regular import, and importing
 	// a source file with the colliding key sandwiched between valid keys.
 	t.Run("regular-import-into-key-collision", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE DATABASE regularkeycollision; USE regularkeycollision")
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		sqlDB.Exec(t,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]),
@@ -1847,8 +1880,8 @@ func TestImportIntoCSV(t *testing.T) {
 	// This tests key collision detection when using direct ingest, and importing
 	// a source file with the colliding key sandwiched between valid keys.
 	t.Run("direct-import-into-key-collision", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE DATABASE directkeycollision; USE directkeycollision")
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		sqlDB.Exec(t,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s) WITH experimental_direct_ingestion`, testFiles.files[0]),
@@ -1862,10 +1895,11 @@ func TestImportIntoCSV(t *testing.T) {
 
 	// Tests that IMPORT INTO invalidates FK and CHECK constraints.
 	t.Run("import-into-invalidate-constraints", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE DATABASE invalidateconstraints; USE invalidateconstraints")
 
 		sqlDB.Exec(t, `CREATE TABLE ref (b STRING PRIMARY KEY)`)
+		defer sqlDB.Exec(t, `DROP TABLE ref`)
 		sqlDB.Exec(t, `CREATE TABLE t (a INT CHECK (a >= 0), b STRING, CONSTRAINT fk_ref FOREIGN KEY (b) REFERENCES ref)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		var checkValidated, fkValidated bool
 		sqlDB.QueryRow(t, fmt.Sprintf(`SELECT validated from [SHOW CONSTRAINT FROM t] WHERE constraint_name = 'check_a'`)).Scan(&checkValidated)
