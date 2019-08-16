@@ -72,7 +72,7 @@ func genHashJoiner(wr io.Writer) error {
 		return err
 	}
 
-	allOverloads := intersectOverloads(comparisonOpToOverloads[tree.NE], hashOverloads)
+	allOverloads := intersectOverloads(sameTypeComparisonOpToOverloads[tree.NE], hashOverloads)
 
 	return tmpl.Execute(wr, struct {
 		NETemplate   interface{}

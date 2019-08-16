@@ -32,9 +32,8 @@ semi-join (merge)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── columns: x:6(int!null)
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── filters (true)
 
@@ -53,9 +52,8 @@ anti-join (merge)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── columns: x:6(int!null)
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── filters (true)
 
@@ -154,9 +152,8 @@ delete xy
       │    ├── key: (3)
       │    └── ordering: +3
       ├── scan uv
-      │    ├── columns: u:5(int!null) v:6(int)
+      │    ├── columns: u:5(int!null)
       │    ├── key: (5)
-      │    ├── fd: (5)-->(6)
       │    └── ordering: +5
       └── filters (true)
 
@@ -785,20 +782,17 @@ semi-join-apply
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── limit
- │    ├── columns: x:6(int!null) y:7(int!null)
+ │    ├── columns: y:7(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(6,7)
+ │    ├── fd: ()-->(7)
  │    ├── select
- │    │    ├── columns: x:6(int!null) y:7(int!null)
+ │    │    ├── columns: y:7(int!null)
  │    │    ├── outer: (1)
- │    │    ├── key: (6)
  │    │    ├── fd: ()-->(7)
  │    │    ├── scan xy
- │    │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    │    ├── key: (6)
- │    │    │    └── fd: (6)-->(7)
+ │    │    │    └── columns: y:7(int)
  │    │    └── filters
  │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
  │    └── const: 1 [type=int]
@@ -818,20 +812,17 @@ anti-join-apply
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── limit
- │    ├── columns: x:6(int!null) y:7(int!null)
+ │    ├── columns: y:7(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(6,7)
+ │    ├── fd: ()-->(7)
  │    ├── select
- │    │    ├── columns: x:6(int!null) y:7(int!null)
+ │    │    ├── columns: y:7(int!null)
  │    │    ├── outer: (1)
- │    │    ├── key: (6)
  │    │    ├── fd: ()-->(7)
  │    │    ├── scan xy
- │    │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    │    ├── key: (6)
- │    │    │    └── fd: (6)-->(7)
+ │    │    │    └── columns: y:7(int)
  │    │    └── filters
  │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
  │    └── const: 1 [type=int]
@@ -912,20 +903,18 @@ semi-join-apply
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── semi-join (hash)
- │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── columns: x:6(int!null)
  │    ├── outer: (4)
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    ├── scan xy
- │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7)
+ │    │    ├── columns: x:6(int!null)
+ │    │    └── key: (6)
  │    ├── scan uv
- │    │    ├── columns: u:8(int!null) v:9(int)
+ │    │    ├── columns: u:8(int!null)
  │    │    ├── constraint: /8: [/10 - /10]
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    └── fd: ()-->(8,9)
+ │    │    └── fd: ()-->(8)
  │    └── filters
  │         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  └── filters
@@ -1436,21 +1425,19 @@ semi-join (merge)
  │    ├── key: (1)
  │    └── ordering: +1
  ├── inner-join (merge)
- │    ├── columns: x:6(int!null) y:7(int) u:8(int!null) v:9(int)
+ │    ├── columns: x:6(int!null) u:8(int!null)
  │    ├── left ordering: +6
  │    ├── right ordering: +8
  │    ├── key: (8)
- │    ├── fd: (6)-->(7), (8)-->(9), (6)==(8), (8)==(6)
+ │    ├── fd: (6)==(8), (8)==(6)
  │    ├── ordering: +(6|8) [actual: +6]
  │    ├── scan xy
- │    │    ├── columns: x:6(int!null) y:7(int)
+ │    │    ├── columns: x:6(int!null)
  │    │    ├── key: (6)
- │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
  │    ├── scan uv
- │    │    ├── columns: u:8(int!null) v:9(int)
+ │    │    ├── columns: u:8(int!null)
  │    │    ├── key: (8)
- │    │    ├── fd: (8)-->(9)
  │    │    └── ordering: +8
  │    └── filters (true)
  └── filters (true)
@@ -1473,21 +1460,19 @@ anti-join (merge)
  │    ├── key: (1)
  │    └── ordering: +1
  ├── inner-join (merge)
- │    ├── columns: x:6(int!null) y:7(int) u:8(int!null) v:9(int)
+ │    ├── columns: x:6(int!null) u:8(int!null)
  │    ├── left ordering: +6
  │    ├── right ordering: +8
  │    ├── key: (8)
- │    ├── fd: (6)-->(7), (8)-->(9), (6)==(8), (8)==(6)
+ │    ├── fd: (6)==(8), (8)==(6)
  │    ├── ordering: +(6|8) [actual: +6]
  │    ├── scan xy
- │    │    ├── columns: x:6(int!null) y:7(int)
+ │    │    ├── columns: x:6(int!null)
  │    │    ├── key: (6)
- │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
  │    ├── scan uv
- │    │    ├── columns: u:8(int!null) v:9(int)
+ │    │    ├── columns: u:8(int!null)
  │    │    ├── key: (8)
- │    │    ├── fd: (8)-->(9)
  │    │    └── ordering: +8
  │    └── filters (true)
  └── filters (true)
@@ -1565,21 +1550,18 @@ semi-join-apply
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
  ├── left-join (merge)
- │    ├── columns: x:6(int!null) y:7(int) u:8(int) v:9(int)
+ │    ├── columns: x:6(int!null) u:8(int)
  │    ├── left ordering: +6
  │    ├── right ordering: +8
  │    ├── outer: (1)
  │    ├── key: (6,8)
- │    ├── fd: (6)-->(7), (8)-->(9)
  │    ├── scan xy
- │    │    ├── columns: x:6(int!null) y:7(int)
+ │    │    ├── columns: x:6(int!null)
  │    │    ├── key: (6)
- │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
  │    ├── scan uv
- │    │    ├── columns: u:8(int!null) v:9(int)
+ │    │    ├── columns: u:8(int!null)
  │    │    ├── key: (8)
- │    │    ├── fd: (8)-->(9)
  │    │    └── ordering: +8
  │    └── filters
  │         └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
@@ -1606,26 +1588,14 @@ semi-join-apply
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
  ├── semi-join (hash)
- │    ├── columns: x:6(int!null) y:7(int)
  │    ├── outer: (1)
- │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    ├── scan xy
- │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7)
  │    ├── inner-join (hash)
- │    │    ├── columns: uv.u:8(int!null) uv.v:9(int) uv2.u:10(int!null) uv2.v:11(int)
- │    │    ├── key: (8,10)
- │    │    ├── fd: (8)-->(9), (10)-->(11)
+ │    │    ├── columns: uv2.u:10(int!null)
  │    │    ├── scan uv
- │    │    │    ├── columns: uv.u:8(int!null) uv.v:9(int)
- │    │    │    ├── key: (8)
- │    │    │    └── fd: (8)-->(9)
  │    │    ├── scan uv2
- │    │    │    ├── columns: uv2.u:10(int!null) uv2.v:11(int)
- │    │    │    ├── key: (10)
- │    │    │    └── fd: (10)-->(11)
+ │    │    │    ├── columns: uv2.u:10(int!null)
+ │    │    │    └── key: (10)
  │    │    └── filters (true)
  │    └── filters
  │         └── uv2.u = k [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
@@ -3095,9 +3065,8 @@ semi-join (merge)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── columns: x:6(int!null)
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── filters (true)
 
@@ -3140,15 +3109,13 @@ semi-join (hash)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    ├── scan xy
- │    │    ├── columns: x:8(int!null) y:9(int)
- │    │    ├── key: (8)
- │    │    └── fd: (8)-->(9)
+ │    │    ├── columns: x:8(int!null)
+ │    │    └── key: (8)
  │    └── filters
  │         └── x = i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
  ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    └── fd: (6)-->(7)
+ │    ├── columns: x:6(int!null)
+ │    └── key: (6)
  └── filters
       └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
@@ -3188,21 +3155,18 @@ semi-join (merge)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── semi-join (merge)
- │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── columns: x:6(int!null)
  │    ├── left ordering: +6
  │    ├── right ordering: +8
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    ├── ordering: +6
  │    ├── scan xy
- │    │    ├── columns: x:6(int!null) y:7(int)
+ │    │    ├── columns: x:6(int!null)
  │    │    ├── key: (6)
- │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
  │    ├── scan uv
- │    │    ├── columns: u:8(int!null) v:9(int)
+ │    │    ├── columns: u:8(int!null)
  │    │    ├── key: (8)
- │    │    ├── fd: (8)-->(9)
  │    │    └── ordering: +8
  │    └── filters (true)
  └── filters (true)
@@ -3225,9 +3189,8 @@ anti-join (merge)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── columns: x:6(int!null)
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── filters (true)
 
@@ -3272,15 +3235,13 @@ anti-join (hash)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    ├── scan xy
- │    │    ├── columns: x:8(int!null) y:9(int)
- │    │    ├── key: (8)
- │    │    └── fd: (8)-->(9)
+ │    │    ├── columns: x:8(int!null)
+ │    │    └── key: (8)
  │    └── filters
  │         └── x = i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
  ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    └── fd: (6)-->(7)
+ │    ├── columns: x:6(int!null)
+ │    └── key: (6)
  └── filters
       └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
@@ -3324,15 +3285,13 @@ semi-join (hash)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    ├── scan xy
- │    │    ├── columns: x:8(int!null) y:9(int)
- │    │    ├── key: (8)
- │    │    └── fd: (8)-->(9)
+ │    │    ├── columns: x:8(int!null)
+ │    │    └── key: (8)
  │    └── filters
  │         └── x = i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
  ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    └── fd: (6)-->(7)
+ │    ├── columns: x:6(int!null)
+ │    └── key: (6)
  └── filters
       └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 

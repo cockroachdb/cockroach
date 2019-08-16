@@ -38,13 +38,7 @@ func genVecComparators(wr io.Writer) error {
 		return err
 	}
 
-	ltOverloads := make([]*overload, 0)
-	for _, overload := range comparisonOpOverloads {
-		if overload.CmpOp == tree.LT {
-			ltOverloads = append(ltOverloads, overload)
-		}
-	}
-	return tmpl.Execute(wr, ltOverloads)
+	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.LT])
 }
 
 func init() {

@@ -680,8 +680,32 @@ DecorrelateJoin
     │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
     └── filters (true)
 ================================================================================
+PruneSemiAntiJoinRightCols
+  Cost: 2180.06
+================================================================================
+   select
+    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── key: (1)
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+    ├── semi-join (hash)
+    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+    │    ├── scan a
+    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    │    │    ├── key: (1)
+    │    │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+    │    ├── scan xy
+  - │    │    ├── columns: x:6(int!null) y:7(int)
+  - │    │    ├── key: (6)
+  - │    │    └── fd: (6)-->(7)
+  + │    │    └── columns: y:7(int)
+    │    └── filters
+    │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+    └── filters (true)
+================================================================================
 EliminateSelect
-  Cost: 2180.05
+  Cost: 2170.05
 ================================================================================
   -select
   +semi-join (hash)
@@ -698,17 +722,13 @@ EliminateSelect
   - │    │    ├── key: (1)
   - │    │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
   - │    ├── scan xy
-  - │    │    ├── columns: x:6(int!null) y:7(int)
-  - │    │    ├── key: (6)
-  - │    │    └── fd: (6)-->(7)
+  - │    │    └── columns: y:7(int)
   - │    └── filters
   - │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
   - └── filters (true)
   + │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
   + ├── scan xy
-  + │    ├── columns: x:6(int!null) y:7(int)
-  + │    ├── key: (6)
-  + │    └── fd: (6)-->(7)
+  + │    └── columns: y:7(int)
   + └── filters
   +      └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 --------------------------------------------------------------------------------
@@ -725,7 +745,7 @@ GenerateLookupJoins (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
 Final best expression
-  Cost: 2180.05
+  Cost: 2170.05
 ================================================================================
   semi-join (hash)
    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -736,9 +756,7 @@ Final best expression
    │    ├── key: (1)
    │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
    ├── scan xy
-   │    ├── columns: x:6(int!null) y:7(int)
-   │    ├── key: (6)
-   │    └── fd: (6)-->(7)
+   │    └── columns: y:7(int)
    └── filters
         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 

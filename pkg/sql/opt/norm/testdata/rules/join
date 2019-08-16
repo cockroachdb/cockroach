@@ -202,9 +202,8 @@ anti-join (merge)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan b
- │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── columns: x:6(int!null)
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── filters
       └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
@@ -466,11 +465,10 @@ semi-join (merge)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan b
- │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── columns: x:6(int!null)
  │    ├── constraint: /6: [/7 - /7] [/10 - /10]
  │    ├── cardinality: [0 - 2]
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── filters (true)
 
@@ -676,11 +674,10 @@ anti-join (merge)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan b
- │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── columns: x:6(int!null)
  │    ├── constraint: /6: [/7 - /7] [/10 - /10]
  │    ├── cardinality: [0 - 2]
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── filters (true)
 
@@ -1184,28 +1181,25 @@ semi-join-apply
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  ├── anti-join (hash)
- │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string!null) j:7(jsonb)
+ │    ├── columns: k:3(int!null) s:6(string!null)
  │    ├── outer: (2)
  │    ├── key: (3)
- │    ├── fd: ()-->(6), (3)-->(4,5,7)
+ │    ├── fd: ()-->(6)
  │    ├── select
- │    │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string!null) j:7(jsonb)
+ │    │    ├── columns: k:3(int!null) s:6(string!null)
  │    │    ├── key: (3)
- │    │    ├── fd: ()-->(6), (3)-->(4,5,7)
+ │    │    ├── fd: ()-->(6)
  │    │    ├── scan a
- │    │    │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
+ │    │    │    ├── columns: k:3(int!null) s:6(string)
  │    │    │    ├── key: (3)
- │    │    │    └── fd: (3)-->(4-7)
+ │    │    │    └── fd: (3)-->(6)
  │    │    └── filters
  │    │         └── s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
  │    ├── select
- │    │    ├── columns: k:8(int!null) i:9(int!null) f:10(float!null) s:11(string) j:12(jsonb)
- │    │    ├── key: (8)
- │    │    ├── fd: ()-->(9), (8)-->(10-12)
+ │    │    ├── columns: i:9(int!null)
+ │    │    ├── fd: ()-->(9)
  │    │    ├── scan a
- │    │    │    ├── columns: k:8(int!null) i:9(int) f:10(float!null) s:11(string) j:12(jsonb)
- │    │    │    ├── key: (8)
- │    │    │    └── fd: (8)-->(9-12)
+ │    │    │    └── columns: i:9(int)
  │    │    └── filters
  │    │         └── i = 10 [type=bool, outer=(9), constraints=(/9: [/10 - /10]; tight), fd=()-->(9)]
  │    └── filters

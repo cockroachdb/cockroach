@@ -127,7 +127,7 @@ func genMergeJoinOps(wr io.Writer) error {
 		return err
 	}
 
-	allOverloads := intersectOverloads(comparisonOpToOverloads[tree.EQ], comparisonOpToOverloads[tree.LT], comparisonOpToOverloads[tree.GT])
+	allOverloads := intersectOverloads(sameTypeComparisonOpToOverloads[tree.EQ], sameTypeComparisonOpToOverloads[tree.LT], sameTypeComparisonOpToOverloads[tree.GT])
 
 	// Create an mjOverload for each overload combining three overloads so that
 	// the template code can access all of EQ, LT, and GT in the same range loop.
