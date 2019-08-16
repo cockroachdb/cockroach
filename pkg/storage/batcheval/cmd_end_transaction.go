@@ -595,7 +595,7 @@ func RunCommitTrigger(
 		// crt.Added() and crt.Removed() don't intersect (including mentioning
 		// the same replica more than once individually) because it would be
 		// silly (though possible) to have to attach semantics to that.
-		return changeReplicasTrigger(ctx, rec, batch, crt), nil
+		return changeReplicasTrigger(ctx, rec, batch, ms, crt)
 	}
 	if ct.GetModifiedSpanTrigger() != nil {
 		var pd result.Result
@@ -1088,8 +1088,25 @@ func mergeTrigger(
 }
 
 func changeReplicasTrigger(
-	ctx context.Context, rec EvalContext, batch engine.Batch, change *roachpb.ChangeReplicasTrigger,
-) result.Result {
+	ctx context.Context,
+	rec EvalContext,
+	batch engine.Batch,
+	ms *enginepb.MVCCStats,
+	change *roachpb.ChangeReplicasTrigger,
+) (result.Result, error) {
+	// If we're transitioning into a joint configuration (i.e. this is an atomic
+	// replication change), we need to atomically persist that so that
+	// .InitialState() can return it. This is necessary since the regular range
+	// descriptor does not carry this information.
+	if len(change.Added())+len(change.Removed()) > 1 {
+		oldDesc := rec.Desc()
+		if err := engine.MVCCPutProto(
+			ctx, batch, ms, keys.RangeDescriptorJointKey(oldDesc.StartKey), hlc.Timestamp{}, nil, oldDesc,
+		); err != nil {
+			return result.Result{}, err
+		}
+	}
+
 	var pd result.Result
 	// After a successful replica addition or removal check to see if the
 	// range needs to be split. Splitting usually takes precedence over
@@ -1125,5 +1142,5 @@ func changeReplicasTrigger(
 		ChangeReplicasTrigger: *change,
 	}
 
-	return pd
+	return pd, nil
 }

@@ -897,12 +897,6 @@ func (r *Replica) ChangeReplicas(
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
 
-	if len(chgs) != 1 {
-		// TODO(tbg): lift this restriction when atomic membership changes are
-		// plumbed into raft.
-		return nil, errors.Errorf("need exactly one change, got %+v", chgs)
-	}
-
 	if err := validateReplicationChanges(desc, chgs); err != nil {
 		return nil, err
 	}
@@ -1021,7 +1015,7 @@ func addLearnerReplicas(
 		replDesc := roachpb.ReplicaDescriptor{
 			NodeID:    target.NodeID,
 			StoreID:   target.StoreID,
-			ReplicaID: desc.NextReplicaID,
+			ReplicaID: newDesc.NextReplicaID,
 			Type:      roachpb.ReplicaTypeLearner(),
 		}
 		newDesc.NextReplicaID++
