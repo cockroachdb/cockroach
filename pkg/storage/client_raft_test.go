@@ -361,11 +361,10 @@ func TestRestoreReplicas(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	target := roachpb.ReplicationTarget{
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
 		NodeID:  mtc.stores[1].Ident.NodeID,
 		StoreID: mtc.stores[1].Ident.StoreID,
-	}
-	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, target)
+	})
 	if _, err := firstRng.ChangeReplicas(context.Background(), firstRng.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
@@ -1181,11 +1180,11 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		target := roachpb.ReplicationTarget{
+
+		chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
 			NodeID:  mtc.stores[2].Ident.NodeID,
 			StoreID: mtc.stores[2].Ident.StoreID,
-		}
-		chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, target)
+		})
 		_, err = rep2.ChangeReplicas(context.Background(), &desc, storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs)
 		return err
 	}
@@ -2801,14 +2800,13 @@ func TestReplicaGCRace(t *testing.T) {
 	}
 	ctx := repl.AnnotateCtx(context.Background())
 
-	target := roachpb.ReplicationTarget{
-		NodeID:  toStore.Ident.NodeID,
-		StoreID: toStore.Ident.StoreID,
-	}
 	// Add the victim replica. Note that it will receive a snapshot and raft log
 	// replays, but will not process the configuration change containing the new
 	// range descriptor, preventing it from learning of the new NextReplicaID.
-	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, target)
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+		NodeID:  toStore.Ident.NodeID,
+		StoreID: toStore.Ident.StoreID,
+	})
 	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
