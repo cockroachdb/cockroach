@@ -374,6 +374,16 @@ func newStoreDetail() *storeDetail {
 	return &storeDetail{}
 }
 
+func (sp *StorePool) GetStores() []*storeDetail {
+	sp.detailsMu.RLock()
+	defer sp.detailsMu.RUnlock()
+	stores := make([]*storeDetail, 0, len(sp.detailsMu.storeDetails))
+	for _, s := range sp.detailsMu.storeDetails {
+		stores = append(stores, s)
+	}
+	return stores
+}
+
 // getStoreDetailLocked returns the store detail for the given storeID.
 // The lock must be held *in write mode* even though this looks like a
 // read-only method.

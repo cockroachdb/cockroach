@@ -45,7 +45,7 @@ var errNoZoneConfigApplies = errors.New("no zone config applies")
 //
 // if getInheritedDefault is true, the direct zone configuration, if it exists, is
 // ignored, and the default that would apply if it did not exist is returned instead.
-func getZoneConfig(
+func GetZoneConfig(
 	id uint32, getKey func(roachpb.Key) (*roachpb.Value, error), getInheritedDefault bool,
 ) (uint32, *config.ZoneConfig, uint32, *config.ZoneConfig, error) {
 	var placeholder *config.ZoneConfig
@@ -82,7 +82,7 @@ func getZoneConfig(
 		}
 		if tableDesc := desc.GetTable(); tableDesc != nil {
 			// This is a table descriptor. Look up its parent database zone config.
-			dbID, zone, _, _, err := getZoneConfig(uint32(tableDesc.ParentID), getKey, false /* getInheritedDefault */)
+			dbID, zone, _, _, err := GetZoneConfig(uint32(tableDesc.ParentID), getKey, false /* getInheritedDefault */)
 			if err != nil {
 				return 0, nil, 0, nil, err
 			}
@@ -93,7 +93,7 @@ func getZoneConfig(
 	// Retrieve the default zone config, but only as long as that wasn't the ID
 	// we were trying to retrieve (avoid infinite recursion).
 	if id != keys.RootNamespaceID {
-		rootID, zone, _, _, err := getZoneConfig(keys.RootNamespaceID, getKey, false /* getInheritedDefault */)
+		rootID, zone, _, _, err := GetZoneConfig(keys.RootNamespaceID, getKey, false /* getInheritedDefault */)
 		if err != nil {
 			return 0, nil, 0, nil, err
 		}
@@ -125,7 +125,7 @@ func completeZoneConfig(
 			return err
 		}
 		if tableDesc := desc.GetTable(); tableDesc != nil {
-			_, dbzone, _, _, err := getZoneConfig(uint32(tableDesc.ParentID), getKey, false /* getInheritedDefault */)
+			_, dbzone, _, _, err := GetZoneConfig(uint32(tableDesc.ParentID), getKey, false /* getInheritedDefault */)
 			if err != nil {
 				return err
 			}
@@ -137,7 +137,7 @@ func completeZoneConfig(
 	if cfg.IsComplete() {
 		return nil
 	}
-	_, defaultZone, _, _, err := getZoneConfig(keys.RootNamespaceID, getKey, false /* getInheritedDefault */)
+	_, defaultZone, _, _, err := GetZoneConfig(keys.RootNamespaceID, getKey, false /* getInheritedDefault */)
 	if err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func ZoneConfigHook(
 	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
 		return cfg.GetValue(key), nil
 	}
-	zoneID, zone, _, placeholder, err := getZoneConfig(
+	zoneID, zone, _, placeholder, err := GetZoneConfig(
 		id, getKey, false /* getInheritedDefault */)
 	if err == errNoZoneConfigApplies {
 		return nil, nil, true, nil
@@ -185,7 +185,7 @@ func GetZoneConfigInTxn(
 		}
 		return kv.Value, nil
 	}
-	zoneID, zone, placeholderID, placeholder, err := getZoneConfig(
+	zoneID, zone, placeholderID, placeholder, err := GetZoneConfig(
 		id, getKey, getInheritedDefault)
 	if err != nil {
 		return 0, nil, nil, err

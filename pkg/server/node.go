@@ -44,7 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/logtags"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -150,6 +150,7 @@ type Node struct {
 	stores      *storage.Stores // Access to node-local stores
 	metrics     nodeMetrics
 	recorder    *status.MetricsRecorder
+	storeStats  *storage.StoreStats
 	startedAt   int64
 	lastUp      int64
 	initialBoot bool // True if this is the first time this node has started.
@@ -271,6 +272,7 @@ func NewNode(
 		eventLogger: eventLogger,
 		clusterID:   clusterID,
 	}
+	n.storeStats = storage.NewStoreStats(cfg.AmbientCtx, n.stores, &n.storeCfg)
 	n.perReplicaServer = storage.MakeServer(&n.Descriptor, n.stores)
 	return n
 }
@@ -494,6 +496,8 @@ func (n *Node) start(
 	// cluster version, but not if the server starts with a lower one and gets
 	// bumped immediately, which would be possible if gossip got started earlier).
 	n.startGossip(ctx, n.stopper)
+
+	n.storeStats.Start(n.stopper)
 
 	allEngines := append([]engine.Engine(nil), initializedEngines...)
 	allEngines = append(allEngines, emptyEngines...)

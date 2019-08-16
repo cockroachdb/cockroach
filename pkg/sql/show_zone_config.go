@@ -28,6 +28,7 @@ import (
 // These must match crdb_internal.zones.
 var showZoneConfigColumns = sqlbase.ResultColumns{
 	{Name: "zone_id", Typ: types.Int, Hidden: true},
+	{Name: "subzone_id", Typ: types.Int, Hidden: true},
 	{Name: "zone_name", Typ: types.String},
 	{Name: "cli_specifier", Typ: types.String, Hidden: true},
 	{Name: "config_yaml", Typ: types.String, Hidden: true},
@@ -38,6 +39,7 @@ var showZoneConfigColumns = sqlbase.ResultColumns{
 // These must match showZoneConfigColumns.
 const (
 	zoneIDCol int = iota
+	subZoneIDCol
 	zoneNameCol
 	cliSpecifierCol
 	configYAMLCol
@@ -58,7 +60,7 @@ func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (p
 					ctx,
 					"show-all-zone-configurations",
 					p.txn,
-					`SELECT zone_id, zone_name, cli_specifier, config_yaml, config_sql, config_protobuf
+					`SELECT zone_id, subzone_id, zone_name, cli_specifier, config_yaml, config_sql, config_protobuf
 					 FROM crdb_internal.zones
 					 WHERE cli_specifier IS NOT NULL`,
 				)
@@ -105,6 +107,7 @@ func getShowZoneConfigRow(
 		return nil, err
 	}
 
+	subZoneIdx := uint32(0)
 	zoneID, zone, subzone, err := GetZoneConfigInTxn(ctx, p.txn,
 		uint32(targetID), index, partition, false /* getInheritedDefault */)
 	if err == errNoZoneConfigApplies {
@@ -116,6 +119,12 @@ func getShowZoneConfigRow(
 	} else if err != nil {
 		return nil, err
 	} else if subzone != nil {
+		for i, _ := range zone.Subzones {
+			subZoneIdx++
+			if subzone == &zone.Subzones[i] {
+				break
+			}
+		}
 		zone = &subzone.Config
 	}
 
@@ -129,7 +138,7 @@ func getShowZoneConfigRow(
 
 	vals := make(tree.Datums, len(showZoneConfigColumns))
 	if err := generateZoneConfigIntrospectionValues(
-		vals, tree.NewDInt(tree.DInt(zoneID)), &zs, zone,
+		vals, tree.NewDInt(tree.DInt(zoneID)), tree.NewDInt(tree.DInt(subZoneIdx)), &zs, zone,
 	); err != nil {
 		return nil, err
 	}
@@ -143,10 +152,15 @@ func getShowZoneConfigRow(
 // provide it as 2nd argument. The function will compute
 // the remaining values based on the zone specifier and configuration.
 func generateZoneConfigIntrospectionValues(
-	values tree.Datums, zoneID tree.Datum, zs *tree.ZoneSpecifier, zone *config.ZoneConfig,
+	values tree.Datums,
+	zoneID tree.Datum,
+	subZoneID tree.Datum,
+	zs *tree.ZoneSpecifier,
+	zone *config.ZoneConfig,
 ) error {
 	// Populate the ID column.
 	values[zoneIDCol] = zoneID
+	values[subZoneIDCol] = subZoneID
 
 	// Populate the specifier column.
 	if zs == nil {

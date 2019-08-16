@@ -201,6 +201,25 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newDescriptorIDs:    staticIDs(keys.CommentsTableID),
 	},
 	{
+		name:                "create crdb_internal.zone_constraints table",
+		workFn:              createZoneConstraintsTable,
+		includedInBootstrap: true,
+		newDescriptorIDs:    staticIDs(keys.ZoneConstraintsTableID),
+	},
+	{
+		name:                "create crdb_internal.zone_locality_at_risk table",
+		workFn:              createZoneLocalityAtRiskTable,
+		includedInBootstrap: true,
+		newDescriptorIDs:    staticIDs(keys.ZoneLocalityAtRiskTableID),
+	},
+	{
+		// Introduced in v2.2.
+		name:                "create crdb_internal.zone_range_status table",
+		workFn:              createZoneRangeStatusTable,
+		includedInBootstrap: true,
+		newDescriptorIDs:    staticIDs(keys.ZoneRangeStatusTableID),
+	},
+	{
 		// Introduced in v2.2.
 		// TODO(knz): bake this migration into v2.3.
 		name:   "propagate the ts purge interval to the new setting names",
@@ -526,6 +545,26 @@ func migrationKey(migration migrationDescriptor) roachpb.Key {
 	return append(keys.MigrationPrefix, roachpb.RKey(migration.name)...)
 }
 
+func dropSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
+	// We install the table at the KV layer so that we can choose a known ID in
+	// the reserved ID space. (The SQL layer doesn't allow this.)
+	err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		b := txn.NewBatch()
+		b.Del(sqlbase.MakeDescMetadataKey(desc.GetID()))
+		b.Del(sqlbase.MakeNameMetadataKey(desc.GetParentID(), desc.GetName()))
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
+		return txn.Run(ctx, b)
+	})
+	// CPuts only provide idempotent inserts if we ignore the errors that arise
+	// when the condition isn't met.
+	if _, ok := err.(*roachpb.ConditionFailedError); ok {
+		return nil
+	}
+	return err
+}
+
 func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
 	// We install the table at the KV layer so that we can choose a known ID in
 	// the reserved ID space. (The SQL layer doesn't allow this.)
@@ -548,6 +587,18 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 
 func createCommentTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.CommentsTable)
+}
+
+func createZoneConstraintsTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.ZoneConstraintsTable)
+}
+
+func createZoneLocalityAtRiskTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.ZoneLocalityAtRiskTable)
+}
+
+func createZoneRangeStatusTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.ZoneRangeStatusTable)
 }
 
 var reportingOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)

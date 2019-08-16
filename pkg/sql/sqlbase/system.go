@@ -258,12 +258,15 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	// users will be able to modify system tables' schemas at will. CREATE and
 	// DROP privileges are allowed on the above system tables for backwards
 	// compatibility reasons only!
-	keys.JobsTableID:            privilege.ReadWriteData,
-	keys.WebSessionsTableID:     privilege.ReadWriteData,
-	keys.TableStatisticsTableID: privilege.ReadWriteData,
-	keys.LocationsTableID:       privilege.ReadWriteData,
-	keys.RoleMembersTableID:     privilege.ReadWriteData,
-	keys.CommentsTableID:        privilege.ReadWriteData,
+	keys.JobsTableID:               privilege.ReadWriteData,
+	keys.WebSessionsTableID:        privilege.ReadWriteData,
+	keys.TableStatisticsTableID:    privilege.ReadWriteData,
+	keys.LocationsTableID:          privilege.ReadWriteData,
+	keys.RoleMembersTableID:        privilege.ReadWriteData,
+	keys.CommentsTableID:           privilege.ReadWriteData,
+	keys.ZoneConstraintsTableID:    privilege.ReadWriteData,
+	keys.ZoneLocalityAtRiskTableID: privilege.ReadWriteData,
+	keys.ZoneRangeStatusTableID:    privilege.ReadWriteData,
 }
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
@@ -860,6 +863,162 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
+
+	ZoneConstraintsTable = TableDescriptor{
+		Name:     "zone_violations",
+		ID:       keys.ZoneConstraintsTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "zone_id", ID: 1, Type: *types.Int},
+			{Name: "subzone_id", ID: 2, Type: *types.Int},
+			{Name: "type", ID: 3, Type: *types.String},
+			{Name: "config", ID: 4, Type: *types.String},
+			{Name: "updated_at", ID: 5, Type: *types.Timestamp},
+			{Name: "violation_started_at", ID: 6, Type: *types.Timestamp, Nullable: true},
+			{Name: "violation_ended_at", ID: 7, Type: *types.Timestamp, Nullable: true},
+			{Name: "violating_ranges", ID: 8, Type: *types.Int},
+			{Name: "violating_mb", ID: 9, Type: *types.Int},
+		},
+		NextColumnID: 10,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ID:          0,
+				ColumnNames: []string{"zone_id", "subzone_id", "type", "config"},
+				ColumnIDs:   []ColumnID{1, 2, 3, 4}},
+			{
+				Name: "variable",
+				ID:   1, ColumnNames: []string{
+					"updated_at",
+					"violation_started_at",
+					"violation_ended_at",
+					"violating_ranges",
+					"violating_mb",
+				},
+				ColumnIDs: []ColumnID{5, 6, 7, 8, 9},
+			},
+		},
+		NextFamilyID: 2,
+		PrimaryIndex: IndexDescriptor{
+			Name:        "primary",
+			ID:          1,
+			Unique:      true,
+			ColumnNames: []string{"zone_id", "subzone_id", "type", "config"},
+			ColumnDirections: []IndexDescriptor_Direction{
+				IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC,
+			},
+			ColumnIDs: []ColumnID{1, 2, 3, 4},
+		},
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ZoneConstraintsTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	ZoneLocalityAtRiskTable = TableDescriptor{
+		Name:     "zone_locality_at_risk",
+		ID:       keys.ZoneLocalityAtRiskTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "zone_id", ID: 1, Type: *types.Int},
+			{Name: "subzone_id", ID: 2, Type: *types.Int},
+			{Name: "locality", ID: 3, Type: *types.String},
+			{Name: "node_id", ID: 4, Type: *types.Int},
+			{Name: "updated_at", ID: 5, Type: *types.Timestamp},
+			{Name: "ranges_at_risk", ID: 6, Type: *types.Int},
+			{Name: "mb_at_risk", ID: 7, Type: *types.Int},
+		},
+		NextColumnID: 8,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ID:          0,
+				ColumnNames: []string{"zone_id", "subzone_id", "locality", "node_id"},
+				ColumnIDs:   []ColumnID{1, 2, 3, 4}},
+			{
+				Name: "variable",
+				ID:   1,
+				ColumnNames: []string{
+					"updated_at",
+					"ranges_at_risk",
+					"mb_at_risk",
+				},
+				ColumnIDs: []ColumnID{5, 6, 7},
+			},
+		},
+		NextFamilyID: 2,
+		PrimaryIndex: IndexDescriptor{
+			Name:        "primary",
+			ID:          1,
+			Unique:      true,
+			ColumnNames: []string{"zone_id", "subzone_id", "locality", "node_id"},
+			ColumnDirections: []IndexDescriptor_Direction{
+				IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC,
+			},
+			ColumnIDs: []ColumnID{1, 2, 3, 4},
+		},
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ZoneLocalityAtRiskTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	ZoneRangeStatusTable = TableDescriptor{
+		Name:     "zone_range_status",
+		ID:       keys.ZoneRangeStatusTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "zone_id", ID: 1, Type: *types.Int},
+			{Name: "subzone_id", ID: 2, Type: *types.Int},
+			{Name: "total", ID: 3, Type: *types.Int},
+			{Name: "unavailable", ID: 4, Type: *types.Int},
+			{Name: "under_replicated", ID: 5, Type: *types.Int},
+			{Name: "over_replicated", ID: 6, Type: *types.Int},
+			{Name: "total_mb", ID: 7, Type: *types.Int},
+			{Name: "unavailable_mb", ID: 8, Type: *types.Int},
+			{Name: "under_replicated_mb", ID: 9, Type: *types.Int},
+			{Name: "over_replicated_mb", ID: 10, Type: *types.Int},
+		},
+		NextColumnID: 11,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ID:          0,
+				ColumnNames: []string{"zone_id", "subzone_id"},
+				ColumnIDs:   []ColumnID{1, 2}},
+			{
+				Name: "variable",
+				ID:   1,
+				ColumnNames: []string{
+					"total",
+					"unavailable",
+					"under_replicated",
+					"over_replicated",
+					"total_mb",
+					"unavailable_mb",
+					"under_replicated_mb",
+					"over_replicated_mb",
+				},
+				ColumnIDs: []ColumnID{3, 4, 5, 6, 7, 8, 9, 10},
+			},
+		},
+		NextFamilyID: 2,
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"zone_id", "subzone_id"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1, 2},
+		},
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ZoneRangeStatusTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
 )
 
 // Create a kv pair for the zone config for the given key and config value.
@@ -905,6 +1064,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	// The CommentsTable has been introduced in 2.2. It was added here since it
 	// was introduced, but it's also created as a migration for older clusters.
 	target.AddDescriptor(keys.SystemDatabaseID, &CommentsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &ZoneConstraintsTable)
 }
 
 // addSystemDatabaseToSchema populates the supplied MetadataSchema with the

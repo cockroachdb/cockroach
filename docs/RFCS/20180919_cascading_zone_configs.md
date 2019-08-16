@@ -108,7 +108,7 @@ the value from its parent recursively. The `.default` fields are always explicit
 
 Before the `getZoneConfigForKey` or the `GetConfigInTxn` returns the zone and/or subzone,
 we must ensure all the values in the return are valid (all fields must be set). So
-after the call from each of the two, to `getZoneConfig`, the returned zone and/or 
+after the call from each of the two, to `GetZoneConfig`, the returned zone and/or 
 subzones will populate its unset fields by walking up the chain of parents as defined
 by the Zone hierarchy above until they find a config with the field explicitly set.
 

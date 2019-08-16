@@ -1853,6 +1853,7 @@ var crdbInternalZonesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.zones (
   zone_id          INT NOT NULL,
+  subzone_id			 INT NOT NULL,
   zone_name        STRING,
   cli_specifier    STRING, -- this column is deprecated in favor of zone_name.
                            -- It is kept for backwards compatibility with the CLI.
@@ -1907,7 +1908,7 @@ CREATE TABLE crdb_internal.zones (
 				configProto.Subzones = nil
 				configProto.SubzoneSpans = nil
 
-				if err := generateZoneConfigIntrospectionValues(values, r[0], zoneSpecifier, &configProto); err != nil {
+				if err := generateZoneConfigIntrospectionValues(values, r[0], tree.NewDInt(tree.DInt(0)), zoneSpecifier, &configProto); err != nil {
 					return err
 				}
 				if err := addRow(values...); err != nil {
@@ -1920,7 +1921,7 @@ CREATE TABLE crdb_internal.zones (
 				if err != nil {
 					return err
 				}
-				for _, s := range subzones {
+				for i, s := range subzones {
 					index, err := table.FindIndexByID(sqlbase.IndexID(s.IndexID))
 					if err != nil {
 						if err == sqlbase.ErrIndexGCMutationsList {
@@ -1935,7 +1936,7 @@ CREATE TABLE crdb_internal.zones (
 						zoneSpecifier = &zs
 					}
 
-					if err := generateZoneConfigIntrospectionValues(values, r[0], zoneSpecifier, &s.Config); err != nil {
+					if err := generateZoneConfigIntrospectionValues(values, r[0], tree.NewDInt(tree.DInt(i+1)), zoneSpecifier, &s.Config); err != nil {
 						return err
 					}
 					if err := addRow(values...); err != nil {
