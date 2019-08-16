@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -79,14 +80,17 @@ type replicatedCmd struct {
 
 // decodedRaftEntry represents the deserialized content of a raftpb.Entry.
 type decodedRaftEntry struct {
-	idKey              storagebase.CmdIDKey
-	raftCmd            storagepb.RaftCommand
+	idKey   storagebase.CmdIDKey
+	raftCmd storagepb.RaftCommand
+	// TODO(tbg): unembed this, it's a nil pointer trap.
 	*decodedConfChange // only non-nil for config changes
 }
 
 // decodedConfChange represents the fields of a config change raft command.
 type decodedConfChange struct {
-	cc    raftpb.ConfChange
+	cc    raftpb.ConfChangeI // backed by either cc1 or cc2
+	cc1   raftpb.ConfChange
+	cc2   raftpb.ConfChangeV2
 	ccCtx ConfChangeContext
 }
 
@@ -161,15 +165,17 @@ func (c *replicatedCmd) FinishAndAckOutcome() error {
 // decode decodes the entry e into the decodedRaftEntry.
 func (d *decodedRaftEntry) decode(ctx context.Context, e *raftpb.Entry) error {
 	*d = decodedRaftEntry{}
-	// etcd raft sometimes inserts nil commands, ours are never nil.
-	// This case is handled upstream of this call.
-	if len(e.Data) == 0 {
-		return nil
-	}
 	switch e.Type {
 	case raftpb.EntryNormal:
+		// etcd raft sometimes inserts nil commands, ours are never nil.
+		// This case is handled upstream of this call.
+		//
+		// NB: e.Data can be nil for EntryConfChangeV2 (the next case).
+		if len(e.Data) == 0 {
+			return nil
+		}
 		return d.decodeNormalEntry(e)
-	case raftpb.EntryConfChange:
+	case raftpb.EntryConfChange, raftpb.EntryConfChangeV2:
 		return d.decodeConfChangeEntry(e)
 	default:
 		log.Fatalf(ctx, "unexpected Raft entry: %v", e)
@@ -192,10 +198,26 @@ func (d *decodedRaftEntry) decodeNormalEntry(e *raftpb.Entry) error {
 
 func (d *decodedRaftEntry) decodeConfChangeEntry(e *raftpb.Entry) error {
 	d.decodedConfChange = &decodedConfChange{}
-	if err := protoutil.Unmarshal(e.Data, &d.cc); err != nil {
-		return wrapWithNonDeterministicFailure(err, "while unmarshaling ConfChange")
+	var err error
+	switch e.Type {
+	case raftpb.EntryConfChange:
+		if err := protoutil.Unmarshal(e.Data, &d.cc1); err != nil {
+			return wrapWithNonDeterministicFailure(err, "while unmarshaling ConfChange")
+		}
+		d.cc = d.cc1
+	case raftpb.EntryConfChangeV2:
+		if err := protoutil.Unmarshal(e.Data, &d.cc2); err != nil {
+			return wrapWithNonDeterministicFailure(err, "while unmarshaling ConfChangeV2")
+		}
+		d.cc = d.cc2
+	default:
+		err = errors.Errorf("unknown conf change entry: %v", e)
 	}
-	if err := protoutil.Unmarshal(d.cc.Context, &d.ccCtx); err != nil {
+	if err != nil {
+		return err
+	}
+
+	if err := protoutil.Unmarshal(d.cc.AsV2().Context, &d.ccCtx); err != nil {
 		return wrapWithNonDeterministicFailure(err, "while unmarshaling ConfChangeContext")
 	}
 	if err := protoutil.Unmarshal(d.ccCtx.Payload, &d.raftCmd); err != nil {

@@ -897,12 +897,6 @@ func (r *Replica) ChangeReplicas(
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
 
-	if len(chgs) != 1 {
-		// TODO(tbg): lift this restriction when atomic membership changes are
-		// plumbed into raft.
-		return nil, errors.Errorf("need exactly one change, got %+v", chgs)
-	}
-
 	if err := validateReplicationChanges(desc, chgs); err != nil {
 		return nil, err
 	}
@@ -937,6 +931,7 @@ func (r *Replica) ChangeReplicas(
 
 	// Catch up any learners, then run the atomic replication change that adds the
 	// final voters and removes any undesirable replicas.
+	prevDescNextReplicaID := desc.NextReplicaID
 	desc, err := r.finalizeChangeReplicas(ctx, desc, priority, reason, details, chgs)
 	if err != nil {
 		if fn := r.store.cfg.TestingKnobs.ReplicaAddSkipLearnerRollback; fn != nil && fn() {
@@ -950,6 +945,27 @@ func (r *Replica) ChangeReplicas(
 			r.tryRollBackLearnerReplica(ctx, r.Desc(), target, reason, details)
 		}
 		return nil, err
+	}
+	// Wait until the joint state is gone (perhaps replaced by someone else's
+	// joint state) so that when we return our caller can rest assured that
+	// *all* of the work was done.
+	//
+	// WIP(tbg): this polling is awkward. We want to send a noop write through
+	// raft as a means of backoff (that's roughly how long we expect to wait),
+	// but I don't think there's an idiomatic way to do so today.
+	var jointDesc roachpb.RangeDescriptor
+	for rt := retry.StartWithCtx(ctx, retry.Options{
+		InitialBackoff: 5 * time.Millisecond,
+		MaxBackoff:     150 * time.Millisecond,
+	}); rt.Next(); {
+		if err := r.store.DB().GetProto(
+			ctx, keys.RangeDescriptorJointKey(desc.StartKey), &jointDesc,
+		); err != nil {
+			return nil, err
+		}
+		if jointDesc.NextReplicaID == 0 || jointDesc.NextReplicaID != prevDescNextReplicaID {
+			return desc, nil
+		}
 	}
 	return desc, nil
 }
@@ -1023,7 +1039,7 @@ func addLearnerReplicas(
 		replDesc := roachpb.ReplicaDescriptor{
 			NodeID:    target.NodeID,
 			StoreID:   target.StoreID,
-			ReplicaID: desc.NextReplicaID,
+			ReplicaID: newDesc.NextReplicaID,
 			Type:      roachpb.ReplicaTypeLearner(),
 		}
 		newDesc.NextReplicaID++

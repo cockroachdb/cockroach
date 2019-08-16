@@ -642,3 +642,56 @@ func (rsl StateLoader) SynthesizeHardState(
 	err := rsl.SetHardState(ctx, eng, newHS)
 	return errors.Wrapf(err, "writing HardState %+v", &newHS)
 }
+
+// makeConfState transforms the current and, optionally, previous descriptor
+// of the range into a ConfState. The previous descriptor is only supplied when
+// the range is in the middle of an atomic replication change.
+func makeConfState(
+	reps []roachpb.ReplicaDescriptor, jointReps ...roachpb.ReplicaDescriptor,
+) raftpb.ConfState {
+	var cs raftpb.ConfState
+	var outgoingVoters map[roachpb.ReplicaID]struct{}
+	if len(jointReps) != 0 {
+		// We'll return a ConfState in a joint state, and we always want Raft
+		// to leave it for us.
+		cs.AutoLeave = true
+		// Populate outgoingVoters for the code handling learners below.
+		outgoingVoters = map[roachpb.ReplicaID]struct{}{}
+		for _, rep := range jointReps {
+			if rep.GetType() == roachpb.ReplicaType_VOTER {
+				outgoingVoters[rep.ReplicaID] = struct{}{}
+				cs.VotersOutgoing = append(cs.VotersOutgoing, uint64(rep.ReplicaID))
+			}
+		}
+	}
+
+	// The incoming config is taken verbatim from 'desc' when the config is not
+	// joint. If it is, the voters are still taken verbatim, but some of the
+	// learners which are also in the outgoing config must be put into
+	// LearnersNext instead of Learners.
+	for _, rep := range reps {
+		if rep.GetType() == roachpb.ReplicaType_VOTER {
+			cs.Voters = append(cs.Voters, uint64(rep.ReplicaID))
+		} else {
+			if _, ok := outgoingVoters[rep.ReplicaID]; ok {
+				cs.LearnersNext = append(cs.LearnersNext, uint64(rep.ReplicaID))
+			} else {
+				cs.Learners = append(cs.Learners, uint64(rep.ReplicaID))
+			}
+		}
+	}
+	return cs
+}
+
+// LoadConfState creates the raftpb.ConfState for the given descriptor.
+func (rsl StateLoader) LoadConfState(
+	ctx context.Context, eng engine.Reader, desc *roachpb.RangeDescriptor,
+) (raftpb.ConfState, error) {
+	jointDesc := &roachpb.RangeDescriptor{}
+	_, err := engine.MVCCGetProto(
+		ctx, eng, keys.RangeDescriptorJointKey(desc.StartKey), hlc.Timestamp{}, jointDesc, engine.MVCCGetOptions{})
+	if err != nil {
+		return raftpb.ConfState{}, err
+	}
+	return makeConfState(desc.Replicas().All(), jointDesc.Replicas().All()...), nil
+}
