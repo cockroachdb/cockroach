@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -189,7 +190,7 @@ func TestSpanResolver(t *testing.T) {
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
 	lr := distsqlplan.NewSpanResolver(
 		s.(*server.TestServer).Cfg.Settings,
-		s.DistSender(), s.Gossip(),
+		s.DistSender(), s.GossipI().(*gossip.Gossip),
 		s.(*server.TestServer).GetNode().Descriptor, nil,
 		replicaoracle.BinPackingChoice)
 
@@ -283,7 +284,7 @@ func TestMixedDirections(t *testing.T) {
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
 	lr := distsqlplan.NewSpanResolver(
 		s.(*server.TestServer).Cfg.Settings,
-		s.DistSender(), s.Gossip(),
+		s.DistSender(), s.GossipI().(*gossip.Gossip),
 		s.(*server.TestServer).GetNode().Descriptor,
 		nil,
 		replicaoracle.BinPackingChoice)
