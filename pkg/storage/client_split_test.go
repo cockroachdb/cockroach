@@ -1290,9 +1290,17 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			}
 		}
 		for i := keys.MinUserDescID; i <= userTableMax; i++ {
-			// We don't care about the value, just the key.
-			key := sqlbase.MakeDescMetadataKey(sqlbase.ID(i))
-			if err := txn.Put(ctx, key, &sqlbase.TableDescriptor{}); err != nil {
+			id := sqlbase.ID(i)
+			key := sqlbase.MakeDescMetadataKey(id)
+			if err := txn.Put(ctx, key,
+				&sqlbase.Descriptor{
+					Union: &sqlbase.Descriptor_Table{
+						Table: &sqlbase.TableDescriptor{
+							// Fill in the descriptor just enough for the test to work.
+							ID: id,
+						},
+					},
+				}); err != nil {
 				return err
 			}
 		}
@@ -1354,9 +1362,18 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			return err
 		}
 		// This time, only write the last table descriptor. Splits only occur for
-		// the descriptor we add. We don't care about the value, just the key.
-		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(userTableMax))
-		return txn.Put(ctx, k, &sqlbase.TableDescriptor{})
+		// the descriptor we add.
+		id := sqlbase.ID(userTableMax)
+		k := sqlbase.MakeDescMetadataKey(id)
+		return txn.Put(ctx, k,
+			&sqlbase.Descriptor{
+				Union: &sqlbase.Descriptor_Table{
+					Table: &sqlbase.TableDescriptor{
+						// Fill in the descriptor just enough for the test to work.
+						ID: id,
+					},
+				},
+			})
 	}); err != nil {
 		t.Fatal(err)
 	}

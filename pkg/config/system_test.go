@@ -11,6 +11,7 @@
 package config_test
 
 import (
+	"context"
 	"sort"
 	"testing"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/gogo/protobuf/proto"
 )
@@ -47,8 +49,26 @@ func sqlKV(tableID uint32, indexID, descriptorID uint64) roachpb.KeyValue {
 	return kv(k, nil)
 }
 
+// descriptor returns a KeyValue, with the keys being a descriptor's key, and
+// the value being an empty TableDescriptor proto (only with the ID set).
 func descriptor(descriptorID uint64) roachpb.KeyValue {
-	return kv(sqlbase.MakeDescMetadataKey(sqlbase.ID(descriptorID)), nil)
+	kv := roachpb.KeyValue{
+		Key: sqlbase.MakeDescMetadataKey(sqlbase.ID(descriptorID)),
+	}
+	if err := kv.Value.SetProto(&sqlbase.Descriptor{
+		Union: &sqlbase.Descriptor_Table{
+			Table: &sqlbase.TableDescriptor{
+				// Fill in the descriptor just enough for the test to work.
+				ID: sqlbase.ID(descriptorID),
+			},
+		},
+	}); err != nil {
+		panic(err)
+	}
+	// We need to set some timestamp on this proto, otherwise unwrapping the
+	// descriptor fatals.
+	kv.Value.Timestamp = hlc.Timestamp{WallTime: 123}
+	return kv
 }
 
 func zoneConfig(descriptorID uint32, spans ...zonepb.SubzoneSpan) roachpb.KeyValue {
@@ -262,7 +282,7 @@ func TestComputeSplitKeySystemRanges(t *testing.T) {
 		Values: kvs,
 	}
 	for tcNum, tc := range testCases {
-		splitKey := cfg.ComputeSplitKey(tc.start, tc.end)
+		splitKey := cfg.ComputeSplitKey(context.Background(), tc.start, tc.end)
 		expected := roachpb.RKey(tc.split)
 		if !splitKey.Equal(expected) {
 			t.Errorf("#%d: bad split:\ngot: %v\nexpected: %v", tcNum, splitKey, expected)
@@ -306,12 +326,6 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 		start, end roachpb.RKey
 		split      roachpb.RKey // nil to indicate no split is expected
 	}{
-		// No data.
-		{nil, minKey, roachpb.RKeyMax, tkey(0)},
-		{nil, tkey(start), roachpb.RKeyMax, nil},
-		{nil, tkey(start), tkey(start + 10), nil},
-		{nil, minKey, tkey(start + 10), tkey(0)},
-
 		// Reserved descriptors.
 		{baseSql, minKey, roachpb.RKeyMax, tkey(0)},
 		{baseSql, tkey(start), roachpb.RKeyMax, nil},
@@ -369,7 +383,7 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
-		splitKey := cfg.ComputeSplitKey(tc.start, tc.end)
+		splitKey := cfg.ComputeSplitKey(context.Background(), tc.start, tc.end)
 		if !splitKey.Equal(tc.split) {
 			t.Errorf("#%d: bad split:\ngot: %v\nexpected: %v", tcNum, splitKey, tc.split)
 		}
