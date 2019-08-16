@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1017,7 +1018,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	const maxBytes = 1 << 16
 	// Set max bytes.
 	descID := uint32(keys.MinUserDescID)
-	zoneConfig := config.DefaultZoneConfig()
+	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
 	config.TestingSetZoneConfig(descID, zoneConfig)
 
@@ -1079,7 +1080,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	// Set max bytes.
 	const maxBytes = 1 << 16
 	descID := uint32(keys.MinUserDescID)
-	zoneConfig := config.DefaultZoneConfig()
+	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
 	config.TestingSetZoneConfig(descID, zoneConfig)
 
@@ -1280,7 +1281,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 	userTableMax := keys.MinUserDescID + 4
 	var exceptions map[int]struct{}
-	schema := sqlbase.MakeMetadataSchema(config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef())
+	schema := sqlbase.MakeMetadataSchema(zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
 	// Write table descriptors for the tables in the metadata schema as well as
 	// five dummy user tables. This does two things:
 	//   - descriptor IDs are used to determine split keys
@@ -2200,7 +2201,7 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 
 	// Avoid excessive logging on under-replicated ranges due to our many splits.
 	config.TestingSetupZoneConfigHook(stopper)
-	zoneConfig := config.DefaultZoneConfig()
+	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.NumReplicas = proto.Int32(1)
 	config.TestingSetZoneConfig(0, zoneConfig)
 
@@ -2403,11 +2404,11 @@ func TestUnsplittableRange(t *testing.T) {
 	splitQueuePurgatoryChan := make(chan time.Time, 1)
 	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	cfg.DefaultZoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
-	cfg.DefaultZoneConfig.GC = &config.GCPolicy{
+	cfg.DefaultZoneConfig.GC = &zonepb.GCPolicy{
 		TTLSeconds: int32(ttl.Seconds()),
 	}
 	cfg.DefaultSystemZoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
-	cfg.DefaultSystemZoneConfig.GC = &config.GCPolicy{
+	cfg.DefaultSystemZoneConfig.GC = &zonepb.GCPolicy{
 		TTLSeconds: int32(ttl.Seconds()),
 	}
 	cfg.TestingKnobs.SplitQueuePurgatoryChan = splitQueuePurgatoryChan

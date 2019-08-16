@@ -14,7 +14,7 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -26,7 +26,7 @@ import (
 
 // GenerateSubzoneSpans constructs from a TableDescriptor the entries mapping
 // zone config spans to subzones for use in the SubzoneSpans field of
-// config.ZoneConfig. SubzoneSpans controls which splits are created, so only
+// zonepb.ZoneConfig. SubzoneSpans controls which splits are created, so only
 // the spans corresponding to entries in subzones are returned.
 //
 // Zone configs target indexes and partitions via `subzones`, which are attached
@@ -71,9 +71,9 @@ func GenerateSubzoneSpans(
 	st *cluster.Settings,
 	clusterID uuid.UUID,
 	tableDesc *sqlbase.TableDescriptor,
-	subzones []config.Subzone,
+	subzones []zonepb.Subzone,
 	hasNewSubzones bool,
-) ([]config.SubzoneSpan, error) {
+) ([]zonepb.SubzoneSpan, error) {
 	// Removing zone configs does not require a valid license.
 	if hasNewSubzones {
 		org := ClusterOrganization.Get(&st.SV)
@@ -105,7 +105,7 @@ func GenerateSubzoneSpans(
 			// perspective) it's safe to append them all together.
 			indexCovering = append(indexCovering, covering.Range{
 				Start: idxSpan.Key, End: idxSpan.EndKey,
-				Payload: config.Subzone{IndexID: uint32(idxDesc.ID)},
+				Payload: zonepb.Subzone{IndexID: uint32(idxDesc.ID)},
 			})
 		}
 
@@ -136,18 +136,18 @@ func GenerateSubzoneSpans(
 	// checked in PartitionDescriptor validation.
 	sharedPrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
 
-	var subzoneSpans []config.SubzoneSpan
+	var subzoneSpans []zonepb.SubzoneSpan
 	for _, r := range ranges {
 		payloads := r.Payload.([]interface{})
 		if len(payloads) == 0 {
 			continue
 		}
-		subzoneSpan := config.SubzoneSpan{
+		subzoneSpan := zonepb.SubzoneSpan{
 			Key:    bytes.TrimPrefix(r.Start, sharedPrefix),
 			EndKey: bytes.TrimPrefix(r.End, sharedPrefix),
 		}
 		var ok bool
-		if subzone := payloads[0].(config.Subzone); len(subzone.PartitionName) > 0 {
+		if subzone := payloads[0].(zonepb.Subzone); len(subzone.PartitionName) > 0 {
 			subzoneSpan.SubzoneIndex, ok = subzoneIndexByPartition[subzone.PartitionName]
 		} else {
 			subzoneSpan.SubzoneIndex, ok = subzoneIndexByIndexID[sqlbase.IndexID(subzone.IndexID)]
@@ -166,7 +166,7 @@ func GenerateSubzoneSpans(
 // indexCoveringsForPartitioning returns span coverings representing the
 // partitions in partDesc (including subpartitions). They are sorted with
 // highest precedence first and the interval.Range payloads are each a
-// `config.Subzone` with the PartitionName set.
+// `zonepb.Subzone` with the PartitionName set.
 func indexCoveringsForPartitioning(
 	a *sqlbase.DatumAlloc,
 	tableDesc *sqlbase.TableDescriptor,
@@ -201,7 +201,7 @@ func indexCoveringsForPartitioning(
 				if _, ok := relevantPartitions[p.Name]; ok {
 					listCoverings[len(t.Datums)] = append(listCoverings[len(t.Datums)], covering.Range{
 						Start: keyPrefix, End: roachpb.Key(keyPrefix).PrefixEnd(),
-						Payload: config.Subzone{PartitionName: p.Name},
+						Payload: zonepb.Subzone{PartitionName: p.Name},
 					})
 				}
 				newPrefixDatums := append(prefixDatums, t.Datums...)
@@ -238,7 +238,7 @@ func indexCoveringsForPartitioning(
 			if _, ok := relevantPartitions[p.Name]; ok {
 				coverings = append(coverings, covering.Covering{{
 					Start: fromKey, End: toKey,
-					Payload: config.Subzone{PartitionName: p.Name},
+					Payload: zonepb.Subzone{PartitionName: p.Name},
 				}})
 			}
 		}

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -69,7 +70,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 		cfg: StoreConfig{
 			Clock:             hlc.NewClock(hlc.UnixNano, time.Second),
 			AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
-			DefaultZoneConfig: config.DefaultZoneConfigRef(),
+			DefaultZoneConfig: zonepb.DefaultZoneConfigRef(),
 		},
 	}
 

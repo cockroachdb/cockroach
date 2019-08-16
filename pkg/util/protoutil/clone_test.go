@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -40,7 +40,7 @@ func TestCloneProto(t *testing.T) {
 
 		// Cloneable types. This includes all types for which a
 		// protoutil.Clone call exists in the codebase as of 2016-11-21.
-		{&config.ZoneConfig{}, false},
+		{&zonepb.ZoneConfig{}, false},
 		{&gossip.Info{}, false},
 		{&gossip.BootstrapInfo{}, false},
 		{&sqlbase.IndexDescriptor{}, false},

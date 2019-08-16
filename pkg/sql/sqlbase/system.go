@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -1251,7 +1252,7 @@ var (
 )
 
 // Create a kv pair for the zone config for the given key and config value.
-func createZoneConfigKV(keyID int, zoneConfig *config.ZoneConfig) roachpb.KeyValue {
+func createZoneConfigKV(keyID int, zoneConfig *zonepb.ZoneConfig) roachpb.KeyValue {
 	value := roachpb.Value{}
 	if err := value.SetProto(zoneConfig); err != nil {
 		panic(fmt.Sprintf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
@@ -1306,8 +1307,8 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 // System database, its tables and zone configurations.
 func addSystemDatabaseToSchema(
 	target *MetadataSchema,
-	defaultZoneConfig *config.ZoneConfig,
-	defaultSystemZoneConfig *config.ZoneConfig,
+	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) {
 	addSystemDescriptorsToSchema(target)
 
@@ -1320,9 +1321,9 @@ func addSystemDatabaseToSchema(
 	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, defaultZoneConfig))
 
 	systemZoneConf := defaultSystemZoneConfig
-	metaRangeZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*config.ZoneConfig)
-	jobsZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*config.ZoneConfig)
-	livenessZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*config.ZoneConfig)
+	metaRangeZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
+	jobsZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
+	livenessZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
 
 	// .meta zone config entry with a shorter GC time.
 	metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
@@ -1333,11 +1334,11 @@ func addSystemDatabaseToSchema(
 	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, jobsZoneConf))
 
 	// Some reporting tables have shorter GC times.
-	replicationConstraintStatsZoneConf := &config.ZoneConfig{
-		GC: &config.GCPolicy{TTLSeconds: int32(ReplicationConstraintStatsTableTTL.Seconds())},
+	replicationConstraintStatsZoneConf := &zonepb.ZoneConfig{
+		GC: &zonepb.GCPolicy{TTLSeconds: int32(ReplicationConstraintStatsTableTTL.Seconds())},
 	}
-	replicationStatsZoneConf := &config.ZoneConfig{
-		GC: &config.GCPolicy{TTLSeconds: int32(ReplicationStatsTableTTL.Seconds())},
+	replicationStatsZoneConf := &zonepb.ZoneConfig{
+		GC: &zonepb.GCPolicy{TTLSeconds: int32(ReplicationStatsTableTTL.Seconds())},
 	}
 
 	// Liveness zone config entry with a shorter GC time.

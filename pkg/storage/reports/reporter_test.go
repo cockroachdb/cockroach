@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -172,14 +173,14 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 
 	// Collect all the zones that exist at cluster bootstrap.
 	systemZoneIDs := make([]int, 0, 10)
-	systemZones := make([]config.ZoneConfig, 0, 10)
+	systemZones := make([]zonepb.ZoneConfig, 0, 10)
 	{
 		rows, err := db.Query("select id, config from system.zones")
 		require.NoError(t, err)
 		for rows.Next() {
 			var zoneID int
 			var buf []byte
-			cfg := config.ZoneConfig{}
+			cfg := zonepb.ZoneConfig{}
 			require.NoError(t, rows.Scan(&zoneID, &buf))
 			require.NoError(t, protoutil.Unmarshal(buf, &cfg))
 			systemZoneIDs = append(systemZoneIDs, zoneID)
@@ -502,7 +503,7 @@ func TestZoneChecker(t *testing.T) {
 	type tc struct {
 		split          string
 		newZone        bool
-		newRootZoneCfg *config.ZoneConfig
+		newRootZoneCfg *zonepb.ZoneConfig
 		newZoneKey     ZoneKey
 	}
 	// NB: IDs need to be beyond MaxSystemConfigDescID, otherwise special logic

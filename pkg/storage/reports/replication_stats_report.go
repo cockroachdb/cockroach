@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -320,7 +321,7 @@ func (v *replicationStatsVisitor) reset(ctx context.Context) {
 	}
 }
 
-func (v *replicationStatsVisitor) ensureEntries(key ZoneKey, zone *config.ZoneConfig) {
+func (v *replicationStatsVisitor) ensureEntries(key ZoneKey, zone *zonepb.ZoneConfig) {
 	if zoneChangesReplication(zone) {
 		v.report.EnsureEntry(key)
 	}
@@ -338,7 +339,7 @@ func (v *replicationStatsVisitor) visitNewZone(
 		v.visitErr = retErr != nil
 	}()
 	var zKey ZoneKey
-	var zConfig *config.ZoneConfig
+	var zConfig *zonepb.ZoneConfig
 	var numReplicas int
 
 	// Figure out the zone config for whose report the current range is to be
@@ -347,7 +348,7 @@ func (v *replicationStatsVisitor) visitNewZone(
 	// factor this zone is configured with; the replication factor might be
 	// inherited from a higher-level zone config.
 	found, err := visitZones(ctx, r, v.cfg, ignoreSubzonePlaceholders,
-		func(_ context.Context, zone *config.ZoneConfig, key ZoneKey) bool {
+		func(_ context.Context, zone *zonepb.ZoneConfig, key ZoneKey) bool {
 			if zConfig == nil {
 				if !zoneChangesReplication(zone) {
 					return false
@@ -425,7 +426,7 @@ func (v *replicationStatsVisitor) countRange(
 // This is used to determine which zone's report a range counts towards for the
 // replication_stats and the critical_localities reports : it'll count towards
 // the lowest ancestor for which this method returns true.
-func zoneChangesReplication(zone *config.ZoneConfig) bool {
+func zoneChangesReplication(zone *zonepb.ZoneConfig) bool {
 	return (zone.NumReplicas != nil && *zone.NumReplicas != 0) ||
 		zone.Constraints != nil
 }

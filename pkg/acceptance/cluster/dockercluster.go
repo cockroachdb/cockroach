@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -64,7 +64,7 @@ const CockroachBinaryInContainer = "/cockroach/cockroach"
 var cockroachImage = flag.String("i", defaultImage, "the docker image to run")
 var cockroachEntry = flag.String("e", "", "the entry point for the image")
 var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
-var maxRangeBytes = *config.DefaultZoneConfig().RangeMaxBytes
+var maxRangeBytes = *zonepb.DefaultZoneConfig().RangeMaxBytes
 
 // CockroachBinary is the path to the host-side binary to use.
 var CockroachBinary = flag.String("b", func() string {

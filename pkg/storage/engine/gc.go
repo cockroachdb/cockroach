@@ -13,7 +13,7 @@ package engine
 import (
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -22,12 +22,12 @@ import (
 // versions and maximum age.
 type GarbageCollector struct {
 	Threshold hlc.Timestamp
-	policy    config.GCPolicy
+	policy    zonepb.GCPolicy
 }
 
 // MakeGarbageCollector allocates and returns a new GC, with expiration
 // computed based on current time and policy.TTLSeconds.
-func MakeGarbageCollector(now hlc.Timestamp, policy config.GCPolicy) GarbageCollector {
+func MakeGarbageCollector(now hlc.Timestamp, policy zonepb.GCPolicy) GarbageCollector {
 	ttlNanos := int64(policy.TTLSeconds) * 1e9
 	return GarbageCollector{
 		Threshold: hlc.Timestamp{WallTime: now.WallTime - ttlNanos},

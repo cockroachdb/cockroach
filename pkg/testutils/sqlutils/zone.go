@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -23,7 +23,7 @@ import (
 // ZoneRow represents a row returned by SHOW ZONE CONFIGURATION.
 type ZoneRow struct {
 	ID     uint32
-	Config config.ZoneConfig
+	Config zonepb.ZoneConfig
 }
 
 func (row ZoneRow) sqlRowString() ([]string, error) {
@@ -42,7 +42,7 @@ func RemoveAllZoneConfigs(t testing.TB, sqlDB *SQLRunner) {
 	t.Helper()
 	for _, row := range sqlDB.QueryStr(t, "SHOW ALL ZONE CONFIGURATIONS") {
 		target := row[0]
-		if target == fmt.Sprintf("RANGE %s", config.DefaultZoneName) {
+		if target == fmt.Sprintf("RANGE %s", zonepb.DefaultZoneName) {
 			// The default zone cannot be removed.
 			continue
 		}

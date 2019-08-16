@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1224,14 +1224,14 @@ CREATE TABLE crdb_internal.create_statements (
 		} else {
 			for _, row := range zoneConstraintRows {
 				tableName := string(tree.MustBeDString(row[0]))
-				var zoneConfig config.ZoneConfig
+				var zoneConfig zonepb.ZoneConfig
 				yamlString := string(tree.MustBeDString(row[1]))
 				err := yaml.UnmarshalStrict([]byte(yamlString), &zoneConfig)
 				if err != nil {
 					return err
 				}
 				// If all constraints are default, then don't show anything.
-				if !zoneConfig.Equal(config.ZoneConfig{}) {
+				if !zoneConfig.Equal(zonepb.ZoneConfig{}) {
 					sqlString := string(tree.MustBeDString(row[2]))
 					zoneConfigStmts[tableName] = append(zoneConfigStmts[tableName], sqlString)
 				}
@@ -2156,7 +2156,7 @@ CREATE TABLE crdb_internal.zones (
 			id := uint32(tree.MustBeDInt(r[0]))
 
 			var zoneSpecifier *tree.ZoneSpecifier
-			zs, err := config.ZoneSpecifierFromID(id, resolveID)
+			zs, err := zonepb.ZoneSpecifierFromID(id, resolveID)
 			if err != nil {
 				// We can have valid zoneSpecifiers whose table/database has been
 				// deleted because zoneSpecifiers are collected asynchronously.
@@ -2168,7 +2168,7 @@ CREATE TABLE crdb_internal.zones (
 			}
 
 			configBytes := []byte(*r[1].(*tree.DBytes))
-			var configProto config.ZoneConfig
+			var configProto zonepb.ZoneConfig
 			if err := protoutil.Unmarshal(configBytes, &configProto); err != nil {
 				return err
 			}

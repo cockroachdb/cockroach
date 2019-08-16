@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -35,7 +35,7 @@ func TestShowTraceReplica(t *testing.T) {
 
 	const numNodes = 4
 
-	zoneConfig := config.DefaultZoneConfig()
+	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.NumReplicas = proto.Int32(1)
 
 	ctx := context.Background()

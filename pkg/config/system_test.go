@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -51,18 +52,18 @@ func descriptor(descriptorID uint64) roachpb.KeyValue {
 	return kv(sqlbase.MakeDescMetadataKey(sqlbase.ID(descriptorID)), nil)
 }
 
-func zoneConfig(descriptorID uint32, spans ...config.SubzoneSpan) roachpb.KeyValue {
+func zoneConfig(descriptorID uint32, spans ...zonepb.SubzoneSpan) roachpb.KeyValue {
 	kv := roachpb.KeyValue{
 		Key: config.MakeZoneKey(descriptorID),
 	}
-	if err := kv.Value.SetProto(&config.ZoneConfig{SubzoneSpans: spans}); err != nil {
+	if err := kv.Value.SetProto(&zonepb.ZoneConfig{SubzoneSpans: spans}); err != nil {
 		panic(err)
 	}
 	return kv
 }
 
-func subzone(start, end string) config.SubzoneSpan {
-	return config.SubzoneSpan{Key: []byte(start), EndKey: []byte(end)}
+func subzone(start, end string) zonepb.SubzoneSpan {
+	return zonepb.SubzoneSpan{Key: []byte(start), EndKey: []byte(end)}
 }
 
 func kv(k, v []byte) roachpb.KeyValue {
@@ -107,7 +108,7 @@ func TestGet(t *testing.T) {
 		{someKeys, "d", &cVal},
 	}
 
-	cfg := config.NewSystemConfig(config.DefaultZoneConfigRef())
+	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
 		if val := cfg.GetValue([]byte(tc.key)); !proto.Equal(val, tc.value) {
@@ -161,7 +162,7 @@ func TestGetLargestID(t *testing.T) {
 
 		// Real SQL layout.
 		func() testCase {
-			ms := sqlbase.MakeMetadataSchema(config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef())
+			ms := sqlbase.MakeMetadataSchema(zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
 			descIDs := ms.DescriptorIDs()
 			maxDescID := descIDs[len(descIDs)-1]
 			kvs, _ /* splits */ := ms.GetInitialValues(cluster.TestingClusterVersion)
@@ -185,7 +186,7 @@ func TestGetLargestID(t *testing.T) {
 		}, 5, 7, ""},
 	}
 
-	cfg := config.NewSystemConfig(config.DefaultZoneConfigRef())
+	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
 		ret, err := cfg.GetLargestObjectID(tc.maxID)
@@ -256,8 +257,8 @@ func TestComputeSplitKeySystemRanges(t *testing.T) {
 		{roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()), roachpb.RKeyMax, keys.SystemConfigSplitKey},
 	}
 
-	cfg := config.NewSystemConfig(config.DefaultZoneConfigRef())
-	kvs, _ /* splits */ := sqlbase.MakeMetadataSchema(cfg.DefaultZoneConfig, config.DefaultSystemZoneConfigRef()).GetInitialValues(cluster.TestingClusterVersion)
+	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
+	kvs, _ /* splits */ := sqlbase.MakeMetadataSchema(cfg.DefaultZoneConfig, zonepb.DefaultSystemZoneConfigRef()).GetInitialValues(cluster.TestingClusterVersion)
 	cfg.SystemConfigEntries = config.SystemConfigEntries{
 		Values: kvs,
 	}
@@ -287,7 +288,7 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 	// separately above.
 	minKey := roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd())
 
-	schema := sqlbase.MakeMetadataSchema(config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef())
+	schema := sqlbase.MakeMetadataSchema(zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
 	// Real system tables only.
 	baseSql, _ /* splits */ := schema.GetInitialValues(cluster.TestingClusterVersion)
 	// Real system tables plus some user stuff.
@@ -368,7 +369,7 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 		{userSQL, tkey(start + 1), tkey(start + 5), nil},
 	}
 
-	cfg := config.NewSystemConfig(config.DefaultZoneConfigRef())
+	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
 		splitKey := cfg.ComputeSplitKey(tc.start, tc.end)
@@ -431,9 +432,9 @@ func TestGetZoneConfigForKey(t *testing.T) {
 	defer func() {
 		config.ZoneConfigHook = originalZoneConfigHook
 	}()
-	cfg := config.NewSystemConfig(config.DefaultZoneConfigRef())
+	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
 
-	kvs, _ /* splits */ := sqlbase.MakeMetadataSchema(cfg.DefaultZoneConfig, config.DefaultSystemZoneConfigRef()).GetInitialValues(cluster.TestingClusterVersion)
+	kvs, _ /* splits */ := sqlbase.MakeMetadataSchema(cfg.DefaultZoneConfig, zonepb.DefaultSystemZoneConfigRef()).GetInitialValues(cluster.TestingClusterVersion)
 	cfg.SystemConfigEntries = config.SystemConfigEntries{
 		Values: kvs,
 	}
@@ -441,9 +442,9 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		var objectID uint32
 		config.ZoneConfigHook = func(
 			_ *config.SystemConfig, id uint32,
-		) (*config.ZoneConfig, *config.ZoneConfig, bool, error) {
+		) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, bool, error) {
 			objectID = id
-			return &config.ZoneConfig{}, nil, false, nil
+			return &zonepb.ZoneConfig{}, nil, false, nil
 		}
 		_, err := cfg.GetZoneConfigForKey(tc.key)
 		if err != nil {

@@ -17,7 +17,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -565,7 +565,7 @@ func (sl StoreList) String() string {
 
 // filter takes a store list and filters it using the passed in constraints. It
 // maintains the original order of the passed in store list.
-func (sl StoreList) filter(constraints []config.Constraints) StoreList {
+func (sl StoreList) filter(constraints []zonepb.Constraints) StoreList {
 	if len(constraints) == 0 {
 		return sl
 	}
