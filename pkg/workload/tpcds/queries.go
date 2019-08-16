@@ -2958,6 +2958,8 @@ LIMIT
 	100;
 `
 
+	// TODO(yuzefovich): update the query once 'customer' table contains
+	// correctly named column 'c_last_review_date_sk'.
 	query30 = `
 WITH
 	customer_total_return
@@ -2987,7 +2989,7 @@ SELECT
 	c_birth_country,
 	c_login,
 	c_email_address,
-	c_last_review_date_sk,
+	c_last_review_date,
 	ctr_total_return
 FROM
 	customer_total_return AS ctr1,
@@ -3018,7 +3020,7 @@ ORDER BY
 	c_birth_country,
 	c_login,
 	c_email_address,
-	c_last_review_date_sk,
+	c_last_review_date,
 	ctr_total_return
 LIMIT
 	100;
