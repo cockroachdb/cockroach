@@ -850,15 +850,6 @@ func (r *Replica) applySnapshot(
 		return errors.Wrapf(err, "unable to write HardState to unreplicated SST writer")
 	}
 
-	// Update TruncatedState if it is unreplicated.
-	if inSnap.UsesUnreplicatedTruncatedState {
-		if err := r.raftMu.stateLoader.SetRaftTruncatedState(
-			ctx, &unreplicatedSST, s.TruncatedState,
-		); err != nil {
-			return errors.Wrapf(err, "unable to write UnreplicatedTruncatedState to unreplicated SST writer")
-		}
-	}
-
 	// Update Raft entries.
 	var lastTerm uint64
 	var raftLogSize int64
@@ -890,6 +881,15 @@ func (r *Replica) applySnapshot(
 		lastTerm = invalidLastTerm
 	}
 	r.store.raftEntryCache.Drop(r.RangeID)
+
+	// Update TruncatedState if it is unreplicated.
+	if inSnap.UsesUnreplicatedTruncatedState {
+		if err := r.raftMu.stateLoader.SetRaftTruncatedState(
+			ctx, &unreplicatedSST, s.TruncatedState,
+		); err != nil {
+			return errors.Wrapf(err, "unable to write UnreplicatedTruncatedState to unreplicated SST writer")
+		}
+	}
 
 	if err := inSnap.SSSS.WriteSST(ctx, &unreplicatedSST); err != nil {
 		return err
