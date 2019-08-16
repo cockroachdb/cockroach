@@ -916,8 +916,12 @@ func (r *Replica) ChangeReplicas(
 		if len(chgs) != 1 {
 			return nil, errors.Errorf("need exactly one change, got %+v", chgs)
 		}
-		target := chgs[0].Target
-		return r.addReplicaLegacyPreemptiveSnapshot(ctx, target, desc, priority, reason, details)
+		if chgs[0].ChangeType == roachpb.ADD_REPLICA {
+			return r.addReplicaLegacyPreemptiveSnapshot(ctx, chgs[0].Target, desc, priority, reason, details)
+		} else {
+			// We're removing a single voter.
+			return r.finalizeChangeReplicas(ctx, desc, priority, reason, details, chgs)
+		}
 	}
 
 	if adds := chgs.Additions(); len(adds) > 0 {
