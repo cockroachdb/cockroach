@@ -1312,26 +1312,14 @@ func (r *Replica) executeAdminBatch(
 		resp = &roachpb.AdminTransferLeaseResponse{}
 
 	case *roachpb.AdminChangeReplicasRequest:
-		var err error
-		expDesc := &tArgs.ExpDesc
 		chgs := tArgs.Changes()
-		for i := range chgs {
-			// Update expDesc to the outcome of the previous run to enable detection
-			// of concurrent updates while applying a series of changes.
-			//
-			// TODO(tbg): stop unrolling this once atomic replication changes are
-			// ready. Do any callers prefer unrolling though? We could add a flag.
-			expDesc, err = r.ChangeReplicas(ctx, expDesc, SnapshotRequest_REBALANCE, storagepb.ReasonAdminRequest, "", chgs[i:i+1])
-			if err != nil {
-				break
-			}
-		}
+		newDesc, err := r.ChangeReplicas(ctx, &tArgs.ExpDesc, SnapshotRequest_REBALANCE, storagepb.ReasonAdminRequest, "", chgs)
 		pErr = roachpb.NewError(err)
 		if err != nil {
 			resp = &roachpb.AdminChangeReplicasResponse{}
 		} else {
 			resp = &roachpb.AdminChangeReplicasResponse{
-				Desc: *expDesc,
+				Desc: *newDesc,
 			}
 		}
 
