@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -45,8 +46,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -841,6 +842,39 @@ func (ts *TestServer) GCSystemLog(
 	ctx context.Context, table string, timestampLowerBound, timestampUpperBound time.Time,
 ) (time.Time, int64, error) {
 	return ts.gcSystemLog(ctx, table, timestampLowerBound, timestampUpperBound)
+}
+
+// ForceTableGC sends a GCRequest for the ranges corresponding to a table.
+func (ts *TestServer) ForceTableGC(
+	ctx context.Context, database, table string, timestamp hlc.Timestamp,
+) error {
+	tableIDQuery := `
+ SELECT tables.id FROM system.namespace tables
+   JOIN system.namespace dbs ON dbs.id = tables."parentID"
+   WHERE dbs.name = $1 AND tables.name = $2
+ `
+	row, err := ts.internalExecutor.QueryRow(
+		ctx, "resolve-table-id", nil /* txn */, tableIDQuery, database, table)
+	if err != nil {
+		return err
+	}
+	if row == nil {
+		return errors.Errorf("table not found")
+	}
+	if len(row) != 1 {
+		return errors.AssertionFailedf("expected 1 column from internal query")
+	}
+	tableID := uint32(*row[0].(*tree.DInt))
+	tblKey := roachpb.Key(keys.MakeTablePrefix(tableID))
+	gcr := roachpb.GCRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    tblKey,
+			EndKey: tblKey.PrefixEnd(),
+		},
+		Threshold: timestamp,
+	}
+	_, pErr := client.SendWrapped(ctx, ts.distSender, &gcr)
+	return pErr.GoError()
 }
 
 type testServerFactoryImpl struct{}

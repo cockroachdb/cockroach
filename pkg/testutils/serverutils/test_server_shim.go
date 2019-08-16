@@ -18,6 +18,7 @@
 package serverutils
 
 import (
+	"context"
 	gosql "database/sql"
 	"net/http"
 	"net/url"
@@ -160,6 +161,9 @@ type TestServerInterface interface {
 	// assuming no additional information is added outside of the normal bootstrap
 	// process.
 	ExpectedInitialRangeCount() (int, error)
+
+	// ForceTableGC sends a GCRequest for the ranges corresponding to a table.
+	ForceTableGC(ctx context.Context, database, table string, timestamp hlc.Timestamp) error
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
