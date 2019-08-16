@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -63,7 +63,7 @@ type Network struct {
 
 // NewNetwork creates nodeCount gossip nodes.
 func NewNetwork(
-	stopper *stop.Stopper, nodeCount int, createResolvers bool, defaultZoneConfig *config.ZoneConfig,
+	stopper *stop.Stopper, nodeCount int, createResolvers bool, defaultZoneConfig *zonepb.ZoneConfig,
 ) *Network {
 	log.Infof(context.TODO(), "simulating gossip network with %d nodes", nodeCount)
 
@@ -107,7 +107,7 @@ func NewNetwork(
 }
 
 // CreateNode creates a simulation node and starts an RPC server for it.
-func (n *Network) CreateNode(defaultZoneConfig *config.ZoneConfig) (*Node, error) {
+func (n *Network) CreateNode(defaultZoneConfig *zonepb.ZoneConfig) (*Node, error) {
 	server := rpc.NewServer(n.RPCContext)
 	ln, err := net.Listen(util.IsolatedTestAddr.Network(), util.IsolatedTestAddr.String())
 	if err != nil {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -121,7 +122,7 @@ func (k ConstraintStatusKey) Less(other ConstraintStatusKey) bool {
 // MakeConstraintRepr creates a canonical string representation for a
 // constraint. The constraint is identified by the group it belongs to and the
 // index within the group.
-func MakeConstraintRepr(constraintGroup config.Constraints, constraintIdx int) ConstraintRepr {
+func MakeConstraintRepr(constraintGroup zonepb.Constraints, constraintIdx int) ConstraintRepr {
 	cstr := constraintGroup.Constraints[constraintIdx].String()
 	if constraintGroup.NumReplicas == 0 {
 		return ConstraintRepr(cstr)
@@ -162,7 +163,7 @@ func (r *replicationConstraintStatsReportSaver) EnsureEntry(
 }
 
 func (r *replicationConstraintStatsReportSaver) ensureEntries(
-	key ZoneKey, zone *config.ZoneConfig,
+	key ZoneKey, zone *zonepb.ZoneConfig,
 ) {
 	for _, group := range zone.Constraints {
 		for i := range group.Constraints {
@@ -371,7 +372,7 @@ type constraintConformanceVisitor struct {
 	// This state can be reused when a range is covered by the same zone config as
 	// the previous one. Reusing it speeds up the report generation.
 	prevZoneKey     ZoneKey
-	prevConstraints []config.Constraints
+	prevConstraints []zonepb.Constraints
 }
 
 var _ rangeVisitor = &constraintConformanceVisitor{}
@@ -433,10 +434,10 @@ func (v *constraintConformanceVisitor) visitNewZone(
 	}()
 
 	// Find the applicable constraints, which may be inherited.
-	var constraints []config.Constraints
+	var constraints []zonepb.Constraints
 	var zKey ZoneKey
 	_, err := visitZones(ctx, r, v.cfg, ignoreSubzonePlaceholders,
-		func(_ context.Context, zone *config.ZoneConfig, key ZoneKey) bool {
+		func(_ context.Context, zone *zonepb.ZoneConfig, key ZoneKey) bool {
 			if zone.Constraints == nil {
 				return false
 			}
@@ -462,7 +463,7 @@ func (v *constraintConformanceVisitor) visitSameZone(
 }
 
 func (v *constraintConformanceVisitor) countRange(
-	ctx context.Context, r *roachpb.RangeDescriptor, key ZoneKey, constraints []config.Constraints,
+	ctx context.Context, r *roachpb.RangeDescriptor, key ZoneKey, constraints []zonepb.Constraints,
 ) {
 	storeDescs := v.storeResolver(r)
 	violated := processRange(ctx, storeDescs, constraints)

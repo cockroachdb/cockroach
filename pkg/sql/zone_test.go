@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -40,9 +40,9 @@ func TestValidSetShowZones(t *testing.T) {
 	yamlDefault := fmt.Sprintf("gc: {ttlseconds: %d}", s.(*server.TestServer).Cfg.DefaultZoneConfig.GC.TTLSeconds)
 	yamlOverride := "gc: {ttlseconds: 42}"
 	zoneOverride := s.(*server.TestServer).Cfg.DefaultZoneConfig
-	zoneOverride.GC = &config.GCPolicy{TTLSeconds: 42}
-	partialZoneOverride := *config.NewZoneConfig()
-	partialZoneOverride.GC = &config.GCPolicy{TTLSeconds: 42}
+	zoneOverride.GC = &zonepb.GCPolicy{TTLSeconds: 42}
+	partialZoneOverride := *zonepb.NewZoneConfig()
+	partialZoneOverride.GC = &zonepb.GCPolicy{TTLSeconds: 42}
 
 	defaultRow := sqlutils.ZoneRow{
 		ID:     keys.RootNamespaceID,

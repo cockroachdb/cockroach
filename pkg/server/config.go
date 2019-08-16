@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -232,11 +232,11 @@ type Config struct {
 	// DefaultZoneConfig is used to set the default zone config inside the server.
 	// It can be overridden during tests by setting the DefaultZoneConfigOverride
 	// server testing knob.
-	DefaultZoneConfig config.ZoneConfig
+	DefaultZoneConfig zonepb.ZoneConfig
 	// DefaultSystemZoneConfig is used to set the default system zone config
 	// inside the server. It can be overridden during tests by setting the
 	// DefaultSystemZoneConfigOverride server testing knob.
-	DefaultSystemZoneConfig config.ZoneConfig
+	DefaultSystemZoneConfig zonepb.ZoneConfig
 
 	// Locality is a description of the topography of the server.
 	Locality roachpb.Locality
@@ -336,8 +336,8 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 
 	cfg := Config{
 		Config:                         new(base.Config),
-		DefaultZoneConfig:              config.DefaultZoneConfig(),
-		DefaultSystemZoneConfig:        config.DefaultSystemZoneConfig(),
+		DefaultZoneConfig:              zonepb.DefaultZoneConfig(),
+		DefaultSystemZoneConfig:        zonepb.DefaultSystemZoneConfig(),
 		MaxOffset:                      MaxOffsetType(base.DefaultMaxClockOffset),
 		Settings:                       st,
 		CacheSize:                      DefaultCacheSize,

@@ -27,7 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
@@ -370,10 +370,10 @@ func (s *Server) getReportingInfo(
 	); err != nil {
 		log.Warning(ctx, err)
 	} else {
-		info.ZoneConfigs = make(map[int64]config.ZoneConfig)
+		info.ZoneConfigs = make(map[int64]zonepb.ZoneConfig)
 		for _, row := range datums {
 			id := int64(tree.MustBeDInt(row[0]))
-			var zone config.ZoneConfig
+			var zone zonepb.ZoneConfig
 			if bytes, ok := row[1].(*tree.DBytes); !ok {
 				continue
 			} else {
@@ -382,7 +382,7 @@ func (s *Server) getReportingInfo(
 					continue
 				}
 			}
-			var anonymizedZone config.ZoneConfig
+			var anonymizedZone zonepb.ZoneConfig
 			anonymizeZoneConfig(&anonymizedZone, zone, secret)
 			info.ZoneConfigs[id] = anonymizedZone
 		}
@@ -392,7 +392,7 @@ func (s *Server) getReportingInfo(
 	return &info
 }
 
-func anonymizeZoneConfig(dst *config.ZoneConfig, src config.ZoneConfig, secret string) {
+func anonymizeZoneConfig(dst *zonepb.ZoneConfig, src zonepb.ZoneConfig, secret string) {
 	if src.RangeMinBytes != nil {
 		dst.RangeMinBytes = proto.Int64(*src.RangeMinBytes)
 	}
@@ -400,15 +400,15 @@ func anonymizeZoneConfig(dst *config.ZoneConfig, src config.ZoneConfig, secret s
 		dst.RangeMaxBytes = proto.Int64(*src.RangeMaxBytes)
 	}
 	if src.GC != nil {
-		dst.GC = &config.GCPolicy{TTLSeconds: src.GC.TTLSeconds}
+		dst.GC = &zonepb.GCPolicy{TTLSeconds: src.GC.TTLSeconds}
 	}
 	if src.NumReplicas != nil {
 		dst.NumReplicas = proto.Int32(*src.NumReplicas)
 	}
-	dst.Constraints = make([]config.Constraints, len(src.Constraints))
+	dst.Constraints = make([]zonepb.Constraints, len(src.Constraints))
 	for i := range src.Constraints {
 		dst.Constraints[i].NumReplicas = src.Constraints[i].NumReplicas
-		dst.Constraints[i].Constraints = make([]config.Constraint, len(src.Constraints[i].Constraints))
+		dst.Constraints[i].Constraints = make([]zonepb.Constraint, len(src.Constraints[i].Constraints))
 		for j := range src.Constraints[i].Constraints {
 			dst.Constraints[i].Constraints[j].Type = src.Constraints[i].Constraints[j].Type
 			if key := src.Constraints[i].Constraints[j].Key; key != "" {
@@ -419,9 +419,9 @@ func anonymizeZoneConfig(dst *config.ZoneConfig, src config.ZoneConfig, secret s
 			}
 		}
 	}
-	dst.LeasePreferences = make([]config.LeasePreference, len(src.LeasePreferences))
+	dst.LeasePreferences = make([]zonepb.LeasePreference, len(src.LeasePreferences))
 	for i := range src.LeasePreferences {
-		dst.LeasePreferences[i].Constraints = make([]config.Constraint, len(src.LeasePreferences[i].Constraints))
+		dst.LeasePreferences[i].Constraints = make([]zonepb.Constraint, len(src.LeasePreferences[i].Constraints))
 		for j := range src.LeasePreferences[i].Constraints {
 			dst.LeasePreferences[i].Constraints[j].Type = src.LeasePreferences[i].Constraints[j].Type
 			if key := src.LeasePreferences[i].Constraints[j].Key; key != "" {
@@ -432,7 +432,7 @@ func anonymizeZoneConfig(dst *config.ZoneConfig, src config.ZoneConfig, secret s
 			}
 		}
 	}
-	dst.Subzones = make([]config.Subzone, len(src.Subzones))
+	dst.Subzones = make([]zonepb.Subzone, len(src.Subzones))
 	for i := range src.Subzones {
 		dst.Subzones[i].IndexID = src.Subzones[i].IndexID
 		dst.Subzones[i].PartitionName = sql.HashForReporting(secret, src.Subzones[i].PartitionName)

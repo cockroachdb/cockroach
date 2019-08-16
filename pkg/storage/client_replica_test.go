@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1712,8 +1712,8 @@ func TestSystemZoneConfigs(t *testing.T) {
 	}
 	expectedUserRanges := 1
 	expectedSystemRanges -= expectedUserRanges
-	systemNumReplicas := int(*config.DefaultSystemZoneConfig().NumReplicas)
-	userNumReplicas := int(*config.DefaultZoneConfig().NumReplicas)
+	systemNumReplicas := int(*zonepb.DefaultSystemZoneConfig().NumReplicas)
+	userNumReplicas := int(*zonepb.DefaultZoneConfig().NumReplicas)
 	expectedReplicas := expectedSystemRanges*systemNumReplicas + expectedUserRanges*userNumReplicas
 	log.Infof(ctx, "TestSystemZoneConfig: expecting %d system ranges and %d user ranges",
 		expectedSystemRanges, expectedUserRanges)

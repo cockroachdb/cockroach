@@ -14,7 +14,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -60,7 +60,7 @@ func TestConvergence(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	network := simulation.NewNetwork(stopper, testConvergenceSize, true, config.DefaultZoneConfigRef())
+	network := simulation.NewNetwork(stopper, testConvergenceSize, true, zonepb.DefaultZoneConfigRef())
 
 	const maxCycles = 100
 	if connectedCycle := network.RunUntilFullyConnected(); connectedCycle > maxCycles {
@@ -93,7 +93,7 @@ func TestNetworkReachesEquilibrium(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	network := simulation.NewNetwork(stopper, testReachesEquilibriumSize, true, config.DefaultZoneConfigRef())
+	network := simulation.NewNetwork(stopper, testReachesEquilibriumSize, true, zonepb.DefaultZoneConfigRef())
 
 	var connsRefused int64
 	var cyclesWithoutChange int
