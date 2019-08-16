@@ -194,6 +194,17 @@ func (ba *BatchRequest) IsSingleEndTransactionRequest() bool {
 	return false
 }
 
+// IsSingleAbortTransactionRequest returns true iff the batch contains a single
+// request, and that request is an EndTransactionRequest(commit=false).
+func (ba *BatchRequest) IsSingleAbortTransactionRequest() bool {
+	if ba.IsSingleRequest() {
+		if et, ok := ba.Requests[0].GetInner().(*EndTransactionRequest); ok {
+			return !et.Commit
+		}
+	}
+	return false
+}
+
 // IsSingleSubsumeRequest returns true iff the batch contains a single request,
 // and that request is an SubsumeRequest.
 func (ba *BatchRequest) IsSingleSubsumeRequest() bool {
