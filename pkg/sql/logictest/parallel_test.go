@@ -29,7 +29,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -202,7 +202,7 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 		if testing.Verbose() || log.V(1) {
 			log.Infof(t.ctx, "Setting range split size: %d", spec.RangeSplitSize)
 		}
-		zoneCfg := config.DefaultZoneConfig()
+		zoneCfg := zonepb.DefaultZoneConfig()
 		zoneCfg.RangeMaxBytes = proto.Int64(int64(spec.RangeSplitSize))
 		zoneCfg.RangeMinBytes = proto.Int64(*zoneCfg.RangeMaxBytes / 2)
 		buf, err := protoutil.Marshal(&zoneCfg)

@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -106,8 +106,8 @@ func initCLIDefaults() {
 	serverCfg.DelayedBootstrapFn = nil
 	serverCfg.SocketFile = ""
 	serverCfg.JoinList = nil
-	serverCfg.DefaultZoneConfig = config.DefaultZoneConfig()
-	serverCfg.DefaultSystemZoneConfig = config.DefaultSystemZoneConfig()
+	serverCfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
+	serverCfg.DefaultSystemZoneConfig = zonepb.DefaultSystemZoneConfig()
 	// Attempt to default serverCfg.SQLMemoryPoolSize to 25% if possible.
 	if bytes, _ := memoryPercentResolver(25); bytes != 0 {
 		serverCfg.SQLMemoryPoolSize = bytes

@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -86,11 +87,11 @@ func waitForConfigChange(t testing.TB, s *server.TestServer) *config.SystemConfi
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
-	defaultZoneConfig := config.DefaultSystemZoneConfig()
+	defaultZoneConfig := zonepb.DefaultSystemZoneConfig()
 	defaultZoneConfig.NumReplicas = proto.Int32(1)
 	defaultZoneConfig.RangeMinBytes = proto.Int64(1 << 20)
 	defaultZoneConfig.RangeMaxBytes = proto.Int64(1 << 21)
-	defaultZoneConfig.GC = &config.GCPolicy{TTLSeconds: 60}
+	defaultZoneConfig.GC = &zonepb.GCPolicy{TTLSeconds: 60}
 	require.NoError(t, defaultZoneConfig.Validate())
 	params.Knobs.Server = &server.TestingKnobs{
 		DefaultZoneConfigOverride:       &defaultZoneConfig,
@@ -110,7 +111,7 @@ func TestGetZoneConfig(t *testing.T) {
 		keySuffix     []byte
 		partitionName string
 
-		zoneCfg config.ZoneConfig
+		zoneCfg zonepb.ZoneConfig
 	}
 	verifyZoneConfigs := func(testCases []testCase) {
 		cfg := forceNewConfig(t, s)
@@ -234,28 +235,28 @@ func TestGetZoneConfig(t *testing.T) {
 
 	db1Cfg := defaultZoneConfig
 	db1Cfg.NumReplicas = proto.Int32(1)
-	db1Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db1"}}}}
+	db1Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db1"}}}}
 
 	tb11Cfg := defaultZoneConfig
 	tb11Cfg.NumReplicas = proto.Int32(1)
-	tb11Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db1.tb1"}}}}
+	tb11Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db1.tb1"}}}}
 
 	p211Cfg := defaultZoneConfig
 	p211Cfg.NumReplicas = proto.Int32(1)
-	p211Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1.p1"}}}}
+	p211Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db2.tb1.p1"}}}}
 
 	p212Cfg := defaultZoneConfig
 	p212Cfg.NumReplicas = proto.Int32(1)
-	p212Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1.p2"}}}}
+	p212Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db2.tb1.p2"}}}}
 
 	tb21Cfg := defaultZoneConfig
 	tb21Cfg.NumReplicas = proto.Int32(1)
-	tb21Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1"}}}}
-	tb21Cfg.Subzones = []config.Subzone{
+	tb21Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db2.tb1"}}}}
+	tb21Cfg.Subzones = []zonepb.Subzone{
 		{PartitionName: "p0", Config: p211Cfg},
 		{PartitionName: "p1", Config: p212Cfg},
 	}
-	tb21Cfg.SubzoneSpans = []config.SubzoneSpan{
+	tb21Cfg.SubzoneSpans = []zonepb.SubzoneSpan{
 		{SubzoneIndex: 0, Key: []byte{1}},
 		{SubzoneIndex: 1, Key: []byte{3}, EndKey: []byte{5}},
 		{SubzoneIndex: 0, Key: []byte{6}},
@@ -263,17 +264,17 @@ func TestGetZoneConfig(t *testing.T) {
 
 	p221Cfg := defaultZoneConfig
 	p221Cfg.NumReplicas = proto.Int32(1)
-	p221Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb2.p1"}}}}
+	p221Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db2.tb2.p1"}}}}
 
 	// Subzone Placeholder
-	tb22Cfg := *config.NewZoneConfig()
+	tb22Cfg := *zonepb.NewZoneConfig()
 	tb22Cfg.NumReplicas = proto.Int32(0)
-	tb22Cfg.Subzones = []config.Subzone{{PartitionName: "p0", Config: p221Cfg}}
-	tb22Cfg.SubzoneSpans = []config.SubzoneSpan{
+	tb22Cfg.Subzones = []zonepb.Subzone{{PartitionName: "p0", Config: p221Cfg}}
+	tb22Cfg.SubzoneSpans = []zonepb.SubzoneSpan{
 		{SubzoneIndex: 0, Key: []byte{1}, EndKey: []byte{255}},
 	}
 
-	for objID, objZone := range map[uint32]config.ZoneConfig{
+	for objID, objZone := range map[uint32]zonepb.ZoneConfig{
 		db1:  db1Cfg,
 		tb11: tb11Cfg,
 		tb21: tb21Cfg,
@@ -322,11 +323,11 @@ func TestCascadingZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 
-	defaultZoneConfig := config.DefaultZoneConfig()
+	defaultZoneConfig := zonepb.DefaultZoneConfig()
 	defaultZoneConfig.NumReplicas = proto.Int32(1)
 	defaultZoneConfig.RangeMinBytes = proto.Int64(1 << 20)
 	defaultZoneConfig.RangeMaxBytes = proto.Int64(1 << 21)
-	defaultZoneConfig.GC = &config.GCPolicy{TTLSeconds: 60}
+	defaultZoneConfig.GC = &zonepb.GCPolicy{TTLSeconds: 60}
 	require.NoError(t, defaultZoneConfig.Validate())
 	params.Knobs.Server = &server.TestingKnobs{
 		DefaultZoneConfigOverride:       &defaultZoneConfig,
@@ -346,7 +347,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 		keySuffix     []byte
 		partitionName string
 
-		zoneCfg config.ZoneConfig
+		zoneCfg zonepb.ZoneConfig
 	}
 	verifyZoneConfigs := func(testCases []testCase) {
 		cfg := forceNewConfig(t, s)
@@ -467,50 +468,50 @@ func TestCascadingZoneConfig(t *testing.T) {
 	//   tb2: no zone config
 	//     p1: true  [1, 255) - inherits replciation factor from default
 
-	db1Cfg := *config.NewZoneConfig()
+	db1Cfg := *zonepb.NewZoneConfig()
 	db1Cfg.NumReplicas = proto.Int32(5)
-	db1Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db1"}}}}
+	db1Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db1"}}}}
 	db1Cfg.InheritedConstraints = false
 
 	// Expected complete config
 	expectedDb1Cfg := defaultZoneConfig
 	expectedDb1Cfg.NumReplicas = proto.Int32(5)
-	expectedDb1Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db1"}}}}
+	expectedDb1Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db1"}}}}
 
-	tb11Cfg := *config.NewZoneConfig()
-	tb11Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db1.tb1"}}}}
+	tb11Cfg := *zonepb.NewZoneConfig()
+	tb11Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db1.tb1"}}}}
 	tb11Cfg.InheritedConstraints = false
 
 	// Expected complete config
 	expectedTb11Cfg := expectedDb1Cfg
-	expectedTb11Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db1.tb1"}}}}
+	expectedTb11Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db1.tb1"}}}}
 
-	p211Cfg := *config.NewZoneConfig()
+	p211Cfg := *zonepb.NewZoneConfig()
 	p211Cfg.NumReplicas = proto.Int32(1)
-	p211Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1.p1"}}}}
+	p211Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db2.tb1.p1"}}}}
 	p211Cfg.InheritedConstraints = false
 
 	// Expected complete config
 	expectedP211Cfg := defaultZoneConfig
 	expectedP211Cfg.NumReplicas = proto.Int32(1)
-	expectedP211Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1.p1"}}}}
+	expectedP211Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db2.tb1.p1"}}}}
 
-	p212Cfg := *config.NewZoneConfig()
-	p212Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1.p2"}}}}
+	p212Cfg := *zonepb.NewZoneConfig()
+	p212Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db2.tb1.p2"}}}}
 	p212Cfg.InheritedConstraints = false
 
 	// Expected complete config
 	expectedP212Cfg := defaultZoneConfig
-	expectedP212Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1.p2"}}}}
+	expectedP212Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db2.tb1.p2"}}}}
 
-	tb21Cfg := *config.NewZoneConfig()
-	tb21Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1"}}}}
+	tb21Cfg := *zonepb.NewZoneConfig()
+	tb21Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db2.tb1"}}}}
 	tb21Cfg.InheritedConstraints = false
-	tb21Cfg.Subzones = []config.Subzone{
+	tb21Cfg.Subzones = []zonepb.Subzone{
 		{PartitionName: "p0", Config: p211Cfg},
 		{PartitionName: "p1", Config: p212Cfg},
 	}
-	tb21Cfg.SubzoneSpans = []config.SubzoneSpan{
+	tb21Cfg.SubzoneSpans = []zonepb.SubzoneSpan{
 		{SubzoneIndex: 0, Key: []byte{1}},
 		{SubzoneIndex: 1, Key: []byte{3}, EndKey: []byte{5}},
 		{SubzoneIndex: 0, Key: []byte{6}},
@@ -518,34 +519,34 @@ func TestCascadingZoneConfig(t *testing.T) {
 
 	// Expected complete config
 	expectedTb21Cfg := defaultZoneConfig
-	expectedTb21Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1"}}}}
-	expectedTb21Cfg.Subzones = []config.Subzone{
+	expectedTb21Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db2.tb1"}}}}
+	expectedTb21Cfg.Subzones = []zonepb.Subzone{
 		{PartitionName: "p0", Config: p211Cfg},
 		{PartitionName: "p1", Config: p212Cfg},
 	}
-	expectedTb21Cfg.SubzoneSpans = []config.SubzoneSpan{
+	expectedTb21Cfg.SubzoneSpans = []zonepb.SubzoneSpan{
 		{SubzoneIndex: 0, Key: []byte{1}},
 		{SubzoneIndex: 1, Key: []byte{3}, EndKey: []byte{5}},
 		{SubzoneIndex: 0, Key: []byte{6}},
 	}
 
-	p221Cfg := *config.NewZoneConfig()
-	p221Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb2.p1"}}}}
+	p221Cfg := *zonepb.NewZoneConfig()
+	p221Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db2.tb2.p1"}}}}
 	p221Cfg.InheritedConstraints = false
 
 	// Expected complete config
 	expectedP221Cfg := defaultZoneConfig
-	expectedP221Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb2.p1"}}}}
+	expectedP221Cfg.Constraints = []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "db2.tb2.p1"}}}}
 
 	// Subzone Placeholder
-	tb22Cfg := *config.NewZoneConfig()
+	tb22Cfg := *zonepb.NewZoneConfig()
 	tb22Cfg.NumReplicas = proto.Int32(0)
-	tb22Cfg.Subzones = []config.Subzone{{PartitionName: "p0", Config: p221Cfg}}
-	tb22Cfg.SubzoneSpans = []config.SubzoneSpan{
+	tb22Cfg.Subzones = []zonepb.Subzone{{PartitionName: "p0", Config: p221Cfg}}
+	tb22Cfg.SubzoneSpans = []zonepb.SubzoneSpan{
 		{SubzoneIndex: 0, Key: []byte{1}, EndKey: []byte{255}},
 	}
 
-	for objID, objZone := range map[uint32]config.ZoneConfig{
+	for objID, objZone := range map[uint32]zonepb.ZoneConfig{
 		db1:  db1Cfg,
 		tb11: tb11Cfg,
 		tb21: tb21Cfg,

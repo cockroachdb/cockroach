@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -26,7 +26,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func subzoneExists(cfg *config.ZoneConfig, index uint32, partition string) bool {
+func subzoneExists(cfg *zonepb.ZoneConfig, index uint32, partition string) bool {
 	for _, s := range cfg.Subzones {
 		if s.IndexID == index && s.PartitionName == partition {
 			return true
@@ -85,7 +85,7 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 	sqlDB.Exec(t, `DROP INDEX t.kv@i`)
 	// All zone configs should still exist.
 	var buf []byte
-	cfg := &config.ZoneConfig{}
+	cfg := &zonepb.ZoneConfig{}
 	sqlDB.QueryRow(t, "SELECT config FROM system.zones WHERE id = $1", tableDesc.ID).Scan(&buf)
 	if err := protoutil.Unmarshal(buf, cfg); err != nil {
 		t.Fatal(err)

@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -51,22 +51,22 @@ import (
 
 const firstRangeID = roachpb.RangeID(1)
 
-var simpleZoneConfig = config.ZoneConfig{
+var simpleZoneConfig = zonepb.ZoneConfig{
 	NumReplicas: proto.Int32(1),
-	Constraints: []config.Constraints{
+	Constraints: []zonepb.Constraints{
 		{
-			Constraints: []config.Constraint{
-				{Value: "a", Type: config.Constraint_REQUIRED},
-				{Value: "ssd", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Value: "a", Type: zonepb.Constraint_REQUIRED},
+				{Value: "ssd", Type: zonepb.Constraint_REQUIRED},
 			},
 		},
 	},
 }
 
-var multiDCConfig = config.ZoneConfig{
+var multiDCConfig = zonepb.ZoneConfig{
 	NumReplicas: proto.Int32(2),
-	Constraints: []config.Constraints{
-		{Constraints: []config.Constraint{{Value: "ssd", Type: config.Constraint_REQUIRED}}},
+	Constraints: []zonepb.Constraints{
+		{Constraints: []zonepb.Constraint{{Value: "ssd", Type: zonepb.Constraint_REQUIRED}}},
 	},
 }
 
@@ -482,13 +482,13 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
 	result, _, err := a.AllocateTarget(
 		context.Background(),
-		&config.ZoneConfig{
+		&zonepb.ZoneConfig{
 			NumReplicas: proto.Int32(0),
-			Constraints: []config.Constraints{
+			Constraints: []zonepb.Constraints{
 				{
-					Constraints: []config.Constraint{
-						{Value: "a", Type: config.Constraint_REQUIRED},
-						{Value: "hdd", Type: config.Constraint_REQUIRED},
+					Constraints: []zonepb.Constraint{
+						{Value: "a", Type: zonepb.Constraint_REQUIRED},
+						{Value: "hdd", Type: zonepb.Constraint_REQUIRED},
 					},
 				},
 			},
@@ -595,7 +595,7 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 		{
 			result, _, err := a.AllocateTarget(
 				context.Background(),
-				config.EmptyCompleteZoneConfig(),
+				zonepb.EmptyCompleteZoneConfig(),
 				firstRangeID,
 				tc.existing,
 			)
@@ -609,7 +609,7 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 			var rangeUsageInfo RangeUsageInfo
 			target, _, details, ok := a.RebalanceTarget(
 				context.Background(),
-				config.EmptyCompleteZoneConfig(),
+				zonepb.EmptyCompleteZoneConfig(),
 				nil, /* raftStatus */
 				firstRangeID,
 				tc.existing,
@@ -683,7 +683,7 @@ func TestAllocatorRebalance(t *testing.T) {
 		var rangeUsageInfo RangeUsageInfo
 		target, _, _, ok := a.RebalanceTarget(
 			ctx,
-			config.EmptyCompleteZoneConfig(),
+			zonepb.EmptyCompleteZoneConfig(),
 			nil,
 			firstRangeID,
 			[]roachpb.ReplicaDescriptor{{NodeID: 3, StoreID: 3}},
@@ -834,7 +834,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result, _, details, ok := a.RebalanceTarget(
 			context.Background(),
-			config.EmptyCompleteZoneConfig(),
+			zonepb.EmptyCompleteZoneConfig(),
 			status,
 			firstRangeID,
 			replicas,
@@ -855,7 +855,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		target, _, details, ok := a.RebalanceTarget(
 			context.Background(),
-			config.EmptyCompleteZoneConfig(),
+			zonepb.EmptyCompleteZoneConfig(),
 			status,
 			firstRangeID,
 			replicas,
@@ -873,7 +873,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		target, origin, details, ok := a.RebalanceTarget(
 			context.Background(),
-			config.EmptyCompleteZoneConfig(),
+			zonepb.EmptyCompleteZoneConfig(),
 			status,
 			firstRangeID,
 			replicas,
@@ -953,7 +953,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 			var rangeUsageInfo RangeUsageInfo
 			target, _, _, ok := a.RebalanceTarget(
 				ctx,
-				config.EmptyCompleteZoneConfig(),
+				zonepb.EmptyCompleteZoneConfig(),
 				nil,
 				firstRangeID,
 				c.existing,
@@ -1148,7 +1148,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 		var rangeUsageInfo RangeUsageInfo
 		result, _, _, ok := a.RebalanceTarget(
 			ctx,
-			config.EmptyCompleteZoneConfig(),
+			zonepb.EmptyCompleteZoneConfig(),
 			nil,
 			firstRangeID,
 			[]roachpb.ReplicaDescriptor{{StoreID: stores[0].StoreID}},
@@ -1221,7 +1221,7 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				context.Background(),
-				config.EmptyCompleteZoneConfig(),
+				zonepb.EmptyCompleteZoneConfig(),
 				c.existing,
 				c.leaseholder,
 				0,
@@ -1297,7 +1297,7 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				context.Background(),
-				config.EmptyCompleteZoneConfig(),
+				zonepb.EmptyCompleteZoneConfig(),
 				c.existing,
 				c.leaseholder,
 				0,
@@ -1432,7 +1432,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 		var rangeUsageInfo RangeUsageInfo
 		result, _, details, ok := a.RebalanceTarget(
 			ctx,
-			config.EmptyCompleteZoneConfig(),
+			zonepb.EmptyCompleteZoneConfig(),
 			nil, /* raftStatus */
 			firstRangeID,
 			tc.existing,
@@ -1503,7 +1503,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 		var rangeUsageInfo RangeUsageInfo
 		result, _, details, ok := a.RebalanceTarget(
 			ctx,
-			config.EmptyCompleteZoneConfig(),
+			zonepb.EmptyCompleteZoneConfig(),
 			nil, /* raftStatus */
 			firstRangeID,
 			tc.existing,
@@ -1569,7 +1569,7 @@ func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				context.Background(),
-				config.EmptyCompleteZoneConfig(),
+				zonepb.EmptyCompleteZoneConfig(),
 				existing,
 				c.leaseholder,
 				0,
@@ -1626,7 +1626,7 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			result := a.ShouldTransferLease(
 				context.Background(),
-				config.EmptyCompleteZoneConfig(),
+				zonepb.EmptyCompleteZoneConfig(),
 				c.existing,
 				c.leaseholder,
 				0,
@@ -1688,7 +1688,7 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			result := a.ShouldTransferLease(
 				context.Background(),
-				config.EmptyCompleteZoneConfig(),
+				zonepb.EmptyCompleteZoneConfig(),
 				c.existing,
 				c.leaseholder,
 				0,
@@ -1728,39 +1728,39 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(stores, t)
 
-	preferDC1 := []config.LeasePreference{
-		{Constraints: []config.Constraint{{Key: "dc", Value: "1", Type: config.Constraint_REQUIRED}}},
+	preferDC1 := []zonepb.LeasePreference{
+		{Constraints: []zonepb.Constraint{{Key: "dc", Value: "1", Type: zonepb.Constraint_REQUIRED}}},
 	}
-	preferDC4Then3Then2 := []config.LeasePreference{
-		{Constraints: []config.Constraint{{Key: "dc", Value: "4", Type: config.Constraint_REQUIRED}}},
-		{Constraints: []config.Constraint{{Key: "dc", Value: "3", Type: config.Constraint_REQUIRED}}},
-		{Constraints: []config.Constraint{{Key: "dc", Value: "2", Type: config.Constraint_REQUIRED}}},
+	preferDC4Then3Then2 := []zonepb.LeasePreference{
+		{Constraints: []zonepb.Constraint{{Key: "dc", Value: "4", Type: zonepb.Constraint_REQUIRED}}},
+		{Constraints: []zonepb.Constraint{{Key: "dc", Value: "3", Type: zonepb.Constraint_REQUIRED}}},
+		{Constraints: []zonepb.Constraint{{Key: "dc", Value: "2", Type: zonepb.Constraint_REQUIRED}}},
 	}
-	preferN2ThenS3 := []config.LeasePreference{
-		{Constraints: []config.Constraint{{Value: "n2", Type: config.Constraint_REQUIRED}}},
-		{Constraints: []config.Constraint{{Value: "s3", Type: config.Constraint_REQUIRED}}},
+	preferN2ThenS3 := []zonepb.LeasePreference{
+		{Constraints: []zonepb.Constraint{{Value: "n2", Type: zonepb.Constraint_REQUIRED}}},
+		{Constraints: []zonepb.Constraint{{Value: "s3", Type: zonepb.Constraint_REQUIRED}}},
 	}
-	preferNotS1ThenNotN2 := []config.LeasePreference{
-		{Constraints: []config.Constraint{{Value: "s1", Type: config.Constraint_PROHIBITED}}},
-		{Constraints: []config.Constraint{{Value: "n2", Type: config.Constraint_PROHIBITED}}},
+	preferNotS1ThenNotN2 := []zonepb.LeasePreference{
+		{Constraints: []zonepb.Constraint{{Value: "s1", Type: zonepb.Constraint_PROHIBITED}}},
+		{Constraints: []zonepb.Constraint{{Value: "n2", Type: zonepb.Constraint_PROHIBITED}}},
 	}
-	preferNotS1AndNotN2 := []config.LeasePreference{
+	preferNotS1AndNotN2 := []zonepb.LeasePreference{
 		{
-			Constraints: []config.Constraint{
-				{Value: "s1", Type: config.Constraint_PROHIBITED},
-				{Value: "n2", Type: config.Constraint_PROHIBITED},
+			Constraints: []zonepb.Constraint{
+				{Value: "s1", Type: zonepb.Constraint_PROHIBITED},
+				{Value: "n2", Type: zonepb.Constraint_PROHIBITED},
 			},
 		},
 	}
-	preferMatchesNothing := []config.LeasePreference{
-		{Constraints: []config.Constraint{{Key: "dc", Value: "5", Type: config.Constraint_REQUIRED}}},
-		{Constraints: []config.Constraint{{Value: "n6", Type: config.Constraint_REQUIRED}}},
+	preferMatchesNothing := []zonepb.LeasePreference{
+		{Constraints: []zonepb.Constraint{{Key: "dc", Value: "5", Type: zonepb.Constraint_REQUIRED}}},
+		{Constraints: []zonepb.Constraint{{Value: "n6", Type: zonepb.Constraint_REQUIRED}}},
 	}
 
 	testCases := []struct {
 		leaseholder        roachpb.StoreID
 		existing           []roachpb.ReplicaDescriptor
-		preferences        []config.LeasePreference
+		preferences        []zonepb.LeasePreference
 		expectedCheckTrue  roachpb.StoreID /* checkTransferLeaseSource = true */
 		expectedCheckFalse roachpb.StoreID /* checkTransferLeaseSource = false */
 	}{
@@ -1815,7 +1815,7 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			zone := &config.ZoneConfig{NumReplicas: proto.Int32(0), LeasePreferences: c.preferences}
+			zone := &zonepb.ZoneConfig{NumReplicas: proto.Int32(0), LeasePreferences: c.preferences}
 			result := a.ShouldTransferLease(
 				context.Background(),
 				zone,
@@ -1896,17 +1896,17 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(stores, t)
 
-	preferEast := []config.LeasePreference{
-		{Constraints: []config.Constraint{{Key: "region", Value: "us-east1", Type: config.Constraint_REQUIRED}}},
+	preferEast := []zonepb.LeasePreference{
+		{Constraints: []zonepb.Constraint{{Key: "region", Value: "us-east1", Type: zonepb.Constraint_REQUIRED}}},
 	}
-	preferNotEast := []config.LeasePreference{
-		{Constraints: []config.Constraint{{Key: "region", Value: "us-east1", Type: config.Constraint_PROHIBITED}}},
+	preferNotEast := []zonepb.LeasePreference{
+		{Constraints: []zonepb.Constraint{{Key: "region", Value: "us-east1", Type: zonepb.Constraint_PROHIBITED}}},
 	}
 
 	testCases := []struct {
 		leaseholder        roachpb.StoreID
 		existing           []roachpb.ReplicaDescriptor
-		preferences        []config.LeasePreference
+		preferences        []zonepb.LeasePreference
 		expectedCheckTrue  roachpb.StoreID /* checkTransferLeaseSource = true */
 		expectedCheckFalse roachpb.StoreID /* checkTransferLeaseSource = false */
 	}{
@@ -1924,7 +1924,7 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			zone := &config.ZoneConfig{NumReplicas: proto.Int32(0), LeasePreferences: c.preferences}
+			zone := &zonepb.ZoneConfig{NumReplicas: proto.Int32(0), LeasePreferences: c.preferences}
 			target := a.TransferLeaseTarget(
 				context.Background(),
 				zone,
@@ -2006,7 +2006,7 @@ func TestAllocatorRemoveTargetLocality(t *testing.T) {
 		}
 		targetRepl, details, err := a.RemoveTarget(
 			context.Background(),
-			config.EmptyCompleteZoneConfig(),
+			zonepb.EmptyCompleteZoneConfig(),
 			existingRepls,
 			existingRepls,
 		)
@@ -2089,7 +2089,7 @@ func TestAllocatorAllocateTargetLocality(t *testing.T) {
 		}
 		targetStore, details, err := a.AllocateTarget(
 			context.Background(),
-			config.EmptyCompleteZoneConfig(),
+			zonepb.EmptyCompleteZoneConfig(),
 			firstRangeID,
 			existingRepls,
 		)
@@ -2211,7 +2211,7 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 		var rangeUsageInfo RangeUsageInfo
 		target, _, details, ok := a.RebalanceTarget(
 			context.Background(),
-			config.EmptyCompleteZoneConfig(),
+			zonepb.EmptyCompleteZoneConfig(),
 			nil,
 			firstRangeID,
 			existingRepls,
@@ -2236,114 +2236,114 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 }
 
 var (
-	threeSpecificLocalities = []config.Constraints{
+	threeSpecificLocalities = []zonepb.Constraints{
 		{
-			Constraints: []config.Constraint{
-				{Key: "datacenter", Value: "a", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Key: "datacenter", Value: "a", Type: zonepb.Constraint_REQUIRED},
 			},
 			NumReplicas: 1,
 		},
 		{
-			Constraints: []config.Constraint{
-				{Key: "datacenter", Value: "b", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Key: "datacenter", Value: "b", Type: zonepb.Constraint_REQUIRED},
 			},
 			NumReplicas: 1,
 		},
 		{
-			Constraints: []config.Constraint{
-				{Key: "datacenter", Value: "c", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Key: "datacenter", Value: "c", Type: zonepb.Constraint_REQUIRED},
 			},
 			NumReplicas: 1,
 		},
 	}
 
-	twoAndOneLocalities = []config.Constraints{
+	twoAndOneLocalities = []zonepb.Constraints{
 		{
-			Constraints: []config.Constraint{
-				{Key: "datacenter", Value: "a", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Key: "datacenter", Value: "a", Type: zonepb.Constraint_REQUIRED},
 			},
 			NumReplicas: 2,
 		},
 		{
-			Constraints: []config.Constraint{
-				{Key: "datacenter", Value: "b", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Key: "datacenter", Value: "b", Type: zonepb.Constraint_REQUIRED},
 			},
 			NumReplicas: 1,
 		},
 	}
 
-	threeInOneLocality = []config.Constraints{
+	threeInOneLocality = []zonepb.Constraints{
 		{
-			Constraints: []config.Constraint{
-				{Key: "datacenter", Value: "a", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Key: "datacenter", Value: "a", Type: zonepb.Constraint_REQUIRED},
 			},
 			NumReplicas: 3,
 		},
 	}
 
-	twoAndOneNodeAttrs = []config.Constraints{
+	twoAndOneNodeAttrs = []zonepb.Constraints{
 		{
-			Constraints: []config.Constraint{
-				{Value: "ssd", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Value: "ssd", Type: zonepb.Constraint_REQUIRED},
 			},
 			NumReplicas: 2,
 		},
 		{
-			Constraints: []config.Constraint{
-				{Value: "hdd", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Value: "hdd", Type: zonepb.Constraint_REQUIRED},
 			},
 			NumReplicas: 1,
 		},
 	}
 
-	twoAndOneStoreAttrs = []config.Constraints{
+	twoAndOneStoreAttrs = []zonepb.Constraints{
 		{
-			Constraints: []config.Constraint{
-				{Value: "odd", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Value: "odd", Type: zonepb.Constraint_REQUIRED},
 			},
 			NumReplicas: 2,
 		},
 		{
-			Constraints: []config.Constraint{
-				{Value: "even", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Value: "even", Type: zonepb.Constraint_REQUIRED},
 			},
 			NumReplicas: 1,
 		},
 	}
 
-	mixLocalityAndAttrs = []config.Constraints{
+	mixLocalityAndAttrs = []zonepb.Constraints{
 		{
-			Constraints: []config.Constraint{
-				{Key: "datacenter", Value: "a", Type: config.Constraint_REQUIRED},
-				{Value: "ssd", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Key: "datacenter", Value: "a", Type: zonepb.Constraint_REQUIRED},
+				{Value: "ssd", Type: zonepb.Constraint_REQUIRED},
 			},
 			NumReplicas: 1,
 		},
 		{
-			Constraints: []config.Constraint{
-				{Key: "datacenter", Value: "b", Type: config.Constraint_REQUIRED},
-				{Value: "odd", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Key: "datacenter", Value: "b", Type: zonepb.Constraint_REQUIRED},
+				{Value: "odd", Type: zonepb.Constraint_REQUIRED},
 			},
 			NumReplicas: 1,
 		},
 		{
-			Constraints: []config.Constraint{
-				{Value: "even", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Value: "even", Type: zonepb.Constraint_REQUIRED},
 			},
 			NumReplicas: 1,
 		},
 	}
 
-	twoSpecificLocalities = []config.Constraints{
+	twoSpecificLocalities = []zonepb.Constraints{
 		{
-			Constraints: []config.Constraint{
-				{Key: "datacenter", Value: "a", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Key: "datacenter", Value: "a", Type: zonepb.Constraint_REQUIRED},
 			},
 			NumReplicas: 1,
 		},
 		{
-			Constraints: []config.Constraint{
-				{Key: "datacenter", Value: "b", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Key: "datacenter", Value: "b", Type: zonepb.Constraint_REQUIRED},
 			},
 			NumReplicas: 1,
 		},
@@ -2363,7 +2363,7 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 	// stores from multiDiversityDCStores would be the best addition to the range
 	// purely on the basis of constraint satisfaction and locality diversity.
 	testCases := []struct {
-		constraints []config.Constraints
+		constraints []zonepb.Constraints
 		existing    []roachpb.StoreID
 		expected    []roachpb.StoreID
 	}{
@@ -2557,7 +2557,7 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 				StoreID: storeID,
 			}
 		}
-		zone := &config.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: tc.constraints}
+		zone := &zonepb.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: tc.constraints}
 		analyzed := constraint.AnalyzeConstraints(
 			context.Background(), a.storePool.getStoreDescriptor, existingRepls, zone)
 		candidates := allocateCandidates(
@@ -2601,7 +2601,7 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 	// stores would be best to remove if we had to remove one purely on the basis
 	// of constraint-matching and locality diversity.
 	testCases := []struct {
-		constraints []config.Constraints
+		constraints []zonepb.Constraints
 		existing    []roachpb.StoreID
 		expected    []roachpb.StoreID
 	}{
@@ -2780,7 +2780,7 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 				StoreID: storeID,
 			}
 		}
-		zone := &config.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: tc.constraints}
+		zone := &zonepb.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: tc.constraints}
 		analyzed := constraint.AnalyzeConstraints(
 			context.Background(), a.storePool.getStoreDescriptor, existingRepls, zone)
 		candidates := removeCandidates(
@@ -2828,7 +2828,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 		candidates []roachpb.StoreID
 	}
 	testCases := []struct {
-		constraints     []config.Constraints
+		constraints     []zonepb.Constraints
 		zoneNumReplicas int32
 		existing        []roachpb.StoreID
 		expected        []rebalanceStoreIDs
@@ -3571,7 +3571,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			}
 		}
 		var rangeUsageInfo RangeUsageInfo
-		zone := &config.ZoneConfig{
+		zone := &zonepb.ZoneConfig{
 			Constraints: tc.constraints,
 			NumReplicas: proto.Int32(tc.zoneNumReplicas),
 		}
@@ -3782,7 +3782,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 			})
 			target := a.TransferLeaseTarget(
 				context.Background(),
-				config.EmptyCompleteZoneConfig(),
+				zonepb.EmptyCompleteZoneConfig(),
 				existing,
 				c.leaseholder,
 				0,
@@ -3980,7 +3980,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		targetRepl, _, err := a.RemoveTarget(
 			ctx,
-			config.EmptyCompleteZoneConfig(),
+			zonepb.EmptyCompleteZoneConfig(),
 			replicas,
 			replicas,
 		)
@@ -4000,15 +4000,15 @@ func TestAllocatorComputeAction(t *testing.T) {
 	// Each test case should describe a repair situation which has a lower
 	// priority than the previous test case.
 	testCases := []struct {
-		zone           config.ZoneConfig
+		zone           zonepb.ZoneConfig
 		desc           roachpb.RangeDescriptor
 		expectedAction AllocatorAction
 	}{
 		// Need three replicas, have three, one is on a dead store.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4035,9 +4035,9 @@ func TestAllocatorComputeAction(t *testing.T) {
 		},
 		// Need five replicas, one is on a dead store.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(5),
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4074,9 +4074,9 @@ func TestAllocatorComputeAction(t *testing.T) {
 		},
 		// Need three replicas, have two.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4098,9 +4098,9 @@ func TestAllocatorComputeAction(t *testing.T) {
 		},
 		// Need five replicas, have four, one is on a dead store.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(5),
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4132,9 +4132,9 @@ func TestAllocatorComputeAction(t *testing.T) {
 		},
 		// Need five replicas, have four.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(5),
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4166,9 +4166,9 @@ func TestAllocatorComputeAction(t *testing.T) {
 		},
 		// Need three replicas, have four, one is on a dead store.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4200,9 +4200,9 @@ func TestAllocatorComputeAction(t *testing.T) {
 		},
 		// Need five replicas, have six, one is on a dead store.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(5),
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4244,9 +4244,9 @@ func TestAllocatorComputeAction(t *testing.T) {
 		},
 		// Need three replicas, have five, one is on a dead store.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4283,9 +4283,9 @@ func TestAllocatorComputeAction(t *testing.T) {
 		},
 		// Need three replicas, have four.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4317,9 +4317,9 @@ func TestAllocatorComputeAction(t *testing.T) {
 		},
 		// Need three replicas, have five.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4358,9 +4358,9 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// be a noop because there aren't enough live replicas for
 		// a quorum.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4387,9 +4387,9 @@ func TestAllocatorComputeAction(t *testing.T) {
 		},
 		// Need three replicas, have three, none of the replicas in the store pool.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4416,9 +4416,9 @@ func TestAllocatorComputeAction(t *testing.T) {
 		},
 		// Need three replicas, have three.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4477,7 +4477,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	zone := config.ZoneConfig{
+	zone := zonepb.ZoneConfig{
 		NumReplicas: proto.Int32(3),
 	}
 	threeReplDesc := roachpb.RangeDescriptor{
@@ -4570,7 +4570,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		zone            config.ZoneConfig
+		zone            zonepb.ZoneConfig
 		desc            roachpb.RangeDescriptor
 		expectedAction  AllocatorAction
 		live            []roachpb.StoreID
@@ -4582,7 +4582,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		// replace it (nor add a new replica) since there isn't a live target,
 		// but that's still the action being emitted.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
@@ -4612,7 +4612,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		// Has three replicas, one is in decommissioning status, and one is on a
 		// dead node. Replacing the dead replica is more important.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
@@ -4642,7 +4642,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		// Needs three replicas, has four, where one is decommissioning and one is
 		// dead.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
@@ -4677,7 +4677,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		// Needs three replicas, has four, where one is decommissioning and one is
 		// decommissioned.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
@@ -4712,7 +4712,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		},
 		// Needs three replicas, has three, all decommissioning
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
@@ -4741,7 +4741,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		},
 		// Needs 3. Has 1 live, 3 decommissioning.
 		{
-			zone: config.ZoneConfig{
+			zone: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
@@ -4792,7 +4792,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 func TestAllocatorRemoveLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	zone := config.ZoneConfig{
+	zone := zonepb.ZoneConfig{
 		NumReplicas: proto.Int32(3),
 	}
 	learnerType := roachpb.LEARNER
@@ -5006,7 +5006,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	zone := &config.ZoneConfig{
+	zone := &zonepb.ZoneConfig{
 		NumReplicas: proto.Int32(5),
 	}
 
@@ -5108,7 +5108,7 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	a := MakeAllocator(nil /* storePool */, nil /* rpcContext */)
-	action, priority := a.ComputeAction(context.Background(), &config.ZoneConfig{NumReplicas: proto.Int32(0)}, nil)
+	action, priority := a.ComputeAction(context.Background(), &zonepb.ZoneConfig{NumReplicas: proto.Int32(0)}, nil)
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
 	}
@@ -5122,14 +5122,14 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 func TestAllocatorError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	constraint := []config.Constraints{
-		{Constraints: []config.Constraint{{Value: "one", Type: config.Constraint_REQUIRED}}},
+	constraint := []zonepb.Constraints{
+		{Constraints: []zonepb.Constraint{{Value: "one", Type: zonepb.Constraint_REQUIRED}}},
 	}
-	constraints := []config.Constraints{
+	constraints := []zonepb.Constraints{
 		{
-			Constraints: []config.Constraint{
-				{Value: "one", Type: config.Constraint_REQUIRED},
-				{Value: "two", Type: config.Constraint_REQUIRED},
+			Constraints: []zonepb.Constraint{
+				{Value: "one", Type: zonepb.Constraint_REQUIRED},
+				{Value: "two", Type: zonepb.Constraint_REQUIRED},
 			},
 		},
 	}
@@ -5475,43 +5475,43 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 		{StoreID: stores[2].StoreID},
 	}
 	testCases := []struct {
-		constraint config.Constraint
+		constraint zonepb.Constraint
 		expected   *roachpb.StoreID
 	}{
 		{
-			constraint: config.Constraint{Key: "datacenter", Value: "us", Type: config.Constraint_REQUIRED},
+			constraint: zonepb.Constraint{Key: "datacenter", Value: "us", Type: zonepb.Constraint_REQUIRED},
 			expected:   &stores[3].StoreID,
 		},
 		{
-			constraint: config.Constraint{Key: "datacenter", Value: "eur", Type: config.Constraint_PROHIBITED},
+			constraint: zonepb.Constraint{Key: "datacenter", Value: "eur", Type: zonepb.Constraint_PROHIBITED},
 			expected:   &stores[3].StoreID,
 		},
 		{
-			constraint: config.Constraint{Key: "datacenter", Value: "eur", Type: config.Constraint_REQUIRED},
+			constraint: zonepb.Constraint{Key: "datacenter", Value: "eur", Type: zonepb.Constraint_REQUIRED},
 			expected:   &stores[4].StoreID,
 		},
 		{
-			constraint: config.Constraint{Key: "datacenter", Value: "us", Type: config.Constraint_PROHIBITED},
+			constraint: zonepb.Constraint{Key: "datacenter", Value: "us", Type: zonepb.Constraint_PROHIBITED},
 			expected:   &stores[4].StoreID,
 		},
 		{
-			constraint: config.Constraint{Key: "datacenter", Value: "other", Type: config.Constraint_REQUIRED},
+			constraint: zonepb.Constraint{Key: "datacenter", Value: "other", Type: zonepb.Constraint_REQUIRED},
 			expected:   nil,
 		},
 		{
-			constraint: config.Constraint{Key: "datacenter", Value: "other", Type: config.Constraint_PROHIBITED},
+			constraint: zonepb.Constraint{Key: "datacenter", Value: "other", Type: zonepb.Constraint_PROHIBITED},
 			expected:   nil,
 		},
 		{
-			constraint: config.Constraint{Key: "datacenter", Value: "other", Type: config.Constraint_DEPRECATED_POSITIVE},
+			constraint: zonepb.Constraint{Key: "datacenter", Value: "other", Type: zonepb.Constraint_DEPRECATED_POSITIVE},
 			expected:   nil,
 		},
 		{
-			constraint: config.Constraint{Key: "datacenter", Value: "us", Type: config.Constraint_DEPRECATED_POSITIVE},
+			constraint: zonepb.Constraint{Key: "datacenter", Value: "us", Type: zonepb.Constraint_DEPRECATED_POSITIVE},
 			expected:   nil,
 		},
 		{
-			constraint: config.Constraint{Key: "datacenter", Value: "eur", Type: config.Constraint_DEPRECATED_POSITIVE},
+			constraint: zonepb.Constraint{Key: "datacenter", Value: "eur", Type: zonepb.Constraint_DEPRECATED_POSITIVE},
 			expected:   nil,
 		},
 	}
@@ -5523,8 +5523,8 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.constraint.String(), func(t *testing.T) {
-			constraints := config.Constraints{
-				Constraints: []config.Constraint{
+			constraints := zonepb.Constraints{
+				Constraints: []zonepb.Constraint{
 					tc.constraint,
 				},
 			}
@@ -5532,7 +5532,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 			var rangeUsageInfo RangeUsageInfo
 			actual, _, _, ok := a.RebalanceTarget(
 				ctx,
-				&config.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: []config.Constraints{constraints}},
+				&zonepb.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: []zonepb.Constraints{constraints}},
 				nil,
 				firstRangeID,
 				existingReplicas,
@@ -5611,7 +5611,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 		st,
 	)
 	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), config.DefaultZoneConfigRef())
+	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 
 	TimeUntilStoreDead.Override(&st.SV, TestTimeUntilStoreDeadOff)
 
@@ -5698,7 +5698,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 					var rangeUsageInfo RangeUsageInfo
 					target, _, details, ok := alloc.RebalanceTarget(
 						ctx,
-						config.EmptyCompleteZoneConfig(),
+						zonepb.EmptyCompleteZoneConfig(),
 						nil,
 						firstRangeID,
 						[]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}},
@@ -5754,7 +5754,7 @@ func Example_rebalancing() {
 		st,
 	)
 	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), config.DefaultZoneConfigRef())
+	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 
 	TimeUntilStoreDead.Override(&st.SV, TestTimeUntilStoreDeadOff)
 
@@ -5827,7 +5827,7 @@ func Example_rebalancing() {
 			var rangeUsageInfo RangeUsageInfo
 			target, _, details, ok := alloc.RebalanceTarget(
 				context.Background(),
-				config.EmptyCompleteZoneConfig(),
+				zonepb.EmptyCompleteZoneConfig(),
 				nil,
 				firstRangeID,
 				[]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}},
