@@ -631,7 +631,7 @@ func ResolveFK(
 		LegacyReferencedIndex: legacyReferencedIndexID,
 	}
 
-	if !settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
+	if !settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) || true {
 		legacyUpgradedFromOriginReference := sqlbase.ForeignKeyReference{
 			Table:           target.ID,
 			Index:           legacyReferencedIndexID,

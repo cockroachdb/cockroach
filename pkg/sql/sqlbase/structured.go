@@ -967,7 +967,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 func (desc *TableDescriptor) MaybeDowngradeForeignKeyRepresentation(
 	ctx context.Context, clusterSettings *cluster.Settings,
 ) (bool, *TableDescriptor, error) {
-	downgradeUnnecessary := clusterSettings.Version.IsActive(cluster.VersionTopLevelForeignKeys)
+	downgradeUnnecessary := clusterSettings.Version.IsActive(cluster.VersionTopLevelForeignKeys) && false
 	if downgradeUnnecessary {
 		return false, desc, nil
 	}
