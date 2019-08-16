@@ -18,7 +18,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -881,7 +881,7 @@ func sameLocalityAndAttrs(s1, s2 roachpb.StoreDescriptor) bool {
 }
 
 type analyzedConstraints struct {
-	constraints []config.Constraints
+	constraints []zonepb.Constraints
 	// True if the per-replica constraints don't fully cover all the desired
 	// replicas in the range (sum(constraints.NumReplicas) < zone.NumReplicas).
 	// In such cases, we allow replicas that don't match any of the per-replica
@@ -904,7 +904,7 @@ func analyzeConstraints(
 	ctx context.Context,
 	getStoreDescFn func(roachpb.StoreID) (roachpb.StoreDescriptor, bool),
 	existing []roachpb.ReplicaDescriptor,
-	zone *config.ZoneConfig,
+	zone *zonepb.ZoneConfig,
 ) analyzedConstraints {
 	result := analyzedConstraints{
 		constraints: zone.Constraints,
@@ -1057,7 +1057,7 @@ func containsStore(stores []roachpb.StoreID, target roachpb.StoreID) bool {
 
 // constraintsCheck returns true iff the provided store would be a valid in a
 // range with the provided constraints.
-func constraintsCheck(store roachpb.StoreDescriptor, constraints []config.Constraints) bool {
+func constraintsCheck(store roachpb.StoreDescriptor, constraints []zonepb.Constraints) bool {
 	if len(constraints) == 0 {
 		return true
 	}
@@ -1073,9 +1073,9 @@ func constraintsCheck(store roachpb.StoreDescriptor, constraints []config.Constr
 // subConstraintsCheck checks a store against a single set of constraints (out
 // of the possibly numerous sets that apply to a range), returning true iff the
 // store matches the constraints.
-func subConstraintsCheck(store roachpb.StoreDescriptor, constraints []config.Constraint) bool {
+func subConstraintsCheck(store roachpb.StoreDescriptor, constraints []zonepb.Constraint) bool {
 	for _, constraint := range constraints {
-		if !config.StoreMatchesConstraint(store, constraint) {
+		if !zonepb.StoreMatchesConstraint(store, constraint) {
 			return false
 		}
 	}

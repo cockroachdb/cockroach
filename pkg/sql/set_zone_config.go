@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -47,19 +48,19 @@ type setZoneConfigNode struct {
 
 // supportedZoneConfigOptions indicates how to translate SQL variable
 // assignments in ALTER CONFIGURE ZONE to assignments to the member
-// fields of config.ZoneConfig.
+// fields of zonepb.ZoneConfig.
 var supportedZoneConfigOptions = map[tree.Name]struct {
 	requiredType *types.T
-	setter       func(*config.ZoneConfig, tree.Datum)
+	setter       func(*zonepb.ZoneConfig, tree.Datum)
 }{
-	"range_min_bytes": {types.Int, func(c *config.ZoneConfig, d tree.Datum) { c.RangeMinBytes = proto.Int64(int64(tree.MustBeDInt(d))) }},
-	"range_max_bytes": {types.Int, func(c *config.ZoneConfig, d tree.Datum) { c.RangeMaxBytes = proto.Int64(int64(tree.MustBeDInt(d))) }},
-	"num_replicas":    {types.Int, func(c *config.ZoneConfig, d tree.Datum) { c.NumReplicas = proto.Int32(int32(tree.MustBeDInt(d))) }},
-	"gc.ttlseconds": {types.Int, func(c *config.ZoneConfig, d tree.Datum) {
-		c.GC = &config.GCPolicy{TTLSeconds: int32(tree.MustBeDInt(d))}
+	"range_min_bytes": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMinBytes = proto.Int64(int64(tree.MustBeDInt(d))) }},
+	"range_max_bytes": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMaxBytes = proto.Int64(int64(tree.MustBeDInt(d))) }},
+	"num_replicas":    {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumReplicas = proto.Int32(int32(tree.MustBeDInt(d))) }},
+	"gc.ttlseconds": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) {
+		c.GC = &zonepb.GCPolicy{TTLSeconds: int32(tree.MustBeDInt(d))}
 	}},
-	"constraints": {types.String, func(c *config.ZoneConfig, d tree.Datum) {
-		constraintsList := config.ConstraintsList{
+	"constraints": {types.String, func(c *zonepb.ZoneConfig, d tree.Datum) {
+		constraintsList := zonepb.ConstraintsList{
 			Constraints: c.Constraints,
 			Inherited:   c.InheritedConstraints,
 		}
@@ -67,7 +68,7 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 		c.Constraints = constraintsList.Constraints
 		c.InheritedConstraints = false
 	}},
-	"lease_preferences": {types.String, func(c *config.ZoneConfig, d tree.Datum) {
+	"lease_preferences": {types.String, func(c *zonepb.ZoneConfig, d tree.Datum) {
 		loadYAML(&c.LeasePreferences, string(tree.MustBeDString(d)))
 		c.InheritedLeasePreferences = false
 	}},
@@ -163,7 +164,7 @@ type setZoneConfigRun struct {
 
 func (n *setZoneConfigNode) startExec(params runParams) error {
 	var yamlConfig string
-	var setters []func(c *config.ZoneConfig)
+	var setters []func(c *zonepb.ZoneConfig)
 	deleteZone := false
 	subzonePlaceholder := false
 
@@ -223,7 +224,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 					"unsupported NULL value for %q", tree.ErrString(name))
 			}
 			setter := supportedZoneConfigOptions[*name].setter
-			setters = append(setters, func(c *config.ZoneConfig) { setter(c, datum) })
+			setters = append(setters, func(c *zonepb.ZoneConfig) { setter(c, datum) })
 			if optionStr.Len() > 0 {
 				optionStr.WriteString(", ")
 			}
@@ -274,17 +275,17 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 
 	// No zone was found. Possibly a SubzonePlaceholder depending on the index.
 	if partialZone == nil {
-		partialZone = config.NewZoneConfig()
+		partialZone = zonepb.NewZoneConfig()
 		if index != nil {
 			subzonePlaceholder = true
 		}
 	}
 
-	var partialSubzone *config.Subzone
+	var partialSubzone *zonepb.Subzone
 	if index != nil {
 		partialSubzone = partialZone.GetSubzone(uint32(index.ID), partition)
 		if partialSubzone == nil {
-			partialSubzone = &config.Subzone{Config: *config.NewZoneConfig()}
+			partialSubzone = &zonepb.Subzone{Config: *zonepb.NewZoneConfig()}
 		}
 	}
 
@@ -307,7 +308,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// the target ID is not a database object, i.e. one of the system
 		// ranges (liveness, meta, etc.), and did not have a zone config
 		// already.
-		completeZone = protoutil.Clone(params.extendedEvalCtx.ExecCfg.DefaultZoneConfig).(*config.ZoneConfig)
+		completeZone = protoutil.Clone(params.extendedEvalCtx.ExecCfg.DefaultZoneConfig).(*zonepb.ZoneConfig)
 	} else if err != nil {
 		return err
 	}
@@ -354,9 +355,9 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// ALTER RANGE default USING DEFAULT sets the default to the in
 		// memory default value.
 		if n.setDefault && keys.RootNamespaceID == uint32(targetID) {
-			finalZone = *protoutil.Clone(params.extendedEvalCtx.ExecCfg.DefaultZoneConfig).(*config.ZoneConfig)
+			finalZone = *protoutil.Clone(params.extendedEvalCtx.ExecCfg.DefaultZoneConfig).(*zonepb.ZoneConfig)
 		} else if n.setDefault {
-			finalZone = *config.NewZoneConfig()
+			finalZone = *zonepb.NewZoneConfig()
 		}
 		// Load settings from YAML. If there was no YAML (e.g. because the
 		// query specified CONFIGURE ZONE USING), the YAML string will be
@@ -433,9 +434,9 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			} else if completeZone == nil {
-				completeZone = config.NewZoneConfig()
+				completeZone = zonepb.NewZoneConfig()
 			}
-			completeZone.SetSubzone(config.Subzone{
+			completeZone.SetSubzone(zonepb.Subzone{
 				IndexID:       uint32(index.ID),
 				PartitionName: partition,
 				Config:        newZone,
@@ -447,7 +448,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				partialZone.DeleteTableConfig()
 			}
 
-			partialZone.SetSubzone(config.Subzone{
+			partialZone.SetSubzone(zonepb.Subzone{
 				IndexID:       uint32(index.ID),
 				PartitionName: partition,
 				Config:        finalZone,
@@ -525,24 +526,24 @@ type nodeGetter func(context.Context, *serverpb.NodesRequest) (*serverpb.NodesRe
 // constraint. For example, constraints [+region=us-east1,+region=us-east2]
 // will be rejected. Additionally, invalid constraints such as
 // [+region=us-east1, -region=us-east1] will also be rejected.
-func validateNoRepeatKeysInZone(zone *config.ZoneConfig) error {
+func validateNoRepeatKeysInZone(zone *zonepb.ZoneConfig) error {
 	for _, constraints := range zone.Constraints {
 		// Because we expect to have a small number of constraints, a nested
 		// loop is probably better than allocating a map.
 		for i, curr := range constraints.Constraints {
 			for _, other := range constraints.Constraints[i+1:] {
-				if curr.Type == config.Constraint_REQUIRED {
+				if curr.Type == zonepb.Constraint_REQUIRED {
 					// Verify that there is not another +k=v pair where k=curr.Key, and
 					// that -k=v does not exist.
-					if other.Type == config.Constraint_REQUIRED && other.Key == curr.Key ||
-						other.Type == config.Constraint_PROHIBITED && other.Key == curr.Key && other.Value == curr.Value {
+					if other.Type == zonepb.Constraint_REQUIRED && other.Key == curr.Key ||
+						other.Type == zonepb.Constraint_PROHIBITED && other.Key == curr.Key && other.Value == curr.Value {
 						return pgerror.Newf(pgcode.CheckViolation,
 							"incompatible zone constraints: %q and %q", curr, other)
 					}
-				} else if curr.Type == config.Constraint_PROHIBITED {
+				} else if curr.Type == zonepb.Constraint_PROHIBITED {
 					// If we have a -k=v pair, verify that there are not any
 					// +k=v pairs in the constraints.
-					if other.Type == config.Constraint_REQUIRED && other.Key == curr.Key && other.Value == curr.Value {
+					if other.Type == zonepb.Constraint_REQUIRED && other.Key == curr.Key && other.Value == curr.Value {
 						return pgerror.Newf(pgcode.CheckViolation,
 							"incompatible zone constraints: %q and %q", curr, other)
 					}
@@ -565,7 +566,7 @@ func validateNoRepeatKeysInZone(zone *config.ZoneConfig) error {
 // the cluster. If you had to first add one of the nodes before creating the
 // constraints, data could be replicated there that shouldn't be.
 func validateZoneAttrsAndLocalities(
-	ctx context.Context, getNodes nodeGetter, zone *config.ZoneConfig,
+	ctx context.Context, getNodes nodeGetter, zone *zonepb.ZoneConfig,
 ) error {
 	if len(zone.Constraints) == 0 && len(zone.LeasePreferences) == 0 {
 		return nil
@@ -579,8 +580,8 @@ func validateZoneAttrsAndLocalities(
 	}
 
 	// Accumulate a unique list of constraints to validate.
-	toValidate := make([]config.Constraint, 0)
-	addToValidate := func(c config.Constraint) {
+	toValidate := make([]zonepb.Constraint, 0)
+	addToValidate := func(c zonepb.Constraint) {
 		var alreadyInList bool
 		for _, val := range toValidate {
 			if c == val {
@@ -613,7 +614,7 @@ func validateZoneAttrsAndLocalities(
 				// typos in prohibited constraints as well, but as noted in the
 				// function-level comment that could break very reasonable use cases
 				// for prohibited constraints.
-				if config.StoreMatchesConstraint(store.Desc, constraint) {
+				if zonepb.StoreMatchesConstraint(store.Desc, constraint) {
 					found = true
 					break node
 				}
@@ -634,7 +635,7 @@ func writeZoneConfig(
 	txn *client.Txn,
 	targetID sqlbase.ID,
 	table *sqlbase.TableDescriptor,
-	zone *config.ZoneConfig,
+	zone *zonepb.ZoneConfig,
 	execCfg *ExecutorConfig,
 	hasNewSubzones bool,
 ) (numAffected int, err error) {
@@ -669,7 +670,7 @@ func writeZoneConfig(
 // zone config exists for the given ID, it returns nil.
 func getZoneConfigRaw(
 	ctx context.Context, txn *client.Txn, id sqlbase.ID,
-) (*config.ZoneConfig, error) {
+) (*zonepb.ZoneConfig, error) {
 	kv, err := txn.Get(ctx, config.MakeZoneKey(uint32(id)))
 	if err != nil {
 		return nil, err
@@ -677,7 +678,7 @@ func getZoneConfigRaw(
 	if kv.Value == nil {
 		return nil, nil
 	}
-	var zone config.ZoneConfig
+	var zone zonepb.ZoneConfig
 	if err := kv.ValueProto(&zone); err != nil {
 		return nil, err
 	}
@@ -700,7 +701,7 @@ func removeIndexZoneConfigs(
 	if err != nil {
 		return err
 	} else if zone == nil {
-		zone = config.NewZoneConfig()
+		zone = zonepb.NewZoneConfig()
 	}
 
 	for _, indexDesc := range indexDescs {

@@ -15,7 +15,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -149,7 +149,7 @@ func getShowZoneConfigRow(
 // provide it as 2nd argument. The function will compute
 // the remaining values based on the zone specifier and configuration.
 func generateZoneConfigIntrospectionValues(
-	values tree.Datums, zoneID tree.Datum, zs *tree.ZoneSpecifier, zone *config.ZoneConfig,
+	values tree.Datums, zoneID tree.Datum, zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig,
 ) error {
 	// Populate the ID column.
 	values[zoneIDCol] = zoneID
@@ -192,7 +192,7 @@ func generateZoneConfigIntrospectionValues(
 	if zs == nil {
 		values[configSQLCol] = tree.DNull
 	} else {
-		constraints, err := yamlMarshalFlow(config.ConstraintsList{
+		constraints, err := yamlMarshalFlow(zonepb.ConstraintsList{
 			Constraints: zone.Constraints,
 			Inherited:   zone.InheritedConstraints})
 		if err != nil {
@@ -283,12 +283,12 @@ func yamlMarshalFlow(v interface{}) (string, error) {
 // TODO(benesch): Teach GetZoneConfig to return the specifier of the zone it
 // finds without impacting performance.
 func ascendZoneSpecifier(
-	zs tree.ZoneSpecifier, resolvedID, actualID uint32, actualSubzone *config.Subzone,
+	zs tree.ZoneSpecifier, resolvedID, actualID uint32, actualSubzone *zonepb.Subzone,
 ) tree.ZoneSpecifier {
 	if actualID == keys.RootNamespaceID {
 		// We had to traverse to the top of the hierarchy, so we're showing the
 		// default zone config.
-		zs.NamedZone = config.DefaultZoneName
+		zs.NamedZone = zonepb.DefaultZoneName
 		zs.Database = ""
 		zs.TableOrIndex = tree.TableIndexName{}
 		// Since the default zone has no partition, we can erase the

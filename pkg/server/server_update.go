@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,9 +29,9 @@ type TestingKnobs struct {
 	// automatic version upgrade mechanism.
 	DisableAutomaticVersionUpgrade int32 // accessed atomically
 	// DefaultZoneConfigOverride, if set, overrides the default zone config defined in `pkg/config/zone.go`
-	DefaultZoneConfigOverride *config.ZoneConfig
+	DefaultZoneConfigOverride *zonepb.ZoneConfig
 	// DefaultSystemZoneConfigOverride, if set, overrides the default system zone config defined in `pkg/config/zone.go`
-	DefaultSystemZoneConfigOverride *config.ZoneConfig
+	DefaultSystemZoneConfigOverride *zonepb.ZoneConfig
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
