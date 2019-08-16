@@ -25,7 +25,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -84,8 +83,9 @@ type TestServerInterface interface {
 	// The real return type is sql.ExecutorConfig.
 	ExecutorConfig() interface{}
 
-	// Gossip returns the gossip used by the TestServer.
-	Gossip() *gossip.Gossip
+	// GossipI returns the gossip used by the TestServer.
+	// The real return type is *gossip.Gossip.
+	GossipI() interface{}
 
 	// Clock returns the clock used by the TestServer.
 	Clock() *hlc.Clock
