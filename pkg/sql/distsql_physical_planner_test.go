@@ -345,7 +345,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	//
 	// TODO(andrei): This is super hacky. What this test really wants to do is to
 	// precisely control the contents of the range cache on node 4.
-	tc.Server(3).DistSender().DisableFirstRangeUpdates()
+	tc.Server(3).DistSenderI().(*kv.DistSender).DisableFirstRangeUpdates()
 	db3 := tc.ServerConn(3)
 	// Do a query on node 4 so that it populates the its cache with an initial
 	// descriptor containing all the SQL key space. If we don't do this, the state

@@ -90,8 +90,9 @@ type TestServerInterface interface {
 	// Clock returns the clock used by the TestServer.
 	Clock() *hlc.Clock
 
-	// DistSender returns the DistSender used by the TestServer.
-	DistSender() *kv.DistSender
+	// DistSenderI returns the DistSender used by the TestServer.
+	// The real return type is *kv.DistSender.
+	DistSenderI() interface{}
 
 	// DistSQLServer returns the *distsqlrun.ServerImpl as an interface{}.
 	DistSQLServer() interface{}
@@ -257,7 +258,9 @@ func ForceTableGC(
 		},
 		Threshold: timestamp,
 	}
-	if _, err := client.SendWrapped(context.Background(), ts.DistSender(), &gcr); err != nil {
+	if _, err := client.SendWrapped(
+		context.Background(), ts.DistSenderI().(*kv.DistSender), &gcr,
+	); err != nil {
 		t.Error(err)
 	}
 }

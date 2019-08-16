@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -2191,7 +2192,9 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 		},
 		Threshold: tc.Server(0).Clock().Now(),
 	}
-	if _, err := client.SendWrapped(ctx, tc.Server(0).DistSender(), &gcr); err != nil {
+	if _, err := client.SendWrapped(
+		ctx, tc.Server(0).DistSenderI().(*kv.DistSender), &gcr,
+	); err != nil {
 		t.Fatal(err)
 	}
 

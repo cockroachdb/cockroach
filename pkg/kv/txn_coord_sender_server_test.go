@@ -95,7 +95,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 			Clock:             s.Clock(),
 			Stopper:           s.Stopper(),
 		},
-		s.DistSender(),
+		s.DistSenderI().(*kv.DistSender),
 	)
 	db := client.NewDB(ambient, tsf, s.Clock())
 	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)

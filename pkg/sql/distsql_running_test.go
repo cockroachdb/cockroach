@@ -99,7 +99,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			Clock:             s.Clock(),
 			Stopper:           s.Stopper(),
 		},
-		s.DistSender(),
+		s.DistSenderI().(*kv.DistSender),
 	)
 	shortDB := client.NewDB(ambient, tsf, s.Clock())
 
