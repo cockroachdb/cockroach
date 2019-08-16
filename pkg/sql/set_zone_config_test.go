@@ -14,7 +14,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -44,7 +44,7 @@ func TestValidateNoRepeatKeysInZone(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		var zone config.ZoneConfig
+		var zone zonepb.ZoneConfig
 		err := yaml.UnmarshalStrict([]byte(tc.constraint), &zone)
 		if err != nil {
 			t.Fatal(err)
@@ -170,7 +170,7 @@ func TestValidateZoneAttrsAndLocalities(t *testing.T) {
 		{`constraints: ["-ssd"]`, expectSuccess, getNodes},
 		{`constraints: ["-fake"]`, expectSuccess, getNodes},
 	} {
-		var zone config.ZoneConfig
+		var zone zonepb.ZoneConfig
 		err := yaml.UnmarshalStrict([]byte(tc.cfg), &zone)
 		if err != nil && tc.expectErr == expectSuccess {
 			t.Fatalf("#%d: expected success for %q; got %v", i, tc.cfg, err)
