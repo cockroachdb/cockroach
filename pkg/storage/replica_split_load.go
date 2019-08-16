@@ -23,7 +23,7 @@ var SplitByLoadEnabled = settings.RegisterBoolSetting(
 var SplitByLoadQPSThreshold = settings.RegisterIntSetting(
 	"kv.range_split.load_qps_threshold",
 	"the QPS over which, the range becomes a candidate for load based splitting",
-	250, // 250 req/s
+	2500, // 2500 req/s
 )
 
 // SplitByLoadQPSThreshold returns the QPS request rate for a given replica.
