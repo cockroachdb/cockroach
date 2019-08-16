@@ -155,6 +155,18 @@ func GenerateInsertRow(
 	return rowVals, nil
 }
 
+// KVBatch represents a batch of KVs generated from converted rows.
+type KVBatch struct {
+	// Source is where the row data in the batch came from.
+	Source int32
+	// LastRow is the index of the last converted row in source in this batch.
+	LastRow uint64
+	// Progress represents the fraction of the input that generated this row.
+	Progress float32
+	// KVs is the actual converted KV data.
+	KVs []roachpb.KeyValue
+}
+
 // DatumRowConverter converts Datums into kvs and streams it to the destination
 // channel.
 type DatumRowConverter struct {
@@ -162,8 +174,8 @@ type DatumRowConverter struct {
 	Datums []tree.Datum
 
 	// kv destination and current batch
-	KvCh     chan<- []roachpb.KeyValue
-	KvBatch  []roachpb.KeyValue
+	KvCh     chan<- KVBatch
+	KvBatch  KVBatch
 	BatchCap int
 
 	tableDesc *sqlbase.ImmutableTableDescriptor
@@ -182,6 +194,10 @@ type DatumRowConverter struct {
 	VisibleColTypes       []*types.T
 	defaultExprs          []tree.TypedExpr
 	computedIVarContainer sqlbase.RowIndexedVarContainer
+
+	// FractionFn is used to set the progress header in KVBatches.
+	CompletedRowFn func() uint64
+	FractionFn     func() float32
 }
 
 const kvDatumRowConverterBatchSize = 5000
@@ -191,7 +207,7 @@ func NewDatumRowConverter(
 	tableDesc *sqlbase.TableDescriptor,
 	targetColNames tree.NameList,
 	evalCtx *tree.EvalContext,
-	kvCh chan<- []roachpb.KeyValue,
+	kvCh chan<- KVBatch,
 ) (*DatumRowConverter, error) {
 	immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc)
 	c := &DatumRowConverter{
@@ -273,7 +289,7 @@ func NewDatumRowConverter(
 
 	padding := 2 * (len(immutDesc.Indexes) + len(immutDesc.Families))
 	c.BatchCap = kvDatumRowConverterBatchSize + padding
-	c.KvBatch = make([]roachpb.KeyValue, 0, c.BatchCap)
+	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 
 	c.computedIVarContainer = sqlbase.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
@@ -315,7 +331,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, fileIndex int32, rowIndex i
 		ctx,
 		KVInserter(func(kv roachpb.KeyValue) {
 			kv.Value.InitChecksum(kv.Key)
-			c.KvBatch = append(c.KvBatch, kv)
+			c.KvBatch.KVs = append(c.KvBatch.KVs, kv)
 		}),
 		insertRow,
 		true, /* ignoreConflicts */
@@ -325,7 +341,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, fileIndex int32, rowIndex i
 		return errors.Wrap(err, "insert row")
 	}
 	// If our batch is full, flush it and start a new one.
-	if len(c.KvBatch) >= kvDatumRowConverterBatchSize {
+	if len(c.KvBatch.KVs) >= kvDatumRowConverterBatchSize {
 		if err := c.SendBatch(ctx); err != nil {
 			return err
 		}
@@ -336,14 +352,20 @@ func (c *DatumRowConverter) Row(ctx context.Context, fileIndex int32, rowIndex i
 // SendBatch streams kv operations from the current KvBatch to the destination
 // channel, and resets the KvBatch to empty.
 func (c *DatumRowConverter) SendBatch(ctx context.Context) error {
-	if len(c.KvBatch) == 0 {
+	if len(c.KvBatch.KVs) == 0 {
 		return nil
+	}
+	if c.FractionFn != nil {
+		c.KvBatch.Progress = c.FractionFn()
+	}
+	if c.CompletedRowFn != nil {
+		c.KvBatch.LastRow = c.CompletedRowFn()
 	}
 	select {
 	case c.KvCh <- c.KvBatch:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	c.KvBatch = make([]roachpb.KeyValue, 0, c.BatchCap)
+	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 	return nil
 }

@@ -14,9 +14,11 @@ import (
 	"context"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -41,7 +44,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type readFileFunc func(context.Context, io.Reader, int32, string, progressFn) error
+type readFileFunc func(context.Context, *fileReader, int32, string, progressFn) error
 
 // readInputFile reads each of the passed dataFiles using the passed func. The
 // key part of dataFiles is the unique index of the data file among all files in
@@ -62,8 +65,9 @@ func readInputFiles(
 	done := ctx.Done()
 
 	var totalBytes, readBytes int64
+	fileSizes := make(map[int32]int64, len(dataFiles))
 	// Attempt to fetch total number of bytes for all files.
-	for _, dataFile := range dataFiles {
+	for id, dataFile := range dataFiles {
 		conf, err := storageccl.ExportStorageConfFromURI(dataFile)
 		if err != nil {
 			return err
@@ -80,6 +84,7 @@ func readInputFiles(
 			totalBytes = 0
 			break
 		}
+		fileSizes[id] = sz
 		totalBytes += sz
 	}
 	updateFromFiles := progressFn != nil && totalBytes == 0
@@ -103,28 +108,32 @@ func readInputFiles(
 				return err
 			}
 			defer es.Close()
-			f, err := es.ReadFile(ctx, "")
+			raw, err := es.ReadFile(ctx, "")
 			if err != nil {
 				return err
 			}
-			defer f.Close()
-			bc := &byteCounter{r: f}
-			src, err := decompressingReader(bc, dataFile, format.Compression)
+			defer raw.Close()
+
+			src := &fileReader{total: fileSizes[dataFileIndex], counter: byteCounter{r: raw}}
+			decompressed, err := decompressingReader(&src.counter, dataFile, format.Compression)
 			if err != nil {
 				return err
 			}
-			defer src.Close()
+			defer decompressed.Close()
+			src.Reader = decompressed
 
 			wrappedProgressFn := func(finished bool) error { return nil }
 			if updateFromBytes {
 				const progressBytes = 100 << 20
+				var lastReported int64
 				wrappedProgressFn = func(finished bool) error {
+					progressed := src.counter.n - lastReported
 					// progressBytes is the number of read bytes at which to report job progress. A
 					// low value may cause excessive updates in the job table which can lead to
 					// very large rows due to MVCC saving each version.
-					if finished || bc.n > progressBytes {
-						readBytes += bc.n
-						bc.n = 0
+					if finished || progressed > progressBytes {
+						readBytes += progressed
+						lastReported = src.counter.n
 						if err := progressFn(float32(readBytes) / float32(totalBytes)); err != nil {
 							return err
 						}
@@ -190,6 +199,19 @@ func (b *byteCounter) Read(p []byte) (int, error) {
 	n, err := b.r.Read(p)
 	b.n += int64(n)
 	return n, err
+}
+
+type fileReader struct {
+	io.Reader
+	total   int64
+	counter byteCounter
+}
+
+func (f fileReader) ReadFraction() float32 {
+	if f.total == 0 {
+		return 0.0
+	}
+	return float32(f.counter.n) / float32(f.total)
 }
 
 var csvOutputTypes = []types.T{
@@ -263,7 +285,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 // wrapper, doing the correct DrainAndClose error handling logic.
 func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	group := ctxgroup.WithContext(ctx)
-	kvCh := make(chan []roachpb.KeyValue, 10)
+	kvCh := make(chan row.KVBatch, 10)
 	evalCtx := cp.flowCtx.NewEvalCtx()
 
 	var singleTable *sqlbase.TableDescriptor
@@ -326,6 +348,9 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 		}
 
 		progFn := func(pct float32) error {
+			if cp.spec.IngestDirectly {
+				return nil
+			}
 			return job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 				d := details.(*jobspb.Progress_Import).Import
 				slotpct := pct * cp.spec.Progress.Contribution
@@ -372,9 +397,7 @@ func (s sampleRate) sample(kv roachpb.KeyValue) bool {
 	return prob > s.rnd.Float64()
 }
 
-func (cp *readImportDataProcessor) emitKvs(
-	ctx context.Context, kvCh <-chan []roachpb.KeyValue,
-) error {
+func (cp *readImportDataProcessor) emitKvs(ctx context.Context, kvCh <-chan row.KVBatch) error {
 	ctx, span := tracing.ChildSpan(ctx, "sendImportKVs")
 	defer tracing.FinishSpan(span)
 
@@ -404,7 +427,7 @@ func (cp *readImportDataProcessor) emitKvs(
 	}
 
 	for kvBatch := range kvCh {
-		for _, kv := range kvBatch {
+		for _, kv := range kvBatch.KVs {
 			// Allow KV pairs to be dropped if they belong to a completed span.
 			if completedSpans.Contains(kv.Key) {
 				continue
@@ -486,9 +509,7 @@ func (cp *readImportDataProcessor) presplitTableBoundaries(ctx context.Context) 
 
 // ingestKvs drains kvs from the channel until it closes, ingesting them using
 // the BulkAdder. It handles the required buffering/sorting/etc.
-func (cp *readImportDataProcessor) ingestKvs(
-	ctx context.Context, kvCh <-chan []roachpb.KeyValue,
-) error {
+func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan row.KVBatch) error {
 	ctx, span := tracing.ChildSpan(ctx, "ingestKVs")
 	defer tracing.FinishSpan(span)
 
@@ -539,54 +560,144 @@ func (cp *readImportDataProcessor) ingestKvs(
 	}
 	defer indexAdder.Close(ctx)
 
-	// We insert splits at every index span of the table above. Since the
-	// BulkAdder is split aware when constructing SSTs, there is no risk of worst
-	// case overlap behavior in the resulting AddSSTable calls.
-	//
-	// NB: We are getting rid of the pre-buffering stage which constructed
-	// separate buckets for each table's primary data, and flushed to the
-	// BulkAdder when the bucket was full. This is because, a tpcc 1k IMPORT would
-	// OOM when maintaining this buffer. Two big wins we got from this
-	// pre-buffering stage were:
-	//
-	// 1. We avoided worst case overlapping behavior in the AddSSTable calls as a
-	// result of flushing keys with the same TableIDIndexID prefix, together.
-	//
-	// 2. Secondary index KVs which were few and filled the bucket infrequently
-	// were flushed rarely, resulting in fewer L0 (and total) files.
-	//
-	// While we continue to achieve the first property as a result of the splits
-	// mentioned above, the KVs sent to the BulkAdder are no longer grouped which
-	// results in flushing a much larger number of small SSTs. This increases the
-	// number of L0 (and total) files, but with a lower memory usage.
-	for kvBatch := range kvCh {
-		for _, kv := range kvBatch {
-			_, _, indexID, indexErr := sqlbase.DecodeTableIDIndexID(kv.Key)
-			if indexErr != nil {
-				return indexErr
-			}
+	// Setup progress tracking:
+	//  - offsets maps source file IDs to offsets in the slices below.
+	//  - writtenRow contains LastRow of batch most recently added to the buffer.
+	//  - writtenFraction contains % of the input finished as of last batch.
+	//  - pkFlushedRow contains `writtenRow` as of the last pk adder flush.
+	//  - idxFlushedRow contains `writtenRow` as of the last index adder flush.
+	// In pkFlushedRow, idxFlushedRow and writtenFaction values are written via
+	// `atomic` so the progress reporting go goroutine can read them.
+	writtenRow := make([]uint64, len(cp.spec.Uri))
+	writtenFraction := make([]uint32, len(cp.spec.Uri))
 
-			// Decide which adder to send the KV to by extracting its index id.
-			//
-			// TODO(adityamaru): There is a potential optimization of plumbing the
-			// different putters, and differentiating based on their type. It might be
-			// more efficient than parsing every kv.
-			if indexID == 1 {
-				if err := pkIndexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
-					if _, ok := err.(storagebase.DuplicateKeyError); ok {
-						return errors.Wrap(err, "duplicate key in primary index")
+	pkFlushedRow := make([]uint64, len(cp.spec.Uri))
+	idxFlushedRow := make([]uint64, len(cp.spec.Uri))
+
+	// When the PK adder flushes, everything written has been flushed, so we set
+	// pkFlushedRow to writtenRow. Additionally if the indexAdder is empty then we
+	// can treat it as flushed as well (in case we're not adding anything to it).
+	pkIndexAdder.SetOnFlush(func() {
+		for _, i := range writtenRow {
+			atomic.StoreUint64(&pkFlushedRow[i], writtenRow[i])
+		}
+		if indexAdder.IsEmpty() {
+			for _, i := range writtenRow {
+				atomic.StoreUint64(&idxFlushedRow[i], writtenRow[i])
+			}
+		}
+	})
+	indexAdder.SetOnFlush(func() {
+		for _, i := range writtenRow {
+			atomic.StoreUint64(&idxFlushedRow[i], writtenRow[i])
+		}
+	})
+
+	// offsets maps input file ID to a slot in our progress tracking slices.
+	offsets := make(map[int32]int, len(cp.spec.Uri))
+	var offset int
+	for i := range cp.spec.Uri {
+		offsets[i] = offset
+		offset++
+	}
+
+	// stopProgress will be closed when there is no more progress to report.
+	stopProgress := make(chan struct{})
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		tick := time.NewTicker(time.Second * 10)
+		defer tick.Stop()
+		done := ctx.Done()
+		for {
+			select {
+			case <-done:
+				return ctx.Err()
+			case <-stopProgress:
+				return nil
+			case <-tick.C:
+				var prog distsqlpb.RemoteProducerMetadata_BulkProcessorProgress
+				prog.CompletedRow = make(map[int32]uint64)
+				prog.CompletedFraction = make(map[int32]float32)
+				for file, offset := range offsets {
+					pk := atomic.LoadUint64(&pkFlushedRow[offset])
+					idx := atomic.LoadUint64(&idxFlushedRow[offset])
+					// On resume we'll be able to skip up the last row for which both the
+					// PK and index adders have flushed KVs.
+					if idx > pk {
+						prog.CompletedRow[file] = pk
+					} else {
+						prog.CompletedRow[file] = idx
 					}
-					return err
+					prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
 				}
-			} else {
-				if err := indexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
-					if _, ok := err.(storagebase.DuplicateKeyError); ok {
-						return errors.Wrap(err, "duplicate key in index")
-					}
-					return err
+				meta := &distsqlpb.ProducerMetadata{BulkProcessorProgress: &prog}
+				if !distsqlrun.EmitHelper(ctx, &cp.out, nil /* row */, meta, func(_ context.Context) {}) {
+					return errors.New("consumer closed")
 				}
 			}
 		}
+	})
+
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(stopProgress)
+
+		// We insert splits at every index span of the table above. Since the
+		// BulkAdder is split aware when constructing SSTs, there is no risk of worst
+		// case overlap behavior in the resulting AddSSTable calls.
+		//
+		// NB: We are getting rid of the pre-buffering stage which constructed
+		// separate buckets for each table's primary data, and flushed to the
+		// BulkAdder when the bucket was full. This is because, a tpcc 1k IMPORT would
+		// OOM when maintaining this buffer. Two big wins we got from this
+		// pre-buffering stage were:
+		//
+		// 1. We avoided worst case overlapping behavior in the AddSSTable calls as a
+		// result of flushing keys with the same TableIDIndexID prefix, together.
+		//
+		// 2. Secondary index KVs which were few and filled the bucket infrequently
+		// were flushed rarely, resulting in fewer L0 (and total) files.
+		//
+		// While we continue to achieve the first property as a result of the splits
+		// mentioned above, the KVs sent to the BulkAdder are no longer grouped which
+		// results in flushing a much larger number of small SSTs. This increases the
+		// number of L0 (and total) files, but with a lower memory usage.
+		for kvBatch := range kvCh {
+			for _, kv := range kvBatch.KVs {
+				_, _, indexID, indexErr := sqlbase.DecodeTableIDIndexID(kv.Key)
+				if indexErr != nil {
+					return indexErr
+				}
+
+				// Decide which adder to send the KV to by extracting its index id.
+				//
+				// TODO(adityamaru): There is a potential optimization of plumbing the
+				// different putters, and differentiating based on their type. It might be
+				// more efficient than parsing every kv.
+				if indexID == 1 {
+					if err := pkIndexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
+						if _, ok := err.(storagebase.DuplicateKeyError); ok {
+							return errors.Wrap(err, "duplicate key in primary index")
+						}
+						return err
+					}
+				} else {
+					if err := indexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
+						if _, ok := err.(storagebase.DuplicateKeyError); ok {
+							return errors.Wrap(err, "duplicate key in index")
+						}
+						return err
+					}
+				}
+			}
+			offset := offsets[kvBatch.Source]
+			writtenRow[offset] = kvBatch.LastRow
+			atomic.StoreUint32(&writtenFraction[offset], math.Float32bits(kvBatch.Progress))
+		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	if err := pkIndexAdder.Flush(ctx); err != nil {
@@ -601,6 +712,18 @@ func (cp *readImportDataProcessor) ingestKvs(
 			return errors.Wrap(err, "duplicate key in index")
 		}
 		return err
+	}
+
+	var prog distsqlpb.RemoteProducerMetadata_BulkProcessorProgress
+	prog.CompletedRow = make(map[int32]uint64)
+	prog.CompletedFraction = make(map[int32]float32)
+	for i := range cp.spec.Uri {
+		prog.CompletedFraction[i] = 1.0
+		prog.CompletedRow[i] = math.MaxUint64
+	}
+	meta := &distsqlpb.ProducerMetadata{BulkProcessorProgress: &prog}
+	if !distsqlrun.EmitHelper(ctx, &cp.out, nil /* row */, meta, func(_ context.Context) {}) {
+		return errors.New("consumer closed")
 	}
 
 	addedSummary := pkIndexAdder.GetSummary()

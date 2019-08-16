@@ -45,14 +45,14 @@ import (
 type mysqldumpReader struct {
 	evalCtx  *tree.EvalContext
 	tables   map[string]*row.DatumRowConverter
-	kvCh     chan []roachpb.KeyValue
+	kvCh     chan row.KVBatch
 	debugRow func(tree.Datums)
 }
 
 var _ inputConverter = &mysqldumpReader{}
 
 func newMysqldumpReader(
-	kvCh chan []roachpb.KeyValue,
+	kvCh chan row.KVBatch,
 	tables map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
 ) (*mysqldumpReader, error) {
@@ -92,12 +92,17 @@ func (m *mysqldumpReader) readFiles(
 }
 
 func (m *mysqldumpReader) readFile(
-	ctx context.Context, input io.Reader, inputIdx int32, inputName string, progressFn progressFn,
+	ctx context.Context, input *fileReader, inputIdx int32, inputName string, progressFn progressFn,
 ) error {
 	var inserts, count int64
 	r := bufio.NewReaderSize(input, 1024*64)
 	tokens := mysql.NewTokenizer(r)
 	tokens.SkipSpecialComments = true
+
+	for _, conv := range m.tables {
+		conv.KvBatch.Source = inputIdx
+		conv.FractionFn = input.ReadFraction
+	}
 
 	for {
 		stmt, err := mysql.ParseNextStrictDDL(tokens)
