@@ -84,7 +84,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 
 	lr := distsqlplan.NewSpanResolver(
 		s3.Cfg.Settings,
-		s3.DistSender(), s3.Gossip(), s3.GetNode().Descriptor, nil,
+		s3.DistSenderI().(*kv.DistSender), s3.Gossip(), s3.GetNode().Descriptor, nil,
 		replicaoracle.BinPackingChoice)
 
 	var spans []spanWithDir
@@ -190,7 +190,7 @@ func TestSpanResolver(t *testing.T) {
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
 	lr := distsqlplan.NewSpanResolver(
 		s.(*server.TestServer).Cfg.Settings,
-		s.DistSender(), s.GossipI().(*gossip.Gossip),
+		s.DistSenderI().(*kv.DistSender), s.GossipI().(*gossip.Gossip),
 		s.(*server.TestServer).GetNode().Descriptor, nil,
 		replicaoracle.BinPackingChoice)
 
@@ -284,7 +284,7 @@ func TestMixedDirections(t *testing.T) {
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
 	lr := distsqlplan.NewSpanResolver(
 		s.(*server.TestServer).Cfg.Settings,
-		s.DistSender(), s.GossipI().(*gossip.Gossip),
+		s.DistSenderI().(*kv.DistSender), s.GossipI().(*gossip.Gossip),
 		s.(*server.TestServer).GetNode().Descriptor,
 		nil,
 		replicaoracle.BinPackingChoice)
