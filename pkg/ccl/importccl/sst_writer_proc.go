@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -220,7 +221,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 					// can never be any shadow keys, and this check could be turned off.
 					// Plumb a user option to toggle this if the overhead without
 					// colliding keys becomes more significant.
-					if err := bulk.AddSSTable(ctx, sp.db, sst.span.Key, sst.span.EndKey, sst.data, true /* disallowShadowing */); err != nil {
+					if err := bulk.AddSSTable(ctx, sp.db, sst.span.Key, sst.span.EndKey, sst.data, true /* disallowShadowing */, enginepb.MVCCStats{} /* ms */); err != nil {
 						return err
 					}
 

@@ -478,7 +478,7 @@ func TestGCQueueProcess(t *testing.T) {
 	}
 
 	// The total size of the GC'able versions of the keys and values in GCInfo.
-	// Key size: len("a") + mvccVersionTimestampSize (13 bytes) = 14 bytes.
+	// Key size: len("a") + MVCCVersionTimestampSize (13 bytes) = 14 bytes.
 	// Value size: len("value") + headerSize (5 bytes) = 10 bytes.
 	// key1 at ts1  (14 bytes) => "value" (10 bytes)
 	// key2 at ts1  (14 bytes) => "value" (10 bytes)
@@ -987,7 +987,7 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	if gcKeyVersionChunkBytes%keyCount != 0 {
 		t.Fatalf("expected gcKeyVersionChunkBytes to be a multiple of %d", keyCount)
 	}
-	// Reduce the key size by mvccVersionTimestampSize (13 bytes) to prevent batch overflow.
+	// Reduce the key size by MVCCVersionTimestampSize (13 bytes) to prevent batch overflow.
 	// This is due to MVCCKey.EncodedSize(), which returns the full size of the encoded key.
 	const keySize = (gcKeyVersionChunkBytes / keyCount) - 13
 	// Create a format string for creating version keys of exactly

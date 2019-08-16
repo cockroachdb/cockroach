@@ -446,6 +446,20 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 		return sstBytes
 	}
 
+	getStats := func(startKey, endKey engine.MVCCKey, data []byte) enginepb.MVCCStats {
+		dataIter, err := engine.NewMemSSTIterator(data, true)
+		if err != nil {
+			return enginepb.MVCCStats{}
+		}
+		defer dataIter.Close()
+
+		stats, err := engine.ComputeStatsGo(dataIter, startKey, endKey, 0)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		return stats
+	}
+
 	// Test key collision when ingesting a key in the start of existing data, and
 	// SST. The colliding key is also equal to the header start key.
 	{
@@ -454,6 +468,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 		})
 
 		sstBytes := getSSTBytes(sstKVs)
+		stats := getStats(engine.MVCCKey{Key: roachpb.Key("a")}, engine.MVCCKey{Key: roachpb.Key("b")}, sstBytes)
 		cArgs := batcheval.CommandArgs{
 			Header: roachpb.Header{
 				Timestamp: hlc.Timestamp{WallTime: 7},
@@ -462,8 +477,9 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 				Data:              sstBytes,
 				DisallowShadowing: true,
+				MVCCStats:         &stats,
 			},
-			Stats: &enginepb.MVCCStats{},
+			Stats: &stats,
 		}
 
 		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
@@ -518,7 +534,6 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				Data:              sstBytes,
 				DisallowShadowing: true,
 			},
-			Stats: &enginepb.MVCCStats{},
 		}
 
 		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
@@ -536,6 +551,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 		})
 
 		sstBytes := getSSTBytes(sstKVs)
+		stats := getStats(engine.MVCCKey{Key: roachpb.Key("c")}, engine.MVCCKey{Key: roachpb.Key("i")}, sstBytes)
 		cArgs := batcheval.CommandArgs{
 			Header: roachpb.Header{
 				Timestamp: hlc.Timestamp{WallTime: 7},
@@ -544,8 +560,9 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("c"), EndKey: roachpb.Key("i")},
 				Data:              sstBytes,
 				DisallowShadowing: true,
+				MVCCStats:         &stats,
 			},
-			Stats: &enginepb.MVCCStats{},
+			Stats: &stats,
 		}
 
 		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
@@ -737,6 +754,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 		})
 
 		sstBytes := getSSTBytes(sstKVs)
+		stats := getStats(engine.MVCCKey{Key: roachpb.Key("e")}, engine.MVCCKey{Key: roachpb.Key("zz")}, sstBytes)
 		cArgs := batcheval.CommandArgs{
 			Header: roachpb.Header{
 				Timestamp: hlc.Timestamp{WallTime: 7},
@@ -745,8 +763,9 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("e"), EndKey: roachpb.Key("zz")},
 				Data:              sstBytes,
 				DisallowShadowing: true,
+				MVCCStats:         &stats,
 			},
-			Stats: &enginepb.MVCCStats{},
+			Stats: &stats,
 		}
 
 		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)

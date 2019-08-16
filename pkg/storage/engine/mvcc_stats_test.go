@@ -82,7 +82,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 	}
 
 	mKeySize := int64(mvccKey(key).EncodedSize()) // 2
-	vKeySize := mvccVersionTimestampSize          // 12
+	vKeySize := MVCCVersionTimestampSize          // 12
 	vValSize := int64(len(value.RawBytes))        // 10
 
 	expMS := enginepb.MVCCStats{
@@ -165,7 +165,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 		Deleted:   false,
 		Txn:       &txn.TxnMeta,
 	}).Size())
-	vKeySize := mvccVersionTimestampSize   // 12
+	vKeySize := MVCCVersionTimestampSize   // 12
 	vValSize := int64(len(value.RawBytes)) // 10
 
 	expMS := enginepb.MVCCStats{
@@ -240,7 +240,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 		Deleted:   false,
 		Txn:       &txn.TxnMeta,
 	}).Size())
-	vKeySize := mvccVersionTimestampSize   // 12
+	vKeySize := MVCCVersionTimestampSize   // 12
 	vValSize := int64(len(value.RawBytes)) // 10
 
 	expMS := enginepb.MVCCStats{
@@ -331,7 +331,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 	}).Size())
 	require.EqualValues(t, m1ValSize, 46)
 
-	vKeySize := mvccVersionTimestampSize
+	vKeySize := MVCCVersionTimestampSize
 	require.EqualValues(t, vKeySize, 12)
 
 	vValSize := int64(len(value.RawBytes))
@@ -440,7 +440,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 	}).Size())
 	require.EqualValues(t, m1ValSize, 46)
 
-	vKeySize := mvccVersionTimestampSize
+	vKeySize := MVCCVersionTimestampSize
 	require.EqualValues(t, vKeySize, 12)
 
 	vValSize := int64(len(value.RawBytes))
@@ -532,7 +532,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 
 	mKeySize := int64(mvccKey(key).EncodedSize())
 	require.EqualValues(t, mKeySize, 2)
-	vKeySize := mvccVersionTimestampSize
+	vKeySize := MVCCVersionTimestampSize
 	require.EqualValues(t, vKeySize, 12)
 
 	expMS := enginepb.MVCCStats{
@@ -669,7 +669,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 	mKeySize := int64(mvccKey(key).EncodedSize())
 	require.EqualValues(t, mKeySize, 2)
 
-	vKeySize := mvccVersionTimestampSize
+	vKeySize := MVCCVersionTimestampSize
 	require.EqualValues(t, vKeySize, 12)
 
 	vValSize := int64(len(value.RawBytes))
@@ -832,7 +832,7 @@ func TestMVCCStatsDelDelGC(t *testing.T) {
 	}
 
 	mKeySize := int64(mvccKey(key).EncodedSize()) // 2
-	vKeySize := mvccVersionTimestampSize          // 12
+	vKeySize := MVCCVersionTimestampSize          // 12
 
 	expMS := enginepb.MVCCStats{
 		LastUpdateNanos: 2E9,
@@ -909,7 +909,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 		Timestamp: hlc.LegacyTimestamp(ts201),
 		Txn:       &txn.TxnMeta,
 	}).Size())
-	vKeySize := mvccVersionTimestampSize   // 12
+	vKeySize := MVCCVersionTimestampSize   // 12
 	vValSize := int64(len(value.RawBytes)) // 10
 
 	expMS := enginepb.MVCCStats{
@@ -992,7 +992,7 @@ func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 	mKeySize := int64(mvccKey(key).EncodedSize())
 	require.EqualValues(t, mKeySize, 2)
 
-	vKeySize := mvccVersionTimestampSize
+	vKeySize := MVCCVersionTimestampSize
 	require.EqualValues(t, vKeySize, 12)
 
 	vValSize := int64(len(val1.RawBytes))
@@ -1087,7 +1087,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 	}).Size())
 	require.EqualValues(t, mValSize, 46)
 
-	vKeySize := mvccVersionTimestampSize
+	vKeySize := MVCCVersionTimestampSize
 	require.EqualValues(t, vKeySize, 12)
 
 	vVal1Size := int64(len(val1.RawBytes))
@@ -1171,7 +1171,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 	}).Size())
 	require.EqualValues(t, mValSize, 46)
 
-	vKeySize := mvccVersionTimestampSize
+	vKeySize := MVCCVersionTimestampSize
 	require.EqualValues(t, vKeySize, 12)
 
 	vVal1Size := int64(len(val1.RawBytes))
@@ -1228,7 +1228,7 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 	mKeySize := int64(mvccKey(key).EncodedSize())
 	require.EqualValues(t, mKeySize, 11)
 
-	vKeySize := mvccVersionTimestampSize
+	vKeySize := MVCCVersionTimestampSize
 	require.EqualValues(t, vKeySize, 12)
 
 	vVal1Size := int64(len(val1.RawBytes))
