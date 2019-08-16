@@ -690,6 +690,19 @@ func DecodeTablePrefix(key roachpb.Key) ([]byte, uint64, error) {
 	return encoding.DecodeUvarintAscending(key)
 }
 
+// DescMetadataPrefix returns the key prefix for all descriptors.
+func DescMetadataPrefix() []byte {
+	k := MakeTablePrefix(uint32(DescriptorTableID))
+	return encoding.EncodeUvarintAscending(k, DescriptorTablePrimaryKeyIndexID)
+}
+
+// DescMetadataKey returns the key for the descriptor.
+func DescMetadataKey(descID uint32) roachpb.Key {
+	k := DescMetadataPrefix()
+	k = encoding.EncodeUvarintAscending(k, uint64(descID))
+	return MakeFamilyKey(k, DescriptorTableDescriptorColFamID)
+}
+
 // DecodeDescMetadataID decodes a descriptor ID from a descriptor metadata key.
 func DecodeDescMetadataID(key roachpb.Key) (uint64, error) {
 	// Extract object ID from key.
@@ -974,4 +987,17 @@ func (b RangeIDPrefixBuf) RangeLastReplicaGCTimestampKey() roachpb.Key {
 // key for the range's last verification timestamp.
 func (b RangeIDPrefixBuf) RangeLastVerificationTimestampKeyDeprecated() roachpb.Key {
 	return append(b.unreplicatedPrefix(), LocalRangeLastVerificationTimestampSuffixDeprecated...)
+}
+
+// ZoneKeyPrefix returns the key prefix for id's row in the system.zones table.
+func ZoneKeyPrefix(id uint32) roachpb.Key {
+	k := MakeTablePrefix(uint32(ZonesTableID))
+	k = encoding.EncodeUvarintAscending(k, uint64(ZonesTablePrimaryIndexID))
+	return encoding.EncodeUvarintAscending(k, uint64(id))
+}
+
+// ZoneKey returns the key for id's entry in the system.zones table.
+func ZoneKey(id uint32) roachpb.Key {
+	k := ZoneKeyPrefix(id)
+	return MakeFamilyKey(k, uint32(ZonesTableConfigColumnID))
 }
