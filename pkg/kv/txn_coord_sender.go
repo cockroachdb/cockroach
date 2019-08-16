@@ -484,14 +484,13 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 	if typ == client.RootTxn {
 		tcs.interceptorAlloc.txnHeartbeater.init(
 			tcf.AmbientContext,
-			&tcs.mu.Mutex,
-			&tcs.mu.txn,
+			tcs.stopper,
 			tcs.clock,
+			&tcs.metrics,
 			tcs.heartbeatInterval,
 			&tcs.interceptorAlloc.txnLockGatekeeper,
-			&tcs.metrics,
-			tcs.stopper,
-			tcs.cleanupTxnLocked,
+			&tcs.mu.Mutex,
+			&tcs.mu.txn,
 		)
 		tcs.interceptorAlloc.txnCommitter = txnCommitter{
 			st:      tcf.st,
@@ -863,9 +862,7 @@ func (tc *TxnCoordSender) maybeSleepForLinearizable(
 func (tc *TxnCoordSender) maybeRejectClientLocked(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
-	if singleRollback := ba != nil &&
-		ba.IsSingleEndTransactionRequest() &&
-		!ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest).Commit; singleRollback {
+	if ba.IsSingleAbortTransactionRequest() {
 		// As a special case, we allow rollbacks to be sent at any time. Any
 		// rollback attempt moves the TxnCoordSender state to txnFinalized, but higher
 		// layers are free to retry rollbacks if they want (and they do, for
@@ -1004,6 +1001,7 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 		// Abort the old txn. The client is not supposed to use use this
 		// TxnCoordSender any more.
 		tc.interceptorAlloc.txnHeartbeater.abortTxnAsyncLocked(ctx)
+		tc.cleanupTxnLocked(ctx)
 		return retErr
 	}
 
@@ -1238,4 +1236,11 @@ func (tc *TxnCoordSender) SerializeTxn() *roachpb.Transaction {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.mu.txn.Clone()
+}
+
+// IsTracking returns true if the heartbeat loop is running.
+func (tc *TxnCoordSender) IsTracking() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.interceptorAlloc.txnHeartbeater.heartbeatLoopRunningLocked()
 }
