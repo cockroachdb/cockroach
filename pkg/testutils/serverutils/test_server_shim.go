@@ -156,6 +156,10 @@ type TestServerInterface interface {
 	// assuming no additional information is added outside of the normal bootstrap
 	// process.
 	ExpectedInitialRangeCount() (int, error)
+
+	// ForceTableGC sends a GCRequest for the ranges corresponding to a table.
+	ForceTableGC(
+		t testing.TB, db sqlutils.DBHandle, database, table string, timestamp hlc.Timestamp)
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/cenkalti/backoff"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -802,6 +804,25 @@ func (ts *TestServer) GCSystemLog(
 	ctx context.Context, table string, timestampLowerBound, timestampUpperBound time.Time,
 ) (time.Time, int64, error) {
 	return ts.gcSystemLog(ctx, table, timestampLowerBound, timestampUpperBound)
+}
+
+// ForceTableGC sends a GCRequest for the ranges corresponding to a table.
+func (ts *TestServer) ForceTableGC(
+	t testing.TB, db sqlutils.DBHandle, database, table string, timestamp hlc.Timestamp,
+) {
+	t.Helper()
+	tblID := sqlutils.QueryTableID(t, db, database, table)
+	tblKey := roachpb.Key(keys.MakeTablePrefix(tblID))
+	gcr := roachpb.GCRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    tblKey,
+			EndKey: tblKey.PrefixEnd(),
+		},
+		Threshold: timestamp,
+	}
+	if _, err := client.SendWrapped(context.Background(), ts.distSender, &gcr); err != nil {
+		t.Error(err)
+	}
 }
 
 type testServerFactoryImpl struct{}
