@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -250,8 +251,8 @@ func (l *logger) PrintfCtxDepth(ctx context.Context, depth int, f string, args .
 	msg := crdblog.MakeMessage(ctx, f, args)
 	if err := l.stdoutL.Output(depth+1, msg); err != nil {
 		// Changing our interface to return an Error from a logging method seems too
-		// onerous. Let's just crash.
-		panic(err)
+		// onerous. Let's yell to the default logger and if that fails, oh well.
+		_ = log.Output(depth+1, fmt.Sprintf("failed to log message: %v: %s", err, msg))
 	}
 }
 
@@ -264,8 +265,8 @@ func (l *logger) ErrorfCtxDepth(ctx context.Context, depth int, f string, args .
 	msg := crdblog.MakeMessage(ctx, f, args)
 	if err := l.stderrL.Output(depth+1, msg); err != nil {
 		// Changing our interface to return an Error from a logging method seems too
-		// onerous. Let's just crash.
-		panic(err)
+		// onerous. Let's yell to the default logger and if that fails, oh well.
+		_ = log.Output(depth+1, fmt.Sprintf("failed to log error: %v: %s", err, msg))
 	}
 }
 
