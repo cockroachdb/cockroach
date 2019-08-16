@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1231,11 +1232,26 @@ func TestImportIntoCSV(t *testing.T) {
 	conn := tc.Conns[0]
 
 	var forceFailure bool
+	var importBodyFinished chan struct{}
+	var delayImportFinish chan struct{}
+
 	for i := range tc.Servers {
 		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
-				r.testingKnobs.forceFailure = forceFailure
+				r.testingKnobs.afterImport = func() error {
+					if importBodyFinished != nil {
+						importBodyFinished <- struct{}{}
+					}
+					if delayImportFinish != nil {
+						<-delayImportFinish
+					}
+
+					if forceFailure {
+						return errors.New("testing injected failure")
+					}
+					return nil
+				}
 				return r
 			},
 		}
@@ -1536,6 +1552,53 @@ func TestImportIntoCSV(t *testing.T) {
 
 		// Expect it to succeed on re-attempt.
 		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[1]))
+	})
+
+	// Verify that during IMPORT INTO the table is offline.
+	t.Run("offline-state", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE checkpoint; USE checkpoint")
+		sqlDB.Exec(t, `CREATE TABLE checkpoint.t (a INT PRIMARY KEY, b STRING)`)
+
+		// Insert the test data
+		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
+
+		for i, v := range insert {
+			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
+		}
+
+		// Hit a failure during import.
+		importBodyFinished = make(chan struct{})
+		delayImportFinish = make(chan struct{})
+		defer func() {
+			importBodyFinished = nil
+			delayImportFinish = nil
+		}()
+
+		var unused interface{}
+
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			defer close(importBodyFinished)
+			_, err := sqlDB.DB.ExecContext(ctx, fmt.Sprintf(`IMPORT INTO checkpoint.t (a, b) CSV DATA (%s)`, testFiles.files[1]))
+			return err
+		})
+		g.GoCtx(func(ctx context.Context) error {
+			defer close(delayImportFinish)
+			<-importBodyFinished
+
+			err := sqlDB.DB.QueryRowContext(ctx, `SELECT 1 FROM checkpoint.t`).Scan(&unused)
+
+			if !testutils.IsError(err, "table in unknown state: IMPORTING") {
+				return err
+			}
+			return nil
+		})
+		if err := g.Wait(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Expect it to succeed on re-attempt.
+		sqlDB.QueryRow(t, `SELECT 1 FROM checkpoint.t`).Scan(&unused)
 	})
 
 	// Tests for user specified target columns in IMPORT INTO statements.

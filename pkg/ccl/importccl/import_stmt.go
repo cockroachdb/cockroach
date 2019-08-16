@@ -643,7 +643,7 @@ type importResumer struct {
 	statsRefresher *stats.Refresher
 
 	testingKnobs struct {
-		forceFailure bool
+		afterImport func() error
 	}
 }
 
@@ -923,8 +923,10 @@ func (r *importResumer) Resume(
 	if err != nil {
 		return err
 	}
-	if r.testingKnobs.forceFailure {
-		return errors.New("testing injected failure")
+	if r.testingKnobs.afterImport != nil {
+		if err := r.testingKnobs.afterImport(); err != nil {
+			return err
+		}
 	}
 
 	r.res = res
