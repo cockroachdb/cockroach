@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -46,7 +47,7 @@ func TestSampleAggregator(t *testing.T) {
 			Settings: st,
 			DB:       kvDB,
 			Executor: server.InternalExecutor().(sqlutil.InternalExecutor),
-			Gossip:   server.Gossip(),
+			Gossip:   server.GossipI().(*gossip.Gossip),
 		},
 	}
 

@@ -160,7 +160,7 @@ func TestDistSQLServerGossipsVersion(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	var v distsqlpb.DistSQLVersionGossipInfo
-	if err := s.Gossip().GetInfoProto(
+	if err := s.GossipI().(*gossip.Gossip).GetInfoProto(
 		gossip.MakeDistSQLNodeVersionKey(s.NodeID()), &v,
 	); err != nil {
 		t.Fatal(err)

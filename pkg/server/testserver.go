@@ -262,7 +262,12 @@ func (ts *TestServer) Stopper() *stop.Stopper {
 	return ts.stopper
 }
 
-// Gossip returns the gossip instance used by the TestServer.
+// GossipI is part of TestServerInterface.
+func (ts *TestServer) GossipI() interface{} {
+	return ts.Gossip()
+}
+
+// Gossip is like GossipI but returns the real type instead of interface{}.
 func (ts *TestServer) Gossip() *gossip.Gossip {
 	if ts != nil {
 		return ts.gossip

@@ -176,7 +176,7 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	tc.StopServer(oldNodeIdx)
 	tc.AddServer(t, newServerArgs)
 
-	tc.WaitForStores(t, tc.Server(1).Gossip())
+	tc.WaitForStores(t, tc.Server(1).GossipI().(*gossip.Gossip))
 
 	// Ensure that all servers still running are responsive. If the two remaining
 	// original nodes don't refresh their connection to the address of the first
