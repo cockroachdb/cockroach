@@ -34,10 +34,24 @@ func registerKV(r *testRegistry) {
 		readPercent int
 		batchSize   int
 		blockSize   int
+		splits      int // 0 implies default, negative implies 0
 		encryption  bool
 		sequential  bool
 		duration    time.Duration
 		tags        []string
+	}
+	computeNumSplits := func(opts kvOptions) int {
+		// TODO(ajwerner): set this default to a more sane value or remove it and
+		// rely on load-based splitting.
+		const defaultNumSplits = 1000
+		switch {
+		case opts.splits == 0:
+			return defaultNumSplits
+		case opts.splits < 0:
+			return 0
+		default:
+			return opts.splits
+		}
 	}
 	runKV := func(ctx context.Context, t *test, c *cluster, opts kvOptions) {
 		nodes := c.spec.NodeCount - 1
@@ -49,7 +63,8 @@ func registerKV(r *testRegistry) {
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
-			splits := " --splits=1000"
+
+			splits := " --splits=" + strconv.Itoa(computeNumSplits(opts))
 			if opts.duration == 0 {
 				opts.duration = 10 * time.Minute
 			}
@@ -89,8 +104,12 @@ func registerKV(r *testRegistry) {
 		{nodes: 1, cpus: 32, readPercent: 95},
 		{nodes: 3, cpus: 8, readPercent: 0},
 		{nodes: 3, cpus: 8, readPercent: 95},
+		{nodes: 3, cpus: 8, readPercent: 0, splits: -1 /* no splits */},
+		{nodes: 3, cpus: 8, readPercent: 95, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 0},
 		{nodes: 3, cpus: 32, readPercent: 95},
+		{nodes: 3, cpus: 32, readPercent: 0, splits: -1 /* no splits */},
+		{nodes: 3, cpus: 32, readPercent: 95, splits: -1 /* no splits */},
 
 		// Configs with large block sizes.
 		{nodes: 3, cpus: 8, readPercent: 0, blockSize: 1 << 12 /* 4 KB */},
@@ -142,6 +161,9 @@ func registerKV(r *testRegistry) {
 		}
 		if opts.blockSize != 0 { // support legacy test name which didn't include block size
 			nameParts = append(nameParts, fmt.Sprintf("size=%dkb", opts.blockSize>>10))
+		}
+		if opts.splits != 0 { // support legacy test name which didn't include splits
+			nameParts = append(nameParts, fmt.Sprintf("splt=%d", computeNumSplits(opts)))
 		}
 		if opts.sequential {
 			nameParts = append(nameParts, fmt.Sprintf("seq"))
