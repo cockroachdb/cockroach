@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 )
 
@@ -72,15 +73,32 @@ func EvalAddSSTable(
 		}
 	}
 
+	// Get the MVCCStats for the SST being ingested.
 	var stats enginepb.MVCCStats
 	if args.MVCCStats != nil {
 		stats = *args.MVCCStats
-	} else {
+	}
+
+	// Stats are computed on-the-fly when shadowing of keys is disallowed. If we
+	// took the fast path and race is enabled, assert the stats were correctly
+	// computed.
+	verifyFastPath := args.DisallowShadowing && util.RaceEnabled
+	if args.MVCCStats == nil || verifyFastPath {
 		log.VEventf(ctx, 2, "computing MVCCStats for SSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
 
 		computed, err := engine.ComputeStatsGo(dataIter, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "computing SSTable MVCC stats")
+		}
+
+		if verifyFastPath {
+			// Update the timestamp to that of the recently computed stats to get the
+			// diff passing.
+			stats.LastUpdateNanos = computed.LastUpdateNanos
+			if !stats.Equal(computed) {
+				log.Fatalf(ctx, "fast-path MVCCStats computation gave wrong result: diff(fast, computed) = %s",
+					pretty.Diff(stats, computed))
+			}
 		}
 		stats = computed
 	}
@@ -135,6 +153,18 @@ func EvalAddSSTable(
 	// Callers can trigger such a re-computation to fixup any discrepancies (and
 	// remove the ContainsEstimates flag) after they are done ingesting files by
 	// sending an explicit recompute.
+	//
+	// TODO(adityamaru): There is a significant performance win to be achieved by
+	// ensuring that the stats computed are not estimates as it prevents
+	// recompuation on splits. Running AddSSTable with disallowShadowing=true gets
+	// us close to this as we do not allow colliding keys to be ingested. However,
+	// in the situation that two SSTs have KV(s) which "perfectly" shadow an
+	// existing key (equal ts and value), we do not consider this a collision.
+	// While the KV would just overwrite the existing data, the stats would be
+	// added below, causing a double count for those KVs. One solution is to
+	// compute the stats for these "skipped" KVs on-the-fly while checking for the
+	// collision condition and returning their stats. The final stats would then
+	// be ms + stats - skipped_stats, and this would be accurate.
 	stats.ContainsEstimates = true
 	ms.Add(stats)
 
