@@ -65,14 +65,10 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 	if raft.IsEmptyHardState(hs) || err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
-	var cs raftpb.ConfState
-	for _, rep := range r.mu.state.Desc.Replicas().Voters() {
-		cs.Voters = append(cs.Voters, uint64(rep.ReplicaID))
+	cs, err := r.mu.stateLoader.LoadConfState(ctx, r.store.Engine(), r.mu.state.Desc)
+	if err != nil {
+		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
-	for _, rep := range r.mu.state.Desc.Replicas().Learners() {
-		cs.Learners = append(cs.Learners, uint64(rep.ReplicaID))
-	}
-
 	return hs, cs, nil
 }
 
@@ -533,13 +529,9 @@ func snapshot(
 		return OutgoingSnapshot{}, err
 	}
 
-	// Synthesize our raftpb.ConfState from desc.
-	var cs raftpb.ConfState
-	for _, rep := range desc.Replicas().Voters() {
-		cs.Voters = append(cs.Voters, uint64(rep.ReplicaID))
-	}
-	for _, rep := range desc.Replicas().Learners() {
-		cs.Learners = append(cs.Learners, uint64(rep.ReplicaID))
+	cs, err := rsl.LoadConfState(ctx, snap, &desc)
+	if err != nil {
+		return OutgoingSnapshot{}, errors.Wrap(err, "failed to load ConfState")
 	}
 
 	term, err := term(ctx, rsl, snap, rangeID, eCache, appliedIndex)
