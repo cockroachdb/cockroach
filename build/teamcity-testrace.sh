@@ -36,7 +36,9 @@ fi
 tc_end_block "Determine changed packages"
 
 tc_start_block "Compile C dependencies"
-run build/builder.sh make -Otarget c-deps GOFLAGS=-race
+# Buffer noisy output and only print it on failure.
+run build/builder.sh make -Otarget c-deps GOFLAGS=-race &> artifacts/race-c-build.log || (cat artifacts/race-c-build.log && false)
+rm artifacts/race-c-build.log
 tc_end_block "Compile C dependencies"
 
 tc_start_block "Run Go tests under race detector"
