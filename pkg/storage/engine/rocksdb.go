@@ -113,7 +113,10 @@ func rocksDBLog(sevLvl C.int, s *C.char, n C.int) {
 	ctx := logtags.AddTag(context.Background(), "rocksdb", nil)
 	switch log.Severity(sevLvl) {
 	case log.Severity_WARNING:
-		log.Warning(ctx, C.GoStringN(s, n))
+		const levelsWarning = `[db/version_set.cc:3086] More existing levels in DB than needed`
+		if str := C.GoStringN(s, n); !strings.HasPrefix(str, levelsWarning) {
+			log.Warning(ctx, str)
+		}
 	case log.Severity_ERROR:
 		log.Error(ctx, C.GoStringN(s, n))
 	case log.Severity_FATAL:
