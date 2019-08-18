@@ -417,10 +417,10 @@ type TaskMap map[string]int
 func (tm TaskMap) String() string {
 	var lines []string
 	for location, num := range tm {
-		lines = append(lines, fmt.Sprintf("%-6d %s", num, location))
+		lines = append(lines, fmt.Sprintf("%d %s", num, location))
 	}
 	sort.Sort(sort.Reverse(sort.StringSlice(lines)))
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, ", ")
 }
 
 // RunningTasks returns a map containing the count of running tasks keyed by
@@ -539,7 +539,7 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 		close(s.quiescer)
 	}
 	for s.mu.numTasks > 0 {
-		log.Infof(ctx, "quiescing; tasks left:\n%s", s.runningTasksLocked())
+		log.Infof(ctx, "quiescing; tasks left: %s", s.runningTasksLocked())
 		// Unlock s.mu, wait for the signal, and lock s.mu.
 		s.mu.quiesce.Wait()
 	}

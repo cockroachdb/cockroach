@@ -53,6 +53,7 @@ for pkg in $pkgspec; do
 		TESTFLAGS='-v' \
 		USE_ROCKSDB_ASSERTIONS=1 2>&1 \
 		| tee -a artifacts/testrace.log \
+		| grep -av "quiescing; tasks left" \
 		| go-test-teamcity
 done
 tc_end_block "Run Go tests under race detector"

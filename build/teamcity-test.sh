@@ -25,6 +25,7 @@ run build/builder.sh \
 	stdbuf -oL -eL \
 	make test TESTFLAGS='-v' 2>&1 \
 	| tee artifacts/test.log \
+	| grep -av "quiescing; tasks left"  \
 	| go-test-teamcity
 tc_end_block "Run Go tests"
 
