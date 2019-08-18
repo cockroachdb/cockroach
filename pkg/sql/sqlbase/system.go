@@ -888,6 +888,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &DescriptorTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &UsersTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &ZonesTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &SettingsTable)
 
 	// Add all the other system tables.
 	target.AddDescriptor(keys.SystemDatabaseID, &LeaseTable)
@@ -895,7 +896,6 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &RangeEventTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &UITable)
 	target.AddDescriptor(keys.SystemDatabaseID, &JobsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &SettingsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &WebSessionsTable)
 
 	// Tables introduced in 2.0, added here for 2.1.
