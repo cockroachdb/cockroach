@@ -213,7 +213,7 @@ func (t *partitioningTest) verifyScansFn(ctx context.Context, db *gosql.DB) func
 	return func() error {
 		for where, expectedNodes := range t.scans {
 			query := fmt.Sprintf(`SELECT count(*) FROM %s WHERE %s`, tree.NameStringP(&t.name), where)
-			log.Infof(ctx, "query: %s", query)
+			//log.Infof(ctx, "query: %s", query)
 			if err := verifyScansOnNode(db, query, expectedNodes); err != nil {
 				if log.V(1) {
 					log.Errorf(ctx, "scan verification failed: %s", err)
