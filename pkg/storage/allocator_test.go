@@ -5506,11 +5506,15 @@ func (ts *testStore) rebalance(ots *testStore, bytes int64) {
 	}
 	// Mimic a real Store's behavior of rejecting preemptive snapshots when full.
 	if !maxCapacityCheck(ots.StoreDescriptor) {
-		log.Infof(context.Background(),
-			"s%d too full to accept snapshot from s%d: %v", ots.StoreID, ts.StoreID, ots.Capacity)
+		if log.V(2) {
+			log.Infof(context.Background(),
+				"s%d too full to accept snapshot from s%d: %v", ots.StoreID, ts.StoreID, ots.Capacity)
+		}
 		return
 	}
-	log.Infof(context.Background(), "s%d accepting snapshot from s%d", ots.StoreID, ts.StoreID)
+	if log.V(2) {
+		log.Infof(context.Background(), "s%d accepting snapshot from s%d", ots.StoreID, ts.StoreID)
+	}
 	ts.Capacity.RangeCount--
 	if ts.immediateCompaction {
 		ts.Capacity.Available += bytes
@@ -5772,7 +5776,9 @@ func Example_rebalancing() {
 				storeFilterThrottled,
 			)
 			if target != nil {
-				log.Infof(context.TODO(), "rebalancing to %v; details: %s", target, details)
+				if log.V(2) {
+					log.Infof(context.TODO(), "rebalancing to %v; details: %s", target, details)
+				}
 				testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))
 			}
 		}
