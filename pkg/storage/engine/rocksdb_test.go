@@ -1597,35 +1597,31 @@ func BenchmarkRocksDBDeleteRangeIterate(b *testing.B) {
 func TestMakeBatchGroup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// Assume every newly instantiated batch has size 12 (header only).
 	testCases := []struct {
 		maxSize   int
-		sizes     []int
 		groupSize []int
 		leader    []bool
 		groups    []int
 	}{
-		{1, []int{100, 100, 100}, []int{100, 100, 100}, []bool{true, true, true}, []int{1, 1, 1}},
-		{199, []int{100, 100, 100}, []int{100, 100, 100}, []bool{true, true, true}, []int{1, 1, 1}},
-		{200, []int{100, 100, 100}, []int{100, 200, 100}, []bool{true, false, true}, []int{2, 1}},
-		{299, []int{100, 100, 100}, []int{100, 200, 100}, []bool{true, false, true}, []int{2, 1}},
-		{300, []int{100, 100, 100}, []int{100, 200, 300}, []bool{true, false, false}, []int{3}},
+		{1, []int{12, 12, 12}, []bool{true, true, true}, []int{1, 1, 1}},
+		{23, []int{12, 12, 12}, []bool{true, true, true}, []int{1, 1, 1}},
+		{24, []int{12, 24, 12}, []bool{true, false, true}, []int{2, 1}},
+		{35, []int{12, 24, 12}, []bool{true, false, true}, []int{2, 1}},
+		{36, []int{12, 24, 36}, []bool{true, false, false}, []int{3}},
 		{
-			400,
-			[]int{100, 200, 300, 100, 500},
-			[]int{100, 300, 300, 400, 500},
-			[]bool{true, false, true, false, true},
-			[]int{2, 2, 1},
+			48,
+			[]int{12, 24, 36, 48, 12},
+			[]bool{true, false, false, false, true},
+			[]int{4, 1},
 		},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			var pending []*rocksDBBatch
 			var groupSize int
-			for i := range c.sizes {
-				// We use intimate knowledge of rocksDBBatch and RocksDBBatchBuilder to
-				// construct a batch of a specific size.
+			for i := range c.groupSize {
 				b := &rocksDBBatch{}
-				b.builder.repr = make([]byte, c.sizes[i])
 				var leader bool
 				pending, groupSize, leader = makeBatchGroup(pending, b, groupSize, c.maxSize)
 				if c.groupSize[i] != groupSize {

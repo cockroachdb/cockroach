@@ -365,7 +365,8 @@ func (r *pebbleMap) Clear() error {
 	// NB: we manually flush after performing the clear range to ensure that the
 	// range tombstone is pushed to disk which will kick off compactions that
 	// will eventually free up the deleted space.
-	return r.store.AsyncFlush()
+	_, err := r.store.AsyncFlush()
+	return err
 }
 
 // Close implements the SortedDiskMap interface.
