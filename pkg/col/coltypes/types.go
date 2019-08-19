@@ -54,24 +54,30 @@ var AllTypes []T
 // type in a binary expression.
 var CompatibleTypes map[T][]T
 
+// NumberTypes is a slice containing all numeric types.
+var NumberTypes = []T{Int8, Int16, Int32, Int64, Float32, Float64, Decimal}
+
+// IntTypes is a slice containing all int types.
+var IntTypes = []T{Int8, Int16, Int32, Int64}
+
+// FloatTypes is a slice containing all float types.
+var FloatTypes = []T{Float32, Float64}
+
 func init() {
 	for i := Bool; i < Unhandled; i++ {
 		AllTypes = append(AllTypes, i)
 	}
 
-	intTypes := []T{Int8, Int16, Int32, Int64}
-	floatTypes := []T{Float32, Float64}
-
 	CompatibleTypes = make(map[T][]T)
 	CompatibleTypes[Bool] = append(CompatibleTypes[Bool], Bool)
 	CompatibleTypes[Bytes] = append(CompatibleTypes[Bytes], Bytes)
-	CompatibleTypes[Decimal] = append(CompatibleTypes[Decimal], Decimal)
-	CompatibleTypes[Int8] = append(CompatibleTypes[Int8], intTypes...)
-	CompatibleTypes[Int16] = append(CompatibleTypes[Int16], intTypes...)
-	CompatibleTypes[Int32] = append(CompatibleTypes[Int32], intTypes...)
-	CompatibleTypes[Int64] = append(CompatibleTypes[Int64], intTypes...)
-	CompatibleTypes[Float32] = append(CompatibleTypes[Float32], floatTypes...)
-	CompatibleTypes[Float64] = append(CompatibleTypes[Float64], floatTypes...)
+	CompatibleTypes[Decimal] = append(CompatibleTypes[Decimal], NumberTypes...)
+	CompatibleTypes[Int8] = append(CompatibleTypes[Int8], NumberTypes...)
+	CompatibleTypes[Int16] = append(CompatibleTypes[Int16], NumberTypes...)
+	CompatibleTypes[Int32] = append(CompatibleTypes[Int32], NumberTypes...)
+	CompatibleTypes[Int64] = append(CompatibleTypes[Int64], NumberTypes...)
+	CompatibleTypes[Float32] = append(CompatibleTypes[Float32], NumberTypes...)
+	CompatibleTypes[Float64] = append(CompatibleTypes[Float64], NumberTypes...)
 }
 
 // FromGoType returns the type for a Go value, if applicable. Shouldn't be used at
