@@ -17,6 +17,8 @@ import (
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -102,7 +104,10 @@ func newSamplerProcessor(
 	}
 
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := NewMonitor(ctx, flowCtx.EvalCtx.Mon, "sampler-mem")
+	// Limit the memory use by creating a child monitor with a hard limit.
+	// The processor will disable histogram collection if this limit is not
+	// enough.
+	memMonitor := NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sampler-mem")
 	s := &samplerProcessor{
 		flowCtx:         flowCtx,
 		input:           input,
@@ -309,7 +314,22 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 		// Use Int63 so we don't have headaches converting to DInt.
 		rank := uint64(rng.Int63())
 		if err := s.sr.SampleRow(ctx, s.evalCtx, row, rank); err != nil {
-			return false, err
+			if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
+				return false, err
+			}
+			// We hit an out of memory error. Clear the sample reservoir and
+			// disable histogram sample collection.
+			s.sr.Disable()
+			log.Info(ctx, "disabling histogram collection due to excessive memory utilization")
+
+			// Send a metadata record so the sample aggregator will also disable
+			// histogram collection.
+			meta := &distsqlpb.ProducerMetadata{SamplerProgress: &distsqlpb.RemoteProducerMetadata_SamplerProgress{
+				HistogramDisabled: true,
+			}}
+			if !EmitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+				return true, nil
+			}
 		}
 	}
 
