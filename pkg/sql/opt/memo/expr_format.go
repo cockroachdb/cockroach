@@ -639,7 +639,8 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 			frame := scalar.Private().(*WindowsItemPrivate).Frame
 			if frame.Mode == tree.RANGE &&
 				frame.StartBoundType == tree.UnboundedPreceding &&
-				frame.EndBoundType == tree.CurrentRow {
+				frame.EndBoundType == tree.CurrentRow &&
+				frame.FrameExclusion == tree.NoExclusion {
 				scalar = scalar.Child(0).(opt.ScalarExpr)
 			}
 		}
@@ -933,6 +934,18 @@ func frameBoundName(b tree.WindowFrameBoundType) string {
 	panic(errors.AssertionFailedf("unexpected bound"))
 }
 
+func frameExclusionMode(e tree.WindowFrameExclusion) string {
+	switch e {
+	case tree.ExcludeCurrentRow:
+		return "exclude current row"
+	case tree.ExcludeGroup:
+		return "exclude group"
+	case tree.ExcludeTies:
+		return "exclude ties"
+	}
+	panic(errors.AssertionFailedf("unexpected frame exclusion"))
+}
+
 // ScanIsReverseFn is a callback that is used to figure out if a scan needs to
 // happen in reverse (the code lives in the ordering package, and depending on
 // that directly would be a dependency loop).
@@ -1031,6 +1044,9 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 			frameBoundName(t.Frame.StartBoundType),
 			frameBoundName(t.Frame.EndBoundType),
 		)
+		if t.Frame.FrameExclusion != tree.NoExclusion {
+			fmt.Fprintf(f.Buffer, " %s", frameExclusionMode(t.Frame.FrameExclusion))
+		}
 
 	case *WindowPrivate:
 		fmt.Fprintf(f.Buffer, " partition=%s", t.Partition)

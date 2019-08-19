@@ -476,7 +476,10 @@ func (w *windower) processPartition(
 		}
 
 		if windowFn.frame != nil {
-			frameRun.Frame = windowFn.frame.ConvertToAST()
+			var err error
+			if frameRun.Frame, err = windowFn.frame.ConvertToAST(); err != nil {
+				return err
+			}
 			startBound, endBound := windowFn.frame.Bounds.Start, windowFn.frame.Bounds.End
 			if startBound.BoundType == distsqlpb.WindowerSpec_Frame_OFFSET_PRECEDING ||
 				startBound.BoundType == distsqlpb.WindowerSpec_Frame_OFFSET_FOLLOWING {
@@ -586,10 +589,10 @@ func (w *windower) processPartition(
 
 		if !frameRun.IsDefaultFrame() {
 			// We have a custom frame not equivalent to default one, so if we have
-			// an aggregate function, we want to reset it for each row.
-			// Not resetting is an optimization since we're not computing
-			// the result over the whole frame but only as a result of the current
-			// row and previous results of aggregation.
+			// an aggregate function, we want to reset it for each row. Not resetting
+			// is an optimization since we're not computing the result over the whole
+			// frame but only as a result of the current row and previous results of
+			// aggregation.
 			builtins.ShouldReset(builtin)
 		}
 

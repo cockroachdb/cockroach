@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-const maxCount = 1000
 const maxInt = 1000000
 const maxOffset = 100
 
@@ -217,6 +216,8 @@ func testSumAndAvg(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFram
 	}
 }
 
+const noFilterIdx = -1
+
 func makeTestWindowFrameRun(count int) *tree.WindowFrameRun {
 	return &tree.WindowFrameRun{
 		Rows:         makeTestPartition(count),
@@ -249,7 +250,7 @@ func partitionToString(ctx context.Context, partition tree.IndexedRows) string {
 }
 
 func TestSlidingWindow(t *testing.T) {
-	for count := 1; count <= maxCount; count += int(rand.Int31n(maxCount / 10)) {
+	for _, count := range []int{1, 17, 253} {
 		testSlidingWindow(t, count)
 	}
 }

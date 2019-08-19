@@ -1556,3 +1556,26 @@ build
 SELECT rank() OVER (ORDER BY k GROUPS k PRECEDING) FROM kv
 ----
 error (42601): GROUPS offset cannot contain variables
+
+build
+SELECT
+  rank() OVER (RANGE UNBOUNDED PRECEDING EXCLUDE CURRENT ROW),
+  rank() OVER (RANGE UNBOUNDED PRECEDING EXCLUDE GROUP),
+  rank() OVER (RANGE UNBOUNDED PRECEDING EXCLUDE TIES),
+  rank() OVER (RANGE UNBOUNDED PRECEDING EXCLUDE NO OTHERS)
+FROM kv
+----
+project
+ ├── columns: rank:8(int) rank:9(int) rank:10(int) rank:11(int)
+ └── window partition=()
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int) rank:9(int) rank:10(int) rank:11(int)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           ├── windows-item: range from unbounded to current-row exclude current row [type=int]
+           │    └── rank [type=int]
+           ├── windows-item: range from unbounded to current-row exclude group [type=int]
+           │    └── rank [type=int]
+           ├── windows-item: range from unbounded to current-row exclude ties [type=int]
+           │    └── rank [type=int]
+           └── rank [type=int]
