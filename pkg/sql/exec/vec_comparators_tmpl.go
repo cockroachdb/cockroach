@@ -57,7 +57,7 @@ func _COMPARE(_, _, _ string) bool {
 // */}}
 
 // Use execgen package to remove unused import warning.
-var _ interface{} = execgen.GET
+var _ interface{} = execgen.UNSAFEGET
 
 // {{range .}}
 type _TYPEVecComparator struct {
@@ -75,8 +75,8 @@ func (c *_TYPEVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 uint
 	} else if n2 {
 		return 1
 	}
-	left := execgen.GET(c.vecs[vecIdx1], int(valIdx1))
-	right := execgen.GET(c.vecs[vecIdx2], int(valIdx2))
+	left := execgen.UNSAFEGET(c.vecs[vecIdx1], int(valIdx1))
+	right := execgen.UNSAFEGET(c.vecs[vecIdx2], int(valIdx2))
 	var cmp int
 	_COMPARE("cmp", "left", "right")
 	return cmp
@@ -92,7 +92,7 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx uint16
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
-		v := execgen.GET(c.vecs[srcVecIdx], int(srcIdx))
+		v := execgen.UNSAFEGET(c.vecs[srcVecIdx], int(srcIdx))
 		execgen.SET(c.vecs[dstVecIdx], int(dstIdx), v)
 	}
 }

@@ -133,7 +133,7 @@ func _ASSIGN_NE(_ bool, _, _ _GOTYPE) bool {
 // */}}
 
 // Use execgen package to remove unused import warning.
-var _ interface{} = execgen.GET
+var _ interface{} = execgen.UNSAFEGET
 
 func newSingleOrderedDistinct(
 	input Operator, distinctColIdx int, outputCol []bool, t coltypes.T,
@@ -362,7 +362,7 @@ func _CHECK_DISTINCT(
 ) { // */}}
 
 	// {{define "checkDistinct"}}
-	v := execgen.GET(col, int(checkIdx))
+	v := execgen.UNSAFEGET(col, int(checkIdx))
 	var unique bool
 	_ASSIGN_NE(unique, v, lastVal)
 	outputCol[outputIdx] = outputCol[outputIdx] || unique
@@ -388,7 +388,7 @@ func _CHECK_DISTINCT_WITH_NULLS(
 
 	// {{define "checkDistinctWithNulls"}}
 	null := nulls.NullAt(uint16(checkIdx))
-	v := execgen.GET(col, int(checkIdx))
+	v := execgen.UNSAFEGET(col, int(checkIdx))
 	if null != lastValNull {
 		// Either the current value is null and the previous was not or vice-versa.
 		outputCol[outputIdx] = true

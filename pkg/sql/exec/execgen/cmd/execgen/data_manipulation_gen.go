@@ -25,9 +25,14 @@ type dataManipulationReplacementInfo struct {
 
 var dataManipulationReplacementInfos = []dataManipulationReplacementInfo{
 	{
+		templatePlaceholder: "execgen.UNSAFEGET",
+		numArgs:             2,
+		replaceWith:         "Get \"unsafe\"",
+	},
+	{
 		templatePlaceholder: "execgen.GET",
 		numArgs:             2,
-		replaceWith:         "Get",
+		replaceWith:         "Get \"safe\"",
 	},
 	{
 		templatePlaceholder: "execgen.SET",
