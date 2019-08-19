@@ -35,9 +35,6 @@ type indexSkipTableReader struct {
 	// currentSpan maintains which span we are currently scanning.
 	currentSpan int
 
-	// scratchKey is scratch space to build prefix keys for following iterations.
-	scratchKey []byte
-
 	// keyPrefixLen holds the length of the prefix of the index
 	// that we are performing a distinct over.
 	keyPrefixLen int
@@ -111,7 +108,6 @@ func newIndexSkipTableReader(
 		return nil, err
 	}
 	t.indexLen = len(index.ColumnIDs)
-	t.scratchKey = make([]byte, 0, t.indexLen)
 
 	cols := immutDesc.Columns
 	if returnMutations {
@@ -185,17 +181,23 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 			}
 		}
 
+		var key []byte
 		{
 			// Fetch the PartialKey in a separate scope so that it cannot be reused
 			// outside this scope.
-			key, err := t.fetcher.PartialKey(t.keyPrefixLen)
+			unsafeKey, err := t.fetcher.PartialKey(t.keyPrefixLen)
 			if err != nil {
 				t.MoveToDraining(err)
 				return nil, &distsqlpb.ProducerMetadata{Err: err}
 			}
-			// Modifying key in place would corrupt our current row, so make a copy.
-			// Use an append here to ensure we copy all elements.
-			t.scratchKey = append(t.scratchKey[:0], key...)
+			// Modifying unsafeKey in place would corrupt our current row, so make a
+			// copy.
+			// A key needs to be allocated every time because it is illegal to mutate
+			// batch requests which would end up happening if we used scratch space.
+			// TODO(asubiotto): Another option would be to construct a key after
+			//  returning a row (at the top of this loop).
+			key = make([]byte, len(unsafeKey))
+			copy(key, unsafeKey)
 		}
 
 		row, _, _, err := t.fetcher.NextRow(t.Ctx)
@@ -220,15 +222,15 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 			//  encounter one. We also need a test to ensure that we behave properly
 			//  when we encounter maximal (i.e. all nulls) prefix keys.
 			for i := 0; i < (t.indexLen - t.keyPrefixLen + 1); i++ {
-				t.scratchKey = append(t.scratchKey, 0xff)
+				key = append(key, 0xff)
 			}
-			t.spans[t.currentSpan].Key = t.scratchKey
+			t.spans[t.currentSpan].Key = key
 		} else {
 			// In the case of reverse, this is much easier. The reverse fetcher
 			// returns the key retrieved, in this case the first key smaller
 			// than EndKey in the current span. Since EndKey is exclusive, we
 			// just set the retrieved key as EndKey for the next scan.
-			t.spans[t.currentSpan].EndKey = t.scratchKey
+			t.spans[t.currentSpan].EndKey = key
 		}
 
 		// If the changes we made turned our current span invalid, mark that
