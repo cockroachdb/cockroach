@@ -602,12 +602,8 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 			localPlanner.stmt = &Statement{Statement: stmt}
 			localPlanner.optPlanningCtx.init(localPlanner)
 
-			var result *planTop
 			localPlanner.runWithOptions(resolveFlags{skipCache: true}, func() {
-				result, err = localPlanner.makeOptimizerPlan(ctx)
-				if err == nil {
-					localPlanner.curPlan = *result
-				}
+				err = localPlanner.makeOptimizerPlan(ctx)
 			})
 
 			if err != nil {
