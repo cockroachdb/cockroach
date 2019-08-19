@@ -24,6 +24,8 @@ import (
 // stubFactory is a do-nothing implementation of exec.Factory, used for testing.
 type stubFactory struct{}
 
+var _ exec.Factory = &stubFactory{}
+
 func (f *stubFactory) ConstructValues(
 	rows [][]tree.TypedExpr, cols sqlbase.ResultColumns,
 ) (exec.Node, error) {
@@ -95,6 +97,7 @@ func (f *stubFactory) ConstructMergeJoin(
 	onCond tree.TypedExpr,
 	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
 	reqOrdering exec.OutputOrdering,
+	leftEqColsAreKey, rightEqColsAreKey bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }

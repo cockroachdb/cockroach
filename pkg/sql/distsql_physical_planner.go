@@ -2275,10 +2275,12 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		}
 	} else {
 		core.MergeJoiner = &distsqlpb.MergeJoinerSpec{
-			LeftOrdering:  leftMergeOrd,
-			RightOrdering: rightMergeOrd,
-			OnExpr:        onExpr,
-			Type:          joinType,
+			LeftOrdering:         leftMergeOrd,
+			RightOrdering:        rightMergeOrd,
+			OnExpr:               onExpr,
+			Type:                 joinType,
+			LeftEqColumnsAreKey:  n.pred.leftEqKey,
+			RightEqColumnsAreKey: n.pred.rightEqKey,
 		}
 	}
 

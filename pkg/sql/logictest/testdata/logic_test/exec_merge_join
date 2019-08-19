@@ -45,3 +45,22 @@ query II
 SELECT k, x FROM t1 INNER MERGE JOIN t2 ON k = x
 ----
 0 0
+
+# Test to make sure that vectorized engine is used when merge joiner is
+# streaming when vectorize=auto (when we're doing a local computation).
+statement ok
+SET vectorize=auto; SET vectorize_row_count_threshold=0
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t VALUES (1), (2), (3)
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE SELECT t1.k FROM t AS t1, t AS t2 WHERE t1.k = t2.k]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMkkFLw0AQhe_-ijAnxdUm6W1B6LWCVqo3yWGbfaYL292wO5GWkv8uSQTbUi3Vi7fMm_km816yJec1HtUKkeQrZVQIqoMvEaMPnTQMTPWaZCrIuLrhTi4ElT6A5JbYsAVJelELizmURhilJEiDlbH92jqYlQqbCZOg51q5KJMbErRQXC4RE99w3bBMMhLETW13pDEJirAo2bwb3sgkvU275ZGVtQmbFWSSRipaQQPyeVxkVYFk1orfGcj-iYH8WwNfdzfOB40AvXdz0ZGnRo6k8IBQ4d4bhzDK91OweOPLSXZ9dRdMtRweSdCs8znJ_pYH1igbNt6dzmR8zkedI9beRRxmc3Rz2gUCXWEIOPomlHgKvuxfM5SznusFjchDNx-Kqetb_V-3C2dnwPkhnP8Ij_fgtC3ai48AAAD__7J0Qt8=
+
+statement ok
+RESET vectorize; RESET vectorize_row_count_threshold

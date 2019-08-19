@@ -768,8 +768,14 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 	rightOrd := right.sqlOrdering(join.RightEq)
 	ep := execPlan{outputCols: outputCols}
 	reqOrd := ep.reqOrdering(join)
+	leftEqColsAreKey := join.Left.Relational().FuncDeps.ColsAreStrictKey(join.LeftEq.ColSet())
+	rightEqColsAreKey := join.Right.Relational().FuncDeps.ColsAreStrictKey(join.RightEq.ColSet())
 	ep.root, err = b.factory.ConstructMergeJoin(
-		joinType, left.root, right.root, onExpr, leftOrd, rightOrd, reqOrd,
+		joinType,
+		left.root, right.root,
+		onExpr,
+		leftOrd, rightOrd, reqOrd,
+		leftEqColsAreKey, rightEqColsAreKey,
 	)
 	if err != nil {
 		return execPlan{}, err

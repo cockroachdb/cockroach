@@ -153,6 +153,7 @@ type Factory interface {
 		onCond tree.TypedExpr,
 		leftOrdering, rightOrdering sqlbase.ColumnOrdering,
 		reqOrdering OutputOrdering,
+		leftEqColsAreKey, rightEqColsAreKey bool,
 	) (Node, error)
 
 	// ConstructGroupBy returns a node that runs an aggregation. A set of
