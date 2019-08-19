@@ -1811,6 +1811,32 @@ func (c *CustomFuncs) ShouldReorderJoins(left, right memo.RelExpr) bool {
 	return size <= c.e.evalCtx.SessionData.ReorderJoinsLimit
 }
 
+// IsSimpleEquality returns true if all of the filter conditions are equalities
+// between simple data types (constants, variables, tuples and NULL).
+func (c *CustomFuncs) IsSimpleEquality(filters memo.FiltersExpr) bool {
+	for i := range filters {
+		eqFilter, ok := filters[i].Condition.(*memo.EqExpr)
+		if !ok {
+			return false
+		}
+
+		left, right := eqFilter.Left, eqFilter.Right
+		switch left.Op() {
+		case opt.VariableOp, opt.ConstOp, opt.NullOp, opt.TupleOp:
+		default:
+			return false
+		}
+
+		switch right.Op() {
+		case opt.VariableOp, opt.ConstOp, opt.NullOp, opt.TupleOp:
+		default:
+			return false
+		}
+	}
+
+	return true
+}
+
 // ----------------------------------------------------------------------
 //
 // GroupBy Rules

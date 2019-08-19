@@ -1160,3 +1160,100 @@ left-join (hash)
  │    ├── key: ()
  │    └── fd: ()-->(2)
  └── filters (true)
+
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b));
+----
+
+exec-ddl
+CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (d, e));
+----
+
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 10
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE def INJECT STATISTICS '[
+  {
+    "columns": ["d"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["e"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+----
+
+# TODO(rytaft): The cardinality estimates here are unrealistically low.
+# Maybe revisit this? I doubt there's anything we can do there though.
+expr format=show-all colstat=5 colstat=6 colstat=(5, 6) colstat=1 colstat=2 colstat=3 colstat=(1, 2, 3)
+(MakeLookupJoin
+  (Scan [ (Table "abc") (Cols "a,b,c") ])
+  [ (JoinType "inner-join") (Table "def") (Index "def@primary") (KeyCols "a,b") (Cols "a,b,c,d,f,e") ]
+  [ ]
+)
+----
+inner-join (lookup def)
+ ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int) t.public.def.d:4(int!null) t.public.def.e:5(int!null) t.public.def.f:6(int)
+ ├── key columns: [1 2] = [4 5]
+ ├── stats: [rows=0.01, distinct(1)=0.01, null(1)=0, distinct(2)=0.01, null(2)=0, distinct(3)=0.00999500175, null(3)=0.0001, distinct(4)=0.01, null(4)=0, distinct(5)=0.01, null(5)=0, distinct(6)=0.00999995009, null(6)=0.0001, distinct(5,6)=0.00999999509, null(5,6)=0.0001, distinct(1-3)=0.0099995001, null(1-3)=0.0001]
+ ├── cost: 506.0506
+ ├── key: (4,5)
+ ├── fd: (1,2)-->(3), (4,5)-->(6), (1)==(4), (4)==(1), (2)==(5), (5)==(2)
+ ├── interesting orderings: (+1,+2)
+ ├── scan t.public.abc
+ │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=1]
+ │    ├── cost: 106.02
+ │    ├── key: (1,2)
+ │    ├── fd: (1,2)-->(3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1,+2)
+ └── filters (true)
+
+# TODO(rytaft): The cardinality estimates for the semi-join are the same as the table.
+# The semi-join currently ignores the selectivities of the filters in the On condition.
+# We should fix this.
+expr format=show-all colstat=5 colstat=6 colstat=(5, 6) colstat=1 colstat=2 colstat=3 colstat=(1, 2, 3)
+(MakeLookupJoin
+  (Scan [ (Table "abc") (Cols "a,b,c") ])
+  [ (JoinType "semi-join") (Table "def") (Index "def@primary") (KeyCols "a,b") (Cols "a,b,c,d,e,f") ]
+  [ ]
+)
+----
+semi-join (lookup def)
+ ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
+ ├── key columns: [1 2] = [4 5]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(5,6)=1, null(5,6)=0, distinct(1-3)=100, null(1-3)=1]
+ ├── cost: 712.03
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3)
+ ├── interesting orderings: (+1,+2)
+ ├── scan t.public.abc
+ │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=1]
+ │    ├── cost: 106.02
+ │    ├── key: (1,2)
+ │    ├── fd: (1,2)-->(3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1,+2)
+ └── filters (true)
