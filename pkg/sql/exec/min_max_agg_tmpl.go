@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	// */}}
@@ -64,7 +65,7 @@ func _ASSIGN_CMP(_, _, _ string) bool {
 // */}}
 
 // Use execgen package to remove unused import warning.
-var _ interface{} = execgen.GET
+var _ interface{} = execgen.UNSAFEGET
 
 // {{range .}} {{/* for each aggregation (min and max) */}}
 
@@ -209,7 +210,7 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 		// The next element of vec is guaranteed  to be initialized to the zero
 		// value. We can't use zero_TYPEColumn here because this is outside of
 		// the earlier template block.
-		a.curAgg = execgen.GET(a.vec, a.curIdx)
+		a.curAgg = execgen.UNSAFEGET(a.vec, a.curIdx)
 	}
 	var isNull bool
 	// {{ if .HasNulls }}
@@ -219,11 +220,11 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 	// {{ end }}
 	if !isNull {
 		if !a.foundNonNullForCurrentGroup {
-			a.curAgg = execgen.GET(col, int(i))
+			a.curAgg = execgen.UNSAFEGET(col, int(i))
 			a.foundNonNullForCurrentGroup = true
 		} else {
 			var cmp bool
-			candidate := execgen.GET(col, int(i))
+			candidate := execgen.UNSAFEGET(col, int(i))
 			_ASSIGN_CMP("cmp", "candidate", "a.curAgg")
 			if cmp {
 				a.curAgg = candidate

@@ -72,7 +72,7 @@ func _ASSIGN_LT(_, _, _ string) bool {
 // */}}
 
 // Use execgen package to remove unused import warning.
-var _ interface{} = execgen.GET
+var _ interface{} = execgen.UNSAFEGET
 
 func isSorterSupported(t coltypes.T, dir distsqlpb.Ordering_Column_Direction) bool {
 	switch t {
@@ -187,8 +187,8 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) Less(i, j int) bool {
 	// {{end}}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := execgen.GET(s.sortCol, int(s.order[i]))
-	arg2 := execgen.GET(s.sortCol, int(s.order[j]))
+	arg1 := execgen.UNSAFEGET(s.sortCol, int(s.order[i]))
+	arg2 := execgen.UNSAFEGET(s.sortCol, int(s.order[j]))
 	_ASSIGN_LT("lt", "arg1", "arg2")
 	return lt
 }

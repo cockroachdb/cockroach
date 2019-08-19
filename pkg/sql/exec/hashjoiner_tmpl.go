@@ -76,9 +76,9 @@ const _SEL_IND = 0
 
 func _CHECK_COL_MAIN(ht *hashTable, buildKeys, probeKeys []interface{}, keyID uint64, i uint16) { // */}}
 	// {{define "checkColMain"}}
-	buildVal := execgen.GET(buildKeys, int(keyID-1))
+	buildVal := execgen.UNSAFEGET(buildKeys, int(keyID-1))
 	selIdx := _SEL_IND
-	probeVal := execgen.GET(probeKeys, int(selIdx))
+	probeVal := execgen.UNSAFEGET(probeKeys, int(selIdx))
 	var unique bool
 	_ASSIGN_NE(unique, buildVal, probeVal)
 
@@ -186,7 +186,7 @@ func _REHASH_BODY(
 		}
 		// {{ end }}
 		selIdx := _SEL_IND
-		v := execgen.GET(keys, int(selIdx))
+		v := execgen.UNSAFEGET(keys, int(selIdx))
 		p := uintptr(buckets[i])
 		_ASSIGN_HASH(p, v)
 		buckets[i] = uint64(p)
@@ -295,7 +295,7 @@ func _DISTINCT_COLLECT_NO_OUTER(
 // */}}
 
 // Use execgen package to remove unused import warning.
-var _ interface{} = execgen.GET
+var _ interface{} = execgen.UNSAFEGET
 
 // rehash takes an element of a key (tuple representing a row of equality
 // column values) at a given column and computes a new hash by applying a

@@ -78,7 +78,7 @@ func _ROWS_TO_COL_VEC(
 // */}}
 
 // Use execgen package to remove unused import warning.
-var _ interface{} = execgen.GET
+var _ interface{} = execgen.UNSAFEGET
 
 // EncDatumRowsToColVec converts one column from EncDatumRows to a column
 // vector. columnIdx is the 0-based index of the column in the EncDatumRows.

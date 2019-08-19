@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	// */}}
@@ -61,7 +62,7 @@ func _ASSIGN_EQ(_, _, _ interface{}) uint64 {
 // */}}
 
 // Use execgen package to remove unused import warning.
-var _ interface{} = execgen.GET
+var _ interface{} = execgen.UNSAFEGET
 
 // Enum used to represent comparison results
 type comparisonResult int
@@ -208,7 +209,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := execgen.GET(col, int(i))
+					v := execgen.UNSAFEGET(col, int(i))
 					if !nulls.NullAt(uint16(i)) && cmpIn_TYPE(v, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = uint16(i)
 						idx++
@@ -219,7 +220,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				sel := batch.Selection()
 				col = execgen.SLICE(col, 0, int(n))
 				for execgen.RANGE(i, col) {
-					v := execgen.GET(col, i)
+					v := execgen.UNSAFEGET(col, i)
 					if !nulls.NullAt(uint16(i)) && cmpIn_TYPE(v, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = uint16(i)
 						idx++
@@ -230,7 +231,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := execgen.GET(col, int(i))
+					v := execgen.UNSAFEGET(col, int(i))
 					if cmpIn_TYPE(v, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = uint16(i)
 						idx++
@@ -241,7 +242,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				sel := batch.Selection()
 				col = execgen.SLICE(col, 0, int(n))
 				for execgen.RANGE(i, col) {
-					v := execgen.GET(col, i)
+					v := execgen.UNSAFEGET(col, i)
 					if cmpIn_TYPE(v, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = uint16(i)
 						idx++
@@ -289,7 +290,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(uint16(i)) {
 					projNulls.SetNull(uint16(i))
 				} else {
-					v := execgen.GET(col, int(i))
+					v := execgen.UNSAFEGET(col, int(i))
 					cmpRes := cmpIn_TYPE(v, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(uint16(i))
@@ -304,7 +305,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(uint16(i)) {
 					projNulls.SetNull(uint16(i))
 				} else {
-					v := execgen.GET(col, i)
+					v := execgen.UNSAFEGET(col, i)
 					cmpRes := cmpIn_TYPE(v, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(uint16(i))
@@ -318,7 +319,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				v := execgen.GET(col, int(i))
+				v := execgen.UNSAFEGET(col, int(i))
 				cmpRes := cmpIn_TYPE(v, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(uint16(i))
@@ -329,7 +330,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 		} else {
 			col = execgen.SLICE(col, 0, int(n))
 			for execgen.RANGE(i, col) {
-				v := execgen.GET(col, i)
+				v := execgen.UNSAFEGET(col, i)
 				cmpRes := cmpIn_TYPE(v, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(uint16(i))
