@@ -57,7 +57,7 @@ const _TYPES_T = coltypes.Unhandled
 // */}}
 
 // Use execgen package to remove unused import warning.
-var _ interface{} = execgen.GET
+var _ interface{} = execgen.UNSAFEGET
 
 // {{range .}}
 
@@ -183,7 +183,7 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 		// Explicit template language is used here because the type receiver differs
 		// from the rest of the template file.
 		// TODO(asubiotto): Figure out a way to alias this.
-		// v := {{ .Global.Get "col" "int(i)" }}
+		// v := {{ .Global.Get false "col" "int(i)" }}
 		// {{ .Global.Set "a.vec" "a.curIdx" "v" }}
 		a.foundNonNullForCurrentGroup = true
 	}

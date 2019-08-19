@@ -153,9 +153,13 @@ func (t T) GoTypeSliceName() string {
 }
 
 // Get is a function that should only be used in templates.
-func (t T) Get(target, i string) string {
+func (t T) Get(safe bool, target, i string) string {
 	if t == Bytes {
-		return fmt.Sprintf("%s.Get(%s)", target, i)
+		getString := fmt.Sprintf("%s.Get(%s)", target, i)
+		if safe {
+			getString = "append([]byte(nil), " + getString + "...)"
+		}
+		return getString
 	}
 	return fmt.Sprintf("%s[%s]", target, i)
 }
