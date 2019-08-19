@@ -22,6 +22,7 @@ package exec
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -43,6 +44,9 @@ var _ apd.Decimal
 
 // Dummy import to pull in "tree" package.
 var _ tree.Datum
+
+// Dummy import to pull in "math" package.
+var _ = math.MaxInt64
 
 // _COMPARE is the template equality function for assigning the first input
 // to the result of comparing second and third inputs.
