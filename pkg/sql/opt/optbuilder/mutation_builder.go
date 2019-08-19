@@ -1064,15 +1064,12 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 		}
 		origTab := orig.(cat.Table)
 
-		// Grab the outbound FK ref since the inbound one is incomplete.
-		// TODO(justin): remove this once descriptors are symmetric.
-		oFK := mb.getOutboundFKRef(origTab, fk)
 		// Bail, so that exec FK checks pick up on FK checks and perform them.
-		if oFK.DeleteReferenceAction() != tree.Restrict && oFK.DeleteReferenceAction() != tree.NoAction {
+		if fk.DeleteReferenceAction() != tree.Restrict && fk.DeleteReferenceAction() != tree.NoAction {
 			mb.checks = nil
 			return
 		}
-		numCols := oFK.ColumnCount()
+		numCols := fk.ColumnCount()
 
 		// We need SELECT privileges on the origin table.
 		mb.b.checkPrivilege(opt.DepByID(origID), origTab, privilege.SELECT)
@@ -1146,20 +1143,6 @@ func (mb *mutationBuilder) makeFKInputScan(
 		BindingProps: mb.outScope.expr.Relational(),
 	})
 	return scan, outCols
-}
-
-// getOutboundFKRef returns the corresponding FK reference from the other side.
-// TODO(justin): remove this once descriptors are symmetric.
-func (mb *mutationBuilder) getOutboundFKRef(
-	otherTab cat.Table, fk cat.ForeignKeyConstraint,
-) cat.ForeignKeyConstraint {
-	for i, n := 0, otherTab.OutboundForeignKeyCount(); i < n; i++ {
-		outboundRef := otherTab.OutboundForeignKey(i)
-		if outboundRef.ID() == fk.ID() {
-			return outboundRef
-		}
-	}
-	panic(errors.AssertionFailedf("didn't find matching outbound FK reference"))
 }
 
 // findNotNullIndexCol finds the first not-null column in the given index and

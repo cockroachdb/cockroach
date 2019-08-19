@@ -98,7 +98,7 @@ func doCreateSequence(
 		return err
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn, params.extendedEvalCtx.Settings); err != nil {
+	if err := desc.Validate(params.ctx, params.p.txn); err != nil {
 		return err
 	}
 
@@ -178,5 +178,5 @@ func MakeSequenceTableDesc(
 	// immediately.
 	desc.State = sqlbase.TableDescriptor_PUBLIC
 
-	return desc, desc.ValidateTable(settings)
+	return desc, desc.ValidateTable()
 }

@@ -108,7 +108,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 
 	newTbKey := sqlbase.NewTableKey(targetDbDesc.ID, newTn.Table()).Key()
 
-	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
+	if err := tableDesc.Validate(ctx, p.txn); err != nil {
 		return err
 	}
 

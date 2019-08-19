@@ -508,11 +508,14 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 
 // TestScrubFKConstraintFKNulls tests that `SCRUB TABLE ... CONSTRAINT ALL` will
 // fail if a MATCH FULL foreign key constraint is violated when foreign key
-// values are partially null. To test this, a row's underlying value is
-// modified using the KV client.
+// values are partially null.
+// TODO (lucy): This is making use of the fact that SCRUB reports errors for
+// unvalidated FKs, even when it's fine for rows to violate the constraint.
+// Ideally we would have SCRUB not report errors for those, and use a validated
+// constraint in this test with corrupted KVs.
 func TestScrubFKConstraintFKNulls(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
 	// Create the table and the row entry.
@@ -527,54 +530,12 @@ CREATE TABLE t.child (
 	child_id INT PRIMARY KEY,
 	parent_id INT,
 	parent_id2 INT,
-	INDEX (parent_id, parent_id2),
-	FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent (id, id2) MATCH FULL
+	INDEX (parent_id, parent_id2)
 );
-INSERT INTO t.parent VALUES (1337, 300);
-INSERT INTO t.child VALUES (11, 1337, 300);
+INSERT INTO t.parent VALUES (1337, NULL);
+INSERT INTO t.child VALUES (11, 1337, NULL);
+ALTER TABLE t.child ADD FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent (id, id2) MATCH FULL NOT VALID;
 `); err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "child")
-
-	// Construct datums for our row values (child_id, parent_id, parent_id2).
-	values := []tree.Datum{tree.NewDInt(11), tree.NewDInt(1337), tree.NewDInt(300)}
-	secondaryIndex := &tableDesc.Indexes[0]
-
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
-	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
-	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
-	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2
-
-	// Create the secondary index key that is currently in the database.
-	secondaryIndexEntry, err := sqlbase.EncodeSecondaryIndex(
-		tableDesc, secondaryIndex, colIDtoRowIndex, values)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	if len(secondaryIndexEntry) != 1 {
-		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexEntry), secondaryIndexEntry)
-	}
-
-	// Delete the entry.
-	if err := kvDB.Del(context.TODO(), secondaryIndexEntry[0].Key); err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	// Replace parent_id2 with NULL.
-	values[2] = tree.DNull
-	secondaryIndexEntry, err = sqlbase.EncodeSecondaryIndex(
-		tableDesc, secondaryIndex, colIDtoRowIndex, values)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	// Add the entry, essentially replacing the index entry with (11, 1337, NULL).
-	// This will be a foreign key violation.
-	if err := kvDB.Put(context.TODO(), secondaryIndexEntry[0].Key,
-		&secondaryIndexEntry[0].Value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 

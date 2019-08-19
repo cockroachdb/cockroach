@@ -53,7 +53,7 @@ func parseTableDesc(createTableStmt string) (*sqlbase.TableDescriptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	return mutDesc.TableDesc(), mutDesc.TableDesc().ValidateTable(st)
+	return mutDesc.TableDesc(), mutDesc.TableDesc().ValidateTable()
 }
 
 func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.EncDatumRow, error) {

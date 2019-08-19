@@ -614,7 +614,7 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 	}
 	for i, d := range testData {
-		if err := d.desc.ValidateTable(cluster.MakeTestingClusterSettings()); err == nil {
+		if err := d.desc.ValidateTable(); err == nil {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, d.err, d.desc)
 		} else if d.err != err.Error() && "internal error: "+d.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, d.err, err)
@@ -632,96 +632,82 @@ func TestValidateCrossTableReferences(t *testing.T) {
 	tests := []struct {
 		err        string
 		desc       TableDescriptor
-		referenced []TableDescriptor
+		otherDescs []TableDescriptor
 	}{
 		// Foreign keys
 		{
-			err: `invalid foreign key: missing table=52 index=2: descriptor not found`,
+			err: `invalid foreign key: missing table=52: descriptor not found`,
 			desc: TableDescriptor{
 				ID: 51,
-				PrimaryIndex: IndexDescriptor{
-					ID:         1,
-					ForeignKey: ForeignKeyReference{Table: 52, Index: 2},
+				OutboundFKs: []ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   52,
+						ReferencedColumnIDs: []ColumnID{1},
+						OriginTableID:       51,
+						OriginColumnIDs:     []ColumnID{1},
+					},
 				},
 			},
-			referenced: nil,
+			otherDescs: nil,
 		},
 		{
-			err: `invalid foreign key: missing table=baz index=2: index-id "2" does not exist`,
+			err: `missing fk back reference "fk" to "foo" from "baz"`,
 			desc: TableDescriptor{
-				ID: 51,
-				PrimaryIndex: IndexDescriptor{
-					ID:         1,
-					ForeignKey: ForeignKeyReference{Table: 52, Index: 2},
+				ID:   51,
+				Name: "foo",
+				OutboundFKs: []ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   52,
+						ReferencedColumnIDs: []ColumnID{1},
+						OriginTableID:       51,
+						OriginColumnIDs:     []ColumnID{1},
+					},
 				},
 			},
-			referenced: []TableDescriptor{{
+			otherDescs: []TableDescriptor{{
 				ID:   52,
 				Name: "baz",
 			}},
 		},
 		{
-			err: `missing fk back reference to "foo"@"bar" from "baz"@"qux"`,
+			err: `invalid foreign key backreference: missing table=52: descriptor not found`,
+			desc: TableDescriptor{
+				ID: 51,
+				InboundFKs: []ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   51,
+						ReferencedColumnIDs: []ColumnID{1},
+						OriginTableID:       52,
+						OriginColumnIDs:     []ColumnID{1},
+					},
+				},
+			},
+		},
+		{
+			err: `missing fk forward reference "fk" to "foo" from "baz"`,
 			desc: TableDescriptor{
 				ID:   51,
 				Name: "foo",
 				PrimaryIndex: IndexDescriptor{
-					ID:         1,
-					Name:       "bar",
-					ForeignKey: ForeignKeyReference{Table: 52, Index: 2},
+					ID:   1,
+					Name: "bar",
+				},
+				InboundFKs: []ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   51,
+						ReferencedColumnIDs: []ColumnID{1},
+						OriginTableID:       52,
+						OriginColumnIDs:     []ColumnID{1},
+					},
 				},
 			},
-			referenced: []TableDescriptor{{
+			otherDescs: []TableDescriptor{{
 				ID:   52,
 				Name: "baz",
-				PrimaryIndex: IndexDescriptor{
-					ID:   2,
-					Name: "qux",
-				},
-			}},
-		},
-		{
-			err: `invalid fk backreference table=52 index=2: descriptor not found`,
-			desc: TableDescriptor{
-				ID: 51,
-				PrimaryIndex: IndexDescriptor{
-					ID:           1,
-					ReferencedBy: []ForeignKeyReference{{Table: 52, Index: 2}},
-				},
-			},
-		},
-		{
-			err: `invalid fk backreference table=baz index=2: index-id "2" does not exist`,
-			desc: TableDescriptor{
-				ID: 51,
-				PrimaryIndex: IndexDescriptor{
-					ID:           1,
-					ReferencedBy: []ForeignKeyReference{{Table: 52, Index: 2}},
-				},
-			},
-			referenced: []TableDescriptor{{
-				ID:   52,
-				Name: "baz",
-			}},
-		},
-		{
-			err: `broken fk backward reference from "foo"@"bar" to "baz"@"qux"`,
-			desc: TableDescriptor{
-				ID:   51,
-				Name: "foo",
-				PrimaryIndex: IndexDescriptor{
-					ID:           1,
-					Name:         "bar",
-					ReferencedBy: []ForeignKeyReference{{Table: 52, Index: 2}},
-				},
-			},
-			referenced: []TableDescriptor{{
-				ID:   52,
-				Name: "baz",
-				PrimaryIndex: IndexDescriptor{
-					ID:   2,
-					Name: "qux",
-				},
 			}},
 		},
 
@@ -737,7 +723,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					}},
 				},
 			},
-			referenced: nil,
+			otherDescs: nil,
 		},
 		{
 			err: `invalid interleave: missing table=baz index=2: index-id "2" does not exist`,
@@ -750,7 +736,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					}},
 				},
 			},
-			referenced: []TableDescriptor{{
+			otherDescs: []TableDescriptor{{
 				ID:   52,
 				Name: "baz",
 			}},
@@ -768,7 +754,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					}},
 				},
 			},
-			referenced: []TableDescriptor{{
+			otherDescs: []TableDescriptor{{
 				ID:   52,
 				Name: "baz",
 				PrimaryIndex: IndexDescriptor{
@@ -796,7 +782,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					InterleavedBy: []ForeignKeyReference{{Table: 52, Index: 2}},
 				},
 			},
-			referenced: []TableDescriptor{{
+			otherDescs: []TableDescriptor{{
 				ID:   52,
 				Name: "baz",
 			}},
@@ -812,7 +798,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					InterleavedBy: []ForeignKeyReference{{Table: 52, Index: 2}},
 				},
 			},
-			referenced: []TableDescriptor{{
+			otherDescs: []TableDescriptor{{
 				ID:   52,
 				Name: "baz",
 				PrimaryIndex: IndexDescriptor{
@@ -835,13 +821,14 @@ func TestValidateCrossTableReferences(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		for _, referencedDesc := range test.referenced {
+		for _, otherDesc := range test.otherDescs {
+			otherDesc.Privileges = NewDefaultPrivilegeDescriptor()
 			var v roachpb.Value
-			desc := &Descriptor{Union: &Descriptor_Table{Table: &referencedDesc}}
+			desc := &Descriptor{Union: &Descriptor_Table{Table: &otherDesc}}
 			if err := v.SetProto(desc); err != nil {
 				t.Fatal(err)
 			}
-			if err := kvDB.Put(ctx, MakeDescMetadataKey(referencedDesc.ID), &v); err != nil {
+			if err := kvDB.Put(ctx, MakeDescMetadataKey(otherDesc.ID), &v); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -851,8 +838,8 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		} else if test.err != err.Error() && "internal error: "+test.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, test.err, err.Error())
 		}
-		for _, referencedDesc := range test.referenced {
-			if err := kvDB.Del(ctx, MakeDescMetadataKey(referencedDesc.ID)); err != nil {
+		for _, otherDesc := range test.otherDescs {
+			if err := kvDB.Del(ctx, MakeDescMetadataKey(otherDesc.ID)); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1231,13 +1218,14 @@ func TestUnvalidateConstraints(t *testing.T) {
 		FormatVersion: FamilyFormatVersion,
 		Indexes:       []IndexDescriptor{makeIndexDescriptor("d", []string{"b", "a"})},
 		Privileges:    NewDefaultPrivilegeDescriptor(),
+		OutboundFKs: []ForeignKeyConstraint{
+			{
+				Name:              "fk",
+				ReferencedTableID: ID(1),
+				Validity:          ConstraintValidity_Validated,
+			},
+		},
 	})
-	desc.Indexes[0].ForeignKey = ForeignKeyReference{
-		Name:     "fk",
-		Table:    ID(1),
-		Index:    IndexID(1),
-		Validity: ConstraintValidity_Validated,
-	}
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
@@ -1842,6 +1830,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 
 	ctx := context.Background()
 	for _, tc := range testCases {
+		tc.origin.expectedUpgraded.Privileges = NewDefaultPrivilegeDescriptor()
+		tc.origin.oldFormat.Privileges = NewDefaultPrivilegeDescriptor()
+		tc.referenced.expectedUpgraded.Privileges = NewDefaultPrivilegeDescriptor()
+		tc.referenced.oldFormat.Privileges = NewDefaultPrivilegeDescriptor()
 		txn := fakeProtoGetter{protos: map[interface{}]protoutil.Message{
 			string(MakeDescMetadataKey(tc.origin.oldFormat.ID)):     WrapDescriptor(&tc.origin.oldFormat),
 			string(MakeDescMetadataKey(tc.referenced.oldFormat.ID)): WrapDescriptor(&tc.referenced.oldFormat),
@@ -1882,6 +1874,14 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 					if !wasUpgraded {
 						t.Fatalf("expected proto to be upgraded")
 					}
+				}
+
+				wasUpgradedAgain, err := upgraded.maybeUpgradeForeignKeyRepresentation(ctx, txn)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if wasUpgradedAgain {
+					t.Fatalf("expected proto upgrade to be idempotent")
 				}
 
 				// The upgraded proto will also have a copy of the old foreign key
@@ -1953,14 +1953,13 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 						t.Fatalf("downgrade wasn't idempotent %s %s", proto.MarshalTextString(downgradedAgain),
 							proto.MarshalTextString(downgraded))
 					}
-				}
-
-				wasDowngraded, _, err := upgraded.MaybeDowngradeForeignKeyRepresentation(ctx, newVersionSettings)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if wasDowngraded {
-					t.Fatalf("expected proto not to be downgraded")
+					wasDowngraded, _, err = upgraded.MaybeDowngradeForeignKeyRepresentation(ctx, newVersionSettings)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if wasDowngraded {
+						t.Fatalf("expected 19.2-final proto not to be downgraded")
+					}
 				}
 			})
 		}

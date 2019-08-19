@@ -1092,11 +1092,6 @@ func (fk *ForeignKeyConstraint) DeleteReferenceAction() tree.ReferenceAction {
 	return fk.deleteAction
 }
 
-// ID is part of the cat.ForeignKeyConstraint interface.
-func (fk *ForeignKeyConstraint) ID() cat.StableID {
-	return fk.id
-}
-
 // Sequence implements the cat.Sequence interface for testing purposes.
 type Sequence struct {
 	SeqID      cat.StableID

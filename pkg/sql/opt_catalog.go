@@ -556,37 +556,36 @@ func newOptTable(
 				idxZone = &copyZone
 			}
 		}
-
 		ot.indexes[i].init(ot, i, idxDesc, idxZone)
-		if fk := &idxDesc.ForeignKey; fk.IsSet() {
-			ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
-				name:            idxDesc.ForeignKey.Name,
-				originTable:     ot.ID(),
-				originIndex:     idxDesc.ID,
-				referencedTable: cat.StableID(fk.Table),
-				referencedIndex: fk.Index,
-				numCols:         int(fk.SharedPrefixLen),
-				validity:        fk.Validity,
-				match:           fk.Match,
-				deleteAction:    fk.OnDelete,
-			})
-		}
-		for j := range idxDesc.ReferencedBy {
-			fk := &idxDesc.ReferencedBy[j]
-			ot.inboundFKs = append(ot.inboundFKs, optForeignKeyConstraint{
-				name:            idxDesc.ForeignKey.Name,
-				originTable:     cat.StableID(fk.Table),
-				originIndex:     fk.Index,
-				referencedTable: ot.ID(),
-				referencedIndex: idxDesc.ID,
-				// TODO(justin): this field is currently not populated, so it will
-				// always be zero and should not be used from this side.
-				numCols:      int(fk.SharedPrefixLen),
-				validity:     fk.Validity,
-				match:        fk.Match,
-				deleteAction: fk.OnDelete,
-			})
-		}
+	}
+
+	for i := range ot.desc.OutboundFKs {
+		fk := &ot.desc.OutboundFKs[i]
+		ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
+			name:              fk.Name,
+			originTable:       ot.ID(),
+			originColumns:     fk.OriginColumnIDs,
+			referencedTable:   cat.StableID(fk.ReferencedTableID),
+			referencedColumns: fk.ReferencedColumnIDs,
+			validity:          fk.Validity,
+			match:             fk.Match,
+		})
+	}
+	for i := range ot.desc.InboundFKs {
+		fk := &ot.desc.InboundFKs[i]
+		ot.inboundFKs = append(ot.inboundFKs, optForeignKeyConstraint{
+			name:              fk.Name,
+			originTable:       cat.StableID(fk.OriginTableID),
+			originColumns:     fk.OriginColumnIDs,
+			referencedTable:   ot.ID(),
+			referencedColumns: fk.ReferencedColumnIDs,
+			validity:          fk.Validity,
+			// TODO(jordan,radu): beware, this is weird: the "delete" direction for
+			// fks always must use "match simple" at runtime. This is correct for
+			// now, but when we implement the optimizer logic for match full, this
+			// has to get attention.
+			match: sqlbase.ForeignKeyReference_SIMPLE,
+		})
 	}
 
 	ot.primaryFamily.init(ot, &desc.Families[0])
@@ -1147,18 +1146,15 @@ func (oi *optFamily) Table() cat.Table {
 type optForeignKeyConstraint struct {
 	name string
 
-	originTable cat.StableID
-	originIndex sqlbase.IndexID
+	originTable   cat.StableID
+	originColumns []sqlbase.ColumnID
 
-	referencedTable cat.StableID
-	referencedIndex sqlbase.IndexID
+	referencedTable   cat.StableID
+	referencedColumns []sqlbase.ColumnID
 
-	numCols      int
 	validity     sqlbase.ConstraintValidity
 	match        sqlbase.ForeignKeyReference_Match
 	deleteAction sqlbase.ForeignKeyReference_Action
-
-	id cat.StableID
 }
 
 var _ cat.ForeignKeyConstraint = &optForeignKeyConstraint{}
@@ -1180,7 +1176,7 @@ func (fk *optForeignKeyConstraint) ReferencedTableID() cat.StableID {
 
 // ColumnCount is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) ColumnCount() int {
-	return fk.numCols
+	return len(fk.originColumns)
 }
 
 // OriginColumnOrdinal is part of the cat.ForeignKeyConstraint interface.
@@ -1193,12 +1189,7 @@ func (fk *optForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i 
 	}
 
 	tab := originTable.(*optTable)
-	index, err := tab.desc.FindIndexByID(fk.originIndex)
-	if err != nil {
-		panic(errors.AssertionFailedf("%v", err))
-	}
-
-	ord, _ := tab.lookupColumnOrdinal(index.ColumnIDs[i])
+	ord, _ := tab.lookupColumnOrdinal(fk.originColumns[i])
 	return ord
 }
 
@@ -1211,12 +1202,7 @@ func (fk *optForeignKeyConstraint) ReferencedColumnOrdinal(referencedTable cat.T
 		))
 	}
 	tab := referencedTable.(*optTable)
-	index, err := tab.desc.FindIndexByID(fk.referencedIndex)
-	if err != nil {
-		panic(errors.AssertionFailedf("%v", err))
-	}
-
-	ord, _ := tab.lookupColumnOrdinal(index.ColumnIDs[i])
+	ord, _ := tab.lookupColumnOrdinal(fk.referencedColumns[i])
 	return ord
 }
 
@@ -1233,11 +1219,6 @@ func (fk *optForeignKeyConstraint) MatchMethod() tree.CompositeKeyMatchMethod {
 // DeleteReferenceAction is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) DeleteReferenceAction() tree.ReferenceAction {
 	return sqlbase.ForeignKeyReferenceActionType[fk.deleteAction]
-}
-
-// ID is part of the cat.ForeignKeyConstraint interface.
-func (fk *optForeignKeyConstraint) ID() cat.StableID {
-	return fk.id
 }
 
 // optVirtualTable is similar to optTable but is used with virtual tables.

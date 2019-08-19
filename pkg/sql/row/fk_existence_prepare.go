@@ -78,76 +78,62 @@ func MakeFkMetadata(
 			continue
 		}
 
-		// Explore all the FK constraints on the table/.
-		for _, idx := range tableEntry.Desc.AllNonDropIndexes() {
-
-			if usage == CheckInserts || usage == CheckUpdates {
+		// Explore all the FK constraints on the table.
+		if usage == CheckInserts || usage == CheckUpdates {
+			for i := range tableEntry.Desc.OutboundFKs {
+				fk := &tableEntry.Desc.OutboundFKs[i]
 				// If the mutation performed is an insertion or an update,
 				// we'll need to do existence checks on the referenced
 				// table(s), if any.
-				if idx.ForeignKey.IsSet() {
-					if _, err := queue.getTable(ctx, idx.ForeignKey.Table); err != nil {
-						return nil, err
-					}
+				if _, err := queue.getTable(ctx, fk.ReferencedTableID); err != nil {
+					return nil, err
 				}
 			}
+		}
+		if usage == CheckDeletes || usage == CheckUpdates {
+			// If the mutation performed is a deletion or an update,
+			// we'll need to do existence checks on the referencing
+			// table(s), if any, as well as cascading actions.
+			for i := range tableEntry.Desc.InboundFKs {
+				fk := &tableEntry.Desc.InboundFKs[i]
+				// The referencing table is required to know the relationship, so
+				// fetch it here.
+				referencingTableEntry, err := queue.getTable(ctx, fk.OriginTableID)
+				if err != nil {
+					return nil, err
+				}
 
-			if usage == CheckDeletes || usage == CheckUpdates {
-				// If the mutaiton performed is a deletion or an update,
-				// we'll need to do existence checks on the referencing
-				// table(s), if any, as well as cascading actions.
-				for _, ref := range idx.ReferencedBy {
-					// The referencing table is required to know the relationship, so
-					// fetch it here.
-					referencingTableEntry, err := queue.getTable(ctx, ref.Table)
-					if err != nil {
-						return nil, err
-					}
+				// Again here if the table descriptor is nil it means that there was
+				// no actual lookup performed. Meaning there is no need to walk any
+				// secondary relationships.
+				//
+				// TODO(knz): this comment is suspicious for the same
+				// reasons as above.
+				if referencingTableEntry.IsAdding || referencingTableEntry.Desc == nil {
+					continue
+				}
 
-					// Again here if the table descriptor is nil it means that there was
-					// no actual lookup performed. Meaning there is no need to walk any
-					// secondary relationships.
-					//
-					// TODO(knz): this comment is suspicious for the same
-					// reasons as above.
-					if referencingTableEntry.IsAdding || referencingTableEntry.Desc == nil {
+				if usage == CheckDeletes {
+					var nextUsage FKCheckType
+					switch fk.OnDelete {
+					case sqlbase.ForeignKeyReference_CASCADE:
+						nextUsage = CheckDeletes
+					case sqlbase.ForeignKeyReference_SET_DEFAULT, sqlbase.ForeignKeyReference_SET_NULL:
+						nextUsage = CheckUpdates
+					default:
+						// There is no need to check any other relationships.
 						continue
 					}
-
-					// Find the index that carries the constraint metadata.
-					//
-					// TODO(knz,bram): constraint metadata should not be carried
-					// by index descriptors! We need to find a different way to
-					// encode this.
-					referencedIdx, err := referencingTableEntry.Desc.FindIndexByID(ref.Index)
-					if err != nil {
+					if err := queue.enqueue(ctx, fk.OriginTableID, nextUsage); err != nil {
 						return nil, err
 					}
-
-					if usage == CheckDeletes {
-						var nextUsage FKCheckType
-						switch referencedIdx.ForeignKey.OnDelete {
-						case sqlbase.ForeignKeyReference_CASCADE:
-							nextUsage = CheckDeletes
-						case sqlbase.ForeignKeyReference_SET_DEFAULT, sqlbase.ForeignKeyReference_SET_NULL:
-							nextUsage = CheckUpdates
-						default:
-							// There is no need to check any other relationships.
-							continue
-						}
-						if err := queue.enqueue(ctx, referencingTableEntry.Desc.ID, nextUsage); err != nil {
+				} else {
+					// curUsage == CheckUpdates
+					if fk.OnUpdate == sqlbase.ForeignKeyReference_CASCADE ||
+						fk.OnUpdate == sqlbase.ForeignKeyReference_SET_DEFAULT ||
+						fk.OnUpdate == sqlbase.ForeignKeyReference_SET_NULL {
+						if err := queue.enqueue(ctx, fk.OriginTableID, CheckUpdates); err != nil {
 							return nil, err
-						}
-					} else {
-						// curUsage == CheckUpdates
-						if referencedIdx.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_CASCADE ||
-							referencedIdx.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_SET_DEFAULT ||
-							referencedIdx.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_SET_NULL {
-							if err := queue.enqueue(
-								ctx, referencingTableEntry.Desc.ID, CheckUpdates,
-							); err != nil {
-								return nil, err
-							}
 						}
 					}
 				}
