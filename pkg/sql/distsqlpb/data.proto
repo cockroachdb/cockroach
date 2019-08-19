@@ -278,6 +278,9 @@ message RemoteProducerMetadata {
     // The number of rows processed by the sampler processor since the last
     // update.
     optional uint64 rows_processed = 1 [(gogoproto.nullable) = false];
+    // Indicates that sample collection for histograms should be disabled,
+    // likely because the sampler processor ran out of memory.
+    optional bool histogram_disabled = 2 [(gogoproto.nullable) = false];
   }
   message BulkProcessorProgress {
      repeated roachpb.Span completed_spans = 1;

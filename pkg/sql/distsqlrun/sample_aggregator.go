@@ -18,11 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -85,7 +88,10 @@ func newSampleAggregator(
 	}
 
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := NewMonitor(ctx, flowCtx.EvalCtx.Mon, "sample-aggregator-mem")
+	// Limit the memory use by creating a child monitor with a hard limit.
+	// The processor will disable histogram collection if this limit is not
+	// enough.
+	memMonitor := NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sample-aggregator-mem")
 	rankCol := len(input.OutputTypes()) - 5
 	s := &sampleAggregator{
 		spec:         spec,
@@ -207,6 +213,12 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 						return false, err
 					}
 				}
+				if meta.SamplerProgress.HistogramDisabled {
+					// One of the sampler processors probably ran out of memory while
+					// collecting histogram samples. Disable sample collection so we
+					// don't create a biased histogram.
+					s.sr.Disable()
+				}
 			} else if !EmitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 				// No cleanup required; EmitHelper() took care of it.
 				return true, nil
@@ -229,7 +241,13 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 			}
 			// Retain the rows with the top ranks.
 			if err := s.sr.SampleRow(ctx, s.evalCtx, row[:s.rankCol], uint64(rank)); err != nil {
-				return false, err
+				if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
+					return false, err
+				}
+				// We hit an out of memory error. Clear the sample reservoir and
+				// disable histogram sample collection.
+				s.sr.Disable()
+				log.Info(ctx, "disabling histogram collection due to excessive memory utilization")
 			}
 			continue
 		}
