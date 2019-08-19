@@ -160,7 +160,7 @@ func init() {
 	sameTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*overload, len(comparisonOpName))
 	anyTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*overload, len(comparisonOpName))
 	for _, t := range inputTypes {
-		customizer := typeCustomizers[t]
+		customizer := typeCustomizers[coltypePair{t, t}]
 		for _, op := range binOps {
 			// Skip types that don't have associated binary ops.
 			switch t {
@@ -200,8 +200,8 @@ func init() {
 		hashOverloads = append(hashOverloads, ov)
 	}
 	for _, leftType := range inputTypes {
-		customizer := typeCustomizers[leftType]
 		for _, rightType := range coltypes.CompatibleTypes[leftType] {
+			customizer := typeCustomizers[coltypePair{leftType, rightType}]
 			for _, op := range cmpOps {
 				opStr := comparisonOpInfix[op]
 				ov := &overload{
@@ -258,14 +258,18 @@ func init() {
 // (==, <, etc) or binary operator (+, -, etc) semantics.
 type typeCustomizer interface{}
 
-// TODO(rafi): make this map keyed by (leftType, rightType) so we can have
-// customizers for mixed-type operations.
-var typeCustomizers map[coltypes.T]typeCustomizer
+// coltypePair is used to key a map that holds all typeCustomizers.
+type coltypePair struct {
+	leftType  coltypes.T
+	rightType coltypes.T
+}
+
+var typeCustomizers map[coltypePair]typeCustomizer
 
 // registerTypeCustomizer registers a particular type customizer to a type, for
 // usage by templates.
-func registerTypeCustomizer(t coltypes.T, customizer typeCustomizer) {
-	typeCustomizers[t] = customizer
+func registerTypeCustomizer(pair coltypePair, customizer typeCustomizer) {
+	typeCustomizers[pair] = customizer
 }
 
 // binOpTypeCustomizer is a type customizer that changes how the templater
@@ -301,8 +305,32 @@ type decimalCustomizer struct{}
 // floatCustomizers are used for hash functions.
 type floatCustomizer struct{ width int }
 
-// intCustomizers are used for hash functions.
+// intCustomizers are used for hash functions and overflow handling.
 type intCustomizer struct{ width int }
+
+// decimalFloatCustomizer supports mixed type expressions with a decimal
+// left-hand side and a float right-hand side.
+type decimalFloatCustomizer struct{}
+
+// decimalIntCustomizer supports mixed type expressions with a decimal left-hand
+// side and an int right-hand side.
+type decimalIntCustomizer struct{}
+
+// decimalFloatCustomizer supports mixed type expressions with a float left-hand
+// side and a decimal right-hand side.
+type floatDecimalCustomizer struct{}
+
+// decimalIntCustomizer supports mixed type expressions with an int left-hand
+// side and a decimal right-hand side.
+type intDecimalCustomizer struct{}
+
+// floatIntCustomizer supports mixed type expressions with a float left-hand
+// side and an int right-hand side.
+type floatIntCustomizer struct{}
+
+// intFloatCustomizer supports mixed type expressions with an int left-hand
+// side and a float right-hand side.
+type intFloatCustomizer struct{}
 
 func (boolCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(target, l, r string) string {
@@ -450,7 +478,6 @@ func (c intCustomizer) getCmpOpCompareFunc() compareFunc {
 		}
 		return buf.String()
 	}
-
 }
 
 func (c intCustomizer) getBinOpAssignFunc() assignFunc {
@@ -567,17 +594,146 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 	}
 }
 
+func (c decimalFloatCustomizer) getCmpOpCompareFunc() compareFunc {
+	return func(target, l, r string) string {
+		args := map[string]string{"Target": target, "Left": l, "Right": r}
+		buf := strings.Builder{}
+		// todo(rafi): is there a way to avoid an allocating on each comparison?
+		t := template.Must(template.New("").Parse(`
+			{
+				tmpDec := &apd.Decimal{}
+				if _, err := tmpDec.SetFloat64(float64({{.Right}})); err != nil {
+					execerror.NonVectorizedPanic(err)
+				}
+				{{.Target}} = tree.CompareDecimals(&{{.Left}}, tmpDec)
+			}
+		`))
+
+		if err := t.Execute(&buf, args); err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+		return buf.String()
+	}
+}
+
+func (c decimalIntCustomizer) getCmpOpCompareFunc() compareFunc {
+	return func(target, l, r string) string {
+		args := map[string]string{"Target": target, "Left": l, "Right": r}
+		buf := strings.Builder{}
+		// todo(rafi): is there a way to avoid an allocating on each comparison?
+		t := template.Must(template.New("").Parse(`
+			{
+				tmpDec := &apd.Decimal{}
+				tmpDec.SetFinite(int64({{.Right}}), 0)
+				{{.Target}} = tree.CompareDecimals(&{{.Left}}, tmpDec)
+			}
+		`))
+
+		if err := t.Execute(&buf, args); err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+		return buf.String()
+	}
+}
+
+func (c floatDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
+	return func(target, l, r string) string {
+		args := map[string]string{"Target": target, "Left": l, "Right": r}
+		buf := strings.Builder{}
+		// todo(rafi): is there a way to avoid an allocating on each comparison?
+		t := template.Must(template.New("").Parse(`
+			{
+				tmpDec := &apd.Decimal{}
+				if _, err := tmpDec.SetFloat64(float64({{.Left}})); err != nil {
+					execerror.NonVectorizedPanic(err)
+				}
+				{{.Target}} = tree.CompareDecimals(tmpDec, &{{.Right}})
+			}
+		`))
+
+		if err := t.Execute(&buf, args); err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+		return buf.String()
+	}
+}
+
+func (c intDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
+	return func(target, l, r string) string {
+		args := map[string]string{"Target": target, "Left": l, "Right": r}
+		buf := strings.Builder{}
+		// todo(rafi): is there a way to avoid an allocating on each comparison?
+		t := template.Must(template.New("").Parse(`
+			{
+				tmpDec := &apd.Decimal{}
+				tmpDec.SetFinite(int64({{.Left}}), 0)
+				{{.Target}} = tree.CompareDecimals(tmpDec, &{{.Right}})
+			}
+		`))
+
+		if err := t.Execute(&buf, args); err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+		return buf.String()
+	}
+}
+
+func (c floatIntCustomizer) getCmpOpCompareFunc() compareFunc {
+	// floatCustomizer's comparison function can be reused since float-int
+	// comparison works by casting the int.
+	return floatCustomizer{}.getCmpOpCompareFunc()
+}
+
+func (c intFloatCustomizer) getCmpOpCompareFunc() compareFunc {
+	// floatCustomizer's comparison function can be reused since int-float
+	// comparison works by casting the int.
+	return floatCustomizer{}.getCmpOpCompareFunc()
+}
+
 func registerTypeCustomizers() {
-	typeCustomizers = make(map[coltypes.T]typeCustomizer)
-	registerTypeCustomizer(coltypes.Bool, boolCustomizer{})
-	registerTypeCustomizer(coltypes.Bytes, bytesCustomizer{})
-	registerTypeCustomizer(coltypes.Decimal, decimalCustomizer{})
-	registerTypeCustomizer(coltypes.Float32, floatCustomizer{width: 32})
-	registerTypeCustomizer(coltypes.Float64, floatCustomizer{width: 64})
-	registerTypeCustomizer(coltypes.Int8, intCustomizer{width: 8})
-	registerTypeCustomizer(coltypes.Int16, intCustomizer{width: 16})
-	registerTypeCustomizer(coltypes.Int32, intCustomizer{width: 32})
-	registerTypeCustomizer(coltypes.Int64, intCustomizer{width: 64})
+	typeCustomizers = make(map[coltypePair]typeCustomizer)
+	registerTypeCustomizer(coltypePair{coltypes.Bool, coltypes.Bool}, boolCustomizer{})
+	registerTypeCustomizer(coltypePair{coltypes.Bytes, coltypes.Bytes}, bytesCustomizer{})
+	registerTypeCustomizer(coltypePair{coltypes.Decimal, coltypes.Decimal}, decimalCustomizer{})
+	for _, leftFloatType := range coltypes.FloatTypes {
+		for _, rightFloatType := range coltypes.FloatTypes {
+			registerTypeCustomizer(coltypePair{leftFloatType, rightFloatType}, floatCustomizer{width: 64})
+		}
+	}
+	for _, leftIntType := range coltypes.IntTypes {
+		for _, rightIntType := range coltypes.IntTypes {
+			registerTypeCustomizer(coltypePair{leftIntType, rightIntType}, intCustomizer{width: 64})
+		}
+	}
+
+	// Use an intCustomizer of appropriate width when widths are the same.
+	registerTypeCustomizer(coltypePair{coltypes.Int8, coltypes.Int8}, intCustomizer{width: 8})
+	registerTypeCustomizer(coltypePair{coltypes.Int16, coltypes.Int16}, intCustomizer{width: 16})
+	registerTypeCustomizer(coltypePair{coltypes.Int32, coltypes.Int32}, intCustomizer{width: 32})
+	registerTypeCustomizer(coltypePair{coltypes.Int64, coltypes.Int64}, intCustomizer{width: 64})
+
+	for _, rightFloatType := range coltypes.FloatTypes {
+		registerTypeCustomizer(coltypePair{coltypes.Decimal, rightFloatType}, decimalFloatCustomizer{})
+	}
+	for _, rightIntType := range coltypes.IntTypes {
+		registerTypeCustomizer(coltypePair{coltypes.Decimal, rightIntType}, decimalIntCustomizer{})
+	}
+	for _, leftFloatType := range coltypes.FloatTypes {
+		registerTypeCustomizer(coltypePair{leftFloatType, coltypes.Decimal}, floatDecimalCustomizer{})
+	}
+	for _, leftIntType := range coltypes.IntTypes {
+		registerTypeCustomizer(coltypePair{leftIntType, coltypes.Decimal}, intDecimalCustomizer{})
+	}
+	for _, leftFloatType := range coltypes.FloatTypes {
+		for _, rightIntType := range coltypes.IntTypes {
+			registerTypeCustomizer(coltypePair{leftFloatType, rightIntType}, floatIntCustomizer{})
+		}
+	}
+	for _, leftIntType := range coltypes.IntTypes {
+		for _, rightFloatType := range coltypes.FloatTypes {
+			registerTypeCustomizer(coltypePair{leftIntType, rightFloatType}, intFloatCustomizer{})
+		}
+	}
 }
 
 // Avoid unused warning for functions which are only used in templates.
