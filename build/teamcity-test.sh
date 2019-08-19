@@ -21,7 +21,7 @@ tc_end_block "Compile C dependencies"
 tc_start_block "Run Go tests"
 run build/builder.sh \
 	stdbuf -oL -eL \
-	make test TESTFLAGS='-v' 2>&1 \
+	make test 2>&1 \
 	| tee artifacts/test.log \
 	| go-test-teamcity
 tc_end_block "Run Go tests"
