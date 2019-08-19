@@ -1325,26 +1325,6 @@ func TestColumnNeedsBackfill(t *testing.T) {
 	}
 }
 
-type fakeProtoGetter struct {
-	protos map[interface{}]protoutil.Message
-}
-
-func (m fakeProtoGetter) GetProto(
-	ctx context.Context, key interface{}, msg protoutil.Message,
-) error {
-	msg.Reset()
-	if other, ok := m.protos[string(key.(roachpb.Key))]; ok {
-		bytes := make([]byte, other.Size())
-		if _, err := other.MarshalTo(bytes); err != nil {
-			return err
-		}
-		if err := protoutil.Unmarshal(bytes, msg); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // oldFormatUpgradedPair is a helper struct for the upgrade/downgrade test
 // below. It holds an "old format" (pre-19.2) table descriptor, and an expected
 // upgraded equivalent. The test will verify that the old format descriptor
@@ -1834,7 +1814,7 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 		tc.origin.oldFormat.Privileges = NewDefaultPrivilegeDescriptor()
 		tc.referenced.expectedUpgraded.Privileges = NewDefaultPrivilegeDescriptor()
 		tc.referenced.oldFormat.Privileges = NewDefaultPrivilegeDescriptor()
-		txn := fakeProtoGetter{protos: map[interface{}]protoutil.Message{
+		txn := MapProtoGetter{Protos: map[interface{}]protoutil.Message{
 			string(MakeDescMetadataKey(tc.origin.oldFormat.ID)):     WrapDescriptor(&tc.origin.oldFormat),
 			string(MakeDescMetadataKey(tc.referenced.oldFormat.ID)): WrapDescriptor(&tc.referenced.oldFormat),
 		}}
@@ -1859,7 +1839,7 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 			}
 			t.Run(fmt.Sprintf("%s/%s", tc.name, name), func(t *testing.T) {
 				upgraded := protoutil.Clone(&pair.oldFormat).(*TableDescriptor)
-				wasUpgraded, err := upgraded.maybeUpgradeForeignKeyRepresentation(ctx, txn)
+				wasUpgraded, err := upgraded.MaybeUpgradeForeignKeyRepresentation(ctx, txn, false /* skipFKsWithNoMatchingTable*/)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -1876,7 +1856,7 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 					}
 				}
 
-				wasUpgradedAgain, err := upgraded.maybeUpgradeForeignKeyRepresentation(ctx, txn)
+				wasUpgradedAgain, err := upgraded.MaybeUpgradeForeignKeyRepresentation(ctx, txn, false /* skipFKsWithNoMatchingTable*/)
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -130,6 +130,9 @@ func ImportBufferConfigSizes(st *cluster.Settings, isPKAdder bool) (int64, int64
 func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.ImportResponse, error) {
 	args := cArgs.Args.(*roachpb.ImportRequest)
 	db := cArgs.EvalCtx.DB()
+	// args.Rekeys could be using table descriptors from either the old or new
+	// foreign key representation on the table descriptor, but this is fine
+	// because foreign keys don't matter for the key rewriter.
 	kr, err := MakeKeyRewriterFromRekeys(args.Rekeys)
 	if err != nil {
 		return nil, errors.Wrap(err, "make key rewriter")
