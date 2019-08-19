@@ -2019,8 +2019,8 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 		}
 		r.batch = nil
 		count, size = r.flushedCount, r.flushedSize
-	} else if len(r.builder.repr) > 0 {
-		count, size = r.builder.count, len(r.builder.repr)
+	} else if r.builder.Len() > 0 {
+		count, size = r.builder.count, r.builder.Len()
 
 		// Fast-path which avoids flushing mutations to the C++ batch. Instead, we
 		// directly apply the mutations to the database.
@@ -2095,7 +2095,7 @@ func (r *rocksDBBatch) flushMutations() {
 	r.distinctNeedsFlush = false
 	r.flushes++
 	r.flushedCount += r.builder.count
-	r.flushedSize += len(r.builder.repr)
+	r.flushedSize += r.builder.Len()
 	if err := dbApplyBatchRepr(r.batch, r.builder.Finish(), false); err != nil {
 		panic(err)
 	}

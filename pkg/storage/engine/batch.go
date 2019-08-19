@@ -12,10 +12,10 @@ package engine
 
 import (
 	"encoding/binary"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/petermattis/pebble"
 	"github.com/pkg/errors"
 )
 
@@ -51,8 +51,6 @@ const (
 	headerSize           int = 12
 	countPos                 = 8
 	initialBatchSize         = 1 << 10 // 1 KB
-	maxRetainedBatchSize     = 1 << 20 // 1 MB
-	maxVarintLen32           = 5
 )
 
 // RocksDBBatchBuilder is used to construct the RocksDB batch representation.
@@ -87,30 +85,15 @@ const (
 // Note that the encoding of these keys needs to match up with the encoding in
 // rocksdb/db.cc:EncodeKey().
 type RocksDBBatchBuilder struct {
-	repr    []byte
+	batch 	pebble.Batch
 	count   int
 	logData bool
-}
-
-func (b *RocksDBBatchBuilder) maybeInit() {
-	if b.repr == nil {
-		b.repr = make([]byte, headerSize, initialBatchSize)
-	}
+	buf     []byte
+	finished bool
 }
 
 func (b *RocksDBBatchBuilder) reset() {
-	if b.repr != nil {
-		if cap(b.repr) > maxRetainedBatchSize {
-			// If the capacity of the buffer is larger than our maximum
-			// retention size, don't re-use it. Let it be GC-ed instead.
-			// This prevents the memory from an unusually large batch from
-			// being held on to indefinitely.
-			b.repr = nil
-		} else {
-			// Otherwise, reset the buffer for re-use.
-			b.repr = b.repr[:headerSize]
-		}
-	}
+	b.batch.Reset()
 	b.count = 0
 	b.logData = false
 }
@@ -119,8 +102,11 @@ func (b *RocksDBBatchBuilder) reset() {
 // the builder may be used to construct another batch, but the returned []byte
 // is only valid until the next builder method is called.
 func (b *RocksDBBatchBuilder) Finish() []byte {
-	repr := b.getRepr()
-	b.repr = b.repr[:headerSize]
+	b.batch.MaybeInit(initialBatchSize)
+
+	repr := b.batch.Repr()
+	// Set finished to true, so the next batch operation calls reset().
+	b.finished = true
 	b.count = 0
 	b.logData = false
 	return repr
@@ -128,46 +114,15 @@ func (b *RocksDBBatchBuilder) Finish() []byte {
 
 // Len returns the number of bytes currently in the under construction repr.
 func (b *RocksDBBatchBuilder) Len() int {
-	return len(b.repr)
+	return len(b.batch.Repr())
 }
 
 var _ = (*RocksDBBatchBuilder).Len
 
 // getRepr constructs the batch representation and returns it.
 func (b *RocksDBBatchBuilder) getRepr() []byte {
-	b.maybeInit()
-	buf := b.repr[countPos:headerSize]
-	v := uint32(b.count)
-	buf[0] = byte(v)
-	buf[1] = byte(v >> 8)
-	buf[2] = byte(v >> 16)
-	buf[3] = byte(v >> 24)
-	return b.repr
-}
-
-func (b *RocksDBBatchBuilder) grow(n int) {
-	newSize := len(b.repr) + n
-	if newSize > cap(b.repr) {
-		newCap := 2 * cap(b.repr)
-		for newCap < newSize {
-			newCap *= 2
-		}
-		newRepr := make([]byte, len(b.repr), newCap)
-		copy(newRepr, b.repr)
-		b.repr = newRepr
-	}
-	b.repr = b.repr[:newSize]
-}
-
-func putUvarint32(buf []byte, x uint32) int {
-	i := 0
-	for x >= 0x80 {
-		buf[i] = byte(x) | 0x80
-		x >>= 7
-		i++
-	}
-	buf[i] = byte(x)
-	return i + 1
+	b.batch.MaybeInit(initialBatchSize)
+	return b.batch.Repr()
 }
 
 func putUint32(b []byte, v uint32) {
@@ -188,61 +143,17 @@ func putUint64(b []byte, v uint64) {
 	b[7] = byte(v)
 }
 
-// encodeKey encodes an MVCC key into the batch, reserving extra bytes in
-// b.repr for use in encoding a value as well. This encoding must match with
-// the encoding in engine/db.cc:EncodeKey().
-func (b *RocksDBBatchBuilder) encodeKey(key MVCCKey, extra int) {
-	length := 1 + len(key.Key)
-	timestampLength := 0
-	if key.Timestamp != (hlc.Timestamp{}) {
-		timestampLength = 1 + 8
-		if key.Timestamp.Logical != 0 {
-			timestampLength += 4
-		}
-	}
-	length += timestampLength
-
-	pos := 1 + len(b.repr)
-	b.grow(1 + maxVarintLen32 + length + extra)
-	n := putUvarint32(b.repr[pos:], uint32(length))
-	b.repr = b.repr[:len(b.repr)-(maxVarintLen32-n)]
-	pos += n
-	copy(b.repr[pos:], key.Key)
-	if timestampLength > 0 {
-		pos += len(key.Key)
-		b.repr[pos] = 0
-		pos++
-		putUint64(b.repr[pos:], uint64(key.Timestamp.WallTime))
-		if key.Timestamp.Logical != 0 {
-			pos += 8
-			putUint32(b.repr[pos:], uint32(key.Timestamp.Logical))
-		}
-	}
-	b.repr[len(b.repr)-1-extra] = byte(timestampLength)
-}
-
-func (b *RocksDBBatchBuilder) encodeKeyValue(key MVCCKey, value []byte, tag BatchType) {
-	b.maybeInit()
-	b.count++
-
-	l := uint32(len(value))
-	extra := int(l) + maxVarintLen32
-
-	pos := len(b.repr)
-	b.encodeKey(key, extra)
-	b.repr[pos] = byte(tag)
-
-	pos = len(b.repr) - extra
-	n := putUvarint32(b.repr[pos:], l)
-	b.repr = b.repr[:len(b.repr)-(maxVarintLen32-n)]
-	copy(b.repr[pos+n:], value)
-}
-
 // Put sets the given key to the value provided.
 //
 // It is safe to modify the contents of the arguments after Put returns.
 func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
-	b.encodeKeyValue(key, value, BatchTypeValue)
+	if b.finished {
+		b.finished = false
+		b.reset()
+	}
+	b.buf = EncodeKeyToBuf(b.buf[:0], key)
+	_ = b.batch.Set(b.buf, value, nil)
+	b.count++
 }
 
 // Merge is a high-performance write operation used for values which are
@@ -252,29 +163,35 @@ func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
 //
 // It is safe to modify the contents of the arguments after Merge returns.
 func (b *RocksDBBatchBuilder) Merge(key MVCCKey, value []byte) {
-	b.encodeKeyValue(key, value, BatchTypeMerge)
+	if b.finished {
+		b.finished = false
+		b.reset()
+	}
+	b.buf = EncodeKeyToBuf(b.buf[:0], key)
+	_ = b.batch.Merge(b.buf, value, nil)
+	b.count++
 }
 
 // Clear removes the item from the db with the given key.
 //
 // It is safe to modify the contents of the arguments after Clear returns.
 func (b *RocksDBBatchBuilder) Clear(key MVCCKey) {
-	b.maybeInit()
+	if b.finished {
+		b.finished = false
+		b.reset()
+	}
+	b.buf = EncodeKeyToBuf(b.buf[:0], key)
+	_ = b.batch.Delete(b.buf, nil)
 	b.count++
-	pos := len(b.repr)
-	b.encodeKey(key, 0)
-	b.repr[pos] = byte(BatchTypeDeletion)
 }
 
 // SingleClear removes the most recent item from the db with the given key.
 //
 // It is safe to modify the contents of the arguments after SingleClear returns.
 func (b *RocksDBBatchBuilder) SingleClear(key MVCCKey) {
-	b.maybeInit()
-	b.count++
-	pos := len(b.repr)
-	b.encodeKey(key, 0)
-	b.repr[pos] = byte(BatchTypeSingleDeletion)
+	// TODO(itsbilal): When pebble.Batch supports SingleDelete, use that instead.
+	// Until then, alias this operation to regular Delete.
+	b.Clear(key)
 }
 
 // LogData adds a blob of log data to the batch. It will be written to the WAL,
@@ -282,16 +199,14 @@ func (b *RocksDBBatchBuilder) SingleClear(key MVCCKey) {
 //
 // It is safe to modify the contents of the arguments after LogData returns.
 func (b *RocksDBBatchBuilder) LogData(data []byte) {
-	b.maybeInit()
+	if b.finished {
+		b.finished = false
+		b.reset()
+	}
+
+	_ = b.batch.LogData(data, nil)
 	b.logData = true
-	pos := len(b.repr)
-	b.grow(1 + maxVarintLen32 + len(data))
-	b.repr[pos] = byte(BatchTypeLogData)
-	pos++
-	n := putUvarint32(b.repr[pos:], uint32(len(data)))
-	b.repr = b.repr[:len(b.repr)-(maxVarintLen32-n)]
-	pos += n
-	copy(b.repr[pos:], data)
+	b.count++
 }
 
 // ApplyRepr applies the mutations in repr to the current batch.
@@ -299,16 +214,15 @@ func (b *RocksDBBatchBuilder) LogData(data []byte) {
 // It is safe to modify the contents of the arguments after ApplyRepr
 // returns.
 func (b *RocksDBBatchBuilder) ApplyRepr(repr []byte) error {
-	if len(repr) < headerSize {
-		return errors.Errorf("batch repr too small: %d < %d", len(repr), headerSize)
+	if b.finished {
+		b.finished = false
+		b.reset()
 	}
-	b.maybeInit()
-	pos := len(b.repr)
-	data := repr[headerSize:]
-	b.grow(len(data))
-	copy(b.repr[pos:], data)
-	b.count += int(binary.LittleEndian.Uint32(repr[countPos:headerSize]))
-	return nil
+
+	b2 := pebble.NewBatchFromRepr(repr)
+	reprCount, _ := RocksDBBatchCount(repr)
+	b.count += reprCount
+	return b.batch.Apply(b2, nil)
 }
 
 // EncodeKey encodes an engine.MVCC key into the RocksDB representation. This
@@ -371,7 +285,7 @@ func DecodeMVCCKey(encodedKey []byte) (MVCCKey, error) {
 
 // Decode the header of RocksDB batch repr, returning both the count of the
 // entries in the batch and the suffix of data remaining in the batch.
-func rocksDBBatchDecodeHeader(repr []byte) (count int, orepr []byte, err error) {
+func rocksDBBatchDecodeHeader(repr []byte) (count int, orepr pebble.BatchReader, err error) {
 	if len(repr) < headerSize {
 		return 0, nil, errors.Errorf("batch repr too small: %d < %d", len(repr), headerSize)
 	}
@@ -380,25 +294,7 @@ func rocksDBBatchDecodeHeader(repr []byte) (count int, orepr []byte, err error) 
 		return 0, nil, errors.Errorf("bad sequence: expected 0, but found %d", seq)
 	}
 	count = int(binary.LittleEndian.Uint32(repr[countPos:headerSize]))
-	return count, repr[headerSize:], nil
-}
-
-// Decode a RocksDB batch repr variable length string, returning both the
-// string and the suffix of data remaining in the batch.
-func rocksDBBatchVarString(repr []byte) (s []byte, orepr []byte, err error) {
-	v, n := binary.Uvarint(repr)
-	if n <= 0 {
-		return nil, nil, fmt.Errorf("unable to decode uvarint")
-	}
-	repr = repr[n:]
-	if v == 0 {
-		return nil, repr, nil
-	}
-	if v > uint64(len(repr)) {
-		return nil, nil, fmt.Errorf("malformed varstring, expected %d bytes, but only %d remaining",
-			v, len(repr))
-	}
-	return repr[:v], repr[v:], nil
+	return count, pebble.MakeBatchReader(repr), nil
 }
 
 // RocksDBBatchReader is used to iterate the entries in a RocksDB batch
@@ -427,7 +323,7 @@ func rocksDBBatchVarString(repr []byte) (s []byte, orepr []byte, err error) {
 //   return err
 // }
 type RocksDBBatchReader struct {
-	repr []byte
+	batchReader pebble.BatchReader
 
 	// The error encountered during iterator, if any
 	err error
@@ -438,7 +334,6 @@ type RocksDBBatchReader struct {
 	// The following all represent the current entry and are updated by Next.
 	// `value` is not applicable for BatchTypeDeletion or BatchTypeSingleDeletion.
 	// `value` indicates the end key for BatchTypeRangeDeletion.
-	offset int
 	typ    BatchType
 	key    []byte
 	value  []byte
@@ -447,12 +342,11 @@ type RocksDBBatchReader struct {
 // NewRocksDBBatchReader creates a RocksDBBatchReader from the given repr and
 // verifies the header.
 func NewRocksDBBatchReader(repr []byte) (*RocksDBBatchReader, error) {
-	count, repr, err := rocksDBBatchDecodeHeader(repr)
+	count, batchReader, err := rocksDBBatchDecodeHeader(repr)
 	if err != nil {
 		return nil, err
 	}
-	// Set offset to -1 so the first call to Next will increment it to 0.
-	return &RocksDBBatchReader{repr: repr, count: count, offset: -1}, nil
+	return &RocksDBBatchReader{batchReader: batchReader, count: count}, nil
 }
 
 // Count returns the declared number of entries in the batch.
@@ -505,44 +399,13 @@ func (r *RocksDBBatchReader) MVCCEndKey() (MVCCKey, error) {
 // Next advances to the next entry in the batch, returning false when the batch
 // is empty.
 func (r *RocksDBBatchReader) Next() bool {
-	if r.err != nil {
-		return false
-	}
+	kind, ukey, value, ok := r.batchReader.Next()
 
-	r.offset++
-	if len(r.repr) == 0 {
-		if r.offset < r.count {
-			r.err = errors.Errorf("invalid batch: expected %d entries but found %d", r.count, r.offset)
-		}
-		return false
-	}
+	r.typ = BatchType(kind)
+	r.key = ukey
+	r.value = value
 
-	r.typ = BatchType(r.repr[0])
-	r.repr = r.repr[1:]
-	switch r.typ {
-	case BatchTypeDeletion, BatchTypeSingleDeletion:
-		if r.key, r.err = r.varstring(); r.err != nil {
-			return false
-		}
-	case BatchTypeValue, BatchTypeMerge, BatchTypeRangeDeletion:
-		if r.key, r.err = r.varstring(); r.err != nil {
-			return false
-		}
-		if r.value, r.err = r.varstring(); r.err != nil {
-			return false
-		}
-	default:
-		r.err = errors.Errorf("unexpected type %d", r.typ)
-		return false
-	}
-	return true
-}
-
-func (r *RocksDBBatchReader) varstring() ([]byte, error) {
-	var s []byte
-	var err error
-	s, r.repr, err = rocksDBBatchVarString(r.repr)
-	return s, err
+	return ok
 }
 
 // RocksDBBatchCount provides an efficient way to get the count of mutations
