@@ -19,13 +19,15 @@ tc_end_block "Compile C dependencies"
 
 tc_start_block "Maybe stress pull request"
 run build/builder.sh go install ./pkg/cmd/github-pull-request-make
-run build/builder.sh env BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=stress github-pull-request-make
+run build/builder.sh env COCKROACH_QUIET_START=true BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=stress github-pull-request-make
 tc_end_block "Maybe stress pull request"
 
 tc_start_block "Run Go tests"
 run build/builder.sh \
 	stdbuf -oL -eL \
+	env COCKROACH_QUIET_START=true \
 	make test TESTFLAGS='-v' 2>&1 \
+	| grep -av 'More existing levels in DB than needed' \
 	| tee artifacts/test.log \
 	| go-test-teamcity
 tc_end_block "Run Go tests"

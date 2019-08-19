@@ -9,8 +9,6 @@ tc_prepare
 export TMPDIR=$PWD/artifacts/testrace
 mkdir -p "$TMPDIR"
 
-export COCKROACH_QUIET_START=true
-
 tc_start_block "Determine changed packages"
 if tc_release_branch; then
 	pkgspec=./pkg/...
@@ -40,7 +38,7 @@ tc_end_block "Compile C dependencies"
 
 tc_start_block "Maybe stressrace pull request"
 build/builder.sh go install ./pkg/cmd/github-pull-request-make
-build/builder.sh env BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=stressrace github-pull-request-make
+build/builder.sh env COCKROACH_QUIET_START=true BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=stressrace github-pull-request-make
 tc_end_block "Maybe stressrace pull request"
 
 tc_start_block "Run Go tests under race detector"
@@ -48,12 +46,14 @@ true >artifacts/testrace.log
 for pkg in $pkgspec; do
 	run build/builder.sh env \
 		COCKROACH_LOGIC_TESTS_SKIP=true \
+		COCKROACH_QUIET_START=true \
 		stdbuf -oL -eL \
 		make testrace \
 		PKG="$pkg" \
 		TESTTIMEOUT=45m \
 		TESTFLAGS='-v' \
 		USE_ROCKSDB_ASSERTIONS=1 2>&1 \
+		| grep -av 'More existing levels in DB than needed' \
 		| tee -a artifacts/testrace.log \
 		| go-test-teamcity
 done

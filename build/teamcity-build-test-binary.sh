@@ -10,6 +10,7 @@ source "$(dirname "${0}")/teamcity-support.sh"
 tc_prepare
 
 tc_start_block "Build test binary"
-run build/builder.sh mkrelease linux-gnu -Otarget
+run build/builder.sh mkrelease linux-gnu -Otarget &> artifacts/compile-binary.log || (cat artifacts/compile-binary.log && false)
+rm artifacts/compile-binary.log
 run mv cockroach-linux-2.6.32-gnu-amd64 artifacts/cockroach
 tc_end_block "Build test binary"
