@@ -428,6 +428,12 @@ func (mm *BytesMonitor) AllocBytes() int64 {
 	return mm.mu.curAllocated
 }
 
+// SetMetrics sets the metric objects for the monitor.
+func (mm *BytesMonitor) SetMetrics(curCount *metric.Gauge, maxHist *metric.Histogram) {
+	mm.curBytesCount = curCount
+	mm.maxBytesHist = maxHist
+}
+
 // BoundAccount tracks the cumulated allocations for one client of a pool or
 // monitor. BytesMonitor has an account to its pool; BytesMonitor clients have
 // an account to the monitor. This allows each client to release all the bytes
