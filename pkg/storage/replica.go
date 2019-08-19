@@ -78,6 +78,12 @@ const (
 
 var testingDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
 
+var enableAtomicReplicationChanges = settings.RegisterBoolSetting(
+	"kv.atomic_replication_changes",
+	"set to true to enable atomic replication changes.",
+	false,
+)
+
 var disableSyncRaftLog = settings.RegisterBoolSetting(
 	"kv.raft_log.disable_synchronization_unsafe",
 	"set to true to disable synchronization on Raft log writes to persistent storage. "+
@@ -1312,22 +1318,33 @@ func (r *Replica) executeAdminBatch(
 		resp = &roachpb.AdminTransferLeaseResponse{}
 
 	case *roachpb.AdminChangeReplicasRequest:
-		var err error
-		expDesc := &tArgs.ExpDesc
 		chgs := tArgs.Changes()
-		for i := range chgs {
-			// Update expDesc to the outcome of the previous run to enable detection
-			// of concurrent updates while applying a series of changes.
-			//
-			// TODO(tbg): stop unrolling this once atomic replication changes are
-			// ready. Do any callers prefer unrolling though? We could add a flag.
-			expDesc, err = r.ChangeReplicas(ctx, expDesc, SnapshotRequest_REBALANCE, storagepb.ReasonAdminRequest, "", chgs[i:i+1])
-			if err != nil {
-				break
+
+		// We execute the change serially if we're not allowed to run atomic replication changes
+		// or if that was explicitly disabled.
+		unroll := !r.ClusterSettings().Version.IsActive(cluster.VersionAtomicChangeReplicas) ||
+			!enableAtomicReplicationChanges.Get(&r.ClusterSettings().SV)
+
+		var expDesc = &tArgs.ExpDesc
+		if !unroll {
+			// Atomic replication change.
+			var err error
+			expDesc, err = r.ChangeReplicas(ctx, expDesc, SnapshotRequest_REBALANCE, storagepb.ReasonAdminRequest, "", chgs)
+			pErr = roachpb.NewError(err)
+
+		} else {
+			// Legacy behavior.
+			for i := range chgs {
+				var err error
+				expDesc, err = r.ChangeReplicas(ctx, expDesc, SnapshotRequest_REBALANCE, storagepb.ReasonAdminRequest, "", chgs[i:i+1])
+				pErr = roachpb.NewError(err)
+
+				if pErr != nil {
+					break
+				}
 			}
 		}
-		pErr = roachpb.NewError(err)
-		if err != nil {
+		if pErr != nil {
 			resp = &roachpb.AdminChangeReplicasResponse{}
 		} else {
 			resp = &roachpb.AdminChangeReplicasResponse{

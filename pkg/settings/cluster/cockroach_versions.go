@@ -43,6 +43,7 @@ const (
 	VersionLearnerReplicas
 	VersionTopLevelForeignKeys
 	VersionAtomicChangeReplicasTrigger
+	VersionAtomicChangeReplicas
 
 	// Add new versions here (step one of two).
 
@@ -512,6 +513,15 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// support atomic replication changes.
 		Key:     VersionAtomicChangeReplicasTrigger,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 8},
+	},
+	{
+		// VersionAtomicChangeReplicas is https://github.com/cockroachdb/cockroach/pull/39713.
+		//
+		// It provides an implementation of (*Replica).ChangeReplicas that uses atomic replication
+		// changes. The corresponding cluster setting 'kv.atomic_replication_changes' provides a
+		// killswitch (i.e. no atomic replication changes will be scheduled when it is set to 'false').
+		Key:     VersionAtomicChangeReplicas,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 9},
 	},
 
 	// Add new versions here (step two of two).
