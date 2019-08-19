@@ -1525,6 +1525,12 @@ func (r *Replica) sendSnapshot(
 		}
 	}
 
+	strategy := SnapshotRequest_KV_BATCH
+	sstSnapshotStrategyEnabled := r.store.ClusterSettings().Version.IsActive(cluster.VersionStreamSSTSnapshot)
+	if sstSnapshotStrategyEnabled {
+		strategy = SnapshotRequest_SST
+	}
+
 	req := SnapshotRequest_Header{
 		State: snap.State,
 		// Tell the recipient whether it needs to synthesize the new
@@ -1551,7 +1557,7 @@ func (r *Replica) sendSnapshot(
 		// Recipients can choose to decline preemptive snapshots.
 		CanDecline: snapType == SnapshotRequest_PREEMPTIVE,
 		Priority:   priority,
-		Strategy:   SnapshotRequest_KV_BATCH,
+		Strategy:   strategy,
 		Type:       snapType,
 	}
 	sent := func() {

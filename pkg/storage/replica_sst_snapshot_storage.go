@@ -196,3 +196,8 @@ func (sssf *SSTSnapshotStorageFile) Close() error {
 	sssf.file = nil
 	return nil
 }
+
+// Filename returns the absolute path of the file.
+func (sssf *SSTSnapshotStorageFile) Filename() string {
+	return sssf.filename
+}

@@ -165,6 +165,18 @@ func (ri *ReplicaDataIterator) Valid() (bool, error) {
 	return ok, err
 }
 
+// UnsafeKey returns the current key, but the memory is invalidated on the next
+// call to {NextKey,Seek}.
+func (ri *ReplicaDataIterator) UnsafeKey() engine.MVCCKey {
+	return ri.it.UnsafeKey()
+}
+
+// UnsafeValue returns the same value as a byte slice, but the memory is
+// invalidated on the next call to {Next,Reset,Close}.
+func (ri *ReplicaDataIterator) UnsafeValue() []byte {
+	return ri.it.UnsafeValue()
+}
+
 // Key returns the current key.
 func (ri *ReplicaDataIterator) Key() engine.MVCCKey {
 	key := ri.it.UnsafeKey()

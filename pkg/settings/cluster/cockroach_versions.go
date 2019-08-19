@@ -515,7 +515,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 8},
 	},
 	{
-		// VersionStreamSSTSnapshot is TODO(jeffreyxiao): Fill pr link.
+		// VersionStreamSSTSnapshot is https://github.com/cockroachdb/cockroach/pull/39752.
 		Key:     VersionStreamSSTSnapshot,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 9},
 	},
