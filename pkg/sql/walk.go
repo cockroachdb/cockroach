@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -617,9 +616,6 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		n.plan = v.visit(n.plan)
 
 	case *explainPlanNode:
-		if v.observer.attr != nil {
-			v.observer.attr(name, "expanded", strconv.FormatBool(n.expanded))
-		}
 		n.plan = v.visit(n.plan)
 
 	case *cancelQueriesNode:
