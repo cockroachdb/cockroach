@@ -675,18 +675,18 @@ render            ·         ·            (a, b, c)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
-render            ·                      ·                (a, b, c)  ·
- │                render 0               a                ·          ·
- │                render 1               b                ·          ·
- │                render 2               c                ·          ·
- └── lookup-join  ·                      ·                (a, b, c)  ·
-      │           table                  def@primary      ·          ·
-      │           type                   semi             ·          ·
-      │           equality               (a, c) = (f, e)  ·          ·
-      │           equality cols are key  ·                ·          ·
-      └── scan    ·                      ·                (a, b, c)  ·
-·                 table                  abc@primary      ·          ·
-·                 spans                  ALL              ·          ·
+render            ·                      ·                (a, b, c)        ·
+ │                render 0               a                ·                ·
+ │                render 1               b                ·                ·
+ │                render 2               c                ·                ·
+ └── lookup-join  ·                      ·                (a, b, c, e, f)  ·
+      │           table                  def@primary      ·                ·
+      │           type                   inner            ·                ·
+      │           equality               (a, c) = (f, e)  ·                ·
+      │           equality cols are key  ·                ·                ·
+      └── scan    ·                      ·                (a, b, c)        ·
+·                 table                  abc@primary      ·                ·
+·                 spans                  ALL              ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND c=e)
