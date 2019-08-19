@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Equals returns true if two aggregation specifiers are identical (and thus
@@ -45,7 +45,7 @@ func (a AggregatorSpec_Aggregation) Equals(b AggregatorSpec_Aggregation) bool {
 	return true
 }
 
-func (spec *WindowerSpec_Frame_Mode) initFromAST(w tree.WindowFrameMode) {
+func (spec *WindowerSpec_Frame_Mode) initFromAST(w tree.WindowFrameMode) error {
 	switch w {
 	case tree.RANGE:
 		*spec = WindowerSpec_Frame_RANGE
@@ -54,11 +54,12 @@ func (spec *WindowerSpec_Frame_Mode) initFromAST(w tree.WindowFrameMode) {
 	case tree.GROUPS:
 		*spec = WindowerSpec_Frame_GROUPS
 	default:
-		panic("unexpected WindowFrameMode")
+		return errors.AssertionFailedf("unexpected WindowFrameMode")
 	}
+	return nil
 }
 
-func (spec *WindowerSpec_Frame_BoundType) initFromAST(bt tree.WindowFrameBoundType) {
+func (spec *WindowerSpec_Frame_BoundType) initFromAST(bt tree.WindowFrameBoundType) error {
 	switch bt {
 	case tree.UnboundedPreceding:
 		*spec = WindowerSpec_Frame_UNBOUNDED_PRECEDING
@@ -71,8 +72,25 @@ func (spec *WindowerSpec_Frame_BoundType) initFromAST(bt tree.WindowFrameBoundTy
 	case tree.UnboundedFollowing:
 		*spec = WindowerSpec_Frame_UNBOUNDED_FOLLOWING
 	default:
-		panic("unexpected WindowFrameBoundType")
+		return errors.AssertionFailedf("unexpected WindowFrameBoundType")
 	}
+	return nil
+}
+
+func (spec *WindowerSpec_Frame_Exclusion) initFromAST(e tree.WindowFrameExclusion) error {
+	switch e {
+	case tree.NoExclusion:
+		*spec = WindowerSpec_Frame_NO_EXCLUSION
+	case tree.ExcludeCurrentRow:
+		*spec = WindowerSpec_Frame_EXCLUDE_CURRENT_ROW
+	case tree.ExcludeGroup:
+		*spec = WindowerSpec_Frame_EXCLUDE_GROUP
+	case tree.ExcludeTies:
+		*spec = WindowerSpec_Frame_EXCLUDE_TIES
+	default:
+		return errors.AssertionFailedf("unexpected WindowerFrameExclusion")
+	}
+	return nil
 }
 
 // If offset exprs are present, we evaluate them and save the encoded results
@@ -84,7 +102,9 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 		return errors.Errorf("unexpected: Start Bound is nil")
 	}
 	spec.Start = WindowerSpec_Frame_Bound{}
-	spec.Start.BoundType.initFromAST(b.StartBound.BoundType)
+	if err := spec.Start.BoundType.initFromAST(b.StartBound.BoundType); err != nil {
+		return err
+	}
 	if b.StartBound.HasOffset() {
 		typedStartOffset := b.StartBound.OffsetExpr.(tree.TypedExpr)
 		dStartOffset, err := typedStartOffset.Eval(evalCtx)
@@ -126,7 +146,9 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 
 	if b.EndBound != nil {
 		spec.End = &WindowerSpec_Frame_Bound{}
-		spec.End.BoundType.initFromAST(b.EndBound.BoundType)
+		if err := spec.End.BoundType.initFromAST(b.EndBound.BoundType); err != nil {
+			return err
+		}
 		if b.EndBound.HasOffset() {
 			typedEndOffset := b.EndBound.OffsetExpr.(tree.TypedExpr)
 			dEndOffset, err := typedEndOffset.Eval(evalCtx)
@@ -189,37 +211,57 @@ func isNegative(evalCtx *tree.EvalContext, offset tree.Datum) bool {
 // InitFromAST initializes the spec based on tree.WindowFrame. It will evaluate
 // offset expressions if present in the frame.
 func (spec *WindowerSpec_Frame) InitFromAST(f *tree.WindowFrame, evalCtx *tree.EvalContext) error {
-	spec.Mode.initFromAST(f.Mode)
+	if err := spec.Mode.initFromAST(f.Mode); err != nil {
+		return err
+	}
+	if err := spec.Exclusion.initFromAST(f.Exclusion); err != nil {
+		return err
+	}
 	return spec.Bounds.initFromAST(f.Bounds, f.Mode, evalCtx)
 }
 
-func (spec WindowerSpec_Frame_Mode) convertToAST() tree.WindowFrameMode {
+func (spec WindowerSpec_Frame_Mode) convertToAST() (tree.WindowFrameMode, error) {
 	switch spec {
 	case WindowerSpec_Frame_RANGE:
-		return tree.RANGE
+		return tree.RANGE, nil
 	case WindowerSpec_Frame_ROWS:
-		return tree.ROWS
+		return tree.ROWS, nil
 	case WindowerSpec_Frame_GROUPS:
-		return tree.GROUPS
+		return tree.GROUPS, nil
 	default:
-		panic("unexpected WindowerSpec_Frame_Mode")
+		return tree.WindowFrameMode(0), errors.AssertionFailedf("unexpected WindowerSpec_Frame_Mode")
 	}
 }
 
-func (spec WindowerSpec_Frame_BoundType) convertToAST() tree.WindowFrameBoundType {
+func (spec WindowerSpec_Frame_BoundType) convertToAST() (tree.WindowFrameBoundType, error) {
 	switch spec {
 	case WindowerSpec_Frame_UNBOUNDED_PRECEDING:
-		return tree.UnboundedPreceding
+		return tree.UnboundedPreceding, nil
 	case WindowerSpec_Frame_OFFSET_PRECEDING:
-		return tree.OffsetPreceding
+		return tree.OffsetPreceding, nil
 	case WindowerSpec_Frame_CURRENT_ROW:
-		return tree.CurrentRow
+		return tree.CurrentRow, nil
 	case WindowerSpec_Frame_OFFSET_FOLLOWING:
-		return tree.OffsetFollowing
+		return tree.OffsetFollowing, nil
 	case WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
-		return tree.UnboundedFollowing
+		return tree.UnboundedFollowing, nil
 	default:
-		panic("unexpected WindowerSpec_Frame_BoundType")
+		return tree.WindowFrameBoundType(0), errors.AssertionFailedf("unexpected WindowerSpec_Frame_BoundType")
+	}
+}
+
+func (spec WindowerSpec_Frame_Exclusion) convertToAST() (tree.WindowFrameExclusion, error) {
+	switch spec {
+	case WindowerSpec_Frame_NO_EXCLUSION:
+		return tree.NoExclusion, nil
+	case WindowerSpec_Frame_EXCLUDE_CURRENT_ROW:
+		return tree.ExcludeCurrentRow, nil
+	case WindowerSpec_Frame_EXCLUDE_GROUP:
+		return tree.ExcludeGroup, nil
+	case WindowerSpec_Frame_EXCLUDE_TIES:
+		return tree.ExcludeTies, nil
+	default:
+		return tree.WindowFrameExclusion(0), errors.AssertionFailedf("unexpected WindowerSpec_Frame_Exclusion")
 	}
 }
 
@@ -227,17 +269,43 @@ func (spec WindowerSpec_Frame_BoundType) convertToAST() tree.WindowFrameBoundTyp
 // WindowerSpec_Frame_Bounds. Note that it might not be fully equivalent to
 // original - if offsetExprs were present in original tree.WindowFrameBounds,
 // they are not included.
-func (spec WindowerSpec_Frame_Bounds) convertToAST() tree.WindowFrameBounds {
-	bounds := tree.WindowFrameBounds{StartBound: &tree.WindowFrameBound{
-		BoundType: spec.Start.BoundType.convertToAST(),
-	}}
-	if spec.End != nil {
-		bounds.EndBound = &tree.WindowFrameBound{BoundType: spec.End.BoundType.convertToAST()}
+func (spec WindowerSpec_Frame_Bounds) convertToAST() (tree.WindowFrameBounds, error) {
+	bounds := tree.WindowFrameBounds{}
+	startBoundType, err := spec.Start.BoundType.convertToAST()
+	if err != nil {
+		return bounds, err
 	}
-	return bounds
+	bounds.StartBound = &tree.WindowFrameBound{
+		BoundType: startBoundType,
+	}
+
+	if spec.End != nil {
+		endBoundType, err := spec.End.BoundType.convertToAST()
+		if err != nil {
+			return bounds, err
+		}
+		bounds.EndBound = &tree.WindowFrameBound{BoundType: endBoundType}
+	}
+	return bounds, nil
 }
 
 // ConvertToAST produces a tree.WindowFrame given a WindoweSpec_Frame.
-func (spec *WindowerSpec_Frame) ConvertToAST() *tree.WindowFrame {
-	return &tree.WindowFrame{Mode: spec.Mode.convertToAST(), Bounds: spec.Bounds.convertToAST()}
+func (spec *WindowerSpec_Frame) ConvertToAST() (*tree.WindowFrame, error) {
+	mode, err := spec.Mode.convertToAST()
+	if err != nil {
+		return nil, err
+	}
+	bounds, err := spec.Bounds.convertToAST()
+	if err != nil {
+		return nil, err
+	}
+	exclusion, err := spec.Exclusion.convertToAST()
+	if err != nil {
+		return nil, err
+	}
+	return &tree.WindowFrame{
+		Mode:      mode,
+		Bounds:    bounds,
+		Exclusion: exclusion,
+	}, nil
 }
