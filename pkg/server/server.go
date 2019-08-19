@@ -370,6 +370,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	rootSQLMemoryMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(s.cfg.SQLMemoryPoolSize))
 
+	// bulkMemoryMonitor is the parent to all child SQL monitors tracking bulk
+	// operations (IMPORT, index backfill). It is itself a child of the
+	// ParentMemoryMonitor.
+	bulkMemoryMonitor := mon.MakeMonitorInheritWithLimit("bulk-mon", 0 /* limit */, &rootSQLMemoryMonitor)
+	bulkMetrics := bulk.MakeBulkMetrics(cfg.HistogramWindowInterval())
+	s.registry.AddMetricStruct(bulkMetrics)
+	bulkMemoryMonitor.SetMetrics(bulkMetrics.CurBytesCount, bulkMetrics.MaxBytesHist)
+	bulkMemoryMonitor.Start(context.Background(), &rootSQLMemoryMonitor, mon.BoundAccount{})
+
 	// Set up the DistSQL temp engine.
 
 	useStoreSpec := cfg.Stores.Specs[s.cfg.TempStorageConfig.SpecIdx]
@@ -537,17 +546,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ClusterName:    s.cfg.ClusterName,
 
 		TempStorage: tempEngine,
+		DiskMonitor: s.cfg.TempStorageConfig.Mon,
+
+		ParentMemoryMonitor: &rootSQLMemoryMonitor,
 		BulkAdder: func(
 			ctx context.Context, db *client.DB, ts hlc.Timestamp, opts storagebase.BulkAdderOptions,
 		) (storagebase.BulkAdder, error) {
 			// Attach a child memory monitor to enable control over the BulkAdder's
 			// memory usage.
-			bulkMon := distsqlrun.NewMonitor(ctx, &rootSQLMemoryMonitor, fmt.Sprintf("bulk-monitor"))
+			bulkMon := distsqlrun.NewMonitor(ctx, &bulkMemoryMonitor, fmt.Sprintf("bulk-adder-monitor"))
 			return bulk.MakeBulkAdder(ctx, db, s.distSender.RangeDescriptorCache(), ts, opts, bulkMon)
 		},
-		DiskMonitor: s.cfg.TempStorageConfig.Mon,
-
-		ParentMemoryMonitor: &rootSQLMemoryMonitor,
 
 		Metrics: &distSQLMetrics,
 
