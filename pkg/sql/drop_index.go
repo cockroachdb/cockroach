@@ -151,37 +151,63 @@ func (p *planner) dropIndexByName(
 		}
 	}
 
+	// Remove all foreign key references and backreferences from the index.
+	// TODO (lucy): This is incorrect for two reasons: The first is that FKs won't
+	// be restored if the DROP INDEX is rolled back, and the second is that
+	// validated constraints should be dropped in the schema changer in multiple
+	// steps to avoid inconsistencies. We should be queuing a mutation to drop the
+	// FK instead. The reason why the FK is removed here is to keep the index
+	// state consistent with the removal of the reference on the other table
+	// involved in the FK, in case of rollbacks (#38733).
+
 	// Check for foreign key mutations referencing this index.
 	for _, m := range tableDesc.Mutations {
-		if c := m.GetConstraint(); c != nil && c.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY && c.ForeignKeyIndex == idx.ID {
+		if c := m.GetConstraint(); c != nil &&
+			c.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY &&
+			c.ForeignKey.LegacyOriginIndex == idx.ID {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"referencing constraint %q in the middle of being added, try again later", c.ForeignKey.Name)
 		}
 	}
 
-	// Queue the mutation.
-	var droppedViews []string
-	if idx.ForeignKey.IsSet() {
-		if behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint {
-			return errors.Errorf("index %q is in use as a foreign key constraint", idx.Name)
-		}
-		if err := p.removeFKBackReference(ctx, tableDesc, idx); err != nil {
-			return err
+	// Index for updating the FK slices in place when removing FKs.
+	sliceIdx := 0
+	for i := range tableDesc.OutboundFKs {
+		tableDesc.OutboundFKs[sliceIdx] = tableDesc.OutboundFKs[i]
+		sliceIdx++
+		fk := &tableDesc.OutboundFKs[i]
+		if fk.LegacyOriginIndex == idx.ID {
+			if behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint {
+				return errors.Errorf("index %q is in use as a foreign key constraint", idx.Name)
+			}
+			sliceIdx--
+			if err := p.removeFKBackReference(ctx, tableDesc, fk); err != nil {
+				return err
+			}
 		}
 	}
+	tableDesc.OutboundFKs = tableDesc.OutboundFKs[:sliceIdx]
+
+	sliceIdx = 0
+	for i := range tableDesc.InboundFKs {
+		tableDesc.InboundFKs[sliceIdx] = tableDesc.InboundFKs[i]
+		sliceIdx++
+		fk := &tableDesc.InboundFKs[i]
+		if fk.LegacyReferencedIndex == idx.ID {
+			err := p.canRemoveFKBackreference(ctx, idx.Name, fk, behavior)
+			if err != nil {
+				return err
+			}
+			sliceIdx--
+			if err := p.removeFKForBackReference(ctx, tableDesc, fk); err != nil {
+				return err
+			}
+		}
+	}
+	tableDesc.InboundFKs = tableDesc.InboundFKs[:sliceIdx]
 
 	if len(idx.Interleave.Ancestors) > 0 {
 		if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
-			return err
-		}
-	}
-
-	for _, ref := range idx.ReferencedBy {
-		fetched, err := p.canRemoveFK(ctx, idx.Name, ref, behavior)
-		if err != nil {
-			return err
-		}
-		if err := p.removeFK(ctx, ref, fetched); err != nil {
 			return err
 		}
 	}
@@ -195,6 +221,7 @@ func (p *planner) dropIndexByName(
 		return errors.Errorf("index %q is in use as unique constraint (use CASCADE if you really want to drop it)", idx.Name)
 	}
 
+	var droppedViews []string
 	for _, tableRef := range tableDesc.DependedOnBy {
 		if tableRef.IndexID == idx.ID {
 			// Ensure that we have DROP privilege on all dependent views
@@ -250,18 +277,6 @@ func (p *planner) dropIndexByName(
 				}
 			}
 
-			// Remove all foreign key references and backreferences from the index.
-			// TODO (lucy): This is incorrect for two reasons: The first is that FKs
-			// won't be restored if the DROP INDEX is rolled back, and the second is
-			// that validated constraints should be dropped in the schema changer in
-			// multiple steps to avoid inconsistencies. We should be queuing a
-			// mutation to drop the FK instead. The reason why the FK is removed here
-			// is to keep the index state consistent with the earlier removal of the
-			// reference on the other table involved in the FK, in case of rollbacks
-			// (#38733).
-			idxEntry.ForeignKey = sqlbase.ForeignKeyReference{}
-			idxEntry.ReferencedBy = nil
-
 			// the idx we picked up with FindIndexByID at the top may not
 			// contain the same field any more due to other schema changes
 			// intervening since the initial lookup. So we send the recent
@@ -278,7 +293,7 @@ func (p *planner) dropIndexByName(
 		return fmt.Errorf("index %q in the middle of being added, try again later", idxName)
 	}
 
-	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
+	if err := tableDesc.Validate(ctx, p.txn); err != nil {
 		return err
 	}
 	mutationID, err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc)

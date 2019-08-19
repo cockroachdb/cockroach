@@ -841,7 +841,7 @@ func (p *planner) writeTableDescToBatch(
 		p.queueSchemaChange(tableDesc.TableDesc(), mutationID)
 	}
 
-	if err := tableDesc.ValidateTable(p.extendedEvalCtx.Settings); err != nil {
+	if err := tableDesc.ValidateTable(); err != nil {
 		return errors.AssertionFailedf("table descriptor is not valid: %s\n%v", err, tableDesc)
 	}
 
