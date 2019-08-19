@@ -914,6 +914,22 @@ func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon
 	return &monitor
 }
 
+// NewLimitedMonitor is a utility function used by processors to create a new
+// limited memory monitor with the given name and start it. The returned
+// monitor must be closed. The limit is determined by settingWorkMemBytes
+// or config.TestingKnobs.MemoryLimitBytes.
+func NewLimitedMonitor(
+	ctx context.Context, parent *mon.BytesMonitor, config *ServerConfig, name string,
+) *mon.BytesMonitor {
+	limit := config.TestingKnobs.MemoryLimitBytes
+	if limit <= 0 {
+		limit = settingWorkMemBytes.Get(&config.Settings.SV)
+	}
+	limitedMon := mon.MakeMonitorInheritWithLimit(name, limit, parent)
+	limitedMon.Start(ctx, parent, mon.BoundAccount{})
+	return &limitedMon
+}
+
 // getInputStats is a utility function to check whether the given input is
 // collecting stats, returning true and the stats if so. If false is returned,
 // the input is not collecting stats.
