@@ -63,7 +63,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 			p := internalPlanner.(*planner)
 
 			p.stmt = &Statement{Statement: stmt}
-			if err := p.makePlan(ctx); err != nil {
+			if err := p.makeOptimizerPlan(ctx); err != nil {
 				t.Fatal(err)
 			}
 			if d.Cmd == "plan-string" {

@@ -723,14 +723,10 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 	planner.curPlan = planTop{AST: stmt.AST}
 
 	log.VEvent(ctx, 2, "generating optimizer plan")
-	var result *planTop
-	var err error
-	result, err = planner.makeOptimizerPlan(ctx)
-	if err != nil {
+	if err := planner.makeOptimizerPlan(ctx); err != nil {
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
 		return err
 	}
-	planner.curPlan = *result
 	return nil
 }
 

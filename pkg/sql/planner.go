@@ -276,6 +276,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.Tables = tables
 
 	p.queryCacheSession.Init()
+	p.optPlanningCtx.init(p)
 
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create

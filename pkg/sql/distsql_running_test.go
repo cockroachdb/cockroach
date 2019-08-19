@@ -149,7 +149,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		// We need to re-plan every time, since close() below makes
 		// the plan unusable across retries.
 		p.stmt = &Statement{Statement: stmt}
-		if err := p.makePlan(ctx); err != nil {
+		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
 		}
 		defer p.curPlan.close(ctx)

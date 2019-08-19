@@ -149,8 +149,9 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 }
 
 // makeOptimizerPlan is an alternative to makePlan which uses the cost-based
-// optimizer. On success, the returned flags always have planFlagOptUsed set.
-func (p *planner) makeOptimizerPlan(ctx context.Context) (*planTop, error) {
+// optimizer. On success, it populates p.curPlan (and the flags always have
+// planFlagOptUsed set).
+func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	stmt := p.stmt
 
 	opc := &p.optPlanningCtx
@@ -158,7 +159,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) (*planTop, error) {
 
 	execMemo, err := opc.buildExecMemo(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Build the plan tree.
@@ -166,7 +167,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) (*planTop, error) {
 	execFactory := makeExecFactory(p)
 	plan, err := execbuilder.New(&execFactory, execMemo, &opc.catalog, root, p.EvalContext()).Build()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	result := plan.(*planTop)
@@ -176,11 +177,13 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) (*planTop, error) {
 	cols := planColumns(result.plan)
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
-			return nil, pgerror.New(pgcode.FeatureNotSupported, "cached plan must not change result type")
+			return pgerror.New(pgcode.FeatureNotSupported, "cached plan must not change result type")
 		}
 	}
 
-	return result, nil
+	p.curPlan = *result
+
+	return nil
 }
 
 type optPlanningCtx struct {
