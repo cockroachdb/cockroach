@@ -224,7 +224,7 @@ func (s *server) gossipReceiver(
 			// Let the connection through so that the client can get a node ID. Once it
 			// has one, we'll run the logic below to decide whether to keep the
 			// connection to it or to forward it elsewhere.
-			log.Infof(ctx, "received initial cluster-verification connection from %s", args.Addr)
+			log.StartupInfof(ctx, "received initial cluster-verification connection from %s", args.Addr)
 		} else if !nodeIdentified {
 			nodeIdentified = true
 

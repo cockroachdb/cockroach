@@ -293,7 +293,7 @@ func (cfg *Config) CheckCertificateAddrs(ctx context.Context) {
 		addrInfo := certAddrs(cert)
 
 		// Log the certificate details in any case. This will aid during troubleshooting.
-		log.Infof(ctx, "server certificate addresses: %s", addrInfo)
+		log.StartupInfof(ctx, "server certificate addresses: %s", addrInfo)
 
 		var msg bytes.Buffer
 		// Verify the compatibility. This requires that ValidateAddrs() has
@@ -339,7 +339,7 @@ func (cfg *Config) CheckCertificateAddrs(ctx context.Context) {
 
 		// Log the certificate details in any case. This will aid during
 		// troubleshooting.
-		log.Infof(ctx, "web UI certificate addresses: %s", addrInfo)
+		log.StartupInfof(ctx, "web UI certificate addresses: %s", addrInfo)
 	}
 }
 

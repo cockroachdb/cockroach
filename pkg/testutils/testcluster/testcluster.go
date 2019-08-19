@@ -651,8 +651,9 @@ func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*storage.Store,
 func (tc *TestCluster) WaitForFullReplication() error {
 	start := timeutil.Now()
 	defer func() {
-		end := timeutil.Now()
-		log.Infof(context.TODO(), "WaitForFullReplication took: %s", end.Sub(start))
+		if took := timeutil.Now().Sub(start); took > 100*time.Millisecond {
+			log.Infof(context.TODO(), "WaitForFullReplication took: %s", took)
+		}
 	}()
 
 	if len(tc.Servers) < 3 {

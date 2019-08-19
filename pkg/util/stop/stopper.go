@@ -539,7 +539,7 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 		close(s.quiescer)
 	}
 	for s.mu.numTasks > 0 {
-		log.Infof(ctx, "quiescing; tasks left: %s", s.runningTasksLocked())
+		log.StartupInfof(ctx, "quiescing; tasks left: %s", s.runningTasksLocked())
 		// Unlock s.mu, wait for the signal, and lock s.mu.
 		s.mu.quiesce.Wait()
 	}

@@ -9,6 +9,8 @@ tc_prepare
 export TMPDIR=$PWD/artifacts/testrace
 mkdir -p "$TMPDIR"
 
+export COCKROACH_QUIET_START=true
+
 tc_start_block "Determine changed packages"
 if tc_release_branch; then
 	pkgspec=./pkg/...
@@ -53,7 +55,6 @@ for pkg in $pkgspec; do
 		TESTFLAGS='-v' \
 		USE_ROCKSDB_ASSERTIONS=1 2>&1 \
 		| tee -a artifacts/testrace.log \
-		| grep -av "quiescing; tasks left" \
 		| go-test-teamcity
 done
 tc_end_block "Run Go tests under race detector"

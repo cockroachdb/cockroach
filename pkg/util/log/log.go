@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -28,6 +29,9 @@ func init() {
 	copyStandardLogTo("INFO")
 	errors.SetWarningFn(Warningf)
 }
+
+// QuietStart indicates if quieter startups have been requested (e.g. in tests).
+var QuietStart = envutil.EnvOrDefaultBool("COCKROACH_QUIET_START", false)
 
 // FatalOnPanic recovers from a panic and exits the process with a
 // Fatal log. This is useful for avoiding a panic being caught through
@@ -92,6 +96,15 @@ func Shout(ctx context.Context, sev Severity, args ...interface{}) {
 // message. Arguments are handled in the manner of fmt.Printf; a newline is
 // appended.
 func Infof(ctx context.Context, format string, args ...interface{}) {
+	logDepth(ctx, 1, Severity_INFO, format, args)
+}
+
+// StartupInfof is like Infof except it will be silenced when quiet startup is
+// requested (e.g. in tests).
+func StartupInfof(ctx context.Context, format string, args ...interface{}) {
+	if QuietStart {
+		return
+	}
 	logDepth(ctx, 1, Severity_INFO, format, args)
 }
 

@@ -65,7 +65,7 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 				log.Infof(ctx, "failed attempt to upgrade cluster version, error: %s", err)
 				continue
 			} else if quit {
-				log.Info(ctx, "no need to upgrade, cluster already at the newest version")
+				log.StartupInfof(ctx, "no need to upgrade, cluster already at the newest version")
 				return
 			}
 

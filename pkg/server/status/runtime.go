@@ -303,7 +303,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) *RuntimeStatSa
 	// We first build set the labels on the metadata.
 	info := build.GetInfo()
 	timestamp, err := info.Timestamp()
-	if err != nil {
+	if err != nil && !log.QuietStart {
 		// We can't panic here, tests don't have a build timestamp.
 		log.Warningf(ctx, "Could not parse build timestamp: %v", err)
 	}

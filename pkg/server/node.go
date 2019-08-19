@@ -314,7 +314,7 @@ func (n *Node) bootstrapCluster(
 	}
 	n.clusterID.Set(ctx, clusterID)
 
-	log.Infof(ctx, "**** cluster %s has been created", clusterID)
+	log.StartupInfof(ctx, "**** cluster %s has been created", clusterID)
 	return nil
 }
 
@@ -369,7 +369,7 @@ func (n *Node) start(
 		if err != nil {
 			return err
 		}
-		log.Infof(ctxWithSpan, "new node allocated ID %d", newID)
+		log.StartupInfof(ctxWithSpan, "new node allocated ID %d", newID)
 		span.Finish()
 		nodeID = newID
 	}
@@ -419,7 +419,7 @@ func (n *Node) start(
 		if err != nil {
 			return errors.Errorf("could not query store capacity: %s", err)
 		}
-		log.Infof(ctx, "initialized store %s: %+v", s, capacity)
+		log.StartupInfof(ctx, "initialized store %s: %+v", s, capacity)
 
 		n.addStore(s)
 	}
@@ -500,7 +500,7 @@ func (n *Node) start(
 
 	allEngines := append([]engine.Engine(nil), initializedEngines...)
 	allEngines = append(allEngines, emptyEngines...)
-	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, allEngines, attrs.Attrs)
+	log.StartupInfof(ctx, "%s: started with %v engine(s) and attributes %v", n, allEngines, attrs.Attrs)
 	return nil
 }
 
@@ -633,7 +633,7 @@ func (n *Node) bootstrapStores(
 // for a match. If not part of a cluster, the cluster ID is set. The
 // node's address is gossiped with node ID as the gossip key.
 func (n *Node) connectGossip(ctx context.Context) error {
-	log.Infof(ctx, "connecting to gossip network to verify cluster ID...")
+	log.StartupInfof(ctx, "connecting to gossip network to verify cluster ID...")
 	select {
 	case <-n.stopper.ShouldStop():
 		return errors.New("stop called before we could connect to gossip")
@@ -653,7 +653,7 @@ func (n *Node) connectGossip(ctx context.Context) error {
 		return errors.Errorf("node %d belongs to cluster %q but is attempting to connect to a gossip network for cluster %q",
 			n.Descriptor.NodeID, clusterID, gossipClusterID)
 	}
-	log.Infof(ctx, "node connected via gossip and verified as part of cluster %q", gossipClusterID)
+	log.StartupInfof(ctx, "node connected via gossip and verified as part of cluster %q", gossipClusterID)
 	return nil
 }
 

@@ -9,6 +9,8 @@ tc_prepare
 export TMPDIR=$PWD/artifacts/test
 mkdir -p "$TMPDIR"
 
+export COCKROACH_QUIET_START=true
+
 tc_start_block "Compile C dependencies"
 # Buffer noisy output and only print it on failure.
 run build/builder.sh make -Otarget c-deps &> artifacts/c-build.log || (cat artifacts/c-build.log && false)
@@ -25,7 +27,6 @@ run build/builder.sh \
 	stdbuf -oL -eL \
 	make test TESTFLAGS='-v' 2>&1 \
 	| tee artifacts/test.log \
-	| grep -av "quiescing; tasks left"  \
 	| go-test-teamcity
 tc_end_block "Run Go tests"
 

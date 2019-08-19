@@ -391,7 +391,7 @@ func (g *Gossip) GetNodeMetrics() *Metrics {
 // SetNodeDescriptor adds the node descriptor to the gossip network.
 func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	ctx := g.AnnotateCtx(context.TODO())
-	log.Infof(ctx, "NodeDescriptor set to %+v", desc)
+	log.StartupInfof(ctx, "NodeDescriptor set to %+v", desc)
 	if desc.Address.IsEmpty() {
 		log.Fatalf(ctx, "n%d address is empty", desc.NodeID)
 	}

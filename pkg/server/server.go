@@ -899,7 +899,7 @@ func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) {
 		log.Fatal(ctx, err)
 	}
 
-	log.Info(ctx, "monitoring forward clock jumps based on server.clock.forward_jump_check_enabled")
+	log.StartupInfof(ctx, "monitoring forward clock jumps based on server.clock.forward_jump_check_enabled")
 }
 
 // ensureClockMonotonicity sleeps till the wall time reaches
@@ -1347,7 +1347,7 @@ func (s *Server) Start(ctx context.Context) error {
 			}()
 		}
 
-		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command or join with an already initialized node.")
+		log.StartupInfof(ctx, "no stores bootstrapped and --join flag specified, awaiting init command or join with an already initialized node.")
 
 		if len(s.cfg.GossipBootstrapResolvers) == 0 {
 			// If the _unfiltered_ list of hosts from the --join flag is
@@ -1357,7 +1357,7 @@ func (s *Server) Start(ctx context.Context) error {
 			if _, err := s.initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
 				return errors.Wrap(err, "while bootstrapping")
 			}
-			log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
+			log.StartupInfof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
 		}
 
 		initRes, err := s.initServer.awaitBootstrap()
@@ -1474,15 +1474,15 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.grpc.setMode(modeOperational)
 
-	log.Infof(ctx, "starting %s server at %s (use: %s)",
+	log.StartupInfof(ctx, "starting %s server at %s (use: %s)",
 		s.cfg.HTTPRequestScheme(), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
 	rpcConnType := "grpc/postgres"
 	if s.cfg.SplitListenSQL {
 		rpcConnType = "grpc"
-		log.Infof(ctx, "starting postgres server at %s (use: %s)", s.cfg.SQLAddr, s.cfg.SQLAdvertiseAddr)
+		log.StartupInfof(ctx, "starting postgres server at %s (use: %s)", s.cfg.SQLAddr, s.cfg.SQLAdvertiseAddr)
 	}
-	log.Infof(ctx, "starting %s server at %s", rpcConnType, s.cfg.Addr)
-	log.Infof(ctx, "advertising CockroachDB node at %s", s.cfg.AdvertiseAddr)
+	log.StartupInfof(ctx, "starting %s server at %s", rpcConnType, s.cfg.Addr)
+	log.StartupInfof(ctx, "advertising CockroachDB node at %s", s.cfg.AdvertiseAddr)
 
 	log.Event(ctx, "accepting connections")
 
@@ -1550,7 +1550,7 @@ func (s *Server) Start(ctx context.Context) error {
 			log.Fatalf(ctx, "%+v", err)
 		}
 	}
-	log.Infof(ctx, "done ensuring all necessary migrations have run")
+	log.StartupInfof(ctx, "done ensuring all necessary migrations have run")
 
 	// Start garbage collecting system events.
 	s.startSystemLogsGC(ctx)
@@ -1788,7 +1788,7 @@ func (s *Server) startServeUI(
 func (s *Server) startServeSQL(
 	ctx, workersCtx context.Context, connManager netutil.Server, pgL net.Listener,
 ) error {
-	log.Info(ctx, "serving sql connections")
+	log.StartupInfof(ctx, "serving sql connections")
 	// Start servicing SQL connections.
 
 	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
@@ -1977,7 +1977,7 @@ func (s *Server) startSampleEnvironment(ctx context.Context, frequency time.Dura
 	ctx = s.AnnotateCtx(ctx)
 	goroutineDumper, err := goroutinedumper.NewGoroutineDumper(s.cfg.GoroutineDumpDirName)
 	if err != nil {
-		log.Infof(ctx, "Could not start goroutine dumper worker due to: %s", err)
+		log.StartupInfof(ctx, "Could not start goroutine dumper worker due to: %s", err)
 	}
 
 	// We're not going to take heap profiles if running with in-memory stores.
