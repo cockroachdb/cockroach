@@ -13,6 +13,8 @@ package sql
 import (
 	"fmt"
 	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // applyLimit tells this node to optimize things under the assumption that
@@ -173,9 +175,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *showTraceReplicaNode:
 		p.setUnlimited(n.plan)
 	case *explainPlanNode:
-		if n.expanded {
-			p.setUnlimited(n.plan)
-		}
+		p.setUnlimited(n.plan)
 
 	case *splitNode:
 		p.setUnlimited(n.rows)
@@ -268,4 +268,8 @@ func getLimit(count, offset int64) int64 {
 		count = math.MaxInt64 - offset
 	}
 	return count + offset
+}
+
+func isFilterTrue(expr tree.TypedExpr) bool {
+	return expr == nil || expr == tree.DBoolTrue
 }

@@ -565,12 +565,6 @@ func (desc *TableDescriptor) SetName(name string) {
 	desc.Name = name
 }
 
-// IsEmpty checks if the descriptor is uninitialized.
-func (desc *TableDescriptor) IsEmpty() bool {
-	// Valid tables cannot have an ID of 0.
-	return desc.ID == 0
-}
-
 // IsTable returns true if the TableDescriptor actually describes a
 // Table resource, as opposed to a different resource (like a View).
 func (desc *TableDescriptor) IsTable() bool {
