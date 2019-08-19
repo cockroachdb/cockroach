@@ -265,21 +265,14 @@ func FatalIfErr(t *test, err error) {
 }
 
 func (t *test) printAndFail(skip int, args ...interface{}) {
-	msg := t.decorate(skip+1, fmt.Sprint(args...))
-	t.l.Printf("test failure: " + msg)
-
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.mu.output = append(t.mu.output, msg...)
-	t.mu.failed = true
-	if t.mu.cancel != nil {
-		t.mu.cancel()
-	}
+	t.failWithMsg(t.decorate(skip+1, fmt.Sprint(args...)))
 }
 
 func (t *test) printfAndFail(skip int, format string, args ...interface{}) {
-	msg := t.decorate(skip+1, fmt.Sprintf(format, args...))
+	t.failWithMsg(t.decorate(skip+1, fmt.Sprintf(format, args...)))
+}
 
+func (t *test) failWithMsg(msg string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 

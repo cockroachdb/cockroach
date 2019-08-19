@@ -2081,10 +2081,12 @@ func (m *monitor) Go(fn func(context.Context) error) {
 	})
 }
 
+var errTestAlreadyFailed = errors.New("already failed")
+
 func (m *monitor) WaitE() error {
 	if m.t.Failed() {
 		// If the test has failed, don't try to limp along.
-		return errors.New("already failed")
+		return errTestAlreadyFailed
 	}
 
 	return m.wait(roachprod, "monitor", m.nodes)
@@ -2095,7 +2097,7 @@ func (m *monitor) Wait() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
-	if err := m.WaitE(); err != nil {
+	if err := m.WaitE(); err != nil && err != errTestAlreadyFailed && !m.t.Failed() {
 		m.t.Fatal(err)
 	}
 }
