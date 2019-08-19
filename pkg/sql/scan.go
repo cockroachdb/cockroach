@@ -465,3 +465,7 @@ func (n *scanNode) computePhysicalProps(
 	pp.applyExpr(evalCtx, n.origFilter)
 	return pp
 }
+
+func isFilterTrue(expr tree.TypedExpr) bool {
+	return expr == nil || expr == tree.DBoolTrue
+}

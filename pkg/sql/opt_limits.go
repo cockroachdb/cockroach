@@ -173,9 +173,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *showTraceReplicaNode:
 		p.setUnlimited(n.plan)
 	case *explainPlanNode:
-		if n.expanded {
-			p.setUnlimited(n.plan)
-		}
+		p.setUnlimited(n.plan)
 
 	case *splitNode:
 		p.setUnlimited(n.rows)

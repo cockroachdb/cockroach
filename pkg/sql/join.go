@@ -34,15 +34,13 @@ type joinNode struct {
 	// pred represents the join predicate.
 	pred *joinPredicate
 
-	// mergeJoinOrdering is set during expandPlan if the left and right sides have
-	// similar ordering on the equality columns (or a subset of them). The column
-	// indices refer to equality columns: a ColIdx of i refers to left column
+	// mergeJoinOrdering is set if the left and right sides have similar ordering
+	// on the equality columns (or a subset of them). The column indices refer to
+	// equality columns: a ColIdx of i refers to left column
 	// pred.leftEqualityIndices[i] and right column pred.rightEqualityIndices[i].
 	// See computeMergeJoinOrdering. This information is used by distsql planning.
 	mergeJoinOrdering sqlbase.ColumnOrdering
 
-	// ordering is set during expandPlan based on mergeJoinOrdering, but later
-	// trimmed.
 	props physicalProps
 
 	// columns contains the metadata for the results of this node.
@@ -386,104 +384,6 @@ func commonColumns(left, right *sqlbase.DataSourceInfo) tree.NameList {
 		}
 	}
 	return res
-}
-
-func (n *joinNode) joinOrdering() physicalProps {
-	if len(n.mergeJoinOrdering) == 0 {
-		return physicalProps{}
-	}
-	info := physicalProps{}
-
-	// n.Columns has the following schema on equality JOINs:
-	//
-	// 0                         numLeftCols
-	// |                         |                          |
-	//  --- Columns from left --- --- Columns from right ---
-
-	leftCol := func(leftColIdx int) int {
-		return leftColIdx
-	}
-	rightCol := func(rightColIdx int) int {
-		return n.pred.numLeftCols + rightColIdx
-	}
-
-	leftOrd := planPhysicalProps(n.left.plan)
-	rightOrd := planPhysicalProps(n.right.plan)
-
-	// Propagate the equivalency groups for the left columns.
-	for i := 0; i < n.pred.numLeftCols; i++ {
-		if group := leftOrd.eqGroups.Find(i); group != i {
-			info.eqGroups.Union(leftCol(group), rightCol(group))
-		}
-	}
-	// Propagate the equivalency groups for the right columns.
-	for i := 0; i < n.pred.numRightCols; i++ {
-		if group := rightOrd.eqGroups.Find(i); group != i {
-			info.eqGroups.Union(rightCol(group), rightCol(i))
-		}
-	}
-
-	// TODO(arjun): Support order propagation for other JOIN types.
-	if n.joinType != sqlbase.InnerJoin {
-		return info
-	}
-
-	// Set equivalency between the equality column pairs (and merged column if
-	// appropriate).
-	for i, leftIdx := range n.pred.leftEqualityIndices {
-		rightIdx := n.pred.rightEqualityIndices[i]
-		info.eqGroups.Union(leftCol(leftIdx), rightCol(rightIdx))
-	}
-
-	// Any constant columns stay constant after an inner join.
-	for l, ok := leftOrd.constantCols.Next(0); ok; l, ok = leftOrd.constantCols.Next(l + 1) {
-		info.addConstantColumn(leftCol(l))
-	}
-	for r, ok := rightOrd.constantCols.Next(0); ok; r, ok = rightOrd.constantCols.Next(r + 1) {
-		info.addConstantColumn(rightCol(r))
-	}
-
-	// If the equality columns form a key on both sides, then each row (from
-	// either side) is incorporated into at most one result row; so any key sets
-	// remain valid and can be propagated.
-
-	var leftEqSet, rightEqSet util.FastIntSet
-	for i, leftIdx := range n.pred.leftEqualityIndices {
-		leftEqSet.Add(leftIdx)
-		info.addNotNullColumn(leftCol(leftIdx))
-
-		rightIdx := n.pred.rightEqualityIndices[i]
-		rightEqSet.Add(rightIdx)
-		info.addNotNullColumn(rightCol(rightIdx))
-	}
-
-	if leftOrd.isKey(leftEqSet) && rightOrd.isKey(rightEqSet) {
-		for _, k := range leftOrd.weakKeys {
-			// Translate column indices.
-			var s util.FastIntSet
-			for c, ok := k.Next(0); ok; c, ok = k.Next(c + 1) {
-				s.Add(leftCol(c))
-			}
-			info.addWeakKey(s)
-		}
-		for _, k := range rightOrd.weakKeys {
-			// Translate column indices.
-			var s util.FastIntSet
-			for c, ok := k.Next(0); ok; c, ok = k.Next(c + 1) {
-				s.Add(rightCol(c))
-			}
-			info.addWeakKey(s)
-		}
-	}
-
-	info.ordering = make(sqlbase.ColumnOrdering, len(n.mergeJoinOrdering))
-	for i, col := range n.mergeJoinOrdering {
-		leftGroup := leftOrd.eqGroups.Find(n.pred.leftEqualityIndices[col.ColIdx])
-		info.ordering[i].ColIdx = leftCol(leftGroup)
-		info.ordering[i].Direction = col.Direction
-	}
-	info.ordering = info.reduce(info.ordering)
-	return info
 }
 
 // interleavedNodes returns the ancestor on which an interleaved join is

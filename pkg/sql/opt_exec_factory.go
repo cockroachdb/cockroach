@@ -1182,15 +1182,9 @@ func (ef *execFactory) ConstructExplain(
 		if analyzeSet {
 			return nil, errors.New("EXPLAIN ANALYZE only supported with (DISTSQL) option")
 		}
-		// NOEXPAND and NOOPTIMIZE must always be set when using the optimizer to
-		// prevent the plans from being modified.
-		opts := *options
-		opts.Flags.Add(tree.ExplainFlagNoExpand)
-		opts.Flags.Add(tree.ExplainFlagNoOptimize)
 		return ef.planner.makeExplainPlanNodeWithPlan(
 			context.TODO(),
-			&opts,
-			false, /* optimizeSubqueries */
+			options,
 			p.plan,
 			p.subqueryPlans,
 			p.postqueryPlans,

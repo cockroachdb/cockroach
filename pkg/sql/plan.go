@@ -22,49 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
-
-type planMaker interface {
-	// newPlan starts preparing the query plan for a single SQL
-	// statement.
-	//
-	// It performs as many early checks as possible on the structure of
-	// the SQL statement, including verifying permissions and type
-	// checking.  The returned plan object is not ready to execute; the
-	// optimizePlan() method must be called first. See makePlan()
-	// below.
-	//
-	// This method should not be used directly; instead prefer makePlan()
-	// or prepare() below.
-	newPlan(
-		ctx context.Context, stmt tree.Statement, desiredTypes []*types.T,
-	) (planNode, error)
-
-	// makePlan prepares the query plan for a single SQL statement.  it
-	// calls newPlan() then optimizePlan() on the result.
-	// The logical plan is stored in the planner's curPlan field.
-	//
-	// Execution must start by calling curPlan.start() first and then
-	// iterating using curPlan.plan.Next() and curPlan.plan.Values() in
-	// order to retrieve matching rows. Finally, the plan must be closed
-	// with curPlan.close().
-	makePlan(ctx context.Context) error
-
-	// prepare does the same checks as makePlan but skips building some
-	// data structures necessary for execution, based on the assumption
-	// that the plan will never be run. A planNode built with prepare()
-	// will do just enough work to check the structural validity of the
-	// SQL statement and determine types for placeholders. However it is
-	// not appropriate to call optimizePlan(), Next() or Values() on a plan
-	// object created with prepare().
-	// The plan should still be closed with p.curPlan.close() though.
-	prepare(ctx context.Context, stmt tree.Statement) error
-}
-
-var _ planMaker = &planner{}
 
 // runParams is a struct containing all parameters passed to planNode.Next() and
 // startPlan.
@@ -330,104 +290,6 @@ type postquery struct {
 	plan planNode
 }
 
-// makePlan implements the planMaker interface. It populates the
-// planner's curPlan field.
-//
-// The caller is responsible for populating the placeholders
-// beforehand (currently in semaCtx.Placeholders).
-//
-// If no error is returned, the caller must call p.curPlan.Close() once the plan
-// is no longer needed.
-func (p *planner) makePlan(ctx context.Context) error {
-	// Reinitialize.
-	stmt := p.stmt
-	p.curPlan = planTop{AST: stmt.AST}
-
-	log.VEvent(ctx, 2, "heuristic planner starts")
-
-	var err error
-	p.curPlan.plan, err = p.newPlan(ctx, stmt.AST, nil /*desiredTypes*/)
-	if err != nil {
-		return err
-	}
-	cols := planColumns(p.curPlan.plan)
-	if stmt.ExpectedTypes != nil {
-		if !stmt.ExpectedTypes.TypesEqual(cols) {
-			return pgerror.New(pgcode.FeatureNotSupported,
-				"cached plan must not change result type")
-		}
-	}
-	if err := p.semaCtx.Placeholders.AssertAllAssigned(); err != nil {
-		// We need to close in case there were any subqueries created.
-		p.curPlan.close(ctx)
-		return err
-	}
-
-	// Ensure that any hidden result column is effectively hidden.
-	// We do this before optimization below so that the needed
-	// column optimization kills the hidden columns.
-	p.curPlan.plan, err = p.hideHiddenColumns(ctx, p.curPlan.plan, cols)
-	if err != nil {
-		p.curPlan.close(ctx)
-		return err
-	}
-
-	log.VEvent(ctx, 2, "heuristic planner optimizes plan")
-
-	needed := allColumns(p.curPlan.plan)
-	p.curPlan.plan, err = p.optimizePlan(ctx, p.curPlan.plan, needed)
-	if err != nil {
-		p.curPlan.close(ctx)
-		return err
-	}
-
-	log.VEvent(ctx, 2, "heuristic planner optimizes subqueries")
-
-	// Now do the same work for all sub-queries.
-	for i := range p.curPlan.subqueryPlans {
-		if err := p.optimizeSubquery(ctx, &p.curPlan.subqueryPlans[i]); err != nil {
-			p.curPlan.close(ctx)
-			return err
-		}
-	}
-
-	if log.V(3) {
-		log.Infof(ctx, "statement %s compiled to:\n%s", stmt,
-			planToString(ctx, p.curPlan.plan, p.curPlan.subqueryPlans, p.curPlan.postqueryPlans))
-	}
-
-	return nil
-}
-
-// hideHiddenColumns ensures that if the plan is returning some hidden
-// column(s), it is wrapped into a renderNode which only renders the
-// visible columns.
-func (p *planner) hideHiddenColumns(
-	ctx context.Context, plan planNode, cols sqlbase.ResultColumns,
-) (planNode, error) {
-	hasHidden := false
-	for i := range cols {
-		if cols[i].Hidden {
-			hasHidden = true
-			break
-		}
-	}
-	if !hasHidden {
-		// Nothing to do.
-		return plan, nil
-	}
-
-	var tn tree.TableName
-	newPlan, err := p.insertRender(ctx, plan, &tn)
-	if err != nil {
-		// Don't return a nil plan on error -- the caller must be able to
-		// Close() it even if the replacement fails.
-		return plan, err
-	}
-
-	return newPlan, nil
-}
-
 // close ensures that the plan's resources have been deallocated.
 func (p *planTop) close(ctx context.Context) {
 	if p.plan != nil {
@@ -616,8 +478,6 @@ func (p *planner) newPlan(
 		return p.DropSequence(ctx, n)
 	case *tree.DropUser:
 		return p.DropUser(ctx, n)
-	case *tree.Explain:
-		return p.Explain(ctx, n)
 	case *tree.Grant:
 		return p.Grant(ctx, n)
 	case *tree.Insert:
@@ -694,107 +554,6 @@ func (p *planner) newPlan(
 			return p.newPlan(ctx, newStmt, nil /* desiredTypes */)
 		}
 		return nil, errors.AssertionFailedf("unknown statement type: %T", stmt)
-	}
-}
-
-// prepare constructs the logical plan for the statement.  This is
-// needed both to type placeholders and to inform pgwire of the types
-// of the result columns. All statements that either support
-// placeholders or have result columns must be handled here.
-// The resulting plan is stored in p.curPlan.
-func (p *planner) prepare(ctx context.Context, stmt tree.Statement) error {
-	// Reinitialize.
-	p.curPlan = planTop{AST: stmt}
-
-	// Prepare the plan.
-	plan, err := p.doPrepare(ctx, stmt)
-	if err != nil {
-		return err
-	}
-
-	// Store the plan for later use.
-	p.curPlan.plan = plan
-
-	return nil
-}
-
-func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode, error) {
-	if plan, err := p.maybePlanHook(ctx, stmt); plan != nil || err != nil {
-		return plan, err
-	}
-	p.isPreparing = true
-
-	switch n := stmt.(type) {
-	case *tree.AlterUserSetPassword:
-		return p.AlterUserSetPassword(ctx, n)
-	case *tree.CancelQueries:
-		return p.CancelQueries(ctx, n)
-	case *tree.CancelSessions:
-		return p.CancelSessions(ctx, n)
-	case *tree.ControlJobs:
-		return p.ControlJobs(ctx, n)
-	case *tree.CreateUser:
-		return p.CreateUser(ctx, n)
-	case *tree.CreateTable:
-		return p.CreateTable(ctx, n)
-	case *tree.Delete:
-		return p.Delete(ctx, n, nil)
-	case *tree.DropUser:
-		return p.DropUser(ctx, n)
-	case *tree.Explain:
-		return p.Explain(ctx, n)
-	case *tree.Insert:
-		return p.Insert(ctx, n, nil)
-	case *tree.Scrub:
-		return p.Scrub(ctx, n)
-	case *tree.Select:
-		return p.Select(ctx, n, nil)
-	case *tree.SelectClause:
-		return p.SelectClause(ctx, n, nil /* orderBy */, nil /* limit */, nil, /* with */
-			nil /* desiredTypes */, publicColumns)
-	case *tree.SetClusterSetting:
-		return p.SetClusterSetting(ctx, n)
-	case *tree.SetVar:
-		return p.SetVar(ctx, n)
-	case *tree.SetZoneConfig:
-		return p.SetZoneConfig(ctx, n)
-	case *tree.ShowClusterSetting:
-		return p.ShowClusterSetting(ctx, n)
-	case *tree.ShowHistogram:
-		return p.ShowHistogram(ctx, n)
-	case *tree.ShowTableStats:
-		return p.ShowTableStats(ctx, n)
-	case *tree.ShowTraceForSession:
-		return p.ShowTrace(ctx, n)
-	case *tree.ShowZoneConfig:
-		return p.ShowZoneConfig(ctx, n)
-	case *tree.Split:
-		return p.Split(ctx, n)
-	case *tree.Unsplit:
-		return p.Unsplit(ctx, n)
-	case *tree.Truncate:
-		return p.Truncate(ctx, n)
-	case *tree.Relocate:
-		return p.Relocate(ctx, n)
-	case *tree.Scatter:
-		return p.Scatter(ctx, n)
-	case *tree.Update:
-		return p.Update(ctx, n, nil)
-	default:
-		var catalog optCatalog
-		catalog.init(p)
-		catalog.reset()
-		newStmt, err := delegate.TryDelegate(ctx, &catalog, p.EvalContext(), stmt)
-		if err != nil {
-			return nil, err
-		}
-		if newStmt != nil {
-			return p.newPlan(ctx, newStmt, nil /* desiredTypes */)
-		}
-		// Other statement types do not have result columns and do not
-		// support placeholders so there is no need for any special
-		// handling here.
-		return nil, nil
 	}
 }
 

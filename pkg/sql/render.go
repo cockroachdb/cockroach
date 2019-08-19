@@ -549,60 +549,6 @@ func (r *renderNode) resetRenderColumns(exprs []tree.TypedExpr, cols sqlbase.Res
 	r.columns = cols
 }
 
-// computePhysicalPropsForRender computes ordering information for the
-// render node, given ordering information for the "from" node.
-//
-//    SELECT a, b FROM t@abc ...
-//      the ordering is: first by column 0 (a), then by column 1 (b).
-//
-//    SELECT a, b FROM t@abc WHERE a = 1 ...
-//      the ordering is: exact match column (a), ordered by column 1 (b).
-//
-//    SELECT b, a FROM t@abc ...
-//      the ordering is: first by column 1 (a), then by column 0 (a).
-//
-//    SELECT a, c FROM t@abc ...
-//      the ordering is: just by column 0 (a). Here we don't have b as a render target so we
-//      cannot possibly use (or even express) the second-rank order by b (which makes any lower
-//      ranks unusable as well).
-//
-//      Note that for queries like
-//         SELECT a, c FROM t@abc ORDER by a,b,c
-//      we internally add b as a render target. The same holds for any targets required for
-//      grouping.
-//
-//    SELECT a, b, a FROM t@abc ...
-//      we have an equivalency group between columns 0 and 2 and the ordering is
-//      first by column 0 (a), then by column 1.
-//
-// The planner is necessary to perform name resolution while detecting constant columns.
-func (p *planner) computePhysicalPropsForRender(r *renderNode, fromOrder physicalProps) {
-	// See physicalProps.project for a description of the projection map.
-	projMap := make([]int, len(r.render))
-	for i, expr := range r.render {
-		if ivar, ok := expr.(*tree.IndexedVar); ok {
-			// Column ivar.Idx of the source becomes column i of the render node.
-			projMap[i] = ivar.Idx
-		} else {
-			projMap[i] = -1
-		}
-	}
-	r.props = fromOrder.project(projMap)
-
-	// Detect constants.
-	for col, expr := range r.render {
-		_, hasRowDependentValues, _, err := p.resolveNamesForRender(expr, r)
-		if err != nil {
-			// If we get an error here, the expression must contain an unresolved name
-			// or invalid indexed var; ignore.
-			continue
-		}
-		if !hasRowDependentValues && !r.columns[col].Omitted {
-			r.props.addConstantColumn(col)
-		}
-	}
-}
-
 // colIdxByRenderAlias returns the corresponding index in columns of an expression
 // that may refer to a column alias.
 // If there are no aliases in columns that expr refers to, then -1 is returned.
