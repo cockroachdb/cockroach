@@ -14,8 +14,20 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/pkg/errors"
 )
+
+func init() {
+	tls13Required := envutil.EnvOrDefaultBool("COCKROACH_REQUIRE_TLS13", false)
+	if tls13Required {
+		minTLSVersion = tls.VersionTLS13
+	} else {
+		minTLSVersion = tls.VersionTLS12
+	}
+}
+
+var minTLSVersion uint16
 
 // EmbeddedCertsDir is the certs directory inside embedded assets.
 // Embedded*{Cert,Key} are the filenames for embedded certs.
@@ -178,7 +190,7 @@ func newBaseTLSConfig(caPEM []byte) (*tls.Config, error) {
 		}
 	}
 
-	return &tls.Config{
+	config := &tls.Config{
 		RootCAs: certPool,
 
 		// This is Go's default list of cipher suites (as of go 1.8.3),
@@ -204,6 +216,9 @@ func newBaseTLSConfig(caPEM []byte) (*tls.Config, error) {
 		//
 		// [1]: https://wiki.mozilla.org/Security/Server_Side_TLS#Modern_compatibility
 		// [2]: https://github.com/golang/go/commit/48d8edb5b21db190f717e035b4d9ab61a077f9d7
+		//
+		// The specified CipherSuites only apply to TLS12. The TLS13 list of cipher suites
+		// is not configurable.
 		CipherSuites: []uint16{
 			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
@@ -221,6 +236,8 @@ func newBaseTLSConfig(caPEM []byte) (*tls.Config, error) {
 			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
 		},
 
-		MinVersion: tls.VersionTLS12,
-	}, nil
+		MinVersion: minTLSVersion,
+	}
+
+	return config, nil
 }
