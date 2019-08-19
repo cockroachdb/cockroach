@@ -70,6 +70,9 @@ func showBackupPlanHook(
 		if err != nil {
 			return err
 		}
+		if err := maybeUpgradeTableDescsInBackupDescriptors(ctx, []BackupDescriptor{desc}, true /*skipFKsWithNoMatchingTable*/); err != nil {
+			return err
+		}
 
 		for _, row := range shower.fn(desc) {
 			select {
