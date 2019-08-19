@@ -1682,13 +1682,25 @@ func (r *rocksDBBatch) Close() {
 	}
 	if r.batch != nil {
 		C.DBClose(r.batch)
-		r.batch = nil
 	}
 	r.builder.reset()
-	*r = rocksDBBatch{
-		builder: r.builder,
-		closed:  true,
-	}
+	r.closed = true
+
+	// Zero all the remaining fields individually. We can't just copy a new
+	// struct onto r, since r.builder has a sync.NoCopy.
+	r.batch = nil
+	r.parent = nil
+	r.flushes = 0
+	r.flushedCount = 0
+	r.flushedSize = 0
+	r.distinctOpen = false
+	r.distinctNeedsFlush = false
+	r.writeOnly = false
+	r.syncCommit = false
+	r.committed = false
+	r.commitErr = nil
+	r.commitWG = sync.WaitGroup{}
+
 	batchPool.Put(r)
 }
 
@@ -2019,8 +2031,8 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 		}
 		r.batch = nil
 		count, size = r.flushedCount, r.flushedSize
-	} else if len(r.builder.repr) > 0 {
-		count, size = r.builder.count, len(r.builder.repr)
+	} else if r.builder.Len() > 0 {
+		count, size = int(r.builder.Count()), r.builder.Len()
 
 		// Fast-path which avoids flushing mutations to the C++ batch. Instead, we
 		// directly apply the mutations to the database.
@@ -2046,7 +2058,7 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 }
 
 func (r *rocksDBBatch) Empty() bool {
-	return r.flushes == 0 && r.builder.count == 0 && !r.builder.logData
+	return r.flushes == 0 && r.builder.Count() == 0 && !r.builder.logData
 }
 
 func (r *rocksDBBatch) Len() int {
@@ -2088,14 +2100,14 @@ func (r *rocksDBBatch) Distinct() ReadWriter {
 }
 
 func (r *rocksDBBatch) flushMutations() {
-	if r.builder.count == 0 {
+	if r.builder.Count() == 0 {
 		return
 	}
 	r.ensureBatch()
 	r.distinctNeedsFlush = false
 	r.flushes++
-	r.flushedCount += r.builder.count
-	r.flushedSize += len(r.builder.repr)
+	r.flushedCount += int(r.builder.Count())
+	r.flushedSize += r.builder.Len()
 	if err := dbApplyBatchRepr(r.batch, r.builder.Finish(), false); err != nil {
 		panic(err)
 	}
