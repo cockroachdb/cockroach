@@ -256,9 +256,13 @@ func formatCatalogFKRef(
 	if inbound {
 		title = "REFERENCED BY " + title
 	}
-	match := ""
+	var extra bytes.Buffer
 	if fkRef.MatchMethod() != tree.MatchSimple {
-		match = fmt.Sprintf(" %s", fkRef.MatchMethod())
+		fmt.Fprintf(&extra, " %s", fkRef.MatchMethod())
+	}
+
+	if action := fkRef.DeleteReferenceAction(); action != tree.NoAction {
+		fmt.Fprintf(&extra, " ON DELETE %s", action.String())
 	}
 
 	tp.Childf(
@@ -269,7 +273,7 @@ func formatCatalogFKRef(
 		formatCols(originDS.(Table), fkRef.ColumnCount(), fkRef.OriginColumnOrdinal),
 		refDS.Name(),
 		formatCols(refDS.(Table), fkRef.ColumnCount(), fkRef.ReferencedColumnOrdinal),
-		match,
+		extra.String(),
 	)
 }
 
