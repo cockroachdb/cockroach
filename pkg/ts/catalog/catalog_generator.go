@@ -192,6 +192,8 @@ var chartCatalog = []ChartSection{
 	},
 }
 
+var catalogGenerated = false
+
 // catalogKey provides an index to simplify ordering ChartSections, as well as
 // limiting the search space every chart uses when being added to the catalog.
 var catalogKey = map[string]int{
@@ -242,11 +244,14 @@ var derKey = map[DescribeDerivative]tspb.TimeSeriesQueryDerivative{
 // /_admin/v1/chartcatalog.
 func GenerateCatalog(metadata map[string]metric.Metadata) ([]ChartSection, error) {
 
-	for _, sd := range charts {
+	if !catalogGenerated {
+		for _, sd := range charts {
 
-		if err := createIndividualCharts(metadata, sd); err != nil {
-			return nil, err
+			if err := createIndividualCharts(metadata, sd); err != nil {
+				return nil, err
+			}
 		}
+		catalogGenerated = true
 	}
 
 	return chartCatalog, nil
