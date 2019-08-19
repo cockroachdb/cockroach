@@ -85,11 +85,12 @@ scan uvwxy
 statement ok
 CREATE TABLE parent (p INT, q INT, r INT, other INT, PRIMARY KEY (p, q, r))
 
+# Simple FK.
 statement ok
 CREATE TABLE child  (
   c INT PRIMARY KEY,
   p INT, q INT, r INT,
-  CONSTRAINT fk FOREIGN KEY (p,q,r) REFERENCES parent(p,q,r) MATCH FULL
+  CONSTRAINT fk FOREIGN KEY (p,q,r) REFERENCES parent(p,q,r)
 )
 
 query T
@@ -107,7 +108,7 @@ TABLE child
  │    ├── q int
  │    ├── r int
  │    └── c int not null
- └── CONSTRAINT fk FOREIGN KEY child (p, q, r) REFERENCES parent (p, q, r) MATCH FULL
+ └── CONSTRAINT fk FOREIGN KEY child (p, q, r) REFERENCES parent (p, q, r)
 scan child
 
 query T
@@ -123,4 +124,47 @@ TABLE parent
  │    ├── q int not null
  │    └── r int not null
  └── REFERENCED BY CONSTRAINT fk FOREIGN KEY child (p, q, r) REFERENCES parent (p, q, r)
+scan parent
+
+# FK with match and actions.
+statement ok
+CREATE TABLE child2  (
+  c INT PRIMARY KEY,
+  p INT, q INT, r INT,
+  CONSTRAINT fk FOREIGN KEY (p,q,r) REFERENCES parent(p,q,r) MATCH FULL ON DELETE SET NULL ON UPDATE SET DEFAULT
+)
+
+# TODO(radu, justin): we are missing the ON UPDATE part.
+query T
+EXPLAIN (OPT, CATALOG) SELECT * from child2
+----
+TABLE child2
+ ├── c int not null
+ ├── p int
+ ├── q int
+ ├── r int
+ ├── INDEX primary
+ │    └── c int not null
+ ├── INDEX child2_auto_index_fk
+ │    ├── p int
+ │    ├── q int
+ │    ├── r int
+ │    └── c int not null
+ └── CONSTRAINT fk FOREIGN KEY child2 (p, q, r) REFERENCES parent (p, q, r) MATCH FULL ON DELETE SET NULL
+scan child2
+
+query T
+EXPLAIN (OPT, CATALOG) SELECT * from parent
+----
+TABLE parent
+ ├── p int not null
+ ├── q int not null
+ ├── r int not null
+ ├── other int
+ ├── INDEX primary
+ │    ├── p int not null
+ │    ├── q int not null
+ │    └── r int not null
+ ├── REFERENCED BY CONSTRAINT fk FOREIGN KEY child (p, q, r) REFERENCES parent (p, q, r)
+ └── REFERENCED BY CONSTRAINT fk FOREIGN KEY child2 (p, q, r) REFERENCES parent (p, q, r) MATCH FULL ON DELETE SET NULL
 scan parent
