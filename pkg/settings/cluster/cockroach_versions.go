@@ -43,6 +43,7 @@ const (
 	VersionLearnerReplicas
 	VersionTopLevelForeignKeys
 	VersionAtomicChangeReplicasTrigger
+	VersionStreamSSTSnapshot
 
 	// Add new versions here (step one of two).
 
@@ -512,6 +513,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// support atomic replication changes.
 		Key:     VersionAtomicChangeReplicasTrigger,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 8},
+	},
+	{
+		// VersionStreamSSTSnapshot is TODO(jeffreyxiao): Fill pr link.
+		Key:     VersionStreamSSTSnapshot,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 9},
 	},
 
 	// Add new versions here (step two of two).
