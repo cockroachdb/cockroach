@@ -544,6 +544,18 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 
 	inputStats := sb.makeTableStatistics(scan.Table)
 	s.RowCount = inputStats.RowCount
+	if scan.IsIndexSkipScan() {
+		table := sb.md.Table(scan.Table)
+		index := table.Index(scan.Index)
+
+		var indexSkipCols opt.ColSet
+		for i := 0; i < scan.PrefixSkipLen; i++ {
+			indexSkipCols.Add(scan.Table.ColumnID(index.Column(i).Ordinal))
+		}
+
+		// An Index Sip Scan returns only the rows with the distinct prefix.
+		s.RowCount = sb.colStat(indexSkipCols, scan).DistinctCount
+	}
 
 	if scan.Constraint != nil {
 		// Calculate distinct counts and histograms for constrained columns

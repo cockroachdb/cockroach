@@ -83,6 +83,34 @@
     )
 )
 
+# GenerateIndexSkipScanThroughIndexJoins creates an index-skip scan
+# in place of the scan that is underneath a projection and a DistinctOn
+# when possible.
+[GenerateIndexSkipScanThroughIndexJoins, Explore]
+(DistinctOn
+    (IndexJoin
+        (Scan $scanPrivate:*) & ^(IsIndexSkipScan $scanPrivate)
+        $indexJoinPrivate:*
+    )
+    $aggregations:*
+    $groupingPrivate:* &
+        (IsIndexPrefix $scanPrivate $groupingCols: (GroupingCols $groupingPrivate)) &
+        (ScanCanProvideOrdering $scanPrivate (ExtractGroupingOrdering $groupingPrivate))
+)
+=>
+(IndexJoin
+    (Scan
+        (PruneScanPrivate
+            (SynthesizeSkipScanPrivate $scanPrivate (ColSetLen $groupingCols))
+            (UnionCols
+                $groupingCols
+                (AggregationCols $aggregations)
+            )
+        )
+    )
+    $indexJoinPrivate
+)
+
 # GenerateIndexSkipScanThroughProjection creates an index-skip scan
 # in place of the scan that is underneath a projection and a DistinctOn
 # when possible.

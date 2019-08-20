@@ -1,9 +1,6 @@
 # LogicTest: local
 
 statement ok
-SET VECTORIZE = OFF
-
-statement ok
 CREATE TABLE abc (a INT8, b INT8, c INT8, PRIMARY KEY (a, b, c))
 
 statement ok
@@ -69,3 +66,16 @@ query T
 SELECT array_agg(DISTINCT a) FROM abc
 ----
 {1,2,3}
+
+statement ok
+CREATE TABLE abcd (a INT8 PRIMARY KEY, b INT8, c INT8, d INT8, INDEX (b, c))
+
+statement ok
+INSERT INTO abcd VALUES (1, 10, 100, 1000), (2, 10, 200, 1000), (3, 20, 200, 2000), (4, 20, 300, 2000), (5, 30, 400, 4000)
+
+query IIII
+SELECT DISTINCT ON (b) a, b, c, d FROM abcd WHERE b > 0 AND b < 100
+----
+1  10  100  1000
+3  20  200  2000
+5  30  400  4000

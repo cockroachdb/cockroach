@@ -1404,7 +1404,7 @@ project
  ├── interesting orderings: (+1)
  ├── scan (index-skip on the first 1 col(s)) t.public.distinct_abc
  │    ├── columns: t.public.distinct_abc.a:1(int!null) t.public.distinct_abc.c:3(int!null)
- │    ├── stats: [rows=10000, distinct(1)=10, null(1)=0]
+ │    ├── stats: [rows=10, distinct(1)=10, null(1)=0]
  │    ├── cost: 40.52
  │    ├── prune: (1,3)
  │    └── interesting orderings: (+1)
@@ -1515,11 +1515,11 @@ scalar-group-by
                 └── variable: a [type=int]
 
 exec-ddl
-CREATE TABLE abc_index_skip (a INT8 PRIMARY KEY, b INT8, c INT8, INDEX (b))
+CREATE TABLE abcd_index_skip (a INT8 PRIMARY KEY, b INT8, c INT8, d INT8, INDEX (b, c))
 ----
 
 exec-ddl
-ALTER TABLE abc_index_skip INJECT STATISTICS '[
+ALTER TABLE abcd_index_skip INJECT STATISTICS '[
 {
   "columns": ["b"],
   "created_at": "2018-01-01 1:00:00.00000+00:00",
@@ -1529,9 +1529,32 @@ ALTER TABLE abc_index_skip INJECT STATISTICS '[
 }]'
 ----
 
+# Test ensures index-skip-scan works with secondary indexes.
 opt
-select distinct on (b) b from abc_index_skip
+SELECT DISTINCT ON (b) b FROM abcd_index_skip
 ----
-scan (index-skip on the first 1 col(s)) abc_index_skip@secondary
+scan (index-skip on the first 1 col(s)) abcd_index_skip@secondary
  ├── columns: b:2(int)
  └── key: (2)
+
+opt
+SELECT DISTINCT ON (b) b FROM abcd_index_skip WHERE b > 0 AND b < 10
+----
+scan (index-skip on the first 1 col(s)) abcd_index_skip@secondary
+ ├── columns: b:2(int!null)
+ ├── constraint: /2/3/1: [/1 - /9]
+ └── key: (2)
+
+# Test ensures index-skip-scan works with through index joins.
+opt
+SELECT DISTINCT ON (b) a, b, c, d FROM abcd_index_skip WHERE b > 0 AND b < 10
+----
+index-join abcd_index_skip
+ ├── columns: a:1(int) b:2(int!null) c:3(int) d:4(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (2)-->(1,3,4)
+ └── scan (index-skip on the first 1 col(s)) abcd_index_skip@secondary
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+      ├── constraint: /2/3/1: [/1 - /9]
+      ├── key: (1)
+      └── fd: (1)-->(2,3)
