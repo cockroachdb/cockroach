@@ -14,13 +14,15 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-// Test that spans are properly classified as global or local and that
-// GetSpans respects the scope argument.
+// Test that span latches are properly classified as global or local and that
+// GetLatches respects the scope argument.
 func TestSpanSetGetSpansScope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -29,22 +31,48 @@ func TestSpanSetGetSpansScope(t *testing.T) {
 	ss.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(1)})
 	ss.Add(SpanReadOnly, roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")})
 
-	exp := []roachpb.Span{{Key: keys.RangeLastGCKey(1)}}
-	if act := ss.GetSpans(SpanReadOnly, SpanLocal); !reflect.DeepEqual(act, exp) {
-		t.Errorf("get local spans: got %v, expected %v", act, exp)
+	exp := []latch{
+		{span: roachpb.Span{Key: keys.RangeLastGCKey(1)}},
+	}
+	if act := ss.GetLatches(SpanReadOnly, SpanLocal); !reflect.DeepEqual(act, exp) {
+		t.Errorf("get local span latches: got %v, expected %v", act, exp)
 	}
 
-	exp = []roachpb.Span{
-		{Key: roachpb.Key("a")},
-		{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+	exp = []latch{
+		{span: roachpb.Span{Key: roachpb.Key("a")}},
+		{span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
 	}
 
-	if act := ss.GetSpans(SpanReadOnly, SpanGlobal); !reflect.DeepEqual(act, exp) {
-		t.Errorf("get global spans: got %v, expected %v", act, exp)
+	if act := ss.GetLatches(SpanReadOnly, SpanGlobal); !reflect.DeepEqual(act, exp) {
+		t.Errorf("get global span latches: got %v, expected %v", act, exp)
 	}
 }
 
-// Test that CheckAllowed properly enforces boundaries.
+// Test that local spans are added with the zero timestamp, and global spans preserve original timestamps.
+func TestSpanLatchAddLocal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var ss SpanSet
+	ss.AddAt(SpanReadOnly, roachpb.Span{Key: roachpb.Key("a")}, hlc.Timestamp{WallTime: 1})
+	ss.AddAt(SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(1)}, hlc.Timestamp{WallTime: 3})
+
+	exp := []latch{
+		{span: roachpb.Span{Key: keys.RangeLastGCKey(1)}},
+	}
+	if act := ss.GetLatches(SpanReadOnly, SpanLocal); !reflect.DeepEqual(act, exp) {
+		t.Errorf("get local span latches: got %v, expected %v", act, exp)
+	}
+
+	exp = []latch{
+		{span: roachpb.Span{Key: roachpb.Key("a")}, ts: hlc.Timestamp{WallTime: 1}},
+	}
+
+	if act := ss.GetLatches(SpanReadOnly, SpanGlobal); !reflect.DeepEqual(act, exp) {
+		t.Errorf("get global span latches: got %v, expected %v", act, exp)
+	}
+}
+
+// Test that CheckAllowed properly enforces span boundaries.
 func TestSpanSetCheckAllowedBoundaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -100,6 +128,109 @@ func TestSpanSetCheckAllowedBoundaries(t *testing.T) {
 	for _, span := range disallowed {
 		if err := ss.CheckAllowed(SpanReadOnly, span); err == nil {
 			t.Errorf("expected %s to be disallowed", span)
+		}
+	}
+}
+
+// Test that CheckAllowedAt properly enforces timestamp control.
+func TestSpanSetCheckAllowedAtTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var ss SpanSet
+	ss.AddAt(SpanReadOnly, roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 2})
+	ss.AddAt(SpanReadOnly, roachpb.Span{Key: roachpb.Key("g")}, hlc.Timestamp{WallTime: 2})
+	ss.AddAt(SpanReadWrite, roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 2})
+	ss.AddAt(SpanReadWrite, roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 2})
+	ss.Add(SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(1)})
+
+	var allowedRO = []struct {
+		span roachpb.Span
+		ts   hlc.Timestamp
+	}{
+		// Read access allowed for subspan or included point at equal timestamp or below.
+		{roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 2}},
+		{roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 1}},
+		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 2}},
+		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 1}},
+		{roachpb.Span{Key: roachpb.Key("g")}, hlc.Timestamp{WallTime: 2}},
+		{roachpb.Span{Key: roachpb.Key("g")}, hlc.Timestamp{WallTime: 1}},
+		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 2}},
+		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 1}},
+
+		// Local keys
+		{roachpb.Span{Key: keys.RangeLastGCKey(1)}, hlc.Timestamp{}},
+		{roachpb.Span{Key: keys.RangeLastGCKey(1)}, hlc.Timestamp{WallTime: 1}},
+	}
+	for _, tc := range allowedRO {
+		if err := ss.CheckAllowedAt(SpanReadOnly, tc.span, tc.ts); err != nil {
+			t.Errorf("expected %s at %s to be allowed, but got error: %+v", tc.span, tc.ts, err)
+		}
+	}
+
+	var disallowedRO = []struct {
+		span roachpb.Span
+		ts   hlc.Timestamp
+	}{
+		// Read access disallowed for subspan or included point at greater timestamp.
+		// Exactly as declared at a timestamp higher than what's declared.
+		{roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 3}},
+		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 3}},
+		{roachpb.Span{Key: roachpb.Key("g")}, hlc.Timestamp{WallTime: 3}},
+		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 3}},
+	}
+	for _, tc := range disallowedRO {
+		if err := ss.CheckAllowedAt(SpanReadOnly, tc.span, tc.ts); err == nil {
+			t.Errorf("expected %s at %s to be disallowed", tc.span, tc.ts)
+		}
+	}
+
+	var allowedRW = []struct {
+		span roachpb.Span
+		ts   hlc.Timestamp
+	}{
+		// Exactly as declared at the declared timestamp.
+		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 2}},
+		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 2}},
+
+		// Points within the non-zero-length span.
+		{roachpb.Span{Key: roachpb.Key("n")}, hlc.Timestamp{WallTime: 2}},
+
+		// Sub span at the declared timestamp.
+		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}, hlc.Timestamp{WallTime: 2}},
+
+		// Local keys
+		{roachpb.Span{Key: keys.RangeLastGCKey(1)}, hlc.Timestamp{}},
+	}
+	for _, tc := range allowedRW {
+		if err := ss.CheckAllowedAt(SpanReadWrite, tc.span, tc.ts); err != nil {
+			t.Errorf("expected %s at %s to be allowed, but got error: %+v", tc.span, tc.ts, err)
+		}
+	}
+
+	var disallowedRW = []struct {
+		span roachpb.Span
+		ts   hlc.Timestamp
+	}{
+		// Exactly as declared at a timestamp different from than what's declared.
+		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 1}},
+		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 3}},
+		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 1}},
+		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 3}},
+
+		// Read only spans.
+		{roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 2}},
+		{roachpb.Span{Key: roachpb.Key("c")}, hlc.Timestamp{WallTime: 2}},
+
+		// Points within the non-zero-length span at a timestamp higher than what's declared.
+		{roachpb.Span{Key: roachpb.Key("n")}, hlc.Timestamp{WallTime: 3}},
+
+		// Sub spans at timestamps different from the one declared.
+		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}, hlc.Timestamp{WallTime: 3}},
+		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}, hlc.Timestamp{WallTime: 1}},
+	}
+	for _, tc := range disallowedRW {
+		if err := ss.CheckAllowedAt(SpanReadWrite, tc.span, tc.ts); err == nil {
+			t.Errorf("expected %s at %s to be disallowed", tc.span, tc.ts)
 		}
 	}
 }

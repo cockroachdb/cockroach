@@ -21,13 +21,16 @@ import (
 
 // DefaultDeclareKeys is the default implementation of Command.DeclareKeys.
 func DefaultDeclareKeys(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanlatch.SpanSet,
+	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanlatch.SpanSet,
 ) {
+	var access spanlatch.SpanAccess
 	if roachpb.IsReadOnly(req) {
-		spans.Add(spanlatch.SpanReadOnly, req.Header().Span())
+		access = spanlatch.SpanReadOnly
 	} else {
-		spans.Add(spanlatch.SpanReadWrite, req.Header().Span())
+		access = spanlatch.SpanReadWrite
 	}
+
+	spans.AddAt(access, req.Header().Span(), header.Timestamp)
 }
 
 // DeclareKeysForBatch adds all keys that the batch with the provided header

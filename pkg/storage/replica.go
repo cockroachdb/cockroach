@@ -1171,7 +1171,7 @@ func (r *Replica) beginCmds(
 		// protected access and to avoid interacting requests from operating at
 		// the same time. The latches will be held for the duration of request.
 		var err error
-		lg, err = r.latchMgr.Acquire(ctx, spans, ba.Timestamp)
+		lg, err = r.latchMgr.Acquire(ctx, spans)
 		if err != nil {
 			return endCmds{}, err
 		}
@@ -1346,7 +1346,7 @@ func (r *Replica) executeAdminBatch(
 
 	case *roachpb.ImportRequest:
 		cArgs := batcheval.CommandArgs{
-			EvalCtx: NewReplicaEvalContext(r, &spanlatch.SpanSet{}),
+			EvalCtx: NewReplicaEvalContext(r, todoSpanSet),
 			Header:  ba.Header,
 			Args:    args,
 		}

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -46,7 +47,7 @@ func EvalAddSSTable(
 	// IMPORT INTO should not proceed if any KVs from the SST shadow existing data
 	// entries - #38044.
 	if args.DisallowShadowing {
-		if err := checkForKeyCollisions(ctx, batch, mvccStartKey, mvccEndKey, args.Data); err != nil {
+		if err := checkForKeyCollisions(ctx, batch, mvccStartKey, mvccEndKey, h.Timestamp, args.Data); err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
 		}
 	}
@@ -153,12 +154,13 @@ func checkForKeyCollisions(
 	batch engine.ReadWriter,
 	mvccStartKey engine.MVCCKey,
 	mvccEndKey engine.MVCCKey,
+	timestamp hlc.Timestamp,
 	data []byte,
 ) error {
 	// We could get a spansetBatch so fetch the underlying rocksDBBatchEngine as
 	// we need access to the underlying C.DBIterator later, and the
 	// dbIteratorGetter is not implemented by a spansetBatch.
-	rocksDBEngine := spanlatch.GetDBEngine(batch, roachpb.Span{Key: mvccStartKey.Key, EndKey: mvccEndKey.Key})
+	rocksDBEngine := spanlatch.GetDBEngine(batch, roachpb.Span{Key: mvccStartKey.Key, EndKey: mvccEndKey.Key}, timestamp)
 
 	// Create iterator over the existing data.
 	existingDataIter := rocksDBEngine.NewIterator(engine.IterOptions{UpperBound: mvccEndKey.Key})

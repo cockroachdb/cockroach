@@ -13,7 +13,6 @@ package spanlatch
 import (
 	"context"
 	"fmt"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -27,7 +26,7 @@ import (
 )
 
 // A Manager maintains an interval tree of key and key range latches. Latch
-// acquitions affecting keys or key ranges must wait on already-acquired latches
+// acquisitions affecting keys or key ranges must wait on already-acquired latches
 // which overlap their key ranges to be released.
 //
 // Latch acquisition attempts invoke Manager.Acquire and provide details about
@@ -64,15 +63,15 @@ type Manager struct {
 }
 
 // scopedManager is a latch manager scoped to either local or global keys.
-// See spanset.SpanScope.
+// See SpanScope.
 type scopedManager struct {
 	readSet latchList
 	trees   [NumSpanAccess]btree
 }
 
-// Make returns an initialized Manager. Using this constructor is optional as
+// NewManager returns an initialized Manager. Using this constructor is optional as
 // the type's zero value is valid to use directly.
-func Make(stopper *stop.Stopper, slowReqs *metric.Gauge) Manager {
+func NewManager(stopper *stop.Stopper, slowReqs *metric.Gauge) Manager {
 	return Manager{
 		stopper:  stopper,
 		slowReqs: slowReqs,
@@ -82,9 +81,10 @@ func Make(stopper *stop.Stopper, slowReqs *metric.Gauge) Manager {
 // latches are stored in the Manager's btrees. They represent the latching
 // of a single key span.
 type latch struct {
+	span roachpb.Span
+	ts   hlc.Timestamp
+
 	id         uint64
-	span       roachpb.Span
-	ts         hlc.Timestamp
 	done       *signal
 	next, prev *latch // readSet linked-list.
 }
@@ -100,91 +100,31 @@ func (la *latch) inReadSet() bool {
 // Guard is a handle to a set of acquired latches. It is returned by
 // Manager.Acquire and accepted by Manager.Release.
 type Guard struct {
-	done signal
-	// latches [spanset.NumSpanScope][spanset.NumSpanAccess][]latch, but half the size.
-	latchesPtrs [NumSpanScope][NumSpanAccess]unsafe.Pointer
-	latchesLens [NumSpanScope][NumSpanAccess]int32
+	done    signal
+	latches [NumSpanScope][NumSpanAccess][]latch
 }
 
-func (lg *Guard) latches(s SpanScope, a SpanAccess) []latch {
-	len := lg.latchesLens[s][a]
-	if len == 0 {
-		return nil
-	}
-	const maxArrayLen = 1 << 31
-	return (*[maxArrayLen]latch)(lg.latchesPtrs[s][a])[:len:len]
-}
-
-func (lg *Guard) setLatches(s SpanScope, a SpanAccess, latches []latch) {
-	lg.latchesPtrs[s][a] = unsafe.Pointer(&latches[0])
-	lg.latchesLens[s][a] = int32(len(latches))
-}
-
-func allocGuardAndLatches(nLatches int) (*Guard, []latch) {
+func newGuard(spans *SpanSet) *Guard {
 	// Guard would be an ideal candidate for object pooling, but without
 	// reference counting its latches we can't know whether they're still
 	// referenced by other tree snapshots. The latches hold a reference to
 	// the signal living on the Guard, so the guard can't be recycled while
 	// latches still point to it.
-	if nLatches <= 1 {
-		alloc := new(struct {
-			g       Guard
-			latches [1]latch
-		})
-		return &alloc.g, alloc.latches[:nLatches]
-	} else if nLatches <= 2 {
-		alloc := new(struct {
-			g       Guard
-			latches [2]latch
-		})
-		return &alloc.g, alloc.latches[:nLatches]
-	} else if nLatches <= 4 {
-		alloc := new(struct {
-			g       Guard
-			latches [4]latch
-		})
-		return &alloc.g, alloc.latches[:nLatches]
-	} else if nLatches <= 8 {
-		alloc := new(struct {
-			g       Guard
-			latches [8]latch
-		})
-		return &alloc.g, alloc.latches[:nLatches]
-	}
-	return new(Guard), make([]latch, nLatches)
-}
-
-func newGuard(spans *SpanSet, ts hlc.Timestamp) *Guard {
-	nLatches := 0
+	guard := new(Guard)
 	for s := SpanScope(0); s < NumSpanScope; s++ {
 		for a := SpanAccess(0); a < NumSpanAccess; a++ {
-			nLatches += len(spans.GetSpans(a, s))
-		}
-	}
-
-	guard, latches := allocGuardAndLatches(nLatches)
-	for s := SpanScope(0); s < NumSpanScope; s++ {
-		for a := SpanAccess(0); a < NumSpanAccess; a++ {
-			ss := spans.GetSpans(a, s)
-			n := len(ss)
+			latches := spans.GetLatches(a, s)
+			n := len(latches)
 			if n == 0 {
 				continue
 			}
 
-			ssLatches := latches[:n]
-			for i := range ssLatches {
-				latch := &latches[i]
-				latch.span = ss[i]
-				latch.ts = ifGlobal(ts, s)
-				latch.done = &guard.done
-				// latch.setID() in Manager.insert, under lock.
+			for i := range latches {
+				// latch.id set in Manager.insert, under lock.
+				latches[i].done = &guard.done
 			}
-			guard.setLatches(s, a, ssLatches)
-			latches = latches[n:]
+			guard.latches[s][a] = latches
 		}
-	}
-	if len(latches) != 0 {
-		panic("alloc too large")
 	}
 	return guard
 }
@@ -198,9 +138,9 @@ func newGuard(spans *SpanSet, ts hlc.Timestamp) *Guard {
 //
 // It returns a Guard which must be provided to Release.
 func (m *Manager) Acquire(
-	ctx context.Context, spans *SpanSet, ts hlc.Timestamp,
+	ctx context.Context, spans *SpanSet,
 ) (*Guard, error) {
-	lg, snap := m.sequence(spans, ts)
+	lg, snap := m.sequence(spans)
 	defer snap.close()
 
 	err := m.wait(ctx, lg, snap)
@@ -215,8 +155,8 @@ func (m *Manager) Acquire(
 // for each of the specified spans into the manager's interval trees, and
 // unlocks the manager. The role of the method is to sequence latch acquisition
 // attempts.
-func (m *Manager) sequence(spans *SpanSet, ts hlc.Timestamp) (*Guard, snapshot) {
-	lg := newGuard(spans, ts)
+func (m *Manager) sequence(spans *SpanSet) (*Guard, snapshot) {
+	lg := newGuard(spans)
 
 	m.mu.Lock()
 	snap := m.snapshotLocked(spans)
@@ -240,13 +180,13 @@ func (sn *snapshot) close() {
 }
 
 // snapshotLocked captures an immutable snapshot of the latch manager. It takes
-// a spanset to limit the amount of state captured.
+// a spanlatch set to limit the amount of state captured.
 func (m *Manager) snapshotLocked(spans *SpanSet) snapshot {
 	var snap snapshot
 	for s := SpanScope(0); s < NumSpanScope; s++ {
 		sm := &m.scopes[s]
-		reading := len(spans.GetSpans(SpanReadOnly, s)) > 0
-		writing := len(spans.GetSpans(SpanReadWrite, s)) > 0
+		reading := len(spans.GetLatches(SpanReadOnly, s)) > 0
+		writing := len(spans.GetLatches(SpanReadWrite, s)) > 0
 
 		if writing {
 			sm.flushReadSetLocked()
@@ -274,7 +214,7 @@ func (m *Manager) insertLocked(lg *Guard) {
 	for s := SpanScope(0); s < NumSpanScope; s++ {
 		sm := &m.scopes[s]
 		for a := SpanAccess(0); a < NumSpanAccess; a++ {
-			latches := lg.latches(s, a)
+			latches := lg.latches[s][a]
 			for i := range latches {
 				latch := &latches[i]
 				latch.id = m.nextIDLocked()
@@ -316,18 +256,6 @@ func ignoreLater(ts, other hlc.Timestamp) bool   { return !ts.IsEmpty() && ts.Le
 func ignoreEarlier(ts, other hlc.Timestamp) bool { return !other.IsEmpty() && other.Less(ts) }
 func ignoreNothing(ts, other hlc.Timestamp) bool { return false }
 
-func ifGlobal(ts hlc.Timestamp, s SpanScope) hlc.Timestamp {
-	switch s {
-	case SpanGlobal:
-		return ts
-	case SpanLocal:
-		// All local latches interfere.
-		return hlc.Timestamp{}
-	default:
-		panic("unknown scope")
-	}
-}
-
 // wait waits for all interfering latches in the provided snapshot to complete
 // before returning.
 func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
@@ -338,7 +266,7 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 	for s := SpanScope(0); s < NumSpanScope; s++ {
 		tr := &snap.trees[s]
 		for a := SpanAccess(0); a < NumSpanAccess; a++ {
-			latches := lg.latches(s, a)
+			latches := lg.latches[s][a]
 			for i := range latches {
 				latch := &latches[i]
 				switch a {
@@ -438,7 +366,7 @@ func (m *Manager) removeLocked(lg *Guard) {
 	for s := SpanScope(0); s < NumSpanScope; s++ {
 		sm := &m.scopes[s]
 		for a := SpanAccess(0); a < NumSpanAccess; a++ {
-			latches := lg.latches(s, a)
+			latches := lg.latches[s][a]
 			for i := range latches {
 				latch := &latches[i]
 				if latch.inReadSet() {
