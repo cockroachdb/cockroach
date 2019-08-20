@@ -26,7 +26,12 @@ import (
 type KVInserter func(roachpb.KeyValue)
 
 // CPut is not implmented.
-func (i KVInserter) CPut(key, value, expValue interface{}) {
+func (i KVInserter) CPut(key, value interface{}, expValue *roachpb.Value) {
+	panic("unimplemented")
+}
+
+// CPutDeprecated is not implmented.
+func (i KVInserter) CPutDeprecated(key, value, expValue interface{}) {
 	panic("unimplemented")
 }
 

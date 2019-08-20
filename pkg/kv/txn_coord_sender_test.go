@@ -39,6 +39,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+func strToValue(s string) *roachpb.Value {
+	v := roachpb.MakeValueFromBytes([]byte(s))
+	return &v
+}
+
 // createTestDB creates a local test server and starts it. The caller
 // is responsible for stopping the test server.
 func createTestDB(t testing.TB) *localtestcluster.LocalTestCluster {
@@ -537,7 +542,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	{
-		err, ok := txn.CPut(ctx, key, []byte("x"), []byte("born to fail")).(*roachpb.ConditionFailedError)
+		err, ok := txn.CPut(ctx, key, []byte("x"), strToValue("born to fail")).(*roachpb.ConditionFailedError)
 		if !ok {
 			t.Fatal(err)
 		}

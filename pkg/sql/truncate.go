@@ -214,7 +214,7 @@ func (p *planner) truncateTable(
 	if traceKV {
 		log.VEventf(ctx, 2, "CPut %s -> nil", nameKey)
 	}
-	b.CPut(nameKey, nil, tableDesc.ID)
+	b.CPutDeprecated(nameKey, nil, tableDesc.ID)
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}
