@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -772,21 +773,18 @@ func (sc *SchemaChanger) distBackfill(
 				return err
 			}
 		}
-		for {
-			var spans []roachpb.Span
-			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-				var err error
-				spans, _, _, err = distsqlrun.GetResumeSpans(
-					ctx, sc.jobRegistry, txn, sc.tableID, sc.mutationID, filter)
-				return err
-			}); err != nil {
-				return err
-			}
-
-			if len(spans) <= 0 {
-				break
-			}
-			log.VEventf(ctx, 2, "backfill: process %+v spans", spans)
+		var todoSpans []roachpb.Span
+		var mutationIdx int
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			var err error
+			todoSpans, _, mutationIdx, err = distsqlrun.GetResumeSpans(
+				ctx, sc.jobRegistry, txn, sc.tableID, sc.mutationID, filter)
+			return err
+		}); err != nil {
+			return err
+		}
+		for len(todoSpans) > 0 {
+			log.VEventf(ctx, 2, "backfill: process %+v spans", todoSpans)
 			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 				// Report schema change progress. We define progress at this point
 				// as the the fraction of fully-backfilled ranges of the primary index of
@@ -795,7 +793,7 @@ func (sc *SchemaChanger) distBackfill(
 				// schema change state machine or from a previous backfill attempt,
 				// we scale that fraction of ranges completed by the remaining fraction
 				// of the job's progress bar.
-				nRanges, err := sc.nRanges(ctx, txn, spans)
+				nRanges, err := sc.nRanges(ctx, txn, todoSpans)
 				if err != nil {
 					return err
 				}
@@ -843,10 +841,16 @@ func (sc *SchemaChanger) distBackfill(
 						otherTableDescs = append(otherTableDescs, *table.TableDesc())
 					}
 				}
-				rw := &errOnlyResultWriter{}
+				metaFn := func(_ context.Context, meta *distsqlpb.ProducerMetadata) {
+					if meta.BulkProcessorProgress != nil {
+						todoSpans = roachpb.SubtractSpans(todoSpans,
+							meta.BulkProcessorProgress.CompletedSpans)
+					}
+				}
+				cbw := metadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
 				recv := MakeDistSQLReceiver(
 					ctx,
-					rw,
+					&cbw,
 					tree.Rows, /* stmtType - doesn't matter here since no result are produced */
 					sc.rangeDescriptorCache,
 					sc.leaseHolderCache,
@@ -860,7 +864,7 @@ func (sc *SchemaChanger) distBackfill(
 
 				planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, evalCtx, txn)
 				plan, err := sc.distSQLPlanner.createBackfiller(
-					planCtx, backfillType, *tableDesc.TableDesc(), duration, chunkSize, spans, otherTableDescs, readAsOf,
+					planCtx, backfillType, *tableDesc.TableDesc(), duration, chunkSize, todoSpans, otherTableDescs, readAsOf,
 				)
 				if err != nil {
 					return err
@@ -871,7 +875,14 @@ func (sc *SchemaChanger) distBackfill(
 					&plan, recv, evalCtx,
 					nil, /* finishedSetupFn */
 				)()
-				return rw.Err()
+				return cbw.Err()
+			}); err != nil {
+				return err
+			}
+			// Record what is left to do for the job.
+			// TODO(spaskob): Execute this at a regular cadence.
+			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				return distsqlrun.SetResumeSpansInJob(ctx, todoSpans, mutationIdx, txn, sc.job)
 			}); err != nil {
 				return err
 			}
