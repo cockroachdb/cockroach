@@ -1136,8 +1136,9 @@ SELECT * FROM (SELECT DISTINCT ON (a) a, b, c FROM abc ORDER BY a, b) ORDER BY c
 sort
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── ordering: +3
- └── scan (index-skip on the first 1 col(s)) abc
-      └── columns: a:1(int!null) b:2(int) c:3(int)
+ └── index-skip-scan (index-skip on the first 1 col(s)) abc
+      ├── columns: a:1(int!null) b:2(int) c:3(int)
+      └── scan ordering: +1,+2,+3
 
 # --------------------------------------------------
 # Insert operator.

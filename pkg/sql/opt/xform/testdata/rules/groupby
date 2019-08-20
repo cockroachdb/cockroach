@@ -985,7 +985,7 @@ memo
 SELECT DISTINCT u, v, w FROM kuvw
 ----
 memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
- ├── G1: (distinct-on G2 G3 cols=(2-4)) (distinct-on G2 G3 cols=(2-4),ordering=+2,+3,+4) (distinct-on G2 G3 cols=(2-4),ordering=+4,+3,+2) (distinct-on G2 G3 cols=(2-4),ordering=+3,+4) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4))
+ ├── G1: (distinct-on G2 G3 cols=(2-4)) (distinct-on G2 G3 cols=(2-4),ordering=+2,+3,+4) (distinct-on G2 G3 cols=(2-4),ordering=+4,+3,+2) (distinct-on G2 G3 cols=(2-4),ordering=+3,+4) (index-skip-scan kuvw@uvw) (index-skip-scan kuvw@wvu)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +2,+3,+4]" G3 cols=(2-4),ordering=+2,+3,+4)
  │         └── cost: 1110.03
@@ -1009,7 +1009,7 @@ memo
 SELECT DISTINCT ON (u, v) u, v, w FROM kuvw
 ----
 memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
- ├── G1: (distinct-on G2 G3 cols=(2,3)) (distinct-on G2 G3 cols=(2,3),ordering=+2,+3) (distinct-on G2 G3 cols=(2,3),ordering=+3) (scan kuvw@uvw,cols=(2-4))
+ ├── G1: (distinct-on G2 G3 cols=(2,3)) (distinct-on G2 G3 cols=(2,3),ordering=+2,+3) (distinct-on G2 G3 cols=(2,3),ordering=+3) (index-skip-scan kuvw@uvw)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +2,+3]" G3 cols=(2,3),ordering=+2,+3)
  │         └── cost: 1110.03
@@ -1032,9 +1032,9 @@ memo
 SELECT DISTINCT ON (u) u, v, w FROM kuvw
 ----
 memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
- ├── G1: (distinct-on G2 G3 cols=(2)) (distinct-on G2 G3 cols=(2),ordering=+2) (scan kuvw@uvw,cols=(2-4))
+ ├── G1: (distinct-on G2 G3 cols=(2)) (distinct-on G2 G3 cols=(2),ordering=+2) (index-skip-scan kuvw@uvw)
  │    └── [presentation: u:2,v:3,w:4]
- │         ├── best: (scan kuvw@uvw,cols=(2-4))
+ │         ├── best: (index-skip-scan kuvw@uvw)
  │         └── cost: 407.02
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +2]
@@ -1054,9 +1054,9 @@ memo
 SELECT DISTINCT ON (v) u, v, w FROM kuvw
 ----
 memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
- ├── G1: (distinct-on G2 G3 cols=(3)) (distinct-on G2 G3 cols=(3),ordering=+3) (scan kuvw@vw,cols=(2-4))
+ ├── G1: (distinct-on G2 G3 cols=(3)) (distinct-on G2 G3 cols=(3),ordering=+3) (index-skip-scan kuvw@vw)
  │    └── [presentation: u:2,v:3,w:4]
- │         ├── best: (scan kuvw@vw,cols=(2-4))
+ │         ├── best: (index-skip-scan kuvw@vw)
  │         └── cost: 407.02
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +3]
@@ -1076,9 +1076,9 @@ memo
 SELECT DISTINCT ON (w) u, v, w FROM kuvw
 ----
 memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
- ├── G1: (distinct-on G2 G3 cols=(4)) (distinct-on G2 G3 cols=(4),ordering=+4) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ ├── G1: (distinct-on G2 G3 cols=(4)) (distinct-on G2 G3 cols=(4),ordering=+4) (index-skip-scan kuvw@wvu) (index-skip-scan kuvw@w)
  │    └── [presentation: u:2,v:3,w:4]
- │         ├── best: (scan kuvw@wvu,cols=(2-4))
+ │         ├── best: (index-skip-scan kuvw@wvu)
  │         └── cost: 407.02
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +4]
@@ -1132,12 +1132,12 @@ memo
 SELECT DISTINCT ON (u) u, v, w FROM kuvw ORDER BY u, v, w
 ----
 memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
- ├── G1: (distinct-on G2 G3 cols=(2),ordering=+3,+4 opt(2)) (distinct-on G2 G3 cols=(2),ordering=+2,+3,+4) (distinct-on G2 G3 cols=(2),ordering=+3,+4) (scan kuvw@uvw,cols=(2-4))
+ ├── G1: (distinct-on G2 G3 cols=(2),ordering=+3,+4 opt(2)) (distinct-on G2 G3 cols=(2),ordering=+2,+3,+4) (distinct-on G2 G3 cols=(2),ordering=+3,+4) (index-skip-scan kuvw@uvw)
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +2]
- │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
+ │    │    ├── best: (index-skip-scan kuvw@uvw)
  │    │    └── cost: 407.02
  │    └── []
- │         ├── best: (scan kuvw@uvw,cols=(2-4))
+ │         ├── best: (index-skip-scan kuvw@uvw)
  │         └── cost: 407.02
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +2,+3,+4]
@@ -1287,6 +1287,44 @@ ALTER TABLE distinct_abc INJECT STATISTICS '[
   "columns": ["a"],
   "created_at": "2018-01-01 1:00:00.00000+00:00",
   "row_count": 10000,
+  "distinct_count": 10000,
+  "null_count": 0
+}]'
+----
+
+# Test Index Skip Scan is not triggered when the prefix has a high distinct count.
+opt format=show-all
+SELECT DISTINCT ON (a) a, b, c FROM distinct_abc
+----
+distinct-on
+ ├── columns: a:1(int!null) b:2(int) c:3(int)
+ ├── grouping columns: t.public.distinct_abc.a:1(int!null)
+ ├── internal-ordering: +1
+ ├── stats: [rows=10000, distinct(1)=10000, null(1)=0]
+ ├── cost: 11000.03
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── prune: (2,3)
+ ├── scan t.public.distinct_abc
+ │    ├── columns: t.public.distinct_abc.a:1(int!null) t.public.distinct_abc.b:2(int!null) t.public.distinct_abc.c:3(int!null)
+ │    ├── stats: [rows=10000, distinct(1)=10000, null(1)=0]
+ │    ├── cost: 10600.02
+ │    ├── key: (1-3)
+ │    ├── ordering: +1
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1,+2,+3)
+ └── aggregations
+      ├── first-agg [type=int, outer=(2)]
+      │    └── variable: t.public.distinct_abc.b [type=int]
+      └── first-agg [type=int, outer=(3)]
+           └── variable: t.public.distinct_abc.c [type=int]
+
+exec-ddl
+ALTER TABLE distinct_abc INJECT STATISTICS '[
+{
+  "columns": ["a"],
+  "created_at": "2018-01-01 1:00:00.00000+00:00",
+  "row_count": 10000,
   "distinct_count": 10,
   "null_count": 0
 },
@@ -1310,54 +1348,62 @@ ALTER TABLE distinct_abc INJECT STATISTICS '[
 opt format=show-all
 SELECT DISTINCT ON (a) a, b, c FROM distinct_abc
 ----
-scan (index-skip on the first 1 col(s)) t.public.distinct_abc
+index-skip-scan (index-skip on the first 1 col(s)) t.public.distinct_abc
  ├── columns: a:1(int!null) b:2(int) c:3(int)
+ ├── scan ordering: +1,+2,+3
  ├── stats: [rows=10, distinct(1)=10, null(1)=0]
  ├── cost: 40.62
  ├── key: (1)
  ├── fd: (1)-->(2,3)
- ├── prune: (2,3)
- └── interesting orderings: (+1,+2,+3)
+ └── prune: (2,3)
 
 # Test Reverse Index Skip Scan.
 opt format=show-all
 SELECT DISTINCT ON (a) a, b, c FROM distinct_abc ORDER BY a DESC
 ----
-scan (index-skip on the first 1 col(s)) t.public.distinct_abc,rev
+sort
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── stats: [rows=10, distinct(1)=10, null(1)=0]
- ├── cost: 40.9521928
+ ├── cost: 41.4943856
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── ordering: -1
- └── prune: (2,3)
+ ├── prune: (2,3)
+ └── index-skip-scan (index-skip on the first 1 col(s)) t.public.distinct_abc
+      ├── columns: t.public.distinct_abc.a:1(int!null) t.public.distinct_abc.b:2(int) t.public.distinct_abc.c:3(int)
+      ├── scan ordering: +1,+2,+3
+      ├── stats: [rows=10, distinct(1)=10, null(1)=0]
+      ├── cost: 40.62
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      └── prune: (2,3)
 
 # Test Index Skip Scan using multiple columns.
 opt format=show-all
 SELECT DISTINCT ON (a, b) a, b, c FROM distinct_abc
 ----
-scan (index-skip on the first 2 col(s)) t.public.distinct_abc
+index-skip-scan (index-skip on the first 2 col(s)) t.public.distinct_abc
  ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ ├── scan ordering: +1,+2,+3
  ├── stats: [rows=100, distinct(1,2)=100, null(1,2)=0]
  ├── cost: 406.02
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)
- ├── prune: (3)
- └── interesting orderings: (+1,+2,+3)
+ └── prune: (3)
 
 # Test Constrained Index Skip Scan.
 opt format=show-all
 SELECT DISTINCT ON (a) a, b, c FROM distinct_abc WHERE a > 1 AND a < 10
 ----
-scan (index-skip on the first 1 col(s)) t.public.distinct_abc
+index-skip-scan (index-skip on the first 1 col(s)) t.public.distinct_abc
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── constraint: /1/2/3: [/2 - /9]
+ ├── scan ordering: +1,+2,+3
  ├── stats: [rows=8, distinct(1)=8, null(1)=0]
  ├── cost: 32.49
  ├── key: (1)
  ├── fd: (1)-->(2,3)
- ├── prune: (2,3)
- └── interesting orderings: (+1,+2,+3)
+ └── prune: (2,3)
 
 # Index Skip scan can't run when there's no Distinct on a prefix.
 opt
@@ -1385,8 +1431,9 @@ project
  ├── columns: "?column?":4(int)  [hidden: a:1(int!null)]
  ├── key: (1)
  ├── fd: (1)-->(4)
- ├── scan (index-skip on the first 1 col(s)) distinct_abc
- │    └── columns: a:1(int!null)
+ ├── index-skip-scan (index-skip on the first 1 col(s)) distinct_abc
+ │    ├── columns: a:1(int!null)
+ │    └── scan ordering: +1
  └── projections
       └── a + 1 [type=int, outer=(1)]
 
@@ -1401,13 +1448,11 @@ project
  ├── key: (1)
  ├── fd: ()-->(7), (1)-->(3-7)
  ├── prune: (3-7)
- ├── interesting orderings: (+1)
- ├── scan (index-skip on the first 1 col(s)) t.public.distinct_abc
+ ├── index-skip-scan (index-skip on the first 1 col(s)) t.public.distinct_abc
  │    ├── columns: t.public.distinct_abc.a:1(int!null) t.public.distinct_abc.c:3(int!null)
+ │    ├── scan ordering: +1,+2,+3
  │    ├── stats: [rows=10, distinct(1)=10, null(1)=0]
- │    ├── cost: 40.52
- │    ├── prune: (1,3)
- │    └── interesting orderings: (+1)
+ │    └── cost: 40.52
  └── projections
       ├── plus [type=int, outer=(1)]
       │    ├── variable: t.public.distinct_abc.a [type=int]
@@ -1429,8 +1474,9 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
- ├── scan (index-skip on the first 1 col(s)) distinct_abc
- │    └── columns: a:1(int!null)
+ ├── index-skip-scan (index-skip on the first 1 col(s)) distinct_abc
+ │    ├── columns: a:1(int!null)
+ │    └── scan ordering: +1
  └── aggregations
       └── count [type=int, outer=(1)]
            └── variable: a [type=int]
@@ -1444,9 +1490,10 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
- ├── scan (index-skip on the first 1 col(s)) distinct_abc
+ ├── index-skip-scan (index-skip on the first 1 col(s)) distinct_abc
  │    ├── columns: a:1(int!null)
- │    └── constraint: /1/2/3: [/11 - /99]
+ │    ├── constraint: /1/2/3: [/11 - /99]
+ │    └── scan ordering: +1
  └── aggregations
       └── count [type=int, outer=(1)]
            └── variable: a [type=int]
@@ -1460,8 +1507,9 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
- ├── scan (index-skip on the first 1 col(s)) distinct_abc
- │    └── columns: a:1(int!null)
+ ├── index-skip-scan (index-skip on the first 1 col(s)) distinct_abc
+ │    ├── columns: a:1(int!null)
+ │    └── scan ordering: +1
  └── aggregations
       └── array-agg [type=int[], outer=(1)]
            └── variable: a [type=int]
@@ -1533,28 +1581,110 @@ ALTER TABLE abcd_index_skip INJECT STATISTICS '[
 opt
 SELECT DISTINCT ON (b) b FROM abcd_index_skip
 ----
-scan (index-skip on the first 1 col(s)) abcd_index_skip@secondary
+index-skip-scan (index-skip on the first 1 col(s)) abcd_index_skip@secondary
  ├── columns: b:2(int)
+ ├── scan ordering: +2
  └── key: (2)
 
 opt
 SELECT DISTINCT ON (b) b FROM abcd_index_skip WHERE b > 0 AND b < 10
 ----
-scan (index-skip on the first 1 col(s)) abcd_index_skip@secondary
+index-skip-scan (index-skip on the first 1 col(s)) abcd_index_skip@secondary
  ├── columns: b:2(int!null)
  ├── constraint: /2/3/1: [/1 - /9]
+ ├── scan ordering: +2
  └── key: (2)
 
 # Test ensures index-skip-scan works with through index joins.
 opt
 SELECT DISTINCT ON (b) a, b, c, d FROM abcd_index_skip WHERE b > 0 AND b < 10
 ----
-index-join abcd_index_skip
+inner-join (lookup abcd_index_skip)
  ├── columns: a:1(int) b:2(int!null) c:3(int) d:4(int)
+ ├── key columns: [1] = [1]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (2)-->(1,3,4)
- └── scan (index-skip on the first 1 col(s)) abcd_index_skip@secondary
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int)
-      ├── constraint: /2/3/1: [/1 - /9]
+ ├── index-skip-scan (index-skip on the first 1 col(s)) abcd_index_skip@secondary
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ │    ├── constraint: /2/3/1: [/1 - /9]
+ │    ├── scan ordering: +2,+3,+1
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters (true)
+
+# Test that IndexSkipScan respects user specified orderings.
+exec-ddl
+CREATE TABLE ab (a INT8, b INT8, PRIMARY KEY (a, b))
+----
+
+opt
+SELECT DISTINCT ON (a) a, b FROM ab ORDER BY a, b
+----
+index-skip-scan (index-skip on the first 1 col(s)) ab
+ ├── columns: a:1(int!null) b:2(int)
+ ├── scan ordering: +1,+2
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── ordering: +1
+
+opt
+SELECT DISTINCT ON (a) a, b FROM ab ORDER BY a DESC, b DESC
+----
+index-skip-scan (index-skip on the first 1 col(s)) ab,rev
+ ├── columns: a:1(int!null) b:2(int)
+ ├── scan ordering: -1,-2
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── ordering: -1
+
+# Testing IndexSKipScan with a sort on top.
+opt
+SELECT DISTINCT ON (a) a, b FROM ab ORDER BY a DESC, b ASC
+----
+sort
+ ├── columns: a:1(int!null) b:2(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── ordering: -1
+ └── index-skip-scan (index-skip on the first 1 col(s)) ab
+      ├── columns: a:1(int!null) b:2(int)
+      ├── scan ordering: +1,+2
       ├── key: (1)
-      └── fd: (1)-->(2,3)
+      └── fd: (1)-->(2)
+
+# Testing IndexSKipScan with a sort on top.
+opt
+SELECT DISTINCT ON (a) a, b FROM ab ORDER BY a ASC, b DESC
+----
+sort
+ ├── columns: a:1(int!null) b:2(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── ordering: +1
+ └── index-skip-scan (index-skip on the first 1 col(s)) ab,rev
+      ├── columns: a:1(int!null) b:2(int)
+      ├── scan ordering: -1,-2
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+opt disable=GenerateIndexSkipScan
+SELECT DISTINCT ON (a) a, b FROM ab ORDER BY a ASC, b DESC
+----
+distinct-on
+ ├── columns: a:1(int!null) b:2(int)
+ ├── grouping columns: a:1(int!null)
+ ├── internal-ordering: -2 opt(1)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── ordering: +1
+ ├── sort (segmented)
+ │    ├── columns: a:1(int!null) b:2(int!null)
+ │    ├── key: (1,2)
+ │    ├── ordering: +1,-2
+ │    └── scan ab
+ │         ├── columns: a:1(int!null) b:2(int!null)
+ │         ├── key: (1,2)
+ │         └── ordering: +1
+ └── aggregations
+      └── first-agg [type=int, outer=(2)]
+           └── variable: b [type=int]

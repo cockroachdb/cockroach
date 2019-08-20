@@ -100,6 +100,11 @@ func init() {
 		buildChildReqOrdering: noChildReqOrdering,
 		buildProvidedOrdering: scanBuildProvided,
 	}
+	funcMap[opt.IndexSkipScanOp] = funcs{
+		canProvideOrdering:    indexSkipScanCanProvideOrdering,
+		buildChildReqOrdering: noChildReqOrdering,
+		buildProvidedOrdering: indexSkipScanBuildProvided,
+	}
 	funcMap[opt.SelectOp] = funcs{
 		canProvideOrdering:    selectCanProvideOrdering,
 		buildChildReqOrdering: selectBuildChildReqOrdering,

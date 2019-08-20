@@ -299,11 +299,6 @@ func (n ZipExpr) OutputCols() opt.ColSet {
 	return colSet
 }
 
-// IsIndexSkipScan specifies whether the scan is an index-skip-scan.
-func (n *ScanPrivate) IsIndexSkipScan() bool {
-	return n.PrefixSkipLen > 0
-}
-
 // TupleOrdinal is an ordinal index into an expression of type Tuple. It is
 // used by the ColumnAccess scalar expression.
 type TupleOrdinal uint32

@@ -59,8 +59,35 @@ func (b *logicalPropsBuilder) clear() {
 	b.sb.clear()
 }
 
+func (b *logicalPropsBuilder) buildIndexSkipScanProps(
+	scan *IndexSkipScanExpr, rel *props.Relational,
+) {
+	// We build the logical props for the scan and then the stats because
+	// IndexSkipScan would compute stats differently.
+	b.buildScanPrivatePropsWithoutStats(scan.Memo().Metadata(), &scan.ScanPrivate, rel)
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildIndexSkipScan(scan, rel)
+	}
+}
+
 func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relational) {
-	md := scan.Memo().Metadata()
+	// We build the logical props for the scan and then the stats because
+	// IndexSkipScan would compute stats differently.
+	b.buildScanPrivatePropsWithoutStats(scan.Memo().Metadata(), &scan.ScanPrivate, rel)
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildScan(scan, rel)
+	}
+}
+
+func (b *logicalPropsBuilder) buildScanPrivatePropsWithoutStats(
+	md *opt.Metadata, scan *ScanPrivate, rel *props.Relational,
+) {
 	hardLimit := scan.HardLimit.RowCount()
 
 	// Output Columns
@@ -114,12 +141,6 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 		if scan.Constraint != nil {
 			b.updateCardinalityFromConstraint(scan.Constraint, rel)
 		}
-	}
-
-	// Statistics
-	// ----------
-	if !b.disableStats {
-		b.sb.buildScan(scan, rel)
 	}
 }
 

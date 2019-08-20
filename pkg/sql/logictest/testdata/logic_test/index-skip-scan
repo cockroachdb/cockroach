@@ -1,5 +1,3 @@
-# LogicTest: local
-
 statement ok
 CREATE TABLE abc (a INT8, b INT8, c INT8, PRIMARY KEY (a, b, c))
 
@@ -7,7 +5,7 @@ statement ok
 INSERT INTO abc VALUES (1, 10, 100), (1, 20, 300), (2, 30, 400), (3, 40, 500), (2, 40, 500)
 
 statement ok
-INSERT INTO abc VALUES (1, 10, 200), (1, 20, 400), (2, 30, 500), (3, 400, 600), (2, 40, 700)
+INSERT INTO abc VALUES (1, 10, 200), (1, 20, 400), (2, 30, 500), (3, 40, 600), (2, 40, 700)
 
 statement ok
 ALTER TABLE abc INJECT STATISTICS '[
@@ -50,12 +48,11 @@ SELECT DISTINCT ON (a) * FROM abc
 query III
 SELECT DISTINCT ON (a, b) * FROM abc
 ----
-1  10   100
-1  20   300
-2  30   400
-2  40   500
-3  40   500
-3  400  600
+1  10  100
+1  20  300
+2  30  400
+2  40  500
+3  40  500
 
 query I
 SELECT count(DISTINCT a) FROM abc
@@ -79,3 +76,51 @@ SELECT DISTINCT ON (b) a, b, c, d FROM abcd WHERE b > 0 AND b < 100
 1  10  100  1000
 3  20  200  2000
 5  30  400  4000
+
+# Test that IndexSkipScan respects user specified orderings.
+statement ok
+CREATE TABLE ab (a INT8, b INT8, PRIMARY KEY (a, b))
+
+statement ok
+INSERT INTO ab VALUES (1, 1), (1, 2), (1, 3)
+
+statement ok
+INSERT INTO ab VALUES (2, 1), (2, 2), (2, 3)
+
+statement ok
+INSERT INTO ab VALUES (3, 1), (3, 2), (3, 3)
+
+query I
+SELECT DISTINCT a FROM ab
+----
+1
+2
+3
+
+query II
+SELECT DISTINCT ON (a) a, b FROM ab ORDER BY a ASC, b ASC
+----
+1  1
+2  1
+3  1
+
+query II
+SELECT DISTINCT ON (a) a, b FROM ab ORDER BY a DESC, b DESC
+----
+3  3
+2  3
+1  3
+
+query II
+SELECT DISTINCT ON (a) a, b FROM ab ORDER BY a DESC, b ASC
+----
+3  1
+2  1
+1  1
+
+query II
+SELECT DISTINCT ON (a) a, b FROM ab ORDER BY a ASC, b DESC
+----
+1  3
+2  3
+3  3

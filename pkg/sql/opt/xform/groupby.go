@@ -12,32 +12,48 @@ package xform
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/errors"
 )
 
-// IsIndexSkipScan specifies whether the current skips rows based on an
-// index prefix.
-func (c *CustomFuncs) IsIndexSkipScan(private *memo.ScanPrivate) bool {
-	return private.IsIndexSkipScan()
-}
-
-// SynthesizeSingleColSkipScanPrivate creates a ScanPrivate that has its
+// SynthesizeSingleColIndexSkipScanPrivate creates a ScanPrivate that has its
 // PrefixSkipLen set to 1.
-func (c *CustomFuncs) SynthesizeSingleColSkipScanPrivate(
-	private *memo.ScanPrivate,
-) *memo.ScanPrivate {
-	return c.SynthesizeSkipScanPrivate(private, 1 /* prefixSkipLen */)
+func (c *CustomFuncs) SynthesizeSingleColIndexSkipScanPrivate(
+	private *memo.ScanPrivate, choice physical.OrderingChoice,
+) *memo.IndexSkipScanPrivate {
+	return c.SynthesizeIndexSkipScanPrivate(private, 1 /* prefixSkipLen */, choice)
 }
 
-// SynthesizeSkipScanPrivate creates a ScanPrivate with the specified PrefixSkipLen.
-func (c *CustomFuncs) SynthesizeSkipScanPrivate(
-	private *memo.ScanPrivate, prefixSkipLen int,
-) *memo.ScanPrivate {
-	newPrivate := *private
-	newPrivate.PrefixSkipLen = prefixSkipLen
+// SynthesizeIndexSkipScanPrivate creates a ScanPrivate with the specified PrefixSkipLen.
+func (c *CustomFuncs) SynthesizeIndexSkipScanPrivate(
+	private *memo.ScanPrivate, prefixSkipLen int, choice physical.OrderingChoice,
+) *memo.IndexSkipScanPrivate {
+	md := c.e.mem.Metadata()
+	tab := md.Table(private.Table)
+	index := tab.Index(private.Index)
+
+	newPrivate := memo.IndexSkipScanPrivate{
+		ScanPrivate:   *private,
+		PrefixSkipLen: prefixSkipLen,
+	}
+
+	_, reverse := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), private, &choice)
+	indexSkipOrdering := make(opt.Ordering, 0, index.KeyColumnCount())
+	for i := 0; i < index.KeyColumnCount(); i++ {
+		indexCol := index.Column(i)
+		colID := private.Table.ColumnID(indexCol.Ordinal)
+		if !private.Cols.Contains(colID) {
+			break
+		}
+		direction := indexCol.Descending != reverse // != is a boolean XOR.
+		indexSkipOrdering = append(indexSkipOrdering, opt.MakeOrderingColumn(colID, direction))
+	}
+
+	newPrivate.Ordering = indexSkipOrdering
+	newPrivate.Reverse = reverse
 	return &newPrivate
 }
 
@@ -46,8 +62,8 @@ func (c *CustomFuncs) ColSetLen(cols opt.ColSet) int {
 	return cols.Len()
 }
 
-// GroupingCols returns the grouping cols of a GroupBy, ScalarGroupBy or a DistinctOn.
-func (c *CustomFuncs) GroupingCols(private *memo.GroupingPrivate) opt.ColSet {
+// ExtractGroupingCols returns the grouping cols of a GroupBy, ScalarGroupBy or a DistinctOn.
+func (c *CustomFuncs) ExtractGroupingCols(private *memo.GroupingPrivate) opt.ColSet {
 	return private.GroupingCols.Copy()
 }
 
@@ -138,11 +154,34 @@ func (c *CustomFuncs) AggregationCols(aggregations memo.AggregationsExpr) opt.Co
 	return aggCols
 }
 
-// PruneScanPrivate prunes the columns of the ScanPrivate based on the needed input.
-func (c *CustomFuncs) PruneScanPrivate(
-	private *memo.ScanPrivate, needed opt.ColSet,
-) *memo.ScanPrivate {
+// PruneIndexSkipScanPrivate prunes the columns of the ScanPrivate based on the needed input.
+func (c *CustomFuncs) PruneIndexSkipScanPrivate(
+	private *memo.IndexSkipScanPrivate, needed opt.ColSet,
+) *memo.IndexSkipScanPrivate {
 	newScanPrivate := private
 	newScanPrivate.Cols = needed.Intersection(private.Cols)
 	return newScanPrivate
+}
+
+// SynthesizeLookupJoinPrivate creates a lookup join from an index join.
+func (c *CustomFuncs) SynthesizeLookupJoinPrivate(
+	private *memo.IndexJoinPrivate, scan *memo.ScanPrivate,
+) *memo.LookupJoinPrivate {
+	newLookupPrivate := &memo.LookupJoinPrivate{
+		JoinType: opt.InnerJoinOp,
+		Table:    private.Table,
+		Index:    cat.PrimaryIndex,
+		Cols:     private.Cols,
+	}
+
+	// Set the key columns appropriately.
+	md := c.e.mem.Metadata()
+	table := md.Table(scan.Table)
+	index := table.Index(cat.PrimaryIndex)
+	pkCols := make(opt.ColList, 0, index.KeyColumnCount())
+	for i := 0; i < index.KeyColumnCount(); i++ {
+		pkCols = append(pkCols, scan.Table.ColumnID(index.Column(i).Ordinal))
+	}
+	newLookupPrivate.KeyCols = pkCols
+	return newLookupPrivate
 }

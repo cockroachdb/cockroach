@@ -185,6 +185,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.ScanExpr:
 		ep, err = b.buildScan(t)
 
+	case *memo.IndexSkipScanExpr:
+		ep, err = b.buildIndexSkipScan(t)
+
 	case *memo.VirtualScanExpr:
 		ep, err = b.buildVirtualScan(t)
 
@@ -408,8 +411,19 @@ func (b *Builder) getColumns(
 // indexConstraintMaxResults returns the maximum number of results for a scan;
 // the scan is guaranteed never to return more results than this. Iff this hint
 // is invalid, 0 is returned.
-func (b *Builder) indexConstraintMaxResults(scan *memo.ScanExpr) uint64 {
-	c := scan.Constraint
+func (b *Builder) indexConstraintMaxResults(scan memo.RelExpr) uint64 {
+	if scan.Op() != opt.ScanOp && scan.Op() != opt.IndexSkipScanOp {
+		panic(errors.AssertionFailedf("not a scan"))
+	}
+	scanPrivate, ok := scan.Private().(*memo.ScanPrivate)
+	if !ok {
+		indexSkipScanPrivate, ok := scan.Private().(*memo.IndexSkipScanPrivate)
+		if !ok {
+			panic(errors.AssertionFailedf("not a scan"))
+		}
+		scanPrivate = &indexSkipScanPrivate.ScanPrivate
+	}
+	c := scanPrivate.Constraint
 	if c == nil || c.IsContradiction() || c.IsUnconstrained() {
 		return 0
 	}
@@ -466,13 +480,109 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		b.indexConstraintMaxResults(scan),
 		res.reqOrdering(scan),
 		rowCount,
-		scan.PrefixSkipLen,
+		0, /* prefixSkipLen */
 	)
 	if err != nil {
 		return execPlan{}, err
 	}
 	res.root = root
 	return res, nil
+}
+
+// buildIndexSkipScan builds the exec plan for IndexSkipScans. Conceptually,
+// an IndexSkipScan returns exactly one row for every distinct value for
+// the first |PrefixSkipLen| columns. However, in practice because the
+// IndexSkipScan table reader runs on multiple nodes, each node makes that
+// guarantee about its local spans. These guarantees don't hold globally. For
+// example, if a table with 1 column has 10 rows where each row is simply a 1,
+// and suppose this table exists on 3 nodes. Now each node will utilize the
+// IndexSkipTableReader and return 1 each. Simply aggregating these results
+// will give three 1s which is wrong. To avoid this, we apply a distinct on
+// on the final node before we return.
+func (b *Builder) buildIndexSkipScan(scan *memo.IndexSkipScanExpr) (execPlan, error) {
+	md := b.mem.Metadata()
+	tab := md.Table(scan.Table)
+
+	// Check if we tried to force a specific index but there was no Scan with that
+	// index in the memo.
+	if scan.Flags.ForceIndex && scan.Flags.Index != scan.Index {
+		idx := tab.Index(scan.Flags.Index)
+		var err error
+		if idx.IsInverted() {
+			err = fmt.Errorf("index \"%s\" is inverted and cannot be used for this query", idx.Name())
+		} else {
+			// This should never happen.
+			err = fmt.Errorf("index \"%s\" cannot be used for this query", idx.Name())
+		}
+		return execPlan{}, err
+	}
+
+	needed, output := b.getColumns(scan.Cols, scan.Table)
+	inputPlan := execPlan{outputCols: output}
+
+	rowCount := scan.Relational().Stats.RowCount
+	if !scan.Relational().Stats.Available {
+		// When there are no statistics available, we construct a scan node with
+		// the estimated row count of zero rows.
+		rowCount = 0
+	}
+
+	indexScanNode, err := b.factory.ConstructScan(
+		tab,
+		tab.Index(scan.Index),
+		needed,
+		scan.Constraint,
+		scan.HardLimit.RowCount(),
+		scan.Reverse,
+		b.indexConstraintMaxResults(scan),
+		exec.OutputOrdering(inputPlan.sqlOrdering(scan.Ordering)),
+		rowCount,
+		scan.PrefixSkipLen,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	inputPlan.root = indexScanNode
+	table := b.mem.Metadata().Table(scan.Table)
+	index := table.Index(scan.Index)
+	var indexSkipCols opt.ColSet
+	for i := 0; i < scan.PrefixSkipLen; i++ {
+		indexSkipCols.Add(scan.Table.ColumnID(index.Column(i).Ordinal))
+	}
+
+	var nonDistinctCols opt.ColSet
+	for i := scan.PrefixSkipLen; i < index.ColumnCount(); i++ {
+		nonDistinctCols.Add(scan.Table.ColumnID(index.Column(i).Ordinal))
+	}
+	nonDistinctCols.IntersectionWith(scan.Cols)
+
+	input, err := b.buildGroupByInput(inputPlan, indexSkipCols, nonDistinctCols, scan)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	distinctCols := input.getColumnOrdinalSet(indexSkipCols)
+	var orderedCols exec.ColumnOrdinalSet
+	ordering := scan.RequiredPhysical().Ordering.ToOrdering()
+	for i := range ordering {
+		orderedCols.Add(int(input.getColumnOrdinal(ordering[i].ID())))
+	}
+	node, err := b.factory.ConstructDistinct(input.root, distinctCols, orderedCols)
+	if err != nil {
+		return execPlan{}, err
+	}
+	ep := execPlan{root: node, outputCols: input.outputCols}
+
+	// buildGroupByInput can add extra sort column(s), so discard those if they
+	// are present by using an additional projection.
+	outCols := scan.Relational().OutputCols
+	if input.outputCols.Len() == outCols.Len() {
+		return ep, nil
+	}
+	return b.ensureColumns(
+		ep, opt.ColSetToList(outCols), nil /* colNames */, scan.ProvidedPhysical().Ordering,
+	)
 }
 
 func (b *Builder) buildVirtualScan(scan *memo.VirtualScanExpr) (execPlan, error) {
@@ -859,7 +969,20 @@ func joinOpToJoinType(op opt.Operator) sqlbase.JoinType {
 }
 
 func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
-	input, err := b.buildGroupByInput(groupBy)
+	groupByInput := groupBy.Child(0).(memo.RelExpr)
+	inputPlan, err := b.buildRelational(groupByInput)
+	if err != nil {
+		return execPlan{}, err
+	}
+	private := groupBy.Private().(*memo.GroupingPrivate)
+	aggregations := *groupBy.Child(1).(*memo.AggregationsExpr)
+
+	var aggCols opt.ColSet
+	for i := range aggregations {
+		aggCols.UnionWith(memo.ExtractAggInputColumns(aggregations[i].Agg))
+	}
+
+	input, err := b.buildGroupByInput(inputPlan, private.GroupingCols, aggCols, groupByInput)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -872,7 +995,6 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 		groupingColIdx = append(groupingColIdx, input.getColumnOrdinal(i))
 	}
 
-	aggregations := *groupBy.Child(1).(*memo.AggregationsExpr)
 	aggInfos := make([]exec.AggInfo, len(aggregations))
 	for i := range aggregations {
 		item := &aggregations[i]
@@ -954,7 +1076,21 @@ func (b *Builder) buildDistinct(distinct *memo.DistinctOnExpr) (execPlan, error)
 		// LIMIT 1 by normalization rules.
 		return execPlan{}, fmt.Errorf("cannot execute distinct on no columns")
 	}
-	input, err := b.buildGroupByInput(distinct)
+
+	inputPlan, err := b.buildRelational(distinct.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	private := distinct.Private().(*memo.GroupingPrivate)
+	aggregations := distinct.Aggregations
+
+	var aggCols opt.ColSet
+	for i := range aggregations {
+		aggCols.UnionWith(memo.ExtractAggInputColumns(aggregations[i].Agg))
+	}
+
+	input, err := b.buildGroupByInput(inputPlan, private.GroupingCols, aggCols, distinct.Input)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -984,13 +1120,9 @@ func (b *Builder) buildDistinct(distinct *memo.DistinctOnExpr) (execPlan, error)
 	)
 }
 
-func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
-	groupByInput := groupBy.Child(0).(memo.RelExpr)
-	input, err := b.buildRelational(groupByInput)
-	if err != nil {
-		return execPlan{}, err
-	}
-
+func (b *Builder) buildGroupByInput(
+	input execPlan, groupingCols, aggregationCols opt.ColSet, groupByInput memo.RelExpr,
+) (execPlan, error) {
 	// TODO(radu): this is a one-off fix for an otherwise bigger gap: we should
 	// have a more general mechanism (through physical properties or otherwise) to
 	// figure out unneeded columns and project them away as necessary. The
@@ -999,12 +1131,8 @@ func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
 	// We address just the GroupBy case for now because there is a particularly
 	// important case with COUNT(*) where we can remove all input columns, which
 	// leads to significant speedup.
-	private := groupBy.Private().(*memo.GroupingPrivate)
-	neededCols := private.GroupingCols.Copy()
-	aggs := *groupBy.Child(1).(*memo.AggregationsExpr)
-	for i := range aggs {
-		neededCols.UnionWith(memo.ExtractAggInputColumns(aggs[i].Agg))
-	}
+	neededCols := groupingCols.Copy()
+	neededCols.UnionWith(aggregationCols.Copy())
 
 	// In rare cases, we might need a column only for its ordering, for example:
 	//   SELECT concat_agg(s) FROM (SELECT s FROM kv ORDER BY k)
@@ -1031,6 +1159,7 @@ func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
 		cols = append(cols, exec.ColumnOrdinal(ordinal))
 	}
 
+	var err error
 	input.outputCols = newOutputCols
 	reqOrdering := input.reqOrdering(groupByInput)
 	input.root, err = b.factory.ConstructSimpleProject(
