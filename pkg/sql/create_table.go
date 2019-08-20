@@ -610,10 +610,16 @@ func ResolveFK(
 
 	var validity sqlbase.ConstraintValidity
 	if ts != NewTable {
-		if validationBehavior == tree.ValidationSkip {
-			validity = sqlbase.ConstraintValidity_Unvalidated
+		if settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
+			if validationBehavior == tree.ValidationSkip {
+				validity = sqlbase.ConstraintValidity_Unvalidated
+			} else {
+				validity = sqlbase.ConstraintValidity_Validating
+			}
 		} else {
-			validity = sqlbase.ConstraintValidity_Validating
+			// This is for backward compatibility with 19.1, when all FKs were added
+			// immediately in the user transaction as unvalidated.
+			validity = sqlbase.ConstraintValidity_Unvalidated
 		}
 	}
 
@@ -650,7 +656,7 @@ func ResolveFK(
 		ref.LegacyUpgradedFromReferencedReference = legacyUpgradedFromReferencedReference
 	}
 
-	if ts == NewTable {
+	if ts == NewTable || !settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
 		tbl.OutboundFKs = append(tbl.OutboundFKs, ref)
 	} else {
 		tbl.AddForeignKeyValidationMutation(&ref)
@@ -658,9 +664,10 @@ func ResolveFK(
 
 	// If the table is being created or was created earlier in the same
 	// transaction, add the backreference now so it happens in the same
-	// transaction too
-	// TODO (lucy): Should the IsNewTable() case be handled in runSchemaChangesInTxn instead?
-	if ts == NewTable || tbl.IsNewTable() {
+	// transaction too. (The forward reference will be installed in
+	// runSchemaChangesInTxn()).
+	// TODO (lucy): Ideally the backreference would also be installed there.
+	if ts == NewTable || tbl.IsNewTable() || !settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
 		target.InboundFKs = append(target.InboundFKs, ref)
 	}
 
