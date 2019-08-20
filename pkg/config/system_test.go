@@ -406,11 +406,23 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()), keys.SystemRangesID},
 		{roachpb.RKey(keys.TableDataMin), keys.SystemDatabaseID},
 		{roachpb.RKey(keys.SystemConfigSplitKey), keys.SystemDatabaseID},
+
+		// Gossiped system tables should refer to the SystemDatabaseID.
 		{tkey(keys.NamespaceTableID), keys.SystemDatabaseID},
 		{tkey(keys.ZonesTableID), keys.SystemDatabaseID},
-		{tkey(keys.LeaseTableID), keys.SystemDatabaseID},
-		{tkey(keys.JobsTableID), keys.SystemDatabaseID},
-		{tkey(keys.LocationsTableID), keys.SystemDatabaseID},
+
+		// Non-gossiped system tables should refer to themselves.
+		{tkey(keys.LeaseTableID), keys.LeaseTableID},
+		{tkey(keys.JobsTableID), keys.JobsTableID},
+		{tkey(keys.LocationsTableID), keys.LocationsTableID},
+
+		// Pseudo-tables should refer to the SystemDatabaseID.
+		{tkey(keys.MetaRangesID), keys.SystemDatabaseID},
+		{tkey(keys.SystemRangesID), keys.SystemDatabaseID},
+		{tkey(keys.TimeseriesRangesID), keys.SystemDatabaseID},
+		{tkey(keys.LivenessRangesID), keys.SystemDatabaseID},
+
+		// User tables should refer to themselves.
 		{tkey(keys.MinUserDescID), keys.MinUserDescID},
 		{tkey(keys.MinUserDescID + 22), keys.MinUserDescID + 22},
 		{roachpb.RKeyMax, keys.RootNamespaceID},
