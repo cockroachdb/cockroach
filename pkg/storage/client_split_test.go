@@ -3176,7 +3176,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	}
 }
 
-// Verify that replicas don't temporrily disappear from the replicas map during
+// Verify that replicas don't temporarily disappear from the replicas map during
 // the splits. See #29144.
 func TestStoreSplitDisappearingReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()

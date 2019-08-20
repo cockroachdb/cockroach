@@ -88,6 +88,10 @@ func (r *Replica) executeReadOnlyBatch(
 	rec := NewReplicaEvalContext(r, spans)
 	readOnly := r.store.Engine().NewReadOnly()
 	if util.RaceEnabled {
+		// TODO(irfansharif): We can't use spanset.NewReaderAt because of
+		// QueryIntent requests being evaluated at hlc.MaxTimestamp, without
+		// having acquired a read latch at hlc.MaxTimestamp to do so. We should be
+		// asserting access for all other requests at ba.Timestamp.
 		readOnly = spanset.NewReadWriter(readOnly, spans)
 	}
 	defer readOnly.Close()
