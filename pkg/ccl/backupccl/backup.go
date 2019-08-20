@@ -540,17 +540,26 @@ func (r BackupFileDescriptors) Less(i, j int) bool {
 
 func writeBackupDescriptor(
 	ctx context.Context,
+	settings *cluster.Settings,
 	exportStore storageccl.ExportStorage,
 	filename string,
 	desc *BackupDescriptor,
 ) error {
 	sort.Sort(BackupFileDescriptors(desc.Files))
 
-	descBuf, err := protoutil.Marshal(desc)
+	// When writing a backup descriptor, make sure to downgrade any new-style FKs
+	// when we're in the 19.1/2 mixed state so that 19.1 clusters can still
+	// restore backups taken on a 19.1/2 mixed cluster.
+	// TODO(lucy, jordan): Remove in 20.1.
+	downgradedDesc, err := maybeDowngradeTableDescsInBackupDescriptor(ctx, settings, desc)
 	if err != nil {
 		return err
 	}
 
+	descBuf, err := protoutil.Marshal(downgradedDesc)
+	if err != nil {
+		return err
+	}
 	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
 }
 
@@ -786,7 +795,7 @@ func backup(
 					checkpointMu.Lock()
 					backupDesc.Files = checkpointFiles
 					err := writeBackupDescriptor(
-						ctx, defaultStore, BackupDescriptorCheckpointName, backupDesc,
+						ctx, settings, defaultStore, BackupDescriptorCheckpointName, backupDesc,
 					)
 					checkpointMu.Unlock()
 					if err != nil {
@@ -847,7 +856,7 @@ func backup(
 		}
 	}
 
-	if err := writeBackupDescriptor(ctx, defaultStore, BackupDescriptorName, backupDesc); err != nil {
+	if err := writeBackupDescriptor(ctx, settings, defaultStore, BackupDescriptorName, backupDesc); err != nil {
 		return mu.exported, err
 	}
 
@@ -877,7 +886,10 @@ func sanitizeLocalityKV(kv string) string {
 // clean up the written checkpoint file (BackupDescriptorCheckpointName) only
 // after writing to the backup file location (BackupDescriptorName).
 func VerifyUsableExportTarget(
-	ctx context.Context, exportStore storageccl.ExportStorage, readable string,
+	ctx context.Context,
+	settings *cluster.Settings,
+	exportStore storageccl.ExportStorage,
+	readable string,
 ) error {
 	if r, err := exportStore.ReadFile(ctx, BackupDescriptorName); err == nil {
 		// TODO(dt): If we audit exactly what not-exists error each ExportStorage
@@ -894,7 +906,7 @@ func VerifyUsableExportTarget(
 			readable, BackupDescriptorCheckpointName)
 	}
 	if err := writeBackupDescriptor(
-		ctx, exportStore, BackupDescriptorCheckpointName, &BackupDescriptor{},
+		ctx, settings, exportStore, BackupDescriptorCheckpointName, &BackupDescriptor{},
 	); err != nil {
 		return errors.Wrapf(err, "cannot write to %s", readable)
 	}
@@ -1028,6 +1040,12 @@ func backupPlanHook(
 			clusterID := p.ExecCfg().ClusterID()
 			prevBackups = make([]BackupDescriptor, len(incrementalFrom))
 			for i, uri := range incrementalFrom {
+				// TODO(lucy): We may want to upgrade the table descs to the newer
+				// foreign key representation here, in case there are backups from an
+				// older cluster. Keeping the descriptors as they are works for now
+				// since all we need to do is get the past backups' table/index spans,
+				// but it will be safer for future code to avoid having older-style
+				// descriptors around.
 				desc, err := ReadBackupDescriptorFromURI(ctx, uri, p.ExecCfg().Settings)
 				if err != nil {
 					return errors.Wrapf(err, "failed to read backup from %q", uri)
@@ -1170,7 +1188,15 @@ func backupPlanHook(
 			return errors.Errorf("expected backup (along with any previous backups) to cover to %v, not %v", endTime, coveredEnd)
 		}
 
-		descBytes, err := protoutil.Marshal(&backupDesc)
+		// When writing a backup descriptor, make sure to downgrade any new-style FKs
+		// when we're in the 19.1/2 mixed state so that 19.1 clusters can still
+		// restore backups taken on a 19.1/2 mixed cluster.
+		// TODO(lucy, jordan): Remove in 20.1.
+		downgradedBackupDesc, err := maybeDowngradeTableDescsInBackupDescriptor(ctx, p.ExecCfg().Settings, &backupDesc)
+		if err != nil {
+			return err
+		}
+		descBytes, err := protoutil.Marshal(downgradedBackupDesc)
 		if err != nil {
 			return err
 		}
@@ -1182,7 +1208,7 @@ func backupPlanHook(
 
 		// TODO (lucy): For partitioned backups, also add verification for other
 		// stores we are writing to in addition to the default.
-		if err := VerifyUsableExportTarget(ctx, defaultStore, defaultURI); err != nil {
+		if err := VerifyUsableExportTarget(ctx, p.ExecCfg().Settings, defaultStore, defaultURI); err != nil {
 			return err
 		}
 
@@ -1253,6 +1279,10 @@ func (b *backupResumer) Resume(
 		storageByLocalityKV[kv] = &conf
 	}
 	var checkpointDesc *BackupDescriptor
+	// We don't read the table descriptors from the backup descriptor, but
+	// they could be using either the new or the old foreign key
+	// representations. We should just preserve whatever representation the
+	// table descriptors were using and leave them alone.
 	if desc, err := readBackupDescriptor(ctx, defaultStore, BackupDescriptorCheckpointName); err == nil {
 		// If the checkpoint is from a different cluster, it's meaningless to us.
 		// More likely though are dummy/lock-out checkpoints with no ClusterID.
@@ -1458,4 +1488,70 @@ func getURIsByLocalityKV(to []string) (string, map[string]string, error) {
 		return "", nil, errors.Errorf("no default URL provided for partitioned backup")
 	}
 	return defaultURI, urisByLocalityKV, nil
+}
+
+// maybeDowngradeTableDescsInBackupDescriptor returns the backup descriptor
+// with its table descriptors downgraded to the older 19.1-style foreign key
+// representation, if they are not already downgraded, and if the cluster is not
+// fully upgraded to 19.2. It returns a *shallow* copy to avoid mutating the
+// original backup descriptor. This function facilitates writing 19.1-compatible
+// backups when the cluster hasn't been fully upgraded.
+// TODO(lucy, jordan): Remove in 20.1.
+func maybeDowngradeTableDescsInBackupDescriptor(
+	ctx context.Context, settings *cluster.Settings, backupDesc *BackupDescriptor,
+) (*BackupDescriptor, error) {
+	backupDescCopy := &(*backupDesc)
+	// Copy Descriptors so we can return a shallow copy without mutating the slice.
+	copy(backupDescCopy.Descriptors, backupDesc.Descriptors)
+	for i := range backupDesc.Descriptors {
+		if tableDesc := backupDesc.Descriptors[i].GetTable(); tableDesc != nil {
+			downgraded, newDesc, err := tableDesc.MaybeDowngradeForeignKeyRepresentation(ctx, settings)
+			if err != nil {
+				return nil, err
+			}
+			if downgraded {
+				backupDescCopy.Descriptors[i] = *sqlbase.WrapDescriptor(newDesc)
+			}
+		}
+	}
+	return backupDescCopy, nil
+}
+
+// maybeUpgradeTableDescsInBackupDescriptors updates the backup descriptors'
+// table descriptors to use the newer 19.2-style foreign key representation,
+// if they are not already upgraded. This requires resolving cross-table FK
+// references, which is done by looking up all table descriptors across all
+// backup descriptors provided. if skipFKsWithNoMatchingTable is set, FKs whose
+// "other" table is missing from the set provided are omitted during the
+// upgrade, instead of causing an error to be returned.
+func maybeUpgradeTableDescsInBackupDescriptors(
+	ctx context.Context, backupDescs []BackupDescriptor, skipFKsWithNoMatchingTable bool,
+) error {
+	protoGetter := sqlbase.MapProtoGetter{
+		Protos: make(map[interface{}]protoutil.Message),
+	}
+	// Populate the protoGetter with all table descriptors in all backup
+	// descriptors so that they can be looked up.
+	for _, backupDesc := range backupDescs {
+		for _, desc := range backupDesc.Descriptors {
+			if table := desc.GetTable(); table != nil {
+				protoGetter.Protos[string(sqlbase.MakeDescMetadataKey(table.ID))] =
+					sqlbase.WrapDescriptor(protoutil.Clone(table).(*sqlbase.TableDescriptor))
+			}
+		}
+	}
+
+	for i := range backupDescs {
+		backupDesc := &backupDescs[i]
+		for j := range backupDesc.Descriptors {
+			if table := backupDesc.Descriptors[j].GetTable(); table != nil {
+				if _, err := table.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, skipFKsWithNoMatchingTable); err != nil {
+					return err
+				}
+				// TODO(lucy): Is this necessary?
+				backupDesc.Descriptors[j] = *sqlbase.WrapDescriptor(table)
+			}
+		}
+	}
+	return nil
 }
