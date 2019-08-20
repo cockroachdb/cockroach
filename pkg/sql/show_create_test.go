@@ -47,7 +47,7 @@ func TestStandAloneShowCreateTable(t *testing.T) {
 	}}
 
 	name := tree.Name(desc.Name)
-	got, err := ShowCreateTable(context.TODO(), &name, "", &desc, nil, IncludeFKs)
+	got, err := ShowCreateTable(context.TODO(), &name, "", &desc, nil, IncludeFkClausesInCreate)
 	if err != nil {
 		t.Fatal(err)
 	}
