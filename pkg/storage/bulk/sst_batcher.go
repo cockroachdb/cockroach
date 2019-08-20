@@ -76,6 +76,9 @@ type SSTBatcher struct {
 
 	// allows ingestion of keys where the MVCC.Key would shadow an existing row.
 	disallowShadowing bool
+
+	// stores on-the-fly stats for the SST if disallowShadowing is true.
+	ms enginepb.MVCCStats
 }
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
@@ -83,6 +86,22 @@ func MakeSSTBatcher(ctx context.Context, db sender, flushBytes int64) (*SSTBatch
 	b := &SSTBatcher{db: db, maxSize: flushBytes}
 	err := b.Reset()
 	return b, err
+}
+
+func (b *SSTBatcher) updateMVCCStats(key engine.MVCCKey, value []byte) {
+	metaKeySize := int64(len(key.Key)) + 1
+	metaValSize := int64(0)
+	b.ms.LiveBytes += metaKeySize
+	b.ms.LiveCount++
+	b.ms.KeyBytes += metaKeySize
+	b.ms.ValBytes += metaValSize
+	b.ms.KeyCount++
+
+	totalBytes := int64(len(value)) + engine.MVCCVersionTimestampSize
+	b.ms.LiveBytes += totalBytes
+	b.ms.KeyBytes += engine.MVCCVersionTimestampSize
+	b.ms.ValBytes += int64(len(value))
+	b.ms.ValCount++
 }
 
 // AddMVCCKey adds a key+timestamp/value pair to the batch (flushing if needed).
@@ -122,6 +141,16 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value [
 	if err := b.rowCounter.Count(key.Key); err != nil {
 		return err
 	}
+
+	// If we do not allowing shadowing of keys when ingesting an SST via
+	// AddSSTable, then we can update the MVCCStats on the fly because we are
+	// guaranteed to ingest unique keys. This saves us an extra iteration in
+	// AddSSTable which has been identified as a significant performance
+	// regression for IMPORT.
+	if b.disallowShadowing {
+		b.updateMVCCStats(key, value)
+	}
+
 	return b.sstWriter.Add(engine.MVCCKeyValue{Key: key, Value: value})
 }
 
@@ -134,6 +163,7 @@ func (b *SSTBatcher) Reset() error {
 	b.batchEndValue = b.batchEndValue[:0]
 	b.flushKey = nil
 	b.flushKeyChecked = false
+	b.ms.Reset()
 
 	b.rowCounter.BulkOpSummary.Reset()
 	return nil
@@ -193,7 +223,13 @@ func (b *SSTBatcher) Flush(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrapf(err, "finishing constructed sstable")
 	}
-	if err := AddSSTable(ctx, b.db, start, end, sstBytes, b.disallowShadowing); err != nil {
+
+	// If the stats have been computed on-the-fly, set the last updated time
+	// before ingesting the SST.
+	if (b.ms != enginepb.MVCCStats{}) {
+		b.ms.LastUpdateNanos = timeutil.Now().UnixNano()
+	}
+	if err := AddSSTable(ctx, b.db, start, end, sstBytes, b.disallowShadowing, b.ms); err != nil {
 		return err
 	}
 	b.totalRows.Add(b.rowCounter.BulkOpSummary)
@@ -228,22 +264,30 @@ type sstSpan struct {
 // SST spans a split, in which case it is iterated and split into two SSTs, one
 // for each side of the split in the error, and each are retried.
 func AddSSTable(
-	ctx context.Context, db sender, start, end roachpb.Key, sstBytes []byte, disallowShadowing bool,
+	ctx context.Context,
+	db sender,
+	start, end roachpb.Key,
+	sstBytes []byte,
+	disallowShadowing bool,
+	ms enginepb.MVCCStats,
 ) error {
-	// Create an iterator that iterates over the top level SST for use in stats
-	// computation and to produce split ssts if needed for retries.
+	now := timeutil.Now().UnixNano()
 	iter, err := engine.NewMemSSTIterator(sstBytes, true)
 	if err != nil {
 		return err
 	}
 	defer iter.Close()
 
-	now := timeutil.Now().UnixNano()
-	stats, err := engine.ComputeStatsGo(
-		iter, engine.MVCCKey{Key: start}, engine.MVCCKey{Key: end}, now,
-	)
-	if err != nil {
-		return errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
+	var stats enginepb.MVCCStats
+	if (ms == enginepb.MVCCStats{}) {
+		stats, err = engine.ComputeStatsGo(
+			iter, engine.MVCCKey{Key: start}, engine.MVCCKey{Key: end}, now,
+		)
+		if err != nil {
+			return errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
+		}
+	} else {
+		stats = ms
 	}
 
 	work := []*sstSpan{{start: start, end: end, sstBytes: sstBytes, disallowShadowing: disallowShadowing, stats: stats}}
