@@ -63,15 +63,7 @@ func (s *sorterBase) init(
 	if useTempStorage {
 		// Limit the memory use by creating a child monitor with a hard limit.
 		// The processor will overflow to disk if this limit is not enough.
-		limit := flowCtx.Cfg.TestingKnobs.MemoryLimitBytes
-		if limit <= 0 {
-			limit = settingWorkMemBytes.Get(&flowCtx.Cfg.Settings.SV)
-		}
-		limitedMon := mon.MakeMonitorInheritWithLimit(
-			"sortall-limited", limit, flowCtx.EvalCtx.Mon,
-		)
-		limitedMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
-		memMonitor = &limitedMon
+		memMonitor = NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sortall-limited")
 	} else {
 		memMonitor = NewMonitor(ctx, flowCtx.EvalCtx.Mon, "sorter-mem")
 	}

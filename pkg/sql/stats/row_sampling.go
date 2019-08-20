@@ -58,6 +58,12 @@ func (sr *SampleReservoir) Init(numSamples int, colTypes []types.T, memAcc *mon.
 	sr.memAcc = memAcc
 }
 
+// Disable releases the memory of this SampleReservoir and sets its capacity
+// to zero.
+func (sr *SampleReservoir) Disable() {
+	sr.samples = nil
+}
+
 // Len is part of heap.Interface.
 func (sr *SampleReservoir) Len() int {
 	return len(sr.samples)
@@ -184,8 +190,6 @@ func truncateDatum(evalCtx *tree.EvalContext, d tree.Datum, maxBytes int) tree.D
 
 	default:
 		// It's not easy to truncate other types (e.g. Decimal).
-		// TODO(rytaft): If the total memory limit is exceeded then the histogram
-		// should not be constructed.
 		return d
 	}
 }
