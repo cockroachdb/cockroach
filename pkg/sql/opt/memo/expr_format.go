@@ -191,15 +191,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		FormatPrivate(f, e.Private(), required)
 		f.Buffer.WriteByte(')')
 
-	case *ScanExpr:
-		if t.IsIndexSkipScan() {
-			fmt.Fprintf(f.Buffer, "%v (index-skip on the first %d col(s))", e.Op(), t.PrefixSkipLen)
-		} else {
-			fmt.Fprintf(f.Buffer, "%v", e.Op())
-		}
+	case *IndexSkipScanExpr:
+		fmt.Fprintf(f.Buffer, "%v (index-skip on the first %d col(s))", e.Op(), t.PrefixSkipLen)
 		FormatPrivate(f, e.Private(), required)
 
-	case *VirtualScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
+	case *ScanExpr, *VirtualScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
 		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr, *SequenceSelectExpr,
 		*WindowExpr, *OpaqueRelExpr, *OpaqueMutationExpr, *OpaqueDDLExpr,
 		*AlterTableSplitExpr, *AlterTableUnsplitExpr, *AlterTableUnsplitAllExpr,
@@ -330,6 +326,17 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				}
 				tp.Childf("flags: force-index=%s%s", idx.Name(), dir)
 			}
+		}
+
+	case *IndexSkipScanExpr:
+		if t.Constraint != nil {
+			tp.Childf("constraint: %s", t.Constraint)
+		}
+		if t.HardLimit.IsSet() {
+			tp.Childf("limit: %s", t.HardLimit)
+		}
+		if !f.HasFlags(ExprFmtHideOrderings) && !t.Ordering.Empty() {
+			tp.Childf("scan ordering: %s", t.Ordering)
 		}
 
 	case *LookupJoinExpr:
@@ -972,6 +979,18 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 
 	case *TupleOrdinal:
 		fmt.Fprintf(f.Buffer, " %d", *t)
+
+	case *IndexSkipScanPrivate:
+		// Don't output name of index if it's the primary index.
+		tab := f.Memo.metadata.Table(t.Table)
+		if t.Index == cat.PrimaryIndex {
+			fmt.Fprintf(f.Buffer, " %s", tableAlias(f, t.Table))
+		} else {
+			fmt.Fprintf(f.Buffer, " %s@%s", tableAlias(f, t.Table), tab.Index(t.Index).Name())
+		}
+		if t.Reverse {
+			f.Buffer.WriteString(",rev")
+		}
 
 	case *ScanPrivate:
 		// Don't output name of index if it's the primary index.

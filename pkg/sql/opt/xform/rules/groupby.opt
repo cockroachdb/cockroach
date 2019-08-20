@@ -66,16 +66,16 @@
 # when we have a DistinctOn a prefix of the index.
 [GenerateIndexSkipScan, Explore]
 (DistinctOn
-    (Scan $scanPrivate:*) & ^(IsIndexSkipScan $scanPrivate)
+    (Scan $scanPrivate:*)
     $aggregations:*
     $groupingPrivate:* &
-        (IsIndexPrefix $scanPrivate $groupingCols: (GroupingCols $groupingPrivate)) &
-        (ScanCanProvideOrdering $scanPrivate (ExtractGroupingOrdering $groupingPrivate))
+        (IsIndexPrefix $scanPrivate $groupingCols: (ExtractGroupingCols $groupingPrivate)) &
+        (ScanCanProvideOrdering $scanPrivate $ordering:(ExtractGroupingOrdering $groupingPrivate))
 )
 =>
-(Scan
-    (PruneScanPrivate
-        (SynthesizeSkipScanPrivate $scanPrivate (ColSetLen $groupingCols))
+(IndexSkipScan
+    (PruneIndexSkipScanPrivate
+        (SynthesizeIndexSkipScanPrivate $scanPrivate (ColSetLen $groupingCols) $ordering)
         (UnionCols
             $groupingCols
             (AggregationCols $aggregations)
@@ -89,26 +89,27 @@
 [GenerateIndexSkipScanThroughIndexJoins, Explore]
 (DistinctOn
     (IndexJoin
-        (Scan $scanPrivate:*) & ^(IsIndexSkipScan $scanPrivate)
+        (Scan $scanPrivate:*)
         $indexJoinPrivate:*
     )
     $aggregations:*
     $groupingPrivate:* &
-        (IsIndexPrefix $scanPrivate $groupingCols: (GroupingCols $groupingPrivate)) &
-        (ScanCanProvideOrdering $scanPrivate (ExtractGroupingOrdering $groupingPrivate))
+        (IsIndexPrefix $scanPrivate $groupingCols: (ExtractGroupingCols $groupingPrivate)) &
+        (ScanCanProvideOrdering $scanPrivate $ordering: (ExtractGroupingOrdering $groupingPrivate))
 )
 =>
-(IndexJoin
-    (Scan
-        (PruneScanPrivate
-            (SynthesizeSkipScanPrivate $scanPrivate (ColSetLen $groupingCols))
+(LookupJoin
+    (IndexSkipScan
+        (PruneIndexSkipScanPrivate
+            (SynthesizeIndexSkipScanPrivate $scanPrivate (ColSetLen $groupingCols) $ordering)
             (UnionCols
                 $groupingCols
                 (AggregationCols $aggregations)
             )
         )
     )
-    $indexJoinPrivate
+    [ ]
+    (SynthesizeLookupJoinPrivate $indexJoinPrivate $scanPrivate)
 )
 
 # GenerateIndexSkipScanThroughProjection creates an index-skip scan
@@ -117,20 +118,20 @@
 [GenerateIndexSkipScanThroughProjection, Explore]
 (DistinctOn
     (Project
-        (Scan $scanPrivate:*) & ^(IsIndexSkipScan $scanPrivate)
+        (Scan $scanPrivate:*)
         $projections:*
         $passthrough:*
     )
     $aggregations:*
     $groupingPrivate:* &
-        (IsIndexPrefix $scanPrivate $groupingCols: (GroupingCols $groupingPrivate)) &
-        (ScanCanProvideOrdering $scanPrivate (ExtractGroupingOrdering $groupingPrivate))
+        (IsIndexPrefix $scanPrivate $groupingCols: (ExtractGroupingCols $groupingPrivate)) &
+        (ScanCanProvideOrdering $scanPrivate $ordering: (ExtractGroupingOrdering $groupingPrivate))
 )
 =>
 (Project
-    (Scan
-        (PruneScanPrivate
-            (SynthesizeSkipScanPrivate $scanPrivate (ColSetLen $groupingCols))
+    (IndexSkipScan
+        (PruneIndexSkipScanPrivate
+            (SynthesizeIndexSkipScanPrivate $scanPrivate (ColSetLen $groupingCols) $ordering)
             (UnionCols
                 $groupingCols
                 (AggregationCols $aggregations)
@@ -148,7 +149,7 @@
 # there are grouping columns specified.
 [GenerateIndexSkipScanThroughAggregates, Explore]
 (GroupBy | ScalarGroupBy
-    (Scan $scanPrivate:*) & ^(IsIndexSkipScan $scanPrivate)
+    (Scan $scanPrivate:*)
     $aggregations:[
         (AggregationsItem
             $aggregate:* & (HasDistinctOnIndexPrefix $aggregate $scanPrivate)
@@ -156,11 +157,11 @@
     ]
     $groupingPrivate:* &
         (HasNoGroupingCols $groupingPrivate) &
-        (ScanCanProvideOrdering $scanPrivate (ExtractGroupingOrdering $groupingPrivate))
+        (ScanCanProvideOrdering $scanPrivate $ordering: (ExtractGroupingOrdering $groupingPrivate))
 )
 =>
 ((OpName)
-    (Scan (SynthesizeSingleColSkipScanPrivate $scanPrivate))
+    (IndexSkipScan (SynthesizeSingleColIndexSkipScanPrivate $scanPrivate $ordering))
     (RemoveAggDistinct $aggregations)
     $groupingPrivate
 )
