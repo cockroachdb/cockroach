@@ -327,6 +327,10 @@ SELECT to_json(x.*) FROM (VALUES (1,2)) AS x(a);
 query error found duplicate tuple label: \"column2\"
 SELECT to_json(x.*) FROM (VALUES (1,2)) AS x(column2);
 
+# Regression test for #39502.
+statement ok
+SELECT json_agg((3808362714,))
+
 ## json_array_elements and jsonb_array_elements
 
 query T

@@ -2525,6 +2525,10 @@ func AsJSON(d Datum) (json.JSON, error) {
 		return builder.Build(), nil
 	case *DTuple:
 		builder := json.NewObjectBuilder(len(t.D))
+		// We need to make sure that t.typ is initialized before getting the tuple
+		// labels (it is valid for t.typ be left uninitialized when instantiating a
+		// DTuple).
+		t.maybePopulateType()
 		labels := t.typ.TupleLabels()
 		for i, e := range t.D {
 			j, err := AsJSON(e)
@@ -2681,8 +2685,9 @@ func AsDTuple(e Expr) (*DTuple, bool) {
 	return nil, false
 }
 
-// ResolvedType implements the TypedExpr interface.
-func (d *DTuple) ResolvedType() *types.T {
+// maybePopulateType populates the tuple's type if it hasn't yet been
+// populated.
+func (d *DTuple) maybePopulateType() {
 	if d.typ == nil {
 		contents := make([]types.T, len(d.D))
 		for i, v := range d.D {
@@ -2690,6 +2695,11 @@ func (d *DTuple) ResolvedType() *types.T {
 		}
 		d.typ = types.MakeTuple(contents)
 	}
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (d *DTuple) ResolvedType() *types.T {
+	d.maybePopulateType()
 	return d.typ
 }
 
