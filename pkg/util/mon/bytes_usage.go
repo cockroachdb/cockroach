@@ -215,8 +215,13 @@ type BytesMonitor struct {
 	// become reported in the logs.
 	noteworthyUsageBytes int64
 
+	// curBytesCount is the metric object used to track number of bytes reserved
+	// by the monitor during its lifetime.
 	curBytesCount *metric.Gauge
-	maxBytesHist  *metric.Histogram
+
+	// maxBytesHist is the metric object used to track the high watermark of bytes
+	// allocated by the monitor during its lifetime.
+	maxBytesHist *metric.Histogram
 
 	settings *cluster.Settings
 }
@@ -426,6 +431,12 @@ func (mm *BytesMonitor) AllocBytes() int64 {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
 	return mm.mu.curAllocated
+}
+
+// SetMetrics sets the metric objects for the monitor.
+func (mm *BytesMonitor) SetMetrics(curCount *metric.Gauge, maxHist *metric.Histogram) {
+	mm.curBytesCount = curCount
+	mm.maxBytesHist = maxHist
 }
 
 // BoundAccount tracks the cumulated allocations for one client of a pool or

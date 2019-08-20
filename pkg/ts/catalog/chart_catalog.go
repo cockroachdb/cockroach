@@ -1375,6 +1375,19 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "Bulk"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Current Memory Usage",
+				Metrics: []string{"sql.mem.bulk.current"},
+			},
+			{
+				Title:   "Memory Usage per Statement",
+				Metrics: []string{"sql.mem.bulk.max"},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "Optimizer"}},
 		Charts: []chartDescription{
 			{
