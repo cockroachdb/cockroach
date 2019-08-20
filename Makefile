@@ -130,6 +130,9 @@ help: ## Print help for targets with comments.
 		"make testlogic FILES='prepare fk'" "Run the logic tests in the files named prepare and fk." \
 		"make testlogic FILES=fk SUBTESTS='20042|20045'" "Run the logic tests within subtests 20042 and 20045 in the file named fk." \
 		"make testlogic TESTCONFIG=local" "Run the logic tests for the cluster configuration 'local'." \
+		"make fuzz" "Run all fuzz tests for 12m each (or whatever the default TESTTIMEOUT is)." \
+		"make fuzz PKG=./pkg/sql/... TESTTIMEOUT=1m" "Run all fuzz tests under the sql directory for 1m each." \
+		"make fuzz PKG=./pkg/sql/sem/tree TESTS=Decimal TESTTIMEOUT=1m" "Run the Decimal fuzz tests in the tree directory for 1m." \
 		"make check-libroach TESTS=ccl" "Run the libroach tests matching .*ccl.*"
 
 BUILDTYPE := development
@@ -1561,6 +1564,7 @@ bins = \
   bin/cockroach-short \
   bin/docgen \
   bin/execgen \
+  bin/fuzz \
   bin/generate-binary \
   bin/terraformgen \
   bin/github-post \
@@ -1620,6 +1624,11 @@ $(testbins): bin/%: bin/%.d | bin/prereqs $(SUBMODULES_TARGET)
 bin/prereqs: ./pkg/cmd/prereqs/*.go
 	@echo go install -v ./pkg/cmd/prereqs
 	@$(GO_INSTALL) -v ./pkg/cmd/prereqs
+
+.PHONY: fuzz
+fuzz: ## Run fuzz tests.
+fuzz: bin/fuzz
+	bin/fuzz $(TESTFLAGS) -tests $(TESTS) -timeout $(TESTTIMEOUT) $(PKG)
 
 .PRECIOUS: bin/%.d
 bin/%.d: ;
