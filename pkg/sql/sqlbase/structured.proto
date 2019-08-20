@@ -26,6 +26,8 @@ enum ConstraintValidity {
   // The constraint was just added, but the validation for existing rows is not
   // yet complete. If validation fails, the constraint will be dropped.
   Validating = 2;
+  // The constraint is being dropped in the schema changer.
+  Dropping = 3;
 }
 
 message ForeignKeyReference {
