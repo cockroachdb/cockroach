@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -126,6 +128,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 	b.constructProjectForScope(outScope, argScope)
 	outScope.expr = argScope.expr
 
+	var referencedCols opt.ColSet
 	// frames accumulates the set of distinct window frames we're computing over
 	// so that we can group functions over the same partition and ordering.
 	frames := make([]memo.WindowExpr, 0, len(inScope.windows))
@@ -142,7 +145,9 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 				b.buildScalar(
 					w.WindowDef.Frame.Bounds.StartBound.OffsetExpr.(tree.TypedExpr),
 					inScope,
-					nil, nil, nil,
+					nil,
+					nil,
+					&referencedCols,
 				),
 			)
 		}
@@ -153,7 +158,18 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 				b.buildScalar(
 					w.WindowDef.Frame.Bounds.EndBound.OffsetExpr.(tree.TypedExpr),
 					inScope,
-					nil, nil, nil,
+					nil,
+					nil,
+					&referencedCols,
+				),
+			)
+		}
+
+		if !referencedCols.Empty() {
+			panic(
+				pgerror.Newf(
+					pgcode.InvalidColumnReference,
+					"ROWS or RANGE cannot contain variables",
 				),
 			)
 		}
