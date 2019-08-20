@@ -33,15 +33,19 @@ func declareKeysGC(
 	// is usually the whole range (pending resolution of #7880).
 	gcr := req.(*roachpb.GCRequest)
 	for _, key := range gcr.Keys {
-		spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: key.Key})
+		if keys.IsLocal(key.Key) {
+			spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: key.Key})
+		} else {
+			spans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: key.Key}, header.Timestamp)
+		}
 	}
 	// Be smart here about blocking on the threshold keys. The GC queue can send an empty
 	// request first to bump the thresholds, and then another one that actually does work
 	// but can avoid declaring these keys below.
 	if gcr.Threshold != (hlc.Timestamp{}) {
-		spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
+		spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
 	}
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+	spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 }
 
 // GC iterates through the list of keys to garbage collect

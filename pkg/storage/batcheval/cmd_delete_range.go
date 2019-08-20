@@ -13,14 +13,29 @@ package batcheval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 func init() {
-	RegisterCommand(roachpb.DeleteRange, DefaultDeclareKeys, DeleteRange)
+	RegisterCommand(roachpb.DeleteRange, declareKeysDeleteRange, DeleteRange)
+}
+
+func declareKeysDeleteRange(
+	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+) {
+	args := req.(*roachpb.DeleteRangeRequest)
+	access := spanset.SpanReadWrite
+
+	if args.Inline || keys.IsLocal(req.Header().Span().Key) {
+		spans.AddNonMVCC(access, req.Header().Span())
+	} else {
+		spans.AddMVCC(access, req.Header().Span(), header.Timestamp)
+	}
 }
 
 // DeleteRange deletes the range of key/value pairs specified by

@@ -42,7 +42,7 @@ func declareKeysClearRange(
 	DefaultDeclareKeys(desc, header, req, spans)
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+	spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 }
 
 // ClearRange wipes all MVCC versions of keys covered by the specified
