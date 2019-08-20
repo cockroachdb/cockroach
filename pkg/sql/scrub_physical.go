@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -111,30 +110,15 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	if err := scan.initTable(ctx, params.p, o.tableDesc, indexFlags, colCfg); err != nil {
 		return err
 	}
-	plan := planNode(scan)
-
-	neededColumns := make([]bool, len(o.tableDesc.Columns))
-	for _, id := range columnIDs {
-		neededColumns[colIDToIdx[sqlbase.ColumnID(id)]] = true
-	}
-
-	// Optimize the plan. This is required in order to populate scanNode
-	// spans.
-	plan, err = params.p.optimizePlan(ctx, plan, neededColumns)
+	scan.index = scan.specifiedIndex
+	scan.spans, err = unconstrainedSpans(o.tableDesc, o.indexDesc, false /* forDelete */)
 	if err != nil {
-		plan.Close(ctx)
 		return err
 	}
-	defer plan.Close(ctx)
-
-	scan = plan.(*scanNode)
-
-	span := o.tableDesc.IndexSpan(o.indexDesc.ID)
-	spans := []roachpb.Span{span}
 
 	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
 	physPlan, err := params.extendedEvalCtx.DistSQLPlanner.createScrubPhysicalCheck(
-		planCtx, scan, *o.tableDesc.TableDesc(), *o.indexDesc, spans, params.p.ExecCfg().Clock.Now())
+		planCtx, scan, *o.tableDesc.TableDesc(), *o.indexDesc, params.p.ExecCfg().Clock.Now())
 	if err != nil {
 		return err
 	}

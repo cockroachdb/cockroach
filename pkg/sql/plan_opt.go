@@ -148,8 +148,8 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 	return opc.flags, nil
 }
 
-// makeOptimizerPlan is an alternative to makePlan which uses the cost-based
-// optimizer. On success, it populates p.curPlan (and the flags always have
+// makeOptimizerPlan generates a plan using the cost-based optimizer.
+// On success, it populates p.curPlan (and the flags always have
 // planFlagOptUsed set).
 func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	stmt := p.stmt

@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // explainDistSQLNode is a planNode that wraps a plan and returns
@@ -34,10 +34,6 @@ type explainDistSQLNode struct {
 	// pointing to a visual query plan with statistics will be in the row
 	// returned by the node.
 	analyze bool
-
-	// optimizeSubqueries indicates whether to invoke optimizeSubquery and
-	// setUnlimited on the subqueries.
-	optimizeSubqueries bool
 
 	run explainDistSQLRun
 }
@@ -95,23 +91,6 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 		}()
 		planCtx.planner.curPlan.subqueryPlans = n.subqueryPlans
-
-		if n.optimizeSubqueries {
-			// The sub-plan's subqueries have been captured local to the
-			// explainDistSQLNode node so that they would not be automatically
-			// started for execution by planTop.start(). But this also means
-			// they were not yet processed by makePlan()/optimizePlan(). Do it
-			// here.
-			for i := range n.subqueryPlans {
-				if err := params.p.optimizeSubquery(params.ctx, &n.subqueryPlans[i]); err != nil {
-					return err
-				}
-
-				// Trigger limit propagation. This would be done otherwise when
-				// starting the plan. However we do not want to start the plan.
-				params.p.setUnlimited(n.subqueryPlans[i].plan)
-			}
-		}
 
 		// Discard rows that are returned.
 		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {

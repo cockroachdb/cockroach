@@ -195,37 +195,3 @@ func (n *distinctNode) Values() tree.Datums {
 func (n *distinctNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
 }
-
-// projectChildPropsToOnExprs takes the physical props (e.g. ordering info,
-// weak keys) of its child and projects them onto the columns specified by
-// the DISTINCT ON clause ("ON expressions").
-func (n *distinctNode) projectChildPropsToOnExprs() physicalProps {
-	underlying := planPhysicalProps(n.plan)
-	props := underlying.copy()
-
-	if numPlanColumns := len(planColumns(n.plan)); !n.distinctOnColIdxs.Empty() && n.distinctOnColIdxs.Len() < numPlanColumns {
-		// The distinctNode has the DISTINCT ON columns defined on a
-		// subset of columns
-		//   SELECT DISTINCT ON (k) v FROM kv.
-		// n.distinctOnCols: k
-		// planColumns(n.plan): v, k
-		colMap := make([]int, numPlanColumns)
-		for i := range colMap {
-			if n.distinctOnColIdxs.Contains(i) {
-				colMap[i] = i
-			} else {
-				colMap[i] = -1
-			}
-		}
-
-		// The DISTINCT ON columns subsume or is a prefix of the any
-		// ORDER BY columns: we can therefore eliminate ordering
-		// information for all other columns.
-		// In addition, the ON columns form a weak key (and potentially
-		// a strong key), so any extra columns in the underlying
-		// ordering don't help.
-		return props.project(colMap)
-	}
-
-	return props
-}

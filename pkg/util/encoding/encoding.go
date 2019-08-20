@@ -106,8 +106,6 @@ const (
 	// EncodedDurationMaxLen is the largest number of bytes used when encoding a
 	// Duration.
 	EncodedDurationMaxLen = 1 + 3*binary.MaxVarintLen64 // 3 varints are encoded.
-	// BytesDescMarker is exported for testing.
-	BytesDescMarker = bytesDescMarker
 )
 
 // Direction for ordering results.

@@ -112,9 +112,7 @@ const (
 	ExplainFlagVerbose = iota
 	ExplainFlagSymVars
 	ExplainFlagTypes
-	ExplainFlagNoExpand
 	ExplainFlagNoNormalize
-	ExplainFlagNoOptimize
 	ExplainFlagAnalyze
 	ExplainFlagEnv
 	ExplainFlagCatalog
@@ -124,9 +122,7 @@ var explainFlagStrings = map[string]int{
 	"verbose":     ExplainFlagVerbose,
 	"symvars":     ExplainFlagSymVars,
 	"types":       ExplainFlagTypes,
-	"noexpand":    ExplainFlagNoExpand,
 	"nonormalize": ExplainFlagNoNormalize,
-	"nooptimize":  ExplainFlagNoOptimize,
 	"analyze":     ExplainFlagAnalyze,
 	"env":         ExplainFlagEnv,
 	"catalog":     ExplainFlagCatalog,

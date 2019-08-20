@@ -30,10 +30,6 @@ type spoolNode struct {
 	curRowIdx int
 }
 
-func (p *planner) makeSpool(source planNode) planNode {
-	return &spoolNode{source: source}
-}
-
 func (s *spoolNode) startExec(params runParams) error {
 	// If FastPathResults() on the source indicates that the results are
 	// already available (2nd value true), then the computation is
