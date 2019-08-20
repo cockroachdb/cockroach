@@ -41,16 +41,16 @@ func declareKeysSubsume(
 	if args.RightDesc != nil {
 		desc = args.RightDesc
 	}
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{
+	spans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{
 		Key:    desc.StartKey.AsRawKey(),
 		EndKey: desc.EndKey.AsRawKey(),
-	})
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{
+	}, header.Timestamp)
+	spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 		Key:    keys.MakeRangeKeyPrefix(desc.StartKey),
 		EndKey: keys.MakeRangeKeyPrefix(desc.EndKey).PrefixEnd(),
 	})
 	rangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(desc.RangeID)
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{
+	spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 		Key:    rangeIDPrefix,
 		EndKey: rangeIDPrefix.PrefixEnd(),
 	})

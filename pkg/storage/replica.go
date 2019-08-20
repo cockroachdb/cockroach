@@ -55,7 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 )
@@ -1118,6 +1118,14 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 		spans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, guess)
 	}
 
+	// For non-local, MVCC spans we annotate them with the request timestamp
+	// during declaration. This is the timestamp used during latch acquisitions.
+	// For read requests this works as expected, reads are performed at the very
+	// same timestamp. During writes however, we may encounter a versioned value
+	// newer than the request timestamp, and may have to retry at a higher
+	// timestamp. This is still safe as we're only ever writing at timestamps
+	// higher than the timestamp any write latch would be declared at.
+
 	desc := r.Desc()
 	batcheval.DeclareKeysForBatch(desc, ba.Header, spans)
 	for _, union := range ba.Requests {
@@ -1172,7 +1180,7 @@ func (r *Replica) beginCmds(
 		// protected access and to avoid interacting requests from operating at
 		// the same time. The latches will be held for the duration of request.
 		var err error
-		lg, err = r.latchMgr.Acquire(ctx, spans, ba.Timestamp)
+		lg, err = r.latchMgr.Acquire(ctx, spans)
 		if err != nil {
 			return endCmds{}, err
 		}
@@ -1347,7 +1355,7 @@ func (r *Replica) executeAdminBatch(
 
 	case *roachpb.ImportRequest:
 		cArgs := batcheval.CommandArgs{
-			EvalCtx: NewReplicaEvalContext(r, &spanset.SpanSet{}),
+			EvalCtx: NewReplicaEvalContext(r, todoSpanSet),
 			Header:  ba.Header,
 			Args:    args,
 		}
