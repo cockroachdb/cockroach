@@ -942,20 +942,7 @@ project
 build
 SELECT avg(k) OVER (ORDER BY v RANGE BETWEEN k - 10 PRECEDING AND CURRENT ROW) FROM kv
 ----
-project
- ├── columns: avg:8(decimal)
- └── window partition=() ordering=+2
-      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal)
-      ├── scan kv
-      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
-      └── windows
-           └── windows-item: range from offset to current-row [type=decimal]
-                └── window-from-offset [type=decimal]
-                     ├── avg [type=decimal]
-                     │    └── variable: k [type=int]
-                     └── minus [type=int]
-                          ├── variable: k [type=int]
-                          └── const: 10 [type=int]
+error (42P10): ROWS or RANGE cannot contain variables
 
 build
 SELECT avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND 10 FOLLOWING) FROM kv
@@ -1061,35 +1048,7 @@ SELECT
 FROM
     kv outer_table
 ----
-project
- ├── columns: avg:16(decimal)
- └── window partition=(3)
-      ├── columns: outer_table.k:1(int!null) outer_table.v:2(int) outer_table.w:3(int) outer_table.f:4(float) outer_table.d:5(decimal) outer_table.s:6(string) outer_table.b:7(bool) avg:16(decimal)
-      ├── scan outer_table
-      │    └── columns: outer_table.k:1(int!null) outer_table.v:2(int) outer_table.w:3(int) outer_table.f:4(float) outer_table.d:5(decimal) outer_table.s:6(string) outer_table.b:7(bool)
-      └── windows
-           └── windows-item: rows from offset to offset [type=decimal]
-                └── window-to-offset [type=decimal]
-                     ├── window-from-offset [type=decimal]
-                     │    ├── avg [type=decimal]
-                     │    │    └── variable: outer_table.v [type=int]
-                     │    └── subquery [type=int]
-                     │         └── max1-row
-                     │              ├── columns: count_rows:15(int)
-                     │              └── scalar-group-by
-                     │                   ├── columns: count_rows:15(int)
-                     │                   ├── project
-                     │                   │    └── select
-                     │                   │         ├── columns: inner_table.k:8(int!null) inner_table.v:9(int) inner_table.w:10(int) inner_table.f:11(float) inner_table.d:12(decimal) inner_table.s:13(string) inner_table.b:14(bool)
-                     │                   │         ├── scan inner_table
-                     │                   │         │    └── columns: inner_table.k:8(int!null) inner_table.v:9(int) inner_table.w:10(int) inner_table.f:11(float) inner_table.d:12(decimal) inner_table.s:13(string) inner_table.b:14(bool)
-                     │                   │         └── filters
-                     │                   │              └── eq [type=bool]
-                     │                   │                   ├── variable: inner_table.k [type=int]
-                     │                   │                   └── variable: outer_table.v [type=int]
-                     │                   └── aggregations
-                     │                        └── count-rows [type=int]
-                     └── const: 1 [type=int]
+error (42P10): ROWS or RANGE cannot contain variables
 
 build
 SELECT
@@ -1579,3 +1538,19 @@ project
            ├── windows-item: range from unbounded to current-row exclude ties [type=int]
            │    └── rank [type=int]
            └── rank [type=int]
+
+exec-ddl
+CREATE TABLE table1 (col5 CHAR, col8 INT2);
+----
+
+build
+SELECT
+    min(tab_536191.col5) OVER (
+        ROWS BETWEEN tab_536191.col8 FOLLOWING AND 1 FOLLOWING
+    )
+FROM
+    table1 AS tab_536191
+GROUP BY
+    tab_536191.col8, tab_536191.col5
+----
+error (42P10): ROWS or RANGE cannot contain variables
