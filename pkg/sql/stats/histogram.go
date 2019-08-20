@@ -27,7 +27,7 @@ import (
 var HistogramClusterMode = settings.RegisterBoolSetting(
 	"sql.stats.histogram_collection.enabled",
 	"histogram collection mode",
-	false,
+	true,
 )
 
 // EquiDepthHistogram creates a histogram where each bucket contains roughly
