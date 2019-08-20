@@ -110,7 +110,8 @@ func getBackupLocalityInfo(
 	}
 
 	// First read the main backup descriptor, which is required to be at the first
-	// URI in the list.
+	// URI in the list. We don't read the table descriptors, so there's no need to
+	// upgrade them.
 	mainBackupDesc, err := readBackupDescriptor(ctx, stores[0], BackupDescriptorName)
 	if err != nil {
 		return info, err
@@ -547,10 +548,19 @@ func RewriteTableDescs(
 		// TODO(lucy): deal with outbound foreign key mutations here as well.
 		origFKs := table.OutboundFKs
 		table.OutboundFKs = nil
-		for _, fk := range origFKs {
+		for i := range origFKs {
+			fk := &origFKs[i]
 			to := fk.ReferencedTableID
 			if indexRewrite, ok := tableRewrites[to]; ok {
 				fk.ReferencedTableID = indexRewrite.TableID
+				fk.OriginTableID = tableRewrite.TableID
+				// Also update the table ID on the old FK proto that exists for
+				// validation, if applicable, so that the validation doesn't fail when
+				// we downgrade the table descriptors for 19.1 nodes.
+				// TODO(lucy, jordan): Remove this in 20.1.
+				if fk.LegacyUpgradedFromOriginReference.Table != 0 {
+					fk.LegacyUpgradedFromOriginReference.Table = indexRewrite.TableID
+				}
 			} else {
 				// If indexRewrite doesn't exist, the user has specified
 				// restoreOptSkipMissingFKs. Error checking in the case the user hasn't has
@@ -561,15 +571,24 @@ func RewriteTableDescs(
 			// TODO(dt): if there is an existing (i.e. non-restoring) table with
 			// a db and name matching the one the FK pointed to at backup, should
 			// we update the FK to point to it?
-			table.OutboundFKs = append(table.OutboundFKs, fk)
+			table.OutboundFKs = append(table.OutboundFKs, *fk)
 		}
 
 		origInboundFks := table.InboundFKs
 		table.InboundFKs = nil
-		for _, ref := range origInboundFks {
+		for i := range origInboundFks {
+			ref := &origInboundFks[i]
 			if refRewrite, ok := tableRewrites[ref.OriginTableID]; ok {
+				ref.ReferencedTableID = tableRewrite.TableID
 				ref.OriginTableID = refRewrite.TableID
-				table.InboundFKs = append(table.InboundFKs, ref)
+				// Also update the table ID on the old FK proto that exists for
+				// validation, if applicable, so that the validation doesn't fail when
+				// we downgrade the table descriptors for 19.1 nodes.
+				// TODO(lucy, jordan): Remove this in 20.1.
+				if ref.LegacyUpgradedFromReferencedReference.Table != 0 {
+					ref.LegacyUpgradedFromReferencedReference.Table = refRewrite.TableID
+				}
+				table.InboundFKs = append(table.InboundFKs, *ref)
 			}
 		}
 
@@ -1227,7 +1246,18 @@ func restore(
 	// Get TableRekeys to use when importing raw data.
 	var rekeys []roachpb.ImportRequest_TableRekey
 	for i := range tables {
-		newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(tables[i]))
+		// Downgrade all tables that we're writing to the cluster, if we're in a
+		// mixed 19.1/19.2 state.
+		// TODO(lucy, jordan): Remove in 20.1.
+		downgraded, newDesc, err := tables[i].MaybeDowngradeForeignKeyRepresentation(restoreCtx, settings)
+		if err != nil {
+			return mu.res, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err, "downgrading table %d", tables[i].ID)
+		}
+		tableToSerialize := tables[i]
+		if downgraded {
+			tableToSerialize = newDesc
+		}
+		newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(tableToSerialize))
 		if err != nil {
 			return mu.res, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"marshaling descriptor")
@@ -1487,6 +1517,10 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
+	_, skipMissingFKs := opts[restoreOptSkipMissingFKs]
+	if err := maybeUpgradeTableDescsInBackupDescriptors(ctx, mainBackupDescs, skipMissingFKs); err != nil {
+		return err
+	}
 
 	if !endTime.IsEmpty() {
 		ok := false
@@ -1497,7 +1531,7 @@ func doRestorePlan(
 				// Ensure that the backup actually has revision history.
 				if b.MVCCFilter != MVCCFilter_All {
 					return errors.Errorf(
-						"incompatible RESTORE timestamp: BACKUP for requested time  needs option '%s'", backupOptRevisionHistory,
+						"incompatible RESTORE timestamp: BACKUP for requested time needs option '%s'", backupOptRevisionHistory,
 					)
 				}
 				// Ensure that the revision history actually covers the requested time -
@@ -1557,6 +1591,19 @@ func doRestorePlan(
 		return err
 	}
 
+	// Before marshaling table descriptors in RestoreDetails, possibly downgrade
+	// them to the old 19.1 representation.
+	// TODO(lucy, jordan): Remove in 20.1.
+	for i := range tables {
+		downgraded, newDesc, err := tables[i].MaybeDowngradeForeignKeyRepresentation(ctx, p.ExecCfg().Settings)
+		if err != nil {
+			return err
+		}
+		if downgraded {
+			tables[i] = newDesc
+		}
+	}
+
 	_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 		Description: description,
 		Username:    p.User(),
@@ -1582,11 +1629,25 @@ func doRestorePlan(
 	return <-errCh
 }
 
+// loadBackupSQLDescs extracts the backup descriptors, the latest backup
+// descriptor, and all the Descriptors for a backup to be restored. It upgrades
+// the table descriptors to the new FK representation if necessary. FKs that
+// can't be restored because the necessary tables are missing are omitted; if
+// skip_missing_foreign_keys was set, we should have aborted the RESTORE and
+// returned an error prior to this.
 func loadBackupSQLDescs(
 	ctx context.Context, details jobspb.RestoreDetails, settings *cluster.Settings,
 ) ([]BackupDescriptor, BackupDescriptor, []sqlbase.Descriptor, error) {
 	backupDescs, err := loadBackupDescs(ctx, details.URIs, settings)
 	if err != nil {
+		return nil, BackupDescriptor{}, nil, err
+	}
+
+	// Upgrade the table descriptors to use the new FK representation.
+	// TODO(lucy, jordan): This should become unnecessary in 20.1 when we stop
+	// writing old-style descs in RestoreDetails (unless a job persists across
+	// an upgrade?).
+	if err := maybeUpgradeTableDescsInBackupDescriptors(ctx, backupDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
 		return nil, BackupDescriptor{}, nil, err
 	}
 

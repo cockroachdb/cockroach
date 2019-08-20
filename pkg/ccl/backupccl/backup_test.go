@@ -1573,14 +1573,20 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.Exec(t, `RESTORE DATABASE store from $1 WITH OPTIONS ('skip_missing_views')`, localFoo)
 		db.CheckQueryResults(t, `SELECT * FROM store.early_customers`, origEarlyCustomers)
 		db.CheckQueryResults(t, `SELECT * FROM store.referencing_early_customers`, origEarlyCustomers)
-		db.Exec(t, `DROP DATABASE store CASCADE`)
+		// TODO(lucy, jordan): DROP DATABASE CASCADE doesn't work in the mixed 19.1/
+		// 19.2 state, which is unrelated to backup/restore. See #39504 for a
+		// description of that problem, which is yet to be investigated.
+		// db.Exec(t, `DROP DATABASE store CASCADE`)
 
 		// Test when some tables (views) are skipped and others are restored
 
-		db.Exec(t, createStore)
+		// See above comment for why we can't delete store and have to create
+		// another database for now....
+		// db.Exec(t, createStore)
 		// storestats.ordercounts depends also on store.orders, so it can't be restored
-		db.Exec(t, `RESTORE storestats.ordercounts, store.customers from $1 WITH OPTIONS ('skip_missing_views')`, localFoo)
-		db.CheckQueryResults(t, `SHOW CONSTRAINTS FROM store.customers`, origCustomers)
+		db.Exec(t, `CREATE DATABASE store2`)
+		db.Exec(t, `RESTORE storestats.ordercounts, store.customers from $1 WITH OPTIONS ('skip_missing_views', 'into_db'='store2')`, localFoo)
+		db.CheckQueryResults(t, `SHOW CONSTRAINTS FROM store2.customers`, origCustomers)
 		db.ExpectErr(t, `relation "storestats.ordercounts" does not exist`, `SELECT * FROM storestats.ordercounts`)
 	})
 }

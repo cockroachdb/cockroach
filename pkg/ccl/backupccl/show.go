@@ -70,6 +70,13 @@ func showBackupPlanHook(
 		if err != nil {
 			return err
 		}
+		// If we are restoring a backup with old-style foreign keys, skip over the
+		// FKs for which we can't resolve the cross-table references. We can't
+		// display them anyway, because we don't have the referenced table names,
+		// etc.
+		if err := maybeUpgradeTableDescsInBackupDescriptors(ctx, []BackupDescriptor{desc}, true /*skipFKsWithNoMatchingTable*/); err != nil {
+			return err
+		}
 
 		for _, row := range shower.fn(desc) {
 			select {
