@@ -1031,19 +1031,23 @@ SELECT description
 				colArg := tree.UnwrapDatum(ctx, args[1])
 				switch t := colArg.(type) {
 				case *tree.DString:
-					colPred = "column_name = $1"
+					// When colArg is a string, it specifies the attribute name.
+					colPred = "attname = $1"
 				case *tree.DInt:
-					colPred = "ordinal_position = $1"
+					// When colArg is an integer, it specifies the attribute number.
+					colPred = "attnum = $1"
 				default:
-					log.Fatalf(ctx.Ctx(), "expected arg type %T", t)
+					log.Fatalf(ctx.Ctx(), "unexpected arg type %T", t)
 				}
 
 				if r, err := ctx.InternalExecutor.QueryRow(
 					ctx.Ctx(), "has-column-privilege",
 					ctx.Txn,
 					fmt.Sprintf(`
-					SELECT column_name FROM information_schema.columns
-					WHERE %s AND %s`, pred, colPred), colArg); err != nil {
+					SELECT attname FROM pg_attribute
+					 WHERE attrelid = '%s.%s.%s'::REGCLASS AND %s`,
+						tn.CatalogName, tn.SchemaName, tn.TableName, colPred), colArg,
+				); err != nil {
 					return nil, err
 				} else if r == nil {
 					return nil, pgerror.Newf(pgcode.UndefinedColumn,
