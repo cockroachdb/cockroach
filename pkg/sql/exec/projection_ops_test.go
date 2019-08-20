@@ -166,18 +166,30 @@ func TestGetProjectionOperator(t *testing.T) {
 
 func benchmarkProjOp(
 	b *testing.B,
-	makeProjOp func(source *RepeatableBatchSource) Operator,
+	makeProjOp func(source *RepeatableBatchSource, useInt64 bool) Operator,
 	useSelectionVector bool,
 	hasNulls bool,
+	useInt64 bool,
 ) {
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
-	col1 := batch.ColVec(0).Int64()
-	col2 := batch.ColVec(1).Int64()
-	for i := int64(0); i < coldata.BatchSize; i++ {
-		col1[i] = 1
-		col2[i] = 1
+	var batch coldata.Batch
+	if useInt64 {
+		batch = coldata.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
+		col1 := batch.ColVec(0).Int64()
+		col2 := batch.ColVec(1).Int64()
+		for i := int64(0); i < coldata.BatchSize; i++ {
+			col1[i] = 1
+			col2[i] = 1
+		}
+	} else {
+		batch = coldata.NewMemBatch([]coltypes.T{coltypes.Int32, coltypes.Int32, coltypes.Int32})
+		col1 := batch.ColVec(0).Int32()
+		col2 := batch.ColVec(1).Int32()
+		for i := int32(0); i < coldata.BatchSize; i++ {
+			col1[i] = 1
+			col2[i] = 1
+		}
 	}
 	if hasNulls {
 		for i := 0; i < coldata.BatchSize; i++ {
@@ -200,7 +212,7 @@ func benchmarkProjOp(
 	source := NewRepeatableBatchSource(batch)
 	source.Init()
 
-	op := makeProjOp(source)
+	op := makeProjOp(source, useInt64)
 	op.Init()
 
 	b.SetBytes(int64(8 * coldata.BatchSize * 2))
@@ -210,33 +222,65 @@ func benchmarkProjOp(
 }
 
 func BenchmarkProjOp(b *testing.B) {
-	projOpMap := map[string]func(*RepeatableBatchSource) Operator{
-		"projPlusInt64Int64Op": func(source *RepeatableBatchSource) Operator {
-			return &projPlusInt64Int64Op{
+	projOpMap := map[string]func(*RepeatableBatchSource, bool) Operator{
+		"projPlusIntIntOp": func(source *RepeatableBatchSource, useInt64 bool) Operator {
+			if useInt64 {
+				return &projPlusInt64Int64Op{
+					OneInputNode: NewOneInputNode(source),
+					col1Idx:      0,
+					col2Idx:      1,
+					outputIdx:    2,
+				}
+			}
+			return &projPlusInt32Int32Op{
 				OneInputNode: NewOneInputNode(source),
 				col1Idx:      0,
 				col2Idx:      1,
 				outputIdx:    2,
 			}
 		},
-		"projMinusInt64Int64Op": func(source *RepeatableBatchSource) Operator {
-			return &projMinusInt64Int64Op{
+		"projMinusIntIntOp": func(source *RepeatableBatchSource, useInt64 bool) Operator {
+			if useInt64 {
+				return &projMinusInt64Int64Op{
+					OneInputNode: NewOneInputNode(source),
+					col1Idx:      0,
+					col2Idx:      1,
+					outputIdx:    2,
+				}
+			}
+			return &projMinusInt32Int32Op{
 				OneInputNode: NewOneInputNode(source),
 				col1Idx:      0,
 				col2Idx:      1,
 				outputIdx:    2,
 			}
 		},
-		"projMultInt64Int64Op": func(source *RepeatableBatchSource) Operator {
-			return &projMultInt64Int64Op{
+		"projMultIntIntOp": func(source *RepeatableBatchSource, useInt64 bool) Operator {
+			if useInt64 {
+				return &projMultInt64Int64Op{
+					OneInputNode: NewOneInputNode(source),
+					col1Idx:      0,
+					col2Idx:      1,
+					outputIdx:    2,
+				}
+			}
+			return &projMultInt32Int32Op{
 				OneInputNode: NewOneInputNode(source),
 				col1Idx:      0,
 				col2Idx:      1,
 				outputIdx:    2,
 			}
 		},
-		"projDivInt64Int64Op": func(source *RepeatableBatchSource) Operator {
-			return &projDivInt64Int64Op{
+		"projDivIntIntOp": func(source *RepeatableBatchSource, useInt64 bool) Operator {
+			if useInt64 {
+				return &projDivInt64Int64Op{
+					OneInputNode: NewOneInputNode(source),
+					col1Idx:      0,
+					col2Idx:      1,
+					outputIdx:    2,
+				}
+			}
+			return &projDivInt32Int32Op{
 				OneInputNode: NewOneInputNode(source),
 				col1Idx:      0,
 				col2Idx:      1,
@@ -248,9 +292,12 @@ func BenchmarkProjOp(b *testing.B) {
 	for projOp, makeProjOp := range projOpMap {
 		for _, useSel := range []bool{true, false} {
 			for _, hasNulls := range []bool{true, false} {
-				b.Run(fmt.Sprintf("op=%s/useSel=%t/hasNulls=%t", projOp, useSel, hasNulls), func(b *testing.B) {
-					benchmarkProjOp(b, makeProjOp, useSel, hasNulls)
-				})
+				for _, useInt64 := range []bool{true, false} {
+					b.Run(fmt.Sprintf("op=%s/useSel=%t/hasNulls=%t/useInt64=%t",
+						projOp, useSel, hasNulls, useInt64), func(b *testing.B) {
+						benchmarkProjOp(b, makeProjOp, useSel, hasNulls, useInt64)
+					})
+				}
 			}
 		}
 	}
