@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -46,15 +46,15 @@ func init() {
 }
 
 func declareKeysEndTransaction(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanlatch.SpanSet,
 ) {
 	et := req.(*roachpb.EndTransactionRequest)
 	declareKeysWriteTransaction(desc, header, req, spans)
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
-		abortSpanAccess := spanset.SpanReadOnly
+		abortSpanAccess := spanlatch.SpanReadOnly
 		if !et.Commit && et.Poison {
-			abortSpanAccess = spanset.SpanReadWrite
+			abortSpanAccess = spanlatch.SpanReadWrite
 		}
 		spans.Add(abortSpanAccess, roachpb.Span{
 			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
@@ -67,13 +67,13 @@ func declareKeysEndTransaction(
 		// All requests that intent on resolving local intents need to depend on
 		// the range descriptor because they need to determine which intents are
 		// within the local range.
-		spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+		spans.Add(spanlatch.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 
 		// The spans may extend beyond this Range, but it's ok for the
 		// purpose of acquiring latches. The parts in our Range will
 		// be resolved eagerly.
 		for _, span := range et.IntentSpans {
-			spans.Add(spanset.SpanReadWrite, span)
+			spans.Add(spanlatch.SpanReadWrite, span)
 		}
 
 		if et.InternalCommitTrigger != nil {
@@ -87,39 +87,39 @@ func declareKeysEndTransaction(
 				// interfere with the non-delta stats computed as a part of the
 				// split. (see
 				// https://github.com/cockroachdb/cockroach/issues/14881)
-				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+				spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
 					Key:    st.LeftDesc.StartKey.AsRawKey(),
 					EndKey: st.RightDesc.EndKey.AsRawKey(),
 				})
-				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+				spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
 					Key:    keys.MakeRangeKeyPrefix(st.LeftDesc.StartKey),
 					EndKey: keys.MakeRangeKeyPrefix(st.RightDesc.EndKey).PrefixEnd(),
 				})
 				leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
-				spans.Add(spanset.SpanReadOnly, roachpb.Span{
+				spans.Add(spanlatch.SpanReadOnly, roachpb.Span{
 					Key:    leftRangeIDPrefix,
 					EndKey: leftRangeIDPrefix.PrefixEnd(),
 				})
 
 				rightRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(st.RightDesc.RangeID)
-				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+				spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
 					Key:    rightRangeIDPrefix,
 					EndKey: rightRangeIDPrefix.PrefixEnd(),
 				})
 				rightRangeIDUnreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(st.RightDesc.RangeID)
-				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+				spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
 					Key:    rightRangeIDUnreplicatedPrefix,
 					EndKey: rightRangeIDUnreplicatedPrefix.PrefixEnd(),
 				})
 
-				spans.Add(spanset.SpanReadOnly, roachpb.Span{
+				spans.Add(spanlatch.SpanReadOnly, roachpb.Span{
 					Key: keys.RangeLastReplicaGCTimestampKey(st.LeftDesc.RangeID),
 				})
-				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+				spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
 					Key: keys.RangeLastReplicaGCTimestampKey(st.RightDesc.RangeID),
 				})
 
-				spans.Add(spanset.SpanReadOnly, roachpb.Span{
+				spans.Add(spanlatch.SpanReadOnly, roachpb.Span{
 					Key:    abortspan.MinKey(header.RangeID),
 					EndKey: abortspan.MaxKey(header.RangeID)})
 			}
@@ -128,19 +128,19 @@ func declareKeysEndTransaction(
 				// and range-local spans. They also read from the right side's range ID
 				// span.
 				leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
-				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+				spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
 					Key:    leftRangeIDPrefix,
 					EndKey: leftRangeIDPrefix.PrefixEnd(),
 				})
-				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+				spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
 					Key:    mt.RightDesc.StartKey.AsRawKey(),
 					EndKey: mt.RightDesc.EndKey.AsRawKey(),
 				})
-				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+				spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
 					Key:    keys.MakeRangeKeyPrefix(mt.RightDesc.StartKey),
 					EndKey: keys.MakeRangeKeyPrefix(mt.RightDesc.EndKey),
 				})
-				spans.Add(spanset.SpanReadOnly, roachpb.Span{
+				spans.Add(spanlatch.SpanReadOnly, roachpb.Span{
 					Key:    keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID),
 					EndKey: keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID).PrefixEnd(),
 				})

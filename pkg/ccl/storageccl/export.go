@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
@@ -31,10 +31,10 @@ func init() {
 }
 
 func declareKeysExport(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanlatch.SpanSet,
 ) {
 	batcheval.DefaultDeclareKeys(desc, header, req, spans)
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
+	spans.Add(spanlatch.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
 }
 
 // evalExport dumps the requested keys into files of non-overlapping key ranges
@@ -131,7 +131,7 @@ func evalExport(
 		io.MaxTimestampHint = h.Timestamp
 	}
 
-	e := spanset.GetDBEngine(batch, roachpb.Span{Key: args.Key, EndKey: args.EndKey})
+	e := spanlatch.GetDBEngine(batch, roachpb.Span{Key: args.Key, EndKey: args.EndKey})
 
 	data, summary, err := engine.ExportToSst(ctx, e, start, end, exportAllRevisions, io)
 

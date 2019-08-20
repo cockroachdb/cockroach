@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -32,8 +32,8 @@ func TestSpanSetBatch(t *testing.T) {
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	defer eng.Close()
 
-	var ss spanset.SpanSet
-	ss.Add(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("g")})
+	var ss spanlatch.SpanSet
+	ss.Add(spanlatch.SpanReadWrite, roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("g")})
 	outsideKey := engine.MakeMVCCMetadataKey(roachpb.Key("a"))
 	outsideKey2 := engine.MakeMVCCMetadataKey(roachpb.Key("b"))
 	outsideKey3 := engine.MakeMVCCMetadataKey(roachpb.Key("m"))
@@ -48,7 +48,7 @@ func TestSpanSetBatch(t *testing.T) {
 		t.Fatalf("direct write failed: %+v", err)
 	}
 
-	batch := spanset.NewBatch(eng.NewBatch(), &ss)
+	batch := spanlatch.NewBatch(eng.NewBatch(), &ss)
 	defer batch.Close()
 
 	// Writes inside the range work. Write twice for later read testing.
@@ -155,7 +155,7 @@ func TestSpanSetBatch(t *testing.T) {
 	if err := batch.Commit(true); err != nil {
 		t.Fatal(err)
 	}
-	iter := spanset.NewIterator(eng.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax}), &ss)
+	iter := spanlatch.NewIterator(eng.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax}), &ss)
 	defer iter.Close()
 	iter.SeekReverse(outsideKey)
 	if _, err := iter.Valid(); !isReadSpanErr(err) {
@@ -216,10 +216,10 @@ func TestSpanSetMVCCResolveWriteIntentRangeUsingIter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var ss spanset.SpanSet
-	ss.Add(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b\x00")})
+	var ss spanlatch.SpanSet
+	ss.Add(spanlatch.SpanReadWrite, roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b\x00")})
 
-	batch := spanset.NewBatch(eng.NewBatch(), &ss)
+	batch := spanlatch.NewBatch(eng.NewBatch(), &ss)
 	defer batch.Close()
 
 	intent := roachpb.Intent{

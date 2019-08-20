@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -256,7 +256,7 @@ and the following Raft status: %+v`,
 // re-executed in full. This allows it to lay down intents and return
 // an appropriate retryable error.
 func (r *Replica) evaluateWriteBatch(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
+	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanlatch.SpanSet,
 ) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
 	ms := enginepb.MVCCStats{}
 	// If not transactional or there are indications that the batch's txn will
@@ -361,7 +361,7 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
-	spans *spanset.SpanSet,
+	spans *spanlatch.SpanSet,
 	canRetry bool,
 ) (batch engine.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	for retries := 0; ; retries++ {
@@ -407,7 +407,7 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			batch = opLogger
 		}
 		if util.RaceEnabled {
-			batch = spanset.NewBatch(batch, spans)
+			batch = spanlatch.NewBatch(batch, spans)
 		}
 
 		br, res, pErr = evaluateBatch(ctx, idKey, batch, rec, ms, ba, false /* readOnly */)

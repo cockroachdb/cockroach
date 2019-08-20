@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -188,9 +188,9 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 
 				ac := abortspan.New(desc.RangeID)
 
-				var spans spanset.SpanSet
+				var spans spanlatch.SpanSet
 				batch := engine.NewBatch()
-				batch = spanset.NewBatch(batch, &spans)
+				batch = spanlatch.NewBatch(batch, &spans)
 				defer batch.Close()
 
 				var h roachpb.Header

@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
@@ -29,10 +29,10 @@ func init() {
 }
 
 func declareKeysQueryTransaction(
-	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanlatch.SpanSet,
 ) {
 	qr := req.(*roachpb.QueryTxnRequest)
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.TransactionKey(qr.Txn.Key, qr.Txn.ID)})
+	spans.Add(spanlatch.SpanReadOnly, roachpb.Span{Key: keys.TransactionKey(qr.Txn.Key, qr.Txn.ID)})
 }
 
 // QueryTxn fetches the current state of a transaction.

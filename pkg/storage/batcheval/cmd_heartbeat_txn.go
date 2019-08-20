@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -27,7 +27,7 @@ func init() {
 }
 
 func declareKeysHeartbeatTransaction(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanlatch.SpanSet,
 ) {
 	declareKeysWriteTransaction(desc, header, req, spans)
 }

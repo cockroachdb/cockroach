@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -127,20 +127,20 @@ func verifyRDIter(
 	t.Helper()
 	testutils.RunTrueAndFalse(t, "spanset", func(t *testing.T, useSpanSet bool) {
 		if useSpanSet {
-			var spans spanset.SpanSet
-			spans.Add(spanset.SpanReadOnly, roachpb.Span{
+			var spans spanlatch.SpanSet
+			spans.Add(spanlatch.SpanReadOnly, roachpb.Span{
 				Key:    keys.MakeRangeIDPrefix(desc.RangeID),
 				EndKey: keys.MakeRangeIDPrefix(desc.RangeID).PrefixEnd(),
 			})
-			spans.Add(spanset.SpanReadOnly, roachpb.Span{
+			spans.Add(spanlatch.SpanReadOnly, roachpb.Span{
 				Key:    keys.MakeRangeKeyPrefix(desc.StartKey),
 				EndKey: keys.MakeRangeKeyPrefix(desc.EndKey),
 			})
-			spans.Add(spanset.SpanReadOnly, roachpb.Span{
+			spans.Add(spanlatch.SpanReadOnly, roachpb.Span{
 				Key:    desc.StartKey.AsRawKey(),
 				EndKey: desc.EndKey.AsRawKey(),
 			})
-			eng = spanset.NewReadWriter(eng, &spans)
+			eng = spanlatch.NewReadWriter(eng, &spans)
 		}
 		iter := NewReplicaDataIterator(desc, eng, replicatedOnly)
 		defer iter.Close()

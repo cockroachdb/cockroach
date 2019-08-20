@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -58,7 +58,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,14 +70,14 @@ import (
 
 // allSpans is a SpanSet that covers *everything* for use in tests that don't
 // care about properly declaring their spans.
-var allSpans = func() spanset.SpanSet {
-	var ss spanset.SpanSet
-	ss.Add(spanset.SpanReadWrite, roachpb.Span{
+var allSpans = func() spanlatch.SpanSet {
+	var ss spanlatch.SpanSet
+	ss.Add(spanlatch.SpanReadWrite, roachpb.Span{
 		Key:    roachpb.KeyMin,
 		EndKey: roachpb.KeyMax,
 	})
 	// Local keys (see `keys.localPrefix`).
-	ss.Add(spanset.SpanReadWrite, roachpb.Span{
+	ss.Add(spanlatch.SpanReadWrite, roachpb.Span{
 		Key:    append([]byte("\x01"), roachpb.KeyMin...),
 		EndKey: append([]byte("\x01"), roachpb.KeyMax...),
 	})
@@ -2670,7 +2670,7 @@ func TestReplicaLatchingTimestampNonInterference(t *testing.T) {
 func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var spans spanset.SpanSet
+	var spans spanlatch.SpanSet
 	cmd, _ := batcheval.LookupCommand(roachpb.EndTransaction)
 	cmd.DeclareKeys(
 		&roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("d")},
@@ -2690,7 +2690,7 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 			},
 		},
 		&spans)
-	if err := spans.CheckAllowed(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("b")}); err != nil {
+	if err := spans.CheckAllowed(spanlatch.SpanReadWrite, roachpb.Span{Key: roachpb.Key("b")}); err != nil {
 		t.Fatalf("expected declaration of write access, err=%s", err)
 	}
 }
@@ -7954,7 +7954,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 	for _, keyThresh := range []hlc.Timestamp{{}, {Logical: 1}} {
 		t.Run(fmt.Sprintf("thresh=%s", keyThresh), func(t *testing.T) {
 			var gc roachpb.GCRequest
-			var spans spanset.SpanSet
+			var spans spanlatch.SpanSet
 
 			gc.Threshold = keyThresh
 			cmd, _ := batcheval.LookupCommand(roachpb.GC)
@@ -7973,7 +7973,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 
 			batch := eng.NewBatch()
 			defer batch.Close()
-			rw := spanset.NewBatch(batch, &spans)
+			rw := spanlatch.NewBatch(batch, &spans)
 
 			var resp roachpb.GCResponse
 

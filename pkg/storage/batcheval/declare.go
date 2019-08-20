@@ -16,17 +16,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 )
 
 // DefaultDeclareKeys is the default implementation of Command.DeclareKeys.
 func DefaultDeclareKeys(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanlatch.SpanSet,
 ) {
 	if roachpb.IsReadOnly(req) {
-		spans.Add(spanset.SpanReadOnly, req.Header().Span())
+		spans.Add(spanlatch.SpanReadOnly, req.Header().Span())
 	} else {
-		spans.Add(spanset.SpanReadWrite, req.Header().Span())
+		spans.Add(spanlatch.SpanReadWrite, req.Header().Span())
 	}
 }
 
@@ -34,17 +34,17 @@ func DefaultDeclareKeys(
 // touches to the given SpanSet. This does not include keys touched during the
 // processing of the batch's individual commands.
 func DeclareKeysForBatch(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, spans *spanlatch.SpanSet,
 ) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
-		spans.Add(spanset.SpanReadOnly, roachpb.Span{
+		spans.Add(spanlatch.SpanReadOnly, roachpb.Span{
 			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
 		})
 	}
 	if header.ReturnRangeInfo {
-		spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
-		spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+		spans.Add(spanlatch.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
+		spans.Add(spanlatch.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 	}
 }
 

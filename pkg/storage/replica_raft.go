@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/apply"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -68,7 +68,7 @@ func (r *Replica) evalAndPropose(
 	ctx context.Context,
 	lease roachpb.Lease,
 	ba *roachpb.BatchRequest,
-	spans *spanset.SpanSet,
+	spans *spanlatch.SpanSet,
 	ec endCmds,
 ) (_ chan proposalResult, _ func(), _ int64, pErr *roachpb.Error) {
 	// Guarantee we release the latches that we acquired if we never make

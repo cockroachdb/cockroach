@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 )
 
 func init() {
@@ -25,9 +25,9 @@ func init() {
 }
 
 func declareKeysLeaseInfo(
-	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanlatch.SpanSet,
 ) {
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
+	spans.Add(spanlatch.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
 }
 
 // LeaseInfo returns information about the lease holder for the range.

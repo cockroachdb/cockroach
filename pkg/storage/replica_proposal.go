@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/time/rate"
 )
@@ -656,7 +656,7 @@ type proposalResult struct {
 //
 // Replica.mu must not be held.
 func (r *Replica) evaluateProposal(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
+	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanlatch.SpanSet,
 ) (*result.Result, bool, *roachpb.Error) {
 	if ba.Timestamp == (hlc.Timestamp{}) {
 		return nil, false, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
@@ -760,7 +760,7 @@ func (r *Replica) evaluateProposal(
 // on a non-nil *roachpb.Error and should be proposed through Raft
 // if ProposalData.command is non-nil.
 func (r *Replica) requestToProposal(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
+	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanlatch.SpanSet,
 ) (*ProposalData, *roachpb.Error) {
 	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, spans)
 

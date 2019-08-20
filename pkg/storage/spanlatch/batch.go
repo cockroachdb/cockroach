@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanset
+package spanlatch
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

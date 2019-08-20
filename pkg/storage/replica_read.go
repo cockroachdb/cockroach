@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -88,7 +88,7 @@ func (r *Replica) executeReadOnlyBatch(
 	rec := NewReplicaEvalContext(r, spans)
 	readOnly := r.store.Engine().NewReadOnly()
 	if util.RaceEnabled {
-		readOnly = spanset.NewReadWriter(readOnly, spans)
+		readOnly = spanlatch.NewReadWriter(readOnly, spans)
 	}
 	defer readOnly.Close()
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba, true /* readOnly */)

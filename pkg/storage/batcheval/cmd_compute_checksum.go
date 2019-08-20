@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -27,7 +27,7 @@ func init() {
 }
 
 func declareKeysComputeChecksum(
-	*roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet,
+	*roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanlatch.SpanSet,
 ) {
 	// Intentionally declare no keys, as ComputeChecksum does not need to be
 	// serialized with any other commands. It simply needs to be committed into

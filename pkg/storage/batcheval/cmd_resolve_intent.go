@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -26,7 +26,7 @@ func init() {
 }
 
 func declareKeysResolveIntentCombined(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanlatch.SpanSet,
 ) {
 	DefaultDeclareKeys(desc, header, req, spans)
 	var status roachpb.TransactionStatus
@@ -40,12 +40,12 @@ func declareKeysResolveIntentCombined(
 		txnID = t.IntentTxn.ID
 	}
 	if WriteAbortSpanOnResolve(status) {
-		spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, txnID)})
+		spans.Add(spanlatch.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, txnID)})
 	}
 }
 
 func declareKeysResolveIntent(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanlatch.SpanSet,
 ) {
 	declareKeysResolveIntentCombined(desc, header, req, spans)
 }

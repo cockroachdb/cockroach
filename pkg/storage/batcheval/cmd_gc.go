@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -27,21 +27,21 @@ func init() {
 }
 
 func declareKeysGC(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanlatch.SpanSet,
 ) {
 	// Intentionally don't call DefaultDeclareKeys: the key range in the header
 	// is usually the whole range (pending resolution of #7880).
 	gcr := req.(*roachpb.GCRequest)
 	for _, key := range gcr.Keys {
-		spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: key.Key})
+		spans.Add(spanlatch.SpanReadWrite, roachpb.Span{Key: key.Key})
 	}
 	// Be smart here about blocking on the threshold keys. The GC queue can send an empty
 	// request first to bump the thresholds, and then another one that actually does work
 	// but can avoid declaring these keys below.
 	if gcr.Threshold != (hlc.Timestamp{}) {
-		spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
+		spans.Add(spanlatch.SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
 	}
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+	spans.Add(spanlatch.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 }
 
 // GC iterates through the list of keys to garbage collect

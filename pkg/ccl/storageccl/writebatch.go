@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
@@ -114,7 +114,7 @@ func clearExistingData(
 	// If this is a Iterator, we have to unwrap it because
 	// ClearIterRange needs a plain rocksdb iterator (and can't unwrap
 	// it itself because of import cycles).
-	if ssi, ok := iter.(*spanset.Iterator); ok {
+	if ssi, ok := iter.(*spanlatch.Iterator); ok {
 		iter = ssi.Iterator()
 	}
 	// TODO(dan): Ideally, this would use `batch.ClearRange` but it doesn't

@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -29,21 +29,21 @@ func init() {
 // declareKeysWriteTransaction is the shared portion of
 // declareKeys{Begin,End,Heartbeat}Transaction.
 func declareKeysWriteTransaction(
-	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanlatch.SpanSet,
 ) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
-		spans.Add(spanset.SpanReadWrite, roachpb.Span{
+		spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
 			Key: keys.TransactionKey(req.Header().Key, header.Txn.ID),
 		})
 	}
 }
 
 func declareKeysBeginTransaction(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanlatch.SpanSet,
 ) {
 	declareKeysWriteTransaction(desc, header, req, spans)
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{
+	spans.Add(spanlatch.SpanReadOnly, roachpb.Span{
 		Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
 	})
 }

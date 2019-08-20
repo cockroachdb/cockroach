@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -33,7 +33,7 @@ import (
 // SpanSet if one is given.
 type SpanSetReplicaEvalContext struct {
 	i  batcheval.EvalContext
-	ss spanset.SpanSet
+	ss spanlatch.SpanSet
 }
 
 var _ batcheval.EvalContext = &SpanSetReplicaEvalContext{}
@@ -116,7 +116,7 @@ func (rec *SpanSetReplicaEvalContext) IsFirstRange() bool {
 // Desc returns the Replica's RangeDescriptor.
 func (rec SpanSetReplicaEvalContext) Desc() *roachpb.RangeDescriptor {
 	desc := rec.i.Desc()
-	rec.ss.AssertAllowed(spanset.SpanReadOnly,
+	rec.ss.AssertAllowed(spanlatch.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)},
 	)
 	return desc
@@ -150,7 +150,7 @@ func (rec SpanSetReplicaEvalContext) GetSplitQPS() float64 {
 func (rec SpanSetReplicaEvalContext) CanCreateTxnRecord(
 	txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
 ) (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
-	rec.ss.AssertAllowed(spanset.SpanReadOnly,
+	rec.ss.AssertAllowed(spanlatch.SpanReadOnly,
 		roachpb.Span{Key: keys.TransactionKey(txnKey, txnID)},
 	)
 	return rec.i.CanCreateTxnRecord(txnID, txnKey, txnMinTS)
@@ -160,7 +160,7 @@ func (rec SpanSetReplicaEvalContext) CanCreateTxnRecord(
 // keys are garbage collected. Reads and writes at timestamps <= this time will
 // not be served.
 func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {
-	rec.ss.AssertAllowed(spanset.SpanReadOnly,
+	rec.ss.AssertAllowed(spanlatch.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeLastGCKey(rec.GetRangeID())},
 	)
 	return rec.i.GetGCThreshold()
@@ -176,7 +176,7 @@ func (rec SpanSetReplicaEvalContext) String() string {
 func (rec SpanSetReplicaEvalContext) GetLastReplicaGCTimestamp(
 	ctx context.Context,
 ) (hlc.Timestamp, error) {
-	if err := rec.ss.CheckAllowed(spanset.SpanReadOnly,
+	if err := rec.ss.CheckAllowed(spanlatch.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeLastReplicaGCTimestampKey(rec.GetRangeID())},
 	); err != nil {
 		return hlc.Timestamp{}, err
@@ -186,7 +186,7 @@ func (rec SpanSetReplicaEvalContext) GetLastReplicaGCTimestamp(
 
 // GetLease returns the Replica's current and next lease (if any).
 func (rec SpanSetReplicaEvalContext) GetLease() (roachpb.Lease, roachpb.Lease) {
-	rec.ss.AssertAllowed(spanset.SpanReadOnly,
+	rec.ss.AssertAllowed(spanlatch.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeLeaseKey(rec.GetRangeID())},
 	)
 	return rec.i.GetLease()

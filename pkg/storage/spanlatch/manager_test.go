@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -32,7 +31,7 @@ var read = false
 var write = true
 var zeroTS = hlc.Timestamp{}
 
-func spans(from, to string, write bool) *spanset.SpanSet {
+func spans(from, to string, write bool) *SpanSet {
 	var span roachpb.Span
 	if to == "" {
 		span = roachpb.Span{Key: roachpb.Key(from)}
@@ -45,10 +44,10 @@ func spans(from, to string, write bool) *spanset.SpanSet {
 			span.EndKey = append(keys.LocalRangePrefix, span.EndKey...)
 		}
 	}
-	var spans spanset.SpanSet
-	access := spanset.SpanReadOnly
+	var spans SpanSet
+	access := SpanReadOnly
 	if write {
-		access = spanset.SpanReadWrite
+		access = SpanReadWrite
 	}
 	spans.Add(access, span)
 	return &spans
@@ -80,7 +79,7 @@ func testLatchBlocks(t *testing.T, lgC <-chan *Guard) {
 
 // MustAcquire is like Acquire, except it can't return context cancellation
 // errors.
-func (m *Manager) MustAcquire(spans *spanset.SpanSet, ts hlc.Timestamp) *Guard {
+func (m *Manager) MustAcquire(spans *SpanSet, ts hlc.Timestamp) *Guard {
 	lg, err := m.Acquire(context.Background(), spans, ts)
 	if err != nil {
 		panic(err)
@@ -93,13 +92,13 @@ func (m *Manager) MustAcquire(spans *spanset.SpanSet, ts hlc.Timestamp) *Guard {
 // returns a channel that provides the Guard when the latches are acquired (i.e.
 // after waiting). If the context expires, a nil Guard will be delivered on the
 // channel.
-func (m *Manager) MustAcquireCh(spans *spanset.SpanSet, ts hlc.Timestamp) <-chan *Guard {
+func (m *Manager) MustAcquireCh(spans *SpanSet, ts hlc.Timestamp) <-chan *Guard {
 	return m.MustAcquireChCtx(context.Background(), spans, ts)
 }
 
 // MustAcquireChCtx is like MustAcquireCh, except it accepts a context.
 func (m *Manager) MustAcquireChCtx(
-	ctx context.Context, spans *spanset.SpanSet, ts hlc.Timestamp,
+	ctx context.Context, spans *SpanSet, ts hlc.Timestamp,
 ) <-chan *Guard {
 	ch := make(chan *Guard)
 	lg, snap := m.sequence(spans, ts)
@@ -207,10 +206,10 @@ func TestLatchManagerMultipleOverlappingSpans(t *testing.T) {
 	lg4 := m.MustAcquire(spans("g", "", write), zeroTS)
 
 	// Attempt to acquire latches overlapping each of them.
-	var spans spanset.SpanSet
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("a")})
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("b")})
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("e")})
+	var spans SpanSet
+	spans.Add(SpanReadWrite, roachpb.Span{Key: roachpb.Key("a")})
+	spans.Add(SpanReadWrite, roachpb.Span{Key: roachpb.Key("b")})
+	spans.Add(SpanReadWrite, roachpb.Span{Key: roachpb.Key("e")})
 	lg5C := m.MustAcquireCh(&spans, zeroTS)
 
 	// Blocks until the first three prerequisite latches release.
@@ -230,9 +229,9 @@ func TestLatchManagerDependentLatches(t *testing.T) {
 
 	cases := []struct {
 		name      string
-		sp1       *spanset.SpanSet
+		sp1       *SpanSet
 		ts1       hlc.Timestamp
-		sp2       *spanset.SpanSet
+		sp2       *SpanSet
 		ts2       hlc.Timestamp
 		dependent bool
 	}{
@@ -490,7 +489,7 @@ func BenchmarkLatchManagerReadWriteMix(b *testing.B) {
 			var m Manager
 			lgBuf := make(chan *Guard, 16)
 
-			spans := make([]spanset.SpanSet, b.N)
+			spans := make([]SpanSet, b.N)
 			for i := range spans {
 				a, b := randBytes(100), randBytes(100)
 				// Overwrite first byte so that we do not mix local and global ranges
@@ -502,9 +501,9 @@ func BenchmarkLatchManagerReadWriteMix(b *testing.B) {
 					Key:    roachpb.Key(a),
 					EndKey: roachpb.Key(b),
 				}
-				access := spanset.SpanReadOnly
+				access := SpanReadOnly
 				if i%(readsPerWrite+1) == 0 {
-					access = spanset.SpanReadWrite
+					access = SpanReadWrite
 				}
 				spans[i].Add(access, span)
 			}

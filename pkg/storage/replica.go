@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/split"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -55,7 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 )
@@ -1095,8 +1094,8 @@ func (ec *endCmds) done(ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pEr
 	}
 }
 
-func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, error) {
-	spans := &spanset.SpanSet{}
+func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanlatch.SpanSet, error) {
+	spans := &spanlatch.SpanSet{}
 	// TODO(bdarnell): need to make this less global when local
 	// latches are used more heavily. For example, a split will
 	// have a large read-only span but also a write (see #10084).
@@ -1108,14 +1107,14 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 	// TODO(bdarnell): revisit as the local portion gets its appropriate
 	// use.
 	if ba.IsReadOnly() {
-		spans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
+		spans.Reserve(spanlatch.SpanReadOnly, spanlatch.SpanGlobal, len(ba.Requests))
 	} else {
 		guess := len(ba.Requests)
 		if et, ok := ba.GetArg(roachpb.EndTransaction); ok {
 			// EndTransaction declares a global write for each of its intent spans.
 			guess += len(et.(*roachpb.EndTransactionRequest).IntentSpans) - 1
 		}
-		spans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, guess)
+		spans.Reserve(spanlatch.SpanReadWrite, spanlatch.SpanGlobal, guess)
 	}
 
 	desc := r.Desc()
@@ -1152,7 +1151,7 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 // removed from the queue, and whose returned error is to be used in place of
 // the supplied error.
 func (r *Replica) beginCmds(
-	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
+	ctx context.Context, ba *roachpb.BatchRequest, spans *spanlatch.SpanSet,
 ) (endCmds, error) {
 	// Only acquire latches for consistent operations.
 	var lg *spanlatch.Guard
@@ -1243,7 +1242,7 @@ func (r *Replica) beginCmds(
 	// Handle load-based splitting.
 	if r.SplitByLoadEnabled() {
 		shouldInitSplit := r.loadBasedSplitter.Record(timeutil.Now(), len(ba.Requests), func() roachpb.Span {
-			return spans.BoundarySpan(spanset.SpanGlobal)
+			return spans.BoundarySpan(spanlatch.SpanGlobal)
 		})
 		if shouldInitSplit {
 			r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
@@ -1347,7 +1346,7 @@ func (r *Replica) executeAdminBatch(
 
 	case *roachpb.ImportRequest:
 		cArgs := batcheval.CommandArgs{
-			EvalCtx: NewReplicaEvalContext(r, &spanset.SpanSet{}),
+			EvalCtx: NewReplicaEvalContext(r, &spanlatch.SpanSet{}),
 			Header:  ba.Header,
 			Args:    args,
 		}
