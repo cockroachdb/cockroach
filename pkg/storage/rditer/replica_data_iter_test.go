@@ -128,19 +128,19 @@ func verifyRDIter(
 	testutils.RunTrueAndFalse(t, "spanset", func(t *testing.T, useSpanSet bool) {
 		if useSpanSet {
 			var spans spanset.SpanSet
-			spans.Add(spanset.SpanReadOnly, roachpb.Span{
+			spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 				Key:    keys.MakeRangeIDPrefix(desc.RangeID),
 				EndKey: keys.MakeRangeIDPrefix(desc.RangeID).PrefixEnd(),
 			})
-			spans.Add(spanset.SpanReadOnly, roachpb.Span{
+			spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 				Key:    keys.MakeRangeKeyPrefix(desc.StartKey),
 				EndKey: keys.MakeRangeKeyPrefix(desc.EndKey),
 			})
-			spans.Add(spanset.SpanReadOnly, roachpb.Span{
+			spans.AddMVCC(spanset.SpanReadOnly, roachpb.Span{
 				Key:    desc.StartKey.AsRawKey(),
 				EndKey: desc.EndKey.AsRawKey(),
-			})
-			eng = spanset.NewReadWriter(eng, &spans)
+			}, hlc.Timestamp{WallTime: 42})
+			eng = spanset.NewReadWriterAt(eng, &spans, hlc.Timestamp{WallTime: 42})
 		}
 		iter := NewReplicaDataIterator(desc, eng, replicatedOnly)
 		defer iter.Close()
