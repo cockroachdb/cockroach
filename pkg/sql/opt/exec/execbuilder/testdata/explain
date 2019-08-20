@@ -405,6 +405,7 @@ limit                 ·       ·
            └── scan   ·       ·
 ·                     table   t@primary
 ·                     spans   ALL
+·                     limit   2
 
 query TTT
 EXPLAIN SELECT DISTINCT v FROM t

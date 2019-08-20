@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // ordinalityNode represents a node that adds an "ordinality" column
@@ -108,49 +107,3 @@ func (o *ordinalityNode) Next(params runParams) (bool, error) {
 
 func (o *ordinalityNode) Values() tree.Datums       { return o.run.row }
 func (o *ordinalityNode) Close(ctx context.Context) { o.source.Close(ctx) }
-
-// restrictOrdering transforms an ordering requirement on the output
-// of an ordinalityNode into an ordering requirement on its input.
-func (o *ordinalityNode) restrictOrdering(
-	desiredOrdering sqlbase.ColumnOrdering,
-) sqlbase.ColumnOrdering {
-	// If there's a desired ordering on the ordinality column, drop it and every
-	// column after that.
-	if len(desiredOrdering) > 0 {
-		for i, ordInfo := range desiredOrdering {
-			if ordInfo.ColIdx == len(o.columns)-1 {
-				return desiredOrdering[:i]
-			}
-		}
-	}
-	return desiredOrdering
-}
-
-// optimizeOrdering updates the ordinalityNode's ordering based on a
-// potentially new ordering information from its source.
-func (o *ordinalityNode) optimizeOrdering() {
-	// We are going to "optimize" the ordering. We had an ordering
-	// initially from the source, but expand() may have caused it to
-	// change. So here retrieve the ordering of the source again.
-	srcProps := planPhysicalProps(o.source)
-	o.props = srcProps.copy()
-
-	// TODO(knz/radu): if srcProps.ordering is not empty, we basically have two
-	// simultaneous orderings.  What we really want is something that
-	// physicalProps cannot currently express: that the rows are ordered by a set
-	// of columns AND at the same time they are also ordered by a different set of
-	// columns. However since ordinalityNode is currently the only case where this
-	// happens we consider it's not worth the hassle and just use the source
-	// ordering.
-	if len(srcProps.ordering) == 0 {
-		// No ordering defined in the source, so create a new one.
-		o.props.ordering = o.props.reduce(sqlbase.ColumnOrdering{{
-			ColIdx:    len(o.columns) - 1,
-			Direction: encoding.Ascending,
-		}})
-	}
-	// The ordinality column forms a key.
-	var k util.FastIntSet
-	k.Add(len(o.columns) - 1)
-	o.props.weakKeys = append(o.props.weakKeys, k)
-}

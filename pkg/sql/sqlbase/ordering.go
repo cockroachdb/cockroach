@@ -27,21 +27,6 @@ type ColumnOrderInfo struct {
 // represents an ordering first by column 3 (descending), then by column 1 (ascending).
 type ColumnOrdering []ColumnOrderInfo
 
-// IsPrefixOf returns true if the receiver ordering matches a prefix of the
-// given ordering. In this case, rows with an order conforming to b
-// automatically conform to a.
-func (a ColumnOrdering) IsPrefixOf(b ColumnOrdering) bool {
-	if len(a) > len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // CompareDatums compares two datum rows according to a column ordering. Returns:
 //  - 0 if lhs and rhs are equal on the ordering columns;
 //  - less than 0 if lhs comes first;

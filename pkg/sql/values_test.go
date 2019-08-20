@@ -153,10 +153,6 @@ func TestValues(t *testing.T) {
 			if plan == nil {
 				return
 			}
-			plan, err = p.optimizePlan(ctx, plan, allColumns(plan))
-			if err != nil {
-				t.Fatalf("%d: unexpected error in optimizePlan: %v", i, err)
-			}
 			params := runParams{ctx: ctx, p: p, extendedEvalCtx: &p.extendedEvalCtx}
 			if err := startExec(params, plan); err != nil {
 				t.Fatalf("%d: unexpected error in Start: %v", i, err)

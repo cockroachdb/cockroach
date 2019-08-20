@@ -59,8 +59,3 @@ func (f *filterNode) Values() tree.Datums {
 }
 
 func (f *filterNode) Close(ctx context.Context) { f.source.plan.Close(ctx) }
-
-func (f *filterNode) computePhysicalProps(evalCtx *tree.EvalContext) {
-	f.props = planPhysicalProps(f.source.plan)
-	f.props.applyExpr(evalCtx, f.filter)
-}
