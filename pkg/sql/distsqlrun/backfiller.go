@@ -66,6 +66,7 @@ type backfiller struct {
 
 	spec        distsqlpb.BackfillerSpec
 	output      RowReceiver
+	out         ProcOutputHelper
 	flowCtx     *FlowCtx
 	processorID int32
 }
@@ -76,27 +77,11 @@ func (*backfiller) OutputTypes() []types.T {
 	return nil
 }
 
-// Run is part of the Processor interface.
-func (b *backfiller) Run(ctx context.Context) {
-	opName := fmt.Sprintf("%sBackfiller", b.name)
-	ctx = logtags.AddTag(ctx, opName, int(b.spec.Table.ID))
-	ctx, span := processorSpan(ctx, opName)
-	defer tracing.FinishSpan(span)
-
-	if err := b.mainLoop(ctx); err != nil {
-		b.output.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
-	}
-	sendTraceData(ctx, b.output)
-	b.output.ProducerDone()
-}
-
-// mainLoop invokes runChunk on chunks of rows.
-// It does not close the output.
-func (b *backfiller) mainLoop(ctx context.Context) error {
+func (b backfiller) getMutationsToProcess(ctx context.Context) ([]sqlbase.DescriptorMutation, error) {
 	var mutations []sqlbase.DescriptorMutation
 	desc := b.spec.Table
 	if len(desc.Mutations) == 0 {
-		return errors.Errorf("no schema changes for table ID=%d", desc.ID)
+		return nil, errors.Errorf("no schema changes for table ID=%d", desc.ID)
 	}
 	const noNewIndex = -1
 	// The first index of a mutation in the mutation list that will be
@@ -117,18 +102,54 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 
 	if firstMutationIdx == noNewIndex ||
 		len(b.spec.Spans) == 0 {
-		return errors.Errorf("completed processing all spans for %s backfill (%d, %d)", b.name, desc.ID, mutationID)
+		return nil, errors.Errorf("completed processing all spans for %s backfill (%d, %d)", b.name, desc.ID, mutationID)
 	}
+	return mutations, nil
+}
 
-	// Backfill the mutations for all the rows.
-	chunkSize := b.spec.ChunkSize
+// Run is part of the Processor interface.
+func (b *backfiller) Run(ctx context.Context) {
+	opName := fmt.Sprintf("%sBackfiller", b.name)
+	ctx = logtags.AddTag(ctx, opName, int(b.spec.Table.ID))
+	ctx, span := processorSpan(ctx, opName)
+	defer tracing.FinishSpan(span)
+	err := b.doRun(ctx)
+	if err != nil {
+		b.output.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
+	}
+	sendTraceData(ctx, b.output)
+	b.output.ProducerDone()
+}
 
-	if err := b.chunks.prepare(ctx); err != nil {
+func (b *backfiller) doRun(ctx context.Context) error {
+	mutations, err := b.getMutationsToProcess(ctx)
+	if err != nil {
 		return err
+	}
+	finishedSpans, err := b.mainLoop(ctx, mutations)
+	if err != nil {
+		return err
+	}
+	var prog distsqlpb.RemoteProducerMetadata_BulkProcessorProgress
+	prog.CompletedSpans = append(prog.CompletedSpans, finishedSpans...)
+	meta := &distsqlpb.ProducerMetadata{BulkProcessorProgress: &prog}
+	if err = b.out.Init(&distsqlpb.PostProcessSpec{}, nil, b.flowCtx.NewEvalCtx(), b.output); err != nil {
+		return err
+	}
+	if !EmitHelper(ctx, &b.out, nil /* row */, meta, func(_ context.Context) {}) {
+		return errors.New("consumer closed")
+	}
+	return nil
+}
+
+// mainLoop invokes runChunk on chunks of rows.
+// It does not close the output.
+func (b *backfiller) mainLoop(ctx context.Context, mutations []sqlbase.DescriptorMutation) (roachpb.Spans, error) {
+	if err := b.chunks.prepare(ctx); err != nil {
+		return nil, err
 	}
 	defer b.chunks.close(ctx)
 
-	requiredCheckpointAfter := b.spec.Duration
 	// As we approach the end of the configured duration, we may want to actually
 	// opportunistically wrap up a bit early. Specifically, if doing so can avoid
 	// starting a new fresh buffer that would need to then be flushed shortly
@@ -157,16 +178,16 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 		for todo.Key != nil {
 			log.VEventf(ctx, 3, "%s backfiller starting chunk %d: %s", b.name, chunks, todo)
 			var err error
-			todo.Key, err = b.chunks.runChunk(ctx, mutations, todo, chunkSize, b.spec.ReadAsOf)
+			todo.Key, err = b.chunks.runChunk(ctx, mutations, todo, b.spec.ChunkSize, b.spec.ReadAsOf)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			chunks++
 			running := timeutil.Since(start)
 			if running > opportunisticCheckpointAfter && b.chunks.CurrentBufferFill() > opportunisticCheckpointThreshold {
 				break
 			}
-			if running > requiredCheckpointAfter {
+			if running > b.spec.Duration {
 				break
 			}
 		}
@@ -188,19 +209,12 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 
 	log.VEventf(ctx, 3, "%s backfiller flushing...", b.name)
 	if err := b.chunks.flush(ctx); err != nil {
-		return err
+		return nil, err
 	}
 	log.VEventf(ctx, 2, "%s backfiller finished %d spans in %d chunks in %s",
 		b.name, totalSpans, totalChunks, timeutil.Since(start))
 
-	return WriteResumeSpan(ctx,
-		b.flowCtx.Cfg.DB,
-		b.spec.Table.ID,
-		mutationID,
-		b.filter,
-		finishedSpans,
-		b.flowCtx.Cfg.JobRegistry,
-	)
+	return finishedSpans, nil
 }
 
 // GetResumeSpans returns a ResumeSpanList from a job.
@@ -265,7 +279,7 @@ func GetResumeSpans(
 	return details.ResumeSpanList[mutationIdx].ResumeSpans, job, mutationIdx, nil
 }
 
-// SetResumeSpansInJob addeds a list of resume spans into a job details field.
+// SetResumeSpansInJob adds a list of resume spans into a job details field.
 func SetResumeSpansInJob(
 	ctx context.Context, spans []roachpb.Span, mutationIdx int, txn *client.Txn, job *jobs.Job,
 ) error {
