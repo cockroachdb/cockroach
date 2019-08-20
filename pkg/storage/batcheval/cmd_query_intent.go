@@ -20,6 +20,14 @@ import (
 )
 
 func init() {
+	// We declare access at header.Timestamp despite reading the specified keys at
+	// the maximum timestamp (done so to ensure we read any intent if one exists,
+	// regardless of the timestamp it was written at).
+	// Query intent requests are part of batches containing requests
+	// accessing overlapping keys. Read/write access at specific timestamps
+	// are mediated by the spans declared by the other requests. If we were to
+	// declare reads at the max timestamp, we potentially inhibit concurrency
+	// despite it being safe to do so.
 	RegisterCommand(roachpb.QueryIntent, DefaultDeclareKeys, QueryIntent)
 }
 

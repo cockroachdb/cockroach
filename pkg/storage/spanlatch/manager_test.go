@@ -32,17 +32,18 @@ var read = false
 var write = true
 var zeroTS = hlc.Timestamp{}
 
-func spans(from, to string, write bool) *spanset.SpanSet {
-	var span roachpb.Span
+func spans(from, to string, write bool, ts hlc.Timestamp) *spanset.SpanSet {
+	var start, end roachpb.Key
 	if to == "" {
-		span = roachpb.Span{Key: roachpb.Key(from)}
+		start = roachpb.Key(from)
 	} else {
-		span = roachpb.Span{Key: roachpb.Key(from), EndKey: roachpb.Key(to)}
+		start = roachpb.Key(from)
+		end = roachpb.Key(to)
 	}
 	if strings.HasPrefix(from, "local") {
-		span.Key = append(keys.LocalRangePrefix, span.Key...)
-		if span.EndKey != nil {
-			span.EndKey = append(keys.LocalRangePrefix, span.EndKey...)
+		start = append(keys.LocalRangePrefix, start...)
+		if end != nil {
+			end = append(keys.LocalRangePrefix, end...)
 		}
 	}
 	var spans spanset.SpanSet
@@ -50,7 +51,11 @@ func spans(from, to string, write bool) *spanset.SpanSet {
 	if write {
 		access = spanset.SpanReadWrite
 	}
-	spans.Add(access, span)
+	if strings.HasPrefix(from, "local") {
+		spans.AddNonMVCC(access, roachpb.Span{Key: start, EndKey: end})
+	} else {
+		spans.AddMVCC(access, roachpb.Span{Key: start, EndKey: end}, ts)
+	}
 	return &spans
 }
 
@@ -80,8 +85,8 @@ func testLatchBlocks(t *testing.T, lgC <-chan *Guard) {
 
 // MustAcquire is like Acquire, except it can't return context cancellation
 // errors.
-func (m *Manager) MustAcquire(spans *spanset.SpanSet, ts hlc.Timestamp) *Guard {
-	lg, err := m.Acquire(context.Background(), spans, ts)
+func (m *Manager) MustAcquire(spans *spanset.SpanSet) *Guard {
+	lg, err := m.Acquire(context.Background(), spans)
 	if err != nil {
 		panic(err)
 	}
@@ -93,16 +98,14 @@ func (m *Manager) MustAcquire(spans *spanset.SpanSet, ts hlc.Timestamp) *Guard {
 // returns a channel that provides the Guard when the latches are acquired (i.e.
 // after waiting). If the context expires, a nil Guard will be delivered on the
 // channel.
-func (m *Manager) MustAcquireCh(spans *spanset.SpanSet, ts hlc.Timestamp) <-chan *Guard {
-	return m.MustAcquireChCtx(context.Background(), spans, ts)
+func (m *Manager) MustAcquireCh(spans *spanset.SpanSet) <-chan *Guard {
+	return m.MustAcquireChCtx(context.Background(), spans)
 }
 
 // MustAcquireChCtx is like MustAcquireCh, except it accepts a context.
-func (m *Manager) MustAcquireChCtx(
-	ctx context.Context, spans *spanset.SpanSet, ts hlc.Timestamp,
-) <-chan *Guard {
+func (m *Manager) MustAcquireChCtx(ctx context.Context, spans *spanset.SpanSet) <-chan *Guard {
 	ch := make(chan *Guard)
-	lg, snap := m.sequence(spans, ts)
+	lg, snap := m.sequence(spans)
 	go func() {
 		err := m.wait(ctx, lg, snap)
 		if err != nil {
@@ -119,15 +122,15 @@ func TestLatchManager(t *testing.T) {
 	var m Manager
 
 	// Try latches with no overlapping already-acquired lathes.
-	lg1 := m.MustAcquire(spans("a", "", write), zeroTS)
+	lg1 := m.MustAcquire(spans("a", "", write, zeroTS))
 	m.Release(lg1)
 
-	lg2 := m.MustAcquire(spans("a", "b", write), zeroTS)
+	lg2 := m.MustAcquire(spans("a", "b", write, zeroTS))
 	m.Release(lg2)
 
 	// Add a latch and verify overlapping latches wait on it.
-	lg3 := m.MustAcquire(spans("a", "b", write), zeroTS)
-	lg4C := m.MustAcquireCh(spans("a", "b", write), zeroTS)
+	lg3 := m.MustAcquire(spans("a", "b", write, zeroTS))
+	lg4C := m.MustAcquireCh(spans("a", "b", write, zeroTS))
 
 	// Second write should block.
 	testLatchBlocks(t, lg4C)
@@ -142,10 +145,10 @@ func TestLatchManagerNoWaitOnReadOnly(t *testing.T) {
 	var m Manager
 
 	// Acquire latch for read-only span.
-	m.MustAcquire(spans("a", "", read), zeroTS)
+	m.MustAcquire(spans("a", "", read, zeroTS))
 
 	// Verify no wait with another read-only span.
-	m.MustAcquire(spans("a", "", read), zeroTS)
+	m.MustAcquire(spans("a", "", read, zeroTS))
 }
 
 func TestLatchManagerWriteWaitForMultipleReads(t *testing.T) {
@@ -153,12 +156,12 @@ func TestLatchManagerWriteWaitForMultipleReads(t *testing.T) {
 	var m Manager
 
 	// Acquire latch for read-only span.
-	lg1 := m.MustAcquire(spans("a", "", read), zeroTS)
+	lg1 := m.MustAcquire(spans("a", "", read, zeroTS))
 	// Acquire another one on top.
-	lg2 := m.MustAcquire(spans("a", "", read), zeroTS)
+	lg2 := m.MustAcquire(spans("a", "", read, zeroTS))
 
 	// A write span should have to wait for **both** reads.
-	lg3C := m.MustAcquireCh(spans("a", "", write), zeroTS)
+	lg3C := m.MustAcquireCh(spans("a", "", write, zeroTS))
 
 	// Certainly blocks now.
 	testLatchBlocks(t, lg3C)
@@ -181,12 +184,12 @@ func TestLatchManagerMultipleOverlappingLatches(t *testing.T) {
 	var m Manager
 
 	// Acquire multiple latches.
-	lg1C := m.MustAcquireCh(spans("a", "", write), zeroTS)
-	lg2C := m.MustAcquireCh(spans("b", "c", write), zeroTS)
-	lg3C := m.MustAcquireCh(spans("a", "d", write), zeroTS)
+	lg1C := m.MustAcquireCh(spans("a", "", write, zeroTS))
+	lg2C := m.MustAcquireCh(spans("b", "c", write, zeroTS))
+	lg3C := m.MustAcquireCh(spans("a", "d", write, zeroTS))
 
 	// Attempt to acquire latch which overlaps them all.
-	lg4C := m.MustAcquireCh(spans("0", "z", write), zeroTS)
+	lg4C := m.MustAcquireCh(spans("0", "z", write, zeroTS))
 	testLatchBlocks(t, lg4C)
 	m.Release(<-lg1C)
 	testLatchBlocks(t, lg4C)
@@ -201,17 +204,17 @@ func TestLatchManagerMultipleOverlappingSpans(t *testing.T) {
 	var m Manager
 
 	// Acquire multiple latches.
-	lg1 := m.MustAcquire(spans("a", "", write), zeroTS)
-	lg2 := m.MustAcquire(spans("b", "c", read), zeroTS)
-	lg3 := m.MustAcquire(spans("d", "f", write), zeroTS)
-	lg4 := m.MustAcquire(spans("g", "", write), zeroTS)
+	lg1 := m.MustAcquire(spans("a", "", write, zeroTS))
+	lg2 := m.MustAcquire(spans("b", "c", read, zeroTS))
+	lg3 := m.MustAcquire(spans("d", "f", write, zeroTS))
+	lg4 := m.MustAcquire(spans("g", "", write, zeroTS))
 
 	// Attempt to acquire latches overlapping each of them.
 	var spans spanset.SpanSet
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("a")})
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("b")})
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("e")})
-	lg5C := m.MustAcquireCh(&spans, zeroTS)
+	spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("a")})
+	spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("b")})
+	spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("e")})
+	lg5C := m.MustAcquireCh(&spans)
 
 	// Blocks until the first three prerequisite latches release.
 	testLatchBlocks(t, lg5C)
@@ -231,185 +234,163 @@ func TestLatchManagerDependentLatches(t *testing.T) {
 	cases := []struct {
 		name      string
 		sp1       *spanset.SpanSet
-		ts1       hlc.Timestamp
 		sp2       *spanset.SpanSet
-		ts2       hlc.Timestamp
 		dependent bool
 	}{
 		{
 			name:      "point writes, same key",
-			sp1:       spans("a", "", write),
-			sp2:       spans("a", "", write),
+			sp1:       spans("a", "", write, zeroTS),
+			sp2:       spans("a", "", write, zeroTS),
 			dependent: true,
 		},
 		{
 			name:      "point writes, different key",
-			sp1:       spans("a", "", write),
-			sp2:       spans("b", "", write),
+			sp1:       spans("a", "", write, zeroTS),
+			sp2:       spans("b", "", write, zeroTS),
 			dependent: false,
 		},
 		{
 			name:      "range writes, overlapping span",
-			sp1:       spans("a", "c", write),
-			sp2:       spans("b", "d", write),
+			sp1:       spans("a", "c", write, zeroTS),
+			sp2:       spans("b", "d", write, zeroTS),
 			dependent: true,
 		},
 		{
 			name:      "range writes, non-overlapping span",
-			sp1:       spans("a", "b", write),
-			sp2:       spans("b", "c", write),
+			sp1:       spans("a", "b", write, zeroTS),
+			sp2:       spans("b", "c", write, zeroTS),
 			dependent: false,
 		},
 		{
 			name:      "point reads, same key",
-			sp1:       spans("a", "", read),
-			sp2:       spans("a", "", read),
+			sp1:       spans("a", "", read, zeroTS),
+			sp2:       spans("a", "", read, zeroTS),
 			dependent: false,
 		},
 		{
 			name:      "point reads, different key",
-			sp1:       spans("a", "", read),
-			sp2:       spans("b", "", read),
+			sp1:       spans("a", "", read, zeroTS),
+			sp2:       spans("b", "", read, zeroTS),
 			dependent: false,
 		},
 		{
 			name:      "range reads, overlapping span",
-			sp1:       spans("a", "c", read),
-			sp2:       spans("b", "d", read),
+			sp1:       spans("a", "c", read, zeroTS),
+			sp2:       spans("b", "d", read, zeroTS),
 			dependent: false,
 		},
 		{
 			name:      "range reads, non-overlapping span",
-			sp1:       spans("a", "b", read),
-			sp2:       spans("b", "c", read),
+			sp1:       spans("a", "b", read, zeroTS),
+			sp2:       spans("b", "c", read, zeroTS),
 			dependent: false,
 		},
 		{
 			name:      "read and write, same ts",
-			sp1:       spans("a", "", write),
-			ts1:       hlc.Timestamp{WallTime: 1},
-			sp2:       spans("a", "", read),
-			ts2:       hlc.Timestamp{WallTime: 1},
+			sp1:       spans("a", "", write, hlc.Timestamp{WallTime: 1}),
+			sp2:       spans("a", "", read, hlc.Timestamp{WallTime: 1}),
 			dependent: true,
 		},
 		{
 			name:      "read and write, causal ts",
-			sp1:       spans("a", "", write),
-			ts1:       hlc.Timestamp{WallTime: 1},
-			sp2:       spans("a", "", read),
-			ts2:       hlc.Timestamp{WallTime: 2},
+			sp1:       spans("a", "", write, hlc.Timestamp{WallTime: 1}),
+			sp2:       spans("a", "", read, hlc.Timestamp{WallTime: 2}),
 			dependent: true,
 		},
 		{
 			name:      "read and write, non-causal ts",
-			sp1:       spans("a", "", write),
-			ts1:       hlc.Timestamp{WallTime: 2},
-			sp2:       spans("a", "", read),
-			ts2:       hlc.Timestamp{WallTime: 1},
+			sp1:       spans("a", "", write, hlc.Timestamp{WallTime: 2}),
+			sp2:       spans("a", "", read, hlc.Timestamp{WallTime: 1}),
 			dependent: false,
 		},
 		{
 			name:      "read and write, zero ts read",
-			sp1:       spans("a", "", write),
-			ts1:       hlc.Timestamp{WallTime: 1},
-			sp2:       spans("a", "", read),
-			ts2:       hlc.Timestamp{WallTime: 0},
+			sp1:       spans("a", "", write, hlc.Timestamp{WallTime: 1}),
+			sp2:       spans("a", "", read, hlc.Timestamp{WallTime: 0}),
 			dependent: true,
 		},
 		{
 			name:      "read and write, zero ts write",
-			sp1:       spans("a", "", write),
-			ts1:       hlc.Timestamp{WallTime: 0},
-			sp2:       spans("a", "", read),
-			ts2:       hlc.Timestamp{WallTime: 1},
+			sp1:       spans("a", "", write, hlc.Timestamp{WallTime: 0}),
+			sp2:       spans("a", "", read, hlc.Timestamp{WallTime: 1}),
 			dependent: true,
 		},
 		{
 			name:      "read and write, non-overlapping",
-			sp1:       spans("a", "b", write),
-			sp2:       spans("b", "", read),
+			sp1:       spans("a", "b", write, zeroTS),
+			sp2:       spans("b", "", read, zeroTS),
 			dependent: false,
 		},
 		{
 			name:      "local range writes, overlapping span",
-			sp1:       spans("local a", "local c", write),
-			sp2:       spans("local b", "local d", write),
+			sp1:       spans("local a", "local c", write, zeroTS),
+			sp2:       spans("local b", "local d", write, zeroTS),
 			dependent: true,
 		},
 		{
 			name:      "local range writes, non-overlapping span",
-			sp1:       spans("local a", "local b", write),
-			sp2:       spans("local b", "local c", write),
+			sp1:       spans("local a", "local b", write, zeroTS),
+			sp2:       spans("local b", "local c", write, zeroTS),
 			dependent: false,
 		},
 		{
 			name:      "local range reads, overlapping span",
-			sp1:       spans("local a", "local c", read),
-			sp2:       spans("local b", "local d", read),
+			sp1:       spans("local a", "local c", read, zeroTS),
+			sp2:       spans("local b", "local d", read, zeroTS),
 			dependent: false,
 		},
 		{
 			name:      "local range reads, non-overlapping span",
-			sp1:       spans("local a", "local b", read),
-			sp2:       spans("local b", "local c", read),
+			sp1:       spans("local a", "local b", read, zeroTS),
+			sp2:       spans("local b", "local c", read, zeroTS),
 			dependent: false,
 		},
 		{
 			name:      "local read and write, same ts",
-			sp1:       spans("local a", "", write),
-			ts1:       hlc.Timestamp{WallTime: 1},
-			sp2:       spans("local a", "", read),
-			ts2:       hlc.Timestamp{WallTime: 1},
+			sp1:       spans("local a", "", write, hlc.Timestamp{WallTime: 1}),
+			sp2:       spans("local a", "", read, hlc.Timestamp{WallTime: 1}),
 			dependent: true,
 		},
 		{
 			name:      "local read and write, causal ts",
-			sp1:       spans("local a", "", write),
-			ts1:       hlc.Timestamp{WallTime: 1},
-			sp2:       spans("local a", "", read),
-			ts2:       hlc.Timestamp{WallTime: 2},
+			sp1:       spans("local a", "", write, hlc.Timestamp{WallTime: 1}),
+			sp2:       spans("local a", "", read, hlc.Timestamp{WallTime: 2}),
 			dependent: true,
 		},
 		{
 			name:      "local read and write, non-causal ts",
-			sp1:       spans("local a", "", write),
-			ts1:       hlc.Timestamp{WallTime: 2},
-			sp2:       spans("local a", "", read),
-			ts2:       hlc.Timestamp{WallTime: 1},
+			sp1:       spans("local a", "", write, hlc.Timestamp{WallTime: 2}),
+			sp2:       spans("local a", "", read, hlc.Timestamp{WallTime: 1}),
 			dependent: true,
 		},
 		{
 			name:      "local read and write, zero ts read",
-			sp1:       spans("local a", "", write),
-			ts1:       hlc.Timestamp{WallTime: 1},
-			sp2:       spans("local a", "", read),
-			ts2:       hlc.Timestamp{WallTime: 0},
+			sp1:       spans("local a", "", write, hlc.Timestamp{WallTime: 1}),
+			sp2:       spans("local a", "", read, hlc.Timestamp{WallTime: 0}),
 			dependent: true,
 		},
 		{
 			name:      "local read and write, zero ts write",
-			sp1:       spans("local a", "", write),
-			ts1:       hlc.Timestamp{WallTime: 0},
-			sp2:       spans("local a", "", read),
-			ts2:       hlc.Timestamp{WallTime: 1},
+			sp1:       spans("local a", "", write, hlc.Timestamp{WallTime: 0}),
+			sp2:       spans("local a", "", read, hlc.Timestamp{WallTime: 1}),
 			dependent: true,
 		},
 		{
 			name:      "local read and write, non-overlapping",
-			sp1:       spans("a", "b", write),
-			sp2:       spans("b", "", read),
+			sp1:       spans("a", "b", write, zeroTS),
+			sp2:       spans("b", "", read, zeroTS),
 			dependent: false,
 		},
 		{
 			name:      "local read and global write, overlapping",
-			sp1:       spans("a", "b", write),
-			sp2:       spans("local b", "", read),
+			sp1:       spans("a", "b", write, zeroTS),
+			sp2:       spans("local b", "", read, zeroTS),
 			dependent: false,
 		},
 		{
 			name:      "local write and global read, overlapping",
-			sp1:       spans("local a", "local b", write),
-			sp2:       spans("b", "", read),
+			sp1:       spans("local a", "local b", write, zeroTS),
+			sp2:       spans("b", "", read, zeroTS),
 			dependent: false,
 		},
 	}
@@ -419,12 +400,11 @@ func TestLatchManagerDependentLatches(t *testing.T) {
 				c := c
 				if inv {
 					c.sp1, c.sp2 = c.sp2, c.sp1
-					c.ts1, c.ts2 = c.ts2, c.ts1
 				}
 
 				var m Manager
-				lg1 := m.MustAcquire(c.sp1, c.ts1)
-				lg2C := m.MustAcquireCh(c.sp2, c.ts2)
+				lg1 := m.MustAcquire(c.sp1)
+				lg2C := m.MustAcquireCh(c.sp2)
 				if c.dependent {
 					testLatchBlocks(t, lg2C)
 					m.Release(lg1)
@@ -445,11 +425,11 @@ func TestLatchManagerContextCancellation(t *testing.T) {
 	var m Manager
 
 	// Attempt to acquire three latches that all block on each other.
-	lg1 := m.MustAcquire(spans("a", "", write), zeroTS)
+	lg1 := m.MustAcquire(spans("a", "", write, zeroTS))
 	// The second one is given a cancelable context.
 	ctx2, cancel2 := context.WithCancel(context.Background())
-	lg2C := m.MustAcquireChCtx(ctx2, spans("a", "", write), zeroTS)
-	lg3C := m.MustAcquireCh(spans("a", "", write), zeroTS)
+	lg2C := m.MustAcquireChCtx(ctx2, spans("a", "", write, zeroTS))
+	lg3C := m.MustAcquireCh(spans("a", "", write, zeroTS))
 
 	// The second and third latch attempt block on the first.
 	testLatchBlocks(t, lg2C)
@@ -471,14 +451,14 @@ func BenchmarkLatchManagerReadOnlyMix(b *testing.B) {
 	for _, size := range []int{1, 4, 16, 64, 128, 256} {
 		b.Run(fmt.Sprintf("size=%d", size), func(b *testing.B) {
 			var m Manager
-			ss := spans("a", "b", read)
+			ss := spans("a", "b", read, zeroTS)
 			for i := 0; i < size; i++ {
-				_ = m.MustAcquire(ss, zeroTS)
+				_ = m.MustAcquire(ss)
 			}
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = m.MustAcquire(ss, zeroTS)
+				_ = m.MustAcquire(ss)
 			}
 		})
 	}
@@ -498,20 +478,17 @@ func BenchmarkLatchManagerReadWriteMix(b *testing.B) {
 				if bytes.Compare(a, b) > 0 {
 					a, b = b, a
 				}
-				span := roachpb.Span{
-					Key:    roachpb.Key(a),
-					EndKey: roachpb.Key(b),
-				}
+				span := roachpb.Span{Key: a, EndKey: b}
 				access := spanset.SpanReadOnly
 				if i%(readsPerWrite+1) == 0 {
 					access = spanset.SpanReadWrite
 				}
-				spans[i].Add(access, span)
+				spans[i].AddNonMVCC(access, span)
 			}
 
 			b.ResetTimer()
 			for i := range spans {
-				lg, snap := m.sequence(&spans[i], zeroTS)
+				lg, snap := m.sequence(&spans[i])
 				snap.close()
 				if len(lgBuf) == cap(lgBuf) {
 					m.Release(<-lgBuf)

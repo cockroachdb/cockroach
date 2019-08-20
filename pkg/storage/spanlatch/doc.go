@@ -10,7 +10,7 @@
 
 /*
 Package spanlatch provides a latch management structure for serializing access
-to keys and key ranges. Latch acquitions affecting keys or key ranges must wait
+to keys and key ranges. Latch acquisitions affecting keys or key ranges must wait
 on already-acquired latches which overlap their key range to be released.
 
 The evolution of complexity can best be understood as a series of incremental

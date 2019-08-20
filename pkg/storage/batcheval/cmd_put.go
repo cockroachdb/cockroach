@@ -13,14 +13,29 @@ package batcheval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 func init() {
-	RegisterCommand(roachpb.Put, DefaultDeclareKeys, Put)
+	RegisterCommand(roachpb.Put, declareKeysPut, Put)
+}
+
+func declareKeysPut(
+	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+) {
+	args := req.(*roachpb.PutRequest)
+	access := spanset.SpanReadWrite
+
+	if args.Inline || keys.IsLocal(req.Header().Span().Key) {
+		spans.AddNonMVCC(access, req.Header().Span())
+	} else {
+		spans.AddMVCC(access, req.Header().Span(), header.Timestamp)
+	}
 }
 
 // Put sets the value for a specified key.

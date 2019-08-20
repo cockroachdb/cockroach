@@ -407,6 +407,8 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			batch = opLogger
 		}
 		if util.RaceEnabled {
+			// See comment in Replica.collectSpans for why we don't assert on access
+			// timestamps using spanset.NewBatchAt.
 			batch = spanset.NewBatch(batch, spans)
 		}
 

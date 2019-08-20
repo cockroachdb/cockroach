@@ -58,7 +58,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -72,12 +72,12 @@ import (
 // care about properly declaring their spans.
 var allSpans = func() spanset.SpanSet {
 	var ss spanset.SpanSet
-	ss.Add(spanset.SpanReadWrite, roachpb.Span{
+	ss.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 		Key:    roachpb.KeyMin,
 		EndKey: roachpb.KeyMax,
 	})
 	// Local keys (see `keys.localPrefix`).
-	ss.Add(spanset.SpanReadWrite, roachpb.Span{
+	ss.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 		Key:    append([]byte("\x01"), roachpb.KeyMin...),
 		EndKey: append([]byte("\x01"), roachpb.KeyMax...),
 	})
