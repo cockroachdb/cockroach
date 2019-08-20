@@ -166,18 +166,33 @@ func TestGetProjectionOperator(t *testing.T) {
 
 func benchmarkProjOp(
 	b *testing.B,
-	makeProjOp func(source *RepeatableBatchSource) Operator,
+	makeProjOp func(source *RepeatableBatchSource, intType coltypes.T) Operator,
 	useSelectionVector bool,
 	hasNulls bool,
+	intType coltypes.T,
 ) {
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
-	col1 := batch.ColVec(0).Int64()
-	col2 := batch.ColVec(1).Int64()
-	for i := int64(0); i < coldata.BatchSize; i++ {
-		col1[i] = 1
-		col2[i] = 1
+	var batch coldata.Batch
+	switch intType {
+	case coltypes.Int64:
+		batch = coldata.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
+		col1 := batch.ColVec(0).Int64()
+		col2 := batch.ColVec(1).Int64()
+		for i := int64(0); i < coldata.BatchSize; i++ {
+			col1[i] = 1
+			col2[i] = 1
+		}
+	case coltypes.Int32:
+		batch = coldata.NewMemBatch([]coltypes.T{coltypes.Int32, coltypes.Int32, coltypes.Int32})
+		col1 := batch.ColVec(0).Int32()
+		col2 := batch.ColVec(1).Int32()
+		for i := int32(0); i < coldata.BatchSize; i++ {
+			col1[i] = 1
+			col2[i] = 1
+		}
+	default:
+		b.Fatalf("unsupported type: %s", intType)
 	}
 	if hasNulls {
 		for i := 0; i < coldata.BatchSize; i++ {
@@ -200,7 +215,7 @@ func benchmarkProjOp(
 	source := NewRepeatableBatchSource(batch)
 	source.Init()
 
-	op := makeProjOp(source)
+	op := makeProjOp(source, intType)
 	op.Init()
 
 	b.SetBytes(int64(8 * coldata.BatchSize * 2))
@@ -210,47 +225,102 @@ func benchmarkProjOp(
 }
 
 func BenchmarkProjOp(b *testing.B) {
-	projOpMap := map[string]func(*RepeatableBatchSource) Operator{
-		"projPlusInt64Int64Op": func(source *RepeatableBatchSource) Operator {
-			return &projPlusInt64Int64Op{
-				OneInputNode: NewOneInputNode(source),
-				col1Idx:      0,
-				col2Idx:      1,
-				outputIdx:    2,
+	projOpMap := map[string]func(*RepeatableBatchSource, coltypes.T) Operator{
+		"projPlusIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
+			switch intType {
+			case coltypes.Int64:
+				return &projPlusInt64Int64Op{
+					OneInputNode: NewOneInputNode(source),
+					col1Idx:      0,
+					col2Idx:      1,
+					outputIdx:    2,
+				}
+			case coltypes.Int32:
+				return &projPlusInt32Int32Op{
+					OneInputNode: NewOneInputNode(source),
+					col1Idx:      0,
+					col2Idx:      1,
+					outputIdx:    2,
+				}
+			default:
+				b.Fatalf("unsupported type: %s", intType)
+				return nil
 			}
 		},
-		"projMinusInt64Int64Op": func(source *RepeatableBatchSource) Operator {
-			return &projMinusInt64Int64Op{
-				OneInputNode: NewOneInputNode(source),
-				col1Idx:      0,
-				col2Idx:      1,
-				outputIdx:    2,
+		"projMinusIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
+			switch intType {
+			case coltypes.Int64:
+				return &projMinusInt64Int64Op{
+					OneInputNode: NewOneInputNode(source),
+					col1Idx:      0,
+					col2Idx:      1,
+					outputIdx:    2,
+				}
+			case coltypes.Int32:
+				return &projMinusInt32Int32Op{
+					OneInputNode: NewOneInputNode(source),
+					col1Idx:      0,
+					col2Idx:      1,
+					outputIdx:    2,
+				}
+			default:
+				b.Fatalf("unsupported type: %s", intType)
+				return nil
 			}
 		},
-		"projMultInt64Int64Op": func(source *RepeatableBatchSource) Operator {
-			return &projMultInt64Int64Op{
-				OneInputNode: NewOneInputNode(source),
-				col1Idx:      0,
-				col2Idx:      1,
-				outputIdx:    2,
+		"projMultIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
+			switch intType {
+			case coltypes.Int64:
+				return &projMultInt64Int64Op{
+					OneInputNode: NewOneInputNode(source),
+					col1Idx:      0,
+					col2Idx:      1,
+					outputIdx:    2,
+				}
+			case coltypes.Int32:
+				return &projMultInt32Int32Op{
+					OneInputNode: NewOneInputNode(source),
+					col1Idx:      0,
+					col2Idx:      1,
+					outputIdx:    2,
+				}
+			default:
+				b.Fatalf("unsupported type: %s", intType)
+				return nil
 			}
 		},
-		"projDivInt64Int64Op": func(source *RepeatableBatchSource) Operator {
-			return &projDivInt64Int64Op{
-				OneInputNode: NewOneInputNode(source),
-				col1Idx:      0,
-				col2Idx:      1,
-				outputIdx:    2,
+		"projDivIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
+			switch intType {
+			case coltypes.Int64:
+				return &projDivInt64Int64Op{
+					OneInputNode: NewOneInputNode(source),
+					col1Idx:      0,
+					col2Idx:      1,
+					outputIdx:    2,
+				}
+			case coltypes.Int32:
+				return &projDivInt32Int32Op{
+					OneInputNode: NewOneInputNode(source),
+					col1Idx:      0,
+					col2Idx:      1,
+					outputIdx:    2,
+				}
+			default:
+				b.Fatalf("unsupported type: %s", intType)
+				return nil
 			}
 		},
 	}
 
 	for projOp, makeProjOp := range projOpMap {
-		for _, useSel := range []bool{true, false} {
-			for _, hasNulls := range []bool{true, false} {
-				b.Run(fmt.Sprintf("op=%s/useSel=%t/hasNulls=%t", projOp, useSel, hasNulls), func(b *testing.B) {
-					benchmarkProjOp(b, makeProjOp, useSel, hasNulls)
-				})
+		for _, intType := range []coltypes.T{coltypes.Int64, coltypes.Int32} {
+			for _, useSel := range []bool{true, false} {
+				for _, hasNulls := range []bool{true, false} {
+					b.Run(fmt.Sprintf("op=%s/type=%s/useSel=%t/hasNulls=%t",
+						projOp, intType, useSel, hasNulls), func(b *testing.B) {
+						benchmarkProjOp(b, makeProjOp, useSel, hasNulls, intType)
+					})
+				}
 			}
 		}
 	}
