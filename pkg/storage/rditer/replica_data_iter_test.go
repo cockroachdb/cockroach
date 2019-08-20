@@ -136,11 +136,11 @@ func verifyRDIter(
 				Key:    keys.MakeRangeKeyPrefix(desc.StartKey),
 				EndKey: keys.MakeRangeKeyPrefix(desc.EndKey),
 			})
-			spans.Add(spanset.SpanReadOnly, roachpb.Span{
+			spans.AddAt(spanset.SpanReadOnly, roachpb.Span{
 				Key:    desc.StartKey.AsRawKey(),
 				EndKey: desc.EndKey.AsRawKey(),
-			})
-			eng = spanset.NewReadWriter(eng, &spans)
+			}, hlc.Timestamp{WallTime: 42})
+			eng = spanset.NewReadWriterAt(eng, &spans, hlc.Timestamp{WallTime: 42})
 		}
 		iter := NewReplicaDataIterator(desc, eng, replicatedOnly)
 		defer iter.Close()

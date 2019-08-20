@@ -17,11 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
-// SpanAccess records the intended mode of access in SpanSet.
+// SpanAccess records the intended mode of access in a SpanSet.
 type SpanAccess int
 
 // Constants for SpanAccess. Higher-valued accesses imply lower-level ones.
@@ -65,21 +66,26 @@ func (a SpanScope) String() string {
 	}
 }
 
-// SpanSet tracks the set of key spans touched by a command. The set
-// is divided into subsets for access type (read-only or read/write)
-// and key scope (local or global; used to facilitate use by the
-// separate local and global latches).
-type SpanSet struct {
-	spans [NumSpanAccess][NumSpanScope][]roachpb.Span
+type Span struct {
+	roachpb.Span
+	Timestamp hlc.Timestamp
 }
 
-// String prints a string representation of the span set.
-func (ss *SpanSet) String() string {
+// SpanSet tracks the set of key spans touched by a command and at what
+// timestamps. The set is divided into subsets for access type (read-only or
+// read/write) and key scope (local or global; used to facilitate use by the
+// separate local and global latches).
+type SpanSet struct {
+	spans [NumSpanAccess][NumSpanScope][]Span
+}
+
+// String prints a string representation of the SpanSet.
+func (s *SpanSet) String() string {
 	var buf strings.Builder
-	for i := SpanAccess(0); i < NumSpanAccess; i++ {
-		for j := SpanScope(0); j < NumSpanScope; j++ {
-			for _, span := range ss.GetSpans(i, j) {
-				fmt.Fprintf(&buf, "%s %s: %s\n", i, j, span)
+	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
+		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
+			for _, sl := range s.GetSpans(sa, ss) {
+				fmt.Fprintf(&buf, "%s %s: %s at %s\n", sa, ss, sl.Span.String(), sl.Timestamp.String())
 			}
 		}
 	}
@@ -87,96 +93,149 @@ func (ss *SpanSet) String() string {
 }
 
 // Len returns the total number of spans tracked across all accesses and scopes.
-func (ss *SpanSet) Len() int {
+func (s *SpanSet) Len() int {
 	var count int
-	for i := SpanAccess(0); i < NumSpanAccess; i++ {
-		for j := SpanScope(0); j < NumSpanScope; j++ {
-			count += len(ss.GetSpans(i, j))
+	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
+		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
+			count += len(s.GetSpans(sa, ss))
 		}
 	}
 	return count
 }
 
-// Reserve space for N additional keys.
-func (ss *SpanSet) Reserve(access SpanAccess, scope SpanScope, n int) {
-	existing := ss.spans[access][scope]
-	ss.spans[access][scope] = make([]roachpb.Span, len(existing), n+cap(existing))
-	copy(ss.spans[access][scope], existing)
+// Reserve space for N additional spans.
+func (s *SpanSet) Reserve(access SpanAccess, scope SpanScope, n int) {
+	existing := s.spans[access][scope]
+	s.spans[access][scope] = make([]Span, len(existing), n+cap(existing))
+	copy(s.spans[access][scope], existing)
 }
 
-// Add a span to the set.
-func (ss *SpanSet) Add(access SpanAccess, span roachpb.Span) {
+// Add a span to the set without an associated timestamp. This should typically
+// be used for non-MVCC access, for local keys for e.g.
+func (s *SpanSet) Add(access SpanAccess, span roachpb.Span) {
+	s.AddAt(access, span, hlc.Timestamp{})
+}
+
+// AddAt adds a span to the set to be accessed at the given timestamp.
+func (s *SpanSet) AddAt(access SpanAccess, span roachpb.Span, timestamp hlc.Timestamp) {
 	scope := SpanGlobal
 	if keys.IsLocal(span.Key) {
 		scope = SpanLocal
 	}
-	ss.spans[access][scope] = append(ss.spans[access][scope], span)
+
+	s.spans[access][scope] = append(s.spans[access][scope], Span{Span: span, Timestamp: timestamp})
 }
 
 // SortAndDedup sorts the spans in the SpanSet and removes any duplicates.
-func (ss *SpanSet) SortAndDedup() {
-	for i := SpanAccess(0); i < NumSpanAccess; i++ {
-		for j := SpanScope(0); j < NumSpanScope; j++ {
-			ss.spans[i][j], _ /* distinct */ = roachpb.MergeSpans(ss.spans[i][j])
+func (s *SpanSet) SortAndDedup() {
+	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
+		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
+			s.spans[sa][ss], _ /* distinct */ = mergeSpans(s.spans[sa][ss])
 		}
 	}
 }
 
-// GetSpans returns a slice of spans with the given parameters.
-func (ss *SpanSet) GetSpans(access SpanAccess, scope SpanScope) []roachpb.Span {
-	return ss.spans[access][scope]
+// GetSpanLatches returns a slice of spans with the given parameters.
+func (s *SpanSet) GetSpans(access SpanAccess, scope SpanScope) []Span {
+	return s.spans[access][scope]
 }
 
 // BoundarySpan returns a span containing all the spans with the given params.
-func (ss *SpanSet) BoundarySpan(scope SpanScope) roachpb.Span {
+func (s *SpanSet) BoundarySpan(scope SpanScope) roachpb.Span {
 	var boundary roachpb.Span
-	for i := SpanAccess(0); i < NumSpanAccess; i++ {
-		for _, span := range ss.spans[i][scope] {
+	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
+		for _, sl := range s.spans[sa][scope] {
 			if !boundary.Valid() {
-				boundary = span
+				boundary = sl.Span
 				continue
 			}
-			boundary = boundary.Combine(span)
+			boundary = boundary.Combine(sl.Span)
 		}
 	}
 	return boundary
 }
 
-// AssertAllowed calls checkAllowed and fatals if the access is not allowed.
-func (ss *SpanSet) AssertAllowed(access SpanAccess, span roachpb.Span) {
-	if err := ss.CheckAllowed(access, span); err != nil {
+// AssertAllowed calls CheckAllowed and fatals if the access is not allowed.
+// Timestamps associated with the spans in the spanset are not considered,
+// only the span boundaries are checked.
+func (s *SpanSet) AssertAllowed(access SpanAccess, span roachpb.Span) {
+	if err := s.CheckAllowed(access, span); err != nil {
 		log.Fatal(context.TODO(), err)
 	}
 }
 
-// CheckAllowed returns an error if the access is not allowed.
-func (ss *SpanSet) CheckAllowed(access SpanAccess, span roachpb.Span) error {
+// CheckAllowed returns an error if the access is not allowed over the given keyspan.
+// Timestamps associated with the spans in the spanset are not considered,
+// only the span boundaries are checked.
+func (s *SpanSet) CheckAllowed(access SpanAccess, span roachpb.Span) error {
 	scope := SpanGlobal
 	if keys.IsLocal(span.Key) {
 		scope = SpanLocal
 	}
+
 	for ac := access; ac < NumSpanAccess; ac++ {
-		for _, s := range ss.spans[ac][scope] {
-			if s.Contains(span) {
+		for _, sl := range s.spans[ac][scope] {
+			if sl.Contains(span) {
 				return nil
 			}
 		}
 	}
 
-	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s", access, span, ss)
+	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s", access, span, s)
 }
 
-// Validate returns an error if any spans that have been added to the set
-// are invalid.
-func (ss *SpanSet) Validate() error {
-	for _, accessSpans := range ss.spans {
-		for _, spans := range accessSpans {
-			for _, span := range spans {
-				if len(span.EndKey) > 0 && span.Key.Compare(span.EndKey) >= 0 {
-					return errors.Errorf("inverted span %s %s", span.Key, span.EndKey)
+// CheckAllowedAt returns an error if the access is not allowed at over the given keyspan
+// at the given timestamp.
+func (s *SpanSet) CheckAllowedAt(
+	access SpanAccess, span roachpb.Span, timestamp hlc.Timestamp,
+) error {
+	scope := SpanGlobal
+	if keys.IsLocal(span.Key) {
+		scope = SpanLocal
+	}
+
+	for ac := access; ac < NumSpanAccess; ac++ {
+		for _, sl := range s.spans[ac][scope] {
+			if sl.Contains(span) {
+				if sl.Timestamp.IsEmpty() {
+					// When the span is acquired as non-MVCC (i.e. with an empty
+					// timestamp), it's equivalent to a read/write mutex where we don't
+					// consider access timestamps.
+					return nil
+				}
+
+				if access == SpanReadWrite {
+					// Writes under a write span with an associated timestamp at that
+					// specific timestamp.
+					if timestamp == sl.Timestamp {
+						return nil
+					}
+				} else {
+					// Read spans acquired at a specific timestamp only allow reads at
+					// that timestamp and below. Non-MVCC access is not allowed.
+					if !timestamp.IsEmpty() && (timestamp.Less(sl.Timestamp) || timestamp == sl.Timestamp) {
+						return nil
+					}
 				}
 			}
 		}
 	}
+
+	return errors.Errorf("cannot %s undeclared span %s at %s\ndeclared:\n%s", access, span, timestamp.String(), s)
+}
+
+// Validate returns an error if any spans that have been added to the set
+// are invalid.
+func (s *SpanSet) Validate() error {
+	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
+		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
+			for _, sl := range s.GetSpans(sa, ss) {
+				if len(sl.EndKey) > 0 && sl.Key.Compare(sl.EndKey) >= 0 {
+					return errors.Errorf("inverted span %s %s", sl.Key, sl.EndKey)
+				}
+			}
+		}
+	}
+
 	return nil
 }

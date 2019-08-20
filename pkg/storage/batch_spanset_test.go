@@ -27,7 +27,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func TestSpanSetBatch(t *testing.T) {
+func TestSpanSetBatchBoundaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	defer eng.Close()
@@ -60,7 +60,7 @@ func TestSpanSetBatch(t *testing.T) {
 	}
 
 	// Writes outside the range fail. We try to cover all write methods
-	// in the failure case to make sure the checkAllowed call is
+	// in the failure case to make sure the CheckAllowed call is
 	// present, but we don't attempt successful versions of all
 	// methods since those are harder to set up.
 	isWriteSpanErr := func(err error) bool {
@@ -115,7 +115,7 @@ func TestSpanSetBatch(t *testing.T) {
 		t.Errorf("Iterate: unexpected error %v", err)
 	}
 
-	func() {
+	{
 		iter := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
 
@@ -147,7 +147,7 @@ func TestSpanSetBatch(t *testing.T) {
 			// Scanning out of bounds sets Valid() to false but is not an error.
 			t.Errorf("unexpected error on iterator: %+v", err)
 		}
-	}()
+	}
 
 	// Same test in reverse. We commit the batch and wrap an iterator on
 	// the raw engine because we don't support bidirectional iteration
@@ -187,6 +187,247 @@ func TestSpanSetBatch(t *testing.T) {
 	iter.SeekReverse(insideKey)
 	if ok, err := iter.Valid(); !ok {
 		t.Fatalf("expected valid iterator, err=%v", err)
+	}
+}
+
+func TestSpanSetBatchTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+	defer eng.Close()
+
+	var ss spanset.SpanSet
+	ss.AddAt(spanset.SpanReadOnly, roachpb.Span{
+		Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}, hlc.Timestamp{WallTime: 2})
+	ss.AddAt(spanset.SpanReadWrite, roachpb.Span{
+		Key: roachpb.Key("d"), EndKey: roachpb.Key("f")}, hlc.Timestamp{WallTime: 2})
+
+	rkey := engine.MakeMVCCMetadataKey(roachpb.Key("b"))
+	wkey := engine.MakeMVCCMetadataKey(roachpb.Key("e"))
+
+	value := []byte("value")
+
+	// Write value that we can try to read later.
+	if err := eng.Put(rkey, value); err != nil {
+		t.Fatalf("direct write failed: %+v", err)
+	}
+
+	batchNonMVCC := spanset.NewBatchAt(eng.NewBatch(), &ss, hlc.Timestamp{WallTime: 0})
+	defer batchNonMVCC.Close()
+
+	batchBefore := spanset.NewBatchAt(eng.NewBatch(), &ss, hlc.Timestamp{WallTime: 1})
+	defer batchBefore.Close()
+
+	batchDuring := spanset.NewBatchAt(eng.NewBatch(), &ss, hlc.Timestamp{WallTime: 2})
+	defer batchDuring.Close()
+
+	batchAfter := spanset.NewBatchAt(eng.NewBatch(), &ss, hlc.Timestamp{WallTime: 3})
+	defer batchAfter.Close()
+
+	// Writes.
+	if err := batchDuring.Put(wkey, value); err != nil {
+		t.Fatalf("failed to write inside the range at same ts as latch declaration: %+v", err)
+	}
+
+	for _, batch := range []engine.Batch{batchAfter, batchBefore, batchNonMVCC} {
+		if err := batch.Put(wkey, value); err == nil {
+			t.Fatalf("was able to write inside the range at ts greater than latch declaration: %+v", err)
+		}
+	}
+
+	// We try to cover all write methods in the failure case to make sure
+	// the CheckAllowedAt call is present, but we don't attempt to successful
+	// versions of all methods since those are harder to set up.
+	isWriteSpanErr := func(err error) bool {
+		return testutils.IsError(err, "cannot write undeclared span")
+	}
+
+	for _, batch := range []engine.Batch{batchAfter, batchBefore, batchNonMVCC} {
+		if err := batch.Clear(wkey); !isWriteSpanErr(err) {
+			t.Errorf("Clear: unexpected error %v", err)
+		}
+		{
+			iter := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+			err := batch.ClearIterRange(iter, wkey, wkey)
+			iter.Close()
+			if !isWriteSpanErr(err) {
+				t.Errorf("ClearIterRange: unexpected error %v", err)
+			}
+		}
+		if err := batch.Merge(wkey, nil); !isWriteSpanErr(err) {
+			t.Errorf("Merge: unexpected error %v", err)
+		}
+		if err := batch.Put(wkey, nil); !isWriteSpanErr(err) {
+			t.Errorf("Put: unexpected error %v", err)
+		}
+	}
+
+	// Reads.
+	for _, batch := range []engine.Batch{batchBefore, batchDuring} {
+		//lint:ignore SA1019 historical usage of deprecated batch.Get is OK
+		if res, err := batch.Get(rkey); err != nil {
+			t.Errorf("failed to read inside the range: %+v", err)
+		} else if !bytes.Equal(res, value) {
+			t.Errorf("failed to read previously written value, got %q", res)
+		}
+	}
+
+	isReadSpanErr := func(err error) bool {
+		return testutils.IsError(err, "cannot read undeclared span")
+	}
+
+	for _, batch := range []engine.Batch{batchAfter, batchNonMVCC} {
+		//lint:ignore SA1019 historical usage of deprecated batch.Get is OK
+		if _, err := batch.Get(rkey); !isReadSpanErr(err) {
+			t.Errorf("Get: unexpected error %v", err)
+		}
+
+		//lint:ignore SA1019 historical usage of deprecated batch.GetProto is OK
+		if _, _, _, err := batch.GetProto(rkey, nil); !isReadSpanErr(err) {
+			t.Errorf("GetProto: unexpected error %v", err)
+		}
+		if err := batch.Iterate(rkey, rkey,
+			func(v engine.MVCCKeyValue) (bool, error) {
+				return false, errors.Errorf("unexpected callback: %v", v)
+			},
+		); !isReadSpanErr(err) {
+			t.Errorf("Iterate: unexpected error %v", err)
+		}
+	}
+}
+
+func TestSpanSetIteratorTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+	defer eng.Close()
+
+	var ss spanset.SpanSet
+	ss.AddAt(spanset.SpanReadOnly, roachpb.Span{
+		Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}, hlc.Timestamp{WallTime: 1})
+	ss.AddAt(spanset.SpanReadOnly, roachpb.Span{
+		Key: roachpb.Key("c"), EndKey: roachpb.Key("e")}, hlc.Timestamp{WallTime: 2})
+
+	k1, v1 := engine.MakeMVCCMetadataKey(roachpb.Key("b")), []byte("b-value")
+	k2, v2 := engine.MakeMVCCMetadataKey(roachpb.Key("d")), []byte("d-value")
+
+	// Write values that we can try to read later.
+	if err := eng.Put(k1, v1); err != nil {
+		t.Fatalf("direct write failed: %+v", err)
+	}
+	if err := eng.Put(k2, v2); err != nil {
+		t.Fatalf("direct write failed: %+v", err)
+	}
+
+	batchNonMVCC := spanset.NewBatchAt(eng.NewBatch(), &ss, hlc.Timestamp{WallTime: 0})
+	defer batchNonMVCC.Close()
+
+	batchAt1 := spanset.NewBatchAt(eng.NewBatch(), &ss, hlc.Timestamp{WallTime: 1})
+	defer batchAt1.Close()
+
+	batchAt2 := spanset.NewBatchAt(eng.NewBatch(), &ss, hlc.Timestamp{WallTime: 2})
+	defer batchAt2.Close()
+
+	batchAt3 := spanset.NewBatchAt(eng.NewBatch(), &ss, hlc.Timestamp{WallTime: 3})
+	defer batchAt3.Close()
+
+	{
+		// When accessing at t=1, we're able to read through latches declared at t=1 and t=2.
+		iter := batchAt1.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+		defer iter.Close()
+
+		iter.Seek(k1)
+		if ok, err := iter.Valid(); !ok {
+			t.Fatalf("expected valid iterator, err=%v", err)
+		}
+		if !reflect.DeepEqual(iter.Key(), k1) {
+			t.Fatalf("expected key %s, got %s", k1, iter.Key())
+		}
+
+		iter.Next()
+		if ok, err := iter.Valid(); !ok {
+			t.Fatalf("expected valid iterator, err=%v", err)
+		}
+		if !reflect.DeepEqual(iter.Key(), k2) {
+			t.Fatalf("expected key %s, got %s", k2, iter.Key())
+		}
+	}
+
+	{
+		// When accessing at t=2, we're only able to read through the latch declared at t=2.
+		iter := batchAt2.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+		defer iter.Close()
+
+		iter.Seek(k1)
+		if ok, _ := iter.Valid(); ok {
+			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
+		}
+
+		iter.Seek(k2)
+		if ok, err := iter.Valid(); !ok {
+			t.Fatalf("expected valid iterator, err=%v", err)
+		}
+		if !reflect.DeepEqual(iter.Key(), k2) {
+			t.Fatalf("expected key %s, got %s", k2, iter.Key())
+		}
+	}
+
+	for _, batch := range []engine.Batch{batchAt3, batchNonMVCC} {
+		// When accessing at t=3, we're unable to read through any of the declared latches.
+		// Same is true when accessing without a timestamp.
+		iter := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+		defer iter.Close()
+
+		iter.Seek(k1)
+		if ok, _ := iter.Valid(); ok {
+			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
+		}
+
+		iter.Seek(k2)
+		if ok, _ := iter.Valid(); ok {
+			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
+		}
+	}
+}
+
+func TestSpanSetNonMVCCBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+	defer eng.Close()
+
+	var ss spanset.SpanSet
+	ss.Add(spanset.SpanReadOnly, roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")})
+	ss.Add(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("f")})
+
+	rkey := engine.MakeMVCCMetadataKey(roachpb.Key("b"))
+	wkey := engine.MakeMVCCMetadataKey(roachpb.Key("e"))
+
+	value := []byte("value")
+
+	// Write value that we can try to read later.
+	if err := eng.Put(rkey, value); err != nil {
+		t.Fatalf("direct write failed: %+v", err)
+	}
+
+	batchNonMVCC := spanset.NewBatch(eng.NewBatch(), &ss)
+	defer batchNonMVCC.Close()
+
+	batchMVCC := spanset.NewBatchAt(eng.NewBatch(), &ss, hlc.Timestamp{WallTime: 1})
+	defer batchMVCC.Close()
+
+	// Writes.
+	for _, batch := range []engine.Batch{batchNonMVCC, batchMVCC} {
+		if err := batch.Put(wkey, value); err != nil {
+			t.Fatalf("write disallowed through non-MVCC latch: %+v", err)
+		}
+	}
+
+	// Reads.
+	for _, batch := range []engine.Batch{batchNonMVCC, batchMVCC} {
+		//lint:ignore SA1019 historical usage of deprecated batch.Get is OK
+		if res, err := batch.Get(rkey); err != nil {
+			t.Errorf("read disallowed through non-MVCC latch: %+v", err)
+		} else if !bytes.Equal(res, value) {
+			t.Errorf("failed to read previously written value, got %q", res)
+		}
 	}
 }
 

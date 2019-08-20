@@ -58,7 +58,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

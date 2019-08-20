@@ -55,7 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 )
@@ -1172,7 +1172,7 @@ func (r *Replica) beginCmds(
 		// protected access and to avoid interacting requests from operating at
 		// the same time. The latches will be held for the duration of request.
 		var err error
-		lg, err = r.latchMgr.Acquire(ctx, spans, ba.Timestamp)
+		lg, err = r.latchMgr.Acquire(ctx, spans)
 		if err != nil {
 			return endCmds{}, err
 		}
@@ -1347,7 +1347,7 @@ func (r *Replica) executeAdminBatch(
 
 	case *roachpb.ImportRequest:
 		cArgs := batcheval.CommandArgs{
-			EvalCtx: NewReplicaEvalContext(r, &spanset.SpanSet{}),
+			EvalCtx: NewReplicaEvalContext(r, todoSpanSet),
 			Header:  ba.Header,
 			Args:    args,
 		}
