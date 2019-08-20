@@ -407,6 +407,11 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			batch = opLogger
 		}
 		if util.RaceEnabled {
+			// During writes we may encounter a versioned value newer than the request
+			// timestamp, and may have to retry at a higher timestamp. This is still
+			// safe as we're only ever writing at timestamps higher than the timestamp
+			// any write latch would be declared at. But because of this, we don't
+			// assert on access timestamps using spanset.NewBatchAt.
 			batch = spanset.NewBatch(batch, spans)
 		}
 
