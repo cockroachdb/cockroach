@@ -67,7 +67,7 @@ func TestRevertTable(t *testing.T) {
 
 		// Revert the table to ts.
 		desc := sqlbase.GetTableDescriptor(kv, "test", "test")
-		desc.State = sqlbase.TableDescriptor_IMPORTING // bypass the offline check.
+		desc.State = sqlbase.TableDescriptor_OFFLINE // bypass the offline check.
 		require.NoError(t, RevertTables(context.TODO(), kv, []*sqlbase.TableDescriptor{desc}, targetTime, 10))
 
 		var reverted int
@@ -93,9 +93,9 @@ func TestRevertTable(t *testing.T) {
 
 		// Revert the table to ts.
 		desc := sqlbase.GetTableDescriptor(kv, "test", "test")
-		desc.State = sqlbase.TableDescriptor_IMPORTING
+		desc.State = sqlbase.TableDescriptor_OFFLINE
 		child := sqlbase.GetTableDescriptor(kv, "test", "child")
-		child.State = sqlbase.TableDescriptor_IMPORTING
+		child.State = sqlbase.TableDescriptor_OFFLINE
 		t.Run("reject only parent", func(t *testing.T) {
 			require.Error(t, RevertTables(ctx, kv, []*sqlbase.TableDescriptor{desc}, targetTime, 10))
 		})
