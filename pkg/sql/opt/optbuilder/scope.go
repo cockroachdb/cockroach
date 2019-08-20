@@ -1175,16 +1175,6 @@ func analyzeWindowFrame(s *scope, windowDef *tree.WindowDef) error {
 			}
 		}
 	case tree.GROUPS:
-		if startBound != nil && startBound.HasOffset() {
-			if tree.ContainsVars(startBound.OffsetExpr) {
-				return errVarOffsetGroups
-			}
-		}
-		if endBound != nil && endBound.HasOffset() {
-			if tree.ContainsVars(endBound.OffsetExpr) {
-				return errVarOffsetGroups
-			}
-		}
 		if len(windowDef.OrderBy) == 0 {
 			return pgerror.Newf(pgcode.Windowing, "GROUPS mode requires an ORDER BY clause")
 		}

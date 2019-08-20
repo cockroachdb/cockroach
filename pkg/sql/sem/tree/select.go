@@ -923,18 +923,24 @@ func (node WindowFrameExclusion) Format(ctx *FmtCtx) {
 	}
 }
 
+// ModeName returns the name of the window frame mode.
+func ModeName(mode WindowFrameMode) string {
+	switch mode {
+	case RANGE:
+		return "RANGE"
+	case ROWS:
+		return "ROWS"
+	case GROUPS:
+		return "GROUPS"
+	default:
+		panic(errors.AssertionFailedf("unhandled case: %d", log.Safe(mode)))
+	}
+}
+
 // Format implements the NodeFormatter interface.
 func (node *WindowFrame) Format(ctx *FmtCtx) {
-	switch node.Mode {
-	case RANGE:
-		ctx.WriteString("RANGE ")
-	case ROWS:
-		ctx.WriteString("ROWS ")
-	case GROUPS:
-		ctx.WriteString("GROUPS ")
-	default:
-		panic(errors.AssertionFailedf("unhandled case: %d", log.Safe(node.Mode)))
-	}
+	ctx.WriteString(ModeName(node.Mode))
+	ctx.WriteByte(' ')
 	if node.Bounds.EndBound != nil {
 		ctx.WriteString("BETWEEN ")
 		ctx.FormatNode(node.Bounds.StartBound)
