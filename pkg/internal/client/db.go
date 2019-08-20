@@ -358,9 +358,24 @@ func (db *DB) PutInline(ctx context.Context, key, value interface{}) error {
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
-func (db *DB) CPut(ctx context.Context, key, value, expValue interface{}) error {
+func (db *DB) CPut(ctx context.Context, key, value interface{}, expValue *roachpb.Value) error {
 	b := &Batch{}
 	b.CPut(key, value, expValue)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
+// CPutDeprecated conditionally sets the value for a key if the existing value is equal
+// to expValue. To conditionally set a value only if there is no existing entry
+// pass nil for expValue. Note that this must be an interface{}(nil), not a
+// typed nil value (e.g. []byte(nil)).
+//
+// Returns an error if the existing value is not equal to expValue.
+//
+// key can be either a byte slice or a string. value can be any key type, a
+// protoutil.Message or any Go primitive type (bool, int, etc).
+func (db *DB) CPutDeprecated(ctx context.Context, key, value, expValue interface{}) error {
+	b := &Batch{}
+	b.CPutDeprecated(key, value, expValue)
 	return getOneErr(db.Run(ctx, b), b)
 }
 

@@ -50,6 +50,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func strToValue(s string) *roachpb.Value {
+	v := roachpb.MakeValueFromBytes([]byte(s))
+	return &v
+}
+
 // TestRangeCommandClockUpdate verifies that followers update their
 // clocks when executing a command, even if the lease holder's clock is far
 // in the future.
@@ -267,7 +272,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			}
 
 			updatedVal := []byte("updatedVal")
-			if err := txn.CPut(ctx, key, updatedVal, "initVal"); err != nil {
+			if err := txn.CPut(ctx, key, updatedVal, strToValue("initVal")); err != nil {
 				log.Errorf(context.TODO(), "failed put value: %+v", err)
 				return err
 			}
