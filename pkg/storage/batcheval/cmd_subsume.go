@@ -41,10 +41,10 @@ func declareKeysSubsume(
 	if args.RightDesc != nil {
 		desc = args.RightDesc
 	}
-	spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
+	spans.AddAt(spanlatch.SpanReadWrite, roachpb.Span{
 		Key:    desc.StartKey.AsRawKey(),
 		EndKey: desc.EndKey.AsRawKey(),
-	})
+	}, header.Timestamp)
 	spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
 		Key:    keys.MakeRangeKeyPrefix(desc.StartKey),
 		EndKey: keys.MakeRangeKeyPrefix(desc.EndKey).PrefixEnd(),

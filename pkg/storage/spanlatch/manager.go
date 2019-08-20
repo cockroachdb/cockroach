@@ -27,7 +27,7 @@ import (
 )
 
 // A Manager maintains an interval tree of key and key range latches. Latch
-// acquitions affecting keys or key ranges must wait on already-acquired latches
+// acquisitions affecting keys or key ranges must wait on already-acquired latches
 // which overlap their key ranges to be released.
 //
 // Latch acquisition attempts invoke Manager.Acquire and provide details about
@@ -64,15 +64,15 @@ type Manager struct {
 }
 
 // scopedManager is a latch manager scoped to either local or global keys.
-// See spanset.SpanScope.
+// See SpanScope.
 type scopedManager struct {
 	readSet latchList
 	trees   [NumSpanAccess]btree
 }
 
-// Make returns an initialized Manager. Using this constructor is optional as
+// NewManager returns an initialized Manager. Using this constructor is optional as
 // the type's zero value is valid to use directly.
-func Make(stopper *stop.Stopper, slowReqs *metric.Gauge) Manager {
+func NewManager(stopper *stop.Stopper, slowReqs *metric.Gauge) Manager {
 	return Manager{
 		stopper:  stopper,
 		slowReqs: slowReqs,
@@ -154,18 +154,12 @@ func allocGuardAndLatches(nLatches int) (*Guard, []latch) {
 	return new(Guard), make([]latch, nLatches)
 }
 
-func newGuard(spans *SpanSet, ts hlc.Timestamp) *Guard {
-	nLatches := 0
-	for s := SpanScope(0); s < NumSpanScope; s++ {
-		for a := SpanAccess(0); a < NumSpanAccess; a++ {
-			nLatches += len(spans.GetSpans(a, s))
-		}
-	}
-
+func newGuard(spans *SpanSet) *Guard {
+	nLatches := spans.Len()
 	guard, latches := allocGuardAndLatches(nLatches)
 	for s := SpanScope(0); s < NumSpanScope; s++ {
 		for a := SpanAccess(0); a < NumSpanAccess; a++ {
-			ss := spans.GetSpans(a, s)
+			ss := spans.getSpanLatches(a, s)
 			n := len(ss)
 			if n == 0 {
 				continue
@@ -174,8 +168,8 @@ func newGuard(spans *SpanSet, ts hlc.Timestamp) *Guard {
 			ssLatches := latches[:n]
 			for i := range ssLatches {
 				latch := &latches[i]
-				latch.span = ss[i]
-				latch.ts = ifGlobal(ts, s)
+				latch.span = ss[i].span
+				latch.ts = ss[i].ts
 				latch.done = &guard.done
 				// latch.setID() in Manager.insert, under lock.
 			}
@@ -198,9 +192,9 @@ func newGuard(spans *SpanSet, ts hlc.Timestamp) *Guard {
 //
 // It returns a Guard which must be provided to Release.
 func (m *Manager) Acquire(
-	ctx context.Context, spans *SpanSet, ts hlc.Timestamp,
+	ctx context.Context, spans *SpanSet,
 ) (*Guard, error) {
-	lg, snap := m.sequence(spans, ts)
+	lg, snap := m.sequence(spans)
 	defer snap.close()
 
 	err := m.wait(ctx, lg, snap)
@@ -215,8 +209,8 @@ func (m *Manager) Acquire(
 // for each of the specified spans into the manager's interval trees, and
 // unlocks the manager. The role of the method is to sequence latch acquisition
 // attempts.
-func (m *Manager) sequence(spans *SpanSet, ts hlc.Timestamp) (*Guard, snapshot) {
-	lg := newGuard(spans, ts)
+func (m *Manager) sequence(spans *SpanSet) (*Guard, snapshot) {
+	lg := newGuard(spans)
 
 	m.mu.Lock()
 	snap := m.snapshotLocked(spans)
@@ -245,8 +239,8 @@ func (m *Manager) snapshotLocked(spans *SpanSet) snapshot {
 	var snap snapshot
 	for s := SpanScope(0); s < NumSpanScope; s++ {
 		sm := &m.scopes[s]
-		reading := len(spans.GetSpans(SpanReadOnly, s)) > 0
-		writing := len(spans.GetSpans(SpanReadWrite, s)) > 0
+		reading := len(spans.getSpanLatches(SpanReadOnly, s)) > 0
+		writing := len(spans.getSpanLatches(SpanReadWrite, s)) > 0
 
 		if writing {
 			sm.flushReadSetLocked()
@@ -315,18 +309,6 @@ type ignoreFn func(ts, other hlc.Timestamp) bool
 func ignoreLater(ts, other hlc.Timestamp) bool   { return !ts.IsEmpty() && ts.Less(other) }
 func ignoreEarlier(ts, other hlc.Timestamp) bool { return !other.IsEmpty() && other.Less(ts) }
 func ignoreNothing(ts, other hlc.Timestamp) bool { return false }
-
-func ifGlobal(ts hlc.Timestamp, s SpanScope) hlc.Timestamp {
-	switch s {
-	case SpanGlobal:
-		return ts
-	case SpanLocal:
-		// All local latches interfere.
-		return hlc.Timestamp{}
-	default:
-		panic("unknown scope")
-	}
-}
 
 // wait waits for all interfering latches in the provided snapshot to complete
 // before returning.

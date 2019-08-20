@@ -88,7 +88,7 @@ func (r *Replica) executeReadOnlyBatch(
 	rec := NewReplicaEvalContext(r, spans)
 	readOnly := r.store.Engine().NewReadOnly()
 	if util.RaceEnabled {
-		readOnly = spanlatch.NewReadWriter(readOnly, spans)
+		readOnly = spanlatch.NewReadWriter(readOnly, spans, ba.Timestamp)
 	}
 	defer readOnly.Close()
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba, true /* readOnly */)

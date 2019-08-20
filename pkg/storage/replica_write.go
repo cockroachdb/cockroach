@@ -407,7 +407,7 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			batch = opLogger
 		}
 		if util.RaceEnabled {
-			batch = spanlatch.NewBatch(batch, spans)
+			batch = spanlatch.NewBatchAt(batch, spans, ba.Timestamp)
 		}
 
 		br, res, pErr = evaluateBatch(ctx, idKey, batch, rec, ms, ba, false /* readOnly */)

@@ -73,7 +73,7 @@ func declareKeysEndTransaction(
 		// purpose of acquiring latches. The parts in our Range will
 		// be resolved eagerly.
 		for _, span := range et.IntentSpans {
-			spans.Add(spanlatch.SpanReadWrite, span)
+			spans.AddAt(spanlatch.SpanReadWrite, span, header.Timestamp)
 		}
 
 		if et.InternalCommitTrigger != nil {
@@ -87,25 +87,26 @@ func declareKeysEndTransaction(
 				// interfere with the non-delta stats computed as a part of the
 				// split. (see
 				// https://github.com/cockroachdb/cockroach/issues/14881)
-				spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
+				spans.AddAt(spanlatch.SpanReadWrite, roachpb.Span{
 					Key:    st.LeftDesc.StartKey.AsRawKey(),
 					EndKey: st.RightDesc.EndKey.AsRawKey(),
-				})
+				}, header.Timestamp)
 				spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
 					Key:    keys.MakeRangeKeyPrefix(st.LeftDesc.StartKey),
 					EndKey: keys.MakeRangeKeyPrefix(st.RightDesc.EndKey).PrefixEnd(),
 				})
+
 				leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
 				spans.Add(spanlatch.SpanReadOnly, roachpb.Span{
 					Key:    leftRangeIDPrefix,
 					EndKey: leftRangeIDPrefix.PrefixEnd(),
 				})
-
 				rightRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(st.RightDesc.RangeID)
 				spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
 					Key:    rightRangeIDPrefix,
 					EndKey: rightRangeIDPrefix.PrefixEnd(),
 				})
+
 				rightRangeIDUnreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(st.RightDesc.RangeID)
 				spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
 					Key:    rightRangeIDUnreplicatedPrefix,
@@ -121,7 +122,8 @@ func declareKeysEndTransaction(
 
 				spans.Add(spanlatch.SpanReadOnly, roachpb.Span{
 					Key:    abortspan.MinKey(header.RangeID),
-					EndKey: abortspan.MaxKey(header.RangeID)})
+					EndKey: abortspan.MaxKey(header.RangeID),
+				})
 			}
 			if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {
 				// Merges write to the left side's abort span and the right side's data
@@ -132,10 +134,10 @@ func declareKeysEndTransaction(
 					Key:    leftRangeIDPrefix,
 					EndKey: leftRangeIDPrefix.PrefixEnd(),
 				})
-				spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
+				spans.AddAt(spanlatch.SpanReadWrite, roachpb.Span{
 					Key:    mt.RightDesc.StartKey.AsRawKey(),
 					EndKey: mt.RightDesc.EndKey.AsRawKey(),
-				})
+				}, header.Timestamp)
 				spans.Add(spanlatch.SpanReadWrite, roachpb.Span{
 					Key:    keys.MakeRangeKeyPrefix(mt.RightDesc.StartKey),
 					EndKey: keys.MakeRangeKeyPrefix(mt.RightDesc.EndKey),

@@ -98,7 +98,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
 	}
 
-	r.latchMgr = spanlatch.Make(r.store.stopper, r.store.metrics.SlowLatchRequests)
+	r.latchMgr = spanlatch.NewManager(r.store.stopper, r.store.metrics.SlowLatchRequests)
 	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]ReplicaChecksum{}
 	// Clear the internal raft group in case we're being reset. Since we're

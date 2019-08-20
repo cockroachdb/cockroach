@@ -131,7 +131,7 @@ func evalExport(
 		io.MaxTimestampHint = h.Timestamp
 	}
 
-	e := spanlatch.GetDBEngine(batch, roachpb.Span{Key: args.Key, EndKey: args.EndKey})
+	e := spanlatch.GetDBEngine(batch, roachpb.Span{Key: args.Key, EndKey: args.EndKey}, h.Timestamp)
 
 	data, summary, err := engine.ExportToSst(ctx, e, start, end, exportAllRevisions, io)
 
