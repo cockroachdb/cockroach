@@ -1017,24 +1017,33 @@ func addLearnerReplicas(
 	details string,
 	targets []roachpb.ReplicationTarget,
 ) (*roachpb.RangeDescriptor, error) {
-	newDesc := *desc
-	newDesc.SetReplicas(desc.Replicas().DeepCopy())
-	var added []roachpb.ReplicaDescriptor
+	// TODO(tbg): we could add all learners in one go, but then we'd need to
+	// do it as an atomic replication change (raft doesn't know which config
+	// to apply the delta to, so we might be demoting more than one voter).
+	// This isn't crazy, we just need to transition out of the joint config
+	// before returning from this method, and it's unclear that it's worth
+	// doing.
 	for _, target := range targets {
+		newDesc := *desc
+		newDesc.SetReplicas(desc.Replicas().DeepCopy())
+		var added []roachpb.ReplicaDescriptor
 		replDesc := roachpb.ReplicaDescriptor{
 			NodeID:    target.NodeID,
 			StoreID:   target.StoreID,
-			ReplicaID: desc.NextReplicaID,
+			ReplicaID: newDesc.NextReplicaID,
 			Type:      roachpb.ReplicaTypeLearner(),
 		}
 		newDesc.NextReplicaID++
 		newDesc.AddReplica(replDesc)
 		added = append(added, replDesc)
+		if err := execChangeReplicasTxn(
+			ctx, store, desc, &newDesc, reason, details, added, nil, /* removed */
+		); err != nil {
+			return nil, err
+		}
+		desc = &newDesc
 	}
-	err := execChangeReplicasTxn(
-		ctx, store, desc, &newDesc, reason, details, added, nil, /* removed */
-	)
-	return &newDesc, err
+	return desc, nil
 }
 
 // finalizeChangeReplicas carries out the atomic membership change that finalizes
