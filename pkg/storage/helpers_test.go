@@ -346,15 +346,6 @@ func (r *Replica) IsRaftGroupInitialized() bool {
 	return r.mu.internalRaftGroup != nil
 }
 
-// HasQuorum returns true iff the range that this replica is part of
-// can achieve quorum.
-func (r *Replica) HasQuorum() bool {
-	desc := r.Desc()
-	liveReplicas, _ := r.store.allocator.storePool.liveAndDeadReplicas(desc.RangeID, desc.InternalReplicas)
-	quorum := computeQuorum(len(desc.InternalReplicas))
-	return len(liveReplicas) >= quorum
-}
-
 // GetStoreList exposes getStoreList for testing only, but with a hardcoded
 // storeFilter of storeFilterNone.
 func (sp *StorePool) GetStoreList(rangeID roachpb.RangeID) (StoreList, int, int) {
