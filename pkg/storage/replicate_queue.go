@@ -299,11 +299,20 @@ func (rq *replicateQueue) processOneChange(
 	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(
 		desc.RangeID, voterReplicas)
 	{
-		quorum := desc.Replicas().QuorumSize()
-		if lr := len(liveVoterReplicas); lr < quorum {
+		unavailable := !desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
+			for _, inner := range liveVoterReplicas {
+				if inner.ReplicaID == rDesc.ReplicaID {
+					return true
+				}
+			}
+			return false
+		})
+		if unavailable {
 			return false, newQuorumError(
-				"range requires a replication change, but lacks a quorum of live replicas (%d/%d)",
-				lr, quorum)
+				"range requires a replication change, but live replicas %v don't constitute a quorum for %v:",
+				liveVoterReplicas,
+				desc.Replicas().All(),
+			)
 		}
 	}
 
