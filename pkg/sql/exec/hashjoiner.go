@@ -560,6 +560,11 @@ func (ht *hashTable) computeBuckets(
 ) {
 	ht.initHash(buckets, nKeys)
 
+	if nKeys == 0 {
+		// No work to do - avoid doing the loops below.
+		return
+	}
+
 	for i, k := range ht.keyCols {
 		ht.rehash(ctx, buckets, i, ht.valTypes[k], keys[i], nKeys, sel)
 	}
