@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	// */}}
@@ -76,10 +77,6 @@ func (m *memColumn) Append(args AppendArgs) {
 }
 
 func (m *memColumn) Copy(args CopyArgs) {
-	if args.Nils != nil && args.Sel64 == nil {
-		panic("Nils set without Sel64")
-	}
-
 	m.Nulls().UnsetNullRange(args.DestIdx, args.DestIdx+(args.SrcEndIdx-args.SrcStartIdx))
 
 	switch args.ColType {
@@ -90,35 +87,6 @@ func (m *memColumn) Copy(args CopyArgs) {
 		if args.Sel64 != nil {
 			sel := args.Sel64
 			// TODO(asubiotto): Template this and the uint16 case below.
-			if args.Nils != nil {
-				if args.Src.MaybeHasNulls() {
-					nulls := args.Src.Nulls()
-					n := execgen.LEN(toCol)
-					toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
-					for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
-						if args.Nils[i] || nulls.NullAt64(selIdx) {
-							m.nulls.SetNull64(uint64(i) + args.DestIdx)
-						} else {
-							v := execgen.UNSAFEGET(fromCol, int(selIdx))
-							execgen.SET(toColSliced, i, v)
-						}
-					}
-					return
-				}
-				// Nils but no Nulls.
-				n := execgen.LEN(toCol)
-				toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
-				for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
-					if args.Nils[i] {
-						m.nulls.SetNull64(uint64(i) + args.DestIdx)
-					} else {
-						v := execgen.UNSAFEGET(fromCol, int(selIdx))
-						execgen.SET(toColSliced, i, v)
-					}
-				}
-				return
-			}
-			// No Nils.
 			if args.Src.MaybeHasNulls() {
 				nulls := args.Src.Nulls()
 				n := execgen.LEN(toCol)
@@ -133,7 +101,7 @@ func (m *memColumn) Copy(args CopyArgs) {
 				}
 				return
 			}
-			// No Nils or Nulls.
+			// No Nulls.
 			n := execgen.LEN(toCol)
 			toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
 			for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
