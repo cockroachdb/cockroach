@@ -149,6 +149,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 		replicaID = repDesc.ReplicaID
 	}
 	r.rangeStr.store(replicaID, r.mu.state.Desc)
+	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey))
 	if err := r.setReplicaIDRaftMuLockedMuLocked(replicaID); err != nil {
 		return err
 	}
