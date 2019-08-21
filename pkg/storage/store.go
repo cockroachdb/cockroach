@@ -2138,6 +2138,17 @@ func splitPostApply(
 		//
 		// See:
 		// https://github.com/cockroachdb/cockroach/issues/21146#issuecomment-365757329
+		//
+		// TODO(tbg): this argument is flawed - it's possible for a tombstone
+		// to exist on the RHS:
+		// https://github.com/cockroachdb/cockroach/issues/40470
+		// Morally speaking, this means that we should throw away the data we
+		// moved from the LHS to the RHS (depending on the tombstone).
+		// Realistically speaking it will probably be easier to create the RHS
+		// anyway, even though there's a tombstone and it may just get gc'ed
+		// again. Note that for extra flavor, we may not even know whether the
+		// RHS is currently supposed to exist or not, lending more weight to the
+		// second approach.
 		tombstoneKey := keys.RaftTombstoneKey(rightRng.RangeID)
 		var tombstone roachpb.RaftTombstone
 		if ok, err := engine.MVCCGetProto(
@@ -2147,21 +2158,46 @@ func splitPostApply(
 		} else if ok {
 			log.Fatalf(ctx, "split trigger found right-hand side with tombstone %+v: %v", tombstone, rightRng)
 		}
-		// NB: the safety argument above implies that we don't have to worry
-		// about restoring the existing minReplicaID if it's nonzero. No
-		// promises have been made, so none need to be kept.
-		rightRng.mu.minReplicaID = 0
 		rightDesc, ok := split.RightDesc.GetReplicaDescriptor(r.StoreID())
 		if !ok {
-			log.Fatalf(ctx, "replica descriptor of local store not found in right hand side of split")
+			// This is yet another special quirky case. The local store is not
+			// necessarily a member of the split; this can occur if this store
+			// wasn't a member at the time of the split, but is nevertheless
+			// catching up across the split. For example, add a learner, and
+			// while it is being caught up via a snapshot, remove the learner
+			// again, then execute a split, and re-add it. Upon being re-added
+			// the learner will likely catch up from where the snapshot left it,
+			// and it will see itself get removed, then we hit this branch when
+			// the split trigger is applied, and eventually there's a
+			// ChangeReplicas that re-adds the local store under a new
+			// replicaID.
+			//
+			// So our trigger will have a smaller replicaID for our RHS, which
+			// will blow up in initRaftMuLockedReplicaMuLocked. We still want
+			// to force the RHS to accept the descriptor, even though that
+			// rewinds the replicaID. To do that we want to change the existing
+			// replicaID, but we didn't find one -- zero is then the only reasonable
+			// choice. Note that this is also the replicaID a replica that is
+			// not reflected in its own descriptor will have, i.e. we're cooking
+			// up less of a special case here than you'd expect at first glance.
+			//
+			// Note that futzing with the replicaID is a high-risk operation as
+			// it is what the raft peer will believe itself to be identified by.
+			// Under no circumstances must we use a replicaID that belongs to
+			// someone else, or a byzantine situation will result. Zero is
+			// special-cased and will never init a raft group until the real
+			// ID is known from inbound raft traffic.
+			rightDesc.ReplicaID = 0 // for clarity only; it's already zero
 		}
-		// We also have to potentially wind back the replicaID to avoid an error
-		// below. We can't overwrite unconditionally since usually the replicaID is
-		// zero (and thus special) and in that case, moving it forward out-of-band
-		// results in an broken state.
 		if rightRng.mu.replicaID > rightDesc.ReplicaID {
 			rightRng.mu.replicaID = rightDesc.ReplicaID
 		}
+		// NB: the safety argument above implies that we don't have to worry
+		// about restoring the existing minReplicaID if it's nonzero. No
+		// promises have been made, so none need to be kept. So we clear this
+		// unconditionally, making sure that it doesn't block us from init'ing
+		// the RHS.
+		rightRng.mu.minReplicaID = 0
 		err := rightRng.initRaftMuLockedReplicaMuLocked(&split.RightDesc, r.store.Clock(), 0)
 		rightRng.mu.Unlock()
 		if err != nil {
