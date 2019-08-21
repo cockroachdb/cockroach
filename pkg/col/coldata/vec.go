@@ -60,16 +60,6 @@ type CopyArgs struct {
 	// before SrcEndIdx is the last element copied into the destination slice,
 	// similar to Src[SrcStartIdx:SrcEndIdx].
 	SrcEndIdx uint64
-
-	// Nils exists to support the hashJoiner's use case of Copy before the
-	// migration to a single Copy method. It overrides the use of a selection
-	// vector only in the Sel64 case and simply sets the destination slice's value
-	// to NULL if the index is true, otherwise defaulting to using the selection
-	// vector.
-	// TODO(asubiotto): Get rid of this.
-	// DEPRECATED: DO NOT USE, it should not be Copy's responsibility to care
-	// about this.
-	Nils []bool
 }
 
 // Vec is an interface that represents a column vector that's accessible by

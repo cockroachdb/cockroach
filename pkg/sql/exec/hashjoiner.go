@@ -956,20 +956,23 @@ func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, b
 		valCol := prober.ht.vals[prober.ht.outCols[i]]
 		colType := prober.ht.valTypes[prober.ht.outCols[i]]
 
-		var nils []bool
-		if prober.spec.outer {
-			nils = prober.probeRowUnmatched
-		}
-
 		outCol.Copy(
 			coldata.CopyArgs{
 				ColType:   colType,
 				Src:       valCol,
 				Sel64:     prober.buildIdx,
 				SrcEndIdx: uint64(nResults),
-				Nils:      nils,
 			},
 		)
+		if prober.spec.outer {
+			// Add in the nulls we needed to set for the outer join.
+			nulls := outCol.Nulls()
+			for i, isNull := range prober.probeRowUnmatched {
+				if isNull {
+					nulls.SetNull(uint16(i))
+				}
+			}
+		}
 	}
 
 	for _, colIdx := range prober.spec.outCols {
