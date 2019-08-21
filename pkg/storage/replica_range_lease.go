@@ -683,7 +683,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 		// `r.mu.minLeaseProposedTS = status.Timestamp` line below will likely play
 		// badly with that. This would be an issue even without learners, but
 		// omitting this check would make it worse. Fixme.
-		if t := nextLeaseHolder.GetType(); t != roachpb.ReplicaType_VOTER {
+		if t := nextLeaseHolder.GetType(); t != roachpb.ReplicaType_Voter {
 			return nil, nil, errors.Errorf(`cannot transfer lease to replica of type %s`, t)
 		}
 
