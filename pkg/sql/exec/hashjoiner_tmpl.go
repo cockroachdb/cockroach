@@ -217,7 +217,12 @@ func _COLLECT_RIGHT_OUTER(
 				return nResults
 			}
 
-			prober.buildIdx[nResults] = currentID - 1
+			if currentID > 0 {
+				// If currentID == 0, nobody will look at this again since
+				// probeRowUnmatched will have been set - so don't populate this with
+				// a garbage value.
+				prober.buildIdx[nResults] = currentID - 1
+			}
 			prober.probeIdx[nResults] = _SEL_IND
 			currentID = prober.ht.same[currentID]
 			prober.ht.headID[i] = currentID
@@ -265,12 +270,17 @@ func _COLLECT_NO_OUTER(
 
 func _DISTINCT_COLLECT_RIGHT_OUTER(prober *hashJoinProber, batchSize uint16, _SEL_STRING string) { // */}}
 	// {{define "distinctCollectRightOuter"}}
+	// TODO(jordan): bounds check eliminations for all slices in here.
 	for i := uint16(0); i < batchSize; i++ {
 		// Index of keys and outputs in the hash table is calculated as ID - 1.
-		prober.buildIdx[i] = prober.ht.groupID[i] - 1
+		id := prober.ht.groupID[i]
+		rowUnmatched := id == 0
+		prober.probeRowUnmatched[i] = rowUnmatched
+		if !rowUnmatched {
+			prober.buildIdx[i] = id - 1
+		}
 		prober.probeIdx[i] = _SEL_IND
 
-		prober.probeRowUnmatched[i] = prober.ht.groupID[i] == 0
 	}
 	// {{end}}
 	// {{/*
