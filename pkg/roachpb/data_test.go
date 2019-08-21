@@ -1635,8 +1635,8 @@ func TestUpdateObservedTimestamps(t *testing.T) {
 func TestChangeReplicasTrigger_String(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	l := ReplicaType_LEARNER
-	v := ReplicaType_VOTER
+	l := ReplicaType_Learner
+	v := ReplicaType_Voter
 	repl1 := ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3, Type: &l}
 	repl2 := ReplicaDescriptor{NodeID: 4, StoreID: 5, ReplicaID: 6, Type: &v}
 	crt := ChangeReplicasTrigger{

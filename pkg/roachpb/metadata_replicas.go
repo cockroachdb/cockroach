@@ -15,17 +15,17 @@ import (
 	"strings"
 )
 
-// ReplicaTypeVoter returns a ReplicaType_VOTER pointer suitable for use in a
+// ReplicaTypeVoter returns a ReplicaType_Voter pointer suitable for use in a
 // nullable proto field.
 func ReplicaTypeVoter() *ReplicaType {
-	t := ReplicaType_VOTER
+	t := ReplicaType_Voter
 	return &t
 }
 
-// ReplicaTypeLearner returns a ReplicaType_LEARNER pointer suitable for use in
+// ReplicaTypeLearner returns a ReplicaType_Learner pointer suitable for use in
 // a nullable proto field.
 func ReplicaTypeLearner() *ReplicaType {
-	t := ReplicaType_LEARNER
+	t := ReplicaType_Learner
 	return &t
 }
 
@@ -77,7 +77,7 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 	// save the alloc.
 	fastpath := true
 	for i := range d.wrapped {
-		if d.wrapped[i].GetType() != ReplicaType_VOTER {
+		if d.wrapped[i].GetType() != ReplicaType_Voter {
 			fastpath = false
 			break
 		}
@@ -87,7 +87,7 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 	}
 	voters := make([]ReplicaDescriptor, 0, len(d.wrapped))
 	for i := range d.wrapped {
-		if d.wrapped[i].GetType() == ReplicaType_VOTER {
+		if d.wrapped[i].GetType() == ReplicaType_Voter {
 			voters = append(voters, d.wrapped[i])
 		}
 	}
@@ -185,7 +185,7 @@ func (d ReplicaDescriptors) Learners() []ReplicaDescriptor {
 	// save the alloc.
 	var learners []ReplicaDescriptor
 	for i := range d.wrapped {
-		if d.wrapped[i].GetType() == ReplicaType_LEARNER {
+		if d.wrapped[i].GetType() == ReplicaType_Learner {
 			if learners == nil {
 				learners = make([]ReplicaDescriptor, 0, len(d.wrapped)-i)
 			}
@@ -243,7 +243,7 @@ func (d *ReplicaDescriptors) RemoveReplica(
 func (d ReplicaDescriptors) QuorumSize() int {
 	var numVoters int
 	for i := range d.wrapped {
-		if d.wrapped[i].GetType() == ReplicaType_VOTER {
+		if d.wrapped[i].GetType() == ReplicaType_Voter {
 			numVoters++
 		}
 	}

@@ -295,12 +295,12 @@ func (mq *mergeQueue) process(
 
 	// Defensive sanity check that everything is now a voter.
 	for i := range lhsReplicas {
-		if lhsReplicas[i].GetType() != roachpb.ReplicaType_VOTER {
+		if lhsReplicas[i].GetType() != roachpb.ReplicaType_Voter {
 			return errors.Errorf(`cannot merge non-voter replicas on lhs: %v`, lhsReplicas)
 		}
 	}
 	for i := range rhsReplicas {
-		if rhsReplicas[i].GetType() != roachpb.ReplicaType_VOTER {
+		if rhsReplicas[i].GetType() != roachpb.ReplicaType_Voter {
 			return errors.Errorf(`cannot merge non-voter replicas on rhs: %v`, rhsReplicas)
 		}
 	}
