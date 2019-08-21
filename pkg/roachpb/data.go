@@ -1335,6 +1335,18 @@ func writeTooOldRetryTimestamp(txn *Transaction, err *WriteTooOldError) hlc.Time
 
 var _ fmt.Stringer = &ChangeReplicasTrigger{}
 
+// EnterJoint is true if applying this trigger will result in a joint
+// configuration.
+func (crt ChangeReplicasTrigger) EnterJoint() bool {
+	return len(crt.Added())+len(crt.Removed()) > 1
+}
+
+// LeaveJoint is true if applying this trigger will actively leave a joint
+// configuration.
+func (crt ChangeReplicasTrigger) LeaveJoint() bool {
+	return len(crt.Added())+len(crt.Removed()) == 0
+}
+
 func (crt ChangeReplicasTrigger) String() string {
 	var nextReplicaID ReplicaID
 	var afterReplicas []ReplicaDescriptor
@@ -1351,6 +1363,14 @@ func (crt ChangeReplicasTrigger) String() string {
 		afterReplicas = crt.DeprecatedUpdatedReplicas
 	}
 	var chgS strings.Builder
+	if crt.LeaveJoint() {
+		// TODO(tbg): could list the replicas that will actually leave the
+		// voter set.
+		fmt.Fprintf(&chgS, "LEAVE_JOINT")
+	}
+	if crt.EnterJoint() {
+		fmt.Fprintf(&chgS, "ENTER_JOINT ")
+	}
 	if len(added) > 0 {
 		fmt.Fprintf(&chgS, "%s%s", ADD_REPLICA, added)
 	}
@@ -1364,9 +1384,13 @@ func (crt ChangeReplicasTrigger) String() string {
 	return chgS.String()
 }
 
+func (crt ChangeReplicasTrigger) legacy() bool {
+	return len(crt.InternalAddedReplicas)+len(crt.InternalRemovedReplicas) == 0 && crt.DeprecatedReplica != (ReplicaDescriptor{})
+}
+
 // Added returns the replicas added by this change (if there are any).
 func (crt ChangeReplicasTrigger) Added() []ReplicaDescriptor {
-	if len(crt.InternalAddedReplicas)+len(crt.InternalRemovedReplicas) == 0 && crt.DeprecatedChangeType == ADD_REPLICA {
+	if crt.legacy() && crt.DeprecatedChangeType == ADD_REPLICA {
 		return []ReplicaDescriptor{crt.DeprecatedReplica}
 	}
 	return crt.InternalAddedReplicas
@@ -1374,7 +1398,7 @@ func (crt ChangeReplicasTrigger) Added() []ReplicaDescriptor {
 
 // Removed returns the replicas removed by this change (if there are any).
 func (crt ChangeReplicasTrigger) Removed() []ReplicaDescriptor {
-	if len(crt.InternalAddedReplicas)+len(crt.InternalRemovedReplicas) == 0 && crt.DeprecatedChangeType == REMOVE_REPLICA {
+	if crt.legacy() && crt.DeprecatedChangeType == REMOVE_REPLICA {
 		return []ReplicaDescriptor{crt.DeprecatedReplica}
 	}
 	return crt.InternalRemovedReplicas
