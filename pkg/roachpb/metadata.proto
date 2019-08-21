@@ -37,17 +37,17 @@ message ReplicationTarget {
 
 // ReplicaType identifies which raft activities a replica participates in.
 enum ReplicaType {
-  // ReplicaType_VOTER indicates a replica that participates in all raft
+  // ReplicaType_Voter indicates a replica that participates in all raft
   // activities, including voting for leadership and committing entries.
   // Notably, voters are considered for quorum size of the raft group.
-  VOTER = 0;
-  // ReplicaType_LEARNER indicates a replica that applies committed entries, but
+  Voter = 0;
+  // ReplicaType_Learner indicates a replica that applies committed entries, but
   // does not count towards the quorum. Learners do not vote for leadership nor
   // do their acknowledged log entries get taken into account for determining
   // the committed index. At the time of writing, learners in CockroachDB are a
   // short-term transient state: a replica being added and on its way to being a
   // VOTER.
-  LEARNER = 1;
+  Learner = 1;
 }
 
 // ReplicaDescriptor describes a replica location by node ID
