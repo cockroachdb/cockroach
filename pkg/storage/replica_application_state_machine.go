@@ -998,10 +998,11 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 			log.Fatalf(ctx, "unexpected replication change from command %s", &cmd.raftCmd)
 		}
 		return nil
-	case raftpb.EntryConfChange:
+	case raftpb.EntryConfChange, raftpb.EntryConfChangeV2:
 		if cmd.replicatedResult().ChangeReplicas == nil {
-			// The command was rejected.
-			cmd.confChange.ConfChangeI = raftpb.ConfChange{}
+			// The command was rejected. There is no need to report a ConfChange
+			// to raft.
+			return nil
 		}
 		return sm.r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 			raftGroup.ApplyConfChange(cmd.confChange.ConfChangeI)
