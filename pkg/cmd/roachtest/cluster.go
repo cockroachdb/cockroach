@@ -1980,6 +1980,9 @@ func getDiskUsageInBytes(
 		var err error
 		out, err = c.RunWithBuffer(ctx, logger, c.Node(nodeIdx), fmt.Sprint("du -sk {store-dir} | grep -oE '^[0-9]+'"))
 		if err != nil {
+			if ctx.Err() != nil {
+				return 0, ctx.Err()
+			}
 			// `du` can fail if files get removed out from under it. RocksDB likes to do that
 			// during compactions and such. It's rare enough to just retry.
 			logger.Printf("retrying disk usage computation after spurious error: %s", err)
