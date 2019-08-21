@@ -76,6 +76,7 @@ type SSTBatcher struct {
 
 	// The rest of the fields are per-batch and are reset via Reset() before each
 	// batch is started.
+	file            SSTMemFile
 	sstWriter       SSTWriter
 	batchStartKey   []byte
 	batchEndKey     []byte
@@ -153,13 +154,15 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value [
 		b.updateMVCCStats(key, value)
 	}
 
-	return b.sstWriter.Add(engine.MVCCKeyValue{Key: key, Value: value})
+	return b.sstWriter.Put(key, value)
 }
 
 // Reset clears all state in the batcher and prepares it for reuse.
 func (b *SSTBatcher) Reset() error {
 	b.sstWriter.Close()
-	b.sstWriter = MakeSSTWriter()
+
+	b.file = SSTMemFile{}
+	b.sstWriter = MakeSSTWriter(&b.file)
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
 	b.batchEndValue = b.batchEndValue[:0]
@@ -260,7 +263,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		b.flushCounts.split++
 	}
 
-	sstBytes, err := b.sstWriter.Finish()
+	err := b.sstWriter.Finish()
 	if err != nil {
 		return errors.Wrapf(err, "finishing constructed sstable")
 	}
@@ -270,7 +273,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 	if (b.ms != enginepb.MVCCStats{}) {
 		b.ms.LastUpdateNanos = timeutil.Now().UnixNano()
 	}
-	files, err := AddSSTable(ctx, b.db, start, end, sstBytes, b.disallowShadowing, b.ms)
+	files, err := AddSSTable(ctx, b.db, start, end, b.file.Data(), b.disallowShadowing, b.ms)
 	if err != nil {
 		return err
 	}
@@ -427,7 +430,8 @@ func createSplitSSTable(
 	disallowShadowing bool,
 	iter engine.SimpleIterator,
 ) (*sstSpan, *sstSpan, error) {
-	w := MakeSSTWriter()
+	file := SSTMemFile{}
+	w := MakeSSTWriter(&file)
 	defer w.Close()
 
 	split := false
@@ -445,17 +449,18 @@ func createSplitSSTable(
 		key := iter.UnsafeKey()
 
 		if !split && key.Key.Compare(splitKey) >= 0 {
-			res, err := w.Finish()
+			err := w.Finish()
 			if err != nil {
 				return nil, nil, err
 			}
 			left = &sstSpan{
 				start:             first,
 				end:               last.PrefixEnd(),
-				sstBytes:          res,
+				sstBytes:          file.Data(),
 				disallowShadowing: disallowShadowing,
 			}
-			w = MakeSSTWriter()
+			file = SSTMemFile{}
+			w = MakeSSTWriter(&file)
 			split = true
 			first = nil
 			last = nil
@@ -466,21 +471,21 @@ func createSplitSSTable(
 		}
 		last = append(last[:0], key.Key...)
 
-		if err := w.Add(engine.MVCCKeyValue{Key: key, Value: iter.UnsafeValue()}); err != nil {
+		if err := w.Put(key, iter.UnsafeValue()); err != nil {
 			return nil, nil, err
 		}
 
 		iter.Next()
 	}
 
-	res, err := w.Finish()
+	err := w.Finish()
 	if err != nil {
 		return nil, nil, err
 	}
 	right = &sstSpan{
 		start:             first,
 		end:               last.PrefixEnd(),
-		sstBytes:          res,
+		sstBytes:          file.Data(),
 		disallowShadowing: disallowShadowing,
 	}
 	return left, right, nil
