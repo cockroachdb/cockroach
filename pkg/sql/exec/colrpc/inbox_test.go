@@ -11,15 +11,25 @@
 package colrpc
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -163,4 +173,212 @@ func TestInboxTimeout(t *testing.T) {
 	streamHandlerErrCh := handleStream(ctx, inbox, rpcLayer.server, nil /* doneFn */)
 	streamErr := <-streamHandlerErrCh
 	require.True(t, testutils.IsError(streamErr, "stream arrived too late"), streamErr)
+}
+
+// TestInboxShutdown is a random test that spawns a goroutine for handling a
+// FlowStream RPC (setting up an inbound stream, or RunWithStream), a goroutine
+// to read from an Inbox (Next goroutine), and a goroutine to drain the Inbox
+// (DrainMeta goroutine). These goroutines race against each other and the
+// desired state is that everything is cleaned up at the end. Examples of
+// scenarios that are tested by this test include but are not limited to:
+//  - DrainMeta called before Next and before a stream arrives.
+//  - DrainMeta called concurrently with Next with an active stream.
+//  - A forceful cancellation of Next but no call to DrainMeta.
+func TestInboxShutdown(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var (
+		rng, _ = randutil.NewPseudoRand()
+		// infiniteBatches will influence whether or not we're likely to test a
+		// graceful shutdown (since other shutdown mechanisms might happen before
+		// we reach the end of the data stream). If infiniteBatches is true,
+		// shutdown scenarios in the middle of data processing are always tested. If
+		// false, they sometimes will be.
+		infiniteBatches    = rng.Float64() < 0.5
+		drainMetaSleep     = time.Millisecond * time.Duration(rng.Intn(10))
+		nextSleep          = time.Millisecond * time.Duration(rng.Intn(10))
+		runWithStreamSleep = time.Millisecond * time.Duration(rng.Intn(10))
+		typs               = []coltypes.T{coltypes.Int64}
+		batch              = exec.RandomBatch(rng, typs, coldata.BatchSize, rng.Float64())
+	)
+
+	for _, runDrainMetaGoroutine := range []bool{false, true} {
+		for _, runNextGoroutine := range []bool{false, true} {
+			for _, runRunWithStreamGoroutine := range []bool{false, true} {
+				if runDrainMetaGoroutine == false && runNextGoroutine == false && runRunWithStreamGoroutine == true {
+					// This is sort of like a remote node connecting to the inbox, but the
+					// inbox will never be spawned. This is dealt with by another part of
+					// the code (the flow registry times out inbound RPCs if a consumer is
+					// not scheduled in time), so this case is skipped.
+					continue
+				}
+				rpcLayer := makeMockFlowStreamRPCLayer()
+
+				t.Run(fmt.Sprintf(
+					"drain=%t/next=%t/stream=%t/inf=%t",
+					runDrainMetaGoroutine, runNextGoroutine, runRunWithStreamGoroutine, infiniteBatches,
+				), func(t *testing.T) {
+					inbox, err := NewInbox(typs)
+					require.NoError(t, err)
+					c, err := colserde.NewArrowBatchConverter(typs)
+					require.NoError(t, err)
+					r, err := colserde.NewRecordBatchSerializer(typs)
+					require.NoError(t, err)
+					inboxCtx, inboxCancel := context.WithCancel(context.Background())
+
+					goroutines := []struct {
+						name           string
+						asyncOperation func() chan error
+					}{
+						{
+							name: "RunWithStream",
+							asyncOperation: func() chan error {
+								errCh := make(chan error)
+								go func() {
+									var wg sync.WaitGroup
+									defer close(errCh)
+									if runWithStreamSleep != 0 {
+										time.Sleep(runWithStreamSleep)
+									}
+									if !runRunWithStreamGoroutine {
+										// The inbox needs to be timed out. This is called by the inbound
+										// stream code during normal operation. This timeout simulates a
+										// stream not arriving in time.
+										inbox.Timeout(errors.New("artificial timeout"))
+										return
+									}
+									wg.Add(1)
+									go func() {
+										defer wg.Done()
+										arrowData, err := c.BatchToArrow(batch)
+										if err != nil {
+											errCh <- err
+											return
+										}
+										var buffer bytes.Buffer
+										_, _, err = r.Serialize(&buffer, arrowData)
+										if err != nil {
+											errCh <- err
+											return
+										}
+										var draining uint32
+										if runDrainMetaGoroutine {
+											// Listen for the drain signal.
+											wg.Add(1)
+											go func() {
+												defer wg.Done()
+												for {
+													cs, err := rpcLayer.client.Recv()
+													if cs != nil && cs.DrainRequest != nil {
+														atomic.StoreUint32(&draining, 1)
+														return
+													}
+													// TODO(asubiotto): Generate some metadata and test
+													//  that it is received.
+													if err != nil {
+														if err == io.EOF {
+															return
+														}
+														errCh <- err
+													}
+												}
+											}()
+										}
+										msg := &distsqlpb.ProducerMessage{Data: distsqlpb.ProducerData{RawBytes: buffer.Bytes()}}
+										batchesToSend := rng.Intn(65536)
+										for i := 0; infiniteBatches || i < batchesToSend; i++ {
+											if atomic.LoadUint32(&draining) == 1 {
+												break
+											}
+											if err := rpcLayer.client.Send(msg); err != nil {
+												errCh <- err
+												return
+											}
+										}
+										if err := rpcLayer.client.CloseSend(); err != nil {
+											errCh <- err
+										}
+									}()
+									// Use context.Background() because it's separate from the
+									// inbox context.
+									handleErr := <-handleStream(context.Background(), inbox, rpcLayer.server, func() { close(rpcLayer.server.csChan) })
+									wg.Wait()
+									errCh <- handleErr
+								}()
+								return errCh
+							},
+						},
+						{
+							name: "Next",
+							asyncOperation: func() chan error {
+								errCh := make(chan error)
+								go func() {
+									defer close(errCh)
+									if !runNextGoroutine {
+										return
+									}
+									if nextSleep != 0 {
+										time.Sleep(nextSleep)
+									}
+									var (
+										done bool
+										err  error
+									)
+									for !done && err == nil {
+										err = execerror.CatchVectorizedRuntimeError(func() { b := inbox.Next(inboxCtx); done = b.Length() == 0 })
+									}
+									errCh <- err
+								}()
+								return errCh
+							},
+						},
+						{
+							name: "DrainMeta",
+							asyncOperation: func() chan error {
+								errCh := make(chan error)
+								go func() {
+									defer func() {
+										inboxCancel()
+										close(errCh)
+									}()
+									// Sleep before checking for whether to run a drain meta
+									// goroutine or not, because we want to insert a potential delay
+									// before canceling the inbox context in any case.
+									if drainMetaSleep != 0 {
+										time.Sleep(drainMetaSleep)
+									}
+									if !runDrainMetaGoroutine {
+										return
+									}
+									_ = inbox.DrainMeta(inboxCtx)
+								}()
+								return errCh
+							},
+						},
+					}
+
+					// goroutineIndices will be shuffled around to randomly change the order in
+					// which the goroutines are spawned.
+					goroutineIndices := make([]int, len(goroutines))
+					for i := range goroutineIndices {
+						goroutineIndices[i] = i
+					}
+					rng.Shuffle(len(goroutineIndices), func(i, j int) { goroutineIndices[i], goroutineIndices[j] = goroutineIndices[j], goroutineIndices[i] })
+					errChans := make([]chan error, 0, len(goroutines))
+					for _, i := range goroutineIndices {
+						errChans = append(errChans, goroutines[i].asyncOperation())
+					}
+
+					for i, errCh := range errChans {
+						for err := <-errCh; err != nil; err = <-errCh {
+							if !testutils.IsError(err, "context canceled|artificial timeout") {
+								// Error to keep on draining errors but mark this test as failed.
+								t.Errorf("unexpected error %v from %s goroutine", err, goroutines[goroutineIndices[i]].name)
+							}
+						}
+					}
+				})
+			}
+		}
+	}
 }
