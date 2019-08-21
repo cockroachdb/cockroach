@@ -43,10 +43,8 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 			range_id,
 			replicas,
 			lease_holder,
-			locality
+			replica_localities,
 		FROM %[1]s.crdb_internal.ranges AS r
-		LEFT JOIN %[1]s.crdb_internal.gossip_nodes n ON
-		r.lease_holder = n.node_id
 		WHERE database_name=%[2]s
 		ORDER BY table_name, r.start_key
 		`
@@ -73,10 +71,8 @@ SELECT
   range_id,
   replicas,
   lease_holder,
-  locality
+  replica_localities
 FROM crdb_internal.ranges AS r
-LEFT JOIN crdb_internal.gossip_nodes n ON
-r.lease_holder = n.node_id
 WHERE (r.start_key < x'%s')
   AND (r.end_key   > x'%s') ORDER BY r.start_key
 `,
