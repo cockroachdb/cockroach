@@ -1656,7 +1656,19 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 			GenerationComparable: proto.Bool(true),
 		},
 	}
+	require.True(t, crt.EnterJoint())
+	require.False(t, crt.LeaveJoint())
 	act := crt.String()
-	exp := "ADD_REPLICA[(n1,s2):3LEARNER], REMOVE_REPLICA[(n4,s5):6]: after=[(n1,s2):3LEARNER (n4,s5):6 (n7,s8):9LEARNER] next=10"
+	exp := "ENTER_JOINT ADD_REPLICA[(n1,s2):3LEARNER], REMOVE_REPLICA[(n4,s5):6]: after=[(n1,s2):3LEARNER (n4,s5):6 (n7,s8):9LEARNER] next=10"
+	require.Equal(t, exp, act)
+
+	crt.InternalRemovedReplicas = nil
+	crt.InternalAddedReplicas = nil
+	require.False(t, crt.EnterJoint())
+	require.True(t, crt.LeaveJoint())
+	act = crt.String()
+	require.Empty(t, crt.Added())
+	require.Empty(t, crt.Removed())
+	exp = "LEAVE_JOINT: after=[(n1,s2):3LEARNER (n4,s5):6 (n7,s8):9LEARNER] next=10"
 	require.Equal(t, exp, act)
 }
