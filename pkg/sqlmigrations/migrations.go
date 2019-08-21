@@ -200,8 +200,32 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newDescriptorIDs:    staticIDs(keys.CommentsTableID),
 	},
 	{
-		// Introduced in v2.2.
-		// TODO(knz): bake this migration into v2.3.
+		name:                "create system.replication_constraint_stats table",
+		workFn:              createReplicationConstraintStatsTable,
+		includedInBootstrap: true,
+		newDescriptorIDs:    staticIDs(keys.ReplicationConstraintStatsTableID),
+	},
+	{
+		name:                "create system.replication_critical_localities table",
+		workFn:              createReplicationCriticalLocalitiesTable,
+		includedInBootstrap: true,
+		newDescriptorIDs:    staticIDs(keys.ReplicationCriticalLocalitiesTableID),
+	},
+	{
+		name:                "create system.reports_meta table",
+		workFn:              createReportsMetaTable,
+		includedInBootstrap: true,
+		newDescriptorIDs:    staticIDs(keys.ReportsMetaTableID),
+	},
+	{
+		name:                "create system.replication_stats table",
+		workFn:              createReplicationStatsTable,
+		includedInBootstrap: true,
+		newDescriptorIDs:    staticIDs(keys.ReplicationStatsTableID),
+	},
+	{
+		// Introduced in v19.1.
+		// TODO(knz): bake this migration into v19.2.
 		name:   "propagate the ts purge interval to the new setting names",
 		workFn: retireOldTsPurgeIntervalSettings,
 	},
@@ -554,6 +578,34 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 
 func createCommentTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.CommentsTable)
+}
+
+func createReplicationConstraintStatsTable(ctx context.Context, r runner) error {
+	if err := createSystemTable(ctx, r, sqlbase.ReplicationConstraintStatsTable); err != nil {
+		return err
+	}
+	_, err := r.sqlExecutor.Exec(ctx, "add-constraints-ttl", nil, /* txn */
+		fmt.Sprintf("ALTER TABLE %s CONFIGURE ZONE USING gc.ttlseconds = %d",
+			sqlbase.ReplicationConstraintStatsTable.Name, int(sqlbase.ReplicationConstraintStatsTableTTL.Seconds())))
+	return errors.Wrapf(err, "failed to set TTL on %s", sqlbase.ReplicationConstraintStatsTable.Name)
+}
+
+func createReplicationCriticalLocalitiesTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.ReplicationCriticalLocalitiesTable)
+}
+
+func createReplicationStatsTable(ctx context.Context, r runner) error {
+	if err := createSystemTable(ctx, r, sqlbase.ReplicationStatsTable); err != nil {
+		return err
+	}
+	_, err := r.sqlExecutor.Exec(ctx, "add-replication-status-ttl", nil, /* txn */
+		fmt.Sprintf("ALTER TABLE %s CONFIGURE ZONE USING gc.ttlseconds = %d",
+			sqlbase.ReplicationStatsTable.Name, int(sqlbase.ReplicationStatsTableTTL.Seconds())))
+	return errors.Wrapf(err, "failed to set TTL on %s", sqlbase.ReplicationStatsTable.Name)
+}
+
+func createReportsMetaTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.ReportsMetaTable)
 }
 
 func runStmtAsRootWithRetry(

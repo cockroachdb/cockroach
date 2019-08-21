@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/constraint"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
@@ -902,7 +903,7 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 				Constraints: tc.constraints,
 				NumReplicas: proto.Int32(tc.zoneNumReplicas),
 			}
-			analyzed := analyzeConstraints(
+			analyzed := constraint.AnalyzeConstraints(
 				context.Background(), getTestStoreDesc, testStoreReplicas(tc.existing), zone)
 			for _, s := range testStores {
 				valid, necessary := allocateConstraintsCheck(s, analyzed)
@@ -1035,7 +1036,8 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 				Constraints: tc.constraints,
 				NumReplicas: proto.Int32(tc.zoneNumReplicas),
 			}
-			analyzed := analyzeConstraints(context.Background(), getTestStoreDesc, existing, zone)
+			analyzed := constraint.AnalyzeConstraints(
+				context.Background(), getTestStoreDesc, existing, zone)
 			for storeID, expected := range tc.expected {
 				valid, necessary := removeConstraintsCheck(testStores[storeID], analyzed)
 				if e, a := expected.valid, valid; e != a {
@@ -1191,7 +1193,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 		targets := rebalanceCandidates(
 			context.Background(),
 			filteredSL,
-			analyzedConstraints{},
+			constraint.AnalyzedConstraints{},
 			replicas,
 			existingNodeLocalities,
 			func(nodeID roachpb.NodeID) string {

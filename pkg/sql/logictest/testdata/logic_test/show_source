@@ -159,41 +159,49 @@ query T colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system]
 ----
 table_name
-comments
-descriptor
-eventlog
-jobs
-lease
-locations
 namespace
-rangelog
-role_members
-settings
-table_statistics
-ui
+descriptor
 users
-web_sessions
 zones
+settings
+lease
+eventlog
+rangelog
+ui
+jobs
+web_sessions
+table_statistics
+locations
+role_members
+comments
+replication_constraint_stats
+replication_critical_localities
+replication_stats
+reports_meta
 
 query TT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
-table_name        comment
-namespace         ·
-descriptor        ·
-users             ·
-zones             ·
-settings          ·
-lease             ·
-eventlog          ·
-rangelog          ·
-ui                ·
-jobs              ·
-web_sessions      ·
-table_statistics  ·
-locations         ·
-role_members      ·
-comments          ·
+table_name                       comment
+namespace                        ·
+descriptor                       ·
+users                            ·
+zones                            ·
+settings                         ·
+lease                            ·
+eventlog                         ·
+rangelog                         ·
+ui                               ·
+jobs                             ·
+web_sessions                     ·
+table_statistics                 ·
+locations                        ·
+role_members                     ·
+comments                         ·
+replication_constraint_stats     ·
+replication_critical_localities  ·
+replication_stats                ·
+reports_meta                     ·
 
 query ITTT colnames
 SELECT node_id, user_name, application_name, active_queries
