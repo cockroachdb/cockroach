@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -79,15 +80,15 @@ type replicatedCmd struct {
 
 // decodedRaftEntry represents the deserialized content of a raftpb.Entry.
 type decodedRaftEntry struct {
-	idKey              storagebase.CmdIDKey
-	raftCmd            storagepb.RaftCommand
-	*decodedConfChange // only non-nil for config changes
+	idKey      storagebase.CmdIDKey
+	raftCmd    storagepb.RaftCommand
+	confChange *decodedConfChange // only non-nil for config changes
 }
 
 // decodedConfChange represents the fields of a config change raft command.
 type decodedConfChange struct {
-	cc    raftpb.ConfChange
-	ccCtx ConfChangeContext
+	raftpb.ConfChangeI
+	ConfChangeContext
 }
 
 // decode decodes the entry e into the replicatedCmd.
@@ -191,17 +192,32 @@ func (d *decodedRaftEntry) decodeNormalEntry(e *raftpb.Entry) error {
 }
 
 func (d *decodedRaftEntry) decodeConfChangeEntry(e *raftpb.Entry) error {
-	d.decodedConfChange = &decodedConfChange{}
-	if err := protoutil.Unmarshal(e.Data, &d.cc); err != nil {
-		return wrapWithNonDeterministicFailure(err, "while unmarshaling ConfChange")
+	d.confChange = &decodedConfChange{}
+
+	switch e.Type {
+	case raftpb.EntryConfChange:
+		var cc raftpb.ConfChange
+		if err := protoutil.Unmarshal(e.Data, &cc); err != nil {
+			return wrapWithNonDeterministicFailure(err, "while unmarshaling ConfChange")
+		}
+		d.confChange.ConfChangeI = cc
+	case raftpb.EntryConfChangeV2:
+		var cc raftpb.ConfChangeV2
+		if err := protoutil.Unmarshal(e.Data, &cc); err != nil {
+			return wrapWithNonDeterministicFailure(err, "while unmarshaling ConfChangeV2")
+		}
+		d.confChange.ConfChangeI = cc
+	default:
+		err := errors.New("unknown entry type")
+		return wrapWithNonDeterministicFailure(err, err.Error())
 	}
-	if err := protoutil.Unmarshal(d.cc.Context, &d.ccCtx); err != nil {
+	if err := protoutil.Unmarshal(d.confChange.AsV2().Context, &d.confChange.ConfChangeContext); err != nil {
 		return wrapWithNonDeterministicFailure(err, "while unmarshaling ConfChangeContext")
 	}
-	if err := protoutil.Unmarshal(d.ccCtx.Payload, &d.raftCmd); err != nil {
+	if err := protoutil.Unmarshal(d.confChange.Payload, &d.raftCmd); err != nil {
 		return wrapWithNonDeterministicFailure(err, "while unmarshaling RaftCommand")
 	}
-	d.idKey = storagebase.CmdIDKey(d.ccCtx.CommandID)
+	d.idKey = storagebase.CmdIDKey(d.confChange.CommandID)
 	return nil
 }
 
