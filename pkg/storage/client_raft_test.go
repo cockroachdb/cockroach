@@ -4399,6 +4399,7 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 		clock:           clock,
 		rpcTestingKnobs: knobs,
 	}
+
 	const numReplicas = 3
 	mtc.Start(t, numReplicas)
 	defer mtc.Stop()
@@ -4411,45 +4412,54 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	keyA := append(keys.MakeTablePrefix(100), 'a')
 	replica1 := mtc.stores[0].LookupReplica(roachpb.RKey(keyA))
 	mtc.replicateRange(replica1.RangeID, 1, 2)
-	// Put some data in the range so we'll have something to test for.
-	putReq := &roachpb.PutRequest{}
-	putReq.RequestHeader.Key = keyA
-	putReq.Value.SetInt(1)
-	_, pErr := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), putReq)
-	require.Nil(t, pErr)
+	// Create a test function so that we can run the test both immediately after
+	// up-replicating and after a restart.
+	runTest := func(t *testing.T) {
+		// Look up the replica again because we may have restarted the store.
+		replica1 = mtc.stores[0].LookupReplica(roachpb.RKey(keyA))
+		// Put some data in the range so we'll have something to test for.
+		putReq := &roachpb.PutRequest{}
+		putReq.RequestHeader.Key = keyA
+		putReq.Value.SetInt(1)
+		_, pErr := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), putReq)
+		require.Nil(t, pErr)
 
-	// Wait for all nodes to catch up.
-	mtc.waitForValues(keyA, []int64{1, 1, 1})
-	disabled.Store(true)
-	repl1, err := mtc.stores[0].GetReplica(1)
-	require.Nil(t, err)
-	// Transfer the lease on range 1
-	lease, _ := repl1.GetLease()
-	var target int
-	for i := roachpb.StoreID(1); i <= numReplicas; i++ {
-		if lease.Replica.StoreID != i {
-			target = int(i - 1)
-			break
+		// Wait for all nodes to catch up.
+		mtc.waitForValues(keyA, []int64{1, 1, 1})
+		disabled.Store(true)
+		repl1, err := mtc.stores[0].GetReplica(1)
+		require.Nil(t, err)
+		// Transfer the lease on range 1
+		lease, _ := repl1.GetLease()
+		var target int
+		for i := roachpb.StoreID(1); i <= numReplicas; i++ {
+			if lease.Replica.StoreID != i {
+				target = int(i - 1)
+				break
+			}
 		}
+		mtc.transferLease(ctx, 1, int(lease.Replica.StoreID-1), target)
+		// Set a relatively short timeout so that this test doesn't take too long.
+		// We should always hit it.
+		withTimeout, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+		defer cancel()
+		putReq.Value.SetInt(2)
+		_, pErr = client.SendWrapped(withTimeout, mtc.stores[0].TestSender(), putReq)
+		require.NotNil(t, pErr, "expected an error when sending to a disconnected store")
+		// Transfer the lease back to demonstrate that the system range is still live.
+		mtc.transferLease(ctx, 1, target, int(lease.Replica.StoreID-1))
+		// Heal the partition, the previous proposal may now succeed but it may have
+		// have been canceled.
+		disabled.Store(false)
+		// Overwrite with a new value and ensure that it propagates.
+		putReq.Value.SetInt(3)
+		_, pErr = client.SendWrapped(ctx, mtc.stores[0].TestSender(), putReq)
+		require.Nil(t, pErr, "expected to succeed after healing the partition")
+		mtc.waitForValues(keyA, []int64{3, 3, 3})
 	}
-	mtc.transferLease(ctx, 1, int(lease.Replica.StoreID-1), target)
-	// Set a relatively short timeout so that this test doesn't take too long.
-	// We should always hit it.
-	withTimeout, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
-	defer cancel()
-	putReq.Value.SetInt(2)
-	_, pErr = client.SendWrapped(withTimeout, mtc.stores[0].TestSender(), putReq)
-	require.NotNil(t, pErr, "expected an error when sending to a disconnected store")
-	// Transfer the lease back to demonstrate that the system range is still live.
-	mtc.transferLease(ctx, 1, target, int(lease.Replica.StoreID-1))
-	// Heal the partition, the previous proposal may now succeed but it may have
-	// have been canceled.
-	disabled.Store(false)
-	// Overwrite with a new value and ensure that it propagates.
-	putReq.Value.SetInt(3)
-	_, pErr = client.SendWrapped(ctx, mtc.stores[0].TestSender(), putReq)
-	require.Nil(t, pErr, "expected to succeed after healing the partition")
-	mtc.waitForValues(keyA, []int64{3, 3, 3})
+	t.Run("initial_run", runTest)
+	mtc.restart()
+	t.Run("after_restart", runTest)
 }
 
 // TestAckWriteBeforeApplication tests that the success of transactional writes
