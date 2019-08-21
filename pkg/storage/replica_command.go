@@ -1072,7 +1072,7 @@ func (r *Replica) finalizeChangeReplicas(
 			return nil, errors.Errorf("programming error: cannot promote replica of type %s", rDesc.Type)
 		}
 
-		rDesc.Type = roachpb.ReplicaTypeVoter()
+		rDesc.Type = roachpb.ReplicaTypeVoterFull()
 		updatedDesc.AddReplica(rDesc)
 		replsAdded = append(replsAdded, rDesc)
 
