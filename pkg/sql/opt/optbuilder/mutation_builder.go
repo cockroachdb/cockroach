@@ -1048,6 +1048,15 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 
 	for i, n := 0, mb.tab.InboundForeignKeyCount(); i < n; i++ {
 		fk := mb.tab.InboundForeignKey(i)
+
+		// We only support RESTRICT and NO ACTION (which are the same as far as
+		// we're concerned). For other actions, bail and fall through to the exec FK
+		// code which can perform all actions.
+		if action := fk.DeleteReferenceAction(); action != tree.Restrict && action != tree.NoAction {
+			mb.checks = nil
+			return
+		}
+
 		item := memo.FKChecksItem{FKChecksItemPrivate: memo.FKChecksItemPrivate{
 			ReferencedTable: mb.tabID,
 			FKOutbound:      false,
@@ -1063,12 +1072,6 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 			panic(err)
 		}
 		origTab := orig.(cat.Table)
-
-		// Bail, so that exec FK checks pick up on FK checks and perform them.
-		if fk.DeleteReferenceAction() != tree.Restrict && fk.DeleteReferenceAction() != tree.NoAction {
-			mb.checks = nil
-			return
-		}
 		numCols := fk.ColumnCount()
 
 		// We need SELECT privileges on the origin table.
