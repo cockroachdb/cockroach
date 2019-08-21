@@ -44,9 +44,9 @@ type stmtKey struct {
 
 // appStats holds per-application statistics.
 type appStats struct {
-	st *cluster.Settings
-
 	syncutil.Mutex
+
+	st       *cluster.Settings
 	stmts    map[stmtKey]*stmtStats
 	txnStats transactionStats
 }
@@ -58,11 +58,12 @@ type stmtStats struct {
 	data roachpb.StatementStatistics
 }
 
-// transactionStats hold per-application transaction statistics.
+// transactionStats holds per-application transaction statistics.
 type transactionStats struct {
-	syncutil.Mutex
-
-	data roachpb.TxnStats
+	mu struct {
+		syncutil.Mutex
+		roachpb.TxnStats
+	}
 }
 
 // stmtStatsEnable determines whether to collect per-statement
@@ -213,28 +214,52 @@ func anonymizeStmt(ast tree.Statement) string {
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 }
 
-func (a *appStats) recordTransaction(totalTimeSec float64, committed bool, implicit bool) {
+func (s *transactionStats) getStats() (
+	txnCount int64,
+	avgTxnTime float64,
+	committedCount int64,
+	implicitCount int64,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	txnCount = s.mu.TxnCount
+	avgTxnTime = s.mu.AggTotalTimeSec / float64(txnCount)
+	committedCount = s.mu.CommittedCount
+	implicitCount = s.mu.ImplicitCount
+	return txnCount, avgTxnTime, committedCount, implicitCount
+}
+
+func (s *transactionStats) recordTransaction(
+	totalTimeSec float64, ev txnEvent, isImplicit func() bool,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.TxnCount++
+	s.mu.AggTotalTimeSec += totalTimeSec
+	if ev == txnCommit {
+		s.mu.CommittedCount++
+	}
+	// TODO(yuzefovich): I don't understand it, but sometimes isImplicit is null
+	// here which means that either txnCommit or txnAborted events were emitted,
+	// but txnStart wasn't (?).
+	if isImplicit != nil && isImplicit() {
+		s.mu.ImplicitCount++
+	}
+}
+
+func (a *appStats) recordTransaction(totalTimeSec float64, ev txnEvent, isImplicit func() bool) {
 	if a == nil || !txnStatsEnable.Get(&a.st.SV) {
 		return
 	}
-	a.txnStats.Lock()
-	a.txnStats.data.TxnCount++
-	a.txnStats.data.AggTotalTimeSec += totalTimeSec
-	if committed {
-		a.txnStats.data.CommittedCount++
-	}
-	if implicit {
-		a.txnStats.data.ImplicitCount++
-	}
-	a.txnStats.Unlock()
+	a.txnStats.recordTransaction(totalTimeSec, ev, isImplicit)
 }
 
-// sqlStats carries per-application statistics for all applications on
-// each node.
+// sqlStats carries per-application statistics for all applications on each
+// node.
 type sqlStats struct {
-	st *cluster.Settings
 	syncutil.Mutex
 
+	st *cluster.Settings
 	// lastReset is the time at which the app containers were reset.
 	lastReset time.Time
 	// apps is the container for all the per-application statistics objects.

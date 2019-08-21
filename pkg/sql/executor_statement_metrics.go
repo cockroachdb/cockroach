@@ -128,7 +128,7 @@ func (ex *connExecutor) recordStatementSummary(
 	bytesRead int64,
 	rowsRead int64,
 ) {
-	phaseTimes := planner.statsCollector.PhaseTimes()
+	phaseTimes := ex.statsCollector.phaseTimes
 
 	// Compute the run latency. This is always recorded in the
 	// server metrics.
@@ -167,7 +167,7 @@ func (ex *connExecutor) recordStatementSummary(
 		m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
 	}
 
-	planner.statsCollector.RecordStatement(
+	ex.statsCollector.recordStatement(
 		stmt, planner.curPlan.savedPlanForStats,
 		flags.IsSet(planFlagDistributed), flags.IsSet(planFlagOptUsed), flags.IsSet(planFlagImplicitTxn),
 		automaticRetryCount, rowsAffected, err,

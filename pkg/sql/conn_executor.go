@@ -590,6 +590,7 @@ func (s *Server) newConnExecutor(
 
 	ex.sessionTracing.ex = ex
 	ex.transitionCtx.sessionTracing = &ex.sessionTracing
+	ex.statsCollector = ex.newStatsCollector()
 	ex.initPlanner(ctx, &ex.planner)
 
 	return ex, nil
@@ -747,7 +748,10 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.state.finishExternalTxn()
 	}
 
-	if err := ex.resetExtraTxnState(ctx, ex.server.dbCache); err != nil {
+	// TODO(yuzefovich): I'm not sure about which kind of txnEvent to pass in.
+	// Do we want to record the transaction when ex.close() is called? Is there
+	// a transaction to record at all?
+	if err := ex.resetExtraTxnState(ctx, ex.server.dbCache, noEvent); err != nil {
 		log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 	}
 
@@ -874,6 +878,10 @@ type connExecutor struct {
 		// txnRewindPos is advanced. Prepared statements are shared between the two
 		// collections, but these collections are periodically reconciled.
 		prepStmtsNamespaceAtTxnRewindPos prepStmtNamespace
+
+		// isImplicit is a function that returns whether the transaction is
+		// implicit.
+		isImplicit func() bool
 	}
 
 	// sessionData contains the user-configurable connection variables.
@@ -908,8 +916,13 @@ type connExecutor struct {
 	// before using.
 	planner planner
 	// phaseTimes tracks session- and transaction-level phase times. It is
-	// copied-by-value to each planner in ex.resetPlanner().
+	// copied-by-value when resetting statsCollector before executing each
+	// statement.
 	phaseTimes phaseTimes
+
+	// statsCollector is used to collect statistics about SQL statements and
+	// transactions.
+	statsCollector *sqlStatsCollector
 
 	// mu contains of all elements of the struct that can be changed
 	// after initialization, and may be accessed from another thread.
@@ -937,15 +950,6 @@ type connExecutor struct {
 	// draining is set if we've received a DrainRequest. Once this is set, we're
 	// going to find a suitable time to close the connection.
 	draining bool
-
-	// txnInfo contains information about the current (or last) transaction. It
-	// is used to record information about transactions and is stored here
-	// separately from the state so that txn in state could be safely reset and
-	// the information could be recorded afterwards.
-	txnInfo struct {
-		// implicit indicates whether the transaction is implicit.
-		implicit bool
-	}
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -1026,7 +1030,7 @@ func (ns *prepStmtNamespace) resetTo(ctx context.Context, to prepStmtNamespace) 
 // resetExtraTxnState resets the fields of ex.extraTxnState when a transaction
 // commits, rolls back or restarts.
 func (ex *connExecutor) resetExtraTxnState(
-	ctx context.Context, dbCacheHolder *databaseCacheHolder,
+	ctx context.Context, dbCacheHolder *databaseCacheHolder, ev txnEvent,
 ) error {
 	ex.extraTxnState.schemaChangers.reset()
 
@@ -1038,6 +1042,12 @@ func (ex *connExecutor) resetExtraTxnState(
 	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
 		p.decRef(ctx)
 		delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
+	}
+
+	// After txn is finished, we record the information about it.
+	switch ev {
+	case txnCommit, txnAborted:
+		ex.recordTransaction(ev)
 	}
 
 	return nil
@@ -1613,6 +1623,8 @@ func (ex *connExecutor) execCopyIn(
 			// state machine, but the copyMachine manages its own transactions without
 			// going through the state machine.
 			ex.state.sqlTimestamp = txnTS
+			ex.statsCollector = ex.newStatsCollector()
+			ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 			ex.initPlanner(ctx, p)
 			ex.resetPlanner(ctx, p, txn, stmtTS, 0 /* numAnnotations */)
 		},
@@ -1820,17 +1832,18 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			InternalExecutor: ie,
 			DB:               ex.server.cfg.DB,
 		},
-		SessionMutator:  ex.dataMutator,
-		VirtualSchemas:  ex.server.cfg.VirtualSchemas,
-		Tracing:         &ex.sessionTracing,
-		StatusServer:    ex.server.cfg.StatusServer,
-		MemMetrics:      &ex.memMetrics,
-		Tables:          &ex.extraTxnState.tables,
-		ExecCfg:         ex.server.cfg,
-		DistSQLPlanner:  ex.server.cfg.DistSQLPlanner,
-		TxnModesSetter:  ex,
-		SchemaChangers:  &ex.extraTxnState.schemaChangers,
-		schemaAccessors: scInterface,
+		SessionMutator:    ex.dataMutator,
+		VirtualSchemas:    ex.server.cfg.VirtualSchemas,
+		Tracing:           &ex.sessionTracing,
+		StatusServer:      ex.server.cfg.StatusServer,
+		MemMetrics:        &ex.memMetrics,
+		Tables:            &ex.extraTxnState.tables,
+		ExecCfg:           ex.server.cfg,
+		DistSQLPlanner:    ex.server.cfg.DistSQLPlanner,
+		TxnModesSetter:    ex,
+		SchemaChangers:    &ex.extraTxnState.schemaChangers,
+		schemaAccessors:   scInterface,
+		sqlStatsCollector: ex.statsCollector,
 	}
 }
 
@@ -1880,7 +1893,6 @@ func (ex *connExecutor) implicitTxn() bool {
 // query in the context of this session.
 func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
-	p.statsCollector = ex.newStatsCollector()
 
 	ex.initEvalCtx(ctx, &p.extendedEvalCtx, p)
 
@@ -1902,7 +1914,6 @@ func (ex *connExecutor) resetPlanner(
 	p.stmt = nil
 
 	p.cancelChecker.Reset(ctx)
-	p.statsCollector.Reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 
 	p.semaCtx = tree.MakeSemaContext()
 	p.semaCtx.Location = &ex.sessionData.DataConversion.Location
@@ -1950,7 +1961,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	case noEvent:
 	case txnStart:
 		ex.extraTxnState.autoRetryCounter = 0
-		ex.recordTransactionStart()
+		ex.extraTxnState.isImplicit = ex.recordTransactionStart()
 	case txnCommit:
 		if res.Err() != nil {
 			err := errorutil.UnexpectedWithIssueErrorf(
@@ -2015,18 +2026,12 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 		fallthrough
 	case txnRestart, txnAborted:
-		if err := ex.resetExtraTxnState(ex.Ctx(), ex.server.dbCache); err != nil {
+		if err := ex.resetExtraTxnState(ex.Ctx(), ex.server.dbCache, advInfo.txnEvent); err != nil {
 			return advanceInfo{}, err
 		}
 	default:
 		return advanceInfo{}, errors.AssertionFailedf(
 			"unexpected event: %v", errors.Safe(advInfo.txnEvent))
-	}
-
-	// After txn is finished, we record the information about it.
-	switch advInfo.txnEvent {
-	case txnCommit, txnAborted:
-		ex.recordTransaction(advInfo.txnEvent)
 	}
 
 	return advInfo, nil
@@ -2060,10 +2065,10 @@ func (ex *connExecutor) recordError(ctx context.Context, err error) {
 	sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
 }
 
-// newStatsCollector returns an sqlStatsCollector that will record stats in the
+// newStatsCollector returns a sqlStatsCollector that will record stats in the
 // session's stats containers.
-func (ex *connExecutor) newStatsCollector() sqlStatsCollector {
-	return newSQLStatsCollectorImpl(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+func (ex *connExecutor) newStatsCollector() *sqlStatsCollector {
+	return newSQLStatsCollector(&ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 }
 
 // cancelQuery is part of the registrySession interface.

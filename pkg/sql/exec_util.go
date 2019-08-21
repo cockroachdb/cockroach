@@ -1860,43 +1860,32 @@ func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {
 	m.data.SequenceState.RecordValue(seqID, val)
 }
 
-type sqlStatsCollectorImpl struct {
-	// sqlStats tracks per-application statistics for all
-	// applications on each node.
+type sqlStatsCollector struct {
+	// sqlStats tracks per-application statistics for all applications on each
+	// node.
 	sqlStats *sqlStats
-	// appStats track per-application SQL usage statistics. This is a pointer into
-	// sqlStats set as the session's current app.
+	// appStats track per-application SQL usage statistics. This is a pointer
+	// into sqlStats set as the session's current app.
 	appStats *appStats
-	// phaseTimes tracks session-level phase times. It is copied-by-value
-	// to each planner in session.newPlanner.
-	phaseTimes phaseTimes
+	// phaseTimes tracks session-level phase times.
+	phaseTimes *phaseTimes
 }
 
-// sqlStatsCollectorImpl implements the sqlStatsCollector interface.
-var _ sqlStatsCollector = &sqlStatsCollectorImpl{}
-
-// newSQLStatsCollectorImpl creates an instance of sqlStatsCollectorImpl.
-//
-// note that phaseTimes is an array, not a slice, so this performs a copy-by-value.
-func newSQLStatsCollectorImpl(
-	sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes,
-) *sqlStatsCollectorImpl {
-	return &sqlStatsCollectorImpl{
+// newSQLStatsCollector creates an instance of sqlStatsCollector. Note that
+// phaseTimes is an array, not a slice, so this performs a copy-by-value.
+func newSQLStatsCollector(
+	sqlStats *sqlStats, appStats *appStats, phaseTimes phaseTimes,
+) *sqlStatsCollector {
+	return &sqlStatsCollector{
 		sqlStats:   sqlStats,
 		appStats:   appStats,
-		phaseTimes: *phaseTimes,
+		phaseTimes: &phaseTimes,
 	}
 }
 
-// PhaseTimes is part of the sqlStatsCollector interface.
-func (s *sqlStatsCollectorImpl) PhaseTimes() *phaseTimes {
-	return &s.phaseTimes
-}
-
-// RecordStatement is part of the sqlStatsCollector interface.
-//
-// samplePlanDescription can be nil, as these are only sampled periodically per unique fingerprint.
-func (s *sqlStatsCollectorImpl) RecordStatement(
+// recordStatement records stats for one statement. samplePlanDescription can
+// be nil, as these are only sampled periodically per unique fingerprint.
+func (s *sqlStatsCollector) recordStatement(
 	stmt *Statement,
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	distSQLUsed bool,
@@ -1913,24 +1902,17 @@ func (s *sqlStatsCollectorImpl) RecordStatement(
 		parseLat, planLat, runLat, svcLat, ovhLat, bytesRead, rowsRead)
 }
 
-// RecordTransaction is part of the sqlStatsCollector interface.
-func (s *sqlStatsCollectorImpl) RecordTransaction(
-	totalTimeSec float64, committed bool, implicit bool,
+// recordTransaction records stats for one transaction.
+func (s *sqlStatsCollector) recordTransaction(
+	totalTimeSec float64, ev txnEvent, isImplicit func() bool,
 ) {
-	s.appStats.recordTransaction(totalTimeSec, committed, implicit)
+	s.appStats.recordTransaction(totalTimeSec, ev, isImplicit)
 }
 
-// SQLStats is part of the sqlStatsCollector interface.
-func (s *sqlStatsCollectorImpl) SQLStats() *sqlStats {
-	return s.sqlStats
-}
-
-func (s *sqlStatsCollectorImpl) Reset(
-	sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes,
-) {
-	*s = sqlStatsCollectorImpl{
+func (s *sqlStatsCollector) reset(sqlStats *sqlStats, appStats *appStats, phaseTimes phaseTimes) {
+	*s = sqlStatsCollector{
 		sqlStats:   sqlStats,
 		appStats:   appStats,
-		phaseTimes: *phaseTimes,
+		phaseTimes: &phaseTimes,
 	}
 }
