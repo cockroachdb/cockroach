@@ -59,8 +59,6 @@ func (rsl StateLoader) Load(
 	ctx context.Context, reader engine.Reader, desc *roachpb.RangeDescriptor,
 ) (storagepb.ReplicaState, error) {
 	var s storagepb.ReplicaState
-	// TODO(tschottdorf): figure out whether this is always synchronous with
-	// on-disk state (likely iffy during Split/ChangeReplica triggers).
 	s.Desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
 	// Read the range lease.
 	lease, err := rsl.LoadLease(ctx, reader)

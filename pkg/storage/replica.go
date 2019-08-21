@@ -958,12 +958,20 @@ func (r *Replica) State() storagepb.RangeInfo {
 // assertStateLocked can be called from the Raft goroutine to check that the
 // in-memory and on-disk states of the Replica are congruent.
 // Requires that both r.raftMu and r.mu are held.
-//
-// TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
 func (r *Replica) assertStateLocked(ctx context.Context, reader engine.Reader) {
 	diskState, err := r.mu.stateLoader.Load(ctx, reader, r.mu.state.Desc)
 	if err != nil {
 		log.Fatal(ctx, err)
+	}
+	if r.mu.state.Desc.IsInitialized() {
+		descKey := keys.RangeDescriptorKey(r.mu.state.Desc.StartKey)
+		if ok, err := engine.MVCCGetProto(
+			ctx, r.Engine(), descKey, hlc.MaxTimestamp, diskState.Desc, engine.MVCCGetOptions{Inconsistent: true},
+		); err != nil {
+			log.Fatal(ctx, err)
+		} else if !ok {
+			log.Fatalf(ctx, "range descriptor not persisted at %s for %s", descKey, r.mu.state.Desc)
+		}
 	}
 	if !diskState.Equal(r.mu.state) {
 		// The roundabout way of printing here is to expose this information in sentry.io.
