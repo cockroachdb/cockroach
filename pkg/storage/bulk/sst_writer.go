@@ -21,14 +21,21 @@ import (
 	"github.com/pkg/errors"
 )
 
+type writeCloseSyncer interface {
+	io.WriteCloser
+	Sync() error
+}
+
 // SSTWriter writes SSTables.
 type SSTWriter struct {
 	fw *sstable.Writer
-	f  *memFile
+	f  writeCloseSyncer
 	// DataSize tracks the total key and value bytes added so far.
 	DataSize int64
 	scratch  []byte
 }
+
+var _ engine.Writer = &SSTWriter{}
 
 var mvccComparer = &pebble.Comparer{
 	Compare: engine.MVCCKeyCompare,
@@ -99,17 +106,19 @@ func (t *timeboundPropCollector) Name() string {
 
 // dummyDeleteRangeCollector is a stub collector that just identifies itself.
 // This stub can be installed so that SSTs claim to have the same props as those
-// written by the Rocks writer, using the collector in table_props.cc. However
-// since bulk-ingestion SSTs never contain deletions (range or otherwise), there
-// is no actual implementation needed here.
+// written by the Rocks writer, using the collector in table_props.cc.
+//
+// TODO(jeffreyxiao): The implementation of this collector is different from
+// the one in table_props.cc because Pebble does not expose a NeedCompact
+// function. The actual behavior should not differ from the RocksDB
+// implementation because although NeedsCompact() is true and the
+// marked_for_compaction tag is set for the RocksDB implementation, the tag is
+// never checked in IngestExternalFiles.
 type dummyDeleteRangeCollector struct{}
 
 var _ pebble.TablePropertyCollector = &dummyDeleteRangeCollector{}
 
 func (dummyDeleteRangeCollector) Add(key pebble.InternalKey, value []byte) error {
-	if key.Kind() != pebble.InternalKeyKindSet {
-		return errors.Errorf("unsupported key kind %v", key.Kind())
-	}
 	return nil
 }
 
@@ -139,35 +148,114 @@ var pebbleOpts = func() *pebble.Options {
 }()
 
 // MakeSSTWriter creates a new SSTWriter.
-func MakeSSTWriter() SSTWriter {
-	f := &memFile{}
+func MakeSSTWriter(f writeCloseSyncer) SSTWriter {
 	sst := sstable.NewWriter(f, pebbleOpts, pebble.LevelOptions{BlockSize: 64 * 1024})
 	return SSTWriter{fw: sst, f: f}
 }
 
-// Add puts a kv entry into the sstable being built. An error is returned if it
-// is not greater than any previously added entry (according to the comparator
-// configured during writer creation). `Close` cannot have been called.
-func (fw *SSTWriter) Add(kv engine.MVCCKeyValue) error {
+// ApplyBatchRepr implements the Writer interface.
+func (fw *SSTWriter) ApplyBatchRepr(repr []byte, sync bool) error {
+	panic("unimplemented")
+}
+
+// Clear implements the Writer interface. Note that it inserts a tombstone
+// rather than actually remove the entry from the storage engine. An error is
+// returned if it is not greater than any previous key used in Put or Clear
+// (according to the comparator configured during writer creation). Close
+// cannot have been called.
+func (fw *SSTWriter) Clear(key engine.MVCCKey) error {
+	if fw.fw == nil {
+		return errors.New("cannot call Clear on a closed writer")
+	}
+	fw.DataSize += int64(len(key.Key))
+	fw.scratch = engine.EncodeKeyToBuf(fw.scratch[:0], key)
+	return fw.fw.Delete(fw.scratch)
+}
+
+// SingleClear implements the Writer interface.
+func (fw *SSTWriter) SingleClear(key engine.MVCCKey) error {
+	panic("unimplemented")
+}
+
+// ClearRange implements the Writer interface. Note that it inserts a range deletion
+// tombstone rather than actually remove the entries from the storage engine.
+// It can be called at any time with respect to Put and Clear.
+func (fw *SSTWriter) ClearRange(start, end engine.MVCCKey) error {
+	if fw.fw == nil {
+		return errors.New("cannot call ClearRange on a closed writer")
+	}
+	fw.DataSize += int64(len(start.Key)) + int64(len(end.Key))
+	fw.scratch = engine.EncodeKeyToBuf(fw.scratch[:0], start)
+	startScratch := fw.scratch
+	fw.scratch = engine.EncodeKeyToBuf(fw.scratch[len(startScratch):], end)
+	endScratch := fw.scratch
+	return fw.fw.DeleteRange(startScratch, endScratch)
+}
+
+// ClearIterRange implements the Writer interface. It inserts range deletion
+// tombstones for all keys from start (inclusive) to end (exclusive) in
+// the provided iterator.
+func (fw *SSTWriter) ClearIterRange(iter engine.Iterator, start, end engine.MVCCKey) error {
+	if fw.fw == nil {
+		return errors.New("cannot call ClearIterRange on a closed writer")
+	}
+	iter.Seek(start)
+	for {
+		valid, err := iter.Valid()
+		if err != nil {
+			return err
+		}
+		if !valid || !iter.Key().Less(end) {
+			break
+		}
+		if err := fw.Clear(iter.Key()); err != nil {
+			return err
+		}
+		iter.Next()
+	}
+	return nil
+}
+
+// Merge implements the Writer interface.
+func (fw *SSTWriter) Merge(key engine.MVCCKey, value []byte) error {
+	panic("unimplemented")
+}
+
+// Put implements the Writer interface. It puts a kv entry into the sstable
+// being built. An error is returned if it is not greater than any previous key
+// used in Put or Clear (according to the comparator configured during writer
+// creation). Close cannot have been called.
+func (fw *SSTWriter) Put(key engine.MVCCKey, value []byte) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Open on a closed writer")
 	}
-	fw.DataSize += int64(len(kv.Key.Key)) + int64(len(kv.Value))
-	fw.scratch = engine.EncodeKeyToBuf(fw.scratch[:0], kv.Key)
-	return fw.fw.Set(fw.scratch, kv.Value)
+	fw.DataSize += int64(len(key.Key)) + int64(len(value))
+	fw.scratch = engine.EncodeKeyToBuf(fw.scratch[:0], key)
+	return fw.fw.Set(fw.scratch, value)
 }
 
-// Finish finalizes the writer and returns the constructed file's contents. At
-// least one kv entry must have been added.
-func (fw *SSTWriter) Finish() ([]byte, error) {
+// LogData implements the Writer interface.
+func (fw *SSTWriter) LogData(data []byte) error {
+	panic("unimplemented")
+}
+
+// LogLogicalOp implements the Writer interface.
+func (fw *SSTWriter) LogLogicalOp(
+	op engine.MVCCLogicalOpType, details engine.MVCCLogicalOpDetails,
+) {
+	// No-op. Logical logging disabled.
+}
+
+// Finish finalizes the writer. At least one kv entry must have been added.
+func (fw *SSTWriter) Finish() error {
 	if fw.fw == nil {
-		return nil, errors.New("cannot call Finish on a closed writer")
+		return errors.New("cannot call Finish on a closed writer")
 	}
 	if err := fw.fw.Close(); err != nil {
-		return nil, err
+		return err
 	}
 	fw.fw = nil
-	return fw.f.data, nil
+	return nil
 }
 
 // Close finishes and frees memory and other resources. Close is idempotent.
@@ -184,20 +272,27 @@ func (fw *SSTWriter) Close() {
 	fw.fw = nil
 }
 
-type memFile struct {
+// SSTMemFile is an in-memory SST file.
+type SSTMemFile struct {
 	data []byte
 	pos  int
 }
 
-func (*memFile) Close() error {
+var _ writeCloseSyncer = &SSTMemFile{}
+
+// Close closes the SSTMemFile. This is a no-op.
+func (*SSTMemFile) Close() error {
 	return nil
 }
 
-func (*memFile) Sync() error {
+// Sync syncs the SSTMemFile. This is a no-op.
+func (*SSTMemFile) Sync() error {
 	return nil
 }
 
-func (f *memFile) Read(p []byte) (int, error) {
+// Read copies the data from the current position in the SSTMemFile to the
+// provided buffer.
+func (f *SSTMemFile) Read(p []byte) (int, error) {
 	if f.pos >= len(f.data) {
 		return 0, io.EOF
 	}
@@ -206,14 +301,22 @@ func (f *memFile) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-func (f *memFile) ReadAt(p []byte, off int64) (int, error) {
+// ReadAt copies the data from the specified offset in the SSTMemFile to the
+// provided buffer.
+func (f *SSTMemFile) ReadAt(p []byte, off int64) (int, error) {
 	if off >= int64(len(f.data)) {
 		return 0, io.EOF
 	}
 	return copy(p, f.data[off:]), nil
 }
 
-func (f *memFile) Write(p []byte) (int, error) {
+// Data returns the underlying buffer that backs the SSTMemFile.
+func (f *SSTMemFile) Data() []byte {
+	return f.data
+}
+
+// Write writes data to the SSTMemFile.
+func (f *SSTMemFile) Write(p []byte) (int, error) {
 	f.data = append(f.data, p...)
 	return len(p), nil
 }
