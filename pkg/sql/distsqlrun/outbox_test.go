@@ -335,7 +335,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			} else {
 				// We're going to perform a RunSyncFlow call and then have the client
 				// cancel the call's context.
-				conn, err := flowCtx.Cfg.NodeDialer.Dial(ctx, staticNodeID)
+				conn, err := flowCtx.Cfg.NodeDialer.Dial(ctx, staticNodeID, rpc.DefaultClass)
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -208,7 +208,8 @@ func (s *statusServer) dialNode(
 	if err != nil {
 		return nil, err
 	}
-	conn, err := s.rpcCtx.GRPCDialNode(addr.String(), nodeID).Connect(ctx)
+	conn, err := s.rpcCtx.GRPCDialNode(addr.String(), nodeID,
+		rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		return nil, err
 	}

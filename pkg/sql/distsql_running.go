@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
@@ -36,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // To allow queries to send out flow RPCs in parallel, we use a pool of workers
@@ -65,7 +66,7 @@ type runnerResult struct {
 func (req runnerRequest) run() {
 	res := runnerResult{nodeID: req.nodeID}
 
-	conn, err := req.nodeDialer.Dial(req.ctx, req.nodeID)
+	conn, err := req.nodeDialer.Dial(req.ctx, req.nodeID, rpc.DefaultClass)
 	if err != nil {
 		res.err = err
 	} else {

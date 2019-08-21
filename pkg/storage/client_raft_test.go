@@ -2343,7 +2343,8 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	// Shut down a raft transport via the circuit breaker, and wait for two
 	// election timeouts to trigger an election if reportUnreachable broke
 	// heartbeat transmission to the other store.
-	cb := mtc.transport.GetCircuitBreaker(mtc.stores[followerIdx].Ident.NodeID)
+	cb := mtc.transport.GetCircuitBreaker(mtc.stores[followerIdx].Ident.NodeID,
+		rpc.DefaultClass)
 	cb.Break()
 
 	// Send a command to ensure Raft is aware of lost follower so that it won't
@@ -2404,7 +2405,7 @@ outer:
 						mtc.transferLease(context.TODO(), rangeID, leaderIdx, replicaIdx)
 					}
 					mtc.unreplicateRange(rangeID, leaderIdx)
-					cb := mtc.transport.GetCircuitBreaker(toStore.Ident.NodeID)
+					cb := mtc.transport.GetCircuitBreaker(toStore.Ident.NodeID, rpc.DefaultClass)
 					cb.Break()
 					time.Sleep(mtc.storeConfig.CoalescedHeartbeatsInterval)
 					cb.Reset()
@@ -4095,7 +4096,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 
 	var targets []target
 	for _, s := range mtc.stores {
-		conn, err := mtc.nodeDialer.Dial(ctx, s.Ident.NodeID)
+		conn, err := mtc.nodeDialer.Dial(ctx, s.Ident.NodeID, rpc.DefaultClass)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4226,7 +4227,7 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 	defer mtc.Stop()
 	store := mtc.Store(0)
 
-	conn, err := mtc.nodeDialer.Dial(ctx, store.Ident.NodeID)
+	conn, err := mtc.nodeDialer.Dial(ctx, store.Ident.NodeID, rpc.DefaultClass)
 	if err != nil {
 		t.Fatal(err)
 	}

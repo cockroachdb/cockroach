@@ -551,7 +551,7 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest, class rpc.ConnectionC
 		panic("snapshots must be sent using SendSnapshot")
 	}
 
-	if !t.dialer.GetCircuitBreakerClass(toNodeID, class).Ready() {
+	if !t.dialer.GetCircuitBreaker(toNodeID, class).Ready() {
 		return false
 	}
 
@@ -591,7 +591,7 @@ func (t *RaftTransport) startProcessNewQueue(
 	class rpc.ConnectionClass,
 	stats *raftTransportStats,
 ) bool {
-	conn, err := t.dialer.DialClass(ctx, toNodeID, class)
+	conn, err := t.dialer.Dial(ctx, toNodeID, class)
 	if err != nil {
 		// DialNode already logs sufficiently, so just return after deleting the
 		// queue.
@@ -662,7 +662,7 @@ func (t *RaftTransport) SendSnapshot(
 	var stream MultiRaft_RaftSnapshotClient
 	nodeID := header.RaftMessageRequest.ToReplica.NodeID
 
-	conn, err := t.dialer.Dial(ctx, nodeID)
+	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
 	if err != nil {
 		return err
 	}

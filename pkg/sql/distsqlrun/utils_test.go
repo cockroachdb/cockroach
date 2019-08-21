@@ -148,7 +148,8 @@ func createDummyStream() (
 	}
 
 	rpcContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
-	conn, err := rpcContext.GRPCDialNode(addr.String(), staticNodeID).Connect(context.Background())
+	conn, err := rpcContext.GRPCDialNode(addr.String(), staticNodeID,
+		rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		return nil, nil, nil, err
 	}

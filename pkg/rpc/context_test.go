@@ -46,6 +46,29 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// TestingConnHealth returns nil if we have an open connection to the given
+// target with DefaultClass that succeeded on its most recent heartbeat.
+// Otherwise, it kicks off a connection attempt (unless one is already in
+// progress or we are in a backoff state) and returns an error (typically
+// ErrNotHeartbeated). This is a conservative/pessimistic indicator:
+// if we have not attempted to talk to the target node recently, an
+// error will be returned. This method should therefore be used to
+// prioritize among a list of candidate nodes, but not to filter out
+// "unhealthy" nodes.
+//
+// This is used in tests only; in clusters use (*Dialer).ConnHealth()
+// instead which automates the address resolution.
+//
+// TODO(knz): remove this altogether. Use the dialer in all cases.
+func (ctx *Context) TestingConnHealth(target string, nodeID roachpb.NodeID) error {
+	if ctx.GetLocalInternalClientForAddr(target, nodeID) != nil {
+		// The local server is always considered healthy.
+		return nil
+	}
+	conn := ctx.GRPCDialNode(target, nodeID, DefaultClass)
+	return conn.Health()
+}
+
 // AddTestingDialOpts adds extra dialing options to the rpc Context. This should
 // be done before GRPCDial is called.
 func (ctx *Context) AddTestingDialOpts(opts ...grpc.DialOption) {
@@ -128,7 +151,7 @@ func TestHeartbeatCB(t *testing.T) {
 			})
 		}
 
-		if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background()); err != nil {
+		if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 
@@ -257,7 +280,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	}
 	remoteAddr := ln.Addr().String()
 	if _, err := clientCtx.GRPCDialNode(
-		remoteAddr, serverNodeID).Connect(context.Background()); err != nil {
+		remoteAddr, serverNodeID, DefaultClass).Connect(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -402,7 +425,7 @@ func TestConnectionRemoveNodeIDZero(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	clientCtx := newTestContext(uuid.MakeV4(), clock, stopper)
 	// Provoke an error.
-	_, err := clientCtx.GRPCDialNode("127.0.0.1:notaport", 1).Connect(context.Background())
+	_, err := clientCtx.GRPCDialNode("127.0.0.1:notaport", 1, DefaultClass).Connect(context.Background())
 	if err == nil {
 		t.Fatal("expected some kind of error, got nil")
 	}
@@ -509,7 +532,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	clientCtx := newTestContext(clusterID, clock, stopper)
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
-	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background()); err != nil {
+	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	// Everything is normal; should become healthy.
@@ -585,7 +608,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 
 	// We can reconnect and the connection becomes healthy again.
 	testutils.SucceedsSoon(t, func() error {
-		if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background()); err != nil {
+		if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background()); err != nil {
 			return err
 		}
 		return clientCtx.TestingConnHealth(remoteAddr, serverNodeID)
@@ -664,7 +687,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
 	clientCtx.RemoteClocks.offsetTTL = 5 * clientAdvancing.getAdvancementInterval()
-	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background()); err != nil {
+	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -736,7 +759,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	// clock reading delay, not the timeout.
 	clientCtx.heartbeatTimeout = 0
 	go func() { heartbeat.ready <- nil }() // Allow one heartbeat for initialization.
-	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background()); err != nil {
+	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -846,7 +869,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 			if _, err := clientNodeContext.ctx.GRPCDialNode(
 				serverNodeContext.ctx.Addr,
 				serverNodeContext.ctx.NodeID.Get(),
-			).Connect(context.Background()); err != nil {
+				DefaultClass).Connect(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1068,7 +1091,7 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 		grpc.WithKeepaliveParams(cKeepalive),
 	)
 	log.Infof(ctx, "dialing server")
-	conn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(ctx)
+	conn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(ctx)
 	if err != nil {
 		return err
 	}
@@ -1236,7 +1259,7 @@ func TestClusterIDMismatch(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
-			_, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background())
+			_, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background())
 			expected := "initial connection heartbeat failed.*doesn't match server cluster ID"
 			if !testutils.IsError(err, expected) {
 				t.Errorf("expected %s error, got %v", expected, err)
@@ -1357,7 +1380,7 @@ func TestNodeIDMismatch(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
-			_, err := clientCtx.GRPCDialNode(remoteAddr, 2).Connect(context.Background())
+			_, err := clientCtx.GRPCDialNode(remoteAddr, 2, DefaultClass).Connect(context.Background())
 			expected := "initial connection heartbeat failed.*doesn't match server node ID"
 			if !testutils.IsError(err, expected) {
 				t.Errorf("expected %s error, got %v", expected, err)
@@ -1433,7 +1456,7 @@ func TestVersionCheckBidirectional(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			_, err = clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background())
+			_, err = clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background())
 
 			if td.expectError {
 				expected := "initial connection heartbeat failed.*cluster requires at least version"
@@ -1473,8 +1496,8 @@ func TestGRPCDialClass(t *testing.T) {
 	remoteAddr := ln.Addr().String()
 	clientCtx := newTestContext(serverCtx.ClusterID.Get(), clock, stopper)
 
-	def1 := clientCtx.GRPCDialNodeClass(remoteAddr, 1, DefaultClass)
-	sys1 := clientCtx.GRPCDialNodeClass(remoteAddr, 1, SystemClass)
+	def1 := clientCtx.GRPCDialNode(remoteAddr, 1, DefaultClass)
+	sys1 := clientCtx.GRPCDialNode(remoteAddr, 1, SystemClass)
 	require.False(t, sys1 == def1,
 		"expected connections dialed with different classes to the same target to differ")
 	defConn1, err := def1.Connect(context.TODO())
@@ -1483,10 +1506,10 @@ func TestGRPCDialClass(t *testing.T) {
 	require.Nil(t, err, "expected successful connection")
 	require.False(t, sysConn1 == defConn1, "expected connections dialed with "+
 		"different classes to the sametarget to have separate underlying gRPC connections")
-	def2 := clientCtx.GRPCDialNodeClass(remoteAddr, 1, DefaultClass)
+	def2 := clientCtx.GRPCDialNode(remoteAddr, 1, DefaultClass)
 	require.True(t, def1 == def2, "expected connections dialed with the same "+
 		"class to the same target to be the same")
-	sys2 := clientCtx.GRPCDialNodeClass(remoteAddr, 1, SystemClass)
+	sys2 := clientCtx.GRPCDialNode(remoteAddr, 1, SystemClass)
 	require.True(t, sys1 == sys2, "expected connections dialed with the same "+
 		"class to the same target to be the same")
 	for _, c := range []*Connection{def2, sys2} {
@@ -1590,9 +1613,9 @@ func TestTestingKnobs(t *testing.T) {
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
 	require.Nil(t, err)
 	remoteAddr := ln.Addr().String()
-	sysConn, err := clientCtx.GRPCDialNodeClass(remoteAddr, 1, SystemClass).Connect(context.TODO())
+	sysConn, err := clientCtx.GRPCDialNode(remoteAddr, 1, SystemClass).Connect(context.TODO())
 	require.Nil(t, err)
-	defConn, err := clientCtx.GRPCDialNodeClass(remoteAddr, 1, DefaultClass).Connect(context.TODO())
+	defConn, err := clientCtx.GRPCDialNode(remoteAddr, 1, DefaultClass).Connect(context.TODO())
 	require.Nil(t, err)
 	const unaryMethod = "/cockroach.rpc.Testing/Foo"
 	const streamMethod = "/cockroach.rpc.Testing/Bar"
@@ -1657,7 +1680,7 @@ func BenchmarkGRPCDial(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, err := ctx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background())
+			_, err := ctx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background())
 			if err != nil {
 				b.Fatal(err)
 			}

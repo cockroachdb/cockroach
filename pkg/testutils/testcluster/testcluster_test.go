@@ -207,7 +207,8 @@ func TestStopServer(t *testing.T) {
 		tc.Server(1).RPCContext().Config, tc.Server(1).Clock(), tc.Stopper(),
 		&tc.Server(1).ClusterSettings().Version,
 	)
-	conn, err := rpcContext.GRPCDialNode(server1.ServingRPCAddr(), server1.NodeID()).Connect(context.Background())
+	conn, err := rpcContext.GRPCDialNode(server1.ServingRPCAddr(), server1.NodeID(),
+		rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

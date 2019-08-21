@@ -818,25 +818,20 @@ func (ctx *Context) GRPCUnvalidatedDial(target string) *Connection {
 	return ctx.grpcDialNodeInternal(target, 0, SystemClass)
 }
 
-// GRPCDialNodeClass calls grpc.Dial with options appropriate for the
+// GRPCDialNode calls grpc.Dial with options appropriate for the
 // context and class (see the comment on ConnectionClass).
 //
 // The remoteNodeID becomes a constraint on the expected node ID of
 // the remote node; this is checked during heartbeats. The caller is
 // responsible for ensuring the remote node ID is known prior to using
 // this function.
-func (ctx *Context) GRPCDialNodeClass(
+func (ctx *Context) GRPCDialNode(
 	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) *Connection {
 	if remoteNodeID == 0 && !ctx.TestingAllowNamedRPCToAnonymousServer {
 		log.Fatalf(context.TODO(), "invalid node ID 0 in GRPCDialNode()")
 	}
 	return ctx.grpcDialNodeInternal(target, remoteNodeID, class)
-}
-
-// GRPCDialNode is a shorthand for calling GRPCDialNodeClass with DefaultClass.
-func (ctx *Context) GRPCDialNode(target string, remoteNodeID roachpb.NodeID) *Connection {
-	return ctx.GRPCDialNodeClass(target, remoteNodeID, DefaultClass)
 }
 
 func (ctx *Context) grpcDialNodeInternal(
@@ -911,29 +906,6 @@ func (ctx *Context) NewBreaker(name string) *circuit.Breaker {
 // ErrNotHeartbeated is returned by ConnHealth when we have not yet performed
 // the first heartbeat.
 var ErrNotHeartbeated = errors.New("not yet heartbeated")
-
-// TestingConnHealth returns nil if we have an open connection to the given
-// target that succeeded on its most recent heartbeat. Otherwise, it
-// kicks off a connection attempt (unless one is already in progress
-// or we are in a backoff state) and returns an error (typically
-// ErrNotHeartbeated). This is a conservative/pessimistic indicator:
-// if we have not attempted to talk to the target node recently, an
-// error will be returned. This method should therefore be used to
-// prioritize among a list of candidate nodes, but not to filter out
-// "unhealthy" nodes.
-//
-// This is used in tests only; in clusters use (*Dialer).ConnHealth()
-// instead which automates the address resolution.
-//
-// TODO(knz): remove this altogether. Use the dialer in all cases.
-func (ctx *Context) TestingConnHealth(target string, nodeID roachpb.NodeID) error {
-	if ctx.GetLocalInternalClientForAddr(target, nodeID) != nil {
-		// The local server is always considered healthy.
-		return nil
-	}
-	conn := ctx.GRPCDialNode(target, nodeID)
-	return conn.Health()
-}
 
 func (ctx *Context) runHeartbeat(
 	conn *Connection, target string, redialChan <-chan struct{},
