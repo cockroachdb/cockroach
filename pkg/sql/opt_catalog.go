@@ -569,6 +569,7 @@ func newOptTable(
 			referencedColumns: fk.ReferencedColumnIDs,
 			validity:          fk.Validity,
 			match:             fk.Match,
+			deleteAction:      fk.OnDelete,
 		})
 	}
 	for i := range ot.desc.InboundFKs {
@@ -580,11 +581,8 @@ func newOptTable(
 			referencedTable:   ot.ID(),
 			referencedColumns: fk.ReferencedColumnIDs,
 			validity:          fk.Validity,
-			// TODO(jordan,radu): beware, this is weird: the "delete" direction for
-			// fks always must use "match simple" at runtime. This is correct for
-			// now, but when we implement the optimizer logic for match full, this
-			// has to get attention.
-			match: sqlbase.ForeignKeyReference_SIMPLE,
+			match:             fk.Match,
+			deleteAction:      fk.OnDelete,
 		})
 	}
 
