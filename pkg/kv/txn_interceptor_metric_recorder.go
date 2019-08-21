@@ -46,7 +46,7 @@ func (m *txnMetricRecorder) SendLocked(
 	}
 
 	br, pErr := m.wrapped.SendLocked(ctx, ba)
-	if pErr == nil && br.Txn != nil {
+	if pErr == nil {
 		m.parallelCommit = br.Txn.Status == roachpb.STAGING
 	}
 	return br, pErr

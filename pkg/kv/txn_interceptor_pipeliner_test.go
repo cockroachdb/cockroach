@@ -26,7 +26,8 @@ import (
 )
 
 // mockLockedSender implements the lockedSender interface and provides a way to
-// mock out and adjust the SendLocked method.
+// mock out and adjust the SendLocked method. If no mock function is set, a call
+// to SendLocked will return the default successful response.
 type mockLockedSender struct {
 	mockFn func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 }
@@ -34,6 +35,11 @@ type mockLockedSender struct {
 func (m *mockLockedSender) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	if m.mockFn == nil {
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	}
 	return m.mockFn(ba)
 }
 
@@ -171,7 +177,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntent = true
 		return br, nil
 	})
 
@@ -341,7 +347,7 @@ func TestTxnPipelinerReads(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntent = true
 		return br, nil
 	})
 
@@ -423,7 +429,7 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntent = true
 		br.Responses[2].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
 		br.Responses[3].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
 		return br, nil
@@ -488,7 +494,7 @@ func TestTxnPipelinerNonTransactionalRequests(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntent = true
 		br.Responses[1].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
 		return br, nil
 	})
@@ -683,7 +689,7 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
-	require.Equal(t, 0, tp.ifWrites.len())
+	require.Equal(t, 1, tp.ifWrites.len()) // nothing proven
 }
 
 // TestTxnPipelinerEpochIncrement tests that a txnPipeliner's in-flight write
@@ -845,7 +851,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntent = true
 		return br, nil
 	})
 
@@ -878,7 +884,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
 		br.Txn.Status = roachpb.COMMITTED
-		br.Responses[0].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntent = true
 		return br, nil
 	})
 
@@ -979,7 +985,7 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntent = true
 		br.Responses[2].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
 		return br, nil
 	})
@@ -1026,7 +1032,7 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntent = true
 		br.Responses[2].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
 		return br, nil
 	})
@@ -1113,7 +1119,7 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
-		br.Responses[0].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
+		br.Responses[0].GetQueryIntent().FoundIntent = true
 		return br, nil
 	})
 
@@ -1141,4 +1147,57 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
 	require.Equal(t, 2, tp.ifWrites.len())
+}
+
+// TestTxnPipelinerRecordsWritesOnFailure tests that even when a request returns
+// with an ABORTED transaction status or an error, the intent writes it attempted
+// to perform are added to the write footprint.
+func TestTxnPipelinerRecordsWritesOnFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	tp, mockSender := makeMockTxnPipeliner()
+
+	txn := makeTxnProto()
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+
+	// Return an error for a write.
+	var ba roachpb.BatchRequest
+	ba.Header = roachpb.Header{Txn: &txn}
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+
+	mockPErr := roachpb.NewErrorf("boom")
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.True(t, ba.AsyncConsensus)
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+
+		return nil, mockPErr
+	})
+
+	br, pErr := tp.SendLocked(ctx, ba)
+	require.Nil(t, br)
+	require.Equal(t, mockPErr, pErr)
+	require.Equal(t, 0, tp.ifWrites.len())
+	require.Len(t, tp.footprint.asSlice(), 1)
+
+	// Return an ABORTED transaction record for a write.
+	ba.Requests = nil
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}})
+
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.True(t, ba.AsyncConsensus)
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Txn.Status = roachpb.ABORTED
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 0, tp.ifWrites.len())
+	require.Len(t, tp.footprint.asSlice(), 2)
 }
