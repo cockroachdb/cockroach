@@ -456,7 +456,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 				replicaID = added[0].ReplicaID
 				typ := added[0].GetType()
 				switch typ {
-				case roachpb.ReplicaType_Voter:
+				case roachpb.ReplicaType_VoterFull:
 					changeType = raftpb.ConfChangeAddNode
 				case roachpb.ReplicaType_Learner:
 					changeType = raftpb.ConfChangeAddLearnerNode
