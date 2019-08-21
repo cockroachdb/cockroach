@@ -15,10 +15,10 @@ import (
 	"strings"
 )
 
-// ReplicaTypeVoter returns a ReplicaType_Voter pointer suitable for use in a
+// ReplicaTypeVoterFull returns a ReplicaType_VoterFull pointer suitable for use in a
 // nullable proto field.
-func ReplicaTypeVoter() *ReplicaType {
-	t := ReplicaType_Voter
+func ReplicaTypeVoterFull() *ReplicaType {
+	t := ReplicaType_VoterFull
 	return &t
 }
 
@@ -77,7 +77,7 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 	// save the alloc.
 	fastpath := true
 	for i := range d.wrapped {
-		if d.wrapped[i].GetType() != ReplicaType_Voter {
+		if d.wrapped[i].GetType() != ReplicaType_VoterFull {
 			fastpath = false
 			break
 		}
@@ -87,7 +87,7 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 	}
 	voters := make([]ReplicaDescriptor, 0, len(d.wrapped))
 	for i := range d.wrapped {
-		if d.wrapped[i].GetType() == ReplicaType_Voter {
+		if d.wrapped[i].GetType() == ReplicaType_VoterFull {
 			voters = append(voters, d.wrapped[i])
 		}
 	}
@@ -243,7 +243,7 @@ func (d *ReplicaDescriptors) RemoveReplica(
 func (d ReplicaDescriptors) QuorumSize() int {
 	var numVoters int
 	for i := range d.wrapped {
-		if d.wrapped[i].GetType() == ReplicaType_Voter {
+		if d.wrapped[i].GetType() == ReplicaType_VoterFull {
 			numVoters++
 		}
 	}

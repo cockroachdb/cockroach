@@ -345,6 +345,8 @@ bool ReplicaType_IsValid(int value) {
   switch (value) {
     case 0:
     case 1:
+    case 2:
+    case 3:
       return true;
     default:
       return false;
