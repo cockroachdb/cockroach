@@ -1,0 +1,2 @@
+create_as_constraint_def ::=
+	'PRIMARY' 'KEY' '(' create_as_params ')'

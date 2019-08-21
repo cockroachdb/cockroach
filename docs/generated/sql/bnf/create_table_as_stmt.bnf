@@ -1,3 +1,5 @@
 create_table_as_stmt ::=
-	'CREATE' opt_temp_create_table 'TABLE' table_name create_as_opt_col_list 'AS' select_stmt
-	| 'CREATE' opt_temp_create_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name create_as_opt_col_list 'AS' select_stmt
+	'CREATE' opt_temp_create_table 'TABLE' table_name '(' column_name create_as_col_qual_list ( ( ',' column_name create_as_col_qual_list | ',' family_def | ',' create_as_constraint_def ) )* ')' 'AS' select_stmt
+	| 'CREATE' opt_temp_create_table 'TABLE' table_name  'AS' select_stmt
+	| 'CREATE' opt_temp_create_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' column_name create_as_col_qual_list ( ( ',' column_name create_as_col_qual_list | ',' family_def | ',' create_as_constraint_def ) )* ')' 'AS' select_stmt
+	| 'CREATE' opt_temp_create_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name  'AS' select_stmt

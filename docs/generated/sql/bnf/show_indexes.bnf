@@ -1,0 +1,7 @@
+show_indexes_stmt ::=
+	'SHOW' 'INDEX' 'FROM' table_name with_comment
+	| 'SHOW' 'INDEX' 'FROM' 'DATABASE' database_name with_comment
+	| 'SHOW' 'INDEXES' 'FROM' table_name with_comment
+	| 'SHOW' 'INDEXES' 'FROM' 'DATABASE' database_name with_comment
+	| 'SHOW' 'KEYS' 'FROM' table_name with_comment
+	| 'SHOW' 'KEYS' 'FROM' 'DATABASE' database_name with_comment
