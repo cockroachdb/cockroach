@@ -12,6 +12,8 @@ package security
 
 import (
 	"crypto/tls"
+	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -49,6 +51,55 @@ func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 	return tlsState.PeerCertificates[0].Subject.CommonName, nil
 }
 
+// CheckCertificateClusterName checks whether the clustername is set in the peer certificate.
+func CheckCertificateClusterName(authCtx AuthContext, tlsState *tls.ConnectionState) error {
+	if tlsState == nil {
+		return errors.Errorf("request is not using TLS")
+	}
+	if len(tlsState.PeerCertificates) == 0 {
+		return errors.Errorf("no client certificates in request")
+	}
+
+	if !authCtx.EnforceClusterNameInCertificate {
+		return nil
+	}
+
+	// The cluster name given to the node must match exactly one of the cluster names
+	// in the peer certificate Subject.OrganizationUnit fields.
+	// If one is set but not the other, this counts as a mismatch.
+	certClusterNames := ClusterNamesFromList(tlsState.PeerCertificates[0].Subject.OrganizationalUnit)
+	nodeHasClusterName := len(authCtx.ClusterName) > 0
+	certHasClusterName := len(certClusterNames) > 0
+
+	// --cluster-name not specified.
+	if !nodeHasClusterName {
+		if certHasClusterName {
+			return fmt.Errorf("client certificate is valid for clusters [%s], but no --cluster-name set on node",
+				strings.Join(certClusterNames, ","))
+		}
+		return nil
+	}
+
+	// certificate has no cluster names specified.
+	if !certHasClusterName {
+		if nodeHasClusterName {
+			return fmt.Errorf("cluster name is %q, but client certificate does not specify any clusters",
+				authCtx.ClusterName)
+		}
+		return nil
+	}
+
+	// --cluster-name is set and certificate has cluster names.
+	for _, certName := range certClusterNames {
+		if certName == authCtx.ClusterName {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("cluster name is %q, but client certificate only allows clusters [%s]",
+		authCtx.ClusterName, strings.Join(certClusterNames, ","))
+}
+
 // AuthenticateRPC verifies that the TLS state from an RPC context is allowed.
 // authCtx.Insecure is not checked as this is only called in secure mode.
 func AuthenticateRPC(authCtx AuthContext, tlsState *tls.ConnectionState) error {
@@ -65,6 +116,10 @@ func AuthenticateRPC(authCtx AuthContext, tlsState *tls.ConnectionState) error {
 		return errors.Errorf("user %s is not allowed to perform this RPC", certUser)
 	}
 
+	if err := CheckCertificateClusterName(authCtx, tlsState); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -77,6 +132,10 @@ func UserAuthCertHook(authCtx AuthContext, tlsState *tls.ConnectionState) (UserA
 		var err error
 		certUser, err = GetCertificateUser(tlsState)
 		if err != nil {
+			return nil, err
+		}
+
+		if err := CheckCertificateClusterName(authCtx, tlsState); err != nil {
 			return nil, err
 		}
 	}
