@@ -2153,7 +2153,26 @@ func splitPostApply(
 		rightRng.mu.minReplicaID = 0
 		rightDesc, ok := split.RightDesc.GetReplicaDescriptor(r.StoreID())
 		if !ok {
-			log.Fatalf(ctx, "replica descriptor of local store not found in right hand side of split")
+			// This is yet another special quirky case. The local store is not
+			// necessarily a member of the split; this can occur if this store
+			// wasn't a member at the time of the split, but is nevertheless
+			// catching up across the split. For example, add a learner, and
+			// while it is being caught up via a snapshot, remove the learner
+			// again, then execute a split, and re-add it. Upon being re-added
+			// the learner will likely catch up from where the snapshot left it,
+			// and it will see itself get removed, then we hit this branch when
+			// the split trigger is applied, and eventually there's a
+			// ChangeReplicas that re-adds the local store under a new
+			// replicaID.
+			//
+			// rightRng.mu.replicaID in this case is not usually zero (at least
+			// not in the exact scenario above) but it sounds like it could be
+			// in general. So if it's zero, we leave it at zero and if it's not
+			// zero we wind it back to one. The code below achieves this.
+			//
+			// TODO(tbg): this is insane. We need to solve (or rather get rid of)
+			// the state in which the replica isn't a part of the descriptor.
+			rightDesc.ReplicaID = 1
 		}
 		// We also have to potentially wind back the replicaID to avoid an error
 		// below. We can't overwrite unconditionally since usually the replicaID is
