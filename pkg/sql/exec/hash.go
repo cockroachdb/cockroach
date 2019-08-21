@@ -59,8 +59,11 @@ func add(p unsafe.Pointer, x uintptr) unsafe.Pointer {
 	return unsafe.Pointer(uintptr(p) + x)
 }
 
-//go:linkname noescape runtime.noescape
-func noescape(p unsafe.Pointer) unsafe.Pointer
+//go:nosplit
+func noescape(p unsafe.Pointer) unsafe.Pointer {
+	x := uintptr(p)
+	return unsafe.Pointer(x ^ 0)
+}
 
 func memhash(p unsafe.Pointer, seed, s uintptr) uintptr {
 	h := uint64(seed + s*hashKey[0])
