@@ -278,8 +278,8 @@ func (r ReplicaDescriptor) String() string {
 	} else {
 		fmt.Fprintf(&buf, "%d", r.ReplicaID)
 	}
-	if r.GetType() == ReplicaType_LEARNER {
-		buf.WriteString("LEARNER")
+	if typ := r.GetType(); typ != ReplicaType_VOTER {
+		buf.WriteString(strings.ToUpper(typ.String()))
 	}
 	return buf.String()
 }
