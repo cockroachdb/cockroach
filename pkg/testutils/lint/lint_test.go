@@ -1227,6 +1227,9 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
 				stream.GrepNot(`\.pb\.gw\.go:[0-9:]+: declaration of "?ctx"? shadows`),
 				stream.GrepNot(`\.[eo]g\.go:[0-9:]+: declaration of ".*" shadows`),
+				// This exception is for hash.go, which re-implements runtime.noescape
+				// for efficient hashing.
+				stream.GrepNot(`pkg/sql/exec/hash.go:[0-9:]+: possible misuse of unsafe.Pointer`),
 				stream.GrepNot(`^#`), // comment line
 			})
 		}
