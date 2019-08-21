@@ -1001,10 +1001,10 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 	case raftpb.EntryConfChange:
 		if cmd.replicatedResult().ChangeReplicas == nil {
 			// The command was rejected.
-			cmd.cc = raftpb.ConfChange{}
+			cmd.confChange.ConfChangeI = raftpb.ConfChange{}
 		}
 		return sm.r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
-			raftGroup.ApplyConfChange(cmd.cc)
+			raftGroup.ApplyConfChange(cmd.confChange.ConfChangeI)
 			return true, nil
 		})
 	default:
