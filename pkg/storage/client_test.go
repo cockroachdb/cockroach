@@ -1204,7 +1204,7 @@ func (m *multiTestContext) replicateRangeNonFatal(rangeID roachpb.RangeID, dests
 			if e := expectedReplicaIDs[i]; repDesc.ReplicaID != e {
 				return errors.Errorf("expected replica %s to have ID %d", repl, e)
 			}
-			if t := repDesc.GetType(); t != roachpb.ReplicaType_Voter {
+			if t := repDesc.GetType(); t != roachpb.ReplicaType_VoterFull {
 				return errors.Errorf("expected replica %s to be a voter was %s", repl, t)
 			}
 			if !repl.Desc().ContainsKey(startKey) {

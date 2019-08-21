@@ -17,7 +17,7 @@ import (
 )
 
 func TestVotersLearnersAll(t *testing.T) {
-	voter := ReplicaTypeVoter()
+	voter := ReplicaTypeVoterFull()
 	learner := ReplicaTypeLearner()
 	tests := [][]ReplicaDescriptor{
 		{},
@@ -32,7 +32,7 @@ func TestVotersLearnersAll(t *testing.T) {
 	for i, test := range tests {
 		r := MakeReplicaDescriptors(test)
 		for _, voter := range r.Voters() {
-			assert.Equal(t, ReplicaType_Voter, voter.GetType(), "testcase %d", i)
+			assert.Equal(t, ReplicaType_VoterFull, voter.GetType(), "testcase %d", i)
 		}
 		for _, learner := range r.Learners() {
 			assert.Equal(t, ReplicaType_Learner, learner.GetType(), "testcase %d", i)
@@ -86,7 +86,7 @@ func TestReplicaDescriptorsRemove(t *testing.T) {
 			assert.Equal(t, lenBefore, len(r.All()), "testcase %d", i)
 		}
 		for _, voter := range r.Voters() {
-			assert.Equal(t, ReplicaType_Voter, voter.GetType(), "testcase %d", i)
+			assert.Equal(t, ReplicaType_VoterFull, voter.GetType(), "testcase %d", i)
 		}
 		for _, learner := range r.Learners() {
 			assert.Equal(t, ReplicaType_Learner, learner.GetType(), "testcase %d", i)
