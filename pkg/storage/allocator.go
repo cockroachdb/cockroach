@@ -47,14 +47,15 @@ const (
 	// algorithm.
 	minReplicaWeight = 0.001
 
-	// priorities for various repair operations.
-	removeLearnerReplicaPriority          float64 = 12001
-	addDeadReplacementPriority            float64 = 12000
-	addMissingReplicaPriority             float64 = 10000
-	addDecommissioningReplacementPriority float64 = 5000
-	removeDeadReplicaPriority             float64 = 1000
-	removeDecommissioningReplicaPriority  float64 = 200
-	removeExtraReplicaPriority            float64 = 100
+	// Priorities for various repair operations.
+	finalizeAtomicReplicationChangePriority float64 = 12002
+	removeLearnerReplicaPriority            float64 = 12001
+	addDeadReplacementPriority              float64 = 12000
+	addMissingReplicaPriority               float64 = 10000
+	addDecommissioningReplacementPriority   float64 = 5000
+	removeDeadReplicaPriority               float64 = 1000
+	removeDecommissioningReplicaPriority    float64 = 200
+	removeExtraReplicaPriority              float64 = 100
 )
 
 // MinLeaseTransferStatsDuration configures the minimum amount of time a
@@ -103,17 +104,19 @@ const (
 	AllocatorRemoveLearner
 	AllocatorConsiderRebalance
 	AllocatorRangeUnavailable
+	AllocatorFinalizeAtomicReplicationChange
 )
 
 var allocatorActionNames = map[AllocatorAction]string{
-	AllocatorNoop:                  "noop",
-	AllocatorRemove:                "remove",
-	AllocatorAdd:                   "add",
-	AllocatorRemoveDead:            "remove dead",
-	AllocatorRemoveDecommissioning: "remove decommissioning",
-	AllocatorRemoveLearner:         "remove learner",
-	AllocatorConsiderRebalance:     "consider rebalance",
-	AllocatorRangeUnavailable:      "range unavailable",
+	AllocatorNoop:                            "noop",
+	AllocatorRemove:                          "remove",
+	AllocatorAdd:                             "add",
+	AllocatorRemoveDead:                      "remove dead",
+	AllocatorRemoveDecommissioning:           "remove decommissioning",
+	AllocatorRemoveLearner:                   "remove learner",
+	AllocatorConsiderRebalance:               "consider rebalance",
+	AllocatorRangeUnavailable:                "range unavailable",
+	AllocatorFinalizeAtomicReplicationChange: "finalize conf change",
 }
 
 func (a AllocatorAction) String() string {
@@ -338,6 +341,12 @@ func (a *Allocator) ComputeAction(
 		// low priority so until this TODO is done, keep
 		// removeLearnerReplicaPriority as the highest priority.
 		return AllocatorRemoveLearner, removeLearnerReplicaPriority
+	}
+	if desc.Replicas().InAtomicReplicationChange() {
+		// With a similar reasoning to the learner branch above, if we're in a
+		// joint configuration the top priority is to leave it before we can
+		// even think about doing anything else.
+		return AllocatorFinalizeAtomicReplicationChange, finalizeAtomicReplicationChangePriority
 	}
 	// computeAction expects to operate only on voters.
 	return a.computeAction(ctx, zone, desc.RangeID, desc.Replicas().Voters())
