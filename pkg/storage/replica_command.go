@@ -988,7 +988,7 @@ func validateReplicationChanges(
 		// trying to add it with the learner+snapshot+voter cycle and got
 		// interrupted or else we hit a race between the replicate queue and
 		// AdminChangeReplicas.
-		if rDesc.GetType() == roachpb.ReplicaType_LEARNER {
+		if rDesc.GetType() == roachpb.ReplicaType_Learner {
 			return errors.Errorf(
 				"unable to add replica %v which is already present as a learner in %s", chg.Target, desc)
 		}
@@ -1068,7 +1068,7 @@ func (r *Replica) finalizeChangeReplicas(
 			return nil, errors.Errorf("programming error: replica %v not found in %v", target, updatedDesc)
 		}
 
-		if rDesc.GetType() != roachpb.ReplicaType_LEARNER {
+		if rDesc.GetType() != roachpb.ReplicaType_Learner {
 			return nil, errors.Errorf("programming error: cannot promote replica of type %s", rDesc.Type)
 		}
 
@@ -1132,7 +1132,7 @@ func (r *Replica) tryRollBackLearnerReplica(
 	newDesc := *desc
 	newDesc.SetReplicas(desc.Replicas().DeepCopy())
 	replDesc, ok := newDesc.RemoveReplica(target.NodeID, target.StoreID)
-	if !ok || replDesc.GetType() != roachpb.ReplicaType_LEARNER {
+	if !ok || replDesc.GetType() != roachpb.ReplicaType_Learner {
 		// There's no learner to roll back.
 		log.Event(ctx, "learner to roll back not found; skipping")
 		return
