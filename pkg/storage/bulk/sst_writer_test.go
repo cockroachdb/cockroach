@@ -66,17 +66,18 @@ func makeRocksSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
 }
 
 func makePebbleSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
-	w := bulk.MakeSSTWriter()
+	sstmf := bulk.SSTMemFile{}
+	w := bulk.MakeSSTWriter(&sstmf)
 	defer w.Close()
 
 	for i := range kvs {
-		if err := w.Add(kvs[i]); err != nil {
+		if err := w.Put(kvs[i].Key, kvs[i].Value); err != nil {
 			t.Fatal(err)
 		}
 	}
-	sst, err := w.Finish()
+	err := w.Finish()
 	require.NoError(t, err)
-	return sst
+	return sstmf.Data()
 }
 
 // TestPebbleWritesSameSSTs tests that using pebble to write some SST produces
