@@ -346,6 +346,8 @@ func (rq *replicateQueue) processOneChange(
 		return rq.removeLearner(ctx, repl, dryRun)
 	case AllocatorConsiderRebalance:
 		return rq.considerRebalance(ctx, repl, voterReplicas, canTransferLease, dryRun)
+	case AllocatorFinalizeAtomicReplicationChange:
+		FatalAtomicReplicationChangeUnimplemented(ctx)
 	}
 	return true, nil
 }
