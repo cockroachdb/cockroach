@@ -1,0 +1,2 @@
+window_definition ::=
+	window_name 'AS' '(' opt_existing_window_name opt_partition_clause opt_sort_clause opt_frame_clause ')'
