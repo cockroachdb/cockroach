@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -91,14 +90,12 @@ func setupTransientServers(
 		return "", "", cleanup, errors.Errorf("must have a positive number of nodes")
 	}
 
-	var nodeLocalityTiers []roachpb.Tier
-	if len(demoCtx.localities.Tiers) != 0 {
+	if len(demoCtx.localities) != 0 {
 		// Error out of localities don't line up with requested node
 		// count before doing any sort of setup.
-		if len(demoCtx.localities.Tiers) != demoCtx.nodes {
+		if len(demoCtx.localities) != demoCtx.nodes {
 			return "", "", cleanup, errors.Errorf("number of localities specified must equal number of nodes")
 		}
-		nodeLocalityTiers = demoCtx.localities.Tiers
 	}
 
 	// Set up logging. For demo/transient server we use non-standard
@@ -135,8 +132,8 @@ func setupTransientServers(
 		if s != nil {
 			args.JoinAddr = s.ServingRPCAddr()
 		}
-		if nodeLocalityTiers != nil {
-			args.Locality = roachpb.Locality{Tiers: nodeLocalityTiers[i : i+1]}
+		if demoCtx.localities != nil {
+			args.Locality = demoCtx.localities[i]
 		}
 		serv := serverFactory.New(args).(*server.TestServer)
 		if err := serv.Start(args); err != nil {
