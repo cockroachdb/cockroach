@@ -1605,14 +1605,19 @@ func (c *CustomFuncs) ConvertConstArrayToTuple(scalar opt.ScalarExpr) opt.Scalar
 // CastToCollatedString returns the given string or collated string as a
 // collated string constant with the given locale.
 func (c *CustomFuncs) CastToCollatedString(str opt.ScalarExpr, locale string) opt.ScalarExpr {
+	datum := str.(*memo.ConstExpr).Value
+	if wrap, ok := datum.(*tree.DOidWrapper); ok {
+		datum = wrap.Wrapped
+	}
+
 	var value string
-	switch t := str.(*memo.ConstExpr).Value.(type) {
+	switch t := datum.(type) {
 	case *tree.DString:
 		value = string(*t)
 	case *tree.DCollatedString:
 		value = t.Contents
 	default:
-		panic(errors.AssertionFailedf("unexpected type for COLLATE: %T", log.Safe(str.(*memo.ConstExpr).Value)))
+		panic(errors.AssertionFailedf("unexpected type for COLLATE: %T", t))
 	}
 
 	return c.f.ConstructConst(tree.NewDCollatedString(value, locale, &c.f.evalCtx.CollationEnv))
