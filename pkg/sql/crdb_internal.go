@@ -373,9 +373,9 @@ CREATE TABLE crdb_internal.leases (
   deleted     BOOL NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		leaseMgr := p.LeaseMgr()
-		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.nodeIDContainer.Get())))
+		nodeID := tree.NewDInt(tree.DInt(int64(p.execCfg.NodeID.Get())))
 
+		leaseMgr := p.LeaseMgr()
 		leaseMgr.mu.Lock()
 		defer leaseMgr.mu.Unlock()
 
@@ -565,7 +565,8 @@ func (s stmtList) Less(i, j int) bool {
 }
 
 var crdbInternalStmtStatsTable = virtualSchemaTable{
-	comment: `statement statistics (RAM; local node only)`,
+	comment: `statement statistics (RAM; local node only)` +
+		`This table is wiped periodically (by default, at least every two hours)`,
 	schema: `
 CREATE TABLE crdb_internal.node_statement_statistics (
   node_id             INT NOT NULL,
@@ -598,14 +599,13 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			return err
 		}
 
-		sqlStats := p.statsCollector.SQLStats()
+		sqlStats := p.extendedEvalCtx.sqlStatsCollector.sqlStats
 		if sqlStats == nil {
 			return errors.AssertionFailedf(
 				"cannot access sql statistics from this context")
 		}
 
-		leaseMgr := p.LeaseMgr()
-		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.nodeIDContainer.Get())))
+		nodeID := tree.NewDInt(tree.DInt(int64(p.execCfg.NodeID.Get())))
 
 		// Retrieve the application names and sort them to ensure the
 		// output is deterministic.
@@ -683,13 +683,14 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 }
 
 var crdbInternalTxnStatsTable = virtualSchemaTable{
-	comment: `per-application transaction statistics (in-memory, not durable; local node only)`,
+	comment: `per-application transaction statistics (in-memory, not durable; local node only). ` +
+		`This table is wiped periodically (by default, at least every two hours)`,
 	schema: `
 CREATE TABLE crdb_internal.node_txn_stats (
   node_id            INT NOT NULL,
   application_name   STRING NOT NULL,
   txn_count          INT NOT NULL,
-  agg_total_time_sec FLOAT NOT NULL,
+  avg_time_sec       FLOAT NOT NULL,
   committed_count    INT NOT NULL,
   implicit_count     INT NOT NULL
 )`,
@@ -698,14 +699,13 @@ CREATE TABLE crdb_internal.node_txn_stats (
 			return err
 		}
 
-		sqlStats := p.statsCollector.SQLStats()
+		sqlStats := p.extendedEvalCtx.sqlStatsCollector.sqlStats
 		if sqlStats == nil {
 			return errors.AssertionFailedf(
 				"cannot access sql statistics from this context")
 		}
 
-		leaseMgr := p.LeaseMgr()
-		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.nodeIDContainer.Get())))
+		nodeID := tree.NewDInt(tree.DInt(int64(p.execCfg.NodeID.Get())))
 
 		// Retrieve the application names and sort them to ensure the
 		// output is deterministic.
@@ -719,16 +719,15 @@ CREATE TABLE crdb_internal.node_txn_stats (
 
 		for _, appName := range appNames {
 			appStats := sqlStats.getStatsForApplication(appName)
-			appStats.txnStats.Lock()
+			txnCount, avgTxnTime, committedCount, implicitCount := appStats.txnStats.getStats()
 			err := addRow(
 				nodeID,
 				tree.NewDString(appName),
-				tree.NewDInt(tree.DInt(appStats.txnStats.data.TxnCount)),
-				tree.NewDFloat(tree.DFloat(appStats.txnStats.data.AggTotalTimeSec)),
-				tree.NewDInt(tree.DInt(appStats.txnStats.data.CommittedCount)),
-				tree.NewDInt(tree.DInt(appStats.txnStats.data.ImplicitCount)),
+				tree.NewDInt(tree.DInt(txnCount)),
+				tree.NewDFloat(tree.DFloat(avgTxnTime)),
+				tree.NewDInt(tree.DInt(committedCount)),
+				tree.NewDInt(tree.DInt(implicitCount)),
 			)
-			appStats.txnStats.Unlock()
 			if err != nil {
 				return err
 			}

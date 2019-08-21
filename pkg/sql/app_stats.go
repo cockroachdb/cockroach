@@ -44,9 +44,9 @@ type stmtKey struct {
 
 // appStats holds per-application statistics.
 type appStats struct {
-	st *cluster.Settings
-
 	syncutil.Mutex
+
+	st       *cluster.Settings
 	stmts    map[stmtKey]*stmtStats
 	txnStats transactionStats
 }
@@ -58,11 +58,12 @@ type stmtStats struct {
 	data roachpb.StatementStatistics
 }
 
-// transactionStats hold per-application transaction statistics.
+// transactionStats holds per-application transaction statistics.
 type transactionStats struct {
-	syncutil.Mutex
-
-	data roachpb.TxnStats
+	mu struct {
+		syncutil.Mutex
+		roachpb.TxnStats
+	}
 }
 
 // stmtStatsEnable determines whether to collect per-statement
@@ -136,7 +137,7 @@ func (a *appStats) recordStatement(
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 	bytesRead, rowsRead int64,
 ) {
-	if a == nil || !stmtStatsEnable.Get(&a.st.SV) {
+	if !stmtStatsEnable.Get(&a.st.SV) {
 		return
 	}
 
@@ -213,28 +214,46 @@ func anonymizeStmt(ast tree.Statement) string {
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 }
 
-func (a *appStats) recordTransaction(totalTimeSec float64, committed bool, implicit bool) {
-	if a == nil || !txnStatsEnable.Get(&a.st.SV) {
-		return
-	}
-	a.txnStats.Lock()
-	a.txnStats.data.TxnCount++
-	a.txnStats.data.AggTotalTimeSec += totalTimeSec
-	if committed {
-		a.txnStats.data.CommittedCount++
-	}
-	if implicit {
-		a.txnStats.data.ImplicitCount++
-	}
-	a.txnStats.Unlock()
+func (s *transactionStats) getStats() (
+	txnCount int64,
+	avgTxnTime float64,
+	committedCount int64,
+	implicitCount int64,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	txnCount = s.mu.TxnCount
+	avgTxnTime = s.mu.AggTotalTimeSec / float64(txnCount)
+	committedCount = s.mu.CommittedCount
+	implicitCount = s.mu.ImplicitCount
+	return txnCount, avgTxnTime, committedCount, implicitCount
 }
 
-// sqlStats carries per-application statistics for all applications on
-// each node.
+func (s *transactionStats) recordTransaction(totalTimeSec float64, ev txnEvent, implicit bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.TxnCount++
+	s.mu.AggTotalTimeSec += totalTimeSec
+	if ev == txnCommit {
+		s.mu.CommittedCount++
+	}
+	if implicit {
+		s.mu.ImplicitCount++
+	}
+}
+
+func (a *appStats) recordTransaction(totalTimeSec float64, ev txnEvent, implicit bool) {
+	if !txnStatsEnable.Get(&a.st.SV) {
+		return
+	}
+	a.txnStats.recordTransaction(totalTimeSec, ev, implicit)
+}
+
+// sqlStats carries per-application statistics for all applications.
 type sqlStats struct {
-	st *cluster.Settings
 	syncutil.Mutex
 
+	st *cluster.Settings
 	// lastReset is the time at which the app containers were reset.
 	lastReset time.Time
 	// apps is the container for all the per-application statistics objects.

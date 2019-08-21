@@ -40,14 +40,14 @@ SELECT txn_count - implicit_count = 1
 true
 
 # All transactions so far should be extremely fast, so we check that the
-# aggregate total transaction time is in [0s, 0.1s] range.
+# average transaction time is in [0s, 0.1s] range.
 query B
 SELECT count(*) = 0
   FROM crdb_internal.node_txn_stats
  WHERE application_name = 'test'
    AND (
-        agg_total_time_sec < 0
-        OR agg_total_time_sec > 0.1
+        avg_time_sec < 0
+        OR avg_time_sec > 0.1
        )
 ----
 true
