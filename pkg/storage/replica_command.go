@@ -898,6 +898,40 @@ func (r *Replica) ChangeReplicas(
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
 
+	// We execute the change serially if we're not allowed to run atomic replication changes
+	// or if that was explicitly disabled. We also unroll if learners are disabled because
+	// that's undertested and the expectation is that learners cannot be disabled in 19.2.
+	st := r.ClusterSettings()
+	unroll := !st.Version.IsActive(cluster.VersionAtomicChangeReplicas) ||
+		!useAtomicReplicationChanges.Get(&st.SV) ||
+		!useLearnerReplicas.Get(&st.SV)
+
+	if unroll {
+		// Legacy behavior.
+		for i := range chgs {
+			var err error
+			desc, err = r.changeReplicasImpl(ctx, desc, priority, reason, details, chgs[i:i+1])
+			if err != nil {
+				return nil, err
+			}
+		}
+		return desc, nil
+	}
+	if len(chgs) > 1 {
+		FatalAtomicReplicationChangeUnimplemented(ctx)
+	}
+	// Atomic replication change.
+	return r.changeReplicasImpl(ctx, desc, SnapshotRequest_REBALANCE, storagepb.ReasonAdminRequest, "", chgs)
+}
+
+func (r *Replica) changeReplicasImpl(
+	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
+	priority SnapshotRequest_Priority,
+	reason storagepb.RangeLogEventReason,
+	details string,
+	chgs roachpb.ReplicationChanges,
+) (updatedDesc *roachpb.RangeDescriptor, _ error) {
 	if len(chgs) != 1 {
 		// TODO(tbg): lift this restriction when atomic membership changes are
 		// plumbed into raft.
