@@ -312,20 +312,24 @@ const (
 	// to "Ranges" instead of a Table - these IDs are needed to store custom
 	// configuration for non-table ranges (e.g. Zone Configs).
 	// NOTE: IDs must be <= MaxReservedDescID.
-	LeaseTableID           = 11
-	EventLogTableID        = 12
-	RangeEventTableID      = 13
-	UITableID              = 14
-	JobsTableID            = 15
-	MetaRangesID           = 16
-	SystemRangesID         = 17
-	TimeseriesRangesID     = 18
-	WebSessionsTableID     = 19
-	TableStatisticsTableID = 20
-	LocationsTableID       = 21
-	LivenessRangesID       = 22
-	RoleMembersTableID     = 23
-	CommentsTableID        = 24
+	LeaseTableID                         = 11
+	EventLogTableID                      = 12
+	RangeEventTableID                    = 13
+	UITableID                            = 14
+	JobsTableID                          = 15
+	MetaRangesID                         = 16
+	SystemRangesID                       = 17
+	TimeseriesRangesID                   = 18
+	WebSessionsTableID                   = 19
+	TableStatisticsTableID               = 20
+	LocationsTableID                     = 21
+	LivenessRangesID                     = 22
+	RoleMembersTableID                   = 23
+	CommentsTableID                      = 24
+	ReplicationConstraintStatsTableID    = 25
+	ReplicationCriticalLocalitiesTableID = 26
+	ReplicationStatsTableID              = 27
+	ReportsMetaTableID                   = 28
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0

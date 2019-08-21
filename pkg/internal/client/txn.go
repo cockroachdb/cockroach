@@ -94,6 +94,8 @@ type Txn struct {
 //   in the batch with the current node's ID.
 //   If the gatewayNodeID is set and this is a root transaction, we optimize
 //   away any clock uncertainty for our own node, as our clock is accessible.
+//
+// See also db.NewTxn().
 func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID, typ TxnType) *Txn {
 	now := db.clock.Now()
 	txn := roachpb.MakeTransaction(

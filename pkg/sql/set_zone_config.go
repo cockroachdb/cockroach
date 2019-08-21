@@ -652,11 +652,11 @@ func validateZoneAttrsAndLocalities(
 	node:
 		for _, node := range nodes.Nodes {
 			for _, store := range node.StoreStatuses {
-				// We could alternatively use config.storeHasConstraint here to catch
-				// typos in prohibited constraints as well, but as noted in the
-				// function-level comment that could break very reasonable use cases
-				// for prohibited constraints.
-				if config.StoreMatchesConstraint(store.Desc, constraint) {
+				// We could alternatively use config.StoreMatchesConstraint here to
+				// catch typos in prohibited constraints as well, but as noted in the
+				// function-level comment that could break very reasonable use cases for
+				// prohibited constraints.
+				if config.StoreSatisfiesConstraint(store.Desc, constraint) {
 					found = true
 					break node
 				}

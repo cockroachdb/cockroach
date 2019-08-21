@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/reports"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -44,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/logtags"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -142,18 +143,19 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
 // IDs for bootstrapping the node itself or new stores as they're added
 // on subsequent instantiations.
 type Node struct {
-	stopper     *stop.Stopper
-	clusterID   *base.ClusterIDContainer // UUID for Cockroach cluster
-	Descriptor  roachpb.NodeDescriptor   // Node ID, network/physical topology
-	storeCfg    storage.StoreConfig      // Config to use and pass to stores
-	eventLogger sql.EventLogger
-	stores      *storage.Stores // Access to node-local stores
-	metrics     nodeMetrics
-	recorder    *status.MetricsRecorder
-	startedAt   int64
-	lastUp      int64
-	initialBoot bool // True if this is the first time this node has started.
-	txnMetrics  kv.TxnMetrics
+	stopper                  *stop.Stopper
+	clusterID                *base.ClusterIDContainer // UUID for Cockroach cluster
+	Descriptor               roachpb.NodeDescriptor   // Node ID, network/physical topology
+	storeCfg                 storage.StoreConfig      // Config to use and pass to stores
+	eventLogger              sql.EventLogger
+	stores                   *storage.Stores // Access to node-local stores
+	metrics                  nodeMetrics
+	recorder                 *status.MetricsRecorder
+	constraintStatsCollector *reports.Reporter
+	startedAt                int64
+	lastUp                   int64
+	initialBoot              bool // True if this is the first time this node has started.
+	txnMetrics               kv.TxnMetrics
 
 	perReplicaServer storage.Server
 }
@@ -271,6 +273,7 @@ func NewNode(
 		eventLogger: eventLogger,
 		clusterID:   clusterID,
 	}
+	n.constraintStatsCollector = reports.NewReporter(n.stores, &n.storeCfg)
 	n.perReplicaServer = storage.MakeServer(&n.Descriptor, n.stores)
 	return n
 }
@@ -497,6 +500,8 @@ func (n *Node) start(
 	// cluster version, but not if the server starts with a lower one and gets
 	// bumped immediately, which would be possible if gossip got started earlier).
 	n.startGossip(ctx, n.stopper)
+
+	n.constraintStatsCollector.Start(ctx, n.stopper)
 
 	allEngines := append([]engine.Engine(nil), initializedEngines...)
 	allEngines = append(allEngines, emptyEngines...)

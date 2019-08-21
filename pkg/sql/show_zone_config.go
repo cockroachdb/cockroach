@@ -28,6 +28,7 @@ import (
 // These must match crdb_internal.zones.
 var showZoneConfigColumns = sqlbase.ResultColumns{
 	{Name: "zone_id", Typ: types.Int, Hidden: true},
+	{Name: "subzone_id", Typ: types.Int, Hidden: true},
 	{Name: "target", Typ: types.String},
 	{Name: "range_name", Typ: types.String, Hidden: true},
 	{Name: "database_name", Typ: types.String, Hidden: true},
@@ -42,6 +43,7 @@ var showZoneConfigColumns = sqlbase.ResultColumns{
 // These must match showZoneConfigColumns.
 const (
 	zoneIDCol int = iota
+	subZoneIDCol
 	targetCol
 	rangeNameCol
 	databaseNameCol
@@ -111,6 +113,7 @@ func getShowZoneConfigRow(
 		return nil, err
 	}
 
+	subZoneIdx := uint32(0)
 	zoneID, zone, subzone, err := GetZoneConfigInTxn(ctx, p.txn,
 		uint32(targetID), index, partition, false /* getInheritedDefault */)
 	if err == errNoZoneConfigApplies {
@@ -122,6 +125,12 @@ func getShowZoneConfigRow(
 	} else if err != nil {
 		return nil, err
 	} else if subzone != nil {
+		for i := range zone.Subzones {
+			subZoneIdx++
+			if subzone == &zone.Subzones[i] {
+				break
+			}
+		}
 		zone = &subzone.Config
 	}
 
@@ -135,7 +144,7 @@ func getShowZoneConfigRow(
 
 	vals := make(tree.Datums, len(showZoneConfigColumns))
 	if err := generateZoneConfigIntrospectionValues(
-		vals, tree.NewDInt(tree.DInt(zoneID)), &zs, zone,
+		vals, tree.NewDInt(tree.DInt(zoneID)), tree.NewDInt(tree.DInt(subZoneIdx)), &zs, zone,
 	); err != nil {
 		return nil, err
 	}
@@ -149,10 +158,15 @@ func getShowZoneConfigRow(
 // provide it as 2nd argument. The function will compute
 // the remaining values based on the zone specifier and configuration.
 func generateZoneConfigIntrospectionValues(
-	values tree.Datums, zoneID tree.Datum, zs *tree.ZoneSpecifier, zone *config.ZoneConfig,
+	values tree.Datums,
+	zoneID tree.Datum,
+	subZoneID tree.Datum,
+	zs *tree.ZoneSpecifier,
+	zone *config.ZoneConfig,
 ) error {
 	// Populate the ID column.
 	values[zoneIDCol] = zoneID
+	values[subZoneIDCol] = subZoneID
 
 	// Populate the zone specifier columns.
 	values[targetCol] = tree.DNull
