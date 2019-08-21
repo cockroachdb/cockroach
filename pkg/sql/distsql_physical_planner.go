@@ -640,8 +640,8 @@ type SpanPartition struct {
 
 type distSQLNodeHealth struct {
 	gossip     *gossip.Gossip
-	connHealth func(roachpb.NodeID) error
 	isLive     func(roachpb.NodeID) (bool, error)
+	connHealth func(roachpb.NodeID, rpc.ConnectionClass) error
 }
 
 func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) error {
@@ -653,7 +653,7 @@ func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) er
 		// artifact of rpcContext's reconnection mechanism at the time of
 		// writing). This is better than having it used in 100% of cases
 		// (until the liveness check below kicks in).
-		err := h.connHealth(nodeID)
+		err := h.connHealth(nodeID, rpc.DefaultClass)
 		if err != nil && err != rpc.ErrNotHeartbeated {
 			// This host is known to be unhealthy. Don't use it (use the gateway
 			// instead). Note: this can never happen for our nodeID (which

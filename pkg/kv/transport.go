@@ -98,7 +98,7 @@ func grpcTransportFactoryImpl(
 ) (Transport, error) {
 	clients := make([]batchClient, 0, len(replicas))
 	for _, replica := range replicas {
-		healthy := nodeDialer.ConnHealth(replica.NodeID) == nil
+		healthy := nodeDialer.ConnHealth(replica.NodeID, opts.class) == nil
 		clients = append(clients, batchClient{
 			replica: replica.ReplicaDescriptor,
 			healthy: healthy,

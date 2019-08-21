@@ -176,7 +176,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		}
 
 		// Only consider followers that that have "healthy" RPC connections.
-		if err := r.store.cfg.NodeDialer.ConnHealth(rep.NodeID); err != nil {
+		if err := r.store.cfg.NodeDialer.ConnHealth(rep.NodeID, r.connectionClass.get()); err != nil {
 			return
 		}
 

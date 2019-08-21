@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
@@ -49,7 +50,9 @@ type mockDialer struct {
 	}
 }
 
-func (d *mockDialer) Dial(context.Context, roachpb.NodeID) (*grpc.ClientConn, error) {
+func (d *mockDialer) Dial(
+	context.Context, roachpb.NodeID, rpc.ConnectionClass,
+) (*grpc.ClientConn, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.mu.conn != nil {

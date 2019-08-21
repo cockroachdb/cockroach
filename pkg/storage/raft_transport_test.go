@@ -446,7 +446,7 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 	// snuck in.
 	testutils.SucceedsSoon(t, func() error {
 		if !rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 2}) {
-			clientTransport.GetCircuitBreaker(serverReplica.NodeID).Reset()
+			clientTransport.GetCircuitBreaker(serverReplica.NodeID, rpc.DefaultClass).Reset()
 		}
 		select {
 		case req := <-serverChannel.ch:

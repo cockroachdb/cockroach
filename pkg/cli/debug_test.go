@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -250,6 +251,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 	grpcConn, err := tc.Server(0).RPCContext().GRPCDialNode(
 		tc.Server(0).ServingRPCAddr(),
 		tc.Server(0).NodeID(),
+		rpc.DefaultClass,
 	).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)

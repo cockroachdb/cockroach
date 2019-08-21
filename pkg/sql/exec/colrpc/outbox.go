@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
@@ -39,7 +40,7 @@ type flowStreamClient interface {
 // method that Outbox.Run needs from nodedialer.Dialer so that we can mock it
 // in tests outside of this package.
 type Dialer interface {
-	Dial(context.Context, roachpb.NodeID) (*grpc.ClientConn, error)
+	Dial(context.Context, roachpb.NodeID, rpc.ConnectionClass) (*grpc.ClientConn, error)
 }
 
 // Outbox is used to push data from local flows to a remote endpoint. Run may
@@ -120,7 +121,7 @@ func (o *Outbox) Run(
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
 
 	log.VEventf(ctx, 2, "Outbox Dialing %s", nodeID)
-	conn, err := dialer.Dial(ctx, nodeID)
+	conn, err := dialer.Dial(ctx, nodeID, rpc.DefaultClass)
 	if err != nil {
 		log.Warningf(
 			ctx,

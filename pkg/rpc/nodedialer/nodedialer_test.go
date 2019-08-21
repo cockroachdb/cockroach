@@ -43,10 +43,10 @@ func TestNodedialerPositive(t *testing.T) {
 	stopper, _, _, _, nd := setUpNodedialerTest(t, staticNodeID)
 	defer stopper.Stop(context.TODO())
 	// Ensure that dialing works.
-	breaker := nd.GetCircuitBreaker(1)
+	breaker := nd.GetCircuitBreaker(1, rpc.DefaultClass)
 	assert.True(t, breaker.Ready())
 	ctx := context.Background()
-	_, err := nd.Dial(ctx, staticNodeID)
+	_, err := nd.Dial(ctx, staticNodeID, rpc.DefaultClass)
 	assert.Nil(t, err, "failed to dial")
 	assert.True(t, breaker.Ready())
 	assert.Equal(t, breaker.Failures(), int64(0))
@@ -57,7 +57,7 @@ func TestConcurrentCancellationAndTimeout(t *testing.T) {
 	stopper, _, _, _, nd := setUpNodedialerTest(t, staticNodeID)
 	defer stopper.Stop(context.TODO())
 	ctx := context.Background()
-	breaker := nd.GetCircuitBreaker(staticNodeID)
+	breaker := nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
 	// Test that when a context is canceled during dialing we always return that
 	// error but we never trip the breaker.
 	const N = 1000
@@ -74,7 +74,7 @@ func TestConcurrentCancellationAndTimeout(t *testing.T) {
 		}()
 		go func() {
 			time.Sleep(randDuration(time.Millisecond))
-			_, err := nd.Dial(iCtx, 1)
+			_, err := nd.Dial(iCtx, 1, rpc.DefaultClass)
 			if err != nil &&
 				err != context.Canceled &&
 				err != context.DeadlineExceeded {
@@ -95,9 +95,9 @@ func TestResolverErrorsTrip(t *testing.T) {
 	nd := New(rpcCtx, func(id roachpb.NodeID) (net.Addr, error) {
 		return nil, boom
 	})
-	_, err := nd.Dial(context.Background(), staticNodeID)
+	_, err := nd.Dial(context.Background(), staticNodeID, rpc.DefaultClass)
 	assert.Equal(t, errors.Cause(err), boom)
-	breaker := nd.GetCircuitBreaker(staticNodeID)
+	breaker := nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
 	assert.False(t, breaker.Ready())
 }
 
@@ -106,7 +106,7 @@ func TestDisconnectsTrip(t *testing.T) {
 	stopper, _, ln, hb, nd := setUpNodedialerTest(t, staticNodeID)
 	defer stopper.Stop(context.TODO())
 	ctx := context.Background()
-	breaker := nd.GetCircuitBreaker(staticNodeID)
+	breaker := nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
 
 	// Now close the underlying connection from the server side and set the
 	// heartbeat service to return errors. This will eventually lead to the client
@@ -140,7 +140,7 @@ func TestDisconnectsTrip(t *testing.T) {
 		}()
 		go func() {
 			time.Sleep(randDuration(time.Millisecond))
-			_, err := nd.Dial(iCtx, 1)
+			_, err := nd.Dial(iCtx, 1, rpc.DefaultClass)
 			if shouldTrip(err) {
 				errChan <- err
 			}
@@ -170,7 +170,7 @@ func TestDisconnectsTrip(t *testing.T) {
 	// service is not returning errors.
 	hb.setErr(nil) // reset in case there were no errors
 	testutils.SucceedsSoon(t, func() error {
-		return nd.ConnHealth(staticNodeID)
+		return nd.ConnHealth(staticNodeID, rpc.DefaultClass)
 	})
 }
 
@@ -191,7 +191,7 @@ func setUpNodedialerTest(
 	_, ln, hb = newTestServer(t, clock, stopper)
 	nd = New(rpcCtx, newSingleNodeResolver(nodeID, ln.Addr()))
 	testutils.SucceedsSoon(t, func() error {
-		return nd.ConnHealth(nodeID)
+		return nd.ConnHealth(nodeID, rpc.DefaultClass)
 	})
 	return stopper, rpcCtx, ln, hb, nd
 }
