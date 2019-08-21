@@ -14,30 +14,71 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/raft"
 )
 
+func rd(typ *ReplicaType, id uint64) ReplicaDescriptor {
+	return ReplicaDescriptor{
+		Type:      typ,
+		NodeID:    NodeID(100 * id),
+		StoreID:   StoreID(10 * id),
+		ReplicaID: ReplicaID(id),
+	}
+}
+
+var v0 = (*ReplicaType)(nil) // should be treated like VoterFull
+var v = ReplicaTypeVoterFull()
+var vi = ReplicaTypeVoterIncoming()
+var vo = ReplicaTypeVoterOutgoing()
+var l = ReplicaTypeLearner()
+
 func TestVotersLearnersAll(t *testing.T) {
-	voter := ReplicaTypeVoterFull()
-	learner := ReplicaTypeLearner()
+
 	tests := [][]ReplicaDescriptor{
 		{},
-		{{Type: voter}},
-		{{Type: nil}},
-		{{Type: learner}},
-		{{Type: voter}, {Type: learner}, {Type: voter}},
-		{{Type: nil}, {Type: learner}, {Type: nil}},
-		{{Type: learner}, {Type: voter}, {Type: learner}},
-		{{Type: learner}, {Type: nil}, {Type: learner}},
+		{rd(v, 1)},
+		{rd(v0, 1)},
+		{rd(l, 1)},
+		{rd(v, 1), rd(l, 2), rd(v, 3)},
+		{rd(v0, 1), rd(l, 2), rd(v, 3)},
+		{rd(l, 1), rd(v, 2), rd(l, 3)},
+		{rd(l, 1), rd(v0, 2), rd(l, 3)},
+		{rd(vi, 1)},
+		{rd(vo, 1)},
+		{rd(l, 1), rd(vo, 2), rd(vi, 3), rd(vi, 4)},
 	}
-	for i, test := range tests {
-		r := MakeReplicaDescriptors(test)
-		for _, voter := range r.Voters() {
-			assert.Equal(t, ReplicaType_VoterFull, voter.GetType(), "testcase %d", i)
-		}
-		for _, learner := range r.Learners() {
-			assert.Equal(t, ReplicaType_Learner, learner.GetType(), "testcase %d", i)
-		}
-		assert.Equal(t, len(test), len(r.All()), "testcase %d", i)
+	for _, test := range tests {
+		t.Run("", func(t *testing.T) {
+			r := MakeReplicaDescriptors(test)
+			seen := map[ReplicaDescriptor]struct{}{}
+			for _, voter := range r.Voters() {
+				typ := voter.GetType()
+				switch typ {
+				case ReplicaType_VoterFull, ReplicaType_VoterIncoming:
+					seen[voter] = struct{}{}
+				default:
+					assert.FailNow(t, "unexpectedly got a %s as Voter()", typ)
+				}
+			}
+			for _, learner := range r.Learners() {
+				seen[learner] = struct{}{}
+				assert.Equal(t, ReplicaType_Learner, learner.GetType())
+			}
+
+			all := r.All()
+			// Make sure that VoterOutgoing is the only type that is skipped both
+			// by Learners() and Voters()
+			for _, rd := range all {
+				typ := rd.GetType()
+				if _, seen := seen[rd]; !seen {
+					assert.Equal(t, ReplicaType_VoterOutgoing, typ)
+				} else {
+					assert.NotEqual(t, ReplicaType_VoterOutgoing, typ)
+				}
+			}
+			assert.Equal(t, len(test), len(all))
+		})
 	}
 }
 
@@ -91,5 +132,62 @@ func TestReplicaDescriptorsRemove(t *testing.T) {
 		for _, learner := range r.Learners() {
 			assert.Equal(t, ReplicaType_Learner, learner.GetType(), "testcase %d", i)
 		}
+	}
+}
+
+func TestReplicaDescriptorsConfState(t *testing.T) {
+	tests := []struct {
+		in  []ReplicaDescriptor
+		out string
+	}{
+		{
+			[]ReplicaDescriptor{rd(v, 1)},
+			"Voters:[1] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false",
+		},
+		{
+			[]ReplicaDescriptor{rd(v0, 1)},
+			"Voters:[1] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false",
+		},
+		{
+			[]ReplicaDescriptor{rd(l, 1), rd(v0, 2)},
+			"Voters:[2] VotersOutgoing:[] Learners:[1] LearnersNext:[] AutoLeave:false",
+		},
+		// First joint case. We're adding n3 (via atomic replication changes), so the outgoing
+		// config we have to get rid of consists only of n2 (even though n2 remains a voter).
+		// Note that we could simplify this config so that it's not joint, but raft expects
+		// the config exactly as described by the descriptor so we don't try.
+		{
+			[]ReplicaDescriptor{rd(l, 1), rd(v0, 2), rd(vi, 3)},
+			"Voters:[2 3] VotersOutgoing:[2] Learners:[1] LearnersNext:[] AutoLeave:false",
+		},
+		// More complex joint change: a replica swap, switching out n4 for n3 from the initial
+		// set of voters n2, n4 (plus learner n1 before and after).
+		{
+			[]ReplicaDescriptor{rd(l, 1), rd(v0, 2), rd(vi, 3), rd(vo, 4)},
+			"Voters:[2 3] VotersOutgoing:[2 4] Learners:[1] LearnersNext:[] AutoLeave:false",
+		},
+		// Upreplicating from n1,n2 to n1,n2,n3,n4.
+		{
+			[]ReplicaDescriptor{rd(v, 1), rd(v, 2), rd(vi, 3), rd(vi, 4)},
+			"Voters:[1 2 3 4] VotersOutgoing:[1 2] Learners:[] LearnersNext:[] AutoLeave:false",
+		},
+		// Downreplicating from n1,n2,n3,n4 to n1,n2.
+		{
+			[]ReplicaDescriptor{rd(v, 1), rd(v, 2), rd(vo, 3), rd(vo, 4)},
+			"Voters:[1 2] VotersOutgoing:[1 2 3 4] Learners:[] LearnersNext:[] AutoLeave:false",
+		},
+		// Completely switching to a new set of replicas: n1,n2 to n4,n5. Throw a learner in for fun.
+		{
+			[]ReplicaDescriptor{rd(vo, 1), rd(vo, 2), rd(vi, 3), rd(vi, 4), rd(l, 5)},
+			"Voters:[3 4] VotersOutgoing:[1 2] Learners:[5] LearnersNext:[] AutoLeave:false",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run("", func(t *testing.T) {
+			r := MakeReplicaDescriptors(test.in)
+			cs := r.ConfState()
+			require.Equal(t, test.out, raft.DescribeConfState(cs))
+		})
 	}
 }

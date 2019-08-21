@@ -212,12 +212,15 @@ func createTestStoreWithOpts(
 	}
 	// Wait for the store's single range to have quorum before proceeding.
 	repl := store.LookupReplica(roachpb.RKeyMin)
-	testutils.SucceedsSoon(t, func() error {
-		if !repl.HasQuorum() {
-			return errors.New("first range has not reached quorum")
-		}
-		return nil
-	})
+
+	// Send a request through the range to make sure everything is warmed up
+	// and works.
+	// NB: it's unclear if this code is necessary.
+	var ba roachpb.BatchRequest
+	get := roachpb.GetRequest{}
+	get.Key = repl.Desc().StartKey.AsRawKey()
+	ba.Header.Replica = repl.Desc().Replicas().Voters()[0]
+	store.Send(ctx, ba)
 
 	// Wait for the system config to be available in gossip. All sorts of things
 	// might not work properly while the system config is not available.

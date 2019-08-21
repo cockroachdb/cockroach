@@ -13,12 +13,31 @@ package roachpb
 import (
 	"fmt"
 	"strings"
+
+	"go.etcd.io/etcd/raft/confchange"
+	"go.etcd.io/etcd/raft/quorum"
+	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/tracker"
 )
 
 // ReplicaTypeVoterFull returns a ReplicaType_VoterFull pointer suitable for use in a
 // nullable proto field.
 func ReplicaTypeVoterFull() *ReplicaType {
 	t := ReplicaType_VoterFull
+	return &t
+}
+
+// ReplicaTypeVoterIncoming returns a ReplicaType_VoterIncoming pointer suitable
+// for use in a nullable proto field.
+func ReplicaTypeVoterIncoming() *ReplicaType {
+	t := ReplicaType_VoterIncoming
+	return &t
+}
+
+// ReplicaTypeVoterOutgoing returns a ReplicaType_VoterOutgoing pointer suitable
+// for use in a nullable proto field.
+func ReplicaTypeVoterOutgoing() *ReplicaType {
+	t := ReplicaType_VoterOutgoing
 	return &t
 }
 
@@ -69,9 +88,19 @@ func (d ReplicaDescriptors) All() []ReplicaDescriptor {
 	return d.wrapped
 }
 
-// Voters returns the voter replicas in the set. This may allocate, but it also
-// may return the underlying slice as a performance optimization, so it's not
-// safe to modify the returned value.
+// Voters returns the current and future voter replicas in the set. This means
+// that during an atomic replication change, only the replicas that will be
+// voters once the change completes will be returned; "outgoing" voters will not
+// be returned even though they do in the current state retain their voting
+// rights. When no atomic membership change is ongoing, this is simply the set
+// of all non-learners.
+//
+// This may allocate, but it also may return the underlying slice as a
+// performance optimization, so it's not safe to modify the returned value.
+//
+// TODO(tbg): go through the callers and figure out the few which want a
+// different subset of voters. Consider renaming this method so that it's
+// more descriptive.
 func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 	// Fastpath, most of the time, everything is a voter, so special case that and
 	// save the alloc.
@@ -87,7 +116,8 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 	}
 	voters := make([]ReplicaDescriptor, 0, len(d.wrapped))
 	for i := range d.wrapped {
-		if d.wrapped[i].GetType() == ReplicaType_VoterFull {
+		switch d.wrapped[i].GetType() {
+		case ReplicaType_VoterFull, ReplicaType_VoterIncoming:
 			voters = append(voters, d.wrapped[i])
 		}
 	}
@@ -238,14 +268,81 @@ func (d *ReplicaDescriptors) RemoveReplica(
 	return removed, true
 }
 
-// QuorumSize returns the number of voter replicas required for quorum in a raft
-// group consisting of this set of replicas.
-func (d ReplicaDescriptors) QuorumSize() int {
-	var numVoters int
-	for i := range d.wrapped {
-		if d.wrapped[i].GetType() == ReplicaType_VoterFull {
-			numVoters++
+// InAtomicReplicationChange returns true if the descriptor is in the middle of
+// an atomic replication change.
+func (d ReplicaDescriptors) InAtomicReplicationChange() bool {
+	for _, rDesc := range d.wrapped {
+		switch rDesc.GetType() {
+		case ReplicaType_VoterFull:
+		case ReplicaType_VoterIncoming:
+			return true
+		case ReplicaType_VoterOutgoing:
+			return true
+		case ReplicaType_Learner:
 		}
 	}
-	return (numVoters / 2) + 1
+	return false
+}
+
+// ConfState returns the Raft configuration described by the set of replicas.
+func (d ReplicaDescriptors) ConfState() raftpb.ConfState {
+	var cs raftpb.ConfState
+	joint := d.InAtomicReplicationChange()
+	// The incoming config is taken verbatim from the full voters when the config is not
+	// joint. If it is joint, slot the voters into the right category.
+	// We never need to populate LearnersNext because this would correspond to
+	// demoting a voter, which we don't do. If we wanted to add that, we'd add
+	// ReplicaType_VoterDemoting and populate both VotersOutgoing and LearnersNext from it.
+	for _, rep := range d.wrapped {
+		id := uint64(rep.ReplicaID)
+		typ := rep.GetType()
+		switch typ {
+		case ReplicaType_VoterFull:
+			cs.Voters = append(cs.Voters, id)
+			if joint {
+				cs.VotersOutgoing = append(cs.VotersOutgoing, id)
+			}
+		case ReplicaType_VoterIncoming:
+			cs.Voters = append(cs.Voters, id)
+		case ReplicaType_VoterOutgoing:
+			cs.VotersOutgoing = append(cs.VotersOutgoing, id)
+		case ReplicaType_Learner:
+			cs.Learners = append(cs.Learners, id)
+		default:
+			panic(fmt.Sprintf("unknown ReplicaType %d", typ))
+		}
+	}
+	return cs
+}
+
+// CanMakeProgress reports whether the given descriptors can make progress at the
+// replication layer. This is more complicated than just counting the number
+// of replicas due to the existence of joint quorums.
+func (d ReplicaDescriptors) CanMakeProgress(liveFunc func(descriptor ReplicaDescriptor) bool) bool {
+	voters := d.Voters()
+	var c int
+	if n := len(d.wrapped); len(voters) == n {
+		// Fast path when there are only full voters, i.e. the common case.
+		for _, rDesc := range voters {
+			if liveFunc(rDesc) {
+				c++
+			}
+		}
+		return c >= n/2+1
+	}
+
+	// Slow path. For simplicity, don't try to duplicate the logic that already
+	// exists in raft.
+	cfg, _, err := confchange.Restore(
+		confchange.Changer{Tracker: tracker.MakeProgressTracker(1)},
+		d.ConfState(),
+	)
+	if err != nil {
+		panic(err)
+	}
+	votes := make(map[uint64]bool, len(d.wrapped))
+	for _, rDesc := range d.wrapped {
+		votes[uint64(rDesc.ReplicaID)] = true
+	}
+	return cfg.Voters.VoteResult(votes) == quorum.VoteWon
 }
