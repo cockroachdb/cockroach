@@ -372,10 +372,13 @@ func init() {
 		VarFlag(f, &serverCfg.JoinList, cliflags.Join)
 		VarFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
 		BoolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification, false)
+
+		// Enforcement of cluster name (--cluster-name) in client (SQL and internal) certificates.
+		BoolFlag(f, &baseCfg.EnforceClusterNameInCertificate, cliflags.EnforceClusterNameInCertificate, false)
+
 		// We also hide it from help for 'start-single-node'.
 		if cmd == startSingleNodeCmd {
 			_ = f.MarkHidden(cliflags.Join.Name)
-			_ = f.MarkHidden(cliflags.ClusterName.Name)
 			_ = f.MarkHidden(cliflags.DisableClusterNameVerification.Name)
 		}
 

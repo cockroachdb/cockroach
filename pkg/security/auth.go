@@ -23,11 +23,19 @@ const (
 	RootUser = "root"
 )
 
+// AuthContext describes the authentication settings for the cluster.
+// These are based on command-line flags and do not change during the lifetime of a node.
+type AuthContext struct {
+	Insecure                        bool
+	ClusterName                     string
+	EnforceClusterNameInCertificate bool
+}
+
 // UserAuthHook authenticates a user based on their username and whether their
 // connection originates from a client or another node in the cluster.
 type UserAuthHook func(string, bool) error
 
-// GetCertificateUser extract the username from a client certificate.
+// GetCertificateUser extracts the username from a client certificate.
 func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 	if tlsState == nil {
 		return "", errors.Errorf("request is not using TLS")
@@ -41,12 +49,31 @@ func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 	return tlsState.PeerCertificates[0].Subject.CommonName, nil
 }
 
+// AuthenticateRPC verifies that the TLS state from an RPC context is allowed.
+// authCtx.Insecure is not checked as this is only called in secure mode.
+func AuthenticateRPC(authCtx AuthContext, tlsState *tls.ConnectionState) error {
+	certUser, err := GetCertificateUser(tlsState)
+	if err != nil {
+		return err
+	}
+
+	// TODO(benesch): the vast majority of RPCs should be limited to just
+	// NodeUser. This is not a security concern, as RootUser has access to
+	// read and write all data, merely good hygiene. For example, there is
+	// no reason to permit the root user to send raw Raft RPCs.
+	if certUser != NodeUser && certUser != RootUser {
+		return errors.Errorf("user %s is not allowed to perform this RPC", certUser)
+	}
+
+	return nil
+}
+
 // UserAuthCertHook builds an authentication hook based on the security
 // mode and client certificate.
-func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAuthHook, error) {
+func UserAuthCertHook(authCtx AuthContext, tlsState *tls.ConnectionState) (UserAuthHook, error) {
 	var certUser string
 
-	if !insecureMode {
+	if !authCtx.Insecure {
 		var err error
 		certUser, err = GetCertificateUser(tlsState)
 		if err != nil {
@@ -65,7 +92,7 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 		}
 
 		// If running in insecure mode, we have nothing to verify it against.
-		if insecureMode {
+		if authCtx.Insecure {
 			return nil
 		}
 
@@ -82,7 +109,7 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 
 // UserAuthPasswordHook builds an authentication hook based on the security
 // mode, password, and its potentially matching hash.
-func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []byte) UserAuthHook {
+func UserAuthPasswordHook(authCtx AuthContext, password string, hashedPassword []byte) UserAuthHook {
 	return func(requestedUser string, clientConnection bool) error {
 		if len(requestedUser) == 0 {
 			return errors.New("user is missing")
@@ -92,7 +119,7 @@ func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []b
 			return errors.New("password authentication is only available for client connections")
 		}
 
-		if insecureMode {
+		if authCtx.Insecure {
 			return nil
 		}
 

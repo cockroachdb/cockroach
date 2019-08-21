@@ -102,7 +102,7 @@ type conn struct {
 type authOptions struct {
 	skipAuth bool                            // test-only
 	authHook func(ctx context.Context) error // test-only
-	insecure bool
+	authCtx  security.AuthContext
 	auth     *hba.Conf
 	ie       *sql.InternalExecutor
 }
@@ -563,10 +563,7 @@ func (c *conn) processCommandsAsync(
 					return
 				}
 			} else {
-				if retErr = c.handleAuthentication(
-					ctx, ac, authOpt.insecure, authOpt.ie, authOpt.auth,
-					sqlServer.GetExecutorConfig(),
-				); retErr != nil {
+				if retErr = c.handleAuthentication(ctx, ac, authOpt, sqlServer.GetExecutorConfig()); retErr != nil {
 					return
 				}
 			}
@@ -1471,9 +1468,7 @@ func (r *pgwireReader) ReadByte() (byte, error) {
 func (c *conn) handleAuthentication(
 	ctx context.Context,
 	ac AuthConn,
-	insecure bool,
-	ie *sql.InternalExecutor,
-	auth *hba.Conf,
+	authOpt authOptions,
 	execCfg *sql.ExecutorConfig,
 ) error {
 	sendError := func(err error) error {
@@ -1484,7 +1479,7 @@ func (c *conn) handleAuthentication(
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
 	exists, hashedPassword, err := sql.GetUserHashedPassword(
-		ctx, ie, &c.metrics.SQLMemMetrics, c.sessionArgs.User,
+		ctx, authOpt.ie, &c.metrics.SQLMemMetrics, c.sessionArgs.User,
 	)
 	if err != nil {
 		return sendError(err)
@@ -1498,7 +1493,7 @@ func (c *conn) handleAuthentication(
 		var methodFn AuthMethod
 		var hbaEntry *hba.Entry
 
-		if auth == nil {
+		if authOpt.auth == nil {
 			methodFn = authCertPassword
 		} else if c.sessionArgs.User == security.RootUser {
 			// If a hba.conf file is specified, hard code the root user to always use
@@ -1512,7 +1507,7 @@ func (c *conn) handleAuthentication(
 				return sendError(err)
 			}
 			ip := net.ParseIP(addr)
-			for _, entry := range auth.Entries {
+			for _, entry := range authOpt.auth.Entries {
 				switch a := entry.Address.(type) {
 				case *net.IPNet:
 					if !a.Contains(ip) {
@@ -1551,7 +1546,7 @@ func (c *conn) handleAuthentication(
 			}
 		}
 
-		authenticationHook, err := methodFn(ac, tlsState, insecure, hashedPassword, execCfg, hbaEntry)
+		authenticationHook, err := methodFn(ac, tlsState, authOpt.authCtx, hashedPassword, execCfg, hbaEntry)
 		if err != nil {
 			return sendError(err)
 		}
@@ -1731,7 +1726,7 @@ func (p *authPipe) SendAuthRequest(authType int32, data []byte) error {
 
 type (
 	// AuthMethod defines a method for authentication of a connection.
-	AuthMethod func(c AuthConn, tlsState tls.ConnectionState, insecure bool, hashedPassword []byte, execCfg *sql.ExecutorConfig, entry *hba.Entry) (security.UserAuthHook, error)
+	AuthMethod func(c AuthConn, tlsState tls.ConnectionState, authCtx security.AuthContext, hashedPassword []byte, execCfg *sql.ExecutorConfig, entry *hba.Entry) (security.UserAuthHook, error)
 
 	// CheckHBAEntry defines a method for error checking an hba Entry.
 	CheckHBAEntry func(hba.Entry) error
@@ -1760,11 +1755,11 @@ func passwordString(pwdData []byte) (string, error) {
 
 func authPassword(
 	c AuthConn,
-	tlsState tls.ConnectionState,
-	insecure bool,
+	_ tls.ConnectionState,
+	authCtx security.AuthContext,
 	hashedPassword []byte,
-	execCfg *sql.ExecutorConfig,
-	entry *hba.Entry,
+	_ *sql.ExecutorConfig,
+	_ *hba.Entry,
 ) (security.UserAuthHook, error) {
 	if err := c.SendAuthRequest(authCleartextPassword, nil /* data */); err != nil {
 		return nil, err
@@ -1778,17 +1773,17 @@ func authPassword(
 		return nil, err
 	}
 	return security.UserAuthPasswordHook(
-		insecure, password, hashedPassword,
+		authCtx, password, hashedPassword,
 	), nil
 }
 
 func authCert(
 	_ AuthConn,
 	tlsState tls.ConnectionState,
-	insecure bool,
-	hashedPassword []byte,
-	execCfg *sql.ExecutorConfig,
-	entry *hba.Entry,
+	authCtx security.AuthContext,
+	_ []byte,
+	_ *sql.ExecutorConfig,
+	_ *hba.Entry,
 ) (security.UserAuthHook, error) {
 	if len(tlsState.PeerCertificates) == 0 {
 		return nil, errors.New("no TLS peer certificates, but required for auth")
@@ -1797,13 +1792,13 @@ func authCert(
 	tlsState.PeerCertificates[0].Subject.CommonName = tree.Name(
 		tlsState.PeerCertificates[0].Subject.CommonName,
 	).Normalize()
-	return security.UserAuthCertHook(insecure, &tlsState)
+	return security.UserAuthCertHook(authCtx, &tlsState)
 }
 
 func authCertPassword(
 	c AuthConn,
 	tlsState tls.ConnectionState,
-	insecure bool,
+	authCtx security.AuthContext,
 	hashedPassword []byte,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
@@ -1814,7 +1809,7 @@ func authCertPassword(
 	} else {
 		fn = authCert
 	}
-	return fn(c, tlsState, insecure, hashedPassword, execCfg, entry)
+	return fn(c, tlsState, authCtx, hashedPassword, execCfg, entry)
 }
 
 func init() {

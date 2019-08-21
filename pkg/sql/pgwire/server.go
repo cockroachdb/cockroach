@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -538,7 +539,11 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		&s.metrics, reserved, s.SQLServer,
 		s.IsDraining,
 		authOptions{
-			insecure: s.cfg.Insecure,
+			authCtx: security.AuthContext{
+				Insecure:                        s.cfg.Insecure,
+				ClusterName:                     s.cfg.ClusterName,
+				EnforceClusterNameInCertificate: s.cfg.EnforceClusterNameInCertificate,
+			},
 			ie:       s.execCfg.InternalExecutor,
 			auth:     auth,
 			authHook: authHook,
