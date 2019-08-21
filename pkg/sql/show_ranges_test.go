@@ -13,6 +13,7 @@ package sql_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -24,7 +25,7 @@ import (
 func TestShowRangesWithLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const numNodes = 4
+	const numNodes = 3
 	ctx := context.Background()
 	tcArgs := base.TestClusterArgs{}
 
@@ -35,16 +36,32 @@ func TestShowRangesWithLocality(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE t (x INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `ALTER TABLE t SPLIT AT SELECT i FROM generate_series(0, 20) AS g(i)`)
 
-	const nodeColIdx = 5
-	const localityColIdx = 6
+	const replicasColIdx = 4
+	const localitiesColIdx = 6
+	replicas := make([]int, 3)
 
 	result := sqlDB.QueryStr(t, `SHOW RANGES FROM TABLE t`)
 	for _, row := range result {
+		_, err := fmt.Sscanf(row[replicasColIdx], "{%d,%d,%d}", &replicas[0], &replicas[1], &replicas[2])
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		// Because StartTestCluster changes the locality no matter what the
 		// arguments are, we expect whatever the test server sets up.
-		locality := fmt.Sprintf("region=test,dc=dc%s", row[nodeColIdx])
-		if row[localityColIdx] != locality {
-			t.Fatalf("expected %s found %s", locality, row[localityColIdx])
+		var builder strings.Builder
+		builder.WriteString("{")
+		for i, replica := range replicas {
+			builder.WriteString(fmt.Sprintf(`"region=test,dc=dc%d"`, replica))
+			if i != len(replicas)-1 {
+				builder.WriteString(",")
+			}
+		}
+		builder.WriteString("}")
+		expected := builder.String()
+
+		if row[localitiesColIdx] != expected {
+			t.Fatalf("expected %s found %s", expected, row[localitiesColIdx])
 		}
 	}
 }
