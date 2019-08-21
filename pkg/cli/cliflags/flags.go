@@ -900,15 +900,16 @@ The line length where sqlfmt will try to wrap.`,
 	DemoNodeLocality = FlagInfo{
 		Name: "demo-locality",
 		Description: `
-Locality information for each demo node. The input is a comma separated
-list of key-value pairs, where the i'th pair is the locality setting
-for the i'th demo cockroach node. For example:
+Locality information for each demo node. The input is a colon separated
+list of localities for each node. The i'th locality in the colon separated
+list sets the locality for the i'th demo cockroach node. For example:
 <PRE>
 
-	--demo-locality=region=us-east1,region=us-east2,region=us-east3
+--demo-locality=region=us-east1,az=1:region=us-east1,az=2:region=us-east1,az=3
 
-Assigns node 1's region to us-east1, node 2's region to us-east2,
-and node 3's region to us-east3.
+Assigns node1's region to us-east1 and availability zone to 1, node 2's
+region to us-east1 and availability zone to 2, and node 3's region
+to us-east1 and availability zone to 3.
 `,
 	}
 
