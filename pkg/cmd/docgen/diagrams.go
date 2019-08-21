@@ -495,6 +495,16 @@ var specs = []stmtSpec{
 		replace: map[string]string{"a_expr": "job_id"},
 		unlink:  []string{"job_id"},
 	},
+	{
+		name: "create_as_col_qual_list",
+		stmt: "create_as_col_qual_list",
+		inline: []string{"create_as_col_qualification", "create_as_col_qualification_elem"},
+	},
+	{
+		name: "create_as_constraint_def",
+		stmt: "create_as_constraint_def",
+		inline: []string{"create_as_constraint_elem"},
+	},
 	{name: "cancel_query", stmt: "cancel_queries_stmt", replace: map[string]string{"a_expr": "query_id"}, unlink: []string{"query_id"}},
 	{name: "cancel_session", stmt: "cancel_sessions_stmt", replace: map[string]string{"a_expr": "session_id"}, unlink: []string{"session_id"}},
 	{name: "create_database_stmt", inline: []string{"opt_encoding_clause"}, replace: map[string]string{"'SCONST'": "encoding"}, unlink: []string{"name", "encoding"}},
@@ -557,7 +567,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_table_as_stmt",
-		inline: []string{"opt_column_list", "name_list"},
+		inline: []string{"create_as_opt_col_list", "create_as_table_defs"},
 	},
 	{
 		name:   "create_table_stmt",
@@ -1138,6 +1148,15 @@ var specs = []stmtSpec{
 		stmt:  "show_stmt",
 		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'KEYS'")},
 	},
+	{
+		name:  "show_locality",
+		stmt:  "show_roles_stmt",
+		replace: map[string]string{"'ROLES'": "'LOCALITY'"},
+	},
+	{
+ 		name: "show_partitions_stmt",
+ 		stmt: "show_partitions_stmt",
+ 	},
 	{
 		name:   "show_queries",
 		stmt:   "show_queries_stmt",
