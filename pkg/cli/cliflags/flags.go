@@ -307,6 +307,17 @@ been updated to know the new cluster name, the cluster can be
 restarted again with this flag removed.`,
 	}
 
+	// This is the cluster-name passed to the cert sub-commands.
+	// We could reuse ClusterName but a more specific description is helpful.
+	CertificateClusterName = FlagInfo{
+		Name: "cluster-name",
+		Description: `
+Specify the cluster name in the certificate. When connecting to a node
+the cluster name in the certificate and the node's --cluster-name must match.
+
+This is stored in the Subject OU as: "clustername=<identifier>".`,
+	}
+
 	Join = FlagInfo{
 		Name:      "join",
 		Shorthand: "j",

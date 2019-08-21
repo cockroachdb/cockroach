@@ -552,7 +552,8 @@ func (s *statusServer) Certificates(
 }
 
 func formatCertNames(p pkix.Name) string {
-	return fmt.Sprintf("CommonName=%s, Organization=%s", p.CommonName, strings.Join(p.Organization, ","))
+	return fmt.Sprintf("CN=%s, O=%s, OU=%s",
+		p.CommonName, strings.Join(p.Organization, ","), strings.Join(p.OrganizationalUnit, ","))
 }
 
 func extractCertFields(contents []byte, details *serverpb.CertificateDetails) error {

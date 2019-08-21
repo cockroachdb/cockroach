@@ -429,6 +429,8 @@ func init() {
 	for _, cmd := range []*cobra.Command{createNodeCertCmd, createClientCertCmd} {
 		f := cmd.Flags()
 		DurationFlag(f, &certificateLifetime, cliflags.CertificateLifetime, defaultCertLifetime)
+		// Only the node and client certificates have a cluster name.
+		VarFlag(f, clusterNameSetter{&certificateClusterName}, cliflags.CertificateClusterName)
 	}
 
 	// The remaining flags are shared between all cert-generating functions.
