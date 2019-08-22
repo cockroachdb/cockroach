@@ -120,6 +120,8 @@ func (b *Bytes) Slice(start, end int) *Bytes {
 // If we copy src into the beginning of dest, we will have to move "world" so
 // that the result is:
 // result Bytes: "aworld", offsets: []int32{0, 1}, lengths: []int32{1, 5}
+// Similarly, if "a", is instead "alongerstring", "world" would have to be
+// shifted right.
 func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	if destIdx < 0 || destIdx > b.Len() {
 		panic(fmt.Sprintf("dest index %d out of range (len=%d)", destIdx, b.Len()))

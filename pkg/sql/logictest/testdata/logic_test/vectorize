@@ -636,3 +636,16 @@ SELECT a, ordinality*2 FROM t_38995 WITH ORDINALITY
 1 2
 2 4
 3 6
+
+# Test for #39827, top k sort with bytes.
+statement ok
+CREATE TABLE t_39827 (a STRING)
+
+statement ok
+INSERT INTO t_39827 VALUES ('hello'), ('world'), ('a'), ('foo')
+
+query T
+SELECT a FROM t_39827 ORDER BY a LIMIT 2
+----
+a
+foo
