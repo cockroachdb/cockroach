@@ -99,6 +99,7 @@ func backupRestoreTestSetupWithParams(
 	bankData := bank.FromConfig(numAccounts, numAccounts, payloadSize, splits)
 
 	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
 	sqlDB.Exec(t, `CREATE DATABASE data`)
 	l := workloadsql.InsertsDataLoader{BatchSize: 1000, Concurrency: 4}
 	if _, err := workloadsql.Setup(ctx, sqlDB.DB.(*gosql.DB), bankData, l); err != nil {
@@ -3067,8 +3068,6 @@ func TestBackupCreatedStats(t *testing.T) {
 	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
-
 	sqlDB.Exec(t, `CREATE TABLE data.foo (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `CREATE STATISTICS foo_stats FROM data.foo`)
 	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
@@ -3100,8 +3099,6 @@ func TestBackupRestoreSubsetCreatedStats(t *testing.T) {
 	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
-
 	sqlDB.Exec(t, `CREATE TABLE data.foo (a INT)`)
 	sqlDB.Exec(t, `CREATE STATISTICS foo_stats FROM data.foo`)
 	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
@@ -3132,8 +3129,6 @@ func TestBackupCreatedStatsFromIncrementalBackup(t *testing.T) {
 	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 	var beforeTs string
-
-	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
 
 	// Create the 1st backup, where data.bank has 1 account.
 	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
