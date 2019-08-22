@@ -637,6 +637,16 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 ) (sqlbase.MutationID, error) {
 	mutationID := tableDesc.ClusterVersion.NextMutationID
 
+	// If the table being schema changed was created in the same txn, we do not
+	// want to update/create a job as we expect the schema change to be executed
+	// immediately (not via the schema changer). For tables created in the same
+	// txn the next mutation ID will not have been allocated and the mutationID
+	// will be an invalid ID. This is fine because the mutation will be processed
+	// immediately.
+	if tableDesc.IsNewTable() {
+		return mutationID, nil
+	}
+
 	var job *jobs.Job
 	var spanList []jobspb.ResumeSpanList
 	if len(tableDesc.MutationJobs) > len(tableDesc.ClusterVersion.MutationJobs) {
