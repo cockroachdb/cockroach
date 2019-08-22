@@ -46,8 +46,10 @@ func EvalAddSSTable(
 
 	// IMPORT INTO should not proceed if any KVs from the SST shadow existing data
 	// entries - #38044.
+	var skippedKVStats enginepb.MVCCStats
+	var err error
 	if args.DisallowShadowing {
-		if err := checkForKeyCollisions(ctx, batch, mvccStartKey, mvccEndKey, args.Data); err != nil {
+		if skippedKVStats, err = checkForKeyCollisions(ctx, batch, mvccStartKey, mvccEndKey, args.Data); err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
 		}
 	}
@@ -154,18 +156,22 @@ func EvalAddSSTable(
 	// remove the ContainsEstimates flag) after they are done ingesting files by
 	// sending an explicit recompute.
 	//
-	// TODO(adityamaru): There is a significant performance win to be achieved by
-	// ensuring that the stats computed are not estimates as it prevents
-	// recompuation on splits. Running AddSSTable with disallowShadowing=true gets
-	// us close to this as we do not allow colliding keys to be ingested. However,
-	// in the situation that two SSTs have KV(s) which "perfectly" shadow an
-	// existing key (equal ts and value), we do not consider this a collision.
-	// While the KV would just overwrite the existing data, the stats would be
-	// added below, causing a double count for those KVs. One solution is to
-	// compute the stats for these "skipped" KVs on-the-fly while checking for the
-	// collision condition and returning their stats. The final stats would then
-	// be ms + stats - skipped_stats, and this would be accurate.
-	stats.ContainsEstimates = true
+	// There is a significant performance win to be achieved by ensuring that the
+	// stats computed are not estimates as it prevents recompuation on splits.
+	// Running AddSSTable with disallowShadowing=true gets us close to this as we
+	// do not allow colliding keys to be ingested. However, in the situation that
+	// two SSTs have KV(s) which "perfectly" shadow an existing key (equal ts and
+	// value), we do not consider this a collision. While the KV would just
+	// overwrite the existing data, the stats would be added to the cumulative
+	// stats of the AddSSTable command, causing a double count for such KVs.
+	// Therfore, we compute the stats for these "skipped" KVs on-the-fly while
+	// checking for the collision condition in C++ and subtract them from the
+	// stats of the SST being ingested before adding them to the running
+	// cumulative for this command. These stats can then be marked as accurate.
+	if args.DisallowShadowing {
+		stats.Subtract(skippedKVStats)
+	}
+	stats.ContainsEstimates = !args.DisallowShadowing
 	ms.Add(stats)
 
 	return result.Result{
@@ -184,21 +190,23 @@ func checkForKeyCollisions(
 	mvccStartKey engine.MVCCKey,
 	mvccEndKey engine.MVCCKey,
 	data []byte,
-) error {
+) (enginepb.MVCCStats, error) {
 	// We could get a spansetBatch so fetch the underlying rocksDBBatchEngine as
 	// we need access to the underlying C.DBIterator later, and the
 	// dbIteratorGetter is not implemented by a spansetBatch.
 	rocksDBEngine := spanset.GetDBEngine(batch, roachpb.Span{Key: mvccStartKey.Key, EndKey: mvccEndKey.Key})
+
+	emptyMVCCStats := enginepb.MVCCStats{}
 
 	// Create iterator over the existing data.
 	existingDataIter := rocksDBEngine.NewIterator(engine.IterOptions{UpperBound: mvccEndKey.Key})
 	defer existingDataIter.Close()
 	existingDataIter.Seek(mvccStartKey)
 	if ok, err := existingDataIter.Valid(); err != nil {
-		return errors.Wrap(err, "checking for key collisions")
+		return emptyMVCCStats, errors.Wrap(err, "checking for key collisions")
 	} else if ok && !existingDataIter.UnsafeKey().Less(mvccEndKey) {
 		// Target key range is empty, so it is safe to ingest.
-		return nil
+		return emptyMVCCStats, nil
 	}
 
 	// Create a C++ iterator over the SST being added. This iterator is used to
@@ -211,15 +219,15 @@ func checkForKeyCollisions(
 	defer sst.Close()
 
 	if err := sst.IngestExternalFile(data); err != nil {
-		return err
+		return emptyMVCCStats, err
 	}
 	sstIterator := sst.NewIterator(engine.IterOptions{UpperBound: mvccEndKey.Key})
 	defer sstIterator.Close()
 	sstIterator.Seek(mvccStartKey)
 	if ok, err := sstIterator.Valid(); err != nil || !ok {
-		return errors.Wrap(err, "checking for key collisions")
+		return emptyMVCCStats, errors.Wrap(err, "checking for key collisions")
 	}
 
-	checkErr := engine.CheckForKeyCollisions(existingDataIter, sstIterator)
-	return checkErr
+	skippedKVStats, checkErr := engine.CheckForKeyCollisions(existingDataIter, sstIterator)
+	return skippedKVStats, checkErr
 }
