@@ -37,6 +37,7 @@ func TestValidateNoRepeatKeysInZone(t *testing.T) {
 		{`constraints: ["-region=us-east-1", "+region=us-east-1"]`, false},
 		{`constraints: {"+region=us-east-1":2, "+region=us-east-2":2}`, true},
 		{`constraints: {"+region=us-east-1,+region=us-west-1":2, "+region=us-east-2":2}`, false},
+		{`constraints: ["+x1", "+x2", "+x3"]`, true},
 	}
 
 	for _, tc := range testCases {

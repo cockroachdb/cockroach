@@ -530,6 +530,12 @@ func validateNoRepeatKeysInZone(zone *config.ZoneConfig) error {
 		// Because we expect to have a small number of constraints, a nested
 		// loop is probably better than allocating a map.
 		for i, curr := range constraints.Constraints {
+			// Don't perform any validation for pairs with an empty key.
+			// These attributes are not real key value pairs, and instead
+			// are node attributes, such as +ssd.
+			if curr.Key == "" {
+				continue
+			}
 			for _, other := range constraints.Constraints[i+1:] {
 				if curr.Type == config.Constraint_REQUIRED {
 					// Verify that there is not another +k=v pair where k=curr.Key, and
