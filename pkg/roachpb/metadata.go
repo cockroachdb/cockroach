@@ -135,11 +135,38 @@ func (r *RangeDescriptor) SetReplicas(replicas ReplicaDescriptors) {
 	r.InternalReplicas = replicas.AsProto()
 }
 
-// AddReplica adds the given replica to this range's set.
-func (r *RangeDescriptor) AddReplica(toAdd ReplicaDescriptor) {
+// SetReplicaType changes the type of the replica with the given ID to the given
+// type. Returns zero values if the replica was not found and the updated
+// descriptor and true otherwise.
+func (r *RangeDescriptor) SetReplicaType(
+	nodeID NodeID, storeID StoreID, typ ReplicaType,
+) (ReplicaDescriptor, bool) {
+	for i := range r.InternalReplicas {
+		desc := &r.InternalReplicas[i]
+		if desc.StoreID == storeID && desc.NodeID == nodeID {
+			desc.Type = &typ
+			return *desc, true
+		}
+	}
+	return ReplicaDescriptor{}, false
+}
+
+// AddReplica adds a replica on the given node and store with the supplied type.
+// It auto-assigns a ReplicaID and returns the inserted ReplicaDescriptor.
+func (r *RangeDescriptor) AddReplica(
+	nodeID NodeID, storeID StoreID, typ ReplicaType,
+) ReplicaDescriptor {
+	toAdd := ReplicaDescriptor{
+		NodeID:    nodeID,
+		StoreID:   storeID,
+		ReplicaID: r.NextReplicaID,
+		Type:      &typ,
+	}
 	rs := r.Replicas()
 	rs.AddReplica(toAdd)
 	r.SetReplicas(rs)
+	r.NextReplicaID++
+	return toAdd
 }
 
 // RemoveReplica removes the matching replica from this range's set and returns
