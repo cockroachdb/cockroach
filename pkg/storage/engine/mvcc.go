@@ -123,6 +123,29 @@ func (k MVCCKey) String() string {
 	return fmt.Sprintf("%s/%s", k.Key, k.Timestamp)
 }
 
+// Len returns the size of the MVCCKey when encoded. Implements the
+// pebble.Encodeable interface.
+//
+// TODO(itsbilal): Reconcile this with EncodedSize. Would require updating MVCC
+// stats tests to reflect the more accurate lengths provided by this function.
+func (k MVCCKey) Len() int {
+	const (
+		timestampSentinelLen      = 1
+		walltimeEncodedLen        = 8
+		logicalEncodedLen         = 4
+		timestampEncodedLengthLen = 1
+	)
+
+	n := len(k.Key) + timestampEncodedLengthLen
+	if k.Timestamp != (hlc.Timestamp{}) {
+		n += timestampSentinelLen + walltimeEncodedLen
+		if k.Timestamp.Logical != 0 {
+			n += logicalEncodedLen
+		}
+	}
+	return n
+}
+
 // MVCCKeyValue contains the raw bytes of the value for a key.
 type MVCCKeyValue struct {
 	Key   MVCCKey
