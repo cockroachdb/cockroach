@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -23,10 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -379,12 +382,33 @@ func TestJoinReader(t *testing.T) {
 		for _, c := range testCases {
 			t.Run(fmt.Sprintf("%d/%s", i, c.description), func(t *testing.T) {
 				st := cluster.MakeTestingClusterSettings()
+				tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer tempEngine.Close()
+
 				evalCtx := tree.MakeTestingEvalContext(st)
 				defer evalCtx.Stop(ctx)
+				diskMonitor := mon.MakeMonitor(
+					"test-disk",
+					mon.DiskResource,
+					nil, /* curCount */
+					nil, /* maxHist */
+					-1,  /* increment: use default block size */
+					math.MaxInt64,
+					st,
+				)
+				diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+				defer diskMonitor.Stop(ctx)
 				flowCtx := FlowCtx{
 					EvalCtx: &evalCtx,
-					Cfg:     &ServerConfig{Settings: st},
-					txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+					Cfg: &ServerConfig{
+						Settings:    st,
+						TempStorage: tempEngine,
+						DiskMonitor: &diskMonitor,
+					},
+					txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				}
 				encRows := make(sqlbase.EncDatumRows, len(c.input))
 				for rowIdx, row := range c.input {
@@ -462,8 +486,12 @@ func TestJoinReaderDrain(t *testing.T) {
 	)
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
-	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
-	defer evalCtx.Stop(context.Background())
+	st := s.ClusterSettings()
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
 
 	// Run the flow in a snowball trace so that we can test for tracing info.
 	tracer := tracing.NewTracer()
@@ -473,10 +501,27 @@ func TestJoinReaderDrain(t *testing.T) {
 	}
 	defer sp.Finish()
 
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(context.Background())
+	diskMonitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil, /* curCount */
+		nil, /* maxHist */
+		-1,  /* increment: use default block size */
+		math.MaxInt64,
+		st,
+	)
+	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer diskMonitor.Stop(ctx)
 	flowCtx := FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
-		txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn),
+		Cfg: &ServerConfig{
+			Settings:    st,
+			TempStorage: tempEngine,
+			DiskMonitor: &diskMonitor,
+		},
+		txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn),
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
