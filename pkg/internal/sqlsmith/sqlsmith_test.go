@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -75,7 +76,7 @@ func TestGenerateParse(t *testing.T) {
 
 	if *flagVec {
 		// After all introspection is done, turn vec on.
-		db.Exec(t, `SET vectorize = experimental_on`)
+		db.Exec(t, `SET vectorize = experimental_always`)
 	}
 
 	seen := map[string]bool{}
@@ -97,6 +98,9 @@ func TestGenerateParse(t *testing.T) {
 				if !seen[es] {
 					seen[es] = true
 					fmt.Printf("ERR (%d): %v\n", i, err)
+					if *flagVec && strings.Contains(es, "unable to vectorize execution plan") {
+						t.Fatal()
+					}
 				}
 			}
 		}
