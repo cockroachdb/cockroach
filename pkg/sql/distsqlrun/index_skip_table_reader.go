@@ -181,23 +181,13 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 			}
 		}
 
-		var key []byte
-		{
-			// Fetch the PartialKey in a separate scope so that it cannot be reused
-			// outside this scope.
-			unsafeKey, err := t.fetcher.PartialKey(t.keyPrefixLen)
-			if err != nil {
-				t.MoveToDraining(err)
-				return nil, &distsqlpb.ProducerMetadata{Err: err}
-			}
-			// Modifying unsafeKey in place would corrupt our current row, so make a
-			// copy.
-			// A key needs to be allocated every time because it is illegal to mutate
-			// batch requests which would end up happening if we used scratch space.
-			// TODO(asubiotto): Another option would be to construct a key after
-			//  returning a row (at the top of this loop).
-			key = make([]byte, len(unsafeKey))
-			copy(key, unsafeKey)
+		// This key *must not* be modified, as this will cause the fetcher
+		// to begin acting incorrectly. This is because modifications
+		// will corrupt the row internal to the fetcher.
+		key, err := t.fetcher.PartialKey(t.keyPrefixLen)
+		if err != nil {
+			t.MoveToDraining(err)
+			return nil, &distsqlpb.ProducerMetadata{Err: err}
 		}
 
 		row, _, _, err := t.fetcher.NextRow(t.Ctx)
@@ -212,19 +202,10 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		}
 
 		if !t.reverse {
-			// 0xff is the largest prefix marker for any encoded key. To ensure that
-			// our new key is larger than any value with the same prefix, we place
-			// 0xff at all other index column values, and one more to guard against
-			// 0xff present as a value in the table (0xff encodes a type of null).
-			// TODO(asubiotto): We should delegate to PrefixEnd here (it exists for
-			//  this purpose and is widely used), but we still need to handle maximal
-			//  keys. Maybe we should just exit early (t.currentSpan++) when we
-			//  encounter one. We also need a test to ensure that we behave properly
-			//  when we encounter maximal (i.e. all nulls) prefix keys.
-			for i := 0; i < (t.indexLen - t.keyPrefixLen + 1); i++ {
-				key = append(key, 0xff)
-			}
-			t.spans[t.currentSpan].Key = key
+			// We set the new key to be the largest key with the prefix that we have
+			// so that we skip all values with the same prefix, and "skip" to the
+			// next distinct value.
+			t.spans[t.currentSpan].Key = key.PrefixEnd()
 		} else {
 			// In the case of reverse, this is much easier. The reverse fetcher
 			// returns the key retrieved, in this case the first key smaller
