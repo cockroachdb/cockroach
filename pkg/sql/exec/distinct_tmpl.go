@@ -133,7 +133,7 @@ func _ASSIGN_NE(_ bool, _, _ _GOTYPE) bool {
 // */}}
 
 // Use execgen package to remove unused import warning.
-var _ interface{} = execgen.GET
+var _ interface{} = execgen.UNSAFEGET
 
 func newSingleOrderedDistinct(
 	input Operator, distinctColIdx int, outputCol []bool, t coltypes.T,

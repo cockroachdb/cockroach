@@ -75,6 +75,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			o.updateComparators(i)
 		}
 	}
+	o.output.ResetInternalBatch()
 	outputIdx := uint16(0)
 	for outputIdx < coldata.BatchSize {
 		// Determine the batch with the smallest row.
@@ -123,7 +124,6 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 
 		outputIdx++
 	}
-	o.output.SetSelection(false)
 	o.output.SetLength(outputIdx)
 	return o.output
 }

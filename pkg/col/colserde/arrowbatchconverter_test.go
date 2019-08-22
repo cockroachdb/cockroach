@@ -41,10 +41,18 @@ func randomBatch() ([]coltypes.T, coldata.Batch) {
 		typs[i] = availableTyps[rng.Intn(len(availableTyps))]
 	}
 
-	b := exec.RandomBatch(rng, typs, rng.Intn(coldata.BatchSize)+1, rng.Float64())
+	capacity := rng.Intn(coldata.BatchSize) + 1
+	length := rng.Intn(capacity)
+	b := exec.RandomBatch(rng, typs, capacity, length, rng.Float64())
 	return typs, b
 }
 
+// copyBatch copies the original batch. However, to increase test coverage, only
+// use the returned batch to assert equality, not as an input to a testing
+// function, since Copy simplifies the internals (e.g. if there are zero
+// elements to copy, copyBatch returns a zero-capacity batch, which is less
+// interesting than testing a batch with a different capacity of BatchSize but
+// zero elements).
 func copyBatch(original coldata.Batch) coldata.Batch {
 	typs := make([]coltypes.T, original.Width())
 	for i, vec := range original.ColVecs() {
@@ -78,11 +86,31 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 		// fail.
 		expectedVec := expected.ColVec(colIdx)
 		actualVec := actual.ColVec(colIdx)
+		typ := expectedVec.Type()
+		require.Equal(t, typ, actualVec.Type())
 		require.Equal(
 			t,
-			expectedVec.Slice(expectedVec.Type(), 0, uint64(expected.Length())),
-			actualVec.Slice(actualVec.Type(), 0, uint64(actual.Length())),
+			expectedVec.Nulls().Slice(0, uint64(expected.Length())),
+			actualVec.Nulls().Slice(0, uint64(actual.Length())),
 		)
+		if typ == coltypes.Bytes {
+			// Cannot use require.Equal for this type.
+			// TODO(asubiotto): Again, why not?
+			expectedBytes := expectedVec.Bytes().Slice(0, int(expected.Length()))
+			resultBytes := actualVec.Bytes().Slice(0, int(actual.Length()))
+			require.Equal(t, expectedBytes.Len(), resultBytes.Len())
+			for i := 0; i < expectedBytes.Len(); i++ {
+				if !bytes.Equal(expectedBytes.Get(i), resultBytes.Get(i)) {
+					t.Fatalf("bytes mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedBytes, resultBytes)
+				}
+			}
+		} else {
+			require.Equal(
+				t,
+				expectedVec.Slice(expectedVec.Type(), 0, uint64(expected.Length())),
+				actualVec.Slice(actualVec.Type(), 0, uint64(actual.Length())),
+			)
+		}
 	}
 }
 
@@ -113,6 +141,34 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 	assertEqualBatches(t, expected, actual)
 }
 
+// roundTripAndAssertEquality is a helper function that round trips a batch
+// through the ArrowBatchConverter and RecordBatchSerializer and asserts that
+// the output batch is equal to the input batch. Make sure to copy the input
+// batch before passing it to this function to assert equality.
+func roundTripBatch(
+	b coldata.Batch, c *ArrowBatchConverter, r *RecordBatchSerializer,
+) (coldata.Batch, error) {
+	var buf bytes.Buffer
+	arrowDataIn, err := c.BatchToArrow(b)
+	if err != nil {
+		return nil, err
+	}
+	_, _, err = r.Serialize(&buf, arrowDataIn)
+	if err != nil {
+		return nil, err
+	}
+
+	var arrowDataOut []*array.Data
+	if err := r.Deserialize(&arrowDataOut, buf.Bytes()); err != nil {
+		return nil, err
+	}
+	actual := coldata.NewMemBatchWithSize(nil, 0)
+	if err := c.ArrowToBatch(arrowDataOut, actual); err != nil {
+		return nil, err
+	}
+	return actual, nil
+}
+
 func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -125,17 +181,8 @@ func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 	// Make a copy of the original batch because the converter modifies and casts
 	// data without copying for performance reasons.
 	expected := copyBatch(b)
-
-	var buf bytes.Buffer
-	arrowDataIn, err := c.BatchToArrow(b)
+	actual, err := roundTripBatch(b, c, r)
 	require.NoError(t, err)
-	_, _, err = r.Serialize(&buf, arrowDataIn)
-	require.NoError(t, err)
-
-	var arrowDataOut []*array.Data
-	require.NoError(t, r.Deserialize(&arrowDataOut, buf.Bytes()))
-	actual := coldata.NewMemBatchWithSize(nil, 0)
-	require.NoError(t, c.ArrowToBatch(arrowDataOut, actual))
 
 	assertEqualBatches(t, expected, actual)
 }
@@ -154,22 +201,28 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	numBytes := []int64{coldata.BatchSize, fixedLen * coldata.BatchSize, 8 * coldata.BatchSize}
 	// Run a benchmark on every type we care about.
 	for typIdx, typ := range typs {
-		batch := exec.RandomBatch(rng, []coltypes.T{typ}, coldata.BatchSize, 0 /* nullProbability */)
+		batch := exec.RandomBatch(rng, []coltypes.T{typ}, coldata.BatchSize, 0 /* length */, 0 /* nullProbability */)
 		if batch.Width() != 1 {
 			b.Fatalf("unexpected batch width: %d", batch.Width())
 		}
 		if typ == coltypes.Bytes {
 			// This type has variable length elements, fit all of them to be fixedLen
-			// bytes long.
+			// bytes long so that we can compare results of one benchmark with
+			// another. Since we can't overwrite elements in a Bytes, create a new
+			// one.
+			// TODO(asubiotto): We should probably create some random spec struct that
+			//  we pass in to RandomBatch.
 			bytes := batch.ColVec(0).Bytes()
+			newBytes := coldata.NewBytes(bytes.Len())
 			for i := 0; i < bytes.Len(); i++ {
 				diff := len(bytes.Get(i)) - fixedLen
 				if diff < 0 {
-					bytes.Set(i, append(bytes.Get(i), make([]byte, -diff)...))
-				} else if diff > 0 {
-					bytes.Set(i, bytes.Get(i)[:fixedLen])
+					newBytes.Set(i, append(bytes.Get(i), make([]byte, -diff)...))
+				} else if diff >= 0 {
+					newBytes.Set(i, bytes.Get(i)[:fixedLen])
 				}
 			}
+			batch.ColVec(0).SetCol(newBytes)
 		}
 		c, err := NewArrowBatchConverter([]coltypes.T{typ})
 		require.NoError(b, err)

@@ -61,7 +61,7 @@ func (m *memColumn) Append(args AppendArgs) {
 			// Improve this.
 			toCol = execgen.SLICE(toCol, 0, int(args.DestIdx))
 			for _, selIdx := range sel {
-				val := execgen.GET(fromCol, int(selIdx))
+				val := execgen.UNSAFEGET(fromCol, int(selIdx))
 				execgen.APPENDVAL(toCol, val)
 			}
 			// TODO(asubiotto): Change Extend* signatures to allow callers to pass in
@@ -99,7 +99,7 @@ func (m *memColumn) Copy(args CopyArgs) {
 						if args.Nils[i] || nulls.NullAt64(selIdx) {
 							m.nulls.SetNull64(uint64(i) + args.DestIdx)
 						} else {
-							v := execgen.GET(fromCol, int(selIdx))
+							v := execgen.UNSAFEGET(fromCol, int(selIdx))
 							execgen.SET(toColSliced, i, v)
 						}
 					}
@@ -112,7 +112,7 @@ func (m *memColumn) Copy(args CopyArgs) {
 					if args.Nils[i] {
 						m.nulls.SetNull64(uint64(i) + args.DestIdx)
 					} else {
-						v := execgen.GET(fromCol, int(selIdx))
+						v := execgen.UNSAFEGET(fromCol, int(selIdx))
 						execgen.SET(toColSliced, i, v)
 					}
 				}
@@ -127,7 +127,7 @@ func (m *memColumn) Copy(args CopyArgs) {
 					if nulls.NullAt64(selIdx) {
 						m.nulls.SetNull64(uint64(i) + args.DestIdx)
 					} else {
-						v := execgen.GET(fromCol, int(selIdx))
+						v := execgen.UNSAFEGET(fromCol, int(selIdx))
 						execgen.SET(toColSliced, i, v)
 					}
 				}
@@ -137,7 +137,7 @@ func (m *memColumn) Copy(args CopyArgs) {
 			n := execgen.LEN(toCol)
 			toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
 			for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
-				v := execgen.GET(fromCol, int(selIdx))
+				v := execgen.UNSAFEGET(fromCol, int(selIdx))
 				execgen.SET(toColSliced, i, v)
 			}
 			return
@@ -151,7 +151,7 @@ func (m *memColumn) Copy(args CopyArgs) {
 					if nulls.NullAt64(uint64(selIdx)) {
 						m.nulls.SetNull64(uint64(i) + args.DestIdx)
 					} else {
-						v := execgen.GET(fromCol, int(selIdx))
+						v := execgen.UNSAFEGET(fromCol, int(selIdx))
 						execgen.SET(toColSliced, i, v)
 					}
 				}
@@ -161,7 +161,7 @@ func (m *memColumn) Copy(args CopyArgs) {
 			n := execgen.LEN(toCol)
 			toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
 			for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
-				v := execgen.GET(fromCol, int(selIdx))
+				v := execgen.UNSAFEGET(fromCol, int(selIdx))
 				execgen.SET(toColSliced, i, v)
 			}
 			return
@@ -207,7 +207,7 @@ func (m *memColumn) PrettyValueAt(colIdx uint16, colType coltypes.T) string {
 	// {{range .}}
 	case _TYPES_T:
 		col := m._TemplateType()
-		v := execgen.GET(col, int(colIdx))
+		v := execgen.UNSAFEGET(col, int(colIdx))
 		return fmt.Sprintf("%v", v)
 	// {{end}}
 	default:

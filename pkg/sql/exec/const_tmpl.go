@@ -48,7 +48,7 @@ type _GOTYPE interface{}
 // */}}
 
 // Use execgen package to remove unused import warning.
-var _ interface{} = execgen.GET
+var _ interface{} = execgen.UNSAFEGET
 
 // NewConstOp creates a new operator that produces a constant value constVal of
 // type t at index outputIdx.

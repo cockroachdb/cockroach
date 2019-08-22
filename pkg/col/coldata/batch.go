@@ -45,6 +45,11 @@ type Batch interface {
 	// columns and allocations, invalidating existing references to the Batch or
 	// its Vecs. However, Reset does _not_ zero out the column data.
 	Reset(types []coltypes.T, length int)
+	// ResetInternalBatch resets a batch and its underlying Vecs for reuse. It's
+	// important for callers to call ResetInternalBatch if they own internal
+	// batches that they reuse as not doing this could result in correctness
+	// or memory blowup issues.
+	ResetInternalBatch()
 }
 
 var _ Batch = &MemBatch{}
@@ -153,5 +158,15 @@ func (m *MemBatch) Reset(types []coltypes.T, length int) {
 	m.SetLength(uint16(length))
 	for _, col := range m.ColVecs() {
 		col.Nulls().UnsetNulls()
+	}
+}
+
+// ResetInternalBatch implements the Batch interface.
+func (m *MemBatch) ResetInternalBatch() {
+	m.SetSelection(false)
+	for _, v := range m.b {
+		if v.Type() == coltypes.Bytes {
+			v.Bytes().Reset()
+		}
 	}
 }

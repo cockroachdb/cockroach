@@ -16,6 +16,7 @@ const nonTemplatePanic = "do not call from non-template code"
 
 // Remove unused warnings.
 var (
+	_ = UNSAFEGET
 	_ = GET
 	_ = SET
 	_ = SWAP
@@ -28,7 +29,16 @@ var (
 	_ = RANGE
 )
 
-// GET is a template function.
+// UNSAFEGET is a template function. Use this if you are not keeping data around
+// (including passing it to SET).
+func UNSAFEGET(target, i interface{}) interface{} {
+	execerror.VectorizedInternalPanic(nonTemplatePanic)
+	return nil
+}
+
+// GET is a template function. The Bytes implementation of this function
+// performs a copy. Use this if you need to keep values around past the
+// lifecycle of a Batch.
 func GET(target, i interface{}) interface{} {
 	execerror.VectorizedInternalPanic(nonTemplatePanic)
 	return nil

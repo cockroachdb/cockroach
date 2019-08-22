@@ -51,7 +51,7 @@ func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
 	}
 
 	p.output.SetLength(batch.Length())
-	p.output.SetSelection(false)
+	p.output.ResetInternalBatch()
 	sel := batch.Selection()
 	for i, t := range p.inputTypes {
 		toCol := p.output.ColVec(i)

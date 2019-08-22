@@ -85,6 +85,7 @@ func TestEncDatumRowsToColVecString(t *testing.T) {
 	vec := coldata.NewMemColumn(coltypes.Bytes, 2)
 	for _, width := range []int32{0, 25} {
 		ct := types.MakeString(width)
+		vec.Bytes().Reset()
 		if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, ct, &alloc); err != nil {
 			t.Fatal(err)
 		}
