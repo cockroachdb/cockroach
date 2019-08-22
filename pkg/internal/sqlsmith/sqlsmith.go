@@ -238,6 +238,7 @@ func Vectorizable() SmitherOption {
 	return multiOption{
 		DisableMutations(),
 		DisableWith(),
+		AvoidConsts(),
 		// This must be last so it can make the final changes to table
 		// exprs and statements.
 		vectorizable{},
