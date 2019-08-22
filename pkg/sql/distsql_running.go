@@ -150,8 +150,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 				if _, err := distsqlrun.SupportsVectorized(
 					ctx, &distsqlrun.FlowCtx{
 						EvalCtx: &evalCtx.EvalContext,
-						Cfg:     &distsqlrun.ServerConfig{},
-						NodeID:  -1,
+						Cfg: &distsqlrun.ServerConfig{
+							DiskMonitor: &mon.BytesMonitor{},
+							Settings:    dsp.st,
+						},
+						NodeID: -1,
 					}, spec.Processors,
 				); err != nil {
 					// Vectorization attempt failed with an error.

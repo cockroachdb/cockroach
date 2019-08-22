@@ -74,6 +74,15 @@ type ReorderableRowContainer interface {
 	Reorder(context.Context, sqlbase.ColumnOrdering) error
 }
 
+// IndexedRowContainer is a ReorderableRowContainer which also implements
+// tree.IndexedRows. It allows retrieving a row at a particular index.
+type IndexedRowContainer interface {
+	ReorderableRowContainer
+
+	// GetRow returns a row at the given index or an error.
+	GetRow(ctx context.Context, idx int) (tree.IndexedRow, error)
+}
+
 // RowIterator is a simple iterator used to iterate over sqlbase.EncDatumRows.
 // Example use:
 // 	var i RowIterator
@@ -295,6 +304,11 @@ type memRowFinalIterator struct {
 // over.
 func (mc *MemRowContainer) NewFinalIterator(_ context.Context) RowIterator {
 	return memRowFinalIterator{MemRowContainer: mc}
+}
+
+// GetRow implements IndexedRowContainer.
+func (mc *MemRowContainer) GetRow(ctx context.Context, pos int) (tree.IndexedRow, error) {
+	return IndexedRow{Idx: pos, Row: mc.EncRow(pos)}, nil
 }
 
 var _ RowIterator = memRowFinalIterator{}
@@ -541,6 +555,10 @@ type DiskBackedIndexedRowContainer struct {
 	// error is encountered.
 	maxCacheSize int
 	cacheMemAcc  mon.BoundAccount
+
+	// DisableCache is intended for testing only. It can be set to true to
+	// disable reading and writing from the row cache.
+	DisableCache bool
 }
 
 // MakeDiskBackedIndexedRowContainer creates a DiskBackedIndexedRowContainer
@@ -653,6 +671,9 @@ func (f *DiskBackedIndexedRowContainer) GetRow(
 	var rowWithIdx sqlbase.EncDatumRow
 	var err error
 	if f.UsingDisk() {
+		if f.DisableCache {
+			return f.getRowWithoutCache(ctx, pos), nil
+		}
 		// The cache contains all contiguous rows up to the biggest pos requested
 		// so far (even if the rows were not requested explicitly). For example,
 		// if the cache is empty and the request comes for a row at pos 3, the
