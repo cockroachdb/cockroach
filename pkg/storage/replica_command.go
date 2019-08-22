@@ -1060,15 +1060,9 @@ func addLearnerReplicas(
 	for _, target := range targets {
 		newDesc := *desc
 		newDesc.SetReplicas(desc.Replicas().DeepCopy())
+		replDesc := newDesc.AddReplica(target.NodeID, target.StoreID, roachpb.ReplicaType_Learner)
+
 		var added []roachpb.ReplicaDescriptor
-		replDesc := roachpb.ReplicaDescriptor{
-			NodeID:    target.NodeID,
-			StoreID:   target.StoreID,
-			ReplicaID: newDesc.NextReplicaID,
-			Type:      roachpb.ReplicaTypeLearner(),
-		}
-		newDesc.NextReplicaID++
-		newDesc.AddReplica(replDesc)
 		added = append(added, replDesc)
 		if err := execChangeReplicasTxn(
 			ctx, store, desc, &newDesc, reason, details, added, nil, /* removed */
@@ -1106,7 +1100,7 @@ func (r *Replica) finalizeChangeReplicas(
 	for _, target := range adds {
 		// All adds must be present as learners right now and they are removed,
 		// upgraded, and then re-added.
-		rDesc, ok := updatedDesc.RemoveReplica(target.NodeID, target.StoreID)
+		rDesc, ok := updatedDesc.GetReplicaDescriptor(target.StoreID)
 		if !ok {
 			return nil, errors.Errorf("programming error: replica %v not found in %v", target, updatedDesc)
 		}
@@ -1115,8 +1109,7 @@ func (r *Replica) finalizeChangeReplicas(
 			return nil, errors.Errorf("programming error: cannot promote replica of type %s", rDesc.Type)
 		}
 
-		rDesc.Type = roachpb.ReplicaTypeVoterFull()
-		updatedDesc.AddReplica(rDesc)
+		rDesc, _ = updatedDesc.SetReplicaType(target.NodeID, target.StoreID, roachpb.ReplicaType_VoterFull)
 		replsAdded = append(replsAdded, rDesc)
 
 		// Note that raft snapshot queue will refuse to send a snapshot to a learner
@@ -1217,10 +1210,11 @@ func (r *Replica) addReplicaLegacyPreemptiveSnapshot(
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
 
-	repDesc := roachpb.ReplicaDescriptor{
-		NodeID:  target.NodeID,
-		StoreID: target.StoreID,
-	}
+	updatedDesc := *desc
+	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
+
+	repDesc := updatedDesc.AddReplica(target.NodeID, target.StoreID, roachpb.ReplicaType_VoterFull)
+
 	repDescIdx := -1  // tracks NodeID && StoreID
 	nodeUsed := false // tracks NodeID only
 	for i, existingRep := range desc.Replicas().All() {
@@ -1233,9 +1227,6 @@ func (r *Replica) addReplicaLegacyPreemptiveSnapshot(
 			break
 		}
 	}
-
-	updatedDesc := *desc
-	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
 
 	// If the replica exists on the remote node, no matter in which store,
 	// abort the replica add.
@@ -1268,13 +1259,13 @@ func (r *Replica) addReplicaLegacyPreemptiveSnapshot(
 	// operation is processed. This is important to allow other ranges to make
 	// progress which might be required for this ChangeReplicas operation to
 	// complete. See #10409.
-	if err := r.sendSnapshot(ctx, repDesc, SnapshotRequest_PREEMPTIVE, priority); err != nil {
-		return nil, err
+	{
+		preemptiveRepDesc := repDesc
+		preemptiveRepDesc.ReplicaID = 0
+		if err := r.sendSnapshot(ctx, preemptiveRepDesc, SnapshotRequest_PREEMPTIVE, priority); err != nil {
+			return nil, err
+		}
 	}
-
-	repDesc.ReplicaID = updatedDesc.NextReplicaID
-	updatedDesc.NextReplicaID++
-	updatedDesc.AddReplica(repDesc)
 
 	added := []roachpb.ReplicaDescriptor{repDesc}
 	err := execChangeReplicasTxn(ctx, r.store, desc, &updatedDesc, reason, details, added, nil /* removed */)
