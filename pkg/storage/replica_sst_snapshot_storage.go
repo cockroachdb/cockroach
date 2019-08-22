@@ -82,13 +82,16 @@ func (ssss *SSTSnapshotStorageScratch) createDir() error {
 
 // NewFile adds another file to SSTSnapshotStorageScratch. This file is lazily
 // created when the file is written to the first time.
-func (ssss *SSTSnapshotStorageScratch) NewFile() (*SSTSnapshotStorageFile, error) {
+func (ssss *SSTSnapshotStorageScratch) NewFile(
+	bytesPerSync int64,
+) (*SSTSnapshotStorageFile, error) {
 	id := len(ssss.ssts)
 	filename := ssss.filename(id)
 	ssss.ssts = append(ssss.ssts, filename)
 	sssf := &SSTSnapshotStorageFile{
-		ssss:     ssss,
-		filename: filename,
+		ssss:         ssss,
+		filename:     filename,
+		bytesPerSync: bytesPerSync,
 	}
 	return sssf, nil
 }
@@ -107,7 +110,7 @@ func (ssss *SSTSnapshotStorageScratch) WriteSST(
 	if err != nil {
 		return err
 	}
-	sssf, err := ssss.NewFile()
+	sssf, err := ssss.NewFile(0)
 	if err != nil {
 		return err
 	}
@@ -139,6 +142,12 @@ type SSTSnapshotStorageFile struct {
 	created  bool
 	file     engine.DBFile
 	filename string
+	// The size of the contents written after the last time the file has been
+	// manually synced.
+	unsyncedBytes int64
+	// The size of the contents written before maunally syncing. If bytesPerSync
+	// is 0, then the file will only be manually synced when it is closed.
+	bytesPerSync int64
 }
 
 func (sssf *SSTSnapshotStorageFile) openFile() error {
@@ -176,7 +185,23 @@ func (sssf *SSTSnapshotStorageFile) Write(ctx context.Context, contents []byte) 
 	if err := sssf.file.Append(contents); err != nil {
 		return err
 	}
-	return sssf.file.Sync()
+	sssf.unsyncedBytes += int64(len(contents))
+	if sssf.unsyncedBytes >= sssf.bytesPerSync && sssf.bytesPerSync != 0 {
+		return sssf.Sync()
+	}
+	return nil
+}
+
+// Sync syncs the underlying file to disk.
+func (sssf *SSTSnapshotStorageFile) Sync() error {
+	if err := sssf.openFile(); err != nil {
+		return err
+	}
+	if err := sssf.file.Sync(); err != nil {
+		return err
+	}
+	sssf.unsyncedBytes = 0
+	return nil
 }
 
 // Close closes the file. Calling this function multiple times is idempotent.
