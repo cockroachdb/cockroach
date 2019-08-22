@@ -576,6 +576,14 @@
   version = "v1.1.0"
 
 [[projects]]
+  digest = "1:edb569dd02419a41ddd98768cc0e7aec922ef19dae139731e5ca750afcf6f4c5"
+  name = "github.com/edsrzf/mmap-go"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "188cc3b666ba704534fa4f96e9e61f21f1e1ba7c"
+  version = "v1.0.0"
+
+[[projects]]
   digest = "1:b496535c6fc37def3b30f6af01b432b4d7b713ff5d28dfdc87072fb11452b0e0"
   name = "github.com/elastic/gosigar"
   packages = [
@@ -1956,6 +1964,7 @@
     "github.com/docker/docker/pkg/stdcopy",
     "github.com/docker/go-connections/nat",
     "github.com/dustin/go-humanize",
+    "github.com/edsrzf/mmap-go",
     "github.com/elastic/gosigar",
     "github.com/elazarl/go-bindata-assetfs",
     "github.com/facebookgo/clock",
