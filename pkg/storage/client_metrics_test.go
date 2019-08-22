@@ -290,7 +290,9 @@ func TestStoreMetrics(t *testing.T) {
 	// Create a transaction statement that fails. Regression test for #4969.
 	if err := mtc.dbs[0].Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
-		b.CPutDeprecated(dataKey, 7, 6)
+		var expVal roachpb.Value
+		expVal.SetInt(6)
+		b.CPut(dataKey, 7, &expVal)
 		return txn.Run(ctx, b)
 	}); err == nil {
 		t.Fatal("Expected transaction error, but none received")
