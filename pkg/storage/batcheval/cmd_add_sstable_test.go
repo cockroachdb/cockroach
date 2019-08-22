@@ -398,7 +398,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	if _, err := batcheval.EvalAddSSTable(ctx, e, cArgsWithStats, nil); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	expected := enginepb.MVCCStats{ContainsEstimates: true, KeyCount: 10}
+	expected := enginepb.MVCCStats{ContainsEstimates: false, KeyCount: 10}
 	if got := *cArgsWithStats.Stats; got != expected {
 		t.Fatalf("expected %v got %v", expected, got)
 	}
@@ -479,7 +479,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				DisallowShadowing: true,
 				MVCCStats:         &stats,
 			},
-			Stats: &stats,
+			Stats: &enginepb.MVCCStats{},
 		}
 
 		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
@@ -562,7 +562,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				DisallowShadowing: true,
 				MVCCStats:         &stats,
 			},
-			Stats: &stats,
+			Stats: &enginepb.MVCCStats{},
 		}
 
 		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
@@ -765,7 +765,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				DisallowShadowing: true,
 				MVCCStats:         &stats,
 			},
-			Stats: &stats,
+			Stats: &enginepb.MVCCStats{},
 		}
 
 		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
@@ -855,6 +855,120 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
 		if !testutils.IsError(err, "ingested key collides with an existing one: \"z\"") {
 			t.Fatalf("%+v", err)
+		}
+	}
+
+	// This test ensures accuracy of MVCCStats in the situation that successive
+	// SSTs being ingested via AddSSTable have "perfectly shadowing" keys (same ts
+	// and value). Such KVs are not considered as collisions and so while they are
+	// skipped during ingestion, their stats would previously be double counted.
+	// To mitigate this problem we now return the stats of such skipped KVs while
+	// evaluating the AddSSTable command, and accumulate accurate stats in the
+	// CommandArgs Stats field by using:
+	// cArgs.Stats + ingested_stats - skipped_stats.
+	{
+		// Successfully evaluate the first SST as there are no key collisions.
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"c", 2, "bb"},
+			{"h", 6, "hh"},
+		})
+
+		sstBytes := getSSTBytes(sstKVs)
+		stats := getStats(engine.MVCCKey{Key: roachpb.Key("c")}, engine.MVCCKey{Key: roachpb.Key("i")}, sstBytes)
+
+		// Accumulate stats across SST ingestion.
+		commandStats := enginepb.MVCCStats{}
+
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("c"), EndKey: roachpb.Key("i")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+				MVCCStats:         &stats,
+			},
+			Stats: &commandStats,
+		}
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		firstSSTStats := commandStats
+
+		// Insert KV entries so that we can correctly identify keys to skip when
+		// ingesting the perfectly shadowing KVs (same ts and same value) in the
+		// second SST.
+		for _, kv := range sstKVs {
+			if err := e.Put(kv.Key, kv.Value); err != nil {
+				t.Fatalf("%+v", err)
+			}
+		}
+
+		// Evaluate the second SST. Both the KVs are perfectly shadowing and should
+		// not contribute to the stats.
+		secondSSTKVs := mvccKVsFromStrs([]strKv{
+			{"c", 2, "bb"}, // key has the same timestamp and value as the one present in the existing data.
+			{"h", 6, "hh"}, // key has the same timestamp and value as the one present in the existing data.
+		})
+		secondSSTBytes := getSSTBytes(secondSSTKVs)
+		secondStats := getStats(engine.MVCCKey{Key: roachpb.Key("c")}, engine.MVCCKey{Key: roachpb.Key("i")}, secondSSTBytes)
+
+		cArgs.Args = &roachpb.AddSSTableRequest{
+			RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("c"), EndKey: roachpb.Key("i")},
+			Data:              secondSSTBytes,
+			DisallowShadowing: true,
+			MVCCStats:         &secondStats,
+		}
+		_, err = batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+
+		// Check that there has been no double counting of stats.
+		if !firstSSTStats.Equal(*cArgs.Stats) {
+			t.Errorf("mvcc stats should not have changed as all keys in second SST are shadowing: %s",
+				pretty.Diff(firstSSTStats, *cArgs.Stats))
+		}
+
+		// Evaluate the third SST. Two of the three KVs are perfectly shadowing, but
+		// there is one valid KV which should contribute to the stats.
+		thirdSSTKVs := mvccKVsFromStrs([]strKv{
+			{"c", 2, "bb"}, // key has the same timestamp and value as the one present in the existing data.
+			{"e", 2, "ee"},
+			{"h", 6, "hh"}, // key has the same timestamp and value as the one present in the existing data.
+		})
+		thirdSSTBytes := getSSTBytes(thirdSSTKVs)
+		thirdStats := getStats(engine.MVCCKey{Key: roachpb.Key("c")}, engine.MVCCKey{Key: roachpb.Key("i")}, thirdSSTBytes)
+
+		cArgs.Args = &roachpb.AddSSTableRequest{
+			RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("c"), EndKey: roachpb.Key("i")},
+			Data:              thirdSSTBytes,
+			DisallowShadowing: true,
+			MVCCStats:         &thirdStats,
+		}
+		_, err = batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+
+		// This is the stats contribution of the KV {"e", 2, "ee"}. This should be
+		// the only addition to the cumulative stats, as the other two KVs are
+		// perfect shadows of existing data.
+		var delta enginepb.MVCCStats
+		delta.LiveCount = 1
+		delta.LiveBytes = 21
+		delta.KeyCount = 1
+		delta.KeyBytes = 14
+		delta.ValCount = 1
+		delta.ValBytes = 7
+
+		// Check that there has been no double counting of stats.
+		firstSSTStats.Add(delta)
+		if !firstSSTStats.Equal(*cArgs.Stats) {
+			t.Errorf("mvcc stats are not accurate: %s",
+				pretty.Diff(firstSSTStats, *cArgs.Stats))
 		}
 	}
 }

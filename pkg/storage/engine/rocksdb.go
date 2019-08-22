@@ -2898,28 +2898,32 @@ func (fr *RocksDBSstFileReader) Close() {
 }
 
 // CheckForKeyCollisions indicates if the two iterators collide on any keys.
-func CheckForKeyCollisions(existingIter Iterator, sstIter Iterator) error {
+func CheckForKeyCollisions(existingIter Iterator, sstIter Iterator) (enginepb.MVCCStats, error) {
 	existingIterGetter := existingIter.(dbIteratorGetter)
 	sstableIterGetter := sstIter.(dbIteratorGetter)
 	var intentErr C.DBString
+	var skippedKVStats C.MVCCStatsResult
+	emptyStats := enginepb.MVCCStats{}
 
-	state := C.DBCheckForKeyCollisions(existingIterGetter.getIter(), sstableIterGetter.getIter(), &intentErr)
+	state := C.DBCheckForKeyCollisions(existingIterGetter.getIter(), sstableIterGetter.getIter(), &skippedKVStats, &intentErr)
 
 	err := statusToError(state.status)
 	if err != nil {
 		if err.Error() == "WriteIntentError" {
 			var e roachpb.WriteIntentError
 			if err := protoutil.Unmarshal(cStringToGoBytes(intentErr), &e); err != nil {
-				return errors.Wrap(err, "failed to decode write intent error")
+				return emptyStats, errors.Wrap(err, "failed to decode write intent error")
 			}
-			return &e
+			return emptyStats, &e
 		} else if err.Error() == "InlineError" {
-			return errors.Errorf("inline values are unsupported when checking for key collisions")
+			return emptyStats, errors.Errorf("inline values are unsupported when checking for key collisions")
 		}
 		err = errors.Wrap(&RocksDBError{msg: cToGoKey(state.key).String()}, "ingested key collides with an existing one")
+		return emptyStats, err
 	}
 
-	return err
+	skippedStats, err := cStatsToGoStats(skippedKVStats, 0)
+	return skippedStats, err
 }
 
 // RocksDBSstFileWriter creates a file suitable for importing with
