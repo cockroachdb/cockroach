@@ -266,6 +266,13 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 		eb.DisableTelemetry()
 		p, err := eb.Build()
 		if err != nil {
+			if errors.IsAssertionFailure(err) {
+				// Enhance the error with the EXPLAIN (OPT, VERBOSE) of the inner
+				// expression.
+				fmtFlags := memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes
+				explainOpt := memo.FormatExpr(newRightSide, fmtFlags, nil /* catalog */)
+				err = errors.WithDetailf(err, "newRightSide:\n%s", explainOpt)
+			}
 			return false, err
 		}
 		plan := p.(*planTop)
