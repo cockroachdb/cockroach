@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -445,35 +444,14 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 				continue
 			}
 
-			added, removed := crt.Added(), crt.Removed()
-			if len(added)+len(removed) != 1 {
-				log.Fatalf(context.TODO(), "atomic replication changes not supported yet")
+			cc, err := crt.ConfChange(encodedCtx)
+			if err != nil {
+				firstErr = err
+				continue
 			}
 
-			var changeType raftpb.ConfChangeType
-			var replicaID roachpb.ReplicaID
-			if len(added) > 0 {
-				replicaID = added[0].ReplicaID
-				typ := added[0].GetType()
-				switch typ {
-				case roachpb.ReplicaType_VoterFull:
-					changeType = raftpb.ConfChangeAddNode
-				case roachpb.ReplicaType_Learner:
-					changeType = raftpb.ConfChangeAddLearnerNode
-				default:
-					panic(errors.Errorf("unknown replica type %v", typ))
-				}
-			} else {
-				changeType, replicaID = raftpb.ConfChangeRemoveNode, removed[0].ReplicaID
-			}
-
-			confChange := raftpb.ConfChange{
-				Type:    changeType,
-				NodeID:  uint64(replicaID),
-				Context: encodedCtx,
-			}
 			if err := raftGroup.ProposeConfChange(
-				confChange,
+				cc,
 			); err != nil && err != raft.ErrProposalDropped {
 				// Silently ignore dropped proposals (they were always silently
 				// ignored prior to the introduction of ErrProposalDropped).
