@@ -1707,8 +1707,8 @@ func TestPropagateTxnOnError(t *testing.T) {
 	}
 
 	// Set the initial value on the target key "b".
-	origVal := "val"
-	if err := db.Put(ctx, keyB, origVal); err != nil {
+	origVal := roachpb.MakeValueFromString("val")
+	if err := db.Put(ctx, keyB, &origVal); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1738,7 +1738,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 
 		b := txn.NewBatch()
 		b.Put(keyA, "val")
-		b.CPutDeprecated(keyB, "new_val", origVal)
+		b.CPut(keyB, "new_val", &origVal)
 		b.Put(keyC, "val2")
 		err := txn.CommitInBatch(ctx, b)
 		if epoch == 1 {

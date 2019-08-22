@@ -51,8 +51,9 @@ type LeaseManager struct {
 type Lease struct {
 	key roachpb.Key
 	val struct {
-		sem   chan struct{}
-		lease *LeaseVal
+		sem      chan struct{}
+		lease    *LeaseVal
+		leaseRaw roachpb.Value
 	}
 }
 
@@ -104,7 +105,10 @@ func (m *LeaseManager) AcquireLease(ctx context.Context, key roachpb.Key) (*Leas
 			Owner:      m.clientID,
 			Expiration: m.clock.Now().Add(m.leaseDuration.Nanoseconds(), 0),
 		}
-		return txn.Put(ctx, key, lease.val.lease)
+		if err := lease.val.leaseRaw.SetProto(lease.val.lease); err != nil {
+			return err
+		}
+		return txn.Put(ctx, key, &lease.val.leaseRaw)
 	}); err != nil {
 		return nil, err
 	}
@@ -150,8 +154,11 @@ func (m *LeaseManager) ExtendLease(ctx context.Context, l *Lease) error {
 		Owner:      m.clientID,
 		Expiration: m.clock.Now().Add(m.leaseDuration.Nanoseconds(), 0),
 	}
-
-	if err := m.db.CPutDeprecated(ctx, l.key, newVal, l.val.lease); err != nil {
+	var newRaw roachpb.Value
+	if err := newRaw.SetProto(newVal); err != nil {
+		return err
+	}
+	if err := m.db.CPut(ctx, l.key, &newRaw, &l.val.leaseRaw); err != nil {
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
 			// Something is wrong - immediately expire the local lease state.
 			l.val.lease.Expiration = hlc.Timestamp{}
@@ -160,6 +167,7 @@ func (m *LeaseManager) ExtendLease(ctx context.Context, l *Lease) error {
 		return err
 	}
 	l.val.lease = newVal
+	l.val.leaseRaw = newRaw
 	return nil
 }
 
@@ -173,5 +181,5 @@ func (m *LeaseManager) ReleaseLease(ctx context.Context, l *Lease) error {
 	}
 	defer func() { <-l.val.sem }()
 
-	return m.db.CPutDeprecated(ctx, l.key, nil, l.val.lease)
+	return m.db.CPut(ctx, l.key, nil, &l.val.leaseRaw)
 }

@@ -969,7 +969,7 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 	}
 
 	// Pretend the node was once there but isn't gossiped anywhere.
-	if err := mtc.dbs[0].CPutDeprecated(ctx, keys.NodeLivenessKey(goneNodeID), &storagepb.Liveness{
+	if err := mtc.dbs[0].CPut(ctx, keys.NodeLivenessKey(goneNodeID), &storagepb.Liveness{
 		NodeID:     goneNodeID,
 		Epoch:      1,
 		Expiration: hlc.LegacyTimestamp(mtc.clock.Now()),

@@ -434,8 +434,8 @@ func (b *Batch) CPutDeprecated(key, value, expValue interface{}) {
 // CPutAllowingIfNotExists is like CPut except it also allows the Put when the
 // existing entry does not exist -- i.e. it succeeds if there is no existing
 // entry or the existing entry has the expected value.
-func (b *Batch) CPutAllowingIfNotExists(key, value, expValue interface{}) {
-	b.cputInternalDeprecated(key, value, expValue, true)
+func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue *roachpb.Value) {
+	b.cputInternal(key, value, expValue, true)
 }
 
 func (b *Batch) cputInternal(key, value interface{}, expValue *roachpb.Value, allowNotExist bool) {
@@ -452,6 +452,10 @@ func (b *Batch) cputInternal(key, value interface{}, expValue *roachpb.Value, al
 	var ev roachpb.Value
 	if expValue != nil {
 		ev = *expValue
+		// This expected value is assumed to come from a kv read or from writing a
+		// roachpb.Value. In both cases it will have a checksum set. Instead of
+		// requiring callers to clear it, do it for them.
+		ev.ClearChecksum()
 	}
 	b.appendReqs(roachpb.NewConditionalPut(k, v, ev, allowNotExist))
 	b.initResult(1, 1, notRaw, nil)
