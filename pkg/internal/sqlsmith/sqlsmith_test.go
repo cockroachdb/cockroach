@@ -14,6 +14,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"testing"
 
@@ -47,7 +48,10 @@ func TestGenerateParse(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	rnd, _ := randutil.NewPseudoRand()
+	// Set COCKROACH_RANDOM_SEED to make this test deterministic between
+	// runs.
+	randutil.SeedForTests()
+	rnd := rand.New(rand.NewSource(rand.Int63()))
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	var opts []SmitherOption
