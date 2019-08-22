@@ -92,8 +92,15 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx uint16
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
+		// TODO(asubiotto): How can I compare against coltypes.Bytes?
+		// {{ if eq .LTyp 1 }}
+		// Since flat Bytes cannot be set at arbitrary indices (data needs to be
+		// moved around), we use CopySlice to accept the performance hit.
+		execgen.COPYSLICE(c.vecs[dstVecIdx], c.vecs[srcVecIdx], int(dstIdx), int(srcIdx), int(srcIdx+1))
+		// {{ else }}
 		v := execgen.UNSAFEGET(c.vecs[srcVecIdx], int(srcIdx))
 		execgen.SET(c.vecs[dstVecIdx], int(dstIdx), v)
+		// {{ end }}
 	}
 }
 
