@@ -220,18 +220,25 @@ func (r *RangeDescriptor) Validate() error {
 		return errors.Errorf("NextReplicaID must be non-zero")
 	}
 	seen := map[ReplicaID]struct{}{}
+	stores := map[StoreID]struct{}{}
 	for i, rep := range r.Replicas().All() {
 		if err := rep.Validate(); err != nil {
 			return errors.Errorf("replica %d is invalid: %s", i, err)
 		}
-		if _, ok := seen[rep.ReplicaID]; ok {
-			return errors.Errorf("ReplicaID %d was reused", rep.ReplicaID)
-		}
-		seen[rep.ReplicaID] = struct{}{}
 		if rep.ReplicaID >= r.NextReplicaID {
 			return errors.Errorf("ReplicaID %d must be less than NextReplicaID %d",
 				rep.ReplicaID, r.NextReplicaID)
 		}
+
+		if _, ok := seen[rep.ReplicaID]; ok {
+			return errors.Errorf("ReplicaID %d was reused", rep.ReplicaID)
+		}
+		seen[rep.ReplicaID] = struct{}{}
+
+		if _, ok := stores[rep.StoreID]; ok {
+			return errors.Errorf("StoreID %d was reused", rep.StoreID)
+		}
+		stores[rep.StoreID] = struct{}{}
 	}
 	return nil
 }
