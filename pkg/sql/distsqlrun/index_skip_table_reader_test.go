@@ -141,12 +141,29 @@ func TestIndexSkipTableReader(t *testing.T) {
 		99,
 		sqlutils.ToRowFn(xFnt6, yFnt6))
 
+	// create a table t7 where each row is:
+	//
+	// |     x     |   y   |  z  |
+	// |-------------------------|
+	// | rowId%10  | NULL | NULL|
+	xFnt7 := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row % 10))
+	}
+	nullt7 := func(_ int) tree.Datum {
+		return tree.DNull
+	}
+	sqlutils.CreateTable(t, sqlDB, "t7",
+		"x INT, y INT, z INT, PRIMARY KEY (x), INDEX i1 (x, y DESC, z DESC), INDEX i2 (y DESC, z DESC)",
+		10,
+		sqlutils.ToRowFn(xFnt7, nullt7, nullt7))
+
 	td1 := sqlbase.GetTableDescriptor(kvDB, "test", "t1")
 	td2 := sqlbase.GetTableDescriptor(kvDB, "test", "t2")
 	td3 := sqlbase.GetTableDescriptor(kvDB, "test", "t3")
 	td4 := sqlbase.GetTableDescriptor(kvDB, "test", "t4")
 	td5 := sqlbase.GetTableDescriptor(kvDB, "test", "t5")
 	td6 := sqlbase.GetTableDescriptor(kvDB, "test", "t6")
+	td7 := sqlbase.GetTableDescriptor(kvDB, "test", "t7")
 
 	makeIndexSpan := func(td *sqlbase.TableDescriptor, start, end int) distsqlpb.TableReaderSpan {
 		var span roachpb.Span
@@ -368,6 +385,34 @@ func TestIndexSkipTableReader(t *testing.T) {
 				OutputColumns: []uint32{0},
 			},
 			expected: "[[10] [9] [8] [7] [6] [5] [4] [3] [2] [1]]",
+		},
+		{
+			// Distinct scan on index with multiple null values
+			desc:      "IndexMultipleNulls",
+			tableDesc: td7,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans:    []distsqlpb.TableReaderSpan{{Span: td7.IndexSpan(2)}},
+				IndexIdx: 1,
+			},
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			expected: "[[0] [1] [2] [3] [4] [5] [6] [7] [8] [9]]",
+		},
+		{
+			// Distinct scan on index with only null values
+			desc:      "IndexAllNulls",
+			tableDesc: td7,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans:    []distsqlpb.TableReaderSpan{{Span: td7.IndexSpan(3)}},
+				IndexIdx: 2,
+			},
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{1},
+			},
+			expected: "[[NULL]]",
 		},
 	}
 
