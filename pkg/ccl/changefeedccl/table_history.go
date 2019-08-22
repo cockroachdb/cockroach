@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/sst"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -249,7 +250,7 @@ func fetchTableDescriptorVersions(
 	var tableDescs []*sqlbase.TableDescriptor
 	for _, file := range res.(*roachpb.ExportResponse).Files {
 		if err := func() error {
-			it, err := engine.NewMemSSTIterator(file.SST, false /* verify */)
+			it, err := sst.NewMemIterator(file.SST, false /* verify */)
 			if err != nil {
 				return err
 			}

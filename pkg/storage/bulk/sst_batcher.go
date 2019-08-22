@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/sst"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -62,8 +63,8 @@ type SSTBatcher struct {
 	rowCounter RowCounter
 	totalRows  roachpb.BulkOpSummary
 
-	file          SSTMemFile
-	sstWriter     SSTWriter
+	file          sst.MemFile
+	sstWriter     sst.Writer
 	batchStartKey []byte
 	batchEndKey   []byte
 
@@ -159,8 +160,8 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value [
 func (b *SSTBatcher) Reset() error {
 	b.sstWriter.Close()
 
-	b.file = SSTMemFile{}
-	b.sstWriter = MakeSSTWriter(&b.file)
+	b.file = sst.MemFile{}
+	b.sstWriter = sst.MakeWriter(&b.file)
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
 	b.batchEndValue = b.batchEndValue[:0]
@@ -275,7 +276,7 @@ func AddSSTable(
 	ms enginepb.MVCCStats,
 ) error {
 	now := timeutil.Now().UnixNano()
-	iter, err := engine.NewMemSSTIterator(sstBytes, true)
+	iter, err := sst.NewMemIterator(sstBytes, true)
 	if err != nil {
 		return err
 	}
@@ -356,8 +357,8 @@ func createSplitSSTable(
 	disallowShadowing bool,
 	iter engine.SimpleIterator,
 ) (*sstSpan, *sstSpan, error) {
-	file := SSTMemFile{}
-	w := MakeSSTWriter(&file)
+	file := sst.MemFile{}
+	w := sst.MakeWriter(&file)
 	defer w.Close()
 
 	split := false
@@ -385,8 +386,8 @@ func createSplitSSTable(
 				sstBytes:          file.Data(),
 				disallowShadowing: disallowShadowing,
 			}
-			file = SSTMemFile{}
-			w = MakeSSTWriter(&file)
+			file = sst.MemFile{}
+			w = sst.MakeWriter(&file)
 			split = true
 			first = nil
 			last = nil
