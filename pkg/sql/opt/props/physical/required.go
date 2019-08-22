@@ -115,6 +115,10 @@ func (p Presentation) Any() bool {
 // Equals returns true iff this presentation exactly matches the given
 // presentation.
 func (p Presentation) Equals(rhs Presentation) bool {
+	// The 0 column presentation is not the same with the nil presentation.
+	if p.Any() != rhs.Any() {
+		return false
+	}
 	if len(p) != len(rhs) {
 		return false
 	}

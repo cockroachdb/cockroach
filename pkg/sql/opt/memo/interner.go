@@ -522,10 +522,14 @@ func (h *hasher) HashTupleOrdinal(val TupleOrdinal) {
 }
 
 func (h *hasher) HashPhysProps(val *physical.Required) {
-	for i := range val.Presentation {
-		col := &val.Presentation[i]
-		h.HashString(col.Alias)
-		h.HashColumnID(col.ID)
+	// Note: the Any presentation is not the same with the 0-column presentation.
+	if !val.Presentation.Any() {
+		h.HashInt(len(val.Presentation))
+		for i := range val.Presentation {
+			col := &val.Presentation[i]
+			h.HashString(col.Alias)
+			h.HashColumnID(col.ID)
+		}
 	}
 	h.HashOrderingChoice(val.Ordering)
 }
