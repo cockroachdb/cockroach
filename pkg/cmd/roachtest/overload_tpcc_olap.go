@@ -59,7 +59,7 @@ func (s tpccOLAPSpec) run(ctx context.Context, t *test, c *cluster) {
 				" --query-file %s"+
 				" --histograms="+perfArtifactsDir+"/stats.json "+
 				" --ramp=%s --duration=%s {pgurl:1-%d}",
-			s.Warehouses, queryFileName, rampDuration, duration, c.spec.NodeCount-1)
+			s.Concurrency, queryFileName, rampDuration, duration, c.spec.NodeCount-1)
 		c.Run(ctx, workloadNode, cmd)
 		return nil
 	})
