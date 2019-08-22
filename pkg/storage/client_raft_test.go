@@ -2065,10 +2065,21 @@ func TestQuotaPool(t *testing.T) {
 	}
 	testutils.SucceedsSoon(t, assertEqualLastIndex)
 
+	// NB: See TestRaftBlockedReplica/#9914 for why we use a separate	goroutine.
+	raftLockReplica := func(repl *storage.Replica) {
+		ch := make(chan struct{})
+		go func() { repl.RaftLock(); close(ch) }()
+		<-ch
+	}
+
 	leaderRepl := mtc.getRaftLeader(rangeID)
+	// Grab the raftMu to re-initialize the QuotaPool to ensure that we don't
+	// race with ongoing applications.
+	raftLockReplica(leaderRepl)
 	if err := leaderRepl.InitQuotaPool(quota); err != nil {
 		t.Fatalf("failed to initialize quota pool: %v", err)
 	}
+	leaderRepl.RaftUnlock()
 	followerRepl := func() *storage.Replica {
 		for _, store := range mtc.stores {
 			repl, err := store.GetReplica(rangeID)
@@ -2088,17 +2099,7 @@ func TestQuotaPool(t *testing.T) {
 
 	// We block the third replica effectively causing acquisition of quota
 	// without subsequent release.
-	//
-	// NB: See TestRaftBlockedReplica/#9914 for why we use a separate
-	// goroutine.
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		followerRepl.RaftLock()
-		wg.Done()
-	}()
-	wg.Wait()
-
+	raftLockReplica(followerRepl)
 	ch := make(chan *roachpb.Error, 1)
 
 	func() {
