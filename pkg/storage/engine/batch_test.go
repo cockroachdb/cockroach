@@ -302,12 +302,14 @@ func TestBatchRepr(t *testing.T) {
 
 		// The keys in the batch have the internal MVCC encoding applied which for
 		// this test implies an appended 0 byte.
+		// TODO(itsbilal): Treat SingleDeletions as Deletions until pebble.Batch
+		// works with SingleDelete.
 		expOps := []string{
 			"put(a\x00,value)",
 			"delete(b\x00)",
 			"merge(c\x00)",
 			"put(e\x00,)",
-			"single_delete(d\x00)",
+			"delete(d\x00)",
 		}
 		if !reflect.DeepEqual(expOps, ops) {
 			t.Fatalf("expected %v, but found %v", expOps, ops)
@@ -786,16 +788,18 @@ func TestBatchBuilder(t *testing.T) {
 		if err := dbClear(batch.batch, key); err != nil {
 			t.Fatal(err)
 		}
-		if err := dbSingleClear(batch.batch, key); err != nil {
-			t.Fatal(err)
-		}
+		// TODO(itsbilal): Uncomment this when pebble.Batch supports SingleDeletion.
+		//if err := dbSingleClear(batch.batch, key); err != nil {
+		//	t.Fatal(err)
+		//}
 		if err := dbMerge(batch.batch, key, appender("bar")); err != nil {
 			t.Fatal(err)
 		}
 
 		builder.Put(key, []byte("value"))
 		builder.Clear(key)
-		builder.SingleClear(key)
+		// TODO(itsbilal): Uncomment this when pebble.Batch supports SingleDeletion.
+		//builder.SingleClear(key)
 		builder.Merge(key, appender("bar"))
 	}
 
@@ -857,10 +861,12 @@ func TestBatchBuilderStress(t *testing.T) {
 					}
 					builder.Clear(key)
 				case 2:
-					if err := dbSingleClear(batch.batch, key); err != nil {
-						t.Fatal(err)
-					}
-					builder.SingleClear(key)
+					// TODO(itsbilal): Don't test SingleClears matching up until
+					// pebble.Batch supports them.
+					//if err := dbSingleClear(batch.batch, key); err != nil {
+					//	t.Fatal(err)
+					//}
+					//builder.SingleClear(key)
 				case 3:
 					if err := dbMerge(batch.batch, key, appender("bar")); err != nil {
 						t.Fatal(err)
