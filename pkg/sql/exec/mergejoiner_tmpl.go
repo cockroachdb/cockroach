@@ -411,9 +411,8 @@ func _INCREMENT_LEFT_SWITCH(
 	// */}}
 	// {{ end }}
 	// {{ if or $.JoinType.IsLeftOuter $.JoinType.IsLeftAnti }}
-	// All the rows on the left within the current group will not get
-	// a match on the right, so we're adding each of them as a left
-	// outer group.
+	// All the rows on the left within the current group will not get a match on
+	// the right, so we're adding each of them as a left unmatched group.
 	o.groups.addLeftUnmatchedGroup(curLIdx-1, curRIdx)
 	for curLIdx < curLLength {
 		// {{ if _L_HAS_NULLS }}
@@ -509,12 +508,10 @@ func _PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{ end }}
 	// {{ if or $.JoinType.IsLeftOuter $.JoinType.IsLeftAnti }}
 	if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
-		// The current group is not the last one within the column, so it
-		// cannot be extended into the next batch, and we need to process it
-		// right now.
-		// Any unprocessed row in the left group will not get a match, so
-		// each one of them becomes a new unmatched group with a
-		// corresponding null group.
+		// The current group is not the last one within the column, so it cannot be
+		// extended into the next batch, and we need to process it right now. Any
+		// unprocessed row in the left group will not get a match, so each one of
+		// them becomes a new unmatched group with a corresponding null group.
 		for curLIdx < curLLength {
 			o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
 			curLIdx++
@@ -523,12 +520,10 @@ func _PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{ end }}
 	// {{ if $.JoinType.IsRightOuter }}
 	if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
-		// The current group is not the last one within the column, so it
-		// cannot be extended into the next batch, and we need to process it
-		// right now.
-		// Any unprocessed row in the right group will not get a match, so
-		// each one of them becomes a new unmatched group with a
-		// corresponding null group.
+		// The current group is not the last one within the column, so it cannot be
+		// extended into the next batch, and we need to process it right now. Any
+		// unprocessed row in the right group will not get a match, so each one of
+		// them becomes a new unmatched group with a corresponding null group.
 		for curRIdx < curRLength {
 			o.groups.addRightOuterGroup(curLIdx, curRIdx)
 			curRIdx++
@@ -979,10 +974,10 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBufferedGroup() {
 // the left source. It should only be called when the right source has been
 // exhausted.
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource() {
-	// {{ if _JOIN_TYPE.IsInner }}
+	// {{ if or _JOIN_TYPE.IsInner _JOIN_TYPE.IsLeftSemi }}
 	// {{/*
 	// Remaining tuples from the left source do not have a match, so they are
-	// ignored in INNER JOIN.
+	// ignored in INNER JOIN and LEFT SEMI JOIN.
 	// */}}
 	// {{ end }}
 	// {{ if or _JOIN_TYPE.IsLeftOuter _JOIN_TYPE.IsLeftAnti }}
@@ -1019,10 +1014,10 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource() {
 // the right source. It should only be called when the left source has been
 // exhausted.
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustRightSource() {
-	// {{ if _JOIN_TYPE.IsInner }}
+	// {{ if or _JOIN_TYPE.IsInner _JOIN_TYPE.IsLeftSemi }}
 	// {{/*
 	// Remaining tuples from the right source do not have a match, so they are
-	// ignored in INNER JOIN.
+	// ignored in INNER JOIN and LEFT SEMI JOIN.
 	// */}}
 	// {{ end }}
 	// {{ if _JOIN_TYPE.IsLeftOuter }}
