@@ -93,7 +93,7 @@ func wrapRowSource(
 
 type newColOperatorResult struct {
 	op              exec.Operator
-	outputTypes     []coltypes.T
+	columnTypes     []types.T
 	memUsage        int
 	metadataSources []distsqlpb.MetadataSource
 	isStreaming     bool
@@ -108,13 +108,6 @@ func newColOperator(
 	core := &spec.Core
 	post := &spec.Post
 
-	// Planning additional operators for the PostProcessSpec (filters and render
-	// expressions) requires knowing the operator's output column types. Currently
-	// this must be set for any core spec which might require post-processing. In
-	// the future we may want to make these column types part of the Operator
-	// interface.
-	var columnTypes []types.T
-
 	// By default, we safely assume that an operator is not streaming. Note that
 	// projections, renders, filters, limits, offsets as well as all internal
 	// operators (like stats collectors and cancel checkers) are streaming, so in
@@ -127,7 +120,7 @@ func newColOperator(
 			return result, err
 		}
 		result.op, result.isStreaming = exec.NewNoop(inputs[0]), true
-		columnTypes = spec.Input[0].ColumnTypes
+		result.columnTypes = spec.Input[0].ColumnTypes
 	case core.TableReader != nil:
 		if err := checkNumIn(inputs, 0); err != nil {
 			return result, err
@@ -156,7 +149,7 @@ func newColOperator(
 		// performing long operations.
 		result.op = exec.NewCancelChecker(result.op)
 		returnMutations := core.TableReader.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
-		columnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
+		result.columnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
 	case core.Aggregator != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
 			return result, err
@@ -174,7 +167,7 @@ func newColOperator(
 			// Ideally the optimizer would not plan a scan in this unusual case.
 			result.op, result.isStreaming, err = exec.NewSingleTupleNoInputOp(), true, nil
 			// We make columnTypes non-nil so that sanity check doesn't panic.
-			columnTypes = make([]types.T, 0)
+			result.columnTypes = make([]types.T, 0)
 			break
 		}
 		if len(aggSpec.GroupCols) == 0 &&
@@ -183,7 +176,7 @@ func newColOperator(
 			aggSpec.Aggregations[0].Func == distsqlpb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
 			result.op, result.isStreaming, err = exec.NewCountOp(inputs[0]), true, nil
-			columnTypes = []types.T{*types.Int}
+			result.columnTypes = []types.T{*types.Int}
 			break
 		}
 
@@ -207,7 +200,7 @@ func newColOperator(
 		aggTyps := make([][]types.T, len(aggSpec.Aggregations))
 		aggCols := make([][]uint32, len(aggSpec.Aggregations))
 		aggFns := make([]distsqlpb.AggregatorSpec_Func, len(aggSpec.Aggregations))
-		columnTypes = make([]types.T, len(aggSpec.Aggregations))
+		result.columnTypes = make([]types.T, len(aggSpec.Aggregations))
 		for i, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
 				return result, errors.Newf("distinct aggregation not supported")
@@ -243,7 +236,7 @@ func newColOperator(
 			if err != nil {
 				return result, err
 			}
-			columnTypes[i] = *retType
+			result.columnTypes[i] = *retType
 		}
 		var typs []coltypes.T
 		typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
@@ -281,9 +274,9 @@ func newColOperator(
 			return result, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
 		}
 
-		columnTypes = spec.Input[0].ColumnTypes
+		result.columnTypes = spec.Input[0].ColumnTypes
 		var typs []coltypes.T
-		typs, err = typeconv.FromColumnTypes(columnTypes)
+		typs, err = typeconv.FromColumnTypes(result.columnTypes)
 		if err != nil {
 			return result, err
 		}
@@ -294,7 +287,7 @@ func newColOperator(
 		if err := checkNumIn(inputs, 1); err != nil {
 			return result, err
 		}
-		columnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
+		result.columnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
 		result.op, result.isStreaming = exec.NewOrdinalityOp(inputs[0]), true
 
 	case core.HashJoiner != nil:
@@ -356,20 +349,20 @@ func newColOperator(
 			return result, err
 		}
 
-		columnTypes = make([]types.T, nLeftCols+nRightCols)
-		copy(columnTypes, spec.Input[0].ColumnTypes)
+		result.columnTypes = make([]types.T, nLeftCols+nRightCols)
+		copy(result.columnTypes, spec.Input[0].ColumnTypes)
 		if core.HashJoiner.Type != sqlbase.JoinType_LEFT_SEMI {
 			// TODO(yuzefovich): update this conditional once LEFT ANTI is supported.
-			copy(columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
+			copy(result.columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
 		} else {
-			columnTypes = columnTypes[:nLeftCols]
+			result.columnTypes = result.columnTypes[:nLeftCols]
 		}
 
 		if !core.HashJoiner.OnExpr.Empty() {
 			if core.HashJoiner.Type != sqlbase.JoinType_INNER {
 				return result, errors.Newf("can't plan non-inner hash join with on expressions")
 			}
-			columnTypes, err = result.planFilterExpr(flowCtx, core.HashJoiner.OnExpr, columnTypes)
+			err = result.planFilterExpr(flowCtx.NewEvalCtx(), core.HashJoiner.OnExpr)
 		}
 
 	case core.MergeJoiner != nil:
@@ -433,20 +426,20 @@ func newColOperator(
 			return result, err
 		}
 
-		columnTypes = make([]types.T, nLeftCols+nRightCols)
-		copy(columnTypes, spec.Input[0].ColumnTypes)
+		result.columnTypes = make([]types.T, nLeftCols+nRightCols)
+		copy(result.columnTypes, spec.Input[0].ColumnTypes)
 		if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI &&
 			core.MergeJoiner.Type != sqlbase.JoinType_LEFT_ANTI {
-			copy(columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
+			copy(result.columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
 		} else {
-			columnTypes = columnTypes[:nLeftCols]
+			result.columnTypes = result.columnTypes[:nLeftCols]
 		}
 
 		if !core.MergeJoiner.OnExpr.Empty() {
 			if core.MergeJoiner.Type != sqlbase.JoinType_INNER {
 				return result, errors.Errorf("can't plan non-inner merge joins with on expressions")
 			}
-			columnTypes, err = result.planFilterExpr(flowCtx, core.MergeJoiner.OnExpr, columnTypes)
+			err = result.planFilterExpr(flowCtx.NewEvalCtx(), core.MergeJoiner.OnExpr)
 		}
 
 		// Merge joiner is a streaming operator when equality columns form a key
@@ -481,7 +474,7 @@ func newColOperator(
 			if err != nil {
 				return nil, err
 			}
-			columnTypes = jr.OutputTypes()
+			result.columnTypes = jr.OutputTypes()
 			return jr, nil
 		})
 		result.op, result.isStreaming = c, true
@@ -513,7 +506,7 @@ func newColOperator(
 			// No optimizations possible. Default to the standard sort operator.
 			result.op, err = exec.NewSorter(input, inputTypes, orderingCols)
 		}
-		columnTypes = spec.Input[0].ColumnTypes
+		result.columnTypes = spec.Input[0].ColumnTypes
 
 	case core.Windower != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
@@ -583,7 +576,7 @@ func newColOperator(
 			result.op = exec.NewSimpleProjectOp(result.op, int(wf.OutputColIdx+1), projection)
 		}
 
-		columnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
+		result.columnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
 
 	default:
 		return result, errors.Newf("unsupported processor core %q", core)
@@ -601,23 +594,23 @@ func newColOperator(
 
 	log.VEventf(ctx, 1, "made op %T\n", result.op)
 
-	if columnTypes == nil {
+	if result.columnTypes == nil {
 		return result, errors.AssertionFailedf("output columnTypes unset after planning %T", result.op)
 	}
 
 	if !post.Filter.Empty() {
-		if columnTypes, err = result.planFilterExpr(flowCtx, post.Filter, columnTypes); err != nil {
+		if err = result.planFilterExpr(flowCtx.NewEvalCtx(), post.Filter); err != nil {
 			return result, err
 		}
 	}
 	if post.Projection {
-		result.op = exec.NewSimpleProjectOp(result.op, len(columnTypes), post.OutputColumns)
+		result.op = exec.NewSimpleProjectOp(result.op, len(result.columnTypes), post.OutputColumns)
 		// Update output columnTypes.
 		newTypes := make([]types.T, 0, len(post.OutputColumns))
 		for _, j := range post.OutputColumns {
-			newTypes = append(newTypes, columnTypes[j])
+			newTypes = append(newTypes, result.columnTypes[j])
 		}
-		columnTypes = newTypes
+		result.columnTypes = newTypes
 	} else if post.RenderExprs != nil {
 		log.VEventf(ctx, 2, "planning render expressions %+v", post.RenderExprs)
 		var renderedCols []uint32
@@ -626,13 +619,13 @@ func newColOperator(
 				helper    exprHelper
 				renderMem int
 			)
-			err := helper.init(expr, columnTypes, flowCtx.EvalCtx)
+			err := helper.init(expr, result.columnTypes, flowCtx.EvalCtx)
 			if err != nil {
 				return result, err
 			}
 			var outputIdx int
-			result.op, outputIdx, columnTypes, renderMem, err = planProjectionOperators(
-				flowCtx.NewEvalCtx(), helper.expr, columnTypes, result.op)
+			result.op, outputIdx, result.columnTypes, renderMem, err = planProjectionOperators(
+				flowCtx.NewEvalCtx(), helper.expr, result.columnTypes, result.op)
 			if err != nil {
 				return result, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
 			}
@@ -642,12 +635,12 @@ func newColOperator(
 			result.memUsage += renderMem
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}
-		result.op = exec.NewSimpleProjectOp(result.op, len(columnTypes), renderedCols)
+		result.op = exec.NewSimpleProjectOp(result.op, len(result.columnTypes), renderedCols)
 		newTypes := make([]types.T, 0, len(renderedCols))
 		for _, j := range renderedCols {
-			newTypes = append(newTypes, columnTypes[j])
+			newTypes = append(newTypes, result.columnTypes[j])
 		}
-		columnTypes = newTypes
+		result.columnTypes = newTypes
 	}
 	if post.Offset != 0 {
 		result.op = exec.NewOffsetOp(result.op, post.Offset)
@@ -655,46 +648,42 @@ func newColOperator(
 	if post.Limit != 0 {
 		result.op = exec.NewLimitOp(result.op, post.Limit)
 	}
-	if err != nil {
-		return result, err
-	}
-	result.outputTypes, err = typeconv.FromColumnTypes(columnTypes)
 	return result, err
 }
 
 func (r *newColOperatorResult) planFilterExpr(
-	flowCtx *FlowCtx, filter distsqlpb.Expression, columnTypes []types.T,
-) ([]types.T, error) {
+	evalCtx *tree.EvalContext, filter distsqlpb.Expression,
+) error {
 	var (
 		helper       exprHelper
 		selectionMem int
 	)
-	err := helper.init(filter, columnTypes, flowCtx.EvalCtx)
+	err := helper.init(filter, r.columnTypes, evalCtx)
 	if err != nil {
-		return columnTypes, err
+		return err
 	}
 	if helper.expr == tree.DNull {
 		// The filter expression is tree.DNull meaning that it is always false, so
 		// we put a zero operator.
 		r.op = exec.NewZeroOp(r.op)
-		return columnTypes, nil
+		return nil
 	}
 	var filterColumnTypes []types.T
-	r.op, _, filterColumnTypes, selectionMem, err = planSelectionOperators(flowCtx.NewEvalCtx(), helper.expr, columnTypes, r.op)
+	r.op, _, filterColumnTypes, selectionMem, err = planSelectionOperators(evalCtx, helper.expr, r.columnTypes, r.op)
 	if err != nil {
-		return columnTypes, errors.Wrapf(err, "unable to columnarize filter expression %q", filter.Expr)
+		return errors.Wrapf(err, "unable to columnarize filter expression %q", filter.Expr)
 	}
 	r.memUsage += selectionMem
-	if len(filterColumnTypes) > len(columnTypes) {
+	if len(filterColumnTypes) > len(r.columnTypes) {
 		// Additional columns were appended to store projections while evaluating
 		// the filter. Project them away.
 		var outputColumns []uint32
-		for i := range columnTypes {
+		for i := range r.columnTypes {
 			outputColumns = append(outputColumns, uint32(i))
 		}
 		r.op = exec.NewSimpleProjectOp(r.op, len(filterColumnTypes), outputColumns)
 	}
-	return columnTypes, nil
+	return nil
 }
 
 func planSelectionOperators(
@@ -1482,8 +1471,12 @@ func (s *vectorizedFlowCreator) setupFlow(
 			// when vectorize=auto.
 			return nil, errors.Errorf("hash router encountered when vectorize=auto")
 		}
+		opOutputTypes, err := typeconv.FromColumnTypes(result.columnTypes)
+		if err != nil {
+			return nil, err
+		}
 		if err = s.setupOutput(
-			ctx, flowCtx, pspec, op, result.outputTypes, metadataSourcesQueue,
+			ctx, flowCtx, pspec, op, opOutputTypes, metadataSourcesQueue,
 		); err != nil {
 			return nil, err
 		}
