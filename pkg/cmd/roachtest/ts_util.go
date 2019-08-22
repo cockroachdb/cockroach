@@ -40,9 +40,19 @@ type tsQuery struct {
 	queryType tsQueryType
 }
 
-func getMetrics(
+func mustGetMetrics(
 	t *test, adminURL string, start, end time.Time, tsQueries []tsQuery,
 ) tspb.TimeSeriesQueryResponse {
+	response, err := getMetrics(adminURL, start, end, tsQueries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return response
+}
+
+func getMetrics(
+	adminURL string, start, end time.Time, tsQueries []tsQuery,
+) (tspb.TimeSeriesQueryResponse, error) {
 	url := "http://" + adminURL + "/ts/query"
 	queries := make([]tspb.Query, len(tsQueries))
 	for i := 0; i < len(tsQueries); i++ {
@@ -74,10 +84,9 @@ func getMetrics(
 		Queries:     queries,
 	}
 	var response tspb.TimeSeriesQueryResponse
-	if err := httputil.PostJSON(http.Client{}, url, &request, &response); err != nil {
-		t.Fatal(err)
-	}
-	return response
+	err := httputil.PostJSON(http.Client{Timeout: 500 * time.Millisecond}, url, &request, &response)
+	return response, err
+
 }
 
 func verifyTxnPerSecond(
@@ -90,7 +99,7 @@ func verifyTxnPerSecond(
 ) {
 	// Query needed information over the timespan of the query.
 	adminURL := c.ExternalAdminUIAddr(ctx, adminNode)[0]
-	response := getMetrics(t, adminURL, start, end, []tsQuery{
+	response := mustGetMetrics(t, adminURL, start, end, []tsQuery{
 		{name: "cr.node.txn.commits", queryType: rate},
 		{name: "cr.node.txn.commits", queryType: total},
 	})
@@ -137,7 +146,7 @@ func verifyLookupsPerSec(
 ) {
 	// Query needed information over the timespan of the query.
 	adminURL := c.ExternalAdminUIAddr(ctx, adminNode)[0]
-	response := getMetrics(t, adminURL, start, end, []tsQuery{
+	response := mustGetMetrics(t, adminURL, start, end, []tsQuery{
 		{name: "cr.node.distsender.rangelookups", queryType: rate},
 	})
 

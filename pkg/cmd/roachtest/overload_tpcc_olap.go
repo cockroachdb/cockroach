@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -73,12 +75,23 @@ func verifyNodeLiveness(ctx context.Context, c *cluster, t *test, runDuration ti
 	const maxFailures = 10
 	adminURLs := c.ExternalAdminUIAddr(ctx, c.Node(1))
 	now := timeutil.Now()
-	response := getMetrics(t, adminURLs[0], now.Add(-runDuration), now, []tsQuery{
-		{
-			name:      "cr.node.liveness.heartbeatfailures",
-			queryType: total,
-		},
-	})
+	var response tspb.TimeSeriesQueryResponse
+	// Retry because timeseries queries can fail if the underlying inter-node
+	// connections are in a failed state which can happen due to overload.
+	// Now that the load has stopped, this should resolve itself soon.
+	if err := retry.WithMaxAttempts(ctx, retry.Options{
+		MaxBackoff: 500 * time.Millisecond,
+	}, 3, func() (err error) {
+		response, err = getMetrics(adminURLs[0], now.Add(-runDuration), now, []tsQuery{
+			{
+				name:      "cr.node.liveness.heartbeatfailures",
+				queryType: total,
+			},
+		})
+		return err
+	}); err != nil {
+		t.Fatalf("failed to fetch liveness metrics: %v", err)
+	}
 	if len(response.Results[0].Datapoints) <= 1 {
 		t.Fatalf("not enough datapoints in timeseries query response: %+v", response)
 	}
