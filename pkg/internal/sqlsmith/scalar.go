@@ -293,7 +293,7 @@ func makeOr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	}
 	left := makeBoolExpr(s, refs)
 	right := makeBoolExpr(s, refs)
-	return typedParen(tree.NewTypedAndExpr(left, right), types.Bool), true
+	return typedParen(tree.NewTypedOrExpr(left, right), types.Bool), true
 }
 
 func makeAnd(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
@@ -304,7 +304,7 @@ func makeAnd(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	}
 	left := makeBoolExpr(s, refs)
 	right := makeBoolExpr(s, refs)
-	return typedParen(tree.NewTypedOrExpr(left, right), types.Bool), true
+	return typedParen(tree.NewTypedAndExpr(left, right), types.Bool), true
 }
 
 func makeNot(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
