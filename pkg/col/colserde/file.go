@@ -14,7 +14,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
-	"io/ioutil"
+	"os"
 
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	mmap "github.com/edsrzf/mmap-go"
 	flatbuffers "github.com/google/flatbuffers/go"
 	"github.com/pkg/errors"
 )
@@ -175,15 +176,21 @@ func NewFileDeserializerFromBytes(buf []byte) (*FileDeserializer, error) {
 
 // NewFileDeserializerFromPath constructs a FileDeserializer by reading it from
 // a file.
-//
-// TODO(dan): mmap instead. This is mostly completely in an interim version of
-// #37803.
 func NewFileDeserializerFromPath(path string) (*FileDeserializer, error) {
-	buf, err := ioutil.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
-		return nil, pgerror.Wrapf(err, pgcode.Io, `reading %s`, path)
+		return nil, pgerror.Wrapf(err, pgcode.Io, `opening %s`, path)
 	}
-	return newFileDeserializer(buf, func() error { return nil })
+	// TODO(dan): This is currently using copy on write semantics because we store
+	// the nulls differently in-mem than arrow does and there's an in-place
+	// conversion. If we used the same format that arrow does, this could be
+	// switched to mmap.RDONLY (it's easy to check, the test fails with a SIGBUS
+	// right now with mmap.RDONLY).
+	buf, err := mmap.Map(f, mmap.COPY, 0 /* flags */)
+	if err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.Io, `mmaping %s`, path)
+	}
+	return newFileDeserializer(buf, buf.Unmap)
 }
 
 func newFileDeserializer(buf []byte, bufCloseFn func() error) (*FileDeserializer, error) {
