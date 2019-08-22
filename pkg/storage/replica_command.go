@@ -1058,18 +1058,14 @@ func addLearnerReplicas(
 	// before returning from this method, and it's unclear that it's worth
 	// doing.
 	for _, target := range targets {
-		newDesc := *desc
-		newDesc.SetReplicas(desc.Replicas().DeepCopy())
-		replDesc := newDesc.AddReplica(target.NodeID, target.StoreID, roachpb.ReplicaType_Learner)
-
-		var added []roachpb.ReplicaDescriptor
-		added = append(added, replDesc)
-		if err := execChangeReplicasTxn(
-			ctx, store, desc, &newDesc, reason, details, added, nil, /* removed */
-		); err != nil {
+		iChgs := []internalReplicationChange{{target: target, typ: internalChangeTypeAddLearner}}
+		var err error
+		desc, err = execChangeReplicasTxn(
+			ctx, store, desc, reason, details, iChgs,
+		)
+		if err != nil {
 			return nil, err
 		}
-		desc = &newDesc
 	}
 	return desc, nil
 }
@@ -1092,25 +1088,20 @@ func (r *Replica) finalizeChangeReplicas(
 	// this may want to detect that and retry, sending a snapshot and promoting
 	// both sides.
 
-	updatedDesc := *desc
-	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
+	iChgs := make([]internalReplicationChange, 0, len(chgs))
 
-	adds, removes := chgs.Additions(), chgs.Removals()
-	var replsAdded, replsRemoved []roachpb.ReplicaDescriptor
-	for _, target := range adds {
-		// All adds must be present as learners right now and they are removed,
-		// upgraded, and then re-added.
-		rDesc, ok := updatedDesc.GetReplicaDescriptor(target.StoreID)
+	for _, target := range chgs.Additions() {
+		iChgs = append(iChgs, internalReplicationChange{target: target, typ: internalChangeTypePromoteLearner})
+		// All adds must be present as learners right now, and we send them
+		// snapshots in anticipation of promoting them to voters.
+		rDesc, ok := desc.GetReplicaDescriptor(target.StoreID)
 		if !ok {
-			return nil, errors.Errorf("programming error: replica %v not found in %v", target, updatedDesc)
+			return nil, errors.Errorf("programming error: replica %v not found in %v", target, desc)
 		}
 
 		if rDesc.GetType() != roachpb.ReplicaType_Learner {
 			return nil, errors.Errorf("programming error: cannot promote replica of type %s", rDesc.Type)
 		}
-
-		rDesc, _ = updatedDesc.SetReplicaType(target.NodeID, target.StoreID, roachpb.ReplicaType_VoterFull)
-		replsAdded = append(replsAdded, rDesc)
 
 		// Note that raft snapshot queue will refuse to send a snapshot to a learner
 		// replica if its store is already sending a snapshot to that replica. That
@@ -1142,16 +1133,11 @@ func (r *Replica) finalizeChangeReplicas(
 		}
 	}
 
-	for _, target := range removes {
-		rDesc, found := updatedDesc.RemoveReplica(target.NodeID, target.StoreID)
-		if !found {
-			return nil, errors.Errorf("target to remove %v not found in %s", target, &updatedDesc)
-		}
-		replsRemoved = append(replsRemoved, rDesc)
+	for _, target := range chgs.Removals() {
+		iChgs = append(iChgs, internalReplicationChange{target: target, typ: internalChangeTypeRemove})
 	}
 
-	err := execChangeReplicasTxn(ctx, r.store, desc, &updatedDesc, reason, details, replsAdded, replsRemoved)
-	return &updatedDesc, err
+	return execChangeReplicasTxn(ctx, r.store, desc, reason, details, iChgs)
 }
 
 // tryRollbackLearnerReplica attempts to remove a learner specified by the
@@ -1165,10 +1151,8 @@ func (r *Replica) tryRollBackLearnerReplica(
 	reason storagepb.RangeLogEventReason,
 	details string,
 ) {
-	newDesc := *desc
-	newDesc.SetReplicas(desc.Replicas().DeepCopy())
-	replDesc, ok := newDesc.RemoveReplica(target.NodeID, target.StoreID)
-	if !ok || replDesc.GetType() != roachpb.ReplicaType_Learner {
+	repDesc, ok := desc.GetReplicaDescriptor(target.StoreID)
+	if !ok || repDesc.GetType() != roachpb.ReplicaType_Learner {
 		// There's no learner to roll back.
 		log.Event(ctx, "learner to roll back not found; skipping")
 		return
@@ -1181,10 +1165,11 @@ func (r *Replica) tryRollBackLearnerReplica(
 	const rollbackTimeout = 10 * time.Second
 
 	rollbackFn := func(ctx context.Context) error {
-		removed := []roachpb.ReplicaDescriptor{replDesc}
-		return execChangeReplicasTxn(
-			ctx, r.store, desc, &newDesc, reason, details, nil /* added */, removed,
+		_, err := execChangeReplicasTxn(
+			ctx, r.store, desc, reason, details,
+			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemove}},
 		)
+		return err
 	}
 	rollbackCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
 	if err := contextutil.RunWithTimeout(
@@ -1194,7 +1179,7 @@ func (r *Replica) tryRollBackLearnerReplica(
 			"failed to rollback learner %s, abandoning it for the replicate queue: %v", target, err)
 		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 	} else {
-		log.Infof(ctx, "rolled back learner %s to %s", replDesc, &newDesc)
+		log.Infof(ctx, "rolled back learner %s in %s", target, desc)
 	}
 }
 
@@ -1210,31 +1195,16 @@ func (r *Replica) addReplicaLegacyPreemptiveSnapshot(
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
 
-	updatedDesc := *desc
-	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
-
-	repDesc := updatedDesc.AddReplica(target.NodeID, target.StoreID, roachpb.ReplicaType_VoterFull)
-
-	repDescIdx := -1  // tracks NodeID && StoreID
 	nodeUsed := false // tracks NodeID only
-	for i, existingRep := range desc.Replicas().All() {
-		nodeUsedByExistingRep := existingRep.NodeID == repDesc.NodeID
+	for _, existingRep := range desc.Replicas().All() {
+		nodeUsedByExistingRep := existingRep.NodeID == target.NodeID
 		nodeUsed = nodeUsed || nodeUsedByExistingRep
-
-		if nodeUsedByExistingRep && existingRep.StoreID == repDesc.StoreID {
-			repDescIdx = i
-			repDesc = existingRep
-			break
-		}
 	}
 
 	// If the replica exists on the remote node, no matter in which store,
 	// abort the replica add.
 	if nodeUsed {
-		if repDescIdx != -1 {
-			return nil, errors.Errorf("%s: unable to add replica %v which is already present", r, repDesc)
-		}
-		return nil, errors.Errorf("%s: unable to add replica %v; node already has a replica", r, repDesc)
+		return nil, errors.Errorf("%s: unable to add replica %v; node already has a replica", r, target)
 	}
 
 	// Send a pre-emptive snapshot. Note that the replica to which this
@@ -1260,31 +1230,108 @@ func (r *Replica) addReplicaLegacyPreemptiveSnapshot(
 	// progress which might be required for this ChangeReplicas operation to
 	// complete. See #10409.
 	{
-		preemptiveRepDesc := repDesc
-		preemptiveRepDesc.ReplicaID = 0
+		preemptiveRepDesc := roachpb.ReplicaDescriptor{
+			NodeID:    target.NodeID,
+			StoreID:   target.StoreID,
+			Type:      roachpb.ReplicaTypeVoterFull(),
+			ReplicaID: 0, // intentional
+		}
 		if err := r.sendSnapshot(ctx, preemptiveRepDesc, SnapshotRequest_PREEMPTIVE, priority); err != nil {
 			return nil, err
 		}
 	}
 
-	added := []roachpb.ReplicaDescriptor{repDesc}
-	err := execChangeReplicasTxn(ctx, r.store, desc, &updatedDesc, reason, details, added, nil /* removed */)
-	return &updatedDesc, err
+	iChgs := []internalReplicationChange{{target: target, typ: internalChangeTypeAddVoterViaPreemptiveSnap}}
+	return execChangeReplicasTxn(ctx, r.store, desc, reason, details, iChgs)
+}
+
+type internalChangeType byte
+
+const (
+	internalChangeTypeAddVoterViaPreemptiveSnap = iota
+	internalChangeTypeAddLearner                = iota
+	internalChangeTypePromoteLearner            = iota
+	internalChangeTypeRemove                    = iota
+)
+
+type internalReplicationChange struct {
+	target roachpb.ReplicationTarget
+	typ    internalChangeType
 }
 
 func execChangeReplicasTxn(
 	ctx context.Context,
 	store *Store,
 	desc *roachpb.RangeDescriptor,
-	updatedDesc *roachpb.RangeDescriptor,
 	reason storagepb.RangeLogEventReason,
 	details string,
-	added, removed []roachpb.ReplicaDescriptor,
-) error {
+	chgs []internalReplicationChange,
+) (*roachpb.RangeDescriptor, error) {
+	updatedDesc := *desc
+	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
+
 	generationComparableEnabled := store.ClusterSettings().Version.IsActive(cluster.VersionGenerationComparable)
 	if generationComparableEnabled {
 		updatedDesc.IncrementGeneration()
 		updatedDesc.GenerationComparable = proto.Bool(true)
+	}
+
+	var added, removed []roachpb.ReplicaDescriptor
+
+	for _, chg := range chgs {
+		switch chg.typ {
+		case internalChangeTypeAddVoterViaPreemptiveSnap:
+			// Legacy code.
+			added = append(added,
+				updatedDesc.AddReplica(chg.target.NodeID, chg.target.StoreID, roachpb.ReplicaType_VoterFull))
+		case internalChangeTypeAddLearner:
+			added = append(added,
+				updatedDesc.AddReplica(chg.target.NodeID, chg.target.StoreID, roachpb.ReplicaType_Learner))
+		case internalChangeTypePromoteLearner:
+			// TODO(tbg): set to VoterIncoming when going through joint config.
+			rDesc, ok := updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.ReplicaType_VoterFull)
+			if !ok {
+				return nil, errors.Errorf("cannot promote target %v which is missing as Learner", chg.target)
+			}
+			added = append(added, rDesc)
+		case internalChangeTypeRemove:
+			// TODO(tbg): set to VoterOutgoing when going through joint config instead.
+			rDesc, ok := updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
+			if !ok {
+				return nil, errors.Errorf("cannot remove nonexistent target %v", chg.target)
+			}
+			removed = append(removed, rDesc)
+		default:
+			return nil, errors.Errorf("unsupported internal change type %d", chg.typ)
+		}
+	}
+
+	if err := updatedDesc.Validate(); err != nil {
+		return nil, errors.Wrapf(err, "validating updated descriptor %s", &updatedDesc)
+	}
+
+	var crt *roachpb.ChangeReplicasTrigger
+	if !store.ClusterSettings().Version.IsActive(cluster.VersionAtomicChangeReplicasTrigger) {
+		var deprecatedChangeType roachpb.ReplicaChangeType
+		var deprecatedRepDesc roachpb.ReplicaDescriptor
+		if len(added) > 0 {
+			deprecatedChangeType = roachpb.ADD_REPLICA
+			deprecatedRepDesc = added[0]
+		} else {
+			deprecatedChangeType = roachpb.REMOVE_REPLICA
+			deprecatedRepDesc = removed[0]
+		}
+		crt = &roachpb.ChangeReplicasTrigger{
+			DeprecatedChangeType: deprecatedChangeType,
+			DeprecatedReplica:    deprecatedRepDesc,
+			Desc:                 &updatedDesc,
+		}
+	} else {
+		crt = &roachpb.ChangeReplicasTrigger{
+			Desc:                    &updatedDesc,
+			InternalAddedReplicas:   added,
+			InternalRemovedReplicas: removed,
+		}
 	}
 
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
@@ -1302,7 +1349,7 @@ func execChangeReplicasTxn(
 
 			// Important: the range descriptor must be the first thing touched in the transaction
 			// so the transaction record is co-located with the range being modified.
-			if err := updateRangeDescriptor(b, descKey, dbDescValue, updatedDesc); err != nil {
+			if err := updateRangeDescriptor(b, descKey, dbDescValue, &updatedDesc); err != nil {
 				return err
 			}
 
@@ -1322,7 +1369,7 @@ func execChangeReplicasTxn(
 		} {
 			for _, repDesc := range tup.repDescs {
 				if err := store.logChange(
-					ctx, txn, tup.typ, repDesc, *updatedDesc, reason, details,
+					ctx, txn, tup.typ, repDesc, updatedDesc, reason, details,
 				); err != nil {
 					return err
 				}
@@ -1334,32 +1381,8 @@ func execChangeReplicasTxn(
 		b := txn.NewBatch()
 
 		// Update range descriptor addressing record(s).
-		if err := updateRangeAddressing(b, updatedDesc); err != nil {
+		if err := updateRangeAddressing(b, &updatedDesc); err != nil {
 			return err
-		}
-
-		var crt *roachpb.ChangeReplicasTrigger
-		if !store.ClusterSettings().Version.IsActive(cluster.VersionAtomicChangeReplicasTrigger) {
-			var deprecatedChangeType roachpb.ReplicaChangeType
-			var deprecatedRepDesc roachpb.ReplicaDescriptor
-			if len(added) > 0 {
-				deprecatedChangeType = roachpb.ADD_REPLICA
-				deprecatedRepDesc = added[0]
-			} else {
-				deprecatedChangeType = roachpb.REMOVE_REPLICA
-				deprecatedRepDesc = removed[0]
-			}
-			crt = &roachpb.ChangeReplicasTrigger{
-				DeprecatedChangeType: deprecatedChangeType,
-				DeprecatedReplica:    deprecatedRepDesc,
-				Desc:                 updatedDesc,
-			}
-		} else {
-			crt = &roachpb.ChangeReplicasTrigger{
-				Desc:                    updatedDesc,
-				InternalAddedReplicas:   added,
-				InternalRemovedReplicas: removed,
-			}
 		}
 
 		b.AddRawRequest(&roachpb.EndTransactionRequest{
@@ -1379,10 +1402,10 @@ func execChangeReplicasTxn(
 		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
 			err = &benignError{errors.New(msg)}
 		}
-		return errors.Wrapf(err, "change replicas of r%d failed", desc.RangeID)
+		return nil, errors.Wrapf(err, "change replicas of r%d failed", desc.RangeID)
 	}
 	log.Event(ctx, "txn complete")
-	return nil
+	return &updatedDesc, nil
 }
 
 // sendSnapshot sends a snapshot of the replica state to the specified replica.
