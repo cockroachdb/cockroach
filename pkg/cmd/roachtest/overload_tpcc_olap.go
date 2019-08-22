@@ -48,8 +48,8 @@ func (s tpccOLAPSpec) run(ctx context.Context, t *test, c *cluster) {
 	c.Run(ctx, workloadNode, "echo", queryLine, "> "+queryFileName)
 	t.Status("waiting")
 	m := newMonitor(ctx, c, crdbNodes)
-	rampDuration := time.Minute
-	duration := 2 * time.Minute
+	rampDuration := 2 * time.Minute
+	duration := 3 * time.Minute
 	m.Go(func(ctx context.Context) error {
 		t.WorkerStatus("running querybench")
 		cmd := fmt.Sprintf(
@@ -109,10 +109,10 @@ func registerTPCCOverloadSpec(r *testRegistry, s tpccOLAPSpec) {
 func registerOverload(r *testRegistry) {
 	specs := []tpccOLAPSpec{
 		{
-			CPUs:        16,
-			Concurrency: 256,
+			CPUs:        8,
+			Concurrency: 96,
 			Nodes:       3,
-			Warehouses:  100,
+			Warehouses:  50,
 		},
 	}
 	for _, s := range specs {
