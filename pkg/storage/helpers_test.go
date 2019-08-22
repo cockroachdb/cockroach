@@ -264,7 +264,7 @@ func (r *Replica) LastAssignedLeaseIndex() uint64 {
 // SetQuotaPool allows the caller to set a replica's quota pool initialized to
 // a given quota. Additionally it initializes the replica's quota release queue
 // and its command sizes map. Only safe to call on the replica that is both
-// lease holder and raft leader.
+// lease holder and raft leader while holding the raftMu.
 func (r *Replica) InitQuotaPool(quota uint64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
