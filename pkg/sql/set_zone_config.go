@@ -605,6 +605,13 @@ func validateZoneAttrsAndLocalities(
 
 	// Check that each constraint matches some store somewhere in the cluster.
 	for _, constraint := range toValidate {
+		// We want to ignore validation on prohibited constraints, as the
+		// logic below fails to validate negative constraints if a node
+		// in the cluster has the constraint being prohibited, and
+		// falsely validates prohibited constraints in certain cases as well.
+		if constraint.Type == config.Constraint_PROHIBITED {
+			continue
+		}
 		var found bool
 	node:
 		for _, node := range nodes.Nodes {
