@@ -25,12 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/sst"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAddBatched(t *testing.T) {
@@ -235,12 +237,13 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 	const numKeys, valueSize, splitEvery = 500, 5000, 1
 
 	// Make some KVs and grab [start,end). Generate one extra for exclusive `end`.
-	kvs := makeIntTableKVs(t, numKeys+1, valueSize, 1)
+	kvs := sst.MakeTestingIntTableKVs(numKeys+1, valueSize, 1)
 	start, end := kvs[0].Key.Key, kvs[numKeys].Key.Key
 	kvs = kvs[:numKeys]
 
 	// Create a large SST.
-	sst := makeRocksSST(t, kvs)
+	sst, err := sst.MakeTestingRocksSST(kvs)
+	require.NoError(t, err)
 
 	var splits []roachpb.Key
 	for i := range kvs {

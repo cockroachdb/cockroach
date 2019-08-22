@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/sst"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -55,7 +56,7 @@ func EvalAddSSTable(
 	// Verify that the keys in the sstable are within the range specified by the
 	// request header, and if the request did not include pre-computed stats,
 	// compute the expected MVCC stats delta of ingesting the SST.
-	dataIter, err := engine.NewMemSSTIterator(args.Data, true)
+	dataIter, err := sst.NewMemIterator(args.Data, true)
 	if err != nil {
 		return result.Result{}, err
 	}
