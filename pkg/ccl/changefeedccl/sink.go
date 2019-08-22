@@ -110,6 +110,18 @@ func getSink(
 			}
 		}
 		q.Del(sinkParamCACert)
+		if clientCertHex := q.Get(sinkParamClientCert); clientCertHex != `` {
+			if cfg.clientCert, err = base64.StdEncoding.DecodeString(clientCertHex); err != nil {
+				return nil, errors.Errorf(`param %s must be base 64 encoded: %s`, sinkParamClientCert, err)
+			}
+		}
+		q.Del(sinkParamClientCert)
+		if clientKeyHex := q.Get(sinkParamClientKey); clientKeyHex != `` {
+			if cfg.clientKey, err = base64.StdEncoding.DecodeString(clientKeyHex); err != nil {
+				return nil, errors.Errorf(`param %s must be base 64 encoded: %s`, sinkParamClientKey, err)
+			}
+		}
+		q.Del(sinkParamClientKey)
 
 		saslParam := q.Get(sinkParamSASLEnabled)
 		q.Del(sinkParamSASLEnabled)
@@ -272,6 +284,8 @@ type kafkaSinkConfig struct {
 	kafkaTopicPrefix string
 	tlsEnabled       bool
 	caCert           []byte
+	clientCert       []byte
+	clientKey        []byte
 	saslEnabled      bool
 	saslHandshake    bool
 	saslUser         string
@@ -327,6 +341,25 @@ func makeKafkaSink(
 		config.Net.TLS.Enable = true
 	} else if cfg.tlsEnabled {
 		config.Net.TLS.Enable = true
+	}
+
+	if cfg.clientCert != nil {
+		if !cfg.tlsEnabled {
+			return nil, errors.Errorf(`%s requires %s=true`, sinkParamClientCert, sinkParamTLSEnabled)
+		}
+		if cfg.clientKey == nil {
+			return nil, errors.Errorf(`%s requires %s to be set`, sinkParamClientCert, sinkParamClientKey)
+		}
+		cert, err := tls.X509KeyPair(cfg.clientCert, cfg.clientKey)
+		if err != nil {
+			return nil, errors.Errorf(`invalid client certificate data provided: %s`, err)
+		}
+		if config.Net.TLS.Config == nil {
+			config.Net.TLS.Config = &tls.Config{}
+		}
+		config.Net.TLS.Config.Certificates = []tls.Certificate{cert}
+	} else if cfg.clientKey != nil {
+		return nil, errors.Errorf(`%s requires %s to be set`, sinkParamClientKey, sinkParamClientCert)
 	}
 
 	if cfg.saslEnabled {
