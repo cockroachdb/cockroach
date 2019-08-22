@@ -181,7 +181,7 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 			}
 		}
 
-		var key []byte
+		var key roachpb.Key
 		{
 			// Fetch the PartialKey in a separate scope so that it cannot be reused
 			// outside this scope.
@@ -212,19 +212,10 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		}
 
 		if !t.reverse {
-			// 0xff is the largest prefix marker for any encoded key. To ensure that
-			// our new key is larger than any value with the same prefix, we place
-			// 0xff at all other index column values, and one more to guard against
-			// 0xff present as a value in the table (0xff encodes a type of null).
-			// TODO(asubiotto): We should delegate to PrefixEnd here (it exists for
-			//  this purpose and is widely used), but we still need to handle maximal
-			//  keys. Maybe we should just exit early (t.currentSpan++) when we
-			//  encounter one. We also need a test to ensure that we behave properly
-			//  when we encounter maximal (i.e. all nulls) prefix keys.
-			for i := 0; i < (t.indexLen - t.keyPrefixLen + 1); i++ {
-				key = append(key, 0xff)
-			}
-			t.spans[t.currentSpan].Key = key
+			// We set the new key to be the largest key with the prefix that we have
+			// so that we skip all values with the same prefix, and "skip" to the
+			// next distinct value.
+			t.spans[t.currentSpan].Key = key.PrefixEnd()
 		} else {
 			// In the case of reverse, this is much easier. The reverse fetcher
 			// returns the key retrieved, in this case the first key smaller
