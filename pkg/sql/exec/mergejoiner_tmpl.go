@@ -96,7 +96,7 @@ const _MJ_OVERLOAD = 0
 // */}}
 
 // Use execgen package to remove unused import warning.
-var _ interface{} = execgen.GET
+var _ interface{} = execgen.UNSAFEGET
 
 // {{ range $joinType := .JoinTypes }}
 type mergeJoin_JOIN_TYPE_STRINGOp struct {
@@ -152,9 +152,9 @@ func _PROBE_SWITCH(
 				// {{ end }}
 
 				lSelIdx := _L_SEL_IND
-				lVal := execgen.GET(lKeys, int(lSelIdx))
+				lVal := execgen.UNSAFEGET(lKeys, int(lSelIdx))
 				rSelIdx := _R_SEL_IND
-				rVal := execgen.GET(rKeys, int(rSelIdx))
+				rVal := execgen.UNSAFEGET(rKeys, int(rSelIdx))
 
 				var match bool
 				_ASSIGN_EQ("match", "lVal", "rVal")
@@ -177,7 +177,7 @@ func _PROBE_SWITCH(
 							}
 							// {{ end }}
 							lSelIdx := _L_SEL_IND
-							newLVal := execgen.GET(lKeys, int(lSelIdx))
+							newLVal := execgen.UNSAFEGET(lKeys, int(lSelIdx))
 							_ASSIGN_EQ("match", "newLVal", "lVal")
 							if !match {
 								lComplete = true
@@ -201,7 +201,7 @@ func _PROBE_SWITCH(
 							}
 							// {{ end }}
 							rSelIdx := _R_SEL_IND
-							newRVal := execgen.GET(rKeys, int(rSelIdx))
+							newRVal := execgen.UNSAFEGET(rKeys, int(rSelIdx))
 							_ASSIGN_EQ("match", "newRVal", "rVal")
 							if !match {
 								rComplete = true
@@ -426,7 +426,7 @@ func _INCREMENT_LEFT_SWITCH(
 		}
 		// {{ end }}
 		lSelIdx = _L_SEL_IND
-		newLVal := execgen.GET(lKeys, int(lSelIdx))
+		newLVal := execgen.UNSAFEGET(lKeys, int(lSelIdx))
 		// {{with _MJ_OVERLOAD}}
 		_ASSIGN_EQ("match", "newLVal", "lVal")
 		// {{end}}
@@ -484,7 +484,7 @@ func _INCREMENT_RIGHT_SWITCH(
 		}
 		// {{ end }}
 		rSelIdx = _R_SEL_IND
-		newRVal := execgen.GET(rKeys, int(rSelIdx))
+		newRVal := execgen.UNSAFEGET(rKeys, int(rSelIdx))
 		// {{with _MJ_OVERLOAD}}
 		_ASSIGN_EQ("match", "newRVal", "rVal")
 		// {{end}}
@@ -660,7 +660,7 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 					// {{ end }}
 
 					if !isNull {
-						val = execgen.GET(srcCol, srcStartIdx)
+						val = execgen.UNSAFEGET(srcCol, srcStartIdx)
 						for i := 0; i < toAppend; i++ {
 							execgen.SET(outCol, outStartIdx, val)
 							outStartIdx++
@@ -805,16 +805,16 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 					// instead of copy.
 					if toAppend == 1 {
 						// {{ if _HAS_SELECTION }}
-						v := execgen.GET(srcCol, int(sel[o.builderState.right.curSrcStartIdx]))
+						v := execgen.UNSAFEGET(srcCol, int(sel[o.builderState.right.curSrcStartIdx]))
 						execgen.SET(outCol, outStartIdx, v)
 						// {{ else }}
-						v := execgen.GET(srcCol, o.builderState.right.curSrcStartIdx)
+						v := execgen.UNSAFEGET(srcCol, o.builderState.right.curSrcStartIdx)
 						execgen.SET(outCol, outStartIdx, v)
 						// {{ end }}
 					} else {
 						// {{ if _HAS_SELECTION }}
 						for i := 0; i < toAppend; i++ {
-							v := execgen.GET(srcCol, int(sel[i+o.builderState.right.curSrcStartIdx]))
+							v := execgen.UNSAFEGET(srcCol, int(sel[i+o.builderState.right.curSrcStartIdx]))
 							execgen.SET(outCol, i+outStartIdx, v)
 						}
 						// {{ else }}
@@ -951,13 +951,13 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 				return true
 			}
 			bufferedCol := bufferedGroup.ColVec(int(colIdx))._TemplateType()
-			prevVal := execgen.GET(bufferedCol, int(lastBufferedTupleIdx))
+			prevVal := execgen.UNSAFEGET(bufferedCol, int(lastBufferedTupleIdx))
 			var curVal _GOTYPE
 			if batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt64(tupleToLookAtIdx) {
 				return true
 			}
 			col := batch.ColVec(int(colIdx))._TemplateType()
-			curVal = execgen.GET(col, int(tupleToLookAtIdx))
+			curVal = execgen.UNSAFEGET(col, int(tupleToLookAtIdx))
 			var match bool
 			_ASSIGN_EQ("match", "prevVal", "curVal")
 			if !match {
@@ -1225,6 +1225,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 		case mjEntry:
 			if o.needToResetOutput {
 				o.needToResetOutput = false
+				o.output.ResetInternalBatch()
 				for _, vec := range o.output.ColVecs() {
 					// We only need to explicitly reset nulls since the values will be
 					// copied over and the correct length will be set.
@@ -1264,7 +1265,6 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			}
 
 			if o.outputReady || o.builderState.outCount == o.outputBatchSize {
-				o.output.SetSelection(false)
 				o.output.SetLength(o.builderState.outCount)
 				// Reset builder out count.
 				o.builderState.outCount = uint16(0)

@@ -245,7 +245,7 @@ func (s *opTestInput) Init() {
 }
 
 func (s *opTestInput) Next(context.Context) coldata.Batch {
-	s.batch.SetSelection(false)
+	s.batch.ResetInternalBatch()
 	if len(s.tuples) == 0 {
 		s.batch.SetLength(0)
 		return s.batch
@@ -504,7 +504,7 @@ func (r *opTestOutput) next(ctx context.Context) tuple {
 		} else {
 			var val reflect.Value
 			if colBytes, ok := vec.Col().(*coldata.Bytes); ok {
-				val = reflect.ValueOf(colBytes.Get(int(curIdx)))
+				val = reflect.ValueOf(append([]byte(nil), colBytes.Get(int(curIdx))...))
 			} else {
 				val = reflect.ValueOf(vec.Col()).Index(int(curIdx))
 			}
