@@ -106,9 +106,9 @@ func (b *circularGroupsBuffer) addGroupsToNextCol(
 	}
 }
 
-// addLeftOuterGroup adds a left and right group to the buffer that correspond
-// to an unmatched row from the left side in the case of LEFT OUTER JOIN or
-// LEFT ANTI JOIN.
+// addLeftUnmatchedGroup adds a left and right group to the buffer that
+// correspond to an unmatched row from the left side in the case of LEFT OUTER
+// JOIN or LEFT ANTI JOIN.
 func (b *circularGroupsBuffer) addLeftUnmatchedGroup(curLIdx int, curRIdx int) {
 	b.leftGroups[b.endIdx] = group{
 		rowStartIdx: curLIdx,
