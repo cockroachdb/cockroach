@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 var (
@@ -1333,19 +1334,174 @@ func writeTooOldRetryTimestamp(txn *Transaction, err *WriteTooOldError) hlc.Time
 	return err.ActualTimestamp
 }
 
+// Replicas returns all of the replicas present in the descriptor after this
+// trigger applies.
+func (crt ChangeReplicasTrigger) Replicas() []ReplicaDescriptor {
+	if crt.Desc != nil {
+		return crt.Desc.Replicas().All()
+	}
+	return crt.DeprecatedUpdatedReplicas
+}
+
+// ConfChange returns the configuration change described by the trigger.
+func (crt ChangeReplicasTrigger) ConfChange(encodedCtx []byte) (raftpb.ConfChangeI, error) {
+	return confChangeImpl(crt, encodedCtx)
+}
+
+func (crt ChangeReplicasTrigger) alwaysV2() bool {
+	// NB: we can return true in 20.1, but we don't win anything unless
+	// we are actively trying to migrate out of V1 membership changes, which
+	// could modestly simplify small areas of our codebase.
+	return false
+}
+
+// confChangeImpl is the implementation of (ChangeReplicasTrigger).ConfChange
+// narrowed down to the inputs it actually needs for better testability.
+func confChangeImpl(
+	crt interface {
+		Added() []ReplicaDescriptor
+		Removed() []ReplicaDescriptor
+		Replicas() []ReplicaDescriptor
+		alwaysV2() bool
+	},
+	encodedCtx []byte,
+) (raftpb.ConfChangeI, error) {
+	added, removed, replicas := crt.Added(), crt.Removed(), crt.Replicas()
+
+	var sl []raftpb.ConfChangeSingle
+
+	checkExists := func(in ReplicaDescriptor) error {
+		for _, rDesc := range replicas {
+			if rDesc.ReplicaID == in.ReplicaID {
+				if a, b := in.GetType(), rDesc.GetType(); a != b {
+					return errors.Errorf("have %s, but descriptor has %s", in, rDesc)
+				}
+				return nil
+			}
+		}
+		return errors.Errorf("%s missing from descriptors %v", in, replicas)
+	}
+	checkNotExists := func(in ReplicaDescriptor) error {
+		for _, rDesc := range replicas {
+			if rDesc.ReplicaID == in.ReplicaID {
+				return errors.Errorf("%s must no longer be present in descriptor", in)
+			}
+		}
+		return nil
+	}
+
+	for _, rDesc := range added {
+		// The incoming descriptor must also be present in the set of all
+		// replicas, which is ultimately the authoritative one because that's
+		// what's written to the KV store.
+		if err := checkExists(rDesc); err != nil {
+			return nil, err
+		}
+
+		var changeType raftpb.ConfChangeType
+		switch rDesc.GetType() {
+		case ReplicaType_VoterFull:
+			// We're adding a new voter.
+			changeType = raftpb.ConfChangeAddNode
+		case ReplicaType_VoterIncoming:
+			// We're adding a voter, but will transition into a joint config
+			// first.
+			changeType = raftpb.ConfChangeAddNode
+		case ReplicaType_Learner:
+			// We're adding a new learner. Note that we're guaranteed by
+			// virtue of the upstream ChangeReplicas txn that this learner
+			// is not currently a voter. If we wanted to support that (i.e.
+			// demotions) we'd need to introduce a new
+			// ReplicaType_VoterDemoting for that purpose.
+			changeType = raftpb.ConfChangeAddLearnerNode
+		default:
+			return nil, errors.Errorf("can't add replica in state %v", rDesc.GetType())
+		}
+		sl = append(sl, raftpb.ConfChangeSingle{
+			Type:   changeType,
+			NodeID: uint64(rDesc.ReplicaID),
+		})
+	}
+
+	for _, rDesc := range removed {
+		switch rDesc.GetType() {
+		case ReplicaType_VoterOutgoing:
+			// If a voter is removed through joint consensus, it will
+			// be turned into an outgoing voter first.
+			if err := checkExists(rDesc); err != nil {
+				return nil, err
+			}
+		case ReplicaType_VoterFull, ReplicaType_Learner:
+			// A learner or full voter can't be in the desc after.
+			if err := checkNotExists(rDesc); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, errors.Errorf("can't remove replica in state %v", rDesc.GetType())
+		}
+		sl = append(sl, raftpb.ConfChangeSingle{
+			Type:   raftpb.ConfChangeRemoveNode,
+			NodeID: uint64(rDesc.ReplicaID),
+		})
+	}
+
+	// Check whether we're entering a joint state. This is the case precisely when
+	// the resulting descriptors tells us that this is the case. Note that we've
+	// made sure above that all of the additions/removals are in tune with that
+	// descriptor already.
+	var enteringJoint bool
+	for _, rDesc := range replicas {
+		switch rDesc.GetType() {
+		case ReplicaType_VoterIncoming, ReplicaType_VoterOutgoing:
+			enteringJoint = true
+		default:
+		}
+	}
+	wantLeaveJoint := len(added)+len(removed) == 0
+	if !enteringJoint {
+		if len(added)+len(removed) > 1 {
+			return nil, errors.Errorf("change requires joint consensus")
+		}
+	} else if wantLeaveJoint {
+		return nil, errors.Errorf("descriptor enters joint state, but trigger is requesting to leave one")
+	}
+
+	var cc raftpb.ConfChangeI
+
+	if enteringJoint || crt.alwaysV2() {
+		// V2 membership changes, which allow atomic replication changes. We
+		// track the joint state in the range descriptor and thus we need to be
+		// in charge of when to leave the joint state.
+		transition := raftpb.ConfChangeTransitionJointExplicit
+		if !enteringJoint {
+			// If we're using V2 just to avoid V1 (and not because we actually
+			// have a change that requires V2), then use an auto transition
+			// which skips the joint state. This is necessary: our descriptor
+			// says we're not supposed to go through one.
+			transition = raftpb.ConfChangeTransitionAuto
+		}
+		cc = raftpb.ConfChangeV2{
+			Transition: transition,
+			Changes:    sl,
+			Context:    encodedCtx,
+		}
+	} else if wantLeaveJoint {
+		// Transitioning out of a joint config.
+		cc = raftpb.ConfChangeV2{
+			Context: encodedCtx,
+		}
+	} else {
+		// Legacy path with exactly one change.
+		cc = raftpb.ConfChange{
+			Type:    sl[0].Type,
+			NodeID:  sl[0].NodeID,
+			Context: encodedCtx,
+		}
+	}
+	return cc, nil
+}
+
 var _ fmt.Stringer = &ChangeReplicasTrigger{}
-
-// EnterJoint is true if applying this trigger will result in a joint
-// configuration.
-func (crt ChangeReplicasTrigger) EnterJoint() bool {
-	return len(crt.Added())+len(crt.Removed()) > 1
-}
-
-// LeaveJoint is true if applying this trigger will actively leave a joint
-// configuration.
-func (crt ChangeReplicasTrigger) LeaveJoint() bool {
-	return len(crt.Added())+len(crt.Removed()) == 0
-}
 
 func (crt ChangeReplicasTrigger) String() string {
 	var nextReplicaID ReplicaID
@@ -1363,19 +1519,27 @@ func (crt ChangeReplicasTrigger) String() string {
 		afterReplicas = crt.DeprecatedUpdatedReplicas
 	}
 	var chgS strings.Builder
-	if crt.LeaveJoint() {
-		// TODO(tbg): could list the replicas that will actually leave the
-		// voter set.
-		fmt.Fprintf(&chgS, "LEAVE_JOINT")
-	}
-	if crt.EnterJoint() {
-		fmt.Fprintf(&chgS, "ENTER_JOINT ")
+	cc, err := crt.ConfChange(nil)
+	if err != nil {
+		fmt.Fprintf(&chgS, "<malformed ChangeReplicasTrigger: %s>", err)
+	} else {
+		ccv2 := cc.AsV2()
+		if ccv2.LeaveJoint() {
+			// NB: this isn't missing a trailing space.
+			//
+			// TODO(tbg): could list the replicas that will actually leave the
+			// voter set.
+			fmt.Fprintf(&chgS, "LEAVE_JOINT")
+		}
+		if _, ok := ccv2.EnterJoint(); ok {
+			fmt.Fprintf(&chgS, "ENTER_JOINT ")
+		}
 	}
 	if len(added) > 0 {
 		fmt.Fprintf(&chgS, "%s%s", ADD_REPLICA, added)
 	}
 	if len(removed) > 0 {
-		if chgS.Len() > 0 {
+		if len(added) > 0 {
 			chgS.WriteString(", ")
 		}
 		fmt.Fprintf(&chgS, "%s%s", REMOVE_REPLICA, removed)
@@ -1384,22 +1548,25 @@ func (crt ChangeReplicasTrigger) String() string {
 	return chgS.String()
 }
 
-func (crt ChangeReplicasTrigger) legacy() bool {
-	return len(crt.InternalAddedReplicas)+len(crt.InternalRemovedReplicas) == 0 && crt.DeprecatedReplica != (ReplicaDescriptor{})
+func (crt ChangeReplicasTrigger) legacy() (ReplicaDescriptor, bool) {
+	if len(crt.InternalAddedReplicas)+len(crt.InternalRemovedReplicas) == 0 && crt.DeprecatedReplica.ReplicaID != 0 {
+		return crt.DeprecatedReplica, true
+	}
+	return ReplicaDescriptor{}, false
 }
 
 // Added returns the replicas added by this change (if there are any).
 func (crt ChangeReplicasTrigger) Added() []ReplicaDescriptor {
-	if crt.legacy() && crt.DeprecatedChangeType == ADD_REPLICA {
-		return []ReplicaDescriptor{crt.DeprecatedReplica}
+	if rDesc, ok := crt.legacy(); ok && crt.DeprecatedChangeType == ADD_REPLICA {
+		return []ReplicaDescriptor{rDesc}
 	}
 	return crt.InternalAddedReplicas
 }
 
 // Removed returns the replicas removed by this change (if there are any).
 func (crt ChangeReplicasTrigger) Removed() []ReplicaDescriptor {
-	if crt.legacy() && crt.DeprecatedChangeType == REMOVE_REPLICA {
-		return []ReplicaDescriptor{crt.DeprecatedReplica}
+	if rDesc, ok := crt.legacy(); ok && crt.DeprecatedChangeType == REMOVE_REPLICA {
+		return []ReplicaDescriptor{rDesc}
 	}
 	return crt.InternalRemovedReplicas
 }
