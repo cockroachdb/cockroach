@@ -128,11 +128,7 @@ func checkTLSSuperUser(ctx context.Context, authCtx security.AuthContext) error 
 		return errors.New("internal authentication error: TLSInfo is not available in request context")
 	}
 
-	if err := security.AuthenticateRPC(authCtx, &tlsInfo.State); err != nil {
-		return err
-	}
-
-	return nil
+	return security.AuthenticateRPC(authCtx, &tlsInfo.State)
 }
 
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat

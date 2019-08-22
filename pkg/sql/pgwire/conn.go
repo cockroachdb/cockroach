@@ -1466,10 +1466,7 @@ func (r *pgwireReader) ReadByte() (byte, error) {
 // authentication and update c.sessionArgs with the authenticated user's name,
 // if different from the one given initially.
 func (c *conn) handleAuthentication(
-	ctx context.Context,
-	ac AuthConn,
-	authOpt authOptions,
-	execCfg *sql.ExecutorConfig,
+	ctx context.Context, ac AuthConn, authOpt authOptions, execCfg *sql.ExecutorConfig,
 ) error {
 	sendError := func(err error) error {
 		_ /* err */ = writeErr(ctx, &execCfg.Settings.SV, err, &c.msgBuilder, c.conn)

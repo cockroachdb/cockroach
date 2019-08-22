@@ -234,8 +234,13 @@ func createCACertAndKey(
 // The CA cert and key must load properly. If multiple certificates
 // exist in the CA cert, the first one is used.
 func CreateNodePair(
-	certsDir, caKeyPath string, keySize int, lifetime time.Duration, overwrite bool,
-	hosts []string, clusterNames []string,
+	certsDir string,
+	caKeyPath string,
+	keySize int,
+	lifetime time.Duration,
+	overwrite bool,
+	hosts []string,
+	clusterNames []string,
 ) error {
 	if len(caKeyPath) == 0 {
 		return errors.New("the path to the CA key is required")

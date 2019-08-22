@@ -116,11 +116,7 @@ func AuthenticateRPC(authCtx AuthContext, tlsState *tls.ConnectionState) error {
 		return errors.Errorf("user %s is not allowed to perform this RPC", certUser)
 	}
 
-	if err := CheckCertificateClusterName(authCtx, tlsState); err != nil {
-		return err
-	}
-
-	return nil
+	return CheckCertificateClusterName(authCtx, tlsState)
 }
 
 // UserAuthCertHook builds an authentication hook based on the security
@@ -168,7 +164,9 @@ func UserAuthCertHook(authCtx AuthContext, tlsState *tls.ConnectionState) (UserA
 
 // UserAuthPasswordHook builds an authentication hook based on the security
 // mode, password, and its potentially matching hash.
-func UserAuthPasswordHook(authCtx AuthContext, password string, hashedPassword []byte) UserAuthHook {
+func UserAuthPasswordHook(
+	authCtx AuthContext, password string, hashedPassword []byte,
+) UserAuthHook {
 	return func(requestedUser string, clientConnection bool) error {
 		if len(requestedUser) == 0 {
 			return errors.New("user is missing")

@@ -38,7 +38,9 @@ const (
 
 // newTemplate returns a partially-filled template.
 // It should be further populated based on the type of certificate (CA/server/client).
-func newTemplate(commonName string, clusterNames []string, lifetime time.Duration) (*x509.Certificate, error) {
+func newTemplate(
+	commonName string, clusterNames []string, lifetime time.Duration,
+) (*x509.Certificate, error) {
 	// Generate a random serial number.
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
@@ -50,7 +52,7 @@ func newTemplate(commonName string, clusterNames []string, lifetime time.Duratio
 	notBefore := now.Add(validFrom)
 	notAfter := now.Add(lifetime)
 
-	populatedClusterNames := make([]string, len(clusterNames), len(clusterNames))
+	populatedClusterNames := make([]string, len(clusterNames))
 	for i, n := range clusterNames {
 		populatedClusterNames[i] = clusternamePrefix + n
 	}
