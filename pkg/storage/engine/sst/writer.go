@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package bulk
+package sst
 
 import (
 	"bytes"
@@ -27,8 +27,8 @@ type writeCloseSyncer interface {
 	Sync() error
 }
 
-// SSTWriter writes SSTables.
-type SSTWriter struct {
+// Writer writes SSTables.
+type Writer struct {
 	fw *sstable.Writer
 	f  writeCloseSyncer
 	// DataSize tracks the total key and value bytes added so far.
@@ -36,7 +36,7 @@ type SSTWriter struct {
 	scratch  []byte
 }
 
-var _ engine.Writer = &SSTWriter{}
+var _ engine.Writer = &Writer{}
 
 var mvccComparer = &pebble.Comparer{
 	Compare: engine.MVCCKeyCompare,
@@ -148,16 +148,16 @@ var pebbleOpts = func() *pebble.Options {
 	return opts
 }()
 
-// MakeSSTWriter creates a new SSTWriter.
-func MakeSSTWriter(f writeCloseSyncer) SSTWriter {
+// MakeWriter creates a new Writer.
+func MakeWriter(f writeCloseSyncer) Writer {
 	// Setting the IndexBlockSize to MaxInt disables twoLevelIndexes in Pebble.
 	// TODO(pbardea): Remove the IndexBlockSize option when https://github.com/cockroachdb/pebble/issues/285 is resolved.
 	sst := sstable.NewWriter(f, pebbleOpts, pebble.LevelOptions{BlockSize: 64 * 1024, IndexBlockSize: math.MaxInt32})
-	return SSTWriter{fw: sst, f: f}
+	return Writer{fw: sst, f: f}
 }
 
 // ApplyBatchRepr implements the Writer interface.
-func (fw *SSTWriter) ApplyBatchRepr(repr []byte, sync bool) error {
+func (fw *Writer) ApplyBatchRepr(repr []byte, sync bool) error {
 	panic("unimplemented")
 }
 
@@ -166,7 +166,7 @@ func (fw *SSTWriter) ApplyBatchRepr(repr []byte, sync bool) error {
 // returned if it is not greater than any previous key used in Put or Clear
 // (according to the comparator configured during writer creation). Close
 // cannot have been called.
-func (fw *SSTWriter) Clear(key engine.MVCCKey) error {
+func (fw *Writer) Clear(key engine.MVCCKey) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Clear on a closed writer")
 	}
@@ -176,14 +176,14 @@ func (fw *SSTWriter) Clear(key engine.MVCCKey) error {
 }
 
 // SingleClear implements the Writer interface.
-func (fw *SSTWriter) SingleClear(key engine.MVCCKey) error {
+func (fw *Writer) SingleClear(key engine.MVCCKey) error {
 	panic("unimplemented")
 }
 
 // ClearRange implements the Writer interface. Note that it inserts a range deletion
 // tombstone rather than actually remove the entries from the storage engine.
 // It can be called at any time with respect to Put and Clear.
-func (fw *SSTWriter) ClearRange(start, end engine.MVCCKey) error {
+func (fw *Writer) ClearRange(start, end engine.MVCCKey) error {
 	if fw.fw == nil {
 		return errors.New("cannot call ClearRange on a closed writer")
 	}
@@ -197,7 +197,7 @@ func (fw *SSTWriter) ClearRange(start, end engine.MVCCKey) error {
 // ClearIterRange implements the Writer interface. It inserts range deletion
 // tombstones for all keys from start (inclusive) to end (exclusive) in
 // the provided iterator.
-func (fw *SSTWriter) ClearIterRange(iter engine.Iterator, start, end engine.MVCCKey) error {
+func (fw *Writer) ClearIterRange(iter engine.Iterator, start, end engine.MVCCKey) error {
 	if fw.fw == nil {
 		return errors.New("cannot call ClearIterRange on a closed writer")
 	}
@@ -219,7 +219,7 @@ func (fw *SSTWriter) ClearIterRange(iter engine.Iterator, start, end engine.MVCC
 }
 
 // Merge implements the Writer interface.
-func (fw *SSTWriter) Merge(key engine.MVCCKey, value []byte) error {
+func (fw *Writer) Merge(key engine.MVCCKey, value []byte) error {
 	panic("unimplemented")
 }
 
@@ -227,7 +227,7 @@ func (fw *SSTWriter) Merge(key engine.MVCCKey, value []byte) error {
 // being built. An error is returned if it is not greater than any previous key
 // used in Put or Clear (according to the comparator configured during writer
 // creation). Close cannot have been called.
-func (fw *SSTWriter) Put(key engine.MVCCKey, value []byte) error {
+func (fw *Writer) Put(key engine.MVCCKey, value []byte) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Open on a closed writer")
 	}
@@ -237,22 +237,21 @@ func (fw *SSTWriter) Put(key engine.MVCCKey, value []byte) error {
 }
 
 // LogData implements the Writer interface.
-func (fw *SSTWriter) LogData(data []byte) error {
+func (fw *Writer) LogData(data []byte) error {
 	panic("unimplemented")
 }
 
 // LogLogicalOp implements the Writer interface.
-func (fw *SSTWriter) LogLogicalOp(
-	op engine.MVCCLogicalOpType, details engine.MVCCLogicalOpDetails,
-) {
+func (fw *Writer) LogLogicalOp(op engine.MVCCLogicalOpType, details engine.MVCCLogicalOpDetails) {
 	// No-op. Logical logging disabled.
 }
 
 // Finish finalizes the writer. At least one kv entry must have been added.
-func (fw *SSTWriter) Finish() error {
+func (fw *Writer) Finish() error {
 	if fw.fw == nil {
 		return errors.New("cannot call Finish on a closed writer")
 	}
+	// The Pebble SST Writer calls Sync on the backing file when closing.
 	if err := fw.fw.Close(); err != nil {
 		return err
 	}
@@ -261,7 +260,7 @@ func (fw *SSTWriter) Finish() error {
 }
 
 // Close finishes and frees memory and other resources. Close is idempotent.
-func (fw *SSTWriter) Close() {
+func (fw *Writer) Close() {
 	if fw.fw == nil {
 		return
 	}
@@ -274,27 +273,27 @@ func (fw *SSTWriter) Close() {
 	fw.fw = nil
 }
 
-// SSTMemFile is an in-memory SST file.
-type SSTMemFile struct {
+// MemFile is an in-memory SST file.
+type MemFile struct {
 	data []byte
 	pos  int
 }
 
-var _ writeCloseSyncer = &SSTMemFile{}
+var _ writeCloseSyncer = &MemFile{}
 
-// Close closes the SSTMemFile. This is a no-op.
-func (*SSTMemFile) Close() error {
+// Close closes the MemFile. This is a no-op.
+func (*MemFile) Close() error {
 	return nil
 }
 
-// Sync syncs the SSTMemFile. This is a no-op.
-func (*SSTMemFile) Sync() error {
+// Sync syncs the MemFile. This is a no-op.
+func (*MemFile) Sync() error {
 	return nil
 }
 
-// Read copies the data from the current position in the SSTMemFile to the
+// Read copies the data from the current position in the MemFile to the
 // provided buffer.
-func (f *SSTMemFile) Read(p []byte) (int, error) {
+func (f *MemFile) Read(p []byte) (int, error) {
 	if f.pos >= len(f.data) {
 		return 0, io.EOF
 	}
@@ -303,22 +302,22 @@ func (f *SSTMemFile) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// ReadAt copies the data from the specified offset in the SSTMemFile to the
+// ReadAt copies the data from the specified offset in the MemFile to the
 // provided buffer.
-func (f *SSTMemFile) ReadAt(p []byte, off int64) (int, error) {
+func (f *MemFile) ReadAt(p []byte, off int64) (int, error) {
 	if off >= int64(len(f.data)) {
 		return 0, io.EOF
 	}
 	return copy(p, f.data[off:]), nil
 }
 
-// Data returns the underlying buffer that backs the SSTMemFile.
-func (f *SSTMemFile) Data() []byte {
+// Data returns the underlying buffer that backs the MemFile.
+func (f *MemFile) Data() []byte {
 	return f.data
 }
 
-// Write writes data to the SSTMemFile.
-func (f *SSTMemFile) Write(p []byte) (int, error) {
+// Write writes data to the MemFile.
+func (f *MemFile) Write(p []byte) (int, error) {
 	f.data = append(f.data, p...)
 	return len(p), nil
 }

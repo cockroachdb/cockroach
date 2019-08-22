@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package engine
+package sst
 
 import (
 	"io/ioutil"
@@ -16,18 +16,19 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func runTestSSTIterator(t *testing.T, iter SimpleIterator, allKVs []MVCCKeyValue) {
+func runTestSSTIterator(t *testing.T, iter engine.SimpleIterator, allKVs []engine.MVCCKeyValue) {
 	// Drop the first kv so we can test Seek.
 	expected := allKVs[1:]
 
 	// Run the test multiple times to check re-Seeking.
 	for i := 0; i < 3; i++ {
-		var kvs []MVCCKeyValue
+		var kvs []engine.MVCCKeyValue
 		for iter.Seek(expected[0].Key); ; iter.Next() {
 			ok, err := iter.Valid()
 			if err != nil {
@@ -36,8 +37,8 @@ func runTestSSTIterator(t *testing.T, iter SimpleIterator, allKVs []MVCCKeyValue
 			if !ok {
 				break
 			}
-			kv := MVCCKeyValue{
-				Key: MVCCKey{
+			kv := engine.MVCCKeyValue{
+				Key: engine.MVCCKey{
 					Key:       append([]byte(nil), iter.UnsafeKey().Key...),
 					Timestamp: iter.UnsafeKey().Timestamp,
 				},
@@ -52,7 +53,7 @@ func runTestSSTIterator(t *testing.T, iter SimpleIterator, allKVs []MVCCKeyValue
 		}
 
 		lastElemKey := expected[len(expected)-1].Key
-		seekTo := MVCCKey{Key: lastElemKey.Key.Next()}
+		seekTo := engine.MVCCKey{Key: lastElemKey.Key.Next()}
 
 		iter.Seek(seekTo)
 		if ok, err := iter.Valid(); err != nil {
@@ -72,15 +73,15 @@ func runTestSSTIterator(t *testing.T, iter SimpleIterator, allKVs []MVCCKeyValue
 func TestSSTIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sst, err := MakeRocksDBSstFileWriter()
+	sst, err := engine.MakeRocksDBSstFileWriter()
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
 	defer sst.Close()
-	var allKVs []MVCCKeyValue
+	var allKVs []engine.MVCCKeyValue
 	for i := 0; i < 10; i++ {
-		kv := MVCCKeyValue{
-			Key: MVCCKey{
+		kv := engine.MVCCKeyValue{
+			Key: engine.MVCCKey{
 				Key:       []byte{'A' + byte(i)},
 				Timestamp: hlc.Timestamp{WallTime: int64(i)},
 			},
@@ -106,7 +107,7 @@ func TestSSTIterator(t *testing.T) {
 			t.Fatalf("%+v", err)
 		}
 
-		iter, err := NewSSTIterator(path)
+		iter, err := NewIterator(path)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
@@ -114,7 +115,7 @@ func TestSSTIterator(t *testing.T) {
 		runTestSSTIterator(t, iter, allKVs)
 	})
 	t.Run("Mem", func(t *testing.T) {
-		iter, err := NewMemSSTIterator(data, false)
+		iter, err := NewMemIterator(data, false)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
@@ -126,18 +127,18 @@ func TestSSTIterator(t *testing.T) {
 func TestCockroachComparer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	keyAMetadata := encodeInternalSeekKey(MVCCKey{
+	keyAMetadata := encodeInternalSeekKey(engine.MVCCKey{
 		Key: []byte("a"),
 	})
-	keyA2 := encodeInternalSeekKey(MVCCKey{
+	keyA2 := encodeInternalSeekKey(engine.MVCCKey{
 		Key:       []byte("a"),
 		Timestamp: hlc.Timestamp{WallTime: 2},
 	})
-	keyA1 := encodeInternalSeekKey(MVCCKey{
+	keyA1 := encodeInternalSeekKey(engine.MVCCKey{
 		Key:       []byte("a"),
 		Timestamp: hlc.Timestamp{WallTime: 1},
 	})
-	keyB2 := encodeInternalSeekKey(MVCCKey{
+	keyB2 := encodeInternalSeekKey(engine.MVCCKey{
 		Key:       []byte("b"),
 		Timestamp: hlc.Timestamp{WallTime: 2},
 	})

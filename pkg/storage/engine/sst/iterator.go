@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package engine
+package sst
 
 import (
 	"bytes"
@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/golang/leveldb/db"
 	"github.com/golang/leveldb/table"
@@ -28,13 +29,17 @@ var readerOpts = &db.Options{
 	Comparer: cockroachComparer{},
 }
 
-type sstIterator struct {
+// Iterator is a SimpleIterator for a leveldb format sstable. It is compatible
+// with sstables output by RocksDBSstFileWriter, which means the keys are
+// CockroachDB mvcc keys and they each have the RocksDB trailer (of seqno &
+// value type).
+type Iterator struct {
 	sst  *table.Reader
 	iter db.Iterator
 
 	valid   bool
 	err     error
-	mvccKey MVCCKey
+	mvccKey engine.MVCCKey
 
 	// For allocation avoidance in NextKey.
 	nextKeyStart []byte
@@ -43,18 +48,18 @@ type sstIterator struct {
 	verify bool
 }
 
-var _ SimpleIterator = &sstIterator{}
+var _ engine.SimpleIterator = &Iterator{}
 
-// NewSSTIterator returns a SimpleIterator for a leveldb formatted sstable on
-// disk. It's compatible with sstables output by RocksDBSstFileWriter,
-// which means the keys are CockroachDB mvcc keys and they each have the RocksDB
+// NewIterator returns a SimpleIterator for a leveldb formatted sstable on
+// disk. It's compatible with sstables output by RocksDBSstFileWriter, which
+// means the keys are CockroachDB mvcc keys and they each have the RocksDB
 // trailer (of seqno & value type).
-func NewSSTIterator(path string) (SimpleIterator, error) {
+func NewIterator(path string) (engine.SimpleIterator, error) {
 	file, err := db.DefaultFileSystem.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	return &sstIterator{sst: table.NewReader(file, readerOpts)}, nil
+	return &Iterator{sst: table.NewReader(file, readerOpts)}, nil
 }
 
 type memFileInfo int64
@@ -112,16 +117,16 @@ func (*memFile) Sync() error {
 	return nil
 }
 
-// NewMemSSTIterator returns a SimpleIterator for a leveldb format sstable in
-// memory. It's compatible with sstables output by RocksDBSstFileWriter,
-// which means the keys are CockroachDB mvcc keys and they each have the RocksDB
+// NewMemIterator returns a SimpleIterator for a leveldb format sstable in
+// memory. It's compatible with sstables output by RocksDBSstFileWriter, which
+// means the keys are CockroachDB mvcc keys and they each have the RocksDB
 // trailer (of seqno & value type).
-func NewMemSSTIterator(data []byte, verify bool) (SimpleIterator, error) {
-	return &sstIterator{sst: table.NewReader(newMemFile(data), readerOpts), verify: verify}, nil
+func NewMemIterator(data []byte, verify bool) (engine.SimpleIterator, error) {
+	return &Iterator{sst: table.NewReader(newMemFile(data), readerOpts), verify: verify}, nil
 }
 
 // Close implements the SimpleIterator interface.
-func (r *sstIterator) Close() {
+func (r *Iterator) Close() {
 	if r.iter != nil {
 		r.err = errors.Wrap(r.iter.Close(), "closing sstable iterator")
 	}
@@ -134,12 +139,12 @@ func (r *sstIterator) Close() {
 // representation and adds padding to the end such that it compares correctly
 // with rocksdb "internal" keys which have an 8b suffix, which appear in SSTs
 // created by rocks when read directly with a reader like LevelDB's Reader.
-func encodeInternalSeekKey(key MVCCKey) []byte {
-	return append(EncodeKey(key), []byte{0, 0, 0, 0, 0, 0, 0, 0}...)
+func encodeInternalSeekKey(key engine.MVCCKey) []byte {
+	return append(engine.EncodeKey(key), []byte{0, 0, 0, 0, 0, 0, 0, 0}...)
 }
 
 // Seek implements the SimpleIterator interface.
-func (r *sstIterator) Seek(key MVCCKey) {
+func (r *Iterator) Seek(key engine.MVCCKey) {
 	if r.iter != nil {
 		if r.err = errors.Wrap(r.iter.Close(), "resetting sstable iterator"); r.err != nil {
 			return
@@ -150,12 +155,12 @@ func (r *sstIterator) Seek(key MVCCKey) {
 }
 
 // Valid implements the SimpleIterator interface.
-func (r *sstIterator) Valid() (bool, error) {
+func (r *Iterator) Valid() (bool, error) {
 	return r.valid && r.err == nil, r.err
 }
 
 // Next implements the SimpleIterator interface.
-func (r *sstIterator) Next() {
+func (r *Iterator) Next() {
 	if r.valid = r.iter.Next(); !r.valid {
 		r.err = errors.Wrap(r.iter.Close(), "closing sstable iterator")
 		r.iter = nil
@@ -171,7 +176,7 @@ func (r *sstIterator) Next() {
 		return
 	}
 	seqAndValueType := binary.LittleEndian.Uint64(rocksdbInternalKey[len(rocksdbInternalKey)-8:])
-	if valueType := BatchType(seqAndValueType & 0xff); valueType != BatchTypeValue {
+	if valueType := engine.BatchType(seqAndValueType & 0xff); valueType != engine.BatchTypeValue {
 		r.err = errors.Errorf("value type not supported: %d", valueType)
 		return
 	}
@@ -193,7 +198,7 @@ func (r *sstIterator) Next() {
 }
 
 // NextKey implements the SimpleIterator interface.
-func (r *sstIterator) NextKey() {
+func (r *Iterator) NextKey() {
 	if !r.valid {
 		return
 	}
@@ -203,12 +208,12 @@ func (r *sstIterator) NextKey() {
 }
 
 // UnsafeKey implements the SimpleIterator interface.
-func (r *sstIterator) UnsafeKey() MVCCKey {
+func (r *Iterator) UnsafeKey() engine.MVCCKey {
 	return r.mvccKey
 }
 
 // UnsafeValue implements the SimpleIterator interface.
-func (r *sstIterator) UnsafeValue() []byte {
+func (r *Iterator) UnsafeValue() []byte {
 	return r.iter.Value()
 }
 
@@ -217,7 +222,7 @@ type cockroachComparer struct{}
 var _ db.Comparer = cockroachComparer{}
 
 // Compare implements the db.Comparer interface. This is used to compare raw SST
-// keys in the sstIterator, and assumes that all keys compared are MVCC encoded
+// keys in the Iterator, and assumes that all keys compared are MVCC encoded
 // and then wrapped by rocksdb into Internal keys.
 func (cockroachComparer) Compare(a, b []byte) int {
 	// We assume every key in these SSTs is a rocksdb "internal" key with an 8b
@@ -230,39 +235,7 @@ func (cockroachComparer) Compare(a, b []byte) int {
 		panic(fmt.Sprintf("invalid keys: compare expects internal keys with 8b suffix: a: %v b: %v", a, b))
 	}
 
-	return MVCCKeyCompare(a[:len(a)-8], b[:len(b)-8])
-}
-
-// MVCCKeyCompare compares cockroach keys, including the MVCC timestamps.
-// This assumes these are the keys cockroach usually works with i.e. "user" keys
-// from the point of view of rocksdb.
-func MVCCKeyCompare(a, b []byte) int {
-	keyA, tsA, okA := enginepb.SplitMVCCKey(a)
-	keyB, tsB, okB := enginepb.SplitMVCCKey(b)
-	if !okA || !okB {
-		// This should never happen unless there is some sort of corruption of
-		// the keys. This is a little bizarre, but the behavior exactly matches
-		// engine/db.cc:DBComparator.
-		return bytes.Compare(a, b)
-	}
-
-	if c := bytes.Compare(keyA, keyB); c != 0 {
-		return c
-	}
-	if len(tsA) == 0 {
-		if len(tsB) == 0 {
-			return 0
-		}
-		return -1
-	} else if len(tsB) == 0 {
-		return 1
-	}
-	if tsCmp := bytes.Compare(tsB, tsA); tsCmp != 0 {
-		return tsCmp
-	}
-	// If decoded MVCC keys are the same, fallback to comparing raw internal keys
-	// in case the internal suffix differentiates them.
-	return bytes.Compare(a, b)
+	return engine.MVCCKeyCompare(a[:len(a)-8], b[:len(b)-8])
 }
 
 func (cockroachComparer) Name() string {
