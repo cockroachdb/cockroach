@@ -140,6 +140,9 @@ func makeScalarSample(
 }
 
 func makeCaseExpr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.schema.vectorizable {
+		return nil, false
+	}
 	typ, ok := s.schema.pickAnyType(typ)
 	if !ok {
 		return nil, false
@@ -160,6 +163,9 @@ func makeCaseExpr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeCoalesceExpr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.schema.vectorizable {
+		return nil, false
+	}
 	typ, ok := s.schema.pickAnyType(typ)
 	if !ok {
 		return nil, false
@@ -286,6 +292,9 @@ func typedParen(expr tree.TypedExpr, typ *types.T) tree.TypedExpr {
 }
 
 func makeOr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.schema.vectorizable {
+		return nil, false
+	}
 	switch typ.Family() {
 	case types.BoolFamily, types.AnyFamily:
 	default:
@@ -297,6 +306,9 @@ func makeOr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeAnd(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.schema.vectorizable {
+		return nil, false
+	}
 	switch typ.Family() {
 	case types.BoolFamily, types.AnyFamily:
 	default:
@@ -308,6 +320,9 @@ func makeAnd(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeNot(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.schema.vectorizable {
+		return nil, false
+	}
 	switch typ.Family() {
 	case types.BoolFamily, types.AnyFamily:
 	default:
@@ -354,6 +369,14 @@ func makeBinOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	if !s.schema.allowedType(op.LeftType, op.RightType) {
 		return nil, false
 	}
+	if s.schema.vectorizable {
+		// TODO(mjibson): Vectorizable currently only supports binary
+		// expressions where the operands are the same type and the
+		// result is also that type. See #39189.
+		if !op.LeftType.Equivalent(op.RightType) || typ.Equivalent(op.LeftType) {
+			return nil, false
+		}
+	}
 	left := makeScalar(s, op.LeftType, refs)
 	right := makeScalar(s, op.RightType, refs)
 	return castType(
@@ -366,6 +389,9 @@ func makeBinOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.schema.vectorizable {
+		return nil, false
+	}
 	typ, ok := s.schema.pickAnyType(typ)
 	if !ok {
 		return nil, false
@@ -415,11 +441,15 @@ func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr
 		args = append(args, castType(arg, argTyp))
 	}
 
+	if fn.def.Class == tree.WindowClass && s.schema.vectorizable {
+		return nil, false
+	}
+
 	var window *tree.WindowDef
 	// Use a window function if:
 	// - we chose an aggregate function, then 1/6 chance, but not if we're in a HAVING (noWindow == true)
 	// - we explicitly chose a window function
-	if fn.def.Class == tree.WindowClass || (!ctx.noWindow && s.d6() == 1 && fn.def.Class == tree.AggregateClass) {
+	if fn.def.Class == tree.WindowClass || (!s.schema.vectorizable && !ctx.noWindow && s.d6() == 1 && fn.def.Class == tree.AggregateClass) {
 		var parts tree.Exprs
 		s.schema.sample(len(refs), 2, func(i int) {
 			parts = append(parts, refs[i].item)
@@ -544,6 +574,9 @@ func makeWindowFrame(s *scope, refs colRefs, orderBy tree.OrderBy) *tree.WindowF
 }
 
 func makeExists(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.schema.vectorizable {
+		return nil, false
+	}
 	switch typ.Family() {
 	case types.BoolFamily, types.AnyFamily:
 	default:
@@ -564,6 +597,9 @@ func makeExists(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeIn(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.schema.vectorizable {
+		return nil, false
+	}
 	switch typ.Family() {
 	case types.BoolFamily, types.AnyFamily:
 	default:
@@ -606,6 +642,9 @@ func makeIn(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeStringComparison(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.schema.vectorizable {
+		return nil, false
+	}
 	switch typ.Family() {
 	case types.BoolFamily, types.AnyFamily:
 	default:
@@ -632,6 +671,9 @@ func makeTuple(s *scope, typ *types.T, refs colRefs) *tree.Tuple {
 }
 
 func makeScalarSubquery(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.schema.vectorizable {
+		return nil, false
+	}
 	if s.schema.disableLimits {
 		// This query must use a LIMIT, so bail if they are disabled.
 		return nil, false

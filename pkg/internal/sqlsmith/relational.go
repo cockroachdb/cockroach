@@ -400,7 +400,10 @@ func (s *scope) makeSelectClause(
 		orderByRefs = fromRefs
 		selectListRefs = selectListRefs.extend(fromRefs...)
 
-		if s.d6() <= 2 {
+		// TODO(mjibson): vectorizable supports GROUP BYs if the
+		// columns have an index, add support for this here. Also see
+		// #39240 which will support this more generally.
+		if !s.schema.vectorizable && s.d6() <= 2 {
 			// Enable GROUP BY. Choose some random subset of the
 			// fromRefs.
 			// TODO(mjibson): Refence handling and aggregation functions
