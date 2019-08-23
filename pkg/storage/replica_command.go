@@ -1318,14 +1318,8 @@ func execChangeReplicasTxn(
 		updatedDesc.GenerationComparable = proto.Bool(true)
 	}
 
-	if len(chgs) > 0 {
-		for _, rDesc := range desc.Replicas().All() {
-			switch rDesc.GetType() {
-			case roachpb.ReplicaType_VoterIncoming, roachpb.ReplicaType_VoterOutgoing:
-				return nil, errors.Errorf("must transition out of joint config first: %s", desc)
-			default:
-			}
-		}
+	if len(chgs) > 0 && desc.Replicas().InAtomicReplicationChange() {
+		return nil, errors.Errorf("must transition out of joint config first: %s", desc)
 	}
 
 	var added, removed []roachpb.ReplicaDescriptor
