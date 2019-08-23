@@ -279,6 +279,8 @@ func (d ReplicaDescriptors) InAtomicReplicationChange() bool {
 		case ReplicaType_VoterOutgoing:
 			return true
 		case ReplicaType_Learner:
+		default:
+			panic(fmt.Sprintf("unknown replica type %d", rDesc.GetType()))
 		}
 	}
 	return false
