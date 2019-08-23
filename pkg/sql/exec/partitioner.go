@@ -70,13 +70,13 @@ func (p *windowSortingPartitioner) Init() {
 
 func (p *windowSortingPartitioner) Next(ctx context.Context) coldata.Batch {
 	b := p.input.Next(ctx)
-	if b.Length() == 0 {
-		return b
-	}
 	if p.partitionColIdx == b.Width() {
 		b.AppendCol(coltypes.Bool)
 	} else if p.partitionColIdx > b.Width() {
 		execerror.VectorizedInternalPanic("unexpected: column partitionColIdx is neither present nor the next to be appended")
+	}
+	if b.Length() == 0 {
+		return b
 	}
 	partitionVec := b.ColVec(p.partitionColIdx).Bool()
 	sel := b.Selection()

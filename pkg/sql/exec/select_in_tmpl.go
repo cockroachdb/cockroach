@@ -259,12 +259,11 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 
 func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 	batch := pi.input.Next(ctx)
-	if batch.Length() == 0 {
-		return batch
-	}
-
 	if pi.outputIdx == batch.Width() {
 		batch.AppendCol(coltypes.Bool)
+	}
+	if batch.Length() == 0 {
+		return batch
 	}
 
 	vec := batch.ColVec(pi.colIdx)
