@@ -9,15 +9,9 @@
 package importccl
 
 import (
-	"compress/bzip2"
-	"compress/gzip"
 	"context"
-	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
-	"net/url"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -29,8 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -43,176 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
-
-type readFileFunc func(context.Context, *fileReader, int32, string, progressFn) error
-
-// readInputFile reads each of the passed dataFiles using the passed func. The
-// key part of dataFiles is the unique index of the data file among all files in
-// the IMPORT. progressFn, if not nil, is periodically invoked with a percentage
-// of the total progress of reading through all of the files. This percentage
-// attempts to use the Size() method of ExportStorage to determine how many
-// bytes must be read of the input files, and reports the percent of bytes read
-// among all dataFiles. If any Size() fails for any file, then progress is
-// reported only after each file has been read.
-func readInputFiles(
-	ctx context.Context,
-	dataFiles map[int32]string,
-	format roachpb.IOFileFormat,
-	fileFunc readFileFunc,
-	progressFn func(float32) error,
-	settings *cluster.Settings,
-) error {
-	done := ctx.Done()
-
-	var totalBytes, readBytes int64
-	fileSizes := make(map[int32]int64, len(dataFiles))
-	// Attempt to fetch total number of bytes for all files.
-	for id, dataFile := range dataFiles {
-		conf, err := storageccl.ExportStorageConfFromURI(dataFile)
-		if err != nil {
-			return err
-		}
-		es, err := storageccl.MakeExportStorage(ctx, conf, settings)
-		if err != nil {
-			return err
-		}
-		sz, err := es.Size(ctx, "")
-		es.Close()
-		if sz <= 0 {
-			// Don't log dataFile here because it could leak auth information.
-			log.Infof(ctx, "could not fetch file size; falling back to per-file progress: %v", err)
-			totalBytes = 0
-			break
-		}
-		fileSizes[id] = sz
-		totalBytes += sz
-	}
-	updateFromFiles := progressFn != nil && totalBytes == 0
-	updateFromBytes := progressFn != nil && totalBytes > 0
-
-	currentFile := 0
-	for dataFileIndex, dataFile := range dataFiles {
-		currentFile++
-		select {
-		case <-done:
-			return ctx.Err()
-		default:
-		}
-		if err := func() error {
-			conf, err := storageccl.ExportStorageConfFromURI(dataFile)
-			if err != nil {
-				return err
-			}
-			es, err := storageccl.MakeExportStorage(ctx, conf, settings)
-			if err != nil {
-				return err
-			}
-			defer es.Close()
-			raw, err := es.ReadFile(ctx, "")
-			if err != nil {
-				return err
-			}
-			defer raw.Close()
-
-			src := &fileReader{total: fileSizes[dataFileIndex], counter: byteCounter{r: raw}}
-			decompressed, err := decompressingReader(&src.counter, dataFile, format.Compression)
-			if err != nil {
-				return err
-			}
-			defer decompressed.Close()
-			src.Reader = decompressed
-
-			wrappedProgressFn := func(finished bool) error { return nil }
-			if updateFromBytes {
-				const progressBytes = 100 << 20
-				var lastReported int64
-				wrappedProgressFn = func(finished bool) error {
-					progressed := src.counter.n - lastReported
-					// progressBytes is the number of read bytes at which to report job progress. A
-					// low value may cause excessive updates in the job table which can lead to
-					// very large rows due to MVCC saving each version.
-					if finished || progressed > progressBytes {
-						readBytes += progressed
-						lastReported = src.counter.n
-						if err := progressFn(float32(readBytes) / float32(totalBytes)); err != nil {
-							return err
-						}
-					}
-					return nil
-				}
-			}
-
-			if err := fileFunc(ctx, src, dataFileIndex, dataFile, wrappedProgressFn); err != nil {
-				return errors.Wrap(err, dataFile)
-			}
-			if updateFromFiles {
-				if err := progressFn(float32(currentFile) / float32(len(dataFiles))); err != nil {
-					return err
-				}
-			}
-			return nil
-		}(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func decompressingReader(
-	in io.Reader, name string, hint roachpb.IOFileFormat_Compression,
-) (io.ReadCloser, error) {
-	switch guessCompressionFromName(name, hint) {
-	case roachpb.IOFileFormat_Gzip:
-		return gzip.NewReader(in)
-	case roachpb.IOFileFormat_Bzip:
-		return ioutil.NopCloser(bzip2.NewReader(in)), nil
-	default:
-		return ioutil.NopCloser(in), nil
-	}
-}
-
-func guessCompressionFromName(
-	name string, hint roachpb.IOFileFormat_Compression,
-) roachpb.IOFileFormat_Compression {
-	if hint != roachpb.IOFileFormat_Auto {
-		return hint
-	}
-	switch {
-	case strings.HasSuffix(name, ".gz"):
-		return roachpb.IOFileFormat_Gzip
-	case strings.HasSuffix(name, ".bz2") || strings.HasSuffix(name, ".bz"):
-		return roachpb.IOFileFormat_Bzip
-	default:
-		if parsed, err := url.Parse(name); err == nil && parsed.Path != name {
-			return guessCompressionFromName(parsed.Path, hint)
-		}
-		return roachpb.IOFileFormat_None
-	}
-}
-
-type byteCounter struct {
-	r io.Reader
-	n int64
-}
-
-func (b *byteCounter) Read(p []byte) (int, error) {
-	n, err := b.r.Read(p)
-	b.n += int64(n)
-	return n, err
-}
-
-type fileReader struct {
-	io.Reader
-	total   int64
-	counter byteCounter
-}
-
-func (f fileReader) ReadFraction() float32 {
-	if f.total == 0 {
-		return 0.0
-	}
-	return float32(f.counter.n) / float32(f.total)
-}
 
 var csvOutputTypes = []types.T{
 	*types.Bytes,
@@ -238,14 +60,6 @@ func newReadImportDataProcessor(
 	return cp, nil
 }
 
-type progressFn func(finished bool) error
-
-type inputConverter interface {
-	start(group ctxgroup.Group)
-	readFiles(ctx context.Context, dataFiles map[int32]string, format roachpb.IOFileFormat, progressFn func(float32) error, settings *cluster.Settings) error
-	inputFinished(ctx context.Context)
-}
-
 type readImportDataProcessor struct {
 	flowCtx     *distsqlrun.FlowCtx
 	processorID int32
@@ -258,15 +72,6 @@ var _ distsqlrun.Processor = &readImportDataProcessor{}
 
 func (cp *readImportDataProcessor) OutputTypes() []types.T {
 	return csvOutputTypes
-}
-
-func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {
-	switch format {
-	case roachpb.IOFileFormat_Mysqldump,
-		roachpb.IOFileFormat_PgDump:
-		return true
-	}
-	return false
 }
 
 func (cp *readImportDataProcessor) Run(ctx context.Context) {
@@ -286,51 +91,8 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	group := ctxgroup.WithContext(ctx)
 	kvCh := make(chan row.KVBatch, 10)
-	evalCtx := cp.flowCtx.NewEvalCtx()
 
-	var singleTable *sqlbase.TableDescriptor
-	var singleTableTargetCols tree.NameList
-	if len(cp.spec.Tables) == 1 {
-		for _, table := range cp.spec.Tables {
-			singleTable = table.Desc
-			singleTableTargetCols = make(tree.NameList, len(table.TargetCols))
-			for i, colName := range table.TargetCols {
-				singleTableTargetCols[i] = tree.Name(colName)
-			}
-		}
-	}
-
-	if format := cp.spec.Format.Format; singleTable == nil && !isMultiTableFormat(format) {
-		return errors.Errorf("%s only supports reading a single, pre-specified table", format.String())
-	}
-
-	var conv inputConverter
-	var err error
-	switch cp.spec.Format.Format {
-	case roachpb.IOFileFormat_CSV:
-		isWorkload := true
-		for _, file := range cp.spec.Uri {
-			if conf, err := storageccl.ExportStorageConfFromURI(file); err != nil || conf.Provider != roachpb.ExportStorageProvider_Workload {
-				isWorkload = false
-				break
-			}
-		}
-		if isWorkload {
-			conv = newWorkloadReader(kvCh, singleTable, evalCtx)
-		} else {
-			conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, cp.spec.WalltimeNanos, singleTable, singleTableTargetCols, evalCtx)
-		}
-	case roachpb.IOFileFormat_MysqlOutfile:
-		conv, err = newMysqloutfileReader(kvCh, cp.spec.Format.MysqlOut, singleTable, evalCtx)
-	case roachpb.IOFileFormat_Mysqldump:
-		conv, err = newMysqldumpReader(kvCh, cp.spec.Tables, evalCtx)
-	case roachpb.IOFileFormat_PgCopy:
-		conv, err = newPgCopyReader(kvCh, cp.spec.Format.PgCopy, singleTable, evalCtx)
-	case roachpb.IOFileFormat_PgDump:
-		conv, err = newPgDumpReader(kvCh, cp.spec.Format.PgDump, cp.spec.Tables, evalCtx)
-	default:
-		err = errors.Errorf("Requested IMPORT format (%d) not supported by this node", cp.spec.Format.Format)
-	}
+	conv, err := makeInputConverter(&cp.spec, cp.flowCtx.NewEvalCtx(), kvCh)
 	if err != nil {
 		return err
 	}
@@ -365,6 +127,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 
 		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, progFn, cp.flowCtx.Cfg.Settings)
 	})
+
 	if cp.spec.IngestDirectly {
 		// IngestDirectly means this reader will just ingest the KVs that the
 		// producer emitted to the chan, and the only result we push into distsql at
@@ -380,6 +143,51 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	}
 
 	return group.Wait()
+
+func makeInputConverter(
+	spec *distsqlpb.ReadImportDataSpec, evalCtx *tree.EvalContext, kvCh chan row.KVBatch,
+) (inputConverter, error) {
+
+	var singleTable *sqlbase.TableDescriptor
+	var singleTableTargetCols tree.NameList
+	if len(spec.Tables) == 1 {
+		for _, table := range spec.Tables {
+			singleTable = table.Desc
+			singleTableTargetCols = make(tree.NameList, len(table.TargetCols))
+			for i, colName := range table.TargetCols {
+				singleTableTargetCols[i] = tree.Name(colName)
+			}
+		}
+	}
+
+	if format := spec.Format.Format; singleTable == nil && !isMultiTableFormat(format) {
+		return nil, errors.Errorf("%s only supports reading a single, pre-specified table", format.String())
+	}
+
+	switch spec.Format.Format {
+	case roachpb.IOFileFormat_CSV:
+		isWorkload := true
+		for _, file := range spec.Uri {
+			if conf, err := storageccl.ExportStorageConfFromURI(file); err != nil || conf.Provider != roachpb.ExportStorageProvider_Workload {
+				isWorkload = false
+				break
+			}
+		}
+		if isWorkload {
+			return newWorkloadReader(kvCh, singleTable, evalCtx), nil
+		}
+		return newCSVInputReader(kvCh, spec.Format.Csv, spec.WalltimeNanos, singleTable, singleTableTargetCols, evalCtx), nil
+	case roachpb.IOFileFormat_MysqlOutfile:
+		return newMysqloutfileReader(kvCh, spec.Format.MysqlOut, singleTable, evalCtx)
+	case roachpb.IOFileFormat_Mysqldump:
+		return newMysqldumpReader(kvCh, spec.Tables, evalCtx)
+	case roachpb.IOFileFormat_PgCopy:
+		return newPgCopyReader(kvCh, spec.Format.PgCopy, singleTable, evalCtx)
+	case roachpb.IOFileFormat_PgDump:
+		return newPgDumpReader(kvCh, spec.Format.PgDump, spec.Tables, evalCtx)
+	default:
+		return nil, errors.Errorf("Requested IMPORT format (%d) not supported by this node", spec.Format.Format)
+	}
 }
 
 type sampleFunc func(roachpb.KeyValue) bool
@@ -460,22 +268,6 @@ func (cp *readImportDataProcessor) emitKvs(ctx context.Context, kvCh <-chan row.
 		}
 	}
 	return nil
-}
-
-func makeRowErr(file string, row int64, code, format string, args ...interface{}) error {
-	return pgerror.NewWithDepthf(1, code,
-		"%q: row %d: "+format, append([]interface{}{file, row}, args...)...)
-}
-
-func wrapRowErr(err error, file string, row int64, code, format string, args ...interface{}) error {
-	if format != "" || len(args) > 0 {
-		err = errors.WrapWithDepthf(1, err, format, args...)
-	}
-	err = errors.WrapWithDepthf(1, err, "%q: row %d", file, row)
-	if code != pgcode.Uncategorized {
-		err = pgerror.WithCandidateCode(err, code)
-	}
-	return err
 }
 
 func (cp *readImportDataProcessor) presplitTableBoundaries(ctx context.Context) error {
