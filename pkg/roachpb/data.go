@@ -1334,18 +1334,6 @@ func writeTooOldRetryTimestamp(txn *Transaction, err *WriteTooOldError) hlc.Time
 	return err.ActualTimestamp
 }
 
-// EnterJoint is true if applying this trigger will result in a joint
-// configuration.
-func (crt ChangeReplicasTrigger) EnterJoint() bool {
-	return len(crt.Added())+len(crt.Removed()) > 1
-}
-
-// LeaveJoint is true if applying this trigger will actively leave a joint
-// configuration.
-func (crt ChangeReplicasTrigger) LeaveJoint() bool {
-	return len(crt.Added())+len(crt.Removed()) == 0
-}
-
 // Replicas returns all of the replicas present in the descriptor after this
 // trigger applies.
 func (crt ChangeReplicasTrigger) Replicas() []ReplicaDescriptor {
