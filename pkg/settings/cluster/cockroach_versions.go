@@ -522,7 +522,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 8},
 	},
 	{
-		// VersionAtomicChangeReplicas is TODO(tbg)
+		// VersionAtomicChangeReplicas is https://github.com/cockroachdb/cockroach/pull/39936.
 		//
 		// It provides an implementation of (*Replica).ChangeReplicas that uses
 		// atomic replication changes. The corresponding cluster setting
