@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 type optionValue struct {
@@ -459,6 +459,20 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			return pgerror.Newf(pgcode.CheckViolation,
 				"could not validate zone config: %v", err)
 		}
+
+		// Finally check for the extra protection partial zone configs would
+		// require from changes made to parent zones. The extra protections are:
+		//
+		// RangeMinBytes and RangeMaxBytes must be set together
+		// LeasePreferences cannot be set unless Constraints are explicitly set
+		// Per-replica constraints cannot be set unless num_replicas is explicitly set
+		if err := finalZone.ValidateTandemFields(); err != nil {
+			err = errors.Wrap(err, "could not validate zone config")
+			err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+			err = errors.WithHint(err,
+				"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] to populate the field")
+			return err
+		}
 	}
 
 	// Write the partial zone configuration.
@@ -466,19 +480,6 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	execConfig := params.extendedEvalCtx.ExecCfg
 	zoneToWrite := partialZone
 
-	// Finally check for the extra protection partial zone configs would
-	// require from changes made to parent zones. The extra protections are:
-	//
-	// RangeMinBytes and RangeMaxBytes must be set together
-	// LeasePreferences cannot be set unless Constraints are explicitly set
-	// Per-replica constraints cannot be set unless num_replicas is explicitly set
-	if err := zoneToWrite.ValidateTandemFields(); err != nil {
-		err = errors.Wrap(err, "could not validate zone config")
-		err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
-		err = errors.WithHint(err,
-			"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] to populate the field")
-		return err
-	}
 	n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
 		targetID, table, zoneToWrite, execConfig, hasNewSubzones)
 	if err != nil {
