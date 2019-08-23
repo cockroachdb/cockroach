@@ -51,7 +51,8 @@ message ReplicationTarget {
 // to replicas 1 and 2, while 3 is VoterOutgoing and 4 is VoterIncoming, then
 // the two sets over which quorums need to be achieved are {1,2,3} and {1,2,4}.
 // Thus, {1,2} is a quorum of both, {1,3} is a quorum of the first but not the
-// second, and {3,4} is a quorum of neither.
+// second, {1,4} is a quorum of the second but not the first, and {3,4} is a
+// quorum of neither.
 enum ReplicaType {
   // ReplicaType_VoterFull indicates a replica that is a voter both in the
   // incoming and outgoing set.
