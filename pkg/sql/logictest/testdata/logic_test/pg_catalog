@@ -1526,7 +1526,6 @@ default_transaction_read_only        off                 NULL      NULL        N
 distsql                              off                 NULL      NULL        NULL        string
 experimental_enable_zigzag_join      on                  NULL      NULL        NULL        string
 experimental_force_split_at          off                 NULL      NULL        NULL        string
-experimental_optimizer_foreign_keys  off                 NULL      NULL        NULL        string
 experimental_serial_normalization    rowid               NULL      NULL        NULL        string
 extra_float_digits                   0                   NULL      NULL        NULL        string
 force_savepoint_restart              off                 NULL      NULL        NULL        string
@@ -1537,6 +1536,7 @@ locality                             region=test,dc=dc1  NULL      NULL        N
 lock_timeout                         0                   NULL      NULL        NULL        string
 max_index_keys                       32                  NULL      NULL        NULL        string
 node_id                              1                   NULL      NULL        NULL        string
+optimizer_foreign_keys               off                 NULL      NULL        NULL        string
 reorder_joins_limit                  4                   NULL      NULL        NULL        string
 results_buffer_size                  16384               NULL      NULL        NULL        string
 row_security                         off                 NULL      NULL        NULL        string
@@ -1580,7 +1580,6 @@ default_transaction_read_only        off                 NULL  user     NULL    
 distsql                              off                 NULL  user     NULL      off                 off
 experimental_enable_zigzag_join      on                  NULL  user     NULL      on                  on
 experimental_force_split_at          off                 NULL  user     NULL      off                 off
-experimental_optimizer_foreign_keys  off                 NULL  user     NULL      off                 off
 experimental_serial_normalization    rowid               NULL  user     NULL      rowid               rowid
 extra_float_digits                   0                   NULL  user     NULL      0                   2
 force_savepoint_restart              off                 NULL  user     NULL      off                 off
@@ -1591,6 +1590,7 @@ locality                             region=test,dc=dc1  NULL  user     NULL    
 lock_timeout                         0                   NULL  user     NULL      0                   0
 max_index_keys                       32                  NULL  user     NULL      32                  32
 node_id                              1                   NULL  user     NULL      1                   1
+optimizer_foreign_keys               off                 NULL  user     NULL      off                 off
 reorder_joins_limit                  4                   NULL  user     NULL      4                   4
 results_buffer_size                  16384               NULL  user     NULL      16384               16384
 row_security                         off                 NULL  user     NULL      off                 off
@@ -1630,7 +1630,6 @@ default_transaction_read_only        NULL    NULL     NULL     NULL        NULL
 distsql                              NULL    NULL     NULL     NULL        NULL
 experimental_enable_zigzag_join      NULL    NULL     NULL     NULL        NULL
 experimental_force_split_at          NULL    NULL     NULL     NULL        NULL
-experimental_optimizer_foreign_keys  NULL    NULL     NULL     NULL        NULL
 experimental_serial_normalization    NULL    NULL     NULL     NULL        NULL
 extra_float_digits                   NULL    NULL     NULL     NULL        NULL
 force_savepoint_restart              NULL    NULL     NULL     NULL        NULL
@@ -1642,6 +1641,7 @@ lock_timeout                         NULL    NULL     NULL     NULL        NULL
 max_index_keys                       NULL    NULL     NULL     NULL        NULL
 node_id                              NULL    NULL     NULL     NULL        NULL
 optimizer                            NULL    NULL     NULL     NULL        NULL
+optimizer_foreign_keys               NULL    NULL     NULL     NULL        NULL
 reorder_joins_limit                  NULL    NULL     NULL     NULL        NULL
 results_buffer_size                  NULL    NULL     NULL     NULL        NULL
 row_security                         NULL    NULL     NULL     NULL        NULL
