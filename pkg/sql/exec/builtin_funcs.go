@@ -44,12 +44,11 @@ func (b *defaultBuiltinFuncOperator) Init() {
 func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 	batch := b.input.Next(ctx)
 	n := batch.Length()
-	if n == 0 {
-		return batch
-	}
-
 	if b.outputIdx == batch.Width() {
 		batch.AppendCol(b.outputPhysType)
+	}
+	if n == 0 {
+		return batch
 	}
 
 	sel := batch.Selection()

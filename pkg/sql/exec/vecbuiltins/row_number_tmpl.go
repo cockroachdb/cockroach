@@ -38,9 +38,6 @@ var _ exec.Operator = &_ROW_NUMBER_STRINGOp{}
 
 func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	batch := r.Input().Next(ctx)
-	if batch.Length() == 0 {
-		return batch
-	}
 	// {{ if .HasPartition }}
 	if r.partitionColIdx == batch.Width() {
 		batch.AppendCol(coltypes.Bool)
@@ -54,6 +51,9 @@ func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 		batch.AppendCol(coltypes.Int64)
 	} else if r.outputColIdx > batch.Width() {
 		execerror.VectorizedInternalPanic("unexpected: column outputColIdx is neither present nor the next to be appended")
+	}
+	if batch.Length() == 0 {
+		return batch
 	}
 	rowNumberCol := batch.ColVec(r.outputColIdx).Int64()
 	sel := batch.Selection()
