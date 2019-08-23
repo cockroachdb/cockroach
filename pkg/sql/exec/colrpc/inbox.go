@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/logtags"
 )
 
 // flowStreamServer is a utility interface used to mock out the RPC layer.
@@ -51,6 +52,10 @@ type Inbox struct {
 
 	converter  *colserde.ArrowBatchConverter
 	serializer *colserde.RecordBatchSerializer
+
+	// streamID is used to tag context with inbox's stream Identifier
+	// as opposed to a stream Identifier in `Next()` and `DrainMeta()` from caller's context
+	streamID distsqlpb.StreamID
 
 	// streamCh is the channel over which the stream is passed from the stream
 	// handler to the reader goroutine.
@@ -109,7 +114,7 @@ type Inbox struct {
 var _ exec.StaticMemoryOperator = &Inbox{}
 
 // NewInbox creates a new Inbox.
-func NewInbox(typs []coltypes.T) (*Inbox, error) {
+func NewInbox(typs []coltypes.T, streamID distsqlpb.StreamID) (*Inbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
 		return nil, err
@@ -123,6 +128,7 @@ func NewInbox(typs []coltypes.T) (*Inbox, error) {
 		zeroBatch:  coldata.NewMemBatchWithSize(typs, 0),
 		converter:  c,
 		serializer: s,
+		streamID:   streamID,
 		streamCh:   make(chan flowStreamServer, 1),
 		contextCh:  make(chan context.Context, 1),
 		timeoutCh:  make(chan error, 1),
@@ -248,6 +254,9 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 	if i.stateMu.done {
 		return i.zeroBatch
 	}
+	// I am not familiar with go Contexts that good, so
+	// I presume that context can be modified, because it is just a local copy
+	ctx = logtags.AddTag(ctx, "streamID", i.streamID)
 
 	defer func() {
 		// Catch any panics that occur and close the errCh in order to not leak the
@@ -345,6 +354,7 @@ func (i *Inbox) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	if i.stateMu.done {
 		return allMeta
 	}
+	ctx = logtags.AddTag(ctx, "streamID", i.streamID)
 
 	// We want draining the Inbox to work regardless of whether or not we have a
 	// goroutine in Next. We essentially need to do two things: 1) Is the stream

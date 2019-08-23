@@ -179,7 +179,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 
 				hashRouter, hashRouterOutputs := exec.NewHashRouter(hashRouterInput, typs, []int{0}, numHashRouterOutputs)
 				for i := 0; i < numInboxes; i++ {
-					inbox, err := colrpc.NewInbox(typs)
+					inbox, err := colrpc.NewInbox(typs, distsqlpb.StreamID(streamID))
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					materializerMetadataSources = append(materializerMetadataSources, inbox)
@@ -259,7 +259,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				ctxAnotherRemote, cancelAnotherRemote := context.WithCancel(context.Background())
 				if addAnotherRemote {
 					// Add another "remote" node to the flow.
-					inbox, err := colrpc.NewInbox(typs)
+					inbox, err := colrpc.NewInbox(typs, distsqlpb.StreamID(streamID))
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					runOutboxInbox(ctxAnotherRemote, cancelAnotherRemote, synchronizer, inbox, streamID, materializerMetadataSources)
@@ -295,7 +295,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				switch shutdownOperation {
 				case consumerDone:
 					materializer.ConsumerDone()
-					receivedMetaFromID := make([]bool, streamID)
+					receivedMetaFromID := make([]bool, distsqlpb.StreamID(streamID))
 					metaCount := 0
 					for {
 						row, meta := materializer.Next()

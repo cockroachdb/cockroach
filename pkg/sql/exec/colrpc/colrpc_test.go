@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
@@ -216,7 +217,7 @@ func TestOutboxInbox(t *testing.T) {
 		outbox, err := NewOutbox(input, typs, nil)
 		require.NoError(t, err)
 
-		inbox, err := NewInbox(typs)
+		inbox, err := NewInbox(typs, distsqlpb.StreamID(0))
 		require.NoError(t, err)
 
 		streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
@@ -446,7 +447,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			inbox, err := NewInbox(typs)
+			inbox, err := NewInbox(typs, distsqlpb.StreamID(0))
 			require.NoError(t, err)
 
 			var (
@@ -507,7 +508,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	outbox, err := NewOutbox(input, typs, nil /* metadataSources */)
 	require.NoError(b, err)
 
-	inbox, err := NewInbox(typs)
+	inbox, err := NewInbox(typs, distsqlpb.StreamID(0))
 	require.NoError(b, err)
 
 	var wg sync.WaitGroup
@@ -532,4 +533,190 @@ func BenchmarkOutboxInbox(b *testing.B) {
 
 	require.NoError(b, <-streamHandlerErrCh)
 	wg.Wait()
+}
+
+// I think we really do this same thing multple times.
+// I didn't change the connection establishment in other TCs, but someone aproves I would do it.
+func initConnectedStreams(
+	ctx context.Context, stopper *stop.Stopper,
+) (
+	cs distsqlpb.DistSQL_FlowStreamClient,
+	ss distsqlpb.DistSQL_FlowStreamServer,
+	conn *grpc.ClientConn,
+	ssDoneFn func(),
+	err error,
+) {
+	_, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(
+		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, staticNodeID,
+	)
+	if err != nil {
+		return cs, ss, conn, ssDoneFn, err
+	}
+
+	conn, err = grpc.Dial(addr.String(), grpc.WithInsecure())
+	if err != nil {
+		return cs, ss, conn, ssDoneFn, err
+	}
+
+	client := distsqlpb.NewDistSQLClient(conn)
+	cs, err = client.FlowStream(ctx)
+	if err != nil {
+		return cs, ss, conn, ssDoneFn, err
+	}
+
+	serverStreamNotification := <-mockServer.InboundStreams
+	ss = serverStreamNotification.Stream
+	ssDoneFn = func() { close(serverStreamNotification.Donec) }
+
+	return cs, ss, conn, ssDoneFn, nil
+}
+
+func TestOutboxStreamIDPropagation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	outbStreamID := distsqlpb.StreamID(1234)
+	inbStreamID := distsqlpb.StreamID(5678)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clientStream, serverStream, conn, ssDoneFn, err := initConnectedStreams(ctx, stopper)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, conn.Close()) }()
+
+	typs := []coltypes.T{coltypes.Int64}
+
+	var inTags *logtags.Buffer
+
+	input := &exec.CallbackOperator{NextCb: func(ctx context.Context) coldata.Batch {
+		b := coldata.NewMemBatchWithSize(typs, 0)
+		b.SetLength(0)
+		inTags = logtags.FromContext(ctx)
+		return b
+	}}
+
+	ctx = logtags.AddTag(ctx, "streamID", outbStreamID)
+
+	outbox, err := NewOutbox(input, typs, nil)
+	require.NoError(t, err)
+
+	// NewInbox is not needed here, I just failed to implement a test without it.
+	// I've tried to `serverStream.Send(&distsqlpb.ConsumerSignal{DrainRequest: &distsqlpb.DrainRequest{}})` without having any inbox
+	// but it didn't lead to receiving `io.EOF` on the `outbox.runWithStream()` side.
+	// Also I've tried to close connection explicitly, it helped but led to some errors in the streamHandlerErrCh
+	inbox, err := NewInbox(typs, inbStreamID)
+	require.NoError(t, err)
+
+	var (
+		wg       sync.WaitGroup
+		canceled uint32
+	)
+	wg.Add(1)
+	go func() {
+		outbox.runWithStream(ctx, clientStream, func() { atomic.StoreUint32(&canceled, 1) })
+		wg.Done()
+	}()
+
+	go func() {
+		streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, ssDoneFn)
+		require.NoError(t, <-streamHandlerErrCh)
+	}()
+
+	meta := inbox.DrainMeta(ctx)
+	require.Equal(t, 0, len(meta))
+
+	require.Equal(t, (*logtags.Buffer)(nil), inTags)
+	wg.Wait()
+}
+
+func TestInboxCtxStreamIDTagging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	streamID := distsqlpb.StreamID(1234)
+	ctx := context.Background()
+	inCtx := context.Background()
+	taggedCtx := logtags.AddTag(context.Background(), "streamID", streamID)
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	defer stopper.Stop(inCtx)
+	defer stopper.Stop(taggedCtx)
+
+	testCases := []struct {
+		name string
+		// test is the body of the test to be run
+		test func(context.Context, *Inbox)
+	}{
+		{
+			// CtxTaggedInNext verifies that `Next()` adds StreamID to the Context in maybeInit
+			name: "CtxTaggedInNext",
+			test: func(ctx context.Context, inbox *Inbox) {
+				inbox.Next(ctx)
+			},
+		},
+		{
+			// CtxTaggedInDrainMeta verifies that `DrainMeta()` adds StreamID to the Context in maybeInit
+			name: "CtxTaggedInDrainMeta",
+			test: func(ctx context.Context, inbox *Inbox) {
+				inbox.DrainMeta(ctx)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+
+			clientStream, serverStream, conn, ssDoneFn, err := initConnectedStreams(ctx, stopper)
+			require.NoError(t, err)
+			defer func() {
+				require.NoError(t, conn.Close())
+			}()
+
+			typs := []coltypes.T{coltypes.Int64}
+
+			input := &exec.CallbackOperator{NextCb: func(ctx context.Context) coldata.Batch {
+				b := coldata.NewMemBatchWithSize(typs, 0)
+				b.SetLength(0)
+				return b
+			}}
+
+			outbox, err := NewOutbox(input, typs, nil)
+			require.NoError(t, err)
+
+			inbox, err := NewInbox(typs, streamID)
+			require.NoError(t, err)
+
+			var (
+				outboxWg sync.WaitGroup
+				inboxWg  sync.WaitGroup
+				canceled uint32
+			)
+			outboxWg.Add(1)
+			go func() {
+				outbox.runWithStream(ctx, clientStream, func() { atomic.StoreUint32(&canceled, 1) })
+				outboxWg.Done()
+			}()
+
+			// This thing down here doesn't look good at all,
+			// mainly because unit test shouldn't play around with the module internals like those channels.
+			// I did it this way, because I didn't have a better idea on how to look into the inbox's ctx.
+			// Better ideas on how to peek inbox's ctx?
+			inboxWg.Add(1)
+			go func() {
+				inCtx = <-inbox.contextCh
+				inboxWg.Done()
+			}()
+			inbox.streamCh <- serverStream
+
+			tc.test(ctx, inbox)
+
+			ssDoneFn()
+			inboxWg.Wait()
+
+			require.Equal(t, (*logtags.Buffer)(nil), logtags.FromContext(ctx))
+			require.Equal(t, logtags.FromContext(taggedCtx), logtags.FromContext(inCtx))
+
+			outboxWg.Wait()
+		})
+	}
 }

@@ -202,7 +202,9 @@ func (o *Outbox) sendBatches(
 	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
 ) (terminatedGracefully bool, _ error) {
 	nextBatch := func() {
-		o.batch = o.Input().Next(ctx)
+		// should it be `nil` or empty `logtags.Buffer`?
+		// I think `nil`, because newly created context has `nil` as tags
+		o.batch = o.Input().Next(logtags.WithTags(ctx, nil))
 	}
 	for {
 		if atomic.LoadUint32(&o.draining) == 1 {
