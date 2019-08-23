@@ -235,7 +235,9 @@ func _PROBE_SWITCH(
 						// {{ if _JOIN_TYPE.IsLeftSemi }}
 						// {{ if _FILTER_INFO.HasFilter }}
 						for lIdx := beginLIdx; lIdx < beginLIdx+lGroupLength; lIdx++ {
-							if !o.isLeftTupleFilteredOut(ctx, o.proberState.lBatch, o.proberState.rBatch, lIdx, beginRIdx, beginRIdx+rGroupLength) {
+							if !o.filter.isLeftTupleFilteredOut(
+								ctx, o.proberState.lBatch, o.proberState.rBatch, lIdx, beginRIdx, beginRIdx+rGroupLength,
+							) {
 								o.groups.addLeftSemiGroup(lIdx, 1)
 							}
 						}
@@ -250,7 +252,9 @@ func _PROBE_SWITCH(
 						// tuple from the left source if there is a filter and the tuple
 						// doesn't pass the filter.
 						for lIdx := beginLIdx; lIdx < beginLIdx+lGroupLength; lIdx++ {
-							if o.isLeftTupleFilteredOut(ctx, o.proberState.lBatch, o.proberState.rBatch, lIdx, beginRIdx, beginRIdx+rGroupLength) {
+							if o.filter.isLeftTupleFilteredOut(
+								ctx, o.proberState.lBatch, o.proberState.rBatch, lIdx, beginRIdx, beginRIdx+rGroupLength,
+							) {
 								// The second argument doesn't matter in case of LEFT ANTI join.
 								o.groups.addLeftUnmatchedGroup(lIdx, beginRIdx)
 							}
@@ -974,13 +978,11 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) setBuilderSourceToBuff
 	// {{ if _JOIN_TYPE.IsLeftAnti }}
 	// {{ if _FILTER_INFO.HasFilter }}
 	o.builderState.lGroups = o.builderState.lGroups[:0]
-	rBatch := o.proberState.rBufferedGroup
 	rEndIdx := int(o.proberState.rBufferedGroup.length)
-	if o.filterOnlyOnLeft {
-		rBatch = nil
-	}
 	for lIdx := 0; lIdx < int(o.proberState.lBufferedGroup.length); lIdx++ {
-		if o.isLeftTupleFilteredOut(ctx, o.proberState.lBufferedGroup, rBatch, lIdx, 0 /* rStartIdx */, rEndIdx) {
+		if o.filter.isLeftTupleFilteredOut(
+			ctx, o.proberState.lBufferedGroup, o.proberState.rBufferedGroup, lIdx, 0 /* rStartIdx */, rEndIdx,
+		) {
 			o.builderState.lGroups = append(o.builderState.lGroups, group{
 				rowStartIdx: lIdx,
 				rowEndIdx:   lIdx + 1,
@@ -1007,7 +1009,9 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) setBuilderSourceToBuff
 	rGroupEndIdx := int(o.proberState.rBufferedGroup.length)
 	o.builderState.lGroups = o.builderState.lGroups[:0]
 	for lIdx := 0; lIdx < lGroupEndIdx; lIdx++ {
-		if !o.isLeftTupleFilteredOut(ctx, o.proberState.lBufferedGroup, o.proberState.rBufferedGroup, lIdx, 0 /* rStartIdx */, rGroupEndIdx) {
+		if !o.filter.isLeftTupleFilteredOut(
+			ctx, o.proberState.lBufferedGroup, o.proberState.rBufferedGroup, lIdx, 0 /* rStartIdx */, rGroupEndIdx,
+		) {
 			o.builderState.lGroups = append(o.builderState.lGroups, group{
 				rowStartIdx: lIdx,
 				rowEndIdx:   lIdx + 1,
