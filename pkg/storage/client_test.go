@@ -1256,18 +1256,25 @@ func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 	return results
 }
 
-// waitForValues waits up to the given duration for the integer values
-// at the given key to match the expected slice (across all engines).
-// Fails the test if they do not match.
-func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
-	m.t.Helper()
-	testutils.SucceedsSoon(m.t, func() error {
+// waitForValuesT is like waitForValues but allows the caller to provide a
+// testing.T which may differ from m.t.
+func (m *multiTestContext) waitForValuesT(t testing.TB, key roachpb.Key, expected []int64) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
 		actual := m.readIntFromEngines(key)
 		if !reflect.DeepEqual(expected, actual) {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
 	})
+}
+
+// waitForValues waits up to the given duration for the integer values
+// at the given key to match the expected slice (across all engines).
+// Fails the test if they do not match.
+func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
+	m.t.Helper()
+	m.waitForValuesT(m.t, key, expected)
 }
 
 // transferLease transfers the lease for the given range from the source

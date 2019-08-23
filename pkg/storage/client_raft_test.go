@@ -4428,8 +4428,17 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 		disabled.Store(true)
 		repl1, err := mtc.stores[0].GetReplica(1)
 		require.Nil(t, err)
-		// Transfer the lease on range 1
-		lease, _ := repl1.GetLease()
+		// Transfer the lease on range 1. Make sure there's no pending transfer.
+		var lease roachpb.Lease
+		testutils.SucceedsSoon(t, func() error {
+			var next roachpb.Lease
+			lease, next = repl1.GetLease()
+			if next != (roachpb.Lease{}) {
+				return fmt.Errorf("lease transfer in process, next = %v", next)
+			}
+			return nil
+		})
+
 		var target int
 		for i := roachpb.StoreID(1); i <= numReplicas; i++ {
 			if lease.Replica.StoreID != i {
@@ -4437,7 +4446,10 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 				break
 			}
 		}
-		mtc.transferLease(ctx, 1, int(lease.Replica.StoreID-1), target)
+		// Use SucceedsSoon for deal rare stress cases where the transfer may fail.
+		testutils.SucceedsSoon(t, func() error {
+			return mtc.transferLeaseNonFatal(ctx, 1, target, int(lease.Replica.StoreID-1))
+		})
 		// Set a relatively short timeout so that this test doesn't take too long.
 		// We should always hit it.
 		withTimeout, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
@@ -4446,15 +4458,22 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 		_, pErr = client.SendWrapped(withTimeout, mtc.stores[0].TestSender(), putReq)
 		require.NotNil(t, pErr, "expected an error when sending to a disconnected store")
 		// Transfer the lease back to demonstrate that the system range is still live.
-		mtc.transferLease(ctx, 1, target, int(lease.Replica.StoreID-1))
+		testutils.SucceedsSoon(t, func() error {
+			return mtc.transferLeaseNonFatal(ctx, 1, target, int(lease.Replica.StoreID-1))
+		})
+
 		// Heal the partition, the previous proposal may now succeed but it may have
 		// have been canceled.
 		disabled.Store(false)
 		// Overwrite with a new value and ensure that it propagates.
 		putReq.Value.SetInt(3)
-		_, pErr = client.SendWrapped(ctx, mtc.stores[0].TestSender(), putReq)
-		require.Nil(t, pErr, "expected to succeed after healing the partition")
-		mtc.waitForValues(keyA, []int64{3, 3, 3})
+		// Retry because failures in stress due to liveness epoch failures can
+		// happen.
+		testutils.SucceedsSoon(t, func() error {
+			_, pErr = client.SendWrapped(ctx, mtc.stores[0].TestSender(), putReq)
+			return pErr.GoError()
+		})
+		mtc.waitForValuesT(t, keyA, []int64{3, 3, 3})
 	}
 	t.Run("initial_run", runTest)
 	mtc.restart()
