@@ -88,7 +88,7 @@ func TestAtomicReplicationChange(t *testing.T) {
 				if diff := pretty.Diff(&desc, r.Desc()); len(diff) > 0 {
 					return errors.Errorf("diff(want, have):\n%s", strings.Join(diff, "\n"))
 				}
-				// Check that conf state is up to date.	This can fail even though
+				// Check that conf state is up to date. This can fail even though
 				// the descriptor already matches since the descriptor is updated
 				// a hair earlier.
 				cfg, _, err := confchange.Restore(confchange.Changer{
