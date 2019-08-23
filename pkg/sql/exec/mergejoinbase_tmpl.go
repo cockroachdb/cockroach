@@ -21,6 +21,7 @@ package exec
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 
@@ -121,4 +122,64 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 		}
 	}
 	return false
+}
+
+// isLeftTupleFilteredOut returns whether a tuple lIdx from lBatch combined
+// with any tuple in range [rStartIdx, rEndIdx) from rBatch satisfies the
+// filter.
+// A special case of rBatch == nil is supported which will run the filter only
+// on the partial tuple coming from the left input.
+func (o *mergeJoinBase) isLeftTupleFilteredOut(
+	ctx context.Context, lBatch, rBatch coldata.Batch, lIdx, rStartIdx, rEndIdx int,
+) bool {
+	if o.filterOnlyOnLeft || rBatch == nil {
+		o.filterInput.reset()
+		o.setFilterInputBatch(lBatch, nil /* rBatch */, lIdx, 0 /* rIdx */)
+		b := o.filter.Next(ctx)
+		return b.Length() == 0
+	}
+	for rIdx := rStartIdx; rIdx < rEndIdx; rIdx++ {
+		o.filterInput.reset()
+		o.setFilterInputBatch(lBatch, rBatch, lIdx, rIdx)
+		b := o.filter.Next(ctx)
+		if b.Length() > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// setFilterInputBatch sets the batch of filterFeedOperator, namely, it copies
+// a single tuple from each of the batches at the specified indices and puts
+// the combined "double" tuple into o.filterInput.
+// Either lBatch or rBatch can be nil to indicate that the tuple from the
+// respective side should not be set, i.e. the filter input batch will only be
+// partially initialized.
+func (o *mergeJoinBase) setFilterInputBatch(lBatch, rBatch coldata.Batch, lIdx, rIdx int) {
+	if lBatch == nil && rBatch == nil {
+		execerror.VectorizedInternalPanic("only one of lBatch and rBatch can be nil")
+	}
+	setOneSide := func(colOffset int, batch coldata.Batch, sourceTypes []coltypes.T, idx int) {
+		for colIdx, col := range batch.ColVecs() {
+			colType := sourceTypes[colIdx]
+			memCol := col.Slice(colType, uint64(idx), uint64(idx+1))
+			switch colType {
+			// {{ range $mjOverload := $.MJOverloads }}
+			case _TYPES_T:
+				o.filterInput.batch.ColVec(colOffset + colIdx).SetCol(memCol._TemplateType())
+				// {{ end }}
+			default:
+				execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colType))
+			}
+			o.filterInput.batch.ColVec(colOffset + colIdx).SetNulls(memCol.Nulls())
+		}
+	}
+	if lBatch != nil {
+		setOneSide(0 /* colOffset */, lBatch, o.left.sourceTypes, lIdx)
+	}
+	if rBatch != nil {
+		setOneSide(len(o.left.sourceTypes), rBatch, o.right.sourceTypes, rIdx)
+	}
+	o.filterInput.batch.SetLength(1)
+	o.filterInput.batch.SetSelection(false)
 }
