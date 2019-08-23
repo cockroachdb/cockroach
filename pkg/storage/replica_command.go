@@ -1318,50 +1318,49 @@ func execChangeReplicasTxn(
 		updatedDesc.GenerationComparable = proto.Bool(true)
 	}
 
-	if len(chgs) > 0 && desc.Replicas().InAtomicReplicationChange() {
-		return nil, errors.Errorf("must transition out of joint config first: %s", desc)
-	}
-
 	var added, removed []roachpb.ReplicaDescriptor
-
-	useJoint := len(chgs) > 1
-	for _, chg := range chgs {
-		switch chg.typ {
-		case internalChangeTypeAddVoterViaPreemptiveSnap:
-			// Legacy code.
-			added = append(added,
-				updatedDesc.AddReplica(chg.target.NodeID, chg.target.StoreID, roachpb.ReplicaType_VoterFull))
-		case internalChangeTypeAddLearner:
-			added = append(added,
-				updatedDesc.AddReplica(chg.target.NodeID, chg.target.StoreID, roachpb.ReplicaType_Learner))
-		case internalChangeTypePromoteLearner:
-			typ := roachpb.ReplicaType_VoterFull
-			if useJoint {
-				typ = roachpb.ReplicaType_VoterIncoming
-			}
-			rDesc, ok := updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, typ)
-			if !ok {
-				return nil, errors.Errorf("cannot promote target %v which is missing as Learner", chg.target)
-			}
-			added = append(added, rDesc)
-		case internalChangeTypeRemove:
-			var rDesc roachpb.ReplicaDescriptor
-			var ok bool
-			if !useJoint {
-				rDesc, ok = updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
-			} else {
-				rDesc, ok = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.ReplicaType_VoterOutgoing)
-			}
-			if !ok {
-				return nil, errors.Errorf("cannot remove nonexistent target %v", chg.target)
-			}
-			removed = append(removed, rDesc)
-		default:
-			return nil, errors.Errorf("unsupported internal change type %d", chg.typ)
+	if len(chgs) > 0 {
+		if desc.Replicas().InAtomicReplicationChange() {
+			return nil, errors.Errorf("must transition out of joint config first: %s", desc)
 		}
-	}
 
-	if len(chgs) == 0 {
+		useJoint := len(chgs) > 1
+		for _, chg := range chgs {
+			switch chg.typ {
+			case internalChangeTypeAddVoterViaPreemptiveSnap:
+				// Legacy code.
+				added = append(added,
+					updatedDesc.AddReplica(chg.target.NodeID, chg.target.StoreID, roachpb.ReplicaType_VoterFull))
+			case internalChangeTypeAddLearner:
+				added = append(added,
+					updatedDesc.AddReplica(chg.target.NodeID, chg.target.StoreID, roachpb.ReplicaType_Learner))
+			case internalChangeTypePromoteLearner:
+				typ := roachpb.ReplicaType_VoterFull
+				if useJoint {
+					typ = roachpb.ReplicaType_VoterIncoming
+				}
+				rDesc, ok := updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, typ)
+				if !ok {
+					return nil, errors.Errorf("cannot promote target %v which is missing as Learner", chg.target)
+				}
+				added = append(added, rDesc)
+			case internalChangeTypeRemove:
+				var rDesc roachpb.ReplicaDescriptor
+				var ok bool
+				if !useJoint {
+					rDesc, ok = updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
+				} else {
+					rDesc, ok = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.ReplicaType_VoterOutgoing)
+				}
+				if !ok {
+					return nil, errors.Errorf("cannot remove nonexistent target %v", chg.target)
+				}
+				removed = append(removed, rDesc)
+			default:
+				return nil, errors.Errorf("unsupported internal change type %d", chg.typ)
+			}
+		}
+	} else {
 		// Want to leave a joint config. Note that we're not populating 'added' or 'removed', this
 		// is intentional; leaving the joint config corresponds to an "empty" raft conf change.
 		var isJoint bool
