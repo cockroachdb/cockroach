@@ -4,6 +4,7 @@ cast.eg.go
 const.eg.go
 distinct.eg.go
 hashjoiner.eg.go
+joiner_util.eg.go
 like_ops.eg.go
 mergejoinbase.eg.go
 mergejoiner_fullouter.eg.go

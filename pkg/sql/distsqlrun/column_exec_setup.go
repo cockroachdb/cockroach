@@ -415,9 +415,12 @@ func newColOperator(
 		var filterConstructor func(exec.Operator) (exec.Operator, error)
 		filterOnlyOnLeft := true
 		onExprAlreadyHandled := false
-		if !core.MergeJoiner.OnExpr.Empty() {
-			// TODO(yuzefovich): figure out how to correctly populate
-			// filterOnlyOnLeft when core.MergeJoiner.OnExpr.LocalExpr is non-nil.
+		if !core.MergeJoiner.OnExpr.Empty() && core.MergeJoiner.Type != sqlbase.JoinType_INNER {
+			if core.MergeJoiner.OnExpr.LocalExpr != nil {
+				// TODO(yuzefovich): figure out how to correctly populate
+				// filterOnlyOnLeft in this case.
+				return result, errors.Errorf("only INNER merge joins with ON expressions passed in LocalExpr are supported")
+			}
 			onExpr := core.MergeJoiner.OnExpr.Expr
 			if onExpr != "" {
 				rightColumnFound := false
