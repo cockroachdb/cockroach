@@ -303,24 +303,22 @@ func NewDatumRowConverter(
 	return c, nil
 }
 
+const fileIDBits = 64 - builtins.NodeIDBits
+
 // Row inserts kv operations into the current kv batch, and triggers a SendBatch
 // if necessary.
 func (c *DatumRowConverter) Row(ctx context.Context, fileIndex int32, rowIndex int64) error {
 	if c.hidden >= 0 {
 		// We don't want to call unique_rowid() for the hidden PK column because
-		// it is not idempotent. The sampling from the first stage will be useless
-		// during the read phase, producing a single range split with all of the
-		// data. Instead, we will call our own function that mimics that function,
-		// but more-or-less guarantees that it will not interfere with the numbers
-		// that will be produced by it. The lower 15 bits mimic the node id, but as
-		// the CSV file number. The upper 48 bits are the line number and mimic the
-		// timestamp. It would take a file with many more than 2**32 lines to even
-		// begin approaching what unique_rowid would return today, so we assume it
-		// to be safe. Since the timestamp is won't overlap, it is safe to use any
-		// number in the node id portion. The 15 bits in that portion should account
-		// for up to 32k CSV files in a single IMPORT. In the case of > 32k files,
-		// the data is xor'd so the final bits are flipped instead of set.
-		c.Datums[c.hidden] = tree.NewDInt(builtins.GenerateUniqueID(fileIndex, uint64(rowIndex)))
+		// it is not idempotent. We mimic its logic but flip the order of the "time"
+		// and "node bits" so that the file index (i'th file of import) which serves
+		// as the "node" is in the high bits instead, while the row index (i'th row
+		// of the that file) serves as the timestamp but is in the lower bits. This
+		// reversed order yields contiguous KVs for contiguous rows of one file and
+		// minimizes overlapping KVs, yielding ~2-3x improvements in performance and
+		// even more significant reductions in required compactions.
+		i := -1*(int64(fileIndex)<<fileIDBits) ^ rowIndex
+		c.Datums[c.hidden] = tree.NewDInt(tree.DInt(i))
 	}
 
 	// TODO(justin): we currently disallow computed columns in import statements.
