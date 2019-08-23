@@ -92,16 +92,6 @@ var useAtomicReplicationChanges = settings.RegisterBoolSetting(
 	false,
 )
 
-// FatalAtomicReplicationChangeUnimplemented is called by code that will need
-// to change when atomic replication changes are available to make sure it is
-// updated accordingly.
-//
-// TODO(tbg): update all callers and remove this method in the commit that allows
-// atomic replication changes.
-func FatalAtomicReplicationChangeUnimplemented(ctx context.Context) {
-	log.Fatalf(ctx, "atomic configuration changes not yet implemented")
-}
-
 // MaxCommandSizeFloor is the minimum allowed value for the MaxCommandSize
 // cluster setting.
 const MaxCommandSizeFloor = 4 << 20 // 4MB
