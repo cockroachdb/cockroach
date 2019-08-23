@@ -170,7 +170,7 @@ func (d *decodedRaftEntry) decode(ctx context.Context, e *raftpb.Entry) error {
 	switch e.Type {
 	case raftpb.EntryNormal:
 		return d.decodeNormalEntry(e)
-	case raftpb.EntryConfChange:
+	case raftpb.EntryConfChange, raftpb.EntryConfChangeV2:
 		return d.decodeConfChangeEntry(e)
 	default:
 		log.Fatalf(ctx, "unexpected Raft entry: %v", e)
