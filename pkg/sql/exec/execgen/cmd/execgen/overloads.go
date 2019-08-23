@@ -372,13 +372,18 @@ func (bytesCustomizer) getCmpOpCompareFunc() compareFunc {
 	}
 }
 
+// hashByteSliceString is a templated code for hashing a byte slice. It is
+// meant to be used as a format string for fmt.Sprintf with the first argument
+// being the "target" (i.e. what variable to assign the hash to) and the second
+// argument being the "value" (i.e. what is the name of a byte slice variable).
+const hashByteSliceString = `
+			sh := (*reflect.SliceHeader)(unsafe.Pointer(&%[2]s))
+			%[1]s = memhash(unsafe.Pointer(sh.Data), %[1]s, uintptr(len(%[2]s)))
+`
+
 func (bytesCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
-		return fmt.Sprintf(`
-			sh := (*reflect.SliceHeader)(unsafe.Pointer(&%[1]s))
-			%[2]s = memhash(unsafe.Pointer(sh.Data), %[2]s, uintptr(len(%[1]s)))
-
-		`, v, target)
+		return fmt.Sprintf(hashByteSliceString, target, v)
 	}
 }
 
@@ -397,20 +402,23 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 
 func (decimalCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
-		return fmt.Sprintf(`
-			d, err := %[2]s.Float64()
-			if err != nil {
-				execerror.NonVectorizedPanic(err)
-			}
-
-			%[1]s = f64hash(noescape(unsafe.Pointer(&d)), %[1]s)
-		`, target, v)
+		return fmt.Sprintf(`b := []byte(%[1]s.String())`, v) +
+			fmt.Sprintf(hashByteSliceString, target, "b")
 	}
 }
 
 func (c floatCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
-		return fmt.Sprintf("%[1]s = f%[3]dhash(noescape(unsafe.Pointer(&%[2]s)), %[1]s)", target, v, c.width)
+		// TODO(yuzefovich): think through whether this is appropriate way to hash
+		// NaNs.
+		return fmt.Sprintf(
+			`
+			f := %[2]s
+			if math.IsNaN(float64(f)) {
+				f = 0
+			}
+			%[1]s = f%[3]dhash(noescape(unsafe.Pointer(&f)), %[1]s)
+`, target, v, c.width)
 	}
 }
 
