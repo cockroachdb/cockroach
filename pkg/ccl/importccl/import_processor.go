@@ -41,31 +41,10 @@ var csvOutputTypes = []types.T{
 	*types.Bytes,
 }
 
-func newReadImportDataProcessor(
-	flowCtx *distsqlrun.FlowCtx,
-	processorID int32,
-	spec distsqlpb.ReadImportDataSpec,
-	output distsqlrun.RowReceiver,
-) (distsqlrun.Processor, error) {
-	cp := &readImportDataProcessor{
-		flowCtx:     flowCtx,
-		processorID: processorID,
-		spec:        spec,
-		output:      output,
-	}
-
-	if err := cp.out.Init(&distsqlpb.PostProcessSpec{}, csvOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
-		return nil, err
-	}
-	return cp, nil
-}
-
 type readImportDataProcessor struct {
-	flowCtx     *distsqlrun.FlowCtx
-	processorID int32
-	spec        distsqlpb.ReadImportDataSpec
-	out         distsqlrun.ProcOutputHelper
-	output      distsqlrun.RowReceiver
+	flowCtx *distsqlrun.FlowCtx
+	spec    distsqlpb.ReadImportDataSpec
+	output  distsqlrun.RowReceiver
 }
 
 var _ distsqlrun.Processor = &readImportDataProcessor{}
@@ -74,28 +53,35 @@ func (cp *readImportDataProcessor) OutputTypes() []types.T {
 	return csvOutputTypes
 }
 
+func newReadImportDataProcessor(
+	flowCtx *distsqlrun.FlowCtx,
+	processorID int32,
+	spec distsqlpb.ReadImportDataSpec,
+	output distsqlrun.RowReceiver,
+) (distsqlrun.Processor, error) {
+	cp := &readImportDataProcessor{
+		flowCtx: flowCtx,
+		spec:    spec,
+		output:  output,
+	}
+	return cp, nil
+}
+
 func (cp *readImportDataProcessor) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "readImportDataProcessor")
 	defer tracing.FinishSpan(span)
 
-	if err := cp.doRun(ctx); err != nil {
-		distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)
-	} else {
-		cp.out.Close()
-	}
-}
+	defer cp.output.ProducerDone()
 
-// doRun uses a more familiar error return API, allowing concise early returns
-// on errors in setup that all then are handled by the actual DistSQL Run method
-// wrapper, doing the correct DrainAndClose error handling logic.
-func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	group := ctxgroup.WithContext(ctx)
 	kvCh := make(chan row.KVBatch, 10)
 
 	conv, err := makeInputConverter(&cp.spec, cp.flowCtx.NewEvalCtx(), kvCh)
 	if err != nil {
-		return err
+		cp.output.Push(nil, &distsqlpb.ProducerMetadata{Err: err})
+		return
 	}
+
 	conv.start(group)
 
 	// Read input files into kvs
@@ -142,7 +128,10 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 		})
 	}
 
-	return group.Wait()
+	if err := group.Wait(); err != nil {
+		cp.output.Push(nil, &distsqlpb.ProducerMetadata{Err: err})
+	}
+}
 
 func makeInputConverter(
 	spec *distsqlpb.ReadImportDataSpec, evalCtx *tree.EvalContext, kvCh chan row.KVBatch,
@@ -256,12 +245,7 @@ func (cp *readImportDataProcessor) emitKvs(ctx context.Context, kvCh <-chan row.
 						sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
 					}
 				}
-
-				cs, err := cp.out.EmitRow(ctx, row)
-				if err != nil {
-					return err
-				}
-				if cs != distsqlrun.NeedMoreRows {
+				if cp.output.Push(row, nil) != distsqlrun.NeedMoreRows {
 					return errors.New("unexpected closure of consumer")
 				}
 			}
@@ -422,10 +406,7 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 					}
 					prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
 				}
-				meta := &distsqlpb.ProducerMetadata{BulkProcessorProgress: &prog}
-				if !distsqlrun.EmitHelper(ctx, &cp.out, nil /* row */, meta, func(_ context.Context) {}) {
-					return errors.New("consumer closed")
-				}
+				cp.output.Push(nil, &distsqlpb.ProducerMetadata{BulkProcessorProgress: &prog})
 			}
 		}
 	})
@@ -513,10 +494,7 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 		prog.CompletedFraction[i] = 1.0
 		prog.CompletedRow[i] = math.MaxUint64
 	}
-	meta := &distsqlpb.ProducerMetadata{BulkProcessorProgress: &prog}
-	if !distsqlrun.EmitHelper(ctx, &cp.out, nil /* row */, meta, func(_ context.Context) {}) {
-		return errors.New("consumer closed")
-	}
+	cp.output.Push(nil, &distsqlpb.ProducerMetadata{BulkProcessorProgress: &prog})
 
 	addedSummary := pkIndexAdder.GetSummary()
 	addedSummary.Add(indexAdder.GetSummary())
@@ -524,16 +502,10 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 	if err != nil {
 		return err
 	}
-	cs, err := cp.out.EmitRow(ctx, sqlbase.EncDatumRow{
+	cp.output.Push(sqlbase.EncDatumRow{
 		sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
 		sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
-	})
-	if err != nil {
-		return err
-	}
-	if cs != distsqlrun.NeedMoreRows {
-		return errors.New("unexpected closure of consumer")
-	}
+	}, nil)
 	return nil
 }
 
