@@ -731,7 +731,10 @@ func TestHashJoinerInt64(t *testing.T) {
 						tc.leftOutCols, tc.rightOutCols,
 						tc.leftTypes, tc.rightTypes,
 						tc.buildRightSide, tc.buildDistinct,
-						tc.joinType)
+						tc.joinType,
+						nil,   /* filterConstructor */
+						false, /* filterOnlyOnLeft */
+					)
 				})
 			})
 

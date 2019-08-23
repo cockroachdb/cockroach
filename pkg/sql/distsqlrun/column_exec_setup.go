@@ -333,6 +333,38 @@ func newColOperator(
 			}
 		}
 
+		var filterConstructor func(exec.Operator) (exec.Operator, error)
+		filterOnlyOnLeft := true
+		onExprAlreadyHandled := false
+		if !core.HashJoiner.OnExpr.Empty() {
+			// TODO(yuzefovich): figure out how to correctly populate
+			// filterOnlyOnLeft when core.HashJoiner.OnExpr.LocalExpr is non-nil.
+			onExpr := core.HashJoiner.OnExpr.Expr
+			if onExpr != "" {
+				rightColumnFound := false
+				colOffset := len(spec.Input[0].ColumnTypes) + 1
+				for rColIdx := range spec.Input[1].ColumnTypes {
+					rColOrdinal := fmt.Sprintf("@%d", rColIdx+colOffset)
+					if strings.Contains(onExpr, rColOrdinal) {
+						rightColumnFound = true
+						break
+					}
+				}
+				filterOnlyOnLeft = !rightColumnFound
+			}
+			if core.HashJoiner.Type == sqlbase.JoinType_LEFT_SEMI {
+				onExprAlreadyHandled = true
+				filterConstructor = func(op exec.Operator) (exec.Operator, error) {
+					r := newColOperatorResult{
+						op:          op,
+						columnTypes: append(spec.Input[0].ColumnTypes, spec.Input[1].ColumnTypes...),
+					}
+					err := r.planFilterExpr(flowCtx.NewEvalCtx(), core.HashJoiner.OnExpr)
+					return r.op, err
+				}
+			}
+		}
+
 		result.op, err = exec.NewEqHashJoinerOp(
 			inputs[0],
 			inputs[1],
@@ -345,6 +377,8 @@ func newColOperator(
 			core.HashJoiner.RightEqColumnsAreKey,
 			core.HashJoiner.LeftEqColumnsAreKey || core.HashJoiner.RightEqColumnsAreKey,
 			core.HashJoiner.Type,
+			filterConstructor,
+			filterOnlyOnLeft,
 		)
 		if err != nil {
 			return result, err
@@ -359,9 +393,9 @@ func newColOperator(
 			result.columnTypes = result.columnTypes[:nLeftCols]
 		}
 
-		if !core.HashJoiner.OnExpr.Empty() {
+		if !core.HashJoiner.OnExpr.Empty() && !onExprAlreadyHandled {
 			if core.HashJoiner.Type != sqlbase.JoinType_INNER {
-				return result, errors.Newf("can't plan non-inner hash join with on expressions")
+				return result, errors.Newf("can only plan INNER and LEFT SEMI hash joins with ON expressions")
 			}
 			err = result.planFilterExpr(flowCtx.NewEvalCtx(), core.HashJoiner.OnExpr)
 		}

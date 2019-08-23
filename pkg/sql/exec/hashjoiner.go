@@ -61,6 +61,8 @@ type hashJoinerSpec struct {
 	// buildDistinct indicates whether or not the build table equality column
 	// tuples are distinct. If they are distinct, performance can be optimized.
 	buildDistinct bool
+
+	filter *joinerFilter
 }
 
 type hashJoinerSourceSpec struct {
@@ -225,12 +227,17 @@ func (hj *hashJoinEqOp) Init() {
 		probe = hj.spec.right
 	}
 
+	// TODO(yuzefovich): we don't need to store all columns all the time.
+	// Optimize this.
+	storeAllCols := hj.spec.filter != nil
+
 	hj.ht = makeHashTable(
 		hashTableBucketSize,
 		build.sourceTypes,
 		build.eqCols,
 		build.outCols,
 		false, /* allowNullEquality */
+		storeAllCols,
 	)
 
 	hj.builder = makeHashJoinBuilder(
@@ -242,6 +249,7 @@ func (hj *hashJoinEqOp) Init() {
 		hj.ht, probe, build,
 		hj.spec.buildRightSide,
 		hj.spec.buildDistinct,
+		hj.spec.filter,
 	)
 
 	hj.runningState = hjBuilding
@@ -366,10 +374,13 @@ type hashTable struct {
 	// head and thereby should not be traversed.
 	head []bool
 
-	// vals stores the union of the equality and output columns of the left
+	// vals stores the union of the equality and output columns of the build
 	// table. A key tuple is defined as the elements in each row of vals that
 	// makes up the equality columns. The ID of a key at any index of vals is
 	// index + 1.
+	// However, when there is an ON expression in case of hash joiner, vals will
+	// store all the columns of the build table.
+	// TODO(yuzefovich): update the comment when this is optimized out.
 	vals []coldata.Vec
 	// valTypes stores the corresponding types of the val columns.
 	valTypes []coltypes.T
@@ -424,54 +435,64 @@ func makeHashTable(
 	eqCols []uint32,
 	outCols []uint32,
 	allowNullEquality bool,
+	storeAllCols bool,
 ) *hashTable {
-	// Compute the union of eqCols and outCols and compress vals to only keep the
-	// important columns.
 	nCols := len(sourceTypes)
-	keepCol := make([]bool, nCols)
-	compressed := make([]uint32, nCols)
-
-	for _, colIdx := range eqCols {
-		keepCol[colIdx] = true
-	}
-
-	for _, colIdx := range outCols {
-		keepCol[colIdx] = true
-	}
-
-	// Extract the important columns and discard the rest.
-	cols := make([]coldata.Vec, 0, nCols)
-	nKeep := uint32(0)
-
 	keepTypes := make([]coltypes.T, 0, nCols)
 	keepCols := make([]uint32, 0, nCols)
+	cols := make([]coldata.Vec, 0, nCols)
 
-	for i := 0; i < nCols; i++ {
-		if keepCol[i] {
-			cols = append(cols, coldata.NewMemColumn(sourceTypes[i], 0))
-			keepTypes = append(keepTypes, sourceTypes[i])
-			keepCols = append(keepCols, uint32(i))
+	// Extract types of the	eqCols and outCols. The indices are extracted below.
+	keys := make([]uint32, len(eqCols))
+	outTypes := make([]coltypes.T, len(outCols))
+	outs := make([]uint32, len(outCols))
 
-			compressed[i] = nKeep
-			nKeep++
+	if storeAllCols {
+		// We will store all the columns.
+		for _, t := range sourceTypes {
+			cols = append(cols, coldata.NewMemColumn(t, 0))
 		}
-	}
+		keepTypes = keepTypes[:nCols]
+		copy(keepTypes, sourceTypes)
+		for i := range sourceTypes {
+			keepCols = append(keepCols, uint32(i))
+		}
+		copy(keys, eqCols)
+		copy(outs, outCols)
+		for i, t := range outCols {
+			outTypes[i] = sourceTypes[t]
+		}
+	} else {
+		// Compute the union of eqCols and outCols and compress vals to only keep
+		// the important columns.
+		keepCol := make([]bool, nCols)
+		for _, colIdx := range eqCols {
+			keepCol[colIdx] = true
+		}
+		for _, colIdx := range outCols {
+			keepCol[colIdx] = true
+		}
 
-	// Extract and types and indices of the	 eqCols and outCols.
-	nKeys := len(eqCols)
-	keyTypes := make([]coltypes.T, nKeys)
-	keys := make([]uint32, nKeys)
-	for i, colIdx := range eqCols {
-		keyTypes[i] = sourceTypes[colIdx]
-		keys[i] = compressed[colIdx]
-	}
+		// Extract the important columns and discard the rest.
+		nKeep := uint32(0)
+		compressed := make([]uint32, nCols)
+		for i := 0; i < nCols; i++ {
+			if keepCol[i] {
+				cols = append(cols, coldata.NewMemColumn(sourceTypes[i], 0))
+				keepTypes = append(keepTypes, sourceTypes[i])
+				keepCols = append(keepCols, uint32(i))
 
-	nOutCols := len(outCols)
-	outTypes := make([]coltypes.T, nOutCols)
-	outs := make([]uint32, nOutCols)
-	for i, colIdx := range outCols {
-		outTypes[i] = sourceTypes[colIdx]
-		outs[i] = compressed[colIdx]
+				compressed[i] = nKeep
+				nKeep++
+			}
+		}
+		for i, colIdx := range eqCols {
+			keys[i] = compressed[colIdx]
+		}
+		for i, colIdx := range outCols {
+			outs[i] = compressed[colIdx]
+			outTypes[i] = sourceTypes[colIdx]
+		}
 	}
 
 	return &hashTable{
@@ -516,6 +537,59 @@ func (ht *hashTable) loadBatch(batch coldata.Batch) {
 	}
 
 	ht.size += uint64(batchSize)
+}
+
+// hjBufferedBatch provides a coldata.Batch interface over hashTable.vals. It
+// should only be used by the filter.
+// TODO(yuzefovich): consider replacing hashTable.vals with mjBufferedGroup.
+type hjBufferedBatch struct {
+	ht *hashTable
+}
+
+var _ coldata.Batch = &hjBufferedBatch{}
+
+func (b *hjBufferedBatch) Length() uint16 {
+	execerror.VectorizedInternalPanic("Length() should not be called on hjBufferedBatch")
+	// This code is unreachable, but the compiler cannot infer that.
+	return 0
+}
+
+func (*hjBufferedBatch) SetLength(uint16) {
+	execerror.VectorizedInternalPanic("SetLength() should not be called on hjBufferedBatch")
+}
+
+func (b *hjBufferedBatch) Width() int {
+	return len(b.ht.vals)
+}
+
+func (b *hjBufferedBatch) ColVec(i int) coldata.Vec {
+	return b.ht.vals[i]
+}
+
+func (b *hjBufferedBatch) ColVecs() []coldata.Vec {
+	return b.ht.vals
+}
+
+func (*hjBufferedBatch) Selection() []uint16 {
+	execerror.VectorizedInternalPanic("Selection() should not be called on hjBufferedBatch")
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
+}
+
+func (*hjBufferedBatch) SetSelection(bool) {
+	execerror.VectorizedInternalPanic("SetSelection() should not be called on hjBufferedBatch")
+}
+
+func (*hjBufferedBatch) AppendCol(coltypes.T) {
+	execerror.VectorizedInternalPanic("AppentCol() should not be called on hjBufferedBatch")
+}
+
+func (*hjBufferedBatch) Reset(types []coltypes.T, length int) {
+	execerror.VectorizedInternalPanic("Reset() should not be called on hjBufferedBatch")
+}
+
+func (b *hjBufferedBatch) ResetInternalBatch() {
+	execerror.VectorizedInternalPanic("ResetInternalBatch() should not be called on hjBufferedBatch")
 }
 
 // initHash, rehash, and finalizeHash work together to compute the hash value
@@ -738,6 +812,9 @@ type hashJoinProber struct {
 	// prevBatch, if not nil, indicates that the previous probe input batch has
 	// not been fully processed.
 	prevBatch coldata.Batch
+
+	filter             *joinerFilter
+	buildBufferedBatch *hjBufferedBatch
 }
 
 func makeHashJoinProber(
@@ -746,6 +823,7 @@ func makeHashJoinProber(
 	build hashJoinerSourceSpec,
 	buildRightSide bool,
 	buildDistinct bool,
+	filter *joinerFilter,
 ) *hashJoinProber {
 	// Prepare the output batch by allocating with the correct column types.
 	nBuildCols := uint32(len(build.sourceTypes))
@@ -778,6 +856,11 @@ func makeHashJoinProber(
 		probeRowUnmatched = make([]bool, coldata.BatchSize)
 	}
 
+	var buildBufferedBatch *hjBufferedBatch
+	if filter != nil {
+		buildBufferedBatch = &hjBufferedBatch{ht: ht}
+	}
+
 	return &hashJoinProber{
 		ht: ht,
 
@@ -796,6 +879,9 @@ func makeHashJoinProber(
 
 		buildRightSide: buildRightSide,
 		buildDistinct:  buildDistinct,
+
+		filter:             filter,
+		buildBufferedBatch: buildBufferedBatch,
 	}
 }
 
@@ -822,7 +908,7 @@ func (prober *hashJoinProber) exec(ctx context.Context) {
 		batchSize := batch.Length()
 		sel := batch.Selection()
 
-		nResults := prober.collect(batch, batchSize, sel)
+		nResults := prober.collect(ctx, batch, batchSize, sel)
 		prober.congregate(nResults, batch, batchSize)
 	} else {
 		for {
@@ -864,7 +950,7 @@ func (prober *hashJoinProber) exec(ctx context.Context) {
 					prober.ht.findNext(nToCheck)
 				}
 
-				nResults = prober.collect(batch, batchSize, sel)
+				nResults = prober.collect(ctx, batch, batchSize, sel)
 			}
 
 			prober.congregate(nResults, batch, batchSize)
@@ -950,7 +1036,7 @@ func (ht *hashTable) check(nToCheck uint16, sel []uint16) uint16 {
 	return nDiffers
 }
 
-// congregate uses the probeIdx and buildidx pairs to stitch together the
+// congregate uses the probeIdx and buildIdx pairs to stitch together the
 // resulting join rows and add them to the output batch with the left table
 // columns preceding the right table columns.
 func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, batchSize uint16) {
@@ -1049,8 +1135,11 @@ func NewEqHashJoinerOp(
 	buildRightSide bool,
 	buildDistinct bool,
 	joinType sqlbase.JoinType,
+	filterConstructor func(Operator) (Operator, error),
+	filterOnlyOnLeft bool,
 ) (Operator, error) {
 	var leftOuter, rightOuter bool
+	var filter *joinerFilter
 	switch joinType {
 	case sqlbase.JoinType_INNER:
 	case sqlbase.JoinType_RIGHT_OUTER:
@@ -1061,15 +1150,22 @@ func NewEqHashJoinerOp(
 		rightOuter = true
 		leftOuter = true
 	case sqlbase.JoinType_LEFT_SEMI:
-		// In a semi-join, we don't need to store anything but a single row per
-		// build row, since all we care about is whether a row on the left matches
-		// any row on the right.
-		// Note that this is *not* the case if we have an ON condition, since we'll
-		// also need to make sure that a row on the left passes the ON condition
-		// with the row on the right to emit it. However, we don't support ON
-		// conditions just yet. When we do, we'll have a separate case for that.
 		buildRightSide = true
-		buildDistinct = true
+		if filterConstructor == nil {
+			// In a semi-join without the ON condition, we don't need to store
+			// anything but a single row per build row, since all we care about is
+			// whether a row on the left matches any row on the right.
+			buildDistinct = true
+		} else {
+			// In a semi-join with the ON condition, we might need to store
+			// everything to make sure that the row on the left passes the condition
+			// when combined with a row from the right.
+			var err error
+			filter, err = newJoinerFilter(leftTypes, rightTypes, filterConstructor, filterOnlyOnLeft)
+			if err != nil {
+				return nil, err
+			}
+		}
 		if len(rightOutCols) != 0 {
 			return nil, errors.Errorf("semi-join can't have right-side output columns")
 		}
@@ -1096,6 +1192,7 @@ func NewEqHashJoinerOp(
 
 		buildRightSide: buildRightSide,
 		buildDistinct:  buildDistinct,
+		filter:         filter,
 	}
 
 	return &hashJoinEqOp{

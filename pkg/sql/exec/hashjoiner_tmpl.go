@@ -256,7 +256,12 @@ func _COLLECT_RIGHT_OUTER(
 }
 
 func _COLLECT_NO_OUTER(
-	prober *hashJoinProber, batchSize uint16, nResults uint16, batch coldata.Batch, _USE_SEL bool,
+	ctx context.Context,
+	prober *hashJoinProber,
+	batchSize uint16,
+	nResults uint16,
+	batch coldata.Batch,
+	_USE_SEL bool,
 ) uint16 { // */}}
 	// {{define "collectNoOuter"}}
 	// Early bounds checks.
@@ -264,23 +269,53 @@ func _COLLECT_NO_OUTER(
 	// {{if .UseSel}}
 	_ = sel[batchSize-1]
 	// {{end}}
-	for i := uint16(0); i < batchSize; i++ {
-		currentID := prober.ht.headID[i]
-		for currentID != 0 {
-			if nResults >= coldata.BatchSize {
-				prober.prevBatch = batch
-				return nResults
-			}
+	if prober.filter != nil {
+		for i := uint16(0); i < batchSize; i++ {
+			currentID := prober.ht.headID[i]
+			filteredOut := true
+			for currentID != 0 && filteredOut {
+				// TODO(yuzefovich): this if is probably unnecessary here.
+				//if nResults >= coldata.BatchSize {
+				//	prober.prevBatch = batch
+				//	return nResults
+				//}
 
-			prober.buildIdx[nResults] = currentID - 1
-			// {{if .UseSel}}
-			prober.probeIdx[nResults] = sel[i]
-			// {{else}}
-			prober.probeIdx[nResults] = i
-			// {{end}}
-			currentID = prober.ht.same[currentID]
-			prober.ht.headID[i] = currentID
-			nResults++
+				// {{ if .UseSel }}
+				lIdx := sel[i]
+				// {{ else }}
+				lIdx := i
+				// {{ end }}
+				rIdx := currentID - 1
+				filteredOut = prober.filter.isLeftTupleFilteredOut(ctx, batch, prober.buildBufferedBatch, int(lIdx), int(rIdx), int(rIdx+1))
+				if !filteredOut {
+					prober.probeIdx[nResults] = lIdx
+					prober.buildIdx[nResults] = currentID - 1
+					nResults++
+				}
+				currentID = prober.ht.same[currentID]
+				// TODO(yuzefovich): this is probably unnecessary here.
+				// prober.ht.headID[i] = currentID
+			}
+		}
+	} else {
+		for i := uint16(0); i < batchSize; i++ {
+			currentID := prober.ht.headID[i]
+			for currentID != 0 {
+				if nResults >= coldata.BatchSize {
+					prober.prevBatch = batch
+					return nResults
+				}
+
+				prober.buildIdx[nResults] = currentID - 1
+				// {{if .UseSel}}
+				prober.probeIdx[nResults] = sel[i]
+				// {{else}}
+				prober.probeIdx[nResults] = i
+				// {{end}}
+				currentID = prober.ht.same[currentID]
+				prober.ht.headID[i] = currentID
+				nResults++
+			}
 		}
 	}
 	// {{end}}
@@ -424,7 +459,9 @@ func (ht *hashTable) checkCol(t coltypes.T, keyColIdx int, nToCheck uint16, sel 
 // collect prepares the buildIdx and probeIdx arrays where the buildIdx and
 // probeIdx at each index are joined to make an output row. The total number of
 // resulting rows is returned.
-func (prober *hashJoinProber) collect(batch coldata.Batch, batchSize uint16, sel []uint16) uint16 {
+func (prober *hashJoinProber) collect(
+	ctx context.Context, batch coldata.Batch, batchSize uint16, sel []uint16,
+) uint16 {
 	nResults := uint16(0)
 
 	if prober.spec.outer {
@@ -435,18 +472,18 @@ func (prober *hashJoinProber) collect(batch coldata.Batch, batchSize uint16, sel
 		}
 	} else {
 		if sel != nil {
-			_COLLECT_NO_OUTER(prober, batchSize, nResults, batch, true)
+			_COLLECT_NO_OUTER(ctx, prober, batchSize, nResults, batch, true)
 		} else {
-			_COLLECT_NO_OUTER(prober, batchSize, nResults, batch, false)
+			_COLLECT_NO_OUTER(ctx, prober, batchSize, nResults, batch, false)
 		}
 	}
 
 	return nResults
 }
 
-// distinctCollect prepares the batch with the joined output columns where the build
-// row index for each probe row is given in the groupID slice. This function
-// requires assumes a N-1 hash join.
+// distinctCollect prepares the batch with the joined output columns where the
+// build row index for each probe row is given in the groupID slice. This
+// function assumes a N-1 hash join.
 func (prober *hashJoinProber) distinctCollect(
 	batch coldata.Batch, batchSize uint16, sel []uint16,
 ) uint16 {
