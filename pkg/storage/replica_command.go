@@ -1007,6 +1007,10 @@ func (r *Replica) maybeLeaveAtomicChangeReplicas(
 	if noop {
 		return desc, nil
 	}
+	// NB: reason and detail won't be used because no range log event will be
+	// emitted.
+	//
+	// TODO(tbg): reconsider this.
 	return execChangeReplicasTxn(
 		ctx, r.store, desc, storagepb.ReasonUnknown /* unused */, "", nil, /* iChgs */
 	)
