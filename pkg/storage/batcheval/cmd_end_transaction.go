@@ -46,7 +46,10 @@ func init() {
 }
 
 func declareKeysEndTransaction(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor,
+	header roachpb.Header,
+	req roachpb.Request,
+	spans *spanset.SpanSet,
 ) {
 	et := req.(*roachpb.EndTransactionRequest)
 	declareKeysWriteTransaction(desc, header, req, spans)
@@ -91,10 +94,10 @@ func declareKeysEndTransaction(
 				// interfere with the non-delta stats computed as a part of the
 				// split. (see
 				// https://github.com/cockroachdb/cockroach/issues/14881)
-				spans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{
+				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key:    st.LeftDesc.StartKey.AsRawKey(),
 					EndKey: st.RightDesc.EndKey.AsRawKey(),
-				}, header.Timestamp)
+				})
 				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key:    keys.MakeRangeKeyPrefix(st.LeftDesc.StartKey),
 					EndKey: keys.MakeRangeKeyPrefix(st.RightDesc.EndKey).PrefixEnd(),
@@ -129,6 +132,7 @@ func declareKeysEndTransaction(
 					EndKey: abortspan.MaxKey(header.RangeID),
 				})
 			}
+            // TODO(irfansharif): Comment on PR and ask if safe.
 			if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {
 				// Merges write to the left side's abort span and the right side's data
 				// and range-local spans. They also read from the right side's range ID
@@ -1094,7 +1098,10 @@ func mergeTrigger(
 }
 
 func changeReplicasTrigger(
-	ctx context.Context, rec EvalContext, batch engine.Batch, change *roachpb.ChangeReplicasTrigger,
+	ctx context.Context,
+	rec EvalContext,
+	batch engine.Batch,
+	change *roachpb.ChangeReplicasTrigger,
 ) result.Result {
 	var pd result.Result
 	// After a successful replica addition or removal check to see if the
