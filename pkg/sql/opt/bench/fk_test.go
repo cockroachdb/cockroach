@@ -44,7 +44,7 @@ func runFKBench(
 			// Don't let auto stats interfere with the test. Stock stats are
 			// sufficient to get the right plans (i.e. lookup join).
 			r.Exec(b, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
-			r.Exec(b, fmt.Sprintf("SET experimental_optimizer_foreign_keys = %v", cfg.optFKOn))
+			r.Exec(b, fmt.Sprintf("SET optimizer_foreign_keys = %v", cfg.optFKOn))
 			setup(b, r, cfg.setupFKs)
 			b.ResetTimer()
 			run(b, r)

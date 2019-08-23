@@ -134,6 +134,12 @@ var ReorderJoinsLimitClusterValue = settings.RegisterValidatedIntSetting(
 	},
 )
 
+var optDrivenFKClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.optimizer_foreign_keys.enabled",
+	"enables optimizer-driven foreign key checks by default",
+	false,
+)
+
 // VectorizeClusterMode controls the cluster default for when automatic
 // vectorization is enabled.
 var VectorizeClusterMode = settings.RegisterEnumSetting(

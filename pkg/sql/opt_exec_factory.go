@@ -1102,12 +1102,13 @@ FROM
 
 	for _, param := range []string{
 		"experimental_enable_zigzag_join",
+		"optimizer_foreign_keys",
 	} {
 		value, err := ef.environmentQuery(fmt.Sprintf("SHOW %s", param))
 		if err != nil {
 			return nil, err
 		}
-		defaultVal := varGen[param].GlobalDefault(nil)
+		defaultVal := varGen[param].GlobalDefault(&ef.planner.extendedEvalCtx.Settings.SV)
 		if value != defaultVal {
 			out.writef("SET %s = %s;\n", param, value)
 		}
