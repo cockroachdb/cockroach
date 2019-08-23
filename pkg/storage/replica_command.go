@@ -1292,6 +1292,10 @@ const (
 	internalChangeTypeRemove
 )
 
+// internalReplicationChange is a replication target together with an internal
+// change type. The internal change type is needed to encode in which way the
+// replica is mutated (i.e. in a sense, what its predecessor looked like). We
+// need this to accurately transcribe the old into the updated range descriptor.
 type internalReplicationChange struct {
 	target roachpb.ReplicationTarget
 	typ    internalChangeType
