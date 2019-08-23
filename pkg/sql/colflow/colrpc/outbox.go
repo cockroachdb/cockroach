@@ -64,6 +64,10 @@ type Outbox struct {
 		buf *bytes.Buffer
 		msg *execinfrapb.ProducerMessage
 	}
+
+	// A copy of Run's caller ctx, with no StreamID tag.
+	// Used to pass a clean context to the input.Next.
+	runnerCtx context.Context
 }
 
 // NewOutbox creates a new Outbox.
@@ -118,6 +122,7 @@ func (o *Outbox) Run(
 	streamID execinfrapb.StreamID,
 	cancelFn context.CancelFunc,
 ) {
+	o.runnerCtx = ctx
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
 
 	log.VEventf(ctx, 2, "Outbox Dialing %s", nodeID)
@@ -202,7 +207,10 @@ func (o *Outbox) sendBatches(
 	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
 ) (terminatedGracefully bool, _ error) {
 	nextBatch := func() {
-		o.batch = o.Input().Next(ctx)
+		if o.runnerCtx == nil {
+			o.runnerCtx = ctx
+		}
+		o.batch = o.Input().Next(o.runnerCtx)
 	}
 	for {
 		if atomic.LoadUint32(&o.draining) == 1 {
