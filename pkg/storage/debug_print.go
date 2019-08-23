@@ -188,13 +188,24 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 				&ent, leaseStr, &cmd, writeBatch), nil
 		}
 		return fmt.Sprintf("%s: EMPTY\n", &ent), nil
-	} else if ent.Type == raftpb.EntryConfChange {
-		var cc raftpb.ConfChange
-		if err := protoutil.Unmarshal(ent.Data, &cc); err != nil {
-			return "", err
+	} else if ent.Type == raftpb.EntryConfChange || ent.Type == raftpb.EntryConfChangeV2 {
+		var c raftpb.ConfChangeI
+		if ent.Type == raftpb.EntryConfChange {
+			var cc raftpb.ConfChange
+			if err := protoutil.Unmarshal(ent.Data, &cc); err != nil {
+				return "", err
+			}
+			c = cc
+		} else {
+			var cc raftpb.ConfChangeV2
+			if err := protoutil.Unmarshal(ent.Data, &cc); err != nil {
+				return "", err
+			}
+			c = cc
 		}
+
 		var ctx ConfChangeContext
-		if err := protoutil.Unmarshal(cc.Context, &ctx); err != nil {
+		if err := protoutil.Unmarshal(c.AsV2().Context, &ctx); err != nil {
 			return "", err
 		}
 		var cmd storagepb.ReplicatedEvalResult
