@@ -142,9 +142,10 @@ func (r *RangeDescriptor) SetReplicaType(
 	nodeID NodeID, storeID StoreID, typ ReplicaType,
 ) (ReplicaDescriptor, bool) {
 	for i := range r.InternalReplicas {
-		if r.InternalReplicas[i].StoreID == storeID && r.InternalReplicas[i].NodeID == nodeID {
-			r.InternalReplicas[i].Type = &typ
-			return r.InternalReplicas[i], true
+		desc := &r.InternalReplicas[i]
+		if desc.StoreID == storeID && desc.NodeID == nodeID {
+			desc.Type = &typ
+			return *desc, true
 		}
 	}
 	return ReplicaDescriptor{}, false
