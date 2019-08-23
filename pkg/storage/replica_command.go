@@ -1286,10 +1286,10 @@ func (r *Replica) addReplicaLegacyPreemptiveSnapshot(
 type internalChangeType byte
 
 const (
-	internalChangeTypeAddVoterViaPreemptiveSnap = iota
-	internalChangeTypeAddLearner                = iota
-	internalChangeTypePromoteLearner            = iota
-	internalChangeTypeRemove                    = iota
+	internalChangeTypeAddVoterViaPreemptiveSnap internalChangeType = iota
+	internalChangeTypeAddLearner
+	internalChangeTypePromoteLearner
+	internalChangeTypeRemove
 )
 
 type internalReplicationChange struct {
