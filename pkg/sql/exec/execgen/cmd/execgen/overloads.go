@@ -369,20 +369,27 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 
 func (decimalCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
+		// TODO(yuzefovich): do we want to restrict the length of the string
+		// representation of a decimal that is used in hashing?
 		return fmt.Sprintf(`
-			d, err := %[2]s.Float64()
-			if err != nil {
-				execerror.NonVectorizedPanic(err)
-			}
-
-			%[1]s = f64hash(noescape(unsafe.Pointer(&d)), %[1]s)
+			b := []byte(%[2]s.String())
+			%[1]s = memhash(noescape(unsafe.Pointer(&b)), %[1]s, uintptr(len(b)))
 		`, target, v)
 	}
 }
 
 func (c floatCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
-		return fmt.Sprintf("%[1]s = f%[3]dhash(noescape(unsafe.Pointer(&%[2]s)), %[1]s)", target, v, c.width)
+		// TODO(yuzefovich): think through whether this is appropriate way to hash
+		// NaNs.
+		return fmt.Sprintf(
+			`
+			f := %[2]s
+			if math.IsNaN(float64(f)) {
+				f = 0
+			}
+			%[1]s = f%[3]dhash(noescape(unsafe.Pointer(&f)), %[1]s)
+`, target, v, c.width)
 	}
 }
 
