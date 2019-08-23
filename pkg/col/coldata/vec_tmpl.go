@@ -39,6 +39,9 @@ import (
 // coltypes.Foo for each type Foo in the coltypes.T type.
 const _TYPES_T = coltypes.Unhandled
 
+// _GOTYPESLICE is a template Go type slice variable.
+type _GOTYPESLICE interface{}
+
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
 
@@ -75,11 +78,38 @@ func (m *memColumn) Append(args AppendArgs) {
 	}
 }
 
-func (m *memColumn) Copy(args CopyArgs) {
-	if args.Nils != nil && args.Sel64 == nil {
-		panic("Nils set without Sel64")
+// {{/*
+func _COPY_WITH_SEL(m *memColumn, args CopyArgs, fromCol, toCol _GOTYPESLICE, sel interface{}) { // */}}
+	// {{define "copyWithSel"}}
+	if args.Src.MaybeHasNulls() {
+		nulls := args.Src.Nulls()
+		n := execgen.LEN(toCol)
+		toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
+		for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
+			if nulls.NullAt64(uint64(selIdx)) {
+				m.nulls.SetNull64(uint64(i) + args.DestIdx)
+			} else {
+				v := execgen.UNSAFEGET(fromCol, int(selIdx))
+				execgen.SET(toColSliced, i, v)
+			}
+		}
+		return
 	}
+	// No Nulls.
+	n := execgen.LEN(toCol)
+	toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
+	for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
+		v := execgen.UNSAFEGET(fromCol, int(selIdx))
+		execgen.SET(toColSliced, i, v)
+	}
+	return
+	// {{end}}
+	// {{/*
+}
 
+// */}}
+
+func (m *memColumn) Copy(args CopyArgs) {
 	m.Nulls().UnsetNullRange(args.DestIdx, args.DestIdx+(args.SrcEndIdx-args.SrcStartIdx))
 
 	switch args.ColType {
@@ -89,82 +119,10 @@ func (m *memColumn) Copy(args CopyArgs) {
 		toCol := m._TemplateType()
 		if args.Sel64 != nil {
 			sel := args.Sel64
-			// TODO(asubiotto): Template this and the uint16 case below.
-			if args.Nils != nil {
-				if args.Src.MaybeHasNulls() {
-					nulls := args.Src.Nulls()
-					n := execgen.LEN(toCol)
-					toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
-					for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
-						if args.Nils[i] || nulls.NullAt64(selIdx) {
-							m.nulls.SetNull64(uint64(i) + args.DestIdx)
-						} else {
-							v := execgen.UNSAFEGET(fromCol, int(selIdx))
-							execgen.SET(toColSliced, i, v)
-						}
-					}
-					return
-				}
-				// Nils but no Nulls.
-				n := execgen.LEN(toCol)
-				toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
-				for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
-					if args.Nils[i] {
-						m.nulls.SetNull64(uint64(i) + args.DestIdx)
-					} else {
-						v := execgen.UNSAFEGET(fromCol, int(selIdx))
-						execgen.SET(toColSliced, i, v)
-					}
-				}
-				return
-			}
-			// No Nils.
-			if args.Src.MaybeHasNulls() {
-				nulls := args.Src.Nulls()
-				n := execgen.LEN(toCol)
-				toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
-				for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
-					if nulls.NullAt64(selIdx) {
-						m.nulls.SetNull64(uint64(i) + args.DestIdx)
-					} else {
-						v := execgen.UNSAFEGET(fromCol, int(selIdx))
-						execgen.SET(toColSliced, i, v)
-					}
-				}
-				return
-			}
-			// No Nils or Nulls.
-			n := execgen.LEN(toCol)
-			toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
-			for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
-				v := execgen.UNSAFEGET(fromCol, int(selIdx))
-				execgen.SET(toColSliced, i, v)
-			}
-			return
+			_COPY_WITH_SEL(m, args, sel)
 		} else if args.Sel != nil {
 			sel := args.Sel
-			if args.Src.MaybeHasNulls() {
-				nulls := args.Src.Nulls()
-				n := execgen.LEN(toCol)
-				toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
-				for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
-					if nulls.NullAt64(uint64(selIdx)) {
-						m.nulls.SetNull64(uint64(i) + args.DestIdx)
-					} else {
-						v := execgen.UNSAFEGET(fromCol, int(selIdx))
-						execgen.SET(toColSliced, i, v)
-					}
-				}
-				return
-			}
-			// No Nulls.
-			n := execgen.LEN(toCol)
-			toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
-			for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
-				v := execgen.UNSAFEGET(fromCol, int(selIdx))
-				execgen.SET(toColSliced, i, v)
-			}
-			return
+			_COPY_WITH_SEL(m, args, sel)
 		}
 		// No Sel or Sel64.
 		execgen.COPYSLICE(toCol, fromCol, int(args.DestIdx), int(args.SrcStartIdx), int(args.SrcEndIdx))
