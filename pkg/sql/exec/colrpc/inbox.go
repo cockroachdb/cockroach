@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/logtags"
 )
 
 // flowStreamServer is a utility interface used to mock out the RPC layer.
@@ -52,6 +53,10 @@ type Inbox struct {
 	converter  *colserde.ArrowBatchConverter
 	serializer *colserde.RecordBatchSerializer
 
+	// streamID is used to overwrite a caller's streamID
+	// in the ctx argument of Next and DrainMeta.
+	streamID distsqlpb.StreamID
+
 	// streamCh is the channel over which the stream is passed from the stream
 	// handler to the reader goroutine.
 	streamCh chan flowStreamServer
@@ -69,6 +74,10 @@ type Inbox struct {
 	// channel in the event of a cancellation or a non-io.EOF error originating
 	// from a stream.Recv.
 	errCh chan error
+
+	// ctxInterceptorFn is a callback to expose the inbox's context
+	// right after init. To be used for unit testing.
+	ctxInterceptorFn func(context.Context)
 
 	// We need two mutexes because a single mutex is insufficient to handle
 	// concurrent calls to Next() and DrainMeta(). See comment in DrainMeta.
@@ -109,7 +118,7 @@ type Inbox struct {
 var _ exec.StaticMemoryOperator = &Inbox{}
 
 // NewInbox creates a new Inbox.
-func NewInbox(typs []coltypes.T) (*Inbox, error) {
+func NewInbox(typs []coltypes.T, streamID distsqlpb.StreamID) (*Inbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
 		return nil, err
@@ -123,6 +132,7 @@ func NewInbox(typs []coltypes.T) (*Inbox, error) {
 		zeroBatch:  coldata.NewMemBatchWithSize(typs, 0),
 		converter:  c,
 		serializer: s,
+		streamID:   streamID,
 		streamCh:   make(chan flowStreamServer, 1),
 		contextCh:  make(chan context.Context, 1),
 		timeoutCh:  make(chan error, 1),
@@ -175,6 +185,10 @@ func (i *Inbox) initLocked(ctx context.Context) error {
 		i.errCh <- fmt.Errorf("%s: Inbox while waiting for stream", ctx.Err())
 		return ctx.Err()
 	}
+
+	if i.ctxInterceptorFn != nil {
+		i.ctxInterceptorFn(ctx)
+	}
 	i.contextCh <- ctx
 	return nil
 }
@@ -193,6 +207,7 @@ func (i *Inbox) closeLocked() {
 // canceled, a caller of Next cancels the first context passed into Next, or
 // an EOF is encountered on the stream by the Next goroutine.
 func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer) error {
+	streamCtx = logtags.AddTag(streamCtx, "streamID", i.streamID)
 	log.VEvent(streamCtx, 2, "Inbox handling stream")
 	defer log.VEvent(streamCtx, 2, "Inbox exited stream handler")
 	// Pass the stream to the reader goroutine (non-blocking) and get the context
@@ -248,6 +263,8 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 	if i.stateMu.done {
 		return i.zeroBatch
 	}
+
+	ctx = logtags.AddTag(ctx, "streamID", i.streamID)
 
 	defer func() {
 		// Catch any panics that occur and close the errCh in order to not leak the
@@ -345,6 +362,8 @@ func (i *Inbox) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	if i.stateMu.done {
 		return allMeta
 	}
+
+	ctx = logtags.AddTag(ctx, "streamID", i.streamID)
 
 	// We want draining the Inbox to work regardless of whether or not we have a
 	// goroutine in Next. We essentially need to do two things: 1) Is the stream
