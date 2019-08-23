@@ -369,10 +369,19 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 
 func (decimalCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
+		// TODO(yuzefovich): figure out how to hash decimals that are outside of
+		// the range of float64.
 		return fmt.Sprintf(`
 			d, err := %[2]s.Float64()
 			if err != nil {
-				execerror.NonVectorizedPanic(err)
+				if !strings.Contains(err.Error(), "value out of range") {
+					execerror.NonVectorizedPanic(err)
+				} else {
+					d = float64(0)
+				}
+			}
+			if math.IsNaN(d) {
+				d = 0
 			}
 
 			%[1]s = f64hash(noescape(unsafe.Pointer(&d)), %[1]s)
@@ -382,7 +391,16 @@ func (decimalCustomizer) getHashAssignFunc() assignFunc {
 
 func (c floatCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
-		return fmt.Sprintf("%[1]s = f%[3]dhash(noescape(unsafe.Pointer(&%[2]s)), %[1]s)", target, v, c.width)
+		// TODO(yuzefovich): think through whether this is appropriate way to hash
+		// NaNs.
+		return fmt.Sprintf(
+			`
+			f := %[2]s
+			if math.IsNaN(float64(f)) {
+				f = 0
+			}
+			%[1]s = f%[3]dhash(noescape(unsafe.Pointer(&f)), %[1]s)
+`, target, v, c.width)
 	}
 }
 

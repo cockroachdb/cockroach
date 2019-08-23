@@ -110,21 +110,69 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 	if nullChance != 0 && rng.Intn(nullChance) == 0 {
 		return tree.DNull
 	}
+	var special tree.Datum
 	// Sometimes pick from a predetermined list of known interesting datums.
 	if rng.Intn(10) == 0 {
 		specials := randInterestingDatums[typ.Family()]
 		if len(specials) > 0 {
-			return specials[rng.Intn(len(specials))]
+			special = specials[rng.Intn(len(specials))]
+			switch typ.Family() {
+			case types.IntFamily, types.FloatFamily:
+				// Specials for Int and Float families need a special treatment to make
+				// sure the special value is within the range given the requested
+				// type's width, so there are handled in the switch below.
+			default:
+				return special
+			}
 		}
 	}
 	switch typ.Family() {
 	case types.BoolFamily:
 		return tree.MakeDBool(rng.Intn(2) == 1)
 	case types.IntFamily:
-		// int64(rng.Uint64()) to get negative numbers, too
-		return tree.NewDInt(tree.DInt(int64(rng.Uint64())))
+		switch typ.Width() {
+		case 64:
+			if special != nil {
+				return special
+			}
+			// int64(rng.Uint64()) to get negative numbers, too
+			return tree.NewDInt(tree.DInt(int64(rng.Uint64())))
+		case 32:
+			if special != nil {
+				return tree.NewDInt(tree.DInt(int32(tree.MustBeDInt(special))))
+			}
+			// int32(rng.Uint64()) to get negative numbers, too
+			return tree.NewDInt(tree.DInt(int32(rng.Uint64())))
+		case 16:
+			if special != nil {
+				return tree.NewDInt(tree.DInt(int16(tree.MustBeDInt(special))))
+			}
+			// int16(rng.Uint64()) to get negative numbers, too
+			return tree.NewDInt(tree.DInt(int16(rng.Uint64())))
+		case 8:
+			if special != nil {
+				return tree.NewDInt(tree.DInt(int8(tree.MustBeDInt(special))))
+			}
+			// int8(rng.Uint64()) to get negative numbers, too
+			return tree.NewDInt(tree.DInt(int16(rng.Uint64())))
+		default:
+			panic(fmt.Sprintf("int with an unexpected width %d", typ.Width()))
+		}
 	case types.FloatFamily:
-		return tree.NewDFloat(tree.DFloat(rng.NormFloat64()))
+		switch typ.Width() {
+		case 64:
+			if special != nil {
+				return special
+			}
+			return tree.NewDFloat(tree.DFloat(rng.NormFloat64()))
+		case 32:
+			if special != nil {
+				return tree.NewDFloat(tree.DFloat(float32(*special.(*tree.DFloat))))
+			}
+			return tree.NewDFloat(tree.DFloat(float32(rng.NormFloat64())))
+		default:
+			panic(fmt.Sprintf("float with an unexpected width %d", typ.Width()))
+		}
 	case types.DecimalFamily:
 		d := &tree.DDecimal{}
 		// int64(rng.Uint64()) to get negative numbers, too
@@ -234,6 +282,10 @@ var (
 			tree.NewDInt(tree.DInt(0)),
 			tree.NewDInt(tree.DInt(-1)),
 			tree.NewDInt(tree.DInt(1)),
+			tree.NewDInt(tree.DInt(math.MaxInt8)),
+			tree.NewDInt(tree.DInt(math.MinInt8)),
+			tree.NewDInt(tree.DInt(math.MaxInt16)),
+			tree.NewDInt(tree.DInt(math.MinInt16)),
 			tree.NewDInt(tree.DInt(math.MaxInt32)),
 			tree.NewDInt(tree.DInt(math.MinInt32)),
 			tree.NewDInt(tree.DInt(math.MaxInt64)),

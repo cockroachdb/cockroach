@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -50,6 +51,9 @@ var _ bytes.Buffer
 
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
+
+// Dummy import to pull in "strings" package.
+var _ = strings.Builder{}
 
 // _GOTYPESLICE is a template Go type slice variable.
 type _GOTYPESLICE interface{}
