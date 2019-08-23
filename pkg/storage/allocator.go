@@ -302,6 +302,13 @@ func (a *Allocator) ComputeAction(
 		return AllocatorNoop, 0
 	}
 
+	if desc.Replicas().InAtomicReplicationChange() {
+		// With a similar reasoning to the learner branch below, if we're in a
+		// joint configuration the top priority is to leave it before we can
+		// even think about doing anything else.
+		return AllocatorFinalizeAtomicReplicationChange, finalizeAtomicReplicationChangePriority
+	}
+
 	// Seeing a learner replica at this point is unexpected because learners are a
 	// short-lived (ish) transient state in a learner+snapshot+voter cycle, which
 	// is always done atomically. Only two places could have added a learner: the
@@ -341,12 +348,6 @@ func (a *Allocator) ComputeAction(
 		// low priority so until this TODO is done, keep
 		// removeLearnerReplicaPriority as the highest priority.
 		return AllocatorRemoveLearner, removeLearnerReplicaPriority
-	}
-	if desc.Replicas().InAtomicReplicationChange() {
-		// With a similar reasoning to the learner branch above, if we're in a
-		// joint configuration the top priority is to leave it before we can
-		// even think about doing anything else.
-		return AllocatorFinalizeAtomicReplicationChange, finalizeAtomicReplicationChangePriority
 	}
 	// computeAction expects to operate only on voters.
 	return a.computeAction(ctx, zone, desc.RangeID, desc.Replicas().Voters())
