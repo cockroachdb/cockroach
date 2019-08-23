@@ -870,10 +870,11 @@ func initTableReaderSpec(
 ) (*distsqlpb.TableReaderSpec, distsqlpb.PostProcessSpec, error) {
 	s := distsqlplan.NewTableReaderSpec()
 	*s = distsqlpb.TableReaderSpec{
-		Table:      *n.desc.TableDesc(),
-		Reverse:    n.reverse,
-		IsCheck:    n.isCheck,
-		Visibility: n.colCfg.visibility.toDistSQLScanVisibility(),
+		Table:         *n.desc.TableDesc(),
+		Reverse:       n.reverse,
+		IsCheck:       n.isCheck,
+		PrefixSkipLen: uint32(n.prefixSkipLen),
+		Visibility:    n.colCfg.visibility.toDistSQLScanVisibility(),
 
 		// Retain the capacity of the spans slice.
 		Spans: s.Spans[:0],

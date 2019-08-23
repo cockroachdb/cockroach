@@ -66,6 +66,87 @@ define ScanPrivate {
     Flags ScanFlags
 }
 
+# IndexSkipScan returns a result set containing rows in a table that do not have
+# the save values for the first PrefixSkipLen columns of the index.
+# It is similar to a scan except that it skips over rows that a scan would read.
+# IndexSkipScan guarantees that for the first PrefixSkipLen columns of the index,
+# no two rows will have matching values. This is useful for a few reasons.
+# It improves performance of DistintOn and AggDistinct queries if they are
+# distincted on a prefix of the index. Furthermore, IndexSkipScans could potentially
+# be useful when we know that a some columns (given that they are the prefix to an
+# index) have very low distinct values - as then an IndexSkipScan could be used
+# to unlock an index if the columns after the prefix is bounded.
+# TODO(ridwanmsharif): More on this later. Create an issue for its design.
+[Relational]
+define IndexSkipScan {
+    _ IndexSkipScanPrivate
+}
+
+[Private]
+define IndexSkipScanPrivate {
+    _ ScanPrivate
+
+    # PrefixSkipLen specifies the length of the index that we are doing an
+    # index-skip-scan over. By default this value is 0 which indicates that the
+    # scan is not an index-skip-scan. When greater than 0, we scan the first row
+    # for each of the distinct first PrefixSkipLen values of the index.
+    PrefixSkipLen int
+    
+    # Ordering is the ordering that the IndexSkipScan provides.
+    # Let's use an example to explain why this is necessary:
+    #
+    # Consider the following schema:
+    # CREATE TABLE ab (a INT8, b INT8, PRIMARY KEY (a, b))
+    #
+    # And the following query:
+    # SELECT DISTINCT ON (a) a, b FROM abc ORDER BY a, b
+    #
+    # Lets consider what this plan would look like if we didn't do an IndexSkipScan:
+    #
+    # distinct-on
+    #  ├── columns: a:1(int!null) b:2(int)
+    #  ├── grouping columns: a:1(int!null)
+    #  ├── internal-ordering: +2 opt(1)
+    #  ├── key: (1)
+    #  ├── fd: (1)-->(2)
+    #  ├── ordering: +1
+    #  ├── scan ab
+    #  │    ├── columns: a:1(int!null) b:2(int!null)
+    #  │    ├── key: (1,2)
+    #  │    └── ordering: +1,+2
+    #  └── aggregations
+    #       └── first-agg [type=int, outer=(2)]
+    #            └── variable: b [type=int]
+    #
+    # If you notice above, the scan under the DistinctOn has a different ordering
+    # as the root. The reason is the DistinctOn specifies an ordering for its Input.
+    # Also because of the FD (1) --> (2), we remove the ordering on `b` from the root.
+    # However because we use an IndexSkipScan for this query, we get a plan that looks
+    # like:
+    #
+    # index-skip-scan (index-skip on the first 1 col(s)) ab
+    #  ├── columns: a:1(int!null) b:2(int)
+    #  ├── scan ordering: +1,+2
+    #  ├── key: (1)
+    #  ├── fd: (1)-->(2)
+    #  └── ordering: +1
+    #
+    # Because an IndexSkipScan doesn't have a DistinctOn parent, it only knows about
+    # the ordering of the parent which is +1. This is dangerous is because
+    # even though the query specified an ordering of a, b - we lose that last bit of
+    # information and so we may return incorrect rows (with incorrect values of b).
+    # To rectify this, we could add an Ordering to the IndexSkipScan that tells us
+    # what order to preserve.
+    # This ordering will inform whether the IndexSkipScan will scan in reverse or not.
+    # Note: If the index scan couldn't satisfy the user ordering, we wouldn't do an
+    # IndexSkipScan anyway.
+    Ordering Ordering
+
+    # Reverse specifies if the IndexSkipScan scans in the reverse order. This can be
+    # inferred from the Ordering above but storing it here makes it easier to use.
+    Reverse bool
+}
+
 # VirtualScan returns a result set containing every row in a virtual table.
 # Virtual tables are system tables that are populated "on the fly" with rows
 # synthesized from system metadata and other state. An example is the

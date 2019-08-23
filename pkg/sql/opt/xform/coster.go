@@ -149,6 +149,9 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	case opt.ScanOp:
 		cost = c.computeScanCost(candidate.(*memo.ScanExpr), required)
 
+	case opt.IndexSkipScanOp:
+		cost = c.computeIndexSkipScanCost(candidate.(*memo.IndexSkipScanExpr), required)
+
 	case opt.VirtualScanOp:
 		cost = c.computeVirtualScanCost(candidate.(*memo.VirtualScanExpr))
 
@@ -296,6 +299,57 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		preferConstrainedScanCost = cpuCostFactor
 	}
 	return memo.Cost(rowCount)*(seqIOCostFactor+perRowCost) + preferConstrainedScanCost
+}
+
+func (c *coster) computeIndexSkipScanCost(
+	scan *memo.IndexSkipScanExpr, required *physical.Required,
+) memo.Cost {
+	// Scanning an index with a few columns is faster than scanning an index with
+	// many columns. Ideally, we would want to use statistics about the size of
+	// each column. In lieu of that, use the number of columns.
+	if scan.Flags.ForceIndex && scan.Flags.Index != scan.Index {
+		// If we are forcing an index, any other index has a very high cost. In
+		// practice, this will only happen when this is a primary index scan.
+		return hugeCost
+	}
+
+	// If we're performing an index skip scan, we only ever scan the distinct rows.
+	md := c.mem.Metadata()
+	table := md.Table(scan.Table)
+	index := table.Index(scan.Index)
+
+	var indexSkipCols opt.ColSet
+	for i := 0; i < scan.PrefixSkipLen; i++ {
+		indexSkipCols.Add(scan.Table.ColumnID(index.Column(i).Ordinal))
+	}
+
+	colStat, ok := c.mem.RequestColStat(scan, indexSkipCols)
+	if !ok {
+		// I don't think we can ever get here. Since we don't allow the memo
+		// to be optimized twice, the coster should never be used after
+		// logPropsBuilder.clear() is called.
+		panic(errors.AssertionFailedf("could not request the stats for ColSet %v", indexSkipCols))
+	}
+
+	rowCount := colStat.DistinctCount
+
+	perRowCost := c.rowScanCost(scan.Table, scan.Index, scan.Cols.Len())
+
+	if scan.Reverse {
+		if rowCount > 1 {
+			// Need to do binary search to seek to the previous row.
+			perRowCost += memo.Cost(math.Log2(rowCount)) * cpuCostFactor
+		}
+	}
+
+	// Add a small cost if the scan is unconstrained, so all else being equal, we
+	// will prefer a constrained scan. This is important if our row count
+	// estimate turns out to be smaller than the actual row count.
+	var preferConstrainedScanCost memo.Cost
+	if scan.Constraint == nil || scan.Constraint.IsUnconstrained() {
+		preferConstrainedScanCost = cpuCostFactor
+	}
+	return memo.Cost(rowCount)*(randIOCostFactor+perRowCost) + preferConstrainedScanCost
 }
 
 func (c *coster) computeVirtualScanCost(scan *memo.VirtualScanExpr) memo.Cost {

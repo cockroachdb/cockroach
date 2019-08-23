@@ -135,6 +135,9 @@ func newColOperator(
 		if core.TableReader.IsCheck {
 			return result, errors.Newf("scrub table reader is unsupported in vectorized")
 		}
+		if core.TableReader.PrefixSkipLen > 0 {
+			return result, errors.Newf("index skip table reader is unsupported in vectorized")
+		}
 		var scanOp *colBatchScan
 		scanOp, err = newColBatchScan(flowCtx, core.TableReader, post)
 		if err != nil {

@@ -90,8 +90,7 @@ var statsAnnID = opt.NewTableAnnID()
 // statisticsBuilder is responsible for building the second type of statistics,
 // relational expression statistics. It builds the statistics lazily, and only
 // calculates column statistics if needed to estimate the row count of an
-// expression (currently, the row count is the only statistic used by the
-// coster).
+// expression.
 //
 // Every relational operator has a buildXXX and a colStatXXX function. For
 // example, Scan has buildScan and colStatScan. buildScan is called when the
@@ -237,6 +236,9 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 	case *ScanExpr:
 		return sb.colStatTable(t.Table, colSet)
 
+	case *IndexSkipScanExpr:
+		return sb.colStatTable(t.Table, colSet)
+
 	case *VirtualScanExpr:
 		return sb.colStatTable(t.Table, colSet)
 
@@ -320,6 +322,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	switch e.Op() {
 	case opt.ScanOp:
 		return sb.colStatScan(colSet, e.(*ScanExpr))
+
+	case opt.IndexSkipScanOp:
+		return sb.colStatIndexSkipScan(colSet, e.(*IndexSkipScanExpr))
 
 	case opt.VirtualScanOp:
 		return sb.colStatVirtualScan(colSet, e.(*VirtualScanExpr))
@@ -530,6 +535,111 @@ func (sb *statisticsBuilder) colStatTable(
 	return sb.colStatLeaf(colSet, tableStats, tableFD, tableNotNullCols)
 }
 
+// calculateStatsOnScanConstrainedCols calculates distinct counts and histograms
+// for constrained columns.
+func (sb *statisticsBuilder) calculateStatsOnScanConstrainedCols(
+	private *ScanPrivate,
+	scan RelExpr,
+	relProps *props.Relational,
+	inputStats, stats *props.Statistics,
+) {
+	var numUnappliedConjuncts float64
+	var constrainedCols, histCols opt.ColSet
+	// Inverted indexes are a special case; a constraint like:
+	// /1: [/'{"a": "b"}' - /'{"a": "b"}']
+	// does not necessarily mean there is only going to be one distinct
+	// value for column 1, if it is being applied to an inverted index.
+	// This is because inverted index keys could correspond to partial
+	// column values, such as one path-to-a-leaf through a JSON object.
+	//
+	// For now, don't apply constraints on inverted index columns.
+	if sb.md.Table(private.Table).Index(private.Index).IsInverted() {
+		for i, n := 0, private.Constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
+			numUnappliedConjuncts += sb.numConjunctsInConstraint(private.Constraint, i)
+		}
+	} else {
+		constrainedCols, histCols = sb.applyIndexConstraint(private.Constraint, scan, relProps)
+	}
+
+	// Calculate row count and selectivity
+	// -----------------------------------
+	inputRowCount := stats.RowCount
+	stats.ApplySelectivity(sb.selectivityFromHistograms(histCols, scan, stats))
+	stats.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols.Difference(histCols), scan, stats))
+	stats.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
+
+	// Set null counts to 0 for non-nullable columns
+	// -------------------------------------------------
+	sb.updateNullCountsFromProps(scan, relProps, inputStats.RowCount)
+
+	stats.ApplySelectivity(sb.selectivityFromNullCounts(constrainedCols, scan, stats, inputRowCount))
+}
+
+// +---------------+
+// | IndexSkipScan |
+// +---------------+
+
+func (sb *statisticsBuilder) buildIndexSkipScan(
+	scan *IndexSkipScanExpr, relProps *props.Relational,
+) {
+	s := &relProps.Stats
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
+	s.Available = sb.availabilityFromInput(scan)
+
+	inputStats := sb.makeTableStatistics(scan.Table)
+	s.RowCount = inputStats.RowCount
+	table := sb.md.Table(scan.Table)
+	index := table.Index(scan.Index)
+
+	var indexSkipCols opt.ColSet
+	for i := 0; i < scan.PrefixSkipLen; i++ {
+		indexSkipCols.Add(scan.Table.ColumnID(index.Column(i).Ordinal))
+	}
+
+	// An Index Sip Scan returns only the rows with the distinct prefix.
+	s.RowCount = sb.colStat(indexSkipCols, scan).DistinctCount
+
+	if scan.Constraint != nil {
+		sb.calculateStatsOnScanConstrainedCols(&scan.ScanPrivate, scan, relProps, inputStats, s)
+	}
+
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatIndexSkipScan(
+	colSet opt.ColSet, scan *IndexSkipScanExpr,
+) *props.ColumnStatistic {
+	relProps := scan.Relational()
+	s := &relProps.Stats
+	return sb.colStatFromScanTable(colSet, scan.Table, s, relProps)
+}
+
+func (sb *statisticsBuilder) colStatFromScanTable(
+	colSet opt.ColSet, table opt.TableID, stats *props.Statistics, relProps *props.Relational,
+) *props.ColumnStatistic {
+	inputColStat := sb.colStatTable(table, colSet)
+	colStat := sb.copyColStat(colSet, stats, inputColStat)
+
+	if sb.shouldUseHistogram(relProps) {
+		colStat.Histogram = inputColStat.Histogram
+	}
+
+	if stats.Selectivity != 1 {
+		tableStats := sb.makeTableStatistics(table)
+		colStat.ApplySelectivity(stats.Selectivity, tableStats.RowCount)
+	}
+
+	if colSet.SubsetOf(relProps.NotNullCols) {
+		colStat.NullCount = 0
+	}
+
+	sb.finalizeFromRowCount(colStat, stats.RowCount)
+	return colStat
+}
+
 // +------+
 // | Scan |
 // +------+
@@ -546,38 +656,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	s.RowCount = inputStats.RowCount
 
 	if scan.Constraint != nil {
-		// Calculate distinct counts and histograms for constrained columns
-		// ----------------------------------------------------------------
-		var numUnappliedConjuncts float64
-		var constrainedCols, histCols opt.ColSet
-		// Inverted indexes are a special case; a constraint like:
-		// /1: [/'{"a": "b"}' - /'{"a": "b"}']
-		// does not necessarily mean there is only going to be one distinct
-		// value for column 1, if it is being applied to an inverted index.
-		// This is because inverted index keys could correspond to partial
-		// column values, such as one path-to-a-leaf through a JSON object.
-		//
-		// For now, don't apply constraints on inverted index columns.
-		if sb.md.Table(scan.Table).Index(scan.Index).IsInverted() {
-			for i, n := 0, scan.Constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
-				numUnappliedConjuncts += sb.numConjunctsInConstraint(scan.Constraint, i)
-			}
-		} else {
-			constrainedCols, histCols = sb.applyIndexConstraint(scan.Constraint, scan, relProps)
-		}
-
-		// Calculate row count and selectivity
-		// -----------------------------------
-		inputRowCount := s.RowCount
-		s.ApplySelectivity(sb.selectivityFromHistograms(histCols, scan, s))
-		s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols.Difference(histCols), scan, s))
-		s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
-
-		// Set null counts to 0 for non-nullable columns
-		// -------------------------------------------------
-		sb.updateNullCountsFromProps(scan, relProps, inputStats.RowCount)
-
-		s.ApplySelectivity(sb.selectivityFromNullCounts(constrainedCols, scan, s, inputRowCount))
+		sb.calculateStatsOnScanConstrainedCols(&scan.ScanPrivate, scan, relProps, inputStats, s)
 	}
 
 	sb.finalizeFromCardinality(relProps)
@@ -586,25 +665,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *props.ColumnStatistic {
 	relProps := scan.Relational()
 	s := &relProps.Stats
-
-	inputColStat := sb.colStatTable(scan.Table, colSet)
-	colStat := sb.copyColStat(colSet, s, inputColStat)
-
-	if sb.shouldUseHistogram(relProps) {
-		colStat.Histogram = inputColStat.Histogram
-	}
-
-	if s.Selectivity != 1 {
-		tableStats := sb.makeTableStatistics(scan.Table)
-		colStat.ApplySelectivity(s.Selectivity, tableStats.RowCount)
-	}
-
-	if colSet.SubsetOf(relProps.NotNullCols) {
-		colStat.NullCount = 0
-	}
-
-	sb.finalizeFromRowCount(colStat, s.RowCount)
-	return colStat
+	return sb.colStatFromScanTable(colSet, scan.Table, s, relProps)
 }
 
 // +-------------+

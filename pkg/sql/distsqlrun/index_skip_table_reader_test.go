@@ -141,12 +141,36 @@ func TestIndexSkipTableReader(t *testing.T) {
 		99,
 		sqlutils.ToRowFn(xFnt6, yFnt6))
 
+	// create a table t5 where each row is:
+	//
+	// |      x      |          y          |      z       |
+	// |--------------------------------------------------|
+	// | rowId / 100 | (rowId % 100) \ 10  |  rowId % 10  |
+	//
+	// (x, y, z) represents a 3 digit number.
+
+	xFnt7 := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row / 100))
+	}
+	yFnt7 := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt((row / 10) % 10))
+	}
+	zFnt7 := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row % 10))
+	}
+	sqlutils.CreateTable(t, sqlDB, "t7",
+		"x INT, y INT, z INT, PRIMARY KEY (x, y, z)",
+		999,
+		sqlutils.ToRowFn(xFnt7, yFnt7, zFnt7),
+	)
+
 	td1 := sqlbase.GetTableDescriptor(kvDB, "test", "t1")
 	td2 := sqlbase.GetTableDescriptor(kvDB, "test", "t2")
 	td3 := sqlbase.GetTableDescriptor(kvDB, "test", "t3")
 	td4 := sqlbase.GetTableDescriptor(kvDB, "test", "t4")
 	td5 := sqlbase.GetTableDescriptor(kvDB, "test", "t5")
 	td6 := sqlbase.GetTableDescriptor(kvDB, "test", "t6")
+	td7 := sqlbase.GetTableDescriptor(kvDB, "test", "t7")
 
 	makeIndexSpan := func(td *sqlbase.TableDescriptor, start, end int) distsqlpb.TableReaderSpan {
 		var span roachpb.Span
@@ -169,7 +193,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "SimpleForward",
 			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
+				Spans:         []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
+				PrefixSkipLen: 1,
 			},
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -182,7 +207,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "InterleavedParent",
 			tableDesc: td5,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{{Span: td5.PrimaryIndexSpan()}},
+				Spans:         []distsqlpb.TableReaderSpan{{Span: td5.PrimaryIndexSpan()}},
+				PrefixSkipLen: 1,
 			},
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -195,7 +221,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "InterleavedChild",
 			tableDesc: td6,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{{Span: td6.PrimaryIndexSpan()}},
+				Spans:         []distsqlpb.TableReaderSpan{{Span: td6.PrimaryIndexSpan()}},
+				PrefixSkipLen: 1,
 			},
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -208,7 +235,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "MultipleSpans",
 			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
+				Spans:         []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
+				PrefixSkipLen: 1,
 			},
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -221,7 +249,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "MultipleSpansWithFilter",
 			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
+				Spans:         []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
+				PrefixSkipLen: 1,
 			},
 			post: distsqlpb.PostProcessSpec{
 				Filter:        distsqlpb.Expression{Expr: "@1 > 3 AND @1 < 7"},
@@ -235,7 +264,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "Filter",
 			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
+				Spans:         []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
+				PrefixSkipLen: 1,
 			},
 			post: distsqlpb.PostProcessSpec{
 				Filter:        distsqlpb.Expression{Expr: "@1 > 3 AND @1 < 7"},
@@ -249,7 +279,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "MultipleOutputCols",
 			tableDesc: td2,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{{Span: td2.PrimaryIndexSpan()}},
+				Spans:         []distsqlpb.TableReaderSpan{{Span: td2.PrimaryIndexSpan()}},
+				PrefixSkipLen: 2,
 			},
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -262,7 +293,8 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "Nulls",
 			tableDesc: td3,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{{Span: td3.PrimaryIndexSpan()}},
+				Spans:         []distsqlpb.TableReaderSpan{{Span: td3.PrimaryIndexSpan()}},
+				PrefixSkipLen: 1,
 			},
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -275,8 +307,9 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "SecondaryIdx",
 			tableDesc: td4,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:    []distsqlpb.TableReaderSpan{{Span: td4.IndexSpan(2)}},
-				IndexIdx: 1,
+				Spans:         []distsqlpb.TableReaderSpan{{Span: td4.IndexSpan(2)}},
+				IndexIdx:      1,
+				PrefixSkipLen: 1,
 			},
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -289,8 +322,9 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "SimpleReverse",
 			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:   []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
-				Reverse: true,
+				Spans:         []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
+				Reverse:       true,
+				PrefixSkipLen: 1,
 			},
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -303,8 +337,9 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "MultipleSpansReverse",
 			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:   []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
-				Reverse: true,
+				Spans:         []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
+				Reverse:       true,
+				PrefixSkipLen: 1,
 			},
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -317,8 +352,9 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "MultipleSpansWithFilterReverse",
 			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:   []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
-				Reverse: true,
+				Spans:         []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
+				Reverse:       true,
+				PrefixSkipLen: 1,
 			},
 			post: distsqlpb.PostProcessSpec{
 				Filter:        distsqlpb.Expression{Expr: "@1 > 3 AND @1 < 7"},
@@ -332,8 +368,9 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "InterleavedParentReverse",
 			tableDesc: td5,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:   []distsqlpb.TableReaderSpan{{Span: td5.PrimaryIndexSpan()}},
-				Reverse: true,
+				Spans:         []distsqlpb.TableReaderSpan{{Span: td5.PrimaryIndexSpan()}},
+				Reverse:       true,
+				PrefixSkipLen: 1,
 			},
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -346,8 +383,9 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "InterleavedParentMultipleSpansReverse",
 			tableDesc: td5,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:   []distsqlpb.TableReaderSpan{makeIndexSpan(td5, 0, 3), makeIndexSpan(td5, 5, 8)},
-				Reverse: true,
+				Spans:         []distsqlpb.TableReaderSpan{makeIndexSpan(td5, 0, 3), makeIndexSpan(td5, 5, 8)},
+				Reverse:       true,
+				PrefixSkipLen: 1,
 			},
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -360,14 +398,42 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "InterleavedChildReverse",
 			tableDesc: td6,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:   []distsqlpb.TableReaderSpan{{Span: td6.PrimaryIndexSpan()}},
-				Reverse: true,
+				Spans:         []distsqlpb.TableReaderSpan{{Span: td6.PrimaryIndexSpan()}},
+				Reverse:       true,
+				PrefixSkipLen: 1,
 			},
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
 			expected: "[[10] [9] [8] [7] [6] [5] [4] [3] [2] [1]]",
+		},
+		{
+			desc:      "ForwardSubsetSkip",
+			tableDesc: td7,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans:         []distsqlpb.TableReaderSpan{{Span: td7.PrimaryIndexSpan()}},
+				PrefixSkipLen: 1,
+			},
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2},
+			},
+			expected: "[[0 0 1] [1 0 0] [2 0 0] [3 0 0] [4 0 0] [5 0 0] [6 0 0] [7 0 0] [8 0 0] [9 0 0]]",
+		},
+		{
+			desc:      "ReverseSubsetSkip",
+			tableDesc: td7,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans:         []distsqlpb.TableReaderSpan{{Span: td7.PrimaryIndexSpan()}},
+				Reverse:       true,
+				PrefixSkipLen: 1,
+			},
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2},
+			},
+			expected: "[[9 9 9] [8 9 9] [7 9 9] [6 9 9] [5 9 9] [4 9 9] [3 9 9] [2 9 9] [1 9 9] [0 9 9]]",
 		},
 	}
 
@@ -456,8 +522,9 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 		NodeID:  nodeID,
 	}
 	spec := distsqlpb.IndexSkipTableReaderSpec{
-		Spans: []distsqlpb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
-		Table: *td,
+		Spans:         []distsqlpb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+		Table:         *td,
+		PrefixSkipLen: 1,
 	}
 	post := distsqlpb.PostProcessSpec{
 		Projection:    true,
@@ -620,8 +687,9 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 			// run the index skip table reader
 			b.Run(fmt.Sprintf("IndexSkipTableReader-rows=%d-ratio=%d", numRows, valueRatio), func(b *testing.B) {
 				spec := distsqlpb.IndexSkipTableReaderSpec{
-					Table: *tableDesc,
-					Spans: []distsqlpb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+					Table:         *tableDesc,
+					Spans:         []distsqlpb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+					PrefixSkipLen: 1,
 				}
 				post := distsqlpb.PostProcessSpec{
 					OutputColumns: []uint32{0},

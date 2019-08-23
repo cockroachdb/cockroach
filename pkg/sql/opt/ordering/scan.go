@@ -27,6 +27,16 @@ func scanCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice
 	return ok
 }
 
+func indexSkipScanCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
+	indexSkip := expr.(*memo.IndexSkipScanExpr)
+	ok, reverse := ScanPrivateCanProvide(
+		expr.Memo().Metadata(),
+		&indexSkip.ScanPrivate,
+		required,
+	)
+	return ok && reverse == indexSkip.Reverse
+}
+
 // ScanIsReverse returns true if the scan must be performed in reverse order
 // in order to satisfy the required ordering. If either direction is ok (e.g. no
 // required ordering), reutrns false. The scan must be able to satisfy the
@@ -111,6 +121,12 @@ func ScanPrivateCanProvide(
 	}
 	// If direction is either, we prefer forward scan.
 	return true, direction == rev
+}
+
+func indexSkipScanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+	scan := expr.(*memo.IndexSkipScanExpr)
+	fds := &scan.Relational().FuncDeps
+	return trimProvided(expr.(*memo.IndexSkipScanExpr).Ordering, required, fds)
 }
 
 func scanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
