@@ -579,7 +579,7 @@ func (r *Replica) AdminMerge(
 			// Should never happen, but just in case.
 			return errors.Errorf("ranges are not adjacent; %s != %s", origLeftDesc.EndKey, rightDesc.StartKey)
 		}
-		// For simplicity, don't handle learner replicas or joing states, expect
+		// For simplicity, don't handle learner replicas or joint states, expect
 		// the caller to resolve them first. (Defensively, we check that there
 		// are no non-voter replicas, in case some third type is later added).
 		// This behavior can be changed later if the complexity becomes worth
