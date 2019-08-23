@@ -11,6 +11,7 @@
 package reduce_test
 
 import (
+	"context"
 	"go/parser"
 	"regexp"
 	"strings"
@@ -20,7 +21,7 @@ import (
 )
 
 func TestReduceGo(t *testing.T) {
-	reduce.Walk(t, "testdata", nil /* filter */, isInterestingGo, goPasses)
+	reduce.Walk(t, "testdata", nil /* filter */, isInterestingGo, reduce.ModeInteresting, goPasses)
 }
 
 var (
@@ -50,7 +51,7 @@ var (
 )
 
 func isInterestingGo(contains string) reduce.InterestingFn {
-	return func(f reduce.File) bool {
+	return func(ctx context.Context, f reduce.File) bool {
 		_, err := parser.ParseExpr(string(f))
 		if err == nil {
 			return false
