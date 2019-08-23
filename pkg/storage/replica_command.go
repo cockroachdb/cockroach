@@ -941,11 +941,15 @@ func (r *Replica) changeReplicasImpl(
 		if len(chgs) != 1 {
 			return nil, errors.Errorf("need exactly one change, got %+v", chgs)
 		}
-		if chgs[0].ChangeType == roachpb.ADD_REPLICA {
+		switch chgs[0].ChangeType {
+		case roachpb.ADD_REPLICA:
 			return r.addReplicaLegacyPreemptiveSnapshot(ctx, chgs[0].Target, desc, priority, reason, details)
+		case roachpb.REMOVE_REPLICA:
+			// We're removing a single voter.
+			return r.atomicReplicationChange(ctx, desc, priority, reason, details, chgs)
+		default:
+			return nil, errors.Errorf("unknown change type %d", chgs[0].ChangeType)
 		}
-		// We're removing a single voter.
-		return r.atomicReplicationChange(ctx, desc, priority, reason, details, chgs)
 	}
 
 	if adds := chgs.Additions(); len(adds) > 0 {
