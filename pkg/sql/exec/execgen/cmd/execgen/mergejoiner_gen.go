@@ -50,6 +50,11 @@ type joinTypeInfo struct {
 	String string
 }
 
+type filterInfo struct {
+	HasFilter bool
+	String    string
+}
+
 func genMergeJoinOps(wr io.Writer) error {
 	d, err := ioutil.ReadFile("pkg/sql/exec/mergejoiner_tmpl.go")
 	if err != nil {
@@ -69,6 +74,8 @@ func genMergeJoinOps(wr io.Writer) error {
 	s = strings.Replace(s, "_SEL_ARG", "$sel", -1)
 	s = strings.Replace(s, "_JOIN_TYPE_STRING", "{{$joinType.String}}", -1)
 	s = strings.Replace(s, "_JOIN_TYPE", "$joinType", -1)
+	s = strings.Replace(s, "_FILTER_INFO_STRING", "{{$filterInfo.String}}", -1)
+	s = strings.Replace(s, "_FILTER_INFO", "$filterInfo", -1)
 	s = strings.Replace(s, "_MJ_OVERLOAD", "$mjOverload", -1)
 	s = strings.Replace(s, "_L_HAS_NULLS", "$.lHasNulls", -1)
 	s = strings.Replace(s, "_R_HAS_NULLS", "$.rHasNulls", -1)
@@ -98,8 +105,8 @@ func genMergeJoinOps(wr io.Writer) error {
 	processNotLastGroupInColumnSwitch := makeFunctionRegex("_PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH", 1)
 	s = processNotLastGroupInColumnSwitch.ReplaceAllString(s, `{{template "processNotLastGroupInColumnSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
-	probeSwitch := makeFunctionRegex("_PROBE_SWITCH", 5)
-	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "JoinType" $1 "SelPermutation" $2 "lHasNulls" $3 "rHasNulls" $4 "AscDirection" $5}}`)
+	probeSwitch := makeFunctionRegex("_PROBE_SWITCH", 6)
+	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "JoinType" $1 "FilterInfo" $2 "SelPermutation" $3 "lHasNulls" $4 "rHasNulls" $5 "AscDirection" $6}}`)
 
 	sourceFinishedSwitch := makeFunctionRegex("_SOURCE_FINISHED_SWITCH", 1)
 	s = sourceFinishedSwitch.ReplaceAllString(s, `{{template "sourceFinishedSwitch" buildDict "Global" $ "JoinType" $1}}`)
@@ -197,14 +204,27 @@ func genMergeJoinOps(wr io.Writer) error {
 		},
 	}
 
+	filterInfos := []filterInfo{
+		{
+			HasFilter: false,
+			String:    "",
+		},
+		{
+			HasFilter: true,
+			String:    "WithOnExpr",
+		},
+	}
+
 	return tmpl.Execute(wr, struct {
 		MJOverloads     interface{}
 		SelPermutations interface{}
 		JoinTypes       interface{}
+		FilterInfos     interface{}
 	}{
 		MJOverloads:     mjOverloads,
 		SelPermutations: selPermutations,
 		JoinTypes:       joinTypeInfos,
+		FilterInfos:     filterInfos,
 	})
 }
 
