@@ -729,7 +729,10 @@ func TestHashJoiner(t *testing.T) {
 						tc.leftOutCols, tc.rightOutCols,
 						tc.leftTypes, tc.rightTypes,
 						tc.buildRightSide, tc.buildDistinct,
-						tc.joinType)
+						tc.joinType,
+						nil,   /* filterConstructor */
+						false, /* filterOnlyOnLeft */
+					)
 				})
 			})
 

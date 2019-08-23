@@ -351,18 +351,35 @@ func NewColOperator(
 		}
 
 		var (
-			onExpr         *execinfrapb.Expression
-			onExprPlanning filterPlanningState
+			onExpr            *execinfrapb.Expression
+			onExprPlanning    filterPlanningState
+			filterOnlyOnLeft  bool
+			filterConstructor func(Operator) (Operator, error)
 		)
 		if !core.HashJoiner.OnExpr.Empty() {
-			if core.HashJoiner.Type != sqlbase.JoinType_INNER {
-				return result, errors.Newf("can't plan non-inner hash join with on expressions")
-			}
 			onExpr = &core.HashJoiner.OnExpr
 			onExprPlanning = makeFilterPlanningState(len(leftTypes), len(rightTypes))
-			leftOutCols, rightOutCols = onExprPlanning.renderAllNeededCols(
-				*onExpr, leftOutCols, rightOutCols,
-			)
+			switch core.HashJoiner.Type {
+			case sqlbase.JoinType_INNER:
+				leftOutCols, rightOutCols = onExprPlanning.renderAllNeededCols(
+					*onExpr, leftOutCols, rightOutCols,
+				)
+			case sqlbase.JoinType_LEFT_SEMI:
+				filterOnlyOnLeft = onExprPlanning.isFilterOnlyOnLeft(*onExpr)
+				filterConstructor = func(op Operator) (Operator, error) {
+					r := NewColOperatorResult{
+						Op:          op,
+						ColumnTypes: append(spec.Input[0].ColumnTypes, spec.Input[1].ColumnTypes...),
+					}
+					// We don't need to remap the indexed vars in onExpr because the
+					// filter will be run alongside the hash joiner, and it will have
+					// access to all of the columns from both sides.
+					err := r.planFilterExpr(flowCtx.NewEvalCtx(), *onExpr)
+					return r.Op, err
+				}
+			default:
+				return result, errors.Errorf("can only plan INNER and LEFT SEMI hash joins with ON expressions")
+			}
 		}
 
 		result.Op, err = NewEqHashJoinerOp(
@@ -377,6 +394,8 @@ func NewColOperator(
 			core.HashJoiner.RightEqColumnsAreKey,
 			core.HashJoiner.LeftEqColumnsAreKey || core.HashJoiner.RightEqColumnsAreKey,
 			core.HashJoiner.Type,
+			filterConstructor,
+			filterOnlyOnLeft,
 		)
 		if err != nil {
 			return result, err
@@ -384,7 +403,7 @@ func NewColOperator(
 
 		result.setProjectedByJoinerColumnTypes(spec, leftOutCols, rightOutCols)
 
-		if onExpr != nil {
+		if onExpr != nil && core.HashJoiner.Type == sqlbase.JoinType_INNER {
 			remappedOnExpr := onExprPlanning.remapIVars(*onExpr)
 			err = result.planFilterExpr(flowCtx.NewEvalCtx(), remappedOnExpr)
 			onExprPlanning.projectOutExtraCols(&result)

@@ -54,8 +54,8 @@ func genHashJoiner(wr io.Writer) error {
 	collectRightOuter := makeFunctionRegex("_COLLECT_RIGHT_OUTER", 5)
 	s = collectRightOuter.ReplaceAllString(s, `{{template "collectRightOuter" buildDict "Global" . "UseSel" $5}}`)
 
-	collectNoOuter := makeFunctionRegex("_COLLECT_NO_OUTER", 5)
-	s = collectNoOuter.ReplaceAllString(s, `{{template "collectNoOuter" buildDict "Global" . "UseSel" $5}}`)
+	collectNoOuter := makeFunctionRegex("_COLLECT_NO_OUTER", 6)
+	s = collectNoOuter.ReplaceAllString(s, `{{template "collectNoOuter" buildDict "Global" . "UseSel" $6}}`)
 
 	checkColBody := makeFunctionRegex("_CHECK_COL_BODY", 9)
 	s = checkColBody.ReplaceAllString(

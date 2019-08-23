@@ -170,7 +170,8 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 			joinType: sqlbase.JoinType_FULL_OUTER,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_SEMI,
+			joinType:        sqlbase.JoinType_LEFT_SEMI,
+			onExprSupported: true,
 		},
 	}
 
