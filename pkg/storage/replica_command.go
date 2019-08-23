@@ -988,6 +988,9 @@ func (r *Replica) changeReplicasImpl(
 	return desc, err
 }
 
+// maybeLeaveAtomicChangeReplicas transitions out of the joint configuration if
+// the descriptor indicates one. This involves running a distributed transaction
+// updating said descriptor, the result of which will be returned.
 func (r *Replica) maybeLeaveAtomicChangeReplicas(
 	ctx context.Context, desc *roachpb.RangeDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
