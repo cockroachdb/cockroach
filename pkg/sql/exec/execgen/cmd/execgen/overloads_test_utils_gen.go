@@ -13,34 +13,31 @@ package main
 import (
 	"io"
 	"text/template"
-
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 const overloadsTestUtilsTemplate = `
 package exec
 
 import (
-  "math"
+	"bytes"
+	"math"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-{{define "opName"}}perform{{.Name}}{{.LTyp}}{{end}}
+{{define "opName"}}perform{{.Name}}{{.LTyp}}{{.RTyp}}{{end}}
 
-{{/* The outer range is a coltypes.T, and the inner is the overloads associated
-     with that type. */}}
-{{range .}}
+{{/* The range is over all overloads */}}
 {{range .}}
 
-func {{template "opName" .}}(a, b {{.LTyp.GoTypeName}}) {{.RetTyp.GoTypeName}} {
-	{{(.Assign "a" "a" "b")}}
-	return a
+func {{template "opName" .}}(a {{.LTyp.GoTypeName}}, b {{.RTyp.GoTypeName}}) {{.RetTyp.GoTypeName}} {
+	var r {{.RetTyp.GoTypeName}}
+	{{(.Assign "r" "a" "b")}}
+	return r
 }
 
-{{end}}
 {{end}}
 `
 
@@ -53,12 +50,10 @@ func genOverloadsTestUtils(wr io.Writer) error {
 		return err
 	}
 
-	typToOverloads := make(map[coltypes.T][]*overload)
-	for _, overload := range binaryOpOverloads {
-		typ := overload.LTyp
-		typToOverloads[typ] = append(typToOverloads[typ], overload)
-	}
-	return tmpl.Execute(wr, typToOverloads)
+	allOverloads := make([]*overload, 0)
+	allOverloads = append(allOverloads, binaryOpOverloads...)
+	allOverloads = append(allOverloads, comparisonOpOverloads...)
+	return tmpl.Execute(wr, allOverloads)
 }
 
 func init() {
