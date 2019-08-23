@@ -168,40 +168,6 @@ func (o *feedOperator) Next(context.Context) coldata.Batch {
 
 var _ Operator = &feedOperator{}
 
-// filterFeedOperator is used to feed the filter by manually setting the batch
-// to be returned on the first Next() call with zero-length batches returned on
-// all consequent calls.
-type filterFeedOperator struct {
-	ZeroInputNode
-	batch     coldata.Batch
-	zeroBatch coldata.Batch
-	nexted    bool
-}
-
-var _ Operator = &filterFeedOperator{}
-
-func newFilterFeedOperator(inputTypes []coltypes.T) *filterFeedOperator {
-	return &filterFeedOperator{
-		batch:     coldata.NewMemBatchWithSize(inputTypes, 1 /* size */),
-		zeroBatch: coldata.NewMemBatchWithSize([]coltypes.T{}, 0 /* size */),
-	}
-}
-
-func (o *filterFeedOperator) Init() {}
-
-func (o *filterFeedOperator) Next(context.Context) coldata.Batch {
-	if !o.nexted {
-		o.nexted = true
-		return o.batch
-	}
-	o.zeroBatch.SetLength(0)
-	return o.zeroBatch
-}
-
-func (o *filterFeedOperator) reset() {
-	o.nexted = false
-}
-
 // The merge join operator uses a probe and build approach to generate the
 // join. What this means is that instead of going through and expanding the
 // cross product row by row, the operator performs two passes.
@@ -367,9 +333,12 @@ func newMergeJoinBase(
 		return base, err
 	}
 	if filterConstructor != nil {
-		base.filterInput = newFilterFeedOperator(append(leftTypes, rightTypes...))
-		base.filter, err = filterConstructor(base.filterInput)
-		base.filterOnlyOnLeft = filterOnlyOnLeft
+		base.filter, err = newJoinerFilter(
+			leftTypes,
+			rightTypes,
+			filterConstructor,
+			filterOnlyOnLeft,
+		)
 	}
 	return base, err
 }
@@ -395,12 +364,7 @@ type mergeJoinBase struct {
 	proberState  mjProberState
 	builderState mjBuilderState
 
-	// A side chain of Operators needed to support ON expressions.
-	filter      Operator
-	filterInput *filterFeedOperator
-	// filterOnlyOnLeft indicates whether the ON expression is such that only
-	// columns from the left input are used.
-	filterOnlyOnLeft bool
+	filter *joinerFilter
 }
 
 func (o *mergeJoinBase) getOutColTypes() []coltypes.T {
@@ -417,11 +381,10 @@ func (o *mergeJoinBase) EstimateStaticMemoryUsage() int {
 	const sizeOfGroup = int(unsafe.Sizeof(group{}))
 	leftDistincter := o.left.distincter.(StaticMemoryOperator)
 	rightDistincter := o.right.distincter.(StaticMemoryOperator)
-	// Note that we're ignoring filter memory usage (if any) since the filter
-	// input uses only two batches of lengths 1 and 0 and the filter itself does
-	// not use any static memory.
-	// TODO(yuzefovich): update this calculation if the above comment is no
-	// longer true.
+	filterMemUsage := 0
+	if o.filter != nil {
+		filterMemUsage = o.filter.EstimateStaticMemoryUsage()
+	}
 	return EstimateBatchSizeBytes(
 		o.getOutColTypes(), coldata.BatchSize,
 	) + // base.output
@@ -433,7 +396,8 @@ func (o *mergeJoinBase) EstimateStaticMemoryUsage() int {
 		) + // base.proberState.rBufferedGroup
 		4*sizeOfGroup*coldata.BatchSize + // base.groups
 		leftDistincter.EstimateStaticMemoryUsage() + // base.left.distincter
-		rightDistincter.EstimateStaticMemoryUsage() // base.right.distincter
+		rightDistincter.EstimateStaticMemoryUsage() + // base.right.distincter
+		filterMemUsage
 }
 
 func (o *mergeJoinBase) Init() {

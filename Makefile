@@ -791,6 +791,7 @@ EXECGEN_TARGETS = \
   pkg/sql/exec/const.eg.go \
   pkg/sql/exec/distinct.eg.go \
   pkg/sql/exec/hashjoiner.eg.go \
+  pkg/sql/exec/joiner_util.eg.go \
   pkg/sql/exec/like_ops.eg.go \
   pkg/sql/exec/mergejoiner.eg.go \
   pkg/sql/exec/min_max_agg.eg.go \
@@ -1463,6 +1464,7 @@ pkg/sql/exec/avg_agg.eg.go: pkg/sql/exec/avg_agg_tmpl.go
 pkg/sql/exec/const.eg.go: pkg/sql/exec/const_tmpl.go
 pkg/sql/exec/distinct.eg.go: pkg/sql/exec/distinct_tmpl.go
 pkg/sql/exec/hashjoiner.eg.go: pkg/sql/exec/hashjoiner_tmpl.go
+pkg/sql/exec/joiner_util.eg.go: pkg/sql/exec/joiner_util_tmpl.go
 pkg/sql/exec/mergejoiner.eg.go: pkg/sql/exec/mergejoiner_tmpl.go
 pkg/sql/exec/min_max_agg.eg.go: pkg/sql/exec/min_max_agg_tmpl.go
 pkg/sql/exec/quicksort.eg.go: pkg/sql/exec/quicksort_tmpl.go

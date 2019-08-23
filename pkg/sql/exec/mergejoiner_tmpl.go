@@ -238,7 +238,9 @@ func _PROBE_SWITCH(
 						// {{ if _JOIN_TYPE.IsLeftSemi }}
 						// {{ if _FILTER_INFO.HasFilter }}
 						for lIdx := beginLIdx; lIdx < beginLIdx+lGroupLength; lIdx++ {
-							if !o.isLeftTupleFilteredOut(ctx, o.proberState.lBatch, o.proberState.rBatch, lIdx, beginRIdx, beginRIdx+rGroupLength) {
+							if !o.filter.isLeftTupleFilteredOut(
+								ctx, o.proberState.lBatch, o.proberState.rBatch, lIdx, beginRIdx, beginRIdx+rGroupLength,
+							) {
 								o.groups.addLeftSemiGroup(lIdx, 1)
 							}
 						}
@@ -253,7 +255,9 @@ func _PROBE_SWITCH(
 						// tuple from the left source if there is a filter and the tuple
 						// doesn't pass the filter.
 						for lIdx := beginLIdx; lIdx < beginLIdx+lGroupLength; lIdx++ {
-							if o.isLeftTupleFilteredOut(ctx, o.proberState.lBatch, o.proberState.rBatch, lIdx, beginRIdx, beginRIdx+rGroupLength) {
+							if o.filter.isLeftTupleFilteredOut(
+								ctx, o.proberState.lBatch, o.proberState.rBatch, lIdx, beginRIdx, beginRIdx+rGroupLength,
+							) {
 								// The second argument doesn't matter in case of LEFT ANTI join.
 								o.groups.addLeftUnmatchedGroup(lIdx, beginRIdx)
 							}
@@ -948,66 +952,6 @@ RightColLoop:
 // {{ end }}
 // {{ end }}
 
-// isLeftTupleFilteredOut returns whether a tuple lIdx from lBatch combined
-// with any tuple in range [rStartIdx, rEndIdx) from rBatch satisfies the
-// filter.
-// A special case of rBatch == nil is supported which will run the filter only
-// on the partial tuple coming from the left input.
-func (o *mergeJoinBase) isLeftTupleFilteredOut(
-	ctx context.Context, lBatch, rBatch coldata.Batch, lIdx, rStartIdx, rEndIdx int,
-) bool {
-	if o.filterOnlyOnLeft || rBatch == nil {
-		o.filterInput.reset()
-		o.setFilterInputBatch(lBatch, nil /* rBatch */, lIdx, 0 /* rIdx */)
-		b := o.filter.Next(ctx)
-		return b.Length() == 0
-	}
-	for rIdx := rStartIdx; rIdx < rEndIdx; rIdx++ {
-		o.filterInput.reset()
-		o.setFilterInputBatch(lBatch, rBatch, lIdx, rIdx)
-		b := o.filter.Next(ctx)
-		if b.Length() > 0 {
-			return false
-		}
-	}
-	return true
-}
-
-// setFilterInputBatch sets the batch of filterFeedOperator, namely, it copies
-// a single tuple from each of the batches at the specified indices and puts
-// the combined "double" tuple into o.filterInput.
-// Either lBatch or rBatch can be nil to indicate that the tuple from the
-// respective side should not be set, i.e. the filter input batch will only be
-// partially initialized.
-func (o *mergeJoinBase) setFilterInputBatch(lBatch, rBatch coldata.Batch, lIdx, rIdx int) {
-	if lBatch == nil && rBatch == nil {
-		execerror.VectorizedInternalPanic("only one of lBatch and rBatch can be nil")
-	}
-	setOneSide := func(colOffset int, batch coldata.Batch, sourceTypes []coltypes.T, idx int) {
-		for colIdx, col := range batch.ColVecs() {
-			colType := sourceTypes[colIdx]
-			memCol := col.Slice(colType, uint64(idx), uint64(idx+1))
-			switch colType {
-			// {{ range $mjOverload := $.MJOverloads }}
-			case _TYPES_T:
-				o.filterInput.batch.ColVec(colOffset + colIdx).SetCol(memCol._TemplateType())
-				// {{ end }}
-			default:
-				execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colType))
-			}
-			o.filterInput.batch.ColVec(colOffset + colIdx).SetNulls(memCol.Nulls())
-		}
-	}
-	if lBatch != nil {
-		setOneSide(0 /* colOffset */, lBatch, o.left.sourceTypes, lIdx)
-	}
-	if rBatch != nil {
-		setOneSide(len(o.left.sourceTypes), rBatch, o.right.sourceTypes, rIdx)
-	}
-	o.filterInput.batch.SetLength(1)
-	o.filterInput.batch.SetSelection(false)
-}
-
 // isBufferedGroupFinished checks to see whether or not the buffered group
 // corresponding to input continues in batch.
 func (o *mergeJoinBase) isBufferedGroupFinished(
@@ -1102,13 +1046,11 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) setBuilderSourceToBuff
 	// {{ if _JOIN_TYPE.IsLeftAnti }}
 	// {{ if _FILTER_INFO.HasFilter }}
 	o.builderState.lGroups = o.builderState.lGroups[:0]
-	rBatch := o.proberState.rBufferedGroup
 	rEndIdx := int(o.proberState.rBufferedGroup.length)
-	if o.filterOnlyOnLeft {
-		rBatch = nil
-	}
 	for lIdx := 0; lIdx < int(o.proberState.lBufferedGroup.length); lIdx++ {
-		if o.isLeftTupleFilteredOut(ctx, o.proberState.lBufferedGroup, rBatch, lIdx, 0 /* rStartIdx */, rEndIdx) {
+		if o.filter.isLeftTupleFilteredOut(
+			ctx, o.proberState.lBufferedGroup, o.proberState.rBufferedGroup, lIdx, 0 /* rStartIdx */, rEndIdx,
+		) {
 			o.builderState.lGroups = append(o.builderState.lGroups, group{
 				rowStartIdx: lIdx,
 				rowEndIdx:   lIdx + 1,
@@ -1135,7 +1077,9 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) setBuilderSourceToBuff
 	rGroupEndIdx := int(o.proberState.rBufferedGroup.length)
 	o.builderState.lGroups = o.builderState.lGroups[:0]
 	for lIdx := 0; lIdx < lGroupEndIdx; lIdx++ {
-		if !o.isLeftTupleFilteredOut(ctx, o.proberState.lBufferedGroup, o.proberState.rBufferedGroup, lIdx, 0 /* rStartIdx */, rGroupEndIdx) {
+		if !o.filter.isLeftTupleFilteredOut(
+			ctx, o.proberState.lBufferedGroup, o.proberState.rBufferedGroup, lIdx, 0 /* rStartIdx */, rGroupEndIdx,
+		) {
 			o.builderState.lGroups = append(o.builderState.lGroups, group{
 				rowStartIdx: lIdx,
 				rowEndIdx:   lIdx + 1,
