@@ -1537,7 +1537,8 @@ func TestMergeJoiner(t *testing.T) {
 		runTests(t, []tuples{tc.leftTuples, tc.rightTuples}, tc.expected, mergeJoinVerifier,
 			tc.expectedOutCols, func(input []Operator) (Operator, error) {
 				return NewMergeJoinOp(tc.joinType, input[0], input[1], tc.leftOutCols,
-					tc.rightOutCols, tc.leftTypes, tc.rightTypes, lOrderings, rOrderings)
+					tc.rightOutCols, tc.leftTypes, tc.rightTypes, lOrderings, rOrderings,
+					nil /* filterConstructor */, false /* filterOnlyOnLeft */)
 			})
 	}
 }
@@ -1572,6 +1573,8 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 						typs,
 						[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
 						[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
+						nil,   /* filterConstructor */
+						false, /* filterOnlyOnLeft */
 					)
 					if err != nil {
 						t.Fatal("error in merge join op constructor", err)
@@ -1634,6 +1637,8 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						typs,
 						[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}, {ColIdx: 1, Direction: distsqlpb.Ordering_Column_ASC}},
 						[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}, {ColIdx: 1, Direction: distsqlpb.Ordering_Column_ASC}},
+						nil,   /* filterConstructor */
+						false, /* filterOnlyOnLeft */
 					)
 					if err != nil {
 						t.Fatal("error in merge join op constructor", err)
@@ -1700,6 +1705,8 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 							typs,
 							[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
 							[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
+							nil,   /* filterConstructor */
+							false, /* filterOnlyOnLeft */
 						)
 						if err != nil {
 							t.Fatal("error in merge join op constructor", err)
@@ -1751,6 +1758,8 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 						typs,
 						[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
 						[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
+						nil,   /* filterConstructor */
+						false, /* filterOnlyOnLeft */
 					)
 					if err != nil {
 						t.Fatal("error in merge join op constructor", err)
@@ -1866,6 +1875,8 @@ func TestMergeJoinerRandomized(t *testing.T) {
 								typs,
 								[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
 								[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
+								nil,   /* filterConstructor */
+								false, /* filterOnlyOnLeft */
 							)
 
 							if err != nil {
