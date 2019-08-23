@@ -24,8 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"google.golang.org/grpc"
 )
 
 // CallbackMetadataSource is a utility struct that implements the MetadataSource
@@ -118,4 +120,36 @@ func (ds *MockDistSQLServer) FlowStream(stream DistSQL_FlowStreamServer) error {
 	donec := make(chan error)
 	ds.InboundStreams <- InboundStreamNotification{Stream: stream, Donec: donec}
 	return <-donec
+}
+
+// MockDialer is a mocked implementation of the Outbox's `Dialer` interface.
+// Used to create a connection with a client stream.
+type MockDialer struct {
+	// Addr is assumed to be obtained from execinfrapb.StartMockDistSQLServer.
+	Addr net.Addr
+	mu   struct {
+		syncutil.Mutex
+		conn *grpc.ClientConn
+	}
+}
+
+// Dial establishes a grpc connection once.
+func (d *MockDialer) Dial(
+	context.Context, roachpb.NodeID, rpc.ConnectionClass,
+) (*grpc.ClientConn, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.mu.conn != nil {
+		return d.mu.conn, nil
+	}
+	var err error
+	d.mu.conn, err = grpc.Dial(d.Addr.String(), grpc.WithInsecure(), grpc.WithBlock())
+	return d.mu.conn, err
+}
+
+// Close must be called after the test is done.
+func (d *MockDialer) Close() {
+	if err := d.mu.conn.Close(); err != nil {
+		panic(err)
+	}
 }

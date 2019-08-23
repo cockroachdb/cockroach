@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"net"
 	"strconv"
 	"sync"
 	"testing"
@@ -22,11 +21,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -37,40 +33,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
-
-type mockDialer struct {
-	addr net.Addr
-	mu   struct {
-		syncutil.Mutex
-		conn *grpc.ClientConn
-	}
-}
-
-func (d *mockDialer) Dial(
-	context.Context, roachpb.NodeID, rpc.ConnectionClass,
-) (*grpc.ClientConn, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if d.mu.conn != nil {
-		return d.mu.conn, nil
-	}
-	var err error
-	d.mu.conn, err = grpc.Dial(d.addr.String(), grpc.WithInsecure(), grpc.WithBlock())
-	return d.mu.conn, err
-}
-
-// close must be called after the test.
-func (d *mockDialer) close() {
-	if err := d.mu.conn.Close(); err != nil {
-		execerror.VectorizedInternalPanic(err)
-	}
-}
 
 type shutdownScenario struct {
 	string
@@ -138,8 +104,8 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, execinfra.StaticNodeID,
 	)
 	require.NoError(t, err)
-	dialer := &mockDialer{addr: addr}
-	defer dialer.close()
+	dialer := &execinfrapb.MockDialer{Addr: addr}
+	defer dialer.Close()
 
 	for run := 0; run < 10; run++ {
 		for _, shutdownOperation := range shutdownScenarios {
@@ -181,7 +147,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 
 				hashRouter, hashRouterOutputs := colexec.NewHashRouter(hashRouterInput, typs, []int{0}, numHashRouterOutputs)
 				for i := 0; i < numInboxes; i++ {
-					inbox, err := colrpc.NewInbox(typs)
+					inbox, err := colrpc.NewInbox(typs, execinfrapb.StreamID(streamID))
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					materializerMetadataSources = append(materializerMetadataSources, inbox)
@@ -261,7 +227,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				ctxAnotherRemote, cancelAnotherRemote := context.WithCancel(context.Background())
 				if addAnotherRemote {
 					// Add another "remote" node to the flow.
-					inbox, err := colrpc.NewInbox(typs)
+					inbox, err := colrpc.NewInbox(typs, execinfrapb.StreamID(streamID))
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					runOutboxInbox(ctxAnotherRemote, cancelAnotherRemote, synchronizer, inbox, streamID, materializerMetadataSources)

@@ -163,7 +163,7 @@ type opDAGWithMetaSources struct {
 // several components in a remote flow. Mostly for testing purposes.
 type remoteComponentCreator interface {
 	newOutbox(input colexec.Operator, typs []coltypes.T, metadataSources []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
-	newInbox(typs []coltypes.T) (*colrpc.Inbox, error)
+	newInbox(typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
@@ -174,8 +174,10 @@ func (vectorizedRemoteComponentCreator) newOutbox(
 	return colrpc.NewOutbox(input, typs, metadataSources)
 }
 
-func (vectorizedRemoteComponentCreator) newInbox(typs []coltypes.T) (*colrpc.Inbox, error) {
-	return colrpc.NewInbox(typs)
+func (vectorizedRemoteComponentCreator) newInbox(
+	typs []coltypes.T, streamID execinfrapb.StreamID,
+) (*colrpc.Inbox, error) {
+	return colrpc.NewInbox(typs, streamID)
 }
 
 // vectorizedFlowCreator performs all the setup of vectorized flows. Depending
@@ -359,7 +361,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			if err != nil {
 				return nil, nil, memUsed, err
 			}
-			inbox, err := s.remoteComponentCreator.newInbox(typs)
+			inbox, err := s.remoteComponentCreator.newInbox(typs, inputStream.StreamID)
 			if err != nil {
 				return nil, nil, memUsed, err
 			}
