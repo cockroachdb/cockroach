@@ -88,6 +88,8 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			[]coltypes.T{coltypes.Int64},
 			[]distsqlpb.Ordering_Column{{ColIdx: 0}},
 			[]distsqlpb.Ordering_Column{{ColIdx: 0}},
+			nil,   /* filterConstructor */
+			false, /* filterOnlyOnLeft */
 		)
 		if err != nil {
 			t.Fatal(err)

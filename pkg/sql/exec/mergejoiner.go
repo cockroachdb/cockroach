@@ -12,6 +12,7 @@ package exec
 
 import (
 	"context"
+	"fmt"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -167,6 +168,40 @@ func (o *feedOperator) Next(context.Context) coldata.Batch {
 
 var _ Operator = &feedOperator{}
 
+// filterFeedOperator is used to feed the filter by manually setting the batch
+// to be returned on the first Next() call with zero-length batches returned on
+// all consequent calls.
+type filterFeedOperator struct {
+	ZeroInputNode
+	batch     coldata.Batch
+	zeroBatch coldata.Batch
+	nexted    bool
+}
+
+var _ Operator = &filterFeedOperator{}
+
+func newFilterFeedOperator(inputTypes []coltypes.T) *filterFeedOperator {
+	return &filterFeedOperator{
+		batch:     coldata.NewMemBatchWithSize(inputTypes, 1 /* size */),
+		zeroBatch: coldata.NewMemBatchWithSize([]coltypes.T{}, 0 /* size */),
+	}
+}
+
+func (o *filterFeedOperator) Init() {}
+
+func (o *filterFeedOperator) Next(context.Context) coldata.Batch {
+	if !o.nexted {
+		o.nexted = true
+		return o.batch
+	}
+	o.zeroBatch.SetLength(0)
+	return o.zeroBatch
+}
+
+func (o *filterFeedOperator) reset() {
+	o.nexted = false
+}
+
 // The merge join operator uses a probe and build approach to generate the
 // join. What this means is that instead of going through and expanding the
 // cross product row by row, the operator performs two passes.
@@ -196,8 +231,35 @@ func NewMergeJoinOp(
 	rightTypes []coltypes.T,
 	leftOrdering []distsqlpb.Ordering_Column,
 	rightOrdering []distsqlpb.Ordering_Column,
+	filterConstructor func(Operator) (Operator, error),
+	filterOnlyOnLeft bool,
 ) (Operator, error) {
-	base, err := newMergeJoinBase(left, right, leftOutCols, rightOutCols, leftTypes, rightTypes, leftOrdering, rightOrdering)
+	base, err := newMergeJoinBase(
+		left,
+		right,
+		leftOutCols,
+		rightOutCols,
+		leftTypes,
+		rightTypes,
+		leftOrdering,
+		rightOrdering,
+		filterConstructor,
+		filterOnlyOnLeft,
+	)
+	if filterConstructor != nil {
+		switch joinType {
+		case sqlbase.JoinType_INNER:
+			execerror.VectorizedInternalPanic("INNER JOIN with ON expression is handled differently")
+		case sqlbase.JoinType_LEFT_SEMI:
+			return &mergeJoinLeftSemiWithOnExprOp{base}, err
+		case sqlbase.JoinType_LEFT_ANTI:
+			return &mergeJoinLeftAntiWithOnExprOp{base}, err
+		default:
+			execerror.VectorizedInternalPanic(
+				fmt.Sprintf("unsupported join type %s with ON expression", joinType.String()),
+			)
+		}
+	}
 	switch joinType {
 	case sqlbase.JoinType_INNER:
 		return &mergeJoinInnerOp{base}, err
@@ -213,9 +275,9 @@ func NewMergeJoinOp(
 		return &mergeJoinLeftAntiOp{base}, err
 	default:
 		execerror.VectorizedInternalPanic("unsupported join type")
-		// This code is unreachable, but the compiler cannot infer that.
-		return nil, nil
 	}
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil, nil
 }
 
 // Const declarations for the merge joiner cross product (MJCP) zero state.
@@ -257,6 +319,8 @@ func newMergeJoinBase(
 	rightTypes []coltypes.T,
 	leftOrdering []distsqlpb.Ordering_Column,
 	rightOrdering []distsqlpb.Ordering_Column,
+	filterConstructor func(Operator) (Operator, error),
+	filterOnlyOnLeft bool,
 ) (mergeJoinBase, error) {
 	lEqCols := make([]uint32, len(leftOrdering))
 	lDirections := make([]distsqlpb.Ordering_Column_Direction, len(leftOrdering))
@@ -299,6 +363,14 @@ func newMergeJoinBase(
 	base.right.distincterInput = &feedOperator{}
 	base.right.distincter, base.right.distinctOutput, err = OrderedDistinctColsToOperators(
 		base.right.distincterInput, rEqCols, rightTypes)
+	if err != nil {
+		return base, err
+	}
+	if filterConstructor != nil {
+		base.filterInput = newFilterFeedOperator(append(leftTypes, rightTypes...))
+		base.filter, err = filterConstructor(base.filterInput)
+		base.filterOnlyOnLeft = filterOnlyOnLeft
+	}
 	return base, err
 }
 
@@ -322,6 +394,13 @@ type mergeJoinBase struct {
 	state        mjState
 	proberState  mjProberState
 	builderState mjBuilderState
+
+	// A side chain of Operators needed to support ON expressions.
+	filter      Operator
+	filterInput *filterFeedOperator
+	// filterOnlyOnLeft indicates whether the ON expression is such that only
+	// columns from the left input are used.
+	filterOnlyOnLeft bool
 }
 
 func (o *mergeJoinBase) getOutColTypes() []coltypes.T {
@@ -338,6 +417,11 @@ func (o *mergeJoinBase) EstimateStaticMemoryUsage() int {
 	const sizeOfGroup = int(unsafe.Sizeof(group{}))
 	leftDistincter := o.left.distincter.(StaticMemoryOperator)
 	rightDistincter := o.right.distincter.(StaticMemoryOperator)
+	// Note that we're ignoring filter memory usage (if any) since the filter
+	// input uses only two batches of lengths 1 and 0 and the filter itself does
+	// not use any static memory.
+	// TODO(yuzefovich): update this calculation if the above comment is no
+	// longer true.
 	return EstimateBatchSizeBytes(
 		o.getOutColTypes(), coldata.BatchSize,
 	) + // base.output
@@ -375,6 +459,10 @@ func (o *mergeJoinBase) initWithBatchSize(outBatchSize uint16) {
 
 	o.groups = makeGroupsBuffer(coldata.BatchSize)
 	o.resetBuilderCrossProductState()
+
+	if o.filter != nil {
+		o.filter.Init()
+	}
 }
 
 func (o *mergeJoinBase) resetBuilderCrossProductState() {
