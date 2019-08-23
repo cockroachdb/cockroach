@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"net"
 	"strconv"
 	"sync"
 	"testing"
@@ -22,8 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
@@ -35,40 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
-
-type mockDialer struct {
-	addr net.Addr
-	mu   struct {
-		syncutil.Mutex
-		conn *grpc.ClientConn
-	}
-}
-
-func (d *mockDialer) Dial(
-	context.Context, roachpb.NodeID, rpc.ConnectionClass,
-) (*grpc.ClientConn, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if d.mu.conn != nil {
-		return d.mu.conn, nil
-	}
-	var err error
-	d.mu.conn, err = grpc.Dial(d.addr.String(), grpc.WithInsecure(), grpc.WithBlock())
-	return d.mu.conn, err
-}
-
-// close must be called after the test.
-func (d *mockDialer) close() {
-	if err := d.mu.conn.Close(); err != nil {
-		panic(err)
-	}
-}
 
 type shutdownScenario struct {
 	string
@@ -136,8 +103,8 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, staticNodeID,
 	)
 	require.NoError(t, err)
-	dialer := &mockDialer{addr: addr}
-	defer dialer.close()
+	dialer := &distsqlpb.MockDialer{Addr: addr}
+	defer dialer.Close()
 
 	for run := 0; run < 10; run++ {
 		for _, shutdownOperation := range shutdownScenarios {
@@ -179,7 +146,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 
 				hashRouter, hashRouterOutputs := exec.NewHashRouter(hashRouterInput, typs, []int{0}, numHashRouterOutputs)
 				for i := 0; i < numInboxes; i++ {
-					inbox, err := colrpc.NewInbox(typs)
+					inbox, err := colrpc.NewInbox(typs, distsqlpb.StreamID(streamID))
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					materializerMetadataSources = append(materializerMetadataSources, inbox)
@@ -259,7 +226,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				ctxAnotherRemote, cancelAnotherRemote := context.WithCancel(context.Background())
 				if addAnotherRemote {
 					// Add another "remote" node to the flow.
-					inbox, err := colrpc.NewInbox(typs)
+					inbox, err := colrpc.NewInbox(typs, distsqlpb.StreamID(streamID))
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					runOutboxInbox(ctxAnotherRemote, cancelAnotherRemote, synchronizer, inbox, streamID, materializerMetadataSources)
@@ -295,7 +262,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				switch shutdownOperation {
 				case consumerDone:
 					materializer.ConsumerDone()
-					receivedMetaFromID := make([]bool, streamID)
+					receivedMetaFromID := make([]bool, distsqlpb.StreamID(streamID))
 					metaCount := 0
 					for {
 						row, meta := materializer.Next()
