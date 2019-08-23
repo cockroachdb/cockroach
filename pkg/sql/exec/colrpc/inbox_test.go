@@ -50,7 +50,7 @@ func TestInboxCancellation(t *testing.T) {
 
 	typs := []coltypes.T{coltypes.Int64}
 	t.Run("ReaderWaitingForStreamHandler", func(t *testing.T) {
-		inbox, err := NewInbox(typs)
+		inbox, err := NewInbox(typs, distsqlpb.StreamID(0))
 		require.NoError(t, err)
 		ctx, cancelFn := context.WithCancel(context.Background())
 		// Cancel the context.
@@ -65,7 +65,7 @@ func TestInboxCancellation(t *testing.T) {
 
 	t.Run("DuringRecv", func(t *testing.T) {
 		rpcLayer := makeMockFlowStreamRPCLayer()
-		inbox, err := NewInbox(typs)
+		inbox, err := NewInbox(typs, distsqlpb.StreamID(0))
 		require.NoError(t, err)
 		ctx, cancelFn := context.WithCancel(context.Background())
 
@@ -96,7 +96,7 @@ func TestInboxCancellation(t *testing.T) {
 
 	t.Run("StreamHandlerWaitingForReader", func(t *testing.T) {
 		rpcLayer := makeMockFlowStreamRPCLayer()
-		inbox, err := NewInbox(typs)
+		inbox, err := NewInbox(typs, distsqlpb.StreamID(0))
 		require.NoError(t, err)
 
 		ctx, cancelFn := context.WithCancel(context.Background())
@@ -114,7 +114,7 @@ func TestInboxCancellation(t *testing.T) {
 func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	inbox, err := NewInbox([]coltypes.T{coltypes.Int64})
+	inbox, err := NewInbox([]coltypes.T{coltypes.Int64}, distsqlpb.StreamID(0))
 	require.NoError(t, err)
 
 	rpcLayer := makeMockFlowStreamRPCLayer()
@@ -139,7 +139,7 @@ func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 func TestInboxTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	inbox, err := NewInbox([]coltypes.T{coltypes.Int64})
+	inbox, err := NewInbox([]coltypes.T{coltypes.Int64}, distsqlpb.StreamID(0))
 	require.NoError(t, err)
 
 	var (
