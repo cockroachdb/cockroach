@@ -1381,6 +1381,14 @@ func confChangeImpl(
 		}
 		return errors.Errorf("%s missing from descriptors %v", in, replicas)
 	}
+	checkNotExists := func(in ReplicaDescriptor) error {
+		for _, rDesc := range replicas {
+			if rDesc.ReplicaID == in.ReplicaID {
+				return errors.Errorf("%s must no longer be present in descriptor", in)
+			}
+		}
+		return nil
+	}
 
 	for _, rDesc := range added {
 		// The incoming descriptor must also be present in the set of all
@@ -1425,17 +1433,15 @@ func confChangeImpl(
 			}
 		case ReplicaType_VoterFull, ReplicaType_Learner:
 			// A learner or full voter can't be in the desc after.
-			for _, rd := range replicas {
-				if rd.ReplicaID == rDesc.ReplicaID {
-					return nil, errors.Errorf("%s must no longer be present in descriptor", rDesc)
-				}
+			if err := checkNotExists(rDesc); err != nil {
+				return nil, err
 			}
 		default:
 			return nil, errors.Errorf("can't remove replica in state %v", rDesc.GetType())
 		}
 		sl = append(sl, raftpb.ConfChangeSingle{
-			NodeID: uint64(rDesc.ReplicaID),
 			Type:   raftpb.ConfChangeRemoveNode,
+			NodeID: uint64(rDesc.ReplicaID),
 		})
 	}
 
