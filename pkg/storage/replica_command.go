@@ -908,7 +908,7 @@ func (r *Replica) ChangeReplicas(
 		return desc, nil
 	}
 	// Atomic replication change.
-	return r.changeReplicasImpl(ctx, desc, SnapshotRequest_REBALANCE, storagepb.ReasonAdminRequest, "", chgs)
+	return r.changeReplicasImpl(ctx, desc, priority, reason, details, chgs)
 }
 
 func (r *Replica) changeReplicasImpl(
