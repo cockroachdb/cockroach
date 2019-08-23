@@ -93,21 +93,29 @@ const _JOIN_TYPE = 0
 // valid go code.
 const _MJ_OVERLOAD = 0
 
+// _FILTER_INFO is used in place of the string "$filterInfo", since that isn't
+// valid go code.
+const _FILTER_INFO = 0
+
 // */}}
 
 // Use execgen package to remove unused import warning.
 var _ interface{} = execgen.UNSAFEGET
 
-type mergeJoin_JOIN_TYPE_STRINGOp struct {
+// {{ range $filterInfo := $.FilterInfos }}
+type mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp struct {
 	mergeJoinBase
 }
 
-var _ StaticMemoryOperator = &mergeJoin_JOIN_TYPE_STRINGOp{}
+var _ StaticMemoryOperator = &mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp{}
+
+// {{ end }}
 
 // {{/*
 // This code snippet is the "meat" of the probing phase.
 func _PROBE_SWITCH(
 	_JOIN_TYPE joinTypeInfo,
+	_FILTER_INFO filterInfo,
 	_SEL_PERMUTATION selPermutation,
 	_L_HAS_NULLS bool,
 	_R_HAS_NULLS bool,
@@ -116,6 +124,7 @@ func _PROBE_SWITCH(
 	// {{define "probeSwitch"}}
 	// {{ $sel := $.SelPermutation }}
 	// {{ $mjOverloads := $.Global.MJOverloads }}
+	// {{ $filterInfo := $.FilterInfo }}
 	switch colType {
 	// {{range $mjOverload := $.Global.MJOverloads }}
 	case _TYPES_T:
@@ -220,17 +229,39 @@ func _PROBE_SWITCH(
 						break EqLoop
 					}
 
-					// {{ if _JOIN_TYPE.IsLeftSemi }}
 					if eqColIdx < len(o.left.eqCols)-1 {
 						o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 					} else {
+						// {{ if _JOIN_TYPE.IsLeftSemi }}
+						// {{ if _FILTER_INFO.HasFilter }}
+						for lIdx := beginLIdx; lIdx < beginLIdx+lGroupLength; lIdx++ {
+							if !o.isLeftTupleFilteredOut(ctx, o.proberState.lBatch, o.proberState.rBatch, lIdx, beginRIdx, beginRIdx+rGroupLength) {
+								o.groups.addLeftSemiGroup(lIdx, 1)
+							}
+						}
+						// {{ else }}
 						o.groups.addLeftSemiGroup(beginLIdx, lGroupLength)
+						// {{ end }}
+						// {{ else if _JOIN_TYPE.IsLeftAnti }}
+						// {{ if _FILTER_INFO.HasFilter }}
+						// With LEFT ANTI join, we are only interested in unmatched tuples
+						// from the left, and so far all tuples in the current group have a
+						// match. We will only add an unmatched group corresponding to a
+						// tuple from the left source if there is a filter and the tuple
+						// doesn't pass the filter.
+						for lIdx := beginLIdx; lIdx < beginLIdx+lGroupLength; lIdx++ {
+							if o.isLeftTupleFilteredOut(ctx, o.proberState.lBatch, o.proberState.rBatch, lIdx, beginRIdx, beginRIdx+rGroupLength) {
+								// The second argument doesn't matter in case of LEFT ANTI join.
+								o.groups.addLeftUnmatchedGroup(lIdx, beginRIdx)
+							}
+						}
+						// {{ end }}
+						// {{ else }}
+						// Neither group ends with the batch, so add the group to the
+						// circular buffer.
+						o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
+						// {{ end }}
 					}
-					// {{ else }}
-					// Neither group ends with the batch, so add the group to the
-					// circular buffer.
-					o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
-					// {{ end }}
 				} else { // mismatch
 					var incrementLeft bool
 					// {{ if _ASC_DIRECTION }}
@@ -537,7 +568,10 @@ func _PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 // */}}
 
 // {{ range $sel := $.SelPermutations }}
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) probeBodyLSel_IS_L_SELRSel_IS_R_SEL() {
+// {{ range $filterInfo := $.FilterInfos }}
+func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) probeBodyLSel_IS_L_SELRSel_IS_R_SEL(
+	ctx context.Context,
+) {
 	lSel := o.proberState.lBatch.Selection()
 	rSel := o.proberState.rBatch.Selection()
 EqLoop:
@@ -548,29 +582,29 @@ EqLoop:
 		if lVec.MaybeHasNulls() {
 			if rVec.MaybeHasNulls() {
 				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
-					_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG, true, true, true)
+					_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, true, true, true)
 				} else {
-					_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG, true, true, false)
+					_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, true, true, false)
 				}
 			} else {
 				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
-					_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG, true, false, true)
+					_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, true, false, true)
 				} else {
-					_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG, true, false, false)
+					_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, true, false, false)
 				}
 			}
 		} else {
 			if rVec.MaybeHasNulls() {
 				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
-					_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG, false, true, true)
+					_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, false, true, true)
 				} else {
-					_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG, false, true, false)
+					_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, false, true, false)
 				}
 			} else {
 				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
-					_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG, false, false, true)
+					_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, false, false, true)
 				} else {
-					_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG, false, false, false)
+					_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, false, false, false)
 				}
 			}
 		}
@@ -580,6 +614,7 @@ EqLoop:
 	}
 }
 
+// {{ end }}
 // {{ end }}
 
 // {{/*
@@ -683,6 +718,8 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 
 // */}}
 
+// {{ range $filterInfo := $.FilterInfos }}
+
 // buildLeftGroups takes a []group and expands each group into the output by
 // repeating each row in the group numRepeats times. For example, given an
 // input table:
@@ -703,7 +740,7 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 // Note: this is different from buildRightGroups in that each row of group is
 // repeated numRepeats times, instead of a simple copy of the group as a whole.
 // SIDE EFFECTS: writes into o.output.
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftGroups(
+func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) buildLeftGroups(
 	leftGroups []group,
 	colOffset int,
 	input *mergeJoinInput,
@@ -739,6 +776,8 @@ LeftColLoop:
 	}
 	o.builderState.left.reset()
 }
+
+// {{ end }}
 
 // {{/*
 // This code snippet builds the output corresponding to the right side (i.e. is
@@ -836,6 +875,8 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 
 // */}}
 
+// {{ range $filterInfo := $.FilterInfos }}
+
 // buildRightGroups takes a []group and repeats each group numRepeats times.
 // For example, given an input table:
 //  R1 |  R2
@@ -855,7 +896,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 // Note: this is different from buildLeftGroups in that each group is not
 // expanded but directly copied numRepeats times.
 // SIDE EFFECTS: writes into o.output.
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightGroups(
+func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) buildRightGroups(
 	rightGroups []group,
 	colOffset int,
 	input *mergeJoinInput,
@@ -894,6 +935,10 @@ RightColLoop:
 	o.builderState.right.reset()
 }
 
+// {{ end }}
+
+// {{ range $filterInfo := $.FilterInfos }}
+
 // probe is where we generate the groups slices that are used in the build
 // phase. We do this by first assuming that every row in both batches
 // contributes to the cross product. Then, with every equality column, we
@@ -902,34 +947,84 @@ RightColLoop:
 // and set the correct cardinality.
 // Note that in this phase, we do this for every group, except the last group
 // in the batch.
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) probe() {
+func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) probe(ctx context.Context) {
 	o.groups.reset(o.proberState.lIdx, o.proberState.lLength, o.proberState.rIdx, o.proberState.rLength)
 	lSel := o.proberState.lBatch.Selection()
 	rSel := o.proberState.rBatch.Selection()
 	if lSel != nil {
 		if rSel != nil {
-			o.probeBodyLSeltrueRSeltrue()
+			o.probeBodyLSeltrueRSeltrue(ctx)
 		} else {
-			o.probeBodyLSeltrueRSelfalse()
+			o.probeBodyLSeltrueRSelfalse(ctx)
 		}
 	} else {
 		if rSel != nil {
-			o.probeBodyLSelfalseRSeltrue()
+			o.probeBodyLSelfalseRSeltrue(ctx)
 		} else {
-			o.probeBodyLSelfalseRSelfalse()
+			o.probeBodyLSelfalseRSelfalse(ctx)
 		}
 	}
 }
 
 // setBuilderSourceToBufferedGroup sets up the builder state to use the
 // buffered group.
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBufferedGroup() {
+func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) setBuilderSourceToBufferedGroup(
+	ctx context.Context,
+) {
+	// {{ if _JOIN_TYPE.IsLeftAnti }}
+	// {{ if _FILTER_INFO.HasFilter }}
+	o.builderState.lGroups = o.builderState.lGroups[:0]
+	rBatch := o.proberState.rBufferedGroup
+	rEndIdx := int(o.proberState.rBufferedGroup.length)
+	if o.filterOnlyOnLeft {
+		rBatch = nil
+	}
+	for lIdx := 0; lIdx < int(o.proberState.lBufferedGroup.length); lIdx++ {
+		if o.isLeftTupleFilteredOut(ctx, o.proberState.lBufferedGroup, rBatch, lIdx, 0 /* rStartIdx */, rEndIdx) {
+			o.builderState.lGroups = append(o.builderState.lGroups, group{
+				rowStartIdx: lIdx,
+				rowEndIdx:   lIdx + 1,
+				numRepeats:  1,
+				toBuild:     1,
+				unmatched:   true,
+			})
+		}
+	}
+	// {{ else }}
+	// All tuples in the buffered group have matches, so they are not output in
+	// case of LEFT ANTI join.
+	o.builderState.lGroups = o.builderState.lGroups[:0]
+	// {{ end }}
+	// {{ else }}
 	lGroupEndIdx := int(o.proberState.lBufferedGroup.length)
 	// The capacity of builder state lGroups and rGroups is always at least 1
 	// given the init.
 	o.builderState.lGroups = o.builderState.lGroups[:1]
 	o.builderState.rGroups = o.builderState.rGroups[:1]
-	// {{ if not _JOIN_TYPE.IsLeftSemi }}
+	// {{ if _JOIN_TYPE.IsLeftSemi }}
+	// TODO(yuzefovich): think about using selection vectors on mjBufferedGroups.
+	// {{ if _FILTER_INFO.HasFilter }}
+	rGroupEndIdx := int(o.proberState.rBufferedGroup.length)
+	o.builderState.lGroups = o.builderState.lGroups[:0]
+	for lIdx := 0; lIdx < lGroupEndIdx; lIdx++ {
+		if !o.isLeftTupleFilteredOut(ctx, o.proberState.lBufferedGroup, o.proberState.rBufferedGroup, lIdx, 0 /* rStartIdx */, rGroupEndIdx) {
+			o.builderState.lGroups = append(o.builderState.lGroups, group{
+				rowStartIdx: lIdx,
+				rowEndIdx:   lIdx + 1,
+				numRepeats:  1,
+				toBuild:     1,
+			})
+		}
+	}
+	// {{ else }}
+	o.builderState.lGroups[0] = group{
+		rowStartIdx: 0,
+		rowEndIdx:   lGroupEndIdx,
+		numRepeats:  1,
+		toBuild:     lGroupEndIdx,
+	}
+	// {{ end }}
+	// {{ else }}
 	rGroupEndIdx := int(o.proberState.rBufferedGroup.length)
 	o.builderState.lGroups[0] = group{
 		rowStartIdx: 0,
@@ -943,13 +1038,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBufferedGroup() {
 		numRepeats:  lGroupEndIdx,
 		toBuild:     rGroupEndIdx * lGroupEndIdx,
 	}
-	// {{ else }}
-	o.builderState.lGroups[0] = group{
-		rowStartIdx: 0,
-		rowEndIdx:   lGroupEndIdx,
-		numRepeats:  1,
-		toBuild:     lGroupEndIdx,
-	}
+	// {{ end }}
 	// {{ end }}
 
 	o.builderState.lBatch = o.proberState.lBufferedGroup
@@ -965,7 +1054,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBufferedGroup() {
 // exhaustLeftSource sets up the builder to process any remaining tuples from
 // the left source. It should only be called when the right source has been
 // exhausted.
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource() {
+func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) exhaustLeftSource(ctx context.Context) {
 	// {{ if or _JOIN_TYPE.IsInner _JOIN_TYPE.IsLeftSemi }}
 	// {{/*
 	// Remaining tuples from the left source do not have a match, so they are
@@ -983,6 +1072,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource() {
 		toBuild:     o.proberState.lLength - o.proberState.lIdx,
 		unmatched:   true,
 	}
+	// {{ if _JOIN_TYPE.IsLeftOuter }}
 	o.builderState.rGroups = o.builderState.rGroups[:1]
 	o.builderState.rGroups[0] = group{
 		rowStartIdx: o.proberState.lIdx,
@@ -991,6 +1081,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource() {
 		toBuild:     o.proberState.lLength - o.proberState.lIdx,
 		nullGroup:   true,
 	}
+	// {{ end }}
 
 	o.proberState.lIdx = o.proberState.lLength
 	// {{ end }}
@@ -1005,7 +1096,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource() {
 // exhaustRightSource sets up the builder to process any remaining tuples from
 // the right source. It should only be called when the left source has been
 // exhausted.
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustRightSource() {
+func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) exhaustRightSource() {
 	// {{ if or _JOIN_TYPE.IsInner _JOIN_TYPE.IsLeftSemi }}
 	// {{/*
 	// Remaining tuples from the right source do not have a match, so they are
@@ -1043,7 +1134,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustRightSource() {
 }
 
 // build creates the cross product, and writes it to the output member.
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) build() {
+func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) build() {
 	if o.output.Width() != 0 {
 		outStartIdx := o.builderState.outCount
 		o.buildLeftGroups(o.builderState.lGroups, 0 /* colOffset */, &o.left, o.builderState.lBatch, outStartIdx)
@@ -1054,6 +1145,8 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) build() {
 	o.builderState.outCount = o.calculateOutputCount(o.builderState.lGroups)
 }
 
+// {{ end }}
+
 // {{/*
 // This code snippet is executed when at least one of the input sources has
 // been exhausted. It processes any remaining tuples and then sets up the
@@ -1062,7 +1155,7 @@ func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{define "sourceFinishedSwitch"}}
 	o.outputReady = true
 	// {{ if or $.JoinType.IsInner $.JoinType.IsLeftSemi }}
-	o.setBuilderSourceToBufferedGroup()
+	o.setBuilderSourceToBufferedGroup(ctx)
 	// {{ else }}
 	// First we make sure that batches of the builder state are always set. This
 	// is needed because the batches are accessed outside of _LEFT_SWITCH and
@@ -1083,7 +1176,7 @@ func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// nulls corresponding to the right one. But if the left source is
 	// finished, then there is nothing left to do.
 	if o.proberState.lIdx < o.proberState.lLength {
-		o.exhaustLeftSource()
+		o.exhaustLeftSource(ctx)
 		// We unset o.outputReady here because we want to put as many unmatched
 		// tuples from the left into the output batch. Once outCount reaches the
 		// desired output batch size, the output will be returned.
@@ -1109,11 +1202,15 @@ func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 
 // */}}
 
+// {{ range $filterInfo := $.FilterInfos }}
+
 // calculateOutputCount uses the toBuild field of each group and the output
 // batch size to determine the output count. Note that as soon as a group is
 // materialized partially or fully to output, its toBuild field is updated
 // accordingly.
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) calculateOutputCount(groups []group) uint16 {
+func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) calculateOutputCount(
+	groups []group,
+) uint16 {
 	count := int(o.builderState.outCount)
 
 	for i := 0; i < len(groups); i++ {
@@ -1136,7 +1233,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) calculateOutputCount(groups []group) uint
 	return uint16(count)
 }
 
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
+func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	for {
 		switch o.state {
 		case mjEntry:
@@ -1167,10 +1264,10 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			o.state = mjBuild
 		case mjFinishBufferedGroup:
 			o.finishProbe(ctx)
-			o.setBuilderSourceToBufferedGroup()
+			o.setBuilderSourceToBufferedGroup(ctx)
 			o.state = mjBuild
 		case mjProbe:
-			o.probe()
+			o.probe(ctx)
 			o.setBuilderSourceToBatch()
 			o.state = mjBuild
 		case mjBuild:
@@ -1194,3 +1291,5 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 		}
 	}
 }
+
+// {{ end }}

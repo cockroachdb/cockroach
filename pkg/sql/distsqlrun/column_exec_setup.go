@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -411,6 +412,39 @@ func newColOperator(
 			}
 		}
 
+		var filterConstructor func(exec.Operator) (exec.Operator, error)
+		filterOnlyOnLeft := true
+		onExprAlreadyHandled := false
+		if !core.MergeJoiner.OnExpr.Empty() {
+			// TODO(yuzefovich): figure out how to correctly populate
+			// filterOnlyOnLeft when core.MergeJoiner.OnExpr.LocalExpr is non-nil.
+			onExpr := core.MergeJoiner.OnExpr.Expr
+			if onExpr != "" {
+				rightColumnFound := false
+				colOffset := len(spec.Input[0].ColumnTypes) + 1
+				for rColIdx := range spec.Input[1].ColumnTypes {
+					rColOrdinal := fmt.Sprintf("@%d", rColIdx+colOffset)
+					if strings.Contains(onExpr, rColOrdinal) {
+						rightColumnFound = true
+						break
+					}
+				}
+				filterOnlyOnLeft = !rightColumnFound
+			}
+			if core.MergeJoiner.Type == sqlbase.JoinType_LEFT_SEMI ||
+				core.MergeJoiner.Type == sqlbase.JoinType_LEFT_ANTI {
+				onExprAlreadyHandled = true
+				filterConstructor = func(op exec.Operator) (exec.Operator, error) {
+					r := newColOperatorResult{
+						op:          op,
+						columnTypes: append(spec.Input[0].ColumnTypes, spec.Input[1].ColumnTypes...),
+					}
+					err := r.planFilterExpr(flowCtx.NewEvalCtx(), core.MergeJoiner.OnExpr)
+					return r.op, err
+				}
+			}
+		}
+
 		result.op, err = exec.NewMergeJoinOp(
 			core.MergeJoiner.Type,
 			inputs[0],
@@ -421,6 +455,8 @@ func newColOperator(
 			rightTypes,
 			core.MergeJoiner.LeftOrdering.Columns,
 			core.MergeJoiner.RightOrdering.Columns,
+			filterConstructor,
+			filterOnlyOnLeft,
 		)
 		if err != nil {
 			return result, err
@@ -435,9 +471,9 @@ func newColOperator(
 			result.columnTypes = result.columnTypes[:nLeftCols]
 		}
 
-		if !core.MergeJoiner.OnExpr.Empty() {
+		if !core.MergeJoiner.OnExpr.Empty() && !onExprAlreadyHandled {
 			if core.MergeJoiner.Type != sqlbase.JoinType_INNER {
-				return result, errors.Errorf("can't plan non-inner merge joins with on expressions")
+				return result, errors.Errorf("can only plan INNER, LEFT SEMI, and LEFT ANTI merge joins with ON expressions")
 			}
 			err = result.planFilterExpr(flowCtx.NewEvalCtx(), core.MergeJoiner.OnExpr)
 		}
