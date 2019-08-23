@@ -32,11 +32,11 @@ func TestReduceSQL(t *testing.T) {
 	t.Skip("unnecessary")
 	reducesql.LogUnknown = *printUnknown
 
-	reduce.Walk(t, "testdata", reducesql.Pretty, isInterestingSQL, reducesql.SQLPasses)
+	reduce.Walk(t, "testdata", reducesql.Pretty, isInterestingSQL, reduce.ModeInteresting, reducesql.SQLPasses)
 }
 
 func isInterestingSQL(contains string) reduce.InterestingFn {
-	return func(f reduce.File) bool {
+	return func(ctx context.Context, f reduce.File) bool {
 		args := base.TestServerArgs{
 			Insecure: true,
 		}
@@ -44,7 +44,6 @@ func isInterestingSQL(contains string) reduce.InterestingFn {
 		if err := server.Start(args); err != nil {
 			panic(err)
 		}
-		ctx := context.Background()
 		defer server.Stopper().Stop(ctx)
 
 		options := url.Values{}
@@ -64,7 +63,7 @@ func isInterestingSQL(contains string) reduce.InterestingFn {
 		if err != nil {
 			panic(err)
 		}
-		_, err = db.Exec(string(f))
+		_, err = db.ExecEx(ctx, string(f), nil)
 		if err == nil {
 			return false
 		}
