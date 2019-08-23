@@ -85,13 +85,14 @@ var (
 		{1, makeUpdateReturning},
 	}
 	nonMutatingTableExprs = tableExprWeights{
-		{20, makeJoinExpr},
-		{10, makeSchemaTable},
+		{40, makeEquiJoinExpr},
+		{20, makeSchemaTable},
+		{10, makeJoinExpr},
 		{1, makeValuesTable},
 		{2, makeSelectTable},
 	}
 	vectorizableTableExprs = tableExprWeights{
-		{10, makeJoinExpr},
+		{20, makeEquiJoinExpr},
 		{20, makeSchemaTable},
 	}
 	allTableExprs = append(mutatingTableExprs, nonMutatingTableExprs...)
@@ -216,6 +217,58 @@ func makeJoinExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs
 	}
 	joinRefs := leftRefs.extend(rightRefs...)
 
+	return joinExpr, joinRefs, true
+}
+
+func makeEquiJoinExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+	left, leftRefs, ok := makeTableExpr(s, refs, true)
+	if !ok {
+		return nil, nil, false
+	}
+	right, rightRefs, ok := makeTableExpr(s, refs, true)
+	if !ok {
+		return nil, nil, false
+	}
+
+	// Determine overlapping types.
+	var available [][2]tree.TypedExpr
+	for _, leftCol := range leftRefs {
+		for _, rightCol := range rightRefs {
+			if leftCol.typ.Equivalent(rightCol.typ) {
+				available = append(available, [2]tree.TypedExpr{
+					typedParen(leftCol.item, leftCol.typ),
+					typedParen(rightCol.item, rightCol.typ),
+				})
+			}
+		}
+	}
+	if len(available) == 0 {
+		// left and right didn't have any columns with the same type.
+		return nil, nil, false
+	}
+
+	s.schema.rnd.Shuffle(len(available), func(i, j int) {
+		available[i], available[j] = available[j], available[i]
+	})
+
+	var cond tree.TypedExpr
+	for (cond == nil || s.coin()) && len(available) > 0 {
+		v := available[0]
+		available = available[1:]
+		expr := tree.NewTypedComparisonExpr(tree.EQ, v[0], v[1])
+		if cond == nil {
+			cond = expr
+		} else {
+			cond = tree.NewTypedAndExpr(cond, expr)
+		}
+	}
+
+	joinExpr := &tree.JoinTableExpr{
+		Left:  left,
+		Right: right,
+		Cond:  &tree.OnJoinCond{Expr: cond},
+	}
+	joinRefs := leftRefs.extend(rightRefs...)
 	return joinExpr, joinRefs, true
 }
 
@@ -400,7 +453,10 @@ func (s *scope) makeSelectClause(
 		orderByRefs = fromRefs
 		selectListRefs = selectListRefs.extend(fromRefs...)
 
-		if s.d6() <= 2 {
+		// TODO(mjibson): vec only supports GROUP BYs on fully-ordered
+		// columns, which we could support here. Also see #39240 which
+		// will support this more generally.
+		if !s.schema.vectorizable && s.d6() <= 2 {
 			// Enable GROUP BY. Choose some random subset of the
 			// fromRefs.
 			// TODO(mjibson): Refence handling and aggregation functions
