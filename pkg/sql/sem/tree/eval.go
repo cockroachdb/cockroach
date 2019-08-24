@@ -292,6 +292,26 @@ func ConcatArrays(typ *types.T, left Datum, right Datum) (Datum, error) {
 	return result, nil
 }
 
+// ArrayContains return true if the haystack contains all needles.
+func ArrayContains(haystack *DArray, needles *DArray) (*DBool, error) {
+	if !haystack.ParamTyp.Equivalent(needles.ParamTyp) {
+		return DBoolFalse, pgerror.New(pgcode.DatatypeMismatch, "cannot compare arrays with different element types")
+	}
+	for i := range needles.Array {
+		var found bool
+		for j := range haystack.Array {
+			if needles.Array[i] == haystack.Array[j] {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return DBoolFalse, nil
+		}
+	}
+	return DBoolTrue, nil
+}
+
 func initArrayToArrayConcatenation() {
 	for _, t := range types.Scalar {
 		typ := t
@@ -2085,6 +2105,40 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 					return nil, err
 				}
 				return MakeDBool(DBool(c)), nil
+			},
+		},
+	},
+	Overlaps: {
+		&CmpOp{
+			LeftType:  types.AnyArray,
+			RightType: types.AnyArray,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				array := MustBeDArray(left)
+				other := MustBeDArray(right)
+				if !array.ParamTyp.Equivalent(other.ParamTyp) {
+					return nil, pgerror.New(pgcode.DatatypeMismatch, "cannot compare arrays with different element types")
+				}
+				for _, needle := range array.Array {
+					// Nulls don't compare to each other in && syntax.
+					if needle == DNull {
+						continue
+					}
+					for _, hay := range other.Array {
+						if needle.Compare(ctx, hay) == 0 {
+							return DBoolTrue, nil
+						}
+					}
+				}
+				return DBoolFalse, nil
+			},
+		},
+		&CmpOp{
+			LeftType:  types.INet,
+			RightType: types.INet,
+			Fn: func(_ *EvalContext, left, right Datum) (Datum, error) {
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				other := MustBeDIPAddr(right).IPAddr
+				return MakeDBool(DBool(ipAddr.ContainsOrContainedBy(&other))), nil
 			},
 		},
 	},

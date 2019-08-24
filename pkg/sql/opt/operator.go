@@ -136,6 +136,7 @@ var ComparisonOpReverseMap = map[Operator]tree.ComparisonOperator{
 	JsonExistsOp:     tree.JSONExists,
 	JsonSomeExistsOp: tree.JSONSomeExists,
 	JsonAllExistsOp:  tree.JSONAllExists,
+	OverlapsOp:       tree.Overlaps,
 }
 
 // BinaryOpReverseMap maps from an optimizer operator type to a semantic tree

@@ -31,6 +31,12 @@
 <tr><td>varbit <code>&</code> varbit</td><td>varbit</td></tr>
 </tbody></table>
 <table><thead>
+<tr><td><code>&&</code></td><td>Return</td></tr>
+</thead><tbody>
+<tr><td>anyelement <code>&&</code> anyelement</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td><a href="inet.html">inet</a> <code>&&</code> <a href="inet.html">inet</a></td><td><a href="bool.html">bool</a></td></tr>
+</tbody></table>
+<table><thead>
 <tr><td><code>*</code></td><td>Return</td></tr>
 </thead><tbody>
 <tr><td><a href="decimal.html">decimal</a> <code>*</code> <a href="decimal.html">decimal</a></td><td><a href="decimal.html">decimal</a></td></tr>
