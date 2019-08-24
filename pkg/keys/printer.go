@@ -244,7 +244,29 @@ func tableKeyParse(input string) (remainder string, output roachpb.Key) {
 		panic(&errUglifyUnsupported{err})
 	}
 	output = roachpb.Key(MakeTablePrefix(uint32(tableID)))
+	if remainder != "" {
+		var indexKey roachpb.Key
+		remainder, indexKey = tableIndexParse(remainder)
+		output = append(output, indexKey...)
+	}
 	return
+}
+
+func tableIndexParse(input string) (string, roachpb.Key) {
+	input = mustShiftSlash(input)
+	slashPos := strings.Index(input, "/")
+	if slashPos < 0 {
+		slashPos = len(input)
+	}
+	remainder := input[slashPos:] // `/something/else` -> `/else`
+	indexIDStr := input[:slashPos]
+	indexID, err := strconv.ParseUint(indexIDStr, 10, 32)
+	if err != nil {
+		panic(&errUglifyUnsupported{err})
+	}
+
+	output := encoding.EncodeUvarintAscending(nil /* key */, uint64(indexID))
+	return remainder, output
 }
 
 const strLogIndex = "/logIndex:"
