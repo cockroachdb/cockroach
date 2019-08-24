@@ -407,7 +407,8 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			// the cleanup. We are in effect peeking to see if the
 			// next message is a delete portal.
 			if c.Type != pgwirebase.PreparePortal || c.Name != r.portalName {
-				return errors.WithDetail(sql.ErrLimitedResultNotSupported, "portals must be executed to completion")
+				return errors.WithDetail(sql.ErrLimitedResultNotSupported,
+					"cannot close a portal while a different one is open")
 			}
 			r.typ = noCompletionMsg
 			// Rewind to before the delete so the AdvanceOne in
@@ -417,7 +418,8 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 		case sql.ExecPortal:
 			// The happy case: the client wants more rows from the portal.
 			if c.Name != r.portalName {
-				return errors.WithDetail(sql.ErrLimitedResultNotSupported, "portals must be executed to completion")
+				return errors.WithDetail(sql.ErrLimitedResultNotSupported,
+					"cannot execute a portal while a different one is open")
 			}
 			r.limit = c.Limit
 			// In order to get the correct command tag, we need to reset the seen rows.
@@ -436,7 +438,9 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			}
 		default:
 			// We got some other message, but we only support executing to completion.
-			return errors.WithDetail(sql.ErrLimitedResultNotSupported, "portals must be executed to completion")
+			return errors.WithSafeDetails(sql.ErrLimitedResultNotSupported,
+				"cannot perform operation %T while a different portal is open",
+				errors.Safe(c))
 		}
 		prevPos = curPos
 	}
