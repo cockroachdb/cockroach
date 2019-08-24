@@ -79,7 +79,9 @@ func (m *memColumn) Append(args AppendArgs) {
 }
 
 // {{/*
-func _COPY_WITH_SEL(m *memColumn, args CopyArgs, fromCol, toCol _GOTYPESLICE, sel interface{}) { // */}}
+func _COPY_WITH_SEL(
+	m *memColumn, args CopyArgs, fromCol, toCol _GOTYPESLICE, sel interface{}, _SEL_ON_DEST bool,
+) { // */}}
 	// {{define "copyWithSel"}}
 	if args.Src.MaybeHasNulls() {
 		nulls := args.Src.Nulls()
@@ -90,7 +92,11 @@ func _COPY_WITH_SEL(m *memColumn, args CopyArgs, fromCol, toCol _GOTYPESLICE, se
 				m.nulls.SetNull64(uint64(i) + args.DestIdx)
 			} else {
 				v := execgen.UNSAFEGET(fromCol, int(selIdx))
+				// {{if .SelOnDest}}
+				execgen.SET(toColSliced, int(selIdx), v)
+				// {{else}}
 				execgen.SET(toColSliced, i, v)
+				// {{end}}
 			}
 		}
 		return
@@ -98,11 +104,15 @@ func _COPY_WITH_SEL(m *memColumn, args CopyArgs, fromCol, toCol _GOTYPESLICE, se
 	// No Nulls.
 	n := execgen.LEN(toCol)
 	toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
-	for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
+	for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
+		selIdx := sel[int(args.SrcStartIdx)+i]
 		v := execgen.UNSAFEGET(fromCol, int(selIdx))
+		// {{if .SelOnDest}}
+		execgen.SET(toColSliced, int(selIdx), v)
+		// {{else}}
 		execgen.SET(toColSliced, i, v)
+		// {{end}}
 	}
-	return
 	// {{end}}
 	// {{/*
 }
@@ -119,10 +129,20 @@ func (m *memColumn) Copy(args CopyArgs) {
 		toCol := m._TemplateType()
 		if args.Sel64 != nil {
 			sel := args.Sel64
-			_COPY_WITH_SEL(m, args, sel)
+			if args.SelOnDest {
+				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, true)
+			} else {
+				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, false)
+			}
+			return
 		} else if args.Sel != nil {
 			sel := args.Sel
-			_COPY_WITH_SEL(m, args, sel)
+			if args.SelOnDest {
+				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, true)
+			} else {
+				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, false)
+			}
+			return
 		}
 		// No Sel or Sel64.
 		execgen.COPYSLICE(toCol, fromCol, int(args.DestIdx), int(args.SrcStartIdx), int(args.SrcEndIdx))

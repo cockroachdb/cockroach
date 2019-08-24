@@ -56,11 +56,11 @@ func (p {{template "opRConstName" .}}) EstimateStaticMemoryUsage() int {
 func (p {{template "opRConstName" .}}) Next(ctx context.Context) coldata.Batch {
 	batch := p.input.Next(ctx)
 	n := batch.Length()
-	if n == 0 {
-		return batch
-	}
 	if p.outputIdx == batch.Width() {
 		batch.AppendCol(coltypes.{{.RetTyp}})
+	}
+	if n == 0 {
+		return batch
 	}
 	vec := batch.ColVec(p.colIdx)
 	col := vec.{{.LTyp}}()
@@ -109,11 +109,11 @@ func (p {{template "opLConstName" .}}) EstimateStaticMemoryUsage() int {
 func (p {{template "opLConstName" .}}) Next(ctx context.Context) coldata.Batch {
 	batch := p.input.Next(ctx)
 	n := batch.Length()
-	if n == 0 {
-		return batch
-	}
 	if p.outputIdx == batch.Width() {
 		batch.AppendCol(coltypes.{{.RetTyp}})
+	}
+	if n == 0 {
+		return batch
 	}
 	vec := batch.ColVec(p.colIdx)
 	col := vec.{{.RTyp}}()
@@ -162,11 +162,11 @@ func (p {{template "opName" .}}) EstimateStaticMemoryUsage() int {
 func (p {{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 	batch := p.input.Next(ctx)
 	n := batch.Length()
-	if n == 0 {
-		return batch
-	}
 	if p.outputIdx == batch.Width() {
 		batch.AppendCol(coltypes.{{.RetTyp}})
+	}
+	if n == 0 {
+		return batch
 	}
 	projVec := batch.ColVec(p.outputIdx)
 	projCol := projVec.{{.RetTyp}}()

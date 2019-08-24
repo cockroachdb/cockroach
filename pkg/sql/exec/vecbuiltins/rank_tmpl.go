@@ -80,10 +80,6 @@ func (r *_RANK_STRINGOp) Init() {
 
 func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	batch := r.Input().Next(ctx)
-	if batch.Length() == 0 {
-		return batch
-	}
-
 	// {{ if .HasPartition }}
 	if r.partitionColIdx == batch.Width() {
 		batch.AppendCol(coltypes.Bool)
@@ -98,6 +94,11 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	} else if r.outputColIdx > batch.Width() {
 		execerror.VectorizedInternalPanic("unexpected: column outputColIdx is neither present nor the next to be appended")
 	}
+
+	if batch.Length() == 0 {
+		return batch
+	}
+
 	rankCol := batch.ColVec(r.outputColIdx).Int64()
 	sel := batch.Selection()
 	// TODO(yuzefovich): template out sel vs non-sel cases.
