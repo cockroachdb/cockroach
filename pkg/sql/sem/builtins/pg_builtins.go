@@ -624,6 +624,17 @@ var pgBuiltins = map[string]builtinDefinition{
 		makePGGetViewDef(tree.ArgTypes{{"view_oid", types.Oid}, {"pretty_bool", types.Bool}}),
 	),
 
+	"pg_my_temp_schema": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Oid),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				return tree.NewDOid(0), nil
+			},
+			Info: notUsableInfo,
+		},
+	),
+
 	// TODO(bram): Make sure the reported type is correct for tuples. See #25523.
 	"pg_typeof": makeBuiltin(tree.FunctionProperties{NullableArgs: true},
 		tree.Overload{
