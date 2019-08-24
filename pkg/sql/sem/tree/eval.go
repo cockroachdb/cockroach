@@ -293,14 +293,18 @@ func ConcatArrays(typ *types.T, left Datum, right Datum) (Datum, error) {
 }
 
 // ArrayContains return true if the haystack contains all needles.
-func ArrayContains(haystack *DArray, needles *DArray) (*DBool, error) {
+func ArrayContains(ctx *EvalContext, haystack *DArray, needles *DArray) (*DBool, error) {
 	if !haystack.ParamTyp.Equivalent(needles.ParamTyp) {
 		return DBoolFalse, pgerror.New(pgcode.DatatypeMismatch, "cannot compare arrays with different element types")
 	}
-	for i := range needles.Array {
+	for _, needle := range needles.Array {
+		// Nulls don't compare to each other in @> syntax.
+		if needle == DNull {
+			return DBoolFalse, nil
+		}
 		var found bool
-		for j := range haystack.Array {
-			if needles.Array[i] == haystack.Array[j] {
+		for _, hay := range haystack.Array {
+			if needle.Compare(ctx, hay) == 0 {
 				found = true
 				break
 			}
@@ -2083,6 +2087,15 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 	Contains: {
 		&CmpOp{
+			LeftType:  types.AnyArray,
+			RightType: types.AnyArray,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				haystack := MustBeDArray(left)
+				needles := MustBeDArray(right)
+				return ArrayContains(ctx, haystack, needles)
+			},
+		},
+		&CmpOp{
 			LeftType:  types.Jsonb,
 			RightType: types.Jsonb,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
@@ -2096,6 +2109,15 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 	},
 
 	ContainedBy: {
+		&CmpOp{
+			LeftType:  types.AnyArray,
+			RightType: types.AnyArray,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				needles := MustBeDArray(left)
+				haystack := MustBeDArray(right)
+				return ArrayContains(ctx, haystack, needles)
+			},
+		},
 		&CmpOp{
 			LeftType:  types.Jsonb,
 			RightType: types.Jsonb,

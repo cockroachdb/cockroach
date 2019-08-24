@@ -188,3 +188,73 @@ eval
 ARRAY[0] && NULL
 ----
 NULL
+
+eval
+ARRAY[1,2,3] @> ARRAY[]:::int[]
+----
+true
+
+eval
+ARRAY[1,2,3] @> ARRAY[3]
+----
+true
+
+eval
+ARRAY[1,2,3] @> ARRAY[0]
+----
+false
+
+eval
+ARRAY[1,2,3] @> ARRAY[1,2,3]
+----
+true
+
+eval
+ARRAY[1,2,3] @> ARRAY[1,2,3,4]
+----
+false
+
+eval
+ARRAY[1,2,3] @> ARRAY[1,NULL]
+----
+false
+
+eval
+ARRAY[1,2,3,NULL] @> ARRAY[1,NULL]
+----
+false
+
+eval
+ARRAY[1,2,3] <@ ARRAY[]:::int[]
+----
+false
+
+eval
+ARRAY[1,2,3] <@ ARRAY[3]
+----
+false
+
+eval
+ARRAY[1,2,3] <@ ARRAY[0]
+----
+false
+
+eval
+ARRAY[1,2,3] <@ ARRAY[1,2,3]
+----
+true
+
+eval
+ARRAY[1,2,3] <@ ARRAY[1,2,3,4]
+----
+true
+
+eval
+ARRAY[1] <@ ARRAY[1,NULL]
+----
+true
+
+eval
+ARRAY[1,NULL] <@ ARRAY[1,NULL]
+----
+false
