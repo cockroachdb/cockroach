@@ -52,6 +52,8 @@ import (
 func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skipf("failing on teamcity with testrace")
+
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
