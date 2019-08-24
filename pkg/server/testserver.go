@@ -262,7 +262,12 @@ func (ts *TestServer) Stopper() *stop.Stopper {
 	return ts.stopper
 }
 
-// Gossip returns the gossip instance used by the TestServer.
+// GossipI is part of TestServerInterface.
+func (ts *TestServer) GossipI() interface{} {
+	return ts.Gossip()
+}
+
+// Gossip is like GossipI but returns the real type instead of interface{}.
 func (ts *TestServer) Gossip() *gossip.Gossip {
 	if ts != nil {
 		return ts.gossip
@@ -590,9 +595,15 @@ func (ts *TestServer) GetNodeLiveness() *storage.NodeLiveness {
 	return ts.nodeLiveness
 }
 
-// DistSender exposes the Server's DistSender.
-func (ts *TestServer) DistSender() *kv.DistSender {
+// DistSenderI is part of DistSendeInterface.
+func (ts *TestServer) DistSenderI() interface{} {
 	return ts.distSender
+}
+
+// DistSender is like DistSenderI(), but returns the real type instead of
+// interface{}.
+func (ts *TestServer) DistSender() *kv.DistSender {
+	return ts.DistSenderI().(*kv.DistSender)
 }
 
 // DistSQLServer is part of TestServerInterface.

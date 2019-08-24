@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -601,7 +602,7 @@ func TestExpectedInitialRangeCount(t *testing.T) {
 			return errors.New("last migration has not completed")
 		}
 
-		sysCfg := s.Gossip().GetSystemConfig()
+		sysCfg := s.GossipI().(*gossip.Gossip).GetSystemConfig()
 		if sysCfg == nil {
 			return errors.New("gossipped system config not available")
 		}
