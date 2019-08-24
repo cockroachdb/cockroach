@@ -485,7 +485,7 @@ func newNameFromStr(s string) *tree.Name {
 // Ordinary key words in alphabetical order.
 %token <str> ABORT ACTION ADD ADMIN AGGREGATE
 %token <str> ALL ALTER ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
-%token <str> ASYMMETRIC AT AUTOMATIC
+%token <str> ASYMMETRIC AT AUTHORIZATION AUTOMATIC
 
 %token <str> BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
 %token <str> BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
@@ -3115,6 +3115,15 @@ set_rest_more:
   {
     /* SKIP DOC */
     $$.val = &tree.SetVar{Name: "search_path", Values: tree.Exprs{$2.expr()}}
+  }
+| SESSION AUTHORIZATION DEFAULT
+  {
+    /* SKIP DOC */
+    $$.val = &tree.SetSessionAuthorizationDefault{}
+  }
+| SESSION AUTHORIZATION non_reserved_word_or_sconst
+  {
+    return unimplemented(sqllex, "set session authorization name")
   }
 // See comment for the non-terminal for SET NAMES below.
 | set_names
@@ -9158,6 +9167,7 @@ unreserved_keyword:
 | ALTER
 | AT
 | AUTOMATIC
+| AUTHORIZATION
 | BACKUP
 | BEGIN
 | BIGSERIAL

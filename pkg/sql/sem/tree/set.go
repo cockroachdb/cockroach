@@ -74,6 +74,16 @@ func (node *SetTransaction) Format(ctx *FmtCtx) {
 	node.Modes.Format(ctx)
 }
 
+// SetSessionAuthorizationDefault represents a SET SESSION AUTHORIZATION DEFAULT
+// statement. This can be extended (and renamed) if we ever support names in the
+// last position.
+type SetSessionAuthorizationDefault struct{}
+
+// Format implements the NodeFormatter interface.
+func (node *SetSessionAuthorizationDefault) Format(ctx *FmtCtx) {
+	ctx.WriteString("SET SESSION AUTHORIZATION DEFAULT")
+}
+
 // SetSessionCharacteristics represents a SET SESSION CHARACTERISTICS AS TRANSACTION statement.
 type SetSessionCharacteristics struct {
 	Modes TransactionModes
