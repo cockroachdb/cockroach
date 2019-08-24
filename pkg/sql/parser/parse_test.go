@@ -657,6 +657,7 @@ func TestParse(t *testing.T) {
 		{`SELECT a#>>'{x}'`},
 		{`SELECT (a->'x')->'y'`},
 		{`SELECT (a->'x')->>'y'`},
+		{`SELECT b && c`},
 
 		{`SELECT 1 FROM t`},
 		{`SELECT 1, 2 FROM t`},
@@ -1451,7 +1452,6 @@ func TestParse2(t *testing.T) {
 
 		{`SELECT b <<= c`, `SELECT inet_contained_by_or_equals(b, c)`},
 		{`SELECT b >>= c`, `SELECT inet_contains_or_equals(b, c)`},
-		{`SELECT b && c`, `SELECT inet_contains_or_contained_by(b, c)`},
 
 		{`SELECT NUMERIC 'foo'`, `SELECT DECIMAL 'foo'`},
 		{`SELECT REAL 'foo'`, `SELECT FLOAT4 'foo'`},
