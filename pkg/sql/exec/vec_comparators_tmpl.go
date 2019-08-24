@@ -92,8 +92,18 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx uint16
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
+		// {{ if eq .LTyp.String "Bytes" }}
+		// Since flat Bytes cannot be set at arbitrary indices (data needs to be
+		// moved around), we use CopySlice to accept the performance hit.
+		// Specifically, this is a performance hit because we are overwriting the
+		// variable number of bytes in `dstVecIdx`, so we will have to either shift
+		// the bytes after that element left or right, depending on how long the
+		// source bytes slice is. Refer to the CopySlice comment for an example.
+		execgen.COPYSLICE(c.vecs[dstVecIdx], c.vecs[srcVecIdx], int(dstIdx), int(srcIdx), int(srcIdx+1))
+		// {{ else }}
 		v := execgen.UNSAFEGET(c.vecs[srcVecIdx], int(srcIdx))
 		execgen.SET(c.vecs[dstVecIdx], int(dstIdx), v)
+		// {{ end }}
 	}
 }
 
