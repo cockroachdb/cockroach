@@ -103,13 +103,12 @@ func setupTransientServers(
 	df := cmd.Flags().Lookup(cliflags.LogDir.Name)
 	sf := cmd.Flags().Lookup(logflags.LogToStderrName)
 	if !df.Changed && !sf.Changed {
-		// User did not request logging flags; shut down logging under
-		// errors and make logs appear on stderr.
+		// User did not request logging flags; shut down all logging.
 		// Otherwise, the demo command would cause a cockroach-data
 		// directory to appear in the current directory just for logs.
 		_ = df.Value.Set("")
 		df.Changed = true
-		_ = sf.Value.Set(log.Severity_ERROR.String())
+		_ = sf.Value.Set(log.Severity_NONE.String())
 		sf.Changed = true
 	}
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd)
