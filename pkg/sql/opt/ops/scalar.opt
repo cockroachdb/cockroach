@@ -472,6 +472,12 @@ define JsonSomeExists {
    Right ScalarExpr
 }
 
+[Scalar, Bool, Comparison]
+define Overlaps {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
 # AnyScalar is the form of ANY which refers to an ANY operation on a
 # tuple or array, as opposed to Any which operates on a subquery.
 [Scalar, Bool]

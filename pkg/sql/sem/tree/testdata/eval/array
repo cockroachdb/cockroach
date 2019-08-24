@@ -141,3 +141,120 @@ eval
 array_upper(ARRAY[ARRAY[1, 2, 3], ARRAY[1, 2, 3]], 3)
 ----
 NULL
+
+# overlap, contains, contained by (&&, @>, <@)
+
+eval
+ARRAY[1,2,3] && ARRAY[0,5,6]
+----
+false
+
+eval
+ARRAY[1,2] && ARRAY[0,2,6]
+----
+true
+
+eval
+ARRAY[1,2,3,4] && ARRAY[4,1]
+----
+true
+
+eval
+ARRAY[1,2,3,4] && ARRAY[]:::int[]
+----
+false
+
+eval
+ARRAY[0] && ARRAY[0,NULL]
+----
+true
+
+eval
+ARRAY[0,NULL] && ARRAY[0,NULL]
+----
+true
+
+eval
+ARRAY[0,NULL] && ARRAY[1,NULL]
+----
+false
+
+eval
+NULL && ARRAY[0]
+----
+NULL
+
+eval
+ARRAY[0] && NULL
+----
+NULL
+
+eval
+ARRAY[1,2,3] @> ARRAY[]:::int[]
+----
+true
+
+eval
+ARRAY[1,2,3] @> ARRAY[3]
+----
+true
+
+eval
+ARRAY[1,2,3] @> ARRAY[0]
+----
+false
+
+eval
+ARRAY[1,2,3] @> ARRAY[1,2,3]
+----
+true
+
+eval
+ARRAY[1,2,3] @> ARRAY[1,2,3,4]
+----
+false
+
+eval
+ARRAY[1,2,3] @> ARRAY[1,NULL]
+----
+false
+
+eval
+ARRAY[1,2,3,NULL] @> ARRAY[1,NULL]
+----
+false
+
+eval
+ARRAY[1,2,3] <@ ARRAY[]:::int[]
+----
+false
+
+eval
+ARRAY[1,2,3] <@ ARRAY[3]
+----
+false
+
+eval
+ARRAY[1,2,3] <@ ARRAY[0]
+----
+false
+
+eval
+ARRAY[1,2,3] <@ ARRAY[1,2,3]
+----
+true
+
+eval
+ARRAY[1,2,3] <@ ARRAY[1,2,3,4]
+----
+true
+
+eval
+ARRAY[1] <@ ARRAY[1,NULL]
+----
+true
+
+eval
+ARRAY[1,NULL] <@ ARRAY[1,NULL]
+----
+false
