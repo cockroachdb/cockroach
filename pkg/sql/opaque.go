@@ -105,6 +105,8 @@ func buildOpaque(
 		plan, err = p.SetVar(ctx, n)
 	case *tree.SetTransaction:
 		plan, err = p.SetTransaction(n)
+	case *tree.SetSessionAuthorizationDefault:
+		plan, err = p.SetSessionAuthorizationDefault()
 	case *tree.SetSessionCharacteristics:
 		plan, err = p.SetSessionCharacteristics(n)
 	case *tree.ShowClusterSetting:
@@ -174,6 +176,7 @@ func init() {
 		&tree.SetZoneConfig{},
 		&tree.SetVar{},
 		&tree.SetTransaction{},
+		&tree.SetSessionAuthorizationDefault{},
 		&tree.SetSessionCharacteristics{},
 		&tree.ShowClusterSetting{},
 		&tree.ShowHistogram{},
