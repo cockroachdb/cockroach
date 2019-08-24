@@ -595,6 +595,7 @@ unreserved_keyword ::=
 	| 'ALTER'
 	| 'AT'
 	| 'AUTOMATIC'
+	| 'AUTHORIZATION'
 	| 'BACKUP'
 	| 'BEGIN'
 	| 'BIGSERIAL'
