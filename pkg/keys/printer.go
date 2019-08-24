@@ -36,11 +36,23 @@ type DictEntry struct {
 	// PSFunc parses the relevant prefix of the input into a roachpb.Key,
 	// returning the remainder and the key corresponding to the consumed prefix of
 	// 'input'. Allowed to panic on errors.
-	PSFunc func(input string) (string, roachpb.Key)
+	PSFunc KeyParserFunc
 }
+
+// KeyParserFunc is a function able to reverse pretty-printed keys.
+type KeyParserFunc func(input string) (string, roachpb.Key)
 
 func parseUnsupported(_ string) (string, roachpb.Key) {
 	panic(&ErrUglifyUnsupported{})
+}
+
+// KeyComprehensionTable contains information about how to decode pretty-printed
+// keys, split by key spans.
+type KeyComprehensionTable []struct {
+	Name    string
+	start   roachpb.Key
+	end     roachpb.Key
+	Entries []DictEntry
 }
 
 var (
@@ -56,12 +68,7 @@ var (
 	}
 
 	// KeyDict drives the pretty-printing and pretty-scanning of the key space.
-	KeyDict = []struct {
-		Name    string
-		start   roachpb.Key
-		end     roachpb.Key
-		Entries []DictEntry
-	}{
+	KeyDict = KeyComprehensionTable{
 		{Name: "/Local", start: localPrefix, end: LocalMax, Entries: []DictEntry{
 			{Name: "/Store", prefix: roachpb.Key(localStorePrefix),
 				ppFunc: localStoreKeyPrint, PSFunc: localStoreKeyParse},
@@ -521,12 +528,12 @@ func decodeTimeseriesKey(_ []encoding.Direction, key roachpb.Key) string {
 	return PrettyPrintTimeseriesKey(key)
 }
 
-// prettyPrintInternal parse key with prefix in keyDict.
+// prettyPrintInternal parse key with prefix in KeyDict.
 // For table keys, valDirs correspond to the encoding direction of each encoded
 // value in key.
 // If valDirs is unspecified, the default encoding direction for each value
 // type is used (see encoding.go:prettyPrintFirstValue).
-// If the key doesn't match any prefix in keyDict, return its byte value with
+// If the key doesn't match any prefix in KeyDict, return its byte value with
 // quotation and false, or else return its human readable value and true.
 func prettyPrintInternal(valDirs []encoding.Direction, key roachpb.Key, quoteRawKeys bool) string {
 	for _, k := range ConstKeyDict {

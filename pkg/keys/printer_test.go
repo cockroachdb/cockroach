@@ -181,8 +181,8 @@ func TestPrettyPrint(t *testing.T) {
 	}
 	for i, test := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			keyInfo := keys.MassagePrettyPrintedSpanForTest(keys.PrettyPrint(nil /* valDirs */,
-				test.key), nil)
+			keyInfo := keys.MassagePrettyPrintedSpanForTest(
+				keys.PrettyPrint(nil /* valDirs */, test.key), nil)
 			exp := keys.MassagePrettyPrintedSpanForTest(test.exp, nil)
 			t.Logf(`---- test case #%d:
 input:  %q
@@ -197,7 +197,8 @@ exp:    %s
 				t.Errorf("%d: from string expected %s, got %s", i, exp, test.key.String())
 			}
 
-			parsed, err := keysutil.UglyPrint(keyInfo)
+			scanner := keysutil.MakePrettyScanner(nil /* tableParser */)
+			parsed, err := scanner.Scan(keyInfo)
 			if err != nil {
 				if _, ok := err.(*keys.ErrUglifyUnsupported); !ok {
 					t.Errorf("%d: %s: %s", i, keyInfo, err)

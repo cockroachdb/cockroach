@@ -327,7 +327,7 @@ func RaftLastIndexKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RaftLastIndexKey()
 }
 
-// RaftLogPrefix returns the system-local prefix shared by all entries
+// RaftLogPrefix returns the system-local prefix shared by all Entries
 // in a Raft log.
 func RaftLogPrefix(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RaftLogPrefix()
@@ -457,7 +457,7 @@ func IsLocal(k roachpb.Key) bool {
 // However, not all local keys are addressable in the global map. Only range
 // local keys incorporating a range key (start key or transaction key) are
 // addressable (e.g. range metadata and txn records). Range local keys
-// incorporating the Range ID are not (e.g. AbortSpan entries, and range
+// incorporating the Range ID are not (e.g. AbortSpan Entries, and range
 // stats).
 //
 // See AddrUpperBound which is to be used when `k` is the EndKey of an interval.
@@ -962,7 +962,7 @@ func (b RangeIDPrefixBuf) RaftLastIndexKey() roachpb.Key {
 	return append(b.unreplicatedPrefix(), LocalRaftLastIndexSuffix...)
 }
 
-// RaftLogPrefix returns the system-local prefix shared by all entries
+// RaftLogPrefix returns the system-local prefix shared by all Entries
 // in a Raft log.
 func (b RangeIDPrefixBuf) RaftLogPrefix() roachpb.Key {
 	return append(b.unreplicatedPrefix(), LocalRaftLogSuffix...)
