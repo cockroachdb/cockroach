@@ -87,12 +87,11 @@ func (c const_TYPEOp) Init() {
 func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
 	n := batch.Length()
-	if n == 0 {
-		return batch
-	}
-
 	if batch.Width() == c.outputIdx {
 		batch.AppendCol(c.typ)
+	}
+	if n == 0 {
+		return batch
 	}
 	col := batch.ColVec(c.outputIdx)._TemplateType()
 	if sel := batch.Selection(); sel != nil {

@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 func checkNumIn(inputs []exec.Operator, numIn int) error {
@@ -788,7 +788,7 @@ func planProjectionOperators(
 		return op, resultIdx, ct, memUsed, nil
 	case tree.Datum:
 		datumType := t.ResolvedType()
-		ct := columnTypes
+		ct = columnTypes
 		resultIdx = len(ct)
 		ct = append(ct, *datumType)
 		if datumType.Family() == types.UnknownFamily {
@@ -804,6 +804,66 @@ func planProjectionOperators(
 			return nil, resultIdx, ct, memUsed, err
 		}
 		return op, resultIdx, ct, memUsed, nil
+	case *tree.CaseExpr:
+		if t.Expr != nil {
+			return nil, resultIdx, ct, 0, errors.New("CASE <expr> WHEN expressions unsupported")
+		}
+
+		buffer := exec.NewBufferOp(input)
+		caseOps := make([]exec.Operator, len(t.Whens))
+		caseOutputType := typeconv.FromColumnType(t.ResolvedType())
+		caseOutputIdx := len(columnTypes)
+		ct = append(columnTypes, *t.ResolvedType())
+		thenIdxs := make([]int, len(t.Whens)+1)
+		for i, when := range t.Whens {
+			// The case operator is assembled from n WHEN arms, n THEN arms, and an
+			// ELSE arm. Each WHEN arm is a boolean projection. Each THEN arm (and the
+			// ELSE arm) is a projection of the type of the CASE expression. We set up
+			// each WHEN arm to write its output to a fresh column, and likewise for
+			// the THEN arms and the ELSE arm. Each WHEN arm individually acts on the
+			// single input batch from the CaseExpr's input and is then transformed
+			// into a selection vector, after which the THEN arm runs to create the
+			// output just for the tuples that matched the WHEN arm. Each subsequent
+			// WHEN arm will use the inverse of the selection vector to avoid running
+			// the WHEN projection on tuples that have already been matched by a
+			// previous WHEN arm. Finally, after each WHEN arm runs, we copy the
+			// results of the WHEN into a single output vector, assembling the final
+			// result of the case projection.
+			var whenMemUsed, thenMemUsed int
+			caseOps[i], resultIdx, ct, whenMemUsed, err = planProjectionOperators(
+				ctx, when.Cond.(tree.TypedExpr), ct, buffer)
+			if err != nil {
+				return nil, resultIdx, ct, 0, err
+			}
+			// Transform the booleans to a selection vector.
+			caseOps[i] = exec.NewBoolVecToSelOp(caseOps[i], resultIdx)
+
+			// Run the "then" clause on those tuples that were selected.
+			caseOps[i], thenIdxs[i], ct, thenMemUsed, err = planProjectionOperators(ctx, when.Val.(tree.TypedExpr), ct,
+				caseOps[i])
+			if err != nil {
+				return nil, resultIdx, ct, 0, err
+			}
+
+			memUsed += whenMemUsed + thenMemUsed
+		}
+		var elseMem int
+		var elseOp exec.Operator
+		elseExpr := t.Else
+		if elseExpr == nil {
+			// If there's no ELSE arm, we write NULLs.
+			elseExpr = tree.DNull
+		}
+		elseOp, thenIdxs[len(t.Whens)], ct, elseMem, err = planProjectionOperators(
+			ctx, elseExpr.(tree.TypedExpr), ct, buffer)
+		if err != nil {
+			return nil, resultIdx, ct, 0, err
+		}
+		memUsed += elseMem
+
+		op := exec.NewCaseOp(buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
+
+		return op, caseOutputIdx, ct, memUsed, nil
 	default:
 		return nil, resultIdx, nil, memUsed, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
 	}
