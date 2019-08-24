@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
@@ -214,7 +215,7 @@ func (k *mvccKey) Set(value string) error {
 		}
 		*k = mvccKey(engine.MakeMVCCMetadataKey(roachpb.Key(unquoted)))
 	case human:
-		key, err := keys.UglyPrint(keyStr)
+		key, err := keysutil.UglyPrint(keyStr)
 		if err != nil {
 			return err
 		}
