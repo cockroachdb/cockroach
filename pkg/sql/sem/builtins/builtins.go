@@ -555,23 +555,6 @@ var builtins = map[string]builtinDefinition{
 		},
 	),
 
-	"inet_contains_or_contained_by": makeBuiltin(defProps(),
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"val", types.INet},
-				{"val", types.INet},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				ipAddr := tree.MustBeDIPAddr(args[0]).IPAddr
-				other := tree.MustBeDIPAddr(args[1]).IPAddr
-				return tree.MakeDBool(tree.DBool(ipAddr.ContainsOrContainedBy(&other))), nil
-			},
-			Info: "Test for subnet inclusion, using only the network parts of the addresses. " +
-				"The host part of the addresses is ignored.",
-		},
-	),
-
 	"inet_contains_or_equals": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ArgTypes{
