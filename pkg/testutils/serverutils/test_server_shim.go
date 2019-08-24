@@ -18,17 +18,13 @@
 package serverutils
 
 import (
-	"context"
 	gosql "database/sql"
 	"net/http"
 	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -84,14 +80,16 @@ type TestServerInterface interface {
 	// The real return type is sql.ExecutorConfig.
 	ExecutorConfig() interface{}
 
-	// Gossip returns the gossip used by the TestServer.
-	Gossip() *gossip.Gossip
+	// GossipI returns the gossip used by the TestServer.
+	// The real return type is *gossip.Gossip.
+	GossipI() interface{}
 
 	// Clock returns the clock used by the TestServer.
 	Clock() *hlc.Clock
 
-	// DistSender returns the DistSender used by the TestServer.
-	DistSender() *kv.DistSender
+	// DistSenderI returns the DistSender used by the TestServer.
+	// The real return type is *kv.DistSender.
+	DistSenderI() interface{}
 
 	// DistSQLServer returns the *distsqlrun.ServerImpl as an interface{}.
 	DistSQLServer() interface{}
@@ -237,27 +235,4 @@ func PostJSONProto(ts TestServerInterface, path string, request, response protou
 		return err
 	}
 	return httputil.PostJSON(httpClient, ts.AdminURL()+path, request, response)
-}
-
-// ForceTableGC sends a GCRequest for the ranges corresponding to a table.
-func ForceTableGC(
-	t testing.TB,
-	ts TestServerInterface,
-	db sqlutils.DBHandle,
-	database, table string,
-	timestamp hlc.Timestamp,
-) {
-	t.Helper()
-	tblID := sqlutils.QueryTableID(t, db, database, table)
-	tblKey := roachpb.Key(keys.MakeTablePrefix(tblID))
-	gcr := roachpb.GCRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    tblKey,
-			EndKey: tblKey.PrefixEnd(),
-		},
-		Threshold: timestamp,
-	}
-	if _, err := client.SendWrapped(context.Background(), ts.DistSender(), &gcr); err != nil {
-		t.Error(err)
-	}
 }

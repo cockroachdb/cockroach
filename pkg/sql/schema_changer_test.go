@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -3387,7 +3388,7 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 			RequestHeader: roachpb.RequestHeaderFromSpan(sp),
 			Threshold:     tc.Server(0).Clock().Now(),
 		}
-		_, err := client.SendWrapped(ctx, tc.Server(0).DistSender(), &gcr)
+		_, err := client.SendWrapped(ctx, tc.Server(0).DistSenderI().(*kv.DistSender), &gcr)
 		if err != nil {
 			panic(err)
 		}
