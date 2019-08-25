@@ -1,0 +1,11 @@
+query T
+SELECT aclexplode(NULL)
+----
+
+query T
+SELECT aclexplode(ARRAY[]::text[])
+----
+
+query T
+SELECT aclexplode(ARRAY['foo'])
+----
