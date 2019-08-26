@@ -592,8 +592,8 @@ func TestLearnerNoAcceptLease(t *testing.T) {
 
 	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 	err := tc.TransferRangeLease(desc, tc.Target(1))
-	if !testutils.IsError(err, `cannot transfer lease to replica of type Learner`) {
-		t.Fatalf(`expected "cannot transfer lease to replica of type Learner" error got: %+v`, err)
+	if !testutils.IsError(err, `cannot transfer lease to replica of type LEARNER`) {
+		t.Fatalf(`expected "cannot transfer lease to replica of type LEARNER" error got: %+v`, err)
 	}
 }
 

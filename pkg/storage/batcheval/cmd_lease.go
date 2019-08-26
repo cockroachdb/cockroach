@@ -47,7 +47,7 @@ func checkCanReceiveLease(rec EvalContext) error {
 	if !ok {
 		return errors.AssertionFailedf(
 			`could not find replica for store %s in %s`, rec.StoreID(), rec.Desc())
-	} else if t := repDesc.GetType(); t != roachpb.ReplicaType_VoterFull {
+	} else if t := repDesc.GetType(); t != roachpb.VOTER_FULL {
 		return errors.Errorf(`cannot transfer lease to replica of type %s`, t)
 	}
 	return nil
