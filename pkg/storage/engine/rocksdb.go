@@ -111,15 +111,20 @@ func rocksDBV(sevLvl C.int, infoVerbosity C.int) bool {
 //export rocksDBLog
 func rocksDBLog(sevLvl C.int, s *C.char, n C.int) {
 	ctx := logtags.AddTag(context.Background(), "rocksdb", nil)
+	msg := C.GoStringN(s, n)
+	if strings.HasSuffix(msg, "max_bytes_for_level_multiplier may not be guaranteed.") {
+		// TODO(ajkr): remove this when the underlying cause is fixed.
+		return
+	}
 	switch log.Severity(sevLvl) {
 	case log.Severity_WARNING:
-		log.Warning(ctx, C.GoStringN(s, n))
+		log.Warning(ctx, msg)
 	case log.Severity_ERROR:
-		log.Error(ctx, C.GoStringN(s, n))
+		log.Error(ctx, msg)
 	case log.Severity_FATAL:
-		log.Fatal(ctx, C.GoStringN(s, n))
+		log.Fatal(ctx, msg)
 	default:
-		log.Info(ctx, C.GoStringN(s, n))
+		log.Info(ctx, msg)
 	}
 }
 
