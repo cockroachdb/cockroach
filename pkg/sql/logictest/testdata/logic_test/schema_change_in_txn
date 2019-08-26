@@ -1661,7 +1661,7 @@ ALTER TABLE t DROP CONSTRAINT fk
 
 # Since the foreign key constraint is dropped in the schema changer after the
 # transaction commits, it's still enforced during the rest of the transaction.
-statement error pgcode 23503 value \[1\] not found in t2@primary \[b\]
+statement error pgcode 23503 foreign key
 INSERT INTO t VALUES (1)
 
 statement ok
