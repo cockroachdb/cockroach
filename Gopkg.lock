@@ -1519,8 +1519,7 @@
   revision = "b5bfa59ec0adc420475f97f89b58045c721d761c"
 
 [[projects]]
-  branch = "crl-bump"
-  digest = "1:a982c802e9fced15a22448839db3fea22853a3b711f55e3388deb1cd1b8e8b9f"
+  digest = "1:a893ff8345b4fea61f22af749d8bbe6c546e9ed36b52bb80da25e991a884cc8e"
   name = "go.etcd.io/etcd"
   packages = [
     "raft",
@@ -1530,8 +1529,7 @@
     "raft/tracker",
   ]
   pruneopts = "UT"
-  revision = "81d090463b9619e7a3a3e7faa4959f1f10af0b08"
-  source = "https://github.com/tbg/etcd"
+  revision = "9b29151d3072511f574e7272a5348504086013fa"
 
 [[projects]]
   digest = "1:3b5a3bc35810830ded5e26ef9516e933083a2380d8e57371fdfde3c70d7c6952"
@@ -2053,6 +2051,8 @@
     "github.com/stretchr/testify/require",
     "github.com/wadey/gocovmerge",
     "go.etcd.io/etcd/raft",
+    "go.etcd.io/etcd/raft/confchange",
+    "go.etcd.io/etcd/raft/quorum",
     "go.etcd.io/etcd/raft/raftpb",
     "go.etcd.io/etcd/raft/tracker",
     "golang.org/x/crypto/bcrypt",
