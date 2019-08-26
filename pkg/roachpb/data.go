@@ -1400,19 +1400,19 @@ func confChangeImpl(
 
 		var changeType raftpb.ConfChangeType
 		switch rDesc.GetType() {
-		case ReplicaType_VoterFull:
+		case VOTER_FULL:
 			// We're adding a new voter.
 			changeType = raftpb.ConfChangeAddNode
-		case ReplicaType_VoterIncoming:
+		case VOTER_INCOMING:
 			// We're adding a voter, but will transition into a joint config
 			// first.
 			changeType = raftpb.ConfChangeAddNode
-		case ReplicaType_Learner:
+		case LEARNER:
 			// We're adding a new learner. Note that we're guaranteed by
 			// virtue of the upstream ChangeReplicas txn that this learner
 			// is not currently a voter. If we wanted to support that (i.e.
 			// demotions) we'd need to introduce a new
-			// ReplicaType_VoterDemoting for that purpose.
+			// replica type VOTER_DEMOTING for that purpose.
 			changeType = raftpb.ConfChangeAddLearnerNode
 		default:
 			return nil, errors.Errorf("can't add replica in state %v", rDesc.GetType())
@@ -1425,13 +1425,13 @@ func confChangeImpl(
 
 	for _, rDesc := range removed {
 		switch rDesc.GetType() {
-		case ReplicaType_VoterOutgoing:
+		case VOTER_OUTGOING:
 			// If a voter is removed through joint consensus, it will
 			// be turned into an outgoing voter first.
 			if err := checkExists(rDesc); err != nil {
 				return nil, err
 			}
-		case ReplicaType_VoterFull, ReplicaType_Learner:
+		case VOTER_FULL, LEARNER:
 			// A learner or full voter can't be in the desc after.
 			if err := checkNotExists(rDesc); err != nil {
 				return nil, err
@@ -1452,7 +1452,7 @@ func confChangeImpl(
 	var enteringJoint bool
 	for _, rDesc := range replicas {
 		switch rDesc.GetType() {
-		case ReplicaType_VoterIncoming, ReplicaType_VoterOutgoing:
+		case VOTER_INCOMING, VOTER_OUTGOING:
 			enteringJoint = true
 		default:
 		}

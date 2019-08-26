@@ -1636,9 +1636,9 @@ func TestUpdateObservedTimestamps(t *testing.T) {
 func TestChangeReplicasTrigger_String(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	vi := ReplicaType_VoterIncoming
-	vo := ReplicaType_VoterOutgoing
-	l := ReplicaType_Learner
+	vi := VOTER_INCOMING
+	vo := VOTER_OUTGOING
+	l := LEARNER
 	repl1 := ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3, Type: &vi}
 	repl2 := ReplicaDescriptor{NodeID: 4, StoreID: 5, ReplicaID: 6, Type: &vo}
 	learner := ReplicaDescriptor{NodeID: 7, StoreID: 8, ReplicaID: 9, Type: &l}
@@ -1660,7 +1660,7 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 		},
 	}
 	act := crt.String()
-	exp := "ENTER_JOINT ADD_REPLICA[(n1,s2):3VOTERINCOMING], REMOVE_REPLICA[(n4,s5):6VOTEROUTGOING]: after=[(n1,s2):3VOTERINCOMING (n4,s5):6VOTEROUTGOING (n7,s8):9LEARNER] next=10"
+	exp := "ENTER_JOINT ADD_REPLICA[(n1,s2):3VOTER_INCOMING], REMOVE_REPLICA[(n4,s5):6VOTER_OUTGOING]: after=[(n1,s2):3VOTER_INCOMING (n4,s5):6VOTER_OUTGOING (n7,s8):9LEARNER] next=10"
 	require.Equal(t, exp, act)
 
 	crt.InternalRemovedReplicas = nil
@@ -1719,26 +1719,26 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 		return m
 	}
 
-	vf1 := sl(ReplicaType_VoterFull, 1)
-	vo1 := sl(ReplicaType_VoterOutgoing, 1)
-	vi1 := sl(ReplicaType_VoterIncoming, 1)
-	vl1 := sl(ReplicaType_Learner, 1)
+	vf1 := sl(VOTER_FULL, 1)
+	vo1 := sl(VOTER_OUTGOING, 1)
+	vi1 := sl(VOTER_INCOMING, 1)
+	vl1 := sl(LEARNER, 1)
 
 	testCases := []struct {
 		crt mockCRT
 		exp raftpb.ConfChangeI
 		err string
 	}{
-		// A replica of type VoterOutgoing being added makes no sense.
-		{crt: mk(in{add: vo1, repls: vo1}), err: "can't add replica in state VoterOutgoing"},
+		// A replica of type VOTER_OUTGOING being added makes no sense.
+		{crt: mk(in{add: vo1, repls: vo1}), err: "can't add replica in state VOTER_OUTGOING"},
 		// But an incoming one can be added, and the result must be a joint change.
 		{crt: mk(in{add: vi1, repls: vi1}), exp: raftpb.ConfChangeV2{
 			Transition: raftpb.ConfChangeTransitionJointExplicit,
 			Changes:    []raftpb.ConfChangeSingle{{Type: raftpb.ConfChangeAddNode, NodeID: 1}},
 		}},
-		// A replica of type VoterIncoming being removed makes no sense.
-		{crt: mk(in{del: vi1}), err: "can't remove replica in state VoterIncoming"},
-		// But during a joint removal we can see VoterOutgoing.
+		// A replica of type VOTER_INCOMING being removed makes no sense.
+		{crt: mk(in{del: vi1}), err: "can't remove replica in state VOTER_INCOMING"},
+		// But during a joint removal we can see VOTER_OUTGOING.
 		{crt: mk(in{del: vo1, repls: vo1}), exp: raftpb.ConfChangeV2{
 			Transition: raftpb.ConfChangeTransitionJointExplicit,
 			Changes:    []raftpb.ConfChangeSingle{{Type: raftpb.ConfChangeRemoveNode, NodeID: 1}},
@@ -1825,21 +1825,21 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 		// Run a more complex change (necessarily) via the V2 path.
 		{crt: mk(in{
 			add: sl( // Additions.
-				ReplicaType_VoterIncoming, 6, ReplicaType_Learner, 4, ReplicaType_VoterIncoming, 3,
+				VOTER_INCOMING, 6, LEARNER, 4, VOTER_INCOMING, 3,
 			),
 			del: sl(
 				// Removals.
-				ReplicaType_Learner, 2, ReplicaType_VoterOutgoing, 8, ReplicaType_VoterOutgoing, 9,
+				LEARNER, 2, VOTER_OUTGOING, 8, VOTER_OUTGOING, 9,
 			),
 			repls: sl(
 				// Replicas.
-				ReplicaType_VoterFull, 1,
-				ReplicaType_VoterIncoming, 6, // added
-				ReplicaType_VoterIncoming, 3, // added
-				ReplicaType_VoterOutgoing, 9, // removing
-				ReplicaType_Learner, 4, // added
-				ReplicaType_VoterOutgoing, 8, // removing
-				ReplicaType_VoterFull, 10,
+				VOTER_FULL, 1,
+				VOTER_INCOMING, 6, // added
+				VOTER_INCOMING, 3, // added
+				VOTER_OUTGOING, 9, // removing
+				LEARNER, 4, // added
+				VOTER_OUTGOING, 8, // removing
+				VOTER_FULL, 10,
 			)}),
 			exp: raftpb.ConfChangeV2{
 				Transition: raftpb.ConfChangeTransitionJointExplicit,
@@ -1855,17 +1855,17 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 
 		// Leave a joint config.
 		{
-			crt: mk(in{repls: sl(ReplicaType_VoterFull, 1)}),
+			crt: mk(in{repls: sl(VOTER_FULL, 1)}),
 			exp: raftpb.ConfChangeV2{},
 		},
 		// If we're asked to leave a joint state but the descriptor is still joint,
 		// that's a problem.
 		{
-			crt: mk(in{v2: true, repls: sl(ReplicaType_VoterIncoming, 1)}),
+			crt: mk(in{v2: true, repls: sl(VOTER_INCOMING, 1)}),
 			err: "descriptor enters joint state, but trigger is requesting to leave one",
 		},
 		{
-			crt: mk(in{v2: true, repls: sl(ReplicaType_VoterOutgoing, 1)}),
+			crt: mk(in{v2: true, repls: sl(VOTER_OUTGOING, 1)}),
 			err: "descriptor enters joint state, but trigger is requesting to leave one",
 		},
 	}

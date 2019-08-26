@@ -327,7 +327,7 @@ func TestSendRPCOrder(t *testing.T) {
 		if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(i)), nd, time.Hour); err != nil {
 			t.Fatal(err)
 		}
-		descriptor.AddReplica(roachpb.NodeID(i), roachpb.StoreID(i), roachpb.ReplicaType_VoterFull)
+		descriptor.AddReplica(roachpb.NodeID(i), roachpb.StoreID(i), roachpb.VOTER_FULL)
 	}
 
 	// Stub to be changed in each test case.
@@ -1429,7 +1429,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		descriptor.AddReplica(roachpb.NodeID(i), roachpb.StoreID(i), roachpb.ReplicaType_VoterFull)
+		descriptor.AddReplica(roachpb.NodeID(i), roachpb.StoreID(i), roachpb.VOTER_FULL)
 	}
 	descDB := mockRangeDescriptorDBForDescs(
 		testMetaRangeDescriptor,

@@ -111,7 +111,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	// that's adding it or it's been orphaned and it's about to be cleaned up by
 	// the replicate queue. Either way, no point in also sending it a snapshot of
 	// type RAFT.
-	if repDesc.GetType() == roachpb.ReplicaType_Learner {
+	if repDesc.GetType() == roachpb.LEARNER {
 		if index := repl.getAndGCSnapshotLogTruncationConstraints(timeutil.Now()); index > 0 {
 			// There is a snapshot being transferred. It's probably a LEARNER snap, so
 			// bail for now and try again later.

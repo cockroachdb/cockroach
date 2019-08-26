@@ -859,7 +859,7 @@ func IsSnapshotError(err error) bool {
 //    replica sets is required for decision making. Transitioning into this joint
 //    configuration, the RangeDescriptor (which is the source of truth of
 //    the replication configuration) is updated with corresponding replicas of
-//    type VoterIncoming and VoterOutgoing.
+//    type VOTER_INCOMING and VOTER_OUTGOING.
 //    Immediately after committing this change, a second transition updates the
 //    descriptor with and activates the final configuration.
 //
@@ -1043,7 +1043,7 @@ func validateReplicationChanges(
 		// trying to add it with the learner+snapshot+voter cycle and got
 		// interrupted or else we hit a race between the replicate queue and
 		// AdminChangeReplicas.
-		if rDesc.GetType() == roachpb.ReplicaType_Learner {
+		if rDesc.GetType() == roachpb.LEARNER {
 			return errors.Errorf(
 				"unable to add replica %v which is already present as a learner in %s", chg.Target, desc)
 		}
@@ -1125,7 +1125,7 @@ func (r *Replica) atomicReplicationChange(
 			return nil, errors.Errorf("programming error: replica %v not found in %v", target, desc)
 		}
 
-		if rDesc.GetType() != roachpb.ReplicaType_Learner {
+		if rDesc.GetType() != roachpb.LEARNER {
 			return nil, errors.Errorf("programming error: cannot promote replica of type %s", rDesc.Type)
 		}
 
@@ -1184,7 +1184,7 @@ func (r *Replica) tryRollBackLearnerReplica(
 	details string,
 ) {
 	repDesc, ok := desc.GetReplicaDescriptor(target.StoreID)
-	if !ok || repDesc.GetType() != roachpb.ReplicaType_Learner {
+	if !ok || repDesc.GetType() != roachpb.LEARNER {
 		// There's no learner to roll back.
 		log.Event(ctx, "learner to roll back not found; skipping")
 		return
@@ -1324,14 +1324,14 @@ func execChangeReplicasTxn(
 			case internalChangeTypeAddVoterViaPreemptiveSnap:
 				// Legacy code.
 				added = append(added,
-					updatedDesc.AddReplica(chg.target.NodeID, chg.target.StoreID, roachpb.ReplicaType_VoterFull))
+					updatedDesc.AddReplica(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_FULL))
 			case internalChangeTypeAddLearner:
 				added = append(added,
-					updatedDesc.AddReplica(chg.target.NodeID, chg.target.StoreID, roachpb.ReplicaType_Learner))
+					updatedDesc.AddReplica(chg.target.NodeID, chg.target.StoreID, roachpb.LEARNER))
 			case internalChangeTypePromoteLearner:
-				typ := roachpb.ReplicaType_VoterFull
+				typ := roachpb.VOTER_FULL
 				if useJoint {
-					typ = roachpb.ReplicaType_VoterIncoming
+					typ = roachpb.VOTER_INCOMING
 				}
 				rDesc, ok := updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, typ)
 				if !ok {
@@ -1344,7 +1344,7 @@ func execChangeReplicasTxn(
 				if !useJoint {
 					rDesc, ok = updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
 				} else {
-					rDesc, ok = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.ReplicaType_VoterOutgoing)
+					rDesc, ok = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_OUTGOING)
 				}
 				if !ok {
 					return nil, errors.Errorf("cannot remove nonexistent target %v", chg.target)
@@ -1362,10 +1362,10 @@ func execChangeReplicasTxn(
 		// call RemoveReplica below.
 		for _, rDesc := range updatedDesc.Replicas().DeepCopy().All() {
 			switch rDesc.GetType() {
-			case roachpb.ReplicaType_VoterIncoming:
-				updatedDesc.SetReplicaType(rDesc.NodeID, rDesc.StoreID, roachpb.ReplicaType_VoterFull)
+			case roachpb.VOTER_INCOMING:
+				updatedDesc.SetReplicaType(rDesc.NodeID, rDesc.StoreID, roachpb.VOTER_FULL)
 				isJoint = true
-			case roachpb.ReplicaType_VoterOutgoing:
+			case roachpb.VOTER_OUTGOING:
 				updatedDesc.RemoveReplica(rDesc.NodeID, rDesc.StoreID)
 				isJoint = true
 			default:
