@@ -1043,6 +1043,12 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			if !testutils.IsError(err, "job paused") {
 				t.Fatalf("%d: expected 'job paused' error, but got %+v", i, err)
 			}
+			if i > 0 {
+				sqlDB.CheckQueryResults(t,
+					`SELECT name FROM crdb_internal.tables WHERE database_name = 'pause' AND state = 'OFFLINE'`,
+					[][]string{{"bank"}},
+				)
+			}
 			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
 			jobutils.WaitForJob(t, sqlDB, jobID)
 		}
