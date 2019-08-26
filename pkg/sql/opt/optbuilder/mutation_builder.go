@@ -1121,8 +1121,12 @@ func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColLi
 	// Build an anti-join, with the origin FK columns on the left and the
 	// referenced columns on the right.
 	refID := fk.ReferencedTableID()
-	ref, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, refID)
+	ref, isAdding, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, refID)
 	if err != nil {
+		if isAdding {
+			// The other table is in the process of being added; ignore the FK relation.
+			return
+		}
 		panic(err)
 	}
 	refTab := ref.(cat.Table)
@@ -1232,7 +1236,7 @@ func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColLi
 // position in the table.
 //
 // Returns false if the check to be added couldn't be added (say, because it
-// uses CASCADE).
+// uses CASCADE) and we need to fall back to the legacy FK checks path.
 func (mb *mutationBuilder) addDeletionCheck(
 	fkOrdinal int,
 	deletedRows memo.RelExpr,
@@ -1251,8 +1255,12 @@ func (mb *mutationBuilder) addDeletionCheck(
 	// Build a semi join, with the referenced FK columns on the left and the
 	// origin columns on the right.
 	origID := fk.OriginTableID()
-	orig, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, origID)
+	orig, isAdding, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, origID)
 	if err != nil {
+		if isAdding {
+			// The other table is in the process of being added; ignore the FK relation.
+			return true
+		}
 		panic(err)
 	}
 	origTab := orig.(cat.Table)
