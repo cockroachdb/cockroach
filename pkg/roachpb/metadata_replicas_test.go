@@ -13,6 +13,7 @@ package roachpb
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
@@ -188,6 +189,111 @@ func TestReplicaDescriptorsConfState(t *testing.T) {
 			r := MakeReplicaDescriptors(test.in)
 			cs := r.ConfState()
 			require.Equal(t, test.out, raft.DescribeConfState(cs))
+		})
+	}
+}
+
+func TestReplicaDescriptorsCanMakeProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type descWithLiveness struct {
+		live bool
+		ReplicaDescriptor
+	}
+
+	for _, test := range []struct {
+		rds []descWithLiveness
+		exp bool
+	}{
+		// One out of one voter dead.
+		{[]descWithLiveness{{false, rd(v, 1)}}, false},
+		// Three out of three voters dead.
+		{[]descWithLiveness{
+			{false, rd(v, 1)},
+			{false, rd(v, 2)},
+			{false, rd(v, 3)},
+		}, false},
+		// Two out of three voters dead.
+		{[]descWithLiveness{
+			{false, rd(v, 1)},
+			{true, rd(v, 2)},
+			{false, rd(v, 3)},
+		}, false},
+		// Two out of three voters alive.
+		{[]descWithLiveness{
+			{true, rd(v, 1)},
+			{false, rd(v, 2)},
+			{true, rd(v, 3)},
+		}, true},
+		// Two out of three voters alive, but one is an incoming voter. (This
+		// still uses the fast path).
+		{[]descWithLiveness{
+			{true, rd(v, 1)},
+			{false, rd(v, 2)},
+			{true, rd(vi, 3)},
+		}, true},
+		// Two out of three voters dead, and they're all incoming voters. (This
+		// can't happen in practice because it means there were zero voters prior
+		// to the conf change, but still this result is correct, similar to others
+		// below).
+		{[]descWithLiveness{
+			{false, rd(vi, 1)},
+			{false, rd(vi, 2)},
+			{true, rd(vi, 3)},
+		}, false},
+		// Two out of three voters dead, and two are outgoing, one incoming.
+		{[]descWithLiveness{
+			{false, rd(vi, 1)},
+			{false, rd(vo, 2)},
+			{true, rd(vo, 3)},
+		}, false},
+		// 1 and 3 are alive, but that's not a quorum for (1 3)&&(2 3) which is
+		// the config here.
+		{[]descWithLiveness{
+			{true, rd(vi, 1)},
+			{false, rd(vo, 2)},
+			{true, rd(v, 3)},
+		}, false},
+		// Same as above, but all three alive.
+		{[]descWithLiveness{
+			{true, rd(vi, 1)},
+			{true, rd(vo, 2)},
+			{true, rd(v, 3)},
+		}, true},
+		// Same, but there are a few learners that should not matter.
+		{[]descWithLiveness{
+			{true, rd(vi, 1)},
+			{true, rd(vo, 2)},
+			{true, rd(v, 3)},
+			{false, rd(l, 4)},
+			{false, rd(l, 5)},
+			{false, rd(l, 6)},
+			{false, rd(l, 7)},
+		}, true},
+		// Non-joint case that should be live unless the learner is somehow taken
+		// into account.
+		{[]descWithLiveness{
+			{true, rd(v, 1)},
+			{true, rd(v, 2)},
+			{false, rd(v, 4)},
+			{false, rd(l, 4)},
+		}, true},
+	} {
+		t.Run("", func(t *testing.T) {
+			rds := make([]ReplicaDescriptor, 0, len(test.rds))
+			for _, rDesc := range test.rds {
+				rds = append(rds, rDesc.ReplicaDescriptor)
+			}
+
+			act := MakeReplicaDescriptors(rds).CanMakeProgress(func(rd ReplicaDescriptor) bool {
+				for _, rdi := range test.rds {
+					if rdi.ReplicaID == rd.ReplicaID {
+						return rdi.live
+					}
+				}
+				return false
+			})
+			require.Equal(t, test.exp, act, "input: %+v", test)
 		})
 	}
 }

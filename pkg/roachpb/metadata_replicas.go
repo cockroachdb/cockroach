@@ -323,8 +323,10 @@ func (d ReplicaDescriptors) ConfState() raftpb.ConfState {
 func (d ReplicaDescriptors) CanMakeProgress(liveFunc func(descriptor ReplicaDescriptor) bool) bool {
 	voters := d.Voters()
 	var c int
+	// Take the fast path when there are only "current and future" voters, i.e.
+	// no learners and no voters of type VoterOutgoing. The config may be joint,
+	// but the outgoing conf is subsumed by the incoming one.
 	if n := len(d.wrapped); len(voters) == n {
-		// Fast path when there are only full voters, i.e. the common case.
 		for _, rDesc := range voters {
 			if liveFunc(rDesc) {
 				c++
@@ -344,7 +346,7 @@ func (d ReplicaDescriptors) CanMakeProgress(liveFunc func(descriptor ReplicaDesc
 	}
 	votes := make(map[uint64]bool, len(d.wrapped))
 	for _, rDesc := range d.wrapped {
-		votes[uint64(rDesc.ReplicaID)] = true
+		votes[uint64(rDesc.ReplicaID)] = liveFunc(rDesc)
 	}
 	return cfg.Voters.VoteResult(votes) == quorum.VoteWon
 }
