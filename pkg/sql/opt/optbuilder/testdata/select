@@ -1,13 +1,20 @@
 # tests adapted from logictest -- select
 
-# This statement must be first for the numeric references tests.
-# The numeric references test assume that this is the first table.
+# These statements must be first - the numeric reference tests assume that
+# these are the first tables defined. Cockroach numeric references start after
+# 53 for user tables. See opt/testutils/testcat/create_table.go:117 for more
+# info on 53 as a magic number.
+
 exec-ddl
-CREATE TABLE numeric_references (a INT PRIMARY KEY, y INT, b INT, c INT, INDEX bc (b,c))
+CREATE TABLE tab53 (a INT PRIMARY KEY, y INT, b INT, c INT, INDEX bc (b,c))
 ----
 
 exec-ddl
-CREATE TABLE num_ref_hidden (x INT, y INT)
+CREATE TABLE tab54 (x INT, y INT)
+----
+
+exec-ddl
+CREATE TABLE tab55 (a INT PRIMARY KEY, b INT, CONSTRAINT foo CHECK (a+b < 10))
 ----
 
 # SELECT with no table.
@@ -1190,7 +1197,7 @@ scan t
  ├── columns: a:1(int!null) y:2(int) b:3(int) c:4(int)
  └── flags: force-index=bc
 
-# Test that hidden columns are not presented
+# Test that hidden columns are not presented.
 build
 SELECT * FROM [54(1,3) AS t]
 ----
@@ -1204,6 +1211,15 @@ SELECT rowid FROM [54(3) as t]
 ----
 scan t
  └── columns: rowid:3(int!null)
+
+
+# Test that we don't error out due to check constraints that involve unselected
+# columns.
+build
+SELECT * FROM [55(1) as t(a)]
+----
+scan t
+ └── columns: a:1(int!null)
 
 # Regression test for #28388. Ensure that selecting from a table with no
 # columns does not cause a panic.
