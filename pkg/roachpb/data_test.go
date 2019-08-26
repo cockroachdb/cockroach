@@ -1636,9 +1636,9 @@ func TestUpdateObservedTimestamps(t *testing.T) {
 func TestChangeReplicasTrigger_String(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	vi := ReplicaType_VoterIncoming
-	vo := ReplicaType_VoterOutgoing
-	l := ReplicaType_Learner
+	vi := VOTER_INCOMING
+	vo := VOTER_OUTGOING
+	l := LEARNER
 	repl1 := ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3, Type: &vi}
 	repl2 := ReplicaDescriptor{NodeID: 4, StoreID: 5, ReplicaID: 6, Type: &vo}
 	learner := ReplicaDescriptor{NodeID: 7, StoreID: 8, ReplicaID: 9, Type: &l}
@@ -1719,10 +1719,10 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 		return m
 	}
 
-	vf1 := sl(ReplicaType_VoterFull, 1)
-	vo1 := sl(ReplicaType_VoterOutgoing, 1)
-	vi1 := sl(ReplicaType_VoterIncoming, 1)
-	vl1 := sl(ReplicaType_Learner, 1)
+	vf1 := sl(VOTER_FULL, 1)
+	vo1 := sl(VOTER_OUTGOING, 1)
+	vi1 := sl(VOTER_INCOMING, 1)
+	vl1 := sl(LEARNER, 1)
 
 	testCases := []struct {
 		crt mockCRT
@@ -1825,21 +1825,21 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 		// Run a more complex change (necessarily) via the V2 path.
 		{crt: mk(in{
 			add: sl( // Additions.
-				ReplicaType_VoterIncoming, 6, ReplicaType_Learner, 4, ReplicaType_VoterIncoming, 3,
+				VOTER_INCOMING, 6, LEARNER, 4, VOTER_INCOMING, 3,
 			),
 			del: sl(
 				// Removals.
-				ReplicaType_Learner, 2, ReplicaType_VoterOutgoing, 8, ReplicaType_VoterOutgoing, 9,
+				LEARNER, 2, VOTER_OUTGOING, 8, VOTER_OUTGOING, 9,
 			),
 			repls: sl(
 				// Replicas.
-				ReplicaType_VoterFull, 1,
-				ReplicaType_VoterIncoming, 6, // added
-				ReplicaType_VoterIncoming, 3, // added
-				ReplicaType_VoterOutgoing, 9, // removing
-				ReplicaType_Learner, 4, // added
-				ReplicaType_VoterOutgoing, 8, // removing
-				ReplicaType_VoterFull, 10,
+				VOTER_FULL, 1,
+				VOTER_INCOMING, 6, // added
+				VOTER_INCOMING, 3, // added
+				VOTER_OUTGOING, 9, // removing
+				LEARNER, 4, // added
+				VOTER_OUTGOING, 8, // removing
+				VOTER_FULL, 10,
 			)}),
 			exp: raftpb.ConfChangeV2{
 				Transition: raftpb.ConfChangeTransitionJointExplicit,
@@ -1855,17 +1855,17 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 
 		// Leave a joint config.
 		{
-			crt: mk(in{repls: sl(ReplicaType_VoterFull, 1)}),
+			crt: mk(in{repls: sl(VOTER_FULL, 1)}),
 			exp: raftpb.ConfChangeV2{},
 		},
 		// If we're asked to leave a joint state but the descriptor is still joint,
 		// that's a problem.
 		{
-			crt: mk(in{v2: true, repls: sl(ReplicaType_VoterIncoming, 1)}),
+			crt: mk(in{v2: true, repls: sl(VOTER_INCOMING, 1)}),
 			err: "descriptor enters joint state, but trigger is requesting to leave one",
 		},
 		{
-			crt: mk(in{v2: true, repls: sl(ReplicaType_VoterOutgoing, 1)}),
+			crt: mk(in{v2: true, repls: sl(VOTER_OUTGOING, 1)}),
 			err: "descriptor enters joint state, but trigger is requesting to leave one",
 		},
 	}

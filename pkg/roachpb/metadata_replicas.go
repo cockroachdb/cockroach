@@ -20,31 +20,31 @@ import (
 	"go.etcd.io/etcd/raft/tracker"
 )
 
-// ReplicaTypeVoterFull returns a ReplicaType_VoterFull pointer suitable for use in a
+// ReplicaTypeVoterFull returns a VOTER_FULL pointer suitable for use in a
 // nullable proto field.
 func ReplicaTypeVoterFull() *ReplicaType {
-	t := ReplicaType_VoterFull
+	t := VOTER_FULL
 	return &t
 }
 
-// ReplicaTypeVoterIncoming returns a ReplicaType_VoterIncoming pointer suitable
+// ReplicaTypeVoterIncoming returns a VOTER_INCOMING pointer suitable
 // for use in a nullable proto field.
 func ReplicaTypeVoterIncoming() *ReplicaType {
-	t := ReplicaType_VoterIncoming
+	t := VOTER_INCOMING
 	return &t
 }
 
-// ReplicaTypeVoterOutgoing returns a ReplicaType_VoterOutgoing pointer suitable
+// ReplicaTypeVoterOutgoing returns a VOTER_OUTGOING pointer suitable
 // for use in a nullable proto field.
 func ReplicaTypeVoterOutgoing() *ReplicaType {
-	t := ReplicaType_VoterOutgoing
+	t := VOTER_OUTGOING
 	return &t
 }
 
-// ReplicaTypeLearner returns a ReplicaType_Learner pointer suitable for use in
+// ReplicaTypeLearner returns a LEARNER pointer suitable for use in
 // a nullable proto field.
 func ReplicaTypeLearner() *ReplicaType {
-	t := ReplicaType_Learner
+	t := LEARNER
 	return &t
 }
 
@@ -106,7 +106,7 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 	// save the alloc.
 	fastpath := true
 	for i := range d.wrapped {
-		if d.wrapped[i].GetType() != ReplicaType_VoterFull {
+		if d.wrapped[i].GetType() != VOTER_FULL {
 			fastpath = false
 			break
 		}
@@ -117,7 +117,7 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 	voters := make([]ReplicaDescriptor, 0, len(d.wrapped))
 	for i := range d.wrapped {
 		switch d.wrapped[i].GetType() {
-		case ReplicaType_VoterFull, ReplicaType_VoterIncoming:
+		case VOTER_FULL, VOTER_INCOMING:
 			voters = append(voters, d.wrapped[i])
 		}
 	}
@@ -215,7 +215,7 @@ func (d ReplicaDescriptors) Learners() []ReplicaDescriptor {
 	// save the alloc.
 	var learners []ReplicaDescriptor
 	for i := range d.wrapped {
-		if d.wrapped[i].GetType() == ReplicaType_Learner {
+		if d.wrapped[i].GetType() == LEARNER {
 			if learners == nil {
 				learners = make([]ReplicaDescriptor, 0, len(d.wrapped)-i)
 			}
@@ -273,12 +273,12 @@ func (d *ReplicaDescriptors) RemoveReplica(
 func (d ReplicaDescriptors) InAtomicReplicationChange() bool {
 	for _, rDesc := range d.wrapped {
 		switch rDesc.GetType() {
-		case ReplicaType_VoterFull:
-		case ReplicaType_VoterIncoming:
+		case VOTER_FULL:
+		case VOTER_INCOMING:
 			return true
-		case ReplicaType_VoterOutgoing:
+		case VOTER_OUTGOING:
 			return true
-		case ReplicaType_Learner:
+		case LEARNER:
 		default:
 			panic(fmt.Sprintf("unknown replica type %d", rDesc.GetType()))
 		}
@@ -299,16 +299,16 @@ func (d ReplicaDescriptors) ConfState() raftpb.ConfState {
 		id := uint64(rep.ReplicaID)
 		typ := rep.GetType()
 		switch typ {
-		case ReplicaType_VoterFull:
+		case VOTER_FULL:
 			cs.Voters = append(cs.Voters, id)
 			if joint {
 				cs.VotersOutgoing = append(cs.VotersOutgoing, id)
 			}
-		case ReplicaType_VoterIncoming:
+		case VOTER_INCOMING:
 			cs.Voters = append(cs.Voters, id)
-		case ReplicaType_VoterOutgoing:
+		case VOTER_OUTGOING:
 			cs.VotersOutgoing = append(cs.VotersOutgoing, id)
-		case ReplicaType_Learner:
+		case LEARNER:
 			cs.Learners = append(cs.Learners, id)
 		default:
 			panic(fmt.Sprintf("unknown ReplicaType %d", typ))

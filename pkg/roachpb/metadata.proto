@@ -35,16 +35,16 @@ message ReplicationTarget {
       (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
 }
 
-// ReplicaType identifies which raft activities a replica participates in.
-// In normal operation, Voter and Learner are the only used states. However,
-// atomic replication changes require a transition through a "joint config";
-// in this joint config, the VoterOutgoing and VoterIncoming types are used
-// as well to denote voters which are being removed and newly added by the
-// change, respectively.
+// ReplicaType identifies which raft activities a replica participates in. In
+// normal operation, VOTER_FULL and LEARNER are the only used states. However,
+// atomic replication changes require a transition through a "joint config"; in
+// this joint config, the VoterOutgoing and VoterIncoming types are used as well
+// to denote voters which are being removed and newly added by the change,
+// respectively.
 //
 // All voter types indicate a replica that participates in all raft activities,
 // including voting for leadership and committing entries. Typically, this
-// requires a majority of voters to reach a decision. In the joint config,
+// requires a majority of voters to reach a decision. In a joint config,
 // two separate majorities are required: one from the set of replicas that
 // have either type Voter or VoterOutgoing, as well as that of the set of
 // types Voter and VoterIncoming. For example, when type Voter is assigned
@@ -54,27 +54,29 @@ message ReplicationTarget {
 // second, {1,4} is a quorum of the second but not the first, and {3,4} is a
 // quorum of neither.
 enum ReplicaType {
-  // ReplicaType_VoterFull indicates a replica that is a voter both in the
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // VOTER_FULL indicates a replica that is a voter both in the
   // incoming and outgoing set.
-  VoterFull = 0;
+  VOTER_FULL = 0;
   // ReplicaType_VoterIncoming indicates a voting replica that will be a
   // VoterFull once the ongoing atomic replication change is finalized; that is,
   // it is in the process of being added. In practice, this replica type should
   // be treated like a VoterFull.
-  VoterIncoming = 2;
+  VOTER_INCOMING = 2;
   // ReplicaType_VoterOutgoing indicates a voting replica that will not be part
   // of the descriptor once the ongoing atomic replication change is finalized;
   // that is, it is in the process of being removed. In practice, a replica of
   // this type should be treated accordingly and no work should be assigned to
   // it.
-  VoterOutgoing = 3;
+  VOTER_OUTGOING = 3;
   // ReplicaType_Learner indicates a replica that applies committed entries, but
   // does not count towards the quorum(s). Learners do not vote for leadership
   // nor do their acknowledged log entries get taken into account for
   // determining the committed index. At the time of writing, learners in
   // CockroachDB are a short-term transient state: a replica being added and on
   // its way to being a VOTER.
-  Learner = 1;
+  LEARNER = 1;
 }
 
 // ReplicaDescriptor describes a replica location by node ID

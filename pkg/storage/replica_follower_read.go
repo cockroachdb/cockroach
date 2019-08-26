@@ -45,7 +45,7 @@ func (r *Replica) canServeFollowerRead(
 	if err != nil {
 		return roachpb.NewError(err)
 	}
-	if repDesc.GetType() == roachpb.ReplicaType_Learner {
+	if repDesc.GetType() == roachpb.LEARNER {
 		log.Event(ctx, "learner replicas cannot serve follower reads")
 		return pErr
 	}

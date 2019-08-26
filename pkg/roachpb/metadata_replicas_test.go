@@ -56,7 +56,7 @@ func TestVotersLearnersAll(t *testing.T) {
 			for _, voter := range r.Voters() {
 				typ := voter.GetType()
 				switch typ {
-				case ReplicaType_VoterFull, ReplicaType_VoterIncoming:
+				case VOTER_FULL, VOTER_INCOMING:
 					seen[voter] = struct{}{}
 				default:
 					assert.FailNow(t, "unexpectedly got a %s as Voter()", typ)
@@ -64,7 +64,7 @@ func TestVotersLearnersAll(t *testing.T) {
 			}
 			for _, learner := range r.Learners() {
 				seen[learner] = struct{}{}
-				assert.Equal(t, ReplicaType_Learner, learner.GetType())
+				assert.Equal(t, LEARNER, learner.GetType())
 			}
 
 			all := r.All()
@@ -73,9 +73,9 @@ func TestVotersLearnersAll(t *testing.T) {
 			for _, rd := range all {
 				typ := rd.GetType()
 				if _, seen := seen[rd]; !seen {
-					assert.Equal(t, ReplicaType_VoterOutgoing, typ)
+					assert.Equal(t, VOTER_OUTGOING, typ)
 				} else {
-					assert.NotEqual(t, ReplicaType_VoterOutgoing, typ)
+					assert.NotEqual(t, VOTER_OUTGOING, typ)
 				}
 			}
 			assert.Equal(t, len(test), len(all))
@@ -128,10 +128,10 @@ func TestReplicaDescriptorsRemove(t *testing.T) {
 			assert.Equal(t, lenBefore, len(r.All()), "testcase %d", i)
 		}
 		for _, voter := range r.Voters() {
-			assert.Equal(t, ReplicaType_VoterFull, voter.GetType(), "testcase %d", i)
+			assert.Equal(t, VOTER_FULL, voter.GetType(), "testcase %d", i)
 		}
 		for _, learner := range r.Learners() {
-			assert.Equal(t, ReplicaType_Learner, learner.GetType(), "testcase %d", i)
+			assert.Equal(t, LEARNER, learner.GetType(), "testcase %d", i)
 		}
 	}
 }
