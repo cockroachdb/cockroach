@@ -139,7 +139,13 @@ func main() {
 			fmt.Printf("pinging %s...", name)
 			if err := conn.Ping(); err != nil {
 				fmt.Printf("\n%s: ping failure: %v\nprevious SQL:\n%s;\n", name, err, stmt)
-				os.Exit(1)
+				// Try to reconnect.
+				db := opts.Databases[name]
+				newConn, err := NewConn(db.Addr, db.InitSQL, opts.InitSQL)
+				if err != nil {
+					log.Fatalf("tried to reconnect: %v\n", err)
+				}
+				conns[name] = newConn
 			}
 			fmt.Printf(" %s\n", timeutil.Since(start))
 		}
