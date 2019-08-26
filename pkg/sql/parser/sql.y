@@ -290,6 +290,9 @@ func (u *sqlSymUnion) when() *tree.When {
 func (u *sqlSymUnion) whens() []*tree.When {
     return u.val.([]*tree.When)
 }
+func (u *sqlSymUnion) forLocked() tree.ForLocked {
+    return u.val.(tree.ForLocked)
+}
 func (u *sqlSymUnion) updateExpr() *tree.UpdateExpr {
     return u.val.(*tree.UpdateExpr)
 }
@@ -554,7 +557,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> SAVEPOINT SCATTER SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str> SERIAL SERIAL2 SERIAL4 SERIAL8
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
-%token <str> SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
+%token <str> SHARE SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
 %token <str> START STATISTICS STATUS STDIN STRICT STRING STORE STORED STORING SUBSTRING
 %token <str> SYMMETRIC SYNTAX SYSTEM SUBSCRIPTION
@@ -769,6 +772,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <*tree.Select> select_no_parens
 %type <tree.SelectStatement> select_clause select_with_parens simple_select values_clause table_clause simple_select_clause
+%type <tree.ForLocked> opt_for
 %type <tree.SelectStatement> set_operation
 
 %type <tree.Expr> alter_column_default
@@ -5715,32 +5719,35 @@ select_with_parens:
 select_no_parens:
   simple_select opt_for
   {
-    $$.val = &tree.Select{Select: $1.selectStmt()}
+    $$.val = &tree.Select{Select: $1.selectStmt(), ForLocked: $2.forLocked()}
   }
 | select_clause sort_clause opt_for
   {
-    $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy()}
+    $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), ForLocked: $3.forLocked()}
   }
 | select_clause opt_sort_clause select_limit opt_for
   {
-    $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), Limit: $3.limit()}
+    $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), Limit: $3.limit(), ForLocked: $4.forLocked()}
   }
 | with_clause select_clause opt_for
   {
-    $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt()}
+    $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), ForLocked: $3.forLocked()}
   }
 | with_clause select_clause sort_clause opt_for
   {
-    $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), OrderBy: $3.orderBy()}
+    $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), OrderBy: $3.orderBy(), ForLocked: $4.forLocked()}
   }
 | with_clause select_clause opt_sort_clause select_limit opt_for
   {
-    $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), OrderBy: $3.orderBy(), Limit: $4.limit()}
+    $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), OrderBy: $3.orderBy(), Limit: $4.limit(), ForLocked: $5.forLocked()}
   }
 
 opt_for:
-  /* EMPTY */ { /* no error */ }
-| FOR error { return unimplementedWithIssue(sqllex, 6583) }
+  /* EMPTY */ { $$.val = tree.ForNone }
+| FOR UPDATE { $$.val = tree.ForUpdate }
+| FOR NO KEY UPDATE { $$.val = tree.ForNoKeyUpdate }
+| FOR SHARE { $$.val = tree.ForShare }
+| FOR KEY SHARE { $$.val = tree.ForKeyShare }
 
 select_clause:
 // We only provide help if an open parenthesis is provided, because
@@ -9316,6 +9323,7 @@ unreserved_keyword:
 | SESSION
 | SESSIONS
 | SET
+| SHARE
 | SHOW
 | SIMPLE
 | SMALLSERIAL

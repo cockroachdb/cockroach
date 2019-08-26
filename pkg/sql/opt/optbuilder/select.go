@@ -676,6 +676,22 @@ func (b *Builder) buildSelect(
 	orderBy := stmt.OrderBy
 	limit := stmt.Limit
 	with := stmt.With
+	forLocked := stmt.ForLocked
+
+	switch forLocked {
+	case tree.ForNone:
+	case tree.ForUpdate:
+	// CockroachDB treats FOR UPDATE as a no-op. Since all of its transactions
+	// are serializable, clients can't observe whether or not FOR UPDATE
+	// actually created a lock. This behavior may improve as the transaction
+	// model gains more capabilities.
+	case tree.ForNoKeyUpdate:
+		panic(unimplemented.NewWithIssue(40205, "FOR NO KEY UPDATE"))
+	case tree.ForShare:
+		panic(unimplemented.NewWithIssue(40205, "FOR SHARE"))
+	case tree.ForKeyShare:
+		panic(unimplemented.NewWithIssue(40205, "FOR KEY SHARE"))
+	}
 
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		stmt = s.Select

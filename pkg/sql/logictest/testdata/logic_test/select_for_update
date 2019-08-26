@@ -1,0 +1,15 @@
+# Cockroach currently supports FOR UPDATE as a no-op, so just test that it
+# parses and runs.
+query I
+SELECT 1 FOR UPDATE
+----
+1
+
+query error unimplemented: FOR NO KEY UPDATE
+SELECT 1 FOR NO KEY UPDATE
+
+query error unimplemented: FOR SHARE
+SELECT 1 FOR SHARE
+
+query error unimplemented: FOR KEY SHARE
+SELECT 1 FOR KEY SHARE
