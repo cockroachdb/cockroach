@@ -3408,7 +3408,7 @@ func (s *Store) processRaftRequestWithReplica(
 		)
 	}
 
-	drop := maybeDropMsgApp(r.AnnotateCtx(context.Background()), (*replicaMsgAppDropper)(r), &req.Message, req.RangeStartKey)
+	drop := maybeDropMsgApp(ctx, (*replicaMsgAppDropper)(r), &req.Message, req.RangeStartKey)
 	if !drop {
 		if err := r.stepRaftGroup(req); err != nil {
 			return roachpb.NewError(err)
