@@ -52,7 +52,8 @@ to avoid pre-loading a dataset.`,
 const defaultGeneratorName = "movr"
 
 var defaultGenerator workload.Generator
-var defaultLocalities = []roachpb.Locality{
+
+var defaultLocalities = demoLocalityList{
 	// Default localities for a 3 node cluster
 	{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east1"}, {Key: "az", Value: "b"}}},
 	{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east1"}, {Key: "az", Value: "c"}}},
