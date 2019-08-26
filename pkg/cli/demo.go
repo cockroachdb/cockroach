@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -51,6 +52,20 @@ to avoid pre-loading a dataset.`,
 const defaultGeneratorName = "movr"
 
 var defaultGenerator workload.Generator
+var defaultLocalities = []roachpb.Locality{
+	// Default localities for a 3 node cluster
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east1"}, {Key: "az", Value: "a"}}},
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east1"}, {Key: "az", Value: "b"}}},
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east1"}, {Key: "az", Value: "z"}}},
+	// Default localities for a 6 node cluster
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "us-west1"}, {Key: "az", Value: "a"}}},
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "us-west1"}, {Key: "az", Value: "b"}}},
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "us-west1"}, {Key: "az", Value: "z"}}},
+	// Default localities for a 9 node cluster
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "europe-west1"}, {Key: "az", Value: "a"}}},
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "europe-west1"}, {Key: "az", Value: "b"}}},
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "europe-west1"}, {Key: "az", Value: "z"}}},
+}
 
 func init() {
 	for _, meta := range workload.Registered() {
@@ -90,11 +105,17 @@ func setupTransientServers(
 		return "", "", cleanup, errors.Errorf("must have a positive number of nodes")
 	}
 
+	// The user specified some localities for their nodes.
 	if len(demoCtx.localities) != 0 {
 		// Error out of localities don't line up with requested node
 		// count before doing any sort of setup.
 		if len(demoCtx.localities) != demoCtx.nodes {
 			return "", "", cleanup, errors.Errorf("number of localities specified must equal number of nodes")
+		}
+	} else {
+		demoCtx.localities = make([]roachpb.Locality, demoCtx.nodes)
+		for i := 0; i < demoCtx.nodes; i++ {
+			demoCtx.localities[i] = defaultLocalities[i%len(defaultLocalities)]
 		}
 	}
 
