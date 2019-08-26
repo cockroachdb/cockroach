@@ -157,13 +157,13 @@ func (tc *Catalog) ResolveDataSource(
 // ResolveDataSourceByID is part of the cat.Catalog interface.
 func (tc *Catalog) ResolveDataSourceByID(
 	ctx context.Context, flags cat.Flags, id cat.StableID,
-) (cat.DataSource, error) {
+) (_ cat.DataSource, isAdding bool, _ error) {
 	for _, ds := range tc.testSchema.dataSources {
 		if ds.ID() == id {
-			return ds, nil
+			return ds, false, nil
 		}
 	}
-	return nil, pgerror.Newf(pgcode.UndefinedTable,
+	return nil, false, pgerror.Newf(pgcode.UndefinedTable,
 		"relation [%d] does not exist", id)
 }
 
