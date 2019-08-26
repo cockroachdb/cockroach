@@ -29,7 +29,7 @@ const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 // ReplicaType identifies which raft activities a replica participates in. In
 // normal operation, VOTER_FULL and LEARNER are the only used states. However,
 // atomic replication changes require a transition through a "joint config"; in
-// this joint config, the VoterOutgoing and VoterIncoming types are used as well
+// this joint config, the VOTER_OUTGOING and VOTER_INCOMING types are used as well
 // to denote voters which are being removed and newly added by the change,
 // respectively.
 //
@@ -37,9 +37,9 @@ const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 // including voting for leadership and committing entries. Typically, this
 // requires a majority of voters to reach a decision. In a joint config,
 // two separate majorities are required: one from the set of replicas that
-// have either type Voter or VoterOutgoing, as well as that of the set of
-// types Voter and VoterIncoming. For example, when type Voter is assigned
-// to replicas 1 and 2, while 3 is VoterOutgoing and 4 is VoterIncoming, then
+// have either type VOTER or VOTER_OUTOING, as well as that of the set of
+// types VOTER and VOTER_INCOMING . For example, when type VOTER_FULL is assigned
+// to replicas 1 and 2, while 3 is VOTER_OUTGOING and 4 is VOTER_INCOMING, then
 // the two sets over which quorums need to be achieved are {1,2,3} and {1,2,4}.
 // Thus, {1,2} is a quorum of both, {1,3} is a quorum of the first but not the
 // second, {1,4} is a quorum of the second but not the first, and {3,4} is a
@@ -50,23 +50,23 @@ const (
 	// VOTER_FULL indicates a replica that is a voter both in the
 	// incoming and outgoing set.
 	VOTER_FULL ReplicaType = 0
-	// ReplicaType_VoterIncoming indicates a voting replica that will be a
-	// VoterFull once the ongoing atomic replication change is finalized; that is,
+	// VOTER_INCOMING indicates a voting replica that will be a
+	// VOTER_FULL once the ongoing atomic replication change is finalized; that is,
 	// it is in the process of being added. In practice, this replica type should
-	// be treated like a VoterFull.
+	// be treated like a VOTER_FULL.
 	VOTER_INCOMING ReplicaType = 2
-	// ReplicaType_VoterOutgoing indicates a voting replica that will not be part
+	// VOTER_OUTGOING indicates a voting replica that will not be part
 	// of the descriptor once the ongoing atomic replication change is finalized;
 	// that is, it is in the process of being removed. In practice, a replica of
 	// this type should be treated accordingly and no work should be assigned to
 	// it.
 	VOTER_OUTGOING ReplicaType = 3
-	// ReplicaType_Learner indicates a replica that applies committed entries, but
+	// LEARNER indicates a replica that applies committed entries, but
 	// does not count towards the quorum(s). Learners do not vote for leadership
 	// nor do their acknowledged log entries get taken into account for
 	// determining the committed index. At the time of writing, learners in
 	// CockroachDB are a short-term transient state: a replica being added and on
-	// its way to being a VOTER.
+	// its way to being a VOTER_FULL.
 	LEARNER ReplicaType = 1
 )
 
@@ -100,7 +100,7 @@ func (x *ReplicaType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ReplicaType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_3bd00cfa593931a5, []int{0}
+	return fileDescriptor_metadata_af2fa38859548c68, []int{0}
 }
 
 // Attributes specifies a list of arbitrary strings describing
@@ -112,7 +112,7 @@ type Attributes struct {
 func (m *Attributes) Reset()      { *m = Attributes{} }
 func (*Attributes) ProtoMessage() {}
 func (*Attributes) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_3bd00cfa593931a5, []int{0}
+	return fileDescriptor_metadata_af2fa38859548c68, []int{0}
 }
 func (m *Attributes) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -146,7 +146,7 @@ type ReplicationTarget struct {
 func (m *ReplicationTarget) Reset()      { *m = ReplicationTarget{} }
 func (*ReplicationTarget) ProtoMessage() {}
 func (*ReplicationTarget) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_3bd00cfa593931a5, []int{1}
+	return fileDescriptor_metadata_af2fa38859548c68, []int{1}
 }
 func (m *ReplicationTarget) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -191,7 +191,7 @@ type ReplicaDescriptor struct {
 func (m *ReplicaDescriptor) Reset()      { *m = ReplicaDescriptor{} }
 func (*ReplicaDescriptor) ProtoMessage() {}
 func (*ReplicaDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_3bd00cfa593931a5, []int{2}
+	return fileDescriptor_metadata_af2fa38859548c68, []int{2}
 }
 func (m *ReplicaDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -226,7 +226,7 @@ func (m *ReplicaIdent) Reset()         { *m = ReplicaIdent{} }
 func (m *ReplicaIdent) String() string { return proto.CompactTextString(m) }
 func (*ReplicaIdent) ProtoMessage()    {}
 func (*ReplicaIdent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_3bd00cfa593931a5, []int{3}
+	return fileDescriptor_metadata_af2fa38859548c68, []int{3}
 }
 func (m *ReplicaIdent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -383,7 +383,7 @@ type RangeDescriptor struct {
 func (m *RangeDescriptor) Reset()      { *m = RangeDescriptor{} }
 func (*RangeDescriptor) ProtoMessage() {}
 func (*RangeDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_3bd00cfa593931a5, []int{4}
+	return fileDescriptor_metadata_af2fa38859548c68, []int{4}
 }
 func (m *RangeDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -422,7 +422,7 @@ type Percentiles struct {
 func (m *Percentiles) Reset()      { *m = Percentiles{} }
 func (*Percentiles) ProtoMessage() {}
 func (*Percentiles) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_3bd00cfa593931a5, []int{5}
+	return fileDescriptor_metadata_af2fa38859548c68, []int{5}
 }
 func (m *Percentiles) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -484,7 +484,7 @@ type StoreCapacity struct {
 func (m *StoreCapacity) Reset()      { *m = StoreCapacity{} }
 func (*StoreCapacity) ProtoMessage() {}
 func (*StoreCapacity) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_3bd00cfa593931a5, []int{6}
+	return fileDescriptor_metadata_af2fa38859548c68, []int{6}
 }
 func (m *StoreCapacity) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -529,7 +529,7 @@ func (m *NodeDescriptor) Reset()         { *m = NodeDescriptor{} }
 func (m *NodeDescriptor) String() string { return proto.CompactTextString(m) }
 func (*NodeDescriptor) ProtoMessage()    {}
 func (*NodeDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_3bd00cfa593931a5, []int{7}
+	return fileDescriptor_metadata_af2fa38859548c68, []int{7}
 }
 func (m *NodeDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -565,7 +565,7 @@ func (m *LocalityAddress) Reset()         { *m = LocalityAddress{} }
 func (m *LocalityAddress) String() string { return proto.CompactTextString(m) }
 func (*LocalityAddress) ProtoMessage()    {}
 func (*LocalityAddress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_3bd00cfa593931a5, []int{8}
+	return fileDescriptor_metadata_af2fa38859548c68, []int{8}
 }
 func (m *LocalityAddress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -603,7 +603,7 @@ func (m *StoreDescriptor) Reset()         { *m = StoreDescriptor{} }
 func (m *StoreDescriptor) String() string { return proto.CompactTextString(m) }
 func (*StoreDescriptor) ProtoMessage()    {}
 func (*StoreDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_3bd00cfa593931a5, []int{9}
+	return fileDescriptor_metadata_af2fa38859548c68, []int{9}
 }
 func (m *StoreDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -640,7 +640,7 @@ func (m *StoreDeadReplicas) Reset()         { *m = StoreDeadReplicas{} }
 func (m *StoreDeadReplicas) String() string { return proto.CompactTextString(m) }
 func (*StoreDeadReplicas) ProtoMessage()    {}
 func (*StoreDeadReplicas) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_3bd00cfa593931a5, []int{10}
+	return fileDescriptor_metadata_af2fa38859548c68, []int{10}
 }
 func (m *StoreDeadReplicas) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -674,7 +674,7 @@ type Locality struct {
 func (m *Locality) Reset()      { *m = Locality{} }
 func (*Locality) ProtoMessage() {}
 func (*Locality) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_3bd00cfa593931a5, []int{11}
+	return fileDescriptor_metadata_af2fa38859548c68, []int{11}
 }
 func (m *Locality) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -710,7 +710,7 @@ type Tier struct {
 func (m *Tier) Reset()      { *m = Tier{} }
 func (*Tier) ProtoMessage() {}
 func (*Tier) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_3bd00cfa593931a5, []int{12}
+	return fileDescriptor_metadata_af2fa38859548c68, []int{12}
 }
 func (m *Tier) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -751,7 +751,7 @@ type Version struct {
 func (m *Version) Reset()      { *m = Version{} }
 func (*Version) ProtoMessage() {}
 func (*Version) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_3bd00cfa593931a5, []int{13}
+	return fileDescriptor_metadata_af2fa38859548c68, []int{13}
 }
 func (m *Version) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -4031,9 +4031,9 @@ var (
 	ErrIntOverflowMetadata   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/metadata.proto", fileDescriptor_metadata_3bd00cfa593931a5) }
+func init() { proto.RegisterFile("roachpb/metadata.proto", fileDescriptor_metadata_af2fa38859548c68) }
 
-var fileDescriptor_metadata_3bd00cfa593931a5 = []byte{
+var fileDescriptor_metadata_af2fa38859548c68 = []byte{
 	// 1396 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x56, 0x4d, 0x6f, 0xdb, 0xc6,
 	0x16, 0x15, 0x25, 0xca, 0x92, 0xae, 0xfc, 0x21, 0x0d, 0x92, 0x3c, 0x41, 0x0f, 0x4f, 0x52, 0xf8,

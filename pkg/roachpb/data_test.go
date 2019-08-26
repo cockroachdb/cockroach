@@ -1729,16 +1729,16 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 		exp raftpb.ConfChangeI
 		err string
 	}{
-		// A replica of type VoterOutgoing being added makes no sense.
-		{crt: mk(in{add: vo1, repls: vo1}), err: "can't add replica in state VoterOutgoing"},
+		// A replica of type VOTER_OUTGOING being added makes no sense.
+		{crt: mk(in{add: vo1, repls: vo1}), err: "can't add replica in state VOTER_OUTGOING"},
 		// But an incoming one can be added, and the result must be a joint change.
 		{crt: mk(in{add: vi1, repls: vi1}), exp: raftpb.ConfChangeV2{
 			Transition: raftpb.ConfChangeTransitionJointExplicit,
 			Changes:    []raftpb.ConfChangeSingle{{Type: raftpb.ConfChangeAddNode, NodeID: 1}},
 		}},
-		// A replica of type VoterIncoming being removed makes no sense.
-		{crt: mk(in{del: vi1}), err: "can't remove replica in state VoterIncoming"},
-		// But during a joint removal we can see VoterOutgoing.
+		// A replica of type VOTER_INCOMING being removed makes no sense.
+		{crt: mk(in{del: vi1}), err: "can't remove replica in state VOTER_INCOMING"},
+		// But during a joint removal we can see VOTER_OUTGOING.
 		{crt: mk(in{del: vo1, repls: vo1}), exp: raftpb.ConfChangeV2{
 			Transition: raftpb.ConfChangeTransitionJointExplicit,
 			Changes:    []raftpb.ConfChangeSingle{{Type: raftpb.ConfChangeRemoveNode, NodeID: 1}},

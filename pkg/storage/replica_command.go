@@ -859,7 +859,7 @@ func IsSnapshotError(err error) bool {
 //    replica sets is required for decision making. Transitioning into this joint
 //    configuration, the RangeDescriptor (which is the source of truth of
 //    the replication configuration) is updated with corresponding replicas of
-//    type VoterIncoming and VoterOutgoing.
+//    type VOTER_INCOMING and VOTER_OUTGOING.
 //    Immediately after committing this change, a second transition updates the
 //    descriptor with and activates the final configuration.
 //

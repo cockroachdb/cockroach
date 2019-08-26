@@ -68,7 +68,7 @@ func TestVotersLearnersAll(t *testing.T) {
 			}
 
 			all := r.All()
-			// Make sure that VoterOutgoing is the only type that is skipped both
+			// Make sure that VOTER_OUTGOING is the only type that is skipped both
 			// by Learners() and Voters()
 			for _, rd := range all {
 				typ := rd.GetType()

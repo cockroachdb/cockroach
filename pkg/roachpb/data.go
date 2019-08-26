@@ -1412,7 +1412,7 @@ func confChangeImpl(
 			// virtue of the upstream ChangeReplicas txn that this learner
 			// is not currently a voter. If we wanted to support that (i.e.
 			// demotions) we'd need to introduce a new
-			// ReplicaType_VoterDemoting for that purpose.
+			// replica type VOTER_DEMOTING for that purpose.
 			changeType = raftpb.ConfChangeAddLearnerNode
 		default:
 			return nil, errors.Errorf("can't add replica in state %v", rDesc.GetType())

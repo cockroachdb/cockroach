@@ -290,11 +290,12 @@ func (d ReplicaDescriptors) InAtomicReplicationChange() bool {
 func (d ReplicaDescriptors) ConfState() raftpb.ConfState {
 	var cs raftpb.ConfState
 	joint := d.InAtomicReplicationChange()
-	// The incoming config is taken verbatim from the full voters when the config is not
-	// joint. If it is joint, slot the voters into the right category.
-	// We never need to populate LearnersNext because this would correspond to
-	// demoting a voter, which we don't do. If we wanted to add that, we'd add
-	// ReplicaType_VoterDemoting and populate both VotersOutgoing and LearnersNext from it.
+	// The incoming config is taken verbatim from the full voters when the
+	// config is not joint. If it is joint, slot the voters into the right
+	// category. We never need to populate LearnersNext because this would
+	// correspond to demoting a voter, which we don't do. If we wanted to add
+	// that, we'd add a replica type VOTER_DEMOTING and populate both
+	// VotersOutgoing and LearnersNext from it.
 	for _, rep := range d.wrapped {
 		id := uint64(rep.ReplicaID)
 		typ := rep.GetType()
@@ -324,7 +325,7 @@ func (d ReplicaDescriptors) CanMakeProgress(liveFunc func(descriptor ReplicaDesc
 	voters := d.Voters()
 	var c int
 	// Take the fast path when there are only "current and future" voters, i.e.
-	// no learners and no voters of type VoterOutgoing. The config may be joint,
+	// no learners and no voters of type VOTER_OUTGOING. The config may be joint,
 	// but the outgoing conf is subsumed by the incoming one.
 	if n := len(d.wrapped); len(voters) == n {
 		for _, rDesc := range voters {
