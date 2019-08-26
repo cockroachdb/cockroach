@@ -19,6 +19,56 @@ import file=tpcc_stats_w10_later
 # environments.
 # --------------------------------------------------
 opt format=hide-qual
+UPDATE district
+SET d_next_o_id = d_next_o_id + 1
+WHERE d_w_id = 10 AND d_id = 5
+RETURNING d_tax, d_next_o_id
+----
+project
+ ├── columns: d_tax:9(decimal) d_next_o_id:11(int)
+ ├── cardinality: [0 - 1]
+ ├── side-effects, mutations
+ ├── stats: [rows=1]
+ ├── cost: 1.29
+ ├── key: ()
+ ├── fd: ()-->(9,11)
+ ├── prune: (9,11)
+ └── update district
+      ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_tax:9(decimal) d_next_o_id:11(int)
+      ├── fetch columns: d_id:12(int) d_w_id:13(int) d_name:14(varchar) d_street_1:15(varchar) d_street_2:16(varchar) d_city:17(varchar) d_state:18(char) d_zip:19(char) d_tax:20(decimal) d_ytd:21(decimal) d_next_o_id:22(int)
+      ├── update-mapping:
+      │    └──  column23:23 => d_next_o_id:11
+      ├── cardinality: [0 - 1]
+      ├── side-effects, mutations
+      ├── stats: [rows=1]
+      ├── cost: 1.27
+      ├── key: ()
+      ├── fd: ()-->(1,2,9,11)
+      └── project
+           ├── columns: column23:23(int) d_id:12(int!null) d_w_id:13(int!null) d_name:14(varchar) d_street_1:15(varchar) d_street_2:16(varchar) d_city:17(varchar) d_state:18(char) d_zip:19(char) d_tax:20(decimal) d_ytd:21(decimal) d_next_o_id:22(int)
+           ├── cardinality: [0 - 1]
+           ├── stats: [rows=1]
+           ├── cost: 1.26
+           ├── key: ()
+           ├── fd: ()-->(12-23)
+           ├── prune: (12-23)
+           ├── interesting orderings: (+13,+12)
+           ├── scan district
+           │    ├── columns: d_id:12(int!null) d_w_id:13(int!null) d_name:14(varchar) d_street_1:15(varchar) d_street_2:16(varchar) d_city:17(varchar) d_state:18(char) d_zip:19(char) d_tax:20(decimal) d_ytd:21(decimal) d_next_o_id:22(int)
+           │    ├── constraint: /13/12: [/10/5 - /10/5]
+           │    ├── cardinality: [0 - 1]
+           │    ├── stats: [rows=1, distinct(12)=1, null(12)=0, distinct(13)=1, null(13)=0]
+           │    ├── cost: 1.23
+           │    ├── key: ()
+           │    ├── fd: ()-->(12-22)
+           │    ├── prune: (12-22)
+           │    └── interesting orderings: (+13,+12)
+           └── projections
+                └── plus [type=int, outer=(22)]
+                     ├── variable: d_next_o_id [type=int]
+                     └── const: 1 [type=int]
+
+opt format=hide-qual
 SELECT w_tax FROM warehouse WHERE w_id = 10
 ----
 project
@@ -110,6 +160,621 @@ project
       ├── prune: (1-3,8,14-17)
       └── interesting orderings: (+2,+1) (+1,+2)
 
+opt format=hide-qual
+INSERT INTO "order" (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
+VALUES (100, 5, 10, 50, '2019-08-26 16:50:41', 10, 1)
+----
+insert "order"
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├──  column1:9 => o_id:1
+ │    ├──  column2:10 => o_d_id:2
+ │    ├──  column3:11 => o_w_id:3
+ │    ├──  column4:12 => o_c_id:4
+ │    ├──  column5:13 => o_entry_d:5
+ │    ├──  column16:16 => o_carrier_id:6
+ │    ├──  column6:14 => o_ol_cnt:7
+ │    └──  column7:15 => o_all_local:8
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ ├── stats: [rows=0]
+ ├── cost: 6.15
+ ├── values
+ │    ├── columns: column1:9(int!null) column2:10(int!null) column3:11(int!null) column4:12(int!null) column5:13(timestamp!null) column6:14(int!null) column7:15(int!null) column16:16(int)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── cost: 0.02
+ │    ├── key: ()
+ │    ├── fd: ()-->(9-16)
+ │    ├── prune: (9-16)
+ │    └── tuple [type=tuple{int, int, int, int, timestamp, int, int, int}]
+ │         ├── const: 100 [type=int]
+ │         ├── const: 5 [type=int]
+ │         ├── const: 10 [type=int]
+ │         ├── const: 50 [type=int]
+ │         ├── const: '2019-08-26 16:50:41+00:00' [type=timestamp]
+ │         ├── const: 10 [type=int]
+ │         ├── const: 1 [type=int]
+ │         └── null [type=int]
+ └── f-k-checks
+      └── f-k-checks-item: order(o_w_id,o_d_id,o_c_id) -> customer(c_w_id,c_d_id,c_id)
+           └── anti-join (lookup customer@customer_idx)
+                ├── columns: column3:38(int!null) column2:39(int!null) column4:40(int!null)
+                ├── key columns: [38 39] = [19 18]
+                ├── cardinality: [0 - 1]
+                ├── stats: [rows=1]
+                ├── cost: 6.12
+                ├── key: ()
+                ├── fd: ()-->(9-16), (11)-->(38), (10)-->(39), (12)-->(40)
+                ├── with-scan &1
+                │    ├── columns: column3:38(int!null) column2:39(int!null) column4:40(int!null)
+                │    ├── mapping:
+                │    │    ├──  column3:11(int) => column3:38(int)
+                │    │    ├──  column2:10(int) => column2:39(int)
+                │    │    └──  column4:12(int) => column4:40(int)
+                │    ├── cardinality: [1 - 1]
+                │    ├── stats: [rows=1]
+                │    ├── cost: 0.01
+                │    ├── key: ()
+                │    └── fd: ()-->(9-16), (11)-->(38), (10)-->(39), (12)-->(40)
+                └── filters
+                     └── eq [type=bool, outer=(17,40), constraints=(/17: (/NULL - ]; /40: (/NULL - ]), fd=(17)==(40), (40)==(17)]
+                          ├── variable: column4 [type=int]
+                          └── variable: c_id [type=int]
+
+opt format=hide-qual
+UPDATE
+  stock
+SET
+  s_quantity
+    = CASE (s_i_id, s_w_id)
+    WHEN (6823, 0) THEN 26
+    WHEN (7853, 0) THEN 10
+    WHEN (8497, 0) THEN 62
+    WHEN (10904, 0) THEN 54
+    WHEN (16152, 0) THEN 80
+    WHEN (41382, 0) THEN 18
+    WHEN (55952, 0) THEN 56
+    WHEN (64817, 0) THEN 26
+    WHEN (66335, 0) THEN 30
+    WHEN (76567, 0) THEN 71
+    WHEN (81680, 0) THEN 51
+    WHEN (89641, 0) THEN 51
+    WHEN (89905, 0) THEN 77
+    ELSE crdb_internal.force_error('', 'unknown case')
+    END,
+  s_ytd
+    = CASE (s_i_id, s_w_id)
+    WHEN (6823, 0) THEN 6
+    WHEN (7853, 0) THEN 9
+    WHEN (8497, 0) THEN 13
+    WHEN (10904, 0) THEN 1
+    WHEN (16152, 0) THEN 2
+    WHEN (41382, 0) THEN 3
+    WHEN (55952, 0) THEN 10
+    WHEN (64817, 0) THEN 31
+    WHEN (66335, 0) THEN 9
+    WHEN (76567, 0) THEN 7
+    WHEN (81680, 0) THEN 4
+    WHEN (89641, 0) THEN 13
+    WHEN (89905, 0) THEN 20
+    END,
+  s_order_cnt
+    = CASE (s_i_id, s_w_id)
+    WHEN (6823, 0) THEN 1
+    WHEN (7853, 0) THEN 1
+    WHEN (8497, 0) THEN 2
+    WHEN (10904, 0) THEN 1
+    WHEN (16152, 0) THEN 1
+    WHEN (41382, 0) THEN 1
+    WHEN (55952, 0) THEN 1
+    WHEN (64817, 0) THEN 4
+    WHEN (66335, 0) THEN 2
+    WHEN (76567, 0) THEN 1
+    WHEN (81680, 0) THEN 1
+    WHEN (89641, 0) THEN 2
+    WHEN (89905, 0) THEN 4
+    END,
+  s_remote_cnt
+    = CASE (s_i_id, s_w_id)
+    WHEN (6823, 0) THEN 0
+    WHEN (7853, 0) THEN 0
+    WHEN (8497, 0) THEN 0
+    WHEN (10904, 0) THEN 0
+    WHEN (16152, 0) THEN 0
+    WHEN (41382, 0) THEN 0
+    WHEN (55952, 0) THEN 0
+    WHEN (64817, 0) THEN 0
+    WHEN (66335, 0) THEN 0
+    WHEN (76567, 0) THEN 0
+    WHEN (81680, 0) THEN 0
+    WHEN (89641, 0) THEN 0
+    WHEN (89905, 0) THEN 0
+    END
+WHERE
+  (s_i_id, s_w_id)
+  IN (
+      (6823, 0),
+      (7853, 0),
+      (8497, 0),
+      (10904, 0),
+      (16152, 0),
+      (41382, 0),
+      (55952, 0),
+      (64817, 0),
+      (66335, 0),
+      (76567, 0),
+      (81680, 0),
+      (89641, 0),
+      (89905, 0)
+    )
+----
+update stock
+ ├── columns: <none>
+ ├── fetch columns: s_i_id:18(int) s_w_id:19(int) s_quantity:20(int) s_dist_01:21(char) s_dist_02:22(char) s_dist_03:23(char) s_dist_04:24(char) s_dist_05:25(char) s_dist_06:26(char) s_dist_07:27(char) s_dist_08:28(char) s_dist_09:29(char) s_dist_10:30(char) s_ytd:31(int) s_order_cnt:32(int) s_remote_cnt:33(int) s_data:34(varchar)
+ ├── update-mapping:
+ │    ├──  column35:35 => s_quantity:3
+ │    ├──  column36:36 => s_ytd:14
+ │    ├──  column37:37 => s_order_cnt:15
+ │    └──  column38:38 => s_remote_cnt:16
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ ├── stats: [rows=0]
+ ├── cost: 17.8728604
+ └── project
+      ├── columns: column35:35(int) column36:36(int) column37:37(int) column38:38(int) s_i_id:18(int!null) s_w_id:19(int!null) s_quantity:20(int) s_dist_01:21(char) s_dist_02:22(char) s_dist_03:23(char) s_dist_04:24(char) s_dist_05:25(char) s_dist_06:26(char) s_dist_07:27(char) s_dist_08:28(char) s_dist_09:29(char) s_dist_10:30(char) s_ytd:31(int) s_order_cnt:32(int) s_remote_cnt:33(int) s_data:34(varchar)
+      ├── cardinality: [0 - 13]
+      ├── side-effects
+      ├── stats: [rows=12.8365902]
+      ├── cost: 17.8628604
+      ├── key: (18)
+      ├── fd: ()-->(19), (18)-->(20-35), (18)-->(36-38)
+      ├── prune: (18-38)
+      ├── interesting orderings: (+19,+18) (+18,+19)
+      ├── scan stock
+      │    ├── columns: s_i_id:18(int!null) s_w_id:19(int!null) s_quantity:20(int) s_dist_01:21(char) s_dist_02:22(char) s_dist_03:23(char) s_dist_04:24(char) s_dist_05:25(char) s_dist_06:26(char) s_dist_07:27(char) s_dist_08:28(char) s_dist_09:29(char) s_dist_10:30(char) s_ytd:31(int) s_order_cnt:32(int) s_remote_cnt:33(int) s_data:34(varchar)
+      │    ├── constraint: /19/18: [/0/6823 - /0/6823] [/0/7853 - /0/7853] [/0/8497 - /0/8497] [/0/10904 - /0/10904] [/0/16152 - /0/16152] [/0/41382 - /0/41382] [/0/55952 - /0/55952] [/0/64817 - /0/64817] [/0/66335 - /0/66335] [/0/76567 - /0/76567] [/0/81680 - /0/81680] [/0/89641 - /0/89641] [/0/89905 - /0/89905]
+      │    ├── cardinality: [0 - 13]
+      │    ├── stats: [rows=12.8365902, distinct(18)=12.8365902, null(18)=0, distinct(19)=1, null(19)=0]
+      │    ├── cost: 17.2110309
+      │    ├── key: (18)
+      │    ├── fd: ()-->(19), (18)-->(20-34)
+      │    ├── prune: (18-34)
+      │    └── interesting orderings: (+19,+18) (+18,+19)
+      └── projections
+           ├── case [type=int, outer=(18,19), side-effects]
+           │    ├── tuple [type=tuple{int, int}]
+           │    │    ├── variable: s_i_id [type=int]
+           │    │    └── variable: s_w_id [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 6823 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 26 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 7853 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 10 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 8497 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 62 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 10904 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 54 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 16152 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 80 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 41382 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 18 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 55952 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 56 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 64817 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 26 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 66335 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 30 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 76567 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 71 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 81680 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 51 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 89641 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 51 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 89905 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 77 [type=int]
+           │    └── function: crdb_internal.force_error [type=int]
+           │         ├── const: '' [type=string]
+           │         └── const: 'unknown case' [type=string]
+           ├── case [type=int, outer=(18,19)]
+           │    ├── tuple [type=tuple{int, int}]
+           │    │    ├── variable: s_i_id [type=int]
+           │    │    └── variable: s_w_id [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 6823 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 6 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 7853 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 9 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 8497 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 13 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 10904 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 1 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 16152 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 2 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 41382 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 3 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 55952 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 10 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 64817 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 31 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 66335 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 9 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 76567 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 7 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 81680 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 4 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 89641 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 13 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 89905 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 20 [type=int]
+           │    └── null [type=unknown]
+           ├── case [type=int, outer=(18,19)]
+           │    ├── tuple [type=tuple{int, int}]
+           │    │    ├── variable: s_i_id [type=int]
+           │    │    └── variable: s_w_id [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 6823 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 1 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 7853 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 1 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 8497 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 2 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 10904 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 1 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 16152 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 1 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 41382 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 1 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 55952 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 1 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 64817 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 4 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 66335 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 2 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 76567 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 1 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 81680 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 1 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 89641 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 2 [type=int]
+           │    ├── when [type=int]
+           │    │    ├── tuple [type=tuple{int, int}]
+           │    │    │    ├── const: 89905 [type=int]
+           │    │    │    └── const: 0 [type=int]
+           │    │    └── const: 4 [type=int]
+           │    └── null [type=unknown]
+           └── case [type=int, outer=(18,19)]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── variable: s_i_id [type=int]
+                │    └── variable: s_w_id [type=int]
+                ├── when [type=int]
+                │    ├── tuple [type=tuple{int, int}]
+                │    │    ├── const: 6823 [type=int]
+                │    │    └── const: 0 [type=int]
+                │    └── const: 0 [type=int]
+                ├── when [type=int]
+                │    ├── tuple [type=tuple{int, int}]
+                │    │    ├── const: 7853 [type=int]
+                │    │    └── const: 0 [type=int]
+                │    └── const: 0 [type=int]
+                ├── when [type=int]
+                │    ├── tuple [type=tuple{int, int}]
+                │    │    ├── const: 8497 [type=int]
+                │    │    └── const: 0 [type=int]
+                │    └── const: 0 [type=int]
+                ├── when [type=int]
+                │    ├── tuple [type=tuple{int, int}]
+                │    │    ├── const: 10904 [type=int]
+                │    │    └── const: 0 [type=int]
+                │    └── const: 0 [type=int]
+                ├── when [type=int]
+                │    ├── tuple [type=tuple{int, int}]
+                │    │    ├── const: 16152 [type=int]
+                │    │    └── const: 0 [type=int]
+                │    └── const: 0 [type=int]
+                ├── when [type=int]
+                │    ├── tuple [type=tuple{int, int}]
+                │    │    ├── const: 41382 [type=int]
+                │    │    └── const: 0 [type=int]
+                │    └── const: 0 [type=int]
+                ├── when [type=int]
+                │    ├── tuple [type=tuple{int, int}]
+                │    │    ├── const: 55952 [type=int]
+                │    │    └── const: 0 [type=int]
+                │    └── const: 0 [type=int]
+                ├── when [type=int]
+                │    ├── tuple [type=tuple{int, int}]
+                │    │    ├── const: 64817 [type=int]
+                │    │    └── const: 0 [type=int]
+                │    └── const: 0 [type=int]
+                ├── when [type=int]
+                │    ├── tuple [type=tuple{int, int}]
+                │    │    ├── const: 66335 [type=int]
+                │    │    └── const: 0 [type=int]
+                │    └── const: 0 [type=int]
+                ├── when [type=int]
+                │    ├── tuple [type=tuple{int, int}]
+                │    │    ├── const: 76567 [type=int]
+                │    │    └── const: 0 [type=int]
+                │    └── const: 0 [type=int]
+                ├── when [type=int]
+                │    ├── tuple [type=tuple{int, int}]
+                │    │    ├── const: 81680 [type=int]
+                │    │    └── const: 0 [type=int]
+                │    └── const: 0 [type=int]
+                ├── when [type=int]
+                │    ├── tuple [type=tuple{int, int}]
+                │    │    ├── const: 89641 [type=int]
+                │    │    └── const: 0 [type=int]
+                │    └── const: 0 [type=int]
+                ├── when [type=int]
+                │    ├── tuple [type=tuple{int, int}]
+                │    │    ├── const: 89905 [type=int]
+                │    │    └── const: 0 [type=int]
+                │    └── const: 0 [type=int]
+                └── null [type=unknown]
+
+opt format=hide-qual
+INSERT INTO order_line
+  (ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity,  ol_amount,  ol_dist_info)
+VALUES
+  (3045,    2,       10,      3,         648,     0,              9,            394.470000, 'YhgLRrwsmd68P2bElAgrnp8u'),
+  (3045,    2,       10,      5,       25393,     0,             10,            830.600000, 'dLXe0YhgLRrwsmd68P2bElAg'),
+  (3045,    2,       10,      1,       47887,     0,              9,            204.390000, 'Xe0YhgLRrwsmd68P2bElAgrn'),
+  (3045,    2,       10,      2,       52000,     0,              6,            561.660000, 'ElAgrnp8ueWNXJpBB0ObpVWo'),
+  (3045,    2,       10,      4,       56624,     0,              6,            273.360000, 'RsaCXoEzmssaF9m9cdLXe0Yh'),
+  (3045,    2,       10,      6,       92966,     0,              4,            366.760000, 'saCXoEzmssaF9m9cdLXe0Yhg')
+----
+insert order_line
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├──  column1:11 => ol_o_id:1
+ │    ├──  column2:12 => ol_d_id:2
+ │    ├──  column3:13 => ol_w_id:3
+ │    ├──  column4:14 => ol_number:4
+ │    ├──  column5:15 => ol_i_id:5
+ │    ├──  column6:16 => ol_supply_w_id:6
+ │    ├──  column20:20 => ol_delivery_d:7
+ │    ├──  column7:17 => ol_quantity:8
+ │    ├──  ol_amount:21 => order_line.ol_amount:9
+ │    └──  column9:19 => ol_dist_info:10
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ ├── stats: [rows=0]
+ ├── cost: 73.04
+ ├── project
+ │    ├── columns: ol_amount:21(decimal) column20:20(timestamp) column1:11(int!null) column2:12(int!null) column3:13(int!null) column4:14(int!null) column5:15(int!null) column6:16(int!null) column7:17(int!null) column9:19(string!null)
+ │    ├── cardinality: [6 - 6]
+ │    ├── stats: [rows=6]
+ │    ├── cost: 0.26
+ │    ├── fd: ()-->(20)
+ │    ├── prune: (11-17,19-21)
+ │    ├── values
+ │    │    ├── columns: column1:11(int!null) column2:12(int!null) column3:13(int!null) column4:14(int!null) column5:15(int!null) column6:16(int!null) column7:17(int!null) column8:18(decimal!null) column9:19(string!null)
+ │    │    ├── cardinality: [6 - 6]
+ │    │    ├── stats: [rows=6]
+ │    │    ├── cost: 0.07
+ │    │    ├── prune: (11-19)
+ │    │    ├── tuple [type=tuple{int, int, int, int, int, int, int, decimal, string}]
+ │    │    │    ├── const: 3045 [type=int]
+ │    │    │    ├── const: 2 [type=int]
+ │    │    │    ├── const: 10 [type=int]
+ │    │    │    ├── const: 3 [type=int]
+ │    │    │    ├── const: 648 [type=int]
+ │    │    │    ├── const: 0 [type=int]
+ │    │    │    ├── const: 9 [type=int]
+ │    │    │    ├── const: 394.470000 [type=decimal]
+ │    │    │    └── const: 'YhgLRrwsmd68P2bElAgrnp8u' [type=string]
+ │    │    ├── tuple [type=tuple{int, int, int, int, int, int, int, decimal, string}]
+ │    │    │    ├── const: 3045 [type=int]
+ │    │    │    ├── const: 2 [type=int]
+ │    │    │    ├── const: 10 [type=int]
+ │    │    │    ├── const: 5 [type=int]
+ │    │    │    ├── const: 25393 [type=int]
+ │    │    │    ├── const: 0 [type=int]
+ │    │    │    ├── const: 10 [type=int]
+ │    │    │    ├── const: 830.600000 [type=decimal]
+ │    │    │    └── const: 'dLXe0YhgLRrwsmd68P2bElAg' [type=string]
+ │    │    ├── tuple [type=tuple{int, int, int, int, int, int, int, decimal, string}]
+ │    │    │    ├── const: 3045 [type=int]
+ │    │    │    ├── const: 2 [type=int]
+ │    │    │    ├── const: 10 [type=int]
+ │    │    │    ├── const: 1 [type=int]
+ │    │    │    ├── const: 47887 [type=int]
+ │    │    │    ├── const: 0 [type=int]
+ │    │    │    ├── const: 9 [type=int]
+ │    │    │    ├── const: 204.390000 [type=decimal]
+ │    │    │    └── const: 'Xe0YhgLRrwsmd68P2bElAgrn' [type=string]
+ │    │    ├── tuple [type=tuple{int, int, int, int, int, int, int, decimal, string}]
+ │    │    │    ├── const: 3045 [type=int]
+ │    │    │    ├── const: 2 [type=int]
+ │    │    │    ├── const: 10 [type=int]
+ │    │    │    ├── const: 2 [type=int]
+ │    │    │    ├── const: 52000 [type=int]
+ │    │    │    ├── const: 0 [type=int]
+ │    │    │    ├── const: 6 [type=int]
+ │    │    │    ├── const: 561.660000 [type=decimal]
+ │    │    │    └── const: 'ElAgrnp8ueWNXJpBB0ObpVWo' [type=string]
+ │    │    ├── tuple [type=tuple{int, int, int, int, int, int, int, decimal, string}]
+ │    │    │    ├── const: 3045 [type=int]
+ │    │    │    ├── const: 2 [type=int]
+ │    │    │    ├── const: 10 [type=int]
+ │    │    │    ├── const: 4 [type=int]
+ │    │    │    ├── const: 56624 [type=int]
+ │    │    │    ├── const: 0 [type=int]
+ │    │    │    ├── const: 6 [type=int]
+ │    │    │    ├── const: 273.360000 [type=decimal]
+ │    │    │    └── const: 'RsaCXoEzmssaF9m9cdLXe0Yh' [type=string]
+ │    │    └── tuple [type=tuple{int, int, int, int, int, int, int, decimal, string}]
+ │    │         ├── const: 3045 [type=int]
+ │    │         ├── const: 2 [type=int]
+ │    │         ├── const: 10 [type=int]
+ │    │         ├── const: 6 [type=int]
+ │    │         ├── const: 92966 [type=int]
+ │    │         ├── const: 0 [type=int]
+ │    │         ├── const: 4 [type=int]
+ │    │         ├── const: 366.760000 [type=decimal]
+ │    │         └── const: 'saCXoEzmssaF9m9cdLXe0Yhg' [type=string]
+ │    └── projections
+ │         ├── function: crdb_internal.round_decimal_values [type=decimal, outer=(18)]
+ │         │    ├── variable: column8 [type=decimal]
+ │         │    └── const: 2 [type=int]
+ │         └── null [type=timestamp]
+ └── f-k-checks
+      ├── f-k-checks-item: order_line(ol_w_id,ol_d_id,ol_o_id) -> order(o_w_id,o_d_id,o_id)
+      │    └── anti-join (lookup order@order_idx)
+      │         ├── columns: column3:30(int!null) column2:31(int!null) column1:32(int!null)
+      │         ├── key columns: [30 31] = [24 23]
+      │         ├── cardinality: [0 - 6]
+      │         ├── stats: [rows=6]
+      │         ├── cost: 36.51
+      │         ├── fd: ()-->(20), (13)-->(30), (12)-->(31), (11)-->(32)
+      │         ├── with-scan &1
+      │         │    ├── columns: column3:30(int!null) column2:31(int!null) column1:32(int!null)
+      │         │    ├── mapping:
+      │         │    │    ├──  column3:13(int) => column3:30(int)
+      │         │    │    ├──  column2:12(int) => column2:31(int)
+      │         │    │    └──  column1:11(int) => column1:32(int)
+      │         │    ├── cardinality: [6 - 6]
+      │         │    ├── stats: [rows=6]
+      │         │    ├── cost: 0.01
+      │         │    └── fd: ()-->(20), (13)-->(30), (12)-->(31), (11)-->(32)
+      │         └── filters
+      │              └── eq [type=bool, outer=(22,32), constraints=(/22: (/NULL - ]; /32: (/NULL - ]), fd=(22)==(32), (32)==(22)]
+      │                   ├── variable: column1 [type=int]
+      │                   └── variable: o_id [type=int]
+      └── f-k-checks-item: order_line(ol_supply_w_id,ol_i_id) -> stock(s_w_id,s_i_id)
+           └── anti-join (lookup stock@stock_item_fk_idx)
+                ├── columns: column6:50(int!null) column5:51(int!null)
+                ├── key columns: [51 50] = [33 34]
+                ├── cardinality: [0 - 6]
+                ├── stats: [rows=6]
+                ├── cost: 36.26
+                ├── fd: ()-->(20), (16)-->(50), (15)-->(51)
+                ├── with-scan &1
+                │    ├── columns: column6:50(int!null) column5:51(int!null)
+                │    ├── mapping:
+                │    │    ├──  column6:16(int) => column6:50(int)
+                │    │    └──  column5:15(int) => column5:51(int)
+                │    ├── cardinality: [6 - 6]
+                │    ├── stats: [rows=6]
+                │    ├── cost: 0.01
+                │    └── fd: ()-->(20), (16)-->(50), (15)-->(51)
+                └── filters (true)
+
 # --------------------------------------------------
 # 2.5 The Payment Transaction
 #
@@ -119,6 +784,106 @@ project
 # stringent response time requirements to satisfy on-line users. In addition,
 # this transaction includes non-primary key access to the CUSTOMER table.
 # --------------------------------------------------
+opt format=hide-qual
+UPDATE warehouse SET w_ytd = w_ytd + 3860.61 WHERE w_id = 10
+RETURNING w_name, w_street_1, w_street_2, w_city, w_state, w_zip
+----
+project
+ ├── columns: w_name:2(varchar) w_street_1:3(varchar) w_street_2:4(varchar) w_city:5(varchar) w_state:6(char) w_zip:7(char)
+ ├── cardinality: [0 - 1]
+ ├── side-effects, mutations
+ ├── stats: [rows=1]
+ ├── cost: 1.25
+ ├── key: ()
+ ├── fd: ()-->(2-7)
+ ├── prune: (2-7)
+ └── update warehouse
+      ├── columns: w_id:1(int!null) w_name:2(varchar) w_street_1:3(varchar) w_street_2:4(varchar) w_city:5(varchar) w_state:6(char) w_zip:7(char)
+      ├── fetch columns: w_id:10(int) w_name:11(varchar) w_street_1:12(varchar) w_street_2:13(varchar) w_city:14(varchar) w_state:15(char) w_zip:16(char) w_tax:17(decimal) warehouse.w_ytd:18(decimal)
+      ├── update-mapping:
+      │    └──  w_ytd:20 => warehouse.w_ytd:9
+      ├── cardinality: [0 - 1]
+      ├── side-effects, mutations
+      ├── stats: [rows=1]
+      ├── cost: 1.23
+      ├── key: ()
+      ├── fd: ()-->(1-7)
+      └── project
+           ├── columns: w_ytd:20(decimal) w_id:10(int!null) w_name:11(varchar) w_street_1:12(varchar) w_street_2:13(varchar) w_city:14(varchar) w_state:15(char) w_zip:16(char) w_tax:17(decimal) warehouse.w_ytd:18(decimal)
+           ├── cardinality: [0 - 1]
+           ├── stats: [rows=1]
+           ├── cost: 1.22
+           ├── key: ()
+           ├── fd: ()-->(10-18,20)
+           ├── prune: (10-18,20)
+           ├── interesting orderings: (+10)
+           ├── scan warehouse
+           │    ├── columns: w_id:10(int!null) w_name:11(varchar) w_street_1:12(varchar) w_street_2:13(varchar) w_city:14(varchar) w_state:15(char) w_zip:16(char) w_tax:17(decimal) warehouse.w_ytd:18(decimal)
+           │    ├── constraint: /10: [/10 - /10]
+           │    ├── cardinality: [0 - 1]
+           │    ├── stats: [rows=1, distinct(10)=1, null(10)=0]
+           │    ├── cost: 1.19
+           │    ├── key: ()
+           │    ├── fd: ()-->(10-18)
+           │    ├── prune: (10-18)
+           │    └── interesting orderings: (+10)
+           └── projections
+                └── function: crdb_internal.round_decimal_values [type=decimal, outer=(18)]
+                     ├── plus [type=decimal]
+                     │    ├── variable: warehouse.w_ytd [type=decimal]
+                     │    └── const: 3860.61 [type=decimal]
+                     └── const: 2 [type=int]
+
+opt format=hide-qual
+UPDATE district SET d_ytd = d_ytd + 3860.61 WHERE (d_w_id = 10) AND (d_id = 5)
+RETURNING d_name, d_street_1, d_street_2, d_city, d_state, d_zip
+----
+project
+ ├── columns: d_name:3(varchar) d_street_1:4(varchar) d_street_2:5(varchar) d_city:6(varchar) d_state:7(char) d_zip:8(char)
+ ├── cardinality: [0 - 1]
+ ├── side-effects, mutations
+ ├── stats: [rows=1]
+ ├── cost: 1.29
+ ├── key: ()
+ ├── fd: ()-->(3-8)
+ ├── prune: (3-8)
+ └── update district
+      ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(varchar) d_street_1:4(varchar) d_street_2:5(varchar) d_city:6(varchar) d_state:7(char) d_zip:8(char)
+      ├── fetch columns: d_id:12(int) d_w_id:13(int) d_name:14(varchar) d_street_1:15(varchar) d_street_2:16(varchar) d_city:17(varchar) d_state:18(char) d_zip:19(char) d_tax:20(decimal) district.d_ytd:21(decimal) d_next_o_id:22(int)
+      ├── update-mapping:
+      │    └──  d_ytd:24 => district.d_ytd:10
+      ├── cardinality: [0 - 1]
+      ├── side-effects, mutations
+      ├── stats: [rows=1]
+      ├── cost: 1.27
+      ├── key: ()
+      ├── fd: ()-->(1-8)
+      └── project
+           ├── columns: d_ytd:24(decimal) d_id:12(int!null) d_w_id:13(int!null) d_name:14(varchar) d_street_1:15(varchar) d_street_2:16(varchar) d_city:17(varchar) d_state:18(char) d_zip:19(char) d_tax:20(decimal) district.d_ytd:21(decimal) d_next_o_id:22(int)
+           ├── cardinality: [0 - 1]
+           ├── stats: [rows=1]
+           ├── cost: 1.26
+           ├── key: ()
+           ├── fd: ()-->(12-22,24)
+           ├── prune: (12-22,24)
+           ├── interesting orderings: (+13,+12)
+           ├── scan district
+           │    ├── columns: d_id:12(int!null) d_w_id:13(int!null) d_name:14(varchar) d_street_1:15(varchar) d_street_2:16(varchar) d_city:17(varchar) d_state:18(char) d_zip:19(char) d_tax:20(decimal) district.d_ytd:21(decimal) d_next_o_id:22(int)
+           │    ├── constraint: /13/12: [/10/5 - /10/5]
+           │    ├── cardinality: [0 - 1]
+           │    ├── stats: [rows=1, distinct(12)=1, null(12)=0, distinct(13)=1, null(13)=0]
+           │    ├── cost: 1.23
+           │    ├── key: ()
+           │    ├── fd: ()-->(12-22)
+           │    ├── prune: (12-22)
+           │    └── interesting orderings: (+13,+12)
+           └── projections
+                └── function: crdb_internal.round_decimal_values [type=decimal, outer=(21)]
+                     ├── plus [type=decimal]
+                     │    ├── variable: district.d_ytd [type=decimal]
+                     │    └── const: 3860.61 [type=decimal]
+                     └── const: 2 [type=int]
+
 opt format=hide-qual
 SELECT c_id
 FROM customer
@@ -143,6 +908,226 @@ project
       ├── ordering: +4 opt(2,3,6) [actual: +4]
       ├── prune: (1-4,6)
       └── interesting orderings: (+3,+2,+1) (+3,+2,+6,+4,+1)
+
+opt format=hide-qual
+UPDATE customer
+SET (c_balance, c_ytd_payment, c_payment_cnt, c_data)
+  = (
+    c_balance - (3860.61:::FLOAT8)::DECIMAL,
+    c_ytd_payment + (3860.61:::FLOAT8)::DECIMAL,
+    c_payment_cnt + 1,
+    CASE c_credit
+    WHEN 'BC'
+    THEN "left"(
+      c_id::STRING
+      || c_d_id::STRING
+      || c_w_id::STRING
+      || (5:::INT8)::STRING
+      || (10:::INT8)::STRING
+      || (3860.61:::FLOAT8)::STRING
+      || c_data,
+      500
+    )
+    ELSE c_data
+    END
+  )
+WHERE
+  (c_w_id = 10 AND c_d_id = 5) AND c_id = 1343
+RETURNING
+  c_first,
+  c_middle,
+  c_last,
+  c_street_1,
+  c_street_2,
+  c_city,
+  c_state,
+  c_zip,
+  c_phone,
+  c_since,
+  c_credit,
+  c_credit_lim,
+  c_discount,
+  c_balance,
+  CASE c_credit WHEN 'BC' THEN "left"(c_data, 200) ELSE '' END
+----
+project
+ ├── columns: c_first:4(varchar) c_middle:5(char) c_last:6(varchar) c_street_1:7(varchar) c_street_2:8(varchar) c_city:9(varchar) c_state:10(char) c_zip:11(char) c_phone:12(char) c_since:13(timestamp) c_credit:14(char) c_credit_lim:15(decimal) c_discount:16(decimal) c_balance:17(decimal) case:49(string)
+ ├── cardinality: [0 - 1]
+ ├── side-effects, mutations
+ ├── stats: [rows=1]
+ ├── cost: 1.53
+ ├── key: ()
+ ├── fd: ()-->(4-17,49)
+ ├── prune: (4-17,49)
+ ├── update customer
+ │    ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_middle:5(char) c_last:6(varchar) c_street_1:7(varchar) c_street_2:8(varchar) c_city:9(varchar) c_state:10(char) c_zip:11(char) c_phone:12(char) c_since:13(timestamp) c_credit:14(char) c_credit_lim:15(decimal) c_discount:16(decimal) customer.c_balance:17(decimal) c_data:21(varchar)
+ │    ├── fetch columns: c_id:22(int) c_d_id:23(int) c_w_id:24(int) c_first:25(varchar) c_middle:26(char) c_last:27(varchar) c_street_1:28(varchar) c_street_2:29(varchar) c_city:30(varchar) c_state:31(char) c_zip:32(char) c_phone:33(char) c_since:34(timestamp) c_credit:35(char) c_credit_lim:36(decimal) c_discount:37(decimal) customer.c_balance:38(decimal) customer.c_ytd_payment:39(decimal) c_payment_cnt:40(int) c_delivery_cnt:41(int) c_data:42(varchar)
+ │    ├── update-mapping:
+ │    │    ├──  c_balance:47 => customer.c_balance:17
+ │    │    ├──  c_ytd_payment:48 => customer.c_ytd_payment:18
+ │    │    ├──  column45:45 => c_payment_cnt:19
+ │    │    └──  column46:46 => c_data:21
+ │    ├── cardinality: [0 - 1]
+ │    ├── side-effects, mutations
+ │    ├── stats: [rows=1]
+ │    ├── cost: 1.5
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-17,21)
+ │    └── project
+ │         ├── columns: c_balance:47(decimal) c_ytd_payment:48(decimal) column45:45(int) column46:46(string) c_id:22(int!null) c_d_id:23(int!null) c_w_id:24(int!null) c_first:25(varchar) c_middle:26(char) c_last:27(varchar) c_street_1:28(varchar) c_street_2:29(varchar) c_city:30(varchar) c_state:31(char) c_zip:32(char) c_phone:33(char) c_since:34(timestamp) c_credit:35(char) c_credit_lim:36(decimal) c_discount:37(decimal) customer.c_balance:38(decimal) customer.c_ytd_payment:39(decimal) c_payment_cnt:40(int) c_delivery_cnt:41(int) c_data:42(varchar)
+ │         ├── cardinality: [0 - 1]
+ │         ├── stats: [rows=1]
+ │         ├── cost: 1.49
+ │         ├── key: ()
+ │         ├── fd: ()-->(22-42,45-48)
+ │         ├── prune: (22-42,45-48)
+ │         ├── interesting orderings: (+24,+23,+22) (+24,+23,+27,+25,+22)
+ │         ├── scan customer
+ │         │    ├── columns: c_id:22(int!null) c_d_id:23(int!null) c_w_id:24(int!null) c_first:25(varchar) c_middle:26(char) c_last:27(varchar) c_street_1:28(varchar) c_street_2:29(varchar) c_city:30(varchar) c_state:31(char) c_zip:32(char) c_phone:33(char) c_since:34(timestamp) c_credit:35(char) c_credit_lim:36(decimal) c_discount:37(decimal) customer.c_balance:38(decimal) customer.c_ytd_payment:39(decimal) c_payment_cnt:40(int) c_delivery_cnt:41(int) c_data:42(varchar)
+ │         │    ├── constraint: /24/23/22: [/10/5/1343 - /10/5/1343]
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── stats: [rows=1, distinct(22)=1, null(22)=0, distinct(23)=1, null(23)=0, distinct(24)=1, null(24)=0]
+ │         │    ├── cost: 1.43
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(22-42)
+ │         │    ├── prune: (22-42)
+ │         │    └── interesting orderings: (+24,+23,+22) (+24,+23,+27,+25,+22)
+ │         └── projections
+ │              ├── function: crdb_internal.round_decimal_values [type=decimal, outer=(38)]
+ │              │    ├── minus [type=decimal]
+ │              │    │    ├── variable: customer.c_balance [type=decimal]
+ │              │    │    └── const: 3860.61 [type=decimal]
+ │              │    └── const: 2 [type=int]
+ │              ├── function: crdb_internal.round_decimal_values [type=decimal, outer=(39)]
+ │              │    ├── plus [type=decimal]
+ │              │    │    ├── variable: customer.c_ytd_payment [type=decimal]
+ │              │    │    └── const: 3860.61 [type=decimal]
+ │              │    └── const: 2 [type=int]
+ │              ├── plus [type=int, outer=(40)]
+ │              │    ├── variable: c_payment_cnt [type=int]
+ │              │    └── const: 1 [type=int]
+ │              └── case [type=string, outer=(22-24,35,42)]
+ │                   ├── variable: c_credit [type=char]
+ │                   ├── when [type=string]
+ │                   │    ├── const: 'BC' [type=string]
+ │                   │    └── function: left [type=string]
+ │                   │         ├── concat [type=string]
+ │                   │         │    ├── concat [type=string]
+ │                   │         │    │    ├── concat [type=string]
+ │                   │         │    │    │    ├── concat [type=string]
+ │                   │         │    │    │    │    ├── concat [type=string]
+ │                   │         │    │    │    │    │    ├── concat [type=string]
+ │                   │         │    │    │    │    │    │    ├── cast: STRING [type=string]
+ │                   │         │    │    │    │    │    │    │    └── variable: c_id [type=int]
+ │                   │         │    │    │    │    │    │    └── cast: STRING [type=string]
+ │                   │         │    │    │    │    │    │         └── variable: c_d_id [type=int]
+ │                   │         │    │    │    │    │    └── cast: STRING [type=string]
+ │                   │         │    │    │    │    │         └── variable: c_w_id [type=int]
+ │                   │         │    │    │    │    └── const: '5' [type=string]
+ │                   │         │    │    │    └── const: '10' [type=string]
+ │                   │         │    │    └── const: '3860.61' [type=string]
+ │                   │         │    └── variable: c_data [type=varchar]
+ │                   │         └── const: 500 [type=int]
+ │                   └── variable: c_data [type=varchar]
+ └── projections
+      └── case [type=string, outer=(14,21)]
+           ├── variable: c_credit [type=char]
+           ├── when [type=string]
+           │    ├── const: 'BC' [type=string]
+           │    └── function: left [type=string]
+           │         ├── variable: c_data [type=varchar]
+           │         └── const: 200 [type=int]
+           └── const: '' [type=string]
+
+opt format=hide-qual
+INSERT INTO history
+  (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_amount, h_date,                h_data)
+VALUES
+  (1343,   5,        10,       5,          10, 3860.61,  '2019-08-26 16:50:41', '8    Kdcgphy3')
+----
+insert history
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├──  column18:18 => rowid:1
+ │    ├──  column1:10 => h_c_id:2
+ │    ├──  column2:11 => h_c_d_id:3
+ │    ├──  column3:12 => h_c_w_id:4
+ │    ├──  column4:13 => h_d_id:5
+ │    ├──  column5:14 => h_w_id:6
+ │    ├──  column7:16 => h_date:7
+ │    ├──  h_amount:19 => history.h_amount:8
+ │    └──  column8:17 => h_data:9
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ ├── stats: [rows=0]
+ ├── cost: 12.3
+ ├── values
+ │    ├── columns: column1:10(int!null) column2:11(int!null) column3:12(int!null) column4:13(int!null) column5:14(int!null) column7:16(timestamp!null) column8:17(string!null) column18:18(uuid) h_amount:19(decimal)
+ │    ├── cardinality: [1 - 1]
+ │    ├── side-effects
+ │    ├── stats: [rows=1]
+ │    ├── cost: 0.02
+ │    ├── key: ()
+ │    ├── fd: ()-->(10-14,16-19)
+ │    ├── prune: (10-14,16-19)
+ │    └── tuple [type=tuple{int, int, int, int, int, timestamp, string, uuid, decimal}]
+ │         ├── const: 1343 [type=int]
+ │         ├── const: 5 [type=int]
+ │         ├── const: 10 [type=int]
+ │         ├── const: 5 [type=int]
+ │         ├── const: 10 [type=int]
+ │         ├── const: '2019-08-26 16:50:41+00:00' [type=timestamp]
+ │         ├── const: '8    Kdcgphy3' [type=string]
+ │         ├── function: gen_random_uuid [type=uuid]
+ │         └── function: crdb_internal.round_decimal_values [type=decimal]
+ │              ├── const: 3860.61 [type=decimal]
+ │              └── const: 2 [type=int]
+ └── f-k-checks
+      ├── f-k-checks-item: history(h_c_w_id,h_c_d_id,h_c_id) -> customer(c_w_id,c_d_id,c_id)
+      │    └── anti-join (lookup customer@customer_idx)
+      │         ├── columns: column3:41(int!null) column2:42(int!null) column1:43(int!null)
+      │         ├── key columns: [41 42] = [22 21]
+      │         ├── cardinality: [0 - 1]
+      │         ├── stats: [rows=1]
+      │         ├── cost: 6.12
+      │         ├── key: ()
+      │         ├── fd: ()-->(10-14,16-19), (12)-->(41), (11)-->(42), (10)-->(43)
+      │         ├── with-scan &1
+      │         │    ├── columns: column3:41(int!null) column2:42(int!null) column1:43(int!null)
+      │         │    ├── mapping:
+      │         │    │    ├──  column3:12(int) => column3:41(int)
+      │         │    │    ├──  column2:11(int) => column2:42(int)
+      │         │    │    └──  column1:10(int) => column1:43(int)
+      │         │    ├── cardinality: [1 - 1]
+      │         │    ├── stats: [rows=1]
+      │         │    ├── cost: 0.01
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(10-14,16-19), (12)-->(41), (11)-->(42), (10)-->(43)
+      │         └── filters
+      │              └── eq [type=bool, outer=(20,43), constraints=(/20: (/NULL - ]; /43: (/NULL - ]), fd=(20)==(43), (43)==(20)]
+      │                   ├── variable: column1 [type=int]
+      │                   └── variable: c_id [type=int]
+      └── f-k-checks-item: history(h_w_id,h_d_id) -> district(d_w_id,d_id)
+           └── anti-join (lookup district)
+                ├── columns: column5:55(int!null) column4:56(int!null)
+                ├── key columns: [55 56] = [45 44]
+                ├── cardinality: [0 - 1]
+                ├── stats: [rows=1]
+                ├── cost: 6.15
+                ├── key: ()
+                ├── fd: ()-->(10-14,16-19), (14)-->(55), (13)-->(56)
+                ├── with-scan &1
+                │    ├── columns: column5:55(int!null) column4:56(int!null)
+                │    ├── mapping:
+                │    │    ├──  column5:14(int) => column5:55(int)
+                │    │    └──  column4:13(int) => column4:56(int)
+                │    ├── cardinality: [1 - 1]
+                │    ├── stats: [rows=1]
+                │    ├── cost: 0.01
+                │    ├── key: ()
+                │    └── fd: ()-->(10-14,16-19), (14)-->(55), (13)-->(56)
+                └── filters (true)
 
 # --------------------------------------------------
 # 2.6 The Order Status Transaction
@@ -330,6 +1315,243 @@ scalar-group-by
  └── aggregations
       └── sum [type=decimal, outer=(9)]
            └── variable: ol_amount [type=decimal]
+
+opt format=hide-qual
+UPDATE "order"
+SET o_carrier_id = 10
+WHERE o_w_id = 10
+  AND (o_d_id, o_id) IN (
+      (10, 2167),
+      (5, 2167),
+      (6, 2167),
+      (9, 2167),
+      (4, 2167),
+      (7, 2167),
+      (8, 2167),
+      (1, 2167),
+      (2, 2167),
+      (3, 2167)
+    )
+RETURNING
+  o_d_id, o_c_id
+----
+project
+ ├── columns: o_d_id:2(int!null) o_c_id:4(int)
+ ├── cardinality: [0 - 10]
+ ├── side-effects, mutations
+ ├── stats: [rows=9.9514311]
+ ├── cost: 11.882203
+ ├── key: (2)
+ ├── fd: (2)-->(4)
+ ├── prune: (2,4)
+ └── update "order"
+      ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_c_id:4(int)
+      ├── fetch columns: o_id:9(int) o_d_id:10(int) o_w_id:11(int) o_c_id:12(int) o_entry_d:13(timestamp) o_carrier_id:14(int) o_ol_cnt:15(int) o_all_local:16(int)
+      ├── update-mapping:
+      │    └──  column17:17 => o_carrier_id:6
+      ├── cardinality: [0 - 10]
+      ├── side-effects, mutations
+      ├── stats: [rows=9.9514311]
+      ├── cost: 11.7726887
+      ├── key: (2)
+      ├── fd: ()-->(1,3), (2)-->(4)
+      └── project
+           ├── columns: column17:17(int!null) o_id:9(int!null) o_d_id:10(int!null) o_w_id:11(int!null) o_c_id:12(int) o_entry_d:13(timestamp) o_carrier_id:14(int) o_ol_cnt:15(int) o_all_local:16(int)
+           ├── cardinality: [0 - 10]
+           ├── stats: [rows=9.9514311]
+           ├── cost: 11.7626887
+           ├── key: (10)
+           ├── fd: ()-->(9,11,17), (10)-->(12-16)
+           ├── prune: (9-17)
+           ├── interesting orderings: (+11,+10,-9) (+11,+10,+12,-9)
+           ├── scan "order"
+           │    ├── columns: o_id:9(int!null) o_d_id:10(int!null) o_w_id:11(int!null) o_c_id:12(int) o_entry_d:13(timestamp) o_carrier_id:14(int) o_ol_cnt:15(int) o_all_local:16(int)
+           │    ├── constraint: /11/10/-9: [/10/1/2167 - /10/1/2167] [/10/2/2167 - /10/2/2167] [/10/3/2167 - /10/3/2167] [/10/4/2167 - /10/4/2167] [/10/5/2167 - /10/5/2167] [/10/6/2167 - /10/6/2167] [/10/7/2167 - /10/7/2167] [/10/8/2167 - /10/8/2167] [/10/9/2167 - /10/9/2167] [/10/10/2167 - /10/10/2167]
+           │    ├── cardinality: [0 - 10]
+           │    ├── stats: [rows=9.9514311, distinct(9)=1, null(9)=0, distinct(10)=9.9514311, null(10)=0, distinct(11)=1, null(11)=0]
+           │    ├── cost: 11.5536601
+           │    ├── key: (10)
+           │    ├── fd: ()-->(9,11), (10)-->(12-16)
+           │    ├── prune: (9-16)
+           │    └── interesting orderings: (+11,+10,-9) (+11,+10,+12,-9)
+           └── projections
+                └── const: 10 [type=int]
+
+opt format=hide-qual
+UPDATE customer
+SET c_delivery_cnt = c_delivery_cnt + 1,
+    c_balance = c_balance + CASE c_d_id
+      WHEN 6 THEN 57214.780000
+      WHEN 8 THEN 67755.430000
+      WHEN 1 THEN 51177.840000
+      WHEN 2 THEN 73840.700000
+      WHEN 4 THEN 45906.990000
+      WHEN 9 THEN 32523.760000
+      WHEN 10 THEN 20240.200000
+      WHEN 3 THEN 75299.790000
+      WHEN 5 THEN 56543.340000
+      WHEN 7 THEN 67157.940000
+    END
+WHERE c_w_id = 10 AND (c_d_id, c_id) IN (
+    (1, 1405),
+    (2, 137),
+    (3, 309),
+    (7, 2377),
+    (8, 2106),
+    (10, 417),
+    (4, 98),
+    (5, 1683),
+    (6, 2807),
+    (9, 1412)
+  )
+----
+update customer
+ ├── columns: <none>
+ ├── fetch columns: c_id:22(int) c_d_id:23(int) c_w_id:24(int) c_first:25(varchar) c_middle:26(char) c_last:27(varchar) c_street_1:28(varchar) c_street_2:29(varchar) c_city:30(varchar) c_state:31(char) c_zip:32(char) c_phone:33(char) c_since:34(timestamp) c_credit:35(char) c_credit_lim:36(decimal) c_discount:37(decimal) customer.c_balance:38(decimal) c_ytd_payment:39(decimal) c_payment_cnt:40(int) c_delivery_cnt:41(int) c_data:42(varchar)
+ ├── update-mapping:
+ │    ├──  c_balance:45 => customer.c_balance:17
+ │    └──  column43:43 => c_delivery_cnt:20
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ ├── stats: [rows=0]
+ ├── cost: 14.53
+ └── project
+      ├── columns: c_balance:45(decimal) column43:43(int) c_id:22(int!null) c_d_id:23(int!null) c_w_id:24(int!null) c_first:25(varchar) c_middle:26(char) c_last:27(varchar) c_street_1:28(varchar) c_street_2:29(varchar) c_city:30(varchar) c_state:31(char) c_zip:32(char) c_phone:33(char) c_since:34(timestamp) c_credit:35(char) c_credit_lim:36(decimal) c_discount:37(decimal) customer.c_balance:38(decimal) c_ytd_payment:39(decimal) c_payment_cnt:40(int) c_delivery_cnt:41(int) c_data:42(varchar)
+      ├── cardinality: [0 - 10]
+      ├── stats: [rows=10]
+      ├── cost: 14.52
+      ├── key: (22,23)
+      ├── fd: ()-->(24), (22,23)-->(25-42,45), (41)-->(43)
+      ├── prune: (22-43,45)
+      ├── interesting orderings: (+24,+23,+22) (+24,+23,+27,+25,+22)
+      ├── scan customer
+      │    ├── columns: c_id:22(int!null) c_d_id:23(int!null) c_w_id:24(int!null) c_first:25(varchar) c_middle:26(char) c_last:27(varchar) c_street_1:28(varchar) c_street_2:29(varchar) c_city:30(varchar) c_state:31(char) c_zip:32(char) c_phone:33(char) c_since:34(timestamp) c_credit:35(char) c_credit_lim:36(decimal) c_discount:37(decimal) customer.c_balance:38(decimal) c_ytd_payment:39(decimal) c_payment_cnt:40(int) c_delivery_cnt:41(int) c_data:42(varchar)
+      │    ├── constraint: /24/23/22: [/10/1/1405 - /10/1/1405] [/10/2/137 - /10/2/137] [/10/3/309 - /10/3/309] [/10/4/98 - /10/4/98] [/10/5/1683 - /10/5/1683] [/10/6/2807 - /10/6/2807] [/10/7/2377 - /10/7/2377] [/10/8/2106 - /10/8/2106] [/10/9/1412 - /10/9/1412] [/10/10/417 - /10/10/417]
+      │    ├── cardinality: [0 - 10]
+      │    ├── stats: [rows=10, distinct(22)=10, null(22)=0, distinct(23)=10, null(23)=0, distinct(24)=1, null(24)=0]
+      │    ├── cost: 14.21
+      │    ├── key: (22,23)
+      │    ├── fd: ()-->(24), (22,23)-->(25-42)
+      │    ├── prune: (22-42)
+      │    └── interesting orderings: (+24,+23,+22) (+24,+23,+27,+25,+22)
+      └── projections
+           ├── function: crdb_internal.round_decimal_values [type=decimal, outer=(23,38)]
+           │    ├── plus [type=decimal]
+           │    │    ├── variable: customer.c_balance [type=decimal]
+           │    │    └── case [type=decimal]
+           │    │         ├── variable: c_d_id [type=int]
+           │    │         ├── when [type=decimal]
+           │    │         │    ├── const: 6 [type=int]
+           │    │         │    └── const: 57214.780000 [type=decimal]
+           │    │         ├── when [type=decimal]
+           │    │         │    ├── const: 8 [type=int]
+           │    │         │    └── const: 67755.430000 [type=decimal]
+           │    │         ├── when [type=decimal]
+           │    │         │    ├── const: 1 [type=int]
+           │    │         │    └── const: 51177.840000 [type=decimal]
+           │    │         ├── when [type=decimal]
+           │    │         │    ├── const: 2 [type=int]
+           │    │         │    └── const: 73840.700000 [type=decimal]
+           │    │         ├── when [type=decimal]
+           │    │         │    ├── const: 4 [type=int]
+           │    │         │    └── const: 45906.990000 [type=decimal]
+           │    │         ├── when [type=decimal]
+           │    │         │    ├── const: 9 [type=int]
+           │    │         │    └── const: 32523.760000 [type=decimal]
+           │    │         ├── when [type=decimal]
+           │    │         │    ├── const: 10 [type=int]
+           │    │         │    └── const: 20240.200000 [type=decimal]
+           │    │         ├── when [type=decimal]
+           │    │         │    ├── const: 3 [type=int]
+           │    │         │    └── const: 75299.790000 [type=decimal]
+           │    │         ├── when [type=decimal]
+           │    │         │    ├── const: 5 [type=int]
+           │    │         │    └── const: 56543.340000 [type=decimal]
+           │    │         ├── when [type=decimal]
+           │    │         │    ├── const: 7 [type=int]
+           │    │         │    └── const: 67157.940000 [type=decimal]
+           │    │         └── null [type=unknown]
+           │    └── const: 2 [type=int]
+           └── plus [type=int, outer=(41)]
+                ├── variable: c_delivery_cnt [type=int]
+                └── const: 1 [type=int]
+
+opt format=hide-qual
+DELETE FROM new_order
+WHERE no_w_id = 10 AND (no_d_id, no_o_id) IN (
+    (10, 2167),
+    (5, 2167),
+    (6, 2167),
+    (9, 2167),
+    (4, 2167),
+    (7, 2167),
+    (8, 2167),
+    (1, 2167),
+    (2, 2167),
+    (3, 2167)
+  )
+----
+delete new_order
+ ├── columns: <none>
+ ├── fetch columns: no_o_id:4(int) no_d_id:5(int) no_w_id:6(int)
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ ├── stats: [rows=0]
+ ├── cost: 0.36556061
+ └── scan new_order
+      ├── columns: no_o_id:4(int!null) no_d_id:5(int!null) no_w_id:6(int!null)
+      ├── constraint: /6/5/4: [/10/1/2167 - /10/1/2167] [/10/2/2167 - /10/2/2167] [/10/3/2167 - /10/3/2167] [/10/4/2167 - /10/4/2167] [/10/5/2167 - /10/5/2167] [/10/6/2167 - /10/6/2167] [/10/7/2167 - /10/7/2167] [/10/8/2167 - /10/8/2167] [/10/9/2167 - /10/9/2167] [/10/10/2167 - /10/10/2167]
+      ├── cardinality: [0 - 10]
+      ├── stats: [rows=0.326000576, distinct(4)=0.326000576, null(4)=0, distinct(5)=0.326000576, null(5)=0, distinct(6)=0.326000576, null(6)=0]
+      ├── cost: 0.35556061
+      ├── key: (5)
+      ├── fd: ()-->(4,6)
+      └── interesting orderings: (+6,+5,+4)
+
+opt format=hide-qual
+UPDATE order_line
+SET ol_delivery_d = '2019-08-26 16:50:41'
+WHERE ol_w_id = 10 AND (ol_d_id, ol_o_id) IN (
+    (10, 2167),
+    (5, 2167),
+    (6, 2167),
+    (9, 2167),
+    (4, 2167),
+    (7, 2167),
+    (8, 2167),
+    (1, 2167),
+    (2, 2167),
+    (3, 2167)
+  )
+----
+update order_line
+ ├── columns: <none>
+ ├── fetch columns: ol_o_id:11(int) ol_d_id:12(int) ol_w_id:13(int) ol_number:14(int) ol_i_id:15(int) ol_supply_w_id:16(int) ol_delivery_d:17(timestamp) ol_quantity:18(int) ol_amount:19(decimal) ol_dist_info:20(char)
+ ├── update-mapping:
+ │    └──  column21:21 => ol_delivery_d:7
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ ├── stats: [rows=0]
+ ├── cost: 121.241712
+ └── project
+      ├── columns: column21:21(timestamp!null) ol_o_id:11(int!null) ol_d_id:12(int!null) ol_w_id:13(int!null) ol_number:14(int!null) ol_i_id:15(int!null) ol_supply_w_id:16(int) ol_delivery_d:17(timestamp) ol_quantity:18(int) ol_amount:19(decimal) ol_dist_info:20(char)
+      ├── stats: [rows=99.3538619]
+      ├── cost: 121.231712
+      ├── key: (12,14)
+      ├── fd: ()-->(11,13,21), (12,14)-->(15-20)
+      ├── prune: (11-21)
+      ├── interesting orderings: (+13,+12,-11,+14) (+16,+15,+13,+12,+11,+14)
+      ├── scan order_line
+      │    ├── columns: ol_o_id:11(int!null) ol_d_id:12(int!null) ol_w_id:13(int!null) ol_number:14(int!null) ol_i_id:15(int!null) ol_supply_w_id:16(int) ol_delivery_d:17(timestamp) ol_quantity:18(int) ol_amount:19(decimal) ol_dist_info:20(char)
+      │    ├── constraint: /13/12/-11/14: [/10/1/2167 - /10/1/2167] [/10/2/2167 - /10/2/2167] [/10/3/2167 - /10/3/2167] [/10/4/2167 - /10/4/2167] [/10/5/2167 - /10/5/2167] [/10/6/2167 - /10/6/2167] [/10/7/2167 - /10/7/2167] [/10/8/2167 - /10/8/2167] [/10/9/2167 - /10/9/2167] [/10/10/2167 - /10/10/2167]
+      │    ├── stats: [rows=99.3538619, distinct(11)=1, null(11)=0, distinct(12)=10, null(12)=0, distinct(13)=1, null(13)=0, distinct(14)=14.9800702, null(14)=0, distinct(15)=99.3051499, null(15)=0]
+      │    ├── cost: 119.234634
+      │    ├── key: (12,14)
+      │    ├── fd: ()-->(11,13), (12,14)-->(15-20)
+      │    ├── prune: (11-20)
+      │    └── interesting orderings: (+13,+12,-11,+14) (+16,+15,+13,+12,+11,+14)
+      └── projections
+           └── const: '2019-08-26 16:50:41+00:00' [type=timestamp]
 
 # --------------------------------------------------
 # 2.8 The Stock-Level Transaction
