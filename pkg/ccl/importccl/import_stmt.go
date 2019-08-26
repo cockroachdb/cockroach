@@ -47,10 +47,15 @@ import (
 )
 
 const (
-	csvDelimiter = "delimiter"
-	csvComment   = "comment"
-	csvNullIf    = "nullif"
-	csvSkip      = "skip"
+	// MaxImportFiles is a conservative upper-bound based on what we've actually
+	// tested -- lots of meta-data is per-file so something multiple orders of
+	// magnitude bigger than we test might break. Additionally, for tables that
+	// use unique_rowid() PKs, being <9k avoids collisions with time-based IDs.
+	MaxImportFiles = 8192
+	csvDelimiter   = "delimiter"
+	csvComment     = "comment"
+	csvNullIf      = "nullif"
+	csvSkip        = "skip"
 
 	mysqlOutfileRowSep   = "rows_terminated_by"
 	mysqlOutfileFieldSep = "fields_terminated_by"
@@ -177,6 +182,10 @@ func importPlanHook(
 		files, err := filesFn()
 		if err != nil {
 			return err
+		}
+
+		if len(files) > MaxImportFiles {
+			return pgerror.Newf(pgcode.TooManyArguments, "IMPORT only supports %d files per IMPORT", MaxImportFiles)
 		}
 
 		table := importStmt.Table
