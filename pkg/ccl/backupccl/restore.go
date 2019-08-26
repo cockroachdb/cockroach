@@ -1180,12 +1180,11 @@ func restore(
 	backupDescs []BackupDescriptor,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
-	sqlDescs []sqlbase.Descriptor,
-	tableRewrites TableRewriteMap,
-	overrideDB string,
+	tables []*sqlbase.TableDescriptor,
+	oldTableIDs []sqlbase.ID,
+	spans []roachpb.Span,
 	job *jobs.Job,
-	resultsCh chan<- tree.Datums,
-) (roachpb.BulkOpSummary, []*sqlbase.DatabaseDescriptor, []*sqlbase.TableDescriptor, error) {
+) (roachpb.BulkOpSummary, error) {
 	// A note about contexts and spans in this method: the top-level context
 	// `restoreCtx` is used for orchestration logging. All operations that carry
 	// out work get their individual contexts.
@@ -1197,34 +1196,6 @@ func restore(
 		highWaterMark     int
 	}{
 		highWaterMark: -1,
-	}
-
-	var databases []*sqlbase.DatabaseDescriptor
-	var tables []*sqlbase.TableDescriptor
-	var oldTableIDs []sqlbase.ID
-	for _, desc := range sqlDescs {
-		if tableDesc := desc.GetTable(); tableDesc != nil {
-			tables = append(tables, tableDesc)
-			oldTableIDs = append(oldTableIDs, tableDesc.ID)
-		}
-		if dbDesc := desc.GetDatabase(); dbDesc != nil {
-			if rewrite, ok := tableRewrites[dbDesc.ID]; ok {
-				dbDesc.ID = rewrite.TableID
-				databases = append(databases, dbDesc)
-			}
-		}
-	}
-
-	log.Eventf(restoreCtx, "starting restore for %d tables", len(tables))
-
-	// We get the spans of the restoring tables _as they appear in the backup_,
-	// that is, in the 'old' keyspace, before we reassign the table IDs.
-	spans := spansForAllTableIndexes(tables, nil)
-
-	// Assign new IDs and privileges to the tables, and update all references to
-	// use the new IDs.
-	if err := RewriteTableDescs(tables, tableRewrites, overrideDB); err != nil {
-		return mu.res, nil, nil, err
 	}
 
 	// TODO(jeffreyxiao): Remove this check in 20.1.
@@ -1251,7 +1222,7 @@ func restore(
 		// TODO(lucy, jordan): Remove in 20.1.
 		downgraded, newDesc, err := tables[i].MaybeDowngradeForeignKeyRepresentation(restoreCtx, settings)
 		if err != nil {
-			return mu.res, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err, "downgrading table %d", tables[i].ID)
+			return mu.res, errors.NewAssertionErrorWithWrappedErrf(err, "downgrading table %d", tables[i].ID)
 		}
 		tableToSerialize := tables[i]
 		if downgraded {
@@ -1259,7 +1230,7 @@ func restore(
 		}
 		newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(tableToSerialize))
 		if err != nil {
-			return mu.res, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
+			return mu.res, errors.NewAssertionErrorWithWrappedErrf(err,
 				"marshaling descriptor")
 		}
 		rekeys = append(rekeys, roachpb.ImportRequest_TableRekey{
@@ -1269,7 +1240,7 @@ func restore(
 	}
 	kr, err := storageccl.MakeKeyRewriterFromRekeys(rekeys)
 	if err != nil {
-		return mu.res, nil, nil, err
+		return mu.res, err
 	}
 
 	// Pivot the backups, which are grouped by time, into requests for import,
@@ -1277,7 +1248,7 @@ func restore(
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
 	importSpans, _, err := makeImportSpans(spans, backupDescs, backupLocalityInfo, highWaterMark, errOnMissingRange)
 	if err != nil {
-		return mu.res, nil, nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
+		return mu.res, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
 
 	for i := range importSpans {
@@ -1409,10 +1380,10 @@ func restore(
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
-		return mu.res, nil, nil, errors.Wrapf(err, "importing %d ranges", len(importSpans))
+		return mu.res, errors.Wrapf(err, "importing %d ranges", len(importSpans))
 	}
 
-	return mu.res, databases, tables, nil
+	return mu.res, nil
 }
 
 // RestoreHeader is the header for RESTORE stmt results.
@@ -1698,6 +1669,76 @@ func remapRelevantStatistics(
 	return relevantTableStatistics
 }
 
+// createImportingTables create the tables that we will restore into. It also
+// fetches the information from the old tables that we need for the restore.
+func createImportingTables(
+	ctx context.Context, p sql.PlanHookState, sqlDescs []sqlbase.Descriptor, r *restoreResumer,
+) (
+	[]*sqlbase.DatabaseDescriptor,
+	[]*sqlbase.TableDescriptor,
+	[]sqlbase.ID,
+	[]roachpb.Span,
+	error,
+) {
+	details := r.job.Details().(jobspb.RestoreDetails)
+
+	var databases []*sqlbase.DatabaseDescriptor
+	var tables []*sqlbase.TableDescriptor
+	var oldTableIDs []sqlbase.ID
+	for _, desc := range sqlDescs {
+		if tableDesc := desc.GetTable(); tableDesc != nil {
+			tables = append(tables, tableDesc)
+			oldTableIDs = append(oldTableIDs, tableDesc.ID)
+		}
+		if dbDesc := desc.GetDatabase(); dbDesc != nil {
+			if rewrite, ok := details.TableRewrites[dbDesc.ID]; ok {
+				dbDesc.ID = rewrite.TableID
+				databases = append(databases, dbDesc)
+			}
+		}
+	}
+
+	// We get the spans of the restoring tables _as they appear in the backup_,
+	// that is, in the 'old' keyspace, before we reassign the table IDs.
+	spans := spansForAllTableIndexes(tables, nil)
+
+	log.Eventf(ctx, "starting restore for %d tables", len(tables))
+
+	// Assign new IDs and privileges to the tables, and update all references to
+	// use the new IDs.
+	if err := RewriteTableDescs(tables, details.TableRewrites, details.OverrideDB); err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	for _, desc := range tables {
+		desc.Version++
+		desc.State = sqlbase.TableDescriptor_OFFLINE
+		desc.OfflineReason = "restoring"
+	}
+
+	if !details.PrepareCompleted {
+		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			// Write the new TableDescriptors which are set in the OFFLINE state.
+			if err := WriteTableDescs(ctx, txn, databases, tables, r.job.Payload().Username, r.settings, nil); err != nil {
+				return errors.Wrapf(err, "restoring %d TableDescriptors", len(r.tables))
+			}
+
+			details.PrepareCompleted = true
+			details.TableDescs = tables
+
+			// Update the job once all descs have been prepared for ingestion.
+			err := r.job.WithTxn(txn).SetDetails(ctx, details)
+
+			return err
+		})
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+	}
+
+	return databases, tables, oldTableIDs, spans, nil
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (r *restoreResumer) Resume(
 	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
@@ -1710,7 +1751,14 @@ func (r *restoreResumer) Resume(
 		return err
 	}
 
-	res, databases, tables, err := restore(
+	databases, tables, oldTableIDs, spans, err := createImportingTables(ctx, p, sqlDescs, r)
+	if err != nil {
+		return err
+	}
+	r.tables = tables
+	r.databases = databases
+
+	res, err := restore(
 		ctx,
 		p.ExecCfg().DB,
 		p.ExecCfg().Gossip,
@@ -1718,15 +1766,12 @@ func (r *restoreResumer) Resume(
 		backupDescs,
 		details.BackupLocalityInfo,
 		details.EndTime,
-		sqlDescs,
-		details.TableRewrites,
-		details.OverrideDB,
+		tables,
+		oldTableIDs,
+		spans,
 		r.job,
-		resultsCh,
 	)
 	r.res = res
-	r.databases = databases
-	r.tables = tables
 	r.exec = p.ExecCfg().InternalExecutor
 	r.statsRefresher = p.ExecCfg().StatsRefresher
 	r.latestStats = remapRelevantStatistics(latestBackupDesc, details.TableRewrites)
@@ -1740,18 +1785,37 @@ func (r *restoreResumer) Resume(
 func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
+	// No need to mark the tables as dropped if they were not even created in the
+	// first place.
+	if !details.PrepareCompleted {
+		return nil
+	}
+
 	// Needed to trigger the schema change manager.
 	if err := txn.SetSystemConfigTrigger(); err != nil {
 		return err
 	}
 	b := txn.NewBatch()
-	for _, tableDesc := range details.TableDescs {
+	for _, tbl := range details.TableDescs {
+		tableDesc := *tbl
+		tableDesc.Version++
 		tableDesc.State = sqlbase.TableDescriptor_DROP
-		if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, r.settings, b, tableDesc.ID, tableDesc); err != nil {
-			return err
-		}
+		b.CPutDeprecated(
+			sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.Name),
+			nil,
+			tableDesc.ID,
+		)
+		b.CPutDeprecated(
+			sqlbase.MakeDescMetadataKey(tableDesc.ID),
+			sqlbase.WrapDescriptor(&tableDesc),
+			sqlbase.WrapDescriptor(tbl),
+		)
 	}
-	return txn.Run(ctx, b)
+	if err := txn.Run(ctx, b); err != nil {
+		return errors.Wrap(err, "dropping tables")
+	}
+
+	return nil
 }
 
 // OnSuccess is part of the jobs.Resumer interface.
@@ -1762,11 +1826,21 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 		return errors.Wrapf(err, "could not reinsert table statistics")
 	}
 
-	// Write the new TableDescriptors and flip the namespace entries over to
-	// them. After this call, any queries on a table will be served by the newly
-	// restored data.
-	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, r.job.Payload().Username, r.settings, nil); err != nil {
-		return errors.Wrapf(err, "restoring %d TableDescriptors", len(r.tables))
+	// Write the new TableDescriptors and flip state over to public so they can be
+	// accessed.
+	b := txn.NewBatch()
+	for _, tbl := range r.tables {
+		tableDesc := *tbl
+		tableDesc.Version++
+		tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+		b.CPutDeprecated(
+			sqlbase.MakeDescMetadataKey(tableDesc.ID),
+			sqlbase.WrapDescriptor(&tableDesc),
+			sqlbase.WrapDescriptor(tbl),
+		)
+	}
+	if err := txn.Run(ctx, b); err != nil {
+		return errors.Wrap(err, "publishing tables")
 	}
 
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
