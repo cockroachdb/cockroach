@@ -1025,6 +1025,11 @@ func TestParse(t *testing.T) {
 		{`SELECT (i.keys).*`},
 		{`SELECT (ARRAY['a', 'b', 'c']).name`},
 
+		{`SELECT 1 FOR UPDATE`},
+		{`SELECT 1 FOR NO KEY UPDATE`},
+		{`SELECT 1 FOR SHARE`},
+		{`SELECT 1 FOR KEY SHARE`},
+
 		{`TABLE a`}, // Shorthand for: SELECT * FROM a; used e.g. in CREATE VIEW v AS TABLE t
 		{`EXPLAIN TABLE a`},
 		{`TABLE [123 AS a]`},
@@ -3025,7 +3030,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``},
 		{`INSERT INTO foo VALUES (1,2) ON CONFLICT ON CONSTRAINT a DO NOTHING`, 28161, ``},
 
-		{`SELECT * FROM a FOR UPDATE`, 6583, ``},
 		{`SELECT * FROM ROWS FROM (a(b) AS (d))`, 0, `ROWS FROM with col_def_list`},
 
 		{`SELECT 'a'::INTERVAL SECOND`, 0, `interval with unit qualifier`},

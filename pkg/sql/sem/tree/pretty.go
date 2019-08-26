@@ -538,7 +538,29 @@ func (node *Select) docTable(p *PrettyCfg) []pretty.TableRow {
 	}
 	items = append(items, node.OrderBy.docRow(p))
 	items = append(items, node.Limit.docTable(p)...)
+	items = append(items, node.ForLocked.docTable(p)...)
 	return items
+}
+
+func (node ForLocked) doc(p *PrettyCfg) pretty.Doc {
+	return p.rlTable(node.docTable(p)...)
+}
+
+func (node ForLocked) docTable(p *PrettyCfg) []pretty.TableRow {
+	var keyword string
+	switch node {
+	case ForNone:
+		return nil
+	case ForUpdate:
+		keyword = "FOR UPDATE"
+	case ForNoKeyUpdate:
+		keyword = "FOR NO KEY UPDATE"
+	case ForShare:
+		keyword = "FOR SHARE"
+	case ForKeyShare:
+		keyword = "FOR KEY SHARE"
+	}
+	return []pretty.TableRow{p.row("", pretty.Keyword(keyword))}
 }
 
 func (node *SelectClause) doc(p *PrettyCfg) pretty.Doc {
