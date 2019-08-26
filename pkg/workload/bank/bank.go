@@ -148,6 +148,8 @@ func (b *bank) Tables() []workload.Table {
 				idCol := cb.ColVec(0).Int64()
 				balanceCol := cb.ColVec(1).Int64()
 				payloadCol := cb.ColVec(2).Bytes()
+				// coldata.Bytes only allows appends so we have to reset it
+				payloadCol.Reset()
 				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
 					var payload []byte
 					*a, payload = a.Alloc(b.payloadBytes, 0 /* extraCap */)
