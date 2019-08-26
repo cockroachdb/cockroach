@@ -312,8 +312,8 @@ func (r ReplicaDescriptor) String() string {
 	} else {
 		fmt.Fprintf(&buf, "%d", r.ReplicaID)
 	}
-	if typ := r.GetType(); typ != ReplicaType_VoterFull {
-		buf.WriteString(strings.ToUpper(typ.String()))
+	if typ := r.GetType(); typ != VOTER_FULL {
+		buf.WriteString(typ.String())
 	}
 	return buf.String()
 }
@@ -335,7 +335,7 @@ func (r ReplicaDescriptor) Validate() error {
 // GetType returns the type of this ReplicaDescriptor.
 func (r ReplicaDescriptor) GetType() ReplicaType {
 	if r.Type == nil {
-		return ReplicaType_VoterFull
+		return VOTER_FULL
 	}
 	return *r.Type
 }
