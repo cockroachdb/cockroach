@@ -359,14 +359,14 @@ func registerTPCC(r *testRegistry) {
 		CPUs:  16,
 
 		LoadWarehouses: gceOrAws(cloud, 2000, 2500),
-		EstimatedMax:   gceOrAws(cloud, 1600, 2300),
+		EstimatedMax:   gceOrAws(cloud, 1600, 2350),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
 		CPUs:  16,
 
 		LoadWarehouses: gceOrAws(cloud, 8000, 10000),
-		EstimatedMax:   gceOrAws(cloud, 7000, 7000),
+		EstimatedMax:   gceOrAws(cloud, 7000, 8000),
 
 		Tags: []string{`weekly`},
 	})
@@ -625,15 +625,15 @@ func loadTPCCBench(
 	var rebalanceWait time.Duration
 	switch b.LoadConfig {
 	case singleLoadgen:
-		loadArgs = `--split --scatter --checks=false`
-		rebalanceWait = time.Duration(b.LoadWarehouses/100) * time.Minute
+		loadArgs = `--scatter --checks=false`
+		rebalanceWait = time.Duration(b.LoadWarehouses/250) * time.Minute
 	case singlePartitionedLoadgen:
-		loadArgs = fmt.Sprintf(`--split --scatter --checks=false --partitions=%d`, b.partitions())
-		rebalanceWait = time.Duration(b.LoadWarehouses/50) * time.Minute
+		loadArgs = fmt.Sprintf(`--scatter --checks=false --partitions=%d`, b.partitions())
+		rebalanceWait = time.Duration(b.LoadWarehouses/125) * time.Minute
 	case multiLoadgen:
-		loadArgs = fmt.Sprintf(`--split --scatter --checks=false --partitions=%d --zones="%s"`,
+		loadArgs = fmt.Sprintf(`--scatter --checks=false --partitions=%d --zones="%s"`,
 			b.partitions(), strings.Join(b.Distribution.zones(), ","))
-		rebalanceWait = time.Duration(b.LoadWarehouses/20) * time.Minute
+		rebalanceWait = time.Duration(b.LoadWarehouses/50) * time.Minute
 	default:
 		panic("unexpected")
 	}
@@ -644,12 +644,12 @@ func loadTPCCBench(
 	if err := c.RunE(ctx, loadNode, cmd); err != nil {
 		return err
 	}
-	if rebalanceWait == 0 {
+	if rebalanceWait == 0 || len(roachNodes) <= 3 {
 		return nil
 	}
 
 	t.l.Printf("waiting %v for rebalancing\n", rebalanceWait)
-	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='64MiB'`)
+	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='128MiB'`)
 	if err != nil {
 		return err
 	}
@@ -657,9 +657,9 @@ func loadTPCCBench(
 	// Split and scatter the tables. Ramp up to the expected load in the desired
 	// distribution. This should allow for load-based rebalancing to help
 	// distribute load. Optionally pass some load configuration-specific flags.
-	cmd = fmt.Sprintf("./workload run tpcc --warehouses=%d --workers=%d "+
-		"--wait=false --duration=%s --tolerate-errors {pgurl%s}",
-		b.LoadWarehouses, b.LoadWarehouses, rebalanceWait, roachNodes)
+	cmd = fmt.Sprintf("./workload run tpcc --warehouses=%d --workers=%d --max-rate=%d "+
+		"--wait=false --duration=%s --scatter --tolerate-errors {pgurl%s}",
+		b.LoadWarehouses, b.LoadWarehouses, b.LoadWarehouses/2, rebalanceWait, roachNodes)
 	if out, err := c.RunWithBuffer(ctx, c.l, loadNode, cmd); err != nil {
 		return errors.Wrapf(err, "failed with output %q", string(out))
 	}
@@ -702,6 +702,11 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 	c.Put(ctx, workload, "./workload", loadNodes)
 	c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
 
+	// Wait after restarting nodes before applying load. This lets
+	// things settle down to avoid unexpected cluster states.
+	const restartWait = 15 * time.Second
+	time.Sleep(restartWait)
+
 	useHAProxy := b.Chaos
 	if useHAProxy {
 		if len(loadNodes) > 1 {
@@ -743,7 +748,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 			m.ExpectDeaths(int32(len(roachNodes)))
 			c.Stop(ctx, roachNodes)
 			c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
-			time.Sleep(10 * time.Second)
+			time.Sleep(restartWait)
 
 			// Set up the load generation configuration.
 			rampDur := 5 * time.Minute
@@ -802,7 +807,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 					t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
 					histogramsPath := fmt.Sprintf("%s/warehouses=%d/stats.json", perfArtifactsDir, activeWarehouses)
 					cmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --active-warehouses=%d "+
-						"--tolerate-errors --ramp=%s --duration=%s%s {pgurl%s} "+
+						"--tolerate-errors --scatter --ramp=%s --duration=%s%s {pgurl%s} "+
 						"--histograms=%s",
 						b.LoadWarehouses, activeWarehouses, rampDur,
 						loadDur, extraFlags, sqlGateways, histogramsPath)
