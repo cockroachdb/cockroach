@@ -3600,24 +3600,23 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 	var hadError bool
 	for i, info := range infos {
 		last := i == len(infos)-1
-		pErr := s.withReplicaForRequest(info.respStream.Context(), info.req,
-			func(ctx context.Context, r *Replica) *roachpb.Error {
-				// Save the last Replica we see, since we don't know in advance which
-				// requests will fail during Replica retrieval. We want this later
-				// so we can handle the Raft Ready state all at once.
-				lastRepl = r
-				pErr := s.processRaftRequestWithReplica(ctx, r, info.req)
-				if last {
-					// If this is the last request, we can handle raft.Ready without
-					// giving up the lock. Set lastRepl to nil, so we don't handle it
-					// down below as well.
-					lastRepl = nil
-					if _, expl, err := r.handleRaftReadyRaftMuLocked(ctx, noSnap); err != nil {
-						fatalOnRaftReadyErr(ctx, expl, err)
-					}
+		pErr := s.withReplicaForRequest(ctx, info.req, func(ctx context.Context, r *Replica) *roachpb.Error {
+			// Save the last Replica we see, since we don't know in advance which
+			// requests will fail during Replica retrieval. We want this later
+			// so we can handle the Raft Ready state all at once.
+			lastRepl = r
+			pErr := s.processRaftRequestWithReplica(ctx, r, info.req)
+			if last {
+				// If this is the last request, we can handle raft.Ready without
+				// giving up the lock. Set lastRepl to nil, so we don't handle it
+				// down below as well.
+				lastRepl = nil
+				if _, expl, err := r.handleRaftReadyRaftMuLocked(ctx, noSnap); err != nil {
+					fatalOnRaftReadyErr(ctx, expl, err)
 				}
-				return pErr
-			})
+			}
+			return pErr
+		})
 		if pErr != nil {
 			hadError = true
 			if err := info.respStream.Send(newRaftMessageResponse(info.req, pErr)); err != nil {
