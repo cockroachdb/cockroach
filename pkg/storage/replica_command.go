@@ -997,16 +997,10 @@ func (r *Replica) maybeLeaveAtomicChangeReplicas(
 	// We want execChangeReplicasTxn to be able to make sure it's only tasked
 	// with leaving a joint state when it's in one, so make sure we don't call
 	// it if we're not.
-	noop := true
-	for _, rDesc := range desc.Replicas().All() {
-		switch rDesc.GetType() {
-		case roachpb.VOTER_OUTGOING, roachpb.VOTER_INCOMING:
-			noop = false
-		}
-	}
-	if noop {
+	if !desc.Replicas().InAtomicReplicationChange() {
 		return desc, nil
 	}
+
 	// NB: reason and detail won't be used because no range log event will be
 	// emitted.
 	//
