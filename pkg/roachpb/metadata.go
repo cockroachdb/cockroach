@@ -135,11 +135,38 @@ func (r *RangeDescriptor) SetReplicas(replicas ReplicaDescriptors) {
 	r.InternalReplicas = replicas.AsProto()
 }
 
-// AddReplica adds the given replica to this range's set.
-func (r *RangeDescriptor) AddReplica(toAdd ReplicaDescriptor) {
+// SetReplicaType changes the type of the replica with the given ID to the given
+// type. Returns zero values if the replica was not found and the updated
+// descriptor and true otherwise.
+func (r *RangeDescriptor) SetReplicaType(
+	nodeID NodeID, storeID StoreID, typ ReplicaType,
+) (ReplicaDescriptor, bool) {
+	for i := range r.InternalReplicas {
+		desc := &r.InternalReplicas[i]
+		if desc.StoreID == storeID && desc.NodeID == nodeID {
+			desc.Type = &typ
+			return *desc, true
+		}
+	}
+	return ReplicaDescriptor{}, false
+}
+
+// AddReplica adds a replica on the given node and store with the supplied type.
+// It auto-assigns a ReplicaID and returns the inserted ReplicaDescriptor.
+func (r *RangeDescriptor) AddReplica(
+	nodeID NodeID, storeID StoreID, typ ReplicaType,
+) ReplicaDescriptor {
+	toAdd := ReplicaDescriptor{
+		NodeID:    nodeID,
+		StoreID:   storeID,
+		ReplicaID: r.NextReplicaID,
+		Type:      &typ,
+	}
 	rs := r.Replicas()
 	rs.AddReplica(toAdd)
 	r.SetReplicas(rs)
+	r.NextReplicaID++
+	return toAdd
 }
 
 // RemoveReplica removes the matching replica from this range's set and returns
@@ -220,18 +247,25 @@ func (r *RangeDescriptor) Validate() error {
 		return errors.Errorf("NextReplicaID must be non-zero")
 	}
 	seen := map[ReplicaID]struct{}{}
+	stores := map[StoreID]struct{}{}
 	for i, rep := range r.Replicas().All() {
 		if err := rep.Validate(); err != nil {
 			return errors.Errorf("replica %d is invalid: %s", i, err)
 		}
-		if _, ok := seen[rep.ReplicaID]; ok {
-			return errors.Errorf("ReplicaID %d was reused", rep.ReplicaID)
-		}
-		seen[rep.ReplicaID] = struct{}{}
 		if rep.ReplicaID >= r.NextReplicaID {
 			return errors.Errorf("ReplicaID %d must be less than NextReplicaID %d",
 				rep.ReplicaID, r.NextReplicaID)
 		}
+
+		if _, ok := seen[rep.ReplicaID]; ok {
+			return errors.Errorf("ReplicaID %d was reused", rep.ReplicaID)
+		}
+		seen[rep.ReplicaID] = struct{}{}
+
+		if _, ok := stores[rep.StoreID]; ok {
+			return errors.Errorf("StoreID %d was reused", rep.StoreID)
+		}
+		stores[rep.StoreID] = struct{}{}
 	}
 	return nil
 }
@@ -278,8 +312,8 @@ func (r ReplicaDescriptor) String() string {
 	} else {
 		fmt.Fprintf(&buf, "%d", r.ReplicaID)
 	}
-	if r.GetType() == ReplicaType_LEARNER {
-		buf.WriteString("LEARNER")
+	if typ := r.GetType(); typ != VOTER_FULL {
+		buf.WriteString(typ.String())
 	}
 	return buf.String()
 }
@@ -301,7 +335,7 @@ func (r ReplicaDescriptor) Validate() error {
 // GetType returns the type of this ReplicaDescriptor.
 func (r ReplicaDescriptor) GetType() ReplicaType {
 	if r.Type == nil {
-		return ReplicaType_VOTER
+		return VOTER_FULL
 	}
 	return *r.Type
 }

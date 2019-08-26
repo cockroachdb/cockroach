@@ -87,7 +87,7 @@ func (x ValueType) String() string {
 	return proto.EnumName(ValueType_name, int32(x))
 }
 func (ValueType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{0}
+	return fileDescriptor_data_3e5eb143f6729682, []int{0}
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.
@@ -111,7 +111,7 @@ func (x ReplicaChangeType) String() string {
 	return proto.EnumName(ReplicaChangeType_name, int32(x))
 }
 func (ReplicaChangeType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{1}
+	return fileDescriptor_data_3e5eb143f6729682, []int{1}
 }
 
 // TransactionStatus specifies possible states for a transaction.
@@ -163,7 +163,7 @@ func (x TransactionStatus) String() string {
 	return proto.EnumName(TransactionStatus_name, int32(x))
 }
 func (TransactionStatus) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{2}
+	return fileDescriptor_data_3e5eb143f6729682, []int{2}
 }
 
 // Span is a key range with an inclusive start Key and an exclusive end Key.
@@ -180,7 +180,7 @@ type Span struct {
 func (m *Span) Reset()      { *m = Span{} }
 func (*Span) ProtoMessage() {}
 func (*Span) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{0}
+	return fileDescriptor_data_3e5eb143f6729682, []int{0}
 }
 func (m *Span) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -232,7 +232,7 @@ func (m *Value) Reset()         { *m = Value{} }
 func (m *Value) String() string { return proto.CompactTextString(m) }
 func (*Value) ProtoMessage()    {}
 func (*Value) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{1}
+	return fileDescriptor_data_3e5eb143f6729682, []int{1}
 }
 func (m *Value) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -268,7 +268,7 @@ func (m *KeyValue) Reset()         { *m = KeyValue{} }
 func (m *KeyValue) String() string { return proto.CompactTextString(m) }
 func (*KeyValue) ProtoMessage()    {}
 func (*KeyValue) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{2}
+	return fileDescriptor_data_3e5eb143f6729682, []int{2}
 }
 func (m *KeyValue) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -306,7 +306,7 @@ func (m *StoreIdent) Reset()         { *m = StoreIdent{} }
 func (m *StoreIdent) String() string { return proto.CompactTextString(m) }
 func (*StoreIdent) ProtoMessage()    {}
 func (*StoreIdent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{3}
+	return fileDescriptor_data_3e5eb143f6729682, []int{3}
 }
 func (m *StoreIdent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -346,7 +346,7 @@ func (m *SplitTrigger) Reset()         { *m = SplitTrigger{} }
 func (m *SplitTrigger) String() string { return proto.CompactTextString(m) }
 func (*SplitTrigger) ProtoMessage()    {}
 func (*SplitTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{4}
+	return fileDescriptor_data_3e5eb143f6729682, []int{4}
 }
 func (m *SplitTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -394,7 +394,7 @@ func (m *MergeTrigger) Reset()         { *m = MergeTrigger{} }
 func (m *MergeTrigger) String() string { return proto.CompactTextString(m) }
 func (*MergeTrigger) ProtoMessage()    {}
 func (*MergeTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{5}
+	return fileDescriptor_data_3e5eb143f6729682, []int{5}
 }
 func (m *MergeTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -419,6 +419,12 @@ func (m *MergeTrigger) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_MergeTrigger proto.InternalMessageInfo
 
+// ChangeReplicasTrigger carries out a replication change. The Added() and Removed()
+// methods return the replicas being added and removed, respectively. If more than
+// one change is specified (i.e. len(Added())+len(Removed()) exceeds one), this
+// initiates an atomic replication change in which the "removed" replicas are
+// of type VOTER_OUTGOING. This joint configuration is left via another
+// ChangeReplicasTrigger which does not specify any additions nor removals.
 type ChangeReplicasTrigger struct {
 	// TODO(tbg): remove once we know that no trigger using this will ever be
 	// applied (this will require something like #39182).
@@ -440,20 +446,22 @@ type ChangeReplicasTrigger struct {
 	// TODO(jeffreyxiao): Remove deprecated_updated_replicas and
 	// deprecated_next_replica_id in 20.1.
 	Desc *RangeDescriptor `protobuf:"bytes,5,opt,name=desc,proto3" json:"desc,omitempty"`
-	// The new replicas added in this change (all reflected in desc, which is necessarily
-	// set when this field is used). Must not specify the same replica more than once or
-	// overlap with the removed replicas below.
+	// The new replicas added to the range descriptor in this change, exactly as
+	// they appear in the updated range descriptor.
 	InternalAddedReplicas []ReplicaDescriptor `protobuf:"bytes,6,rep,name=internal_added_replicas,json=internalAddedReplicas,proto3" json:"internal_added_replicas"`
-	// The replicas removed in this change (all reflected in desc, which is necessarily
-	// set when this field is used). Must not specify the same replica more than once or
-	// overlap with the added replicas above.
+	// The replicas whose removal is being initiated in this change. If the
+	// replica is still present as an outgoing voter in the updated descriptor
+	// (i.e. if this is a full atomic replication change), then the replica here
+	// must match that in the descriptor; otherwise it must match the replica
+	// removed from the descriptor in the course of this change (which is itself
+	// not visible to this trigger).
 	InternalRemovedReplicas []ReplicaDescriptor `protobuf:"bytes,7,rep,name=internal_removed_replicas,json=internalRemovedReplicas,proto3" json:"internal_removed_replicas"`
 }
 
 func (m *ChangeReplicasTrigger) Reset()      { *m = ChangeReplicasTrigger{} }
 func (*ChangeReplicasTrigger) ProtoMessage() {}
 func (*ChangeReplicasTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{6}
+	return fileDescriptor_data_3e5eb143f6729682, []int{6}
 }
 func (m *ChangeReplicasTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -495,7 +503,7 @@ func (m *ModifiedSpanTrigger) Reset()         { *m = ModifiedSpanTrigger{} }
 func (m *ModifiedSpanTrigger) String() string { return proto.CompactTextString(m) }
 func (*ModifiedSpanTrigger) ProtoMessage()    {}
 func (*ModifiedSpanTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{7}
+	return fileDescriptor_data_3e5eb143f6729682, []int{7}
 }
 func (m *ModifiedSpanTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -541,7 +549,7 @@ func (m *StickyBitTrigger) Reset()         { *m = StickyBitTrigger{} }
 func (m *StickyBitTrigger) String() string { return proto.CompactTextString(m) }
 func (*StickyBitTrigger) ProtoMessage()    {}
 func (*StickyBitTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{8}
+	return fileDescriptor_data_3e5eb143f6729682, []int{8}
 }
 func (m *StickyBitTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -580,7 +588,7 @@ func (m *InternalCommitTrigger) Reset()         { *m = InternalCommitTrigger{} }
 func (m *InternalCommitTrigger) String() string { return proto.CompactTextString(m) }
 func (*InternalCommitTrigger) ProtoMessage()    {}
 func (*InternalCommitTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{9}
+	return fileDescriptor_data_3e5eb143f6729682, []int{9}
 }
 func (m *InternalCommitTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -649,7 +657,7 @@ func (m *ObservedTimestamp) Reset()         { *m = ObservedTimestamp{} }
 func (m *ObservedTimestamp) String() string { return proto.CompactTextString(m) }
 func (*ObservedTimestamp) ProtoMessage()    {}
 func (*ObservedTimestamp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{10}
+	return fileDescriptor_data_3e5eb143f6729682, []int{10}
 }
 func (m *ObservedTimestamp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -877,7 +885,7 @@ type Transaction struct {
 func (m *Transaction) Reset()      { *m = Transaction{} }
 func (*Transaction) ProtoMessage() {}
 func (*Transaction) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{11}
+	return fileDescriptor_data_3e5eb143f6729682, []int{11}
 }
 func (m *Transaction) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -927,7 +935,7 @@ func (m *TransactionRecord) Reset()         { *m = TransactionRecord{} }
 func (m *TransactionRecord) String() string { return proto.CompactTextString(m) }
 func (*TransactionRecord) ProtoMessage()    {}
 func (*TransactionRecord) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{12}
+	return fileDescriptor_data_3e5eb143f6729682, []int{12}
 }
 func (m *TransactionRecord) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -963,7 +971,7 @@ func (m *Intent) Reset()         { *m = Intent{} }
 func (m *Intent) String() string { return proto.CompactTextString(m) }
 func (*Intent) ProtoMessage()    {}
 func (*Intent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{13}
+	return fileDescriptor_data_3e5eb143f6729682, []int{13}
 }
 func (m *Intent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1000,7 +1008,7 @@ func (m *SequencedWrite) Reset()         { *m = SequencedWrite{} }
 func (m *SequencedWrite) String() string { return proto.CompactTextString(m) }
 func (*SequencedWrite) ProtoMessage()    {}
 func (*SequencedWrite) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{14}
+	return fileDescriptor_data_3e5eb143f6729682, []int{14}
 }
 func (m *SequencedWrite) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1064,7 +1072,7 @@ type Lease struct {
 func (m *Lease) Reset()      { *m = Lease{} }
 func (*Lease) ProtoMessage() {}
 func (*Lease) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{15}
+	return fileDescriptor_data_3e5eb143f6729682, []int{15}
 }
 func (m *Lease) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1109,7 +1117,7 @@ func (m *AbortSpanEntry) Reset()         { *m = AbortSpanEntry{} }
 func (m *AbortSpanEntry) String() string { return proto.CompactTextString(m) }
 func (*AbortSpanEntry) ProtoMessage()    {}
 func (*AbortSpanEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{16}
+	return fileDescriptor_data_3e5eb143f6729682, []int{16}
 }
 func (m *AbortSpanEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1173,7 +1181,7 @@ func (m *TxnCoordMeta) Reset()         { *m = TxnCoordMeta{} }
 func (m *TxnCoordMeta) String() string { return proto.CompactTextString(m) }
 func (*TxnCoordMeta) ProtoMessage()    {}
 func (*TxnCoordMeta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cc95704a62d85cea, []int{17}
+	return fileDescriptor_data_3e5eb143f6729682, []int{17}
 }
 func (m *TxnCoordMeta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -6289,9 +6297,9 @@ var (
 	ErrIntOverflowData   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/data.proto", fileDescriptor_data_cc95704a62d85cea) }
+func init() { proto.RegisterFile("roachpb/data.proto", fileDescriptor_data_3e5eb143f6729682) }
 
-var fileDescriptor_data_cc95704a62d85cea = []byte{
+var fileDescriptor_data_3e5eb143f6729682 = []byte{
 	// 2110 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x58, 0xcd, 0x6f, 0xdb, 0xc8,
 	0x15, 0x37, 0x4d, 0x4a, 0xa2, 0x9e, 0x3e, 0x4c, 0x4f, 0xe2, 0x44, 0x49, 0x50, 0x29, 0x55, 0x8a,
