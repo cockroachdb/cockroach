@@ -74,6 +74,7 @@ message RestoreDetails {
   repeated BackupLocalityInfo backup_locality_info = 7 [(gogoproto.nullable) = false];
   repeated sqlbase.TableDescriptor table_descs = 5;
   string override_db = 6 [(gogoproto.customname) = "OverrideDB"];
+  bool prepare_completed = 8;
 }
 
 message RestoreProgress {
