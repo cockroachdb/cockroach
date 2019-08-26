@@ -143,16 +143,16 @@ func TestReplicaDescriptorsConfState(t *testing.T) {
 	}{
 		{
 			[]ReplicaDescriptor{rd(v, 1)},
-			"Voters:[1] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false",
+			"Voters:[1] VotersOutgoing:[] Learners:[] LearnersNext:[]",
 		},
 		// Make sure nil is treated like VoterFull.
 		{
 			[]ReplicaDescriptor{rd(vn, 1)},
-			"Voters:[1] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false",
+			"Voters:[1] VotersOutgoing:[] Learners:[] LearnersNext:[]",
 		},
 		{
 			[]ReplicaDescriptor{rd(l, 1), rd(vn, 2)},
-			"Voters:[2] VotersOutgoing:[] Learners:[1] LearnersNext:[] AutoLeave:false",
+			"Voters:[2] VotersOutgoing:[] Learners:[1] LearnersNext:[]",
 		},
 		// First joint case. We're adding n3 (via atomic replication changes), so the outgoing
 		// config we have to get rid of consists only of n2 (even though n2 remains a voter).
@@ -160,28 +160,28 @@ func TestReplicaDescriptorsConfState(t *testing.T) {
 		// the config exactly as described by the descriptor so we don't try.
 		{
 			[]ReplicaDescriptor{rd(l, 1), rd(v, 2), rd(vi, 3)},
-			"Voters:[2 3] VotersOutgoing:[2] Learners:[1] LearnersNext:[] AutoLeave:false",
+			"Voters:[2 3] VotersOutgoing:[2] Learners:[1] LearnersNext:[]",
 		},
 		// More complex joint change: a replica swap, switching out n4 for n3 from the initial
 		// set of voters n2, n4 (plus learner n1 before and after).
 		{
 			[]ReplicaDescriptor{rd(l, 1), rd(v, 2), rd(vi, 3), rd(vo, 4)},
-			"Voters:[2 3] VotersOutgoing:[2 4] Learners:[1] LearnersNext:[] AutoLeave:false",
+			"Voters:[2 3] VotersOutgoing:[2 4] Learners:[1] LearnersNext:[]",
 		},
 		// Upreplicating from n1,n2 to n1,n2,n3,n4.
 		{
 			[]ReplicaDescriptor{rd(v, 1), rd(v, 2), rd(vi, 3), rd(vi, 4)},
-			"Voters:[1 2 3 4] VotersOutgoing:[1 2] Learners:[] LearnersNext:[] AutoLeave:false",
+			"Voters:[1 2 3 4] VotersOutgoing:[1 2] Learners:[] LearnersNext:[]",
 		},
 		// Downreplicating from n1,n2,n3,n4 to n1,n2.
 		{
 			[]ReplicaDescriptor{rd(v, 1), rd(v, 2), rd(vo, 3), rd(vo, 4)},
-			"Voters:[1 2] VotersOutgoing:[1 2 3 4] Learners:[] LearnersNext:[] AutoLeave:false",
+			"Voters:[1 2] VotersOutgoing:[1 2 3 4] Learners:[] LearnersNext:[]",
 		},
 		// Completely switching to a new set of replicas: n1,n2 to n4,n5. Throw a learner in for fun.
 		{
 			[]ReplicaDescriptor{rd(vo, 1), rd(vo, 2), rd(vi, 3), rd(vi, 4), rd(l, 5)},
-			"Voters:[3 4] VotersOutgoing:[1 2] Learners:[5] LearnersNext:[] AutoLeave:false",
+			"Voters:[3 4] VotersOutgoing:[1 2] Learners:[5] LearnersNext:[]",
 		},
 	}
 
