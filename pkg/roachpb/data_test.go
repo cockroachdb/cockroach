@@ -1660,7 +1660,7 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 		},
 	}
 	act := crt.String()
-	exp := "ENTER_JOINT ADD_REPLICA[(n1,s2):3VOTERINCOMING], REMOVE_REPLICA[(n4,s5):6VOTEROUTGOING]: after=[(n1,s2):3VOTERINCOMING (n4,s5):6VOTEROUTGOING (n7,s8):9LEARNER] next=10"
+	exp := "ENTER_JOINT ADD_REPLICA[(n1,s2):3VOTER_INCOMING], REMOVE_REPLICA[(n4,s5):6VOTER_OUTGOING]: after=[(n1,s2):3VOTER_INCOMING (n4,s5):6VOTER_OUTGOING (n7,s8):9LEARNER] next=10"
 	require.Equal(t, exp, act)
 
 	crt.InternalRemovedReplicas = nil
