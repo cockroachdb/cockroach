@@ -28,7 +28,7 @@ func rd(typ *ReplicaType, id uint64) ReplicaDescriptor {
 	}
 }
 
-var v0 = (*ReplicaType)(nil) // should be treated like VoterFull
+var vn = (*ReplicaType)(nil) // should be treated like VoterFull
 var v = ReplicaTypeVoterFull()
 var vi = ReplicaTypeVoterIncoming()
 var vo = ReplicaTypeVoterOutgoing()
@@ -39,12 +39,12 @@ func TestVotersLearnersAll(t *testing.T) {
 	tests := [][]ReplicaDescriptor{
 		{},
 		{rd(v, 1)},
-		{rd(v0, 1)},
+		{rd(vn, 1)},
 		{rd(l, 1)},
 		{rd(v, 1), rd(l, 2), rd(v, 3)},
-		{rd(v0, 1), rd(l, 2), rd(v, 3)},
+		{rd(vn, 1), rd(l, 2), rd(v, 3)},
 		{rd(l, 1), rd(v, 2), rd(l, 3)},
-		{rd(l, 1), rd(v0, 2), rd(l, 3)},
+		{rd(l, 1), rd(vn, 2), rd(l, 3)},
 		{rd(vi, 1)},
 		{rd(vo, 1)},
 		{rd(l, 1), rd(vo, 2), rd(vi, 3), rd(vi, 4)},
@@ -145,12 +145,13 @@ func TestReplicaDescriptorsConfState(t *testing.T) {
 			[]ReplicaDescriptor{rd(v, 1)},
 			"Voters:[1] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false",
 		},
+		// Make sure nil is treated like VoterFull.
 		{
-			[]ReplicaDescriptor{rd(v0, 1)},
+			[]ReplicaDescriptor{rd(vn, 1)},
 			"Voters:[1] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false",
 		},
 		{
-			[]ReplicaDescriptor{rd(l, 1), rd(v0, 2)},
+			[]ReplicaDescriptor{rd(l, 1), rd(vn, 2)},
 			"Voters:[2] VotersOutgoing:[] Learners:[1] LearnersNext:[] AutoLeave:false",
 		},
 		// First joint case. We're adding n3 (via atomic replication changes), so the outgoing
@@ -158,13 +159,13 @@ func TestReplicaDescriptorsConfState(t *testing.T) {
 		// Note that we could simplify this config so that it's not joint, but raft expects
 		// the config exactly as described by the descriptor so we don't try.
 		{
-			[]ReplicaDescriptor{rd(l, 1), rd(v0, 2), rd(vi, 3)},
+			[]ReplicaDescriptor{rd(l, 1), rd(v, 2), rd(vi, 3)},
 			"Voters:[2 3] VotersOutgoing:[2] Learners:[1] LearnersNext:[] AutoLeave:false",
 		},
 		// More complex joint change: a replica swap, switching out n4 for n3 from the initial
 		// set of voters n2, n4 (plus learner n1 before and after).
 		{
-			[]ReplicaDescriptor{rd(l, 1), rd(v0, 2), rd(vi, 3), rd(vo, 4)},
+			[]ReplicaDescriptor{rd(l, 1), rd(v, 2), rd(vi, 3), rd(vo, 4)},
 			"Voters:[2 3] VotersOutgoing:[2 4] Learners:[1] LearnersNext:[] AutoLeave:false",
 		},
 		// Upreplicating from n1,n2 to n1,n2,n3,n4.
