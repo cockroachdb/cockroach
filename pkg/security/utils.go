@@ -85,7 +85,7 @@ func ExtKeyUsageToString(eku x509.ExtKeyUsage) string {
 }
 
 // ClusterNamesFromList takes in a list of strings.
-// When a string of the form `clustername=<identifier>` is encountered, `<identifier>` is
+// When a string of the form `cluster-name=<identifier>` is encountered, `<identifier>` is
 // added to the returned list.
 func ClusterNamesFromList(strList []string) []string {
 	ret := []string{}

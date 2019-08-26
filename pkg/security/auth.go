@@ -51,7 +51,7 @@ func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 	return tlsState.PeerCertificates[0].Subject.CommonName, nil
 }
 
-// CheckCertificateClusterName checks whether the clustername is set in the peer certificate.
+// CheckCertificateClusterName checks whether the cluster-name is set in the peer certificate.
 func CheckCertificateClusterName(authCtx AuthContext, tlsState *tls.ConnectionState) error {
 	if tlsState == nil {
 		return errors.Errorf("request is not using TLS")

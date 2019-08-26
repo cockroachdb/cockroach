@@ -33,7 +33,7 @@ const (
 	validFrom         = -time.Hour * 24
 	maxPathLength     = 1
 	caCommonName      = "Cockroach CA"
-	clusternamePrefix = "clustername="
+	clusternamePrefix = "cluster-name="
 )
 
 // newTemplate returns a partially-filled template.
@@ -118,7 +118,7 @@ func checkLifetimeAgainstCA(cert, ca *x509.Certificate) error {
 // GenerateServerCert generates a server certificate and returns the cert bytes.
 // Takes in the CA cert and private key, the node public key, the certificate lifetime,
 // and the list of hosts/ip addresses this certificate applies to.
-// If non-empty, the list of `clusterNames` is added as repeated `clustername=<name>` to the subject's OU.
+// If non-empty, the list of `clusterNames` is added as repeated `cluster-name=<name>` to the subject's OU.
 func GenerateServerCert(
 	caCert *x509.Certificate,
 	caPrivateKey crypto.PrivateKey,
@@ -198,7 +198,7 @@ func GenerateUIServerCert(
 // GenerateClientCert generates a client certificate and returns the cert bytes.
 // Takes in the CA cert and private key, the client public key, the certificate lifetime,
 // and the username.
-// If non-empty, the list of `clusterNames` is added as repeated `clustername=<name>` to the subject's OU.
+// If non-empty, the list of `clusterNames` is added as repeated `cluster-name=<name>` to the subject's OU.
 func GenerateClientCert(
 	caCert *x509.Certificate,
 	caPrivateKey crypto.PrivateKey,

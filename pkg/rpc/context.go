@@ -111,7 +111,7 @@ func spanInclusionFuncForClient(
 }
 
 // checkTLSSuperUser is called for secure mode only. It checks the request context
-// for a valid super user ("node" or "root"), as well as
+// for a valid super user ("node" or "root") as well as cluster name if specified at startup.
 func checkTLSSuperUser(ctx context.Context, authCtx security.AuthContext) error {
 	if grpcutil.IsLocalRequestContext(ctx) {
 		// This is an in-process request. Bypass authentication check.

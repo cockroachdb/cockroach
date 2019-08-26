@@ -315,14 +315,14 @@ restarted again with this flag removed.`,
 Specify the cluster name in the certificate. When connecting to a node
 the cluster name in the certificate and the node's --cluster-name must match.
 
-This is stored in the Subject OU as: "clustername=<identifier>".`,
+This is stored in the Subject OU as: "cluster-name=<identifier>".`,
 	}
 
 	EnforceClusterNameInCertificate = FlagInfo{
 		Name: "enforce-cluster-name-in-certificate",
 		Description: `
 The --cluster-name must match one of the clusters in client certificate
-Subject.OrganizationUnit (can be repeated, format: "clustername=<identifier>").
+Subject.OrganizationUnit (can be repeated, format: "cluster-name=<identifier>").
 
 If --cluster-name is set, an exact match must be found in client certificates.
 If --cluster-name is not set, no cluster name must be set in client certificates.
