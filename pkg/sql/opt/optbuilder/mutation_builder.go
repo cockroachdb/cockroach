@@ -907,8 +907,12 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 		// referenced columns on the right.
 
 		refID := fk.ReferencedTableID()
-		ref, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, refID)
+		ref, isAdding, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, refID)
 		if err != nil {
+			if isAdding {
+				// The other table is in the process of being added; ignore the FK relation.
+				continue
+			}
 			panic(err)
 		}
 		refTab := ref.(cat.Table)
@@ -1067,8 +1071,12 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 		// origin columns on the right.
 
 		origID := fk.OriginTableID()
-		orig, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, origID)
+		orig, isAdding, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, origID)
 		if err != nil {
+			if isAdding {
+				// The other table is in the process of being added; ignore the FK relation.
+				continue
+			}
 			panic(err)
 		}
 		origTab := orig.(cat.Table)
