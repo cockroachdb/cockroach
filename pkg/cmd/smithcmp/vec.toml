@@ -23,9 +23,12 @@ seed = 0
 
 [databases.cockroach]
 addr = "postgresql://root@localhost:26257?sslmode=disable"
+initsql = """
+set vectorize=off;
+"""
 
 [databases.vec]
 addr = "postgresql://root@localhost:26257?sslmode=disable"
 initsql = """
-set experimental_vectorize=on;
+set vectorize=experimental_on;
 """
