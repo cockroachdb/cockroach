@@ -1523,14 +1523,15 @@ func (crt ChangeReplicasTrigger) String() string {
 	if err != nil {
 		fmt.Fprintf(&chgS, "<malformed ChangeReplicasTrigger: %s>", err)
 	} else {
-		if cc.AsV2().LeaveJoint() {
+		ccv2 := cc.AsV2()
+		if ccv2.LeaveJoint() {
 			// NB: this isn't missing a trailing space.
 			//
 			// TODO(tbg): could list the replicas that will actually leave the
 			// voter set.
 			fmt.Fprintf(&chgS, "LEAVE_JOINT")
 		}
-		if _, ok := cc.AsV2().EnterJoint(); ok {
+		if _, ok := ccv2.EnterJoint(); ok {
 			fmt.Fprintf(&chgS, "ENTER_JOINT ")
 		}
 	}
