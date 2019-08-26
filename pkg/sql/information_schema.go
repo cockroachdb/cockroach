@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -117,6 +118,7 @@ var informationSchema = virtualSchema{
 	tableDefs: map[sqlbase.ID]virtualSchemaDef{
 		sqlbase.InformationSchemaAdministrableRoleAuthorizationsID: informationSchemaAdministrableRoleAuthorizations,
 		sqlbase.InformationSchemaApplicableRolesID:                 informationSchemaApplicableRoles,
+		sqlbase.InformationSchemaCheckConstraints:                  informationSchemaCheckConstraints,
 		sqlbase.InformationSchemaColumnPrivilegesID:                informationSchemaColumnPrivileges,
 		sqlbase.InformationSchemaColumnsTableID:                    informationSchemaColumnsTable,
 		sqlbase.InformationSchemaConstraintColumnUsageTableID:      informationSchemaConstraintColumnUsageTable,
@@ -261,6 +263,75 @@ https://www.postgresql.org/docs/9.5/infoschema-applicable-roles.html`,
 		}
 
 		return nil
+	},
+}
+
+var informationSchemaCheckConstraints = virtualSchemaTable{
+	comment: `check constraints
+` + base.DocsURL("information-schema.html#check_constraints") + `
+https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
+	schema: vtable.InformationSchemaCheckConstraints,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
+			db *sqlbase.DatabaseDescriptor,
+			scName string,
+			table *sqlbase.TableDescriptor,
+			tableLookup tableLookupFn,
+		) error {
+			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
+			if err != nil {
+				return err
+			}
+			dbNameStr := tree.NewDString(db.Name)
+			scNameStr := tree.NewDString(scName)
+			for conName, con := range conInfo {
+				// Only Check constraints are included.
+				if con.Kind != sqlbase.ConstraintTypeCheck {
+					continue
+				}
+				conNameStr := tree.NewDString(conName)
+				// Like with pg_catalog.pg_constraint, Postgres wraps the check
+				// constraint expression in two pairs of parentheses.
+				chkExprStr := tree.NewDString(fmt.Sprintf("((%s))", con.Details))
+				if err := addRow(
+					dbNameStr,  // constraint_catalog
+					scNameStr,  // constraint_schema
+					conNameStr, // constraint_name
+					chkExprStr, // check_clause
+				); err != nil {
+					return err
+				}
+			}
+
+			// Unlike with pg_catalog.pg_constraint, Postgres also includes NOT
+			// NULL column constraints in information_schema.check_constraints.
+			// Cockroach doesn't track these constraints as check constraints,
+			// but we can pull them off of the table's column descriptors.
+			colNum := 0
+			return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
+				colNum++
+				// Only visible, non-nullable columns are included.
+				if column.Hidden || column.Nullable {
+					return nil
+				}
+				// Generate a unique name for each NOT NULL constraint. Postgres
+				// uses the format <namespace_oid>_<table_oid>_<col_idx>_not_null.
+				// We might as well do the same.
+				conNameStr := tree.NewDString(fmt.Sprintf(
+					"%s_%s_%d_not_null", h.NamespaceOid(db, scName), defaultOid(table.ID), colNum,
+				))
+				chkExprStr := tree.NewDString(fmt.Sprintf(
+					"%s IS NOT NULL", column.Name,
+				))
+				return addRow(
+					dbNameStr,  // constraint_catalog
+					scNameStr,  // constraint_schema
+					conNameStr, // constraint_name
+					chkExprStr, // check_clause
+				)
+			})
+		})
 	},
 }
 
@@ -450,7 +521,7 @@ CREATE TABLE information_schema.constraint_column_usage (
 	CONSTRAINT_NAME    STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*no constraints in virtual tables*/, func(
+		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
 			db *sqlbase.DatabaseDescriptor,
 			scName string,
 			table *sqlbase.TableDescriptor,
@@ -512,7 +583,7 @@ CREATE TABLE information_schema.key_column_usage (
 	POSITION_IN_UNIQUE_CONSTRAINT INT
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*no constraints in virtual tables*/, func(
+		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
 			db *sqlbase.DatabaseDescriptor,
 			scName string,
 			table *sqlbase.TableDescriptor,
@@ -662,7 +733,7 @@ CREATE TABLE information_schema.referential_constraints (
 	REFERENCED_TABLE_NAME     STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*no constraints in virtual tables*/, func(
+		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
 			db *sqlbase.DatabaseDescriptor,
 			scName string,
 			table *sqlbase.TableDescriptor,
@@ -919,7 +990,7 @@ CREATE TABLE information_schema.sequences (
     CYCLE_OPTION             STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /*no sequences in virtual schemas*/
+		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* no sequences in virtual schemas */
 			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
 				if !table.IsSequence() {
 					return nil
@@ -964,7 +1035,7 @@ CREATE TABLE information_schema.statistics (
 	IMPLICIT      STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables have no indexes*/
+		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables have no indexes */
 			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
 				dbNameStr := tree.NewDString(db.GetName())
 				scNameStr := tree.NewDString(scName)

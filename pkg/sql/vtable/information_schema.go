@@ -90,6 +90,18 @@ CREATE TABLE information_schema.applicable_roles (
 	IS_GRANTABLE STRING NOT NULL
 )`
 
+// InformationSchemaCheckConstraints describes the schema of the
+// information_schema.check_constraints table.
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-check-constraints.html
+// MySQL:    missing
+const InformationSchemaCheckConstraints = `
+CREATE TABLE information_schema.check_constraints (
+	CONSTRAINT_CATALOG STRING NOT NULL,
+	CONSTRAINT_SCHEMA  STRING NOT NULL,
+	CONSTRAINT_NAME    STRING NOT NULL,
+	CHECK_CLAUSE       STRING NOT NULL
+)`
+
 // InformationSchemaColumnPrivileges describes the schema of the
 // information_schema.column_privileges table.
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-column-privileges.html

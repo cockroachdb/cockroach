@@ -16,6 +16,7 @@ SHOW TABLES FROM information_schema
 ----
 administrable_role_authorizations
 applicable_roles
+check_constraints
 column_privileges
 columns
 constraint_column_usage
@@ -122,6 +123,7 @@ SHOW TABLES FROM test.information_schema
 ----
 administrable_role_authorizations
 applicable_roles
+check_constraints
 column_privileges
 columns
 constraint_column_usage
@@ -247,6 +249,7 @@ crdb_internal       tables
 crdb_internal       zones
 information_schema  administrable_role_authorizations
 information_schema  applicable_roles
+information_schema  check_constraints
 information_schema  column_privileges
 information_schema  columns
 information_schema  constraint_column_usage
@@ -374,6 +377,7 @@ tables
 zones
 administrable_role_authorizations
 applicable_roles
+check_constraints
 column_privileges
 columns
 constraint_column_usage
@@ -508,6 +512,7 @@ system         crdb_internal       tables                             SYSTEM VIE
 system         crdb_internal       zones                              SYSTEM VIEW  NO                  1
 system         information_schema  administrable_role_authorizations  SYSTEM VIEW  NO                  1
 system         information_schema  applicable_roles                   SYSTEM VIEW  NO                  1
+system         information_schema  check_constraints                  SYSTEM VIEW  NO                  1
 system         information_schema  column_privileges                  SYSTEM VIEW  NO                  1
 system         information_schema  columns                            SYSTEM VIEW  NO                  1
 system         information_schema  constraint_column_usage            SYSTEM VIEW  NO                  1
@@ -624,6 +629,7 @@ statement ok
 SET DATABASE = test
 
 ## information_schema.table_constraints
+## information_schema.check_constraints
 ## information_schema.constraint_column_usage
 
 query TTTTTTTTT colnames
@@ -647,6 +653,66 @@ system              public             primary          system         public   
 system              public             primary          system         public        users             PRIMARY KEY      NO             NO
 system              public             primary          system         public        web_sessions      PRIMARY KEY      NO             NO
 system              public             primary          system         public        zones             PRIMARY KEY      NO             NO
+
+query TTTT colnames
+SELECT *
+FROM system.information_schema.check_constraints
+ORDER BY CONSTRAINT_CATALOG, CONSTRAINT_NAME
+----
+constraint_catalog  constraint_schema  constraint_name          check_clause
+system              public             630200280_11_1_not_null  descID IS NOT NULL
+system              public             630200280_11_2_not_null  version IS NOT NULL
+system              public             630200280_11_3_not_null  nodeID IS NOT NULL
+system              public             630200280_11_4_not_null  expiration IS NOT NULL
+system              public             630200280_12_1_not_null  timestamp IS NOT NULL
+system              public             630200280_12_2_not_null  eventType IS NOT NULL
+system              public             630200280_12_3_not_null  targetID IS NOT NULL
+system              public             630200280_12_4_not_null  reportingID IS NOT NULL
+system              public             630200280_12_6_not_null  uniqueID IS NOT NULL
+system              public             630200280_13_1_not_null  timestamp IS NOT NULL
+system              public             630200280_13_2_not_null  rangeID IS NOT NULL
+system              public             630200280_13_3_not_null  storeID IS NOT NULL
+system              public             630200280_13_4_not_null  eventType IS NOT NULL
+system              public             630200280_13_7_not_null  uniqueID IS NOT NULL
+system              public             630200280_14_1_not_null  key IS NOT NULL
+system              public             630200280_14_3_not_null  lastUpdated IS NOT NULL
+system              public             630200280_15_1_not_null  id IS NOT NULL
+system              public             630200280_15_2_not_null  status IS NOT NULL
+system              public             630200280_15_3_not_null  created IS NOT NULL
+system              public             630200280_15_4_not_null  payload IS NOT NULL
+system              public             630200280_19_1_not_null  id IS NOT NULL
+system              public             630200280_19_2_not_null  hashedSecret IS NOT NULL
+system              public             630200280_19_3_not_null  username IS NOT NULL
+system              public             630200280_19_4_not_null  createdAt IS NOT NULL
+system              public             630200280_19_5_not_null  expiresAt IS NOT NULL
+system              public             630200280_19_7_not_null  lastUsedAt IS NOT NULL
+system              public             630200280_20_1_not_null  tableID IS NOT NULL
+system              public             630200280_20_2_not_null  statisticID IS NOT NULL
+system              public             630200280_20_4_not_null  columnIDs IS NOT NULL
+system              public             630200280_20_5_not_null  createdAt IS NOT NULL
+system              public             630200280_20_6_not_null  rowCount IS NOT NULL
+system              public             630200280_20_7_not_null  distinctCount IS NOT NULL
+system              public             630200280_20_8_not_null  nullCount IS NOT NULL
+system              public             630200280_21_1_not_null  localityKey IS NOT NULL
+system              public             630200280_21_2_not_null  localityValue IS NOT NULL
+system              public             630200280_21_3_not_null  latitude IS NOT NULL
+system              public             630200280_21_4_not_null  longitude IS NOT NULL
+system              public             630200280_23_1_not_null  role IS NOT NULL
+system              public             630200280_23_2_not_null  member IS NOT NULL
+system              public             630200280_23_3_not_null  isAdmin IS NOT NULL
+system              public             630200280_24_1_not_null  type IS NOT NULL
+system              public             630200280_24_2_not_null  object_id IS NOT NULL
+system              public             630200280_24_3_not_null  sub_id IS NOT NULL
+system              public             630200280_24_4_not_null  comment IS NOT NULL
+system              public             630200280_2_1_not_null   parentID IS NOT NULL
+system              public             630200280_2_2_not_null   name IS NOT NULL
+system              public             630200280_3_1_not_null   id IS NOT NULL
+system              public             630200280_4_1_not_null   username IS NOT NULL
+system              public             630200280_4_3_not_null   isRole IS NOT NULL
+system              public             630200280_5_1_not_null   id IS NOT NULL
+system              public             630200280_6_1_not_null   name IS NOT NULL
+system              public             630200280_6_2_not_null   value IS NOT NULL
+system              public             630200280_6_3_not_null   lastUpdated IS NOT NULL
 
 query TTTTTTT colnames
 SELECT *
@@ -713,6 +779,16 @@ constraint_db       public             primary          constraint_db  public   
 constraint_db       public             t1_a_key         constraint_db  public        t1          UNIQUE           NO             NO
 constraint_db       public             fk               constraint_db  public        t2          FOREIGN KEY      NO             NO
 
+query TTTT colnames
+SELECT *
+FROM information_schema.check_constraints
+ORDER BY CONSTRAINT_CATALOG, CONSTRAINT_NAME
+----
+constraint_catalog  constraint_schema  constraint_name          check_clause
+constraint_db       public             541687103_59_1_not_null  p IS NOT NULL
+constraint_db       public             c2                       ((a < 99))
+constraint_db       public             check_a                  ((a > 4))
+
 query TTTTTTT colnames
 SELECT *
 FROM information_schema.constraint_column_usage
@@ -725,6 +801,19 @@ constraint_db  public        t1          a            constraint_db       public
 constraint_db  public        t1          a            constraint_db       public             fk
 constraint_db  public        t1          a            constraint_db       public             t1_a_key
 constraint_db  public        t1          p            constraint_db       public             primary
+
+# Query issued by jOOQ in PostgresDatabase.loadCheckConstraints.
+query TTTT colnames
+SELECT tc.table_schema, tc.table_name, cc.constraint_name, cc.check_clause
+FROM information_schema.table_constraints AS tc
+JOIN information_schema.check_constraints AS cc
+USING (constraint_catalog, constraint_schema, constraint_name)
+WHERE tc.table_schema in ('public')
+ORDER BY tc.table_schema, tc.table_name, cc.constraint_name
+----
+table_schema  table_name  constraint_name  check_clause
+public        t1          c2               ((a < 99))
+public        t1          check_a          ((a > 4))
 
 statement ok
 DROP DATABASE constraint_db CASCADE
@@ -1101,6 +1190,7 @@ NULL     public   system         crdb_internal       tables                     
 NULL     public   system         crdb_internal       zones                              SELECT          NULL          YES
 NULL     public   system         information_schema  administrable_role_authorizations  SELECT          NULL          YES
 NULL     public   system         information_schema  applicable_roles                   SELECT          NULL          YES
+NULL     public   system         information_schema  check_constraints                  SELECT          NULL          YES
 NULL     public   system         information_schema  column_privileges                  SELECT          NULL          YES
 NULL     public   system         information_schema  columns                            SELECT          NULL          YES
 NULL     public   system         information_schema  constraint_column_usage            SELECT          NULL          YES
@@ -1341,6 +1431,7 @@ NULL     public   system         crdb_internal       tables                     
 NULL     public   system         crdb_internal       zones                              SELECT          NULL          YES
 NULL     public   system         information_schema  administrable_role_authorizations  SELECT          NULL          YES
 NULL     public   system         information_schema  applicable_roles                   SELECT          NULL          YES
+NULL     public   system         information_schema  check_constraints                  SELECT          NULL          YES
 NULL     public   system         information_schema  column_privileges                  SELECT          NULL          YES
 NULL     public   system         information_schema  columns                            SELECT          NULL          YES
 NULL     public   system         information_schema  constraint_column_usage            SELECT          NULL          YES
