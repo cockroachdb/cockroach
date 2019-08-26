@@ -26,7 +26,7 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"1"}]}
 {"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: execute row count limits only partially supported"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: multiple active portals not supported"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
@@ -67,7 +67,7 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"1"}]}
 {"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: execute row count limits only partially supported"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: multiple active portals not supported"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send

@@ -69,6 +69,15 @@ var aclexplodeGeneratorType = types.MakeLabeledTuple(
 	[]string{"grantor", "grantee", "privilege_type", "is_grantable"},
 )
 
+// aclExplodeGenerator supports the execution of aclexplode.
+type aclexplodeGenerator struct{}
+
+func (aclexplodeGenerator) ResolvedType() *types.T { return aclexplodeGeneratorType }
+func (aclexplodeGenerator) Start() error           { return nil }
+func (aclexplodeGenerator) Close()                 {}
+func (aclexplodeGenerator) Next() (bool, error)    { return false, nil }
+func (aclexplodeGenerator) Values() tree.Datums    { return nil }
+
 // generators is a map from name to slice of Builtins for all built-in
 // generators.
 //
@@ -80,7 +89,9 @@ var generators = map[string]builtinDefinition{
 		makeGeneratorOverload(
 			tree.ArgTypes{{"aclitems", types.StringArray}},
 			aclexplodeGeneratorType,
-			makeUnaryGenerator,
+			func(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
+				return aclexplodeGenerator{}, nil
+			},
 			"Produces a virtual table containing aclitem stuff ("+
 				"returns no rows as this feature is unsupported in CockroachDB)",
 		),
