@@ -38,7 +38,7 @@ message ReplicationTarget {
 // ReplicaType identifies which raft activities a replica participates in. In
 // normal operation, VOTER_FULL and LEARNER are the only used states. However,
 // atomic replication changes require a transition through a "joint config"; in
-// this joint config, the VoterOutgoing and VoterIncoming types are used as well
+// this joint config, the VOTER_OUTGOING and VOTER_INCOMING types are used as well
 // to denote voters which are being removed and newly added by the change,
 // respectively.
 //
@@ -48,7 +48,7 @@ message ReplicationTarget {
 // two separate majorities are required: one from the set of replicas that
 // have either type Voter or VoterOutgoing, as well as that of the set of
 // types Voter and VoterIncoming. For example, when type Voter is assigned
-// to replicas 1 and 2, while 3 is VoterOutgoing and 4 is VoterIncoming, then
+// to replicas 1 and 2, while 3 is VOTER_OUTGOING and 4 is VOTER_INCOMING, then
 // the two sets over which quorums need to be achieved are {1,2,3} and {1,2,4}.
 // Thus, {1,2} is a quorum of both, {1,3} is a quorum of the first but not the
 // second, {1,4} is a quorum of the second but not the first, and {3,4} is a
@@ -59,18 +59,18 @@ enum ReplicaType {
   // VOTER_FULL indicates a replica that is a voter both in the
   // incoming and outgoing set.
   VOTER_FULL = 0;
-  // ReplicaType_VoterIncoming indicates a voting replica that will be a
-  // VoterFull once the ongoing atomic replication change is finalized; that is,
+  // VOTER_INCOMING indicates a voting replica that will be a
+  // VOTER_FULL once the ongoing atomic replication change is finalized; that is,
   // it is in the process of being added. In practice, this replica type should
-  // be treated like a VoterFull.
+  // be treated like a VOTER_FULL.
   VOTER_INCOMING = 2;
-  // ReplicaType_VoterOutgoing indicates a voting replica that will not be part
+  // VOTER_OUTGOING indicates a voting replica that will not be part
   // of the descriptor once the ongoing atomic replication change is finalized;
   // that is, it is in the process of being removed. In practice, a replica of
   // this type should be treated accordingly and no work should be assigned to
   // it.
   VOTER_OUTGOING = 3;
-  // ReplicaType_Learner indicates a replica that applies committed entries, but
+  // LEARNER indicates a replica that applies committed entries, but
   // does not count towards the quorum(s). Learners do not vote for leadership
   // nor do their acknowledged log entries get taken into account for
   // determining the committed index. At the time of writing, learners in
