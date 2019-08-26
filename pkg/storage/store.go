@@ -3228,17 +3228,20 @@ func (s *Store) maybeWaitForPushee(
 func (s *Store) HandleSnapshot(
 	header *SnapshotRequest_Header, stream SnapshotResponseStream,
 ) error {
-	s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
-
-	if s.IsDraining() {
-		return stream.Send(&SnapshotResponse{
-			Status:  SnapshotResponse_DECLINED,
-			Message: storeDrainingMsg,
-		})
-	}
-
 	ctx := s.AnnotateCtx(stream.Context())
-	return s.receiveSnapshot(ctx, header, stream)
+	const name = "storage.Store: handle snapshot"
+	return s.stopper.RunTaskWithErr(ctx, name, func(ctx context.Context) error {
+		s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
+
+		if s.IsDraining() {
+			return stream.Send(&SnapshotResponse{
+				Status:  SnapshotResponse_DECLINED,
+				Message: storeDrainingMsg,
+			})
+		}
+
+		return s.receiveSnapshot(ctx, header, stream)
+	})
 }
 
 func (s *Store) uncoalesceBeats(
@@ -3293,6 +3296,10 @@ func (s *Store) uncoalesceBeats(
 func (s *Store) HandleRaftRequest(
 	ctx context.Context, req *RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *roachpb.Error {
+	// NB: unlike the other two RaftMessageHandler methods implemented by Store,
+	// this one doesn't need to directly run through a Stopper task because it
+	// delegates all work through a raftScheduler, whose workers' lifetimes are
+	// already tied to the Store's Stopper.
 	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
 		if req.RangeID != 0 {
 			log.Fatalf(ctx, "coalesced heartbeats must have rangeID == 0")
@@ -3501,82 +3508,85 @@ func (s *Store) processRaftSnapshotRequest(
 // It requires that s.mu is not held.
 func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageResponse) error {
 	ctx = s.AnnotateCtx(ctx)
-	repl, replErr := s.GetReplica(resp.RangeID)
-	if replErr == nil {
-		// Best-effort context annotation of replica.
-		ctx = repl.AnnotateCtx(ctx)
-	}
-	switch val := resp.Union.GetValue().(type) {
-	case *roachpb.Error:
-		switch tErr := val.GetDetail().(type) {
-		case *roachpb.ReplicaTooOldError:
-			if replErr != nil {
-				// RangeNotFoundErrors are expected here; nothing else is.
-				if _, ok := replErr.(*roachpb.RangeNotFoundError); !ok {
-					log.Error(ctx, replErr)
-				}
-				return nil
-			}
-
-			// Grab the raftMu in addition to the replica mu because
-			// cancelFailedProposalsLocked below requires it.
-			repl.raftMu.Lock()
-			defer repl.raftMu.Unlock()
-			repl.mu.Lock()
-			defer repl.mu.Unlock()
-
-			// If the replica ID in the error does not match then we know
-			// that the replica has been removed and re-added quickly. In
-			// that case, we don't want to add it to the replicaGCQueue.
-			if tErr.ReplicaID != repl.mu.replicaID {
-				log.Infof(ctx, "replica too old response with old replica ID: %s", tErr.ReplicaID)
-				return nil
-			}
-
-			// If the replica ID in the error does match, we know the replica
-			// will be removed and we can cancel any pending commands. This is
-			// sometimes necessary to unblock PushTxn operations that are
-			// necessary for the replica GC to succeed.
-			repl.cancelPendingCommandsLocked()
-
-			// The replica will be garbage collected soon (we are sure
-			// since our replicaID is definitely too old), but in the meantime we
-			// already want to bounce all traffic from it. Note that the replica
-			// could be re-added with a higher replicaID, in which this error is
-			// cleared in setReplicaIDRaftMuLockedMuLocked.
-			if repl.mu.destroyStatus.IsAlive() {
-				storeID := repl.store.StoreID()
-				repl.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(repl.RangeID, storeID), destroyReasonRemovalPending)
-			}
-
-			s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityRemoved)
-		case *roachpb.RaftGroupDeletedError:
-			if replErr != nil {
-				// RangeNotFoundErrors are expected here; nothing else is.
-				if _, ok := replErr.(*roachpb.RangeNotFoundError); !ok {
-					log.Error(ctx, replErr)
-				}
-				return nil
-			}
-
-			// If the replica is talking to a replica that's been deleted, it must be
-			// out of date. While this may just mean it's slightly behind, it can
-			// also mean that it is so far behind it no longer knows where any of the
-			// other replicas are (#23994). Add it to the replica GC queue to do a
-			// proper check.
-			s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityDefault)
-		case *roachpb.StoreNotFoundError:
-			log.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
-				resp.FromReplica.NodeID, resp.FromReplica.StoreID, resp.FromReplica, val)
-			return val.GetDetail() // close Raft connection
-		default:
-			log.Warningf(ctx, "got error from r%d, replica %s: %s",
-				resp.RangeID, resp.FromReplica, val)
+	const name = "storage.Store: handle raft response"
+	return s.stopper.RunTaskWithErr(ctx, name, func(ctx context.Context) error {
+		repl, replErr := s.GetReplica(resp.RangeID)
+		if replErr == nil {
+			// Best-effort context annotation of replica.
+			ctx = repl.AnnotateCtx(ctx)
 		}
-	default:
-		log.Warningf(ctx, "got unknown raft response type %T from replica %s: %s", val, resp.FromReplica, val)
-	}
-	return nil
+		switch val := resp.Union.GetValue().(type) {
+		case *roachpb.Error:
+			switch tErr := val.GetDetail().(type) {
+			case *roachpb.ReplicaTooOldError:
+				if replErr != nil {
+					// RangeNotFoundErrors are expected here; nothing else is.
+					if _, ok := replErr.(*roachpb.RangeNotFoundError); !ok {
+						log.Error(ctx, replErr)
+					}
+					return nil
+				}
+
+				// Grab the raftMu in addition to the replica mu because
+				// cancelFailedProposalsLocked below requires it.
+				repl.raftMu.Lock()
+				defer repl.raftMu.Unlock()
+				repl.mu.Lock()
+				defer repl.mu.Unlock()
+
+				// If the replica ID in the error does not match then we know
+				// that the replica has been removed and re-added quickly. In
+				// that case, we don't want to add it to the replicaGCQueue.
+				if tErr.ReplicaID != repl.mu.replicaID {
+					log.Infof(ctx, "replica too old response with old replica ID: %s", tErr.ReplicaID)
+					return nil
+				}
+
+				// If the replica ID in the error does match, we know the replica
+				// will be removed and we can cancel any pending commands. This is
+				// sometimes necessary to unblock PushTxn operations that are
+				// necessary for the replica GC to succeed.
+				repl.cancelPendingCommandsLocked()
+
+				// The replica will be garbage collected soon (we are sure
+				// since our replicaID is definitely too old), but in the meantime we
+				// already want to bounce all traffic from it. Note that the replica
+				// could be re-added with a higher replicaID, in which this error is
+				// cleared in setReplicaIDRaftMuLockedMuLocked.
+				if repl.mu.destroyStatus.IsAlive() {
+					storeID := repl.store.StoreID()
+					repl.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(repl.RangeID, storeID), destroyReasonRemovalPending)
+				}
+
+				s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityRemoved)
+			case *roachpb.RaftGroupDeletedError:
+				if replErr != nil {
+					// RangeNotFoundErrors are expected here; nothing else is.
+					if _, ok := replErr.(*roachpb.RangeNotFoundError); !ok {
+						log.Error(ctx, replErr)
+					}
+					return nil
+				}
+
+				// If the replica is talking to a replica that's been deleted, it must be
+				// out of date. While this may just mean it's slightly behind, it can
+				// also mean that it is so far behind it no longer knows where any of the
+				// other replicas are (#23994). Add it to the replica GC queue to do a
+				// proper check.
+				s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityDefault)
+			case *roachpb.StoreNotFoundError:
+				log.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
+					resp.FromReplica.NodeID, resp.FromReplica.StoreID, resp.FromReplica, val)
+				return val.GetDetail() // close Raft connection
+			default:
+				log.Warningf(ctx, "got error from r%d, replica %s: %s",
+					resp.RangeID, resp.FromReplica, val)
+			}
+		default:
+			log.Warningf(ctx, "got unknown raft response type %T from replica %s: %s", val, resp.FromReplica, val)
+		}
+		return nil
+	})
 }
 
 // enqueueRaftUpdateCheck asynchronously registers the given range ID to be
