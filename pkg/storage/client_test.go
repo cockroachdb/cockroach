@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
 	"google.golang.org/grpc"
 )
@@ -212,12 +213,18 @@ func createTestStoreWithOpts(
 	}
 	// Wait for the store's single range to have quorum before proceeding.
 	repl := store.LookupReplica(roachpb.RKeyMin)
-	testutils.SucceedsSoon(t, func() error {
-		if !repl.HasQuorum() {
-			return errors.New("first range has not reached quorum")
-		}
-		return nil
-	})
+
+	// Send a request through the range to make sure everything is warmed up
+	// and works.
+	// NB: it's unclear if this code is necessary.
+	var ba roachpb.BatchRequest
+	get := roachpb.GetRequest{}
+	get.Key = keys.LocalMax
+	ba.Header.Replica = repl.Desc().Replicas().Voters()[0]
+	ba.Header.RangeID = repl.RangeID
+	ba.Add(&get)
+	_, pErr := store.Send(ctx, ba)
+	require.NoError(t, pErr.GoError())
 
 	// Wait for the system config to be available in gossip. All sorts of things
 	// might not work properly while the system config is not available.
@@ -1204,7 +1211,7 @@ func (m *multiTestContext) replicateRangeNonFatal(rangeID roachpb.RangeID, dests
 			if e := expectedReplicaIDs[i]; repDesc.ReplicaID != e {
 				return errors.Errorf("expected replica %s to have ID %d", repl, e)
 			}
-			if t := repDesc.GetType(); t != roachpb.ReplicaType_VOTER {
+			if t := repDesc.GetType(); t != roachpb.VOTER_FULL {
 				return errors.Errorf("expected replica %s to be a voter was %s", repl, t)
 			}
 			if !repl.Desc().ContainsKey(startKey) {

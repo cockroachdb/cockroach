@@ -294,15 +294,20 @@ func (r *Replica) handleComputeChecksumResult(ctx context.Context, cc *storagepb
 }
 
 func (r *Replica) handleChangeReplicasResult(ctx context.Context, chng *storagepb.ChangeReplicas) {
-	for _, rDesc := range chng.Removed() {
-		if r.store.StoreID() == rDesc.StoreID {
-			// This wants to run as late as possible, maximizing the chances
-			// that the other nodes have finished this command as well (since
-			// processing the removal from the queue looks up the Range at the
-			// lease holder, being too early here turns this into a no-op).
-			r.store.replicaGCQueue.AddAsync(ctx, r, replicaGCPriorityRemoved)
+	storeID := r.store.StoreID()
+	var found bool
+	for _, rDesc := range chng.Replicas() {
+		if rDesc.StoreID == storeID {
+			found = true
 			break
 		}
+	}
+	if !found {
+		// This wants to run as late as possible, maximizing the chances
+		// that the other nodes have finished this command as well (since
+		// processing the removal from the queue looks up the Range at the
+		// lease holder, being too early here turns this into a no-op).
+		r.store.replicaGCQueue.AddAsync(ctx, r, replicaGCPriorityRemoved)
 	}
 }
 

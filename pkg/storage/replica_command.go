@@ -143,6 +143,15 @@ func (r *Replica) adminSplitWithDescriptor(
 	delayable bool,
 	reason string,
 ) (roachpb.AdminSplitResponse, error) {
+	var err error
+	// The split queue doesn't care about the set of replicas, so if we somehow
+	// are being handed one that's in a joint state, finalize that before
+	// continuing.
+	desc, err = r.maybeLeaveAtomicChangeReplicas(ctx, desc)
+	if err != nil {
+		return roachpb.AdminSplitResponse{}, err
+	}
+
 	var reply roachpb.AdminSplitResponse
 
 	// Determine split key if not provided with args. This scan is
@@ -570,10 +579,11 @@ func (r *Replica) AdminMerge(
 			// Should never happen, but just in case.
 			return errors.Errorf("ranges are not adjacent; %s != %s", origLeftDesc.EndKey, rightDesc.StartKey)
 		}
-		// For simplicity, don't handle learner replicas, expect the caller to
-		// resolve them first. (Defensively, we check that there are no non-voter
-		// replicas, in case some third type is later added). This behavior can be
-		// changed later if the complexity becomes worth it, but it's not right now.
+		// For simplicity, don't handle learner replicas or joint states, expect
+		// the caller to resolve them first. (Defensively, we check that there
+		// are no non-voter replicas, in case some third type is later added).
+		// This behavior can be changed later if the complexity becomes worth
+		// it, but it's not right now.
 		lReplicas, rReplicas := origLeftDesc.Replicas(), rightDesc.Replicas()
 		if len(lReplicas.Voters()) != len(lReplicas.All()) {
 			return errors.Errorf("cannot merge range with non-voter replicas on lhs: %s", lReplicas)
@@ -808,9 +818,6 @@ func IsSnapshotError(err error) bool {
 // leaseholder (which in particular implies that we can never remove all
 // replicas).
 //
-// NB: at the time of writing, atomic replication changes are not implemented
-// yet. Only a single change is supported, everything else returns an error.
-//
 // The returned RangeDescriptor is the new value of the range's descriptor
 // following the successful commit of the transaction.
 //
@@ -849,29 +856,12 @@ func IsSnapshotError(err error) bool {
 //    protocol; otherwise it has to use joint consensus. In this latter mechanism,
 //    a first configuration change is made which results in a configuration ("joint
 //    configuration") in which a quorum of both the old replicas and the new
-//    replica sets is required for decision making. Since this joint configuration
-//    is not represented in the RangeDescriptor (which is the source of truth of
-//    the replication configuration), additional information about the joint state
-//    is persisted under RangeDescriptorJointKey, a replicated key located on the
-//    range similar to the range descriptor (but not versioned). Raft will
-//    automatically transition out of this joint configuration as soon as it has
-//    properly been applied (and we clear the extra replicated state atomically);
-//    ChangeReplicas ensures the final configuration is active before returning.
-//
-//    TODO(tbg): figure out how the "waiting to transition out of the joint config"
-//    will happen. We want Raft to auto-transition out (rather than doing it
-//    manually) because that way we know we'll leave that joint state even if the
-//    coordinator crashes etc. On the other hand, the polling seems a little
-//    difficult to do idiomatically. If many replication changes are carried out
-//    back to back, what do we wait for? We only need to know that some replica
-//    (typically the leader) has transitioned out (i.e. there's no requirement that
-//    the local replica has done so). It seems most straightforward to stash the
-//    joint state in an inline key that can be read through KV (mutated below
-//    Raft), and make sure the generation of the replication change is preserved.
-//    Then we just need to poll that the key goes away or has a larger generation
-//    (indicating that we transitioned out of "our" conf change and into another
-//    joint config driven by someone else). We can avoid the poll in the common
-//    case by proposing an empty entry first.
+//    replica sets is required for decision making. Transitioning into this joint
+//    configuration, the RangeDescriptor (which is the source of truth of
+//    the replication configuration) is updated with corresponding replicas of
+//    type VOTER_INCOMING and VOTER_OUTGOING.
+//    Immediately after committing this change, a second transition updates the
+//    descriptor with and activates the final configuration.
 //
 // A replica that learns that it was removed will queue itself for replicaGC.
 // Note that a removed replica may never apply the configuration change removing
@@ -898,10 +888,44 @@ func (r *Replica) ChangeReplicas(
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
 
-	if len(chgs) != 1 {
-		// TODO(tbg): lift this restriction when atomic membership changes are
-		// plumbed into raft.
-		return nil, errors.Errorf("need exactly one change, got %+v", chgs)
+	// We execute the change serially if we're not allowed to run atomic replication changes
+	// or if that was explicitly disabled. We also unroll if learners are disabled because
+	// that's undertested and the expectation is that learners cannot be disabled in 19.2.
+	st := r.ClusterSettings()
+	unroll := !st.Version.IsActive(cluster.VersionAtomicChangeReplicas) ||
+		!useAtomicReplicationChanges.Get(&st.SV) ||
+		!useLearnerReplicas.Get(&st.SV)
+
+	if unroll {
+		// Legacy behavior.
+		for i := range chgs {
+			var err error
+			desc, err = r.changeReplicasImpl(ctx, desc, priority, reason, details, chgs[i:i+1])
+			if err != nil {
+				return nil, err
+			}
+		}
+		return desc, nil
+	}
+	// Atomic replication change.
+	return r.changeReplicasImpl(ctx, desc, priority, reason, details, chgs)
+}
+
+func (r *Replica) changeReplicasImpl(
+	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
+	priority SnapshotRequest_Priority,
+	reason storagepb.RangeLogEventReason,
+	details string,
+	chgs roachpb.ReplicationChanges,
+) (updatedDesc *roachpb.RangeDescriptor, _ error) {
+	var err error
+	// If in a joint config, clean up. The assumption here is that the caller
+	// of ChangeReplicas didn't even realize that they were holding on to a
+	// joint descriptor and would rather not have to deal with that fact.
+	desc, err = r.maybeLeaveAtomicChangeReplicas(ctx, desc)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := validateReplicationChanges(desc, chgs); err != nil {
@@ -917,11 +941,15 @@ func (r *Replica) ChangeReplicas(
 		if len(chgs) != 1 {
 			return nil, errors.Errorf("need exactly one change, got %+v", chgs)
 		}
-		if chgs[0].ChangeType == roachpb.ADD_REPLICA {
+		switch chgs[0].ChangeType {
+		case roachpb.ADD_REPLICA:
 			return r.addReplicaLegacyPreemptiveSnapshot(ctx, chgs[0].Target, desc, priority, reason, details)
+		case roachpb.REMOVE_REPLICA:
+			// We're removing a single voter.
+			return r.atomicReplicationChange(ctx, desc, priority, reason, details, chgs)
+		default:
+			return nil, errors.Errorf("unknown change type %d", chgs[0].ChangeType)
 		}
-		// We're removing a single voter.
-		return r.finalizeChangeReplicas(ctx, desc, priority, reason, details, chgs)
 	}
 
 	if adds := chgs.Additions(); len(adds) > 0 {
@@ -938,8 +966,13 @@ func (r *Replica) ChangeReplicas(
 
 	// Catch up any learners, then run the atomic replication change that adds the
 	// final voters and removes any undesirable replicas.
-	desc, err := r.finalizeChangeReplicas(ctx, desc, priority, reason, details, chgs)
+	desc, err = r.atomicReplicationChange(ctx, desc, priority, reason, details, chgs)
 	if err != nil {
+		// If the error occurred while transitioning out of an atomic replication change,
+		// try again here with a fresh descriptor; this is a noop otherwise.
+		if _, err := r.maybeLeaveAtomicChangeReplicas(ctx, r.Desc()); err != nil {
+			return nil, err
+		}
 		if fn := r.store.cfg.TestingKnobs.ReplicaAddSkipLearnerRollback; fn != nil && fn() {
 			return nil, err
 		}
@@ -952,7 +985,29 @@ func (r *Replica) ChangeReplicas(
 		}
 		return nil, err
 	}
-	return desc, nil
+	return desc, err
+}
+
+// maybeLeaveAtomicChangeReplicas transitions out of the joint configuration if
+// the descriptor indicates one. This involves running a distributed transaction
+// updating said descriptor, the result of which will be returned.
+func (r *Replica) maybeLeaveAtomicChangeReplicas(
+	ctx context.Context, desc *roachpb.RangeDescriptor,
+) (*roachpb.RangeDescriptor, error) {
+	// We want execChangeReplicasTxn to be able to make sure it's only tasked
+	// with leaving a joint state when it's in one, so make sure we don't call
+	// it if we're not.
+	if !desc.Replicas().InAtomicReplicationChange() {
+		return desc, nil
+	}
+
+	// NB: reason and detail won't be used because no range log event will be
+	// emitted.
+	//
+	// TODO(tbg): reconsider this.
+	return execChangeReplicasTxn(
+		ctx, r.store, desc, storagepb.ReasonUnknown /* unused */, "", nil, /* iChgs */
+	)
 }
 
 func validateReplicationChanges(
@@ -988,7 +1043,7 @@ func validateReplicationChanges(
 		// trying to add it with the learner+snapshot+voter cycle and got
 		// interrupted or else we hit a race between the replicate queue and
 		// AdminChangeReplicas.
-		if rDesc.GetType() == roachpb.ReplicaType_LEARNER {
+		if rDesc.GetType() == roachpb.LEARNER {
 			return errors.Errorf(
 				"unable to add replica %v which is already present as a learner in %s", chg.Target, desc)
 		}
@@ -1017,33 +1072,37 @@ func addLearnerReplicas(
 	details string,
 	targets []roachpb.ReplicationTarget,
 ) (*roachpb.RangeDescriptor, error) {
-	newDesc := *desc
-	newDesc.SetReplicas(desc.Replicas().DeepCopy())
-	var added []roachpb.ReplicaDescriptor
+	// TODO(tbg): we could add all learners in one go, but then we'd need to
+	// do it as an atomic replication change (raft doesn't know which config
+	// to apply the delta to, so we might be demoting more than one voter).
+	// This isn't crazy, we just need to transition out of the joint config
+	// before returning from this method, and it's unclear that it's worth
+	// doing.
 	for _, target := range targets {
-		replDesc := roachpb.ReplicaDescriptor{
-			NodeID:    target.NodeID,
-			StoreID:   target.StoreID,
-			ReplicaID: desc.NextReplicaID,
-			Type:      roachpb.ReplicaTypeLearner(),
+		iChgs := []internalReplicationChange{{target: target, typ: internalChangeTypeAddLearner}}
+		var err error
+		desc, err = execChangeReplicasTxn(
+			ctx, store, desc, reason, details, iChgs,
+		)
+		if err != nil {
+			return nil, err
 		}
-		newDesc.NextReplicaID++
-		newDesc.AddReplica(replDesc)
-		added = append(added, replDesc)
 	}
-	err := execChangeReplicasTxn(
-		ctx, store, desc, &newDesc, reason, details, added, nil, /* removed */
-	)
-	return &newDesc, err
+	return desc, nil
 }
 
-// finalizeChangeReplicas carries out the atomic membership change that finalizes
-// the addition and/or removal of replicas. Any voters in the process of being
-// added (as reflected by the replication changes) must have been added as
-// learners already and will be caught up before being promoted to voters. Any
-// replica removals (from the replication changes) will be processed. All of this
-// occurs in one atomic raft membership change.
-func (r *Replica) finalizeChangeReplicas(
+// atomicReplicationChange carries out the atomic membership change that
+// finalizes the addition and/or removal of replicas. Any voters in the process
+// of being added (as reflected by the replication changes) must have been added
+// as learners already and will be caught up before being promoted to voters.
+// Any replica removals (from the replication changes) will be processed. All of
+// this occurs in one atomic raft membership change which is carried out across
+// two distributed transactions. On error, it is possible that the range is in
+// the intermediate ("joint") configuration in which a quorum of both the old
+// and new sets of voters is required. If a range is encountered in this state,
+// r.maybeLeaveAtomicReplicationChange can fix this, but it is the caller's
+// job to do this when necessary.
+func (r *Replica) atomicReplicationChange(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	priority SnapshotRequest_Priority,
@@ -1055,26 +1114,20 @@ func (r *Replica) finalizeChangeReplicas(
 	// this may want to detect that and retry, sending a snapshot and promoting
 	// both sides.
 
-	updatedDesc := *desc
-	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
+	iChgs := make([]internalReplicationChange, 0, len(chgs))
 
-	adds, removes := chgs.Additions(), chgs.Removals()
-	var replsAdded, replsRemoved []roachpb.ReplicaDescriptor
-	for _, target := range adds {
-		// All adds must be present as learners right now and they are removed,
-		// upgraded, and then re-added.
-		rDesc, ok := updatedDesc.RemoveReplica(target.NodeID, target.StoreID)
+	for _, target := range chgs.Additions() {
+		iChgs = append(iChgs, internalReplicationChange{target: target, typ: internalChangeTypePromoteLearner})
+		// All adds must be present as learners right now, and we send them
+		// snapshots in anticipation of promoting them to voters.
+		rDesc, ok := desc.GetReplicaDescriptor(target.StoreID)
 		if !ok {
-			return nil, errors.Errorf("programming error: replica %v not found in %v", target, updatedDesc)
+			return nil, errors.Errorf("programming error: replica %v not found in %v", target, desc)
 		}
 
-		if rDesc.GetType() != roachpb.ReplicaType_LEARNER {
+		if rDesc.GetType() != roachpb.LEARNER {
 			return nil, errors.Errorf("programming error: cannot promote replica of type %s", rDesc.Type)
 		}
-
-		rDesc.Type = roachpb.ReplicaTypeVoter()
-		updatedDesc.AddReplica(rDesc)
-		replsAdded = append(replsAdded, rDesc)
 
 		// Note that raft snapshot queue will refuse to send a snapshot to a learner
 		// replica if its store is already sending a snapshot to that replica. That
@@ -1106,16 +1159,17 @@ func (r *Replica) finalizeChangeReplicas(
 		}
 	}
 
-	for _, target := range removes {
-		rDesc, found := updatedDesc.RemoveReplica(target.NodeID, target.StoreID)
-		if !found {
-			return nil, errors.Errorf("target to remove %v not found in %s", target, &updatedDesc)
-		}
-		replsRemoved = append(replsRemoved, rDesc)
+	for _, target := range chgs.Removals() {
+		iChgs = append(iChgs, internalReplicationChange{target: target, typ: internalChangeTypeRemove})
 	}
 
-	err := execChangeReplicasTxn(ctx, r.store, desc, &updatedDesc, reason, details, replsAdded, replsRemoved)
-	return &updatedDesc, err
+	var err error
+	desc, err = execChangeReplicasTxn(ctx, r.store, desc, reason, details, iChgs)
+	if err != nil {
+		return nil, err
+	}
+	// Leave the joint config if we entered one.
+	return r.maybeLeaveAtomicChangeReplicas(ctx, desc)
 }
 
 // tryRollbackLearnerReplica attempts to remove a learner specified by the
@@ -1129,10 +1183,8 @@ func (r *Replica) tryRollBackLearnerReplica(
 	reason storagepb.RangeLogEventReason,
 	details string,
 ) {
-	newDesc := *desc
-	newDesc.SetReplicas(desc.Replicas().DeepCopy())
-	replDesc, ok := newDesc.RemoveReplica(target.NodeID, target.StoreID)
-	if !ok || replDesc.GetType() != roachpb.ReplicaType_LEARNER {
+	repDesc, ok := desc.GetReplicaDescriptor(target.StoreID)
+	if !ok || repDesc.GetType() != roachpb.LEARNER {
 		// There's no learner to roll back.
 		log.Event(ctx, "learner to roll back not found; skipping")
 		return
@@ -1145,10 +1197,11 @@ func (r *Replica) tryRollBackLearnerReplica(
 	const rollbackTimeout = 10 * time.Second
 
 	rollbackFn := func(ctx context.Context) error {
-		removed := []roachpb.ReplicaDescriptor{replDesc}
-		return execChangeReplicasTxn(
-			ctx, r.store, desc, &newDesc, reason, details, nil /* added */, removed,
+		_, err := execChangeReplicasTxn(
+			ctx, r.store, desc, reason, details,
+			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemove}},
 		)
+		return err
 	}
 	rollbackCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
 	if err := contextutil.RunWithTimeout(
@@ -1158,7 +1211,7 @@ func (r *Replica) tryRollBackLearnerReplica(
 			"failed to rollback learner %s, abandoning it for the replicate queue: %v", target, err)
 		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 	} else {
-		log.Infof(ctx, "rolled back learner %s to %s", replDesc, &newDesc)
+		log.Infof(ctx, "rolled back learner %s in %s", target, desc)
 	}
 }
 
@@ -1174,33 +1227,16 @@ func (r *Replica) addReplicaLegacyPreemptiveSnapshot(
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
 
-	repDesc := roachpb.ReplicaDescriptor{
-		NodeID:  target.NodeID,
-		StoreID: target.StoreID,
-	}
-	repDescIdx := -1  // tracks NodeID && StoreID
 	nodeUsed := false // tracks NodeID only
-	for i, existingRep := range desc.Replicas().All() {
-		nodeUsedByExistingRep := existingRep.NodeID == repDesc.NodeID
+	for _, existingRep := range desc.Replicas().All() {
+		nodeUsedByExistingRep := existingRep.NodeID == target.NodeID
 		nodeUsed = nodeUsed || nodeUsedByExistingRep
-
-		if nodeUsedByExistingRep && existingRep.StoreID == repDesc.StoreID {
-			repDescIdx = i
-			repDesc = existingRep
-			break
-		}
 	}
-
-	updatedDesc := *desc
-	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
 
 	// If the replica exists on the remote node, no matter in which store,
 	// abort the replica add.
 	if nodeUsed {
-		if repDescIdx != -1 {
-			return nil, errors.Errorf("%s: unable to add replica %v which is already present", r, repDesc)
-		}
-		return nil, errors.Errorf("%s: unable to add replica %v; node already has a replica", r, repDesc)
+		return nil, errors.Errorf("%s: unable to add replica %v; node already has a replica", r, target)
 	}
 
 	// Send a pre-emptive snapshot. Note that the replica to which this
@@ -1225,32 +1261,151 @@ func (r *Replica) addReplicaLegacyPreemptiveSnapshot(
 	// operation is processed. This is important to allow other ranges to make
 	// progress which might be required for this ChangeReplicas operation to
 	// complete. See #10409.
-	if err := r.sendSnapshot(ctx, repDesc, SnapshotRequest_PREEMPTIVE, priority); err != nil {
-		return nil, err
+	{
+		preemptiveRepDesc := roachpb.ReplicaDescriptor{
+			NodeID:    target.NodeID,
+			StoreID:   target.StoreID,
+			Type:      roachpb.ReplicaTypeVoterFull(),
+			ReplicaID: 0, // intentional
+		}
+		if err := r.sendSnapshot(ctx, preemptiveRepDesc, SnapshotRequest_PREEMPTIVE, priority); err != nil {
+			return nil, err
+		}
 	}
 
-	repDesc.ReplicaID = updatedDesc.NextReplicaID
-	updatedDesc.NextReplicaID++
-	updatedDesc.AddReplica(repDesc)
+	iChgs := []internalReplicationChange{{target: target, typ: internalChangeTypeAddVoterViaPreemptiveSnap}}
+	return execChangeReplicasTxn(ctx, r.store, desc, reason, details, iChgs)
+}
 
-	added := []roachpb.ReplicaDescriptor{repDesc}
-	err := execChangeReplicasTxn(ctx, r.store, desc, &updatedDesc, reason, details, added, nil /* removed */)
-	return &updatedDesc, err
+type internalChangeType byte
+
+const (
+	internalChangeTypeAddVoterViaPreemptiveSnap internalChangeType = iota
+	internalChangeTypeAddLearner
+	internalChangeTypePromoteLearner
+	internalChangeTypeRemove
+)
+
+// internalReplicationChange is a replication target together with an internal
+// change type. The internal change type is needed to encode in which way the
+// replica is mutated (i.e. in a sense, what its predecessor looked like). We
+// need this to accurately transcribe the old into the updated range descriptor.
+type internalReplicationChange struct {
+	target roachpb.ReplicationTarget
+	typ    internalChangeType
 }
 
 func execChangeReplicasTxn(
 	ctx context.Context,
 	store *Store,
 	desc *roachpb.RangeDescriptor,
-	updatedDesc *roachpb.RangeDescriptor,
 	reason storagepb.RangeLogEventReason,
 	details string,
-	added, removed []roachpb.ReplicaDescriptor,
-) error {
+	chgs []internalReplicationChange,
+) (*roachpb.RangeDescriptor, error) {
+	updatedDesc := *desc
+	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
+
 	generationComparableEnabled := store.ClusterSettings().Version.IsActive(cluster.VersionGenerationComparable)
 	if generationComparableEnabled {
 		updatedDesc.IncrementGeneration()
 		updatedDesc.GenerationComparable = proto.Bool(true)
+	}
+
+	var added, removed []roachpb.ReplicaDescriptor
+	if len(chgs) > 0 {
+		if desc.Replicas().InAtomicReplicationChange() {
+			return nil, errors.Errorf("must transition out of joint config first: %s", desc)
+		}
+
+		useJoint := len(chgs) > 1
+		for _, chg := range chgs {
+			switch chg.typ {
+			case internalChangeTypeAddVoterViaPreemptiveSnap:
+				// Legacy code.
+				added = append(added,
+					updatedDesc.AddReplica(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_FULL))
+			case internalChangeTypeAddLearner:
+				added = append(added,
+					updatedDesc.AddReplica(chg.target.NodeID, chg.target.StoreID, roachpb.LEARNER))
+			case internalChangeTypePromoteLearner:
+				typ := roachpb.VOTER_FULL
+				if useJoint {
+					typ = roachpb.VOTER_INCOMING
+				}
+				rDesc, ok := updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, typ)
+				if !ok {
+					return nil, errors.Errorf("cannot promote target %v which is missing as Learner", chg.target)
+				}
+				added = append(added, rDesc)
+			case internalChangeTypeRemove:
+				var rDesc roachpb.ReplicaDescriptor
+				var ok bool
+				if !useJoint {
+					rDesc, ok = updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
+				} else {
+					rDesc, ok = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_OUTGOING)
+				}
+				if !ok {
+					return nil, errors.Errorf("cannot remove nonexistent target %v", chg.target)
+				}
+				removed = append(removed, rDesc)
+			default:
+				return nil, errors.Errorf("unsupported internal change type %d", chg.typ)
+			}
+		}
+	} else {
+		// Want to leave a joint config. Note that we're not populating 'added' or 'removed', this
+		// is intentional; leaving the joint config corresponds to an "empty" raft conf change.
+		var isJoint bool
+		// NB: the DeepCopy is needed or we'll skip over an entry every time we
+		// call RemoveReplica below.
+		for _, rDesc := range updatedDesc.Replicas().DeepCopy().All() {
+			switch rDesc.GetType() {
+			case roachpb.VOTER_INCOMING:
+				updatedDesc.SetReplicaType(rDesc.NodeID, rDesc.StoreID, roachpb.VOTER_FULL)
+				isJoint = true
+			case roachpb.VOTER_OUTGOING:
+				updatedDesc.RemoveReplica(rDesc.NodeID, rDesc.StoreID)
+				isJoint = true
+			default:
+			}
+		}
+		if !isJoint {
+			return nil, errors.Errorf("cannot leave a joint config; desc not joint: %s", &updatedDesc)
+		}
+	}
+
+	if err := updatedDesc.Validate(); err != nil {
+		return nil, errors.Wrapf(err, "validating updated descriptor %s", &updatedDesc)
+	}
+
+	var crt *roachpb.ChangeReplicasTrigger
+	if !store.ClusterSettings().Version.IsActive(cluster.VersionAtomicChangeReplicasTrigger) {
+		var deprecatedChangeType roachpb.ReplicaChangeType
+		var deprecatedRepDesc roachpb.ReplicaDescriptor
+		if len(added) > 0 {
+			deprecatedChangeType = roachpb.ADD_REPLICA
+			deprecatedRepDesc = added[0]
+		} else {
+			deprecatedChangeType = roachpb.REMOVE_REPLICA
+			deprecatedRepDesc = removed[0]
+		}
+		crt = &roachpb.ChangeReplicasTrigger{
+			DeprecatedChangeType: deprecatedChangeType,
+			DeprecatedReplica:    deprecatedRepDesc,
+			Desc:                 &updatedDesc,
+		}
+	} else {
+		crt = &roachpb.ChangeReplicasTrigger{
+			Desc:                    &updatedDesc,
+			InternalAddedReplicas:   added,
+			InternalRemovedReplicas: removed,
+		}
+	}
+
+	if _, err := crt.ConfChange(nil); err != nil {
+		return nil, errors.Wrapf(err, "programming error: malformed trigger created from desc %s to %s", desc, &updatedDesc)
 	}
 
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
@@ -1268,7 +1423,7 @@ func execChangeReplicasTxn(
 
 			// Important: the range descriptor must be the first thing touched in the transaction
 			// so the transaction record is co-located with the range being modified.
-			if err := updateRangeDescriptor(b, descKey, dbDescValue, updatedDesc); err != nil {
+			if err := updateRangeDescriptor(b, descKey, dbDescValue, &updatedDesc); err != nil {
 				return err
 			}
 
@@ -1288,7 +1443,7 @@ func execChangeReplicasTxn(
 		} {
 			for _, repDesc := range tup.repDescs {
 				if err := store.logChange(
-					ctx, txn, tup.typ, repDesc, *updatedDesc, reason, details,
+					ctx, txn, tup.typ, repDesc, updatedDesc, reason, details,
 				); err != nil {
 					return err
 				}
@@ -1300,32 +1455,8 @@ func execChangeReplicasTxn(
 		b := txn.NewBatch()
 
 		// Update range descriptor addressing record(s).
-		if err := updateRangeAddressing(b, updatedDesc); err != nil {
+		if err := updateRangeAddressing(b, &updatedDesc); err != nil {
 			return err
-		}
-
-		var crt *roachpb.ChangeReplicasTrigger
-		if !store.ClusterSettings().Version.IsActive(cluster.VersionAtomicChangeReplicasTrigger) {
-			var deprecatedChangeType roachpb.ReplicaChangeType
-			var deprecatedRepDesc roachpb.ReplicaDescriptor
-			if len(added) > 0 {
-				deprecatedChangeType = roachpb.ADD_REPLICA
-				deprecatedRepDesc = added[0]
-			} else {
-				deprecatedChangeType = roachpb.REMOVE_REPLICA
-				deprecatedRepDesc = removed[0]
-			}
-			crt = &roachpb.ChangeReplicasTrigger{
-				DeprecatedChangeType: deprecatedChangeType,
-				DeprecatedReplica:    deprecatedRepDesc,
-				Desc:                 updatedDesc,
-			}
-		} else {
-			crt = &roachpb.ChangeReplicasTrigger{
-				Desc:                    updatedDesc,
-				InternalAddedReplicas:   added,
-				InternalRemovedReplicas: removed,
-			}
 		}
 
 		b.AddRawRequest(&roachpb.EndTransactionRequest{
@@ -1345,10 +1476,10 @@ func execChangeReplicasTxn(
 		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
 			err = &benignError{errors.New(msg)}
 		}
-		return errors.Wrapf(err, "change replicas of r%d failed", desc.RangeID)
+		return nil, errors.Wrapf(err, "change replicas of r%d failed", desc.RangeID)
 	}
 	log.Event(ctx, "txn complete")
-	return nil
+	return &updatedDesc, nil
 }
 
 // sendSnapshot sends a snapshot of the replica state to the specified replica.

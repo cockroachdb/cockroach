@@ -113,7 +113,7 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	ctx := context.Background()
 	const voterStoreID, learnerStoreID roachpb.StoreID = 1, 2
 	replicas := []roachpb.ReplicaDescriptor{
-		{StoreID: voterStoreID, Type: roachpb.ReplicaTypeVoter()},
+		{StoreID: voterStoreID, Type: roachpb.ReplicaTypeVoterFull()},
 		{StoreID: learnerStoreID, Type: roachpb.ReplicaTypeLearner()},
 	}
 	desc := roachpb.RangeDescriptor{}

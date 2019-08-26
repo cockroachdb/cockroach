@@ -114,12 +114,14 @@ namespace cockroach {
 namespace roachpb {
 
 enum ReplicaType {
-  VOTER = 0,
+  VOTER_FULL = 0,
+  VOTER_INCOMING = 2,
+  VOTER_OUTGOING = 3,
   LEARNER = 1
 };
 bool ReplicaType_IsValid(int value);
-const ReplicaType ReplicaType_MIN = VOTER;
-const ReplicaType ReplicaType_MAX = LEARNER;
+const ReplicaType ReplicaType_MIN = VOTER_FULL;
+const ReplicaType ReplicaType_MAX = VOTER_OUTGOING;
 const int ReplicaType_ARRAYSIZE = ReplicaType_MAX + 1;
 
 // ===================================================================

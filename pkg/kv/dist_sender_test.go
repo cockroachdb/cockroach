@@ -310,9 +310,10 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	descriptor := roachpb.RangeDescriptor{
-		StartKey: roachpb.RKeyMin,
-		EndKey:   roachpb.RKeyMax,
-		RangeID:  rangeID,
+		StartKey:      roachpb.RKeyMin,
+		EndKey:        roachpb.RKeyMax,
+		RangeID:       rangeID,
+		NextReplicaID: 1,
 	}
 	for i := int32(1); i <= 5; i++ {
 		addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d:1", i))
@@ -326,10 +327,7 @@ func TestSendRPCOrder(t *testing.T) {
 		if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(i)), nd, time.Hour); err != nil {
 			t.Fatal(err)
 		}
-		descriptor.AddReplica(roachpb.ReplicaDescriptor{
-			NodeID:  roachpb.NodeID(i),
-			StoreID: roachpb.StoreID(i),
-		})
+		descriptor.AddReplica(roachpb.NodeID(i), roachpb.StoreID(i), roachpb.VOTER_FULL)
 	}
 
 	// Stub to be changed in each test case.
@@ -1416,9 +1414,10 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 
 	// Fill RangeDescriptor with three replicas.
 	var descriptor = roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKey("a"),
-		EndKey:   roachpb.RKey("z"),
+		RangeID:       1,
+		StartKey:      roachpb.RKey("a"),
+		EndKey:        roachpb.RKey("z"),
+		NextReplicaID: 1,
 	}
 	for i := 1; i <= 3; i++ {
 		addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
@@ -1430,11 +1429,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		descriptor.AddReplica(roachpb.ReplicaDescriptor{
-			NodeID:    roachpb.NodeID(i),
-			StoreID:   roachpb.StoreID(i),
-			ReplicaID: roachpb.ReplicaID(i),
-		})
+		descriptor.AddReplica(roachpb.NodeID(i), roachpb.StoreID(i), roachpb.VOTER_FULL)
 	}
 	descDB := mockRangeDescriptorDBForDescs(
 		testMetaRangeDescriptor,

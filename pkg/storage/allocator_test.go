@@ -4784,7 +4784,7 @@ func TestAllocatorRemoveLearner(t *testing.T) {
 	zone := config.ZoneConfig{
 		NumReplicas: proto.Int32(3),
 	}
-	learnerType := roachpb.ReplicaType_LEARNER
+	learnerType := roachpb.LEARNER
 	rangeWithLearnerDesc := roachpb.RangeDescriptor{
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
