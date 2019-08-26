@@ -720,7 +720,7 @@ func (r *DistSQLReceiver) Push(
 var (
 	// ErrLimitedResultNotSupported is an error produced by pgwire
 	// indicating an unsupported feature of row count limits was attempted.
-	ErrLimitedResultNotSupported = unimplemented.NewWithIssue(4035, "execute row count limits only partially supported")
+	ErrLimitedResultNotSupported = unimplemented.NewWithIssue(40195, "multiple active portals not supported")
 	// ErrLimitedResultClosed is a sentinel error produced by pgwire
 	// indicating the portal should be closed without error.
 	ErrLimitedResultClosed = errors.New("row count limit closed")

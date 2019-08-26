@@ -186,6 +186,22 @@ SELECT (a + b)::INT FROM intdec
 ----
 3
 
+statement ok
+SET vectorize = experimental_always
+
+query B
+SELECT b > a FROM intdec
+----
+true
+
+query IR
+SELECT a, b FROM intdec WHERE a < b;
+----
+1  2.0
+
+statement ok
+RESET vectorize
+
 # AND expressions.
 query II
 SELECT a, b FROM a WHERE a < 2 AND b > 0 AND a * b != 3
