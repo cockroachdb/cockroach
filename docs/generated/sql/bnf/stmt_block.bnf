@@ -280,6 +280,7 @@ alter_ddl_stmt ::=
 	| alter_sequence_stmt
 	| alter_database_stmt
 	| alter_range_stmt
+	| alter_partition_stmt
 
 alter_user_stmt ::=
 	alter_user_password_stmt
@@ -961,6 +962,9 @@ alter_database_stmt ::=
 alter_range_stmt ::=
 	alter_zone_range_stmt
 
+alter_partition_stmt ::=
+	alter_zone_partition_stmt
+
 alter_user_password_stmt ::=
 	'ALTER' 'USER' string_or_placeholder 'WITH' 'PASSWORD' string_or_placeholder
 	| 'ALTER' 'USER' 'IF' 'EXISTS' string_or_placeholder 'WITH' 'PASSWORD' string_or_placeholder
@@ -1252,7 +1256,6 @@ alter_scatter_stmt ::=
 
 alter_zone_table_stmt ::=
 	'ALTER' 'TABLE' table_name set_zone_config
-	| 'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name set_zone_config
 
 alter_rename_table_stmt ::=
 	'ALTER' 'TABLE' relation_expr 'RENAME' 'TO' table_name
@@ -1280,7 +1283,6 @@ alter_rename_index_stmt ::=
 
 alter_zone_index_stmt ::=
 	'ALTER' 'INDEX' table_index_name set_zone_config
-	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
 
 alter_rename_view_stmt ::=
 	'ALTER' 'VIEW' relation_expr 'RENAME' 'TO' view_name
@@ -1302,6 +1304,11 @@ alter_zone_database_stmt ::=
 
 alter_zone_range_stmt ::=
 	'ALTER' 'RANGE' zone_name set_zone_config
+
+alter_zone_partition_stmt ::=
+	'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name set_zone_config
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' '*' set_zone_config
 
 kv_option ::=
 	name '=' string_or_placeholder

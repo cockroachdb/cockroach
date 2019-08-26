@@ -69,6 +69,9 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER RANGE foo CONFIGURE ??`, `ALTER RANGE`},
 		{`ALTER RANGE ??`, `ALTER RANGE`},
 
+		{`ALTER PARTITION ??`, `ALTER PARTITION`},
+		{`ALTER PARTITION p OF INDEX tbl@idx ??`, `ALTER PARTITION`},
+
 		{`CANCEL ??`, `CANCEL`},
 		{`CANCEL JOB ??`, `CANCEL JOBS`},
 		{`CANCEL JOBS ??`, `CANCEL JOBS`},
