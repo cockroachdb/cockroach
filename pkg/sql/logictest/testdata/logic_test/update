@@ -416,7 +416,7 @@ CREATE TABLE src(x VARCHAR PRIMARY KEY);
   INSERT INTO derived(x, y) VALUES ('abc', 'abc')
 
 # Sanity check that the FK constraints gets actually validated
-statement error foreign key violation
+statement error foreign key
 UPDATE derived SET x = 'xxx'
 
 statement error value too long for type CHAR\(3\)
