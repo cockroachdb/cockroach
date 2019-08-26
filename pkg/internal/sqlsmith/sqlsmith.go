@@ -74,6 +74,7 @@ type Smither struct {
 	simpleDatums     bool
 	avoidConsts      bool
 	vectorizable     bool
+	outputSort       bool
 	ignoreFNs        []*regexp.Regexp
 }
 
@@ -253,6 +254,17 @@ func (d vectorizable) Apply(s *Smither) {
 	s.tableExprs = vectorizableTableExprs
 }
 
+// OutputSort adds a top-level ORDER BY on all columns.
+func OutputSort() SmitherOption {
+	return outputSort{}
+}
+
+type outputSort struct{}
+
+func (d outputSort) Apply(s *Smither) {
+	s.outputSort = true
+}
+
 type multiOption []SmitherOption
 
 func (d multiOption) Apply(s *Smither) {
@@ -268,6 +280,7 @@ func CompareMode() SmitherOption {
 		DisableMutations(),
 		DisableImpureFns(),
 		DisableLimits(),
+		OutputSort(),
 	}
 }
 
