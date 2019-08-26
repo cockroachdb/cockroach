@@ -1978,13 +1978,23 @@ func getDiskUsageInBytes(
 			return 0, errors.New("already failed")
 		}
 		var err error
-		out, err = c.RunWithBuffer(ctx, logger, c.Node(nodeIdx), fmt.Sprint("du -sk {store-dir} | grep -oE '^[0-9]+'"))
+		// `du` can warn if files get removed out from under it (which
+		// happens during RocksDB compactions, for example). Discard its
+		// stderr to avoid breaking Atoi later.
+		// TODO(bdarnell): Refactor this stack to not combine stdout and
+		// stderr so we don't need to do this (and the Warning check
+		// below).
+		out, err = c.RunWithBuffer(ctx, logger, c.Node(nodeIdx),
+			fmt.Sprint("du -sk {store-dir} 2>/dev/null | grep -oE '^[0-9]+'"))
 		if err != nil {
 			if ctx.Err() != nil {
 				return 0, ctx.Err()
 			}
-			// `du` can fail if files get removed out from under it. RocksDB likes to do that
-			// during compactions and such. It's rare enough to just retry.
+			// If `du` fails, retry.
+			// TODO(bdarnell): is this worth doing? It was originally added
+			// because of the "files removed out from under it" problem, but
+			// that doesn't result in a command failure, just a stderr
+			// message.
 			logger.Printf("retrying disk usage computation after spurious error: %s", err)
 			continue
 		}
