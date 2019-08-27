@@ -715,7 +715,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			// Start up the update check loop.
 			// We don't do this in (*server.Server).Start() because we don't want it
 			// in tests.
-			if !envutil.EnvOrDefaultBool("COCKROACH_SKIP_UPDATE_CHECK", false) {
+			if shouldEnableTelemetry() {
 				s.PeriodicallyCheckForUpdates(ctx)
 			}
 
@@ -1074,6 +1074,10 @@ func maybeWarnMemorySizes(ctx context.Context) {
 
 func logOutputDirectory() string {
 	return startCtx.logDir.String()
+}
+
+func shouldEnableTelemetry() bool {
+	return !envutil.EnvOrDefaultBool("COCKROACH_SKIP_UPDATE_CHECK", false)
 }
 
 // setupAndInitializeLoggingAndProfiling does what it says on the label.

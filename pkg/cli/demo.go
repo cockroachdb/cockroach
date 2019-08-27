@@ -14,7 +14,10 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
@@ -41,13 +44,23 @@ interactive SQL prompt to it. Various datasets are available to be preloaded as
 subcommands: e.g. "cockroach demo startrek". See --help for a full list.
 
 By default, the 'movr' dataset is pre-loaded. You can also use --empty
-to avoid pre-loading a dataset.`,
+to avoid pre-loading a dataset.
+
+cockroach demo attempts to obtain a temporary enterprise license for demoing
+enterprise features and enable telemetry back to Cockroach Labs. In order to
+disable this behavior, set the environment variable "COCKROACH_SKIP_UPDATE_CHECK".
+`,
 	Example: `  cockroach demo`,
 	Args:    cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(func(cmd *cobra.Command, _ []string) error {
 		return runDemo(cmd, nil /* gen */)
 	}),
 }
+
+// TODO (rohany): change this once another endpoint is setup for getting licenses.
+// This URL grants a license that is valid for 1 hour.
+const licenseURL = "https://register.cockroachdb.com/api/prodtest"
+const demoOrg = "Cockroach Labs - Production Testing"
 
 const defaultGeneratorName = "movr"
 
@@ -93,6 +106,39 @@ func init() {
 		demoCmd.AddCommand(genDemoCmd)
 		genDemoCmd.Flags().AddFlagSet(genFlags)
 	}
+}
+
+func getLicense() (string, error) {
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+	resp, err := client.Get(licenseURL)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.New("unable to connect to licensing endpoint")
+	}
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(bodyBytes), nil
+}
+
+func getAndApplyLicense(db *gosql.DB) error {
+	license, err := getLicense()
+	if err != nil {
+		return err
+	}
+	if _, err := db.Exec(`SET CLUSTER SETTING cluster.organization = $1`, demoOrg); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`SET CLUSTER SETTING enterprise.license = $1`, license); err != nil {
+		return err
+	}
+	return nil
 }
 
 func setupTransientServers(
@@ -189,6 +235,29 @@ func setupTransientServers(
 	}
 	urlStr := url.String()
 
+	// Start up the update check loop.
+	// We don't do this in (*server.Server).Start() because we don't want it
+	// in tests.
+	if shouldEnableTelemetry() {
+		s.PeriodicallyCheckForUpdates(ctx)
+		// If we allow telemetry, then also try and get an enterprise license for the demo.
+		if cliCtx.isInteractive {
+			db, err := gosql.Open("postgres", urlStr)
+			if err != nil {
+				return ``, ``, cleanup, err
+			}
+			// Perform license acquisition asynchronously to avoid delay in cli startup.
+			go func() {
+				defer db.Close()
+				err := getAndApplyLicense(db)
+				if err != nil {
+					msg := `error attempting to acquire demo license %+v. Enterprise feature are not enabled in this session`
+					log.Warningf(ctx, msg, err)
+				}
+			}()
+		}
+	}
+
 	// If there is a load generator, create its database and load its
 	// fixture.
 	if gen != nil {
@@ -218,13 +287,13 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) error {
 		gen = defaultGenerator
 	}
 
+	checkInteractive()
+
 	connURL, adminURL, cleanup, err := setupTransientServers(cmd, gen)
 	defer cleanup()
 	if err != nil {
 		return checkAndMaybeShout(err)
 	}
-
-	checkInteractive()
 
 	if cliCtx.isInteractive {
 		fmt.Printf(`#
