@@ -702,9 +702,9 @@ func TestJointConfigLease(t *testing.T) {
 	exp := `cannot transfer lease to replica of type VOTER_INCOMING`
 	require.True(t, testutils.IsError(err, exp), err)
 
-	// NB: we don't have to transition out of the joint config first because
-	// this is done automatically by ChangeReplicas before it does what it's
-	// asked to do.
+	// NB: we don't have to transition out of the previous joint config first
+	// because this is done automatically by ChangeReplicas before it does what
+	// it's asked to do.
 	desc = tc.RemoveReplicasOrFatal(t, k, tc.Target(1))
 	err = tc.TransferRangeLease(desc, tc.Target(1))
 	exp = `cannot transfer lease to replica of type VOTER_OUTGOING`
