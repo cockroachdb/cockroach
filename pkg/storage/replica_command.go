@@ -1362,13 +1362,13 @@ func execChangeReplicasTxn(
 				if !ok {
 					return nil, errors.Errorf("target %s not found", chg.target)
 				}
-				if typ := rDesc.GetType(); !useJoint || typ != roachpb.VOTER_FULL {
-					// NB: typ != VOTER_FULL means it's a LEARNER since we verified above that we
-					// did not start in a joint config.
+				if typ := rDesc.GetType(); !useJoint || typ == roachpb.LEARNER {
 					rDesc, _ = updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
 				} else {
+					// NB: typ is already known to be VOTER_FULL because of !InAtomicReplicationChange() above.
+					// We check it anyway.
 					var prevTyp roachpb.ReplicaType
-					rDesc, prevTyp, _ = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_OUTGOING)
+					rDesc, _, _ = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_OUTGOING)
 					if prevTyp != roachpb.VOTER_FULL {
 						return nil, errors.Errorf("cannot transition from %s to VOTER_OUTGOING", prevTyp)
 					}
