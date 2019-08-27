@@ -278,7 +278,7 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 	const kb = 1 << 10
 
 	t.Logf("Adding %dkb sst spanning %d splits from %v to %v", len(sst)/kb, len(splits), start, end)
-	if err := bulk.AddSSTable(
+	if _, err := bulk.AddSSTable(
 		context.TODO(), mock, start, end, sst, false /* disallowShadowing */, enginepb.MVCCStats{},
 	); err != nil {
 		t.Fatal(err)
