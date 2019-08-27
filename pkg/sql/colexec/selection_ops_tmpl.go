@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"time"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -51,6 +52,9 @@ var _ tree.Datum
 
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
+
+// Dummy import to pull in "time" package.
+var _ = time.Day
 
 // Dummy import to pull in "coltypes" package.
 var _ = coltypes.Bool

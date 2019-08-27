@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"time"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -103,6 +104,9 @@ var _ bytes.Buffer
 
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
+
+// Dummy import to pull in "time" package.
+var _ time.Time
 
 // Dummy import to pull in "tree" package.
 var _ tree.Datum

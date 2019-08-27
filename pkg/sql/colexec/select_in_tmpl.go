@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"time"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -44,6 +45,9 @@ type _TYPE interface{}
 
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
+
+// Dummy import to pull in "time" package.
+var _ time.Time
 
 // Dummy import to pull in "coltypes" package
 var _ coltypes.T

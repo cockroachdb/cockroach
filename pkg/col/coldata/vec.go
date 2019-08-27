@@ -12,6 +12,7 @@ package coldata
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -76,6 +77,8 @@ type Vec interface {
 	// TODO(jordan): should this be [][]byte?
 	// Decimal returns an apd.Decimal slice.
 	Decimal() []apd.Decimal
+	// Timestamp returns a time.Time slice.
+	Timestamp() []time.Time
 
 	// Col returns the raw, typeless backing storage for this Vec.
 	Col() interface{}
@@ -151,6 +154,8 @@ func NewMemColumn(t coltypes.T, n int) Vec {
 		return &memColumn{t: t, col: make([]float64, n), nulls: nulls}
 	case coltypes.Decimal:
 		return &memColumn{t: t, col: make([]apd.Decimal, n), nulls: nulls}
+	case coltypes.Timestamp:
+		return &memColumn{t: t, col: make([]time.Time, n), nulls: nulls}
 	default:
 		panic(fmt.Sprintf("unhandled type %s", t))
 	}
@@ -190,6 +195,10 @@ func (m *memColumn) Bytes() *Bytes {
 
 func (m *memColumn) Decimal() []apd.Decimal {
 	return m.col.([]apd.Decimal)
+}
+
+func (m *memColumn) Timestamp() []time.Time {
+	return m.col.([]time.Time)
 }
 
 func (m *memColumn) Col() interface{} {
