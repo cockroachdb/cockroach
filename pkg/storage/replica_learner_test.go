@@ -973,9 +973,10 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		require.Empty(t, desc.Replicas().Learners())
 	}
 
+	// Create the RHS again and repeat the same game, except this time the LHS
+	// gets a VOTER_INCOMING for s2, and then the merge queue runs into it. It
+	// will transition the LHS out of the joint config and then do the merge.
 	{
-		// Create the RHS again and repeat the same game, except this time the LHS
-		// gets a VOTER_INCOMING for s2.
 		desc := splitAndUnsplit()
 
 		ltk.withJointConfigAndStop(func() {
@@ -1002,6 +1003,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		checkTransitioningOut()
 		desc = tc.LookupRangeOrFatal(t, scratchStartKey)
 		require.Len(t, desc.Replicas().Voters(), 2)
+		require.False(t, desc.Replicas().InAtomicReplicationChange(), desc)
 
 		// Repeat the game, except now we start with two replicas and we're
 		// giving the RHS a VOTER_OUTGOING.
