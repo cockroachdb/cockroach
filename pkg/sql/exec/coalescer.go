@@ -18,7 +18,7 @@ import (
 )
 
 // coalescerOp consumes the input operator and coalesces the resulting batches
-// to return full batches of col.BatchSize.
+// to return full batches of coldata.BatchSize.
 type coalescerOp struct {
 	OneInputNode
 
@@ -50,6 +50,8 @@ func (p *coalescerOp) Init() {
 }
 
 func (p *coalescerOp) Next(ctx context.Context) coldata.Batch {
+	p.group.ResetInternalBatch()
+	p.buffer.ResetInternalBatch()
 	tempBatch := p.group
 	p.group = p.buffer
 

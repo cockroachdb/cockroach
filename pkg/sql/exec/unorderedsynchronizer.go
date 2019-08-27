@@ -200,6 +200,8 @@ func (s *UnorderedSynchronizer) init(ctx context.Context) {
 // Next is part of the Operator interface.
 func (s *UnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	if s.done {
+		// TODO(yuzefovich): do we want to be on the safe side and explicitly set
+		// the length here (and below) to 0?
 		return s.zeroBatch
 	}
 	if !s.initialized {
