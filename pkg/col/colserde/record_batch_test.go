@@ -196,7 +196,7 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 
 	// We do not support decimals yet.
 	for _, t := range coltypes.AllTypes {
-		if t == coltypes.Decimal {
+		if t == coltypes.Decimal || t == coltypes.Timestamp {
 			continue
 		}
 		supportedTypes = append(supportedTypes, t)

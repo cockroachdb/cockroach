@@ -61,6 +61,9 @@ func EstimateBatchSizeBytes(vecTypes []coltypes.T, batchLength int) int {
 			// Similar to byte arrays, we can't tell how much space is used
 			// to hold the arbitrary precision decimal objects.
 			acc += 50
+		case coltypes.Timestamp:
+			// time.Time has 2 int64s and a pointer.
+			acc += sizeOfInt64 * 3
 		default:
 			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", t))
 		}

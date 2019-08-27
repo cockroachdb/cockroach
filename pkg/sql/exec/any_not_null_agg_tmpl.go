@@ -20,6 +20,8 @@
 package exec
 
 import (
+	"time"
+
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -44,6 +46,9 @@ func newAnyNotNullAgg(t coltypes.T) (aggregateFunc, error) {
 
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
+
+// Dummy import to pull in "time" package.
+var _ time.Time
 
 // _GOTYPESLICE is the template Go type slice variable for this operator. It
 // will be replaced by the Go slice representation for each type in coltypes.T, for

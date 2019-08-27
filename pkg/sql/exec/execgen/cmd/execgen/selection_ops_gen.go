@@ -21,9 +21,10 @@ const selTemplate = `
 package exec
 
 import (
-	"bytes"
+  "bytes"
   "context"
   "math"
+  "time"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"

@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -43,6 +44,9 @@ var _ tree.Datum
 
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
+
+// Dummy import to pull in "time" package.
+var _ time.Time
 
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
