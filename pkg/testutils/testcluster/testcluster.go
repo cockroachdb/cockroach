@@ -506,6 +506,7 @@ func (tc *TestCluster) RemoveReplicas(
 	return tc.changeReplicas(roachpb.REMOVE_REPLICA, keys.MustAddr(startKey), targets...)
 }
 
+// RemoveReplicasOrFatal is part of TestClusterInterface.
 func (tc *TestCluster) RemoveReplicasOrFatal(
 	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) roachpb.RangeDescriptor {
