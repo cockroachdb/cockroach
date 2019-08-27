@@ -21,6 +21,7 @@ package colexec
 import (
 	"bytes"
 	"math"
+	"time"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
