@@ -208,7 +208,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 		if err := protoutil.Unmarshal(c.AsV2().Context, &ctx); err != nil {
 			return "", err
 		}
-		var cmd storagepb.ReplicatedEvalResult
+		var cmd storagepb.RaftCommand
 		if err := protoutil.Unmarshal(ctx.Payload, &cmd); err != nil {
 			return "", err
 		}
