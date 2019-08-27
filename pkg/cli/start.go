@@ -715,7 +715,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			// Start up the update check loop.
 			// We don't do this in (*server.Server).Start() because we don't want it
 			// in tests.
-			if !envutil.EnvOrDefaultBool("COCKROACH_SKIP_UPDATE_CHECK", false) {
+			if !cluster.TelemetryOptOut() {
 				s.PeriodicallyCheckForUpdates(ctx)
 			}
 
