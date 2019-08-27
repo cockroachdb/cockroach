@@ -49,10 +49,10 @@ subcommands: e.g. "cockroach demo startrek". See --help for a full list.
 By default, the 'movr' dataset is pre-loaded. You can also use --empty
 to avoid pre-loading a dataset.
 
-cockroach demo attempts to connect to a Cockroach Labs server to obtain a 
-temporary enterprise license for demoing enterprise features and enable 
-telemetry back to Cockroach Labs. In order to disable this behavior, set the 
-environment variable "COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING".
+cockroach demo attempts to connect to a Cockroach Labs server to obtain a
+temporary enterprise license for demoing enterprise features and enable
+telemetry back to Cockroach Labs. In order to disable this behavior, set the
+environment variable "COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING" to true.
 `,
 	Example: `  cockroach demo`,
 	Args:    cobra.NoArgs,
@@ -122,6 +122,13 @@ func setupTransientServers(
 
 	if demoCtx.nodes <= 0 {
 		return "", "", cleanup, errors.Errorf("must have a positive number of nodes")
+	}
+
+	// This demo only works on a 9 node cluster, so set the node count as such.
+	// Ignore input user localities.
+	if demoCtx.geoPartitionedReplicas {
+		demoCtx.nodes = 9
+		demoCtx.localities = nil
 	}
 
 	// The user specified some localities for their nodes.
@@ -207,6 +214,10 @@ func setupTransientServers(
 	}
 	urlStr := url.String()
 
+	// Communicate information about license acquisition to services
+	// that depend on it.
+	licenseSuccess := make(chan bool, 1)
+
 	// Start up the update check loop.
 	// We don't do this in (*server.Server).Start() because we don't want it
 	// in tests.
@@ -230,8 +241,13 @@ func setupTransientServers(
 					const msg = "Unable to acquire demo license. Enterprise features are not enabled in this session.\n"
 					fmt.Fprint(stderr, msg)
 				}
+				licenseSuccess <- success
 			}()
 		}
+	} else {
+		// If we aren't supposed to check for a license, then automatically
+		// notify failure.
+		licenseSuccess <- false
 	}
 
 	// If there is a load generator, create its database and load its
@@ -253,14 +269,146 @@ func setupTransientServers(
 			return ``, ``, cleanup, err
 		}
 
+		partitioningComplete := make(chan struct{}, 1)
+		// If we are requested to prepartition our data, and the
+		// specified dataset is Movr, spawn a goroutine to do the partitioning.
+		if demoCtx.geoPartitionedReplicas && gen.Meta().Name == "movr" {
+			go func() {
+				success := <-licenseSuccess
+				// Only try partitioning if license acquisition was successful.
+				if success {
+					db, err := gosql.Open("postgres", urlStr)
+					if err != nil {
+						exitWithError("demo", err)
+					}
+					defer db.Close()
+					if err := setupGeoPartitionedReplicas(db); err != nil {
+						exitWithError("demo", err)
+					}
+					partitioningComplete <- struct{}{}
+				} else {
+					const msg = "license acquisition was unsuccessful. Enterprise features are needed to partition data"
+					exitWithError("demo", errors.New(msg))
+				}
+			}()
+		}
+
 		if demoCtx.runWorkload {
-			if err := runWorkload(ctx, gen, urlStr, stopper); err != nil {
-				return ``, ``, cleanup, err
-			}
+			go func() {
+				// If partitioning was requested, wait for that to complete before running the workload.
+				if demoCtx.geoPartitionedReplicas {
+					<-partitioningComplete
+				}
+				if err := runWorkload(ctx, gen, urlStr, stopper); err != nil {
+					exitWithError("demo", err)
+				}
+			}()
 		}
 	}
 
 	return urlStr, s.AdminURL(), cleanup, nil
+}
+
+func setupGeoPartitionedReplicas(db *gosql.DB) error {
+	// Create us-west, us-east and europe-west partitions.
+	q := `
+		ALTER TABLE users PARTITION BY LIST (city) (
+			PARTITION us_west VALUES IN ('seattle', 'san francisco', 'los angeles'),
+			PARTITION us_east VALUES IN ('new york', 'boston', 'washington dc'),
+			PARTITION europe_west VALUES IN ('amsterdam', 'paris', 'rome')
+		);
+		ALTER TABLE vehicles PARTITION BY LIST (city) (
+			PARTITION us_west VALUES IN ('seattle', 'san francisco', 'los angeles'),
+			PARTITION us_east VALUES IN ('new york', 'boston', 'washington dc'),
+			PARTITION europe_west VALUES IN ('amsterdam', 'paris', 'rome')
+		);
+		ALTER INDEX vehicles_auto_index_fk_city_ref_users PARTITION BY LIST (city) (
+			PARTITION us_west VALUES IN ('seattle', 'san francisco', 'los angeles'),
+			PARTITION us_east VALUES IN ('new york', 'boston', 'washington dc'),
+			PARTITION europe_west VALUES IN ('amsterdam', 'paris', 'rome')
+		);
+		ALTER TABLE rides PARTITION BY LIST (city) (
+			PARTITION us_west VALUES IN ('seattle', 'san francisco', 'los angeles'),
+			PARTITION us_east VALUES IN ('new york', 'boston', 'washington dc'),
+			PARTITION europe_west VALUES IN ('amsterdam', 'paris', 'rome')
+		);
+		ALTER INDEX rides_auto_index_fk_city_ref_users PARTITION BY LIST (city) (
+			PARTITION us_west VALUES IN ('seattle', 'san francisco', 'los angeles'),
+			PARTITION us_east VALUES IN ('new york', 'boston', 'washington dc'),
+			PARTITION europe_west VALUES IN ('amsterdam', 'paris', 'rome')
+		);
+		ALTER INDEX rides_auto_index_fk_vehicle_city_ref_vehicles PARTITION BY LIST (vehicle_city) (
+			PARTITION us_west VALUES IN ('seattle', 'san francisco', 'los angeles'),
+			PARTITION us_east VALUES IN ('new york', 'boston', 'washington dc'),
+			PARTITION europe_west VALUES IN ('amsterdam', 'paris', 'rome')
+		);
+		ALTER TABLE user_promo_codes PARTITION BY LIST (city) (
+			PARTITION us_west VALUES IN ('seattle', 'san francisco', 'los angeles'),
+			PARTITION us_east VALUES IN ('new york', 'boston', 'washington dc'),
+			PARTITION europe_west VALUES IN ('amsterdam', 'paris', 'rome')
+		);
+		ALTER TABLE vehicle_location_histories PARTITION BY LIST (city) (
+			PARTITION us_west VALUES IN ('seattle', 'san francisco', 'los angeles'),
+			PARTITION us_east VALUES IN ('new york', 'boston', 'washington dc'),
+			PARTITION europe_west VALUES IN ('amsterdam', 'paris', 'rome')
+		);
+	`
+	if _, err := db.Exec(q); err != nil {
+		return err
+	}
+
+	// Alter the partitions to place replicas in the appropriate zones.
+	q = `
+		ALTER PARTITION us_west OF INDEX users@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-west1"]';
+		ALTER PARTITION us_east OF INDEX users@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-east1"]';
+		ALTER PARTITION europe_west OF INDEX users@* CONFIGURE ZONE USING CONSTRAINTS='["+region=europe-west1"]';
+
+		ALTER PARTITION us_west OF INDEX vehicles@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-west1"]';
+		ALTER PARTITION us_east OF INDEX vehicles@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-east1"]';
+		ALTER PARTITION europe_west OF INDEX vehicles@* CONFIGURE ZONE USING CONSTRAINTS='["+region=europe-west1"]';
+
+		ALTER PARTITION us_west OF INDEX rides@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-west1"]';
+		ALTER PARTITION us_east OF INDEX rides@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-east1"]';
+		ALTER PARTITION europe_west OF INDEX rides@* CONFIGURE ZONE USING CONSTRAINTS='["+region=europe-west1"]';
+
+		ALTER PARTITION us_west OF INDEX user_promo_codes@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-west1"]';
+		ALTER PARTITION us_east OF INDEX user_promo_codes@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-east1"]';
+		ALTER PARTITION europe_west OF INDEX user_promo_codes@* CONFIGURE ZONE USING CONSTRAINTS='["+region=europe-west1"]';
+
+		ALTER PARTITION us_west OF INDEX vehicle_location_histories@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-west1"]';
+		ALTER PARTITION us_east OF INDEX vehicle_location_histories@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-east1"]';
+		ALTER PARTITION europe_west OF INDEX vehicle_location_histories@* CONFIGURE ZONE USING CONSTRAINTS='["+region=europe-west1"]';
+	`
+	if _, err := db.Exec(q); err != nil {
+		return err
+	}
+
+	// Create some duplicate indexes for the promo_codes table.
+	q = `
+		CREATE INDEX promo_codes_idx_us_west ON promo_codes (code) STORING (description, creation_time, expiration_time, rules);
+		CREATE INDEX promo_codes_idx_europe_west ON promo_codes (code) STORING (description, creation_time, expiration_time, rules);
+	`
+	if _, err := db.Exec(q); err != nil {
+		return err
+	}
+
+	// Apply configurations to the index for fast reads.
+	q = `
+		ALTER TABLE promo_codes CONFIGURE ZONE USING num_replicas = 3,
+			constraints = '{"+region=us-east1": 1}',
+			lease_preferences = '[[+region=us-east1]]';
+		ALTER INDEX promo_codes@promo_codes_idx_us_west CONFIGURE ZONE USING
+			constraints = '{"+region=us-west1": 1}',
+			lease_preferences = '[[+region=us-west1]]';
+		ALTER INDEX promo_codes@promo_codes_idx_europe_west CONFIGURE ZONE USING
+			constraints = '{"+region=europe-west1": 1}',
+			lease_preferences = '[[+region=europe-west1]]';
+	`
+	if _, err := db.Exec(q); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func runWorkload(
@@ -317,6 +465,26 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) error {
 	// Make sure that the user didn't request a workload and an empty database.
 	if demoCtx.runWorkload && demoCtx.useEmptyDatabase {
 		return errors.New("cannot run a workload against an empty database")
+	}
+
+	// Make sure that the user didn't request to have a topology and an empty database.
+	if demoCtx.geoPartitionedReplicas && demoCtx.useEmptyDatabase {
+		return errors.New("cannot setup geo-partitioned replicas topology on an empty database")
+	}
+
+	// Make sure that the Movr database is selected when automatically partitioning.
+	if demoCtx.geoPartitionedReplicas && (gen == nil || gen.Meta().Name != "movr") {
+		return errors.New("--geo-partitioned-replicas must be used with the Movr dataset")
+	}
+
+	// If the geo-partitioned replicas flag was given and the demo localities have changed, throw an error.
+	if demoCtx.geoPartitionedReplicas && demoCtx.localities != nil {
+		return errors.New("--demo-locality cannot be used with --geo-partitioned-replicas")
+	}
+
+	// If the geo-partitioned replicas flag was given and the nodes have changed, throw an error.
+	if demoCtx.geoPartitionedReplicas && cmd.Flags().Lookup(cliflags.DemoNodes.Name).Changed {
+		return errors.New("--nodes cannot be used with --geo-partitioned-replicas")
 	}
 
 	connURL, adminURL, cleanup, err := setupTransientServers(cmd, gen)

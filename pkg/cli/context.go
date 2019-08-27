@@ -147,6 +147,7 @@ func initCLIDefaults() {
 	demoCtx.useEmptyDatabase = false
 	demoCtx.runWorkload = false
 	demoCtx.localities = nil
+	demoCtx.geoPartitionedReplicas = false
 
 	initPreFlagsDefaults()
 
@@ -336,8 +337,9 @@ var sqlfmtCtx struct {
 // demoCtx captures the command-line parameters of the `demo` command.
 // Defaults set by InitCLIDefaults() above.
 var demoCtx struct {
-	nodes            int
-	useEmptyDatabase bool
-	runWorkload      bool
-	localities       demoLocalityList
+	nodes                  int
+	useEmptyDatabase       bool
+	runWorkload            bool
+	localities             demoLocalityList
+	geoPartitionedReplicas bool
 }
