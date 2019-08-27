@@ -873,6 +873,7 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	}
 
 	// LEARNER on the lhs or rhs should fail.
+	// desc{1,2,3} = (VOTER_FULL, LEARNER) (VOTER_FULL) (VOTER_FULL, LEARNER)
 	checkFails()
 
 	// Turn the learners on desc1 and desc3 into VOTER_INCOMINGs.
@@ -886,9 +887,11 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	require.Len(t, desc1.Replicas().Filter(predIncoming), 1)
 
 	// VOTER_INCOMING on the lhs or rhs should fail.
+	// desc{1,2,3} = (VOTER_FULL, VOTER_INCOMING) (VOTER_FULL) (VOTER_FULL, VOTER_INCOMING)
 	checkFails()
 
 	// Turn the incoming voters on desc1 and desc3 into VOTER_OUTGOINGs.
+	// desc{1,2,3} = (VOTER_FULL, VOTER_OUTGOING) (VOTER_FULL) (VOTER_FULL, VOTER_OUTGOING)
 	desc1 = tc.RemoveReplicasOrFatal(t, desc1.StartKey.AsRawKey(), tc.Target(1))
 	require.Len(t, desc1.Replicas().Filter(predOutgoing), 1)
 	desc3 = tc.RemoveReplicasOrFatal(t, desc3.StartKey.AsRawKey(), tc.Target(1))
@@ -900,13 +903,14 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	// Add a VOTER_INCOMING to desc2 to make sure it actually exludes this type
 	// of replicas from merges (rather than really just checking whether the
 	// replica sets are equal).
-
+	// desc{1,2,3} = (VOTER_FULL, VOTER_OUTGOING) (VOTER_FULL, VOTER_INCOMING) (VOTER_FULL, VOTER_OUTGOING)
 	desc2 := tc.AddReplicasOrFatal(t, splitKey1, tc.Target(1))
 	require.Len(t, desc2.Replicas().Filter(predIncoming), 1)
 
 	checkFails()
 
 	// Ditto VOTER_OUTGOING.
+	// desc{1,2,3} = (VOTER_FULL, VOTER_OUTGOING) (VOTER_FULL, VOTER_OUTGOING) (VOTER_FULL, VOTER_OUTGOING)
 	desc2 = tc.RemoveReplicasOrFatal(t, desc2.StartKey.AsRawKey(), tc.Target(1))
 	require.Len(t, desc2.Replicas().Filter(predOutgoing), 1)
 
