@@ -123,7 +123,6 @@ func TestAddReplicaViaLearner(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
 
@@ -209,8 +208,6 @@ func TestLearnerRaftConfState(t *testing.T) {
 		// contrast to other tests, run this `defer Stop` in an anonymous func.
 		tc.Stopper().Stop(ctx)
 	}()
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	// Add a learner replica, send a snapshot so that it's materialized as a
 	// Replica on the Store, but don't promote it to a voter.
@@ -259,8 +256,6 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
 	atomic.StoreInt64(&rejectSnapshots, 1)
@@ -288,8 +283,6 @@ func TestSplitWithLearner(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	// Add a learner replica, send a snapshot so that it's materialized as a
 	// Replica on the Store, but don't promote it to a voter.
@@ -317,8 +310,6 @@ func TestReplicateQueueSeesLearner(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	// Add a learner replica, send a snapshot so that it's materialized as a
 	// Replica on the Store, but don't promote it to a voter.
@@ -353,8 +344,6 @@ func TestGCQueueSeesLearner(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	// Add a learner replica, send a snapshot so that it's materialized as a
 	// Replica on the Store, but don't promote it to a voter.
@@ -395,8 +384,6 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	// Create a learner replica.
 	scratchStartKey := tc.ScratchRange(t)
@@ -456,8 +443,6 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	// Add the learner.
 	scratchStartKey := tc.ScratchRange(t)
@@ -516,8 +501,6 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
@@ -580,8 +563,6 @@ func TestLearnerNoAcceptLease(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	// Add a learner replica, send a snapshot so that it's materialized as a
 	// Replica on the Store, but don't promote it to a voter.
@@ -614,7 +595,6 @@ func TestLearnerFollowerRead(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = $1`, testingTargetDuration)
 	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.close_fraction = $1`, closeFraction)
 	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true`)
@@ -662,8 +642,6 @@ func TestLearnerAdminRelocateRange(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
 	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 1)
@@ -699,8 +677,6 @@ func TestLearnerAdminMerge(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
 	splitKey1 := scratchStartKey.Next()
@@ -735,7 +711,6 @@ func TestMergeQueueSeesLearner(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 	// TestCluster currently overrides this when used with ReplicationManual.
 	db.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = true`)
 
