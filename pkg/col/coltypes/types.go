@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/cockroachdb/apd"
 )
@@ -38,6 +39,8 @@ const (
 	Int64
 	// Float64 is a column of type float64
 	Float64
+	// Timestamp is a column of type time.Time
+	Timestamp
 
 	// Unhandled is a temporary value that represents an unhandled type.
 	// TODO(jordan): this should be replaced by a panic once all types are
@@ -74,6 +77,7 @@ func init() {
 	CompatibleTypes[Int32] = append(CompatibleTypes[Int32], NumberTypes...)
 	CompatibleTypes[Int64] = append(CompatibleTypes[Int64], NumberTypes...)
 	CompatibleTypes[Float64] = append(CompatibleTypes[Float64], NumberTypes...)
+	CompatibleTypes[Timestamp] = append(CompatibleTypes[Timestamp], Timestamp)
 }
 
 // FromGoType returns the type for a Go value, if applicable. Shouldn't be used at
@@ -96,6 +100,8 @@ func FromGoType(v interface{}) T {
 		return Bytes
 	case apd.Decimal:
 		return Decimal
+	case time.Time:
+		return Timestamp
 	default:
 		panic(fmt.Sprintf("type %T not supported yet", t))
 	}
@@ -118,6 +124,8 @@ func (t T) GoTypeName() string {
 		return "int64"
 	case Float64:
 		return "float64"
+	case Timestamp:
+		return "time.Time"
 	default:
 		panic(fmt.Sprintf("unhandled type %d", t))
 	}

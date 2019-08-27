@@ -21,6 +21,7 @@ package colexec
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -36,6 +37,9 @@ import (
 
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
+
+// Dummy import to pull in "time" package.
+var _ time.Time
 
 const (
 	_FAMILY = types.Family(0)

@@ -21,6 +21,7 @@ package coldata
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -44,6 +45,9 @@ type _GOTYPESLICE interface{}
 
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
+
+// Dummy import to pull in "time" package.
+var _ time.Time
 
 // */}}
 
