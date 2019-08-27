@@ -14,13 +14,17 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -48,6 +52,11 @@ to avoid pre-loading a dataset.`,
 		return runDemo(cmd, nil /* gen */)
 	}),
 }
+
+// TODO (rohany): change this once another endpoint is setup for getting licenses.
+//  This URL grants 1 licenses that work for 1 hour.
+const licenseURL = "https://register.cockroachdb.com/api/prodtest"
+const demoOrg = "Cockroach Labs - Production Testing"
 
 const defaultGeneratorName = "movr"
 
@@ -93,6 +102,25 @@ func init() {
 		demoCmd.AddCommand(genDemoCmd)
 		genDemoCmd.Flags().AddFlagSet(genFlags)
 	}
+}
+
+func getLicense() (string, error) {
+	client := &http.Client{
+		Timeout: time.Second,
+	}
+	resp, err := client.Get(licenseURL)
+	if err != nil {
+		return "", nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.New("unable to connect to licensing endpoint")
+	}
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(bodyBytes), nil
 }
 
 func setupTransientServers(
@@ -189,15 +217,28 @@ func setupTransientServers(
 	}
 	urlStr := url.String()
 
+	db, err := gosql.Open("postgres", urlStr)
+	if err != nil {
+		return ``, ``, cleanup, err
+	}
+	defer db.Close()
+
+	// Load a license.
+	if cliCtx.isInteractive {
+		license, err := getLicense()
+		if err == nil {
+			if _, err := db.Exec(`SET CLUSTER SETTING cluster.organization = ` + lex.EscapeSQLString(demoOrg)); err != nil {
+				return ``, ``, cleanup, err
+			}
+			if _, err := db.Exec(`SET CLUSTER SETTING enterprise.license = ` + lex.EscapeSQLString(license)); err != nil {
+				return ``, ``, cleanup, err
+			}
+		}
+	}
+
 	// If there is a load generator, create its database and load its
 	// fixture.
 	if gen != nil {
-		db, err := gosql.Open("postgres", urlStr)
-		if err != nil {
-			return ``, ``, cleanup, err
-		}
-		defer db.Close()
-
 		if _, err := db.Exec(`CREATE DATABASE ` + gen.Meta().Name); err != nil {
 			return ``, ``, cleanup, err
 		}
