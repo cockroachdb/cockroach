@@ -175,6 +175,7 @@ func (p {{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 	col1 := vec1.{{.LTyp}}()
 	col2 := vec2.{{.RTyp}}()
 	if sel := batch.Selection(); sel != nil {
+		sel = sel[:n]
 		for _, i := range sel {
 			arg1 := {{.LTyp.Get "unsafe" "col1" "int(i)"}}
 			arg2 := {{.RTyp.Get "unsafe" "col2" "int(i)"}}

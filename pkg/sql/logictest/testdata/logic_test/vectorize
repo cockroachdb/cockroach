@@ -176,28 +176,48 @@ true 2
 # Mismatched column types in projection. Not handled yet but should fall back
 # gracefully.
 statement ok
-CREATE TABLE intdec (a INT, b DECIMAL)
+CREATE TABLE intdecfloat (a INT, b DECIMAL, c INT4, d INT2, e FLOAT8)
 
 statement ok
-INSERT INTO intdec VALUES (1, 2.0)
+INSERT INTO intdecfloat VALUES (1, 2.0, 3, 4, 3.5)
 
 query I
-SELECT (a + b)::INT FROM intdec
+SELECT (a + b)::INT FROM intdecfloat
 ----
 3
 
 statement ok
 SET vectorize = experimental_always
 
-query B
-SELECT b > a FROM intdec
+query BB
+SELECT b > a, e < b FROM intdecfloat
 ----
-true
+true  false
 
 query IR
-SELECT a, b FROM intdec WHERE a < b;
+SELECT a, b FROM intdecfloat WHERE a < b;
 ----
 1  2.0
+
+query RIRRI
+SELECT a+b, a+c, b+c, b+d, c+d FROM intdecfloat
+----
+3.0  4  5.0  6.0  7
+
+query RIRRI
+SELECT a-b, a-c, b-c, b-d, c-d FROM intdecfloat
+----
+-1.0  -2  -1.0  -2.0  -1
+
+query RIRRI
+SELECT a*b, a*c, b*c, b*d, c*d FROM intdecfloat
+----
+2.0  3  6.0  8.0  12
+
+query RRRRR
+SELECT a/b, a/c, b/c, b/d, c/d FROM intdecfloat
+----
+0.5  0.33333333333333333333  0.66666666666666666667  0.5  0.75
 
 statement ok
 RESET vectorize
@@ -444,13 +464,13 @@ SELECT * FROM t38754
 ----
 1
 
-# Test integer division. (Should fall back due to decimal result.)
+# Test integer division.
 query T
 SELECT a/b FROM a WHERE b = 2
 ----
 0.5
 
-# Test mixed types comparison. (Should also fall back.)
+# Test mixed types comparison.
 query I
 SELECT b FROM a WHERE b < 0.5
 ----
