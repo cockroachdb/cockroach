@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // maxVarLen specifies a length limit for variable length types (e.g. byte slices).
@@ -93,6 +94,11 @@ func RandomVec(rng *rand.Rand, typ coltypes.T, vec coldata.Vec, n int, nullProba
 		floats := vec.Float64()
 		for i := 0; i < n; i++ {
 			floats[i] = rng.Float64()
+		}
+	case coltypes.Timestamp:
+		timestamps := vec.Timestamp()
+		for i := 0; i < n; i++ {
+			timestamps[i] = timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))
 		}
 	default:
 		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", typ))

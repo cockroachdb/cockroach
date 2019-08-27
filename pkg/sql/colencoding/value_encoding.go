@@ -11,6 +11,8 @@
 package colencoding
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -84,6 +86,10 @@ func decodeUntaggedDatumToCol(vec coldata.Vec, idx uint16, t *types.T, buf []byt
 			// We map these to 64-bit INT now. See #34161.
 			vec.Int64()[idx] = i
 		}
+	case types.TimestampFamily:
+		var t time.Time
+		buf, t, err = encoding.DecodeUntaggedTimeValue(buf)
+		vec.Timestamp()[idx] = t
 	default:
 		return buf, errors.AssertionFailedf(
 			"couldn't decode type: %s", log.Safe(t))

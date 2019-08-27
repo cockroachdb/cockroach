@@ -11,6 +11,8 @@
 package colencoding
 
 import (
+	"time"
+
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -227,6 +229,14 @@ func decodeTableKeyToCol(
 			rkey, t, err = encoding.DecodeVarintDescending(key)
 		}
 		vec.Int64()[idx] = t
+	case types.TimestampFamily:
+		var t time.Time
+		if dir == sqlbase.IndexDescriptor_ASC {
+			rkey, t, err = encoding.DecodeTimeAscending(key)
+		} else {
+			rkey, t, err = encoding.DecodeTimeDescending(key)
+		}
+		vec.Timestamp()[idx] = t
 	default:
 		return rkey, errors.AssertionFailedf("unsupported type %+v", log.Safe(valType))
 	}
