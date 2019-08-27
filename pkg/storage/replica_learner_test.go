@@ -353,7 +353,7 @@ func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 	require.False(t, right.Replicas().InAtomicReplicationChange(), right)
 }
 
-func TestReplicateQueueSeesLearner(t *testing.T) {
+func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// NB also see TestAllocatorRemoveLearner for a lower-level test.
 
@@ -376,19 +376,42 @@ func TestReplicateQueueSeesLearner(t *testing.T) {
 
 	// Run the replicate queue.
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-	require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
-	_, errMsg, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
-	require.NoError(t, err)
-	require.Equal(t, ``, errMsg)
-	require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
+	{
+		require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
+		_, errMsg, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
+		require.NoError(t, err)
+		require.Equal(t, ``, errMsg)
+		require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
 
-	// Make sure it deleted the learner.
-	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
-	require.Empty(t, desc.Replicas().Learners())
+		// Make sure it deleted the learner.
+		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
+		require.Empty(t, desc.Replicas().Learners())
 
-	// Bonus points: the replicate queue keeps processing until there is nothing
-	// to do, so it should have upreplicated the range to 3.
-	require.Len(t, desc.Replicas().Voters(), 3)
+		// Bonus points: the replicate queue keeps processing until there is nothing
+		// to do, so it should have upreplicated the range to 3.
+		require.Len(t, desc.Replicas().Voters(), 3)
+	}
+
+	// Create a VOTER_OUTGOING, i.e. a joint configuration.
+	ltk.withJointConfigAndStop(func() {
+		desc := tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(2))
+		require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
+		trace, errMsg, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
+		require.NoError(t, err)
+		require.Equal(t, ``, errMsg)
+		formattedTrace := tracing.FormatRecordedSpans(trace)
+		expectedMessages := []string{
+			`transitioning out of joint configuration`,
+		}
+		if err := testutils.MatchInOrder(formattedTrace, expectedMessages...); err != nil {
+			t.Fatal(err)
+		}
+
+		desc = tc.LookupRangeOrFatal(t, scratchStartKey)
+		require.False(t, desc.Replicas().InAtomicReplicationChange(), desc)
+		// Queue processed again, so we're back to three replicas.
+		require.Len(t, desc.Replicas().Voters(), 3)
+	})
 }
 
 func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {

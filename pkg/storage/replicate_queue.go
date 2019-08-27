@@ -348,7 +348,7 @@ func (rq *replicateQueue) processOneChange(
 		return rq.considerRebalance(ctx, repl, voterReplicas, canTransferLease, dryRun)
 	case AllocatorFinalizeAtomicReplicationChange:
 		_, err := maybeLeaveAtomicChangeReplicas(ctx, repl.store, repl.Desc())
-		return false, err
+		return true, err
 	}
 	return true, nil
 }
