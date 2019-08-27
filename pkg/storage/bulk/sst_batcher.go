@@ -39,12 +39,12 @@ func (b sz) String() string {
 // it to attempt to flush SSTs before they cross range boundaries to minimize
 // expensive on-split retries.
 type SSTBatcher struct {
-	db sender
+	db      sender
+	rc      *kv.RangeDescriptorCache
+	maxSize int64
 
-	flushKeyChecked bool
-	flushKey        roachpb.Key
-	rc              *kv.RangeDescriptorCache
-
+	// allows ingestion of keys where the MVCC.Key would shadow an existing row.
+	disallowShadowing bool
 	// skips duplicate keys (iff they are buffered together). This is true when
 	// used to backfill an inverted index. An array in JSONB with multiple values
 	// which are the same, will all correspond to the same kv in the inverted
@@ -57,17 +57,10 @@ type SSTBatcher struct {
 	// will not raise a DuplicateKeyError.
 	skipDuplicates bool
 
-	maxSize int64
-	// rows written in the current batch.
-	rowCounter RowCounter
-	totalRows  roachpb.BulkOpSummary
-
-	sstWriter     SSTWriter
-	batchStartKey []byte
-	batchEndKey   []byte
-
-	batchEndValue []byte
-
+	// The rest of the fields accumulated state as opposed to configuration. Some,
+	// like totalRows, are accumulated _across_ batches and are not reset between
+	// batches when Reset() is called.
+	totalRows   roachpb.BulkOpSummary
 	flushCounts struct {
 		total   int
 		split   int
@@ -75,11 +68,18 @@ type SSTBatcher struct {
 		files   int // a single flush might create multiple files.
 	}
 
-	// allows ingestion of keys where the MVCC.Key would shadow an existing row.
-	disallowShadowing bool
-
+	// Thee rest of the fields are per-batch and are reset via Reset() before each
+	// batch is started.
+	sstWriter       SSTWriter
+	batchStartKey   []byte
+	batchEndKey     []byte
+	batchEndValue   []byte
+	flushKeyChecked bool
+	flushKey        roachpb.Key
 	// stores on-the-fly stats for the SST if disallowShadowing is true.
 	ms enginepb.MVCCStats
+	// rows written in the current batch.
+	rowCounter RowCounter
 }
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
@@ -123,13 +123,8 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value [
 	// Check if we need to flush current batch *before* adding the next k/v --
 	// the batcher may want to flush the keys it already has, either because it
 	// is full or because it wants this key in a separate batch due to splits.
-	if b.shouldFlush(ctx, key.Key) {
-		if err := b.Flush(ctx); err != nil {
-			return err
-		}
-		if err := b.Reset(); err != nil {
-			return err
-		}
+	if err := b.flushIfNeeded(ctx, key.Key); err != nil {
+		return err
 	}
 
 	// Update the range currently represented in this batch, as necessary.
@@ -170,7 +165,13 @@ func (b *SSTBatcher) Reset() error {
 	return nil
 }
 
-func (b *SSTBatcher) shouldFlush(ctx context.Context, nextKey roachpb.Key) bool {
+const (
+	manualFlush = iota
+	sizeFlush
+	rangeFlush
+)
+
+func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) error {
 	// If this is the first key we have seen (since being reset), attempt to find
 	// the end of the range it is in so we can flush the SST before crossing it,
 	// because AddSSTable cannot span ranges and will need to be split and retried
@@ -192,24 +193,28 @@ func (b *SSTBatcher) shouldFlush(ctx context.Context, nextKey roachpb.Key) bool 
 		}
 	}
 
-	size := b.sstWriter.DataSize
-
 	if b.flushKey != nil && b.flushKey.Compare(nextKey) <= 0 {
-		log.VEventf(ctx, 3, "flushing %s SST due to range boundary %s", sz(size), b.flushKey)
-		b.flushCounts.split++
-		return true
+		if err := b.doFlush(ctx, rangeFlush); err != nil {
+			return err
+		}
+		return b.Reset()
 	}
 
-	if size >= b.maxSize {
-		log.VEventf(ctx, 3, "flushing %s SST due to size > %s", sz(size), sz(b.maxSize))
-		b.flushCounts.sstSize++
-		return true
+	if b.sstWriter.DataSize >= b.maxSize {
+		if err := b.doFlush(ctx, sizeFlush); err != nil {
+			return err
+		}
+		return b.Reset()
 	}
-	return false
+	return nil
 }
 
 // Flush sends the current batch, if any.
 func (b *SSTBatcher) Flush(ctx context.Context) error {
+	return b.doFlush(ctx, manualFlush)
+}
+
+func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	if b.sstWriter.DataSize == 0 {
 		return nil
 	}
@@ -219,6 +224,16 @@ func (b *SSTBatcher) Flush(ctx context.Context) error {
 	// The end key of the WriteBatch request is exclusive, but batchEndKey is
 	// currently the largest key in the batch. Increment it.
 	end := roachpb.Key(append([]byte(nil), b.batchEndKey...)).Next()
+
+
+	size := b.sstWriter.DataSize
+	if reason == sizeFlush {
+		log.VEventf(ctx, 3, "flushing %s SST due to size > %s", sz(size), sz(b.maxSize))
+		b.flushCounts.sstSize++
+	} else if reason == rangeFlush {
+		log.VEventf(ctx, 3, "flushing %s SST due to range boundary %s", sz(size), b.flushKey)
+		b.flushCounts.split++
+	}
 
 	sstBytes, err := b.sstWriter.Finish()
 	if err != nil {
