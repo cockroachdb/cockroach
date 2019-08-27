@@ -1336,11 +1336,11 @@ func writeTooOldRetryTimestamp(txn *Transaction, err *WriteTooOldError) hlc.Time
 
 // Replicas returns all of the replicas present in the descriptor after this
 // trigger applies.
-func (crt ChangeReplicasTrigger) Replicas() []ReplicaDescriptor {
+func (crt ChangeReplicasTrigger) Replicas() ReplicaDescriptors {
 	if crt.Desc != nil {
-		return crt.Desc.Replicas().All()
+		return crt.Desc.Replicas()
 	}
-	return crt.DeprecatedUpdatedReplicas
+	return MakeReplicaDescriptors(crt.DeprecatedUpdatedReplicas)
 }
 
 // ConfChange returns the configuration change described by the trigger.
@@ -1361,7 +1361,7 @@ func confChangeImpl(
 	crt interface {
 		Added() []ReplicaDescriptor
 		Removed() []ReplicaDescriptor
-		Replicas() []ReplicaDescriptor
+		Replicas() ReplicaDescriptors
 		alwaysV2() bool
 	},
 	encodedCtx []byte,
@@ -1371,7 +1371,7 @@ func confChangeImpl(
 	var sl []raftpb.ConfChangeSingle
 
 	checkExists := func(in ReplicaDescriptor) error {
-		for _, rDesc := range replicas {
+		for _, rDesc := range replicas.All() {
 			if rDesc.ReplicaID == in.ReplicaID {
 				if a, b := in.GetType(), rDesc.GetType(); a != b {
 					return errors.Errorf("have %s, but descriptor has %s", in, rDesc)
@@ -1382,7 +1382,7 @@ func confChangeImpl(
 		return errors.Errorf("%s missing from descriptors %v", in, replicas)
 	}
 	checkNotExists := func(in ReplicaDescriptor) error {
-		for _, rDesc := range replicas {
+		for _, rDesc := range replicas.All() {
 			if rDesc.ReplicaID == in.ReplicaID {
 				return errors.Errorf("%s must no longer be present in descriptor", in)
 			}
@@ -1445,35 +1445,66 @@ func confChangeImpl(
 		})
 	}
 
-	// Check whether we're entering a joint state. This is the case precisely when
-	// the resulting descriptors tells us that this is the case. Note that we've
-	// made sure above that all of the additions/removals are in tune with that
-	// descriptor already.
-	var enteringJoint bool
-	for _, rDesc := range replicas {
-		switch rDesc.GetType() {
-		case VOTER_INCOMING, VOTER_OUTGOING:
-			enteringJoint = true
-		default:
-		}
-	}
+	// Check whether we're entering a joint state. Note that there is a "gotcha"
+	// if we carry out multiple changes but none of them affect voters, that is,
+	// we're adding/removing multiple learners. This does not change the quorum
+	// requirements, so we *should* be able to get by without going through a
+	// joint state. In fact, we *have to*, unless we want to add additional
+	// state to the RangeDescriptor (like a Joint boolean or
+	// LEARNER_{INCOMING,OUTGOING} replica types).
+	//
+	// Unfortunately, etcd/raft *always requires* a joint consensus transition
+	// when it is handed more than one change. This is because as far as it it
+	// knows, every addition of a learner could be a demotion of a voter (thus
+	// changing the quorum size); the configuration change API does not specify
+	// the config on which the changes are to be applied, and the app needs to
+	// predictably know whether the change will be joint or not.
+	//
+	// However, in CRDB we know the base configuration on which the delta
+	// applies - it is the config represented by the previous descriptor, and as
+	// outlined above, in the "learners only" case it never reflects a joint
+	// configuration in this case. Luckily, we can work around this safely by
+	// giving etcd/raft the joint transition it needs, but transitioning out of
+	// it immediately when entering it (in the same entry). More precisely,
+	// after we call rawNode.ApplyConfChange, if we just moved into a joint
+	// configuration but our descriptor is not joint, we call ApplyConfChange
+	// again to transition out of the joint state again.
+	//
+	// In summary:
+	// - if crt.Desc.InAtomicReplicationChange(), then we've changed voters and
+	//   will enter the joint configuration, and will leave it explicitly via
+	//   another replication change txn (see wantLeaveJoint below).
+	// - if !crt.Desc.InAtomicReplicationChange() but there is more than one
+	//   change, then we're only changing learners and don't need joint consensus,
+	//   but etcd/raft wants it, and we go through the joint state but without
+	//   spending any time in it. This amounts to letting etcd/raft trust us
+	//   that we know what the underlying configuration is.
+	// - if !crt.Desc.InAtomicReplicationChange() and there is only one change,
+	//   then we're adding/removing a single learner or voter without going
+	//   through a joint transition.
+	raftEnteringJoint := len(added)+len(removed) > 1
+	// If there's an incoming/outgoing voter, then even if there is only
+	// one change apparently we are running it through a joint
+	// configuration. We're allowed to do that, though we typically
+	// don't do it outside of tests.
+	raftEnteringJoint = raftEnteringJoint || replicas.InAtomicReplicationChange()
+
+	// A trigger that neither adds nor removes anything is how we encode a request
+	// to leave a joint state. Note that this is only applicable in case 1 above,
+	// i.e. we're chaning something about the voters.
 	wantLeaveJoint := len(added)+len(removed) == 0
-	if !enteringJoint {
-		if len(added)+len(removed) > 1 {
-			return nil, errors.Errorf("change requires joint consensus")
-		}
-	} else if wantLeaveJoint {
+
+	if raftEnteringJoint && wantLeaveJoint {
 		return nil, errors.Errorf("descriptor enters joint state, but trigger is requesting to leave one")
 	}
 
 	var cc raftpb.ConfChangeI
-
-	if enteringJoint || crt.alwaysV2() {
+	if raftEnteringJoint || crt.alwaysV2() {
 		// V2 membership changes, which allow atomic replication changes. We
 		// track the joint state in the range descriptor and thus we need to be
 		// in charge of when to leave the joint state.
 		transition := raftpb.ConfChangeTransitionJointExplicit
-		if !enteringJoint {
+		if !raftEnteringJoint {
 			// If we're using V2 just to avoid V1 (and not because we actually
 			// have a change that requires V2), then use an auto transition
 			// which skips the joint state. This is necessary: our descriptor

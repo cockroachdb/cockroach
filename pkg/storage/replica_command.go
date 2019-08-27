@@ -1078,6 +1078,8 @@ func addLearnerReplicas(
 	// This isn't crazy, we just need to transition out of the joint config
 	// before returning from this method, and it's unclear that it's worth
 	// doing.
+	//
+	// WIP(tbg): address the above TODO now.
 	for _, target := range targets {
 		iChgs := []internalReplicationChange{{target: target, typ: internalChangeTypeAddLearner}}
 		var err error

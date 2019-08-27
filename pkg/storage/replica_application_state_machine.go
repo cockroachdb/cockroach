@@ -1005,7 +1005,28 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 			return nil
 		}
 		return sm.r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
-			raftGroup.ApplyConfChange(cmd.confChange.ConfChangeI)
+			cc := cmd.confChange.ConfChangeI.AsV2()
+			raftGroup.ApplyConfChange(cc)
+			cc.Context = nil // for info below
+			newCfg := raftGroup.Status().Config
+			if !cmd.replicatedResult().ChangeReplicas.Desc.Replicas().InAtomicReplicationChange() && len(newCfg.Voters[1]) > 0 {
+				// If the RawNode entered a joint configuration but the descriptor does not describe one,
+				// then we have mutated only learners in this change and were only formally forced into
+				// joint consensus by a restriction in etcd/raft. Transition out of the joint config
+				// immediately so that the Raft config reflects the descriptor accurately.
+				//
+				// Note that the joint state it's in is equivalent to the non-joint config represented by
+				// the descriptor (since (1 2 3)&&(1 2 3) is equivalent to (1 2 3) alone), though if we
+				// didn't auto-transition here we'd hit an error the next time we want to change the
+				// configuration (can't run simple changes when in joint state, can't enter joint
+				// state when already in joint state, etc).
+				//
+				// See the comment within this method for more details:
+				_ = (*roachpb.ChangeReplicasTrigger)(nil).ConfChange
+
+				log.VEventf(ctx, 1, "transitioning out of joint config %s", newCfg.String())
+				raftGroup.ApplyConfChange(raftpb.ConfChangeV2{})
+			}
 			return true, nil
 		})
 	default:

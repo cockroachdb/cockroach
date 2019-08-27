@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/kr/pretty"
@@ -130,4 +131,29 @@ func TestAtomicReplicationChange(t *testing.T) {
 
 	// Only a lone voter on s5 should be left over.
 	checkDesc(desc, 5)
+}
+
+// TODO(tbg): finish this test, add comments.
+func TestAtomicReplicationChangeMultipleLearners(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	knobs, ltk := makeReplicationTestKnobs()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
+	db.Exec(t, `SET CLUSTER SETTING kv.atomic_replication_changes.enabled = true`)
+
+	k := tc.ScratchRange(t)
+	var desc roachpb.RangeDescriptor
+	ltk.withStopAfterLearnerAtomic(func() {
+		desc = tc.AddReplicasOrFatal(t, k, tc.Target(1), tc.Target(2))
+	})
+	require.Len(t, desc.Replicas().Learners(), 2, desc)
+
+	desc = tc.RemoveReplicasOrFatal(t, k, tc.Target(1), tc.Target(2))
+	require.Len(t, desc.Replicas().Learners(), 0, desc)
 }
