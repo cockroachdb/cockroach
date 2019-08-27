@@ -241,6 +241,7 @@ func (f *stubFactory) ConstructUpdate(
 	returnCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	passthrough sqlbase.ResultColumns,
+	skipFKChecks bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }

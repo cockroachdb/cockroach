@@ -219,6 +219,7 @@ func (p *planner) Update(
 		updateCols,
 		requestedCols,
 		row.UpdaterDefault,
+		row.CheckFKs,
 		p.EvalContext(),
 		&p.alloc,
 	)
