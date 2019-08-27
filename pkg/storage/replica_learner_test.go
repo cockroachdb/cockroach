@@ -787,7 +787,6 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 	check()
 
 	// Removing the voter (and remaining in joint config) does.
-
 	scratchDesc = tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 	require.True(t, scratchDesc.Replicas().InAtomicReplicationChange(), scratchDesc)
 	require.Len(t, scratchDesc.Replicas().Filter(predOutgoing), 1)
