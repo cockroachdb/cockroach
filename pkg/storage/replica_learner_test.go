@@ -391,7 +391,7 @@ func TestReplicateQueueSeesLearner(t *testing.T) {
 	require.Len(t, desc.Replicas().Voters(), 3)
 }
 
-func TestReplicaGCQueueSeesLearner(t *testing.T) {
+func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
@@ -411,16 +411,29 @@ func TestReplicaGCQueueSeesLearner(t *testing.T) {
 	})
 
 	// Run the replicaGC queue.
-	store, repl := getFirstStoreReplica(t, tc.Server(1), scratchStartKey)
-	trace, errMsg, err := store.ManuallyEnqueue(ctx, "replicaGC", repl, true /* skipShouldQueue */)
-	require.NoError(t, err)
-	require.Equal(t, ``, errMsg)
-	const msg = `not gc'able, replica is still in range descriptor: (n2,s2):2LEARNER`
-	require.Contains(t, tracing.FormatRecordedSpans(trace), msg)
+	checkNoGC := func() roachpb.RangeDescriptor {
+		store, repl := getFirstStoreReplica(t, tc.Server(1), scratchStartKey)
+		trace, errMsg, err := store.ManuallyEnqueue(ctx, "replicaGC", repl, true /* skipShouldQueue */)
+		require.NoError(t, err)
+		require.Equal(t, ``, errMsg)
+		const msg = `not gc'able, replica is still in range descriptor: (n2,s2):`
+		require.Contains(t, tracing.FormatRecordedSpans(trace), msg)
+		return tc.LookupRangeOrFatal(t, scratchStartKey)
+	}
 
+	desc := checkNoGC()
 	// Make sure it didn't collect the learner.
-	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 	require.NotEmpty(t, desc.Replicas().Learners())
+
+	// Now get the range into a joint config.
+	tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(1)) // remove learner
+	ltk.withJointConfigAndStop(func() {
+		desc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+		require.Len(t, desc.Replicas().Filter(predIncoming), 1, desc)
+	})
+
+	postDesc := checkNoGC()
+	require.Equal(t, desc, postDesc)
 }
 
 func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
