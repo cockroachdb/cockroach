@@ -442,7 +442,8 @@ func (b *Builder) buildScan(
 			}
 		}
 		outScope.expr = b.factory.ConstructScan(&private)
-		b.addCheckConstraintsToScan(outScope, tabMeta)
+
+		b.addCheckConstraintsForTable(outScope, tabMeta, ordinals != nil /* allowMissingColumns */)
 
 		if b.trackViewDeps {
 			dep := opt.ViewDep{DataSource: tab}
@@ -459,10 +460,16 @@ func (b *Builder) buildScan(
 	return outScope
 }
 
-// addCheckConstraintsToScan finds all the check constraints that apply to the
+// addCheckConstraintsForTable finds all the check constraints that apply to the
 // table and adds them to the table metadata. To do this, the scalar expression
 // of the check constraints are built here.
-func (b *Builder) addCheckConstraintsToScan(scope *scope, tabMeta *opt.TableMeta) {
+//
+// If allowMissingColumns is true, we ignore check constraints that involve
+// columns not in the current scope (useful when we build a scan that doesn't
+// contain all table columns).
+func (b *Builder) addCheckConstraintsForTable(
+	scope *scope, tabMeta *opt.TableMeta, allowMissingColumns bool,
+) {
 	tab := tabMeta.Table
 	// Find all the check constraints that apply to the table and add them
 	// to the table meta data. To do this, we must build them into scalar
@@ -479,8 +486,26 @@ func (b *Builder) addCheckConstraintsToScan(scope *scope, tabMeta *opt.TableMeta
 			panic(err)
 		}
 
-		texpr := scope.resolveAndRequireType(expr, types.Bool)
-		tabMeta.AddConstraint(b.buildScalar(texpr, scope, nil, nil, nil))
+		var texpr tree.TypedExpr
+		func() {
+			if allowMissingColumns {
+				// Swallow any undefined column errors.
+				defer func() {
+					if r := recover(); r != nil {
+						if err, ok := r.(error); ok {
+							if code := pgerror.GetPGCode(err); code == pgcode.UndefinedColumn {
+								return
+							}
+						}
+						panic(r)
+					}
+				}()
+			}
+			texpr = scope.resolveAndRequireType(expr, types.Bool)
+		}()
+		if texpr != nil {
+			tabMeta.AddConstraint(b.buildScalar(texpr, scope, nil, nil, nil))
+		}
 	}
 }
 
