@@ -358,6 +358,18 @@ func (m *Memo) RequestColStat(
 	return nil, false
 }
 
+// RowsProcessed calculates and returns the number of rows processed by the
+// relational expression. It is currently only supported for lookup joins and
+// merge joins.
+func (m *Memo) RowsProcessed(expr RelExpr) (_ float64, ok bool) {
+	// When SetRoot is called, the statistics builder may have been cleared.
+	// If this happens, we can't serve the request anymore.
+	if m.logPropsBuilder.sb.md != nil {
+		return m.logPropsBuilder.sb.rowsProcessed(expr), true
+	}
+	return 0, false
+}
+
 // NextWithID returns a not-yet-assigned identifier for a WITH expression.
 func (m *Memo) NextWithID() opt.WithID {
 	m.curWithID++
