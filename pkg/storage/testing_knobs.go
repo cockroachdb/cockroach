@@ -202,6 +202,9 @@ type StoreTestingKnobs struct {
 	// the func returns true. This happens before transitioning out of a joint
 	// configuration.
 	ReplicaAddStopAfterJointConfig func() bool
+	// ReplicationAlwaysUseJointConfig causes replica addition to always go
+	// through a joint configuration, even when this isn't necessary.
+	ReplicationAlwaysUseJointConfig func() bool
 	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
 	// applying a snapshot.
 	BeforeSnapshotSSTIngestion func(IncomingSnapshot, SnapshotRequest_Type, []string) error
