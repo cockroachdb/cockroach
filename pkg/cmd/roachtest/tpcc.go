@@ -147,7 +147,7 @@ func setupTPCC(
 
 				t.Status("loading dataset")
 				c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
-
+				waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]))
 				c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, warehouses, ""))
 				c.Stop(ctx, crdbNodes)
 
@@ -158,6 +158,7 @@ func setupTPCC(
 			c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
 		} else {
 			c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
+			waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]))
 			c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, warehouses, ""))
 		}
 	}()
@@ -640,6 +641,7 @@ func loadTPCCBench(
 
 	// Load the corresponding fixture.
 	t.l.Printf("restoring tpcc fixture\n")
+	waitForFullReplication(t, db)
 	cmd := tpccFixturesCmd(t, cloud, b.LoadWarehouses, loadArgs)
 	if err := c.RunE(ctx, loadNode, cmd); err != nil {
 		return err
