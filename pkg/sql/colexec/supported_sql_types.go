@@ -27,4 +27,5 @@ var allSupportedSQLTypes = []types.T{
 	*types.Float4,
 	*types.String,
 	*types.Uuid,
+	*types.Timestamp,
 }

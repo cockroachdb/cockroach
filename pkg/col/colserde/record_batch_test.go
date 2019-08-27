@@ -180,9 +180,9 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 		buf             = bytes.Buffer{}
 	)
 
-	// We do not support decimals yet.
+	// We do not support decimals or timestamps yet.
 	for _, t := range coltypes.AllTypes {
-		if t == coltypes.Decimal {
+		if t == coltypes.Decimal || t == coltypes.Timestamp {
 			continue
 		}
 		supportedTypes = append(supportedTypes, t)

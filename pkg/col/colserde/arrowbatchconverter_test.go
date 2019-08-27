@@ -30,8 +30,8 @@ func randomBatch() ([]coltypes.T, coldata.Batch) {
 
 	availableTyps := make([]coltypes.T, 0, len(coltypes.AllTypes))
 	for _, typ := range coltypes.AllTypes {
-		// TODO(asubiotto): We do not support decimal conversion yet.
-		if typ == coltypes.Decimal {
+		// TODO(asubiotto,jordan): We do not support decimal, timestamp conversion yet.
+		if typ == coltypes.Decimal || typ == coltypes.Timestamp {
 			continue
 		}
 		availableTyps = append(availableTyps, typ)
@@ -119,7 +119,7 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 func TestArrowBatchConverterRejectsUnsupportedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	typs := []coltypes.T{coltypes.Decimal}
+	typs := []coltypes.T{coltypes.Decimal, coltypes.Timestamp}
 	_, err := NewArrowBatchConverter(typs)
 	require.Error(t, err)
 }
