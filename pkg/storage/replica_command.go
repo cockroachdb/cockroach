@@ -585,10 +585,14 @@ func (r *Replica) AdminMerge(
 		// This behavior can be changed later if the complexity becomes worth
 		// it, but it's not right now.
 		lReplicas, rReplicas := origLeftDesc.Replicas(), rightDesc.Replicas()
-		if len(lReplicas.Voters()) != len(lReplicas.All()) {
+
+		predFullVoter := func(rDesc roachpb.ReplicaDescriptor) bool {
+			return rDesc.GetType() == roachpb.VOTER_FULL
+		}
+		if len(lReplicas.Filter(predFullVoter)) != len(lReplicas.All()) {
 			return errors.Errorf("cannot merge range with non-voter replicas on lhs: %s", lReplicas)
 		}
-		if len(rReplicas.Voters()) != len(rReplicas.All()) {
+		if len(rReplicas.Filter(predFullVoter)) != len(rReplicas.All()) {
 			return errors.Errorf("cannot merge range with non-voter replicas on rhs: %s", rReplicas)
 		}
 		if !replicaSetsEqual(lReplicas.All(), rReplicas.All()) {
