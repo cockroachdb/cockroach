@@ -210,9 +210,7 @@ func (d ReplicaDescriptors) Learners() []ReplicaDescriptor {
 
 // Filter returns only the replica descriptors for which the supplied method
 // returns true. The memory returned may be shared with the receiver.
-func (d ReplicaDescriptors) Filter(
-	pred func(descriptor ReplicaDescriptor) bool,
-) []ReplicaDescriptor {
+func (d ReplicaDescriptors) Filter(pred func(rDesc ReplicaDescriptor) bool) []ReplicaDescriptor {
 	// Fast path when all or none match to avoid allocations.
 	fastpath := true
 	out := d.wrapped
