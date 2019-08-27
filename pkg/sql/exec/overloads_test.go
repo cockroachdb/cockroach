@@ -59,25 +59,35 @@ func TestIntegerSubtraction(t *testing.T) {
 }
 
 func TestIntegerDivision(t *testing.T) {
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performDivInt8Int8(math.MinInt8, -1) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performDivInt16Int16(math.MinInt16, -1) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performDivInt32Int32(math.MinInt32, -1) }))
-	require.Equal(t, tree.ErrIntOutOfRange, execerror.CatchVectorizedRuntimeError(func() { performDivInt64Int64(math.MinInt64, -1) }))
+	d := &apd.Decimal{}
+	var res apd.Decimal
+
+	res = performDivInt8Int8(math.MinInt8, -1)
+	require.Equal(t, 0, res.Cmp(d.SetFinite(-math.MinInt8, 0)))
+	res = performDivInt16Int16(math.MinInt16, -1)
+	require.Equal(t, 0, res.Cmp(d.SetFinite(-math.MinInt16, 0)))
+	res = performDivInt32Int32(math.MinInt32, -1)
+	require.Equal(t, 0, res.Cmp(d.SetFinite(-math.MinInt32, 0)))
+	res = performDivInt64Int64(math.MinInt64, -1)
+	d.SetFinite(math.MinInt64, 0)
+	if _, err := tree.DecimalCtx.Neg(d, d); err != nil {
+		t.Error(err)
+	}
+	require.Equal(t, 0, res.Cmp(d))
 
 	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivInt8Int8(10, 0) }))
 	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivInt16Int16(10, 0) }))
 	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivInt32Int32(10, 0) }))
 	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivInt64Int64(10, 0) }))
 
-	require.Equal(t, int8(-math.MaxInt8), performDivInt8Int8(math.MaxInt8, -1))
-	require.Equal(t, int16(-math.MaxInt16), performDivInt16Int16(math.MaxInt16, -1))
-	require.Equal(t, int32(-math.MaxInt32), performDivInt32Int32(math.MaxInt32, -1))
-	require.Equal(t, int64(-math.MaxInt64), performDivInt64Int64(math.MaxInt64, -1))
-
-	require.Equal(t, int16(0), performDivInt16Int16(10, 12))
-	require.Equal(t, int16(0), performDivInt16Int16(-10, -12))
-	require.Equal(t, int16(-1), performDivInt16Int16(-12, 10))
-	require.Equal(t, int16(-1), performDivInt16Int16(12, -10))
+	res = performDivInt8Int8(math.MaxInt8, -1)
+	require.Equal(t, 0, res.Cmp(d.SetFinite(-math.MaxInt8, 0)))
+	res = performDivInt16Int16(math.MaxInt16, -1)
+	require.Equal(t, 0, res.Cmp(d.SetFinite(-math.MaxInt16, 0)))
+	res = performDivInt32Int32(math.MaxInt32, -1)
+	require.Equal(t, 0, res.Cmp(d.SetFinite(-math.MaxInt32, 0)))
+	res = performDivInt64Int64(math.MaxInt64, -1)
+	require.Equal(t, 0, res.Cmp(d.SetFinite(-math.MaxInt64, 0)))
 }
 
 func TestIntegerMultiplication(t *testing.T) {
@@ -120,6 +130,35 @@ func TestIntegerMultiplication(t *testing.T) {
 	require.Equal(t, int16(120), performMultInt16Int16(-10, -12))
 	require.Equal(t, int32(-120), performMultInt32Int32(-12, 10))
 	require.Equal(t, int64(-120), performMultInt64Int64(12, -10))
+}
+
+func TestMixedTypeInteger(t *testing.T) {
+	require.Equal(t, int64(22), performPlusInt16Int32(10, 12))
+	require.Equal(t, int64(-22), performPlusInt16Int64(-10, -12))
+	require.Equal(t, int64(2), performPlusInt64Int32(-10, 12))
+	require.Equal(t, int64(-2), performPlusInt64Int16(10, -12))
+
+	require.Equal(t, int64(-2), performMinusInt16Int32(10, 12))
+	require.Equal(t, int64(2), performMinusInt16Int64(-10, -12))
+	require.Equal(t, int64(-22), performMinusInt64Int32(-10, 12))
+	require.Equal(t, int64(22), performMinusInt64Int16(10, -12))
+
+	require.Equal(t, int64(120), performMultInt16Int32(10, 12))
+	require.Equal(t, int64(120), performMultInt16Int64(-10, -12))
+	require.Equal(t, int64(-120), performMultInt64Int32(-12, 10))
+	require.Equal(t, int64(-120), performMultInt64Int16(12, -10))
+
+	d := &apd.Decimal{}
+	var res apd.Decimal
+
+	res = performDivInt16Int32(4, 2)
+	require.Equal(t, 0, res.Cmp(d.SetFinite(2, 0)))
+	res = performDivInt16Int64(6, 2)
+	require.Equal(t, 0, res.Cmp(d.SetFinite(3, 0)))
+	res = performDivInt64Int32(12, 3)
+	require.Equal(t, 0, res.Cmp(d.SetFinite(4, 0)))
+	res = performDivInt64Int16(20, 4)
+	require.Equal(t, 0, res.Cmp(d.SetFinite(5, 0)))
 }
 
 func TestDecimalComparison(t *testing.T) {

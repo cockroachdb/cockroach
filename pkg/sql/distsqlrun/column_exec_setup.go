@@ -694,9 +694,6 @@ func (r *newColOperatorResult) planFilterExpr(
 func planSelectionOperators(
 	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []types.T, input exec.Operator,
 ) (op exec.Operator, resultIdx int, ct []types.T, memUsed int, err error) {
-	if err := assertHomogeneousTypes(expr); err != nil {
-		return op, resultIdx, ct, memUsed, err
-	}
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
 		return exec.NewBoolVecToSelOp(input, t.Idx), -1, columnTypes, memUsed, nil
@@ -751,9 +748,6 @@ func planSelectionOperators(
 func planProjectionOperators(
 	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []types.T, input exec.Operator,
 ) (op exec.Operator, resultIdx int, ct []types.T, memUsed int, err error) {
-	if err := assertHomogeneousTypes(expr); err != nil {
-		return op, resultIdx, ct, memUsed, err
-	}
 	resultIdx = -1
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
@@ -944,26 +938,6 @@ func planProjectionExpr(
 		memUsed += sMem.EstimateStaticMemoryUsage()
 	}
 	return op, resultIdx, ct, leftMem + rightMem + memUsed, err
-}
-
-// assertHomogeneousTypes checks that the left and right sides of a BinaryExpr
-// have identical types. (Vectorized execution does not yet handle mixed types.)
-// It also checks that the result type matches, since this is not the case for
-// certain operations like integer division.
-func assertHomogeneousTypes(expr tree.TypedExpr) error {
-	switch t := expr.(type) {
-	case *tree.BinaryExpr:
-		left := t.TypedLeft().ResolvedType()
-		right := t.TypedRight().ResolvedType()
-		result := t.ResolvedType()
-		if !left.Identical(right) {
-			return errors.Errorf("BinaryExpr on %s and %s is unhandled", left, right)
-		}
-		if !left.Identical(result) {
-			return errors.Errorf("BinaryExpr on %s with %s result is unhandled", left, result)
-		}
-	}
-	return nil
 }
 
 // wrapWithVectorizedStatsCollector creates a new exec.VectorizedStatsCollector

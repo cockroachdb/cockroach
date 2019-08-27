@@ -106,7 +106,7 @@ var anyTypeBinaryOpToOverloads map[tree.BinaryOperator][]*overload
 var sameTypeComparisonOpToOverloads map[tree.ComparisonOperator][]*overload
 
 // anyTypeComparisonOpToOverloads maps a comparison operator to all of the
-// overloads that implement it, including all mixed type comparisons. IT also
+// overloads that implement it, including all mixed type comparisons. It also
 // includes all entries from sameTypeComparisonOpToOverloads.
 var anyTypeComparisonOpToOverloads map[tree.ComparisonOperator][]*overload
 
@@ -401,6 +401,7 @@ func (decimalCustomizer) getCmpOpCompareFunc() compareFunc {
 
 func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op overload, target, l, r string) string {
+		// todo(jordan): should tree.ExactCtx be used here? (#39540)
 		return fmt.Sprintf("if _, err := tree.DecimalCtx.%s(&%s, &%s, &%s); err != nil { execerror.NonVectorizedPanic(err) }",
 			binaryOpDecMethod[op.BinOp], target, l, r)
 	}
@@ -596,33 +597,23 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 			`))
 
 		case tree.Div:
-			var minInt string
-			switch c.width {
-			case 8:
-				minInt = "math.MinInt8"
-			case 16:
-				minInt = "math.MinInt16"
-			case 32:
-				minInt = "math.MinInt32"
-			case 64:
-				minInt = "math.MinInt64"
-			default:
-				execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled integer width %d", c.width))
-			}
-
-			args["MinInt"] = minInt
+			// Note that this is the '/' operator, which has a decimal result.
+			// TODO(rafi): implement the '//' floor division operator.
+			// todo(rafi): is there a way to avoid allocating on each operation?
+			// todo(jordan): should tree.ExactCtx be used here? (#39540)
 			t = template.Must(template.New("").Parse(`
-				{
-					if {{.Right}} == 0 {
-						execerror.NonVectorizedPanic(tree.ErrDivByZero)
-					}
-					result := {{.Left}} / {{.Right}}
-					if {{.Left}} == {{.MinInt}} && {{.Right}} == -1 {
-						execerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
-					}
-					{{.Target}} = result
+			{
+				if {{.Right}} == 0 {
+					execerror.NonVectorizedPanic(tree.ErrDivByZero)
 				}
-			`))
+				leftTmpDec, rightTmpDec := &apd.Decimal{}, &apd.Decimal{}
+				leftTmpDec.SetFinite(int64({{.Left}}), 0)
+				rightTmpDec.SetFinite(int64({{.Right}}), 0)
+				if _, err := tree.DecimalCtx.Quo(&{{.Target}}, leftTmpDec, rightTmpDec); err != nil {
+					execerror.NonVectorizedPanic(err)
+				}
+			}
+		`))
 
 		default:
 			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
@@ -680,6 +671,7 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 		args := map[string]string{"Op": binaryOpDecMethod[op.BinOp], "Target": target, "Left": l, "Right": r}
 		buf := strings.Builder{}
 		// todo(rafi): is there a way to avoid allocating on each operation?
+		// todo(jordan): should tree.ExactCtx be used here? (#39540)
 		t := template.Must(template.New("").Parse(`
 			{
 				tmpDec := &apd.Decimal{}
@@ -742,6 +734,7 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 		args := map[string]string{"Op": binaryOpDecMethod[op.BinOp], "Target": target, "Left": l, "Right": r}
 		buf := strings.Builder{}
 		// todo(rafi): is there a way to avoid allocating on each operation?
+		// todo(jordan): should tree.ExactCtx be used here? (#39540)
 		t := template.Must(template.New("").Parse(`
 			{
 				tmpDec := &apd.Decimal{}
@@ -845,13 +838,13 @@ func registerBinOpOutputTypes() {
 		}
 	}
 
-	// todo(rafi): Handle special case for division with integers; it should
-	// output decimal type.
-	//for _, leftIntType := range coltypes.IntTypes {
-	//	for _, rightIntType := range coltypes.IntTypes {
-	//		binOpOutputTypes[tree.Div][coltypePair{leftIntType, rightIntType}] = coltypes.Decimal
-	//	}
-	//}
+	// There is a special case for division with integers; it should have a
+	// decimal result.
+	for _, leftIntType := range coltypes.IntTypes {
+		for _, rightIntType := range coltypes.IntTypes {
+			binOpOutputTypes[tree.Div][coltypePair{leftIntType, rightIntType}] = coltypes.Decimal
+		}
+	}
 }
 
 // Avoid unused warning for functions which are only used in templates.
