@@ -271,14 +271,6 @@ func TestFlatBytes(t *testing.T) {
 		// Same with Reset.
 		b1.Reset()
 		b1.Set(1, []byte("reset new usage"))
-
-		// Swap exists temporarily due to execgen.SWAP.
-		// TODO(asubiotto): Remove execgen.SWAP and Swap.
-		require.Panics(
-			t,
-			func() { b1.Swap(0, 1) },
-			"should be unable to swap values",
-		)
 	})
 
 	t.Run("Append", func(t *testing.T) {

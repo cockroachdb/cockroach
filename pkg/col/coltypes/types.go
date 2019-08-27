@@ -140,7 +140,6 @@ var (
 	_ = Bool.GoTypeSliceName
 	_ = Bool.Get
 	_ = Bool.Set
-	_ = Bool.Swap
 	_ = Bool.Slice
 	_ = Bool.CopySlice
 	_ = Bool.AppendSlice
@@ -179,14 +178,6 @@ func (t T) Set(target, i, new string) string {
 		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
 	}
 	return fmt.Sprintf("%s[%s] = %s", target, i, new)
-}
-
-// Swap is a function that should only be used in templates.
-func (t T) Swap(target, i, j string) string {
-	if t == Bytes {
-		return fmt.Sprintf("%s.Swap(%s, %s)", target, i, j)
-	}
-	return fmt.Sprintf("%[1]s[%[2]s], %[1]s[%[3]s] = %[1]s[%[3]s], %[1]s[%[2]s]", target, i, j)
 }
 
 // Slice is a function that should only be used in templates.

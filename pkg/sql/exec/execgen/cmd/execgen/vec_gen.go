@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func genColvec(wr io.Writer) error {
+func genVec(wr io.Writer) error {
 	d, err := ioutil.ReadFile("pkg/col/coldata/vec_tmpl.go")
 	if err != nil {
 		return err
@@ -45,5 +45,5 @@ func genColvec(wr io.Writer) error {
 	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.NE])
 }
 func init() {
-	registerGenerator(genColvec, "vec.eg.go")
+	registerGenerator(genVec, "vec.eg.go")
 }
