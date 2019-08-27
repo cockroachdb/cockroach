@@ -72,6 +72,7 @@ type SSTBatcher struct {
 		total   int
 		split   int
 		sstSize int
+		files   int // a single flush might create multiple files.
 	}
 
 	// allows ingestion of keys where the MVCC.Key would shadow an existing row.
@@ -229,8 +230,10 @@ func (b *SSTBatcher) Flush(ctx context.Context) error {
 	if (b.ms != enginepb.MVCCStats{}) {
 		b.ms.LastUpdateNanos = timeutil.Now().UnixNano()
 	}
-	if err := AddSSTable(ctx, b.db, start, end, sstBytes, b.disallowShadowing, b.ms); err != nil {
+	if files, err := AddSSTable(ctx, b.db, start, end, sstBytes, b.disallowShadowing, b.ms); err != nil {
 		return err
+	} else {
+		b.flushCounts.files += files
 	}
 	b.totalRows.Add(b.rowCounter.BulkOpSummary)
 	b.totalRows.DataSize += b.sstWriter.DataSize
@@ -270,11 +273,12 @@ func AddSSTable(
 	sstBytes []byte,
 	disallowShadowing bool,
 	ms enginepb.MVCCStats,
-) error {
+) (int, error) {
+	var files int
 	now := timeutil.Now().UnixNano()
 	iter, err := engine.NewMemSSTIterator(sstBytes, true)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer iter.Close()
 
@@ -284,7 +288,7 @@ func AddSSTable(
 			iter, engine.MVCCKey{Key: start}, engine.MVCCKey{Key: end}, now,
 		)
 		if err != nil {
-			return errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
+			return 0, errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
 		}
 	} else {
 		stats = ms
@@ -334,14 +338,15 @@ func AddSSTable(
 			}
 			return errors.Wrapf(err, "addsstable [%s,%s)", item.start, item.end)
 		}(); err != nil {
-			return err
+			return files, err
 		}
+		files++
 		// explicitly deallocate SST. This will not deallocate the
 		// top level SST which is kept around to iterate over.
 		item.sstBytes = nil
 	}
 
-	return nil
+	return files, nil
 }
 
 // createSplitSSTable is a helper for splitting up SSTs. The iterator
