@@ -258,17 +258,17 @@ func (r *Replica) applyTimestampCache(
 			if rTS.Forward(minReadTS) {
 				rTxnID = uuid.Nil
 			}
+			nextRTS := rTS.Next()
 			if ba.Txn != nil {
 				if ba.Txn.ID != rTxnID {
-					nextTS := rTS.Next()
-					if ba.Txn.Timestamp.Less(nextTS) {
+					if ba.Txn.Timestamp.Less(nextRTS) {
 						txn := ba.Txn.Clone()
-						bumped = txn.Timestamp.Forward(nextTS) || bumped
+						bumped = txn.Timestamp.Forward(nextRTS) || bumped
 						ba.Txn = txn
 					}
 				}
 			} else {
-				bumped = ba.Timestamp.Forward(rTS.Next()) || bumped
+				bumped = ba.Timestamp.Forward(nextRTS) || bumped
 			}
 
 			// On more recent writes, forward the timestamp and set the
@@ -276,17 +276,18 @@ func (r *Replica) applyTimestampCache(
 			// only EndTransaction and DeleteRange requests update the
 			// write timestamp cache.
 			wTS, wTxnID := r.store.tsCache.GetMaxWrite(header.Key, header.EndKey)
+			nextWTS := wTS.Next()
 			if ba.Txn != nil {
 				if ba.Txn.ID != wTxnID {
-					if !wTS.Less(ba.Txn.Timestamp) {
+					if ba.Txn.Timestamp.Less(nextWTS) {
 						txn := ba.Txn.Clone()
-						bumped = txn.Timestamp.Forward(wTS.Next()) || bumped
+						bumped = txn.Timestamp.Forward(nextWTS) || bumped
 						txn.WriteTooOld = true
 						ba.Txn = txn
 					}
 				}
 			} else {
-				bumped = ba.Timestamp.Forward(wTS.Next()) || bumped
+				bumped = ba.Timestamp.Forward(nextWTS) || bumped
 			}
 		}
 	}
