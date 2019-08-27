@@ -147,6 +147,7 @@ func initCLIDefaults() {
 	demoCtx.useEmptyDatabase = false
 	demoCtx.runWorkload = false
 	demoCtx.localities = nil
+	demoCtx.geoPartitionedReplicas = false
 
 	initPreFlagsDefaults()
 
@@ -340,4 +341,6 @@ var demoCtx struct {
 	useEmptyDatabase bool
 	runWorkload      bool
 	localities       demoLocalityList
+	// Use the geopartitioned replicas topology
+	geoPartitionedReplicas bool
 }

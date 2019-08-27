@@ -588,6 +588,7 @@ func init() {
 	// so we use the regular flag set.
 	BoolFlag(demoCmd.Flags(), &demoCtx.useEmptyDatabase, cliflags.UseEmptyDatabase, false)
 	BoolFlag(demoCmd.Flags(), &demoCtx.runWorkload, cliflags.RunDemoWorkload, false)
+	BoolFlag(demoCmd.Flags(), &demoCtx.geoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas, false)
 	VarFlag(demoFlags, &demoCtx.localities, cliflags.DemoNodeLocality)
 
 	// sqlfmt command.

@@ -112,9 +112,10 @@ var cities = []struct {
 	{city: "seattle", locality: "us_west"},
 	{city: "san francisco", locality: "us_west"},
 	{city: "los angeles", locality: "us_west"},
-	{city: "chicago", locality: "us_central"},
-	{city: "detroit", locality: "us_central"},
-	{city: "minneapolis", locality: "us_central"},
+	// The demo setup we have is a 9 node, 3 region cluster.
+	//{city: "chicago", locality: "us_central"},
+	//{city: "detroit", locality: "us_central"},
+	//{city: "minneapolis", locality: "us_central"},
 	{city: "amsterdam", locality: "eu_west"},
 	{city: "paris", locality: "eu_west"},
 	{city: "rome", locality: "eu_west"},

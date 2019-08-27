@@ -124,6 +124,13 @@ func setupTransientServers(
 		return "", "", cleanup, errors.Errorf("must have a positive number of nodes")
 	}
 
+	// This demo only works on a 9 node cluster, so set the node count as such.
+	// Ignore input user localities.
+	if demoCtx.geoPartitionedReplicas {
+		demoCtx.nodes = 9
+		demoCtx.localities = nil
+	}
+
 	// The user specified some localities for their nodes.
 	if len(demoCtx.localities) != 0 {
 		// Error out of localities don't line up with requested node
@@ -255,6 +262,17 @@ func setupTransientServers(
 			return ``, ``, cleanup, err
 		}
 
+		if demoCtx.geoPartitionedReplicas && gen.Meta().Name == "movr" {
+			db, err := gosql.Open("postgres", urlStr)
+			if err != nil {
+				return ``, ``, cleanup, err
+			}
+			defer db.Close()
+			if err := setupGeoPartitionedReplicas(db); err != nil {
+				return ``, ``, cleanup, err
+			}
+		}
+
 		if demoCtx.runWorkload {
 			if err := runWorkload(ctx, gen, urlStr, stopper); err != nil {
 				return ``, ``, cleanup, err
@@ -263,6 +281,108 @@ func setupTransientServers(
 	}
 
 	return urlStr, s.AdminURL(), cleanup, nil
+}
+
+func setupGeoPartitionedReplicas(db *gosql.DB) error {
+	// Create us-west, us-east and europe-west partitions.
+	q := `
+		ALTER TABLE users PARTITION BY LIST (city) ( 
+			PARTITION us_west VALUES IN ('seattle', 'san francisco', 'los angeles'),
+			PARTITION us_east VALUES IN ('new york', 'boston', 'washington dc'),
+			PARTITION europe_west VALUES IN ('amsterdam', 'paris', 'rome') 
+		);
+		ALTER TABLE vehicles PARTITION BY LIST (city) (
+			PARTITION us_west VALUES IN ('seattle', 'san francisco', 'los angeles'),
+			PARTITION us_east VALUES IN ('new york', 'boston', 'washington dc'),
+			PARTITION europe_west VALUES IN ('amsterdam', 'paris', 'rome') 
+		);
+		ALTER INDEX vehicles_auto_index_fk_city_ref_users PARTITION BY LIST (city) ( 
+			PARTITION us_west VALUES IN ('seattle', 'san francisco', 'los angeles'),
+			PARTITION us_east VALUES IN ('new york', 'boston', 'washington dc'),
+			PARTITION europe_west VALUES IN ('amsterdam', 'paris', 'rome') 
+		);
+		ALTER TABLE rides PARTITION BY LIST (city) (
+			PARTITION us_west VALUES IN ('seattle', 'san francisco', 'los angeles'),
+			PARTITION us_east VALUES IN ('new york', 'boston', 'washington dc'),
+			PARTITION europe_west VALUES IN ('amsterdam', 'paris', 'rome') 
+		);
+		ALTER INDEX rides_auto_index_fk_city_ref_users PARTITION BY LIST (city) (
+			PARTITION us_west VALUES IN ('seattle', 'san francisco', 'los angeles'),
+			PARTITION us_east VALUES IN ('new york', 'boston', 'washington dc'),
+			PARTITION europe_west VALUES IN ('amsterdam', 'paris', 'rome') 
+		);
+		ALTER INDEX rides_auto_index_fk_vehicle_city_ref_vehicles PARTITION BY LIST (vehicle_city) (
+			PARTITION us_west VALUES IN ('seattle', 'san francisco', 'los angeles'),
+			PARTITION us_east VALUES IN ('new york', 'boston', 'washington dc'),
+			PARTITION europe_west VALUES IN ('amsterdam', 'paris', 'rome') 
+		);
+		ALTER TABLE user_promo_codes PARTITION BY LIST (city) (
+			PARTITION us_west VALUES IN ('seattle', 'san francisco', 'los angeles'),
+			PARTITION us_east VALUES IN ('new york', 'boston', 'washington dc'),
+			PARTITION europe_west VALUES IN ('amsterdam', 'paris', 'rome') 
+		);
+		ALTER TABLE vehicle_location_histories PARTITION BY LIST (city) (
+			PARTITION us_west VALUES IN ('seattle', 'san francisco', 'los angeles'),
+			PARTITION us_east VALUES IN ('new york', 'boston', 'washington dc'),
+			PARTITION europe_west VALUES IN ('amsterdam', 'paris', 'rome') 
+		);
+	`
+	if _, err := db.Exec(q); err != nil {
+		return err
+	}
+
+	// Alter the partitions to place replicas in the appropriate zones.
+	q = `
+		ALTER PARTITION us_west OF INDEX users@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-west1"]';
+		ALTER PARTITION us_east OF INDEX users@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-east1"]';
+		ALTER PARTITION europe_west OF INDEX users@* CONFIGURE ZONE USING CONSTRAINTS='["+region=europe-west1"]';
+		
+		ALTER PARTITION us_west OF INDEX vehicles@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-west1"]';
+		ALTER PARTITION us_east OF INDEX vehicles@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-east1"]';
+		ALTER PARTITION europe_west OF INDEX vehicles@* CONFIGURE ZONE USING CONSTRAINTS='["+region=europe-west1"]';
+		
+		ALTER PARTITION us_west OF INDEX rides@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-west1"]';
+		ALTER PARTITION us_east OF INDEX rides@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-east1"]';
+		ALTER PARTITION europe_west OF INDEX rides@* CONFIGURE ZONE USING CONSTRAINTS='["+region=europe-west1"]';
+		
+		ALTER PARTITION us_west OF INDEX user_promo_codes@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-west1"]';
+		ALTER PARTITION us_east OF INDEX user_promo_codes@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-east1"]';
+		ALTER PARTITION europe_west OF INDEX user_promo_codes@* CONFIGURE ZONE USING CONSTRAINTS='["+region=europe-west1"]';
+		
+		ALTER PARTITION us_west OF INDEX vehicle_location_histories@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-west1"]';
+		ALTER PARTITION us_east OF INDEX vehicle_location_histories@* CONFIGURE ZONE USING CONSTRAINTS='["+region=us-east1"]';
+		ALTER PARTITION europe_west OF INDEX vehicle_location_histories@* CONFIGURE ZONE USING CONSTRAINTS='["+region=europe-west1"]';
+	`
+	if _, err := db.Exec(q); err != nil {
+		return err
+	}
+
+	// Create some duplicate indexes for the promo_codes table.
+	q = `
+		CREATE INDEX promo_codes_idx_us_west ON promo_codes (code) STORING (description, creation_time, expiration_time, rules);
+		CREATE INDEX promo_codes_idx_europe_west ON promo_codes (code) STORING (description, creation_time, expiration_time, rules);
+	`
+	if _, err := db.Exec(q); err != nil {
+		return err
+	}
+
+	// Apply configurations to the index for fast reads.
+	q = `
+		ALTER TABLE promo_codes CONFIGURE ZONE USING num_replicas = 3,
+			constraints = '{"+region=us-east1": 1}',
+			lease_preferences = '[[+region=us-east1]]';
+		ALTER INDEX promo_codes@promo_codes_idx_us_west CONFIGURE ZONE USING 
+			constraints = '{"+region=us-west1": 1}',
+			lease_preferences = '[[+region=us-west1]]'; 
+		ALTER INDEX promo_codes@promo_codes_idx_europe_west CONFIGURE ZONE USING 
+			constraints = '{"+region=europe-west1": 1}', 
+			lease_preferences = '[[+region=europe-west1]]';
+	`
+	if _, err := db.Exec(q); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func runWorkload(
@@ -319,6 +439,11 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) error {
 	// Make sure that the user didn't request a workload and an empty database.
 	if demoCtx.runWorkload && demoCtx.useEmptyDatabase {
 		return errors.New("cannot run a workload against an empty database")
+	}
+
+	// Make sure that the user didn't request to have a topology and an empty database.
+	if demoCtx.geoPartitionedReplicas && demoCtx.useEmptyDatabase {
+		return errors.New("cannot setup geo-partitioned replicas topology on an empty database")
 	}
 
 	connURL, adminURL, cleanup, err := setupTransientServers(cmd, gen)

@@ -918,6 +918,16 @@ to us-east1 and availability zone to 3.
 `,
 	}
 
+	DemoGeoPartitionedReplicas = FlagInfo{
+		Name: "geo-partitioned-replicas",
+		Description: `
+Create a 9 node cluster preloaded with the Movr dataset, and automatically apply
+the geo-partitioned replicas topology across the regions us-east1, us-west1, and
+europe-west1. More information about the geo-partitioned replicas topology can be found
+at this URL: https://www.cockroachlabs.com/docs/v19.1/topology-geo-partitioned-replicas.html
+		`,
+	}
+
 	UseEmptyDatabase = FlagInfo{
 		Name: "empty",
 		Description: `
