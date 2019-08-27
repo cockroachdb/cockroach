@@ -605,6 +605,37 @@ func TestLearnerNoAcceptLease(t *testing.T) {
 	}
 }
 
+// TestJointConfigLease verifies that incoming and outgoing voters can't have the
+// lease transferred to them.
+func TestJointConfigLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	knobs, ltk := makeReplicationTestKnobs()
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	k := tc.ScratchRange(t)
+	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
+	atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
+	desc := tc.AddReplicasOrFatal(t, k, tc.Target(1))
+	require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
+
+	err := tc.TransferRangeLease(desc, tc.Target(1))
+	exp := `cannot transfer lease to replica of type VOTER_INCOMING`
+	require.True(t, testutils.IsError(err, exp), err)
+
+	// NB: we don't have to transition out of the joint config first because
+	// this is done automatically by ChangeReplicas before it does what it's
+	// asked to do.
+	desc = tc.RemoveReplicasOrFatal(t, k, tc.Target(1))
+	err = tc.TransferRangeLease(desc, tc.Target(1))
+	exp = `cannot transfer lease to replica of type VOTER_OUTGOING`
+	require.True(t, testutils.IsError(err, exp), err)
+}
+
 func TestLearnerFollowerRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
