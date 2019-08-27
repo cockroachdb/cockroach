@@ -203,7 +203,8 @@ type StoreTestingKnobs struct {
 	// configuration.
 	ReplicaAddStopAfterJointConfig func() bool
 	// ReplicationAlwaysUseJointConfig causes replica addition to always go
-	// through a joint configuration, even when this isn't necessary.
+	// through a joint configuration, even when this isn't necessary (because
+	// the replication change affects only one replica).
 	ReplicationAlwaysUseJointConfig func() bool
 	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
 	// applying a snapshot.
