@@ -11,6 +11,8 @@
 /pkg/sql/opt/                @cockroachdb/sql-opt-prs
 /pkg/sql/stats/              @cockroachdb/sql-opt-prs
 
+/pkg/cli/                    @cockroachdb/cli-prs
+
 /pkg/ui/                     @cockroachdb/admin-ui-prs
 /pkg/ui/embedded.go
 /pkg/ui/src/js/protos.d.ts
