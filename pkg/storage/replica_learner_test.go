@@ -38,15 +38,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type learnerTestKnobs struct {
+type replicationTestKnobs struct {
 	storeKnobs                       storage.StoreTestingKnobs
 	replicaAddStopAfterLearnerAtomic int64
+	replicaAddStopAfterJointConfig   int64
 }
 
-func makeLearnerTestKnobs() (base.TestingKnobs, *learnerTestKnobs) {
-	var k learnerTestKnobs
+func makeReplicationTestKnobs() (base.TestingKnobs, *replicationTestKnobs) {
+	var k replicationTestKnobs
 	k.storeKnobs.ReplicaAddStopAfterLearnerSnapshot = func() bool {
 		return atomic.LoadInt64(&k.replicaAddStopAfterLearnerAtomic) > 0
+	}
+	k.storeKnobs.ReplicaAddStopAfterJointConfig = func() bool {
+		return atomic.LoadInt64(&k.replicaAddStopAfterJointConfig) > 0
 	}
 	return base.TestingKnobs{Store: &k.storeKnobs}, &k
 }
@@ -106,7 +110,7 @@ func TestAddReplicaViaLearner(t *testing.T) {
 
 	blockUntilSnapshotCh := make(chan struct{})
 	blockSnapshotsCh := make(chan struct{})
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
 		close(blockUntilSnapshotCh)
 		select {
@@ -189,7 +193,7 @@ func TestLearnerRaftConfState(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	ctx := context.Background()
 	const numNodes = 2
 	serverArgsPerNode := make(map[int]base.TestServerArgs)
@@ -246,7 +250,7 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var rejectSnapshots int64
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
 		if atomic.LoadInt64(&rejectSnapshots) > 0 {
 			return errors.New(`nope`)
@@ -282,7 +286,7 @@ func TestSplitWithLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
@@ -311,7 +315,7 @@ func TestReplicateQueueSeesLearner(t *testing.T) {
 	// NB also see TestAllocatorRemoveLearner for a lower-level test.
 
 	ctx := context.Background()
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
@@ -347,7 +351,7 @@ func TestReplicateQueueSeesLearner(t *testing.T) {
 func TestReplicaGCQueueSeesLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
@@ -380,7 +384,7 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	blockSnapshotsCh := make(chan struct{})
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	ltk.storeKnobs.DisableRaftSnapshotQueue = true
 	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
 		select {
@@ -444,7 +448,7 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 
 	blockUntilSnapshotCh := make(chan struct{}, 2)
 	blockSnapshotsCh := make(chan struct{})
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
 		blockUntilSnapshotCh <- struct{}{}
 		<-blockSnapshotsCh
@@ -501,7 +505,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 	var skipReceiveSnapshotKnobAtomic int64 = 1
 	blockUntilSnapshotCh := make(chan struct{}, 2)
 	blockSnapshotsCh := make(chan struct{})
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
 		if atomic.LoadInt64(&skipReceiveSnapshotKnobAtomic) > 0 {
 			return nil
@@ -574,7 +578,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 func TestLearnerNoAcceptLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
@@ -607,7 +611,7 @@ func TestLearnerFollowerRead(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
@@ -656,7 +660,7 @@ func TestLearnerAdminRelocateRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
@@ -693,7 +697,7 @@ func TestLearnerAdminMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
@@ -728,7 +732,7 @@ func TestLearnerAdminMerge(t *testing.T) {
 func TestMergeQueueSeesLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
