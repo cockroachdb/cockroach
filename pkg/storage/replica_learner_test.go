@@ -344,7 +344,7 @@ func TestReplicateQueueSeesLearner(t *testing.T) {
 	require.Len(t, desc.Replicas().Voters(), 3)
 }
 
-func TestGCQueueSeesLearner(t *testing.T) {
+func TestReplicaGCQueueSeesLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	knobs, ltk := makeLearnerTestKnobs()
