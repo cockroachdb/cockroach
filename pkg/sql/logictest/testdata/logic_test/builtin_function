@@ -2246,3 +2246,25 @@ query BBB
 SELECT pg_type_is_visible('int'::regtype), pg_type_is_visible(NULL), pg_type_is_visible(99999)
 ----
 true  NULL  NULL
+
+# Sanity check pg_get_function_identity_arguments.
+query T
+SELECT pg_get_function_identity_arguments('convert_from'::regproc::oid)
+----
+bytea, text
+
+# This produces an empty string in Postgres too.
+query T
+SELECT pg_get_function_identity_arguments('version'::regproc::oid)
+----
+·
+
+query T
+SELECT pg_get_function_identity_arguments('array_length'::regproc)
+----
+anyarray, int8
+
+query T
+SELECT pg_get_function_identity_arguments((select oid from pg_proc where proname='variance' and proargtypes[0] = 'int'::regtype))
+----
+int8
