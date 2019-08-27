@@ -98,7 +98,7 @@ func tryIntent(kv engine.MVCCKeyValue) (string, error) {
 
 func decodeWriteBatch(writeBatch *storagepb.WriteBatch) (string, error) {
 	if writeBatch == nil {
-		return "<nil>", nil
+		return "<nil>\n", nil
 	}
 
 	r, err := engine.NewRocksDBBatchReader(writeBatch.Data)
