@@ -30,6 +30,10 @@ type BulkAdderOptions struct {
 	// they may be smaller than this limit.
 	SSTSize uint64
 
+	// SplitAndScatterAfter is the number of bytes which if added without hitting
+	// an existing split will cause the adder to split and scatter the next span.
+	SplitAndScatterAfter uint64
+
 	// MinBufferSize is the initial size of the BulkAdder buffer. It indicates the
 	// amount of memory we require to be able to buffer data before flushing for
 	// SST creation.
