@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -44,14 +43,6 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.etcd.io/etcd/raft/tracker"
 )
-
-// useLearnerReplicas specifies whether to use learner replicas for replica
-// addition or whether to fall back to the previous method of a preemptive
-// snapshot followed by going straight to a voter replica.
-var useLearnerReplicas = settings.RegisterBoolSetting(
-	"kv.learner_replicas.enabled",
-	"use learner replicas for replica addition",
-	true)
 
 // AdminSplit divides the range into into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
@@ -888,13 +879,11 @@ func (r *Replica) ChangeReplicas(
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
 
-	// We execute the change serially if we're not allowed to run atomic replication changes
-	// or if that was explicitly disabled. We also unroll if learners are disabled because
-	// that's undertested and the expectation is that learners cannot be disabled in 19.2.
+	// We execute the change serially if we're not allowed to run atomic
+	// replication changes or if that was explicitly disabled.
 	st := r.ClusterSettings()
 	unroll := !st.Version.IsActive(cluster.VersionAtomicChangeReplicas) ||
-		!useAtomicReplicationChanges.Get(&st.SV) ||
-		!useLearnerReplicas.Get(&st.SV)
+		!useAtomicReplicationChanges.Get(&st.SV)
 
 	if unroll {
 		// Legacy behavior.
@@ -933,9 +922,7 @@ func (r *Replica) changeReplicasImpl(
 	}
 
 	settings := r.ClusterSettings()
-	useLearners := useLearnerReplicas.Get(&settings.SV)
-	useLearners = useLearners && settings.Version.IsActive(cluster.VersionLearnerReplicas)
-	if !useLearners {
+	if useLearners := settings.Version.IsActive(cluster.VersionLearnerReplicas); !useLearners {
 		// NB: we will never use atomic replication changes while learners are not
 		// also active.
 		if len(chgs) != 1 {
