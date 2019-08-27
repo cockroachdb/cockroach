@@ -84,15 +84,21 @@ func MakeBulkAdder(
 	if opts.SSTSize == 0 {
 		opts.SSTSize = 16 << 20
 	}
+	if opts.SplitAndScatterAfter == 0 {
+		// splitting _before_ hitting max reduces chance of auto-splitting after the
+		// range is full and is more expensive to split/move.
+		opts.SplitAndScatterAfter = 48 << 20
+	}
 
 	b := &BufferingAdder{
 		name: opts.Name,
 		sink: SSTBatcher{
 			db:                db,
-			maxSize:           int64(opts.SSTSize),
+			maxSize:           opts.SSTSize,
 			rc:                rangeCache,
 			skipDuplicates:    opts.SkipDuplicates,
 			disallowShadowing: opts.DisallowShadowing,
+			splitAfter:        opts.SplitAndScatterAfter,
 		},
 		timestamp:           timestamp,
 		curBufferSize:       opts.MinBufferSize,
