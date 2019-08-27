@@ -170,7 +170,7 @@ func (k Key) IsPrev(m Key) bool {
 
 // PrefixEnd determines the end key given key as a prefix, that is the
 // key that sorts precisely behind all keys starting with prefix: "1"
-// is added to the final byte and the carry propagated. The special
+// is added to the final byte and then carry propagated. The special
 // cases of nil and KeyMin always returns KeyMax.
 func (k Key) PrefixEnd() Key {
 	if len(k) == 0 {
