@@ -145,6 +145,7 @@ func initCLIDefaults() {
 
 	demoCtx.nodes = 1
 	demoCtx.useEmptyDatabase = false
+	demoCtx.runWorkload = false
 	demoCtx.localities = nil
 
 	initPreFlagsDefaults()
@@ -337,5 +338,6 @@ var sqlfmtCtx struct {
 var demoCtx struct {
 	nodes            int
 	useEmptyDatabase bool
+	runWorkload      bool
 	localities       demoLocalityList
 }
