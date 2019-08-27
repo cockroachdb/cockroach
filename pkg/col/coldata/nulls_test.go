@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/stretchr/testify/require"
 )
 
@@ -220,7 +221,10 @@ func TestSetAndUnsetNulls(t *testing.T) {
 	}
 }
 
-func TestExtend(t *testing.T) {
+func TestNullsDuplicate(t *testing.T) {
+	args := &VecArgs{
+		Src: NewMemColumn(coltypes.Int64, BatchSize),
+	}
 	for _, destStartIdx := range pos {
 		for _, srcStartIdx := range pos {
 			for _, srcEndIdx := range pos {
@@ -230,7 +234,11 @@ func TestExtend(t *testing.T) {
 						srcStartIdx, toAppend)
 					t.Run(name, func(t *testing.T) {
 						n := nulls3.Copy()
-						n.Extend(&nulls5, destStartIdx, uint16(srcStartIdx), uint16(toAppend))
+						args.Src.SetNulls(&nulls5)
+						args.DestIdx = destStartIdx
+						args.SrcStartIdx = srcStartIdx
+						args.SrcEndIdx = srcEndIdx
+						n.duplicate(args)
 						for i := uint64(0); i < destStartIdx; i++ {
 							require.Equal(t, nulls3.NullAt64(i), n.NullAt64(i))
 						}
@@ -251,12 +259,15 @@ func TestExtend(t *testing.T) {
 	}
 }
 
-func TestExtendSel(t *testing.T) {
+func TestNullsDuplicateWithSel(t *testing.T) {
+	args := &VecArgs{
+		Src: NewMemColumn(coltypes.Int64, BatchSize),
+		Sel: make([]uint16, BatchSize),
+	}
 	// Make a selection vector with every even index. (This turns nulls10 into
 	// nulls5.)
-	sel := make([]uint16, BatchSize)
-	for i := range sel {
-		sel[i] = uint16(i) * 2
+	for i := range args.Sel {
+		args.Sel[i] = uint16(i) * 2
 	}
 
 	for _, destStartIdx := range pos {
@@ -268,7 +279,11 @@ func TestExtendSel(t *testing.T) {
 						srcStartIdx, toAppend)
 					t.Run(name, func(t *testing.T) {
 						n := nulls3.Copy()
-						n.ExtendWithSel(&nulls10, destStartIdx, uint16(srcStartIdx), uint16(toAppend), sel)
+						args.Src.SetNulls(&nulls10)
+						args.DestIdx = destStartIdx
+						args.SrcStartIdx = srcStartIdx
+						args.SrcEndIdx = srcEndIdx
+						n.duplicate(args)
 						for i := uint64(0); i < destStartIdx; i++ {
 							require.Equal(t, nulls3.NullAt64(i), n.NullAt64(i))
 						}

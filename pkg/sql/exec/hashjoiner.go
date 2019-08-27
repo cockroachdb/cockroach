@@ -313,7 +313,7 @@ func (hj *hashJoinEqOp) emitUnmatched() {
 		colType := hj.ht.valTypes[hj.ht.outCols[i]]
 
 		outCol.Copy(
-			coldata.CopyArgs{
+			&coldata.VecArgs{
 				ColType:   colType,
 				Src:       valCol,
 				Sel64:     hj.prober.buildIdx,
@@ -505,12 +505,12 @@ func (ht *hashTable) loadBatch(batch coldata.Batch) {
 	batchSize := batch.Length()
 	for i, colIdx := range ht.valCols {
 		ht.vals[i].Append(
-			coldata.AppendArgs{
+			&coldata.VecArgs{
 				ColType:   ht.valTypes[i],
 				Src:       batch.ColVec(int(colIdx)),
 				Sel:       batch.Selection(),
 				DestIdx:   ht.size,
-				SrcEndIdx: batchSize,
+				SrcEndIdx: uint64(batchSize),
 			},
 		)
 	}
@@ -960,7 +960,7 @@ func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, b
 		colType := prober.ht.valTypes[prober.ht.outCols[i]]
 
 		outCol.Copy(
-			coldata.CopyArgs{
+			&coldata.VecArgs{
 				ColType:   colType,
 				Src:       valCol,
 				Sel64:     prober.buildIdx,
@@ -984,7 +984,7 @@ func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, b
 		colType := prober.spec.sourceTypes[colIdx]
 
 		outCol.Copy(
-			coldata.CopyArgs{
+			&coldata.VecArgs{
 				ColType:   colType,
 				Src:       valCol,
 				Sel:       prober.probeIdx,

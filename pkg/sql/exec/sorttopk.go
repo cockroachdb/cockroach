@@ -131,12 +131,12 @@ func (t *topKSorter) spool(ctx context.Context) {
 			vec := inputBatch.ColVec(i)
 			colType := t.inputTypes[i]
 			destVec.Append(
-				coldata.AppendArgs{
+				&coldata.VecArgs{
 					ColType:   colType,
 					Src:       vec,
 					Sel:       inputBatch.Selection(),
 					DestIdx:   toLength,
-					SrcEndIdx: fromLength,
+					SrcEndIdx: uint64(fromLength),
 				},
 			)
 		}
@@ -202,7 +202,7 @@ func (t *topKSorter) emit() coldata.Batch {
 	for i := range t.inputTypes {
 		vec := t.output.ColVec(i)
 		vec.Copy(
-			coldata.CopyArgs{
+			&coldata.VecArgs{
 				ColType:   t.inputTypes[i],
 				Src:       t.topK.ColVec(i),
 				Sel:       t.sel,

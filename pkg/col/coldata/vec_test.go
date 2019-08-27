@@ -143,12 +143,12 @@ func TestAppend(t *testing.T) {
 
 	testCases := []struct {
 		name           string
-		args           AppendArgs
+		args           VecArgs
 		expectedLength int
 	}{
 		{
 			name: "AppendSimple",
-			args: AppendArgs{
+			args: VecArgs{
 				// DestIdx must be specified to append to the end of dest.
 				DestIdx: BatchSize,
 			},
@@ -156,7 +156,7 @@ func TestAppend(t *testing.T) {
 		},
 		{
 			name: "AppendOverwriteSimple",
-			args: AppendArgs{
+			args: VecArgs{
 				// DestIdx 0, the default value, will start appending at index 0.
 				DestIdx: 0,
 			},
@@ -164,7 +164,7 @@ func TestAppend(t *testing.T) {
 		},
 		{
 			name: "AppendOverwriteSlice",
-			args: AppendArgs{
+			args: VecArgs{
 				// Start appending at index 10.
 				DestIdx: 10,
 			},
@@ -172,7 +172,7 @@ func TestAppend(t *testing.T) {
 		},
 		{
 			name: "AppendSlice",
-			args: AppendArgs{
+			args: VecArgs{
 				DestIdx:     20,
 				SrcStartIdx: 10,
 				SrcEndIdx:   20,
@@ -181,7 +181,7 @@ func TestAppend(t *testing.T) {
 		},
 		{
 			name: "AppendWithSel",
-			args: AppendArgs{
+			args: VecArgs{
 				DestIdx:     5,
 				SrcStartIdx: 10,
 				SrcEndIdx:   20,
@@ -191,10 +191,10 @@ func TestAppend(t *testing.T) {
 		},
 		{
 			name: "AppendWithHalfSel",
-			args: AppendArgs{
+			args: VecArgs{
 				DestIdx:   5,
 				Sel:       sel[:len(sel)/2],
-				SrcEndIdx: uint16(len(sel) / 2),
+				SrcEndIdx: uint64(len(sel) / 2),
 			},
 			expectedLength: 5 + (BatchSize / 2),
 		},
@@ -209,7 +209,7 @@ func TestAppend(t *testing.T) {
 		}
 		t.Run(tc.name, func(t *testing.T) {
 			dest := NewMemColumn(typ, BatchSize)
-			dest.Append(tc.args)
+			dest.Append(&tc.args)
 			require.Equal(t, tc.expectedLength, len(dest.Int64()))
 		})
 	}
@@ -243,17 +243,17 @@ func TestCopy(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		args        CopyArgs
+		args        VecArgs
 		expectedSum int
 	}{
 		{
 			name:        "CopyNothing",
-			args:        CopyArgs{},
+			args:        VecArgs{},
 			expectedSum: 0,
 		},
 		{
 			name: "CopyBatchSizeMinus1WithOffset1",
-			args: CopyArgs{
+			args: VecArgs{
 				// Use DestIdx 1 to make sure that it is respected.
 				DestIdx:   1,
 				SrcEndIdx: BatchSize - 1,
@@ -263,7 +263,7 @@ func TestCopy(t *testing.T) {
 		},
 		{
 			name: "CopyWithSel",
-			args: CopyArgs{
+			args: VecArgs{
 				// Set sel, but this should be ignored in favor of Sel64.
 				Sel: sel,
 				// Since sel64 and sel refer to the same indices, slice sel64 to be able
@@ -283,7 +283,7 @@ func TestCopy(t *testing.T) {
 		tc.args.ColType = typ
 		t.Run(tc.name, func(t *testing.T) {
 			dest := NewMemColumn(typ, BatchSize)
-			dest.Copy(tc.args)
+			dest.Copy(&tc.args)
 			destInts := dest.Int64()
 			firstNonZero := 0
 			for i := range destInts {
@@ -324,7 +324,7 @@ func TestCopyNulls(t *testing.T) {
 		src.Nulls().SetNull(uint16(i))
 	}
 
-	copyArgs := CopyArgs{
+	copyArgs := VecArgs{
 		ColType:     typ,
 		Src:         src,
 		DestIdx:     3,
@@ -332,7 +332,7 @@ func TestCopyNulls(t *testing.T) {
 		SrcEndIdx:   10,
 	}
 
-	dst.Copy(copyArgs)
+	dst.Copy(&copyArgs)
 
 	// Verify that original nulls aren't deleted, and that
 	// the nulls in the source have been copied over.
@@ -361,15 +361,15 @@ func BenchmarkAppend(b *testing.B) {
 
 	benchCases := []struct {
 		name string
-		args AppendArgs
+		args VecArgs
 	}{
 		{
 			name: "AppendSimple",
-			args: AppendArgs{},
+			args: VecArgs{},
 		},
 		{
 			name: "AppendWithSel",
-			args: AppendArgs{
+			args: VecArgs{
 				Sel: sel,
 			},
 		},
@@ -383,7 +383,7 @@ func BenchmarkAppend(b *testing.B) {
 		b.Run(bc.name, func(b *testing.B) {
 			b.SetBytes(8 * BatchSize)
 			for i := 0; i < b.N; i++ {
-				dest.Append(bc.args)
+				dest.Append(&bc.args)
 				// "Reset" dest for another round.
 				dest.SetCol(dest.Int64()[:BatchSize])
 			}
@@ -399,15 +399,15 @@ func BenchmarkCopy(b *testing.B) {
 
 	benchCases := []struct {
 		name string
-		args CopyArgs
+		args VecArgs
 	}{
 		{
 			name: "CopySimple",
-			args: CopyArgs{},
+			args: VecArgs{},
 		},
 		{
 			name: "CopyWithSel",
-			args: CopyArgs{
+			args: VecArgs{
 				Sel: sel,
 			},
 		},
@@ -421,7 +421,7 @@ func BenchmarkCopy(b *testing.B) {
 		b.Run(bc.name, func(b *testing.B) {
 			b.SetBytes(8 * BatchSize)
 			for i := 0; i < b.N; i++ {
-				dest.Copy(bc.args)
+				dest.Copy(&bc.args)
 			}
 		})
 	}

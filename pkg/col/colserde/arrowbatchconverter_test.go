@@ -61,7 +61,7 @@ func copyBatch(original coldata.Batch) coldata.Batch {
 	b := coldata.NewMemBatchWithSize(typs, int(original.Length()))
 	b.SetLength(original.Length())
 	for colIdx, col := range original.ColVecs() {
-		b.ColVec(colIdx).Copy(coldata.CopyArgs{
+		b.ColVec(colIdx).Copy(&coldata.VecArgs{
 			ColType:   typs[colIdx],
 			Src:       col,
 			SrcEndIdx: uint64(original.Length()),

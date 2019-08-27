@@ -139,7 +139,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 		// Copy the results into the output vector, using the toSubtract selection
 		// vector to copy only the elements that we actually wrote according to the
 		// current case arm.
-		outputCol.Copy(coldata.CopyArgs{
+		outputCol.Copy(&coldata.VecArgs{
 			ColType:     c.typ,
 			Src:         inputCol,
 			Sel:         toSubtract,
@@ -188,7 +188,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 	// that's done, restore the original selection vector and return the batch.
 	batch := c.elseOp.Next(ctx)
 	inputCol := c.buffer.batch.Batch.ColVec(c.thenIdxs[len(c.thenIdxs)-1])
-	outputCol.Copy(coldata.CopyArgs{
+	outputCol.Copy(&coldata.VecArgs{
 		ColType:     c.typ,
 		Src:         inputCol,
 		Sel:         batch.Selection(),

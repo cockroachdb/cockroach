@@ -103,12 +103,12 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 				srcStartIdx = sel[srcStartIdx]
 			}
 			o.output.ColVec(i).Append(
-				coldata.AppendArgs{
+				&coldata.VecArgs{
 					ColType:     o.columnTypes[i],
 					Src:         vec,
 					DestIdx:     uint64(outputIdx),
-					SrcStartIdx: srcStartIdx,
-					SrcEndIdx:   srcStartIdx + 1,
+					SrcStartIdx: uint64(srcStartIdx),
+					SrcEndIdx:   uint64(srcStartIdx + 1),
 				},
 			)
 		}

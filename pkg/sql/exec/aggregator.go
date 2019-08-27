@@ -267,7 +267,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			// According to the aggregate function interface contract, the value at
 			// the current index must also be copied.
 			a.scratch.ColVec(i).Copy(
-				coldata.CopyArgs{
+				&coldata.VecArgs{
 					Src:         a.scratch.ColVec(i),
 					ColType:     a.outputTypes[i],
 					SrcStartIdx: uint64(a.scratch.outputSize),

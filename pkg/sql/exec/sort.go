@@ -120,12 +120,12 @@ func (p *allSpooler) spool(ctx context.Context) {
 	for ; batch.Length() != 0; batch = p.input.Next(ctx) {
 		for i := 0; i < len(p.values); i++ {
 			p.values[i].Append(
-				coldata.AppendArgs{
+				&coldata.VecArgs{
 					ColType:   p.inputTypes[i],
 					Src:       batch.ColVec(i),
 					Sel:       batch.Selection(),
 					DestIdx:   nTuples,
-					SrcEndIdx: batch.Length(),
+					SrcEndIdx: uint64(batch.Length()),
 				},
 			)
 		}
@@ -250,7 +250,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 
 		for j := 0; j < len(p.inputTypes); j++ {
 			p.output.ColVec(j).Copy(
-				coldata.CopyArgs{
+				&coldata.VecArgs{
 					ColType:     p.inputTypes[j],
 					Src:         p.input.getValues(j),
 					Sel64:       p.order,

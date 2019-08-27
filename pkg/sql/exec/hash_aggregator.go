@@ -243,7 +243,7 @@ func (op *hashGrouper) Next(ctx context.Context) coldata.Batch {
 		toCol := op.batch.ColVec(i)
 		fromCol := op.ht.vals[colIdx]
 		toCol.Copy(
-			coldata.CopyArgs{
+			&coldata.VecArgs{
 				ColType:     op.ht.valTypes[op.ht.outCols[i]],
 				Src:         fromCol,
 				Sel64:       op.sel,
