@@ -764,7 +764,7 @@ func TestLearnerAdminRelocateRange(t *testing.T) {
 	require.Empty(t, desc.Replicas().Learners())
 }
 
-func TestLearnerAdminMerge(t *testing.T) {
+func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -784,20 +784,67 @@ func TestLearnerAdminMerge(t *testing.T) {
 	_, _ = tc.SplitRangeOrFatal(t, splitKey2)
 
 	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 1)
-	_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
-	_ = tc.AddReplicasOrFatal(t, splitKey2, tc.Target(1))
+	// Three ranges (in that order):
+	// desc1: will have a learner (later joint voter)
+	// desc2 (unnamed): is always left vanilla
+	// desc3: like desc1
+	//
+	// This allows testing merges that have a learner on the RHS (on desc2) and
+	// the LHS (on desc1).
+	desc1 := tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	desc3 := tc.AddReplicasOrFatal(t, splitKey2, tc.Target(1))
 	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 0)
 
-	// Learner on the lhs should fail.
-	err := tc.Server(0).DB().AdminMerge(ctx, scratchStartKey)
-	if !testutils.IsError(err, `cannot merge range with non-voter replicas on lhs`) {
-		t.Fatalf(`expected "cannot merge range with non-voter replicas on lhs" error got: %+v`, err)
+	checkFails := func() {
+		err := tc.Server(0).DB().AdminMerge(ctx, scratchStartKey)
+		if exp := `cannot merge range with non-voter replicas on`; !testutils.IsError(err, exp) {
+			t.Fatalf(`expected "%s" error got: %+v`, exp, err)
+		}
+		err = tc.Server(0).DB().AdminMerge(ctx, splitKey1)
+		if exp := `cannot merge range with non-voter replicas on`; !testutils.IsError(err, exp) {
+			t.Fatalf(`expected "%s" error got: %+v`, exp, err)
+		}
 	}
-	// Learner on the rhs should fail.
-	err = tc.Server(0).DB().AdminMerge(ctx, splitKey1)
-	if !testutils.IsError(err, `cannot merge range with non-voter replicas on rhs`) {
-		t.Fatalf(`expected "cannot merge range with non-voter replicas on rhs" error got: %+v`, err)
-	}
+
+	// LEARNER on the lhs or rhs should fail.
+	checkFails()
+
+	// Turn the learners on desc1 and desc3 into VOTER_INCOMINGs.
+	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
+	atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
+	desc1 = tc.RemoveReplicasOrFatal(t, desc1.StartKey.AsRawKey(), tc.Target(1))
+	desc1 = tc.AddReplicasOrFatal(t, desc1.StartKey.AsRawKey(), tc.Target(1))
+	require.Len(t, desc1.Replicas().Filter(predIncoming), 1)
+	desc3 = tc.RemoveReplicasOrFatal(t, desc3.StartKey.AsRawKey(), tc.Target(1))
+	desc3 = tc.AddReplicasOrFatal(t, desc3.StartKey.AsRawKey(), tc.Target(1))
+	require.Len(t, desc1.Replicas().Filter(predIncoming), 1)
+
+	// VOTER_INCOMING on the lhs or rhs should fail.
+	checkFails()
+
+	// Turn the incoming voters on desc1 and desc3 into VOTER_OUTGOINGs.
+	desc1 = tc.RemoveReplicasOrFatal(t, desc1.StartKey.AsRawKey(), tc.Target(1))
+	require.Len(t, desc1.Replicas().Filter(predOutgoing), 1)
+	desc3 = tc.RemoveReplicasOrFatal(t, desc3.StartKey.AsRawKey(), tc.Target(1))
+	require.Len(t, desc3.Replicas().Filter(predOutgoing), 1)
+
+	// VOTER_OUTGOING on the lhs or rhs should fail.
+	checkFails()
+
+	// Add a VOTER_INCOMING to desc2 to make sure it actually exludes this type
+	// of replicas from merges (rather than really just checking whether the
+	// replica sets are equal).
+
+	desc2 := tc.AddReplicasOrFatal(t, splitKey1, tc.Target(1))
+	require.Len(t, desc2.Replicas().Filter(predIncoming), 1)
+
+	checkFails()
+
+	// Ditto VOTER_OUTGOING.
+	desc2 = tc.RemoveReplicasOrFatal(t, desc2.StartKey.AsRawKey(), tc.Target(1))
+	require.Len(t, desc2.Replicas().Filter(predOutgoing), 1)
+
+	checkFails()
 }
 
 func TestMergeQueueSeesLearner(t *testing.T) {
