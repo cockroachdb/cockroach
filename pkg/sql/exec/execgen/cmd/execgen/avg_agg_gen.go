@@ -93,7 +93,7 @@ func genAvgAgg(wr io.Writer) error {
 		spm[typ] = i
 	}
 	tmplInfos := make([]avgAggTmplInfo, len(supportedTypes))
-	for _, o := range binaryOpToOverloads[tree.Plus] {
+	for _, o := range sameTypeBinaryOpToOverloads[tree.Plus] {
 		i, ok := spm[o.LTyp]
 		if !ok {
 			continue

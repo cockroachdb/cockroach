@@ -44,7 +44,7 @@ func genSumAgg(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, binaryOpToOverloads[tree.Plus])
+	return tmpl.Execute(wr, sameTypeBinaryOpToOverloads[tree.Plus])
 }
 
 func init() {
