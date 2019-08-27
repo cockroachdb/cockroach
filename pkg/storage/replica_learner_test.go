@@ -53,19 +53,16 @@ type replicationTestKnobs struct {
 }
 
 func (rtl *replicationTestKnobs) withStopAfterLearnerAtomic(f func()) {
-	prev := atomic.LoadInt64(&rtl.replicaAddStopAfterLearnerAtomic)
+	prev := atomic.SwapInt64(&rtl.replicaAddStopAfterLearnerAtomic, 1)
 	defer atomic.StoreInt64(&rtl.replicaAddStopAfterLearnerAtomic, prev)
-	atomic.StoreInt64(&rtl.replicaAddStopAfterLearnerAtomic, 1)
 	f()
 }
 
 func (rtl *replicationTestKnobs) withStopAfterJointConfig(f func()) {
-	au := atomic.LoadInt64(&rtl.replicationAlwaysUseJointConfig)
-	sa := atomic.LoadInt64(&rtl.replicaAddStopAfterJointConfig)
+	au := atomic.SwapInt64(&rtl.replicationAlwaysUseJointConfig, 1)
+	sa := atomic.SwapInt64(&rtl.replicaAddStopAfterJointConfig, 1)
 	defer atomic.StoreInt64(&rtl.replicationAlwaysUseJointConfig, au)
 	defer atomic.StoreInt64(&rtl.replicaAddStopAfterJointConfig, sa)
-	atomic.StoreInt64(&rtl.replicationAlwaysUseJointConfig, 1)
-	atomic.StoreInt64(&rtl.replicaAddStopAfterJointConfig, 1)
 	f()
 }
 
