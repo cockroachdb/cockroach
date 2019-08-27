@@ -46,7 +46,6 @@ func getLicense(clusterID uuid.UUID) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		return "", errors.New("unable to connect to licensing endpoint")
 	}
