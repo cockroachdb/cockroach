@@ -23,6 +23,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/apd"
+	"time"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )

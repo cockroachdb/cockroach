@@ -47,6 +47,8 @@ func FromColumnType(ct *types.T) coltypes.T {
 		execerror.VectorizedInternalPanic(fmt.Sprintf("integer with unknown width %d", ct.Width()))
 	case types.FloatFamily:
 		return coltypes.Float64
+	case types.TimestampFamily:
+		return coltypes.Timestamp
 	}
 	return coltypes.Unhandled
 }
@@ -165,6 +167,14 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
 				return nil, errors.Errorf("expected *tree.DDecimal, found %s", reflect.TypeOf(datum))
 			}
 			return d.Decimal, nil
+		}
+	case types.TimestampFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DTimestamp)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DDecimal, found %s", reflect.TypeOf(datum))
+			}
+			return d.Time, nil
 		}
 	}
 	// It would probably be more correct to return an error here, rather than a

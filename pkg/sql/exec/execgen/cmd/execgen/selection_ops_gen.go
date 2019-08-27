@@ -24,6 +24,7 @@ import (
 	"bytes"
   "context"
   "math"
+  "time"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"

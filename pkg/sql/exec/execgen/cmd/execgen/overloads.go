@@ -164,7 +164,7 @@ func init() {
 		for _, op := range binOps {
 			// Skip types that don't have associated binary ops.
 			switch t {
-			case coltypes.Bytes, coltypes.Bool:
+			case coltypes.Bytes, coltypes.Bool, coltypes.Timestamp:
 				continue
 			}
 			ov := &overload{
@@ -331,6 +331,9 @@ type floatIntCustomizer struct{}
 // intFloatCustomizer supports mixed type expressions with an int left-hand
 // side and a float right-hand side.
 type intFloatCustomizer struct{}
+
+// timestampCustomizer is necessary since time.Time doesn't have infix operators.
+type timestampCustomizer struct{}
 
 func (boolCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(target, l, r string) string {
@@ -701,11 +704,44 @@ func (c intFloatCustomizer) getCmpOpCompareFunc() compareFunc {
 	return getFloatCmpOpCompareFunc(false /* checkLeftNan */, true /* checkRightNan */)
 }
 
+func (c timestampCustomizer) getCmpOpCompareFunc() compareFunc {
+	return func(target, l, r string) string {
+		args := map[string]string{"Target": target, "Left": l, "Right": r}
+		buf := strings.Builder{}
+		// Inline the code from tree.compareTimestamps.
+		t := template.Must(template.New("").Parse(`
+			if {{.Left}}.Before({{.Right}}) {
+				{{.Target}} = -1
+			}
+			if {{.Right}}.Before({{.Left}}) {
+				{{.Target}} = 1
+			}
+			{{.Target}} = 0
+		`))
+
+		if err := t.Execute(&buf, args); err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+		return buf.String()
+	}
+}
+
+func (timestampCustomizer) getHashAssignFunc() assignFunc {
+	return func(op overload, target, v, _ string) string {
+		return fmt.Sprintf(`
+		  s, ns := %[2]s.Second(), %[2]s.Nanosecond()
+		  %[1]s = memhash64(noescape(unsafe.Pointer(&s)), %[1]s)
+		  %[1]s = memhash64(noescape(unsafe.Pointer(&ns)), %[1]s)
+		`, target, v)
+	}
+}
+
 func registerTypeCustomizers() {
 	typeCustomizers = make(map[coltypePair]typeCustomizer)
 	registerTypeCustomizer(coltypePair{coltypes.Bool, coltypes.Bool}, boolCustomizer{})
 	registerTypeCustomizer(coltypePair{coltypes.Bytes, coltypes.Bytes}, bytesCustomizer{})
 	registerTypeCustomizer(coltypePair{coltypes.Decimal, coltypes.Decimal}, decimalCustomizer{})
+	registerTypeCustomizer(coltypePair{coltypes.Timestamp, coltypes.Timestamp}, timestampCustomizer{})
 	for _, leftFloatType := range coltypes.FloatTypes {
 		for _, rightFloatType := range coltypes.FloatTypes {
 			registerTypeCustomizer(coltypePair{leftFloatType, rightFloatType}, floatCustomizer{width: 64})
