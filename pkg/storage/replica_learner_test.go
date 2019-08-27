@@ -900,7 +900,7 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	// VOTER_OUTGOING on the lhs or rhs should fail.
 	checkFails()
 
-	// Add a VOTER_INCOMING to desc2 to make sure it actually exludes this type
+	// Add a VOTER_INCOMING to desc2 to make sure it actually excludes this type
 	// of replicas from merges (rather than really just checking whether the
 	// replica sets are equal).
 	// desc{1,2,3} = (VOTER_FULL, VOTER_OUTGOING) (VOTER_FULL, VOTER_INCOMING) (VOTER_FULL, VOTER_OUTGOING)
