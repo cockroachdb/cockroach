@@ -293,7 +293,7 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 	require.Empty(t, desc.Replicas().Learners())
 }
 
-func TestSplitWithLearner(t *testing.T) {
+func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
@@ -319,6 +319,20 @@ func TestSplitWithLearner(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, left.Replicas().Learners(), 1)
 	require.Len(t, right.Replicas().Learners(), 1)
+
+	// Remove the learner on the RHS.
+	right = tc.RemoveReplicasOrFatal(t, right.StartKey.AsRawKey(), tc.Target(1))
+
+	// Put an incoming voter on the RHS and split again. This works because the
+	// split auto-transitions us out of the joint conf before doing work.
+	atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
+	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
+	right = tc.AddReplicasOrFatal(t, right.StartKey.AsRawKey(), tc.Target(1))
+	require.Len(t, right.Replicas().Filter(predIncoming), 1)
+	left, right, err = tc.SplitRange(right.StartKey.AsRawKey().Next())
+	require.NoError(t, err)
+	require.False(t, left.Replicas().InAtomicReplicationChange(), left)
+	require.False(t, right.Replicas().InAtomicReplicationChange(), right)
 }
 
 func TestReplicateQueueSeesLearner(t *testing.T) {
