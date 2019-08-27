@@ -55,6 +55,9 @@ func checkCanReceiveLease(rec EvalContext) error {
 		// amounts to removing the leaseholder without any safety precautions.
 		// This would either wedge the range or allow illegal reads to be
 		// served.
+		//
+		// Since the leaseholder can't remove itself and is a VOTER_FULL, we
+		// also know that in any configuration there's at least one VOTER_FULL.
 		return errors.Errorf(`cannot transfer lease to replica of type %s`, t)
 	}
 	return nil
