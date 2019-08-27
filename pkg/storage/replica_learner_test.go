@@ -52,14 +52,14 @@ type replicationTestKnobs struct {
 	replicationAlwaysUseJointConfig  int64
 }
 
-func (rtl *replicationTestKnobs) withLearnerStop(f func()) {
+func (rtl *replicationTestKnobs) withStopAfterLearnerAtomic(f func()) {
 	prev := atomic.LoadInt64(&rtl.replicaAddStopAfterLearnerAtomic)
 	defer atomic.StoreInt64(&rtl.replicaAddStopAfterLearnerAtomic, prev)
 	atomic.StoreInt64(&rtl.replicaAddStopAfterLearnerAtomic, 1)
 	f()
 }
 
-func (rtl *replicationTestKnobs) withJointConfigAndStop(f func()) {
+func (rtl *replicationTestKnobs) withStopAfterJointConfig(f func()) {
 	au := atomic.LoadInt64(&rtl.replicationAlwaysUseJointConfig)
 	sa := atomic.LoadInt64(&rtl.replicaAddStopAfterJointConfig)
 	defer atomic.StoreInt64(&rtl.replicationAlwaysUseJointConfig, au)
@@ -248,7 +248,7 @@ func TestLearnerRaftConfState(t *testing.T) {
 	// Replica on the Store, but don't promote it to a voter.
 	scratchStartKey := tc.ScratchRange(t)
 	var desc roachpb.RangeDescriptor
-	ltk.withLearnerStop(func() {
+	ltk.withStopAfterLearnerAtomic(func() {
 		desc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 	})
 	require.Len(t, desc.Replicas().Learners(), 1)
@@ -327,7 +327,7 @@ func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 	// Add a learner replica, send a snapshot so that it's materialized as a
 	// Replica on the Store, but don't promote it to a voter.
 	scratchStartKey := tc.ScratchRange(t)
-	ltk.withLearnerStop(func() {
+	ltk.withStopAfterLearnerAtomic(func() {
 		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 	})
 
@@ -370,7 +370,7 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	// Add a learner replica, send a snapshot so that it's materialized as a
 	// Replica on the Store, but don't promote it to a voter.
 	scratchStartKey := tc.ScratchRange(t)
-	ltk.withLearnerStop(func() {
+	ltk.withStopAfterLearnerAtomic(func() {
 		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 	})
 
@@ -393,7 +393,7 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	}
 
 	// Create a VOTER_OUTGOING, i.e. a joint configuration.
-	ltk.withJointConfigAndStop(func() {
+	ltk.withStopAfterJointConfig(func() {
 		desc := tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(2))
 		require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
 		trace, errMsg, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
@@ -429,7 +429,7 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 	// Add a learner replica, send a snapshot so that it's materialized as a
 	// Replica on the Store, but don't promote it to a voter.
 	scratchStartKey := tc.ScratchRange(t)
-	ltk.withLearnerStop(func() {
+	ltk.withStopAfterLearnerAtomic(func() {
 		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 	})
 
@@ -450,7 +450,7 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 
 	// Now get the range into a joint config.
 	tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(1)) // remove learner
-	ltk.withJointConfigAndStop(func() {
+	ltk.withStopAfterJointConfig(func() {
 		desc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 		require.Len(t, desc.Replicas().Filter(predIncoming), 1, desc)
 	})
@@ -669,7 +669,7 @@ func TestLearnerNoAcceptLease(t *testing.T) {
 	// Add a learner replica, send a snapshot so that it's materialized as a
 	// Replica on the Store, but don't promote it to a voter.
 	scratchStartKey := tc.ScratchRange(t)
-	ltk.withLearnerStop(func() {
+	ltk.withStopAfterLearnerAtomic(func() {
 		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 	})
 
@@ -735,7 +735,7 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 
 	scratchStartKey := tc.ScratchRange(t)
 	var scratchDesc roachpb.RangeDescriptor
-	ltk.withLearnerStop(func() {
+	ltk.withStopAfterLearnerAtomic(func() {
 		scratchDesc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 	})
 
@@ -809,7 +809,7 @@ func TestLearnerAdminRelocateRange(t *testing.T) {
 	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
-	ltk.withLearnerStop(func() {
+	ltk.withStopAfterLearnerAtomic(func() {
 		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(2))
 	})
@@ -859,7 +859,7 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	// This allows testing merges that have a learner on the RHS (on desc2) and
 	// the LHS (on desc1).
 	var desc1, desc3 roachpb.RangeDescriptor
-	ltk.withLearnerStop(func() {
+	ltk.withStopAfterLearnerAtomic(func() {
 		desc1 = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 		desc3 = tc.AddReplicasOrFatal(t, splitKey2, tc.Target(1))
 	})
@@ -946,7 +946,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 	{
 		splitAndUnsplit()
 
-		ltk.withLearnerStop(func() {
+		ltk.withStopAfterLearnerAtomic(func() {
 			_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 		})
 
@@ -978,7 +978,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 	{
 		desc := splitAndUnsplit()
 
-		ltk.withJointConfigAndStop(func() {
+		ltk.withStopAfterJointConfig(func() {
 			desc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 		})
 		require.Len(t, desc.Replicas().Filter(predIncoming), 1, desc)
@@ -1007,7 +1007,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		// Repeat the game, except now we start with two replicas and we're
 		// giving the RHS a VOTER_OUTGOING.
 		desc = splitAndUnsplit()
-		ltk.withJointConfigAndStop(func() {
+		ltk.withStopAfterJointConfig(func() {
 			descRight := tc.RemoveReplicasOrFatal(t, desc.EndKey.AsRawKey(), tc.Target(1))
 			require.Len(t, descRight.Replicas().Filter(predOutgoing), 1, desc)
 		})
