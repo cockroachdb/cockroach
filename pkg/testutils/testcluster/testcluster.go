@@ -506,6 +506,18 @@ func (tc *TestCluster) RemoveReplicas(
 	return tc.changeReplicas(roachpb.REMOVE_REPLICA, keys.MustAddr(startKey), targets...)
 }
 
+func (tc *TestCluster) RemoveReplicasOrFatal(
+	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) roachpb.RangeDescriptor {
+	t.Helper()
+	desc, err := tc.RemoveReplicas(startKey, targets...)
+	if err != nil {
+		t.Fatalf(`could not remove %v replicas from range containing %s: %+v`,
+			targets, startKey, err)
+	}
+	return desc
+}
+
 // TransferRangeLease is part of the TestServerInterface.
 func (tc *TestCluster) TransferRangeLease(
 	rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
