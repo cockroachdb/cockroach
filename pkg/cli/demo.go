@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
@@ -25,10 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"golang.org/x/time/rate"
 )
 
 var demoCmd = &cobra.Command{
@@ -186,15 +189,75 @@ func setupTransientServers(
 		if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
 			return ``, ``, cleanup, err
 		}
+
+		if demoCtx.runWorkload {
+			if err := runWorkload(gen, urlStr); err != nil {
+				return ``, ``, cleanup, err
+			}
+		}
 	}
 
 	return urlStr, s.AdminURL(), cleanup, nil
+}
+
+func runWorkload(gen workload.Generator, dbURL string) error {
+	opser, ok := gen.(workload.Opser)
+	if !ok {
+		return errors.New("default dataset does not have a workload defined")
+	}
+
+	// TODO (rohany): cleanly cancel the workers -- how to do this?
+
+	// Dummy registry to prove to the Opser.
+	reg := histogram.NewRegistry(time.Duration(100) * time.Millisecond)
+	ops, err := opser.Ops([]string{dbURL}, reg)
+	if err != nil {
+		return errors.Wrap(err, "unable to create workload")
+	}
+
+	// Use a light rate limit of 25 queries per second
+	limiter := rate.NewLimiter(rate.Limit(25), 1)
+
+	ctx := context.Background()
+	// Start a goroutine to run each of the workload functions.
+	for _, workerFn := range ops.WorkerFns {
+		go func(fun func(context.Context) error) {
+			for {
+				if ctx.Err() != nil {
+					return
+				}
+
+				// Limit how quickly we can generate work.
+				if err := limiter.Wait(ctx); err != nil {
+					if err == ctx.Err() {
+						return
+					}
+					panic(err)
+				}
+
+				if err := fun(ctx); err != nil {
+					if errors.Cause(err) == ctx.Err() {
+						return
+					}
+					// TODO (rohany): What to do with this error?
+					panic(err)
+				}
+			}
+		}(workerFn)
+	}
+
+	return nil
 }
 
 func runDemo(cmd *cobra.Command, gen workload.Generator) error {
 	if gen == nil && !demoCtx.useEmptyDatabase {
 		// Use a default dataset unless prevented by --empty.
 		gen = defaultGenerator
+	}
+
+	// Make sure that the user didn't request a workload and an empty database.
+	if demoCtx.runWorkload && demoCtx.useEmptyDatabase {
+		return errors.New("cannot run a workload against an empty database")
 	}
 
 	connURL, adminURL, cleanup, err := setupTransientServers(cmd, gen)
