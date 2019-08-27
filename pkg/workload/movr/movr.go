@@ -11,6 +11,7 @@
 package movr
 
 import (
+	"context"
 	gosql "database/sql"
 	"math"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/faker"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
@@ -391,7 +393,7 @@ func (g *movr) movrVehicleLocationHistoriesInitialRow(rowIdx int) []interface{} 
 	rideRowIdx := g.rides.randRowInCity(rng, cityIdx)
 	rideID := g.movrRidesInitialRow(rideRowIdx)[0]
 	time := g.creationTime.Add(time.Duration(rowIdx) * time.Millisecond)
-	lat, long := float64(-180+rng.Intn(360)), float64(-90+rng.Intn(180))
+	lat, long := randLatLong(rng)
 
 	return []interface{}{
 		city.city,                    // city
@@ -418,4 +420,187 @@ func (g *movr) movrPromoCodesInitialRow(rowIdx int) []interface{} {
 		expirationTime, // expiration_time
 		rulesJSON,      // rules
 	}
+}
+
+type rideInfo struct {
+	id   string
+	city string
+}
+
+// Ops implements the Opser interface
+func (g *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+	sqlDatabase, err := workload.SanitizeUrls(g, g.connFlags.DBOverride, urls)
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+	db, err := gosql.Open(`postgres`, strings.Join(urls, ` `))
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+
+	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+
+	rng := rand.New(rand.NewSource(g.seed))
+	readPercentage := 0.90
+	activeRides := []rideInfo{}
+
+	getRandomUser := func(city string) (string, error) {
+		id, err := uuid.NewV4()
+		if err != nil {
+			return "", err
+		}
+		var user string
+		q := `SELECT id FROM users WHERE city = $1 AND id > $2 LIMIT 1`
+		err = db.QueryRow(q, city, id.String()).Scan(&user)
+		if err == nil {
+			return user, nil
+		}
+		// If we got an error, select the first row
+		q = `SELECT id FROM users WHERE city = $1 LIMIT 1`
+		err = db.QueryRow(q, city).Scan(&user)
+		return user, err
+	}
+
+	getRandomPromoCode := func() (string, error) {
+		id, err := uuid.NewV4()
+		if err != nil {
+			return "", err
+		}
+		q := `SELECT code FROM promo_codes WHERE code > $1`
+		var code string
+		err = db.QueryRow(q, id.String()).Scan(&code)
+		if err == nil {
+			return code, nil
+		}
+		// If we got an error, select the first row
+		q = `SELECT code FROM promo_codes LIMIT 1`
+		err = db.QueryRow(q).Scan(&code)
+		return code, err
+	}
+
+	getRandomVehicle := func(city string) (string, error) {
+		id, err := uuid.NewV4()
+		if err != nil {
+			return "", err
+		}
+		q := `SELECT id FROM vehicles WHERE city = $1 AND id > $2`
+		var vehicle string
+		err = db.QueryRow(q, city, id.String()).Scan(&vehicle)
+		if err == nil {
+			return vehicle, nil
+		}
+		// If we got an error, select the first row
+		q = `SELECT id FROM vehicles WHERE city = $1 LIMIT 1`
+		err = db.QueryRow(q, city).Scan(&vehicle)
+		return vehicle, err
+	}
+
+	movrQuerySimulation := func(ctx context.Context) error {
+		activeCity := randCity(rng)
+		if rng.Float64() <= readPercentage {
+			q := `SELECT city, id FROM vehicles WHERE city = $1`
+			_, err := db.Exec(q, activeCity)
+			return err
+		}
+		// Simulate vehicle location updates.
+		for i, ride := range activeRides {
+			if i >= 10 {
+				break
+			}
+			lat, long := randLatLong(rng)
+			q := `UPSERT INTO vehicle_location_histories VALUES ($1, $2, now(), $3, $4)`
+			_, err := db.Exec(q, ride.city, ride.id, lat, long)
+			if err != nil {
+				return err
+			}
+		}
+
+		id, err := uuid.NewV4()
+		if err != nil {
+			return err
+		}
+
+		// Do write operations.
+		if rng.Float64() < 0.03 {
+			q := `INSERT INTO promo_codes VALUES ($1, NULL, NULL, NULL, NULL)`
+			_, err = db.Exec(q, id.String())
+			return err
+		} else if rng.Float64() < 0.1 {
+			// Apply a promo code to an account.
+			user, err := getRandomUser(activeCity)
+			if err != nil {
+				return err
+			}
+
+			code, err := getRandomPromoCode()
+			if err != nil {
+				return err
+			}
+
+			// See if the promo code has been used.
+			var count int
+			q := `SELECT count(*) FROM user_promo_codes WHERE city = $1 AND user_id = $2 AND code = $3`
+			err = db.QueryRow(q, activeCity, user, code).Scan(&count)
+			if err != nil {
+				return err
+			}
+
+			// If is has not been, apply the promo code.
+			if count == 0 {
+				q = `INSERT INTO user_promo_codes VALUES ($1, $2, $3, NULL, NULL)`
+				_, err = db.Exec(q, activeCity, user, code)
+				return err
+			}
+			return nil
+		} else if rng.Float64() < 0.3 {
+			q := `INSERT INTO users VALUES ($1, $2, NULL, NULL, NULL)`
+			_, err = db.Exec(q, id.String(), activeCity)
+			return err
+		} else if rng.Float64() < 0.1 {
+			// Simulate adding a new vehicle to the population.
+			ownerID, err := getRandomUser(activeCity)
+			if err != nil {
+				return err
+			}
+
+			typ := randVehicleType(rng)
+			q := `INSERT INTO vehicles VALUES ($1, $2, $3, $4, NULL, NULL, NULL, NULL)`
+			_, err = db.Exec(q, id.String(), activeCity, typ, ownerID)
+			return err
+		} else if rng.Float64() < 0.5 {
+			// Simulate a user starting a ride.
+			rider, err := getRandomUser(activeCity)
+			if err != nil {
+				return err
+			}
+
+			vehicle, err := getRandomVehicle(activeCity)
+			if err != nil {
+				return err
+			}
+
+			q := `INSERT INTO rides VALUES ($1, $2, $2, $3, $4, $5, NULL, now(), NULL, NULL)`
+			_, err = db.Exec(q, id.String(), activeCity, rider, vehicle, g.faker.StreetAddress(rng))
+			if err != nil {
+				return err
+			}
+			activeRides = append(activeRides, rideInfo{id.String(), activeCity})
+			return err
+		} else {
+			// Simulate a ride ending.
+			if len(activeRides) > 1 {
+				ride := activeRides[0]
+				activeRides = activeRides[1:]
+				q := `UPDATE rides SET end_address = $3, end_time = now() WHERE city = $1 AND id = $2`
+				_, err := db.Exec(q, ride.city, ride.id, g.faker.StreetAddress(rng))
+				return err
+			}
+		}
+
+		return nil
+	}
+
+	ql.WorkerFns = append(ql.WorkerFns, movrQuerySimulation)
+
+	return ql, nil
 }
