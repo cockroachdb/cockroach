@@ -94,6 +94,7 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 
 const (
 	execPackagePrefix  = "github.com/cockroachdb/cockroach/pkg/sql/exec"
+	colPrefix          = "github.com/cockroachdb/cockroach/pkg/col"
 	colBatchScanPrefix = "github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.(*colBatchScan)"
 	cFetcherPrefix     = "github.com/cockroachdb/cockroach/pkg/sql/row.(*CFetcher)"
 	columnarizerPrefix = "github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.(*columnarizer)"
@@ -105,6 +106,7 @@ const (
 // panicEmittedFrom must be trimmed to not have any white spaces in the prefix.
 func isPanicFromVectorizedEngine(panicEmittedFrom string) bool {
 	return strings.HasPrefix(panicEmittedFrom, execPackagePrefix) ||
+		strings.HasPrefix(panicEmittedFrom, colPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, colBatchScanPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, cFetcherPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, columnarizerPrefix)
