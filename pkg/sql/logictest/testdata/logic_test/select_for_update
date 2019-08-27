@@ -1,0 +1,21 @@
+# Cockroach currently supports all of the row locking modes as no-ops, so just
+# test that they parse and run.
+query I
+SELECT 1 FOR UPDATE
+----
+1
+
+query I
+SELECT 1 FOR NO KEY UPDATE
+----
+1
+
+query I
+SELECT 1 FOR SHARE
+----
+1
+
+query I
+SELECT 1 FOR KEY SHARE
+----
+1
