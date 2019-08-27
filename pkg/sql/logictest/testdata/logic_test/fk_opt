@@ -1,7 +1,7 @@
 # LogicTest: local fakedist
 
 # The tests in this file target the new optimizer-driven FK paths (with
-# fallback on the legacy paths for unsupported cases).
+# fall back on the legacy paths for unsupported cases).
 statement ok
 SET experimental_optimizer_foreign_keys = true
 
