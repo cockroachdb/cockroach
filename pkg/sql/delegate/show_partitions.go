@@ -43,7 +43,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 			partitions.column_names,
 			concat(tables.name, '@', table_indexes.index_name) AS index_name,
 			coalesce(partitions.list_value, partitions.range_value) as partition_value,
-			regexp_extract(config_yaml, e'constraints: (\\[.*\\])') AS zone_constraints
+		  replace(regexp_extract(config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as zone_config
 		FROM
 			crdb_internal.partitions
 			JOIN crdb_internal.tables ON partitions.table_id = tables.table_id
@@ -69,7 +69,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 			partitions.column_names,
 			concat(tables.name, '@', table_indexes.index_name) AS index_name,
 			coalesce(partitions.list_value, partitions.range_value) as partition_value,
-			regexp_extract(config_yaml, e'constraints: (\\[.*\\])') AS zone_constraints
+		  replace(regexp_extract(config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as zone_config
 		FROM
 			%[1]s.crdb_internal.partitions
 			JOIN %[1]s.crdb_internal.tables ON partitions.table_id = tables.table_id
@@ -121,7 +121,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 		partitions.column_names,
 		concat(tables.name, '@', table_indexes.index_name) AS index_name,
 		coalesce(partitions.list_value, partitions.range_value) as partition_value,
-		regexp_extract(config_yaml, e'constraints: (\\[.*\\])') AS zone_constraints
+	  replace(regexp_extract(config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as zone_config
 	FROM
 		crdb_internal.partitions
 		JOIN crdb_internal.table_indexes ON
