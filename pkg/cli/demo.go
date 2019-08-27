@@ -14,7 +14,10 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
@@ -48,6 +51,11 @@ to avoid pre-loading a dataset.`,
 		return runDemo(cmd, nil /* gen */)
 	}),
 }
+
+// TODO (rohany): change this once another endpoint is setup for getting licenses.
+// This URL grants a license that is valid for 1 hour.
+const licenseURL = "https://register.cockroachdb.com/api/prodtest"
+const demoOrg = "Cockroach Labs - Production Testing"
 
 const defaultGeneratorName = "movr"
 
@@ -93,6 +101,25 @@ func init() {
 		demoCmd.AddCommand(genDemoCmd)
 		genDemoCmd.Flags().AddFlagSet(genFlags)
 	}
+}
+
+func getLicense() (string, error) {
+	client := &http.Client{
+		Timeout: time.Second,
+	}
+	resp, err := client.Get(licenseURL)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.New("unable to connect to licensing endpoint")
+	}
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(bodyBytes), nil
 }
 
 func setupTransientServers(
@@ -189,15 +216,30 @@ func setupTransientServers(
 	}
 	urlStr := url.String()
 
+	db, err := gosql.Open("postgres", urlStr)
+	if err != nil {
+		return ``, ``, cleanup, err
+	}
+	defer db.Close()
+
+	// Load a license.
+	if cliCtx.isInteractive {
+		license, err := getLicense()
+		if err == nil {
+			if _, err := db.Exec(`SET CLUSTER SETTING cluster.organization = $1`, demoOrg); err != nil {
+				return ``, ``, cleanup, err
+			}
+			if _, err := db.Exec(`SET CLUSTER SETTING enterprise.license = $1`, license); err != nil {
+				return ``, ``, cleanup, err
+			}
+		} else {
+			log.Warningf(ctx, "error when attempting to acquire demo license: %+v\n", err)
+		}
+	}
+
 	// If there is a load generator, create its database and load its
 	// fixture.
 	if gen != nil {
-		db, err := gosql.Open("postgres", urlStr)
-		if err != nil {
-			return ``, ``, cleanup, err
-		}
-		defer db.Close()
-
 		if _, err := db.Exec(`CREATE DATABASE ` + gen.Meta().Name); err != nil {
 			return ``, ``, cleanup, err
 		}
@@ -218,13 +260,13 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) error {
 		gen = defaultGenerator
 	}
 
+	checkInteractive()
+
 	connURL, adminURL, cleanup, err := setupTransientServers(cmd, gen)
 	defer cleanup()
 	if err != nil {
 		return checkAndMaybeShout(err)
 	}
-
-	checkInteractive()
 
 	if cliCtx.isInteractive {
 		fmt.Printf(`#
