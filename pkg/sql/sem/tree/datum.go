@@ -3287,6 +3287,30 @@ func NewDOid(d DInt) *DOid {
 	return &oid
 }
 
+// AsDOid attempts to retrieve a DOid from an Expr, returning a DOid and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DOid wrapped by a
+// *DOidWrapper is possible.
+func AsDOid(e Expr) (*DOid, bool) {
+	switch t := e.(type) {
+	case *DOid:
+		return t, true
+	case *DOidWrapper:
+		return AsDOid(t.Wrapped)
+	}
+	return NewDOid(0), false
+}
+
+// MustBeDOid attempts to retrieve a DOid from an Expr, panicking if the
+// assertion fails.
+func MustBeDOid(e Expr) *DOid {
+	i, ok := AsDOid(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DOid, found %T", e))
+	}
+	return i
+}
+
 // NewDOidWithName is a helper routine to create a *DOid initialized from a DInt
 // and a string.
 func NewDOidWithName(d DInt, typ *types.T, name string) *DOid {

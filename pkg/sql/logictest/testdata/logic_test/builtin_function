@@ -2246,3 +2246,9 @@ query BBB
 SELECT pg_type_is_visible('int'::regtype), pg_type_is_visible(NULL), pg_type_is_visible(99999)
 ----
 true  NULL  NULL
+
+# Sanity check pg_get_function_identity_arguments.
+query T
+SELECT pg_get_function_identity_arguments('convert_from'::regproc::oid)
+----
+bytea, text

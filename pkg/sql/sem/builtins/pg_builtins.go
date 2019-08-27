@@ -610,6 +610,50 @@ var pgBuiltins = map[string]builtinDefinition{
 		makePGGetConstraintDef(tree.ArgTypes{{"constraint_oid", types.Oid}}),
 	),
 
+	// pg_get_function_identity_arguments returns the argument list necessary to
+	// identify a function, in the form it would need to appear in within ALTER
+	// FUNCTION, for instance. This form omits default values.
+	"pg_get_function_identity_arguments": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"func_oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				funcOid := tree.MustBeDOid(args[0])
+				t, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "pg_get_function_identity_arguments",
+					ctx.Txn,
+					`SELECT array_agg(unnest(proargtypes)::REGTYPE::TEXT) FROM pg_proc WHERE oid=$1`, int(funcOid.DInt))
+				if err != nil {
+					return nil, err
+				}
+				if len(t) == 0 {
+					return tree.NewDString(""), nil
+				}
+				arr := tree.MustBeDArray(t[0])
+				var sb strings.Builder
+				for i, elem := range arr.Array {
+					if i > 0 {
+						sb.WriteString(", ")
+					}
+					if elem == tree.DNull {
+						// This shouldn't ever happen, but let's be safe about it.
+						sb.WriteString("NULL")
+						continue
+					}
+					str, ok := tree.AsDString(elem)
+					if !ok {
+						// This also shouldn't happen.
+						sb.WriteString(elem.String())
+						continue
+					}
+					sb.WriteString(string(str))
+				}
+				return tree.NewDString(sb.String()), nil
+			},
+			Info: notUsableInfo,
+		},
+	),
+
 	// pg_get_indexdef functions like SHOW CREATE INDEX would if we supported that
 	// statement.
 	"pg_get_indexdef": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
