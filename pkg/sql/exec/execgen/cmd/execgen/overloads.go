@@ -92,9 +92,13 @@ type compareFunc func(target, l, r string) string
 var binaryOpOverloads []*overload
 var comparisonOpOverloads []*overload
 
-// binaryOpToOverloads maps a binary operator to all of the overloads that
-// implement it.
-var binaryOpToOverloads map[tree.BinaryOperator][]*overload
+// sameTypeBinaryOpToOverloads maps a binary operator to all of the overloads
+// that implement the operator between two values of the same type.
+var sameTypeBinaryOpToOverloads map[tree.BinaryOperator][]*overload
+
+// anyTypeBinaryOpToOverloads maps a binary operator to all of the overloads
+// that implement it, including all mixed input types.
+var anyTypeBinaryOpToOverloads map[tree.BinaryOperator][]*overload
 
 // sameTypeComparisonOpToOverloads maps a comparison operator to all of the
 // overloads that implement that comparison between two values of the same type.
@@ -151,57 +155,62 @@ func (o overload) UnaryAssign(target, v string) string {
 
 func init() {
 	registerTypeCustomizers()
+	registerBinOpOutputTypes()
 
 	// Build overload definitions for basic coltypes.
 	inputTypes := coltypes.AllTypes
 	binOps := []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div}
 	cmpOps := []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE}
-	binaryOpToOverloads = make(map[tree.BinaryOperator][]*overload, len(binaryOpName))
+	sameTypeBinaryOpToOverloads = make(map[tree.BinaryOperator][]*overload, len(binaryOpName))
+	anyTypeBinaryOpToOverloads = make(map[tree.BinaryOperator][]*overload, len(binaryOpName))
 	sameTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*overload, len(comparisonOpName))
 	anyTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*overload, len(comparisonOpName))
-	for _, t := range inputTypes {
-		customizer := typeCustomizers[coltypePair{t, t}]
-		for _, op := range binOps {
-			// Skip types that don't have associated binary ops.
-			switch t {
-			case coltypes.Bytes, coltypes.Bool:
-				continue
-			}
-			ov := &overload{
-				Name:      binaryOpName[op],
-				BinOp:     op,
-				IsBinOp:   true,
-				OpStr:     binaryOpInfix[op],
-				LTyp:      t,
-				RTyp:      t,
-				LGoType:   t.GoTypeName(),
-				RGoType:   t.GoTypeName(),
-				RetTyp:    t,
-				RetGoType: t.GoTypeName(),
-			}
-			if customizer != nil {
-				if b, ok := customizer.(binOpTypeCustomizer); ok {
-					ov.AssignFunc = b.getBinOpAssignFunc()
-				}
-			}
-			binaryOpOverloads = append(binaryOpOverloads, ov)
-			binaryOpToOverloads[op] = append(binaryOpToOverloads[op], ov)
-		}
-		ov := &overload{
-			IsHashOp: true,
-			LTyp:     t,
-			OpStr:    "uint64",
-		}
-		if customizer != nil {
-			if b, ok := customizer.(hashTypeCustomizer); ok {
-				ov.AssignFunc = b.getHashAssignFunc()
-			}
-		}
-		hashOverloads = append(hashOverloads, ov)
-	}
 	for _, leftType := range inputTypes {
 		for _, rightType := range coltypes.CompatibleTypes[leftType] {
 			customizer := typeCustomizers[coltypePair{leftType, rightType}]
+			for _, op := range binOps {
+				// Skip types that don't have associated binary ops.
+				if leftType == coltypes.Bytes || leftType == coltypes.Bool ||
+					rightType == coltypes.Bytes || rightType == coltypes.Bool {
+					continue
+				}
+				retType := binOpOutputTypes[op][coltypePair{leftType, rightType}]
+				ov := &overload{
+					Name:      binaryOpName[op],
+					BinOp:     op,
+					IsBinOp:   true,
+					OpStr:     binaryOpInfix[op],
+					LTyp:      leftType,
+					RTyp:      rightType,
+					LGoType:   leftType.GoTypeName(),
+					RGoType:   rightType.GoTypeName(),
+					RetTyp:    retType,
+					RetGoType: retType.GoTypeName(),
+				}
+				if customizer != nil {
+					if b, ok := customizer.(binOpTypeCustomizer); ok {
+						ov.AssignFunc = b.getBinOpAssignFunc()
+					}
+				}
+				binaryOpOverloads = append(binaryOpOverloads, ov)
+				anyTypeBinaryOpToOverloads[op] = append(anyTypeBinaryOpToOverloads[op], ov)
+				if leftType == rightType {
+					sameTypeBinaryOpToOverloads[op] = append(sameTypeBinaryOpToOverloads[op], ov)
+				}
+			}
+			if leftType == rightType {
+				ov := &overload{
+					IsHashOp: true,
+					LTyp:     leftType,
+					OpStr:    "uint64",
+				}
+				if customizer != nil {
+					if b, ok := customizer.(hashTypeCustomizer); ok {
+						ov.AssignFunc = b.getHashAssignFunc()
+					}
+				}
+				hashOverloads = append(hashOverloads, ov)
+			}
 			for _, op := range cmpOps {
 				opStr := comparisonOpInfix[op]
 				ov := &overload{
@@ -265,6 +274,8 @@ type coltypePair struct {
 }
 
 var typeCustomizers map[coltypePair]typeCustomizer
+
+var binOpOutputTypes map[tree.BinaryOperator]map[coltypePair]coltypes.T
 
 // registerTypeCustomizer registers a particular type customizer to a
 // pair of types, for usage by templates.
@@ -460,6 +471,17 @@ func (c floatCustomizer) getCmpOpCompareFunc() compareFunc {
 	return getFloatCmpOpCompareFunc(true /* checkLeftNan */, true /* checkRightNan */)
 }
 
+func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		// The float64 customizer is used to handle binOps with floats of different
+		// widths, so we must cast to float64 in this case.
+		if c.width == 64 {
+			return fmt.Sprintf("%s = float64(%s) %s float64(%s)", target, l, op.OpStr, r)
+		}
+		return fmt.Sprintf("%s = %s %s %s", target, l, op.OpStr, r)
+	}
+}
+
 func (c intCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
 		return fmt.Sprintf("%[1]s = memhash%[3]d(noescape(unsafe.Pointer(&%[2]s)), %[1]s)", target, v, c.width)
@@ -494,6 +516,12 @@ func (c intCustomizer) getCmpOpCompareFunc() compareFunc {
 func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op overload, target, l, r string) string {
 		args := map[string]string{"Target": target, "Left": l, "Right": r}
+		// The int64 customizer is used to handle binOps with integers of different
+		// widths, so we must cast to int64 in this case.
+		if c.width == 64 {
+			args["Left"] = fmt.Sprintf("int64(%s)", l)
+			args["Right"] = fmt.Sprintf("int64(%s)", r)
+		}
 		buf := strings.Builder{}
 		var t *template.Template
 
@@ -619,7 +647,27 @@ func (c decimalFloatCustomizer) getCmpOpCompareFunc() compareFunc {
 				{{.Target}} = tree.CompareDecimals(&{{.Left}}, tmpDec)
 			}
 		`))
+		if err := t.Execute(&buf, args); err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+		return buf.String()
+	}
+}
 
+func (c decimalFloatCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		args := map[string]string{"Op": op.OpStr, "Target": target, "Left": l, "Right": r}
+		buf := strings.Builder{}
+		// todo(rafi): is there a way to avoid allocating on each operation?
+		t := template.Must(template.New("").Parse(`
+			{
+				tmpFloat, err := {{.Left}}.Float64()
+				if err != nil {
+					execerror.NonVectorizedPanic(err)
+				}
+				{{.Target}} = tmpFloat {{.Op}} float64({{.Right}})
+			}
+		`))
 		if err := t.Execute(&buf, args); err != nil {
 			execerror.VectorizedInternalPanic(err)
 		}
@@ -639,7 +687,27 @@ func (c decimalIntCustomizer) getCmpOpCompareFunc() compareFunc {
 				{{.Target}} = tree.CompareDecimals(&{{.Left}}, tmpDec)
 			}
 		`))
+		if err := t.Execute(&buf, args); err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+		return buf.String()
+	}
+}
 
+func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		args := map[string]string{"Op": binaryOpDecMethod[op.BinOp], "Target": target, "Left": l, "Right": r}
+		buf := strings.Builder{}
+		// todo(rafi): is there a way to avoid allocating on each operation?
+		t := template.Must(template.New("").Parse(`
+			{
+				tmpDec := &apd.Decimal{}
+				tmpDec.SetFinite(int64({{.Right}}), 0)
+				if _, err := tree.DecimalCtx.{{.Op}}(&{{.Target}}, &{{.Left}}, tmpDec); err != nil {
+					execerror.NonVectorizedPanic(err)
+				}
+			}
+		`))
 		if err := t.Execute(&buf, args); err != nil {
 			execerror.VectorizedInternalPanic(err)
 		}
@@ -661,7 +729,27 @@ func (c floatDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 				{{.Target}} = tree.CompareDecimals(tmpDec, &{{.Right}})
 			}
 		`))
+		if err := t.Execute(&buf, args); err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+		return buf.String()
+	}
+}
 
+func (c floatDecimalCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		args := map[string]string{"Op": op.OpStr, "Target": target, "Left": l, "Right": r}
+		buf := strings.Builder{}
+		// todo(rafi): is there a way to avoid allocating on each operation?
+		t := template.Must(template.New("").Parse(`
+			{
+				tmpFloat, err := {{.Right}}.Float64()
+				if err != nil {
+					execerror.NonVectorizedPanic(err)
+				}
+				{{.Target}} = float64({{.Left}}) {{.Op}} tmpFloat
+			}
+		`))
 		if err := t.Execute(&buf, args); err != nil {
 			execerror.VectorizedInternalPanic(err)
 		}
@@ -689,16 +777,49 @@ func (c intDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 	}
 }
 
+func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		args := map[string]string{"Op": binaryOpDecMethod[op.BinOp], "Target": target, "Left": l, "Right": r}
+		buf := strings.Builder{}
+		// todo(rafi): is there a way to avoid allocating on each operation?
+		t := template.Must(template.New("").Parse(`
+			{
+				tmpDec := &apd.Decimal{}
+				tmpDec.SetFinite(int64({{.Left}}), 0)
+				if _, err := tree.DecimalCtx.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}}); err != nil {
+					execerror.NonVectorizedPanic(err)
+				}
+			}
+		`))
+		if err := t.Execute(&buf, args); err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+		return buf.String()
+	}
+}
+
 func (c floatIntCustomizer) getCmpOpCompareFunc() compareFunc {
 	// floatCustomizer's comparison function can be reused since float-int
 	// comparison works by casting the int.
 	return getFloatCmpOpCompareFunc(true /* checkLeftNan */, false /* checkRightNan */)
 }
 
+func (c floatIntCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		return fmt.Sprintf("%s = float64(%s) %s float64(%s)", target, l, op.OpStr, r)
+	}
+}
+
 func (c intFloatCustomizer) getCmpOpCompareFunc() compareFunc {
 	// floatCustomizer's comparison function can be reused since int-float
 	// comparison works by casting the int.
 	return getFloatCmpOpCompareFunc(false /* checkLeftNan */, true /* checkRightNan */)
+}
+
+func (c intFloatCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		return fmt.Sprintf("%s = float64(%s) %s float64(%s)", target, l, op.OpStr, r)
+	}
 }
 
 func registerTypeCustomizers() {
@@ -746,6 +867,53 @@ func registerTypeCustomizers() {
 			registerTypeCustomizer(coltypePair{leftIntType, rightFloatType}, intFloatCustomizer{})
 		}
 	}
+}
+
+func registerBinOpOutputTypes() {
+	binOpOutputTypes = make(map[tree.BinaryOperator]map[coltypePair]coltypes.T)
+	for binOp, _ := range binaryOpName {
+		binOpOutputTypes[binOp] = make(map[coltypePair]coltypes.T)
+		for _, leftFloatType := range coltypes.FloatTypes {
+			for _, rightFloatType := range coltypes.FloatTypes {
+				binOpOutputTypes[binOp][coltypePair{leftFloatType, rightFloatType}] = coltypes.Float64
+			}
+		}
+		for _, leftIntType := range coltypes.IntTypes {
+			for _, rightIntType := range coltypes.IntTypes {
+				binOpOutputTypes[binOp][coltypePair{leftIntType, rightIntType}] = coltypes.Int64
+			}
+		}
+		// Use an output type of the same width when input widths are the same.
+		binOpOutputTypes[binOp][coltypePair{coltypes.Decimal, coltypes.Decimal}] = coltypes.Decimal
+		binOpOutputTypes[binOp][coltypePair{coltypes.Float32, coltypes.Float32}] = coltypes.Float32
+		binOpOutputTypes[binOp][coltypePair{coltypes.Float64, coltypes.Float64}] = coltypes.Float64
+		binOpOutputTypes[binOp][coltypePair{coltypes.Int8, coltypes.Int8}] = coltypes.Int8
+		binOpOutputTypes[binOp][coltypePair{coltypes.Int16, coltypes.Int16}] = coltypes.Int16
+		binOpOutputTypes[binOp][coltypePair{coltypes.Int32, coltypes.Int32}] = coltypes.Int32
+		binOpOutputTypes[binOp][coltypePair{coltypes.Int64, coltypes.Int64}] = coltypes.Int64
+		for _, floatType := range coltypes.FloatTypes {
+			binOpOutputTypes[binOp][coltypePair{coltypes.Decimal, floatType}] = coltypes.Float64
+			binOpOutputTypes[binOp][coltypePair{floatType, coltypes.Decimal}] = coltypes.Float64
+		}
+		for _, intType := range coltypes.IntTypes {
+			binOpOutputTypes[binOp][coltypePair{coltypes.Decimal, intType}] = coltypes.Decimal
+			binOpOutputTypes[binOp][coltypePair{intType, coltypes.Decimal}] = coltypes.Decimal
+		}
+		for _, floatType := range coltypes.FloatTypes {
+			for _, intType := range coltypes.IntTypes {
+				binOpOutputTypes[binOp][coltypePair{intType, floatType}] = coltypes.Float64
+				binOpOutputTypes[binOp][coltypePair{floatType, intType}] = coltypes.Float64
+			}
+		}
+	}
+
+	// todo(rafi): Handle special case for division with integers; it should
+	// output decimal type.
+	//for _, leftIntType := range coltypes.IntTypes {
+	//	for _, rightIntType := range coltypes.IntTypes {
+	//		binOpOutputTypes[tree.Div][coltypePair{leftIntType, rightIntType}] = coltypes.Decimal
+	//	}
+	//}
 }
 
 // Avoid unused warning for functions which are only used in templates.
