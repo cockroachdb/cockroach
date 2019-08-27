@@ -13,6 +13,7 @@ package bulk
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -39,9 +41,10 @@ func (b sz) String() string {
 // it to attempt to flush SSTs before they cross range boundaries to minimize
 // expensive on-split retries.
 type SSTBatcher struct {
-	db      sender
-	rc      *kv.RangeDescriptorCache
-	maxSize int64
+	db         sender
+	rc         *kv.RangeDescriptorCache
+	maxSize    int64
+	splitAfter int64
 
 	// allows ingestion of keys where the MVCC.Key would shadow an existing row.
 	disallowShadowing bool
@@ -67,6 +70,9 @@ type SSTBatcher struct {
 		sstSize int
 		files   int // a single flush might create multiple files.
 	}
+	// Tracking for if we have "filled" a range in case we want to split/scatter.
+	flushedToCurrentRange int64
+	lastFlushKey          []byte
 
 	// Thee rest of the fields are per-batch and are reset via Reset() before each
 	// batch is started.
@@ -194,14 +200,14 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 	}
 
 	if b.flushKey != nil && b.flushKey.Compare(nextKey) <= 0 {
-		if err := b.doFlush(ctx, rangeFlush); err != nil {
+		if err := b.doFlush(ctx, rangeFlush, nil); err != nil {
 			return err
 		}
 		return b.Reset()
 	}
 
 	if b.sstWriter.DataSize >= b.maxSize {
-		if err := b.doFlush(ctx, sizeFlush); err != nil {
+		if err := b.doFlush(ctx, sizeFlush, nextKey); err != nil {
 			return err
 		}
 		return b.Reset()
@@ -211,25 +217,41 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 
 // Flush sends the current batch, if any.
 func (b *SSTBatcher) Flush(ctx context.Context) error {
-	return b.doFlush(ctx, manualFlush)
+	return b.doFlush(ctx, manualFlush, nil)
 }
 
-func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
+func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Key) error {
 	if b.sstWriter.DataSize == 0 {
 		return nil
 	}
 	b.flushCounts.total++
+
+	hour := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Hour).UnixNano()}
 
 	start := roachpb.Key(append([]byte(nil), b.batchStartKey...))
 	// The end key of the WriteBatch request is exclusive, but batchEndKey is
 	// currently the largest key in the batch. Increment it.
 	end := roachpb.Key(append([]byte(nil), b.batchEndKey...)).Next()
 
-
 	size := b.sstWriter.DataSize
 	if reason == sizeFlush {
 		log.VEventf(ctx, 3, "flushing %s SST due to size > %s", sz(size), sz(b.maxSize))
 		b.flushCounts.sstSize++
+
+		// On first flush, if it is due to size, we introduce one split at the start
+		// of our span, since size means we didn't already hit one. When adders have
+		// non-overlapping keyspace this split partitions off "our" target space for
+		// future splitting/scattering, while if they don't, doing this only once
+		// minimizes impact on other adders (e.g. causing extra SST splitting).
+		if b.flushCounts.total == 1 {
+			if splitAt, err := keys.EnsureSafeSplitKey(start); err != nil {
+				log.Warning(ctx, err)
+			} else {
+				if err := b.db.SplitAndScatter(ctx, splitAt, hour); err != nil {
+					log.Warning(ctx, err)
+				}
+			}
+		}
 	} else if reason == rangeFlush {
 		log.VEventf(ctx, 3, "flushing %s SST due to range boundary %s", sz(size), b.flushKey)
 		b.flushCounts.split++
@@ -245,11 +267,36 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	if (b.ms != enginepb.MVCCStats{}) {
 		b.ms.LastUpdateNanos = timeutil.Now().UnixNano()
 	}
-	if files, err := AddSSTable(ctx, b.db, start, end, sstBytes, b.disallowShadowing, b.ms); err != nil {
+	files, err := AddSSTable(ctx, b.db, start, end, sstBytes, b.disallowShadowing, b.ms)
+	if err != nil {
 		return err
-	} else {
-		b.flushCounts.files += files
 	}
+
+	b.flushCounts.files += files
+	if b.flushKey != nil {
+		// If the flush-before key hasn't changed we know we don't think we passed
+		// a range boundary, and if the files-added count is 1 we didn't hit an
+		// unexpected split either, so assume we added to the same range.
+		if reason == sizeFlush && bytes.Equal(b.flushKey, b.lastFlushKey) && files == 1 {
+			b.flushedToCurrentRange += size
+		} else {
+			// Assume we started adding to new different range with this SST.
+			b.lastFlushKey = append(b.lastFlushKey[:0], b.flushKey...)
+			b.flushedToCurrentRange = size
+		}
+		if b.splitAfter > 0 && b.flushedToCurrentRange > b.splitAfter && nextKey != nil {
+			if splitAt, err := keys.EnsureSafeSplitKey(nextKey); err != nil {
+				log.Warning(ctx, err)
+			} else {
+				log.VEventf(ctx, 2, "%s added since last split, splitting/scattering for next range at %v", sz(b.flushedToCurrentRange), end)
+				if err := b.db.SplitAndScatter(ctx, splitAt, hour); err != nil {
+					log.Warningf(ctx, "failed to split and scatter during ingest: %+v", err)
+				}
+			}
+			b.flushedToCurrentRange = 0
+		}
+	}
+
 	b.totalRows.Add(b.rowCounter.BulkOpSummary)
 	b.totalRows.DataSize += b.sstWriter.DataSize
 	return nil
@@ -269,6 +316,7 @@ type sender interface {
 	AddSSTable(
 		ctx context.Context, begin, end interface{}, data []byte, disallowShadowing bool, stats *enginepb.MVCCStats,
 	) error
+	SplitAndScatter(ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp) error
 }
 
 type sstSpan struct {
