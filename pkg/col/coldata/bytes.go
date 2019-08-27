@@ -37,11 +37,6 @@ func (b *Bytes) Set(i int, v []byte) {
 	b.data[i] = v
 }
 
-// Swap swaps the ith []byte with the jth []byte and vice-versa.
-func (b *Bytes) Swap(i int, j int) {
-	b.data[i], b.data[j] = b.data[j], b.data[i]
-}
-
 // Slice returns a new Bytes struct with its internal data sliced according to
 // start and end.
 func (b *Bytes) Slice(start, end int) *Bytes {
@@ -90,6 +85,9 @@ func (b *Bytes) Reset() {}
 
 // TODO(yuzefovich): fix flatBytes implementation and use that instead of
 // Bytes.
+
+// Remove the unused warnings.
+var _ *flatBytes = newFlatBytes(0)
 
 // flatBytes is a wrapper type for a two-dimensional byte slice ([][]byte).
 type flatBytes struct {
@@ -151,12 +149,6 @@ func (b *flatBytes) Set(i int, v []byte) {
 	b.lengths[i] = int32(len(v))
 	b.data = append(b.data, v...)
 	b.maxSetIndex = i
-}
-
-// Swap swaps the ith []byte with the jth []byte and vice-versa. This is
-// disallowed.
-func (b *flatBytes) Swap(i int, j int) {
-	panic("cannot swap flat Bytes elements")
 }
 
 // Slice modifies and returns the receiver flatBytes struct sliced according to
