@@ -68,6 +68,12 @@ type TestClusterInterface interface {
 		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) (roachpb.RangeDescriptor, error)
 
+	// RemoveReplicasOrFatal is the same as RemoveReplicas but will Fatal the test on
+	// error.
+	RemoveReplicasOrFatal(
+		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	) roachpb.RangeDescriptor
+
 	// FindRangeLeaseHolder returns the current lease holder for the given range.
 	// In particular, it returns one particular node's (the hint, if specified) view
 	// of the current lease.
