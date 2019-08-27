@@ -200,7 +200,10 @@ type StoreTestingKnobs struct {
 	ReplicaAddStopAfterLearnerSnapshot func() bool
 	// ReplicaAddStopAfterJointConfig causes replica addition to return early if
 	// the func returns true. This happens before transitioning out of a joint
-	// configuration.
+	// configuration, after the joint configuration has been entered by means
+	// of a first ChangeReplicas transaction. If the replication change does
+	// not use joint consensus, this early return is identical to the regular
+	// return path.
 	ReplicaAddStopAfterJointConfig func() bool
 	// ReplicationAlwaysUseJointConfig causes replica addition to always go
 	// through a joint configuration, even when this isn't necessary (because
