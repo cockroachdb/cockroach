@@ -88,6 +88,19 @@ func (d ReplicaDescriptors) All() []ReplicaDescriptor {
 	return d.wrapped
 }
 
+func predVoterFullOrIncoming(rDesc ReplicaDescriptor) bool {
+	switch rDesc.GetType() {
+	case VOTER_FULL, VOTER_INCOMING:
+		return true
+	default:
+	}
+	return false
+}
+
+func predLearner(rDesc ReplicaDescriptor) bool {
+	return rDesc.GetType() == LEARNER
+}
+
 // Voters returns the current and future voter replicas in the set. This means
 // that during an atomic replication change, only the replicas that will be
 // voters once the change completes will be returned; "outgoing" voters will not
@@ -102,26 +115,7 @@ func (d ReplicaDescriptors) All() []ReplicaDescriptor {
 // different subset of voters. Consider renaming this method so that it's
 // more descriptive.
 func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
-	// Fastpath, most of the time, everything is a voter, so special case that and
-	// save the alloc.
-	fastpath := true
-	for i := range d.wrapped {
-		if d.wrapped[i].GetType() != VOTER_FULL {
-			fastpath = false
-			break
-		}
-	}
-	if fastpath {
-		return d.wrapped
-	}
-	voters := make([]ReplicaDescriptor, 0, len(d.wrapped))
-	for i := range d.wrapped {
-		switch d.wrapped[i].GetType() {
-		case VOTER_FULL, VOTER_INCOMING:
-			voters = append(voters, d.wrapped[i])
-		}
-	}
-	return voters
+	return d.Filter(predVoterFullOrIncoming)
 }
 
 // Learners returns the learner replicas in the set. This may allocate, but it
@@ -211,18 +205,31 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 //
 // For some related mega-comments, see Replica.sendSnapshot.
 func (d ReplicaDescriptors) Learners() []ReplicaDescriptor {
-	// Fastpath, most of the time, everything is a voter, so special case that and
-	// save the alloc.
-	var learners []ReplicaDescriptor
+	return d.Filter(predLearner)
+}
+
+// Filter returns only the replica descriptors for which the supplied method
+// returns true. The memory returned may be shared with the receiver.
+func (d ReplicaDescriptors) Filter(
+	pred func(descriptor ReplicaDescriptor) bool,
+) []ReplicaDescriptor {
+	// Fast path when all or none match to avoid allocations.
+	fastpath := true
+	out := d.wrapped
 	for i := range d.wrapped {
-		if d.wrapped[i].GetType() == LEARNER {
-			if learners == nil {
-				learners = make([]ReplicaDescriptor, 0, len(d.wrapped)-i)
+		if pred(d.wrapped[i]) {
+			if !fastpath {
+				out = append(out, d.wrapped[i])
 			}
-			learners = append(learners, d.wrapped[i])
+		} else {
+			if fastpath {
+				out = nil
+				out = append(out, d.wrapped[:i]...)
+				fastpath = false
+			}
 		}
 	}
-	return learners
+	return out
 }
 
 // AsProto returns the protobuf representation of these replicas, suitable for

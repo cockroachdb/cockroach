@@ -137,18 +137,19 @@ func (r *RangeDescriptor) SetReplicas(replicas ReplicaDescriptors) {
 
 // SetReplicaType changes the type of the replica with the given ID to the given
 // type. Returns zero values if the replica was not found and the updated
-// descriptor and true otherwise.
+// descriptor, the previous type, and true, otherwise.
 func (r *RangeDescriptor) SetReplicaType(
 	nodeID NodeID, storeID StoreID, typ ReplicaType,
-) (ReplicaDescriptor, bool) {
+) (ReplicaDescriptor, ReplicaType, bool) {
 	for i := range r.InternalReplicas {
 		desc := &r.InternalReplicas[i]
 		if desc.StoreID == storeID && desc.NodeID == nodeID {
+			prevTyp := desc.GetType()
 			desc.Type = &typ
-			return *desc, true
+			return *desc, prevTyp, true
 		}
 	}
-	return ReplicaDescriptor{}, false
+	return ReplicaDescriptor{}, 0, false
 }
 
 // AddReplica adds a replica on the given node and store with the supplied type.
