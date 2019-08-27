@@ -81,6 +81,7 @@ func (c *columnarizer) Init() {
 }
 
 func (c *columnarizer) Next(context.Context) coldata.Batch {
+	c.batch.ResetInternalBatch()
 	// Buffer up n rows.
 	nRows := uint16(0)
 	columnTypes := c.OutputTypes()
