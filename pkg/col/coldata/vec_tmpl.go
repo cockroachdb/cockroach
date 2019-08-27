@@ -85,32 +85,28 @@ func _COPY_WITH_SEL(
 	// {{define "copyWithSel"}}
 	if args.Src.MaybeHasNulls() {
 		nulls := args.Src.Nulls()
-		n := execgen.LEN(toCol)
-		toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
 		for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 			if nulls.NullAt64(uint64(selIdx)) {
 				m.nulls.SetNull64(uint64(i) + args.DestIdx)
 			} else {
 				v := execgen.UNSAFEGET(fromCol, int(selIdx))
 				// {{if .SelOnDest}}
-				execgen.SET(toColSliced, int(selIdx), v)
+				execgen.SET(toCol, int(selIdx), v)
 				// {{else}}
-				execgen.SET(toColSliced, i, v)
+				execgen.SET(toCol, i, v)
 				// {{end}}
 			}
 		}
 		return
 	}
 	// No Nulls.
-	n := execgen.LEN(toCol)
-	toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
 	for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 		selIdx := sel[int(args.SrcStartIdx)+i]
 		v := execgen.UNSAFEGET(fromCol, int(selIdx))
 		// {{if .SelOnDest}}
-		execgen.SET(toColSliced, int(selIdx), v)
+		execgen.SET(toCol, int(selIdx), v)
 		// {{else}}
-		execgen.SET(toColSliced, i, v)
+		execgen.SET(toCol, i, v)
 		// {{end}}
 	}
 	// {{end}}
@@ -168,6 +164,7 @@ func (m *memColumn) Slice(colType coltypes.T, start uint64, end uint64) Vec {
 	case _TYPES_T:
 		col := m._TemplateType()
 		return &memColumn{
+			t:     colType,
 			col:   execgen.SLICE(col, int(start), int(end)),
 			nulls: m.nulls.Slice(start, end),
 		}

@@ -106,7 +106,7 @@ func TestSwapNulls(t *testing.T) {
 		}
 		for _, i := range swapPos {
 			for _, j := range swapPos {
-				n.SwapNulls(i, j)
+				n.swap(i, j)
 				for k := uint64(0); k < BatchSize; k++ {
 					require.Equal(t, idxInSwapPos(k), n.NullAt64(k),
 						"after swapping NULLS (%d, %d), NullAt(%d) saw %t, expected %t", i, j, k, n.NullAt64(k), idxInSwapPos(k))
@@ -137,7 +137,7 @@ func TestSwapNulls(t *testing.T) {
 			n.SetNull64(j)
 		}
 		for i, j := range swaps {
-			n.SwapNulls(i, j)
+			n.swap(i, j)
 			require.Truef(t, n.NullAt64(i), "after swapping not null and null (%d, %d), found null=%t at %d", i, j, n.NullAt64(i), i)
 			require.Truef(t, !n.NullAt64(j), "after swapping not null and null (%d, %d), found null=%t at %d", i, j, !n.NullAt64(j), j)
 			for k := uint64(0); k < BatchSize; k++ {
@@ -158,7 +158,7 @@ func TestSwapNulls(t *testing.T) {
 		}
 		for _, i := range swapPos {
 			for _, j := range swapPos {
-				n.SwapNulls(i, j)
+				n.swap(i, j)
 				for k := uint64(0); k < BatchSize; k++ {
 					require.Equal(t, idxInSwapPos(k), !n.NullAt64(k),
 						"after swapping NULLS (%d, %d), NullAt(%d) saw %t, expected %t", i, j, k, !n.NullAt64(k), idxInSwapPos(k))

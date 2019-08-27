@@ -142,7 +142,6 @@ var (
 	_ = Bool.GoTypeSliceName
 	_ = Bool.Get
 	_ = Bool.Set
-	_ = Bool.Swap
 	_ = Bool.Slice
 	_ = Bool.CopySlice
 	_ = Bool.CopyVal
@@ -190,35 +189,6 @@ func (t T) Set(target, i, new string) string {
 		return fmt.Sprintf("%s[%s].Set(&%s)", target, i, new)
 	}
 	return fmt.Sprintf("%s[%s] = %s", target, i, new)
-}
-
-// Swap is a function that should only be used in templates.
-func (t T) Swap(target, i, j string) string {
-	var tmpl string
-	switch t {
-	case Bytes:
-		tmpl = `{{.Tgt}}.Swap({{.I}}, {{.J}})`
-	case Decimal:
-		tmpl = `
-{
-  var __tmp apd.Decimal
-  __tmp.Set(&{{.Tgt}}[{{.I}}])
-  {{.Tgt}}[{{.I}}].Set(&{{.Tgt}}[{{.J}}])
-  {{.Tgt}}[{{.J}}].Set(&{{.Tgt}}[{{.I}}])
-}`
-	default:
-		tmpl = `{{.Tgt}}[{{.I}}], {{.Tgt}}[{{.J}}] = {{.Tgt}}[{{.J}}], {{.Tgt}}[{{.I}}]`
-	}
-	args := map[string]string{
-		"Tgt": target,
-		"I":   j,
-		"J":   j,
-	}
-	var buf strings.Builder
-	if err := template.Must(template.New("").Parse(tmpl)).Execute(&buf, args); err != nil {
-		panic(err)
-	}
-	return buf.String()
 }
 
 // Slice is a function that should only be used in templates.

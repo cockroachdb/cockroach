@@ -205,15 +205,20 @@ func (n *Nulls) UnsetNull64(i uint64) {
 	n.nulls[i/8] |= bitMask[i%8]
 }
 
-// SwapNulls swaps the null values at the argument indices.
-// We implement the logic directly on the byte array
-// rather than case on the result of NullAt to avoid
+// Remove the unused warning.
+var (
+	n = Nulls{}
+	_ = n.swap
+)
+
+// swap swaps the null values at the argument indices. We implement the logic
+// directly on the byte array rather than case on the result of NullAt to avoid
 // having to take some branches.
-func (n *Nulls) SwapNulls(i, j uint64) {
+func (n *Nulls) swap(i, j uint64) {
 	// Get original null values.
 	ni := (n.nulls[i/8] >> (i % 8)) & 0x1
 	nj := (n.nulls[j/8] >> (j % 8)) & 0x1
-	// Write into the correct positions
+	// Write into the correct positions.
 	iMask := bitMask[i%8]
 	jMask := bitMask[j%8]
 	n.nulls[i/8] = (n.nulls[i/8] & ^iMask) | (nj << (i % 8))
