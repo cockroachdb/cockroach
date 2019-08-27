@@ -1153,10 +1153,8 @@ func (r *Replica) atomicReplicationChange(
 		}
 	}
 
-	if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterLearnerSnapshot; fn != nil {
-		if fn() {
-			return desc, nil
-		}
+	if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterLearnerSnapshot; fn != nil && fn() {
+		return desc, nil
 	}
 
 	for _, target := range chgs.Removals() {
@@ -1168,6 +1166,11 @@ func (r *Replica) atomicReplicationChange(
 	if err != nil {
 		return nil, err
 	}
+
+	if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterJointConfig; fn != nil && fn() {
+		return desc, nil
+	}
+
 	// Leave the joint config if we entered one.
 	return r.maybeLeaveAtomicChangeReplicas(ctx, desc)
 }

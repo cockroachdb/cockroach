@@ -198,6 +198,10 @@ type StoreTestingKnobs struct {
 	// This ensures the `*Replica` will be materialized on the Store when it
 	// returns.
 	ReplicaAddStopAfterLearnerSnapshot func() bool
+	// ReplicaAddStopAfterJointConfig causes replica addition to return early if
+	// the func returns true. This happens before transitioning out of a joint
+	// configuration.
+	ReplicaAddStopAfterJointConfig func() bool
 	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
 	// applying a snapshot.
 	BeforeSnapshotSSTIngestion func(IncomingSnapshot, SnapshotRequest_Type, []string) error
