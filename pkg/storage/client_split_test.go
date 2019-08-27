@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -3216,8 +3215,6 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	k := tc.ScratchRange(t)
 	desc := tc.LookupRangeOrFatal(t, k)
