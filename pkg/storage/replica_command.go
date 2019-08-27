@@ -1339,21 +1339,26 @@ func execChangeReplicasTxn(
 				if useJoint {
 					typ = roachpb.VOTER_INCOMING
 				}
-				rDesc, ok := updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, typ)
-				if !ok {
+				rDesc, prevTyp, ok := updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, typ)
+				if !ok || prevTyp != roachpb.LEARNER {
 					return nil, errors.Errorf("cannot promote target %v which is missing as Learner", chg.target)
 				}
 				added = append(added, rDesc)
 			case internalChangeTypeRemove:
-				var rDesc roachpb.ReplicaDescriptor
-				var ok bool
-				if !useJoint {
-					rDesc, ok = updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
-				} else {
-					rDesc, ok = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_OUTGOING)
-				}
+				rDesc, ok := updatedDesc.GetReplicaDescriptor(chg.target.StoreID)
 				if !ok {
-					return nil, errors.Errorf("cannot remove nonexistent target %v", chg.target)
+					return nil, errors.Errorf("target %s not found", chg.target)
+				}
+				if typ := rDesc.GetType(); !useJoint || typ != roachpb.VOTER_FULL {
+					// NB: typ != VOTER_FULL means it's a LEARNER since we verified above that we
+					// did not start in a joint config.
+					rDesc, _ = updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
+				} else {
+					var prevTyp roachpb.ReplicaType
+					rDesc, prevTyp, _ = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_OUTGOING)
+					if prevTyp != roachpb.VOTER_FULL {
+						return nil, errors.Errorf("cannot transition from %s to VOTER_OUTGOING", prevTyp)
+					}
 				}
 				removed = append(removed, rDesc)
 			default:

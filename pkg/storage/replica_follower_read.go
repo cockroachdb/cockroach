@@ -37,16 +37,17 @@ var FollowerReadsEnabled = settings.RegisterBoolSetting(
 func (r *Replica) canServeFollowerRead(
 	ctx context.Context, ba *roachpb.BatchRequest, pErr *roachpb.Error,
 ) *roachpb.Error {
-	// There's no known reason that a learner replica couldn't serve follower
-	// reads (or RangeFeed), but as of the time of writing, learners are expected
+	// There's no known reason that a non-VOTER_FULL replica couldn't serve follower
+	// reads (or RangeFeed), but as of the time of writing, these are expected
 	// to be short-lived, so it's not worth working out the edge-cases. Revisit if
-	// we add long-lived learners.
+	// we add long-lived learners or feel that incoming/outgoing voters also need
+	// to be able to serve follower reads.
 	repDesc, err := r.GetReplicaDescriptor()
 	if err != nil {
 		return roachpb.NewError(err)
 	}
-	if repDesc.GetType() == roachpb.LEARNER {
-		log.Event(ctx, "learner replicas cannot serve follower reads")
+	if typ := repDesc.GetType(); typ != roachpb.VOTER_FULL {
+		log.Eventf(ctx, "%s replicas cannot serve follower reads", typ)
 		return pErr
 	}
 

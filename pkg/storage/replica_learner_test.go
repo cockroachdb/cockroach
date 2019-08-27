@@ -38,6 +38,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func predIncoming(rDesc roachpb.ReplicaDescriptor) bool {
+	return rDesc.GetType() == roachpb.VOTER_INCOMING
+}
+func predOutgoing(rDesc roachpb.ReplicaDescriptor) bool {
+	return rDesc.GetType() == roachpb.VOTER_OUTGOING
+}
+
 type replicationTestKnobs struct {
 	storeKnobs                       storage.StoreTestingKnobs
 	replicaAddStopAfterLearnerAtomic int64
@@ -636,7 +643,7 @@ func TestJointConfigLease(t *testing.T) {
 	require.True(t, testutils.IsError(err, exp), err)
 }
 
-func TestLearnerFollowerRead(t *testing.T) {
+func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	if util.RaceEnabled {
@@ -663,32 +670,61 @@ func TestLearnerFollowerRead(t *testing.T) {
 	scratchDesc := tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 0)
 
-	req := roachpb.BatchRequest{Header: roachpb.Header{
-		RangeID:   scratchDesc.RangeID,
-		Timestamp: tc.Server(0).Clock().Now(),
-	}}
-	req.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{
-		Key: scratchDesc.StartKey.AsRawKey(), EndKey: scratchDesc.EndKey.AsRawKey(),
-	}})
+	check := func() {
+		req := roachpb.BatchRequest{Header: roachpb.Header{
+			RangeID:   scratchDesc.RangeID,
+			Timestamp: tc.Server(0).Clock().Now(),
+		}}
+		req.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{
+			Key: scratchDesc.StartKey.AsRawKey(), EndKey: scratchDesc.EndKey.AsRawKey(),
+		}})
 
-	_, repl := getFirstStoreReplica(t, tc.Server(1), scratchStartKey)
-	testutils.SucceedsSoon(t, func() error {
-		// Trace the Send call so we can verify that it hit the exact `learner
-		// replicas cannot serve follower reads` branch that we're trying to test.
-		sendCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "manual read request")
-		defer cancel()
-		_, pErr := repl.Send(sendCtx, req)
-		err := pErr.GoError()
-		if !testutils.IsError(err, `not lease holder`) {
-			return errors.Errorf(`expected "not lease holder" error got: %+v`, err)
-		}
-		const msg = `learner replicas cannot serve follower reads`
-		formattedTrace := tracing.FormatRecordedSpans(collect())
-		if !strings.Contains(formattedTrace, msg) {
-			return errors.Errorf("expected a trace with `%s` got:\n%s", msg, formattedTrace)
-		}
-		return nil
-	})
+		_, repl := getFirstStoreReplica(t, tc.Server(1), scratchStartKey)
+		testutils.SucceedsSoon(t, func() error {
+			// Trace the Send call so we can verify that it hit the exact `learner
+			// replicas cannot serve follower reads` branch that we're trying to test.
+			sendCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "manual read request")
+			defer cancel()
+			_, pErr := repl.Send(sendCtx, req)
+			err := pErr.GoError()
+			if !testutils.IsError(err, `not lease holder`) {
+				return errors.Errorf(`expected "not lease holder" error got: %+v`, err)
+			}
+			const msg = `cannot serve follower reads`
+			formattedTrace := tracing.FormatRecordedSpans(collect())
+			if !strings.Contains(formattedTrace, msg) {
+				return errors.Errorf("expected a trace with `%s` got:\n%s", msg, formattedTrace)
+			}
+			return nil
+		})
+	}
+
+	// Can't serve follower read from the LEARNER.
+	check()
+
+	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
+	atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
+
+	scratchDesc = tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	// Removing a learner doesn't get you into a joint state (no voters changed).
+	require.False(t, scratchDesc.Replicas().InAtomicReplicationChange(), scratchDesc)
+	scratchDesc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+
+	// Re-adding the voter (and remaining in joint config) does.
+	require.True(t, scratchDesc.Replicas().InAtomicReplicationChange(), scratchDesc)
+	require.Len(t, scratchDesc.Replicas().Filter(predIncoming), 1)
+
+	// Can't serve follower read from the VOTER_INCOMING.
+	check()
+
+	// Removing the voter (and remaining in joint config) does.
+
+	scratchDesc = tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	require.True(t, scratchDesc.Replicas().InAtomicReplicationChange(), scratchDesc)
+	require.Len(t, scratchDesc.Replicas().Filter(predOutgoing), 1)
+
+	// Can't serve follower read from the VOTER_OUTGOING.
+	check()
 }
 
 func TestLearnerAdminRelocateRange(t *testing.T) {
