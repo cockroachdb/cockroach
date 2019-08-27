@@ -259,6 +259,7 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 		} else {
 			leftProps = e.Child(0).(RelExpr).Relational()
 		}
+
 		intersectsLeft := leftProps.OutputCols.Intersects(colSet)
 		var intersectsRight bool
 		if lookupJoin != nil {
@@ -268,13 +269,11 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 		} else {
 			intersectsRight = e.Child(1).(RelExpr).Relational().OutputCols.Intersects(colSet)
 		}
+
+		// It's possible that colSet intersects both left and right if we have a
+		// lookup join that was converted from an index join, so check the left
+		// side first.
 		if intersectsLeft {
-			if intersectsRight {
-				// TODO(radu): what if both sides have columns in colSet?
-				panic(errors.AssertionFailedf(
-					"colSet %v contains both left and right columns", log.Safe(colSet),
-				))
-			}
 			if zigzagJoin != nil {
 				return sb.colStatTable(zigzagJoin.LeftTable, colSet)
 			}
@@ -901,7 +900,13 @@ func (sb *statisticsBuilder) buildJoin(
 
 	// Calculate selectivity and row count
 	// -----------------------------------
-	s.RowCount = leftStats.RowCount * rightStats.RowCount
+	if h.rightProps.FuncDeps.ColsAreStrictKey(h.selfJoinCols) {
+		// This is like an index join.
+		s.RowCount = leftStats.RowCount
+	} else {
+		s.RowCount = leftStats.RowCount * rightStats.RowCount
+		equivReps.UnionWith(h.selfJoinCols)
+	}
 	inputRowCount := s.RowCount
 	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols, join, s))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filtersFD, join, s))
@@ -2269,6 +2274,39 @@ func (sb *statisticsBuilder) shouldUseHistogram(relProps *props.Relational) bool
 	// a constraint on a key column), don't bother adding the overhead of
 	// creating a histogram.
 	return relProps.Cardinality.Max >= minCardinalityForHistogram
+}
+
+// rowsProcessed calculates and returns the number of rows processed by the
+// relational expression. It is currently only supported for lookup joins and
+// merge joins.
+func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
+	switch t := e.(type) {
+	case *LookupJoinExpr:
+		if t.On.IsTrue() {
+			// If there are no additional ON filters, the number of rows processed
+			// equals the number of output rows.
+			return e.Relational().Stats.RowCount
+		}
+
+		// Otherwise, we need to determine the row count of the join before the
+		// ON conditions are applied.
+		withoutOn := e.Memo().MemoizeLookupJoin(t.Input, nil /* on */, &t.LookupJoinPrivate)
+		return withoutOn.Relational().Stats.RowCount
+
+	case *MergeJoinExpr:
+		if t.On.IsTrue() {
+			// If there are no additional ON filters, the number of rows processed
+			// equals the number of output rows.
+			return e.Relational().Stats.RowCount
+		}
+
+		// Otherwise, we need to determine the row count of the join before the
+		// ON conditions are applied.
+		withoutOn := e.Memo().MemoizeMergeJoin(t.Left, t.Right, nil /* on */, &t.MergeJoinPrivate)
+		return withoutOn.Relational().Stats.RowCount
+	}
+
+	panic(errors.AssertionFailedf("rowsProcessed not supported for operator type %v", log.Safe(e.Op())))
 }
 
 func min(a float64, b float64) float64 {
