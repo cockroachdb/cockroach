@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -48,8 +50,8 @@ func (s tpccOLAPSpec) run(ctx context.Context, t *test, c *cluster) {
 	c.Run(ctx, workloadNode, "echo", queryLine, "> "+queryFileName)
 	t.Status("waiting")
 	m := newMonitor(ctx, c, crdbNodes)
-	rampDuration := time.Minute
-	duration := 2 * time.Minute
+	rampDuration := 2 * time.Minute
+	duration := 3 * time.Minute
 	m.Go(func(ctx context.Context) error {
 		t.WorkerStatus("running querybench")
 		cmd := fmt.Sprintf(
@@ -59,7 +61,7 @@ func (s tpccOLAPSpec) run(ctx context.Context, t *test, c *cluster) {
 				" --query-file %s"+
 				" --histograms="+perfArtifactsDir+"/stats.json "+
 				" --ramp=%s --duration=%s {pgurl:1-%d}",
-			s.Warehouses, queryFileName, rampDuration, duration, c.spec.NodeCount-1)
+			s.Concurrency, queryFileName, rampDuration, duration, c.spec.NodeCount-1)
 		c.Run(ctx, workloadNode, cmd)
 		return nil
 	})
@@ -73,12 +75,23 @@ func verifyNodeLiveness(ctx context.Context, c *cluster, t *test, runDuration ti
 	const maxFailures = 10
 	adminURLs := c.ExternalAdminUIAddr(ctx, c.Node(1))
 	now := timeutil.Now()
-	response := getMetrics(t, adminURLs[0], now.Add(-runDuration), now, []tsQuery{
-		{
-			name:      "cr.node.liveness.heartbeatfailures",
-			queryType: total,
-		},
-	})
+	var response tspb.TimeSeriesQueryResponse
+	// Retry because timeseries queries can fail if the underlying inter-node
+	// connections are in a failed state which can happen due to overload.
+	// Now that the load has stopped, this should resolve itself soon.
+	if err := retry.WithMaxAttempts(ctx, retry.Options{
+		MaxBackoff: 500 * time.Millisecond,
+	}, 3, func() (err error) {
+		response, err = getMetrics(adminURLs[0], now.Add(-runDuration), now, []tsQuery{
+			{
+				name:      "cr.node.liveness.heartbeatfailures",
+				queryType: total,
+			},
+		})
+		return err
+	}); err != nil {
+		t.Fatalf("failed to fetch liveness metrics: %v", err)
+	}
 	if len(response.Results[0].Datapoints) <= 1 {
 		t.Fatalf("not enough datapoints in timeseries query response: %+v", response)
 	}
@@ -109,10 +122,10 @@ func registerTPCCOverloadSpec(r *testRegistry, s tpccOLAPSpec) {
 func registerOverload(r *testRegistry) {
 	specs := []tpccOLAPSpec{
 		{
-			CPUs:        16,
-			Concurrency: 256,
+			CPUs:        8,
+			Concurrency: 96,
 			Nodes:       3,
-			Warehouses:  100,
+			Warehouses:  50,
 		},
 	}
 	for _, s := range specs {
