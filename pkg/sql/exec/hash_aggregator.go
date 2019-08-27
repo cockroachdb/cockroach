@@ -189,6 +189,7 @@ func (op *hashGrouper) Init() {
 }
 
 func (op *hashGrouper) Next(ctx context.Context) coldata.Batch {
+	op.batch.ResetInternalBatch()
 	// First, build the hash table.
 	if !op.buildFinished {
 		op.buildFinished = true
