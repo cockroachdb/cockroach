@@ -64,7 +64,7 @@ func TestCoalescer(t *testing.T) {
 func BenchmarkCoalescer(b *testing.B) {
 	ctx := context.Background()
 	// The input operator to the coalescer returns a batch of random size from [1,
-	// col.BatchSize) each time.
+	// coldata.BatchSize) each time.
 	nCols := 4
 	sourceTypes := make([]coltypes.T, nCols)
 
