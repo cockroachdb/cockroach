@@ -71,6 +71,12 @@ download and install various dependencies. After running `make build`,
 the `cockroach` executable will be in your current directory and can
 be run as shown in the [README](README.md).
 
+Note that if you use the builder image, you should ensure that your
+Docker installation grants 4GB or more of RAM to containers. On some
+systems, the default configuration limits containers to 2GB memory
+usage and this can be insufficient to build/link a CockroachDB
+executable.
+
 ### Other Considerations
 
 - The default binary contains core open-source functionally covered by
