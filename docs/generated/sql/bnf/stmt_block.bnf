@@ -434,12 +434,12 @@ scrub_database_stmt ::=
 	'EXPERIMENTAL' 'SCRUB' 'DATABASE' database_name opt_as_of_clause
 
 select_no_parens ::=
-	simple_select
-	| select_clause sort_clause
-	| select_clause opt_sort_clause select_limit
-	| with_clause select_clause
-	| with_clause select_clause sort_clause
-	| with_clause select_clause opt_sort_clause select_limit
+	simple_select opt_for
+	| select_clause sort_clause opt_for
+	| select_clause opt_sort_clause select_limit opt_for
+	| with_clause select_clause opt_for
+	| with_clause select_clause sort_clause opt_for
+	| with_clause select_clause opt_sort_clause select_limit opt_for
 
 select_with_parens ::=
 	'(' select_no_parens ')'
@@ -788,6 +788,7 @@ unreserved_keyword ::=
 	| 'SESSION'
 	| 'SESSIONS'
 	| 'SET'
+	| 'SHARE'
 	| 'SHOW'
 	| 'SIMPLE'
 	| 'SMALLSERIAL'
@@ -1141,6 +1142,12 @@ simple_select ::=
 	| values_clause
 	| table_clause
 	| set_operation
+
+opt_for ::=
+	'FOR' 'UPDATE'
+	| 'FOR' 'NO' 'KEY' 'UPDATE'
+	| 'FOR' 'SHARE'
+	| 'FOR' 'KEY' 'SHARE'
 
 select_clause ::=
 	simple_select
