@@ -49,10 +49,10 @@ subcommands: e.g. "cockroach demo startrek". See --help for a full list.
 By default, the 'movr' dataset is pre-loaded. You can also use --empty
 to avoid pre-loading a dataset.
 
-cockroach demo attempts to connect to a Cockroach Labs server to obtain a 
-temporary enterprise license for demoing enterprise features and enable 
-telemetry back to Cockroach Labs. In order to disable this behavior, set the 
-environment variable "COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING".
+cockroach demo attempts to connect to a Cockroach Labs server to obtain a
+temporary enterprise license for demoing enterprise features and enable
+telemetry back to Cockroach Labs. In order to disable this behavior, set the
+environment variable "COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING" to true.
 `,
 	Example: `  cockroach demo`,
 	Args:    cobra.NoArgs,
@@ -207,6 +207,10 @@ func setupTransientServers(
 	}
 	urlStr := url.String()
 
+	// Communicate information about license acquisition to services
+	// that depend on it.
+	licenseSuccess := make(chan bool, 1)
+
 	// Start up the update check loop.
 	// We don't do this in (*server.Server).Start() because we don't want it
 	// in tests.
@@ -230,8 +234,13 @@ func setupTransientServers(
 					const msg = "Unable to acquire demo license. Enterprise features are not enabled in this session.\n"
 					fmt.Fprint(stderr, msg)
 				}
+				licenseSuccess <- success
 			}()
 		}
+	} else {
+		// If we aren't supposed to check for a license, then automatically
+		// notify failure.
+		licenseSuccess <- false
 	}
 
 	// If there is a load generator, create its database and load its
@@ -253,10 +262,40 @@ func setupTransientServers(
 			return ``, ``, cleanup, err
 		}
 
+		partitioningComplete := make(chan struct{}, 1)
+		// If we are requested to prepartition our data spawn a goroutine to do the partitioning.
+		if demoCtx.geoPartitionedReplicas {
+			go func() {
+				success := <-licenseSuccess
+				// Only try partitioning if license acquisition was successful.
+				if success {
+					db, err := gosql.Open("postgres", urlStr)
+					if err != nil {
+						exitWithError("demo", err)
+					}
+					defer db.Close()
+					// Based on validation done in setup, we know that this workload has a partitioning step.
+					if err := gen.(workload.Hookser).Hooks().Partition(db); err != nil {
+						exitWithError("demo", err)
+					}
+					partitioningComplete <- struct{}{}
+				} else {
+					const msg = "license acquisition was unsuccessful. Enterprise features are needed to partition data"
+					exitWithError("demo", errors.New(msg))
+				}
+			}()
+		}
+
 		if demoCtx.runWorkload {
-			if err := runWorkload(ctx, gen, urlStr, stopper); err != nil {
-				return ``, ``, cleanup, err
-			}
+			go func() {
+				// If partitioning was requested, wait for that to complete before running the workload.
+				if demoCtx.geoPartitionedReplicas {
+					<-partitioningComplete
+				}
+				if err := runWorkload(ctx, gen, urlStr, stopper); err != nil {
+					exitWithError("demo", err)
+				}
+			}()
 		}
 	}
 
@@ -317,6 +356,49 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) error {
 	// Make sure that the user didn't request a workload and an empty database.
 	if demoCtx.runWorkload && demoCtx.useEmptyDatabase {
 		return errors.New("cannot run a workload against an empty database")
+	}
+
+	// Make sure that the user didn't request to have a topology and an empty database.
+	if demoCtx.geoPartitionedReplicas && demoCtx.useEmptyDatabase {
+		return errors.New("cannot setup geo-partitioned replicas topology on an empty database")
+	}
+
+	// Make sure that the Movr database is selected when automatically partitioning.
+	if demoCtx.geoPartitionedReplicas && (gen == nil || gen.Meta().Name != "movr") {
+		return errors.New("--geo-partitioned-replicas must be used with the Movr dataset")
+	}
+
+	// If the geo-partitioned replicas flag was given and the demo localities have changed, throw an error.
+	if demoCtx.geoPartitionedReplicas && demoCtx.localities != nil {
+		return errors.New("--demo-locality cannot be used with --geo-partitioned-replicas")
+	}
+
+	// If the geo-partitioned replicas flag was given and the nodes have changed, throw an error.
+	if demoCtx.geoPartitionedReplicas && cmd.Flags().Lookup(cliflags.DemoNodes.Name).Changed {
+		return errors.New("--nodes cannot be used with --geo-partitioned-replicas")
+	}
+
+	// If geo-partition-replicas is requested, make sure the workload has a Partitioning step.
+	if demoCtx.geoPartitionedReplicas {
+		configErr := errors.New(fmt.Sprintf("workload %s is not configured to have a partitioning step", gen.Meta().Name))
+		hookser, ok := gen.(workload.Hookser)
+		if !ok {
+			return configErr
+		}
+		if hookser.Hooks().Partition == nil {
+			return configErr
+		}
+	}
+
+	// Th geo-partitioned replicas demo only works on a 9 node cluster, so set the node count as such.
+	// Ignore input user localities so that the nodes have the same attributes/localities as expected.
+	if demoCtx.geoPartitionedReplicas {
+		const msg = `#
+# --geo-partitioned replicas operates on a 9 node cluster.
+# The cluster size has been changed from the default to 9 nodes.`
+		fmt.Println(msg)
+		demoCtx.nodes = 9
+		demoCtx.localities = nil
 	}
 
 	connURL, adminURL, cleanup, err := setupTransientServers(cmd, gen)
