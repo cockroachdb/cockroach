@@ -42,6 +42,7 @@ type replicationTestKnobs struct {
 	storeKnobs                       storage.StoreTestingKnobs
 	replicaAddStopAfterLearnerAtomic int64
 	replicaAddStopAfterJointConfig   int64
+	replicationAlwaysUseJointConfig  int64
 }
 
 func makeReplicationTestKnobs() (base.TestingKnobs, *replicationTestKnobs) {
@@ -51,6 +52,9 @@ func makeReplicationTestKnobs() (base.TestingKnobs, *replicationTestKnobs) {
 	}
 	k.storeKnobs.ReplicaAddStopAfterJointConfig = func() bool {
 		return atomic.LoadInt64(&k.replicaAddStopAfterJointConfig) > 0
+	}
+	k.storeKnobs.ReplicationAlwaysUseJointConfig = func() bool {
+		return atomic.LoadInt64(&k.replicationAlwaysUseJointConfig) > 0
 	}
 	return base.TestingKnobs{Store: &k.storeKnobs}, &k
 }

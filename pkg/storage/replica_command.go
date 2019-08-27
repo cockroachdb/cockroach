@@ -1322,6 +1322,9 @@ func execChangeReplicasTxn(
 		}
 
 		useJoint := len(chgs) > 1
+		if fn := store.TestingKnobs().ReplicationAlwaysUseJointConfig; fn != nil && fn() {
+			useJoint = true
+		}
 		for _, chg := range chgs {
 			switch chg.typ {
 			case internalChangeTypeAddVoterViaPreemptiveSnap:
