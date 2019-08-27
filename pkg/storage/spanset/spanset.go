@@ -150,6 +150,13 @@ func (ss *SpanSet) AssertAllowed(access SpanAccess, span roachpb.Span) {
 }
 
 // CheckAllowed returns an error if the access is not allowed.
+//
+// TODO(irfansharif): This does not currently work for spans that straddle
+// across multiple added spans. Specifically a spanset with spans [a-c) and
+// [b-d) added under read only and read write access modes respectively would
+// fail at checking if read only access over the span [a-d) was requested. This
+// is also a problem if the added spans were read only and the spanset wasn't
+// already SortAndDedup-ed.
 func (ss *SpanSet) CheckAllowed(access SpanAccess, span roachpb.Span) error {
 	scope := SpanGlobal
 	if keys.IsLocal(span.Key) {
