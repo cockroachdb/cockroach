@@ -158,4 +158,3 @@
 <tr><td><a name="xor_agg"></a><code>xor_agg(arg1: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the bitwise XOR of the selected values.</p>
 </span></td></tr></tbody>
 </table>
-

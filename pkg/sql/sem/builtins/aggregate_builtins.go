@@ -114,7 +114,8 @@ var aggregates = map[string]builtinDefinition{
 					return types.MakeArray(args[0].ResolvedType())
 				},
 				newArrayAggregate,
-				"Aggregates the selected values into an array.",
+				"Aggregates the selected values into an array.\n"+
+					"This aggregate function is non-commutative.",
 			)
 		})),
 
@@ -149,9 +150,11 @@ var aggregates = map[string]builtinDefinition{
 
 	"concat_agg": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.String}, types.String, newStringConcatAggregate,
-			"Concatenates all selected values."),
+			"Concatenates all selected values.\n"+
+				"This aggregate function is non-commutative."),
 		makeAggOverload([]*types.T{types.Bytes}, types.Bytes, newBytesConcatAggregate,
-			"Concatenates all selected values."),
+			"Concatenates all selected values.\n"+
+				"This aggregate function is non-commutative."),
 		// TODO(eisen): support collated strings when the type system properly
 		// supports parametric types.
 	),
@@ -192,9 +195,11 @@ var aggregates = map[string]builtinDefinition{
 
 	"string_agg": makeBuiltin(aggPropsNullableArgs(),
 		makeAggOverload([]*types.T{types.String, types.String}, types.String, newStringConcatAggregate,
-			"Concatenates all selected values using the provided delimiter."),
+			"Concatenates all selected values using the provided delimiter.\n"+
+				"This aggregate function is non-commutative."),
 		makeAggOverload([]*types.T{types.Bytes, types.Bytes}, types.Bytes, newBytesConcatAggregate,
-			"Concatenates all selected values using the provided delimiter."),
+			"Concatenates all selected values using the provided delimiter.\n"+
+				"This aggregate function is non-commutative."),
 	),
 
 	"sum_int": makeBuiltin(aggProps(),
@@ -291,12 +296,14 @@ var aggregates = map[string]builtinDefinition{
 
 	"json_agg": makeBuiltin(aggPropsNullableArgs(),
 		makeAggOverload([]*types.T{types.Any}, types.Jsonb, newJSONAggregate,
-			"Aggregates values as a JSON or JSONB array."),
+			"Aggregates values as a JSON or JSONB array.\n"+
+				"This aggregate function is non-commutative."),
 	),
 
 	"jsonb_agg": makeBuiltin(aggPropsNullableArgs(),
 		makeAggOverload([]*types.T{types.Any}, types.Jsonb, newJSONAggregate,
-			"Aggregates values as a JSON or JSONB array."),
+			"Aggregates values as a JSON or JSONB array.\n"+
+				"This aggregate function is non-commutative."),
 	),
 
 	"json_object_agg":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Class: tree.AggregateClass, Impure: true}),
