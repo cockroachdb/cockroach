@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -111,5 +112,11 @@ func (s *addSSTableSender) AddSSTable(
 	_ context.Context, _, _ interface{}, data []byte, _ bool, _ *enginepb.MVCCStats,
 ) error {
 	*s = append(*s, data)
+	return nil
+}
+
+func (s *addSSTableSender) SplitAndScatter(
+	_ context.Context, _ roachpb.Key, _ hlc.Timestamp,
+) error {
 	return nil
 }

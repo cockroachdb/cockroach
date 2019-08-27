@@ -93,6 +93,7 @@ func MakeBulkAdder(
 			rc:                rangeCache,
 			skipDuplicates:    opts.SkipDuplicates,
 			disallowShadowing: opts.DisallowShadowing,
+			splitAfter:        int64(opts.SSTSize * 3),
 		},
 		timestamp:           timestamp,
 		curBufferSize:       opts.MinBufferSize,
