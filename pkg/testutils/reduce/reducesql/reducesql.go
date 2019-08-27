@@ -52,6 +52,7 @@ var SQLPasses = []reduce.Pass{
 	removeAliases,
 	removeDBSchema,
 	removeFroms,
+	removeJoins,
 	removeWhere,
 	removeHaving,
 	removeDistinct,
@@ -707,6 +708,30 @@ var (
 			n := len(node.From.Tables)
 			if xfi < len(node.From.Tables) {
 				node.From.Tables = append(node.From.Tables[:xfi], node.From.Tables[xfi+1:]...)
+			}
+			return n
+		}
+		return 0
+	})
+	removeJoins = walkSQL("remove JOINs", func(xfi int, node interface{}) int {
+		// Remove JOINs. Replace them with either the left or right
+		// side based on if xfi is even or odd.
+		switch node := node.(type) {
+		case *tree.SelectClause:
+			idx := xfi / 2
+			n := 0
+			for i, t := range node.From.Tables {
+				switch t := t.(type) {
+				case *tree.JoinTableExpr:
+					if n == idx {
+						if xfi%2 == 0 {
+							node.From.Tables[i] = t.Left
+						} else {
+							node.From.Tables[i] = t.Right
+						}
+					}
+					n += 2
+				}
 			}
 			return n
 		}

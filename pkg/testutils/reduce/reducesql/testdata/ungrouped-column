@@ -60,8 +60,6 @@ LIMIT
 	23:::INT8;
 ----
 ----
-CREATE TABLE table0 ();
-
 CREATE TABLE table1 (col1 BYTES, col5 INT4);
 
 SELECT
@@ -74,14 +72,8 @@ HAVING
 			SELECT
 				NULL
 			FROM
-				table1
-				RIGHT JOIN (SELECT tab_1222.col1)
-						AS tab_1224 (col_3473)
-					JOIN table0
-						RIGHT JOIN table1 AS tab_1226 ON
-								true
-						FULL JOIN table1 AS tab_1227 ON
-								true ON true ON true
+				(SELECT tab_1222.col1)
+					AS tab_1224 (col_3473)
 		)::INET
 		- tab_1222.col5,
 		NULL::INET
