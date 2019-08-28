@@ -591,30 +591,34 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		result, _, err := a.AllocateTarget(
-			context.Background(),
-			config.EmptyCompleteZoneConfig(),
-			firstRangeID,
-			tc.existing,
-		)
-		if e, a := tc.expectTarget, result != nil; e != a {
-			t.Errorf("AllocateTarget(%v) got target %v, err %v; expectTarget=%v",
-				tc.existing, result, err, tc.expectTarget)
+		{
+			result, _, err := a.AllocateTarget(
+				context.Background(),
+				config.EmptyCompleteZoneConfig(),
+				firstRangeID,
+				tc.existing,
+			)
+			if e, a := tc.expectTarget, result != nil; e != a {
+				t.Errorf("AllocateTarget(%v) got target %v, err %v; expectTarget=%v",
+					tc.existing, result, err, tc.expectTarget)
+			}
 		}
 
-		var rangeUsageInfo RangeUsageInfo
-		result, details := a.RebalanceTarget(
-			context.Background(),
-			config.EmptyCompleteZoneConfig(),
-			nil, /* raftStatus */
-			firstRangeID,
-			tc.existing,
-			rangeUsageInfo,
-			storeFilterThrottled,
-		)
-		if e, a := tc.expectTarget, result != nil; e != a {
-			t.Errorf("RebalanceTarget(%v) got target %v, details %v; expectTarget=%v",
-				tc.existing, result, details, tc.expectTarget)
+		{
+			var rangeUsageInfo RangeUsageInfo
+			target, _, details, ok := a.RebalanceTarget(
+				context.Background(),
+				config.EmptyCompleteZoneConfig(),
+				nil, /* raftStatus */
+				firstRangeID,
+				tc.existing,
+				rangeUsageInfo,
+				storeFilterThrottled,
+			)
+			if e, a := tc.expectTarget, ok; e != a {
+				t.Errorf("RebalanceTarget(%v) got target %v, details %v; expectTarget=%v",
+					tc.existing, target, details, tc.expectTarget)
+			}
 		}
 	}
 }
@@ -676,7 +680,7 @@ func TestAllocatorRebalance(t *testing.T) {
 	// Every rebalance target must be either store 1 or 2.
 	for i := 0; i < 10; i++ {
 		var rangeUsageInfo RangeUsageInfo
-		result, _ := a.RebalanceTarget(
+		target, _, _, ok := a.RebalanceTarget(
 			ctx,
 			config.EmptyCompleteZoneConfig(),
 			nil,
@@ -685,14 +689,14 @@ func TestAllocatorRebalance(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 		)
-		if result == nil {
+		if !ok {
 			i-- // loop until we find 10 candidates
 			continue
 		}
 		// We might not get a rebalance target if the random nodes selected as
 		// candidates are not suitable targets.
-		if result.StoreID != 1 && result.StoreID != 2 {
-			t.Errorf("%d: expected store 1 or 2; got %d", i, result.StoreID)
+		if target.StoreID != 1 && target.StoreID != 2 {
+			t.Errorf("%d: expected store 1 or 2; got %d", i, target.StoreID)
 		}
 	}
 
@@ -827,7 +831,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 		}
 	}
 	for i := 0; i < 10; i++ {
-		result, details := a.RebalanceTarget(
+		result, _, details, ok := a.RebalanceTarget(
 			context.Background(),
 			config.EmptyCompleteZoneConfig(),
 			status,
@@ -836,7 +840,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 		)
-		if result != nil {
+		if ok {
 			t.Fatalf("expected no rebalance, but got target s%d; details: %s", result.StoreID, details)
 		}
 	}
@@ -848,7 +852,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	stores[2].Capacity.RangeCount = 46
 	sg.GossipStores(stores, t)
 	for i := 0; i < 10; i++ {
-		result, details := a.RebalanceTarget(
+		target, _, details, ok := a.RebalanceTarget(
 			context.Background(),
 			config.EmptyCompleteZoneConfig(),
 			status,
@@ -857,8 +861,8 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 		)
-		if result != nil {
-			t.Fatalf("expected no rebalance, but got target s%d; details: %s", result.StoreID, details)
+		if ok {
+			t.Fatalf("expected no rebalance, but got target s%d; details: %s", target.StoreID, details)
 		}
 	}
 
@@ -866,7 +870,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	stores[1].Capacity.RangeCount = 44
 	sg.GossipStores(stores, t)
 	for i := 0; i < 10; i++ {
-		result, details := a.RebalanceTarget(
+		target, origin, details, ok := a.RebalanceTarget(
 			context.Background(),
 			config.EmptyCompleteZoneConfig(),
 			status,
@@ -875,9 +879,11 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 		)
-		if result == nil || result.StoreID != stores[1].StoreID {
-			t.Fatalf("%d: expected rebalance to s%d, but got %v; details: %s",
-				i, stores[1].StoreID, result, details)
+		expTo := stores[1].StoreID
+		expFrom := map[roachpb.StoreID]bool{stores[3].StoreID: true, stores[4].StoreID: true}
+		if !ok || target.StoreID != expTo || !expFrom[origin.StoreID] {
+			t.Fatalf("%d: expected rebalance from either of %v to s%d, but got %v->%v; details: %s",
+				i, expFrom, expTo, origin, target, details)
 		}
 	}
 }
@@ -944,7 +950,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			var rangeUsageInfo RangeUsageInfo
-			result, _ := a.RebalanceTarget(
+			target, _, _, ok := a.RebalanceTarget(
 				ctx,
 				config.EmptyCompleteZoneConfig(),
 				nil,
@@ -953,13 +959,13 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 				rangeUsageInfo,
 				storeFilterThrottled)
 			if c.expected > 0 {
-				if result == nil {
+				if !ok {
 					t.Fatalf("expected %d, but found nil", c.expected)
-				} else if c.expected != result.StoreID {
-					t.Fatalf("expected %d, but found %d", c.expected, result.StoreID)
+				} else if c.expected != target.StoreID {
+					t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
 				}
-			} else if result != nil {
-				t.Fatalf("expected nil, but found %d", result.StoreID)
+			} else if ok {
+				t.Fatalf("expected nil, but found %d", target.StoreID)
 			}
 		})
 	}
@@ -1139,7 +1145,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 	// Every rebalance target must be store 4 (or nil for case of missing the only option).
 	for i := 0; i < 10; i++ {
 		var rangeUsageInfo RangeUsageInfo
-		result, _ := a.RebalanceTarget(
+		result, _, _, ok := a.RebalanceTarget(
 			ctx,
 			config.EmptyCompleteZoneConfig(),
 			nil,
@@ -1148,7 +1154,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 		)
-		if result != nil && result.StoreID != 4 {
+		if ok && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
 		}
 	}
@@ -1423,7 +1429,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 
 	for i, tc := range testCases {
 		var rangeUsageInfo RangeUsageInfo
-		result, details := a.RebalanceTarget(
+		result, _, details, ok := a.RebalanceTarget(
 			ctx,
 			config.EmptyCompleteZoneConfig(),
 			nil, /* raftStatus */
@@ -1433,7 +1439,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			storeFilterThrottled,
 		)
 		var resultID roachpb.StoreID
-		if result != nil {
+		if ok {
 			resultID = result.StoreID
 		}
 		if resultID != tc.expected {
@@ -1494,7 +1500,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 	for i, tc := range testCases2 {
 		log.Infof(ctx, "case #%d", i)
 		var rangeUsageInfo RangeUsageInfo
-		result, details := a.RebalanceTarget(
+		result, _, details, ok := a.RebalanceTarget(
 			ctx,
 			config.EmptyCompleteZoneConfig(),
 			nil, /* raftStatus */
@@ -1504,7 +1510,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			storeFilterThrottled,
 		)
 		var gotExpected bool
-		if result == nil {
+		if !ok {
 			gotExpected = (tc.expected == nil)
 		} else {
 			for _, expectedStoreID := range tc.expected {
@@ -2202,7 +2208,7 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 			}
 		}
 		var rangeUsageInfo RangeUsageInfo
-		targetStore, details := a.RebalanceTarget(
+		target, _, details, ok := a.RebalanceTarget(
 			context.Background(),
 			config.EmptyCompleteZoneConfig(),
 			nil,
@@ -2211,19 +2217,19 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 		)
-		if targetStore == nil {
+		if !ok {
 			t.Fatalf("%d: RebalanceTarget(%v) returned no target store; details: %s", i, c.existing, details)
 		}
 		var found bool
 		for _, storeID := range c.expected {
-			if targetStore.StoreID == storeID {
+			if target.StoreID == storeID {
 				found = true
 				break
 			}
 		}
 		if !found {
 			t.Errorf("%d: expected RebalanceTarget(%v) in %v, but got %d; details: %s",
-				i, c.existing, c.expected, targetStore.StoreID, details)
+				i, c.existing, c.expected, target.StoreID, details)
 		}
 	}
 }
@@ -3600,10 +3606,10 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 		} else {
 			// Also verify that RebalanceTarget picks out one of the best options as
 			// the final rebalance choice.
-			target, details := a.RebalanceTarget(
+			target, _, details, ok := a.RebalanceTarget(
 				context.Background(), zone, nil, firstRangeID, existingRepls, rangeUsageInfo, storeFilterThrottled)
 			var found bool
-			if target == nil && len(tc.validTargets) == 0 {
+			if !ok && len(tc.validTargets) == 0 {
 				found = true
 			}
 			for _, storeID := range tc.validTargets {
@@ -5520,7 +5526,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 			}
 
 			var rangeUsageInfo RangeUsageInfo
-			actual, _ := a.RebalanceTarget(
+			actual, _, _, ok := a.RebalanceTarget(
 				ctx,
 				&config.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: []config.Constraints{constraints}},
 				nil,
@@ -5530,11 +5536,11 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 				storeFilterThrottled,
 			)
 
-			if tc.expected == nil && actual != nil {
+			if tc.expected == nil && ok {
 				t.Errorf("rebalancing to the incorrect store, expected nil, got %d", actual.StoreID)
-			} else if tc.expected != nil && actual == nil {
+			} else if tc.expected != nil && !ok {
 				t.Errorf("rebalancing to the incorrect store, expected %d, got nil", *tc.expected)
-			} else if !(tc.expected == nil && actual == nil) && *tc.expected != actual.StoreID {
+			} else if !(tc.expected == nil && !ok) && *tc.expected != actual.StoreID {
 				t.Errorf("rebalancing to the incorrect store, expected %d, got %d", tc.expected, actual.StoreID)
 			}
 		})
@@ -5686,7 +5692,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 				// Rebalance until there's no more rebalancing to do.
 				if ts.Capacity.RangeCount > 0 {
 					var rangeUsageInfo RangeUsageInfo
-					target, details := alloc.RebalanceTarget(
+					target, _, details, ok := alloc.RebalanceTarget(
 						ctx,
 						config.EmptyCompleteZoneConfig(),
 						nil,
@@ -5695,7 +5701,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 						rangeUsageInfo,
 						storeFilterThrottled,
 					)
-					if target != nil {
+					if ok {
 						if log.V(1) {
 							log.Infof(ctx, "rebalancing to %v; details: %s", target, details)
 						}
@@ -5815,7 +5821,7 @@ func Example_rebalancing() {
 		for j := 0; j < len(testStores); j++ {
 			ts := &testStores[j]
 			var rangeUsageInfo RangeUsageInfo
-			target, details := alloc.RebalanceTarget(
+			target, _, details, ok := alloc.RebalanceTarget(
 				context.Background(),
 				config.EmptyCompleteZoneConfig(),
 				nil,
@@ -5824,7 +5830,7 @@ func Example_rebalancing() {
 				rangeUsageInfo,
 				storeFilterThrottled,
 			)
-			if target != nil {
+			if ok {
 				log.Infof(context.TODO(), "rebalancing to %v; details: %s", target, details)
 				testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))
 			}
