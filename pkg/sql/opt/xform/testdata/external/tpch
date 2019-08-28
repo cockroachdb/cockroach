@@ -1901,12 +1901,10 @@ limit
  │         ├── inner-join (hash)
  │         │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_quantity:22(float!null)
  │         │    ├── fd: (1)-->(2), (9)-->(10,12,13), (9)==(18), (18)==(9), (1)==(10), (10)==(1)
- │         │    ├── scan lineitem
- │         │    │    └── columns: l_orderkey:18(int!null) l_quantity:22(float!null)
- │         │    ├── inner-join (hash)
- │         │    │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null)
- │         │    │    ├── key: (9)
- │         │    │    ├── fd: (9)-->(10,12,13), (1)-->(2), (1)==(10), (10)==(1)
+ │         │    ├── inner-join (lookup lineitem)
+ │         │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_quantity:22(float!null)
+ │         │    │    ├── key columns: [9] = [18]
+ │         │    │    ├── fd: (9)-->(10,12,13), (9)==(18), (18)==(9)
  │         │    │    ├── semi-join (merge)
  │         │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null)
  │         │    │    │    ├── left ordering: +9
@@ -1938,14 +1936,13 @@ limit
  │         │    │    │    │    └── filters
  │         │    │    │    │         └── sum > 300.0 [type=bool, outer=(50), constraints=(/50: [/300.00000000000006 - ]; tight)]
  │         │    │    │    └── filters (true)
- │         │    │    ├── scan customer
- │         │    │    │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null)
- │         │    │    │    ├── key: (1)
- │         │    │    │    └── fd: (1)-->(2)
- │         │    │    └── filters
- │         │    │         └── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │         │    │    └── filters (true)
+ │         │    ├── scan customer
+ │         │    │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null)
+ │         │    │    ├── key: (1)
+ │         │    │    └── fd: (1)-->(2)
  │         │    └── filters
- │         │         └── o_orderkey = l_orderkey [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ]), fd=(9)==(18), (18)==(9)]
+ │         │         └── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
  │         └── aggregations
  │              ├── sum [type=float, outer=(22)]
  │              │    └── variable: l_quantity [type=float]
@@ -2370,54 +2367,55 @@ GROUP BY
 ORDER BY
     cntrycode;
 ----
-group-by
+sort
  ├── columns: cntrycode:27(string) numcust:28(int) totacctbal:29(float)
- ├── grouping columns: cntrycode:27(string)
  ├── key: (27)
  ├── fd: (27)-->(28,29)
  ├── ordering: +27
- ├── sort
- │    ├── columns: c_acctbal:6(float!null) cntrycode:27(string)
- │    ├── ordering: +27
- │    └── project
- │         ├── columns: cntrycode:27(string) c_acctbal:6(float!null)
- │         ├── anti-join (lookup orders@o_ck)
- │         │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
- │         │    ├── key columns: [1] = [19]
- │         │    ├── key: (1)
- │         │    ├── fd: (1)-->(5,6)
- │         │    ├── select
- │         │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
- │         │    │    ├── key: (1)
- │         │    │    ├── fd: (1)-->(5,6)
- │         │    │    ├── scan customer
- │         │    │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
- │         │    │    │    ├── key: (1)
- │         │    │    │    └── fd: (1)-->(5,6)
- │         │    │    └── filters
- │         │    │         ├── substring(c_phone, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [type=bool, outer=(5)]
- │         │    │         └── gt [type=bool, outer=(6), subquery, constraints=(/6: (/NULL - ])]
- │         │    │              ├── variable: c_acctbal [type=float]
- │         │    │              └── subquery [type=float]
- │         │    │                   └── scalar-group-by
- │         │    │                        ├── columns: avg:17(float)
- │         │    │                        ├── cardinality: [1 - 1]
- │         │    │                        ├── key: ()
- │         │    │                        ├── fd: ()-->(17)
- │         │    │                        ├── select
- │         │    │                        │    ├── columns: c_phone:13(char!null) c_acctbal:14(float!null)
- │         │    │                        │    ├── scan customer
- │         │    │                        │    │    └── columns: c_phone:13(char!null) c_acctbal:14(float!null)
- │         │    │                        │    └── filters
- │         │    │                        │         ├── c_acctbal > 0.0 [type=bool, outer=(14), constraints=(/14: [/5e-324 - ]; tight)]
- │         │    │                        │         └── substring(c_phone, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [type=bool, outer=(13)]
- │         │    │                        └── aggregations
- │         │    │                             └── avg [type=float, outer=(14)]
- │         │    │                                  └── variable: c_acctbal [type=float]
- │         │    └── filters (true)
- │         └── projections
- │              └── substring(c_phone, 1, 2) [type=string, outer=(5)]
- └── aggregations
-      ├── count-rows [type=int]
-      └── sum [type=float, outer=(6)]
-           └── variable: c_acctbal [type=float]
+ └── group-by
+      ├── columns: cntrycode:27(string) count_rows:28(int) sum:29(float)
+      ├── grouping columns: cntrycode:27(string)
+      ├── key: (27)
+      ├── fd: (27)-->(28,29)
+      ├── project
+      │    ├── columns: cntrycode:27(string) c_acctbal:6(float!null)
+      │    ├── anti-join (lookup orders@o_ck)
+      │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
+      │    │    ├── key columns: [1] = [19]
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(5,6)
+      │    │    ├── select
+      │    │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(5,6)
+      │    │    │    ├── scan customer
+      │    │    │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
+      │    │    │    │    ├── key: (1)
+      │    │    │    │    └── fd: (1)-->(5,6)
+      │    │    │    └── filters
+      │    │    │         ├── substring(c_phone, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [type=bool, outer=(5)]
+      │    │    │         └── gt [type=bool, outer=(6), subquery, constraints=(/6: (/NULL - ])]
+      │    │    │              ├── variable: c_acctbal [type=float]
+      │    │    │              └── subquery [type=float]
+      │    │    │                   └── scalar-group-by
+      │    │    │                        ├── columns: avg:17(float)
+      │    │    │                        ├── cardinality: [1 - 1]
+      │    │    │                        ├── key: ()
+      │    │    │                        ├── fd: ()-->(17)
+      │    │    │                        ├── select
+      │    │    │                        │    ├── columns: c_phone:13(char!null) c_acctbal:14(float!null)
+      │    │    │                        │    ├── scan customer
+      │    │    │                        │    │    └── columns: c_phone:13(char!null) c_acctbal:14(float!null)
+      │    │    │                        │    └── filters
+      │    │    │                        │         ├── c_acctbal > 0.0 [type=bool, outer=(14), constraints=(/14: [/5e-324 - ]; tight)]
+      │    │    │                        │         └── substring(c_phone, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [type=bool, outer=(13)]
+      │    │    │                        └── aggregations
+      │    │    │                             └── avg [type=float, outer=(14)]
+      │    │    │                                  └── variable: c_acctbal [type=float]
+      │    │    └── filters (true)
+      │    └── projections
+      │         └── substring(c_phone, 1, 2) [type=string, outer=(5)]
+      └── aggregations
+           ├── count-rows [type=int]
+           └── sum [type=float, outer=(6)]
+                └── variable: c_acctbal [type=float]
