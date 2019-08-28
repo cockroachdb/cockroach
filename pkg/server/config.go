@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/pebble"
+	pebbleCache "github.com/cockroachdb/pebble/cache"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
 )
@@ -479,19 +481,39 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 			details = append(details, fmt.Sprintf("store %d: RocksDB, max size %s, max open file limit %d",
 				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
-			rocksDBConfig := engine.RocksDBConfig{
-				Attrs:                   spec.Attributes,
-				Dir:                     spec.Path,
-				MaxSizeBytes:            sizeInBytes,
-				MaxOpenFiles:            openFileLimitPerStore,
-				WarnLargeBatchThreshold: 500 * time.Millisecond,
-				Settings:                cfg.Settings,
-				UseFileRegistry:         spec.UseFileRegistry,
-				RocksDBOptions:          spec.RocksDBOptions,
-				ExtraOptions:            spec.ExtraOptions,
-			}
 
-			eng, err := engine.NewRocksDB(rocksDBConfig, cache)
+			var eng engine.Engine
+			var err error
+			if spec.Engine == base.EngineTypePebble {
+				pebbleOpts := &pebble.Options{
+					Cache: pebbleCache.New(128 << 20),
+					MaxOpenFiles: int(openFileLimitPerStore),
+					MemTableSize:                64 << 20,
+					MemTableStopWritesThreshold: 4,
+					MinFlushRate:                4 << 20,
+					L0CompactionThreshold:       2,
+					L0StopWritesThreshold:       400,
+					LBaseMaxBytes:               64 << 20, // 64 MB
+					Levels: []pebble.LevelOptions{{
+						BlockSize: 32 << 10,
+					}},
+				}
+				eng, err = engine.NewPebble(spec.Path, pebbleOpts)
+			} else {
+				rocksDBConfig := engine.RocksDBConfig{
+					Attrs:                   spec.Attributes,
+					Dir:                     spec.Path,
+					MaxSizeBytes:            sizeInBytes,
+					MaxOpenFiles:            openFileLimitPerStore,
+					WarnLargeBatchThreshold: 500 * time.Millisecond,
+					Settings:                cfg.Settings,
+					UseFileRegistry:         spec.UseFileRegistry,
+					RocksDBOptions:          spec.RocksDBOptions,
+					ExtraOptions:            spec.ExtraOptions,
+				}
+
+				eng, err = engine.NewRocksDB(rocksDBConfig, cache)
+			}
 			if err != nil {
 				return Engines{}, err
 			}

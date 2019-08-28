@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble"
 )
 
 const (
@@ -1882,51 +1881,6 @@ func (m mvccKeyFormatter) Format(f fmt.State, c rune) {
 		return
 	}
 	m.key.Format(f, c)
-}
-
-// MVCCComparer is a pebble.Comparer object that implements MVCC-specific
-// comparator settings for use with Pebble.
-//
-// TODO(itsbilal): Move this to a new file pebble.go.
-var MVCCComparer = &pebble.Comparer{
-	Compare: MVCCKeyCompare,
-	AbbreviatedKey: func(k []byte) uint64 {
-		key, _, ok := enginepb.SplitMVCCKey(k)
-		if !ok {
-			return 0
-		}
-		return pebble.DefaultComparer.AbbreviatedKey(key)
-	},
-
-	Format: func(k []byte) fmt.Formatter {
-		decoded, err := DecodeMVCCKey(k)
-		if err != nil {
-			return mvccKeyFormatter{err: err}
-		}
-		return mvccKeyFormatter{key: decoded}
-	},
-
-	Separator: func(dst, a, b []byte) []byte {
-		return append(dst, a...)
-	},
-
-	Successor: func(dst, a []byte) []byte {
-		return append(dst, a...)
-	},
-	Split: func(k []byte) int {
-		if len(k) == 0 {
-			return len(k)
-		}
-		// This is similar to what enginepb.SplitMVCCKey does.
-		tsLen := int(k[len(k)-1])
-		keyPartEnd := len(k) - 1 - tsLen
-		if keyPartEnd < 0 {
-			return len(k)
-		}
-		return keyPartEnd
-	},
-
-	Name: "cockroach_comparator",
 }
 
 // MVCCMerge implements a merge operation. Merge adds integer values,
