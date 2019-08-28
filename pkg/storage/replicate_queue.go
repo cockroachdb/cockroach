@@ -432,10 +432,18 @@ func (rq *replicateQueue) add(
 	return true, nil
 }
 
-func (rq *replicateQueue) remove(
-	ctx context.Context, repl *Replica, existingReplicas []roachpb.ReplicaDescriptor, dryRun bool,
-) (requeue bool, _ error) {
-	desc, zone := repl.DescAndZone()
+// findRemoveTarget takes a list of replicas and picks one to remove, making
+// sure to not remove a newly added replica or to violate the zone configs in
+// the progress.
+func (rq *replicateQueue) findRemoveTarget(
+	ctx context.Context,
+	repl interface {
+		LastReplicaAdded() (roachpb.ReplicaID, time.Time)
+		RaftStatus() *raft.Status
+	},
+	zone *config.ZoneConfig,
+	existingReplicas []roachpb.ReplicaDescriptor,
+) (roachpb.ReplicaDescriptor, string, error) {
 	// This retry loop involves quick operations on local state, so a
 	// small MaxBackoff is good (but those local variables change on
 	// network time scales as raft receives responses).
@@ -459,7 +467,7 @@ func (rq *replicateQueue) remove(
 		raftStatus := repl.RaftStatus()
 		if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
 			// If we've lost raft leadership, we're unlikely to regain it so give up immediately.
-			return false, &benignError{errors.Errorf("not raft leader while range needs removal")}
+			return roachpb.ReplicaDescriptor{}, "", &benignError{errors.Errorf("not raft leader while range needs removal")}
 		}
 		candidates = filterUnremovableReplicas(raftStatus, existingReplicas, lastReplAdded)
 		log.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal: %s",
@@ -490,11 +498,18 @@ func (rq *replicateQueue) remove(
 	}
 	if len(candidates) == 0 {
 		// If we timed out and still don't have any valid candidates, give up.
-		return false, errors.Errorf("no removable replicas from range that needs a removal: %s",
+		return roachpb.ReplicaDescriptor{}, "", errors.Errorf("no removable replicas from range that needs a removal: %s",
 			rangeRaftProgress(repl.RaftStatus(), existingReplicas))
 	}
 
-	removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone, candidates, existingReplicas)
+	return rq.allocator.RemoveTarget(ctx, zone, candidates, existingReplicas)
+}
+
+func (rq *replicateQueue) remove(
+	ctx context.Context, repl *Replica, existingReplicas []roachpb.ReplicaDescriptor, dryRun bool,
+) (requeue bool, _ error) {
+	desc, zone := repl.DescAndZone()
+	removeReplica, details, err := rq.findRemoveTarget(ctx, repl, zone, existingReplicas)
 	if err != nil {
 		return false, err
 	}
