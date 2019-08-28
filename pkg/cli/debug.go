@@ -53,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/tool"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/kr/pretty"
@@ -1332,14 +1331,7 @@ func init() {
 	// To be able to read Cockroach-written RocksDB manifests/SSTables, comparator
 	// and merger functions must be specified to pebble that match the ones used
 	// to write those files.
-	//
-	// TODO(itsbilal): Port the Cockroach merger over from libroach/merge.cc to go
-	// and use that here. Until this happens, some data (eg. timeseries) will be
-	// printed incorrectly by this tool: it will be concatenated instead of being
-	// properly merged.
-	merger := *pebble.DefaultMerger
-	merger.Name = "cockroach_merge_operator"
-	pebbleTool.RegisterMerger(&merger)
+	pebbleTool.RegisterMerger(engine.MVCCMerger)
 	pebbleTool.RegisterComparer(engine.MVCCComparer)
 	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	DebugCmd.AddCommand(debugPebbleCmd)

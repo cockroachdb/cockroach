@@ -34,16 +34,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/pebble"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
 )
 
 // Context defaults.
 const (
-	// DefaultCacheSize is the default size of the RocksDB cache. We default the
-	// cache size and SQL memory pool size to 128 MiB. Larger values might
-	// provide significantly better performance, but we're not sure what type of
-	// system we're running on (development or production or some shared
+	// DefaultCacheSize is the default size of the RocksDB and Pebble caches. We
+	// default the cache size and SQL memory pool size to 128 MiB. Larger values
+	// might provide significantly better performance, but we're not sure what
+	// type of system we're running on (development or production or some shared
 	// environment). Production users should almost certainly override these
 	// settings and we'll warn in the logs about doing so.
 	DefaultCacheSize         = 128 << 20 // 128 MB
@@ -479,19 +480,40 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 			details = append(details, fmt.Sprintf("store %d: RocksDB, max size %s, max open file limit %d",
 				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
-			rocksDBConfig := engine.RocksDBConfig{
-				Attrs:                   spec.Attributes,
-				Dir:                     spec.Path,
-				MaxSizeBytes:            sizeInBytes,
-				MaxOpenFiles:            openFileLimitPerStore,
-				WarnLargeBatchThreshold: 500 * time.Millisecond,
-				Settings:                cfg.Settings,
-				UseFileRegistry:         spec.UseFileRegistry,
-				RocksDBOptions:          spec.RocksDBOptions,
-				ExtraOptions:            spec.ExtraOptions,
-			}
 
-			eng, err := engine.NewRocksDB(rocksDBConfig, cache)
+			var eng engine.Engine
+			var err error
+			if spec.Engine == base.EngineTypePebble {
+				// TODO(itsbilal): Tune these options, and allow them to be overridden
+				// in the spec (similar to the existing spec.RocksDBOptions and others).
+				pebbleOpts := &pebble.Options{
+					MaxOpenFiles: int(openFileLimitPerStore),
+					MemTableSize:                64 << 20,
+					MemTableStopWritesThreshold: 4,
+					MinFlushRate:                4 << 20,
+					L0CompactionThreshold:       2,
+					L0StopWritesThreshold:       400,
+					LBaseMaxBytes:               64 << 20, // 64 MB
+					Levels: []pebble.LevelOptions{{
+						BlockSize: 32 << 10,
+					}},
+				}
+				eng, err = engine.NewPebble(spec.Path, pebbleOpts)
+			} else {
+				rocksDBConfig := engine.RocksDBConfig{
+					Attrs:                   spec.Attributes,
+					Dir:                     spec.Path,
+					MaxSizeBytes:            sizeInBytes,
+					MaxOpenFiles:            openFileLimitPerStore,
+					WarnLargeBatchThreshold: 500 * time.Millisecond,
+					Settings:                cfg.Settings,
+					UseFileRegistry:         spec.UseFileRegistry,
+					RocksDBOptions:          spec.RocksDBOptions,
+					ExtraOptions:            spec.ExtraOptions,
+				}
+
+				eng, err = engine.NewRocksDB(rocksDBConfig, cache)
+			}
 			if err != nil {
 				return Engines{}, err
 			}
