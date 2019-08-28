@@ -59,12 +59,21 @@ func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase
 	// clock offset is reset or the node will crash again.
 	var aliveAfterOffset bool
 	defer func() {
-		if !aliveAfterOffset {
+		offsetInjector.recover(ctx, c.spec.NodeCount)
+		// Resetting the clock is a jump in the opposite direction which
+		// can cause a crash even if the original jump didn't. Wait a few
+		// seconds before checking whether the node is alive and
+		// restarting it if not.
+		time.Sleep(3 * time.Second)
+		if !isAlive(db) {
 			c.Start(ctx, t, c.Node(1))
 		}
 	}()
 	defer offsetInjector.recover(ctx, c.spec.NodeCount)
 	offsetInjector.offset(ctx, c.spec.NodeCount, tc.offset)
+
+	// Wait a few seconds to let it crash if it's going to crash.
+	time.Sleep(3 * time.Second)
 
 	t.Status("validating health")
 	aliveAfterOffset = isAlive(db)
