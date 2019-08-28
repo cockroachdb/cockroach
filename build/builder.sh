@@ -164,6 +164,10 @@ gid=$(id -g)
 [ "$uid" -lt 500 ] && uid=501
 [ "$gid" -lt 500 ] && gid=$uid
 
+# temporary disable immediate exit on failure, so that we could catch
+# the status of "docker run"
+set +e
+
 # -i causes some commands (including `git diff`) to attempt to use
 # a pager, so we override $PAGER to disable.
 
@@ -179,3 +183,27 @@ docker run --init --privileged -i ${tty-} --rm \
   --env=COCKROACH_BUILDER_CCACHE \
   --env=COCKROACH_BUILDER_CCACHE_MAXSIZE \
   "${image}:${version}" "$@"
+
+# Build container needs to have at least 4GB of RAM available to compile the project
+# successfully, which is not true in some cases (i.e. Docker for MacOS by default).
+# Check if it might be the case if "docker run" failed
+res=$?
+set -e
+
+if test $res -ne 0 -a \( ${1-x} = "make" -o ${1-x} = "xmkrelease" \) ; then
+   ram=$(docker run -i --rm \
+         -u "$uid:$gid" \
+         "${image}:${version}" awk '/MemTotal/{print $2}' /proc/meminfo)
+
+   if test $ram -lt 4000000; then
+      ram_gb=`printf "%.2f" $(echo $ram/1024/1024 | bc -l)`
+
+      ram_message="Note: if the build seems to terminate for unclear reasons, \
+                note that your container limits RAM to ${ram_gb}GB. This may be \
+                the cause of the failure. Try increasing the limit to 4GB or above."
+
+      echo $ram_message >&2   # be mindful of printing to stderr, not stdout
+   fi
+fi
+
+exit $res
