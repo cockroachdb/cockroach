@@ -366,7 +366,7 @@ type hashTable struct {
 	// head and thereby should not be traversed.
 	head []bool
 
-	// vals stores the union of the equality and output columns of the left
+	// vals stores the union of the equality and output columns of the build
 	// table. A key tuple is defined as the elements in each row of vals that
 	// makes up the equality columns. The ID of a key at any index of vals is
 	// index + 1.
@@ -383,13 +383,13 @@ type hashTable struct {
 	// outTypes stores the types of the output columns.
 	outTypes []coltypes.T
 
-	// size returns the total number of keyCols the hashTable currently stores.
+	// size returns the total number of tuples the hashTable currently stores.
 	size uint64
 	// bucketSize returns the number of buckets the hashTable employs. This is
 	// equivalent to the size of first.
 	bucketSize uint64
 
-	// keyCols stores the equality columns on the probe table for a single batch.
+	// keys stores the equality columns on the probe table for a single batch.
 	keys []coldata.Vec
 	// buckets is used to store the computed hash value of each key in a single
 	// batch.
