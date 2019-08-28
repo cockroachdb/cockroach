@@ -370,6 +370,10 @@ func (r *Replica) handleNoRaftLogDeltaResult(ctx context.Context) {
 func (r *Replica) handleSuggestedCompactionsResult(
 	ctx context.Context, scs []storagepb.SuggestedCompaction,
 ) {
+	// TODO(itsbilal): Remove this check once Pebble supports GetSSTables
+	if r.store.compactor == nil {
+		return
+	}
 	for _, sc := range scs {
 		r.store.compactor.Suggest(ctx, sc)
 	}
