@@ -312,6 +312,16 @@ func (expr *FuncExpr) Walk(v Visitor) Expr {
 			ret.Filter = e
 		}
 	}
+
+	if expr.OrderBy != nil {
+		order, changed := walkOrderBy(v, expr.OrderBy)
+		if changed {
+			if ret == expr {
+				ret = expr.copyNode()
+			}
+			ret.OrderBy = order
+		}
+	}
 	return ret
 }
 
