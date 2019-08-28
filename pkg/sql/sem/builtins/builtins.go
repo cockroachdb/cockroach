@@ -3072,6 +3072,34 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	// Return the size in bytes of a range.
+	"crdb_internal.range_size": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"key", types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				key := []byte(tree.MustBeDBytes(args[0]))
+				b := &client.Batch{}
+				b.AddRawRequest(&roachpb.RangeStatsRequest{
+					RequestHeader: roachpb.RequestHeader{
+						Key: key,
+					},
+				})
+				if err := ctx.Txn.Run(ctx.Context, b); err != nil {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "message: %s", err)
+				}
+				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.RangeStatsResponse)
+				return tree.NewDInt(tree.DInt(int(resp.MVCCStats.LiveBytes))), nil
+			},
+			Info: "This function is used to retrieve the size of a range in bytes.",
+		},
+	),
+
 	"crdb_internal.set_vmodule": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,

@@ -1869,7 +1869,8 @@ CREATE VIEW crdb_internal.ranges AS SELECT
 	replicas,
 	learner_replicas,
 	split_enforced_until,
-	crdb_internal.lease_holder(start_key) AS lease_holder
+	crdb_internal.lease_holder(start_key) AS lease_holder,
+	crdb_internal.range_size(start_key) AS range_size
 FROM crdb_internal.ranges_no_leases
 `,
 	resultColumns: sqlbase.ResultColumns{
@@ -1885,6 +1886,7 @@ FROM crdb_internal.ranges_no_leases
 		{Name: "learner_replicas", Typ: types.Int2Vector},
 		{Name: "split_enforced_until", Typ: types.Timestamp},
 		{Name: "lease_holder", Typ: types.Int},
+		{Name: "range_size", Typ: types.Int},
 	},
 }
 
@@ -1906,7 +1908,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
   index_name           STRING NOT NULL,
 	replicas             INT[] NOT NULL,
 	learner_replicas     INT[] NOT NULL,
-  split_enforced_until TIMESTAMP
+	split_enforced_until TIMESTAMP
 )
 `,
 	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
