@@ -673,6 +673,12 @@ func (r *newColOperatorResult) planFilterExpr(
 	if err != nil {
 		return columnTypes, err
 	}
+	if helper.expr == tree.DNull {
+		// The filter expression is tree.DNull meaning that it is always false, so
+		// we put a zero operator.
+		r.op = exec.NewZeroOp(r.op)
+		return columnTypes, nil
+	}
 	var filterColumnTypes []types.T
 	r.op, _, filterColumnTypes, selectionMem, err = planSelectionOperators(flowCtx.NewEvalCtx(), helper.expr, columnTypes, r.op)
 	if err != nil {
