@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -132,6 +133,19 @@ func (b *backfiller) doRun(ctx context.Context) *distsqlpb.ProducerMetadata {
 	}
 	finishedSpans, err := b.mainLoop(ctx, mutations)
 	if err != nil {
+		return &distsqlpb.ProducerMetadata{Err: err}
+	}
+	if !b.flowCtx.Cfg.Settings.Version.IsActive(cluster.VersionAtomicChangeReplicasTrigger) {
+		// There is a node of older version which could be the coordinator.
+		// So we communicate the finished work by writing to the jobs row.
+		err = WriteResumeSpan(ctx,
+			b.flowCtx.Cfg.DB,
+			b.spec.Table.ID,
+			b.spec.Table.Mutations[0].MutationID,
+			b.filter,
+			finishedSpans,
+			b.flowCtx.Cfg.JobRegistry,
+		)
 		return &distsqlpb.ProducerMetadata{Err: err}
 	}
 	var prog distsqlpb.RemoteProducerMetadata_BulkProcessorProgress
