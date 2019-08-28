@@ -74,7 +74,7 @@ type SchemaAccessor interface {
 	// GetDatabaseDesc looks up a database by name and returns its
 	// descriptor. If the database is not found and required is true,
 	// an error is returned; otherwise a nil reference is returned.
-	GetDatabaseDesc(ctx context.Context, txn *client.Txn, dbName string, flags DatabaseLookupFlags) (*DatabaseDescriptor, error)
+	GetDatabaseDesc(ctx context.Context, txn *client.Txn, dbName string, flags tree.DatabaseLookupFlags) (*DatabaseDescriptor, error)
 
 	// IsValidSchema returns true if the given schema name is valid for the given database.
 	IsValidSchema(db *DatabaseDescriptor, scName string) bool
@@ -83,37 +83,11 @@ type SchemaAccessor interface {
 	// database and schema.
 	// TODO(whomever): when separate schemas are supported, this
 	// API should be extended to use schema descriptors.
-	GetObjectNames(ctx context.Context, txn *client.Txn, db *DatabaseDescriptor, scName string, flags DatabaseListFlags) (TableNames, error)
+	GetObjectNames(ctx context.Context, txn *client.Txn, db *DatabaseDescriptor, scName string, flags tree.DatabaseListFlags) (TableNames, error)
 
-	// GetObjectDesc looks up an objcet by name and returns both its
+	// GetObjectDesc looks up an object by name and returns both its
 	// descriptor and that of its parent database. If the object is not
 	// found and flags.required is true, an error is returned, otherwise
 	// a nil reference is returned.
-	GetObjectDesc(ctx context.Context, txn *client.Txn, name *ObjectName, flags ObjectLookupFlags) (ObjectDescriptor, error)
-}
-
-// CommonLookupFlags is the common set of flags for the various accessor interfaces.
-type CommonLookupFlags struct {
-	// if required is set, lookup will return an error if the item is not found.
-	required bool
-	// if avoidCached is set, lookup will avoid the cache (if any).
-	avoidCached bool
-}
-
-// DatabaseLookupFlags is the flag struct suitable for GetDatabaseDesc().
-type DatabaseLookupFlags = CommonLookupFlags
-
-// DatabaseListFlags is the flag struct suitable for GetObjectNames().
-type DatabaseListFlags struct {
-	CommonLookupFlags
-	// explicitPrefix, when set, will cause the returned table names to
-	// have an explicit schema and catalog part.
-	explicitPrefix bool
-}
-
-// ObjectLookupFlags is the flag struct suitable for GetObjectDesc().
-type ObjectLookupFlags struct {
-	CommonLookupFlags
-	// return a MutableTableDeescriptor
-	requireMutable bool
+	GetObjectDesc(ctx context.Context, txn *client.Txn, name *ObjectName, flags tree.ObjectLookupFlags) (ObjectDescriptor, error)
 }

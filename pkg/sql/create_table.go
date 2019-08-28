@@ -755,7 +755,7 @@ func addInterleave(
 	}
 
 	parentTable, err := ResolveExistingObject(
-		ctx, vt, &interleave.Parent, true /*required*/, ResolveRequireTableDesc,
+		ctx, vt, &interleave.Parent, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc,
 	)
 	if err != nil {
 		return err

@@ -403,7 +403,7 @@ func (p *planner) ParseQualifiedTableName(
 
 // ResolveTableName implements the tree.EvalDatabase interface.
 func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
-	_, err := ResolveExistingObject(ctx, p, tn, true /*required*/, ResolveAnyDescType)
+	_, err := ResolveExistingObject(ctx, p, tn, tree.ObjectLookupFlagsWithRequired(), ResolveAnyDescType)
 	return err
 }
 
@@ -411,7 +411,7 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) erro
 // CommonLookupFlags, it could use or skip the TableCollection cache. See
 // TableCollection.getTableVersionByID for how it's used.
 func (p *planner) LookupTableByID(ctx context.Context, tableID sqlbase.ID) (row.TableEntry, error) {
-	flags := ObjectLookupFlags{CommonLookupFlags: CommonLookupFlags{avoidCached: p.avoidCachedDescriptors}}
+	flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{AvoidCached: p.avoidCachedDescriptors}}
 	table, err := p.Tables().getTableVersionByID(ctx, p.txn, tableID, flags)
 	if err != nil {
 		if err == errTableAdding {

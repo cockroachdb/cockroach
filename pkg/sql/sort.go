@@ -316,7 +316,7 @@ func (p *planner) rewriteIndexOrderings(
 
 		case tree.OrderByIndex:
 			tn := o.Table
-			desc, err := ResolveExistingObject(ctx, p, &tn, true /*required*/, ResolveRequireTableDesc)
+			desc, err := ResolveExistingObject(ctx, p, &tn, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
 			if err != nil {
 				return nil, err
 			}

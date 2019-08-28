@@ -52,20 +52,21 @@ var errTableDropped = errors.New("table is being dropped")
 var errTableAdding = errors.New("table is being added")
 
 func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
-	switch {
-	case tableDesc.Dropped():
+	switch tableDesc.State {
+	case sqlbase.TableDescriptor_DROP:
 		return errTableDropped
-	case tableDesc.Adding():
+	case sqlbase.TableDescriptor_ADD:
 		return errTableAdding
-	case tableDesc.State == sqlbase.TableDescriptor_OFFLINE:
+	case sqlbase.TableDescriptor_OFFLINE:
 		if tableDesc.OfflineReason != "" {
 			return errors.Errorf("table %q is offline: %s", tableDesc.Name, tableDesc.OfflineReason)
 		}
 		return errors.Errorf("table %q is offline", tableDesc.Name)
-	case tableDesc.State != sqlbase.TableDescriptor_PUBLIC:
+	case sqlbase.TableDescriptor_PUBLIC:
+		return nil
+	default:
 		return errors.Errorf("table in unknown state: %s", tableDesc.State.String())
 	}
-	return nil
 }
 
 // An uncommitted database is a database that has been created/dropped
@@ -140,20 +141,20 @@ type dbCacheSubscriber interface {
 // return a nil descriptor and no error if the table does not exist.
 //
 func (tc *TableCollection) getMutableTableDescriptor(
-	ctx context.Context, txn *client.Txn, tn *tree.TableName, flags ObjectLookupFlags,
+	ctx context.Context, txn *client.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
 ) (*sqlbase.MutableTableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "reading mutable descriptor on table '%s'", tn)
 	}
 
 	if tn.SchemaName != tree.PublicSchemaName {
-		if flags.required {
+		if flags.Required {
 			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(tn))
 		}
 		return nil, nil
 	}
 
-	refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseID(tn.Catalog(), flags.required)
+	refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseID(tn.Catalog(), flags.Required)
 	if refuseFurtherLookup || err != nil {
 		return nil, err
 	}
@@ -162,14 +163,14 @@ func (tc *TableCollection) getMutableTableDescriptor(
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
 		dbID, err = tc.databaseCache.getDatabaseID(ctx,
-			tc.leaseMgr.db.Txn, tn.Catalog(), flags.required)
+			tc.leaseMgr.db.Txn, tn.Catalog(), flags.Required)
 		if err != nil || dbID == sqlbase.InvalidID {
 			// dbID can still be invalid if required is false and the database is not found.
 			return nil, err
 		}
 	}
 
-	if refuseFurtherLookup, table, err := tc.getUncommittedTable(dbID, tn, flags.required); refuseFurtherLookup || err != nil {
+	if refuseFurtherLookup, table, err := tc.getUncommittedTable(dbID, tn, flags.Required); refuseFurtherLookup || err != nil {
 		return nil, err
 	} else if mut := table.MutableTableDescriptor; mut != nil {
 		log.VEventf(ctx, 2, "found uncommitted table %d", mut.ID)
@@ -196,20 +197,20 @@ func (tc *TableCollection) getMutableTableDescriptor(
 // the validity window of the table descriptor version returned.
 //
 func (tc *TableCollection) getTableVersion(
-	ctx context.Context, txn *client.Txn, tn *tree.TableName, flags ObjectLookupFlags,
+	ctx context.Context, txn *client.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
 	}
 
 	if tn.SchemaName != tree.PublicSchemaName {
-		if flags.required {
+		if flags.Required {
 			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(tn))
 		}
 		return nil, nil
 	}
 
-	refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseID(tn.Catalog(), flags.required)
+	refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseID(tn.Catalog(), flags.Required)
 	if refuseFurtherLookup || err != nil {
 		return nil, err
 	}
@@ -218,7 +219,7 @@ func (tc *TableCollection) getTableVersion(
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
 		dbID, err = tc.databaseCache.getDatabaseID(ctx,
-			tc.leaseMgr.db.Txn, tn.Catalog(), flags.required)
+			tc.leaseMgr.db.Txn, tn.Catalog(), flags.Required)
 		if err != nil || dbID == sqlbase.InvalidID {
 			// dbID can still be invalid if required is false and the database is not found.
 			return nil, err
@@ -232,16 +233,16 @@ func (tc *TableCollection) getTableVersion(
 	// disabling caching of system.eventlog, system.rangelog, and
 	// system.users. For now we're sticking to disabling caching of
 	// all system descriptors except the role-members-table.
-	avoidCache := flags.avoidCached || testDisableTableLeases ||
+	avoidCache := flags.AvoidCached || testDisableTableLeases ||
 		(tn.Catalog() == sqlbase.SystemDB.Name && tn.TableName.String() != sqlbase.RoleMembersTable.Name)
 
-	if refuseFurtherLookup, table, err := tc.getUncommittedTable(dbID, tn, flags.required); refuseFurtherLookup || err != nil {
+	if refuseFurtherLookup, table, err := tc.getUncommittedTable(dbID, tn, flags.Required); refuseFurtherLookup || err != nil {
 		return nil, err
 	} else if immut := table.ImmutableTableDescriptor; immut != nil {
 		// If not forcing to resolve using KV, tables being added aren't visible.
 		if immut.Adding() && !avoidCache {
 			err := errTableAdding
-			if !flags.required {
+			if !flags.Required {
 				err = nil
 			}
 			return nil, err
@@ -307,11 +308,11 @@ func (tc *TableCollection) getTableVersion(
 
 // getTableVersionByID is a by-ID variant of getTableVersion (i.e. uses same cache).
 func (tc *TableCollection) getTableVersionByID(
-	ctx context.Context, txn *client.Txn, tableID sqlbase.ID, flags ObjectLookupFlags,
+	ctx context.Context, txn *client.Txn, tableID sqlbase.ID, flags tree.ObjectLookupFlags,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting table on table ID %d", tableID)
 
-	if flags.avoidCached || testDisableTableLeases {
+	if flags.AvoidCached || testDisableTableLeases {
 		table, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
 		if err != nil {
 			return nil, err
