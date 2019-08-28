@@ -3093,7 +3093,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // PerformCast performs a cast from the provided Datum to the specified
-// CastTargetType.
+// types.T.
 func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 	switch t.Family() {
 	case types.BitFamily:
@@ -3552,6 +3552,15 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			switch t.Oid() {
 			case oid.T_oid:
 				return &DOid{semanticType: t, DInt: v.DInt}, nil
+			case oid.T_regtype:
+				// Mapping an oid to a regtype is easy: we have a hardcoded map.
+				typ, ok := types.OidToType[oid.Oid(v.DInt)]
+				ret := &DOid{semanticType: t, DInt: v.DInt}
+				if !ok {
+					return ret, nil
+				}
+				ret.name = typ.PGName()
+				return ret, nil
 			default:
 				oid, err := queryOid(ctx, t, v)
 				if err != nil {
