@@ -338,6 +338,14 @@ func (rq *replicateQueue) processOneChange(
 		return rq.add(ctx, repl, existingReplicas, dryRun)
 	case AllocatorRemove:
 		return rq.remove(ctx, repl, voterReplicas, dryRun)
+	case AllocatorReplaceDead, AllocatorReplaceDecommissioning:
+		existingReplicas := liveVoterReplicas
+		// WIP(tbg): pass a slice of replicas that can be replaced in.
+		// In ReplaceDead, it's the dead replicas, in ReplaceDecommissioning
+		// it's the decommissioning ones.
+		// Rename rq.add to rq.addOrReplace, and let it actually replace a replica
+		// atomically when there's suitable candidate in the slice.
+		return rq.add(ctx, repl, existingReplicas, dryRun)
 	case AllocatorRemoveDecommissioning:
 		return rq.removeDecommissioning(ctx, repl, dryRun)
 	case AllocatorRemoveDead:
