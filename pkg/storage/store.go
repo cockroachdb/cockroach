@@ -2799,15 +2799,6 @@ func (s *Store) Metrics() *StoreMetrics {
 	return s.metrics
 }
 
-// MVCCStats returns the current MVCCStats accumulated for this store.
-// TODO(mrtracy): This should be removed as part of #4465, this is only needed
-// to support the current NodeStatus structures which will be changing.
-func (s *Store) MVCCStats() enginepb.MVCCStats {
-	s.metrics.mu.Lock()
-	defer s.metrics.mu.Unlock()
-	return s.metrics.mu.stats
-}
-
 // Descriptor returns a StoreDescriptor including current store
 // capacity information.
 func (s *Store) Descriptor(useCached bool) (*roachpb.StoreDescriptor, error) {

@@ -67,6 +67,7 @@ func (p {{template "opRConstName" .}}) Next(ctx context.Context) coldata.Batch {
 	projVec := batch.ColVec(p.outputIdx)
 	projCol := projVec.{{.RetTyp}}()
 	if sel := batch.Selection(); sel != nil {
+		sel = sel[:n]
 		for _, i := range sel {
 			arg := {{.LTyp.Get "unsafe" "col" "int(i)"}}
 			{{(.Assign "projCol[i]" "arg" "p.constArg")}}
@@ -120,6 +121,7 @@ func (p {{template "opLConstName" .}}) Next(ctx context.Context) coldata.Batch {
 	projVec := batch.ColVec(p.outputIdx)
 	projCol := projVec.{{.RetTyp}}()
 	if sel := batch.Selection(); sel != nil {
+		sel = sel[:n]
 		for _, i := range sel {
 			arg := {{.RTyp.Get "unsafe" "col" "int(i)"}}
 			{{(.Assign "projCol[i]" "p.constArg" "arg")}}
@@ -175,6 +177,7 @@ func (p {{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 	col1 := vec1.{{.LTyp}}()
 	col2 := vec2.{{.RTyp}}()
 	if sel := batch.Selection(); sel != nil {
+		sel = sel[:n]
 		for _, i := range sel {
 			arg1 := {{.LTyp.Get "unsafe" "col1" "int(i)"}}
 			arg2 := {{.RTyp.Get "unsafe" "col2" "int(i)"}}
