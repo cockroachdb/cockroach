@@ -15,6 +15,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -23,11 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble"
+	"github.com/dustin/go-humanize"
+	"github.com/elastic/gosigar"
 )
 
 const (
@@ -1884,51 +1888,6 @@ func (m mvccKeyFormatter) Format(f fmt.State, c rune) {
 	m.key.Format(f, c)
 }
 
-// MVCCComparer is a pebble.Comparer object that implements MVCC-specific
-// comparator settings for use with Pebble.
-//
-// TODO(itsbilal): Move this to a new file pebble.go.
-var MVCCComparer = &pebble.Comparer{
-	Compare: MVCCKeyCompare,
-	AbbreviatedKey: func(k []byte) uint64 {
-		key, _, ok := enginepb.SplitMVCCKey(k)
-		if !ok {
-			return 0
-		}
-		return pebble.DefaultComparer.AbbreviatedKey(key)
-	},
-
-	Format: func(k []byte) fmt.Formatter {
-		decoded, err := DecodeMVCCKey(k)
-		if err != nil {
-			return mvccKeyFormatter{err: err}
-		}
-		return mvccKeyFormatter{key: decoded}
-	},
-
-	Separator: func(dst, a, b []byte) []byte {
-		return append(dst, a...)
-	},
-
-	Successor: func(dst, a []byte) []byte {
-		return append(dst, a...)
-	},
-	Split: func(k []byte) int {
-		if len(k) == 0 {
-			return len(k)
-		}
-		// This is similar to what enginepb.SplitMVCCKey does.
-		tsLen := int(k[len(k)-1])
-		keyPartEnd := len(k) - 1 - tsLen
-		if keyPartEnd < 0 {
-			return len(k)
-		}
-		return keyPartEnd
-	},
-
-	Name: "cockroach_comparator",
-}
-
 // MVCCMerge implements a merge operation. Merge adds integer values,
 // concatenates undifferentiated byte slice values, and efficiently
 // combines time series observations if the roachpb.Value tag value
@@ -3287,4 +3246,86 @@ func ComputeStatsGo(
 
 	ms.LastUpdateNanos = nowNanos
 	return ms, nil
+}
+
+// computeCapacity returns capacity details for the engine's available storage,
+// by querying the underlying file system.
+func computeCapacity(path string, maxSizeBytes int64) (roachpb.StoreCapacity, error) {
+	fileSystemUsage := gosigar.FileSystemUsage{}
+	dir := path
+	if dir == "" {
+		// This is an in-memory instance. Pretend we're empty since we
+		// don't know better and only use this for testing. Using any
+		// part of the actual file system here can throw off allocator
+		// rebalancing in a hard-to-trace manner. See #7050.
+		return roachpb.StoreCapacity{
+			Capacity:  maxSizeBytes,
+			Available: maxSizeBytes,
+		}, nil
+	}
+	if err := fileSystemUsage.Get(dir); err != nil {
+		return roachpb.StoreCapacity{}, err
+	}
+
+	if fileSystemUsage.Total > math.MaxInt64 {
+		return roachpb.StoreCapacity{}, fmt.Errorf("unsupported disk size %s, max supported size is %s",
+			humanize.IBytes(fileSystemUsage.Total), humanizeutil.IBytes(math.MaxInt64))
+	}
+	if fileSystemUsage.Avail > math.MaxInt64 {
+		return roachpb.StoreCapacity{}, fmt.Errorf("unsupported disk size %s, max supported size is %s",
+			humanize.IBytes(fileSystemUsage.Avail), humanizeutil.IBytes(math.MaxInt64))
+	}
+	fsuTotal := int64(fileSystemUsage.Total)
+	fsuAvail := int64(fileSystemUsage.Avail)
+
+	// Find the total size of all the files in the r.dir and all its
+	// subdirectories.
+	var totalUsedBytes int64
+	if errOuter := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			// This can happen if rocksdb removes files out from under us - just keep
+			// going to get the best estimate we can.
+			if os.IsNotExist(err) {
+				return nil
+			}
+			// Special-case: if the store-dir is configured using the root of some fs,
+			// e.g. "/mnt/db", we might have special fs-created files like lost+found
+			// that we can't read, so just ignore them rather than crashing.
+			if os.IsPermission(err) && filepath.Base(path) == "lost+found" {
+				return nil
+			}
+			return err
+		}
+		if info.Mode().IsRegular() {
+			totalUsedBytes += info.Size()
+		}
+		return nil
+	}); errOuter != nil {
+		return roachpb.StoreCapacity{}, errOuter
+	}
+
+	// If no size limitation have been placed on the store size or if the
+	// limitation is greater than what's available, just return the actual
+	// totals.
+	if maxSizeBytes == 0 || maxSizeBytes >= fsuTotal || path == "" {
+		return roachpb.StoreCapacity{
+			Capacity:  fsuTotal,
+			Available: fsuAvail,
+			Used:      totalUsedBytes,
+		}, nil
+	}
+
+	available := maxSizeBytes - totalUsedBytes
+	if available > fsuAvail {
+		available = fsuAvail
+	}
+	if available < 0 {
+		available = 0
+	}
+
+	return roachpb.StoreCapacity{
+		Capacity:  maxSizeBytes,
+		Available: available,
+		Used:      totalUsedBytes,
+	}, nil
 }

@@ -161,6 +161,7 @@ type StoreSpec struct {
 	Path       string
 	Size       SizeSpec
 	InMemory   bool
+	Engine     EngineType
 	Attributes roachpb.Attributes
 	// UseFileRegistry is true if the "file registry" store version is desired.
 	// This is set by CCL code when encryption-at-rest is in use.
@@ -307,6 +308,12 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 				ss.InMemory = true
 			} else {
 				return StoreSpec{}, fmt.Errorf("%s is not a valid store type", value)
+			}
+		case "engine":
+			if value == "pebble" {
+				ss.Engine = EngineTypePebble
+			} else {
+				ss.Engine = EngineTypeRocksDB
 			}
 		case "rocksdb":
 			ss.RocksDBOptions = value
