@@ -3222,8 +3222,9 @@ SELECT *
 FROM a
 WHERE NOT EXISTS(SELECT * FROM xy WHERE x=k) AND NOT EXISTS(SELECT * FROM xy WHERE x=i)
 ----
-anti-join (hash)
+anti-join (lookup xy)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── key columns: [1] = [6]
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── anti-join (hash)
@@ -3239,11 +3240,7 @@ anti-join (hash)
  │    │    └── key: (8)
  │    └── filters
  │         └── x = i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
- ├── scan xy
- │    ├── columns: x:6(int!null)
- │    └── key: (6)
- └── filters
-      └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ └── filters (true)
 
 # Don't hoist uncorrelated subqueries.
 opt expect-not=HoistSelectNotExists
@@ -3272,8 +3269,9 @@ select
 opt expect=(HoistSelectExists,HoistSelectNotExists)
 SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE x=k) AND NOT EXISTS(SELECT * FROM xy WHERE x=i)
 ----
-semi-join (hash)
+semi-join (lookup xy)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── key columns: [1] = [6]
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── anti-join (hash)
@@ -3289,11 +3287,7 @@ semi-join (hash)
  │    │    └── key: (8)
  │    └── filters
  │         └── x = i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
- ├── scan xy
- │    ├── columns: x:6(int!null)
- │    └── key: (6)
- └── filters
-      └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ └── filters (true)
 
 # --------------------------------------------------
 # HoistSelectSubquery
@@ -5133,6 +5127,10 @@ inner-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
+ ├── scan xy
+ │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
  ├── anti-join (hash)
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
@@ -5145,10 +5143,6 @@ inner-join (hash)
  │    │    └── columns: v:9(int)
  │    └── filters
  │         └── (i = v) IS NOT false [type=bool, outer=(2,9)]
- ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    └── fd: (6)-->(7)
  └── filters
       └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 

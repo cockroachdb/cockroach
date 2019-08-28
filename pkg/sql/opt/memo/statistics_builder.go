@@ -828,19 +828,11 @@ func (sb *statisticsBuilder) buildJoin(
 	rightCols := h.rightProps.OutputCols.Copy()
 	equivReps := h.filtersFD.EquivReps()
 
-	// Estimating selectivity for semi-join and anti-join is error-prone.
-	// For now, just propagate stats from the left side.
-	switch h.joinType {
-	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		s.RowCount = leftStats.RowCount
-		s.Selectivity = 1
-		return
-	}
-
 	// Shortcut if there are no ON conditions. Note that for lookup join, there
 	// are implicit equality conditions on KeyCols.
 	if h.filterIsTrue {
 		s.RowCount = leftStats.RowCount * rightStats.RowCount
+		s.Selectivity = 1
 		switch h.joinType {
 		case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 		case opt.LeftJoinOp, opt.LeftJoinApplyOp:
@@ -855,13 +847,20 @@ func (sb *statisticsBuilder) buildJoin(
 			// All rows from both sides should be in the result.
 			s.RowCount = max(s.RowCount, leftStats.RowCount)
 			s.RowCount = max(s.RowCount, rightStats.RowCount)
+
+		case opt.SemiJoinOp, opt.SemiJoinApplyOp:
+			s.RowCount = leftStats.RowCount
+
+		case opt.AntiJoinOp, opt.AntiJoinApplyOp:
+			s.RowCount = 0
+			s.Selectivity = 0
 		}
-		s.Selectivity = 1
 		return
 	}
 
 	// Shortcut if the ON condition is false or there is a contradiction.
 	if h.filters.IsFalse() {
+		s.Selectivity = 0
 		switch h.joinType {
 		case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 			s.RowCount = 0
@@ -877,8 +876,14 @@ func (sb *statisticsBuilder) buildJoin(
 		case opt.FullJoinOp:
 			// All rows from both sides should be in the result.
 			s.RowCount = leftStats.RowCount + rightStats.RowCount
+
+		case opt.SemiJoinOp, opt.SemiJoinApplyOp:
+			s.RowCount = 0
+
+		case opt.AntiJoinOp, opt.AntiJoinApplyOp:
+			s.RowCount = leftStats.RowCount
+			s.Selectivity = 1
 		}
-		s.Selectivity = 0
 		return
 	}
 
@@ -900,16 +905,36 @@ func (sb *statisticsBuilder) buildJoin(
 
 	// Calculate selectivity and row count
 	// -----------------------------------
-	if h.rightProps.FuncDeps.ColsAreStrictKey(h.selfJoinCols) {
-		// This is like an index join.
-		s.RowCount = leftStats.RowCount
-	} else {
-		s.RowCount = leftStats.RowCount * rightStats.RowCount
-		equivReps.UnionWith(h.selfJoinCols)
-	}
+	s.RowCount = leftStats.RowCount * rightStats.RowCount
 	inputRowCount := s.RowCount
+	switch h.joinType {
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		// Treat anti join as if it were a semi join for the selectivity
+		// calculations. It will be fixed below.
+		s.RowCount = leftStats.RowCount
+		inputRowCount = s.RowCount
+		selectivity := sb.selectivityFromEquivalencies(equivReps, &h.filtersFD, join, s)
+
+		// Multiply the selectivity from equivalencies by the right row count to
+		// account for the fact that semi/anti joins start from the left side row
+		// count rather than the cross product.
+		s.ApplySelectivity(min(rightStats.RowCount*selectivity, 1))
+
+	default:
+		if h.rightProps.FuncDeps.ColsAreStrictKey(h.selfJoinCols) {
+			// This is like an index join, so apply a selectivity that will result
+			// in leftStats.RowCount rows.
+			s.ApplySelectivity(1 / rightStats.RowCount)
+		} else {
+			// Add the self join columns to equivReps so they are included in the
+			// calculation for selectivityFromEquivalencies below.
+			equivReps.UnionWith(h.selfJoinCols)
+		}
+
+		s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filtersFD, join, s))
+	}
+
 	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols, join, s))
-	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filtersFD, join, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 
 	// Update distinct counts based on equivalencies; this should happen after
@@ -919,16 +944,24 @@ func (sb *statisticsBuilder) buildJoin(
 	// Update null counts for non-nullable columns.
 	sb.updateNullCountsFromProps(join, relProps, inputRowCount)
 
-	s.ApplySelectivity(sb.joinSelectivityFromNullCounts(
-		constrainedCols,
-		join,
-		s,
-		inputRowCount,
-		leftCols,
-		leftStats.RowCount,
-		rightCols,
-		rightStats.RowCount,
-	))
+	switch h.joinType {
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		// Keep only column stats from the left side.
+		s.ColStats.RemoveIntersecting(h.rightProps.OutputCols)
+		s.ApplySelectivity(sb.selectivityFromNullCounts(constrainedCols, join, s, inputRowCount))
+
+	default:
+		s.ApplySelectivity(sb.joinSelectivityFromNullCounts(
+			constrainedCols,
+			join,
+			s,
+			inputRowCount,
+			leftCols,
+			leftStats.RowCount,
+			rightCols,
+			rightStats.RowCount,
+		))
+	}
 
 	// The above calculation is for inner joins. Other joins need to remove stats
 	// that involve outer columns.
@@ -965,6 +998,27 @@ func (sb *statisticsBuilder) buildJoin(
 		leftJoinRowCount := max(innerJoinRowCount, leftStats.RowCount)
 		rightJoinRowCount := max(innerJoinRowCount, rightStats.RowCount)
 		s.RowCount = leftJoinRowCount + rightJoinRowCount - innerJoinRowCount
+	}
+
+	// Fix the stats for anti join.
+	switch h.joinType {
+	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		s.RowCount = max(inputRowCount-s.RowCount, epsilon)
+		s.Selectivity = max(1-s.Selectivity, epsilon)
+		for i := 0; i < s.ColStats.Count(); i++ {
+			colStat := s.ColStats.Get(i)
+			inputColStat := sb.colStatFromChild(colStat.Cols, join, 0 /* childIdx */)
+
+			// Distinct count is tricky for anti-joins. This is a rough estimate,
+			// accounting for the way distinct counts are calculated above.
+			colStat.DistinctCount = max(
+				inputColStat.DistinctCount-colStat.DistinctCount, colStat.DistinctCount,
+			)
+			colStat.NullCount = inputColStat.NullCount - colStat.NullCount
+
+			// TODO(rytaft): Add a method to subtract histograms from each other.
+			colStat.Histogram = nil
+		}
 	}
 
 	// Loop through all colSets added in this step, and adjust null counts and

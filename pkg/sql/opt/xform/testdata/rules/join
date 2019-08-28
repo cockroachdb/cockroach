@@ -2390,13 +2390,13 @@ SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=d AND c=e)
 semi-join (lookup def)
  ├── columns: a:1(int) b:2(int) c:3(int)
  ├── key columns: [1 3] = [5 6]
- ├── stats: [rows=100]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
  ├── cost: 712.03
  ├── prune: (2)
  ├── interesting orderings: (+1,+2) (+2,+3)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=1]
  │    ├── cost: 107.02
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1,+2) (+2,+3)
@@ -2410,7 +2410,7 @@ SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=d AND c=e)
 ----
 project
  ├── columns: a:1(int) b:2(int) c:3(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
  ├── cost: 508.0605
  ├── prune: (2)
  ├── interesting orderings: (+1,+2) (+2,+3)
