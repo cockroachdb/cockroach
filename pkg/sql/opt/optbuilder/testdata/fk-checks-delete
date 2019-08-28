@@ -166,7 +166,6 @@ DELETE FROM parent WHERE p = 1
 delete parent
  ├── columns: <none>
  ├── fetch columns: x:4(int) parent.p:5(int) parent.other:6(int)
- ├── input binding: &1
  └── select
       ├── columns: x:4(int) parent.p:5(int!null) parent.other:6(int)
       ├── scan parent
