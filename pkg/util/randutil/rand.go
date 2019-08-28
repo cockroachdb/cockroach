@@ -30,11 +30,13 @@ func NewPseudoSeed() int64 {
 	return seed
 }
 
-// NewPseudoRand returns an instance of math/rand.Rand seeded from crypto/rand
-// and its seed so we can easily and cheaply generate unique streams of
-// numbers. The created object is not safe for concurrent access.
+// NewPseudoRand returns an instance of math/rand.Rand seeded from the
+// environment variable COCKROACH_RANDOM_SEED.  If that variable is not set,
+// crypto/rand is used to generate a seed. The seed is also returned so we can
+// easily and cheaply generate unique streams of numbers. The created object is
+// not safe for concurrent access.
 func NewPseudoRand() (*rand.Rand, int64) {
-	seed := NewPseudoSeed()
+	seed := envutil.EnvOrDefaultInt64("COCKROACH_RANDOM_SEED", NewPseudoSeed())
 	return rand.New(rand.NewSource(seed)), seed
 }
 
