@@ -51,7 +51,7 @@ const (
 	helpMessageFmt = `You are using 'cockroach sql', CockroachDB's lightweight SQL client.
 Type:
   \? or "help"      print this help.
-  \q, quit, exit    exit the shell (Ctrl+C/Ctrl+D also supported)
+  \q, quit, exit    exit the shell (Ctrl+C/Ctrl+D also supported).
   \! CMD            run an external command and print its results on standard output.
   \| CMD            run an external command and run its output as SQL statements.
   \set [NAME]       set a client-side flag or (without argument) print the current settings.
@@ -59,10 +59,10 @@ Type:
   \show             during a multi-line statement or transaction, show the SQL entered so far.
   \h [NAME]         help on syntax of SQL commands.
   \hf [NAME]        help on SQL built-in functions.
-  \l                list all databases in the CockroachDB cluster
-  \dt               show the tables of the current schema in the current database
-  \du               list the users for all databases
-  \d TABLE          show details about columns in the specified table
+  \l                list all databases in the CockroachDB cluster.
+  \dt               show the tables of the current schema in the current database.
+  \du               list the users for all databases.
+  \d [TABLE]        show details about columns in the specified table, or alias for '\dt' if no table is specified.
 More documentation about our SQL dialect and the CLI shell is available online:
 %s
 %s`
@@ -1037,7 +1037,10 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return cliRunStatement
 
 	case `\d`:
-		if len(cmd) == 2 {
+		if len(cmd) == 1 {
+			c.concatLines = `SHOW TABLES`
+			return cliRunStatement
+		} else if len(cmd) == 2 {
 			c.concatLines = `SHOW COLUMNS FROM ` + cmd[1]
 			return cliRunStatement
 		}
