@@ -464,13 +464,13 @@ func (r *Replica) UnquiesceAndWakeLeader() {
 }
 
 func (nl *NodeLiveness) SetDrainingInternal(
-	ctx context.Context, liveness *storagepb.Liveness, drain bool,
+	ctx context.Context, liveness storagepb.Liveness, drain bool,
 ) error {
 	return nl.setDrainingInternal(ctx, liveness, drain)
 }
 
 func (nl *NodeLiveness) SetDecommissioningInternal(
-	ctx context.Context, nodeID roachpb.NodeID, liveness *storagepb.Liveness, decommission bool,
+	ctx context.Context, nodeID roachpb.NodeID, liveness storagepb.Liveness, decommission bool,
 ) (changeCommitted bool, err error) {
 	return nl.setDecommissioningInternal(ctx, nodeID, liveness, decommission)
 }
