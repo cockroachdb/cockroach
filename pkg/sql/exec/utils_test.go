@@ -266,6 +266,9 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 	}
 
 	if s.useSel {
+		for i := range s.selection {
+			s.selection[i] = uint16(i)
+		}
 		// We have populated s.selection vector with possibly more indices than we
 		// have actual tuples for, so some "default" tuples will be introduced but
 		// will not be selected due to the length of the batch being equal to the
@@ -285,6 +288,12 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 		sort.Slice(s.selection[:batchSize], func(i, j int) bool {
 			return s.selection[i] < s.selection[j]
 		})
+		// Any unused elements in the selection vector are set to a value larger
+		// than the max batch size, so the test will panic if this part of the slice
+		// is accidentally accessed.
+		for i := range s.selection[batchSize:] {
+			s.selection[int(batchSize)+i] = coldata.BatchSize + 1
+		}
 
 		s.batch.SetSelection(true)
 		copy(s.batch.Selection(), s.selection)
@@ -304,6 +313,8 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 		// reflection. This is slow, but acceptable for tests.
 		col := reflect.ValueOf(vec.Col())
 		for j := uint16(0); j < batchSize; j++ {
+			// If useSel is false, then the selection vector will contain
+			// [0, ..., batchSize] in ascending order.
 			outputIdx := s.selection[j]
 			if tups[j][i] == nil {
 				// Set garbage data in the value to make sure NULL gets handled

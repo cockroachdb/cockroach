@@ -591,30 +591,34 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		result, _, err := a.AllocateTarget(
-			context.Background(),
-			config.EmptyCompleteZoneConfig(),
-			firstRangeID,
-			tc.existing,
-		)
-		if e, a := tc.expectTarget, result != nil; e != a {
-			t.Errorf("AllocateTarget(%v) got target %v, err %v; expectTarget=%v",
-				tc.existing, result, err, tc.expectTarget)
+		{
+			result, _, err := a.AllocateTarget(
+				context.Background(),
+				config.EmptyCompleteZoneConfig(),
+				firstRangeID,
+				tc.existing,
+			)
+			if e, a := tc.expectTarget, result != nil; e != a {
+				t.Errorf("AllocateTarget(%v) got target %v, err %v; expectTarget=%v",
+					tc.existing, result, err, tc.expectTarget)
+			}
 		}
 
-		var rangeUsageInfo RangeUsageInfo
-		result, details := a.RebalanceTarget(
-			context.Background(),
-			config.EmptyCompleteZoneConfig(),
-			nil, /* raftStatus */
-			firstRangeID,
-			tc.existing,
-			rangeUsageInfo,
-			storeFilterThrottled,
-		)
-		if e, a := tc.expectTarget, result != nil; e != a {
-			t.Errorf("RebalanceTarget(%v) got target %v, details %v; expectTarget=%v",
-				tc.existing, result, details, tc.expectTarget)
+		{
+			var rangeUsageInfo RangeUsageInfo
+			target, _, details, ok := a.RebalanceTarget(
+				context.Background(),
+				config.EmptyCompleteZoneConfig(),
+				nil, /* raftStatus */
+				firstRangeID,
+				tc.existing,
+				rangeUsageInfo,
+				storeFilterThrottled,
+			)
+			if e, a := tc.expectTarget, ok; e != a {
+				t.Errorf("RebalanceTarget(%v) got target %v, details %v; expectTarget=%v",
+					tc.existing, target, details, tc.expectTarget)
+			}
 		}
 	}
 }
@@ -676,7 +680,7 @@ func TestAllocatorRebalance(t *testing.T) {
 	// Every rebalance target must be either store 1 or 2.
 	for i := 0; i < 10; i++ {
 		var rangeUsageInfo RangeUsageInfo
-		result, _ := a.RebalanceTarget(
+		target, _, _, ok := a.RebalanceTarget(
 			ctx,
 			config.EmptyCompleteZoneConfig(),
 			nil,
@@ -685,14 +689,14 @@ func TestAllocatorRebalance(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 		)
-		if result == nil {
+		if !ok {
 			i-- // loop until we find 10 candidates
 			continue
 		}
 		// We might not get a rebalance target if the random nodes selected as
 		// candidates are not suitable targets.
-		if result.StoreID != 1 && result.StoreID != 2 {
-			t.Errorf("%d: expected store 1 or 2; got %d", i, result.StoreID)
+		if target.StoreID != 1 && target.StoreID != 2 {
+			t.Errorf("%d: expected store 1 or 2; got %d", i, target.StoreID)
 		}
 	}
 
@@ -827,7 +831,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 		}
 	}
 	for i := 0; i < 10; i++ {
-		result, details := a.RebalanceTarget(
+		result, _, details, ok := a.RebalanceTarget(
 			context.Background(),
 			config.EmptyCompleteZoneConfig(),
 			status,
@@ -836,7 +840,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 		)
-		if result != nil {
+		if ok {
 			t.Fatalf("expected no rebalance, but got target s%d; details: %s", result.StoreID, details)
 		}
 	}
@@ -848,7 +852,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	stores[2].Capacity.RangeCount = 46
 	sg.GossipStores(stores, t)
 	for i := 0; i < 10; i++ {
-		result, details := a.RebalanceTarget(
+		target, _, details, ok := a.RebalanceTarget(
 			context.Background(),
 			config.EmptyCompleteZoneConfig(),
 			status,
@@ -857,8 +861,8 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 		)
-		if result != nil {
-			t.Fatalf("expected no rebalance, but got target s%d; details: %s", result.StoreID, details)
+		if ok {
+			t.Fatalf("expected no rebalance, but got target s%d; details: %s", target.StoreID, details)
 		}
 	}
 
@@ -866,7 +870,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	stores[1].Capacity.RangeCount = 44
 	sg.GossipStores(stores, t)
 	for i := 0; i < 10; i++ {
-		result, details := a.RebalanceTarget(
+		target, origin, details, ok := a.RebalanceTarget(
 			context.Background(),
 			config.EmptyCompleteZoneConfig(),
 			status,
@@ -875,9 +879,11 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 		)
-		if result == nil || result.StoreID != stores[1].StoreID {
-			t.Fatalf("%d: expected rebalance to s%d, but got %v; details: %s",
-				i, stores[1].StoreID, result, details)
+		expTo := stores[1].StoreID
+		expFrom := map[roachpb.StoreID]bool{stores[3].StoreID: true, stores[4].StoreID: true}
+		if !ok || target.StoreID != expTo || !expFrom[origin.StoreID] {
+			t.Fatalf("%d: expected rebalance from either of %v to s%d, but got %v->%v; details: %s",
+				i, expFrom, expTo, origin, target, details)
 		}
 	}
 }
@@ -944,7 +950,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			var rangeUsageInfo RangeUsageInfo
-			result, _ := a.RebalanceTarget(
+			target, _, _, ok := a.RebalanceTarget(
 				ctx,
 				config.EmptyCompleteZoneConfig(),
 				nil,
@@ -953,13 +959,13 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 				rangeUsageInfo,
 				storeFilterThrottled)
 			if c.expected > 0 {
-				if result == nil {
+				if !ok {
 					t.Fatalf("expected %d, but found nil", c.expected)
-				} else if c.expected != result.StoreID {
-					t.Fatalf("expected %d, but found %d", c.expected, result.StoreID)
+				} else if c.expected != target.StoreID {
+					t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
 				}
-			} else if result != nil {
-				t.Fatalf("expected nil, but found %d", result.StoreID)
+			} else if ok {
+				t.Fatalf("expected nil, but found %d", target.StoreID)
 			}
 		})
 	}
@@ -1139,7 +1145,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 	// Every rebalance target must be store 4 (or nil for case of missing the only option).
 	for i := 0; i < 10; i++ {
 		var rangeUsageInfo RangeUsageInfo
-		result, _ := a.RebalanceTarget(
+		result, _, _, ok := a.RebalanceTarget(
 			ctx,
 			config.EmptyCompleteZoneConfig(),
 			nil,
@@ -1148,7 +1154,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 		)
-		if result != nil && result.StoreID != 4 {
+		if ok && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
 		}
 	}
@@ -1423,7 +1429,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 
 	for i, tc := range testCases {
 		var rangeUsageInfo RangeUsageInfo
-		result, details := a.RebalanceTarget(
+		result, _, details, ok := a.RebalanceTarget(
 			ctx,
 			config.EmptyCompleteZoneConfig(),
 			nil, /* raftStatus */
@@ -1433,7 +1439,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			storeFilterThrottled,
 		)
 		var resultID roachpb.StoreID
-		if result != nil {
+		if ok {
 			resultID = result.StoreID
 		}
 		if resultID != tc.expected {
@@ -1494,7 +1500,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 	for i, tc := range testCases2 {
 		log.Infof(ctx, "case #%d", i)
 		var rangeUsageInfo RangeUsageInfo
-		result, details := a.RebalanceTarget(
+		result, _, details, ok := a.RebalanceTarget(
 			ctx,
 			config.EmptyCompleteZoneConfig(),
 			nil, /* raftStatus */
@@ -1504,7 +1510,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			storeFilterThrottled,
 		)
 		var gotExpected bool
-		if result == nil {
+		if !ok {
 			gotExpected = (tc.expected == nil)
 		} else {
 			for _, expectedStoreID := range tc.expected {
@@ -2202,7 +2208,7 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 			}
 		}
 		var rangeUsageInfo RangeUsageInfo
-		targetStore, details := a.RebalanceTarget(
+		target, _, details, ok := a.RebalanceTarget(
 			context.Background(),
 			config.EmptyCompleteZoneConfig(),
 			nil,
@@ -2211,19 +2217,19 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 		)
-		if targetStore == nil {
+		if !ok {
 			t.Fatalf("%d: RebalanceTarget(%v) returned no target store; details: %s", i, c.existing, details)
 		}
 		var found bool
 		for _, storeID := range c.expected {
-			if targetStore.StoreID == storeID {
+			if target.StoreID == storeID {
 				found = true
 				break
 			}
 		}
 		if !found {
 			t.Errorf("%d: expected RebalanceTarget(%v) in %v, but got %d; details: %s",
-				i, c.existing, c.expected, targetStore.StoreID, details)
+				i, c.existing, c.expected, target.StoreID, details)
 		}
 	}
 }
@@ -3600,10 +3606,10 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 		} else {
 			// Also verify that RebalanceTarget picks out one of the best options as
 			// the final rebalance choice.
-			target, details := a.RebalanceTarget(
+			target, _, details, ok := a.RebalanceTarget(
 				context.Background(), zone, nil, firstRangeID, existingRepls, rangeUsageInfo, storeFilterThrottled)
 			var found bool
-			if target == nil && len(tc.validTargets) == 0 {
+			if !ok && len(tc.validTargets) == 0 {
 				found = true
 			}
 			for _, storeID := range tc.validTargets {
@@ -4024,7 +4030,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: AllocatorAdd,
+			expectedAction: AllocatorReplaceDead,
 		},
 		// Need five replicas, one is on a dead store.
 		{
@@ -4063,7 +4069,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: AllocatorAdd,
+			expectedAction: AllocatorReplaceDead,
 		},
 		// Need three replicas, have two.
 		{
@@ -4507,19 +4513,21 @@ func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 		dead           []roachpb.StoreID
 		expectedAction AllocatorAction
 	}{
-		// Needs three replicas, one is dead, and there's no replacement.
+		// Needs three replicas, one is dead, and there's no replacement. Since
+		// there's no replacement we can't do anything, but an action is still
+		// emitted.
 		{
 			desc:           threeReplDesc,
 			live:           []roachpb.StoreID{1, 2},
 			dead:           []roachpb.StoreID{3},
-			expectedAction: AllocatorAdd,
+			expectedAction: AllocatorReplaceDead,
 		},
 		// Needs three replicas, one is dead, but there is a replacement.
 		{
 			desc:           threeReplDesc,
 			live:           []roachpb.StoreID{1, 2, 4},
 			dead:           []roachpb.StoreID{3},
-			expectedAction: AllocatorAdd,
+			expectedAction: AllocatorReplaceDead,
 		},
 		// Needs three replicas, two are dead (i.e. the range lacks a quorum).
 		{
@@ -4569,7 +4577,9 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		decommissioning []roachpb.StoreID
 		decommissioned  []roachpb.StoreID
 	}{
-		// Has three replicas, but one is in decommissioning status
+		// Has three replicas, but one is in decommissioning status. We can't
+		// replace it (nor add a new replica) since there isn't a live target,
+		// but that's still the action being emitted.
 		{
 			zone: config.ZoneConfig{
 				NumReplicas: proto.Int32(3),
@@ -4593,13 +4603,13 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 					},
 				},
 			},
-			expectedAction:  AllocatorAdd,
+			expectedAction:  AllocatorReplaceDecommissioning,
 			live:            []roachpb.StoreID{1, 2},
 			dead:            nil,
 			decommissioning: []roachpb.StoreID{3},
 		},
 		// Has three replicas, one is in decommissioning status, and one is on a
-		// dead node.
+		// dead node. Replacing the dead replica is more important.
 		{
 			zone: config.ZoneConfig{
 				NumReplicas: proto.Int32(3),
@@ -4623,7 +4633,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 					},
 				},
 			},
-			expectedAction:  AllocatorAdd,
+			expectedAction:  AllocatorReplaceDead,
 			live:            []roachpb.StoreID{1},
 			dead:            []roachpb.StoreID{2},
 			decommissioning: []roachpb.StoreID{3},
@@ -4723,7 +4733,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 					},
 				},
 			},
-			expectedAction:  AllocatorAdd,
+			expectedAction:  AllocatorReplaceDecommissioning,
 			live:            nil,
 			dead:            nil,
 			decommissioning: []roachpb.StoreID{1, 2, 3},
@@ -4772,7 +4782,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		mockStorePool(sp, tcase.live, nil, tcase.dead, tcase.decommissioning, tcase.decommissioned)
 		action, _ := a.ComputeAction(ctx, &tcase.zone, &tcase.desc)
 		if tcase.expectedAction != action {
-			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
+			t.Errorf("Test case %d expected action %s, got action %s", i, tcase.expectedAction, action)
 			continue
 		}
 	}
@@ -4815,125 +4825,172 @@ func TestAllocatorRemoveLearner(t *testing.T) {
 func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// In this test, the configured zone config has a replication factor of five
+	// set. We are checking that the effective replication factor is rounded down
+	// to the number of stores which are not decommissioned or decommissioning.
 	testCases := []struct {
-		storeList       []roachpb.StoreID
-		expectedAction  AllocatorAction
-		live            []roachpb.StoreID
-		unavailable     []roachpb.StoreID
-		dead            []roachpb.StoreID
-		decommissioning []roachpb.StoreID
+		storeList           []roachpb.StoreID
+		expectedNumReplicas int
+		expectedAction      AllocatorAction
+		live                []roachpb.StoreID
+		unavailable         []roachpb.StoreID
+		dead                []roachpb.StoreID
+		decommissioning     []roachpb.StoreID
 	}{
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4},
-			expectedAction:  AllocatorRemoveDecommissioning,
-			live:            []roachpb.StoreID{4},
-			unavailable:     nil,
-			dead:            nil,
-			decommissioning: []roachpb.StoreID{1, 2, 3},
+			// Four known stores, three of them are decommissioning, so effective
+			// replication factor would be 1 if we hadn't decided that we'll never
+			// drop past 3, so 3 it is.
+			storeList:           []roachpb.StoreID{1, 2, 3, 4},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorRemoveDecommissioning,
+			live:                []roachpb.StoreID{4},
+			unavailable:         nil,
+			dead:                nil,
+			decommissioning:     []roachpb.StoreID{1, 2, 3},
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3},
-			expectedAction:  AllocatorAdd,
-			live:            []roachpb.StoreID{4, 5},
-			unavailable:     nil,
-			dead:            nil,
-			decommissioning: []roachpb.StoreID{1, 2, 3},
+			// Ditto.
+			storeList:           []roachpb.StoreID{1, 2, 3},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorReplaceDecommissioning,
+			live:                []roachpb.StoreID{4, 5},
+			unavailable:         nil,
+			dead:                nil,
+			decommissioning:     []roachpb.StoreID{1, 2, 3},
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4},
-			expectedAction:  AllocatorRemoveDead,
-			live:            []roachpb.StoreID{1, 2, 3, 5},
-			unavailable:     nil,
-			dead:            []roachpb.StoreID{4},
-			decommissioning: nil,
+			// Four live stores and one dead one, so the effective replication
+			// factor would be even (four), in which case we drop down one more
+			// to three. Then the right thing becomes removing the dead replica
+			// from the range at hand, rather than trying to replace it.
+			storeList:           []roachpb.StoreID{1, 2, 3, 4},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorRemoveDead,
+			live:                []roachpb.StoreID{1, 2, 3, 5},
+			unavailable:         nil,
+			dead:                []roachpb.StoreID{4},
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 4},
-			expectedAction:  AllocatorAdd,
-			live:            []roachpb.StoreID{1, 2, 3, 5},
-			unavailable:     nil,
-			dead:            []roachpb.StoreID{4},
-			decommissioning: nil,
+			// Two replicas, one on a dead store, but we have four live nodes
+			// in the system which amounts to an effective replication factor
+			// of three (avoiding the even number). Adding a replica is more
+			// important than replacing the dead one.
+			storeList:           []roachpb.StoreID{1, 4},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorAdd,
+			live:                []roachpb.StoreID{1, 2, 3, 5},
+			unavailable:         nil,
+			dead:                []roachpb.StoreID{4},
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3},
-			expectedAction:  AllocatorConsiderRebalance,
-			live:            []roachpb.StoreID{1, 2, 3, 4},
-			unavailable:     nil,
-			dead:            nil,
-			decommissioning: nil,
+			// Similar to above, but nothing to do.
+			storeList:           []roachpb.StoreID{1, 2, 3},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorConsiderRebalance,
+			live:                []roachpb.StoreID{1, 2, 3, 4},
+			unavailable:         nil,
+			dead:                nil,
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2},
-			expectedAction:  AllocatorAdd,
-			live:            []roachpb.StoreID{1, 2},
-			unavailable:     nil,
-			dead:            nil,
-			decommissioning: nil,
+			// Effective replication factor can't dip below three (unless the
+			// zone config explicitly asks for that, which it does not), so three
+			// it is and we are under-replicaed.
+			storeList:           []roachpb.StoreID{1, 2},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorAdd,
+			live:                []roachpb.StoreID{1, 2},
+			unavailable:         nil,
+			dead:                nil,
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3},
-			expectedAction:  AllocatorConsiderRebalance,
-			live:            []roachpb.StoreID{1, 2, 3},
-			unavailable:     nil,
-			dead:            nil,
-			decommissioning: nil,
+			// Three and happy.
+			storeList:           []roachpb.StoreID{1, 2, 3},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorConsiderRebalance,
+			live:                []roachpb.StoreID{1, 2, 3},
+			unavailable:         nil,
+			dead:                nil,
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4},
-			expectedAction:  AllocatorRemove,
-			live:            []roachpb.StoreID{1, 2, 3, 4},
-			unavailable:     nil,
-			dead:            nil,
-			decommissioning: nil,
+			// Three again, on account of avoiding the even four.
+			storeList:           []roachpb.StoreID{1, 2, 3, 4},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorRemove,
+			live:                []roachpb.StoreID{1, 2, 3, 4},
+			unavailable:         nil,
+			dead:                nil,
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
-			expectedAction:  AllocatorConsiderRebalance,
-			live:            []roachpb.StoreID{1, 2, 3, 4, 5},
-			unavailable:     nil,
-			dead:            nil,
-			decommissioning: nil,
+			// The usual case in which there are enough nodes to accommodate the
+			// zone config.
+			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedNumReplicas: 5,
+			expectedAction:      AllocatorConsiderRebalance,
+			live:                []roachpb.StoreID{1, 2, 3, 4, 5},
+			unavailable:         nil,
+			dead:                nil,
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
-			expectedAction:  AllocatorConsiderRebalance,
-			live:            []roachpb.StoreID{1, 2, 3, 4},
-			unavailable:     []roachpb.StoreID{5},
-			dead:            nil,
-			decommissioning: nil,
+			// No dead or decommissioning node and enough nodes around, so
+			// sticking with the zone config.
+			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedNumReplicas: 5,
+			expectedAction:      AllocatorConsiderRebalance,
+			live:                []roachpb.StoreID{1, 2, 3, 4},
+			unavailable:         []roachpb.StoreID{5},
+			dead:                nil,
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
-			expectedAction:  AllocatorConsiderRebalance,
-			live:            []roachpb.StoreID{1, 2, 3},
-			unavailable:     []roachpb.StoreID{4, 5},
-			dead:            nil,
-			decommissioning: nil,
+			// Ditto.
+			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedNumReplicas: 5,
+			expectedAction:      AllocatorConsiderRebalance,
+			live:                []roachpb.StoreID{1, 2, 3},
+			unavailable:         []roachpb.StoreID{4, 5},
+			dead:                nil,
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
-			expectedAction:  AllocatorRangeUnavailable,
-			live:            []roachpb.StoreID{1, 2},
-			unavailable:     []roachpb.StoreID{3, 4, 5},
-			dead:            nil,
-			decommissioning: nil,
+			// Ditto, but we've lost quorum.
+			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedNumReplicas: 5,
+			expectedAction:      AllocatorRangeUnavailable,
+			live:                []roachpb.StoreID{1, 2},
+			unavailable:         []roachpb.StoreID{3, 4, 5},
+			dead:                nil,
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
-			expectedAction:  AllocatorAdd,
-			live:            []roachpb.StoreID{1, 2, 3},
-			unavailable:     []roachpb.StoreID{4},
-			dead:            []roachpb.StoreID{5},
-			decommissioning: nil,
+			// Ditto (dead nodes don't reduce NumReplicas, only decommissioning
+			// or decommissioned do, and both correspond to the 'decommissioning'
+			// slice in these tests).
+			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedNumReplicas: 5,
+			expectedAction:      AllocatorReplaceDead,
+			live:                []roachpb.StoreID{1, 2, 3},
+			unavailable:         []roachpb.StoreID{4},
+			dead:                []roachpb.StoreID{5},
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
-			expectedAction:  AllocatorRemoveDecommissioning,
-			live:            []roachpb.StoreID{1, 2, 3},
-			unavailable:     []roachpb.StoreID{4},
-			dead:            nil,
-			decommissioning: []roachpb.StoreID{5},
+			// Avoiding four, so getting three, and since there is no dead store
+			// the most important thing is removing a decommissioning replica.
+			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorRemoveDecommissioning,
+			live:                []roachpb.StoreID{1, 2, 3},
+			unavailable:         []roachpb.StoreID{4},
+			dead:                nil,
+			decommissioning:     []roachpb.StoreID{5},
 		},
 	}
 
@@ -4957,17 +5014,19 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		roachpb.RKey(keys.SystemPrefix),
 	} {
 		for _, c := range testCases {
-			t.Run("", func(t *testing.T) {
+			t.Run(prefixKey.String(), func(t *testing.T) {
 				numNodes = len(c.storeList) - len(c.decommissioning)
 				mockStorePool(sp, c.live, c.unavailable, c.dead,
 					c.decommissioning, []roachpb.StoreID{})
 				desc := makeDescriptor(c.storeList)
 				desc.EndKey = prefixKey
+
+				clusterNodes := a.storePool.ClusterNodeCount()
+				effectiveNumReplicas := GetNeededReplicas(*zone.NumReplicas, clusterNodes)
+				require.Equal(t, c.expectedNumReplicas, effectiveNumReplicas, "clusterNodes=%d", clusterNodes)
+
 				action, _ := a.ComputeAction(ctx, zone, &desc)
-				if c.expectedAction != action {
-					t.Fatalf("expected action %q, got action %q",
-						allocatorActionNames[c.expectedAction], allocatorActionNames[action])
-				}
+				require.Equal(t, c.expectedAction.String(), action.String())
 			})
 		}
 	}
@@ -5467,7 +5526,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 			}
 
 			var rangeUsageInfo RangeUsageInfo
-			actual, _ := a.RebalanceTarget(
+			actual, _, _, ok := a.RebalanceTarget(
 				ctx,
 				&config.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: []config.Constraints{constraints}},
 				nil,
@@ -5477,11 +5536,11 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 				storeFilterThrottled,
 			)
 
-			if tc.expected == nil && actual != nil {
+			if tc.expected == nil && ok {
 				t.Errorf("rebalancing to the incorrect store, expected nil, got %d", actual.StoreID)
-			} else if tc.expected != nil && actual == nil {
+			} else if tc.expected != nil && !ok {
 				t.Errorf("rebalancing to the incorrect store, expected %d, got nil", *tc.expected)
-			} else if !(tc.expected == nil && actual == nil) && *tc.expected != actual.StoreID {
+			} else if !(tc.expected == nil && !ok) && *tc.expected != actual.StoreID {
 				t.Errorf("rebalancing to the incorrect store, expected %d, got %d", tc.expected, actual.StoreID)
 			}
 		})
@@ -5633,7 +5692,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 				// Rebalance until there's no more rebalancing to do.
 				if ts.Capacity.RangeCount > 0 {
 					var rangeUsageInfo RangeUsageInfo
-					target, details := alloc.RebalanceTarget(
+					target, _, details, ok := alloc.RebalanceTarget(
 						ctx,
 						config.EmptyCompleteZoneConfig(),
 						nil,
@@ -5642,7 +5701,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 						rangeUsageInfo,
 						storeFilterThrottled,
 					)
-					if target != nil {
+					if ok {
 						if log.V(1) {
 							log.Infof(ctx, "rebalancing to %v; details: %s", target, details)
 						}
@@ -5762,7 +5821,7 @@ func Example_rebalancing() {
 		for j := 0; j < len(testStores); j++ {
 			ts := &testStores[j]
 			var rangeUsageInfo RangeUsageInfo
-			target, details := alloc.RebalanceTarget(
+			target, _, details, ok := alloc.RebalanceTarget(
 				context.Background(),
 				config.EmptyCompleteZoneConfig(),
 				nil,
@@ -5771,7 +5830,7 @@ func Example_rebalancing() {
 				rangeUsageInfo,
 				storeFilterThrottled,
 			)
-			if target != nil {
+			if ok {
 				log.Infof(context.TODO(), "rebalancing to %v; details: %s", target, details)
 				testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))
 			}
