@@ -508,7 +508,7 @@ create table y (
 statement ok
 INSERT INTO y VALUES (5)
 
-statement error foreign key violation
+statement error foreign key
 INSERT INTO y VALUES (100)
 
 statement ok

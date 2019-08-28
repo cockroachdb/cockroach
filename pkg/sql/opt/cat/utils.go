@@ -244,11 +244,11 @@ func formatCols(tab Table, numCols int, colOrdinal func(tab Table, i int) int) s
 func formatCatalogFKRef(
 	catalog Catalog, inbound bool, fkRef ForeignKeyConstraint, tp treeprinter.Node,
 ) {
-	originDS, err := catalog.ResolveDataSourceByID(context.TODO(), Flags{}, fkRef.OriginTableID())
+	originDS, _, err := catalog.ResolveDataSourceByID(context.TODO(), Flags{}, fkRef.OriginTableID())
 	if err != nil {
 		panic(err)
 	}
-	refDS, err := catalog.ResolveDataSourceByID(context.TODO(), Flags{}, fkRef.ReferencedTableID())
+	refDS, _, err := catalog.ResolveDataSourceByID(context.TODO(), Flags{}, fkRef.ReferencedTableID())
 	if err != nil {
 		panic(err)
 	}

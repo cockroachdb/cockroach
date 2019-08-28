@@ -214,7 +214,7 @@ func (md *Metadata) CheckDependencies(
 		var toCheck cat.DataSource
 		var err error
 		if name.byID != 0 {
-			toCheck, err = catalog.ResolveDataSourceByID(ctx, cat.Flags{}, name.byID)
+			toCheck, _, err = catalog.ResolveDataSourceByID(ctx, cat.Flags{}, name.byID)
 		} else {
 			// Resolve data source object.
 			toCheck, _, err = catalog.ResolveDataSource(ctx, cat.Flags{}, &name.byName)

@@ -3152,7 +3152,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	// Ensure that the FK property still holds.
 	if _, err := sqlDB.Exec(
 		`INSERT INTO t.test VALUES ($1 , $2, $3)`, maxValue+2, maxValue+2, 3.15,
-	); !testutils.IsError(err, "foreign key violation") {
+	); !testutils.IsError(err, "foreign key violation|violates foreign key") {
 		t.Fatalf("err = %v", err)
 	}
 
