@@ -170,13 +170,13 @@ func benchmarkProjOp(
 	useSelectionVector bool,
 	hasNulls bool,
 	intType coltypes.T,
+	outputType coltypes.T,
 ) {
 	ctx := context.Background()
 
-	var batch coldata.Batch
+	batch := coldata.NewMemBatch([]coltypes.T{intType, intType, outputType})
 	switch intType {
 	case coltypes.Int64:
-		batch = coldata.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
 		col1 := batch.ColVec(0).Int64()
 		col2 := batch.ColVec(1).Int64()
 		for i := int64(0); i < coldata.BatchSize; i++ {
@@ -184,7 +184,6 @@ func benchmarkProjOp(
 			col2[i] = 1
 		}
 	case coltypes.Int32:
-		batch = coldata.NewMemBatch([]coltypes.T{coltypes.Int32, coltypes.Int32, coltypes.Int32})
 		col1 := batch.ColVec(0).Int32()
 		col2 := batch.ColVec(1).Int32()
 		for i := int32(0); i < coldata.BatchSize; i++ {
@@ -318,7 +317,11 @@ func BenchmarkProjOp(b *testing.B) {
 				for _, hasNulls := range []bool{true, false} {
 					b.Run(fmt.Sprintf("op=%s/type=%s/useSel=%t/hasNulls=%t",
 						projOp, intType, useSel, hasNulls), func(b *testing.B) {
-						benchmarkProjOp(b, makeProjOp, useSel, hasNulls, intType)
+						outputType := intType
+						if projOp == "projDivIntIntOp" {
+							outputType = coltypes.Decimal
+						}
+						benchmarkProjOp(b, makeProjOp, useSel, hasNulls, intType, outputType)
 					})
 				}
 			}
