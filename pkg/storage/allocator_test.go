@@ -4024,7 +4024,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: AllocatorAdd,
+			expectedAction: AllocatorReplaceDead,
 		},
 		// Need five replicas, one is on a dead store.
 		{
@@ -4063,7 +4063,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: AllocatorAdd,
+			expectedAction: AllocatorReplaceDead,
 		},
 		// Need three replicas, have two.
 		{
@@ -4507,19 +4507,21 @@ func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 		dead           []roachpb.StoreID
 		expectedAction AllocatorAction
 	}{
-		// Needs three replicas, one is dead, and there's no replacement.
+		// Needs three replicas, one is dead, and there's no replacement. Since
+		// there's no replacement we can't do anything, but an action is still
+		// emitted.
 		{
 			desc:           threeReplDesc,
 			live:           []roachpb.StoreID{1, 2},
 			dead:           []roachpb.StoreID{3},
-			expectedAction: AllocatorAdd,
+			expectedAction: AllocatorReplaceDead,
 		},
 		// Needs three replicas, one is dead, but there is a replacement.
 		{
 			desc:           threeReplDesc,
 			live:           []roachpb.StoreID{1, 2, 4},
 			dead:           []roachpb.StoreID{3},
-			expectedAction: AllocatorAdd,
+			expectedAction: AllocatorReplaceDead,
 		},
 		// Needs three replicas, two are dead (i.e. the range lacks a quorum).
 		{
@@ -4569,7 +4571,9 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		decommissioning []roachpb.StoreID
 		decommissioned  []roachpb.StoreID
 	}{
-		// Has three replicas, but one is in decommissioning status
+		// Has three replicas, but one is in decommissioning status. We can't
+		// replace it (nor add a new replica) since there isn't a live target,
+		// but that's still the action being emitted.
 		{
 			zone: config.ZoneConfig{
 				NumReplicas: proto.Int32(3),
@@ -4593,13 +4597,13 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 					},
 				},
 			},
-			expectedAction:  AllocatorAdd,
+			expectedAction:  AllocatorReplaceDecommissioning,
 			live:            []roachpb.StoreID{1, 2},
 			dead:            nil,
 			decommissioning: []roachpb.StoreID{3},
 		},
 		// Has three replicas, one is in decommissioning status, and one is on a
-		// dead node.
+		// dead node. Replacing the dead replica is more important.
 		{
 			zone: config.ZoneConfig{
 				NumReplicas: proto.Int32(3),
@@ -4623,7 +4627,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 					},
 				},
 			},
-			expectedAction:  AllocatorAdd,
+			expectedAction:  AllocatorReplaceDead,
 			live:            []roachpb.StoreID{1},
 			dead:            []roachpb.StoreID{2},
 			decommissioning: []roachpb.StoreID{3},
@@ -4723,7 +4727,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 					},
 				},
 			},
-			expectedAction:  AllocatorAdd,
+			expectedAction:  AllocatorReplaceDecommissioning,
 			live:            nil,
 			dead:            nil,
 			decommissioning: []roachpb.StoreID{1, 2, 3},
@@ -4772,7 +4776,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		mockStorePool(sp, tcase.live, nil, tcase.dead, tcase.decommissioning, tcase.decommissioned)
 		action, _ := a.ComputeAction(ctx, &tcase.zone, &tcase.desc)
 		if tcase.expectedAction != action {
-			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
+			t.Errorf("Test case %d expected action %s, got action %s", i, tcase.expectedAction, action)
 			continue
 		}
 	}
@@ -4815,125 +4819,172 @@ func TestAllocatorRemoveLearner(t *testing.T) {
 func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// In this test, the configured zone config has a replication factor of five
+	// set. We are checking that the effective replication factor is rounded down
+	// to the number of stores which are not decommissioned or decommissioning.
 	testCases := []struct {
-		storeList       []roachpb.StoreID
-		expectedAction  AllocatorAction
-		live            []roachpb.StoreID
-		unavailable     []roachpb.StoreID
-		dead            []roachpb.StoreID
-		decommissioning []roachpb.StoreID
+		storeList           []roachpb.StoreID
+		expectedNumReplicas int
+		expectedAction      AllocatorAction
+		live                []roachpb.StoreID
+		unavailable         []roachpb.StoreID
+		dead                []roachpb.StoreID
+		decommissioning     []roachpb.StoreID
 	}{
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4},
-			expectedAction:  AllocatorRemoveDecommissioning,
-			live:            []roachpb.StoreID{4},
-			unavailable:     nil,
-			dead:            nil,
-			decommissioning: []roachpb.StoreID{1, 2, 3},
+			// Four known stores, three of them are decommissioning, so effective
+			// replication factor would be 1 if we hadn't decided that we'll never
+			// drop past 3, so 3 it is.
+			storeList:           []roachpb.StoreID{1, 2, 3, 4},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorRemoveDecommissioning,
+			live:                []roachpb.StoreID{4},
+			unavailable:         nil,
+			dead:                nil,
+			decommissioning:     []roachpb.StoreID{1, 2, 3},
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3},
-			expectedAction:  AllocatorAdd,
-			live:            []roachpb.StoreID{4, 5},
-			unavailable:     nil,
-			dead:            nil,
-			decommissioning: []roachpb.StoreID{1, 2, 3},
+			// Ditto.
+			storeList:           []roachpb.StoreID{1, 2, 3},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorReplaceDecommissioning,
+			live:                []roachpb.StoreID{4, 5},
+			unavailable:         nil,
+			dead:                nil,
+			decommissioning:     []roachpb.StoreID{1, 2, 3},
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4},
-			expectedAction:  AllocatorRemoveDead,
-			live:            []roachpb.StoreID{1, 2, 3, 5},
-			unavailable:     nil,
-			dead:            []roachpb.StoreID{4},
-			decommissioning: nil,
+			// Four live stores and one dead one, so the effective replication
+			// factor would be even (four), in which case we drop down one more
+			// to three. Then the right thing becomes removing the dead replica
+			// from the range at hand, rather than trying to replace it.
+			storeList:           []roachpb.StoreID{1, 2, 3, 4},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorRemoveDead,
+			live:                []roachpb.StoreID{1, 2, 3, 5},
+			unavailable:         nil,
+			dead:                []roachpb.StoreID{4},
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 4},
-			expectedAction:  AllocatorAdd,
-			live:            []roachpb.StoreID{1, 2, 3, 5},
-			unavailable:     nil,
-			dead:            []roachpb.StoreID{4},
-			decommissioning: nil,
+			// Two replicas, one on a dead store, but we have four live nodes
+			// in the system which amounts to an effective replication factor
+			// of three (avoiding the even number). Adding a replica is more
+			// important than replacing the dead one.
+			storeList:           []roachpb.StoreID{1, 4},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorAdd,
+			live:                []roachpb.StoreID{1, 2, 3, 5},
+			unavailable:         nil,
+			dead:                []roachpb.StoreID{4},
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3},
-			expectedAction:  AllocatorConsiderRebalance,
-			live:            []roachpb.StoreID{1, 2, 3, 4},
-			unavailable:     nil,
-			dead:            nil,
-			decommissioning: nil,
+			// Similar to above, but nothing to do.
+			storeList:           []roachpb.StoreID{1, 2, 3},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorConsiderRebalance,
+			live:                []roachpb.StoreID{1, 2, 3, 4},
+			unavailable:         nil,
+			dead:                nil,
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2},
-			expectedAction:  AllocatorAdd,
-			live:            []roachpb.StoreID{1, 2},
-			unavailable:     nil,
-			dead:            nil,
-			decommissioning: nil,
+			// Effective replication factor can't dip below three (unless the
+			// zone config explicitly asks for that, which it does not), so three
+			// it is and we are under-replicaed.
+			storeList:           []roachpb.StoreID{1, 2},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorAdd,
+			live:                []roachpb.StoreID{1, 2},
+			unavailable:         nil,
+			dead:                nil,
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3},
-			expectedAction:  AllocatorConsiderRebalance,
-			live:            []roachpb.StoreID{1, 2, 3},
-			unavailable:     nil,
-			dead:            nil,
-			decommissioning: nil,
+			// Three and happy.
+			storeList:           []roachpb.StoreID{1, 2, 3},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorConsiderRebalance,
+			live:                []roachpb.StoreID{1, 2, 3},
+			unavailable:         nil,
+			dead:                nil,
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4},
-			expectedAction:  AllocatorRemove,
-			live:            []roachpb.StoreID{1, 2, 3, 4},
-			unavailable:     nil,
-			dead:            nil,
-			decommissioning: nil,
+			// Three again, on account of avoiding the even four.
+			storeList:           []roachpb.StoreID{1, 2, 3, 4},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorRemove,
+			live:                []roachpb.StoreID{1, 2, 3, 4},
+			unavailable:         nil,
+			dead:                nil,
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
-			expectedAction:  AllocatorConsiderRebalance,
-			live:            []roachpb.StoreID{1, 2, 3, 4, 5},
-			unavailable:     nil,
-			dead:            nil,
-			decommissioning: nil,
+			// The usual case in which there are enough nodes to accommodate the
+			// zone config.
+			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedNumReplicas: 5,
+			expectedAction:      AllocatorConsiderRebalance,
+			live:                []roachpb.StoreID{1, 2, 3, 4, 5},
+			unavailable:         nil,
+			dead:                nil,
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
-			expectedAction:  AllocatorConsiderRebalance,
-			live:            []roachpb.StoreID{1, 2, 3, 4},
-			unavailable:     []roachpb.StoreID{5},
-			dead:            nil,
-			decommissioning: nil,
+			// No dead or decommissioning node and enough nodes around, so
+			// sticking with the zone config.
+			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedNumReplicas: 5,
+			expectedAction:      AllocatorConsiderRebalance,
+			live:                []roachpb.StoreID{1, 2, 3, 4},
+			unavailable:         []roachpb.StoreID{5},
+			dead:                nil,
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
-			expectedAction:  AllocatorConsiderRebalance,
-			live:            []roachpb.StoreID{1, 2, 3},
-			unavailable:     []roachpb.StoreID{4, 5},
-			dead:            nil,
-			decommissioning: nil,
+			// Ditto.
+			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedNumReplicas: 5,
+			expectedAction:      AllocatorConsiderRebalance,
+			live:                []roachpb.StoreID{1, 2, 3},
+			unavailable:         []roachpb.StoreID{4, 5},
+			dead:                nil,
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
-			expectedAction:  AllocatorRangeUnavailable,
-			live:            []roachpb.StoreID{1, 2},
-			unavailable:     []roachpb.StoreID{3, 4, 5},
-			dead:            nil,
-			decommissioning: nil,
+			// Ditto, but we've lost quorum.
+			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedNumReplicas: 5,
+			expectedAction:      AllocatorRangeUnavailable,
+			live:                []roachpb.StoreID{1, 2},
+			unavailable:         []roachpb.StoreID{3, 4, 5},
+			dead:                nil,
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
-			expectedAction:  AllocatorAdd,
-			live:            []roachpb.StoreID{1, 2, 3},
-			unavailable:     []roachpb.StoreID{4},
-			dead:            []roachpb.StoreID{5},
-			decommissioning: nil,
+			// Ditto (dead nodes don't reduce NumReplicas, only decommissioning
+			// or decommissioned do, and both correspond to the 'decommissioning'
+			// slice in these tests).
+			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedNumReplicas: 5,
+			expectedAction:      AllocatorReplaceDead,
+			live:                []roachpb.StoreID{1, 2, 3},
+			unavailable:         []roachpb.StoreID{4},
+			dead:                []roachpb.StoreID{5},
+			decommissioning:     nil,
 		},
 		{
-			storeList:       []roachpb.StoreID{1, 2, 3, 4, 5},
-			expectedAction:  AllocatorRemoveDecommissioning,
-			live:            []roachpb.StoreID{1, 2, 3},
-			unavailable:     []roachpb.StoreID{4},
-			dead:            nil,
-			decommissioning: []roachpb.StoreID{5},
+			// Avoiding four, so getting three, and since there is no dead store
+			// the most important thing is removing a decommissioning replica.
+			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
+			expectedNumReplicas: 3,
+			expectedAction:      AllocatorRemoveDecommissioning,
+			live:                []roachpb.StoreID{1, 2, 3},
+			unavailable:         []roachpb.StoreID{4},
+			dead:                nil,
+			decommissioning:     []roachpb.StoreID{5},
 		},
 	}
 
@@ -4957,17 +5008,19 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		roachpb.RKey(keys.SystemPrefix),
 	} {
 		for _, c := range testCases {
-			t.Run("", func(t *testing.T) {
+			t.Run(prefixKey.String(), func(t *testing.T) {
 				numNodes = len(c.storeList) - len(c.decommissioning)
 				mockStorePool(sp, c.live, c.unavailable, c.dead,
 					c.decommissioning, []roachpb.StoreID{})
 				desc := makeDescriptor(c.storeList)
 				desc.EndKey = prefixKey
+
+				clusterNodes := a.storePool.ClusterNodeCount()
+				effectiveNumReplicas := GetNeededReplicas(*zone.NumReplicas, clusterNodes)
+				require.Equal(t, c.expectedNumReplicas, effectiveNumReplicas, "clusterNodes=%d", clusterNodes)
+
 				action, _ := a.ComputeAction(ctx, zone, &desc)
-				if c.expectedAction != action {
-					t.Fatalf("expected action %q, got action %q",
-						allocatorActionNames[c.expectedAction], allocatorActionNames[action])
-				}
+				require.Equal(t, c.expectedAction.String(), action.String())
 			})
 		}
 	}
