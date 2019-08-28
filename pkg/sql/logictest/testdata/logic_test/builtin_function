@@ -2327,3 +2327,26 @@ query TT
 SELECT pg_get_function_result('pg_sleep'::regproc), pg_get_function_result('unnest'::regproc)
 ----
 bool  anyelement
+
+# Regression test for #40297.
+statement ok
+CREATE TABLE t40297 AS SELECT g FROM generate_series(NULL, NULL) AS g
+
+query I
+SELECT COALESCE((SELECT ()), NULL) FROM t40297
+----
+
+query T
+SELECT CASE WHEN true THEN (1, 2) ELSE NULL END
+----
+(1,2)
+
+query B
+SELECT (1, 2) IN ((2, 3), NULL, (1, 2))
+----
+true
+
+query B
+SELECT (1, 2) IN ((2, 3), NULL)
+----
+NULL
