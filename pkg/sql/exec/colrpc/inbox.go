@@ -246,6 +246,8 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		i.stateMu.Unlock()
 	}()
 	if i.stateMu.done {
+		// TODO(yuzefovich): do we want to be on the safe side and explicitly set
+		// the length here (and below) to 0?
 		return i.zeroBatch
 	}
 

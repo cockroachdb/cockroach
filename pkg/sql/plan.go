@@ -511,6 +511,8 @@ func (p *planner) newPlan(
 		return p.SetVar(ctx, n)
 	case *tree.SetTransaction:
 		return p.SetTransaction(n)
+	case *tree.SetSessionAuthorizationDefault:
+		return p.SetSessionAuthorizationDefault()
 	case *tree.SetSessionCharacteristics:
 		return p.SetSessionCharacteristics(n)
 	case *tree.ShowClusterSetting:
