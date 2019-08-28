@@ -99,7 +99,9 @@ const (
 	AllocatorNoop
 	AllocatorRemove
 	AllocatorAdd
+	AllocatorReplaceDead
 	AllocatorRemoveDead
+	AllocatorReplaceDecommissioning
 	AllocatorRemoveDecommissioning
 	AllocatorRemoveLearner
 	AllocatorConsiderRebalance
@@ -111,7 +113,9 @@ var allocatorActionNames = map[AllocatorAction]string{
 	AllocatorNoop:                            "noop",
 	AllocatorRemove:                          "remove",
 	AllocatorAdd:                             "add",
+	AllocatorReplaceDead:                     "replace dead",
 	AllocatorRemoveDead:                      "remove dead",
+	AllocatorReplaceDecommissioning:          "replace decommissioning",
 	AllocatorRemoveDecommissioning:           "remove decommissioning",
 	AllocatorRemoveLearner:                   "remove learner",
 	AllocatorConsiderRebalance:               "consider rebalance",
@@ -377,20 +381,12 @@ func (a *Allocator) computeAction(
 		return AllocatorAdd, priority
 	}
 
-	if have == need && len(decommissioningReplicas) > 0 {
-		// Range has decommissioning replica(s). We should up-replicate to add
-		// another replica. The decommissioning replica(s) will be down-replicated
-		// later.
-		priority := addDecommissioningReplacementPriority
-		log.VEventf(ctx, 3, "AllocatorAdd - replacement for %d decommissioning replicas priority=%.2f",
-			len(decommissioningReplicas), priority)
-		return AllocatorAdd, priority
-	}
-
 	liveVoterReplicas, deadVoterReplicas := a.storePool.liveAndDeadReplicas(rangeID, voterReplicas)
+
 	if len(liveVoterReplicas) < quorum {
-		// Do not take any removal action if we do not have a quorum of live
-		// replicas.
+		// Do not take any replacement/removal action if we do not have a quorum of live
+		// replicas. If we're correctly assessing the unavailable state of the range, we
+		// also won't be able to add replicas as we try above, but hope springs eternal.
 		log.VEventf(ctx, 1, "unable to take action - live replicas %v don't meet quorum of %d",
 			liveVoterReplicas, quorum)
 		return AllocatorRangeUnavailable, 0
@@ -405,7 +401,15 @@ func (a *Allocator) computeAction(
 		priority := addDeadReplacementPriority
 		log.VEventf(ctx, 3, "AllocatorAdd - replacement for %d dead replicas priority=%.2f",
 			len(deadVoterReplicas), priority)
-		return AllocatorAdd, priority
+		return AllocatorReplaceDead, priority
+	}
+
+	if have == need && len(decommissioningReplicas) > 0 {
+		// Range has decommissioning replica(s), which should be replaced.
+		priority := addDecommissioningReplacementPriority
+		log.VEventf(ctx, 3, "AllocatorAdd - replacement for %d decommissioning replicas priority=%.2f",
+			len(decommissioningReplicas), priority)
+		return AllocatorReplaceDecommissioning, priority
 	}
 
 	// Removal actions follow.
@@ -455,6 +459,8 @@ type decisionDetails struct {
 // out as targets. The range ID of the replica being allocated for is also
 // passed in to ensure that we don't try to replace an existing dead replica on
 // a store.
+//
+// TODO(tbg): AllocateReplacement?
 func (a *Allocator) AllocateTarget(
 	ctx context.Context,
 	zone *config.ZoneConfig,
