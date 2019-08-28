@@ -86,7 +86,9 @@ var disableSyncRaftLog = settings.RegisterBoolSetting(
 	false,
 )
 
-var useAtomicReplicationChanges = settings.RegisterBoolSetting(
+// UseAtomicReplicationChanges determines whether to issue atomic replication changes.
+// This has no effect until the cluster version is 19.2 or higher.
+var UseAtomicReplicationChanges = settings.RegisterBoolSetting(
 	"kv.atomic_replication_changes.enabled",
 	"use atomic replication changes",
 	false,
