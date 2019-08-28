@@ -181,7 +181,7 @@ func (oc *optCatalog) ResolveDataSource(
 // ResolveDataSourceByID is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveDataSourceByID(
 	ctx context.Context, flags cat.Flags, dataSourceID cat.StableID,
-) (cat.DataSource, error) {
+) (_ cat.DataSource, isAdding bool, _ error) {
 	if flags.AvoidDescriptorCaches {
 		defer func(prev bool) {
 			oc.planner.avoidCachedDescriptors = prev
@@ -193,13 +193,14 @@ func (oc *optCatalog) ResolveDataSourceByID(
 
 	if err != nil || tableLookup.IsAdding {
 		if err == sqlbase.ErrDescriptorNotFound || tableLookup.IsAdding {
-			return nil, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
+			return nil, tableLookup.IsAdding, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
 		}
-		return nil, err
+		return nil, false, err
 	}
 
 	// The name is only used for virtual tables, which can't be looked up by ID.
-	return oc.dataSourceForDesc(ctx, cat.Flags{}, tableLookup.Desc, &tree.TableName{})
+	ds, err := oc.dataSourceForDesc(ctx, cat.Flags{}, tableLookup.Desc, &tree.TableName{})
+	return ds, false, err
 }
 
 func getDescForCatalogObject(o cat.Object) (sqlbase.DescriptorProto, error) {

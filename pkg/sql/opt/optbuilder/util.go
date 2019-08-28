@@ -497,7 +497,7 @@ func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) 
 		// Avoid taking table leases when we're creating a view.
 		flags.AvoidDescriptorCaches = true
 	}
-	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, flags, cat.StableID(ref.TableID))
+	ds, _, err := b.catalog.ResolveDataSourceByID(b.ctx, flags, cat.StableID(ref.TableID))
 	if err != nil {
 		panic(pgerror.Wrapf(err, pgcode.UndefinedObject, "%s", tree.ErrString(ref)))
 	}
