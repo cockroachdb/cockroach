@@ -47,7 +47,7 @@ func (p *planner) CreateUser(ctx context.Context, n *tree.CreateUser) (planNode,
 func (p *planner) CreateUserNode(
 	ctx context.Context, nameE, passwordE tree.Expr, ifNotExists bool, isRole bool, opName string,
 ) (*CreateUserNode, error) {
-	tDesc, err := ResolveExistingObject(ctx, p, userTableName, true /*required*/, ResolveRequireTableDesc)
+	tDesc, err := ResolveExistingObject(ctx, p, userTableName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}
