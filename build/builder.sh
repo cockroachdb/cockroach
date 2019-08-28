@@ -164,6 +164,18 @@ gid=$(id -g)
 [ "$uid" -lt 500 ] && uid=501
 [ "$gid" -lt 500 ] && gid=$uid
 
+# Build container needs to have at least 4GB of RAM available to compile the project
+# successfully, which is not true in some cases (i.e. Docker for MacOS by default).
+# This wraps the passed build command into a check for avilable memory for "make"
+# and "make build"
+ram_message="Note: if the build seems to terminate for unclear reasons, \
+note that your container limits RAM to \${ram}kB. This may be \
+the cause of the failure. Try increasing the limit to 4GB or above."
+
+cmd="ram=\$(awk '/MemTotal/{print \$2}' /proc/meminfo); $* \
+|| { [ \"$*\" = \"make\" -o \"$*\" = \"make build\" ] && [ \$ram -lt 4042196 ] \
+&& echo $ram_message; }"
+
 # -i causes some commands (including `git diff`) to attempt to use
 # a pager, so we override $PAGER to disable.
 
@@ -178,4 +190,4 @@ docker run --init --privileged -i ${tty-} --rm \
   --env="TZ=America/New_York" \
   --env=COCKROACH_BUILDER_CCACHE \
   --env=COCKROACH_BUILDER_CCACHE_MAXSIZE \
-  "${image}:${version}" "$@"
+  "${image}:${version}" bash -c "$cmd"
