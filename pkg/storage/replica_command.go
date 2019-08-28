@@ -883,7 +883,7 @@ func (r *Replica) ChangeReplicas(
 	// replication changes or if that was explicitly disabled.
 	st := r.ClusterSettings()
 	unroll := !st.Version.IsActive(cluster.VersionAtomicChangeReplicas) ||
-		!useAtomicReplicationChanges.Get(&st.SV)
+		!UseAtomicReplicationChanges.Get(&st.SV)
 
 	if unroll {
 		// Legacy behavior.

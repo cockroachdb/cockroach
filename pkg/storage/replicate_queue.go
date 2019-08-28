@@ -694,28 +694,63 @@ func (rq *replicateQueue) considerRebalance(
 	// The Noop case will result if this replica was queued in order to
 	// rebalance. Attempt to find a rebalancing target.
 	if !rq.store.TestingKnobs().DisableReplicaRebalancing {
+		// See if we can swap out a replica. First, we find one that we're allowed
+		// to remove.
+		removeReplica, detailsRemove, err := rq.findRemoveTarget(ctx, repl, existingReplicas)
+		if err != nil {
+			return false, err
+		}
+
+		// TODO(tbg): the details are JSON, and the ChangeReplicas API only allows us
+		// to pass one along. Attach the details to each change instead. Tracked in:
+		// https://github.com/cockroachdb/cockroach/issues/12768#issuecomment-522591757
+		_ = detailsRemove
+		done, err := rq.maybeTransferLeaseAway(ctx, repl, removeReplica, dryRun)
+		if err != nil {
+			return false, err
+		}
+		if done {
+			// Not leaseholder any more.
+			return false, nil
+		}
+
+		// Then, not taking into account the replica we're going to remove, see
+		// if we could add a new one.
 		rangeUsageInfo := rangeUsageInfoForRepl(repl)
-		rebalanceStore, details := rq.allocator.RebalanceTarget(
+		rebalanceStore, detailsAdd := rq.allocator.RebalanceTarget(
 			ctx, zone, repl.RaftStatus(), desc.RangeID, existingReplicas, rangeUsageInfo,
 			storeFilterThrottled)
 		if rebalanceStore == nil {
 			log.VEventf(ctx, 1, "no suitable rebalance target")
 		} else {
-			rebalanceReplica := roachpb.ReplicationTarget{
+			// We have a replica to remove and one we can add, so let's swap them
+			// out.
+			addTarget := roachpb.ReplicationTarget{
 				NodeID:  rebalanceStore.Node.NodeID,
 				StoreID: rebalanceStore.StoreID,
 			}
+			removeTarget := roachpb.ReplicationTarget{
+				NodeID:  removeReplica.NodeID,
+				StoreID: removeReplica.StoreID,
+			}
 			rq.metrics.RebalanceReplicaCount.Inc(1)
-			log.VEventf(ctx, 1, "rebalancing to %+v: %s",
-				rebalanceReplica, rangeRaftProgress(repl.RaftStatus(), existingReplicas))
+			log.VEventf(ctx, 1, "rebalancing %+v to %+v: %s",
+				removeTarget, addTarget, rangeRaftProgress(repl.RaftStatus(), existingReplicas))
 			if err := rq.changeReplicas(
 				ctx,
 				repl,
-				[]roachpb.ReplicationChange{{Target: rebalanceReplica, ChangeType: roachpb.ADD_REPLICA}},
+				[]roachpb.ReplicationChange{
+					// NB: we place the addition first because in the case of
+					// atomic replication changes being turned off, the changes
+					// will be executed individually in the order in which they
+					// appear.
+					{Target: addTarget, ChangeType: roachpb.ADD_REPLICA},
+					{Target: removeTarget, ChangeType: roachpb.REMOVE_REPLICA},
+				},
 				desc,
 				SnapshotRequest_REBALANCE,
 				storagepb.ReasonRebalance,
-				details,
+				detailsAdd,
 				dryRun,
 			); err != nil {
 				return false, err
