@@ -331,6 +331,8 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
+				ScanMinIdleTime: time.Millisecond,
+				ScanMaxIdleTime: time.Millisecond,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						DefaultZoneConfigOverride: &zcfg,
