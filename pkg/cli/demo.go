@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -163,6 +164,13 @@ func setupTransientServers(
 		// Remember the first server created.
 		if i == 0 {
 			s = serv
+		}
+
+		// Start up the update check loop.
+		// We don't do this in (*server.Server).Start() because we don't want it
+		// in tests.
+		if !envutil.EnvOrDefaultBool("COCKROACH_SKIP_UPDATE_CHECK", false) {
+			serv.PeriodicallyCheckForUpdates(ctx)
 		}
 	}
 
