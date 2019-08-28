@@ -359,8 +359,7 @@ func (m *Memo) RequestColStat(
 }
 
 // RowsProcessed calculates and returns the number of rows processed by the
-// relational expression. It is currently only supported for lookup joins and
-// merge joins.
+// relational expression. It is currently only supported for joins.
 func (m *Memo) RowsProcessed(expr RelExpr) (_ float64, ok bool) {
 	// When SetRoot is called, the statistics builder may have been cleared.
 	// If this happens, we can't serve the request anymore.

@@ -244,8 +244,6 @@ SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE b
 start_key  end_key  replicas  lease_holder
 NULL       NULL     {5}       5
 
-# TODO(radu): this doesn't seem to be a lookup join, but it should be.
-
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf]
 ----
@@ -675,18 +673,18 @@ render            ·         ·            (a, b, c)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
-render            ·                      ·                (a, b, c)        ·
- │                render 0               a                ·                ·
- │                render 1               b                ·                ·
- │                render 2               c                ·                ·
- └── lookup-join  ·                      ·                (a, b, c, e, f)  ·
-      │           table                  def@primary      ·                ·
-      │           type                   inner            ·                ·
-      │           equality               (a, c) = (f, e)  ·                ·
-      │           equality cols are key  ·                ·                ·
-      └── scan    ·                      ·                (a, b, c)        ·
-·                 table                  abc@primary      ·                ·
-·                 spans                  ALL              ·                ·
+render            ·                      ·                (a, b, c)  ·
+ │                render 0               a                ·          ·
+ │                render 1               b                ·          ·
+ │                render 2               c                ·          ·
+ └── lookup-join  ·                      ·                (a, b, c)  ·
+      │           table                  def@primary      ·          ·
+      │           type                   semi             ·          ·
+      │           equality               (a, c) = (f, e)  ·          ·
+      │           equality cols are key  ·                ·          ·
+      └── scan    ·                      ·                (a, b, c)  ·
+·                 table                  abc@primary      ·          ·
+·                 spans                  ALL              ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND c=e)
@@ -741,7 +739,7 @@ SELECT url FROM [ EXPLAIN (DISTSQL)
   SELECT a,b from small WHERE EXISTS (SELECT a FROM data WHERE small.a=data.a) ORDER BY a
 ]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlEFr2zAUx-_7FOJdJ-NIdtLUp1w6SOmS0eY2ctCiR-fN0TOSDCsl3304HqtdWlngQ3q0lD__X35PvGcwpHGjjuig-A4COEjgkAGHHDjMYc-htnRA58i2P-kCa_0HihmH0tSNb4_3HA5kEYpn8KWvEArYqR8V3qPSaNMZcNDoVVmda2pbHpV9Wrmjqirg8FAr4wqWpIIpo5lg5H-iBQ7bxhdsJfhKwv7EgRr_0ue8ekQoxInHM91Saf4hzYdIu6caC3Z382XHHm6-rtntdr0B_p9UK6-Awx3R76Zmv6g0jEyLFgcp34V8YSOr0aIeYq3EZ9if3vgnG0qoTsVQ7Hv12aBexM9NRM0tFUkqp05uhKo3ucXlJifj1ck4dTJJs6nqRqh66q4upy6LV5fFqcuSNJ-qboSqp255OXV5vLo8Tl2epPOp6kaoeuquP8aqfQPyHl1NxmHUFp21exj1I3Z721FjD_jN0uFc031uz7nzgUbnu1vRfaxNd9UC9sMiGJaDsHgdluHmkeosmM7D4XwK9zwYXoSbF1Oar4LhZbh5OaX5Ojyr2cgzCT-y193706e_AQAA__8Shyy4
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEll9v2jAUxd_3KdB92lSjxE7Cn0iTeNhLJ62dur1NPLjEg0g0RraRVlV89wkyKSKBe-0F6Fsp-XGPfc65yhtUulAP8kVZyH8BBwYCGCTAIAUGGcwZbIxeKGu12T9SA_fFH8hjBmW12br9v-cMFtooyN_AlW6tIIef8nmtnpQslIliYFAoJ8v1YczGlC_SvM7si1yvgcGPjaxsPhhGfCCrYsAH2q2UAQaPW5cPZpzNBMx3DPTW_ZvXjHl-HaykXR0PmHGY7-YMrJNLBTnfsf_TnZ3WXUgnu7JFLds2uluiG0EiRNCX0rqyWriIx51TMng0hTKqQMclZ8c1U3T9O-0Jd_VFnteUBWkK8y3tp5s1T22rU8-dPNo3ZZbqqy4rZSI-Ov7dtfrtPs743afPplyu6j-xmDZHyS5uwYMe6k0keOtEp8ePjsZz_wZwr-ZGfBiJW3Q3QPnIp7uIcM_yEoqaovCLlJe_QwnG1ymB8PdS-KVQDKPkFikMUD72SuF54Z4pJBQ1KRQXSaF4hxROrpPCxN_LxC-FyTBKb5HCAOUTrxSeF-6ZQkJRk8LkIilM3iGF0-ukMPX3MvVLYTqMslukMED51CuFe-HBySNUNMlLL5K89PbJE_H1X0VPSHhSdqMrq7zeMuP9IVSxVPW9WL01C_Xd6MVhTP3x8cAdXmQKZV39bVp_uK_qr_YC_eFpH5gnvehxH1pwnOZtOj6ij-C4DQsUJk6dBLglwuBpH7jlVig97kO33OrQKXrhGX7hGW414fWoT7lwmCgXDlPlImiiXDhNlWuM3vgEv_BJn3JN-wSF91qkBE2YTdCU2xRO2E3g5DLFtyknKsZ77VPeWS1BnndWS5DnOE15jtOk5wROeY7jpOf4WuUjwvPOhgnyHN8wlOedFRPkOU5TnuM06TmBU57jOOk5vl5FTLw2dbZMiOcCXzJtz-e7D38DAAD__xe8Uow=
 
 query T
 SELECT url FROM [ EXPLAIN (DISTSQL)
