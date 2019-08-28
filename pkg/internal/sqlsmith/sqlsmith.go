@@ -68,13 +68,14 @@ type Smither struct {
 	statements                    statementWeights
 	tableExprs                    tableExprWeights
 
-	disableWith      bool
-	disableImpureFns bool
-	disableLimits    bool
-	simpleDatums     bool
-	avoidConsts      bool
-	vectorizable     bool
-	ignoreFNs        []*regexp.Regexp
+	disableWith        bool
+	disableImpureFns   bool
+	disableLimits      bool
+	simpleDatums       bool
+	avoidConsts        bool
+	vectorizable       bool
+	ignoreFNs          []*regexp.Regexp
+	disableWindowFuncs bool
 }
 
 // NewSmither creates a new Smither. db is used to populate existing tables
@@ -232,12 +233,24 @@ func (d avoidConsts) Apply(s *Smither) {
 	s.avoidConsts = true
 }
 
+// DisableWindowFuncs disables window functions.
+func DisableWindowFuncs() SmitherOption {
+	return disableWindowFuncs{}
+}
+
+type disableWindowFuncs struct{}
+
+func (d disableWindowFuncs) Apply(s *Smither) {
+	s.disableWindowFuncs = true
+}
+
 // Vectorizable causes the Smither to limit query generation to queries
 // supported by vectorized execution.
 func Vectorizable() SmitherOption {
 	return multiOption{
 		DisableMutations(),
 		DisableWith(),
+		DisableWindowFuncs(),
 		AvoidConsts(),
 		// This must be last so it can make the final changes to table
 		// exprs and statements.
