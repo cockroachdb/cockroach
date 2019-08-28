@@ -419,10 +419,10 @@ func (rq *replicateQueue) add(
 	rq.metrics.AddReplicaCount.Inc(1)
 	log.VEventf(ctx, 1, "adding replica %+v due to under-replication: %s",
 		newReplica, rangeRaftProgress(repl.RaftStatus(), existingReplicas))
-	if err := rq.addReplica(
+	if err := rq.changeReplicas(
 		ctx,
 		repl,
-		newReplica,
+		roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, newReplica),
 		desc,
 		SnapshotRequest_RECOVERY,
 		storagepb.ReasonRangeUnderReplicated,
@@ -561,8 +561,15 @@ func (rq *replicateQueue) remove(
 		StoreID: removeReplica.StoreID,
 	}
 	desc, _ := repl.DescAndZone()
-	if err := rq.removeReplica(
-		ctx, repl, target, desc, storagepb.ReasonRangeOverReplicated, details, dryRun,
+	if err := rq.changeReplicas(
+		ctx,
+		repl,
+		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
+		desc,
+		SnapshotRequest_UNKNOWN, // unused
+		storagepb.ReasonRangeOverReplicated,
+		details,
+		dryRun,
 	); err != nil {
 		return false, err
 	}
@@ -596,8 +603,13 @@ func (rq *replicateQueue) removeDecommissioning(
 		NodeID:  decommissioningReplica.NodeID,
 		StoreID: decommissioningReplica.StoreID,
 	}
-	if err := rq.removeReplica(
-		ctx, repl, target, desc, storagepb.ReasonStoreDecommissioning, "", dryRun,
+	if err := rq.changeReplicas(
+		ctx,
+		repl,
+		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
+		desc,
+		SnapshotRequest_UNKNOWN, // unused
+		storagepb.ReasonStoreDecommissioning, "", dryRun,
 	); err != nil {
 		return false, err
 	}
@@ -623,8 +635,15 @@ func (rq *replicateQueue) removeDead(
 	// NB: we don't check whether to transfer the lease away because if the removal target
 	// is dead, it's not us (and if for some reason that happens, the removal is simply
 	// going to fail).
-	if err := rq.removeReplica(
-		ctx, repl, target, desc, storagepb.ReasonStoreDead, "", dryRun,
+	if err := rq.changeReplicas(
+		ctx,
+		repl,
+		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
+		desc,
+		SnapshotRequest_UNKNOWN, // unused
+		storagepb.ReasonStoreDead,
+		"",
+		dryRun,
 	); err != nil {
 		return false, err
 	}
@@ -651,8 +670,15 @@ func (rq *replicateQueue) removeLearner(
 	// NB: we don't check whether to transfer the lease away because we're very unlikely
 	// to be the learner (and if so, we don't have the lease any more, so after the removal
 	// fails the situation will have rectified itself).
-	if err := rq.removeReplica(
-		ctx, repl, target, desc, storagepb.ReasonAbandonedLearner, "", dryRun,
+	if err := rq.changeReplicas(
+		ctx,
+		repl,
+		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
+		desc,
+		SnapshotRequest_UNKNOWN,
+		storagepb.ReasonAbandonedLearner,
+		"",
+		dryRun,
 	); err != nil {
 		return false, err
 	}
@@ -684,10 +710,10 @@ func (rq *replicateQueue) considerRebalance(
 			rq.metrics.RebalanceReplicaCount.Inc(1)
 			log.VEventf(ctx, 1, "rebalancing to %+v: %s",
 				rebalanceReplica, rangeRaftProgress(repl.RaftStatus(), existingReplicas))
-			if err := rq.addReplica(
+			if err := rq.changeReplicas(
 				ctx,
 				repl,
-				rebalanceReplica,
+				[]roachpb.ReplicationChange{{Target: rebalanceReplica, ChangeType: roachpb.ADD_REPLICA}},
 				desc,
 				SnapshotRequest_REBALANCE,
 				storagepb.ReasonRebalance,
@@ -786,10 +812,10 @@ func (rq *replicateQueue) transferLease(
 	return nil
 }
 
-func (rq *replicateQueue) addReplica(
+func (rq *replicateQueue) changeReplicas(
 	ctx context.Context,
 	repl *Replica,
-	target roachpb.ReplicationTarget,
+	chgs roachpb.ReplicationChanges,
 	desc *roachpb.RangeDescriptor,
 	priority SnapshotRequest_Priority,
 	reason storagepb.RangeLogEventReason,
@@ -799,35 +825,14 @@ func (rq *replicateQueue) addReplica(
 	if dryRun {
 		return nil
 	}
-	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, target)
 	if _, err := repl.ChangeReplicas(ctx, desc, priority, reason, details, chgs); err != nil {
 		return err
 	}
 	rangeUsageInfo := rangeUsageInfoForRepl(repl)
-	rq.allocator.storePool.updateLocalStoreAfterRebalance(
-		target.StoreID, rangeUsageInfo, roachpb.ADD_REPLICA)
-	return nil
-}
-
-func (rq *replicateQueue) removeReplica(
-	ctx context.Context,
-	repl *Replica,
-	target roachpb.ReplicationTarget,
-	desc *roachpb.RangeDescriptor,
-	reason storagepb.RangeLogEventReason,
-	details string,
-	dryRun bool,
-) error {
-	if dryRun {
-		return nil
+	for _, chg := range chgs {
+		rq.allocator.storePool.updateLocalStoreAfterRebalance(
+			chg.Target.StoreID, rangeUsageInfo, chg.ChangeType)
 	}
-	chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target)
-	if _, err := repl.ChangeReplicas(ctx, desc, SnapshotRequest_REBALANCE, reason, details, chgs); err != nil {
-		return err
-	}
-	rangeUsageInfo := rangeUsageInfoForRepl(repl)
-	rq.allocator.storePool.updateLocalStoreAfterRebalance(
-		target.StoreID, rangeUsageInfo, roachpb.REMOVE_REPLICA)
 	return nil
 }
 
