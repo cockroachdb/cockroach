@@ -201,6 +201,7 @@ func TestHandleCliCmdSqlAliasMetacommands(t *testing.T) {
 		{`\dt`, `SHOW TABLES`},
 		{`\du`, `SHOW USERS`},
 		{`\d mytable`, `SHOW COLUMNS FROM mytable`},
+		{`\d`, `SHOW TABLES`},
 	}
 
 	var c cliState
