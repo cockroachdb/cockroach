@@ -708,7 +708,12 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 		UpdateCols: makeColList(mb.updateOrds),
 		CanaryCol:  mb.canaryColID,
 		CheckCols:  makeColList(mb.checkOrds),
-		WithID:     mb.withID,
+	}
+
+	// If we didn't actually plan any checks (e.g. because of cascades), don't
+	// buffer the input.
+	if len(mb.checks) > 0 {
+		private.WithID = mb.withID
 	}
 
 	if needResults {
@@ -1076,11 +1081,6 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 			mb.checks = nil
 			break
 		}
-	}
-
-	// If we didn't end up having to do any checks, then don't buffer the input.
-	if mb.checks == nil {
-		mb.withID = 0
 	}
 }
 
