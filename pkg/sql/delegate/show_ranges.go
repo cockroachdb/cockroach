@@ -41,6 +41,7 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 				ELSE crdb_internal.pretty_key(r.end_key, 2)
 			END AS end_key,
 			range_id,
+			range_size / 1000000 as range_size_mb,
 			replicas,
 			lease_holder,
 			locality
@@ -71,6 +72,7 @@ SELECT
   CASE WHEN r.start_key <= x'%s' THEN NULL ELSE crdb_internal.pretty_key(r.start_key, 2) END AS start_key,
   CASE WHEN r.end_key >= x'%s' THEN NULL ELSE crdb_internal.pretty_key(r.end_key, 2) END AS end_key,
   range_id,
+  range_size / 1000000 as range_size_mb,
   replicas,
   lease_holder,
   locality

@@ -16,6 +16,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
+	gojson "encoding/json"
 	"fmt"
 	"hash"
 	"hash/crc32"
@@ -3069,6 +3070,42 @@ may increase either contention or retry errors, or both.`,
 					int(tree.MustBeDInt(args[1])))), nil
 			},
 			Info: "This function is used only by CockroachDB's developers for testing purposes.",
+		},
+	),
+
+	// Return status about a range.
+	"crdb_internal.range_stats": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"key", types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				key := []byte(tree.MustBeDBytes(args[0]))
+				b := &client.Batch{}
+				b.AddRawRequest(&roachpb.RangeStatsRequest{
+					RequestHeader: roachpb.RequestHeader{
+						Key: key,
+					},
+				})
+				if err := ctx.Txn.Run(ctx.Context, b); err != nil {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "message: %s", err)
+				}
+				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.RangeStatsResponse).MVCCStats
+				jsonStr, err := gojson.Marshal(&resp)
+				if err != nil {
+					return nil, err
+				}
+				jsonDatum, err := tree.ParseDJSON(string(jsonStr))
+				if err != nil {
+					return nil, err
+				}
+				return jsonDatum, nil
+			},
+			Info: "This function is used to retrieve range status information as a JSON object.",
 		},
 	),
 
