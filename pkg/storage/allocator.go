@@ -612,6 +612,14 @@ func (a Allocator) RemoveTarget(
 // other stores in the cluster will also be doing their probabilistic best to
 // rebalance. This helps prevent a stampeding herd targeting an abnormally
 // under-utilized store.
+//
+// The return values are, in order:
+//
+// 1. The target on which to add a new replica,
+// 2. An existing replica to remove,
+// 3. a JSON string for use in the range log, and
+// 4. a boolean indicationg whether 1-3 were populated (i.e. whether a rebalance
+//    opportunity was found).
 func (a Allocator) RebalanceTarget(
 	ctx context.Context,
 	zone *config.ZoneConfig,
@@ -620,8 +628,10 @@ func (a Allocator) RebalanceTarget(
 	existingReplicas []roachpb.ReplicaDescriptor,
 	rangeUsageInfo RangeUsageInfo,
 	filter storeFilter,
-) (*roachpb.StoreDescriptor, string) {
+) (add roachpb.ReplicationTarget, remove roachpb.ReplicationTarget, details string, ok bool) {
 	sl, _, _ := a.storePool.getStoreList(rangeID, filter)
+
+	zero := roachpb.ReplicationTarget{}
 
 	// We're going to add another replica to the range which will change the
 	// quorum size. Verify that the number of existing live replicas is sufficient
@@ -647,7 +657,7 @@ func (a Allocator) RebalanceTarget(
 		if numLiveReplicas < newQuorum {
 			// Don't rebalance as we won't be able to make quorum after the rebalance
 			// until the new replica has been caught up.
-			return nil, ""
+			return zero, zero, "", false
 		}
 	}
 
@@ -665,17 +675,18 @@ func (a Allocator) RebalanceTarget(
 	)
 
 	if len(results) == 0 {
-		return nil, ""
+		return zero, zero, "", false
 	}
 	// Keep looping until we either run out of options or find a target that we're
 	// pretty sure we won't want to remove immediately after adding it.
 	// If we would, we don't want to actually rebalance to that target.
 	var target *candidate
+	var removeReplica roachpb.ReplicaDescriptor
 	var existingCandidates candidateList
 	for {
 		target, existingCandidates = bestRebalanceTarget(a.randGen, results)
 		if target == nil {
-			return nil, ""
+			return zero, zero, "", false
 		}
 
 		// Add a fake new replica to our copy of the range descriptor so that we can
@@ -702,10 +713,12 @@ func (a Allocator) RebalanceTarget(
 			// No existing replicas are suitable to remove.
 			log.VEventf(ctx, 2, "not rebalancing to s%d because there are no existing "+
 				"replicas that can be removed", target.store.StoreID)
-			return nil, ""
+			return zero, zero, "", false
 		}
 
-		removeReplica, removeDetails, err := a.simulateRemoveTarget(
+		var removeDetails string
+		var err error
+		removeReplica, removeDetails, err = a.simulateRemoveTarget(
 			ctx,
 			target.store.StoreID,
 			zone,
@@ -715,9 +728,11 @@ func (a Allocator) RebalanceTarget(
 		)
 		if err != nil {
 			log.Warningf(ctx, "simulating RemoveTarget failed: %+v", err)
-			return nil, ""
+			return zero, zero, "", false
 		}
 		if target.store.StoreID != removeReplica.StoreID {
+			// Successfully populated these variables
+			_, _ = target, removeReplica
 			break
 		}
 
@@ -727,16 +742,24 @@ func (a Allocator) RebalanceTarget(
 
 	// Compile the details entry that will be persisted into system.rangelog for
 	// debugging/auditability purposes.
-	details := decisionDetails{
+	dDetails := decisionDetails{
 		Target:   target.compactString(options),
 		Existing: existingCandidates.compactString(options),
 	}
-	detailsBytes, err := json.Marshal(details)
+	detailsBytes, err := json.Marshal(dDetails)
 	if err != nil {
 		log.Warningf(ctx, "failed to marshal details for choosing rebalance target: %+v", err)
 	}
 
-	return &target.store, string(detailsBytes)
+	addTarget := roachpb.ReplicationTarget{
+		NodeID:  target.store.Node.NodeID,
+		StoreID: target.store.StoreID,
+	}
+	removeTarget := roachpb.ReplicationTarget{
+		NodeID:  removeReplica.NodeID,
+		StoreID: removeReplica.StoreID,
+	}
+	return addTarget, removeTarget, string(detailsBytes), true
 }
 
 func (a *Allocator) scorerOptions() scorerOptions {

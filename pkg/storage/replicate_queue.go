@@ -218,9 +218,9 @@ func (rq *replicateQueue) shouldQueue(
 
 	if !rq.store.TestingKnobs().DisableReplicaRebalancing {
 		rangeUsageInfo := rangeUsageInfoForRepl(repl)
-		target, _ := rq.allocator.RebalanceTarget(
+		_, _, _, ok := rq.allocator.RebalanceTarget(
 			ctx, zone, repl.RaftStatus(), desc.RangeID, voterReplicas, rangeUsageInfo, storeFilterThrottled)
-		if target != nil {
+		if ok {
 			log.VEventf(ctx, 2, "rebalance target found, enqueuing")
 			return true, 0
 		}
@@ -694,45 +694,17 @@ func (rq *replicateQueue) considerRebalance(
 	// The Noop case will result if this replica was queued in order to
 	// rebalance. Attempt to find a rebalancing target.
 	if !rq.store.TestingKnobs().DisableReplicaRebalancing {
-		// See if we can swap out a replica. First, we find one that we're allowed
-		// to remove.
-		removeReplica, detailsRemove, err := rq.findRemoveTarget(ctx, repl, existingReplicas)
-		if err != nil {
-			return false, err
-		}
-
-		// TODO(tbg): the details are JSON, and the ChangeReplicas API only allows us
-		// to pass one along. Attach the details to each change instead. Tracked in:
-		// https://github.com/cockroachdb/cockroach/issues/12768#issuecomment-522591757
-		_ = detailsRemove
-		done, err := rq.maybeTransferLeaseAway(ctx, repl, removeReplica, dryRun)
-		if err != nil {
-			return false, err
-		}
-		if done {
-			// Not leaseholder any more.
-			return false, nil
-		}
-
 		// Then, not taking into account the replica we're going to remove, see
 		// if we could add a new one.
 		rangeUsageInfo := rangeUsageInfoForRepl(repl)
-		rebalanceStore, detailsAdd := rq.allocator.RebalanceTarget(
+		removeTarget, addTarget, details, ok := rq.allocator.RebalanceTarget(
 			ctx, zone, repl.RaftStatus(), desc.RangeID, existingReplicas, rangeUsageInfo,
 			storeFilterThrottled)
-		if rebalanceStore == nil {
+		if !ok {
 			log.VEventf(ctx, 1, "no suitable rebalance target")
 		} else {
 			// We have a replica to remove and one we can add, so let's swap them
 			// out.
-			addTarget := roachpb.ReplicationTarget{
-				NodeID:  rebalanceStore.Node.NodeID,
-				StoreID: rebalanceStore.StoreID,
-			}
-			removeTarget := roachpb.ReplicationTarget{
-				NodeID:  removeReplica.NodeID,
-				StoreID: removeReplica.StoreID,
-			}
 			rq.metrics.RebalanceReplicaCount.Inc(1)
 			log.VEventf(ctx, 1, "rebalancing %+v to %+v: %s",
 				removeTarget, addTarget, rangeRaftProgress(repl.RaftStatus(), existingReplicas))
@@ -750,7 +722,7 @@ func (rq *replicateQueue) considerRebalance(
 				desc,
 				SnapshotRequest_REBALANCE,
 				storagepb.ReasonRebalance,
-				detailsAdd,
+				details,
 				dryRun,
 			); err != nil {
 				return false, err
