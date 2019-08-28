@@ -12,6 +12,7 @@ package exec
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -27,7 +28,7 @@ type defaultBuiltinFuncOperator struct {
 	evalCtx        *tree.EvalContext
 	funcExpr       *tree.FuncExpr
 	columnTypes    []types.T
-	inputCols      []int
+	argumentCols   []int
 	outputIdx      int
 	outputType     *types.T
 	outputPhysType coltypes.T
@@ -60,13 +61,13 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 
 		hasNulls := false
 
-		for j := range b.inputCols {
-			col := batch.ColVec(b.inputCols[j])
+		for j := range b.argumentCols {
+			col := batch.ColVec(b.argumentCols[j])
 			if col.MaybeHasNulls() && col.Nulls().NullAt(rowIdx) {
 				hasNulls = true
 				b.row[j] = tree.DNull
 			} else {
-				b.row[j] = PhysicalTypeColElemToDatum(col, rowIdx, b.da, b.columnTypes[b.inputCols[j]])
+				b.row[j] = PhysicalTypeColElemToDatum(col, rowIdx, b.da, b.columnTypes[b.argumentCols[j]])
 			}
 		}
 
@@ -98,30 +99,113 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
+type substringFunctionOperator struct {
+	OneInputNode
+	argumentCols []int
+	outputIdx    int
+}
+
+var _ Operator = &substringFunctionOperator{}
+
+func (s *substringFunctionOperator) Init() {
+	s.input.Init()
+}
+
+func (s *substringFunctionOperator) Next(ctx context.Context) coldata.Batch {
+	batch := s.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return batch
+	}
+
+	if s.outputIdx == batch.Width() {
+		batch.AppendCol(coltypes.Bytes)
+	}
+
+	sel := batch.Selection()
+	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
+	startVec := batch.ColVec(s.argumentCols[1]).Int64()
+	lengthVec := batch.ColVec(s.argumentCols[2]).Int64()
+	outputVec := batch.ColVec(s.outputIdx).Bytes()
+	for i := uint16(0); i < n; i++ {
+		rowIdx := i
+		if sel != nil {
+			rowIdx = sel[i]
+		}
+
+		// The substring operator does not support nulls. If any of the arguments
+		// are NULL, we output NULL.
+		isNull := false
+		for _, col := range s.argumentCols {
+			if batch.ColVec(col).Nulls().NullAt(rowIdx) {
+				isNull = true
+				break
+			}
+		}
+		if isNull {
+			batch.ColVec(s.outputIdx).Nulls().SetNull(rowIdx)
+			continue
+		}
+
+		runes := runeVec.Get(int(rowIdx))
+		// Substring start is 1 indexed.
+		start := int(startVec[rowIdx]) - 1
+		length := int(lengthVec[rowIdx])
+		if length < 0 {
+			execerror.VectorizedInternalPanic(fmt.Sprintf("negative substring length %d not allowed", length))
+		}
+
+		end := start + length
+		// Check for integer overflow.
+		if end < start {
+			end = len(runes)
+		} else if end < 0 {
+			end = 0
+		} else if end > len(runes) {
+			end = len(runes)
+		}
+
+		if start < 0 {
+			start = 0
+		} else if start > len(runes) {
+			start = len(runes)
+		}
+		outputVec.Set(int(rowIdx), runes[start:end])
+	}
+
+	return batch
+}
+
 // NewBuiltinFunctionOperator returns an operator that applies builtin functions.
 func NewBuiltinFunctionOperator(
 	evalCtx *tree.EvalContext,
 	funcExpr *tree.FuncExpr,
 	columnTypes []types.T,
-	inputCols []int,
+	argumentCols []int,
 	outputIdx int,
 	input Operator,
 ) Operator {
 
-	outputType := funcExpr.ResolvedType()
-
-	// For now, return the default builtin operator. Future work can specialize
-	// out the operators to efficient implementations of specific builtins.
-	return &defaultBuiltinFuncOperator{
-		OneInputNode:   NewOneInputNode(input),
-		evalCtx:        evalCtx,
-		funcExpr:       funcExpr,
-		outputIdx:      outputIdx,
-		columnTypes:    columnTypes,
-		outputType:     outputType,
-		outputPhysType: typeconv.FromColumnType(outputType),
-		converter:      typeconv.GetDatumToPhysicalFn(outputType),
-		row:            make(tree.Datums, len(inputCols)),
-		inputCols:      inputCols,
+	switch funcExpr.ResolvedOverload().SpecializedVecBuiltin {
+	case tree.SubstringStringIntInt:
+		return &substringFunctionOperator{
+			OneInputNode: NewOneInputNode(input),
+			argumentCols: argumentCols,
+			outputIdx:    outputIdx,
+		}
+	default:
+		outputType := funcExpr.ResolvedType()
+		return &defaultBuiltinFuncOperator{
+			OneInputNode:   NewOneInputNode(input),
+			evalCtx:        evalCtx,
+			funcExpr:       funcExpr,
+			outputIdx:      outputIdx,
+			columnTypes:    columnTypes,
+			outputType:     outputType,
+			outputPhysType: typeconv.FromColumnType(outputType),
+			converter:      typeconv.GetDatumToPhysicalFn(outputType),
+			row:            make(tree.Datums, len(argumentCols)),
+			argumentCols:   argumentCols,
+		}
 	}
 }

@@ -3199,7 +3199,8 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 			{"start_pos", types.Int},
 			{"length", types.Int},
 		},
-		ReturnType: tree.FixedReturnType(types.String),
+		SpecializedVecBuiltin: tree.SubstringStringIntInt,
+		ReturnType:            tree.FixedReturnType(types.String),
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			runes := []rune(string(tree.MustBeDString(args[0])))
 			// SQL strings are 1-indexed.
