@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
@@ -61,6 +63,15 @@ func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 	inMem := NewInMem(inMemAttrs, testCacheSize)
 	stopper.AddCloser(inMem)
 	test(inMem, t)
+	inMem.Close()
+	pebbleInMem, err := NewPebble("", &pebble.Options{
+		FS: vfs.NewMem(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	test(pebbleInMem, t)
+	pebbleInMem.Close()
 }
 
 // TestEngineBatchCommit writes a batch containing 10K rows (all the
@@ -159,7 +170,14 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 
 		// Higher-level failure mode. Mostly for documentation.
 		{
-			batch := eng.NewBatch().(*rocksDBBatch)
+			// TODO(itsbilal): Stop skipping this test for pebble batches when the
+			// pebble MVCC scanner is merged.
+			batch := eng.NewBatch()
+			switch batch.(type) {
+			case *pebbleBatch:
+				return
+			default:
+			}
 			defer batch.Close()
 
 			key := roachpb.Key("z")
@@ -404,6 +422,13 @@ func TestEnginePutGetDelete(t *testing.T) {
 func TestEngineMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runWithAllEngines(func(engine Engine, t *testing.T) {
+		// TODO(itsbilal): Stop skipping this test for pebble when the timeseries
+		// merge operator has been ported to Go and/or the current merger passes.
+		switch engine.(type) {
+		case *Pebble:
+			return
+		default:
+		}
 		testcases := []struct {
 			testKey  MVCCKey
 			merges   [][]byte

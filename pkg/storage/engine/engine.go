@@ -182,7 +182,9 @@ type Reader interface {
 	// function f on each key value pair. If f returns an error or if the scan
 	// itself encounters an error, the iteration will stop and return the error.
 	// If the first result of f is true, the iteration stops and returns a nil
-	// error.
+	// error. Note that this method is not expected take into account the
+	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
+	// in the iteration.
 	Iterate(start, end MVCCKey, f func(MVCCKeyValue) (stop bool, err error)) error
 	// NewIterator returns a new instance of an Iterator over this
 	// engine. The caller must invoke Iterator.Close() when finished
