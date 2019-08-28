@@ -2013,12 +2013,13 @@ func typeCheckTupleComparison(
 	return left, right, nil
 }
 
-// typeCheckSameTypedTupleExprs type checks a list of expressions, asserting that all
-// are tuples which have the same type. The function expects the first provided expression
-// to be a tuple, and will panic if it is not. However, it does not expect all other
-// expressions are tuples, and will return a sane error if they are not. An optional
-// desired type can be provided, which will hint that type which the expressions should
-// resolve to, if possible.
+// typeCheckSameTypedTupleExprs type checks a list of expressions, asserting
+// that all are tuples which have the same type or nulls. The function expects
+// the first provided expression to be a tuple, and will panic if it is not.
+// However, it does not expect all other expressions are tuples or nulls, and
+// will return a sane error if they are not. An optional desired type can be
+// provided, which will hint that type which the expressions should resolve to,
+// if possible.
 func typeCheckSameTypedTupleExprs(
 	ctx *SemaContext, desired *types.T, exprs ...Expr,
 ) ([]TypedExpr, *types.T, error) {
@@ -2028,7 +2029,7 @@ func typeCheckSameTypedTupleExprs(
 
 	// All other exprs must be tuples.
 	first := exprs[0].(*Tuple)
-	if err := checkAllExprsAreTuples(ctx, exprs[1:]); err != nil {
+	if err := checkAllExprsAreTuplesOrNulls(ctx, exprs[1:]); err != nil {
 		return nil, nil, err
 	}
 
@@ -2038,12 +2039,21 @@ func typeCheckSameTypedTupleExprs(
 		return nil, nil, err
 	}
 
-	// All expressions at the same indexes must be the same type.
+	// All expressions within tuples at the same indexes must be the same type.
 	resTypes := types.MakeTuple(make([]types.T, firstLen))
-	sameTypeExprs := make([]Expr, len(exprs))
+	sameTypeExprs := make([]Expr, 0, len(exprs))
+	// We will be skipping nulls, so we need to keep track at which indices in
+	// exprs are the non-null tuples.
+	sameTypeExprsIndices := make([]int, 0, len(exprs))
 	for elemIdx := range first.Exprs {
-		for tupleIdx, expr := range exprs {
-			sameTypeExprs[tupleIdx] = expr.(*Tuple).Exprs[elemIdx]
+		sameTypeExprs = sameTypeExprs[:0]
+		sameTypeExprsIndices = sameTypeExprsIndices[:0]
+		for exprIdx, expr := range exprs {
+			if expr == DNull {
+				continue
+			}
+			sameTypeExprs = append(sameTypeExprs, expr.(*Tuple).Exprs[elemIdx])
+			sameTypeExprsIndices = append(sameTypeExprsIndices, exprIdx)
 		}
 		desiredElem := types.Any
 		if len(desired.TupleContents()) > elemIdx {
@@ -2054,20 +2064,27 @@ func typeCheckSameTypedTupleExprs(
 			return nil, nil, pgerror.Newf(pgcode.DatatypeMismatch, "tuples %s are not the same type: %v", Exprs(exprs), err)
 		}
 		for j, typedExpr := range typedSubExprs {
-			exprs[j].(*Tuple).Exprs[elemIdx] = typedExpr
+			tupleIdx := sameTypeExprsIndices[j]
+			exprs[tupleIdx].(*Tuple).Exprs[elemIdx] = typedExpr
 		}
 		resTypes.TupleContents()[elemIdx] = *resType
 	}
 	for tupleIdx, expr := range exprs {
-		expr.(*Tuple).typ = resTypes
+		if expr != DNull {
+			expr.(*Tuple).typ = resTypes
+		}
 		typedExprs[tupleIdx] = expr.(TypedExpr)
 	}
 	return typedExprs, resTypes, nil
 }
 
-func checkAllExprsAreTuples(ctx *SemaContext, exprs []Expr) error {
+// checkAllExprsAreTuplesOrNulls checks that all expressions in exprs are
+// either tuples or nulls.
+func checkAllExprsAreTuplesOrNulls(ctx *SemaContext, exprs []Expr) error {
 	for _, expr := range exprs {
-		if _, ok := expr.(*Tuple); !ok {
+		_, isTuple := expr.(*Tuple)
+		isNull := expr == DNull
+		if !(isTuple || isNull) {
 			typedExpr, err := expr.TypeCheck(ctx, types.Any)
 			if err != nil {
 				return err
@@ -2078,8 +2095,13 @@ func checkAllExprsAreTuples(ctx *SemaContext, exprs []Expr) error {
 	return nil
 }
 
+// checkAllTuplesHaveLength checks that all tuples in exprs have the expected
+// length. Note that all nulls are skipped in this check.
 func checkAllTuplesHaveLength(exprs []Expr, expectedLen int) error {
 	for _, expr := range exprs {
+		if expr == DNull {
+			continue
+		}
 		if err := checkTupleHasLength(expr.(*Tuple), expectedLen); err != nil {
 			return err
 		}
