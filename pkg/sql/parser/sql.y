@@ -487,8 +487,8 @@ func newNameFromStr(s string) *tree.Name {
 
 // Ordinary key words in alphabetical order.
 %token <str> ABORT ACTION ADD ADMIN AGGREGATE
-%token <str> ALL ALTER ANALYSE ANALYZE AND ANY ANNOTATE_TYPE ARRAY AS ASC
-%token <str> ASYMMETRIC AT AUTOMATIC
+%token <str> ALL ALTER ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
+%token <str> ASYMMETRIC AT AUTHORIZATION AUTOMATIC
 
 %token <str> BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
 %token <str> BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
@@ -521,7 +521,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
 
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCREMENT INCREMENTAL
-%token <str> INET INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
+%token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
 %token <str> INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
 %token <str> INTERSECT INTERVAL INTO INVERTED IS ISERROR ISNULL ISOLATION
@@ -1046,7 +1046,7 @@ func newNameFromStr(s string) *tree.Name {
 %left      '|'
 %left      '#'
 %left      '&'
-%left      LSHIFT RSHIFT INET_CONTAINS_OR_EQUALS INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
+%left      LSHIFT RSHIFT INET_CONTAINS_OR_EQUALS INET_CONTAINED_BY_OR_EQUALS AND_AND
 %left      '+' '-'
 %left      '*' '/' FLOORDIV '%'
 %left      '^'
@@ -3119,6 +3119,15 @@ set_rest_more:
   {
     /* SKIP DOC */
     $$.val = &tree.SetVar{Name: "search_path", Values: tree.Exprs{$2.expr()}}
+  }
+| SESSION AUTHORIZATION DEFAULT
+  {
+    /* SKIP DOC */
+    $$.val = &tree.SetSessionAuthorizationDefault{}
+  }
+| SESSION AUTHORIZATION non_reserved_word_or_sconst
+  {
+    return unimplementedWithIssue(sqllex, 40283)
   }
 // See comment for the non-terminal for SET NAMES below.
 | set_names
@@ -7403,9 +7412,9 @@ a_expr:
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction("inet_contained_by_or_equals"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
   }
-| a_expr INET_CONTAINS_OR_CONTAINED_BY a_expr
+| a_expr AND_AND a_expr
   {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("inet_contains_or_contained_by"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
+    $$.val = &tree.ComparisonExpr{Operator: tree.Overlaps, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr INET_CONTAINS_OR_EQUALS a_expr
   {
@@ -9165,6 +9174,7 @@ unreserved_keyword:
 | ALTER
 | AT
 | AUTOMATIC
+| AUTHORIZATION
 | BACKUP
 | BEGIN
 | BIGSERIAL

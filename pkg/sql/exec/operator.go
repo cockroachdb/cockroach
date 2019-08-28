@@ -207,7 +207,7 @@ func (s *singleTupleNoInputOperator) Init() {
 }
 
 func (s *singleTupleNoInputOperator) Next(ctx context.Context) coldata.Batch {
-	s.batch.SetSelection(false)
+	s.batch.ResetInternalBatch()
 	if s.nexted {
 		s.batch.SetLength(0)
 		return s.batch

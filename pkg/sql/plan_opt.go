@@ -67,7 +67,8 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		*tree.ReleaseSavepoint, *tree.RenameColumn, *tree.RenameDatabase,
 		*tree.RenameIndex, *tree.RenameTable, *tree.Revoke, *tree.RevokeRole,
 		*tree.RollbackToSavepoint, *tree.RollbackTransaction,
-		*tree.Savepoint, *tree.SetTransaction, *tree.SetTracing, *tree.SetSessionCharacteristics:
+		*tree.Savepoint, *tree.SetTransaction, *tree.SetTracing, *tree.SetSessionAuthorizationDefault,
+		*tree.SetSessionCharacteristics:
 		return opc.flags, nil
 	}
 

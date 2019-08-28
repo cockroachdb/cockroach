@@ -238,8 +238,6 @@
 </span></td></tr>
 <tr><td><code>inet_contained_by_or_equals(val: <a href="inet.html">inet</a>, container: <a href="inet.html">inet</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Test for subnet inclusion or equality, using only the network parts of the addresses. The host part of the addresses is ignored.</p>
 </span></td></tr>
-<tr><td><code>inet_contains_or_contained_by(val: <a href="inet.html">inet</a>, val: <a href="inet.html">inet</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Test for subnet inclusion, using only the network parts of the addresses. The host part of the addresses is ignored.</p>
-</span></td></tr>
 <tr><td><code>inet_contains_or_equals(container: <a href="inet.html">inet</a>, val: <a href="inet.html">inet</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Test for subnet inclusion or equality, using only the network parts of the addresses. The host part of the addresses is ignored.</p>
 </span></td></tr>
 <tr><td><code>inet_same_family(val: <a href="inet.html">inet</a>, val: <a href="inet.html">inet</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks if two IP addresses are of the same IP family.</p>

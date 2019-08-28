@@ -332,7 +332,7 @@ func (s *scanner) scan(lval *sqlSymType) {
 		switch s.peek() {
 		case '&': // &&
 			s.pos++
-			lval.id = INET_CONTAINS_OR_CONTAINED_BY
+			lval.id = AND_AND
 			return
 		}
 		return
