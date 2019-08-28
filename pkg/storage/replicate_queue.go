@@ -347,8 +347,10 @@ func (rq *replicateQueue) processOneChange(
 	case AllocatorConsiderRebalance:
 		return rq.considerRebalance(ctx, repl, voterReplicas, canTransferLease, dryRun)
 	case AllocatorFinalizeAtomicReplicationChange:
-		_, err := repl.maybeLeaveAtomicChangeReplicas(ctx, repl.Desc())
-		return false, err
+		_, err := maybeLeaveAtomicChangeReplicas(ctx, repl.store, repl.Desc())
+		// Requeue because either we failed to transition out of a joint state
+		// (bad) or we did and there might be more to do for that range.
+		return true, err
 	}
 	return true, nil
 }

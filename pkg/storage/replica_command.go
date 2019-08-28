@@ -138,7 +138,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	// The split queue doesn't care about the set of replicas, so if we somehow
 	// are being handed one that's in a joint state, finalize that before
 	// continuing.
-	desc, err = r.maybeLeaveAtomicChangeReplicas(ctx, desc)
+	desc, err = maybeLeaveAtomicChangeReplicas(ctx, r.store, desc)
 	if err != nil {
 		return roachpb.AdminSplitResponse{}, err
 	}
@@ -575,11 +575,21 @@ func (r *Replica) AdminMerge(
 		// are no non-voter replicas, in case some third type is later added).
 		// This behavior can be changed later if the complexity becomes worth
 		// it, but it's not right now.
+		//
+		// NB: the merge queue transitions out of any joint states and removes
+		// any learners it sees. It's sort of silly that we don't do that here
+		// instead; effectively any caller of AdminMerge that is not the merge
+		// queue won't be able to recover from these cases (though the replicate
+		// queues should fix things up quickly).
 		lReplicas, rReplicas := origLeftDesc.Replicas(), rightDesc.Replicas()
-		if len(lReplicas.Voters()) != len(lReplicas.All()) {
+
+		predFullVoter := func(rDesc roachpb.ReplicaDescriptor) bool {
+			return rDesc.GetType() == roachpb.VOTER_FULL
+		}
+		if len(lReplicas.Filter(predFullVoter)) != len(lReplicas.All()) {
 			return errors.Errorf("cannot merge range with non-voter replicas on lhs: %s", lReplicas)
 		}
-		if len(rReplicas.Voters()) != len(rReplicas.All()) {
+		if len(rReplicas.Filter(predFullVoter)) != len(rReplicas.All()) {
 			return errors.Errorf("cannot merge range with non-voter replicas on rhs: %s", rReplicas)
 		}
 		if !replicaSetsEqual(lReplicas.All(), rReplicas.All()) {
@@ -912,7 +922,7 @@ func (r *Replica) changeReplicasImpl(
 	// If in a joint config, clean up. The assumption here is that the caller
 	// of ChangeReplicas didn't even realize that they were holding on to a
 	// joint descriptor and would rather not have to deal with that fact.
-	desc, err = r.maybeLeaveAtomicChangeReplicas(ctx, desc)
+	desc, err = maybeLeaveAtomicChangeReplicas(ctx, r.store, desc)
 	if err != nil {
 		return nil, err
 	}
@@ -957,7 +967,7 @@ func (r *Replica) changeReplicasImpl(
 	if err != nil {
 		// If the error occurred while transitioning out of an atomic replication change,
 		// try again here with a fresh descriptor; this is a noop otherwise.
-		if _, err := r.maybeLeaveAtomicChangeReplicas(ctx, r.Desc()); err != nil {
+		if _, err := maybeLeaveAtomicChangeReplicas(ctx, r.store, r.Desc()); err != nil {
 			return nil, err
 		}
 		if fn := r.store.cfg.TestingKnobs.ReplicaAddSkipLearnerRollback; fn != nil && fn() {
@@ -978,8 +988,8 @@ func (r *Replica) changeReplicasImpl(
 // maybeLeaveAtomicChangeReplicas transitions out of the joint configuration if
 // the descriptor indicates one. This involves running a distributed transaction
 // updating said descriptor, the result of which will be returned.
-func (r *Replica) maybeLeaveAtomicChangeReplicas(
-	ctx context.Context, desc *roachpb.RangeDescriptor,
+func maybeLeaveAtomicChangeReplicas(
+	ctx context.Context, store *Store, desc *roachpb.RangeDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
 	// We want execChangeReplicasTxn to be able to make sure it's only tasked
 	// with leaving a joint state when it's in one, so make sure we don't call
@@ -988,12 +998,15 @@ func (r *Replica) maybeLeaveAtomicChangeReplicas(
 		return desc, nil
 	}
 
+	// NB: this is matched on in TestMergeQueueSeesLearner.
+	log.Eventf(ctx, "transitioning out of joint configuration %s", desc)
+
 	// NB: reason and detail won't be used because no range log event will be
 	// emitted.
 	//
 	// TODO(tbg): reconsider this.
 	return execChangeReplicasTxn(
-		ctx, r.store, desc, storagepb.ReasonUnknown /* unused */, "", nil, /* iChgs */
+		ctx, store, desc, storagepb.ReasonUnknown /* unused */, "", nil, /* iChgs */
 	)
 }
 
@@ -1087,7 +1100,7 @@ func addLearnerReplicas(
 // two distributed transactions. On error, it is possible that the range is in
 // the intermediate ("joint") configuration in which a quorum of both the old
 // and new sets of voters is required. If a range is encountered in this state,
-// r.maybeLeaveAtomicReplicationChange can fix this, but it is the caller's
+// maybeLeaveAtomicReplicationChange can fix this, but it is the caller's
 // job to do this when necessary.
 func (r *Replica) atomicReplicationChange(
 	ctx context.Context,
@@ -1140,10 +1153,8 @@ func (r *Replica) atomicReplicationChange(
 		}
 	}
 
-	if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterLearnerSnapshot; fn != nil {
-		if fn() {
-			return desc, nil
-		}
+	if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterLearnerSnapshot; fn != nil && fn() {
+		return desc, nil
 	}
 
 	for _, target := range chgs.Removals() {
@@ -1155,8 +1166,13 @@ func (r *Replica) atomicReplicationChange(
 	if err != nil {
 		return nil, err
 	}
+
+	if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterJointConfig; fn != nil && fn() {
+		return desc, nil
+	}
+
 	// Leave the joint config if we entered one.
-	return r.maybeLeaveAtomicChangeReplicas(ctx, desc)
+	return maybeLeaveAtomicChangeReplicas(ctx, r.store, desc)
 }
 
 // tryRollbackLearnerReplica attempts to remove a learner specified by the
@@ -1306,6 +1322,9 @@ func execChangeReplicasTxn(
 		}
 
 		useJoint := len(chgs) > 1
+		if fn := store.TestingKnobs().ReplicationAlwaysUseJointConfig; fn != nil && fn() {
+			useJoint = true
+		}
 		for _, chg := range chgs {
 			switch chg.typ {
 			case internalChangeTypeAddVoterViaPreemptiveSnap:
@@ -1320,21 +1339,26 @@ func execChangeReplicasTxn(
 				if useJoint {
 					typ = roachpb.VOTER_INCOMING
 				}
-				rDesc, ok := updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, typ)
-				if !ok {
+				rDesc, prevTyp, ok := updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, typ)
+				if !ok || prevTyp != roachpb.LEARNER {
 					return nil, errors.Errorf("cannot promote target %v which is missing as Learner", chg.target)
 				}
 				added = append(added, rDesc)
 			case internalChangeTypeRemove:
-				var rDesc roachpb.ReplicaDescriptor
-				var ok bool
-				if !useJoint {
-					rDesc, ok = updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
-				} else {
-					rDesc, ok = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_OUTGOING)
-				}
+				rDesc, ok := updatedDesc.GetReplicaDescriptor(chg.target.StoreID)
 				if !ok {
-					return nil, errors.Errorf("cannot remove nonexistent target %v", chg.target)
+					return nil, errors.Errorf("target %s not found", chg.target)
+				}
+				if typ := rDesc.GetType(); !useJoint || typ == roachpb.LEARNER {
+					rDesc, _ = updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
+				} else {
+					// NB: typ is already known to be VOTER_FULL because of !InAtomicReplicationChange() above.
+					// We check it anyway.
+					var prevTyp roachpb.ReplicaType
+					rDesc, _, _ = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_OUTGOING)
+					if prevTyp != roachpb.VOTER_FULL {
+						return nil, errors.Errorf("cannot transition from %s to VOTER_OUTGOING", prevTyp)
+					}
 				}
 				removed = append(removed, rDesc)
 			default:

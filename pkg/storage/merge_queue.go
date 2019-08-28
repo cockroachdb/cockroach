@@ -188,22 +188,22 @@ var _ purgatoryError = rangeMergePurgatoryError{}
 
 func (mq *mergeQueue) requestRangeStats(
 	ctx context.Context, key roachpb.Key,
-) (roachpb.RangeDescriptor, enginepb.MVCCStats, float64, error) {
+) (*roachpb.RangeDescriptor, enginepb.MVCCStats, float64, error) {
 	res, pErr := client.SendWrappedWith(ctx, mq.db.NonTransactionalSender(), roachpb.Header{
 		ReturnRangeInfo: true,
 	}, &roachpb.RangeStatsRequest{
 		RequestHeader: roachpb.RequestHeader{Key: key},
 	})
 	if pErr != nil {
-		return roachpb.RangeDescriptor{}, enginepb.MVCCStats{}, 0, pErr.GoError()
+		return nil, enginepb.MVCCStats{}, 0, pErr.GoError()
 	}
 	rangeInfos := res.Header().RangeInfos
 	if len(rangeInfos) != 1 {
-		return roachpb.RangeDescriptor{}, enginepb.MVCCStats{}, 0, fmt.Errorf(
+		return nil, enginepb.MVCCStats{}, 0, fmt.Errorf(
 			"mergeQueue.requestRangeStats: response had %d range infos but exactly one was expected",
 			len(rangeInfos))
 	}
-	return rangeInfos[0].Desc, res.(*roachpb.RangeStatsResponse).MVCCStats,
+	return &rangeInfos[0].Desc, res.(*roachpb.RangeStatsResponse).MVCCStats,
 		res.(*roachpb.RangeStatsResponse).QueriesPerSecond, nil
 }
 
@@ -275,21 +275,34 @@ func (mq *mergeQueue) process(
 	}
 
 	{
-		// AdminMerge errors if there are learners on either side and
-		// AdminRelocateRange removes any on the range it operates on. For the sake
-		// of obviousness, just remove them all upfront.
-		newLHSDesc, err := removeLearners(ctx, lhsRepl.store.DB(), lhsDesc)
+		store, db := lhsRepl.store, lhsRepl.store.DB()
+		// AdminMerge errors if there is a learner or joint config on either
+		// side and AdminRelocateRange removes any on the range it operates on.
+		// For the sake of obviousness, just fix this all upfront.
+		var err error
+		lhsDesc, err = maybeLeaveAtomicChangeReplicas(ctx, store, lhsDesc)
 		if err != nil {
 			log.VEventf(ctx, 2, `%v`, err)
 			return err
 		}
-		lhsDesc = newLHSDesc
-		newRHSDesc, err := removeLearners(ctx, lhsRepl.store.DB(), &rhsDesc)
+
+		lhsDesc, err = removeLearners(ctx, db, lhsDesc)
 		if err != nil {
 			log.VEventf(ctx, 2, `%v`, err)
 			return err
 		}
-		rhsDesc = *newRHSDesc
+
+		rhsDesc, err = maybeLeaveAtomicChangeReplicas(ctx, store, rhsDesc)
+		if err != nil {
+			log.VEventf(ctx, 2, `%v`, err)
+			return err
+		}
+
+		rhsDesc, err = removeLearners(ctx, db, rhsDesc)
+		if err != nil {
+			log.VEventf(ctx, 2, `%v`, err)
+			return err
+		}
 	}
 	lhsReplicas, rhsReplicas := lhsDesc.Replicas().All(), rhsDesc.Replicas().All()
 
