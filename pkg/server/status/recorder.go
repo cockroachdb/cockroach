@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -83,7 +82,6 @@ var recordHistogramQuantiles = []quantile{
 type storeMetrics interface {
 	StoreID() roachpb.StoreID
 	Descriptor(bool) (*roachpb.StoreDescriptor, error)
-	MVCCStats() enginepb.MVCCStats
 	Registry() *metric.Registry
 }
 
