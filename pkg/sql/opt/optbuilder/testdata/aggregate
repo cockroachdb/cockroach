@@ -3123,7 +3123,7 @@ SELECT count(col1 ORDER BY col2) FROM tab
 scalar-group-by
  ├── columns: count:5(int)
  ├── project
- │    ├── columns: col1:1(int!null)
+ │    ├── columns: col1:1(int!null) col2:2(int!null)
  │    └── scan tab
  │         └── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null)
  └── aggregations
@@ -3402,6 +3402,74 @@ project
       └── aggregations
            └── array-agg [type=string[]]
                 └── variable: column5 [type=string]
+
+build
+SELECT array_agg(v+w ORDER BY w) FROM kv
+----
+scalar-group-by
+ ├── columns: array_agg:6(int[])
+ ├── window partition=() ordering=+3
+ │    ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) column5:5(int) array_agg:6(int[])
+ │    ├── project
+ │    │    ├── columns: column5:5(int) k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    │    ├── scan kv
+ │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    │    └── projections
+ │    │         └── plus [type=int]
+ │    │              ├── variable: v [type=int]
+ │    │              └── variable: w [type=int]
+ │    └── windows
+ │         └── windows-item: range from unbounded to unbounded [type=int[]]
+ │              └── array-agg [type=int[]]
+ │                   └── variable: column5 [type=int]
+ └── aggregations
+      └── const-agg [type=int[]]
+           └── variable: array_agg [type=int[]]
+
+build
+SELECT array_agg(v ORDER BY v+w) FROM kv
+----
+scalar-group-by
+ ├── columns: array_agg:6(int[])
+ ├── window partition=() ordering=+5
+ │    ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) column5:5(int) array_agg:6(int[])
+ │    ├── project
+ │    │    ├── columns: column5:5(int) k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    │    ├── scan kv
+ │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    │    └── projections
+ │    │         └── plus [type=int]
+ │    │              ├── variable: v [type=int]
+ │    │              └── variable: w [type=int]
+ │    └── windows
+ │         └── windows-item: range from unbounded to unbounded [type=int[]]
+ │              └── array-agg [type=int[]]
+ │                   └── variable: v [type=int]
+ └── aggregations
+      └── const-agg [type=int[]]
+           └── variable: array_agg [type=int[]]
+
+build
+SELECT array_agg(a ORDER BY b) FROM (SELECT 1 AS a, 2 AS b)
+----
+scalar-group-by
+ ├── columns: array_agg:3(int[])
+ ├── window partition=() ordering=+2
+ │    ├── columns: a:1(int!null) b:2(int!null) array_agg:3(int[])
+ │    ├── project
+ │    │    ├── columns: a:1(int!null) b:2(int!null)
+ │    │    ├── values
+ │    │    │    └── tuple [type=tuple]
+ │    │    └── projections
+ │    │         ├── const: 1 [type=int]
+ │    │         └── const: 2 [type=int]
+ │    └── windows
+ │         └── windows-item: range from unbounded to unbounded [type=int[]]
+ │              └── array-agg [type=int[]]
+ │                   └── variable: a [type=int]
+ └── aggregations
+      └── const-agg [type=int[]]
+           └── variable: array_agg [type=int[]]
 
 # Regression test for #38551.
 build

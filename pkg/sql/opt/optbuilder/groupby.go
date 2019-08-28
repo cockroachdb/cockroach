@@ -512,6 +512,13 @@ func (b *Builder) buildAggregateFunction(
 		info.filter = b.buildAggArg(f.Filter.(tree.TypedExpr), &info, tempScope, inScope)
 	}
 
+	// If we have ORDER BY, add the ordering columns to the tempScope.
+	if f.OrderBy != nil {
+		for _, o := range f.OrderBy {
+			b.buildAggArg(o.Expr.(tree.TypedExpr), &info, tempScope, inScope)
+		}
+	}
+
 	// Find the appropriate aggregation scopes for this aggregate now that we
 	// know which columns it references. If necessary, we'll move the columns
 	// for the arguments from tempScope to aggInScope below.
