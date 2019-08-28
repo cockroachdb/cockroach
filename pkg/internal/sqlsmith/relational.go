@@ -496,7 +496,7 @@ func (s *scope) makeSelectClause(
 	}
 	clause.Exprs = selectList
 
-	if s.d100() == 1 {
+	if !s.schema.vectorizable && s.d100() == 1 {
 		clause.Distinct = true
 		// For SELECT DISTINCT, ORDER BY expressions must appear in select list.
 		orderByRefs = selectRefs

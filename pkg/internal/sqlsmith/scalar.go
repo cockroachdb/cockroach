@@ -358,6 +358,13 @@ func makeCompareOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) 
 	return typedParen(tree.NewTypedComparisonExpr(op, left, right), typ), true
 }
 
+var vecBinOps = map[tree.BinaryOperator]bool{
+	tree.Plus:  true,
+	tree.Minus: true,
+	tree.Mult:  true,
+	tree.Div:   true,
+}
+
 func makeBinOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	typ, ok := s.schema.pickAnyType(typ)
 	if !ok {
@@ -373,10 +380,11 @@ func makeBinOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		return nil, false
 	}
 	if s.schema.vectorizable {
-		// TODO(mjibson): Vectorizable currently only supports binary
-		// expressions where the operands are the same type and the
-		// result is also that type. See #39189.
-		if !op.LeftType.Equivalent(op.RightType) || typ.Equivalent(op.LeftType) {
+		// TODO(mjibson): Improve this when #39189 is fixed.
+		if !op.LeftType.Equivalent(op.RightType) || !typ.Equivalent(op.LeftType) {
+			return nil, false
+		}
+		if !vecBinOps[op.Operator] {
 			return nil, false
 		}
 	}
