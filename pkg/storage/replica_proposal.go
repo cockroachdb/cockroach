@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -75,10 +76,10 @@ type ProposalData struct {
 	// containing the command ID.
 	encodedCommand []byte
 
-	// quotaSize is the encoded size of command that was used to acquire
-	// proposal quota. command.Size can change slightly as the object is
-	// mutated, so it's safer to record the exact value used here.
-	quotaSize int64
+	// quotaAlloc is the allocation retreived from the proposalQuota.
+	// Once a proposal has been passed to raft modifying this field requires
+	// holding the raftMu.
+	quotaAlloc *quotapool.IntAlloc
 
 	// tmpFooter is used to avoid an allocation.
 	tmpFooter storagepb.RaftCommandFooter
@@ -126,20 +127,10 @@ type ProposalData struct {
 // order to allow the original client to be canceled. (When the original client
 // is canceled, it won't be listening to this done channel, and so it can't be
 // counted on to invoke endCmds itself.)
+//
+// The method is safe to call more than once, but only the first result will be
+// returned to the client.
 func (proposal *ProposalData) finishApplication(pr proposalResult) {
-	if proposal.applied {
-		// If the command already applied then we shouldn't be "finishing" its
-		// application again because it should only be able to apply successfully
-		// once. We expect that when any reproposal for the same command attempts
-		// to apply it will be rejected by the below raft lease sequence or lease
-		// index check in checkForcedErr.
-		if pr.Err != nil {
-			return
-		}
-		log.Fatalf(proposal.ctx,
-			"command already applied: %+v; unexpected successful result: %+v", proposal, pr)
-	}
-	proposal.applied = true
 	proposal.ec.done(proposal.Request, pr.Reply, pr.Err)
 	proposal.signalProposalResult(pr)
 	if proposal.sp != nil {
@@ -152,6 +143,9 @@ func (proposal *ProposalData) finishApplication(pr proposalResult) {
 // has not already been signaled. The method can be called even before the
 // proposal has finished replication and command application, and does not
 // release the request's latches.
+//
+// The method is safe to call more than once, but only the first result will be
+// returned to the client.
 func (proposal *ProposalData) signalProposalResult(pr proposalResult) {
 	if proposal.doneCh != nil {
 		proposal.doneCh <- pr
@@ -159,9 +153,19 @@ func (proposal *ProposalData) signalProposalResult(pr proposalResult) {
 	}
 }
 
+// releaseQuota releases the proposal's quotaAlloc and sets it to nil.
+// If the quotaAlloc is already nil it is a no-op.
+func (proposal *ProposalData) releaseQuota() {
+	if proposal.quotaAlloc != nil {
+		proposal.quotaAlloc.Release()
+		proposal.quotaAlloc = nil
+	}
+}
+
 // TODO(tschottdorf): we should find new homes for the checksum, lease
 // code, and various others below to leave here only the core logic.
-// Not moving anything right now to avoid awkward diffs.
+// Not moving anything right now to avoid awkward diffs. These should
+// all be moved to replica_application_result.go.
 
 func (r *Replica) gcOldChecksumEntriesLocked(now time.Time) {
 	for id, val := range r.mu.checksums {

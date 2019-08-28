@@ -1375,6 +1375,19 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "Bulk"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Current Memory Usage",
+				Metrics: []string{"sql.mem.bulk.current"},
+			},
+			{
+				Title:   "Memory Usage per Statement",
+				Metrics: []string{"sql.mem.bulk.max"},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "Optimizer"}},
 		Charts: []chartDescription{
 			{
@@ -1574,6 +1587,14 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"sql.service.latency",
 					"sql.service.latency.internal",
+				},
+				AxisLabel: "Latency",
+			},
+			{
+				Title: "Transaction Latency",
+				Metrics: []string{
+					"sql.txn.latency",
+					"sql.txn.latency.internal",
 				},
 				AxisLabel: "Latency",
 			},

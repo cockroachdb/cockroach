@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -217,8 +218,17 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 	if m.stream == nil {
 		var conn *grpc.ClientConn
 		var err error
-		conn, err = m.flowCtx.Cfg.NodeDialer.Dial(ctx, m.nodeID)
+		conn, err = m.flowCtx.Cfg.NodeDialer.Dial(ctx, m.nodeID, rpc.DefaultClass)
 		if err != nil {
+			// Log any Dial errors. This does not have a verbosity check due to being
+			// a critical part of query execution: if this step doesn't work, the
+			// receiving side might end up hanging or timing out.
+			// TODO(asubiotto): On top of ignoring the circuit breaker here (#38602),
+			//  we should also retry a failed Dial. Both changes rest on the argument
+			//  that the gateway planned this query with the assumption that the
+			//  remote node was reachable, the outbox should at least try a bit harder
+			//  to make sure that this is in fact not the case.
+			log.Infof(ctx, "outbox: connection dial error: %+v", err)
 			return err
 		}
 		client := distsqlpb.NewDistSQLClient(conn)

@@ -16,12 +16,14 @@ import (
 	"io"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/colserde"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
@@ -38,15 +40,16 @@ type flowStreamClient interface {
 // method that Outbox.Run needs from nodedialer.Dialer so that we can mock it
 // in tests outside of this package.
 type Dialer interface {
-	Dial(context.Context, roachpb.NodeID) (*grpc.ClientConn, error)
+	Dial(context.Context, roachpb.NodeID, rpc.ConnectionClass) (*grpc.ClientConn, error)
 }
 
 // Outbox is used to push data from local flows to a remote endpoint. Run may
 // be called with the necessary information to establish a connection to a
 // given remote endpoint.
 type Outbox struct {
-	input exec.Operator
-	typs  []types.T
+	exec.OneInputNode
+
+	typs []coltypes.T
 	// batch is the last batch received from the input.
 	batch coldata.Batch
 
@@ -65,7 +68,7 @@ type Outbox struct {
 
 // NewOutbox creates a new Outbox.
 func NewOutbox(
-	input exec.Operator, typs []types.T, metadataSources []distsqlpb.MetadataSource,
+	input exec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource,
 ) (*Outbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
@@ -78,7 +81,7 @@ func NewOutbox(
 	o := &Outbox{
 		// Add a deselector as selection vectors are not serialized (nor should they
 		// be).
-		input:           exec.NewDeselectorOp(input, typs),
+		OneInputNode:    exec.NewOneInputNode(exec.NewDeselectorOp(input, typs)),
 		typs:            typs,
 		converter:       c,
 		serializer:      s,
@@ -118,7 +121,7 @@ func (o *Outbox) Run(
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
 
 	log.VEventf(ctx, 2, "Outbox Dialing %s", nodeID)
-	conn, err := dialer.Dial(ctx, nodeID)
+	conn, err := dialer.Dial(ctx, nodeID, rpc.DefaultClass)
 	if err != nil {
 		log.Warningf(
 			ctx,
@@ -154,6 +157,7 @@ func (o *Outbox) Run(
 
 	log.VEvent(ctx, 2, "Outbox starting normal operation")
 	o.runWithStream(ctx, stream, cancelFn)
+	log.VEvent(ctx, 2, "Outbox exiting")
 }
 
 // handleStreamErr is a utility method used to handle an error when calling
@@ -198,14 +202,14 @@ func (o *Outbox) sendBatches(
 	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
 ) (terminatedGracefully bool, _ error) {
 	nextBatch := func() {
-		o.batch = o.input.Next(ctx)
+		o.batch = o.Input().Next(ctx)
 	}
 	for {
 		if atomic.LoadUint32(&o.draining) == 1 {
 			return true, nil
 		}
 
-		if err := exec.CatchVectorizedRuntimeError(nextBatch); err != nil {
+		if err := execerror.CatchVectorizedRuntimeError(nextBatch); err != nil {
 			log.Errorf(ctx, "Outbox Next error: %+v", err)
 			return false, err
 		}
@@ -261,7 +265,7 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 func (o *Outbox) runWithStream(
 	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
 ) {
-	o.input.Init()
+	o.Input().Init()
 
 	waitCh := make(chan struct{})
 	go func() {

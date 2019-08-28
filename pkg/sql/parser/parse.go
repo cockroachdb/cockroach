@@ -211,7 +211,7 @@ func (p *Parser) parse(
 // for the purpose of formatting and scrubbing.
 func unaryNegation(e tree.Expr) tree.Expr {
 	if cst, ok := e.(*tree.NumVal); ok {
-		cst.Negative = !cst.Negative
+		cst.Negate()
 		return cst
 	}
 
@@ -234,21 +234,6 @@ func Parse(sql string) (Statements, error) {
 func ParseOne(sql string) (Statement, error) {
 	var p Parser
 	return p.parseOneWithDepth(1, sql)
-}
-
-// ParseTableIndexName parses a table name with index.
-func ParseTableIndexName(sql string) (tree.TableIndexName, error) {
-	// We wrap the name we want to parse into a dummy statement since our parser
-	// can only parse full statements.
-	stmt, err := ParseOne(fmt.Sprintf("ALTER INDEX %s RENAME TO x", sql))
-	if err != nil {
-		return tree.TableIndexName{}, err
-	}
-	rename, ok := stmt.AST.(*tree.RenameIndex)
-	if !ok {
-		return tree.TableIndexName{}, errors.AssertionFailedf("expected an ALTER INDEX statement, but found %T", stmt)
-	}
-	return *rename.Index, nil
 }
 
 // ParseTableName parses a table name.

@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE
@@ -106,7 +106,7 @@ render                             ·       ·
       │                            order   -column17,-started
       └── render                   ·       ·
            └── filter              ·       ·
-                │                  filter  ((job_type != 'AUTO CREATE STATS') OR (job_type IS NULL)) AND ((finished IS NULL) OR (finished > (now() - '12:00:00')))
+                │                  filter  ((job_type IS NULL) OR (job_type != 'AUTO CREATE STATS')) AND ((finished IS NULL) OR (finished > (now() - '12:00:00')))
                 └── virtual table  ·       ·
 ·                                  source  ·
 
@@ -405,6 +405,7 @@ limit                 ·       ·
            └── scan   ·       ·
 ·                     table   t@primary
 ·                     spans   ALL
+·                     limit   2
 
 query TTT
 EXPLAIN SELECT DISTINCT v FROM t

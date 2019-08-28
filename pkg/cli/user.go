@@ -11,7 +11,9 @@
 package cli
 
 import (
+	"fmt"
 	"os"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -20,15 +22,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// TODO(knz): Remove this file after 19.2 is released.
+// Then also remove the flag definitions in flags.go.
+
 var password bool
 
 // A getUserCmd command displays the config for the specified username.
 var getUserCmd = &cobra.Command{
 	Use:   "get [options] <username>",
-	Short: "fetches and displays a user",
+	Short: "fetches and displays a user (deprecated)",
 	Long: `
-Fetches and displays the user for <username>.
-`,
+This command is deprecated.
+Use SHOW USERS or SHOW ROLES in a SQL session.`,
 	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runGetUser),
 }
@@ -38,6 +43,7 @@ var verRmUser = version.MustParse("v1.1.0-alpha.20170622")
 var verSetUser = version.MustParse("v1.2.0-alpha.20171113")
 
 func runGetUser(cmd *cobra.Command, args []string) error {
+	fmt.Fprintf(stderr, "warning: %s\n", strings.ReplaceAll(strings.TrimSpace(cmd.Long), "\n", " "))
 	conn, err := getPasswordAndMakeSQLClient("cockroach user")
 	if err != nil {
 		return err
@@ -60,15 +66,16 @@ SELECT username AS user_name,
 // A lsUsersCmd command displays a list of users.
 var lsUsersCmd = &cobra.Command{
 	Use:   "ls [options]",
-	Short: "list all users",
+	Short: "list all users (deprecated)",
 	Long: `
-List all users.
-`,
+This command is deprecated.
+Use SHOW USERS or SHOW ROLES in a SQL session.`,
 	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runLsUsers),
 }
 
 func runLsUsers(cmd *cobra.Command, args []string) error {
+	fmt.Fprintf(stderr, "warning: %s\n", strings.ReplaceAll(strings.TrimSpace(cmd.Long), "\n", " "))
 	conn, err := getPasswordAndMakeSQLClient("cockroach user")
 	if err != nil {
 		return err
@@ -81,15 +88,16 @@ func runLsUsers(cmd *cobra.Command, args []string) error {
 // A rmUserCmd command removes the user for the specified username.
 var rmUserCmd = &cobra.Command{
 	Use:   "rm [options] <username>",
-	Short: "remove a user",
+	Short: "remove a user (deprecated)",
 	Long: `
-Remove an existing user by username.
-`,
+This command is deprecated.
+Use DROP USER or DROP ROLE in a SQL session.`,
 	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runRmUser),
 }
 
 func runRmUser(cmd *cobra.Command, args []string) error {
+	fmt.Fprintf(stderr, "warning: %s\n", strings.ReplaceAll(strings.TrimSpace(cmd.Long), "\n", " "))
 	conn, err := getPasswordAndMakeSQLClient("cockroach user")
 	if err != nil {
 		return err
@@ -108,14 +116,10 @@ func runRmUser(cmd *cobra.Command, args []string) error {
 // A setUserCmd command creates a new or updates an existing user.
 var setUserCmd = &cobra.Command{
 	Use:   "set [options] <username>",
-	Short: "create or update a user",
+	Short: "create or update a user (deprecated)",
 	Long: `
-Create or update a user for the specified username, prompting
-for the password.
-
-Valid usernames contain 1 to 63 alphanumeric characters. They must
-begin with either a letter or an underscore. Subsequent characters
-may be letters, numbers, or underscores.
+This command is deprecated.
+Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runSetUser),
@@ -126,6 +130,7 @@ may be letters, numbers, or underscores.
 // TODO(marc): once we have more fields in the user, we will need
 // to allow changing just some of them (eg: change email, but leave password).
 func runSetUser(cmd *cobra.Command, args []string) error {
+	fmt.Fprintf(stderr, "warning: %s\n", strings.ReplaceAll(strings.TrimSpace(cmd.Long), "\n", " "))
 	pwdString := ""
 	if password {
 		var err error
@@ -172,7 +177,7 @@ var userCmds = []*cobra.Command{
 
 var userCmd = &cobra.Command{
 	Use:   "user",
-	Short: "get, set, list and remove users",
+	Short: "get, set, list and remove users (deprecated)",
 	RunE:  usageAndErr,
 }
 

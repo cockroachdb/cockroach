@@ -28,7 +28,7 @@ func Example_sql_lex() {
 	defer c.cleanup()
 
 	conn := makeSQLConn(fmt.Sprintf("postgres://%s@%s/?sslmode=disable",
-		security.RootUser, c.ServingAddr()))
+		security.RootUser, c.ServingSQLAddr()))
 	defer conn.Close()
 
 	tests := []string{`

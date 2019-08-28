@@ -5,10 +5,20 @@ statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
 
 statement ok
-CREATE TABLE a (a INT, b INT, PRIMARY KEY (a, b))
+CREATE TABLE a (a INT, b INT, c INT4, PRIMARY KEY (a, b))
 
 statement ok
-INSERT INTO a SELECT g//2, g FROM generate_series(0,2000) g(g)
+INSERT INTO a SELECT g//2, g, g FROM generate_series(0,2000) g(g)
+
+query II
+SELECT a, CASE WHEN a = 0 THEN 0 WHEN a = 1 THEN 3 ELSE 5 END FROM a LIMIT 6
+----
+0  0
+0  0
+1  3
+1  3
+2  5
+2  5
 
 statement ok
 CREATE TABLE bools (b BOOL, i INT, PRIMARY KEY (b, i)); INSERT INTO bools VALUES (true, 0), (false, 1), (true, 2), (false, 3);
@@ -29,19 +39,19 @@ SELECT count(*) FROM (SELECT DISTINCT a FROM a)
 ----
 1001
 
-query II
+query III
 SELECT * FROM a LIMIT 10
 ----
-0  0
-0  1
-1  2
-1  3
-2  4
-2  5
-3  6
-3  7
-4  8
-4  9
+0  0  0
+0  1  1
+1  2  2
+1  3  3
+2  4  4
+2  5  5
+3  6  6
+3  7  7
+4  8  8
+4  9  9
 
 query II
 SELECT DISTINCT(a), b FROM a LIMIT 10
@@ -64,6 +74,14 @@ SELECT b FROM a WHERE b < 3
 0
 1
 2
+
+# Mixed type comparison
+query IB
+SELECT c, c > 1 FROM a LIMIT 3
+----
+0  false
+1  false
+2  true
 
 # Simple filter with nulls.
 query I
@@ -168,6 +186,22 @@ SELECT (a + b)::INT FROM intdec
 ----
 3
 
+statement ok
+SET vectorize = experimental_always
+
+query B
+SELECT b > a FROM intdec
+----
+true
+
+query IR
+SELECT a, b FROM intdec WHERE a < b;
+----
+1  2.0
+
+statement ok
+RESET vectorize
+
 # AND expressions.
 query II
 SELECT a, b FROM a WHERE a < 2 AND b > 0 AND a * b != 3
@@ -250,15 +284,15 @@ SELECT c.d FROM c@sec JOIN d ON d.b = c.b
 0
 
 # Ordinality operator with a filter and limit.
-query III
+query IIII
 SELECT * FROM a WITH ORDINALITY WHERE a > 1 LIMIT 6
 ----
-2  4  5
-2  5  6
-3  6  7
-3  7  8
-4  8  9
-4  9  10
+2  4  4  5
+2  5  5  6
+3  6  6  7
+3  7  7  8
+4  8  8  9
+4  9  9  10
 
 # Ensure that lookup joins properly get their postprocessing to select needed
 # columns.
@@ -334,12 +368,21 @@ SELECT * FROM e WHERE x NOT LIKE 'a%c'
 ----
 xyz
 
+query TBBBBBBBB
+SELECT x, x LIKE '%', x NOT LIKE '%', x LIKE 'ab%', x NOT LIKE 'ab%', x LIKE '%bc', x NOT LIKE '%bc', x LIKE 'a%c', x NOT LIKE 'a%c' FROM e ORDER BY x
+----
+abc  true  false  true   false  true   false  true   false
+xyz  true  false  false  true   false  true   false  true
+
 # Test that vectorized stats are collected correctly.
 statement ok
 SET vectorize = experimental_on
 
 statement ok
 SET distsql = on
+
+statement ok
+SET vectorize_row_count_threshold = 0
 
 query T
 SELECT url FROM [EXPLAIN ANALYZE SELECT a FROM a]
@@ -357,7 +400,7 @@ SELECT url FROM [EXPLAIN ANALYZE SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d
 https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kkFr4zAQhe_7K8ycdlm1sZ2boJBrCm1K2lvxQZGmjkCRjDQqCcH_vcgqNAluQ0rpzXrSNzPvjfdgncJ7scEA_BkqaBh03kkMwfkk5QdztQVeMtC2i5TkhoF0HoHvgTQZBA5PYmVwiUKhn5TAQCEJbYayndcb4XczCQweO2EDL66AwSISL2YVMFgJkmsMhYvUJTFpFDtzINXAIKBBSfpV044X5XWZ2gQSxhSkN8iLMkDTM8jI-5iBRIvAq559z0o1bkWNWal_xUr9qZUPB9E6r9CjOpq-SeS5JyN53KFv8dZpi35SH-dh8IX-zqr__268btf586dWi1uUkbSz5zOZXrLeJYbO2YCn2YxWLlMgqFrMAQcXvcQH7-TQJh8XAzcICgPl2zof5na4Gv6_Q7i6AK5P4fpLeHoEl33T_3kLAAD__6RFR6I=
 
 statement ok
-RESET optimizer; RESET vectorize; RESET distsql
+RESET optimizer; RESET vectorize; RESET distsql; RESET vectorize_row_count_threshold
 
 # Regression test for composite null handling
 # https://github.com/cockroachdb/cockroach/issues/37358
@@ -619,3 +662,23 @@ SELECT a, ordinality*2 FROM t_38995 WITH ORDINALITY
 1 2
 2 4
 3 6
+
+# Test for #39827, top k sort with bytes.
+statement ok
+CREATE TABLE t_39827 (a STRING)
+
+statement ok
+INSERT INTO t_39827 VALUES ('hello'), ('world'), ('a'), ('foo')
+
+query T
+SELECT a FROM t_39827 ORDER BY a LIMIT 2
+----
+a
+foo
+
+# Regression test for #40227, an issue with flat bytes implementation.
+statement ok
+CREATE TABLE t_40227 AS SELECT g FROM generate_series(0, 5) AS g
+
+statement ok
+SELECT '' FROM t_40227 AS t1 JOIN t_40227 AS t2 ON true

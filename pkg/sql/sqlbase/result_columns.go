@@ -116,6 +116,12 @@ var ExplainOptColumns = ResultColumns{
 	{Name: "text", Typ: types.String},
 }
 
+// ExplainVecColumns are the result columns of an
+// EXPLAIN (VEC) statement.
+var ExplainVecColumns = ResultColumns{
+	{Name: "text", Typ: types.String},
+}
+
 // ShowTraceColumns are the result columns of a SHOW [KV] TRACE statement.
 var ShowTraceColumns = ResultColumns{
 	{Name: "timestamp", Typ: types.TimestampTZ},
@@ -213,4 +219,11 @@ var SequenceSelectColumns = ResultColumns{
 	{Name: `last_value`, Typ: types.Int},
 	{Name: `log_cnt`, Typ: types.Int},
 	{Name: `is_called`, Typ: types.Bool},
+}
+
+// ExportColumns are the result columns of an EXPORT statement.
+var ExportColumns = ResultColumns{
+	{Name: "filename", Typ: types.String},
+	{Name: "rows", Typ: types.Int},
+	{Name: "bytes", Typ: types.Int},
 }

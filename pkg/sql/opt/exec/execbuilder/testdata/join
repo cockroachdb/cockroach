@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 statement ok
 CREATE TABLE onecolumn (x INT); INSERT INTO onecolumn(x) VALUES (44), (NULL), (42)
@@ -384,16 +384,17 @@ CREATE TABLE cards(id INT PRIMARY KEY, cust INT NOT NULL REFERENCES customers(id
 query TTT
 EXPLAIN SELECT * FROM cards LEFT OUTER JOIN customers ON customers.id = cards.cust
 ----
-merge-join  ·               ·
- │          type            inner
- │          equality        (cust) = (id)
- │          mergeJoinOrder  +"(cust=id)"
- ├── scan   ·               ·
- │          table           cards@cards_auto_index_fk_cust_ref_customers
- │          spans           ALL
- └── scan   ·               ·
-·           table           customers@primary
-·           spans           ALL
+merge-join  ·                   ·
+ │          type                inner
+ │          equality            (cust) = (id)
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(cust=id)"
+ ├── scan   ·                   ·
+ │          table               cards@cards_auto_index_fk_cust_ref_customers
+ │          spans               ALL
+ └── scan   ·                   ·
+·           table               customers@primary
+·           spans               ALL
 
 # Tests for filter propagation through joins.
 
@@ -661,36 +662,40 @@ render          ·                   ·                            (a, b, c, d) 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b, c)
 ----
-render           ·               ·                           (a, b, c, d, d)           ·
- │               render 0        a                           ·                         ·
- │               render 1        b                           ·                         ·
- │               render 2        c                           ·                         ·
- │               render 3        d                           ·                         ·
- │               render 4        d                           ·                         ·
- └── merge-join  ·               ·                           (a, b, c, d, a, b, c, d)  ·
-      │          type            inner                       ·                         ·
-      │          equality        (b, a, c) = (b, a, c)       ·                         ·
-      │          mergeJoinOrder  +"(b=b)",+"(a=a)",+"(c=c)"  ·                         ·
-      ├── scan   ·               ·                           (a, b, c, d)              +b,+a,+c
-      │          table           pkbac@primary               ·                         ·
-      │          spans           ALL                         ·                         ·
-      └── scan   ·               ·                           (a, b, c, d)              +b,+a,+c
-·                table           pkbac@primary               ·                         ·
-·                spans           ALL                         ·                         ·
+render           ·                   ·                           (a, b, c, d, d)           ·
+ │               render 0            a                           ·                         ·
+ │               render 1            b                           ·                         ·
+ │               render 2            c                           ·                         ·
+ │               render 3            d                           ·                         ·
+ │               render 4            d                           ·                         ·
+ └── merge-join  ·                   ·                           (a, b, c, d, a, b, c, d)  ·
+      │          type                inner                       ·                         ·
+      │          equality            (b, a, c) = (b, a, c)       ·                         ·
+      │          left cols are key   ·                           ·                         ·
+      │          right cols are key  ·                           ·                         ·
+      │          mergeJoinOrder      +"(b=b)",+"(a=a)",+"(c=c)"  ·                         ·
+      ├── scan   ·                   ·                           (a, b, c, d)              +b,+a,+c
+      │          table               pkbac@primary               ·                         ·
+      │          spans               ALL                         ·                         ·
+      └── scan   ·                   ·                           (a, b, c, d)              +b,+a,+c
+·                table               pkbac@primary               ·                         ·
+·                spans               ALL                         ·                         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAD AS r ON l.c = r.d AND l.a = r.a AND l.b = r.b
 ----
-merge-join  ·               ·                           (a, b, c, d, a, b, c, d)  ·
- │          type            inner                       ·                         ·
- │          equality        (b, a, c) = (b, a, d)       ·                         ·
- │          mergeJoinOrder  +"(b=b)",+"(a=a)",+"(c=d)"  ·                         ·
- ├── scan   ·               ·                           (a, b, c, d)              +b,+a,+c
- │          table           pkbac@primary               ·                         ·
- │          spans           ALL                         ·                         ·
- └── scan   ·               ·                           (a, b, c, d)              +b,+a,+d
-·           table           pkbad@primary               ·                         ·
-·           spans           ALL                         ·                         ·
+merge-join  ·                   ·                           (a, b, c, d, a, b, c, d)  ·
+ │          type                inner                       ·                         ·
+ │          equality            (b, a, c) = (b, a, d)       ·                         ·
+ │          left cols are key   ·                           ·                         ·
+ │          right cols are key  ·                           ·                         ·
+ │          mergeJoinOrder      +"(b=b)",+"(a=a)",+"(c=d)"  ·                         ·
+ ├── scan   ·                   ·                           (a, b, c, d)              +b,+a,+c
+ │          table               pkbac@primary               ·                         ·
+ │          spans               ALL                         ·                         ·
+ └── scan   ·                   ·                           (a, b, c, d)              +b,+a,+d
+·           table               pkbad@primary               ·                         ·
+·           spans               ALL                         ·                         ·
 
 # Tests with joins with merged columns of collated string type.
 statement ok
@@ -1053,62 +1058,70 @@ CREATE TABLE r (a INT PRIMARY KEY)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 3;
 ----
-render           ·               ·           (a)     ·
- │               render 0        a           ·       ·
- └── merge-join  ·               ·           (a, a)  ·
-      │          type            left outer  ·       ·
-      │          equality        (a) = (a)   ·       ·
-      │          mergeJoinOrder  +"(a=a)"    ·       ·
-      ├── scan   ·               ·           (a)     ·
-      │          table           l@primary   ·       ·
-      │          spans           /3-/3/#     ·       ·
-      └── scan   ·               ·           (a)     ·
-·                table           r@primary   ·       ·
-·                spans           /3-/3/#     ·       ·
+render           ·                   ·           (a)     ·
+ │               render 0            a           ·       ·
+ └── merge-join  ·                   ·           (a, a)  ·
+      │          type                left outer  ·       ·
+      │          equality            (a) = (a)   ·       ·
+      │          left cols are key   ·           ·       ·
+      │          right cols are key  ·           ·       ·
+      │          mergeJoinOrder      +"(a=a)"    ·       ·
+      ├── scan   ·                   ·           (a)     ·
+      │          table               l@primary   ·       ·
+      │          spans               /3-/3/#     ·       ·
+      └── scan   ·                   ·           (a)     ·
+·                table               r@primary   ·       ·
+·                spans               /3-/3/#     ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
 ----
-merge-join  ·               ·           (a, a)  ·
- │          type            left outer  ·       ·
- │          equality        (a) = (a)   ·       ·
- │          mergeJoinOrder  +"(a=a)"    ·       ·
- ├── scan   ·               ·           (a)     ·
- │          table           l@primary   ·       ·
- │          spans           /3-/3/#     ·       ·
- └── scan   ·               ·           (a)     ·
-·           table           r@primary   ·       ·
-·           spans           /3-/3/#     ·       ·
+merge-join  ·                   ·           (a, a)  ·
+ │          type                left outer  ·       ·
+ │          equality            (a) = (a)   ·       ·
+ │          left cols are key   ·           ·       ·
+ │          right cols are key  ·           ·       ·
+ │          mergeJoinOrder      +"(a=a)"    ·       ·
+ ├── scan   ·                   ·           (a)     ·
+ │          table               l@primary   ·       ·
+ │          spans               /3-/3/#     ·       ·
+ └── scan   ·                   ·           (a)     ·
+·           table               r@primary   ·       ·
+·           spans               /3-/3/#     ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3;
 ----
-render           ·               ·            (a)     ·
- │               render 0        a            ·       ·
- └── merge-join  ·               ·            (a, a)  ·
-      │          type            right outer  ·       ·
-      │          equality        (a) = (a)    ·       ·
-      │          mergeJoinOrder  +"(a=a)"     ·       ·
-      ├── scan   ·               ·            (a)     ·
-      │          table           l@primary    ·       ·
-      │          spans           /3-/3/#      ·       ·
-      └── scan   ·               ·            (a)     ·
-·                table           r@primary    ·       ·
-·                spans           /3-/3/#      ·       ·
+render           ·                   ·            (a)     ·
+ │               render 0            a            ·       ·
+ └── merge-join  ·                   ·            (a, a)  ·
+      │          type                right outer  ·       ·
+      │          equality            (a) = (a)    ·       ·
+      │          left cols are key   ·            ·       ·
+      │          right cols are key  ·            ·       ·
+      │          mergeJoinOrder      +"(a=a)"     ·       ·
+      ├── scan   ·                   ·            (a)     ·
+      │          table               l@primary    ·       ·
+      │          spans               /3-/3/#      ·       ·
+      └── scan   ·                   ·            (a)     ·
+·                table               r@primary    ·       ·
+·                spans               /3-/3/#      ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r ON l.a = r.a WHERE r.a = 3;
 ----
-merge-join  ·               ·            (a, a)  ·
- │          type            right outer  ·       ·
- │          equality        (a) = (a)    ·       ·
- │          mergeJoinOrder  +"(a=a)"     ·       ·
- ├── scan   ·               ·            (a)     ·
- │          table           l@primary    ·       ·
- │          spans           /3-/3/#      ·       ·
- └── scan   ·               ·            (a)     ·
-·           table           r@primary    ·       ·
-·           spans           /3-/3/#      ·       ·
+merge-join  ·                   ·            (a, a)  ·
+ │          type                right outer  ·       ·
+ │          equality            (a) = (a)    ·       ·
+ │          left cols are key   ·            ·       ·
+ │          right cols are key  ·            ·       ·
+ │          mergeJoinOrder      +"(a=a)"     ·       ·
+ ├── scan   ·                   ·            (a)     ·
+ │          table               l@primary    ·       ·
+ │          spans               /3-/3/#      ·       ·
+ └── scan   ·                   ·            (a)     ·
+·           table               r@primary    ·       ·
+·           spans               /3-/3/#      ·       ·
 
 # Regression tests for #21243
 statement ok
@@ -1133,18 +1146,19 @@ CREATE TABLE abg (
 query TTT
 EXPLAIN SELECT * FROM abcdef join (select * from abg) USING (a,b) WHERE ((a,b)>(1,2) OR ((a,b)=(1,2) AND c < 6) OR ((a,b,c)=(1,2,6) AND d > 8))
 ----
-render           ·               ·
- └── merge-join  ·               ·
-      │          type            inner
-      │          equality        (a, b) = (a, b)
-      │          mergeJoinOrder  +"(a=a)",+"(b=b)"
-      ├── scan   ·               ·
-      │          table           abcdef@primary
-      │          spans           /1/2/6/9-
-      │          filter          (((a, b) > (1, 2)) OR (((a = 1) AND (b = 2)) AND (c < 6))) OR ((((a = 1) AND (b = 2)) AND (c = 6)) AND (d > 8))
-      └── scan   ·               ·
-·                table           abg@primary
-·                spans           ALL
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (a, b) = (a, b)
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(a=a)",+"(b=b)"
+      ├── scan   ·                   ·
+      │          table               abcdef@primary
+      │          spans               /1/2/6/9-
+      │          filter              (((a, b) > (1, 2)) OR (((a = 1) AND (b = 2)) AND (c < 6))) OR ((((a = 1) AND (b = 2)) AND (c = 6)) AND (d > 8))
+      └── scan   ·                   ·
+·                table               abg@primary
+·                spans               ALL
 
 # Regression tests for mixed-type equality columns (#22514).
 statement ok

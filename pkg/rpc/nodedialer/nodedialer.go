@@ -48,7 +48,7 @@ type Dialer struct {
 	rpcContext *rpc.Context
 	resolver   AddressResolver
 
-	breakers syncutil.IntMap // map[roachpb.NodeID]*wrappedBreaker
+	breakers [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*wrappedBreaker
 }
 
 // New initializes a Dialer.
@@ -70,7 +70,9 @@ var _ = (*Dialer).Stopper
 
 // Dial returns a grpc connection to the given node. It logs whenever the
 // node first becomes unreachable or reachable.
-func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.ClientConn, err error) {
+func (n *Dialer) Dial(
+	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
+) (_ *grpc.ClientConn, err error) {
 	if n == nil || n.resolver == nil {
 		return nil, errors.New("no node dialer configured")
 	}
@@ -78,24 +80,23 @@ func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.Clien
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, ctxErr
 	}
-	breaker := n.getBreaker(nodeID)
+	breaker := n.getBreaker(nodeID, class)
 	addr, err := n.resolver(nodeID)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
 		breaker.Fail(err)
 		return nil, err
 	}
-	return n.dial(ctx, nodeID, addr, breaker)
+	return n.dial(ctx, nodeID, addr, breaker, class)
 }
 
-// DialInternalClient is a specialization of Dial for callers that
-// want a roachpb.InternalClient. This supports an optimization to
-// bypass the network for the local node. Returns a context.Context
-// which should be used when making RPC calls on the returned server
-// (This context is annotated to mark this request as in-process and
-// bypass ctx.Peer checks).
+// DialInternalClient is a specialization of DialClass for callers that
+// want a roachpb.InternalClient. This supports an optimization to bypass the
+// network for the local node. Returns a context.Context which should be used
+// when making RPC calls on the returned server. (This context is annotated to
+// mark this request as in-process and bypass ctx.Peer checks).
 func (n *Dialer) DialInternalClient(
-	ctx context.Context, nodeID roachpb.NodeID,
+	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
 ) (context.Context, roachpb.InternalClient, error) {
 	if n == nil || n.resolver == nil {
 		return nil, nil, errors.New("no node dialer configured")
@@ -114,7 +115,7 @@ func (n *Dialer) DialInternalClient(
 		return localCtx, localClient, nil
 	}
 	log.VEventf(ctx, 2, "sending request to %s", addr)
-	conn, err := n.dial(ctx, nodeID, addr, n.getBreaker(nodeID))
+	conn, err := n.dial(ctx, nodeID, addr, n.getBreaker(nodeID, class), class)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -123,7 +124,11 @@ func (n *Dialer) DialInternalClient(
 
 // dial performs the dialing of the remote connection.
 func (n *Dialer) dial(
-	ctx context.Context, nodeID roachpb.NodeID, addr net.Addr, breaker *wrappedBreaker,
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	addr net.Addr,
+	breaker *wrappedBreaker,
+	class rpc.ConnectionClass,
 ) (_ *grpc.ClientConn, err error) {
 	// Don't trip the breaker if we're already canceled.
 	if ctxErr := ctx.Err(); ctxErr != nil {
@@ -139,7 +144,7 @@ func (n *Dialer) dial(
 			log.Infof(ctx, "unable to connect to n%d: %s", nodeID, err)
 		}
 	}()
-	conn, err := n.rpcContext.GRPCDialNode(addr.String(), nodeID).Connect(ctx)
+	conn, err := n.rpcContext.GRPCDialNode(addr.String(), nodeID, class).Connect(ctx)
 	if err != nil {
 		// If we were canceled during the dial, don't trip the breaker.
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -168,14 +173,14 @@ func (n *Dialer) dial(
 	return conn, nil
 }
 
-// ConnHealth returns nil if we have an open connection to the given node
-// that succeeded on its most recent heartbeat. See the method of the same
-// name on rpc.Context for more details.
-func (n *Dialer) ConnHealth(nodeID roachpb.NodeID) error {
+// ConnHealth returns nil if we have an open connection of the request
+// class to the given node that succeeded on its most recent heartbeat. See the
+// method of the same name on rpc.Context for more details.
+func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) error {
 	if n == nil || n.resolver == nil {
 		return errors.New("no node dialer configured")
 	}
-	if !n.getBreaker(nodeID).Ready() {
+	if !n.getBreaker(nodeID, class).Ready() {
 		return circuit.ErrBreakerOpen
 	}
 	addr, err := n.resolver(nodeID)
@@ -188,23 +193,26 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID) error {
 		// The local client is always considered healthy.
 		return nil
 	}
-	conn := n.rpcContext.GRPCDialNode(addr.String(), nodeID)
+	conn := n.rpcContext.GRPCDialNode(addr.String(), nodeID, class)
 	return conn.Health()
 }
 
-// GetCircuitBreaker retrieves the circuit breaker for connections to the given
-// node. The breaker should not be mutated as this affects all connections
+// GetCircuitBreaker retrieves the circuit breaker for connections to the
+// given node. The breaker should not be mutated as this affects all connections
 // dialing to that node through this NodeDialer.
-func (n *Dialer) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
-	return n.getBreaker(nodeID).Breaker
+func (n *Dialer) GetCircuitBreaker(
+	nodeID roachpb.NodeID, class rpc.ConnectionClass,
+) *circuit.Breaker {
+	return n.getBreaker(nodeID, class).Breaker
 }
 
-func (n *Dialer) getBreaker(nodeID roachpb.NodeID) *wrappedBreaker {
-	value, ok := n.breakers.Load(int64(nodeID))
+func (n *Dialer) getBreaker(nodeID roachpb.NodeID, class rpc.ConnectionClass) *wrappedBreaker {
+	breakers := &n.breakers[class]
+	value, ok := breakers.Load(int64(nodeID))
 	if !ok {
 		name := fmt.Sprintf("rpc %v [n%d]", n.rpcContext.Config.Addr, nodeID)
 		breaker := &wrappedBreaker{Breaker: n.rpcContext.NewBreaker(name), EveryN: log.Every(logPerNodeFailInterval)}
-		value, _ = n.breakers.LoadOrStore(int64(nodeID), unsafe.Pointer(breaker))
+		value, _ = breakers.LoadOrStore(int64(nodeID), unsafe.Pointer(breaker))
 	}
 	return (*wrappedBreaker)(value)
 }
@@ -212,11 +220,11 @@ func (n *Dialer) getBreaker(nodeID roachpb.NodeID) *wrappedBreaker {
 type dialerAdapter Dialer
 
 func (da *dialerAdapter) Ready(nodeID roachpb.NodeID) bool {
-	return (*Dialer)(da).GetCircuitBreaker(nodeID).Ready()
+	return (*Dialer)(da).GetCircuitBreaker(nodeID, rpc.DefaultClass).Ready()
 }
 
 func (da *dialerAdapter) Dial(ctx context.Context, nodeID roachpb.NodeID) (ctpb.Client, error) {
-	c, err := (*Dialer)(da).Dial(ctx, nodeID)
+	c, err := (*Dialer)(da).Dial(ctx, nodeID, rpc.DefaultClass)
 	if err != nil {
 		return nil, err
 	}

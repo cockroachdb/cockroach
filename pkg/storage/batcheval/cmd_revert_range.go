@@ -34,6 +34,7 @@ func declareKeysRevertRange(
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(desc.RangeID)})
 }
 
 // isEmptyKeyTimeRange checks if the span has no writes in (since,until].
@@ -87,39 +88,29 @@ func RevertRange(
 
 	log.VEventf(ctx, 2, "clearing keys with timestamp (%v, %v]", args.TargetTime, cArgs.Header.Timestamp)
 
-	// Get the initial MVCC stats for all the keys in the affected span.
-	statsBefore, err := computeStatsDelta(
-		ctx, batch, cArgs, engine.MVCCKey{Key: args.Key}, engine.MVCCKey{Key: args.EndKey},
-	)
-	if err != nil {
-		return result.Result{}, err
-	}
-
 	resume, err := engine.MVCCClearTimeRange(
-		ctx, batch, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp, cArgs.MaxKeys,
+		ctx, batch, cArgs.Stats, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp, cArgs.MaxKeys,
 	)
 	if err != nil {
 		return result.Result{}, err
 	}
-
-	// Compute the true stats for the affected span after modification.
-	iter := batch.NewIterator(engine.IterOptions{UpperBound: args.Key})
-	statsAfter, err := iter.ComputeStats(
-		engine.MVCCKey{Key: args.Key}, engine.MVCCKey{Key: args.EndKey}, cArgs.Header.Timestamp.WallTime,
-	)
-	iter.Close()
-	if err != nil {
-		return result.Result{}, err
-	}
-
-	// Compute the difference between the computed post-modification stats and the
-	// initial stats for the span and
-	statsAfter.Subtract(statsBefore)
-
-	*cArgs.Stats = statsAfter
 
 	if resume != nil {
+		log.VEventf(ctx, 2, "hit limit while clearing keys, resume span [%v, %v)", resume.Key, resume.EndKey)
 		reply.ResumeSpan = resume
+
+		// If, and only if, we're returning a resume span do we want to return >0
+		// NumKeys. Distsender will reduce the limit for subsequent requests by the
+		// amount returned, but that doesn't really make sense for RevertRange:
+		// there isn't some combined result set size we're trying to hit across many
+		// requests; just because some earlier range ran X Clears that does not mean
+		// we want the next range to run fewer than the limit chosen for the batch
+		// size reasons. On the otherhand, we have to pass MaxKeys though if we
+		// return a resume span to cause distsender to stop after this request, as
+		// currently response combining's handling of resume spans prefers that
+		// there only be one. Thus we just set it to MaxKeys when, and only when,
+		// we're returning a ResumeSpan.
+		reply.NumKeys = cArgs.MaxKeys
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
 

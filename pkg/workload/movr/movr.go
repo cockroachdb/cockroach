@@ -296,11 +296,11 @@ func (d cityDistributor) rowsForCity(cityIdx int) (min, max int) {
 	numPerCity := float64(d.numRows) / float64(len(cities))
 	min = int(math.Ceil(float64(cityIdx) * numPerCity))
 	max = int(math.Ceil(float64(cityIdx+1) * numPerCity))
-	if min >= int(d.numRows) {
-		min = int(d.numRows)
+	if min >= d.numRows {
+		min = d.numRows
 	}
-	if max >= int(d.numRows) {
-		max = int(d.numRows)
+	if max >= d.numRows {
+		max = d.numRows
 	}
 	return min, max
 }

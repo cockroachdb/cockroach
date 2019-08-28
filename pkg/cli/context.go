@@ -99,10 +99,7 @@ func initCLIDefaults() {
 	debugCtx.inputFile = ""
 	debugCtx.printSystemConfig = false
 	debugCtx.maxResults = 1000
-	debugCtx.ballastSize = base.SizeSpec{}
-
-	zoneCtx.zoneConfig = ""
-	zoneCtx.zoneDisableReplication = false
+	debugCtx.ballastSize = base.SizeSpec{InBytes: 1000000000}
 
 	serverCfg.ReadyFn = nil
 	serverCfg.DelayedBootstrapFn = nil
@@ -148,6 +145,7 @@ func initCLIDefaults() {
 
 	demoCtx.nodes = 1
 	demoCtx.useEmptyDatabase = false
+	demoCtx.localities = nil
 
 	initPreFlagsDefaults()
 
@@ -258,13 +256,6 @@ var debugCtx struct {
 	maxResults        int64
 }
 
-// zoneCtx captures the command-line parameters of the `zone` command.
-// Defaults set by InitCLIDefaults() above.
-var zoneCtx struct {
-	zoneConfig             string
-	zoneDisableReplication bool
-}
-
 // startCtx captures the command-line arguments for the `start` command.
 // Defaults set by InitCLIDefaults() above.
 var startCtx struct {
@@ -275,6 +266,8 @@ var startCtx struct {
 
 	// temporary directory to use to spill computation results to disk.
 	tempDir string
+	// storage engine to use for temporary storage (eg. rocksdb, pebble)
+	tempEngine storageEngine
 	// directory to use for remotely-initiated operations that can
 	// specify node-local I/O paths, like BACKUP/RESTORE/IMPORT.
 	externalIODir string
@@ -344,4 +337,5 @@ var sqlfmtCtx struct {
 var demoCtx struct {
 	nodes            int
 	useEmptyDatabase bool
+	localities       demoLocalityList
 }

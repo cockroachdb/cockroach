@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
@@ -37,7 +38,7 @@ var _ pflag.Value = &localityList{}
 // Type implements the pflag.Value interface.
 func (l *localityList) Type() string { return "localityList" }
 
-// String implements the pflag.Value interface.=
+// String implements the pflag.Value interface.
 func (l *localityList) String() string {
 	string := ""
 	for _, loc := range []roachpb.LocalityAddress(*l) {
@@ -47,7 +48,7 @@ func (l *localityList) String() string {
 	return string
 }
 
-// String implements the pflag.Value interface.
+// Set implements the pflag.Value interface.
 func (l *localityList) Set(value string) error {
 	*l = []roachpb.LocalityAddress{}
 
@@ -75,6 +76,35 @@ func (l *localityList) Set(value string) error {
 		*l = append(*l, locAddress)
 	}
 
+	return nil
+}
+
+// type used to implement parsing a list of localities for the cockroach demo command.
+type demoLocalityList []roachpb.Locality
+
+// Type implements the pflag.Value interface.
+func (l *demoLocalityList) Type() string { return "demoLocalityList" }
+
+// String implements the pflag.Value interface.
+func (l *demoLocalityList) String() string {
+	s := ""
+	for _, loc := range []roachpb.Locality(*l) {
+		s += loc.String()
+	}
+	return s
+}
+
+// Set implements the pflag.Value interface.
+func (l *demoLocalityList) Set(value string) error {
+	*l = []roachpb.Locality{}
+	locs := strings.Split(value, ":")
+	for _, value := range locs {
+		parsedLoc := &roachpb.Locality{}
+		if err := parsedLoc.Set(value); err != nil {
+			return err
+		}
+		*l = append(*l, *parsedLoc)
+	}
 	return nil
 }
 
@@ -185,7 +215,8 @@ func (k *mvccKey) Set(value string) error {
 		}
 		*k = mvccKey(engine.MakeMVCCMetadataKey(roachpb.Key(unquoted)))
 	case human:
-		key, err := keys.UglyPrint(keyStr)
+		scanner := keysutil.MakePrettyScanner(nil /* tableParser */)
+		key, err := scanner.Scan(keyStr)
 		if err != nil {
 			return err
 		}
@@ -344,6 +375,41 @@ func (f *tableDisplayFormat) Set(s string) error {
 	default:
 		return fmt.Errorf("invalid table display format: %s "+
 			"(possible values: tsv, csv, table, records, sql, html, raw)", s)
+	}
+	return nil
+}
+
+type storageEngine int
+
+const (
+	engineRocksDB storageEngine = iota
+	enginePebble
+)
+
+// Type implements the pflag.Value interface.
+func (f *storageEngine) Type() string { return "string" }
+
+// String implements the pflag.Value interface.
+func (f *storageEngine) String() string {
+	switch *f {
+	case engineRocksDB:
+		return "rocksdb"
+	case enginePebble:
+		return "experimental-pebble"
+	}
+	return ""
+}
+
+// Set implements the pflag.Value interface.
+func (f *storageEngine) Set(s string) error {
+	switch s {
+	case "rocksdb":
+		*f = engineRocksDB
+	case "experimental-pebble":
+		*f = enginePebble
+	default:
+		return fmt.Errorf("invalid storage engine: %s "+
+			"(possible values: rocksdb, experimental-pebble)", s)
 	}
 	return nil
 }

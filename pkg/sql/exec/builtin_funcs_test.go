@@ -16,25 +16,26 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // Mock typing context for the typechecker.
 type mockTypeContext struct {
-	typs []semtypes.T
+	typs []types.T
 }
 
 func (p *mockTypeContext) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
 	return tree.DNull.Eval(ctx)
 }
 
-func (p *mockTypeContext) IndexedVarResolvedType(idx int) *semtypes.T {
+func (p *mockTypeContext) IndexedVarResolvedType(idx int) *types.T {
 	return &p.typs[idx]
 }
 
@@ -52,27 +53,27 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 		expr         string
 		inputCols    []int
 		inputTuples  tuples
-		inputTypes   []semtypes.T
-		outputTypes  []semtypes.T
+		inputTypes   []types.T
+		outputTypes  []types.T
 		outputTuples tuples
 	}{
 		{
-			desc:         "Absolute value",
+			desc:         "AbsVal",
 			expr:         "abs(@1)",
 			inputCols:    []int{0},
 			inputTuples:  tuples{{1}, {-1}},
-			inputTypes:   []semtypes.T{*semtypes.Int},
+			inputTypes:   []types.T{*types.Int},
 			outputTuples: tuples{{1}, {1}},
-			outputTypes:  []semtypes.T{*semtypes.Int, *semtypes.Int},
+			outputTypes:  []types.T{*types.Int, *types.Int},
 		},
 		{
-			desc:         "String length",
+			desc:         "StringLen",
 			expr:         "length(@1)",
 			inputCols:    []int{0},
 			inputTuples:  tuples{{"Hello"}, {"The"}},
-			inputTypes:   []semtypes.T{*semtypes.String},
+			inputTypes:   []types.T{*types.String},
 			outputTuples: tuples{{5}, {3}},
-			outputTypes:  []semtypes.T{*semtypes.String, *semtypes.Int},
+			outputTypes:  []types.T{*types.String, *types.Int},
 		},
 	}
 
@@ -88,7 +89,7 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 					}
 
 					p := &mockTypeContext{typs: tc.inputTypes}
-					typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarContainer: p}, semtypes.Any)
+					typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarContainer: p}, types.Any)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -103,7 +104,7 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	ctx := context.Background()
 	tctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-	batch := coldata.NewMemBatch([]types.T{types.Int64})
+	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
 	col := batch.ColVec(0).Int64()
 
 	for i := int64(0); i < coldata.BatchSize; i++ {
@@ -139,12 +140,12 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	if err != nil {
 		b.Fatal(err)
 	}
-	p := &mockTypeContext{typs: []semtypes.T{*semtypes.Int}}
-	typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarContainer: p}, semtypes.Any)
+	p := &mockTypeContext{typs: []types.T{*types.Int}}
+	typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarContainer: p}, types.Any)
 	if err != nil {
 		b.Fatal(err)
 	}
-	op := NewBuiltinFunctionOperator(tctx, typedExpr.(*tree.FuncExpr), []semtypes.T{*semtypes.Int}, []int{0}, 1, source)
+	op := NewBuiltinFunctionOperator(tctx, typedExpr.(*tree.FuncExpr), []types.T{*types.Int}, []int{0}, 1, source)
 
 	b.SetBytes(int64(8 * coldata.BatchSize))
 	b.ResetTimer()
@@ -162,4 +163,81 @@ func BenchmarkBuiltinFunctions(b *testing.B) {
 			})
 		}
 	}
+}
+
+// Perform a comparison between the default substring operator
+// and the specialized operator.
+func BenchmarkCompareSpecializedOperators(b *testing.B) {
+	ctx := context.Background()
+	tctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Bytes, coltypes.Int64, coltypes.Int64, coltypes.Bytes})
+	bCol := batch.ColVec(0).Bytes()
+	sCol := batch.ColVec(1).Int64()
+	eCol := batch.ColVec(2).Int64()
+	outCol := batch.ColVec(3).Bytes()
+	for i := 0; i < coldata.BatchSize; i++ {
+		bCol.Set(i, []byte("hello there"))
+		sCol[i] = 1
+		eCol[i] = 4
+	}
+	batch.SetLength(coldata.BatchSize)
+	source := NewRepeatableBatchSource(batch)
+	source.Init()
+
+	// Set up the default operator.
+	expr, err := parser.ParseExpr("substring(@1, @2, @3)")
+	if err != nil {
+		b.Fatal(err)
+	}
+	typs := []types.T{*types.String, *types.Int, *types.Int}
+	inputCols := []int{0, 1, 2}
+	p := &mockTypeContext{typs: typs}
+	typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarContainer: p}, types.Any)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defaultOp := &defaultBuiltinFuncOperator{
+		OneInputNode:   NewOneInputNode(source),
+		evalCtx:        tctx,
+		funcExpr:       typedExpr.(*tree.FuncExpr),
+		outputIdx:      3,
+		columnTypes:    typs,
+		outputType:     types.String,
+		outputPhysType: coltypes.Bytes,
+		converter:      typeconv.GetDatumToPhysicalFn(types.String),
+		row:            make(tree.Datums, 3),
+		argumentCols:   inputCols,
+	}
+	defaultOp.Init()
+
+	// Set up the specialized substring operator.
+	specOp := &substringFunctionOperator{
+		OneInputNode: NewOneInputNode(source),
+		argumentCols: inputCols,
+		outputIdx:    3,
+	}
+	specOp.Init()
+
+	b.Run("DefaultBuiltinOperator", func(b *testing.B) {
+		b.SetBytes(int64(len("hello there") * coldata.BatchSize))
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			defaultOp.Next(ctx)
+			// Due to the flat byte updates, we have to reset the output
+			// bytes col after each next call.
+			outCol.Reset()
+		}
+	})
+
+	b.Run("SpecializedSubstringOperator", func(b *testing.B) {
+		b.SetBytes(int64(len("hello there") * coldata.BatchSize))
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			specOp.Next(ctx)
+			// Due to the flat byte updates, we have to reset the output
+			// bytes col after each next call.
+			outCol.Reset()
+		}
+	})
 }

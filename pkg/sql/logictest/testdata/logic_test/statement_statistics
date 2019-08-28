@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 # Check that node_statement_statistics report per application
 
@@ -123,10 +123,10 @@ SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)                 ·
 SELECT x FROM test WHERE y IN (_, _, __more3__)                   ·
 SELECT x FROM test WHERE y IN (_, _, __more3__)                   +
 SELECT x FROM test WHERE y NOT IN (_, _, __more3__)               ·
-SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT  -
-SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _        -
-SET application_name = _                                          -
-SET distsql = "on"                                                -
+SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT  ·
+SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _        ·
+SET application_name = _                                          ·
+SET distsql = "on"                                                ·
 SHOW CLUSTER SETTING "debug.panic_on_failed_assertions"           ·
 SHOW application_name                                             ·
 

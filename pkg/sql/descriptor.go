@@ -114,13 +114,13 @@ func (p *planner) createDescriptorWithID(
 		log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
 	}
 	b.CPut(idKey, descID, nil)
-	WriteNewDescToBatch(
-		ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-		st, b, descID, descriptor)
+	if err := WriteNewDescToBatch(ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), st, b, descID, descriptor); err != nil {
+		return err
+	}
 
 	mutDesc, isTable := descriptor.(*sqlbase.MutableTableDescriptor)
 	if isTable {
-		if err := mutDesc.ValidateTable(st); err != nil {
+		if err := mutDesc.ValidateTable(); err != nil {
 			return err
 		}
 		if err := p.Tables().addUncommittedTable(*mutDesc); err != nil {
@@ -176,9 +176,11 @@ func getDescriptorByID(
 			return pgerror.Newf(pgcode.WrongObjectType,
 				"%q is not a table", desc.String())
 		}
-		table.MaybeFillInDescriptor()
+		if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
+			return nil
+		}
 
-		if err := table.Validate(ctx, txn, nil /* clusterVersion */); err != nil {
+		if err := table.Validate(ctx, txn); err != nil {
 			return err
 		}
 		*t = *table
@@ -206,17 +208,21 @@ func GetAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 		return nil, err
 	}
 
-	descs := make([]sqlbase.DescriptorProto, len(kvs))
-	for i, kv := range kvs {
+	descs := make([]sqlbase.DescriptorProto, 0, len(kvs))
+	for _, kv := range kvs {
 		desc := &sqlbase.Descriptor{}
 		if err := kv.ValueProto(desc); err != nil {
 			return nil, err
 		}
 		switch t := desc.Union.(type) {
 		case *sqlbase.Descriptor_Table:
-			descs[i] = desc.GetTable()
+			table := desc.GetTable()
+			if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
+				return nil, err
+			}
+			descs = append(descs, table)
 		case *sqlbase.Descriptor_Database:
-			descs[i] = desc.GetDatabase()
+			descs = append(descs, desc.GetDatabase())
 		default:
 			return nil, errors.AssertionFailedf("Descriptor.Union has unexpected type %T", t)
 		}
@@ -227,9 +233,6 @@ func GetAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 // writeDescToBatch adds a Put command writing a descriptor proto to the
 // descriptors table. It writes the descriptor desc at the id descID. If kvTrace
 // is enabled, it will log an event explaining the put that was performed.
-// TODO(jordan): the unused cluster.Settings will be used for version gating
-// this function, which must downgrade the descriptors in the case of a
-// mixed-version 19.1-19.2 cluster.
 func writeDescToBatch(
 	ctx context.Context,
 	kvTrace bool,
@@ -237,22 +240,39 @@ func writeDescToBatch(
 	b *client.Batch,
 	descID sqlbase.ID,
 	desc sqlbase.DescriptorProto,
-) {
+) (err error) {
+	var tableToDowngrade *TableDescriptor
+	switch d := desc.(type) {
+	case *TableDescriptor:
+		tableToDowngrade = d
+	case *MutableTableDescriptor:
+		tableToDowngrade = d.TableDesc()
+	case *DatabaseDescriptor:
+	default:
+		return errors.AssertionFailedf("unexpected proto type %T", desc)
+	}
+	if tableToDowngrade != nil {
+		didDowngrade, downgraded, err := tableToDowngrade.MaybeDowngradeForeignKeyRepresentation(ctx, s)
+		if err != nil {
+			return err
+		}
+		if didDowngrade {
+			desc = downgraded
+		}
+	}
 	descKey := sqlbase.MakeDescMetadataKey(descID)
 	descDesc := sqlbase.WrapDescriptor(desc)
 	if kvTrace {
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descDesc)
 	}
-	b.Put(sqlbase.MakeDescMetadataKey(descID), sqlbase.WrapDescriptor(desc))
+	b.Put(descKey, descDesc)
+	return nil
 }
 
 // WriteNewDescToBatch adds a CPut command writing a descriptor proto to the
 // descriptors table. It writes the descriptor desc at the id descID, asserting
 // that there was no previous descriptor at that id present already. If kvTrace
 // is enabled, it will log an event explaining the CPut that was performed.
-// TODO(jordan): the unused cluster.Settings will be used for version gating
-// this function, which must downgrade the descriptors in the case of a
-// mixed-version 19.1-19.2 cluster.
 func WriteNewDescToBatch(
 	ctx context.Context,
 	kvTrace bool,
@@ -260,11 +280,31 @@ func WriteNewDescToBatch(
 	b *client.Batch,
 	tableID sqlbase.ID,
 	desc sqlbase.DescriptorProto,
-) {
+) (err error) {
+	var tableToDowngrade *TableDescriptor
+	switch d := desc.(type) {
+	case *TableDescriptor:
+		tableToDowngrade = d
+	case *MutableTableDescriptor:
+		tableToDowngrade = d.TableDesc()
+	case *DatabaseDescriptor:
+	default:
+		return errors.AssertionFailedf("unexpected proto type %T", desc)
+	}
+	if tableToDowngrade != nil {
+		didDowngrade, downgraded, err := tableToDowngrade.MaybeDowngradeForeignKeyRepresentation(ctx, s)
+		if err != nil {
+			return err
+		}
+		if didDowngrade {
+			desc = downgraded
+		}
+	}
 	descKey := sqlbase.MakeDescMetadataKey(tableID)
 	descDesc := sqlbase.WrapDescriptor(desc)
 	if kvTrace {
 		log.VEventf(ctx, 2, "CPut %s -> %s", descKey, descDesc)
 	}
 	b.CPut(descKey, descDesc, nil)
+	return nil
 }

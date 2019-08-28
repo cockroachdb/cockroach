@@ -871,11 +871,25 @@ MainLoop:
 // getColVarIdx detects whether an expression is a straightforward
 // reference to a column or index variable. In this case it returns
 // the index of that column's in the descriptor's []Column array.
-// Used by indexInfo.makeIndexConstraints().
 func getColVarIdx(expr tree.Expr) (ok bool, colIdx int) {
 	switch q := expr.(type) {
 	case *tree.IndexedVar:
 		return true, q.Idx
 	}
 	return false, -1
+}
+
+// splitAndExpr flattens a tree of AND expressions, appending all of the child
+// expressions as a list. Any non-AND expression is appended as a single element
+// in the list.
+//
+//   a AND b AND c AND d -> [a, b, c, d]
+func splitAndExpr(
+	evalCtx *tree.EvalContext, e tree.TypedExpr, exprs tree.TypedExprs,
+) tree.TypedExprs {
+	switch t := e.(type) {
+	case *tree.AndExpr:
+		return splitAndExpr(evalCtx, t.TypedRight(), splitAndExpr(evalCtx, t.TypedLeft(), exprs))
+	}
+	return append(exprs, e)
 }

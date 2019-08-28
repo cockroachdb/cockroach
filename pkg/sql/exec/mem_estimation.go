@@ -14,7 +14,8 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 )
 
 const (
@@ -30,38 +31,38 @@ const (
 // EstimateBatchSizeBytes returns an estimated amount of bytes needed to
 // store a batch in memory that has column types vecTypes.
 // WARNING: This only is correct for fixed width types, and returns an
-// estimate for non fixed width types. In future it might be possible to
+// estimate for non fixed width coltypes. In future it might be possible to
 // remove the need for estimation by specifying batch sizes in terms of bytes.
-func EstimateBatchSizeBytes(vecTypes []types.T, batchLength int) int {
+func EstimateBatchSizeBytes(vecTypes []coltypes.T, batchLength int) int {
 	// acc represents the number of bytes to represent a row in the batch.
 	acc := 0
 	for _, t := range vecTypes {
 		switch t {
-		case types.Bool:
+		case coltypes.Bool:
 			acc += sizeOfBool
-		case types.Bytes:
+		case coltypes.Bytes:
 			// We don't know without looking at the data in a batch to see how
 			// much space each byte array takes up. Use some default value as a
 			// heuristic right now.
 			acc += 100
-		case types.Int8:
+		case coltypes.Int8:
 			acc += sizeOfInt8
-		case types.Int16:
+		case coltypes.Int16:
 			acc += sizeOfInt16
-		case types.Int32:
+		case coltypes.Int32:
 			acc += sizeOfInt32
-		case types.Int64:
+		case coltypes.Int64:
 			acc += sizeOfInt64
-		case types.Float32:
+		case coltypes.Float32:
 			acc += sizeOfFloat32
-		case types.Float64:
+		case coltypes.Float64:
 			acc += sizeOfFloat64
-		case types.Decimal:
+		case coltypes.Decimal:
 			// Similar to byte arrays, we can't tell how much space is used
 			// to hold the arbitrary precision decimal objects.
 			acc += 50
 		default:
-			panic(fmt.Sprintf("unhandled type %s", t))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", t))
 		}
 	}
 	return acc * batchLength

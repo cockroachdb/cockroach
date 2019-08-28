@@ -14,8 +14,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 func TestOrdinality(t *testing.T) {
@@ -53,7 +53,7 @@ func TestOrdinality(t *testing.T) {
 func BenchmarkOrdinality(b *testing.B) {
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64, types.Int64})
+	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
 	batch.SetLength(coldata.BatchSize)
 	source := NewRepeatableBatchSource(batch)
 	source.Init()

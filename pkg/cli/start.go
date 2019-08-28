@@ -368,6 +368,10 @@ func initTempStorageConfig(
 			tempStorageMaxSizeBytes = base.DefaultTempStorageMaxSizeBytes
 		}
 	}
+	storageEngine := base.EngineTypeRocksDB
+	if startCtx.tempEngine == enginePebble {
+		storageEngine = base.EngineTypePebble
+	}
 
 	// Initialize a base.TempStorageConfig based on first store's spec and
 	// cli flags.
@@ -376,6 +380,7 @@ func initTempStorageConfig(
 		st,
 		firstStore,
 		startCtx.tempDir,
+		storageEngine,
 		tempStorageMaxSizeBytes,
 		specIdx,
 	)
@@ -416,18 +421,22 @@ func runStartSingleNode(cmd *cobra.Command, args []string) error {
 	// Now actually set the flag as changed so that the start code
 	// doesn't warn that it was not set.
 	joinFlag.Changed = true
-	return runStart(cmd, args)
+	return runStart(cmd, args, true /*disableReplication*/)
 }
 
 func runStartJoin(cmd *cobra.Command, args []string) error {
-	return runStart(cmd, args)
+	return runStart(cmd, args, false /*disableReplication*/)
 }
 
 // runStart starts the cockroach node using --store as the list of
 // storage devices ("stores") on this machine and --join as the list
 // of other active nodes used to join this node to the cockroach
 // cluster, if this is its first time connecting.
-func runStart(cmd *cobra.Command, args []string) error {
+//
+// If the argument disableReplication is true and we are starting
+// a fresh cluster, the replication factor will be disabled in
+// all zone configs.
+func runStart(cmd *cobra.Command, args []string, disableReplication bool) error {
 	tBegin := timeutil.Now()
 
 	// First things first: if the user wants background processing,
@@ -560,6 +569,31 @@ func runStart(cmd *cobra.Command, args []string) error {
 			}
 		}
 
+		// If the invoker has requested an URL update, do it now that
+		// the server is ready to accept SQL connections.
+		// (Note: as stated above, ReadyFn is called after the server
+		// has started listening on its socket, but possibly before
+		// the cluster has been initialized and can start processing requests.
+		// This is OK for SQL clients, as the connection will be accepted
+		// by the network listener and will just wait/suspend until
+		// the cluster initializes, at which point it will be picked up
+		// and let the client go through, transparently.)
+		if startCtx.listeningURLFile != "" {
+			log.Infof(ctx, "listening URL file: %s", startCtx.listeningURLFile)
+			// (Re-)compute the client connection URL. We cannot do this
+			// earlier (e.g. above, in the runStart function) because
+			// at this time the address and port have not been resolved yet.
+			pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
+			if err != nil {
+				log.Errorf(ctx, "failed computing the URL: %v", err)
+				return
+			}
+
+			if err = ioutil.WriteFile(startCtx.listeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL)), 0644); err != nil {
+				log.Errorf(ctx, "failed writing the URL: %v", err)
+			}
+		}
+
 		if waitForInit {
 			log.Shout(ctx, log.Severity_INFO,
 				"initial startup completed.\n"+
@@ -685,10 +719,19 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 				s.PeriodicallyCheckForUpdates(ctx)
 			}
 
-			// Compute the client connection URL.
-			pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
-			if err != nil {
-				return err
+			initialBoot := s.InitialBoot()
+
+			if disableReplication && initialBoot {
+				// For start-single-node, set the default replication factor to
+				// 1 so as to avoid warning message and unnecessary rebalance
+				// churn.
+				if err := cliDisableReplication(ctx, s); err != nil {
+					log.Errorf(ctx, "could not disable replication: %v", err)
+					return err
+				}
+				log.Shout(ctx, log.Severity_INFO,
+					"Replication was disabled for this cluster.\n"+
+						"When/if adding nodes in the future, update zone configurations to increase the replication factor.")
 			}
 
 			// Now inform the user that the server is running and tell the
@@ -699,8 +742,18 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			fmt.Fprintf(tw, "CockroachDB node starting at %s (took %0.1fs)\n", timeutil.Now(), timeutil.Since(tBegin).Seconds())
 			fmt.Fprintf(tw, "build:\t%s %s @ %s (%s)\n", info.Distribution, info.Tag, info.Time, info.GoVersion)
 			fmt.Fprintf(tw, "webui:\t%s\n", serverCfg.AdminURL())
+
+			// (Re-)compute the client connection URL. We cannot do this
+			// earlier (e.g. above, in the runStart function) because
+			// at this time the address and port have not been resolved yet.
+			pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
+			if err != nil {
+				log.Errorf(ctx, "failed computing the URL: %v", err)
+				return err
+			}
 			fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
-			fmt.Fprintf(tw, "client flags:\t%s\n", clientFlags())
+
+			fmt.Fprintf(tw, "RPC client flags:\t%s\n", clientFlagsRPC())
 			if len(serverCfg.SocketFile) != 0 {
 				fmt.Fprintf(tw, "socket:\t%s\n", serverCfg.SocketFile)
 			}
@@ -725,7 +778,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			for i, spec := range serverCfg.Stores.Specs {
 				fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
 			}
-			initialBoot := s.InitialBoot()
 			nodeID := s.NodeID()
 			if initialBoot {
 				if nodeID == server.FirstNodeID {
@@ -737,12 +789,17 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 				fmt.Fprintf(tw, "status:\trestarted pre-existing node\n")
 			}
 
+			if baseCfg.ClusterName != "" {
+				fmt.Fprintf(tw, "cluster name:\t%s\n", baseCfg.ClusterName)
+			}
+
 			// Remember the cluster ID for log file rotation.
 			clusterID := s.ClusterID().String()
 			log.SetClusterID(clusterID)
 			fmt.Fprintf(tw, "clusterID:\t%s\n", clusterID)
-
 			fmt.Fprintf(tw, "nodeID:\t%d\n", nodeID)
+
+			// Collect the formatted string and show it to the user.
 			if err := tw.Flush(); err != nil {
 				return err
 			}
@@ -750,21 +807,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			log.Infof(ctx, "node startup completed:\n%s", msg)
 			if !startCtx.inBackground && !log.LoggingToStderr(log.Severity_INFO) {
 				fmt.Print(msg)
-			}
-
-			// If the invoker has requested an URL update, do it now that
-			// the server is ready to accept SQL connections. We do this
-			// here and not in ReadyFn because we need to wait for bootstrap
-			// to complete.
-			if startCtx.listeningURLFile != "" {
-				log.Infof(ctx, "listening URL file: %s", startCtx.listeningURLFile)
-				pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
-				if err == nil {
-					err = ioutil.WriteFile(startCtx.listeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL)), 0644)
-				}
-				if err != nil {
-					log.Error(ctx, err)
-				}
 			}
 
 			return nil
@@ -955,7 +997,7 @@ func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
 	}
 }
 
-func clientFlags() string {
+func clientFlagsRPC() string {
 	flags := []string{os.Args[0], "<client cmd>"}
 	if serverCfg.AdvertiseAddr != "" {
 		flags = append(flags, "--host="+serverCfg.AdvertiseAddr)

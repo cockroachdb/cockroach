@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -233,7 +234,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				} else {
 					ck.Validity = sqlbase.ConstraintValidity_Unvalidated
 				}
-				n.tableDesc.AddCheckMutation(ck)
+				n.tableDesc.AddCheckMutation(ck, sqlbase.DescriptorMutation_ADD)
 
 			case *tree.ForeignKeyConstraintTableDef:
 				for _, colName := range d.FromCols {
@@ -284,6 +285,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return err
 					}
 				}
+				// TODO(lucy): Validate() can't be called here because it reads the
+				// referenced table descs, which may have to be upgraded to the new FK
+				// representation. That requires reading the original table descriptor
+				// (which the backreference points to) from KV, but we haven't written
+				// the updated table desc yet. We can restore the call to Validate()
+				// after running a migration of all table descriptors, making it
+				// unnecessary to read the original table desc from KV.
+				// if err := n.tableDesc.Validate(params.ctx, params.p.txn); err != nil {
+				// 	return err
+				// }
 
 			default:
 				return errors.AssertionFailedf(
@@ -419,6 +430,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			// Drop check constraints which reference the column.
+			// Note that foreign key constraints are dropped as part of dropping
+			// indexes on the column. In the future, when FKs no longer depend on
+			// indexes in the same way, FKs will have to be dropped separately here.
 			validChecks := n.tableDesc.Checks[:0]
 			for _, check := range n.tableDesc.AllActiveAndInactiveChecks() {
 				if used, err := check.UsesColumn(n.tableDesc.TableDesc(), col.ID); err != nil {
@@ -460,6 +474,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"column %q in the middle of being added, try again later", t.Column)
 			}
+			if err := n.tableDesc.Validate(params.ctx, params.p.txn); err != nil {
+				return err
+			}
 
 		case *tree.AlterTableDropConstraint:
 			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
@@ -477,12 +494,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			if err := n.tableDesc.DropConstraint(
 				name, details,
-				func(desc *sqlbase.MutableTableDescriptor, idx *sqlbase.IndexDescriptor) error {
-					return params.p.removeFKBackReference(params.ctx, desc, idx)
-				}); err != nil {
+				func(desc *sqlbase.MutableTableDescriptor, ref *sqlbase.ForeignKeyConstraint) error {
+					return params.p.removeFKBackReference(params.ctx, desc, ref)
+				}, params.ExecCfg().Settings); err != nil {
 				return err
 			}
 			descriptorChanged = true
+			if err := n.tableDesc.Validate(params.ctx, params.p.txn); err != nil {
+				return err
+			}
 
 		case *tree.AlterTableValidateConstraint:
 			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
@@ -522,18 +542,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 				ck.Validity = sqlbase.ConstraintValidity_Validated
 
 			case sqlbase.ConstraintTypeFK:
-				found := false
-				var fkIdx *sqlbase.IndexDescriptor
-				for _, idx := range n.tableDesc.AllNonDropIndexes() {
-					fk := &idx.ForeignKey
+				var foundFk *sqlbase.ForeignKeyConstraint
+				for i := range n.tableDesc.OutboundFKs {
+					fk := &n.tableDesc.OutboundFKs[i]
 					// If the constraint is still being validated, don't allow VALIDATE CONSTRAINT to run
-					if fk.IsSet() && fk.Name == name && fk.Validity != sqlbase.ConstraintValidity_Validating {
-						found = true
-						fkIdx = idx
+					if fk.Name == name && fk.Validity != sqlbase.ConstraintValidity_Validating {
+						foundFk = fk
 						break
 					}
 				}
-				if !found {
+				if foundFk == nil {
 					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
@@ -542,7 +560,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				); err != nil {
 					return err
 				}
-				fkIdx.ForeignKey.Validity = sqlbase.ConstraintValidity_Validated
+				foundFk.Validity = sqlbase.ConstraintValidity_Validated
 
 			default:
 				return pgerror.Newf(pgcode.WrongObjectType,
@@ -642,7 +660,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			if err := n.tableDesc.RenameConstraint(
-				details, string(t.Constraint), string(t.NewName), depViewRenameError); err != nil {
+				details, string(t.Constraint), string(t.NewName), depViewRenameError, func(desc *MutableTableDescriptor, ref *sqlbase.ForeignKeyConstraint, newName string) error {
+					return params.p.updateFKBackReferenceName(params.ctx, desc, ref, newName)
+				}); err != nil {
 				return err
 			}
 			descriptorChanged = true
@@ -819,7 +839,12 @@ func applyColumnMutation(
 		for i := range tableDesc.Mutations {
 			if constraint := tableDesc.Mutations[i].GetConstraint(); constraint != nil &&
 				constraint.ConstraintType == sqlbase.ConstraintToUpdate_NOT_NULL {
-				return nil
+				if tableDesc.Mutations[i].Direction == sqlbase.DescriptorMutation_ADD {
+					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"constraint in the middle of being added")
+				}
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"constraint in the middle of being dropped, try again later")
 			}
 		}
 
@@ -831,22 +856,41 @@ func applyColumnMutation(
 		for k := range info {
 			inuseNames[k] = struct{}{}
 		}
-		tableDesc.AddNotNullValidationMutation(string(t.Column), col.ID, inuseNames)
+		check := sqlbase.MakeNotNullCheckConstraint(col.Name, col.ID, inuseNames, sqlbase.ConstraintValidity_Validating)
+		tableDesc.AddNotNullMutation(check, sqlbase.DescriptorMutation_ADD)
 
 	case *tree.AlterTableDropNotNull:
 		if col.Nullable {
 			return nil
 		}
-		// See if there's already a mutation to add a not null constraint
+		// See if there's already a mutation to add/drop a not null constraint.
 		for i := range tableDesc.Mutations {
 			if constraint := tableDesc.Mutations[i].GetConstraint(); constraint != nil &&
 				constraint.ConstraintType == sqlbase.ConstraintToUpdate_NOT_NULL {
+				if tableDesc.Mutations[i].Direction == sqlbase.DescriptorMutation_ADD {
+					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"constraint in the middle of being added, try again later")
+				}
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					"constraint in the middle of being added, try again later")
+					"constraint in the middle of being dropped")
 			}
 		}
-		// TODO (lucy): As with FKs and check constraints, move this to the schema changer
+		info, err := tableDesc.GetConstraintInfo(params.ctx, nil)
+		if err != nil {
+			return err
+		}
+		inuseNames := make(map[string]struct{}, len(info))
+		for k := range info {
+			inuseNames[k] = struct{}{}
+		}
 		col.Nullable = true
+		// In 19.2 and above, add a check constraint equivalent to the non-null
+		// constraint and drop it in the schema changer.
+		if params.ExecCfg().Settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
+			check := sqlbase.MakeNotNullCheckConstraint(col.Name, col.ID, inuseNames, sqlbase.ConstraintValidity_Dropping)
+			tableDesc.Checks = append(tableDesc.Checks, check)
+			tableDesc.AddNotNullMutation(check, sqlbase.DescriptorMutation_DROP)
+		}
 
 	case *tree.AlterTableDropStored:
 		if !col.IsComputed() {
@@ -982,4 +1026,41 @@ func (p *planner) removeColumnComment(
 		columnID)
 
 	return err
+}
+
+// updateFKBackReferenceName updates the name of a foreign key reference on
+// the referenced table descriptor.
+// TODO (lucy): This method is meant to be analogous to removeFKBackReference,
+// in that it only updates the backreference, but we should refactor/unify all
+// the places where we update both FKs and their backreferences, so that callers
+// don't have to manually take care of updating both table descriptors.
+func (p *planner) updateFKBackReferenceName(
+	ctx context.Context,
+	tableDesc *sqlbase.MutableTableDescriptor,
+	ref *sqlbase.ForeignKeyConstraint,
+	newName string,
+) error {
+	var referencedTableDesc *sqlbase.MutableTableDescriptor
+	// We don't want to lookup/edit a second copy of the same table.
+	if tableDesc.ID == ref.ReferencedTableID {
+		referencedTableDesc = tableDesc
+	} else {
+		lookup, err := p.Tables().getMutableTableVersionByID(ctx, ref.ReferencedTableID, p.txn)
+		if err != nil {
+			return errors.Errorf("error resolving referenced table ID %d: %v", ref.ReferencedTableID, err)
+		}
+		referencedTableDesc = lookup
+	}
+	if referencedTableDesc.Dropped() {
+		// The referenced table is being dropped. No need to modify it further.
+		return nil
+	}
+	for i := range referencedTableDesc.InboundFKs {
+		backref := &referencedTableDesc.InboundFKs[i]
+		if backref.Name == ref.Name && backref.OriginTableID == tableDesc.ID {
+			backref.Name = newName
+			return p.writeSchemaChange(ctx, referencedTableDesc, sqlbase.InvalidMutationID)
+		}
+	}
+	return errors.Errorf("missing backreference for foreign key %s", ref.Name)
 }

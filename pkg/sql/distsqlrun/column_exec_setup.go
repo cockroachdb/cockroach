@@ -18,24 +18,24 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/colrpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/vecbuiltins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 func checkNumIn(inputs []exec.Operator, numIn int) error {
@@ -51,7 +51,7 @@ func wrapRowSource(
 	ctx context.Context,
 	flowCtx *FlowCtx,
 	input exec.Operator,
-	inputTypes []semtypes.T,
+	inputTypes []types.T,
 	newToWrap func(RowSource) (RowSource, error),
 ) (*columnarizer, error) {
 	var (
@@ -66,17 +66,12 @@ func wrapRowSource(
 		// to this operator (e.g. streamIDToOp).
 		toWrapInput = c.input
 	} else {
-		outputToInputColIdx := make([]int, len(inputTypes))
-		for i := range outputToInputColIdx {
-			outputToInputColIdx[i] = i
-		}
 		var err error
 		toWrapInput, err = newMaterializer(
 			flowCtx,
 			processorID,
 			input,
 			inputTypes,
-			outputToInputColIdx,
 			&distsqlpb.PostProcessSpec{},
 			nil, /* output */
 			nil, /* metadataSourcesQueue */
@@ -98,7 +93,7 @@ func wrapRowSource(
 
 type newColOperatorResult struct {
 	op              exec.Operator
-	outputTypes     []types.T
+	outputTypes     []coltypes.T
 	memUsage        int
 	metadataSources []distsqlpb.MetadataSource
 	isStreaming     bool
@@ -118,7 +113,7 @@ func newColOperator(
 	// this must be set for any core spec which might require post-processing. In
 	// the future we may want to make these column types part of the Operator
 	// interface.
-	var columnTypes []semtypes.T
+	var columnTypes []types.T
 
 	// By default, we safely assume that an operator is not streaming. Note that
 	// projections, renders, filters, limits, offsets as well as all internal
@@ -142,10 +137,15 @@ func newColOperator(
 		}
 		var scanOp *colBatchScan
 		scanOp, err = newColBatchScan(flowCtx, core.TableReader, post)
-		result.op = scanOp
+		if err != nil {
+			return result, err
+		}
+		result.op, result.isStreaming = scanOp, true
 		result.metadataSources = append(result.metadataSources, scanOp)
-		// We will be wrapping colBatchScan with a cancel checker below, so we
-		// need to log its creation separately.
+		// colBatchScan is wrapped with a cancel checker below, so we need to
+		// account for its static memory usage here. We also need to log its
+		// creation separately.
+		result.memUsage += scanOp.EstimateStaticMemoryUsage()
 		log.VEventf(ctx, 1, "made op %T\n", result.op)
 
 		// We want to check for cancellation once per input batch, and wrapping
@@ -154,7 +154,7 @@ func newColOperator(
 		// However, some of the long-running operators (for example, sorter) are
 		// still responsible for doing the cancellation check on their own while
 		// performing long operations.
-		result.op, result.isStreaming = exec.NewCancelChecker(result.op), true
+		result.op = exec.NewCancelChecker(result.op)
 		returnMutations := core.TableReader.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 		columnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
 	case core.Aggregator != nil:
@@ -172,9 +172,9 @@ func newColOperator(
 			// TODO(solon): The distsql plan for this case includes a TableReader, so
 			// we end up creating an orphaned colBatchScan. We should avoid that.
 			// Ideally the optimizer would not plan a scan in this unusual case.
-			result.op, err = exec.NewSingleTupleNoInputOp(), nil
+			result.op, result.isStreaming, err = exec.NewSingleTupleNoInputOp(), true, nil
 			// We make columnTypes non-nil so that sanity check doesn't panic.
-			columnTypes = make([]semtypes.T, 0)
+			columnTypes = make([]types.T, 0)
 			break
 		}
 		if len(aggSpec.GroupCols) == 0 &&
@@ -182,8 +182,8 @@ func newColOperator(
 			aggSpec.Aggregations[0].FilterColIdx == nil &&
 			aggSpec.Aggregations[0].Func == distsqlpb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
-			result.op, err = exec.NewCountOp(inputs[0]), nil
-			columnTypes = []semtypes.T{*semtypes.Int}
+			result.op, result.isStreaming, err = exec.NewCountOp(inputs[0]), true, nil
+			columnTypes = []types.T{*types.Int}
 			break
 		}
 
@@ -204,10 +204,10 @@ func newColOperator(
 			return result, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
 		}
 
-		aggTyps := make([][]semtypes.T, len(aggSpec.Aggregations))
+		aggTyps := make([][]types.T, len(aggSpec.Aggregations))
 		aggCols := make([][]uint32, len(aggSpec.Aggregations))
 		aggFns := make([]distsqlpb.AggregatorSpec_Func, len(aggSpec.Aggregations))
-		columnTypes = make([]semtypes.T, len(aggSpec.Aggregations))
+		columnTypes = make([]types.T, len(aggSpec.Aggregations))
 		for i, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
 				return result, errors.Newf("distinct aggregation not supported")
@@ -218,7 +218,7 @@ func newColOperator(
 			if len(agg.Arguments) > 0 {
 				return result, errors.Newf("aggregates with arguments not supported")
 			}
-			aggTyps[i] = make([]semtypes.T, len(agg.ColIdx))
+			aggTyps[i] = make([]types.T, len(agg.ColIdx))
 			for j, colIdx := range agg.ColIdx {
 				aggTyps[i][j] = spec.Input[0].ColumnTypes[colIdx]
 			}
@@ -227,7 +227,7 @@ func newColOperator(
 			switch agg.Func {
 			case distsqlpb.AggregatorSpec_SUM:
 				switch aggTyps[i][0].Family() {
-				case semtypes.IntFamily:
+				case types.IntFamily:
 					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
 					// at the end, mod issues with overflow. Perhaps to avoid the overflow
 					// issues, at first, we could plan SUM for all types besides Int64.
@@ -245,8 +245,8 @@ func newColOperator(
 			}
 			columnTypes[i] = *retType
 		}
-		var typs []types.T
-		typs, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		var typs []coltypes.T
+		typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
 			return result, err
 		}
@@ -282,8 +282,8 @@ func newColOperator(
 		}
 
 		columnTypes = spec.Input[0].ColumnTypes
-		var typs []types.T
-		typs, err = conv.FromColumnTypes(columnTypes)
+		var typs []coltypes.T
+		typs, err = typeconv.FromColumnTypes(columnTypes)
 		if err != nil {
 			return result, err
 		}
@@ -294,7 +294,7 @@ func newColOperator(
 		if err := checkNumIn(inputs, 1); err != nil {
 			return result, err
 		}
-		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
+		columnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
 		result.op, result.isStreaming = exec.NewOrdinalityOp(inputs[0]), true
 
 	case core.HashJoiner != nil:
@@ -302,12 +302,12 @@ func newColOperator(
 			return result, err
 		}
 
-		var leftTypes, rightTypes []types.T
-		leftTypes, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		var leftTypes, rightTypes []coltypes.T
+		leftTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
 			return result, err
 		}
-		rightTypes, err = conv.FromColumnTypes(spec.Input[1].ColumnTypes)
+		rightTypes, err = typeconv.FromColumnTypes(spec.Input[1].ColumnTypes)
 		if err != nil {
 			return result, err
 		}
@@ -356,7 +356,7 @@ func newColOperator(
 			return result, err
 		}
 
-		columnTypes = make([]semtypes.T, nLeftCols+nRightCols)
+		columnTypes = make([]types.T, nLeftCols+nRightCols)
 		copy(columnTypes, spec.Input[0].ColumnTypes)
 		if core.HashJoiner.Type != sqlbase.JoinType_LEFT_SEMI {
 			// TODO(yuzefovich): update this conditional once LEFT ANTI is supported.
@@ -373,9 +373,6 @@ func newColOperator(
 		}
 
 	case core.MergeJoiner != nil:
-		// TODO(yuzefovich): merge joiner is streaming when both input sources are
-		// unique. We probably need to propagate that information from the
-		// optimizer.
 		if err := checkNumIn(inputs, 2); err != nil {
 			return result, err
 		}
@@ -384,12 +381,12 @@ func newColOperator(
 			return result, errors.AssertionFailedf("unexpectedly %s merge join was planned", core.MergeJoiner.Type.String())
 		}
 
-		var leftTypes, rightTypes []types.T
-		leftTypes, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		var leftTypes, rightTypes []coltypes.T
+		leftTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
 			return result, err
 		}
-		rightTypes, err = conv.FromColumnTypes(spec.Input[1].ColumnTypes)
+		rightTypes, err = typeconv.FromColumnTypes(spec.Input[1].ColumnTypes)
 		if err != nil {
 			return result, err
 		}
@@ -436,7 +433,7 @@ func newColOperator(
 			return result, err
 		}
 
-		columnTypes = make([]semtypes.T, nLeftCols+nRightCols)
+		columnTypes = make([]types.T, nLeftCols+nRightCols)
 		copy(columnTypes, spec.Input[0].ColumnTypes)
 		if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI &&
 			core.MergeJoiner.Type != sqlbase.JoinType_LEFT_ANTI {
@@ -451,6 +448,10 @@ func newColOperator(
 			}
 			columnTypes, err = result.planFilterExpr(flowCtx, core.MergeJoiner.OnExpr, columnTypes)
 		}
+
+		// Merge joiner is a streaming operator when equality columns form a key
+		// for both of the inputs.
+		result.isStreaming = core.MergeJoiner.LeftEqColumnsAreKey && core.MergeJoiner.RightEqColumnsAreKey
 
 	case core.JoinReader != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
@@ -491,8 +492,8 @@ func newColOperator(
 			return result, err
 		}
 		input := inputs[0]
-		var inputTypes []types.T
-		inputTypes, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		var inputTypes []coltypes.T
+		inputTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
 			return result, err
 		}
@@ -533,8 +534,8 @@ func newColOperator(
 		}
 
 		input := inputs[0]
-		var typs []types.T
-		typs, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		var typs []coltypes.T
+		typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
 			return result, err
 		}
@@ -582,7 +583,7 @@ func newColOperator(
 			result.op = exec.NewSimpleProjectOp(result.op, int(wf.OutputColIdx+1), projection)
 		}
 
-		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
+		columnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
 
 	default:
 		return result, errors.Newf("unsupported processor core %q", core)
@@ -612,7 +613,7 @@ func newColOperator(
 	if post.Projection {
 		result.op = exec.NewSimpleProjectOp(result.op, len(columnTypes), post.OutputColumns)
 		// Update output columnTypes.
-		newTypes := make([]semtypes.T, 0, len(post.OutputColumns))
+		newTypes := make([]types.T, 0, len(post.OutputColumns))
 		for _, j := range post.OutputColumns {
 			newTypes = append(newTypes, columnTypes[j])
 		}
@@ -642,7 +643,7 @@ func newColOperator(
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}
 		result.op = exec.NewSimpleProjectOp(result.op, len(columnTypes), renderedCols)
-		newTypes := make([]semtypes.T, 0, len(renderedCols))
+		newTypes := make([]types.T, 0, len(renderedCols))
 		for _, j := range renderedCols {
 			newTypes = append(newTypes, columnTypes[j])
 		}
@@ -657,13 +658,13 @@ func newColOperator(
 	if err != nil {
 		return result, err
 	}
-	result.outputTypes, err = conv.FromColumnTypes(columnTypes)
+	result.outputTypes, err = typeconv.FromColumnTypes(columnTypes)
 	return result, err
 }
 
 func (r *newColOperatorResult) planFilterExpr(
-	flowCtx *FlowCtx, filter distsqlpb.Expression, columnTypes []semtypes.T,
-) ([]semtypes.T, error) {
+	flowCtx *FlowCtx, filter distsqlpb.Expression, columnTypes []types.T,
+) ([]types.T, error) {
 	var (
 		helper       exprHelper
 		selectionMem int
@@ -672,7 +673,7 @@ func (r *newColOperatorResult) planFilterExpr(
 	if err != nil {
 		return columnTypes, err
 	}
-	var filterColumnTypes []semtypes.T
+	var filterColumnTypes []types.T
 	r.op, _, filterColumnTypes, selectionMem, err = planSelectionOperators(flowCtx.NewEvalCtx(), helper.expr, columnTypes, r.op)
 	if err != nil {
 		return columnTypes, errors.Wrapf(err, "unable to columnarize filter expression %q", filter.Expr)
@@ -691,8 +692,8 @@ func (r *newColOperatorResult) planFilterExpr(
 }
 
 func planSelectionOperators(
-	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
-) (op exec.Operator, resultIdx int, ct []semtypes.T, memUsed int, err error) {
+	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []types.T, input exec.Operator,
+) (op exec.Operator, resultIdx int, ct []types.T, memUsed int, err error) {
 	if err := assertHomogeneousTypes(expr); err != nil {
 		return op, resultIdx, ct, memUsed, err
 	}
@@ -711,7 +712,7 @@ func planSelectionOperators(
 		if err != nil {
 			return nil, resultIdx, ct, memUsageLeft, err
 		}
-		typ := &ct[leftIdx]
+		lTyp := &ct[leftIdx]
 		if constArg, ok := t.Right.(tree.Datum); ok {
 			if t.Operator == tree.Like || t.Operator == tree.NotLike {
 				negate := t.Operator == tree.NotLike
@@ -726,17 +727,17 @@ func planSelectionOperators(
 					err = errors.Errorf("IN is only supported for constant expressions")
 					return nil, resultIdx, ct, memUsed, err
 				}
-				op, err := exec.GetInOperator(typ, leftOp, leftIdx, datumTuple, negate)
+				op, err := exec.GetInOperator(lTyp, leftOp, leftIdx, datumTuple, negate)
 				return op, resultIdx, ct, memUsageLeft, err
 			}
-			op, err := exec.GetSelectionConstOperator(typ, cmpOp, leftOp, leftIdx, constArg)
+			op, err := exec.GetSelectionConstOperator(lTyp, t.TypedRight().ResolvedType(), cmpOp, leftOp, leftIdx, constArg)
 			return op, resultIdx, ct, memUsageLeft, err
 		}
 		rightOp, rightIdx, ct, memUsageRight, err := planProjectionOperators(ctx, t.TypedRight(), ct, leftOp)
 		if err != nil {
 			return nil, resultIdx, ct, memUsageLeft + memUsageRight, err
 		}
-		op, err := exec.GetSelectionOperator(typ, cmpOp, rightOp, leftIdx, rightIdx)
+		op, err := exec.GetSelectionOperator(lTyp, &ct[rightIdx], cmpOp, rightOp, leftIdx, rightIdx)
 		return op, resultIdx, ct, memUsageLeft + memUsageRight, err
 	default:
 		return nil, resultIdx, nil, memUsed, errors.Errorf("unhandled selection expression type: %s", reflect.TypeOf(t))
@@ -748,8 +749,8 @@ func planSelectionOperators(
 // of the expression's result (if any, otherwise -1) and the column types of the
 // resulting batches.
 func planProjectionOperators(
-	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
-) (op exec.Operator, resultIdx int, ct []semtypes.T, memUsed int, err error) {
+	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []types.T, input exec.Operator,
+) (op exec.Operator, resultIdx int, ct []types.T, memUsed int, err error) {
 	if err := assertHomogeneousTypes(expr); err != nil {
 		return op, resultIdx, ct, memUsed, err
 	}
@@ -787,14 +788,14 @@ func planProjectionOperators(
 		return op, resultIdx, ct, memUsed, nil
 	case tree.Datum:
 		datumType := t.ResolvedType()
-		ct := columnTypes
+		ct = columnTypes
 		resultIdx = len(ct)
 		ct = append(ct, *datumType)
-		if datumType.Family() == semtypes.UnknownFamily {
+		if datumType.Family() == types.UnknownFamily {
 			return exec.NewConstNullOp(input, resultIdx), resultIdx, ct, memUsed, nil
 		}
-		typ := conv.FromColumnType(datumType)
-		constVal, err := conv.GetDatumToPhysicalFn(datumType)(t)
+		typ := typeconv.FromColumnType(datumType)
+		constVal, err := typeconv.GetDatumToPhysicalFn(datumType)(t)
 		if err != nil {
 			return nil, resultIdx, ct, memUsed, err
 		}
@@ -803,6 +804,66 @@ func planProjectionOperators(
 			return nil, resultIdx, ct, memUsed, err
 		}
 		return op, resultIdx, ct, memUsed, nil
+	case *tree.CaseExpr:
+		if t.Expr != nil {
+			return nil, resultIdx, ct, 0, errors.New("CASE <expr> WHEN expressions unsupported")
+		}
+
+		buffer := exec.NewBufferOp(input)
+		caseOps := make([]exec.Operator, len(t.Whens))
+		caseOutputType := typeconv.FromColumnType(t.ResolvedType())
+		caseOutputIdx := len(columnTypes)
+		ct = append(columnTypes, *t.ResolvedType())
+		thenIdxs := make([]int, len(t.Whens)+1)
+		for i, when := range t.Whens {
+			// The case operator is assembled from n WHEN arms, n THEN arms, and an
+			// ELSE arm. Each WHEN arm is a boolean projection. Each THEN arm (and the
+			// ELSE arm) is a projection of the type of the CASE expression. We set up
+			// each WHEN arm to write its output to a fresh column, and likewise for
+			// the THEN arms and the ELSE arm. Each WHEN arm individually acts on the
+			// single input batch from the CaseExpr's input and is then transformed
+			// into a selection vector, after which the THEN arm runs to create the
+			// output just for the tuples that matched the WHEN arm. Each subsequent
+			// WHEN arm will use the inverse of the selection vector to avoid running
+			// the WHEN projection on tuples that have already been matched by a
+			// previous WHEN arm. Finally, after each WHEN arm runs, we copy the
+			// results of the WHEN into a single output vector, assembling the final
+			// result of the case projection.
+			var whenMemUsed, thenMemUsed int
+			caseOps[i], resultIdx, ct, whenMemUsed, err = planProjectionOperators(
+				ctx, when.Cond.(tree.TypedExpr), ct, buffer)
+			if err != nil {
+				return nil, resultIdx, ct, 0, err
+			}
+			// Transform the booleans to a selection vector.
+			caseOps[i] = exec.NewBoolVecToSelOp(caseOps[i], resultIdx)
+
+			// Run the "then" clause on those tuples that were selected.
+			caseOps[i], thenIdxs[i], ct, thenMemUsed, err = planProjectionOperators(ctx, when.Val.(tree.TypedExpr), ct,
+				caseOps[i])
+			if err != nil {
+				return nil, resultIdx, ct, 0, err
+			}
+
+			memUsed += whenMemUsed + thenMemUsed
+		}
+		var elseMem int
+		var elseOp exec.Operator
+		elseExpr := t.Else
+		if elseExpr == nil {
+			// If there's no ELSE arm, we write NULLs.
+			elseExpr = tree.DNull
+		}
+		elseOp, thenIdxs[len(t.Whens)], ct, elseMem, err = planProjectionOperators(
+			ctx, elseExpr.(tree.TypedExpr), ct, buffer)
+		if err != nil {
+			return nil, resultIdx, ct, 0, err
+		}
+		memUsed += elseMem
+
+		op := exec.NewCaseOp(buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
+
+		return op, caseOutputIdx, ct, memUsed, nil
 	default:
 		return nil, resultIdx, nil, memUsed, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
 	}
@@ -811,11 +872,11 @@ func planProjectionOperators(
 func planProjectionExpr(
 	ctx *tree.EvalContext,
 	binOp tree.Operator,
-	outputType *semtypes.T,
+	outputType *types.T,
 	left, right tree.TypedExpr,
-	columnTypes []semtypes.T,
+	columnTypes []types.T,
 	input exec.Operator,
-) (op exec.Operator, resultIdx int, ct []semtypes.T, memUsed int, err error) {
+) (op exec.Operator, resultIdx int, ct []types.T, memUsed int, err error) {
 	resultIdx = -1
 	// There are 3 cases. Either the left is constant, the right is constant,
 	// or neither are constant.
@@ -834,7 +895,7 @@ func planProjectionExpr(
 		resultIdx = len(ct)
 		// The projection result will be outputted to a new column which is appended
 		// to the input batch.
-		op, err = exec.GetProjectionLConstOperator(&ct[rightIdx], binOp, rightOp, rightIdx, lConstArg, resultIdx)
+		op, err = exec.GetProjectionLConstOperator(left.ResolvedType(), &ct[rightIdx], binOp, rightOp, rightIdx, lConstArg, resultIdx)
 		ct = append(ct, *outputType)
 		if sMem, ok := op.(exec.StaticMemoryOperator); ok {
 			memUsed += sMem.EstimateStaticMemoryUsage()
@@ -850,7 +911,11 @@ func planProjectionExpr(
 		// The projection result will be outputted to a new column which is appended
 		// to the input batch.
 		resultIdx = len(ct)
-		if binOp == tree.In || binOp == tree.NotIn {
+		if binOp == tree.Like || binOp == tree.NotLike {
+			negate := binOp == tree.NotLike
+			op, err = exec.GetLikeProjectionOperator(
+				ctx, leftOp, leftIdx, resultIdx, string(tree.MustBeDString(rConstArg)), negate)
+		} else if binOp == tree.In || binOp == tree.NotIn {
 			negate := binOp == tree.NotIn
 			datumTuple, ok := tree.AsDTuple(rConstArg)
 			if !ok {
@@ -859,7 +924,7 @@ func planProjectionExpr(
 			}
 			op, err = exec.GetInProjectionOperator(&ct[leftIdx], leftOp, leftIdx, resultIdx, datumTuple, negate)
 		} else {
-			op, err = exec.GetProjectionRConstOperator(&ct[leftIdx], binOp, leftOp, leftIdx, rConstArg, resultIdx)
+			op, err = exec.GetProjectionRConstOperator(&ct[leftIdx], right.ResolvedType(), binOp, leftOp, leftIdx, rConstArg, resultIdx)
 		}
 		ct = append(ct, *outputType)
 		if sMem, ok := op.(exec.StaticMemoryOperator); ok {
@@ -873,7 +938,7 @@ func planProjectionExpr(
 		return nil, resultIdx, nil, leftMem + rightMem, err
 	}
 	resultIdx = len(ct)
-	op, err = exec.GetProjectionOperator(&ct[leftIdx], binOp, rightOp, leftIdx, rightIdx, resultIdx)
+	op, err = exec.GetProjectionOperator(&ct[leftIdx], &ct[rightIdx], binOp, rightOp, leftIdx, rightIdx, resultIdx)
 	ct = append(ct, *outputType)
 	if sMem, ok := op.(exec.StaticMemoryOperator); ok {
 		memUsed += sMem.EstimateStaticMemoryUsage()
@@ -881,10 +946,10 @@ func planProjectionExpr(
 	return op, resultIdx, ct, leftMem + rightMem + memUsed, err
 }
 
-// assertHomogeneousTypes checks that the left and right sides of an expression
+// assertHomogeneousTypes checks that the left and right sides of a BinaryExpr
 // have identical types. (Vectorized execution does not yet handle mixed types.)
-// For BinaryExprs, it also checks that the result type matches, since this is
-// not the case for certain operations like integer division.
+// It also checks that the result type matches, since this is not the case for
+// certain operations like integer division.
 func assertHomogeneousTypes(expr tree.TypedExpr) error {
 	switch t := expr.(type) {
 	case *tree.BinaryExpr:
@@ -896,20 +961,6 @@ func assertHomogeneousTypes(expr tree.TypedExpr) error {
 		}
 		if !left.Identical(result) {
 			return errors.Errorf("BinaryExpr on %s with %s result is unhandled", left, result)
-		}
-	case *tree.ComparisonExpr:
-		left := t.TypedLeft().ResolvedType()
-		right := t.TypedRight().ResolvedType()
-
-		// Special rules for IN and NOT IN expressions. The type checker
-		// handles invalid types for the IN and NOT IN operations at this point,
-		// and we allow a comparison between t and t tuple.
-		if t.Operator == tree.In || t.Operator == tree.NotIn {
-			return nil
-		}
-
-		if !left.Identical(right) {
-			return errors.Errorf("ComparisonExpr on %s and %s is unhandled", left, right)
 		}
 	}
 	return nil
@@ -992,14 +1043,41 @@ type flowCreatorHelper interface {
 	getCancelFlowFn() context.CancelFunc
 }
 
+// opDAGWithMetaSources is a helper struct that stores an operator DAG as well
+// as the metadataSources in this DAG that need to be drained.
+type opDAGWithMetaSources struct {
+	rootOperator    exec.Operator
+	metadataSources []distsqlpb.MetadataSource
+}
+
+// remoteComponentCreator is an interface that abstracts the constructors for
+// several components in a remote flow. Mostly for testing purposes.
+type remoteComponentCreator interface {
+	newOutbox(input exec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource) (*colrpc.Outbox, error)
+	newInbox(typs []coltypes.T) (*colrpc.Inbox, error)
+}
+
+type vectorizedRemoteComponentCreator struct{}
+
+func (vectorizedRemoteComponentCreator) newOutbox(
+	input exec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource,
+) (*colrpc.Outbox, error) {
+	return colrpc.NewOutbox(input, typs, metadataSources)
+}
+
+func (vectorizedRemoteComponentCreator) newInbox(typs []coltypes.T) (*colrpc.Inbox, error) {
+	return colrpc.NewInbox(typs)
+}
+
 // vectorizedFlowCreator performs all the setup of vectorized flows. Depending
 // on embedded flowCreatorHelper, it can either do the actual setup in order
 // to run the flow or do the setup needed to check that the flow is supported
 // through the vectorized engine.
 type vectorizedFlowCreator struct {
 	flowCreatorHelper
+	remoteComponentCreator
 
-	streamIDToInputOp              map[distsqlpb.StreamID]exec.Operator
+	streamIDToInputOp              map[distsqlpb.StreamID]opDAGWithMetaSources
 	recordingStats                 bool
 	vectorizedStatsCollectorsQueue []*exec.VectorizedStatsCollector
 	procIDs                        []int32
@@ -1012,10 +1090,15 @@ type vectorizedFlowCreator struct {
 	// It must be accessed atomically.
 	numOutboxes       int32
 	materializerAdded bool
+
+	// leaves accumulates all operators that have no further outputs on the
+	// current node, for the purposes of EXPLAIN output.
+	leaves []exec.OpNode
 }
 
 func newVectorizedFlowCreator(
 	helper flowCreatorHelper,
+	componentCreator remoteComponentCreator,
 	recordingStats bool,
 	waitGroup *sync.WaitGroup,
 	syncFlowConsumer RowReceiver,
@@ -1024,7 +1107,8 @@ func newVectorizedFlowCreator(
 ) *vectorizedFlowCreator {
 	return &vectorizedFlowCreator{
 		flowCreatorHelper:              helper,
-		streamIDToInputOp:              make(map[distsqlpb.StreamID]exec.Operator),
+		remoteComponentCreator:         componentCreator,
+		streamIDToInputOp:              make(map[distsqlpb.StreamID]opDAGWithMetaSources),
 		recordingStats:                 recordingStats,
 		vectorizedStatsCollectorsQueue: make([]*exec.VectorizedStatsCollector, 0, 2),
 		procIDs:                        make([]int32, 0, 2),
@@ -1035,20 +1119,23 @@ func newVectorizedFlowCreator(
 	}
 }
 
+// setupRemoteOutputStream sets up an Outbox that will operate according to
+// the given StreamEndpointSpec. It will also drain all MetadataSources in the
+// metadataSourcesQueue.
 func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	op exec.Operator,
-	outputTyps []types.T,
+	outputTyps []coltypes.T,
 	stream *distsqlpb.StreamEndpointSpec,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
-) error {
-	outbox, err := colrpc.NewOutbox(op, outputTyps, metadataSourcesQueue)
+) (exec.OpNode, error) {
+	outbox, err := s.remoteComponentCreator.newOutbox(op, outputTyps, metadataSourcesQueue)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	atomic.AddInt32(&s.numOutboxes, 1)
 	run := func(ctx context.Context, cancelFn context.CancelFunc) {
 		outbox.Run(ctx, s.nodeDialer, stream.TargetNodeID, s.flowID, stream.StreamID, cancelFn)
-		atomic.AddInt32(&s.numOutboxes, -1)
+		currentOutboxes := atomic.AddInt32(&s.numOutboxes, -1)
 		// When the last Outbox on this node exits, we want to make sure that
 		// everything is shutdown; namely, we need to call cancelFn if:
 		// - it is the last Outbox
@@ -1057,29 +1144,28 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 		// - cancelFn is non-nil (it can be nil in tests).
 		// Calling cancelFn will cancel the context that all infrastructure on this
 		// node is listening on, so it will shut everything down.
-		if atomic.LoadInt32(&s.numOutboxes) == 0 && !s.materializerAdded && cancelFn != nil {
+		if currentOutboxes == 0 && !s.materializerAdded && cancelFn != nil {
 			cancelFn()
 		}
 	}
 	s.accumulateAsyncComponent(run)
-	return nil
+	return outbox, nil
 }
 
 // setupRouter sets up a vectorized hash router according to the output router
 // spec. If the outputs are local, these are added to s.streamIDToInputOp to be
 // used as inputs in further planning. metadataSourcesQueue is passed along to
-// any outboxes created to be drained, an error is returned if this does not
-// happen (i.e. no router outputs are remote).
+// any outboxes created to be drained, or stored in streamIDToInputOp for any
+// local outputs to pass that responsibility along. In any case,
+// metadataSourcesQueue will always be fully consumed.
+// NOTE: This method supports only BY_HASH routers. Callers should handle
+// PASS_THROUGH routers separately.
 func (s *vectorizedFlowCreator) setupRouter(
 	input exec.Operator,
-	outputTyps []types.T,
+	outputTyps []coltypes.T,
 	output *distsqlpb.OutputRouterSpec,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
 ) error {
-	if output.Type == distsqlpb.OutputRouterSpec_PASS_THROUGH {
-		// Nothing to do.
-		return nil
-	}
 	if output.Type != distsqlpb.OutputRouterSpec_BY_HASH {
 		return errors.Errorf("vectorized output router type %s unsupported", output.Type)
 	}
@@ -1098,20 +1184,18 @@ func (s *vectorizedFlowCreator) setupRouter(
 	// Append the router to the metadata sources.
 	metadataSourcesQueue = append(metadataSourcesQueue, router)
 
-	consumedMetadataSources := false
+	foundLocalOutput := false
 	for i, op := range outputs {
 		stream := &output.Streams[i]
 		switch stream.Type {
 		case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
 			return errors.Errorf("unexpected sync response output when setting up router")
 		case distsqlpb.StreamEndpointSpec_REMOTE:
-			if err := s.setupRemoteOutputStream(op, outputTyps, stream, metadataSourcesQueue); err != nil {
+			if _, err := s.setupRemoteOutputStream(op, outputTyps, stream, metadataSourcesQueue); err != nil {
 				return err
 			}
-			// We only need one outbox to drain metadata.
-			metadataSourcesQueue = nil
-			consumedMetadataSources = true
 		case distsqlpb.StreamEndpointSpec_LOCAL:
+			foundLocalOutput = true
 			if s.recordingStats {
 				// Wrap local outputs with vectorized stats collectors when recording
 				// stats. This is mostly for compatibility but will provide some useful
@@ -1124,12 +1208,16 @@ func (s *vectorizedFlowCreator) setupRouter(
 					return err
 				}
 			}
-			s.streamIDToInputOp[stream.StreamID] = op
+			s.streamIDToInputOp[stream.StreamID] = opDAGWithMetaSources{rootOperator: op, metadataSources: metadataSourcesQueue}
 		}
+		// Either the metadataSourcesQueue will be drained by an outbox or we
+		// created an opDAGWithMetaSources to pass along these metadataSources. We don't need to
+		// worry about metadata sources for following iterations of the loop.
+		metadataSourcesQueue = nil
 	}
-
-	if !consumedMetadataSources {
-		return errors.Errorf("router had no remote outputs so metadata could not be consumed")
+	if !foundLocalOutput {
+		// No local output means that our router is a leaf node.
+		s.leaves = append(s.leaves, router)
 	}
 	return nil
 }
@@ -1149,24 +1237,26 @@ func (s *vectorizedFlowCreator) setupInput(
 	for _, inputStream := range input.Streams {
 		switch inputStream.Type {
 		case distsqlpb.StreamEndpointSpec_LOCAL:
-			inputStreamOps = append(inputStreamOps, s.streamIDToInputOp[inputStream.StreamID])
+			in := s.streamIDToInputOp[inputStream.StreamID]
+			inputStreamOps = append(inputStreamOps, in.rootOperator)
+			metaSources = append(metaSources, in.metadataSources...)
 		case distsqlpb.StreamEndpointSpec_REMOTE:
 			// If the input is remote, the input operator does not exist in
 			// streamIDToInputOp. Create an inbox.
 			if err := s.checkInboundStreamID(inputStream.StreamID); err != nil {
 				return nil, nil, memUsed, err
 			}
-			typs, err := conv.FromColumnTypes(input.ColumnTypes)
+			typs, err := typeconv.FromColumnTypes(input.ColumnTypes)
 			if err != nil {
 				return nil, nil, memUsed, err
 			}
-			inbox, err := colrpc.NewInbox(typs)
+			inbox, err := s.remoteComponentCreator.newInbox(typs)
 			if err != nil {
 				return nil, nil, memUsed, err
 			}
 			s.addStreamEndpoint(inputStream.StreamID, inbox, s.waitGroup)
 			metaSources = append(metaSources, inbox)
-			op = exec.Operator(inbox)
+			op = inbox
 			memUsed += op.(exec.StaticMemoryOperator).EstimateStaticMemoryUsage()
 			if s.recordingStats {
 				op, err = wrapWithVectorizedStatsCollector(
@@ -1191,7 +1281,7 @@ func (s *vectorizedFlowCreator) setupInput(
 	op = inputStreamOps[0]
 	if len(inputStreamOps) > 1 {
 		statsInputs := inputStreamOps
-		typs, err := conv.FromColumnTypes(input.ColumnTypes)
+		typs, err := typeconv.FromColumnTypes(input.ColumnTypes)
 		if err != nil {
 			return nil, nil, memUsed, err
 		}
@@ -1221,111 +1311,108 @@ func (s *vectorizedFlowCreator) setupInput(
 }
 
 // setupOutput sets up any necessary infrastructure according to the output
-// spec of pspec. It returns an updated queue for metadata sources as well as
-// any error if it occurs.
+// spec of pspec. The metadataSourcesQueue is fully consumed by either
+// connecting it to a component that can drain these MetadataSources (root
+// materializer or outbox) or storing it in streamIDToInputOp with the given op
+// to be processed later.
+// NOTE: The caller must not reuse the metadataSourcesQueue.
 func (s *vectorizedFlowCreator) setupOutput(
 	ctx context.Context,
 	flowCtx *FlowCtx,
 	pspec *distsqlpb.ProcessorSpec,
 	op exec.Operator,
-	opOutputTypes []types.T,
+	opOutputTypes []coltypes.T,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
-) ([]distsqlpb.MetadataSource, error) {
+) error {
 	output := &pspec.Output[0]
 	if output.Type != distsqlpb.OutputRouterSpec_PASS_THROUGH {
-		if err := s.setupRouter(
+		return s.setupRouter(
 			op,
 			opOutputTypes,
 			output,
 			// Pass in a copy of the queue to reset metadataSourcesQueue for
 			// further appends without overwriting.
-			append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
-		); err != nil {
-			return nil, err
-		}
-		metadataSourcesQueue = metadataSourcesQueue[:0]
-	} else {
-		if len(output.Streams) != 1 {
-			return nil, errors.Errorf("unsupported multi outputstream proc (%d streams)", len(output.Streams))
-		}
-		outputStream := &output.Streams[0]
-		switch outputStream.Type {
-		case distsqlpb.StreamEndpointSpec_LOCAL:
-		case distsqlpb.StreamEndpointSpec_REMOTE:
-			// Set up an Outbox. Note that we pass in a copy of metadataSourcesQueue
-			// so that we can reset it below and keep on writing to it.
-			if s.recordingStats {
-				// If recording stats, we add a metadata source that will generate all
-				// stats data as metadata for the stats collectors created so far.
-				vscs := append([]*exec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
-				s.vectorizedStatsCollectorsQueue = s.vectorizedStatsCollectorsQueue[:0]
-				metadataSourcesQueue = append(
-					metadataSourcesQueue,
-					distsqlpb.CallbackMetadataSource{
-						DrainMetaCb: func(ctx context.Context) []distsqlpb.ProducerMetadata {
-							// TODO(asubiotto): Who is responsible for the recording of the
-							// parent context?
-							// Start a separate recording so that GetRecording will return
-							// the recordings for only the child spans containing stats.
-							ctx, span := tracing.ChildSpanSeparateRecording(ctx, "")
-							finishVectorizedStatsCollectors(ctx, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscs, s.procIDs)
-							return []distsqlpb.ProducerMetadata{{TraceData: tracing.GetRecording(span)}}
-						},
+			metadataSourcesQueue,
+		)
+	}
+
+	if len(output.Streams) != 1 {
+		return errors.Errorf("unsupported multi outputstream proc (%d streams)", len(output.Streams))
+	}
+	outputStream := &output.Streams[0]
+	switch outputStream.Type {
+	case distsqlpb.StreamEndpointSpec_LOCAL:
+		s.streamIDToInputOp[outputStream.StreamID] = opDAGWithMetaSources{rootOperator: op, metadataSources: metadataSourcesQueue}
+	case distsqlpb.StreamEndpointSpec_REMOTE:
+		// Set up an Outbox. Note that we pass in a copy of metadataSourcesQueue
+		// so that we can reset it below and keep on writing to it.
+		if s.recordingStats {
+			// If recording stats, we add a metadata source that will generate all
+			// stats data as metadata for the stats collectors created so far.
+			vscs := append([]*exec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
+			s.vectorizedStatsCollectorsQueue = s.vectorizedStatsCollectorsQueue[:0]
+			metadataSourcesQueue = append(
+				metadataSourcesQueue,
+				distsqlpb.CallbackMetadataSource{
+					DrainMetaCb: func(ctx context.Context) []distsqlpb.ProducerMetadata {
+						// TODO(asubiotto): Who is responsible for the recording of the
+						// parent context?
+						// Start a separate recording so that GetRecording will return
+						// the recordings for only the child spans containing stats.
+						ctx, span := tracing.ChildSpanSeparateRecording(ctx, "")
+						finishVectorizedStatsCollectors(ctx, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscs, s.procIDs)
+						return []distsqlpb.ProducerMetadata{{TraceData: tracing.GetRecording(span)}}
 					},
+				},
+			)
+		}
+		outbox, err := s.setupRemoteOutputStream(op, opOutputTypes, outputStream, metadataSourcesQueue)
+		if err != nil {
+			return err
+		}
+		// An outbox is a leaf: there's nothing that sees it as an input on this
+		// node.
+		s.leaves = append(s.leaves, outbox)
+	case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
+		if s.syncFlowConsumer == nil {
+			return errors.New("syncFlowConsumer unset, unable to create materializer")
+		}
+		// Make the materializer, which will write to the given receiver.
+		columnTypes := s.syncFlowConsumer.Types()
+		var outputStatsToTrace func()
+		if s.recordingStats {
+			// Make a copy given that vectorizedStatsCollectorsQueue is reset and
+			// appended to.
+			vscq := append([]*exec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
+			outputStatsToTrace = func() {
+				finishVectorizedStatsCollectors(
+					ctx, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscq, s.procIDs,
 				)
 			}
-			if err := s.setupRemoteOutputStream(op, opOutputTypes, outputStream, metadataSourcesQueue); err != nil {
-				return nil, err
-			}
-			metadataSourcesQueue = metadataSourcesQueue[:0]
-		case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
-			if s.syncFlowConsumer == nil {
-				return nil, errors.New("syncFlowConsumer unset, unable to create materializer")
-			}
-			// Make the materializer, which will write to the given receiver.
-			columnTypes := s.syncFlowConsumer.Types()
-			outputToInputColIdx := make([]int, len(columnTypes))
-			for i := range outputToInputColIdx {
-				outputToInputColIdx[i] = i
-			}
-			var outputStatsToTrace func()
-			if s.recordingStats {
-				// Make a copy given that vectorizedStatsCollectorsQueue is reset and
-				// appended to.
-				vscq := append([]*exec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
-				outputStatsToTrace = func() {
-					finishVectorizedStatsCollectors(
-						ctx, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscq, s.procIDs,
-					)
-				}
-			}
-			proc, err := newMaterializer(
-				flowCtx,
-				pspec.ProcessorID,
-				op,
-				columnTypes,
-				outputToInputColIdx,
-				&distsqlpb.PostProcessSpec{},
-				s.syncFlowConsumer,
-				// Pass in a copy of the queue to reset metadataSourcesQueue for
-				// further appends without overwriting.
-				append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
-				outputStatsToTrace,
-				s.getCancelFlowFn(),
-			)
-			if err != nil {
-				return nil, err
-			}
-			metadataSourcesQueue = metadataSourcesQueue[:0]
-			s.vectorizedStatsCollectorsQueue = s.vectorizedStatsCollectorsQueue[:0]
-			s.addMaterializer(proc)
-			s.materializerAdded = true
-		default:
-			return nil, errors.Errorf("unsupported output stream type %s", outputStream.Type)
 		}
-		s.streamIDToInputOp[outputStream.StreamID] = op
+		proc, err := newMaterializer(
+			flowCtx,
+			pspec.ProcessorID,
+			op,
+			columnTypes,
+			&distsqlpb.PostProcessSpec{},
+			s.syncFlowConsumer,
+			metadataSourcesQueue,
+			outputStatsToTrace,
+			s.getCancelFlowFn,
+		)
+		if err != nil {
+			return err
+		}
+		s.vectorizedStatsCollectorsQueue = s.vectorizedStatsCollectorsQueue[:0]
+		// A materializer is a leaf.
+		s.leaves = append(s.leaves, proc)
+		s.addMaterializer(proc)
+		s.materializerAdded = true
+	default:
+		return errors.Errorf("unsupported output stream type %s", outputStream.Type)
 	}
-	return metadataSourcesQueue, nil
+	return nil
 }
 
 func (s *vectorizedFlowCreator) setupFlow(
@@ -1333,9 +1420,8 @@ func (s *vectorizedFlowCreator) setupFlow(
 	flowCtx *FlowCtx,
 	processorSpecs []distsqlpb.ProcessorSpec,
 	acc *mon.BoundAccount,
-) error {
+) (leaves []exec.OpNode, err error) {
 	streamIDToSpecIdx := make(map[distsqlpb.StreamID]int)
-	metadataSourcesQueue := make([]distsqlpb.MetadataSource, 0, 1)
 	// queue is a queue of indices into processorSpecs, for topologically
 	// ordered processing.
 	queue := make([]int, 0, len(processorSpecs))
@@ -1363,16 +1449,23 @@ func (s *vectorizedFlowCreator) setupFlow(
 		pspec := &processorSpecs[queue[0]]
 		queue = queue[1:]
 		if len(pspec.Output) > 1 {
-			return errors.Errorf("unsupported multi-output proc (%d outputs)", len(pspec.Output))
+			return nil, errors.Errorf("unsupported multi-output proc (%d outputs)", len(pspec.Output))
 		}
+
+		// metadataSourcesQueue contains all the MetadataSources that need to be
+		// drained. If in a given loop iteration no component that can drain
+		// metadata from these sources is found, the metadataSourcesQueue should be
+		// added as part of one of the last unconnected inputDAGs in
+		// streamIDToInputOp. This is to avoid cycles.
+		metadataSourcesQueue := make([]distsqlpb.MetadataSource, 0, 1)
 		inputs = inputs[:0]
 		for i := range pspec.Input {
 			input, metadataSources, memUsed, err := s.setupInput(pspec.Input[i])
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if err = acc.Grow(ctx, int64(memUsed)); err != nil {
-				return errors.Wrapf(err, "not enough memory to setup vectorized plan")
+				return nil, errors.Wrapf(err, "not enough memory to setup vectorized plan")
 			}
 			metadataSourcesQueue = append(metadataSourcesQueue, metadataSources...)
 			inputs = append(inputs, input)
@@ -1380,14 +1473,14 @@ func (s *vectorizedFlowCreator) setupFlow(
 
 		result, err := newColOperator(ctx, flowCtx, pspec, inputs)
 		if err != nil {
-			return errors.Wrapf(err, "unable to vectorize execution plan")
+			return nil, errors.Wrapf(err, "unable to vectorize execution plan")
 		}
 		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto &&
 			!result.isStreaming {
-			return errors.Errorf("non-streaming operator encountered when vectorize=auto")
+			return nil, errors.Errorf("non-streaming operator encountered when vectorize=auto")
 		}
 		if err = acc.Grow(ctx, int64(result.memUsage)); err != nil {
-			return errors.Wrapf(err, "not enough memory to setup vectorized plan")
+			return nil, errors.Wrapf(err, "not enough memory to setup vectorized plan")
 		}
 		metadataSourcesQueue = append(metadataSourcesQueue, result.metadataSources...)
 
@@ -1395,17 +1488,24 @@ func (s *vectorizedFlowCreator) setupFlow(
 		if s.recordingStats {
 			vsc, err := wrapWithVectorizedStatsCollector(op, inputs, pspec)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, vsc)
 			s.procIDs = append(s.procIDs, pspec.ProcessorID)
 			op = vsc
 		}
 
-		if metadataSourcesQueue, err = s.setupOutput(
+		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto &&
+			pspec.Output[0].Type == distsqlpb.OutputRouterSpec_BY_HASH {
+			// exec.HashRouter can do unlimited buffering, and it is present in the
+			// flow, so we don't want to run such a flow via the vectorized engine
+			// when vectorize=auto.
+			return nil, errors.Errorf("hash router encountered when vectorize=auto")
+		}
+		if err = s.setupOutput(
 			ctx, flowCtx, pspec, op, result.outputTypes, metadataSourcesQueue,
 		); err != nil {
-			return err
+			return nil, err
 		}
 
 		// Now queue all outputs from this op whose inputs are already all
@@ -1419,7 +1519,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				}
 				procIdx, ok := streamIDToSpecIdx[stream.StreamID]
 				if !ok {
-					return errors.Errorf("couldn't find stream %d", stream.StreamID)
+					return nil, errors.Errorf("couldn't find stream %d", stream.StreamID)
 				}
 				outputSpec := &processorSpecs[procIdx]
 				for k := range outputSpec.Input {
@@ -1444,13 +1544,10 @@ func (s *vectorizedFlowCreator) setupFlow(
 		}
 	}
 
-	if len(metadataSourcesQueue) > 0 {
-		panic("not all metadata sources have been processed")
-	}
 	if len(s.vectorizedStatsCollectorsQueue) > 0 {
 		panic("not all vectorized stats collectors have been processed")
 	}
-	return nil
+	return s.leaves, nil
 }
 
 // vectorizedFlowCreatorHelper is a flowCreatorHelper that sets up all the
@@ -1507,9 +1604,10 @@ func (f *Flow) setupVectorizedFlow(ctx context.Context, acc *mon.BoundAccount) e
 	}
 	helper := &vectorizedFlowCreatorHelper{f: f}
 	creator := newVectorizedFlowCreator(
-		helper, recordingStats, &f.waitGroup, f.syncFlowConsumer, f.Cfg.NodeDialer, f.id,
+		helper, vectorizedRemoteComponentCreator{}, recordingStats, &f.waitGroup, f.syncFlowConsumer, f.Cfg.NodeDialer, f.id,
 	)
-	return creator.setupFlow(ctx, &f.FlowCtx, f.spec.Processors, acc)
+	_, err := creator.setupFlow(ctx, &f.FlowCtx, f.spec.Processors, acc)
+	return err
 }
 
 // noopFlowCreatorHelper is a flowCreatorHelper that only performs sanity
@@ -1550,11 +1648,14 @@ func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 // SupportsVectorized checks whether flow is supported by the vectorized engine
 // and returns an error if it isn't. Note that it does so by setting up the
 // full flow without running the components asynchronously.
+// It returns a list of the leaf operators of all flows for the purposes of
+// EXPLAIN output.
 func SupportsVectorized(
 	ctx context.Context, flowCtx *FlowCtx, processorSpecs []distsqlpb.ProcessorSpec,
-) error {
+) (leaves []exec.OpNode, err error) {
 	creator := newVectorizedFlowCreator(
 		newNoopFlowCreatorHelper(),
+		vectorizedRemoteComponentCreator{},
 		false,        /* recordingStats */
 		nil,          /* waitGroup */
 		&RowBuffer{}, /* syncFlowConsumer */

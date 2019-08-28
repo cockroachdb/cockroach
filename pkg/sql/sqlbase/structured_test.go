@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pmezard/go-difflib/difflib"
 )
 
 // Makes an IndexDescriptor with all columns being ascending.
@@ -613,7 +615,7 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 	}
 	for i, d := range testData {
-		if err := d.desc.ValidateTable(cluster.MakeTestingClusterSettings()); err == nil {
+		if err := d.desc.ValidateTable(); err == nil {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, d.err, d.desc)
 		} else if d.err != err.Error() && "internal error: "+d.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, d.err, err)
@@ -631,96 +633,82 @@ func TestValidateCrossTableReferences(t *testing.T) {
 	tests := []struct {
 		err        string
 		desc       TableDescriptor
-		referenced []TableDescriptor
+		otherDescs []TableDescriptor
 	}{
 		// Foreign keys
 		{
-			err: `invalid foreign key: missing table=52 index=2: descriptor not found`,
+			err: `invalid foreign key: missing table=52: descriptor not found`,
 			desc: TableDescriptor{
 				ID: 51,
-				PrimaryIndex: IndexDescriptor{
-					ID:         1,
-					ForeignKey: ForeignKeyReference{Table: 52, Index: 2},
+				OutboundFKs: []ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   52,
+						ReferencedColumnIDs: []ColumnID{1},
+						OriginTableID:       51,
+						OriginColumnIDs:     []ColumnID{1},
+					},
 				},
 			},
-			referenced: nil,
+			otherDescs: nil,
 		},
 		{
-			err: `invalid foreign key: missing table=baz index=2: index-id "2" does not exist`,
+			err: `missing fk back reference "fk" to "foo" from "baz"`,
 			desc: TableDescriptor{
-				ID: 51,
-				PrimaryIndex: IndexDescriptor{
-					ID:         1,
-					ForeignKey: ForeignKeyReference{Table: 52, Index: 2},
+				ID:   51,
+				Name: "foo",
+				OutboundFKs: []ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   52,
+						ReferencedColumnIDs: []ColumnID{1},
+						OriginTableID:       51,
+						OriginColumnIDs:     []ColumnID{1},
+					},
 				},
 			},
-			referenced: []TableDescriptor{{
+			otherDescs: []TableDescriptor{{
 				ID:   52,
 				Name: "baz",
 			}},
 		},
 		{
-			err: `missing fk back reference to "foo"@"bar" from "baz"@"qux"`,
+			err: `invalid foreign key backreference: missing table=52: descriptor not found`,
+			desc: TableDescriptor{
+				ID: 51,
+				InboundFKs: []ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   51,
+						ReferencedColumnIDs: []ColumnID{1},
+						OriginTableID:       52,
+						OriginColumnIDs:     []ColumnID{1},
+					},
+				},
+			},
+		},
+		{
+			err: `missing fk forward reference "fk" to "foo" from "baz"`,
 			desc: TableDescriptor{
 				ID:   51,
 				Name: "foo",
 				PrimaryIndex: IndexDescriptor{
-					ID:         1,
-					Name:       "bar",
-					ForeignKey: ForeignKeyReference{Table: 52, Index: 2},
+					ID:   1,
+					Name: "bar",
+				},
+				InboundFKs: []ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   51,
+						ReferencedColumnIDs: []ColumnID{1},
+						OriginTableID:       52,
+						OriginColumnIDs:     []ColumnID{1},
+					},
 				},
 			},
-			referenced: []TableDescriptor{{
+			otherDescs: []TableDescriptor{{
 				ID:   52,
 				Name: "baz",
-				PrimaryIndex: IndexDescriptor{
-					ID:   2,
-					Name: "qux",
-				},
-			}},
-		},
-		{
-			err: `invalid fk backreference table=52 index=2: descriptor not found`,
-			desc: TableDescriptor{
-				ID: 51,
-				PrimaryIndex: IndexDescriptor{
-					ID:           1,
-					ReferencedBy: []ForeignKeyReference{{Table: 52, Index: 2}},
-				},
-			},
-		},
-		{
-			err: `invalid fk backreference table=baz index=2: index-id "2" does not exist`,
-			desc: TableDescriptor{
-				ID: 51,
-				PrimaryIndex: IndexDescriptor{
-					ID:           1,
-					ReferencedBy: []ForeignKeyReference{{Table: 52, Index: 2}},
-				},
-			},
-			referenced: []TableDescriptor{{
-				ID:   52,
-				Name: "baz",
-			}},
-		},
-		{
-			err: `broken fk backward reference from "foo"@"bar" to "baz"@"qux"`,
-			desc: TableDescriptor{
-				ID:   51,
-				Name: "foo",
-				PrimaryIndex: IndexDescriptor{
-					ID:           1,
-					Name:         "bar",
-					ReferencedBy: []ForeignKeyReference{{Table: 52, Index: 2}},
-				},
-			},
-			referenced: []TableDescriptor{{
-				ID:   52,
-				Name: "baz",
-				PrimaryIndex: IndexDescriptor{
-					ID:   2,
-					Name: "qux",
-				},
 			}},
 		},
 
@@ -736,7 +724,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					}},
 				},
 			},
-			referenced: nil,
+			otherDescs: nil,
 		},
 		{
 			err: `invalid interleave: missing table=baz index=2: index-id "2" does not exist`,
@@ -749,7 +737,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					}},
 				},
 			},
-			referenced: []TableDescriptor{{
+			otherDescs: []TableDescriptor{{
 				ID:   52,
 				Name: "baz",
 			}},
@@ -767,7 +755,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					}},
 				},
 			},
-			referenced: []TableDescriptor{{
+			otherDescs: []TableDescriptor{{
 				ID:   52,
 				Name: "baz",
 				PrimaryIndex: IndexDescriptor{
@@ -795,7 +783,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					InterleavedBy: []ForeignKeyReference{{Table: 52, Index: 2}},
 				},
 			},
-			referenced: []TableDescriptor{{
+			otherDescs: []TableDescriptor{{
 				ID:   52,
 				Name: "baz",
 			}},
@@ -811,7 +799,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					InterleavedBy: []ForeignKeyReference{{Table: 52, Index: 2}},
 				},
 			},
-			referenced: []TableDescriptor{{
+			otherDescs: []TableDescriptor{{
 				ID:   52,
 				Name: "baz",
 				PrimaryIndex: IndexDescriptor{
@@ -834,13 +822,14 @@ func TestValidateCrossTableReferences(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		for _, referencedDesc := range test.referenced {
+		for _, otherDesc := range test.otherDescs {
+			otherDesc.Privileges = NewDefaultPrivilegeDescriptor()
 			var v roachpb.Value
-			desc := &Descriptor{Union: &Descriptor_Table{Table: &referencedDesc}}
+			desc := &Descriptor{Union: &Descriptor_Table{Table: &otherDesc}}
 			if err := v.SetProto(desc); err != nil {
 				t.Fatal(err)
 			}
-			if err := kvDB.Put(ctx, MakeDescMetadataKey(referencedDesc.ID), &v); err != nil {
+			if err := kvDB.Put(ctx, MakeDescMetadataKey(otherDesc.ID), &v); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -850,8 +839,8 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		} else if test.err != err.Error() && "internal error: "+test.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, test.err, err.Error())
 		}
-		for _, referencedDesc := range test.referenced {
-			if err := kvDB.Del(ctx, MakeDescMetadataKey(referencedDesc.ID)); err != nil {
+		for _, otherDesc := range test.otherDescs {
+			if err := kvDB.Del(ctx, MakeDescMetadataKey(otherDesc.ID)); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1230,13 +1219,14 @@ func TestUnvalidateConstraints(t *testing.T) {
 		FormatVersion: FamilyFormatVersion,
 		Indexes:       []IndexDescriptor{makeIndexDescriptor("d", []string{"b", "a"})},
 		Privileges:    NewDefaultPrivilegeDescriptor(),
+		OutboundFKs: []ForeignKeyConstraint{
+			{
+				Name:              "fk",
+				ReferencedTableID: ID(1),
+				Validity:          ConstraintValidity_Validated,
+			},
+		},
 	})
-	desc.Indexes[0].ForeignKey = ForeignKeyReference{
-		Name:     "fk",
-		Table:    ID(1),
-		Index:    IndexID(1),
-		Validity: ConstraintValidity_Validated,
-	}
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
@@ -1310,7 +1300,7 @@ func TestKeysPerRow(t *testing.T) {
 }
 
 func TestColumnNeedsBackfill(t *testing.T) {
-	// Define variable strings here such that we can pass their address below
+	// Define variable strings here such that we can pass their address below.
 	null := "NULL"
 	four := "4:::INT8"
 	// Create Column Descriptors that reflect the definition of a column with a
@@ -1336,26 +1326,6 @@ func TestColumnNeedsBackfill(t *testing.T) {
 	}
 }
 
-type fakeProtoGetter struct {
-	protos map[interface{}]protoutil.Message
-}
-
-func (m fakeProtoGetter) GetProto(
-	ctx context.Context, key interface{}, msg protoutil.Message,
-) error {
-	msg.Reset()
-	if other, ok := m.protos[string(key.(roachpb.Key))]; ok {
-		bytes := make([]byte, other.Size())
-		if _, err := other.MarshalTo(bytes); err != nil {
-			return err
-		}
-		if err := protoutil.Unmarshal(bytes, msg); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // oldFormatUpgradedPair is a helper struct for the upgrade/downgrade test
 // below. It holds an "old format" (pre-19.2) table descriptor, and an expected
 // upgraded equivalent. The test will verify that the old format descriptor
@@ -1363,6 +1333,14 @@ func (m fakeProtoGetter) GetProto(
 type oldFormatUpgradedPair struct {
 	oldFormat        TableDescriptor
 	expectedUpgraded TableDescriptor
+	// This field being true indicates that we're testing a situation where the
+	// on-disk descriptor (aka oldFormat) was actually already upgraded. This
+	// allows us to test upgrades that have one side that's already been upgraded
+	// and one side that hasn't.
+	// Test cases that have this set only need to set oldFormat, and the test
+	// harness will take care of duplicating oldFormat to expectedUpgraded to
+	// save on typing.
+	oldFormatWasAlreadyUpgraded bool
 }
 
 // This test exercises the foreign key representation upgrade and downgrade
@@ -1670,6 +1648,161 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 			// the above, since it's a self-referencing table.
 			referenced: oldFormatUpgradedPair{},
 		},
+		3: {
+			// In this test, the origin table is already upgraded. This ensures that
+			// the upgrade path can deal with a mismatch between upgraded and
+			// non-upgraded foreign key tables.
+			name: "origin-is-upgraded-already",
+			origin: oldFormatUpgradedPair{
+				oldFormatWasAlreadyUpgraded: true,
+				oldFormat: TableDescriptor{
+					ID:      1,
+					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					Indexes: []IndexDescriptor{
+						{
+							ID:        1,
+							ColumnIDs: ColumnIDs{1},
+						},
+					},
+					OutboundFKs: []ForeignKeyConstraint{
+						{
+							OriginTableID:       1,
+							OriginColumnIDs:     ColumnIDs{1},
+							ReferencedTableID:   2,
+							ReferencedColumnIDs: ColumnIDs{2},
+							Name:                "foo",
+							Validity:            ConstraintValidity_Validated,
+							OnDelete:            ForeignKeyReference_NO_ACTION,
+							OnUpdate:            ForeignKeyReference_NO_ACTION,
+							Match:               ForeignKeyReference_SIMPLE,
+							// These are set manually because we're simulating what would
+							// happen when we see an upgraded on-disk TD, which for the
+							// duration of 19.2 will always have these fields set.
+							LegacyOriginIndex:     1,
+							LegacyReferencedIndex: 2,
+						},
+					},
+				},
+			},
+			// Our referenced table is *not* upgraded.
+			referenced: oldFormatUpgradedPair{
+				oldFormat: TableDescriptor{
+					ID:      2,
+					Columns: []ColumnDescriptor{{ID: 2}},
+					PrimaryIndex: IndexDescriptor{
+						ColumnIDs: ColumnIDs{2},
+						ID:        2,
+						ReferencedBy: []ForeignKeyReference{
+							{
+								Table: 1,
+								Index: 1,
+							},
+						},
+					},
+				},
+				expectedUpgraded: TableDescriptor{
+					ID:      2,
+					Columns: []ColumnDescriptor{{ID: 2}},
+					PrimaryIndex: IndexDescriptor{
+						ColumnIDs: ColumnIDs{2},
+						ID:        2,
+					},
+					InboundFKs: []ForeignKeyConstraint{
+						{
+							OriginTableID:       1,
+							OriginColumnIDs:     ColumnIDs{1},
+							ReferencedTableID:   2,
+							ReferencedColumnIDs: ColumnIDs{2},
+							Name:                "foo",
+							Validity:            ConstraintValidity_Validated,
+							OnDelete:            ForeignKeyReference_NO_ACTION,
+							OnUpdate:            ForeignKeyReference_NO_ACTION,
+							Match:               ForeignKeyReference_SIMPLE,
+						},
+					},
+				},
+			},
+		},
+		4: {
+			// In this test, the referenced table is already upgraded.
+			name: "referenced-is-upgraded-already",
+			// Origin table has *not* been upgraded.
+			origin: oldFormatUpgradedPair{
+				oldFormat: TableDescriptor{
+					ID:      1,
+					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					Indexes: []IndexDescriptor{
+						{
+							ID:        1,
+							ColumnIDs: ColumnIDs{1},
+							ForeignKey: ForeignKeyReference{
+								Table:           2,
+								Index:           2,
+								Name:            "foo",
+								Validity:        ConstraintValidity_Validated,
+								SharedPrefixLen: 1,
+								OnDelete:        ForeignKeyReference_NO_ACTION,
+								OnUpdate:        ForeignKeyReference_NO_ACTION,
+								Match:           ForeignKeyReference_SIMPLE,
+							},
+						},
+					},
+				},
+				expectedUpgraded: TableDescriptor{
+					ID:      1,
+					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					Indexes: []IndexDescriptor{
+						{
+							ID:        1,
+							ColumnIDs: ColumnIDs{1},
+						},
+					},
+					OutboundFKs: []ForeignKeyConstraint{
+						{
+							OriginTableID:       1,
+							OriginColumnIDs:     ColumnIDs{1},
+							ReferencedTableID:   2,
+							ReferencedColumnIDs: ColumnIDs{2},
+							Name:                "foo",
+							Validity:            ConstraintValidity_Validated,
+							OnDelete:            ForeignKeyReference_NO_ACTION,
+							OnUpdate:            ForeignKeyReference_NO_ACTION,
+							Match:               ForeignKeyReference_SIMPLE,
+						},
+					},
+				},
+			},
+			// Our referenced table is already upgraded.
+			referenced: oldFormatUpgradedPair{
+				oldFormatWasAlreadyUpgraded: true,
+				oldFormat: TableDescriptor{
+					ID:      2,
+					Columns: []ColumnDescriptor{{ID: 2}},
+					PrimaryIndex: IndexDescriptor{
+						ColumnIDs: ColumnIDs{2},
+						ID:        2,
+					},
+					InboundFKs: []ForeignKeyConstraint{
+						{
+							OriginTableID:       1,
+							OriginColumnIDs:     ColumnIDs{1},
+							ReferencedTableID:   2,
+							ReferencedColumnIDs: ColumnIDs{2},
+							Name:                "foo",
+							Validity:            ConstraintValidity_Validated,
+							OnDelete:            ForeignKeyReference_NO_ACTION,
+							OnUpdate:            ForeignKeyReference_NO_ACTION,
+							Match:               ForeignKeyReference_SIMPLE,
+							// These are set manually because we're simulating what would
+							// happen when we see an upgraded on-disk TD, which for the
+							// duration of 19.2 will always have these fields set.
+							LegacyOriginIndex:     1,
+							LegacyReferencedIndex: 2,
+						},
+					},
+				},
+			},
+		},
 	}
 
 	// Set the self-referencing test case's referenced tables to the origin tables
@@ -1678,7 +1811,11 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 
 	ctx := context.Background()
 	for _, tc := range testCases {
-		txn := fakeProtoGetter{protos: map[interface{}]protoutil.Message{
+		tc.origin.expectedUpgraded.Privileges = NewDefaultPrivilegeDescriptor()
+		tc.origin.oldFormat.Privileges = NewDefaultPrivilegeDescriptor()
+		tc.referenced.expectedUpgraded.Privileges = NewDefaultPrivilegeDescriptor()
+		tc.referenced.oldFormat.Privileges = NewDefaultPrivilegeDescriptor()
+		txn := MapProtoGetter{Protos: map[interface{}]protoutil.Message{
 			string(MakeDescMetadataKey(tc.origin.oldFormat.ID)):     WrapDescriptor(&tc.origin.oldFormat),
 			string(MakeDescMetadataKey(tc.referenced.oldFormat.ID)): WrapDescriptor(&tc.referenced.oldFormat),
 		}}
@@ -1690,19 +1827,42 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 		//
 		// Additionally verify that downgrading on a cluster version that's
 		// sufficiently new is a no-op.
-		for i, pair := range tables {
+		for i := range tables {
+			if tables[i].oldFormatWasAlreadyUpgraded {
+				// If a test case has this flag set, it expects old format and the
+				// expected result to be identical.
+				tables[i].expectedUpgraded = *protoutil.Clone(&tables[i].oldFormat).(*TableDescriptor)
+			}
+			pair := tables[i]
 			name := "origin"
 			if i == 1 {
 				name = "referenced"
 			}
 			t.Run(fmt.Sprintf("%s/%s", tc.name, name), func(t *testing.T) {
 				upgraded := protoutil.Clone(&pair.oldFormat).(*TableDescriptor)
-				wasUpgraded, err := upgraded.maybeUpgradeForeignKeyRepresentation(ctx, txn)
+				wasUpgraded, err := upgraded.MaybeUpgradeForeignKeyRepresentation(ctx, txn, false /* skipFKsWithNoMatchingTable*/)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !wasUpgraded {
-					t.Fatalf("expected proto to be upgraded")
+				if pair.oldFormatWasAlreadyUpgraded {
+					// In this case, we expect the descriptor to *not* have been upgraded.
+					// This could have been done with a more concise boolean, but it would
+					// have been not very readable.
+					if wasUpgraded {
+						t.Fatalf("expected proto to not be upgraded")
+					}
+				} else {
+					if !wasUpgraded {
+						t.Fatalf("expected proto to be upgraded")
+					}
+				}
+
+				wasUpgradedAgain, err := upgraded.MaybeUpgradeForeignKeyRepresentation(ctx, txn, false /* skipFKsWithNoMatchingTable*/)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if wasUpgradedAgain {
+					t.Fatalf("expected proto upgrade to be idempotent")
 				}
 
 				// The upgraded proto will also have a copy of the old foreign key
@@ -1719,8 +1879,16 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 					pair.expectedUpgraded.InboundFKs[i].LegacyReferencedIndex = upgraded.InboundFKs[i].LegacyReferencedIndex
 				}
 				if !reflect.DeepEqual(upgraded, &pair.expectedUpgraded) {
-					t.Fatalf("upgrade didn't match original %s %s", proto.MarshalTextString(upgraded),
-						proto.MarshalTextString(&pair.expectedUpgraded))
+					diff := difflib.UnifiedDiff{
+						A:       difflib.SplitLines(proto.MarshalTextString(upgraded)),
+						B:       difflib.SplitLines(proto.MarshalTextString(&pair.expectedUpgraded)),
+						Context: 100,
+					}
+					text, err := difflib.GetUnifiedDiffString(diff)
+					if err != nil {
+						t.Fatalf("upgrade didn't match original, failed to make diff i%s", err)
+					}
+					t.Fatalf("upgrade didn't match original. diff:\n%s", text)
 				}
 				for i := range upgraded.OutboundFKs {
 					pair.expectedUpgraded.OutboundFKs[i].LegacyUpgradedFromOriginReference = ForeignKeyReference{}
@@ -1733,27 +1901,105 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 					pair.expectedUpgraded.InboundFKs[i].LegacyReferencedIndex = 0
 				}
 
-				wasDowngraded, downgraded, err := upgraded.maybeDowngradeForeignKeyRepresentation(ctx, txn, mixedVersionSettings)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !wasDowngraded {
-					t.Fatalf("expected proto to be downgraded")
-				}
+				if !pair.oldFormatWasAlreadyUpgraded {
+					// Check that the upgraded table descriptor properly downgrades. We
+					// dont perform this check in test cases that start with a pre-upgraded
+					// table descriptor, since we'll never be in a situation where we're
+					// trying to downgrade something that we read from disk that was already
+					// upgraded.
+					wasDowngraded, downgraded, err := upgraded.MaybeDowngradeForeignKeyRepresentation(ctx, mixedVersionSettings)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !wasDowngraded {
+						t.Fatalf("expected proto to be downgraded")
+					}
 
-				if !reflect.DeepEqual(downgraded, &pair.oldFormat) {
-					t.Fatalf("downgrade didn't match original %s %s", proto.MarshalTextString(downgraded),
-						proto.MarshalTextString(&pair.oldFormat))
-				}
+					if !reflect.DeepEqual(downgraded, &pair.oldFormat) {
+						t.Fatalf("downgrade didn't match original %s %s", proto.MarshalTextString(downgraded),
+							proto.MarshalTextString(&pair.oldFormat))
+					}
 
-				wasDowngraded, _, err = upgraded.maybeDowngradeForeignKeyRepresentation(ctx, txn, newVersionSettings)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if wasDowngraded {
-					t.Fatalf("expected proto not to be downgraded")
+					// Check that the downgrade is idempotent as well. Downgrading the table
+					// again shouldn't change it.
+					wasDowngradedAgain, downgradedAgain, err := downgraded.MaybeDowngradeForeignKeyRepresentation(ctx, mixedVersionSettings)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if wasDowngradedAgain {
+						t.Fatalf("expected proto to not be downgraded a second time")
+					}
+
+					if !reflect.DeepEqual(downgradedAgain, downgraded) {
+						t.Fatalf("downgrade wasn't idempotent %s %s", proto.MarshalTextString(downgradedAgain),
+							proto.MarshalTextString(downgraded))
+					}
+					wasDowngraded, _, err = upgraded.MaybeDowngradeForeignKeyRepresentation(ctx, newVersionSettings)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if wasDowngraded {
+						t.Fatalf("expected 19.2-final proto not to be downgraded")
+					}
 				}
 			})
 		}
+	}
+}
+
+func TestDefaultExprNil(t *testing.T) {
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	if _, err := conn.Exec(`CREATE DATABASE t`); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	t.Run(fmt.Sprintf("%s - %d", "(a INT PRIMARY KEY)", 1), func(t *testing.T) {
+		sqlDB := sqlutils.MakeSQLRunner(conn)
+		// Execute SQL commands with both implicit and explicit setting of the
+		// default expression.
+		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO t (a) VALUES (1), (2)`)
+		sqlDB.Exec(t, `ALTER TABLE t ADD COLUMN b INT NULL`)
+		sqlDB.Exec(t, `INSERT INTO t (a) VALUES (3)`)
+		sqlDB.Exec(t, `ALTER TABLE t ADD COLUMN c INT DEFAULT NULL`)
+
+		var descBytes []byte
+		// Grab the most recently created descriptor.
+		row := sqlDB.QueryRow(t,
+			`SELECT descriptor FROM system.descriptor ORDER BY id DESC LIMIT 1`)
+		row.Scan(&descBytes)
+		var desc Descriptor
+		if err := protoutil.Unmarshal(descBytes, &desc); err != nil {
+			t.Fatalf("%+v", err)
+		}
+		// Test and verify that the default expressions of the column descriptors
+		// are all nil.
+		for _, col := range desc.GetTable().Columns {
+			if col.DefaultExpr != nil {
+				t.Errorf("expected Column Default Expression to be 'nil', got %s instead.", *col.DefaultExpr)
+			}
+		}
+	})
+}
+
+func TestSQLString(t *testing.T) {
+	colNames := []string{"derp", "foo"}
+	indexName := "idx"
+	tableName := tree.MakeTableName("DB", "t1")
+	tableName.ExplicitCatalog = false
+	tableName.ExplicitSchema = false
+	index := IndexDescriptor{Name: indexName,
+		ID:               0x0,
+		Unique:           false,
+		ColumnNames:      colNames,
+		ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+	}
+	expected := fmt.Sprintf("INDEX %s ON t1 (%s ASC, %s ASC)", indexName, colNames[0], colNames[1])
+	if got := index.SQLString(&tableName); got != expected {
+		t.Errorf("Expected '%s', but got '%s'", expected, got)
+	}
+	expected = fmt.Sprintf("INDEX %s (%s ASC, %s ASC)", indexName, colNames[0], colNames[1])
+	if got := index.SQLString(&AnonymousTable); got != expected {
+		t.Errorf("Expected '%s', but got '%s'", expected, got)
 	}
 }

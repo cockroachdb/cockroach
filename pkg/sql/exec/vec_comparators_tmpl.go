@@ -22,10 +22,13 @@ package exec
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -42,17 +45,23 @@ var _ apd.Decimal
 // Dummy import to pull in "tree" package.
 var _ tree.Datum
 
+// Dummy import to pull in "math" package.
+var _ = math.MaxInt64
+
 // _COMPARE is the template equality function for assigning the first input
 // to the result of comparing second and third inputs.
 func _COMPARE(_, _, _ string) bool {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // */}}
 
+// Use execgen package to remove unused import warning.
+var _ interface{} = execgen.UNSAFEGET
+
 // {{range .}}
 type _TYPEVecComparator struct {
-	vecs  [][]_GOTYPE
+	vecs  []_GOTYPESLICE
 	nulls []*coldata.Nulls
 }
 
@@ -66,8 +75,8 @@ func (c *_TYPEVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 uint
 	} else if n2 {
 		return 1
 	}
-	left := c.vecs[vecIdx1][valIdx1]
-	right := c.vecs[vecIdx2][valIdx2]
+	left := execgen.UNSAFEGET(c.vecs[vecIdx1], int(valIdx1))
+	right := execgen.UNSAFEGET(c.vecs[vecIdx2], int(valIdx2))
 	var cmp int
 	_COMPARE("cmp", "left", "right")
 	return cmp
@@ -83,21 +92,34 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx uint16
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
-		c.vecs[dstVecIdx][dstIdx] = c.vecs[srcVecIdx][srcIdx]
+		// {{ if eq .LTyp.String "Bytes" }}
+		// Since flat Bytes cannot be set at arbitrary indices (data needs to be
+		// moved around), we use CopySlice to accept the performance hit.
+		// Specifically, this is a performance hit because we are overwriting the
+		// variable number of bytes in `dstVecIdx`, so we will have to either shift
+		// the bytes after that element left or right, depending on how long the
+		// source bytes slice is. Refer to the CopySlice comment for an example.
+		execgen.COPYSLICE(c.vecs[dstVecIdx], c.vecs[srcVecIdx], int(dstIdx), int(srcIdx), int(srcIdx+1))
+		// {{ else }}
+		v := execgen.UNSAFEGET(c.vecs[srcVecIdx], int(srcIdx))
+		execgen.SET(c.vecs[dstVecIdx], int(dstIdx), v)
+		// {{ end }}
 	}
 }
 
 // {{end}}
 
-func GetVecComparator(t types.T, numVecs int) vecComparator {
+func GetVecComparator(t coltypes.T, numVecs int) vecComparator {
 	switch t {
 	// {{range .}}
-	case types._TYPE:
+	case coltypes._TYPE:
 		return &_TYPEVecComparator{
-			vecs:  make([][]_GOTYPE, numVecs),
+			vecs:  make([]_GOTYPESLICE, numVecs),
 			nulls: make([]*coldata.Nulls, numVecs),
 		}
 		// {{end}}
 	}
-	panic(fmt.Sprintf("unhandled type %v", t))
+	execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %v", t))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }

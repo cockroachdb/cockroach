@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
@@ -65,7 +66,7 @@ type runnerResult struct {
 func (req runnerRequest) run() {
 	res := runnerResult{nodeID: req.nodeID}
 
-	conn, err := req.nodeDialer.Dial(req.ctx, req.nodeID)
+	conn, err := req.nodeDialer.Dial(req.ctx, req.nodeID, rpc.DefaultClass)
 	if err != nil {
 		res.err = err
 	} else {
@@ -114,10 +115,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 	flows map[roachpb.NodeID]*distsqlpb.FlowSpec,
 	recv *DistSQLReceiver,
 	localState distsqlrun.LocalState,
+	vectorizeThresholdMet bool,
 ) (context.Context, *distsqlrun.Flow, error) {
 	thisNodeID := dsp.nodeDesc.NodeID
 
-	evalCtxProto := distsqlpb.MakeEvalContext(evalCtx.EvalContext)
+	evalCtxProto := distsqlpb.MakeEvalContext(&evalCtx.EvalContext)
 	setupReq := distsqlpb.SetupFlowRequest{
 		TxnCoordMeta: txnCoordMeta,
 		Version:      distsqlrun.Version,
@@ -131,54 +133,57 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(flows) > 1 {
 		resultChan = make(chan runnerResult, len(flows)-1)
 	}
-	// First check to see whether or not to even try vectorizing the flow. The
-	// goal here is to determine up front whether all of the flows can be
-	// vectorized. If any of them can't, turn off the setting.
-	// TODO(yuzefovich): this is a safe but quite inefficient way of setting up
-	// vectorized flows since the flows will effectively be planned twice. Remove
-	// this once logic of falling back to DistSQL is bullet-proof.
+
 	if evalCtx.SessionData.VectorizeMode != sessiondata.VectorizeOff {
-		for _, spec := range flows {
-			if err := distsqlrun.SupportsVectorized(
-				ctx, &distsqlrun.FlowCtx{
-					EvalCtx: &evalCtx.EvalContext,
-					Cfg:     &distsqlrun.ServerConfig{},
-					NodeID:  -1,
-				}, spec.Processors,
-			); err != nil {
-				// Vectorization attempt failed with an error.
-				returnVectorizationSetupError := false
-				if evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeExperimentalAlways {
-					returnVectorizationSetupError = true
-					// If running with VectorizeExperimentalAlways, this check makes sure
-					// that we can still run SET statements (mostly to set vectorize to
-					// off) and the like.
-					if len(spec.Processors) == 1 &&
-						spec.Processors[0].Core.LocalPlanNode != nil {
-						rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
-						if rsidx != nil {
-							lp := localState.LocalProcs[*rsidx]
-							if z, ok := lp.(distsqlrun.VectorizeAlwaysException); ok {
-								if z.IsException() {
-									returnVectorizationSetupError = false
+		if !vectorizeThresholdMet && evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto {
+			// Vectorization is not justified for this flow because the expected
+			// amount of data is too small and the overhead of pre-allocating data
+			// structures needed for the vectorized engine is expected to dominate
+			// the execution time.
+			setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
+		} else {
+			// Now we check to see whether or not to even try vectorizing the flow.
+			// The goal here is to determine up front whether all of the flows can be
+			// vectorized. If any of them can't, turn off the setting.
+			// TODO(yuzefovich): this is a safe but quite inefficient way of setting
+			// up vectorized flows since the flows will effectively be planned twice.
+			for _, spec := range flows {
+				if _, err := distsqlrun.SupportsVectorized(
+					ctx, &distsqlrun.FlowCtx{
+						EvalCtx: &evalCtx.EvalContext,
+						Cfg:     &distsqlrun.ServerConfig{},
+						NodeID:  -1,
+					}, spec.Processors,
+				); err != nil {
+					// Vectorization attempt failed with an error.
+					returnVectorizationSetupError := false
+					if evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeExperimentalAlways {
+						returnVectorizationSetupError = true
+						// If running with VectorizeExperimentalAlways, this check makes sure
+						// that we can still run SET statements (mostly to set vectorize to
+						// off) and the like.
+						if len(spec.Processors) == 1 &&
+							spec.Processors[0].Core.LocalPlanNode != nil {
+							rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
+							if rsidx != nil {
+								lp := localState.LocalProcs[*rsidx]
+								if z, ok := lp.(distsqlrun.VectorizeAlwaysException); ok {
+									if z.IsException() {
+										returnVectorizationSetupError = false
+									}
 								}
 							}
 						}
 					}
+					log.VEventf(ctx, 1, "failed to vectorize: %s", err)
+					if returnVectorizationSetupError {
+						return nil, nil, err
+					}
+					// Vectorization is not supported for this flow, so we override the
+					// setting.
+					setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
+					break
 				}
-				log.VEventf(ctx, 1, "failed to vectorize: %s", err)
-				if returnVectorizationSetupError {
-					return nil, nil, err
-				}
-				// Vectorization is not supported for this flow, so we override the
-				// setting. Note that we need to restore the setting of evalCtx since
-				// it can be used in the future, but setupReq is used only once, so we
-				// don't need to restore it.
-				setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
-				origMode := evalCtx.SessionData.VectorizeMode
-				evalCtx.SessionData.VectorizeMode = sessiondata.VectorizeOff
-				defer func() { evalCtx.SessionData.VectorizeMode = origMode }()
-				break
 			}
 		}
 	}
@@ -314,7 +319,8 @@ func (dsp *DistSQLPlanner) Run(
 	recv.outputTypes = plan.ResultTypes
 	recv.resultToStreamColMap = plan.PlanToStreamColMap
 
-	ctx, flow, err := dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState)
+	vectorizedThresholdMet := plan.MaxEstimatedRowCount >= evalCtx.SessionData.VectorizeRowCountThreshold
+	ctx, flow, err := dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState, vectorizedThresholdMet)
 	if err != nil {
 		recv.SetError(err)
 		return func() {}
@@ -441,6 +447,19 @@ type rowResultWriter interface {
 	IncrementRowsAffected(n int)
 	SetError(error)
 	Err() error
+}
+
+type metadataResultWriter interface {
+	AddMeta(ctx context.Context, meta *distsqlpb.ProducerMetadata)
+}
+
+type metadataCallbackWriter struct {
+	rowResultWriter
+	fn func(ctx context.Context, meta *distsqlpb.ProducerMetadata)
+}
+
+func (w *metadataCallbackWriter) AddMeta(ctx context.Context, meta *distsqlpb.ProducerMetadata) {
+	w.fn(ctx, meta)
 }
 
 // errOnlyResultWriter is a rowResultWriter that only supports receiving an
@@ -613,6 +632,9 @@ func (r *DistSQLReceiver) Push(
 			meta.Metrics.Release()
 			meta.Release()
 		}
+		if metaWriter, ok := r.resultWriter.(metadataResultWriter); ok {
+			metaWriter.AddMeta(r.ctx, meta)
+		}
 		return r.status
 	}
 	if r.resultWriter.Err() == nil && r.txnAbortedErr.Load() != nil {
@@ -698,7 +720,7 @@ func (r *DistSQLReceiver) Push(
 var (
 	// ErrLimitedResultNotSupported is an error produced by pgwire
 	// indicating an unsupported feature of row count limits was attempted.
-	ErrLimitedResultNotSupported = unimplemented.NewWithIssue(4035, "execute row count limits only partially supported")
+	ErrLimitedResultNotSupported = unimplemented.NewWithIssue(40195, "multiple active portals not supported")
 	// ErrLimitedResultClosed is a sentinel error produced by pgwire
 	// indicating the portal should be closed without error.
 	ErrLimitedResultClosed = errors.New("row count limit closed")
@@ -1011,37 +1033,12 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	dsp.FinalizePlan(postqueryPlanCtx, &postqueryPhysPlan)
 
 	postqueryRecv := recv.clone()
-	var postqueryRowReceiver postqueryRowResultWriter
-	postqueryRecv.resultWriter = &postqueryRowReceiver
+	// TODO(yuzefovich): at the moment, errOnlyResultWriter is sufficient here,
+	// but it may not be the case when we support cascades through the optimizer.
+	postqueryRecv.resultWriter = &errOnlyResultWriter{}
 	dsp.Run(postqueryPlanCtx, planner.txn, &postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)()
 	if postqueryRecv.commErr != nil {
 		return postqueryRecv.commErr
 	}
-	return postqueryRowReceiver.Err()
-}
-
-// postqueryRowResultWriter is a lightweight version of RowResultWriter that
-// can only write errors. It is used only for executing postqueries and is
-// sufficient for that case since those can only return errors.
-type postqueryRowResultWriter struct {
-	err error
-}
-
-var _ rowResultWriter = &postqueryRowResultWriter{}
-
-func (r *postqueryRowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
-	return errors.Errorf("unexpectedly AddRow is called on postqueryRowResultWriter")
-}
-
-func (r *postqueryRowResultWriter) IncrementRowsAffected(n int) {
-	// TODO(yuzefovich): this probably will need to change when we support
-	// cascades.
-}
-
-func (r *postqueryRowResultWriter) SetError(err error) {
-	r.err = err
-}
-
-func (r *postqueryRowResultWriter) Err() error {
-	return r.err
+	return postqueryRecv.resultWriter.Err()
 }

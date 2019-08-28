@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -66,6 +66,8 @@ type extendedEvalContext struct {
 	SchemaChangers *schemaChangerCollection
 
 	schemaAccessors *schemaInterface
+
+	sqlStatsCollector *sqlStatsCollector
 }
 
 // copy returns a deep copy of ctx.
@@ -108,9 +110,6 @@ type planner struct {
 	execCfg *ExecutorConfig
 
 	preparedStatements preparedStatementsAccessor
-
-	// statsCollector is used to collect statistics about SQL statement execution.
-	statsCollector sqlStatsCollector
 
 	// avoidCachedDescriptors, when true, instructs all code that
 	// accesses table/view descriptors to force reading the descriptors
@@ -261,6 +260,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.SessionAccessor = p
 	p.extendedEvalCtx.Sequence = p
 	p.extendedEvalCtx.ClusterID = execCfg.ClusterID()
+	p.extendedEvalCtx.ClusterName = execCfg.RPCContext.ClusterName()
 	p.extendedEvalCtx.NodeID = execCfg.NodeID.Get()
 	p.extendedEvalCtx.Locality = execCfg.Locality
 
@@ -274,6 +274,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.Tables = tables
 
 	p.queryCacheSession.Init()
+	p.optPlanningCtx.init(p)
 
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create
@@ -454,6 +455,41 @@ const (
 	KVStringOptRequireValue   KVStringOptValidate = `value`
 )
 
+// evalStringOptions evaluates the KVOption values as strings and returns them
+// in a map. Options with no value have an empty string.
+func evalStringOptions(
+	evalCtx *tree.EvalContext, opts []exec.KVOption, optValidate map[string]KVStringOptValidate,
+) (map[string]string, error) {
+	res := make(map[string]string, len(opts))
+	for _, opt := range opts {
+		k := opt.Key
+		validate, ok := optValidate[k]
+		if !ok {
+			return nil, errors.Errorf("invalid option %q", k)
+		}
+		val, err := opt.Value.Eval(evalCtx)
+		if err != nil {
+			return nil, err
+		}
+		if val == tree.DNull {
+			if validate == KVStringOptRequireValue {
+				return nil, errors.Errorf("option %q requires a value", k)
+			}
+			res[k] = ""
+		} else {
+			if validate == KVStringOptRequireNoValue {
+				return nil, errors.Errorf("option %q does not take a value", k)
+			}
+			str, ok := val.(*tree.DString)
+			if !ok {
+				return nil, errors.Errorf("expected string value, got %T", val)
+			}
+			res[k] = string(*str)
+		}
+	}
+	return res, nil
+}
+
 // TypeAsStringOpts enforces (not hints) that the given expressions
 // typecheck as strings, and returns a function that can be called to
 // get the string value during (planNode).Start.
@@ -555,35 +591,4 @@ type txnModesSetter interface {
 	// transaction.
 	// asOfTs, if not empty, is the evaluation of modes.AsOf.
 	setTransactionModes(modes tree.TransactionModes, asOfTs hlc.Timestamp) error
-}
-
-// sqlStatsCollector is the interface used by SQL execution, through the
-// planner, for recording statistics about SQL statements.
-type sqlStatsCollector interface {
-	// PhaseTimes returns that phaseTimes struct that measures the time spent in
-	// each phase of SQL execution.
-	// See executor_statement_metrics.go for details.
-	PhaseTimes() *phaseTimes
-
-	// RecordStatement record stats for one statement.
-	//
-	// samplePlanDescription can be nil, as these are only sampled periodically per unique fingerprint.
-	RecordStatement(
-		stmt *Statement,
-		samplePlanDescription *roachpb.ExplainTreePlanNode,
-		distSQLUsed bool,
-		optUsed bool,
-		implicitTxn bool,
-		automaticRetryCount int,
-		numRows int,
-		err error,
-		parseLat, planLat, runLat, svcLat, ovhLat float64,
-		bytesRead, rowsRead int64,
-	)
-
-	// SQLStats provides access to the global sqlStats object.
-	SQLStats() *sqlStats
-
-	// Reset resets this stats collector with the given phaseTimes array.
-	Reset(sqlStats *sqlStats, appStats *appStats, times *phaseTimes)
 }

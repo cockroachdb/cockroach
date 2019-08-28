@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/jackc/pgx"
 )
 
@@ -498,11 +500,18 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 	// extra batch to be read without its rows actually being needed. This is not
 	// entirely easy to cause given the current implementation details.
 
-	// trapRead is set, atomically, once the test wants to block a read on the
-	// first node.
-	var trapRead int64
-	blockedRead := make(chan roachpb.BatchRequest)
-	unblockRead := make(chan *roachpb.Error)
+	var (
+		// trapRead is set, atomically, once the test wants to block a read on the
+		// first node.
+		trapRead    int64
+		blockedRead struct {
+			syncutil.Mutex
+			unblockCond   *sync.Cond
+			shouldUnblock bool
+		}
+	)
+
+	blockedRead.unblockCond = sync.NewCond(&blockedRead.Mutex)
 
 	tc := serverutils.StartTestCluster(t, 3, /* numNodes */
 		base.TestClusterArgs{
@@ -526,8 +535,16 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 								key := req.(*roachpb.ScanRequest).Key.String()
 								endKey := req.(*roachpb.ScanRequest).EndKey.String()
 								if strings.Contains(key, "/1") && strings.Contains(endKey, "5/") {
-									blockedRead <- ba
-									return <-unblockRead
+									blockedRead.Lock()
+									for !blockedRead.shouldUnblock {
+										blockedRead.unblockCond.Wait()
+									}
+									blockedRead.Unlock()
+									return roachpb.NewError(
+										roachpb.NewReadWithinUncertaintyIntervalError(
+											ba.Timestamp,           /* readTs */
+											ba.Timestamp.Add(1, 0), /* existingTs */
+											ba.Txn))
 								}
 								return nil
 							},
@@ -573,7 +590,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 	}
 
 	pgURL, cleanup := sqlutils.PGUrl(
-		t, tc.Server(0).ServingAddr(), t.Name(), url.User(security.RootUser))
+		t, tc.Server(0).ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
 	pgURL.Path = `test`
 	pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
@@ -587,57 +604,67 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 
 	atomic.StoreInt64(&trapRead, 1)
 
-	// We're going to run the test twice. Once in "dummy" node, which just
-	// verifies that the test is not fooling itself by increasing the limit from 5
-	// to 6 and checking that we get the injected error in that case.
-	testutils.RunTrueAndFalse(t, "dummy", func(t *testing.T, dummy bool) {
-		// Force DistSQL to distribute the query. Otherwise, as of Nov 2018, it's hard
-		// to convince it to distribute a query that uses an index.
-		if _, err := conn.Exec("set distsql='always'"); err != nil {
-			t.Fatal(err)
-		}
-		limit := 5
-		if dummy {
-			limit = 6
-		}
-		query := fmt.Sprintf(
-			"select x from t where x <= 5 union all select x from t where x > 5 limit %d",
-			limit)
-		rows, err := conn.Query(query)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer rows.Close()
-		i := 6
-		for rows.Next() {
-			var n int
-			if err := rows.Scan(&n); err != nil {
+	// Run with the default vectorize mode and the explicit "on" mode.
+	testutils.RunTrueAndFalse(t, "vectorize", func(t *testing.T, vectorize bool) {
+		// We're going to run the test twice in each vectorize configuration. Once
+		// in "dummy" node, which just verifies that the test is not fooling itself
+		// by increasing the limit from 5 to 6 and checking that we get the injected
+		// error in that case.
+		testutils.RunTrueAndFalse(t, "dummy", func(t *testing.T, dummy bool) {
+			// Force DistSQL to distribute the query. Otherwise, as of Nov 2018, it's hard
+			// to convince it to distribute a query that uses an index.
+			if _, err := conn.Exec("set distsql='always'"); err != nil {
 				t.Fatal(err)
 			}
-			if n != i {
-				t.Fatalf("expected row: %d but got: %d", i, n)
+			if vectorize {
+				if _, err := conn.Exec("set vectorize='experimental_on'"); err != nil {
+					t.Fatal(err)
+				}
 			}
-			i++
-			// After we've gotten all the rows from the second node, let the first node
-			// return an uncertainty error.
-			if n == 10 {
-				ba := <-blockedRead
-				unblockRead <- roachpb.NewError(
-					roachpb.NewReadWithinUncertaintyIntervalError(
-						ba.Timestamp,           /* readTs */
-						ba.Timestamp.Add(1, 0), /* existingTs */
-						ba.Txn))
+			limit := 5
+			if dummy {
+				limit = 6
 			}
-		}
-		err = rows.Err()
-		if !dummy {
+			query := fmt.Sprintf(
+				"select x from t where x <= 5 union all select x from t where x > 5 limit %d",
+				limit)
+			rows, err := conn.Query(query)
 			if err != nil {
 				t.Fatal(err)
 			}
-		} else {
-			if !testutils.IsError(err, "ReadWithinUncertaintyIntervalError") {
-				t.Fatalf("expected injected error, got: %v", err)
+			defer rows.Close()
+			i := 6
+			for rows.Next() {
+				var n int
+				if err := rows.Scan(&n); err != nil {
+					t.Fatal(err)
+				}
+				if n != i {
+					t.Fatalf("expected row: %d but got: %d", i, n)
+				}
+				i++
+				// After we've gotten all the rows from the second node, let the first node
+				// return an uncertainty error.
+				if n == 10 {
+					blockedRead.Lock()
+					// Set shouldUnblock to true to have any reads that would block return
+					// an uncertainty error. Signal the cond to wake up any reads that have
+					// already been blocked.
+					blockedRead.shouldUnblock = true
+					blockedRead.unblockCond.Signal()
+					blockedRead.Unlock()
+				}
 			}
-		}
+			err = rows.Err()
+			if !dummy {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if !testutils.IsError(err, "ReadWithinUncertaintyIntervalError") {
+					t.Fatalf("expected injected error, got: %v", err)
+				}
+			}
+		})
 	})
 }

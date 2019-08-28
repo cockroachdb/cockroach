@@ -14,7 +14,7 @@ import (
 	"io"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 const selTemplate = `
@@ -23,13 +23,15 @@ package exec
 import (
 	"bytes"
   "context"
+  "math"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -41,7 +43,8 @@ if sel := batch.Selection(); sel != nil {
 	sel = sel[:n]
 	for _, i := range sel {
 		var cmp bool
-		{{(.Global.Assign "cmp" "col[i]" "p.constArg")}}
+		arg := {{.Global.LTyp.Get "unsafe" "col" "int(i)"}}
+		{{(.Global.Assign "cmp" "arg" "p.constArg")}}
 		if cmp {{if .HasNulls}}&& !nulls.NullAt(i) {{end}}{
 			sel[idx] = i
 			idx++
@@ -50,10 +53,11 @@ if sel := batch.Selection(); sel != nil {
 } else {
 	batch.SetSelection(true)
 	sel := batch.Selection()
-	col = col[:n]
-	for i := range col {
+	col = {{.Global.LTyp.Slice "col" "0" "int(n)"}}
+	for {{.Global.LTyp.Range "i" "col"}} {
 		var cmp bool
-		{{(.Global.Assign "cmp" "col[i]" "p.constArg")}}
+		arg := {{.Global.LTyp.Get "unsafe" "col" "i"}}
+		{{(.Global.Assign "cmp" "arg" "p.constArg")}}
 		if cmp {{if .HasNulls}}&& !nulls.NullAt(uint16(i)) {{end}}{
 			sel[idx] = uint16(i)
 			idx++
@@ -67,7 +71,9 @@ if sel := batch.Selection(); sel != nil {
 	sel = sel[:n]
 	for _, i := range sel {
 		var cmp bool
-		{{(.Global.Assign "cmp" "col1[i]" "col2[i]")}}
+		arg1 := {{.Global.LTyp.Get "unsafe" "col1" "int(i)"}}
+		arg2 := {{.Global.RTyp.Get "unsafe" "col2" "int(i)"}}
+		{{(.Global.Assign "cmp" "arg1" "arg2")}}
 		if cmp {{if .HasNulls}}&& !nulls.NullAt(i) {{end}}{
 			sel[idx] = i
 			idx++
@@ -76,11 +82,14 @@ if sel := batch.Selection(); sel != nil {
 } else {
 	batch.SetSelection(true)
 	sel := batch.Selection()
-	col1 = col1[:n]
-	col2 = col2[:len(col1)]
-	for i := range col1 {
+	col1 = {{.Global.LTyp.Slice "col1" "0" "int(n)"}}
+	col1Len := {{.Global.LTyp.Len "col1"}}
+	col2 = {{.Global.RTyp.Slice "col2" "0" "col1Len"}}
+	for {{.Global.LTyp.Range "i" "col1"}} {
 		var cmp bool
-		{{(.Global.Assign "cmp" "col1[i]" "col2[i]")}}
+		arg1 := {{.Global.LTyp.Get "unsafe" "col1" "i"}}
+		arg2 := {{.Global.RTyp.Get "unsafe" "col2" "i"}}
+		{{(.Global.Assign "cmp" "arg1" "arg2")}}
 		if cmp {{if .HasNulls}}&& !nulls.NullAt(uint16(i)) {{end}}{
 			sel[idx] = uint16(i)
 			idx++
@@ -91,7 +100,7 @@ if sel := batch.Selection(); sel != nil {
 
 {{define "selConstOp"}}
 type {{template "opConstName" .}} struct {
-	input Operator
+	OneInputNode
 
 	colIdx   int
 	constArg {{.RGoType}}
@@ -128,7 +137,7 @@ func (p {{template "opConstName" .}}) Init() {
 
 {{define "selOp"}}
 type {{template "opName" .}} struct {
-	input Operator
+	OneInputNode
 
 	col1Idx int
 	col2Idx int
@@ -166,85 +175,110 @@ func (p {{template "opName" .}}) Init() {
 }
 {{end}}
 
-{{/* The outer range is a types.T, and the inner is the overloads associated
-     with that type. */}}
+{{/* The outer range is a coltypes.T (the left type). The middle range is also a
+     coltypes.T (the right type). The inner is the overloads associated with
+     those two types. */}}
+{{range .}}
 {{range .}}
 {{range .}}
 {{template "selConstOp" .}}
 {{template "selOp" .}}
 {{end}}
 {{end}}
+{{end}}
 
 // GetSelectionConstOperator returns the appropriate constant selection operator
-// for the given column type and comparison.
+// for the given left and right column types and comparison.
 func GetSelectionConstOperator(
-	ct *semtypes.T,
+  leftColType *types.T,
+  constColType *types.T,
 	cmpOp tree.ComparisonOperator,
 	input Operator,
 	colIdx int,
 	constArg tree.Datum,
 ) (Operator, error) {
-	c, err := conv.GetDatumToPhysicalFn(ct)(constArg)
+	c, err := typeconv.GetDatumToPhysicalFn(constColType)(constArg)
 	if err != nil {
 		return nil, err
 	}
-	switch t := conv.FromColumnType(ct); t {
-	{{range $typ, $overloads := .}}
-	case types.{{$typ}}:
-		switch cmpOp {
-		{{range $overloads}}
-		case tree.{{.Name}}:
-			return &{{template "opConstName" .}}{
-				input:    input,
-				colIdx:   colIdx,
-				constArg: c.({{.RGoType}}),
-			}, nil
+	switch leftType := typeconv.FromColumnType(leftColType); leftType {
+	{{range $lTyp, $rTypToOverloads := .}}
+	case coltypes.{{$lTyp}}:
+		switch rightType := typeconv.FromColumnType(constColType); rightType {
+		{{range $rTyp, $overloads := $rTypToOverloads}}
+		case coltypes.{{$rTyp}}:
+			switch cmpOp {
+			{{range $overloads}}
+			case tree.{{.Name}}:
+				return &{{template "opConstName" .}}{
+					OneInputNode: NewOneInputNode(input),
+					colIdx:   colIdx,
+					constArg: c.({{.RGoType}}),
+				}, nil
+			{{end}}
+			default:
+				return nil, errors.Errorf("unhandled comparison operator: %s", cmpOp)
+			}
 		{{end}}
 		default:
-			return nil, errors.Errorf("unhandled comparison operator: %s", cmpOp)
+			return nil, errors.Errorf("unhandled right type: %s", rightType)
 		}
 	{{end}}
 	default:
-		return nil, errors.Errorf("unhandled type: %s", t)
+		return nil, errors.Errorf("unhandled left type: %s", leftType)
 	}
 }
 
 // GetSelectionOperator returns the appropriate two column selection operator
-// for the given column type and comparison.
+// for the given left and right column types and comparison.
 func GetSelectionOperator(
-	ct *semtypes.T,
+  leftColType *types.T,
+  rightColType *types.T,
 	cmpOp tree.ComparisonOperator,
 	input Operator,
 	col1Idx int,
 	col2Idx int,
 ) (Operator, error) {
-	switch t := conv.FromColumnType(ct); t {
-	{{range $typ, $overloads := .}}
-	case types.{{$typ}}:
-		switch cmpOp {
-		{{range $overloads}}
-		case tree.{{.Name}}:
-			return &{{template "opName" .}}{
-				input:   input,
-				col1Idx: col1Idx,
-				col2Idx: col2Idx,
-			}, nil
+	switch leftType := typeconv.FromColumnType(leftColType); leftType {
+	{{range $lTyp, $rTypToOverloads := .}}
+	case coltypes.{{$lTyp}}:
+		switch rightType := typeconv.FromColumnType(rightColType); rightType {
+		{{range $rTyp, $overloads := $rTypToOverloads}}
+		case coltypes.{{$rTyp}}:
+			switch cmpOp {
+			{{range $overloads}}
+			case tree.{{.Name}}:
+				return &{{template "opName" .}}{
+					OneInputNode: NewOneInputNode(input),
+					col1Idx: col1Idx,
+					col2Idx: col2Idx,
+				}, nil
+			{{end}}
+			default:
+				return nil, errors.Errorf("unhandled comparison operator: %s", cmpOp)
+			}
 		{{end}}
 		default:
-			return nil, errors.Errorf("unhandled comparison operator: %s", cmpOp)
+			return nil, errors.Errorf("unhandled right type: %s", rightType)
 		}
 	{{end}}
 	default:
-		return nil, errors.Errorf("unhandled type: %s", t)
+		return nil, errors.Errorf("unhandled left type: %s", leftType)
 	}
 }
 `
 
 func genSelectionOps(wr io.Writer) error {
-	typToOverloads := make(map[types.T][]*overload)
-	for _, overload := range comparisonOpOverloads {
-		typ := overload.LTyp
-		typToOverloads[typ] = append(typToOverloads[typ], overload)
+	lTypToRTypToOverloads := make(map[coltypes.T]map[coltypes.T][]*overload)
+	for _, ov := range comparisonOpOverloads {
+		lTyp := ov.LTyp
+		rTyp := ov.RTyp
+		rTypToOverloads := lTypToRTypToOverloads[lTyp]
+		if rTypToOverloads == nil {
+			rTypToOverloads = make(map[coltypes.T][]*overload)
+			lTypToRTypToOverloads[lTyp] = rTypToOverloads
+		}
+		rTypToOverloads[rTyp] = append(rTypToOverloads[rTyp], ov)
 	}
 	tmpl := template.New("selection_ops").Funcs(template.FuncMap{"buildDict": buildDict})
 	var err error
@@ -252,7 +286,7 @@ func genSelectionOps(wr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return tmpl.Execute(wr, typToOverloads)
+	return tmpl.Execute(wr, lTypToRTypToOverloads)
 }
 
 func init() {

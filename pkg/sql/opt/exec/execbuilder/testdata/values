@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 # Tests for the implicit one row, zero column values operator.
 query TTTTT

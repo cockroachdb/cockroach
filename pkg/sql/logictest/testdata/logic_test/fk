@@ -1,3 +1,13 @@
+# LogicTest: local fakedist fakedist-metadata fakedist-disk
+# The local-mixed-19.1-19.2 configuration is excluded for this file because of
+# 1) remaining bugs that need to be fixed in the 19.1/19.2 mixed state, and 2)
+# different FK behavior between 19.1 and 19.2. Tests to be run in that
+# configuration are in fk-local-mixed-19.1-19.2.
+
+# The tests in this file target the legacy FK paths.
+statement ok
+SET experimental_optimizer_foreign_keys = false
+
 # Disable automatic stats to avoid flakiness.
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
@@ -40,7 +50,7 @@ CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
 statement error type of "customer" \(int\) does not match foreign key "customers"."email" \(string\)
 CREATE TABLE mismatch (customer INT REFERENCES customers (email))
 
-statement error columns cannot be used by multiple foreign key constraints
+statement error column "product" cannot be used by multiple foreign key constraints
 CREATE TABLE orders (
   id INT PRIMARY KEY,
   product STRING REFERENCES products,
@@ -67,7 +77,7 @@ ALTER TABLE orders DROP CONSTRAINT fk_product_ref_products
 statement ok
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE NO ACTION
 
-statement error pq: columns cannot be used by multiple foreign key constraints
+statement error column "product" cannot be used by multiple foreign key constraints
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE NO ACTION
 
 statement ok
@@ -256,9 +266,9 @@ delivery  CREATE TABLE delivery (
           "order" INT8 NULL,
           shipment INT8 NULL,
           item STRING NULL,
+          CONSTRAINT fk_order_ref_orders FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment),
           CONSTRAINT fk_item_ref_products FOREIGN KEY (item) REFERENCES products(upc),
           INDEX delivery_item_idx (item ASC),
-          CONSTRAINT fk_order_ref_orders FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment),
           INDEX delivery_auto_index_fk_order_ref_orders ("order" ASC, shipment ASC),
           FAMILY "primary" (ts, "order", shipment, item, rowid)
 )
@@ -822,8 +832,8 @@ SHOW CREATE TABLE refers
 refers  CREATE TABLE refers (
         a INT8 NULL,
         b INT8 NULL,
-        INDEX another_idx (b ASC),
         CONSTRAINT fk_a_ref_referee FOREIGN KEY (a) REFERENCES referee(id),
+        INDEX another_idx (b ASC),
         INDEX refers_auto_index_fk_a_ref_referee (a ASC),
         INDEX foo (a ASC),
         FAMILY "primary" (a, b, rowid)
@@ -1201,25 +1211,26 @@ CREATE TABLE a (
 );
 
 # Create a table with no DEFAULT expressions column and a SET DEFAULT action.
-statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.no_default_table.delete_no_default" which has no DEFAULT expression
-CREATE TABLE no_default_table (
+statement ok
+CREATE TABLE delete_no_default_table (
   id INT PRIMARY KEY
  ,delete_no_default INT REFERENCES a ON DELETE SET DEFAULT
 );
 
-statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.no_default_table.update_no_default" which has no DEFAULT expression
-CREATE TABLE no_default_table (
+statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.update_no_default_table.update_no_default" which has a NOT NULL constraint and a NULL default expression
+CREATE TABLE update_no_default_table (
   id INT PRIMARY KEY
  ,update_no_default INT NOT NULL REFERENCES a ON UPDATE SET DEFAULT
 );
 
 # Create a table where the primary key has a SET DEFAULT action.
-statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.primary_key_table.id" which has no DEFAULT expression
-CREATE TABLE primary_key_table (
+# Primary keys are not allowed to be NULL
+statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.primary_key_table_set_default.id" which has a NOT NULL constraint and a NULL default expression
+CREATE TABLE primary_key_table_set_default (
   id INT PRIMARY KEY REFERENCES a ON DELETE SET DEFAULT
 );
 
-statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.primary_key_table.id" which has no DEFAULT expression
+statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.primary_key_table.id" which has a NOT NULL constraint and a NULL default expression
 CREATE TABLE primary_key_table (
   id INT PRIMARY KEY REFERENCES a ON UPDATE SET DEFAULT
 );
@@ -1232,12 +1243,12 @@ CREATE TABLE no_default_table (
  ,update_no_default INT
 );
 
-statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.no_default_table.delete_no_default" which has no DEFAULT expression
+statement ok
 ALTER TABLE no_default_table ADD CONSTRAINT no_default_delete_set_default
   FOREIGN KEY (delete_no_default) REFERENCES a (id)
   ON DELETE SET DEFAULT;
 
-statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.no_default_table.update_no_default" which has no DEFAULT expression
+statement ok
 ALTER TABLE no_default_table ADD CONSTRAINT no_default_update_set_default
   FOREIGN KEY (update_no_default) REFERENCES a (id)
   ON UPDATE SET DEFAULT;
@@ -1253,19 +1264,20 @@ CREATE TABLE primary_key_table (
   id INT PRIMARY KEY
 );
 
-statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.primary_key_table.id" which has no DEFAULT expression
+# id is a primary key and thus cannot be NULL
+statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.primary_key_table.id" which has a NOT NULL constraint and a NULL default expression
 ALTER TABLE primary_key_table ADD CONSTRAINT no_default_delete_set_default
   FOREIGN KEY (id) REFERENCES a (id)
   ON DELETE SET DEFAULT;
 
-statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.primary_key_table.id" which has no DEFAULT expression
+statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.primary_key_table.id" which has a NOT NULL constraint and a NULL default expression
 ALTER TABLE primary_key_table ADD CONSTRAINT no_default_update_set_default
   FOREIGN KEY (id) REFERENCES a (id)
   ON UPDATE SET DEFAULT;
 
 # Clean up the tables used so far.
 statement ok
-DROP TABLE primary_key_table, a;
+DROP TABLE primary_key_table, delete_no_default_table, a;
 
 # Now test composite foreign keys
 statement ok
@@ -1276,7 +1288,7 @@ CREATE TABLE a (
 );
 
 # Create a table with a column without a DEFAULT expression and a SET DEFAULT action.
-statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.no_default_table.ref1" which has no DEFAULT expression
+statement ok
 CREATE TABLE no_default_table (
   id INT PRIMARY KEY
  ,ref1 INT
@@ -1285,8 +1297,32 @@ CREATE TABLE no_default_table (
  ,FOREIGN KEY (ref1, ref2) REFERENCES a (id2, id1) ON DELETE SET DEFAULT
 );
 
-statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.no_default_table.ref1" which has no DEFAULT expression
-CREATE TABLE no_default_table (
+statement ok
+INSERT INTO a VALUES (1, 2)
+
+statement ok
+INSERT INTO a VALUES (3, 4)
+
+statement ok
+INSERT INTO no_default_table VALUES (6, 2, 1)
+
+query III colnames
+SELECT * FROM no_default_table
+----
+id  ref1  ref2
+6   2     1
+
+statement ok
+DELETE FROM a WHERE id1=1
+
+query III colnames
+SELECT * FROM no_default_table
+----
+id  ref1  ref2
+6   NULL  NULL
+
+statement ok
+CREATE TABLE no_default_table_on_update (
   id INT PRIMARY KEY
  ,ref1 INT
  ,ref2 INT
@@ -1294,8 +1330,26 @@ CREATE TABLE no_default_table (
  ,FOREIGN KEY (ref1, ref2) REFERENCES a (id2, id1) ON UPDATE SET DEFAULT
 );
 
-statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.no_default_table.ref1" which has no DEFAULT expression
-CREATE TABLE no_default_table (
+statement ok
+INSERT INTO no_default_table_on_update VALUES (0, 4, 3)
+
+query III colnames
+SELECT * FROM no_default_table_on_update
+----
+id  ref1  ref2
+0   4     3
+
+statement ok
+UPDATE a SET id1=33, id2=44 WHERE id1=3;
+
+query III colnames
+SELECT * FROM no_default_table_on_update
+----
+id  ref1  ref2
+0   NULL  NULL
+
+statement ok
+CREATE TABLE no_default_table_ref2_default_on_delete (
   id INT PRIMARY KEY
  ,ref1 INT
  ,ref2 INT DEFAULT 1
@@ -1303,9 +1357,8 @@ CREATE TABLE no_default_table (
  ,FOREIGN KEY (ref1, ref2) REFERENCES a (id2, id1) ON DELETE SET DEFAULT
 );
 
-
-statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.no_default_table.ref1" which has no DEFAULT expression
-CREATE TABLE no_default_table (
+statement ok
+CREATE TABLE no_default_table_ref2_default_on_update (
   id INT PRIMARY KEY
  ,ref1 INT
  ,ref2 INT DEFAULT 1
@@ -1313,8 +1366,8 @@ CREATE TABLE no_default_table (
  ,FOREIGN KEY (ref1, ref2) REFERENCES a (id2, id1) ON UPDATE SET DEFAULT
 );
 
-statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.no_default_table.ref2" which has no DEFAULT expression
-CREATE TABLE no_default_table (
+statement ok
+CREATE TABLE no_default_table_ref1_default_on_delete (
   id INT PRIMARY KEY
  ,ref1 INT DEFAULT 1
  ,ref2 INT
@@ -1322,18 +1375,30 @@ CREATE TABLE no_default_table (
  ,FOREIGN KEY (ref1, ref2) REFERENCES a (id2, id1) ON DELETE SET DEFAULT
 );
 
-statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.no_default_table.ref2" which has no DEFAULT expression
-CREATE TABLE no_default_table (
+statement ok
+CREATE TABLE no_default_table_ref1_default_on_update (
   id INT PRIMARY KEY
  ,ref1 INT DEFAULT 1
  ,ref2 INT
  ,INDEX (ref1, ref2)
  ,FOREIGN KEY (ref1, ref2) REFERENCES a (id2, id1) ON UPDATE SET DEFAULT
+);
+
+# Create a table with a NOT NULL column and a SET NULL action.
+statement error pq: cannot add a SET DEFAULT cascading action on column "test.public.not_null_table.ref1" which has a NOT NULL constraint and a NULL default expression
+CREATE TABLE not_null_table (
+  id INT PRIMARY KEY
+ ,ref1 INT NOT NULL
+ ,ref2 INT NOT NULL
+ ,INDEX (ref1, ref2)
+ ,FOREIGN KEY (ref1, ref2) REFERENCES a (id2, id1) ON DELETE SET DEFAULT
 );
 
 # Clean up after the test.
 statement ok
-DROP TABLE a;
+DROP TABLE a, no_default_table, no_default_table_on_update, no_default_table_ref2_default_on_delete,
+no_default_table_ref2_default_on_update, no_default_table_ref1_default_on_delete,
+no_default_table_ref1_default_on_update
 
 # Test that no column can have more than 1 FK constraint
 subtest column_uniqueness
@@ -1704,7 +1769,7 @@ CREATE TABLE b (
 
 # Add the constraint separately so that it's unvalidated, so we can test VALIDATE CONSTRAINT.
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x)
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x) NOT VALID
 
 statement ok
 INSERT INTO a (x, y) VALUES ('x1', 'y1')
@@ -1758,7 +1823,7 @@ CREATE TABLE b (
 
 # Add the constraint separately so that it's unvalidated, so we can test VALIDATE CONSTRAINT.
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) NOT VALID
 
 statement ok
 INSERT INTO a (x, y, z) VALUES ('x1', 'y1', 'z1')
@@ -2550,7 +2615,7 @@ statement ok
 DELETE FROM t1 WHERE x IS NULL
 
 statement ok
-DROP TABLE t2, t2 CASCADE
+DROP TABLE t1, t2 CASCADE
 
 subtest test_not_valid_fk
 

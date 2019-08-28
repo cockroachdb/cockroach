@@ -29,12 +29,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 func makeTS(walltime int64, logical int32) hlc.Timestamp {
@@ -502,22 +504,74 @@ func TestTransactionUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Updating an empty Transaction copies all fields.
 	var txn2 Transaction
 	txn2.Update(&txn)
 
-	if err := zerofields.NoZeroField(txn2); err != nil {
-		t.Fatal(err)
-	}
+	expTxn2 := txn
+	require.Equal(t, expTxn2, txn2)
 
+	// Updating a Transaction at an earlier epoch replaces all epoch-scoped fields.
 	var txn3 Transaction
-	txn3.ID = uuid.MakeV4()
+	txn3.ID = txn.ID
+	txn3.Epoch = txn.Epoch - 1
+	txn3.Status = STAGING
 	txn3.Name = "carl"
 	txn3.Priority = 123
 	txn3.Update(&txn)
 
-	if err := zerofields.NoZeroField(txn3); err != nil {
-		t.Fatal(err)
-	}
+	expTxn3 := txn
+	expTxn3.Name = "carl"
+	require.Equal(t, expTxn3, txn3)
+
+	// Updating a Transaction at the same epoch forwards all epoch-scoped fields.
+	var txn4 Transaction
+	txn4.ID = txn.ID
+	txn4.Epoch = txn.Epoch
+	txn4.Status = STAGING
+	txn4.Sequence = txn.Sequence + 10
+	txn4.Name = "carl"
+	txn4.Priority = 123
+	txn4.Update(&txn)
+
+	expTxn4 := txn
+	expTxn4.Name = "carl"
+	expTxn4.Sequence = txn.Sequence + 10
+	require.Equal(t, expTxn4, txn4)
+
+	// Updating a Transaction at a future epoch ignores all epoch-scoped fields.
+	var txn5 Transaction
+	txn5.ID = txn.ID
+	txn5.Epoch = txn.Epoch + 1
+	txn5.Status = PENDING
+	txn5.Sequence = txn.Sequence - 10
+	txn5.Name = "carl"
+	txn5.Priority = 123
+	txn5.Update(&txn)
+
+	expTxn5 := txn
+	expTxn5.Name = "carl"
+	expTxn5.Epoch = txn.Epoch + 1
+	expTxn5.Status = PENDING
+	expTxn5.Sequence = txn.Sequence - 10
+	expTxn5.IntentSpans = nil
+	expTxn5.InFlightWrites = nil
+	expTxn5.WriteTooOld = false
+	expTxn5.OrigTimestampWasObserved = false
+	require.Equal(t, expTxn5, txn5)
+
+	// Updating a different transaction fatals.
+	var exited bool
+	log.SetExitFunc(true /* hideStack */, func(int) { exited = true })
+	defer log.ResetExitFunc()
+
+	var txn6 Transaction
+	txn6.ID = uuid.MakeV4()
+	origTxn6 := txn6
+	txn6.Update(&txn)
+
+	require.Equal(t, origTxn6, txn6)
+	require.True(t, exited)
 }
 
 func TestTransactionUpdateMinTimestamp(t *testing.T) {
@@ -609,6 +663,22 @@ func TestTransactionClone(t *testing.T) {
 	if !reflect.DeepEqual(nonZeroTxn, txn) {
 		t.Fatalf("e = %v, v = %v", nonZeroTxn, txn)
 	}
+}
+
+func TestTransactionRestart(t *testing.T) {
+	txn := nonZeroTxn
+	txn.Restart(1, 1, makeTS(25, 1))
+
+	expTxn := nonZeroTxn
+	expTxn.Epoch++
+	expTxn.Sequence = 0
+	expTxn.Timestamp = makeTS(25, 1)
+	expTxn.OrigTimestamp = makeTS(25, 1)
+	expTxn.WriteTooOld = false
+	expTxn.OrigTimestampWasObserved = false
+	expTxn.IntentSpans = nil
+	expTxn.InFlightWrites = nil
+	require.Equal(t, expTxn, txn)
 }
 
 // TestTransactionRecordRoundtrips tests a few properties about Transaction
@@ -831,7 +901,7 @@ func TestLeaseEquivalence(t *testing.T) {
 	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts2.Clone()}
 
 	r1Voter, r1Learner := r1, r1
-	r1Voter.Type = ReplicaTypeVoter()
+	r1Voter.Type = ReplicaTypeVoterFull()
 	r1Learner.Type = ReplicaTypeLearner()
 	epoch1Voter := Lease{Replica: r1Voter, Start: ts1, Epoch: 1}
 	epoch1Learner := Lease{Replica: r1Learner, Start: ts1, Epoch: 1}
@@ -1566,20 +1636,23 @@ func TestUpdateObservedTimestamps(t *testing.T) {
 func TestChangeReplicasTrigger_String(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	l := ReplicaType_LEARNER
-	v := ReplicaType_VOTER
-	repl := ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3, Type: &l}
+	vi := VOTER_INCOMING
+	vo := VOTER_OUTGOING
+	l := LEARNER
+	repl1 := ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3, Type: &vi}
+	repl2 := ReplicaDescriptor{NodeID: 4, StoreID: 5, ReplicaID: 6, Type: &vo}
+	learner := ReplicaDescriptor{NodeID: 7, StoreID: 8, ReplicaID: 9, Type: &l}
 	crt := ChangeReplicasTrigger{
-		ChangeType: ADD_REPLICA,
-		Replica:    repl,
+		InternalAddedReplicas:   []ReplicaDescriptor{repl1},
+		InternalRemovedReplicas: []ReplicaDescriptor{repl2},
 		Desc: &RangeDescriptor{
 			RangeID:  1,
 			StartKey: RKey("a"),
 			EndKey:   RKey("b"),
 			InternalReplicas: []ReplicaDescriptor{
-				repl,
-				{NodeID: 4, StoreID: 5, ReplicaID: 6, Type: &v},
-				{NodeID: 7, StoreID: 8, ReplicaID: 9, Type: &l},
+				repl1,
+				repl2,
+				learner,
 			},
 			NextReplicaID:        10,
 			Generation:           proto.Int64(5),
@@ -1587,6 +1660,225 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 		},
 	}
 	act := crt.String()
-	exp := `ADD_REPLICA((n1,s2):3LEARNER): updated=(n4,s5):6,(n1,s2):3LEARNER,(n7,s8):9LEARNER next=10`
+	exp := "ENTER_JOINT ADD_REPLICA[(n1,s2):3VOTER_INCOMING], REMOVE_REPLICA[(n4,s5):6VOTER_OUTGOING]: after=[(n1,s2):3VOTER_INCOMING (n4,s5):6VOTER_OUTGOING (n7,s8):9LEARNER] next=10"
 	require.Equal(t, exp, act)
+
+	crt.InternalRemovedReplicas = nil
+	crt.InternalAddedReplicas = nil
+	repl1.Type = ReplicaTypeVoterFull()
+	crt.Desc.SetReplicas(MakeReplicaDescriptors([]ReplicaDescriptor{repl1, learner}))
+	act = crt.String()
+	require.Empty(t, crt.Added())
+	require.Empty(t, crt.Removed())
+	exp = "LEAVE_JOINT: after=[(n1,s2):3 (n7,s8):9LEARNER] next=10"
+	require.Equal(t, exp, act)
+}
+
+type mockCRT struct {
+	v2 bool
+	ChangeReplicasTrigger
+}
+
+func (m mockCRT) alwaysV2() bool {
+	return m.v2
+}
+
+func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sl := func(alt ...interface{}) []ReplicaDescriptor {
+		t.Helper()
+		if len(alt)%2 != 0 {
+			t.Fatal("need pairs")
+		}
+		var rDescs []ReplicaDescriptor
+		for i := 0; i < len(alt); i += 2 {
+			typ := alt[i].(ReplicaType)
+			id := alt[i+1].(int)
+			rDescs = append(rDescs, ReplicaDescriptor{
+				Type:      &typ,
+				NodeID:    NodeID(3 * id),
+				StoreID:   StoreID(2 * id),
+				ReplicaID: ReplicaID(id),
+			})
+		}
+		return rDescs
+	}
+
+	type in struct {
+		v2              bool
+		add, del, repls []ReplicaDescriptor
+	}
+
+	mk := func(in in) mockCRT {
+		m := mockCRT{v2: in.v2}
+		m.ChangeReplicasTrigger.InternalAddedReplicas = in.add
+		m.ChangeReplicasTrigger.InternalRemovedReplicas = in.del
+		m.Desc = &RangeDescriptor{}
+		m.Desc.SetReplicas(MakeReplicaDescriptors(in.repls))
+		return m
+	}
+
+	vf1 := sl(VOTER_FULL, 1)
+	vo1 := sl(VOTER_OUTGOING, 1)
+	vi1 := sl(VOTER_INCOMING, 1)
+	vl1 := sl(LEARNER, 1)
+
+	testCases := []struct {
+		crt mockCRT
+		exp raftpb.ConfChangeI
+		err string
+	}{
+		// A replica of type VOTER_OUTGOING being added makes no sense.
+		{crt: mk(in{add: vo1, repls: vo1}), err: "can't add replica in state VOTER_OUTGOING"},
+		// But an incoming one can be added, and the result must be a joint change.
+		{crt: mk(in{add: vi1, repls: vi1}), exp: raftpb.ConfChangeV2{
+			Transition: raftpb.ConfChangeTransitionJointExplicit,
+			Changes:    []raftpb.ConfChangeSingle{{Type: raftpb.ConfChangeAddNode, NodeID: 1}},
+		}},
+		// A replica of type VOTER_INCOMING being removed makes no sense.
+		{crt: mk(in{del: vi1}), err: "can't remove replica in state VOTER_INCOMING"},
+		// But during a joint removal we can see VOTER_OUTGOING.
+		{crt: mk(in{del: vo1, repls: vo1}), exp: raftpb.ConfChangeV2{
+			Transition: raftpb.ConfChangeTransitionJointExplicit,
+			Changes:    []raftpb.ConfChangeSingle{{Type: raftpb.ConfChangeRemoveNode, NodeID: 1}},
+		}},
+
+		// Adding a voter via the V1 path.
+		{crt: mk(in{add: vf1, repls: vf1}), exp: raftpb.ConfChange{
+			Type:   raftpb.ConfChangeAddNode,
+			NodeID: 1,
+		}},
+		// Adding a learner via the V1 path.
+		{crt: mk(in{add: vl1, repls: vl1}), exp: raftpb.ConfChange{
+			Type:   raftpb.ConfChangeAddLearnerNode,
+			NodeID: 1,
+		}},
+
+		// Removing a voter or learner via the V1 path but falsely the replica is still in the descriptor.
+		{crt: mk(in{del: vf1, repls: vf1}), err: "(n3,s2):1 must no longer be present in descriptor"},
+		{crt: mk(in{del: vl1, repls: vl1}), err: "(n3,s2):1LEARNER must no longer be present in descriptor"},
+		// Well-formed examples.
+		{crt: mk(in{del: vf1}), exp: raftpb.ConfChange{
+			Type:   raftpb.ConfChangeRemoveNode,
+			NodeID: 1,
+		}},
+		{crt: mk(in{del: vl1}), exp: raftpb.ConfChange{
+			Type:   raftpb.ConfChangeRemoveNode,
+			NodeID: 1,
+		}},
+		// Adding a voter via the V2 path but without joint consensus.
+		{crt: mk(in{v2: true, add: vf1, repls: vf1}), exp: raftpb.ConfChangeV2{
+			Transition: raftpb.ConfChangeTransitionAuto,
+			Changes: []raftpb.ConfChangeSingle{{
+				Type:   raftpb.ConfChangeAddNode,
+				NodeID: 1,
+			}},
+		}},
+		// Ditto, but with joint consensus requested.
+		{crt: mk(in{v2: true, add: vi1, repls: vi1}), exp: raftpb.ConfChangeV2{
+			Transition: raftpb.ConfChangeTransitionJointExplicit,
+			Changes: []raftpb.ConfChangeSingle{{
+				Type:   raftpb.ConfChangeAddNode,
+				NodeID: 1,
+			}},
+		}},
+
+		// Adding a learner via the V2 path and without joint consensus. (There is currently
+		// no way to request joint consensus when adding a single learner, but there is no
+		// reason one would ever want that).
+		{crt: mk(in{v2: true, add: vl1, repls: vl1}), exp: raftpb.ConfChangeV2{
+			Transition: raftpb.ConfChangeTransitionAuto,
+			Changes: []raftpb.ConfChangeSingle{{
+				Type:   raftpb.ConfChangeAddLearnerNode,
+				NodeID: 1,
+			}},
+		}},
+
+		// Removing a voter or learner via the V2 path without joint consensus.
+		// Note that this means that the replica is not in the desc any more.
+		{crt: mk(in{v2: true, del: vf1}), exp: raftpb.ConfChangeV2{
+			Transition: raftpb.ConfChangeTransitionAuto,
+			Changes: []raftpb.ConfChangeSingle{{
+				Type:   raftpb.ConfChangeRemoveNode,
+				NodeID: 1,
+			}},
+		}},
+		{crt: mk(in{v2: true, del: vl1}), exp: raftpb.ConfChangeV2{
+			Transition: raftpb.ConfChangeTransitionAuto,
+			Changes: []raftpb.ConfChangeSingle{{
+				Type:   raftpb.ConfChangeRemoveNode,
+				NodeID: 1,
+			}},
+		}},
+
+		// Ditto but with joint consensus. (This can happen only with a voter;
+		// learners disappear immediately).
+		{crt: mk(in{v2: true, del: vo1, repls: vo1}), exp: raftpb.ConfChangeV2{
+			Transition: raftpb.ConfChangeTransitionJointExplicit,
+			Changes: []raftpb.ConfChangeSingle{{
+				Type:   raftpb.ConfChangeRemoveNode,
+				NodeID: 1,
+			}},
+		}},
+
+		// Run a more complex change (necessarily) via the V2 path.
+		{crt: mk(in{
+			add: sl( // Additions.
+				VOTER_INCOMING, 6, LEARNER, 4, VOTER_INCOMING, 3,
+			),
+			del: sl(
+				// Removals.
+				LEARNER, 2, VOTER_OUTGOING, 8, VOTER_OUTGOING, 9,
+			),
+			repls: sl(
+				// Replicas.
+				VOTER_FULL, 1,
+				VOTER_INCOMING, 6, // added
+				VOTER_INCOMING, 3, // added
+				VOTER_OUTGOING, 9, // removing
+				LEARNER, 4, // added
+				VOTER_OUTGOING, 8, // removing
+				VOTER_FULL, 10,
+			)}),
+			exp: raftpb.ConfChangeV2{
+				Transition: raftpb.ConfChangeTransitionJointExplicit,
+				Changes: []raftpb.ConfChangeSingle{
+					{NodeID: 6, Type: raftpb.ConfChangeAddNode},
+					{NodeID: 4, Type: raftpb.ConfChangeAddLearnerNode},
+					{NodeID: 3, Type: raftpb.ConfChangeAddNode},
+					{NodeID: 2, Type: raftpb.ConfChangeRemoveNode},
+					{NodeID: 8, Type: raftpb.ConfChangeRemoveNode},
+					{NodeID: 9, Type: raftpb.ConfChangeRemoveNode},
+				}},
+		},
+
+		// Leave a joint config.
+		{
+			crt: mk(in{repls: sl(VOTER_FULL, 1)}),
+			exp: raftpb.ConfChangeV2{},
+		},
+		// If we're asked to leave a joint state but the descriptor is still joint,
+		// that's a problem.
+		{
+			crt: mk(in{v2: true, repls: sl(VOTER_INCOMING, 1)}),
+			err: "descriptor enters joint state, but trigger is requesting to leave one",
+		},
+		{
+			crt: mk(in{v2: true, repls: sl(VOTER_OUTGOING, 1)}),
+			err: "descriptor enters joint state, but trigger is requesting to leave one",
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run("", func(t *testing.T) {
+			cc, err := confChangeImpl(test.crt, nil /* payload */)
+			if test.err == "" {
+				require.NoError(t, err)
+				require.Equal(t, test.exp, cc)
+			} else {
+				require.EqualError(t, err, test.err)
+			}
+		})
+	}
 }

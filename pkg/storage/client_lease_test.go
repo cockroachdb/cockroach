@@ -14,7 +14,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -192,7 +191,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 		t.Fatal(err)
 	}
 	testutils.SucceedsSoon(t, func() error {
-		if !reflect.DeepEqual(getSystemConfig(), config.NewSystemConfig(sc.DefaultZoneConfig)) {
+		if !getSystemConfig().DefaultZoneConfig.Equal(sc.DefaultZoneConfig) {
 			return errors.New("system config not empty")
 		}
 		if getNodeLiveness() != (storagepb.Liveness{}) {
@@ -205,7 +204,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 	// data is gossiped.
 	mtc.restartStore(0)
 	testutils.SucceedsSoon(t, func() error {
-		if reflect.DeepEqual(getSystemConfig(), config.NewSystemConfig(sc.DefaultZoneConfig)) {
+		if !getSystemConfig().DefaultZoneConfig.Equal(sc.DefaultZoneConfig) {
 			return errors.New("system config not gossiped")
 		}
 		if getNodeLiveness() == (storagepb.Liveness{}) {

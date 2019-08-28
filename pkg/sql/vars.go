@@ -402,21 +402,42 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`optimizer`: {
+	`vectorize_row_count_threshold`: {
+		GetStringVal: makeIntGetStringValFn(`vectorize_row_count_threshold`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			mode, ok := sessiondata.OptimizerModeFromString(s)
-			if !ok {
-				return newVarValueError(`optimizer`, s, "on", "off", "local", "always")
+			b, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
 			}
-			m.SetOptimizerMode(mode)
+			if b < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set vectorize_row_count_threshold to a negative value: %d", b)
+			}
+			m.SetVectorizeRowCountThreshold(uint64(b))
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return evalCtx.SessionData.OptimizerMode.String()
+			return strconv.FormatInt(int64(evalCtx.SessionData.VectorizeRowCountThreshold), 10)
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return sessiondata.OptimizerMode(
-				OptimizerClusterMode.Get(sv)).String()
+			return strconv.FormatInt(VectorizeRowCountThresholdClusterValue.Get(sv), 10)
+		},
+	},
+
+	// CockroachDB extension.
+	// This is deprecated; the only allowable setting is "on".
+	`optimizer`: {
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			if strings.ToUpper(s) != "ON" {
+				return newVarValueError(`optimizer`, s, "on")
+			}
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return "on"
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "on"
 		},
 	},
 

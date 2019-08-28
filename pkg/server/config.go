@@ -354,7 +354,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 			Specs: []base.StoreSpec{storeSpec},
 		},
 		TempStorageConfig: base.TempStorageConfigFromEnv(
-			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes, 0),
+			ctx, st, storeSpec, "" /* parentDir */, base.EngineTypeRocksDB, base.DefaultTempStorageMaxSizeBytes, 0),
 	}
 	cfg.AmbientCtx.Tracer = st.Tracer
 

@@ -1,4 +1,4 @@
-# LogicTest: local local-opt local-vec fakedist fakedist-opt fakedist-metadata
+# LogicTest: local local-vec fakedist fakedist-metadata
 
 # SELECT with no table.
 
@@ -624,3 +624,19 @@ CREATE TABLE nocols(x INT); ALTER TABLE nocols DROP COLUMN x
 query I
 SELECT 1, * FROM nocols
 ----
+
+# ------------------------------------------------------------------------------
+# Wide tables can tickle edge cases.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE wide (id INT4 NOT NULL, a INT4, b VARCHAR(255), c INT4, d VARCHAR(255), e VARCHAR(255), f INT4, g VARCHAR(255), h VARCHAR(255), i VARCHAR(255), j VARCHAR(255), k INT4,
+                   l FLOAT4, m FLOAT8, n INT2, PRIMARY KEY (id))
+
+statement ok
+INSERT INTO wide(id, n) VALUES(0, 10)
+
+query IITITTITTTTIFFI
+SELECT * FROM wide
+----
+0  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  10

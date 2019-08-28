@@ -13,7 +13,7 @@ package tree
 // Backup represents a BACKUP statement.
 type Backup struct {
 	Targets         TargetList
-	To              Expr
+	To              PartitionedBackup
 	IncrementalFrom Exprs
 	AsOf            AsOfClause
 	Options         KVOptions
@@ -26,7 +26,7 @@ func (node *Backup) Format(ctx *FmtCtx) {
 	ctx.WriteString("BACKUP ")
 	ctx.FormatNode(&node.Targets)
 	ctx.WriteString(" TO ")
-	ctx.FormatNode(node.To)
+	ctx.FormatNode(&node.To)
 	if node.AsOf.Expr != nil {
 		ctx.WriteString(" ")
 		ctx.FormatNode(&node.AsOf)
@@ -44,7 +44,7 @@ func (node *Backup) Format(ctx *FmtCtx) {
 // Restore represents a RESTORE statement.
 type Restore struct {
 	Targets TargetList
-	From    Exprs
+	From    []PartitionedBackup
 	AsOf    AsOfClause
 	Options KVOptions
 }
@@ -56,7 +56,12 @@ func (node *Restore) Format(ctx *FmtCtx) {
 	ctx.WriteString("RESTORE ")
 	ctx.FormatNode(&node.Targets)
 	ctx.WriteString(" FROM ")
-	ctx.FormatNode(&node.From)
+	for i := range node.From {
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.FormatNode(&node.From[i])
+	}
 	if node.AsOf.Expr != nil {
 		ctx.WriteString(" ")
 		ctx.FormatNode(&node.AsOf)
@@ -88,5 +93,22 @@ func (o *KVOptions) Format(ctx *FmtCtx) {
 			ctx.WriteString(` = `)
 			ctx.FormatNode(n.Value)
 		}
+	}
+}
+
+// PartitionedBackup is a list of destination URIs for a single BACKUP. A single
+// URI corresponds to the special case of a regular backup, and multiple URIs
+// correspond to a partitioned backup whose locality configuration is
+// specified by LOCALITY url params.
+type PartitionedBackup []Expr
+
+// Format implements the NodeFormatter interface.
+func (node *PartitionedBackup) Format(ctx *FmtCtx) {
+	if len(*node) > 1 {
+		ctx.WriteString("(")
+	}
+	ctx.FormatNode((*Exprs)(node))
+	if len(*node) > 1 {
+		ctx.WriteString(")")
 	}
 }

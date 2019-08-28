@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -36,7 +37,7 @@ func TestGossipInvalidation(t *testing.T) {
 
 	sc := stats.NewTableStatisticsCache(
 		10, /* cacheSize */
-		tc.Server(0).Gossip(),
+		tc.Server(0).GossipI().(*gossip.Gossip),
 		tc.Server(0).DB(),
 		tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
 	)

@@ -42,6 +42,8 @@ const (
 	VersionGenerationComparable
 	VersionLearnerReplicas
 	VersionTopLevelForeignKeys
+	VersionAtomicChangeReplicasTrigger
+	VersionAtomicChangeReplicas
 
 	// Add new versions here (step one of two).
 
@@ -501,8 +503,34 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// all old-style table descriptors into the new format upon read. Once the
 		// upgrade is finalized, the database will write the upgraded format, but
 		// continue to upgrade old-style descriptors on-demand.
+		//
+		// This version is also used for the new foreign key schema changes which
+		// are run in the schema changer, requiring new types of mutations on the
+		// table descriptor. The same version is used for both of these changes
+		// because the changes are intertwined, and it slightly simplifies some of
+		// the logic to assume that either neither or both sets of changes can be
+		// active.
 		Key:     VersionTopLevelForeignKeys,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 7},
+	},
+	{
+		// VersionAtomicChangeReplicasTrigger is https://github.com/cockroachdb/cockroach/pull/39485.
+		//
+		// It enables use of updated fields in ChangeReplicasTrigger that will
+		// support atomic replication changes.
+		Key:     VersionAtomicChangeReplicasTrigger,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 8},
+	},
+	{
+		// VersionAtomicChangeReplicas is https://github.com/cockroachdb/cockroach/pull/39936.
+		//
+		// It provides an implementation of (*Replica).ChangeReplicas that uses
+		// atomic replication changes. The corresponding cluster setting
+		// 'kv.atomic_replication_changes.enabled' provides a killswitch (i.e.
+		// no atomic replication changes will be scheduled when it is set to
+		// 'false').
+		Key:     VersionAtomicChangeReplicas,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 9},
 	},
 
 	// Add new versions here (step two of two).

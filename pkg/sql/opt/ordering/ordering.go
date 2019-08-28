@@ -217,6 +217,11 @@ func init() {
 		buildChildReqOrdering: cancelSessionsBuildChildReqOrdering,
 		buildProvidedOrdering: noProvidedOrdering,
 	}
+	funcMap[opt.ExportOp] = funcs{
+		canProvideOrdering:    canNeverProvideOrdering,
+		buildChildReqOrdering: exportBuildChildReqOrdering,
+		buildProvidedOrdering: noProvidedOrdering,
+	}
 }
 
 func canNeverProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
@@ -276,7 +281,7 @@ func remapProvided(provided opt.Ordering, fds *props.FuncDepSet, outCols opt.Col
 				copy(result, provided)
 			}
 			result = append(result, opt.MakeOrderingColumn(
-				opt.ColumnID(remappedCol), provided[i].Descending(),
+				remappedCol, provided[i].Descending(),
 			))
 		}
 		closure.Add(col)

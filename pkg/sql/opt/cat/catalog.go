@@ -105,9 +105,14 @@ type Catalog interface {
 	// locates a data source by its StableID. See the comment for StableID for
 	// more details.
 	//
+	// If the table is in the process of being added, returns an
+	// "undefined relation" error but also returns isAdding=true.
+	//
 	// NOTE: The returned data source must be immutable after construction, and
 	// so can be safely copied or used across goroutines.
-	ResolveDataSourceByID(ctx context.Context, flags Flags, id StableID) (DataSource, error)
+	ResolveDataSourceByID(
+		ctx context.Context, flags Flags, id StableID,
+	) (_ DataSource, isAdding bool, _ error)
 
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.

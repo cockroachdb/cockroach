@@ -226,6 +226,7 @@ func (o *indexCheckOperation) Done(ctx context.Context) bool {
 
 // Close4 implements the checkOperation interface.
 func (o *indexCheckOperation) Close(ctx context.Context) {
+	o.run.rows = nil
 }
 
 // createIndexCheckQuery will make the index check query for a given

@@ -1,0 +1,280 @@
+1:
+-
+SELECT
+	sum(
+		a
+	) OVER w,
+	avg(
+		b
+	) OVER (
+		PARTITION BY
+			c
+		ORDER BY
+			d
+		ROWS
+			e PRECEDING
+	),
+	min(
+		f
+	) OVER (
+		ORDER BY
+			g
+		RANGE
+			BETWEEN
+				UNBOUNDED PRECEDING
+			AND
+				h FOLLOWING EXCLUDE TIES
+	)
+FROM
+	t
+WINDOW
+	w AS (
+		PARTITION BY
+			i
+		GROUPS
+			BETWEEN
+				j PRECEDING
+			AND
+				CURRENT ROW EXCLUDE NO OTHERS
+	)
+
+17:
+-----------------
+SELECT
+	sum(
+		a
+	) OVER w,
+	avg(b) OVER (
+		PARTITION BY
+			c
+		ORDER BY
+			d
+		ROWS
+			e PRECEDING
+	),
+	min(f) OVER (
+		ORDER BY
+			g
+		RANGE
+			BETWEEN
+				UNBOUNDED PRECEDING
+			AND
+				h FOLLOWING EXCLUDE TIES
+	)
+FROM
+	t
+WINDOW
+	w AS (
+		PARTITION BY
+			i
+		GROUPS
+			BETWEEN
+				j PRECEDING
+			AND
+				CURRENT ROW EXCLUDE NO OTHERS
+	)
+
+18:
+------------------
+SELECT
+	sum(a) OVER w,
+	avg(b) OVER (
+		PARTITION BY
+			c
+		ORDER BY
+			d
+		ROWS
+			e PRECEDING
+	),
+	min(f) OVER (
+		ORDER BY
+			g
+		RANGE
+			BETWEEN
+				UNBOUNDED PRECEDING
+			AND
+				h FOLLOWING EXCLUDE TIES
+	)
+FROM
+	t
+WINDOW
+	w AS (
+		PARTITION BY
+			i
+		GROUPS
+			BETWEEN
+				j PRECEDING
+			AND
+				CURRENT ROW EXCLUDE NO OTHERS
+	)
+
+50:
+--------------------------------------------------
+SELECT
+	sum(a) OVER w,
+	avg(b) OVER (
+		PARTITION BY c ORDER BY d ROWS e PRECEDING
+	),
+	min(f) OVER (
+		ORDER BY
+			g
+		RANGE
+			BETWEEN
+				UNBOUNDED PRECEDING
+			AND
+				h FOLLOWING EXCLUDE TIES
+	)
+FROM
+	t
+WINDOW
+	w AS (
+		PARTITION BY
+			i
+		GROUPS
+			BETWEEN
+				j PRECEDING
+			AND
+				CURRENT ROW EXCLUDE NO OTHERS
+	)
+
+61:
+-------------------------------------------------------------
+SELECT
+	sum(a) OVER w,
+	avg(b) OVER (PARTITION BY c ORDER BY d ROWS e PRECEDING),
+	min(f) OVER (
+		ORDER BY
+			g
+		RANGE
+			BETWEEN
+				UNBOUNDED PRECEDING
+			AND
+				h FOLLOWING EXCLUDE TIES
+	)
+FROM
+	t
+WINDOW
+	w AS (
+		PARTITION BY
+			i
+		GROUPS
+			BETWEEN
+				j PRECEDING
+			AND
+				CURRENT ROW EXCLUDE NO OTHERS
+	)
+
+65:
+-----------------------------------------------------------------
+SELECT
+	sum(a) OVER w,
+	avg(b) OVER (PARTITION BY c ORDER BY d ROWS e PRECEDING),
+	min(f) OVER (
+		ORDER BY
+			g
+		RANGE
+			BETWEEN
+				UNBOUNDED PRECEDING
+			AND
+				h FOLLOWING EXCLUDE TIES
+	)
+FROM
+	t
+WINDOW
+	w AS (
+		PARTITION BY
+			i
+		GROUPS
+			BETWEEN j PRECEDING AND CURRENT ROW EXCLUDE NO OTHERS
+	)
+
+68:
+--------------------------------------------------------------------
+SELECT
+	sum(a) OVER w,
+	avg(b) OVER (PARTITION BY c ORDER BY d ROWS e PRECEDING),
+	min(f) OVER (
+		ORDER BY
+			g
+		RANGE
+			BETWEEN UNBOUNDED PRECEDING AND h FOLLOWING EXCLUDE TIES
+	)
+FROM
+	t
+WINDOW
+	w AS (
+		PARTITION BY
+			i
+		GROUPS
+			BETWEEN j PRECEDING AND CURRENT ROW EXCLUDE NO OTHERS
+	)
+
+81:
+---------------------------------------------------------------------------------
+SELECT
+	sum(a) OVER w,
+	avg(b) OVER (PARTITION BY c ORDER BY d ROWS e PRECEDING),
+	min(f) OVER (
+		ORDER BY g RANGE BETWEEN UNBOUNDED PRECEDING AND h FOLLOWING EXCLUDE TIES
+	)
+FROM
+	t
+WINDOW
+	w AS (
+		PARTITION BY
+			i
+		GROUPS
+			BETWEEN j PRECEDING AND CURRENT ROW EXCLUDE NO OTHERS
+	)
+
+83:
+-----------------------------------------------------------------------------------
+SELECT
+	sum(a) OVER w,
+	avg(b) OVER (PARTITION BY c ORDER BY d ROWS e PRECEDING),
+	min(f) OVER (
+		ORDER BY g RANGE BETWEEN UNBOUNDED PRECEDING AND h FOLLOWING EXCLUDE TIES
+	)
+FROM
+	t
+WINDOW
+	w AS (
+		PARTITION BY i GROUPS BETWEEN j PRECEDING AND CURRENT ROW EXCLUDE NO OTHERS
+	)
+
+86:
+--------------------------------------------------------------------------------------
+SELECT
+	sum(a) OVER w,
+	avg(b) OVER (PARTITION BY c ORDER BY d ROWS e PRECEDING),
+	min(f) OVER (
+		ORDER BY g RANGE BETWEEN UNBOUNDED PRECEDING AND h FOLLOWING EXCLUDE TIES
+	)
+FROM
+	t
+WINDOW
+	w AS (PARTITION BY i GROUPS BETWEEN j PRECEDING AND CURRENT ROW EXCLUDE NO OTHERS)
+
+91:
+-------------------------------------------------------------------------------------------
+SELECT
+	sum(a) OVER w,
+	avg(b) OVER (PARTITION BY c ORDER BY d ROWS e PRECEDING),
+	min(f) OVER (ORDER BY g RANGE BETWEEN UNBOUNDED PRECEDING AND h FOLLOWING EXCLUDE TIES)
+FROM
+	t
+WINDOW
+	w AS (PARTITION BY i GROUPS BETWEEN j PRECEDING AND CURRENT ROW EXCLUDE NO OTHERS)
+
+164:
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SELECT
+	sum(a) OVER w, avg(b) OVER (PARTITION BY c ORDER BY d ROWS e PRECEDING), min(f) OVER (ORDER BY g RANGE BETWEEN UNBOUNDED PRECEDING AND h FOLLOWING EXCLUDE TIES)
+FROM
+	t
+WINDOW
+	w AS (PARTITION BY i GROUPS BETWEEN j PRECEDING AND CURRENT ROW EXCLUDE NO OTHERS)
+
+264:
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SELECT sum(a) OVER w, avg(b) OVER (PARTITION BY c ORDER BY d ROWS e PRECEDING), min(f) OVER (ORDER BY g RANGE BETWEEN UNBOUNDED PRECEDING AND h FOLLOWING EXCLUDE TIES) FROM t WINDOW w AS (PARTITION BY i GROUPS BETWEEN j PRECEDING AND CURRENT ROW EXCLUDE NO OTHERS)

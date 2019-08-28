@@ -14,8 +14,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/stretchr/testify/require"
 )
@@ -24,10 +25,11 @@ import (
 // when the context is canceled.
 func TestCancelChecker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	batch := coldata.NewMemBatch([]types.T{types.Int64})
+	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
 	op := NewCancelChecker(NewNoop(NewRepeatableBatchSource(batch)))
 	cancel()
-	require.PanicsWithValue(t, sqlbase.QueryCanceledError, func() {
+	err := execerror.CatchVectorizedRuntimeError(func() {
 		op.Next(ctx)
 	})
+	require.Equal(t, sqlbase.QueryCanceledError, err)
 }

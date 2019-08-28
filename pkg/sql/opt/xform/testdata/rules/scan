@@ -465,7 +465,7 @@ memo (optimized, ~2KB, required=[presentation: i:2,k:1] [ordering: -4,+2,+1])
 memo
 SELECT i, k FROM a WHERE s >= 'foo'
 ----
-memo (optimized, ~5KB, required=[presentation: i:2,k:1])
+memo (optimized, ~6KB, required=[presentation: i:2,k:1])
  ├── G1: (project G2 G3 k i)
  │    └── [presentation: i:2,k:1]
  │         ├── best: (project G2 G3 k i)

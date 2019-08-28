@@ -13,8 +13,8 @@ package tpcc
 import (
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -65,12 +65,12 @@ type generateLocals struct {
 	uuidAlloc uuid.UUID
 }
 
-var itemColTypes = []types.T{
-	types.Int64,
-	types.Int64,
-	types.Bytes,
-	types.Float64,
-	types.Bytes,
+var itemColTypes = []coltypes.T{
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Bytes,
+	coltypes.Float64,
+	coltypes.Bytes,
 }
 
 func (w *tpcc) tpccItemInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
@@ -84,9 +84,9 @@ func (w *tpcc) tpccItemInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc
 	cb.Reset(itemColTypes, 1)
 	cb.ColVec(0).Int64()[0] = int64(iID)
 	cb.ColVec(1).Int64()[0] = randInt(l.rng.Rand, 1, 10000)                             // im_id: "Image ID associated to Item"
-	cb.ColVec(2).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 14, 24)        // name
+	cb.ColVec(2).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 14, 24))     // name
 	cb.ColVec(3).Float64()[0] = float64(randInt(l.rng.Rand, 100, 10000)) / float64(100) // price
-	cb.ColVec(4).Bytes()[0] = randOriginalStringInitialDataOnly(&l.rng, &ao, a)
+	cb.ColVec(4).Bytes().Set(0, randOriginalStringInitialDataOnly(&l.rng, &ao, a))
 }
 
 func (w *tpcc) tpccItemStats() []workload.JSONStatistic {
@@ -102,16 +102,16 @@ func (w *tpcc) tpccItemStats() []workload.JSONStatistic {
 	}
 }
 
-var warehouseColTypes = []types.T{
-	types.Int64,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Float64,
-	types.Float64,
+var warehouseColTypes = []coltypes.T{
+	coltypes.Int64,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Float64,
+	coltypes.Float64,
 }
 
 func (w *tpcc) tpccWarehouseInitialRowBatch(
@@ -127,12 +127,12 @@ func (w *tpcc) tpccWarehouseInitialRowBatch(
 
 	cb.Reset(warehouseColTypes, 1)
 	cb.ColVec(0).Int64()[0] = int64(wID)
-	cb.ColVec(1).Bytes()[0] = []byte(strconv.FormatInt(randInt(l.rng.Rand, 6, 10), 10))  // name
-	cb.ColVec(2).Bytes()[0] = []byte(strconv.FormatInt(randInt(l.rng.Rand, 10, 20), 10)) // street_1
-	cb.ColVec(3).Bytes()[0] = []byte(strconv.FormatInt(randInt(l.rng.Rand, 10, 20), 10)) // street_2
-	cb.ColVec(4).Bytes()[0] = []byte(strconv.FormatInt(randInt(l.rng.Rand, 10, 20), 10)) // city
-	cb.ColVec(5).Bytes()[0] = randStateInitialDataOnly(&l.rng, &lo, a)
-	cb.ColVec(6).Bytes()[0] = randZipInitialDataOnly(&l.rng, &no, a)
+	cb.ColVec(1).Bytes().Set(0, []byte(strconv.FormatInt(randInt(l.rng.Rand, 6, 10), 10)))  // name
+	cb.ColVec(2).Bytes().Set(0, []byte(strconv.FormatInt(randInt(l.rng.Rand, 10, 20), 10))) // street_1
+	cb.ColVec(3).Bytes().Set(0, []byte(strconv.FormatInt(randInt(l.rng.Rand, 10, 20), 10))) // street_2
+	cb.ColVec(4).Bytes().Set(0, []byte(strconv.FormatInt(randInt(l.rng.Rand, 10, 20), 10))) // city
+	cb.ColVec(5).Bytes().Set(0, randStateInitialDataOnly(&l.rng, &lo, a))
+	cb.ColVec(6).Bytes().Set(0, randZipInitialDataOnly(&l.rng, &no, a))
 	cb.ColVec(7).Float64()[0] = randTax(l.rng.Rand)
 	cb.ColVec(8).Float64()[0] = wYtd
 }
@@ -154,24 +154,24 @@ func (w *tpcc) tpccWarehouseStats() []workload.JSONStatistic {
 	}
 }
 
-var stockColTypes = []types.T{
-	types.Int64,
-	types.Int64,
-	types.Int64,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Int64,
-	types.Int64,
-	types.Int64,
-	types.Bytes,
+var stockColTypes = []coltypes.T{
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Bytes,
 }
 
 func (w *tpcc) tpccStockInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
@@ -186,21 +186,21 @@ func (w *tpcc) tpccStockInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufallo
 	cb.Reset(stockColTypes, 1)
 	cb.ColVec(0).Int64()[0] = int64(sID)
 	cb.ColVec(1).Int64()[0] = int64(wID)
-	cb.ColVec(2).Int64()[0] = randInt(l.rng.Rand, 10, 100)                        // quantity
-	cb.ColVec(3).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)  // dist_01
-	cb.ColVec(4).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)  // dist_02
-	cb.ColVec(5).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)  // dist_03
-	cb.ColVec(6).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)  // dist_04
-	cb.ColVec(7).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)  // dist_05
-	cb.ColVec(8).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)  // dist_06
-	cb.ColVec(9).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)  // dist_07
-	cb.ColVec(10).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24) // dist_08
-	cb.ColVec(11).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24) // dist_09
-	cb.ColVec(12).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24) // dist_10
-	cb.ColVec(13).Int64()[0] = 0                                                  // ytd
-	cb.ColVec(14).Int64()[0] = 0                                                  // order_cnt
-	cb.ColVec(15).Int64()[0] = 0                                                  // remote_cnt
-	cb.ColVec(16).Bytes()[0] = randOriginalStringInitialDataOnly(&l.rng, &ao, a)  // data
+	cb.ColVec(2).Int64()[0] = randInt(l.rng.Rand, 10, 100)                           // quantity
+	cb.ColVec(3).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_01
+	cb.ColVec(4).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_02
+	cb.ColVec(5).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_03
+	cb.ColVec(6).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_04
+	cb.ColVec(7).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_05
+	cb.ColVec(8).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_06
+	cb.ColVec(9).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))  // dist_07
+	cb.ColVec(10).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)) // dist_08
+	cb.ColVec(11).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)) // dist_09
+	cb.ColVec(12).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)) // dist_10
+	cb.ColVec(13).Int64()[0] = 0                                                     // ytd
+	cb.ColVec(14).Int64()[0] = 0                                                     // order_cnt
+	cb.ColVec(15).Int64()[0] = 0                                                     // remote_cnt
+	cb.ColVec(16).Bytes().Set(0, randOriginalStringInitialDataOnly(&l.rng, &ao, a))  // data
 }
 
 func (w *tpcc) tpccStockStats() []workload.JSONStatistic {
@@ -230,18 +230,18 @@ func (w *tpcc) tpccStockStats() []workload.JSONStatistic {
 	}
 }
 
-var districtColTypes = []types.T{
-	types.Int64,
-	types.Int64,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Float64,
-	types.Float64,
-	types.Int64,
+var districtColTypes = []coltypes.T{
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Float64,
+	coltypes.Float64,
+	coltypes.Int64,
 }
 
 func (w *tpcc) tpccDistrictInitialRowBatch(
@@ -260,12 +260,12 @@ func (w *tpcc) tpccDistrictInitialRowBatch(
 	cb.Reset(districtColTypes, 1)
 	cb.ColVec(0).Int64()[0] = int64(dID)
 	cb.ColVec(1).Int64()[0] = int64(wID)
-	cb.ColVec(2).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 6, 10)  // name
-	cb.ColVec(3).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20) // street 1
-	cb.ColVec(4).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20) // street 2
-	cb.ColVec(5).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20) // city
-	cb.ColVec(6).Bytes()[0] = randStateInitialDataOnly(&l.rng, &lo, a)
-	cb.ColVec(7).Bytes()[0] = randZipInitialDataOnly(&l.rng, &no, a)
+	cb.ColVec(2).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 6, 10))  // name
+	cb.ColVec(3).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20)) // street 1
+	cb.ColVec(4).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20)) // street 2
+	cb.ColVec(5).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20)) // city
+	cb.ColVec(6).Bytes().Set(0, randStateInitialDataOnly(&l.rng, &lo, a))
+	cb.ColVec(7).Bytes().Set(0, randZipInitialDataOnly(&l.rng, &no, a))
 	cb.ColVec(8).Float64()[0] = randTax(l.rng.Rand)
 	cb.ColVec(9).Float64()[0] = ytd
 	cb.ColVec(10).Int64()[0] = nextOrderID
@@ -293,28 +293,28 @@ func (w *tpcc) tpccDistrictStats() []workload.JSONStatistic {
 	}
 }
 
-var customerColTypes = []types.T{
-	types.Int64,
-	types.Int64,
-	types.Int64,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Float64,
-	types.Float64,
-	types.Float64,
-	types.Float64,
-	types.Int64,
-	types.Int64,
-	types.Bytes,
+var customerColTypes = []coltypes.T{
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Float64,
+	coltypes.Float64,
+	coltypes.Float64,
+	coltypes.Float64,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Bytes,
 }
 
 func (w *tpcc) tpccCustomerInitialRowBatch(
@@ -351,24 +351,24 @@ func (w *tpcc) tpccCustomerInitialRowBatch(
 	cb.ColVec(0).Int64()[0] = int64(cID)
 	cb.ColVec(1).Int64()[0] = int64(dID)
 	cb.ColVec(2).Int64()[0] = int64(wID)
-	cb.ColVec(3).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 8, 16) // first name
-	cb.ColVec(4).Bytes()[0] = middleName
-	cb.ColVec(5).Bytes()[0] = lastName
-	cb.ColVec(6).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20) // street 1
-	cb.ColVec(7).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20) // street 2
-	cb.ColVec(8).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20) // city name
-	cb.ColVec(9).Bytes()[0] = randStateInitialDataOnly(&l.rng, &lo, a)
-	cb.ColVec(10).Bytes()[0] = randZipInitialDataOnly(&l.rng, &no, a)
-	cb.ColVec(11).Bytes()[0] = randNStringInitialDataOnly(&l.rng, &no, a, 16, 16) // phone number
-	cb.ColVec(12).Bytes()[0] = w.nowString
-	cb.ColVec(13).Bytes()[0] = credit
+	cb.ColVec(3).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 8, 16)) // first name
+	cb.ColVec(4).Bytes().Set(0, middleName)
+	cb.ColVec(5).Bytes().Set(0, lastName)
+	cb.ColVec(6).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20)) // street 1
+	cb.ColVec(7).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20)) // street 2
+	cb.ColVec(8).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20)) // city name
+	cb.ColVec(9).Bytes().Set(0, randStateInitialDataOnly(&l.rng, &lo, a))
+	cb.ColVec(10).Bytes().Set(0, randZipInitialDataOnly(&l.rng, &no, a))
+	cb.ColVec(11).Bytes().Set(0, randNStringInitialDataOnly(&l.rng, &no, a, 16, 16)) // phone number
+	cb.ColVec(12).Bytes().Set(0, w.nowString)
+	cb.ColVec(13).Bytes().Set(0, credit)
 	cb.ColVec(14).Float64()[0] = creditLimit
 	cb.ColVec(15).Float64()[0] = float64(randInt(l.rng.Rand, 0, 5000)) / float64(10000.0) // discount
 	cb.ColVec(16).Float64()[0] = balance
 	cb.ColVec(17).Float64()[0] = ytdPayment
 	cb.ColVec(18).Int64()[0] = paymentCount
 	cb.ColVec(19).Int64()[0] = deliveryCount
-	cb.ColVec(20).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 300, 500) // data
+	cb.ColVec(20).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 300, 500)) // data
 }
 
 func (w *tpcc) tpccCustomerStats() []workload.JSONStatistic {
@@ -405,16 +405,16 @@ func (w *tpcc) tpccCustomerStats() []workload.JSONStatistic {
 	}
 }
 
-var historyColTypes = []types.T{
-	types.Bytes,
-	types.Int64,
-	types.Int64,
-	types.Int64,
-	types.Int64,
-	types.Int64,
-	types.Bytes,
-	types.Float64,
-	types.Bytes,
+var historyColTypes = []coltypes.T{
+	coltypes.Bytes,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Bytes,
+	coltypes.Float64,
+	coltypes.Bytes,
 }
 
 func (w *tpcc) tpccHistoryInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
@@ -440,15 +440,15 @@ func (w *tpcc) tpccHistoryInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufal
 	wID := (rowIdx / numCustomersPerWarehouse)
 
 	cb.Reset(historyColTypes, 1)
-	cb.ColVec(0).Bytes()[0] = rowID
+	cb.ColVec(0).Bytes().Set(0, rowID)
 	cb.ColVec(1).Int64()[0] = int64(cID)
 	cb.ColVec(2).Int64()[0] = int64(dID)
 	cb.ColVec(3).Int64()[0] = int64(wID)
 	cb.ColVec(4).Int64()[0] = int64(dID)
 	cb.ColVec(5).Int64()[0] = int64(wID)
-	cb.ColVec(6).Bytes()[0] = w.nowString
+	cb.ColVec(6).Bytes().Set(0, w.nowString)
 	cb.ColVec(7).Float64()[0] = 10.00
-	cb.ColVec(8).Bytes()[0] = randAStringInitialDataOnly(&l.rng, &ao, a, 12, 24)
+	cb.ColVec(8).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 12, 24))
 }
 
 func (w *tpcc) tpccHistoryStats() []workload.JSONStatistic {
@@ -468,15 +468,15 @@ func (w *tpcc) tpccHistoryStats() []workload.JSONStatistic {
 	}
 }
 
-var orderColTypes = []types.T{
-	types.Int64,
-	types.Int64,
-	types.Int64,
-	types.Int64,
-	types.Bytes,
-	types.Int64,
-	types.Int64,
-	types.Int64,
+var orderColTypes = []coltypes.T{
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Bytes,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int64,
 }
 
 func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
@@ -525,7 +525,7 @@ func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufallo
 	cb.ColVec(1).Int64()[0] = int64(dID)
 	cb.ColVec(2).Int64()[0] = int64(wID)
 	cb.ColVec(3).Int64()[0] = int64(cID)
-	cb.ColVec(4).Bytes()[0] = w.nowString
+	cb.ColVec(4).Bytes().Set(0, w.nowString)
 	cb.ColVec(5).Nulls().UnsetNulls()
 	if carrierSet {
 		cb.ColVec(5).Int64()[0] = carrierID
@@ -555,10 +555,10 @@ func (w *tpcc) tpccOrderStats() []workload.JSONStatistic {
 	}
 }
 
-var newOrderColTypes = []types.T{
-	types.Int64,
-	types.Int64,
-	types.Int64,
+var newOrderColTypes = []coltypes.T{
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int64,
 }
 
 func (w *tpcc) tpccNewOrderInitialRowBatch(
@@ -585,17 +585,17 @@ func (w *tpcc) tpccNewOrderStats() []workload.JSONStatistic {
 	}
 }
 
-var orderLineColTypes = []types.T{
-	types.Int64,
-	types.Int64,
-	types.Int64,
-	types.Int64,
-	types.Int64,
-	types.Int64,
-	types.Bytes,
-	types.Int64,
-	types.Float64,
-	types.Bytes,
+var orderLineColTypes = []coltypes.T{
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Bytes,
+	coltypes.Int64,
+	coltypes.Float64,
+	coltypes.Bytes,
 }
 
 func (w *tpcc) tpccOrderLineInitialRowBatch(
@@ -629,6 +629,8 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 	olAmountCol := cb.ColVec(8).Float64()
 	olDistInfoCol := cb.ColVec(9).Bytes()
 
+	olDeliveryDCol.Reset()
+	olDistInfoCol.Reset()
 	for rowIdx := 0; rowIdx < numOrderLines; rowIdx++ {
 		olNumber := rowIdx + 1
 
@@ -650,14 +652,14 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 		olIIDCol[rowIdx] = randInt(l.rng.Rand, 1, 100000)
 		olSupplyWIDCol[rowIdx] = int64(wID)
 		if deliveryDSet {
-			olDeliveryDCol[rowIdx] = deliveryD
+			olDeliveryDCol.Set(rowIdx, deliveryD)
 		} else {
 			olDeliveryD.Nulls().SetNull64(uint64(rowIdx))
-			olDeliveryDCol[rowIdx] = nil
+			olDeliveryDCol.Set(rowIdx, nil)
 		}
 		olQuantityCol[rowIdx] = 5
 		olAmountCol[rowIdx] = amount
-		olDistInfoCol[rowIdx] = randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24)
+		olDistInfoCol.Set(rowIdx, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))
 	}
 }
 

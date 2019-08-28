@@ -66,11 +66,17 @@ func TestValues(t *testing.T) {
 	unsupp := &tree.RangeCond{}
 
 	intVal := func(v int64) *tree.NumVal {
-		return &tree.NumVal{Value: constant.MakeInt64(v)}
+		return tree.NewNumVal(
+			constant.MakeInt64(v),
+			"", /* origString */
+			false /* negative */)
 	}
 	floatVal := func(f float64) *tree.CastExpr {
 		return &tree.CastExpr{
-			Expr: &tree.NumVal{Value: constant.MakeFloat64(f)},
+			Expr: tree.NewNumVal(
+				constant.MakeFloat64(f),
+				"", /* origString */
+				false /* negative */),
 			Type: types.Float,
 		}
 	}
@@ -146,10 +152,6 @@ func TestValues(t *testing.T) {
 			}
 			if plan == nil {
 				return
-			}
-			plan, err = p.optimizePlan(ctx, plan, allColumns(plan))
-			if err != nil {
-				t.Fatalf("%d: unexpected error in optimizePlan: %v", i, err)
 			}
 			params := runParams{ctx: ctx, p: p, extendedEvalCtx: &p.extendedEvalCtx}
 			if err := startExec(params, plan); err != nil {

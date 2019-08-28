@@ -12,21 +12,39 @@ package roachpb
 
 import (
 	"fmt"
-	"sort"
 	"strings"
+
+	"go.etcd.io/etcd/raft/confchange"
+	"go.etcd.io/etcd/raft/quorum"
+	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/tracker"
 )
 
-// ReplicaTypeVoter returns a ReplicaType_VOTER pointer suitable for use in a
+// ReplicaTypeVoterFull returns a VOTER_FULL pointer suitable for use in a
 // nullable proto field.
-func ReplicaTypeVoter() *ReplicaType {
-	t := ReplicaType_VOTER
+func ReplicaTypeVoterFull() *ReplicaType {
+	t := VOTER_FULL
 	return &t
 }
 
-// ReplicaTypeLearner returns a ReplicaType_LEARNER pointer suitable for use in
+// ReplicaTypeVoterIncoming returns a VOTER_INCOMING pointer suitable
+// for use in a nullable proto field.
+func ReplicaTypeVoterIncoming() *ReplicaType {
+	t := VOTER_INCOMING
+	return &t
+}
+
+// ReplicaTypeVoterOutgoing returns a VOTER_OUTGOING pointer suitable
+// for use in a nullable proto field.
+func ReplicaTypeVoterOutgoing() *ReplicaType {
+	t := VOTER_OUTGOING
+	return &t
+}
+
+// ReplicaTypeLearner returns a LEARNER pointer suitable for use in
 // a nullable proto field.
 func ReplicaTypeLearner() *ReplicaType {
-	t := ReplicaType_LEARNER
+	t := LEARNER
 	return &t
 }
 
@@ -49,9 +67,8 @@ type ReplicaDescriptors struct {
 // we're trading one allocation for another. However, if the caller already has
 // the slice header on the heap (which is the common case for *RangeDescriptors)
 // then this is a net win.
-func MakeReplicaDescriptors(replicas *[]ReplicaDescriptor) ReplicaDescriptors {
-	sort.Sort((*byTypeThenReplicaID)(replicas))
-	return ReplicaDescriptors{wrapped: *replicas}
+func MakeReplicaDescriptors(replicas []ReplicaDescriptor) ReplicaDescriptors {
+	return ReplicaDescriptors{wrapped: replicas}
 }
 
 func (d ReplicaDescriptors) String() string {
@@ -71,18 +88,39 @@ func (d ReplicaDescriptors) All() []ReplicaDescriptor {
 	return d.wrapped
 }
 
-// Voters returns the voter replicas in the set.
-func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
-	// Note that the wrapped replicas are sorted first by type.
-	for i := range d.wrapped {
-		if d.wrapped[i].GetType() == ReplicaType_LEARNER {
-			return d.wrapped[:i]
-		}
+func predVoterFullOrIncoming(rDesc ReplicaDescriptor) bool {
+	switch rDesc.GetType() {
+	case VOTER_FULL, VOTER_INCOMING:
+		return true
+	default:
 	}
-	return d.wrapped
+	return false
 }
 
-// Learners returns the learner replicas in the set.
+func predLearner(rDesc ReplicaDescriptor) bool {
+	return rDesc.GetType() == LEARNER
+}
+
+// Voters returns the current and future voter replicas in the set. This means
+// that during an atomic replication change, only the replicas that will be
+// voters once the change completes will be returned; "outgoing" voters will not
+// be returned even though they do in the current state retain their voting
+// rights. When no atomic membership change is ongoing, this is simply the set
+// of all non-learners.
+//
+// This may allocate, but it also may return the underlying slice as a
+// performance optimization, so it's not safe to modify the returned value.
+//
+// TODO(tbg): go through the callers and figure out the few which want a
+// different subset of voters. Consider renaming this method so that it's
+// more descriptive.
+func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
+	return d.Filter(predVoterFullOrIncoming)
+}
+
+// Learners returns the learner replicas in the set. This may allocate, but it
+// also may return the underlying slice as a performance optimization, so it's
+// not safe to modify the returned value.
 //
 // A learner is a participant in a raft group that accepts messages but doesn't
 // vote. This means it doesn't affect raft quorum and thus doesn't affect the
@@ -109,8 +147,8 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 // - Learner replicas cannot become raft leaders, so we also don't allow them to
 //   become leaseholders. As a result, DistSender and the various oracles don't
 //   try to send them traffic.
-// - The raft snapshot queue does not send snapshots to learners for reasons
-//   described below.
+// - The raft snapshot queue tries to avoid sending snapshots to learners for
+//   reasons described below.
 // - Merges won't run while a learner replica is present.
 //
 // Replicas are now added in two ConfChange transactions. The first creates the
@@ -135,7 +173,19 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 // There is another race between the learner snapshot being sent and the raft
 // snapshot queue happening to check the replica at the same time, also sending
 // it a snapshot. This is safe but wasteful, so the raft snapshot queue won't
-// try to send snapshots to learners.
+// try to send snapshots to learners if there is already a snapshot to that
+// range in flight.
+//
+// *However*, raft is currently pickier than the needs to be about the snapshots
+// it requests and it can get stuck in StateSnapshot if it doesn't receive
+// exactly the index it wants. As a result, for now, the raft snapshot queue
+// will send one if it's still needed after the learner snapshot finishes (or
+// times out). To make this work in a timely manner (i.e. without relying on the
+// replica scanner) but without blocking the raft snapshot queue, when a
+// snapshot is skipped, this is reported to raft as an error sending the
+// snapshot. This causes raft to eventually re-enqueue it in the raft snapshot
+// queue. All of this is quite hard to reason about, so it'd be nice to make
+// this go away at some point.
 //
 // Merges are blocked if either side has a learner (to avoid working out the
 // edge cases) but it's historically turned out to be a bad idea to get in the
@@ -155,13 +205,29 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 //
 // For some related mega-comments, see Replica.sendSnapshot.
 func (d ReplicaDescriptors) Learners() []ReplicaDescriptor {
-	// Note that the wrapped replicas are sorted first by type.
+	return d.Filter(predLearner)
+}
+
+// Filter returns only the replica descriptors for which the supplied method
+// returns true. The memory returned may be shared with the receiver.
+func (d ReplicaDescriptors) Filter(pred func(rDesc ReplicaDescriptor) bool) []ReplicaDescriptor {
+	// Fast path when all or none match to avoid allocations.
+	fastpath := true
+	out := d.wrapped
 	for i := range d.wrapped {
-		if d.wrapped[i].GetType() == ReplicaType_LEARNER {
-			return d.wrapped[i:]
+		if pred(d.wrapped[i]) {
+			if !fastpath {
+				out = append(out, d.wrapped[i])
+			}
+		} else {
+			if fastpath {
+				out = nil
+				out = append(out, d.wrapped[:i]...)
+				fastpath = false
+			}
 		}
 	}
-	return nil
+	return out
 }
 
 // AsProto returns the protobuf representation of these replicas, suitable for
@@ -204,24 +270,89 @@ func (d *ReplicaDescriptors) RemoveReplica(
 	d.wrapped[idx], d.wrapped[len(d.wrapped)-1] = d.wrapped[len(d.wrapped)-1], d.wrapped[idx]
 	removed := d.wrapped[len(d.wrapped)-1]
 	d.wrapped = d.wrapped[:len(d.wrapped)-1]
-	// The swap may have broken our sortedness invariant, so re-sort.
-	sort.Sort((*byTypeThenReplicaID)(&d.wrapped))
 	return removed, true
 }
 
-// QuorumSize returns the number of voter replicas required for quorum in a raft
-// group consisting of this set of replicas.
-func (d ReplicaDescriptors) QuorumSize() int {
-	return (len(d.Voters()) / 2) + 1
+// InAtomicReplicationChange returns true if the descriptor is in the middle of
+// an atomic replication change.
+func (d ReplicaDescriptors) InAtomicReplicationChange() bool {
+	for _, rDesc := range d.wrapped {
+		switch rDesc.GetType() {
+		case VOTER_FULL:
+		case VOTER_INCOMING:
+			return true
+		case VOTER_OUTGOING:
+			return true
+		case LEARNER:
+		default:
+			panic(fmt.Sprintf("unknown replica type %d", rDesc.GetType()))
+		}
+	}
+	return false
 }
 
-type byTypeThenReplicaID []ReplicaDescriptor
-
-func (x *byTypeThenReplicaID) Len() int      { return len(*x) }
-func (x *byTypeThenReplicaID) Swap(i, j int) { (*x)[i], (*x)[j] = (*x)[j], (*x)[i] }
-func (x *byTypeThenReplicaID) Less(i, j int) bool {
-	if (*x)[i].GetType() == (*x)[j].GetType() {
-		return (*x)[i].ReplicaID < (*x)[j].ReplicaID
+// ConfState returns the Raft configuration described by the set of replicas.
+func (d ReplicaDescriptors) ConfState() raftpb.ConfState {
+	var cs raftpb.ConfState
+	joint := d.InAtomicReplicationChange()
+	// The incoming config is taken verbatim from the full voters when the
+	// config is not joint. If it is joint, slot the voters into the right
+	// category. We never need to populate LearnersNext because this would
+	// correspond to demoting a voter, which we don't do. If we wanted to add
+	// that, we'd add a replica type VOTER_DEMOTING and populate both
+	// VotersOutgoing and LearnersNext from it.
+	for _, rep := range d.wrapped {
+		id := uint64(rep.ReplicaID)
+		typ := rep.GetType()
+		switch typ {
+		case VOTER_FULL:
+			cs.Voters = append(cs.Voters, id)
+			if joint {
+				cs.VotersOutgoing = append(cs.VotersOutgoing, id)
+			}
+		case VOTER_INCOMING:
+			cs.Voters = append(cs.Voters, id)
+		case VOTER_OUTGOING:
+			cs.VotersOutgoing = append(cs.VotersOutgoing, id)
+		case LEARNER:
+			cs.Learners = append(cs.Learners, id)
+		default:
+			panic(fmt.Sprintf("unknown ReplicaType %d", typ))
+		}
 	}
-	return (*x)[i].GetType() < (*x)[j].GetType()
+	return cs
+}
+
+// CanMakeProgress reports whether the given descriptors can make progress at the
+// replication layer. This is more complicated than just counting the number
+// of replicas due to the existence of joint quorums.
+func (d ReplicaDescriptors) CanMakeProgress(liveFunc func(descriptor ReplicaDescriptor) bool) bool {
+	voters := d.Voters()
+	var c int
+	// Take the fast path when there are only "current and future" voters, i.e.
+	// no learners and no voters of type VOTER_OUTGOING. The config may be joint,
+	// but the outgoing conf is subsumed by the incoming one.
+	if n := len(d.wrapped); len(voters) == n {
+		for _, rDesc := range voters {
+			if liveFunc(rDesc) {
+				c++
+			}
+		}
+		return c >= n/2+1
+	}
+
+	// Slow path. For simplicity, don't try to duplicate the logic that already
+	// exists in raft.
+	cfg, _, err := confchange.Restore(
+		confchange.Changer{Tracker: tracker.MakeProgressTracker(1)},
+		d.ConfState(),
+	)
+	if err != nil {
+		panic(err)
+	}
+	votes := make(map[uint64]bool, len(d.wrapped))
+	for _, rDesc := range d.wrapped {
+		votes[uint64(rDesc.ReplicaID)] = liveFunc(rDesc)
+	}
+	return cfg.Voters.VoteResult(votes) == quorum.VoteWon
 }

@@ -20,15 +20,20 @@ import (
 
 // Walk walks path for datadriven files and calls RunTest on them.
 func Walk(
-	t *testing.T, path string, interesting func(contains string) InterestingFn, passes []Pass,
+	t *testing.T,
+	path string,
+	filter func([]byte) ([]byte, error),
+	interesting func(contains string) InterestingFn,
+	passes []Pass,
 ) {
 	datadriven.Walk(t, path, func(t *testing.T, path string) {
-		RunTest(t, path, interesting, passes)
+		RunTest(t, path, filter, interesting, passes)
 	})
 }
 
-// RunTest executes reducer commands. In verbose mode, output is written to
-// stderr. Supported commands:
+// RunTest executes reducer commands. If the optional filter func is not nil,
+// it is invoked on all "reduce" commands before the reduction algorithm is
+// started. In verbose mode, output is written to stderr. Supported commands:
 //
 // "contains": Sets the substring that must be contained by an error message
 // for a test case to be marked as interesting. This variable is passed to the
@@ -37,7 +42,11 @@ func Walk(
 // "reduce": Creates an InterestingFn based on the current value of contains
 // and executes the reducer. Outputs the reduced case.
 func RunTest(
-	t *testing.T, path string, interesting func(contains string) InterestingFn, passes []Pass,
+	t *testing.T,
+	path string,
+	filter func([]byte) ([]byte, error),
+	interesting func(contains string) InterestingFn,
+	passes []Pass,
 ) {
 	var contains string
 	var log io.Writer
@@ -50,7 +59,15 @@ func RunTest(
 			contains = d.Input
 			return ""
 		case "reduce":
-			output, err := Reduce(log, File(d.Input), interesting(contains), passes...)
+			input := []byte(d.Input)
+			if filter != nil {
+				var err error
+				input, err = filter(input)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			output, err := Reduce(log, File(input), interesting(contains), passes...)
 			if err != nil {
 				t.Fatal(err)
 			}

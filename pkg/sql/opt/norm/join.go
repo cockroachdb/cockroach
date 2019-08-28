@@ -45,8 +45,6 @@ func (c *CustomFuncs) ConstructNonLeftJoin(
 		return c.f.ConstructInnerJoinApply(left, right, on, private)
 	case opt.FullJoinOp:
 		return c.f.ConstructRightJoin(left, right, on, private)
-	case opt.FullJoinApplyOp:
-		return c.f.ConstructRightJoinApply(left, right, on, private)
 	}
 	panic(errors.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
 }
@@ -60,12 +58,8 @@ func (c *CustomFuncs) ConstructNonRightJoin(
 	switch joinOp {
 	case opt.RightJoinOp:
 		return c.f.ConstructInnerJoin(left, right, on, private)
-	case opt.RightJoinApplyOp:
-		return c.f.ConstructInnerJoinApply(left, right, on, private)
 	case opt.FullJoinOp:
 		return c.f.ConstructLeftJoin(left, right, on, private)
-	case opt.FullJoinApplyOp:
-		return c.f.ConstructLeftJoinApply(left, right, on, private)
 	}
 	panic(errors.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
 }
@@ -141,7 +135,7 @@ func (c *CustomFuncs) CanMapJoinOpFilter(
 	// For CanMapJoinOpFilter to be true, each column in src must map to at
 	// least one column in dst.
 	for i, ok := scalarProps.OuterCols.Next(0); ok; i, ok = scalarProps.OuterCols.Next(i + 1) {
-		eqCols := c.GetEquivColsWithEquivType(opt.ColumnID(i), filters)
+		eqCols := c.GetEquivColsWithEquivType(i, filters)
 		if !eqCols.Intersects(c.OutputCols(dst)) {
 			return false
 		}
@@ -186,7 +180,7 @@ func (c *CustomFuncs) MapJoinOpFilter(
 	var colMap util.FastIntMap
 	outerCols := src.ScalarProps(c.mem).OuterCols
 	for srcCol, ok := outerCols.Next(0); ok; srcCol, ok = outerCols.Next(srcCol + 1) {
-		eqCols := c.GetEquivColsWithEquivType(opt.ColumnID(srcCol), filters)
+		eqCols := c.GetEquivColsWithEquivType(srcCol, filters)
 		eqCols.IntersectionWith(c.OutputCols(dst))
 		if eqCols.Contains(srcCol) {
 			colMap.Set(int(srcCol), int(srcCol))

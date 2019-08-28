@@ -24,13 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -44,7 +43,7 @@ func TestAddBatched(t *testing.T) {
 	})
 }
 
-func runTestImport(t *testing.T, batchSize int64) {
+func runTestImport(t *testing.T, batchSize uint64) {
 
 	ctx := context.Background()
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -120,7 +119,8 @@ func runTestImport(t *testing.T, batchSize int64) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			r, _, err := s.DistSender().RangeDescriptorCache().LookupRangeDescriptorWithEvictionToken(ctx, addr, nil, false)
+			r, _, err := s.DistSenderI().(*kv.DistSender).RangeDescriptorCache().LookupRangeDescriptorWithEvictionToken(
+				ctx, addr, nil, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -129,7 +129,9 @@ func runTestImport(t *testing.T, batchSize int64) {
 			}
 
 			ts := hlc.Timestamp{WallTime: 100}
-			b, err := bulk.MakeBulkAdder(kvDB, mockCache, batchSize, batchSize, ts)
+			b, err := bulk.MakeBulkAdder(
+				ctx, kvDB, mockCache, ts, storagebase.BulkAdderOptions{MinBufferSize: batchSize, SSTSize: batchSize}, nil, /* bulkMon */
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -232,36 +234,19 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 
 	const numKeys, valueSize, splitEvery = 500, 5000, 1
 
-	prefix := encoding.EncodeUvarintAscending(keys.MakeTablePrefix(uint32(100)), uint64(1))
-	key := func(i int) []byte {
-		return encoding.EncodeVarintAscending(append([]byte{}, prefix...), int64(i))
-	}
-
-	var splits []roachpb.Key
+	// Make some KVs and grab [start,end). Generate one extra for exclusive `end`.
+	kvs := makeIntTableKVs(t, numKeys+1, valueSize, 1)
+	start, end := kvs[0].Key.Key, kvs[numKeys].Key.Key
+	kvs = kvs[:numKeys]
 
 	// Create a large SST.
-	w, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer w.Close()
-	r, _ := randutil.NewPseudoRand()
-	buf := make([]byte, valueSize)
-	for i := 0; i < numKeys; i++ {
-		randutil.ReadTestdataBytes(r, buf)
+	sst := makeRocksSST(t, kvs)
+
+	var splits []roachpb.Key
+	for i := range kvs {
 		if i%splitEvery == 0 {
-			splits = append(splits, key(i))
+			splits = append(splits, kvs[i].Key.Key)
 		}
-		if err := w.Add(engine.MVCCKeyValue{
-			Key:   engine.MVCCKey{Key: key(i), Timestamp: hlc.Timestamp{WallTime: 1}},
-			Value: roachpb.MakeValueFromString(string(buf)).RawBytes,
-		}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	sst, err := w.Finish()
-	if err != nil {
-		t.Fatal(err)
 	}
 
 	// Keep track of the memory.
@@ -292,8 +277,10 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 
 	const kb = 1 << 10
 
-	t.Logf("Adding %dkb sst spanning %d splits", len(sst)/kb, len(splits))
-	if err := bulk.AddSSTable(context.TODO(), mock, key(0), key(numKeys), sst, false /* disallowShadowing */); err != nil {
+	t.Logf("Adding %dkb sst spanning %d splits from %v to %v", len(sst)/kb, len(splits), start, end)
+	if err := bulk.AddSSTable(
+		context.TODO(), mock, start, end, sst, false /* disallowShadowing */, enginepb.MVCCStats{},
+	); err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("Adding took %d total attempts", totalAdditionAttempts)

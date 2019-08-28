@@ -38,12 +38,36 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/logtags"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 )
+
+// TestingConnHealth returns nil if we have an open connection to the given
+// target with DefaultClass that succeeded on its most recent heartbeat.
+// Otherwise, it kicks off a connection attempt (unless one is already in
+// progress or we are in a backoff state) and returns an error (typically
+// ErrNotHeartbeated). This is a conservative/pessimistic indicator:
+// if we have not attempted to talk to the target node recently, an
+// error will be returned. This method should therefore be used to
+// prioritize among a list of candidate nodes, but not to filter out
+// "unhealthy" nodes.
+//
+// This is used in tests only; in clusters use (*Dialer).ConnHealth()
+// instead which automates the address resolution.
+//
+// TODO(knz): remove this altogether. Use the dialer in all cases.
+func (ctx *Context) TestingConnHealth(target string, nodeID roachpb.NodeID) error {
+	if ctx.GetLocalInternalClientForAddr(target, nodeID) != nil {
+		// The local server is always considered healthy.
+		return nil
+	}
+	conn := ctx.GRPCDialNode(target, nodeID, DefaultClass)
+	return conn.Health()
+}
 
 // AddTestingDialOpts adds extra dialing options to the rpc Context. This should
 // be done before GRPCDial is called.
@@ -64,20 +88,23 @@ func newTestServer(t testing.TB, ctx *Context, extraOpts ...grpc.ServerOption) *
 	return grpc.NewServer(opts...)
 }
 
-func newTestContext(clusterID uuid.UUID, clock *hlc.Clock, stopper *stop.Stopper) *Context {
-	rctx := NewContext(
+func newTestContextWithKnobs(
+	clock *hlc.Clock, stopper *stop.Stopper, knobs ContextTestingKnobs,
+) *Context {
+	return NewContextWithTestingKnobs(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		testutils.NewNodeTestBaseContext(),
 		clock,
 		stopper,
 		&cluster.MakeTestingClusterSettings().Version,
+		knobs,
 	)
-	// Ensure that tests using this test context and restart/shut down
-	// their servers do not inadvertently start talking to servers from
-	// unrelated concurrent tests.
-	rctx.ClusterID.Set(context.TODO(), clusterID)
+}
 
-	return rctx
+func newTestContext(clusterID uuid.UUID, clock *hlc.Clock, stopper *stop.Stopper) *Context {
+	return newTestContextWithKnobs(clock, stopper, ContextTestingKnobs{
+		ClusterID: &clusterID,
+	})
 }
 
 func TestHeartbeatCB(t *testing.T) {
@@ -124,7 +151,7 @@ func TestHeartbeatCB(t *testing.T) {
 			})
 		}
 
-		if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background()); err != nil {
+		if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 
@@ -253,7 +280,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	}
 	remoteAddr := ln.Addr().String()
 	if _, err := clientCtx.GRPCDialNode(
-		remoteAddr, serverNodeID).Connect(context.Background()); err != nil {
+		remoteAddr, serverNodeID, DefaultClass).Connect(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -398,7 +425,7 @@ func TestConnectionRemoveNodeIDZero(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	clientCtx := newTestContext(uuid.MakeV4(), clock, stopper)
 	// Provoke an error.
-	_, err := clientCtx.GRPCDialNode("127.0.0.1:notaport", 1).Connect(context.Background())
+	_, err := clientCtx.GRPCDialNode("127.0.0.1:notaport", 1, DefaultClass).Connect(context.Background())
 	if err == nil {
 		t.Fatal("expected some kind of error, got nil")
 	}
@@ -505,7 +532,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	clientCtx := newTestContext(clusterID, clock, stopper)
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
-	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background()); err != nil {
+	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	// Everything is normal; should become healthy.
@@ -581,7 +608,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 
 	// We can reconnect and the connection becomes healthy again.
 	testutils.SucceedsSoon(t, func() error {
-		if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background()); err != nil {
+		if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background()); err != nil {
 			return err
 		}
 		return clientCtx.TestingConnHealth(remoteAddr, serverNodeID)
@@ -660,7 +687,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
 	clientCtx.RemoteClocks.offsetTTL = 5 * clientAdvancing.getAdvancementInterval()
-	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background()); err != nil {
+	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -732,7 +759,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	// clock reading delay, not the timeout.
 	clientCtx.heartbeatTimeout = 0
 	go func() { heartbeat.ready <- nil }() // Allow one heartbeat for initialization.
-	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background()); err != nil {
+	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -842,7 +869,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 			if _, err := clientNodeContext.ctx.GRPCDialNode(
 				serverNodeContext.ctx.Addr,
 				serverNodeContext.ctx.NodeID.Get(),
-			).Connect(context.Background()); err != nil {
+				DefaultClass).Connect(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -976,7 +1003,7 @@ type grpcKeepaliveTestCase struct {
 func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) error {
 	var cKeepalive keepalive.ClientParameters
 	if c.cKeepalive {
-		cKeepalive = clientTestingKeepalive
+		cKeepalive = clientKeepalive
 	}
 	var sKeepalive keepalive.ServerParameters
 	if c.sKeepalive {
@@ -1064,7 +1091,7 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 		grpc.WithKeepaliveParams(cKeepalive),
 	)
 	log.Infof(ctx, "dialing server")
-	conn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(ctx)
+	conn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(ctx)
 	if err != nil {
 		return err
 	}
@@ -1232,7 +1259,7 @@ func TestClusterIDMismatch(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
-			_, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background())
+			_, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background())
 			expected := "initial connection heartbeat failed.*doesn't match server cluster ID"
 			if !testutils.IsError(err, expected) {
 				t.Errorf("expected %s error, got %v", expected, err)
@@ -1241,6 +1268,82 @@ func TestClusterIDMismatch(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+func TestClusterNameMismatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+
+	testData := []struct {
+		serverName             string
+		serverDisablePeerCheck bool
+		clientName             string
+		clientDisablePeerCheck bool
+		expectedErr            string
+	}{
+		{"", false, "", false, ``},
+		// The name check is enabled if both the client and server want it.
+		{"a", false, "", false, `peer node expects cluster name "a", use --cluster-name to configure`},
+		{"", false, "a", false, `peer node does not have a cluster name configured, cannot use --cluster-name`},
+		{"a", false, "b", false, `local cluster name "b" does not match peer cluster name "a"`},
+		// It's disabled if either doesn't want it.
+		// However in any case if the name is not empty it has to match.
+		{"a", true, "", false, ``},
+		{"", true, "a", false, ``},
+		{"a", true, "b", false, ``},
+		{"a", false, "", true, ``},
+		{"", false, "a", true, ``},
+		{"a", false, "b", true, ``},
+		{"a", true, "", true, ``},
+		{"", true, "a", true, ``},
+		{"a", true, "b", true, ``},
+	}
+
+	for i, c := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.TODO())
+
+			serverCtx := newTestContext(uuid.MakeV4(), clock, stopper)
+			serverCtx.clusterName = c.serverName
+			serverCtx.disableClusterNameVerification = c.serverDisablePeerCheck
+
+			s := newTestServer(t, serverCtx)
+			RegisterHeartbeatServer(s, &HeartbeatService{
+				clock:                          clock,
+				remoteClockMonitor:             serverCtx.RemoteClocks,
+				clusterID:                      &serverCtx.ClusterID,
+				nodeID:                         &serverCtx.NodeID,
+				version:                        serverCtx.version,
+				clusterName:                    serverCtx.clusterName,
+				disableClusterNameVerification: serverCtx.disableClusterNameVerification,
+			})
+
+			ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			remoteAddr := ln.Addr().String()
+
+			clientCtx := newTestContext(serverCtx.ClusterID.Get(), clock, stopper)
+			clientCtx.clusterName = c.clientName
+			clientCtx.disableClusterNameVerification = c.clientDisablePeerCheck
+
+			var wg sync.WaitGroup
+			for i := 0; i < 10; i++ {
+				wg.Add(1)
+				go func() {
+					_, err := clientCtx.GRPCUnvalidatedDial(remoteAddr).Connect(context.Background())
+					if !testutils.IsError(err, c.expectedErr) {
+						t.Errorf("expected %s error, got %v", c.expectedErr, err)
+					}
+					wg.Done()
+				}()
+			}
+			wg.Wait()
+		})
+	}
 }
 
 func TestNodeIDMismatch(t *testing.T) {
@@ -1277,7 +1380,7 @@ func TestNodeIDMismatch(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
-			_, err := clientCtx.GRPCDialNode(remoteAddr, 2).Connect(context.Background())
+			_, err := clientCtx.GRPCDialNode(remoteAddr, 2, DefaultClass).Connect(context.Background())
 			expected := "initial connection heartbeat failed.*doesn't match server node ID"
 			if !testutils.IsError(err, expected) {
 				t.Errorf("expected %s error, got %v", expected, err)
@@ -1353,7 +1456,7 @@ func TestVersionCheckBidirectional(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			_, err = clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background())
+			_, err = clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background())
 
 			if td.expectError {
 				expected := "initial connection heartbeat failed.*cluster requires at least version"
@@ -1364,6 +1467,195 @@ func TestVersionCheckBidirectional(t *testing.T) {
 				t.Errorf("unexpected error: %s", err)
 			}
 		})
+	}
+}
+
+// TestGRPCDialClass ensures that distinct connections are constructed when
+// dialing the same target with different classes.
+func TestGRPCDialClass(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+	serverCtx := newTestContext(uuid.MakeV4(), clock, stopper)
+	const serverNodeID = 1
+	serverCtx.NodeID.Set(context.TODO(), serverNodeID)
+	s := newTestServer(t, serverCtx)
+	RegisterHeartbeatServer(s, &HeartbeatService{
+		clock:              clock,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+		clusterID:          &serverCtx.ClusterID,
+		nodeID:             &serverCtx.NodeID,
+		version:            serverCtx.version,
+	})
+
+	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+	require.Nil(t, err)
+	remoteAddr := ln.Addr().String()
+	clientCtx := newTestContext(serverCtx.ClusterID.Get(), clock, stopper)
+
+	def1 := clientCtx.GRPCDialNode(remoteAddr, 1, DefaultClass)
+	sys1 := clientCtx.GRPCDialNode(remoteAddr, 1, SystemClass)
+	require.False(t, sys1 == def1,
+		"expected connections dialed with different classes to the same target to differ")
+	defConn1, err := def1.Connect(context.TODO())
+	require.Nil(t, err, "expected successful connection")
+	sysConn1, err := sys1.Connect(context.TODO())
+	require.Nil(t, err, "expected successful connection")
+	require.False(t, sysConn1 == defConn1, "expected connections dialed with "+
+		"different classes to the sametarget to have separate underlying gRPC connections")
+	def2 := clientCtx.GRPCDialNode(remoteAddr, 1, DefaultClass)
+	require.True(t, def1 == def2, "expected connections dialed with the same "+
+		"class to the same target to be the same")
+	sys2 := clientCtx.GRPCDialNode(remoteAddr, 1, SystemClass)
+	require.True(t, sys1 == sys2, "expected connections dialed with the same "+
+		"class to the same target to be the same")
+	for _, c := range []*Connection{def2, sys2} {
+		require.Nil(t, c.Health(), "expected connections to be healthy")
+	}
+}
+
+// TestTestingKnobs ensures that the testing knobs are injected in the proper
+// places.
+func TestTestingKnobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	clusterID := uuid.MakeV4()
+
+	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+	serverCtx := newTestContext(clusterID, clock, stopper)
+	const serverNodeID = 1
+	serverCtx.NodeID.Set(context.TODO(), serverNodeID)
+	// Register an UnknownServiceHandler that expects a BatchRequest and sends
+	// a BatchResponse. It will be used both as a unary and stream handler below.
+	s := newTestServer(t, serverCtx, grpc.UnknownServiceHandler(
+		func(srv interface{}, stream grpc.ServerStream) error {
+			var ba roachpb.BatchRequest
+			if err := stream.RecvMsg(&ba); err != nil {
+				return err
+			}
+			return stream.SendMsg(&roachpb.BatchResponse{})
+		},
+	))
+	RegisterHeartbeatServer(s, &HeartbeatService{
+		clock:              clock,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+		clusterID:          &serverCtx.ClusterID,
+		nodeID:             &serverCtx.NodeID,
+		version:            serverCtx.version,
+	})
+
+	// The test will inject interceptors for both stream and unary calls and then
+	// will ensure that these interceptors are properly called by keeping track
+	// of all calls.
+
+	// Use these structs to keep track of the number of times the interceptors
+	// are called in the seen map below.
+	type streamCall struct {
+		target string
+		class  ConnectionClass
+		method string
+	}
+	type unaryCall struct {
+		target string
+		class  ConnectionClass
+		method string
+	}
+	seen := make(map[interface{}]int)
+	var seenMu syncutil.Mutex
+	recordCall := func(call interface{}) {
+		seenMu.Lock()
+		defer seenMu.Unlock()
+		seen[call]++
+	}
+	clientCtx := newTestContextWithKnobs(clock, stopper, ContextTestingKnobs{
+		ClusterID: &clusterID,
+		StreamClientInterceptor: func(
+			target string, class ConnectionClass,
+		) grpc.StreamClientInterceptor {
+			return func(
+				ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
+				method string, streamer grpc.Streamer, opts ...grpc.CallOption,
+			) (grpc.ClientStream, error) {
+				cs, err := streamer(ctx, desc, cc, method, opts...)
+				if err != nil {
+					return nil, err
+				}
+				recordCall(streamCall{
+					target: target,
+					class:  class,
+					method: method,
+				})
+				return cs, nil
+			}
+		},
+		UnaryClientInterceptor: func(
+			target string, class ConnectionClass,
+		) grpc.UnaryClientInterceptor {
+			return func(
+				ctx context.Context, method string, req, reply interface{},
+				cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption,
+			) error {
+				recordCall(unaryCall{
+					target: target,
+					class:  class,
+					method: method,
+				})
+				return invoker(ctx, method, req, reply, cc, opts...)
+			}
+		},
+	})
+
+	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+	require.Nil(t, err)
+	remoteAddr := ln.Addr().String()
+	sysConn, err := clientCtx.GRPCDialNode(remoteAddr, 1, SystemClass).Connect(context.TODO())
+	require.Nil(t, err)
+	defConn, err := clientCtx.GRPCDialNode(remoteAddr, 1, DefaultClass).Connect(context.TODO())
+	require.Nil(t, err)
+	const unaryMethod = "/cockroach.rpc.Testing/Foo"
+	const streamMethod = "/cockroach.rpc.Testing/Bar"
+	const numSysUnary = 3
+	for i := 0; i < numSysUnary; i++ {
+		ba := roachpb.BatchRequest{}
+		br := roachpb.BatchResponse{}
+		err := sysConn.Invoke(context.TODO(), unaryMethod, &ba, &br)
+		require.Nil(t, err)
+	}
+	const numDefStream = 4
+	for i := 0; i < numDefStream; i++ {
+		desc := grpc.StreamDesc{
+			StreamName:    "bar",
+			ClientStreams: true,
+		}
+		cs, err := defConn.NewStream(context.TODO(), &desc, streamMethod)
+		require.Nil(t, err)
+		require.Nil(t, cs.SendMsg(&roachpb.BatchRequest{}))
+		var br roachpb.BatchResponse
+		require.Nil(t, cs.RecvMsg(&br))
+		require.Nil(t, cs.CloseSend())
+	}
+
+	exp := map[interface{}]int{
+		unaryCall{
+			target: remoteAddr,
+			class:  SystemClass,
+			method: unaryMethod,
+		}: numSysUnary,
+		streamCall{
+			target: remoteAddr,
+			class:  DefaultClass,
+			method: streamMethod,
+		}: numDefStream,
+	}
+	seenMu.Lock()
+	defer seenMu.Unlock()
+	for call, num := range exp {
+		require.Equal(t, num, seen[call])
 	}
 }
 
@@ -1388,7 +1680,7 @@ func BenchmarkGRPCDial(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, err := ctx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background())
+			_, err := ctx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background())
 			if err != nil {
 				b.Fatal(err)
 			}

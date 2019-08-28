@@ -20,15 +20,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/colrpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -49,7 +50,9 @@ type mockDialer struct {
 	}
 }
 
-func (d *mockDialer) Dial(context.Context, roachpb.NodeID) (*grpc.ClientConn, error) {
+func (d *mockDialer) Dial(
+	context.Context, roachpb.NodeID, rpc.ConnectionClass,
+) (*grpc.ClientConn, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.mu.conn != nil {
@@ -152,8 +155,8 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				var (
 					err             error
 					wg              sync.WaitGroup
-					typs            = []types.T{types.Int64}
-					semtyps         = []semtypes.T{*semtypes.Int}
+					typs            = []coltypes.T{coltypes.Int64}
+					semtyps         = []types.T{*types.Int}
 					hashRouterInput = exec.NewRandomDataOp(
 						rng,
 						exec.RandomDataOpArgs{
@@ -275,12 +278,11 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					1, /* processorID */
 					materializerInput,
 					semtyps,
-					[]int{0},
 					&distsqlpb.PostProcessSpec{},
 					nil, /* output */
 					materializerMetadataSources,
 					nil, /* outputStatsToTrace */
-					cancelLocal,
+					func() context.CancelFunc { return cancelLocal },
 				)
 				require.NoError(t, err)
 				materializer.Start(ctxLocal)

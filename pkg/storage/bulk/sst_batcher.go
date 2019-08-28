@@ -45,7 +45,16 @@ type SSTBatcher struct {
 	flushKey        roachpb.Key
 	rc              *kv.RangeDescriptorCache
 
-	// skips duplicates (iff they are buffered together).
+	// skips duplicate keys (iff they are buffered together). This is true when
+	// used to backfill an inverted index. An array in JSONB with multiple values
+	// which are the same, will all correspond to the same kv in the inverted
+	// index. The method which generates these kvs does not dedup, thus we rely on
+	// the SSTBatcher to dedup them (by skipping), rather than throwing a
+	// DuplicateKeyError. This is also true when used with IMPORT. Import
+	// generally prohibits the ingestion of KVs which will shadow existing data,
+	// with the exception of duplicates having the same value and timestamp. To
+	// maintain uniform behavior, duplicates in the same batch with equal values
+	// will not raise a DuplicateKeyError.
 	skipDuplicates bool
 
 	maxSize int64
@@ -53,9 +62,11 @@ type SSTBatcher struct {
 	rowCounter RowCounter
 	totalRows  roachpb.BulkOpSummary
 
-	sstWriter     engine.RocksDBSstFileWriter
+	sstWriter     SSTWriter
 	batchStartKey []byte
 	batchEndKey   []byte
+
+	batchEndValue []byte
 
 	flushCounts struct {
 		total   int
@@ -63,8 +74,11 @@ type SSTBatcher struct {
 		sstSize int
 	}
 
-	// allows ingestion of keys where the MVCC.Key would shadow an exisiting row.
+	// allows ingestion of keys where the MVCC.Key would shadow an existing row.
 	disallowShadowing bool
+
+	// stores on-the-fly stats for the SST if disallowShadowing is true.
+	ms enginepb.MVCCStats
 }
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
@@ -74,15 +88,32 @@ func MakeSSTBatcher(ctx context.Context, db sender, flushBytes int64) (*SSTBatch
 	return b, err
 }
 
+func (b *SSTBatcher) updateMVCCStats(key engine.MVCCKey, value []byte) {
+	metaKeySize := int64(len(key.Key)) + 1
+	metaValSize := int64(0)
+	b.ms.LiveBytes += metaKeySize
+	b.ms.LiveCount++
+	b.ms.KeyBytes += metaKeySize
+	b.ms.ValBytes += metaValSize
+	b.ms.KeyCount++
+
+	totalBytes := int64(len(value)) + engine.MVCCVersionTimestampSize
+	b.ms.LiveBytes += totalBytes
+	b.ms.KeyBytes += engine.MVCCVersionTimestampSize
+	b.ms.ValBytes += int64(len(value))
+	b.ms.ValCount++
+}
+
 // AddMVCCKey adds a key+timestamp/value pair to the batch (flushing if needed).
 // This is only for callers that want to control the timestamp on individual
 // keys -- like RESTORE where we want the restored data to look the like backup.
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value []byte) error {
 	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) {
-		if b.skipDuplicates {
+		if b.skipDuplicates && bytes.Equal(b.batchEndValue, value) {
 			return nil
 		}
+
 		var err storagebase.DuplicateKeyError
 		err.Key = append(err.Key, key.Key...)
 		err.Value = append(err.Value, value...)
@@ -105,25 +136,34 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value [
 		b.batchStartKey = append(b.batchStartKey[:0], key.Key...)
 	}
 	b.batchEndKey = append(b.batchEndKey[:0], key.Key...)
+	b.batchEndValue = append(b.batchEndValue[:0], value...)
 
 	if err := b.rowCounter.Count(key.Key); err != nil {
 		return err
 	}
+
+	// If we do not allowing shadowing of keys when ingesting an SST via
+	// AddSSTable, then we can update the MVCCStats on the fly because we are
+	// guaranteed to ingest unique keys. This saves us an extra iteration in
+	// AddSSTable which has been identified as a significant performance
+	// regression for IMPORT.
+	if b.disallowShadowing {
+		b.updateMVCCStats(key, value)
+	}
+
 	return b.sstWriter.Add(engine.MVCCKeyValue{Key: key, Value: value})
 }
 
 // Reset clears all state in the batcher and prepares it for reuse.
 func (b *SSTBatcher) Reset() error {
 	b.sstWriter.Close()
-	w, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return err
-	}
-	b.sstWriter = w
+	b.sstWriter = MakeSSTWriter()
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
+	b.batchEndValue = b.batchEndValue[:0]
 	b.flushKey = nil
 	b.flushKeyChecked = false
+	b.ms.Reset()
 
 	b.rowCounter.BulkOpSummary.Reset()
 	return nil
@@ -183,7 +223,13 @@ func (b *SSTBatcher) Flush(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrapf(err, "finishing constructed sstable")
 	}
-	if err := AddSSTable(ctx, b.db, start, end, sstBytes, b.disallowShadowing); err != nil {
+
+	// If the stats have been computed on-the-fly, set the last updated time
+	// before ingesting the SST.
+	if (b.ms != enginepb.MVCCStats{}) {
+		b.ms.LastUpdateNanos = timeutil.Now().UnixNano()
+	}
+	if err := AddSSTable(ctx, b.db, start, end, sstBytes, b.disallowShadowing, b.ms); err != nil {
 		return err
 	}
 	b.totalRows.Add(b.rowCounter.BulkOpSummary)
@@ -218,25 +264,33 @@ type sstSpan struct {
 // SST spans a split, in which case it is iterated and split into two SSTs, one
 // for each side of the split in the error, and each are retried.
 func AddSSTable(
-	ctx context.Context, db sender, start, end roachpb.Key, sstBytes []byte, disallowShadowing bool,
+	ctx context.Context,
+	db sender,
+	start, end roachpb.Key,
+	sstBytes []byte,
+	disallowShadowing bool,
+	ms enginepb.MVCCStats,
 ) error {
-	// Create an iterator that iterates over the top level SST for use in stats
-	// computation and to produce split ssts if needed for retries.
+	now := timeutil.Now().UnixNano()
 	iter, err := engine.NewMemSSTIterator(sstBytes, true)
 	if err != nil {
 		return err
 	}
 	defer iter.Close()
 
-	now := timeutil.Now().UnixNano()
-	stats, err := engine.ComputeStatsGo(
-		iter, engine.MVCCKey{Key: start}, engine.MVCCKey{Key: end}, now,
-	)
-	if err != nil {
-		return errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
+	var stats enginepb.MVCCStats
+	if (ms == enginepb.MVCCStats{}) {
+		stats, err = engine.ComputeStatsGo(
+			iter, engine.MVCCKey{Key: start}, engine.MVCCKey{Key: end}, now,
+		)
+		if err != nil {
+			return errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
+		}
+	} else {
+		stats = ms
 	}
 
-	work := []*sstSpan{{start: start, end: end, sstBytes: sstBytes, stats: stats}}
+	work := []*sstSpan{{start: start, end: end, sstBytes: sstBytes, disallowShadowing: disallowShadowing, stats: stats}}
 	const maxAddSSTableRetries = 10
 	for len(work) > 0 {
 		item := work[0]
@@ -299,10 +353,7 @@ func createSplitSSTable(
 	disallowShadowing bool,
 	iter engine.SimpleIterator,
 ) (*sstSpan, *sstSpan, error) {
-	w, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return nil, nil, err
-	}
+	w := MakeSSTWriter()
 	defer w.Close()
 
 	split := false
@@ -330,13 +381,7 @@ func createSplitSSTable(
 				sstBytes:          res,
 				disallowShadowing: disallowShadowing,
 			}
-
-			w.Close()
-			w, err = engine.MakeRocksDBSstFileWriter()
-			if err != nil {
-				return nil, nil, err
-			}
-
+			w = MakeSSTWriter()
 			split = true
 			first = nil
 			last = nil

@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
@@ -39,24 +41,94 @@ func buildOpaque(
 	var plan planNode
 	var err error
 	switch n := stmt.(type) {
+	case *tree.AlterIndex:
+		plan, err = p.AlterIndex(ctx, n)
+	case *tree.AlterTable:
+		plan, err = p.AlterTable(ctx, n)
+	case *tree.AlterSequence:
+		plan, err = p.AlterSequence(ctx, n)
+	case *tree.AlterUserSetPassword:
+		plan, err = p.AlterUserSetPassword(ctx, n)
+	case *tree.CommentOnColumn:
+		plan, err = p.CommentOnColumn(ctx, n)
+	case *tree.CommentOnDatabase:
+		plan, err = p.CommentOnDatabase(ctx, n)
+	case *tree.CommentOnTable:
+		plan, err = p.CommentOnTable(ctx, n)
+	case *tree.CreateDatabase:
+		plan, err = p.CreateDatabase(ctx, n)
+	case *tree.CreateIndex:
+		plan, err = p.CreateIndex(ctx, n)
+	case *tree.CreateUser:
+		plan, err = p.CreateUser(ctx, n)
+	case *tree.CreateSequence:
+		plan, err = p.CreateSequence(ctx, n)
+	case *tree.CreateStats:
+		plan, err = p.CreateStatistics(ctx, n)
+	case *tree.Deallocate:
+		plan, err = p.Deallocate(ctx, n)
+	case *tree.Discard:
+		plan, err = p.Discard(ctx, n)
+	case *tree.DropDatabase:
+		plan, err = p.DropDatabase(ctx, n)
+	case *tree.DropIndex:
+		plan, err = p.DropIndex(ctx, n)
+	case *tree.DropTable:
+		plan, err = p.DropTable(ctx, n)
+	case *tree.DropView:
+		plan, err = p.DropView(ctx, n)
+	case *tree.DropSequence:
+		plan, err = p.DropSequence(ctx, n)
+	case *tree.DropUser:
+		plan, err = p.DropUser(ctx, n)
+	case *tree.Grant:
+		plan, err = p.Grant(ctx, n)
+	case *tree.RenameColumn:
+		plan, err = p.RenameColumn(ctx, n)
+	case *tree.RenameDatabase:
+		plan, err = p.RenameDatabase(ctx, n)
+	case *tree.RenameIndex:
+		plan, err = p.RenameIndex(ctx, n)
+	case *tree.RenameTable:
+		plan, err = p.RenameTable(ctx, n)
+	case *tree.Revoke:
+		plan, err = p.Revoke(ctx, n)
+	case *tree.Scatter:
+		plan, err = p.Scatter(ctx, n)
+	case *tree.Scrub:
+		plan, err = p.Scrub(ctx, n)
+	case *tree.SetClusterSetting:
+		plan, err = p.SetClusterSetting(ctx, n)
+	case *tree.SetZoneConfig:
+		plan, err = p.SetZoneConfig(ctx, n)
+	case *tree.SetVar:
+		plan, err = p.SetVar(ctx, n)
+	case *tree.SetTransaction:
+		plan, err = p.SetTransaction(n)
+	case *tree.SetSessionAuthorizationDefault:
+		plan, err = p.SetSessionAuthorizationDefault()
+	case *tree.SetSessionCharacteristics:
+		plan, err = p.SetSessionCharacteristics(n)
 	case *tree.ShowClusterSetting:
 		plan, err = p.ShowClusterSetting(ctx, n)
-
 	case *tree.ShowHistogram:
 		plan, err = p.ShowHistogram(ctx, n)
-
 	case *tree.ShowTableStats:
 		plan, err = p.ShowTableStats(ctx, n)
-
 	case *tree.ShowTraceForSession:
 		plan, err = p.ShowTrace(ctx, n)
-
 	case *tree.ShowZoneConfig:
 		plan, err = p.ShowZoneConfig(ctx, n)
-
 	case *tree.ShowFingerprints:
 		plan, err = p.ShowFingerprints(ctx, n)
-
+	case *tree.Truncate:
+		plan, err = p.Truncate(ctx, n)
+	case tree.CCLOnlyStatement:
+		plan, err = p.maybePlanHook(ctx, stmt)
+		if plan == nil && err == nil {
+			return nil, nil, pgerror.Newf(pgcode.CCLRequired,
+				"a CCL binary is required to use this statement type: %T", stmt)
+		}
 	default:
 		return nil, nil, errors.AssertionFailedf("unknown opaque statement %T", stmt)
 	}
@@ -71,15 +143,66 @@ func buildOpaque(
 }
 
 func init() {
-	opaqueReadOnlyStmts := []reflect.Type{
-		reflect.TypeOf(&tree.ShowClusterSetting{}),
-		reflect.TypeOf(&tree.ShowHistogram{}),
-		reflect.TypeOf(&tree.ShowTableStats{}),
-		reflect.TypeOf(&tree.ShowTraceForSession{}),
-		reflect.TypeOf(&tree.ShowZoneConfig{}),
-		reflect.TypeOf(&tree.ShowFingerprints{}),
-	}
-	for _, t := range opaqueReadOnlyStmts {
-		optbuilder.RegisterOpaque(t, optbuilder.OpaqueReadOnly, buildOpaque)
+	for _, stmt := range []tree.Statement{
+		&tree.AlterUserSetPassword{},
+		&tree.AlterIndex{},
+		&tree.AlterTable{},
+		&tree.AlterSequence{},
+		&tree.CommentOnColumn{},
+		&tree.CommentOnDatabase{},
+		&tree.CommentOnTable{},
+		&tree.CreateDatabase{},
+		&tree.CreateIndex{},
+		&tree.CreateUser{},
+		&tree.CreateSequence{},
+		&tree.CreateStats{},
+		&tree.Deallocate{},
+		&tree.Discard{},
+		&tree.DropDatabase{},
+		&tree.DropIndex{},
+		&tree.DropTable{},
+		&tree.DropView{},
+		&tree.DropSequence{},
+		&tree.DropUser{},
+		&tree.Grant{},
+		&tree.RenameColumn{},
+		&tree.RenameDatabase{},
+		&tree.RenameIndex{},
+		&tree.RenameTable{},
+		&tree.Revoke{},
+		&tree.Scatter{},
+		&tree.Scrub{},
+		&tree.SetClusterSetting{},
+		&tree.SetZoneConfig{},
+		&tree.SetVar{},
+		&tree.SetTransaction{},
+		&tree.SetSessionAuthorizationDefault{},
+		&tree.SetSessionCharacteristics{},
+		&tree.ShowClusterSetting{},
+		&tree.ShowHistogram{},
+		&tree.ShowTableStats{},
+		&tree.ShowTraceForSession{},
+		&tree.ShowZoneConfig{},
+		&tree.ShowFingerprints{},
+		&tree.Truncate{},
+
+		// CCL statements (without Export which has an optimizer operator).
+		&tree.Backup{},
+		&tree.ShowBackup{},
+		&tree.Restore{},
+		&tree.CreateChangefeed{},
+		&tree.CreateRole{},
+		&tree.DropRole{},
+		&tree.GrantRole{},
+		&tree.RevokeRole{},
+		&tree.Import{},
+	} {
+		typ := optbuilder.OpaqueReadOnly
+		if tree.CanModifySchema(stmt) {
+			typ = optbuilder.OpaqueDDL
+		} else if tree.CanWriteData(stmt) {
+			typ = optbuilder.OpaqueMutation
+		}
+		optbuilder.RegisterOpaque(reflect.TypeOf(stmt), typ, buildOpaque)
 	}
 }

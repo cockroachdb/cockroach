@@ -573,7 +573,7 @@ CREATE TABLE src(x VARCHAR PRIMARY KEY);
                        y VARCHAR CHECK(length(y) < 4) REFERENCES src(x))
 
 # Sanity check that the FK constraints gets actually validated
-statement error foreign key violation
+statement error foreign key
 INSERT INTO derived(x) VALUES('xxx')
 
 statement error value too long for type CHAR\(3\)

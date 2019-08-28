@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -33,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 func TestClusterFlow(t *testing.T) {
@@ -204,7 +205,8 @@ func TestClusterFlow(t *testing.T) {
 	var clients []distsqlpb.DistSQLClient
 	for i := 0; i < 3; i++ {
 		s := tc.Server(i)
-		conn, err := s.RPCContext().GRPCDialNode(s.ServingAddr(), s.NodeID()).Connect(ctx)
+		conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(),
+			rpc.DefaultClass).Connect(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -486,7 +488,8 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		},
 	}
 	s := tc.Server(0)
-	conn, err := s.RPCContext().GRPCDialNode(s.ServingAddr(), s.NodeID()).Connect(context.Background())
+	conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(),
+		rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -715,7 +718,8 @@ func BenchmarkInfrastructure(b *testing.B) {
 					var clients []distsqlpb.DistSQLClient
 					for i := 0; i < numNodes; i++ {
 						s := tc.Server(i)
-						conn, err := s.RPCContext().GRPCDialNode(s.ServingAddr(), s.NodeID()).Connect(context.Background())
+						conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(),
+							rpc.DefaultClass).Connect(context.Background())
 						if err != nil {
 							b.Fatal(err)
 						}

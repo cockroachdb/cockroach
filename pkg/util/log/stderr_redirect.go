@@ -22,21 +22,22 @@ var OrigStderr = func() *os.File {
 	return os.NewFile(fd, os.Stderr.Name())
 }()
 
-// stderrRedirected attempts to track whether stderr was redirected.
-// This is used to de-duplicate the panic log.
-var stderrRedirected bool
+// stderrRedirected returns true if and only if logging captures
+// stderr output to the log file. This is used e.g. by Shout() to
+// determine whether to report to standard error in addition to logs.
+func stderrRedirected() bool {
+	return logging.stderrThreshold > Severity_INFO && !logging.noStderrRedirect
+}
 
 // hijackStderr replaces stderr with the given file descriptor.
 //
 // A client that wishes to use the original stderr must use
 // OrigStderr defined above.
 func hijackStderr(f *os.File) error {
-	stderrRedirected = true
 	return redirectStderr(f)
 }
 
 // restoreStderr cancels the effect of hijackStderr().
 func restoreStderr() error {
-	stderrRedirected = false
 	return redirectStderr(OrigStderr)
 }

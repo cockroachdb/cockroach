@@ -42,7 +42,15 @@ var _ Processor = &indexBackfiller{}
 var _ chunkBackfiller = &indexBackfiller{}
 
 var backfillerBufferSize = settings.RegisterByteSizeSetting(
-	"schemachanger.backfiller.buffer_size", "amount to buffer in memory during backfills", 196<<20,
+	"schemachanger.backfiller.buffer_size", "the initial size of the BulkAdder buffer handling index backfills", 32<<20,
+)
+
+var backfillerMaxBufferSize = settings.RegisterByteSizeSetting(
+	"schemachanger.backfiller.max_buffer_size", "the maximum size of the BulkAdder buffer handling index backfills", 512<<20,
+)
+
+var backfillerBufferIncrementSize = settings.RegisterByteSizeSetting(
+	"schemachanger.backfiller.buffer_increment", "the size by which the BulkAdder attempts to grow its buffer before flushing", 32<<20,
 )
 
 var backillerSSTSize = settings.RegisterByteSizeSetting(
@@ -77,14 +85,22 @@ func newIndexBackfiller(
 }
 
 func (ib *indexBackfiller) prepare(ctx context.Context) error {
-	bufferSize := backfillerBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
+	minBufferSize := backfillerBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
+	maxBufferSize := backfillerMaxBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
 	sstSize := backillerSSTSize.Get(&ib.flowCtx.Cfg.Settings.SV)
-	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, bufferSize, sstSize, ib.spec.ReadAsOf)
+	stepSize := backfillerBufferIncrementSize.Get(&ib.flowCtx.Cfg.Settings.SV)
+	opts := storagebase.BulkAdderOptions{
+		SSTSize:        uint64(sstSize),
+		MinBufferSize:  uint64(minBufferSize),
+		MaxBufferSize:  uint64(maxBufferSize),
+		StepBufferSize: uint64(stepSize),
+		SkipDuplicates: ib.ContainsInvertedIndex(),
+	}
+	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, ib.spec.ReadAsOf, opts)
 	if err != nil {
 		return err
 	}
 	ib.adder = adder
-	ib.adder.SkipLocalDuplicates(ib.ContainsInvertedIndex())
 	return nil
 }
 

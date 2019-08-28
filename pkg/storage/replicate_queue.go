@@ -250,17 +250,17 @@ func (rq *replicateQueue) process(
 		MaxRetries:     5,
 	}
 
-	// Use a retry loop in order to backoff in the case of preemptive
-	// snapshot errors, usually signaling that a rebalancing
-	// reservation could not be made with the selected target.
+	// Use a retry loop in order to backoff in the case of snapshot errors,
+	// usually signaling that a rebalancing reservation could not be made with the
+	// selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		for {
 			requeue, err := rq.processOneChange(ctx, repl, rq.canTransferLease, false /* dryRun */)
 			if IsSnapshotError(err) {
-				// If ChangeReplicas failed because the preemptive snapshot failed, we
-				// log the error but then return success indicating we should retry the
-				// operation. The most likely causes of the preemptive snapshot failing are
-				// a declined reservation or the remote node being unavailable. In either
+				// If ChangeReplicas failed because the snapshot failed, we log the
+				// error but then return success indicating we should retry the
+				// operation. The most likely causes of the snapshot failing are a
+				// declined reservation or the remote node being unavailable. In either
 				// case we don't want to wait another scanner cycle before reconsidering
 				// the range.
 				log.Info(ctx, err)
@@ -295,14 +295,24 @@ func (rq *replicateQueue) processOneChange(
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
+	voterReplicas := desc.Replicas().Voters()
 	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(
-		desc.RangeID, desc.Replicas().Voters())
+		desc.RangeID, voterReplicas)
 	{
-		quorum := desc.Replicas().QuorumSize()
-		if lr := len(liveVoterReplicas); lr < quorum {
+		unavailable := !desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
+			for _, inner := range liveVoterReplicas {
+				if inner.ReplicaID == rDesc.ReplicaID {
+					return true
+				}
+			}
+			return false
+		})
+		if unavailable {
 			return false, newQuorumError(
-				"range requires a replication change, but lacks a quorum of live replicas (%d/%d)",
-				lr, quorum)
+				"range requires a replication change, but live replicas %v don't constitute a quorum for %v:",
+				liveVoterReplicas,
+				desc.Replicas().All(),
+			)
 		}
 	}
 
@@ -315,7 +325,6 @@ func (rq *replicateQueue) processOneChange(
 	if action == AllocatorRemoveLearner {
 		return rq.removeLearner(ctx, repl, dryRun)
 	}
-	voterReplicas := desc.Replicas().Voters()
 
 	switch action {
 	case AllocatorNoop, AllocatorRangeUnavailable:
@@ -337,6 +346,11 @@ func (rq *replicateQueue) processOneChange(
 		return rq.removeLearner(ctx, repl, dryRun)
 	case AllocatorConsiderRebalance:
 		return rq.considerRebalance(ctx, repl, voterReplicas, canTransferLease, dryRun)
+	case AllocatorFinalizeAtomicReplicationChange:
+		_, err := maybeLeaveAtomicChangeReplicas(ctx, repl.store, repl.Desc())
+		// Requeue because either we failed to transition out of a joint state
+		// (bad) or we did and there might be more to do for that range.
+		return true, err
 	}
 	return true, nil
 }
@@ -760,7 +774,8 @@ func (rq *replicateQueue) addReplica(
 	if dryRun {
 		return nil
 	}
-	if _, err := repl.addReplica(ctx, target, desc, priority, reason, details); err != nil {
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, target)
+	if _, err := repl.ChangeReplicas(ctx, desc, priority, reason, details, chgs); err != nil {
 		return err
 	}
 	rangeUsageInfo := rangeUsageInfoForRepl(repl)
@@ -781,7 +796,8 @@ func (rq *replicateQueue) removeReplica(
 	if dryRun {
 		return nil
 	}
-	if _, err := repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, target, desc, reason, details); err != nil {
+	chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target)
+	if _, err := repl.ChangeReplicas(ctx, desc, SnapshotRequest_REBALANCE, reason, details, chgs); err != nil {
 		return err
 	}
 	rangeUsageInfo := rangeUsageInfoForRepl(repl)

@@ -76,6 +76,7 @@ func (ef *execFactory) ConstructScan(
 	reverse bool,
 	maxResults uint64,
 	reqOrdering exec.OutputOrdering,
+	rowCount float64,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
@@ -120,6 +121,7 @@ func (ef *execFactory) ConstructScan(
 		}
 	}
 	scan.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
+	scan.estimatedRowCount = uint64(rowCount)
 	scan.createdByOpt = true
 	return scan, nil
 }
@@ -330,6 +332,7 @@ func (ef *execFactory) ConstructMergeJoin(
 	onCond tree.TypedExpr,
 	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
 	reqOrdering exec.OutputOrdering,
+	leftEqColsAreKey, rightEqColsAreKey bool,
 ) (exec.Node, error) {
 	p := ef.planner
 	leftSrc := asDataSource(left)
@@ -343,6 +346,8 @@ func (ef *execFactory) ConstructMergeJoin(
 	pred.onCond = pred.iVarHelper.Rebind(
 		onCond, false /* alsoReset */, false, /* normalizeToNonNil */
 	)
+	pred.leftEqKey = leftEqColsAreKey
+	pred.rightEqKey = rightEqColsAreKey
 
 	n := len(leftOrdering)
 	if n == 0 || len(rightOrdering) != n {
@@ -888,8 +893,11 @@ func (ef *execFactory) ConstructPlan(
 		root = spool.source
 	}
 	res := &planTop{
-		plan:        root.(planNode),
-		auditEvents: ef.planner.curPlan.auditEvents,
+		plan: root.(planNode),
+		// TODO(radu): these fields can be modified by planning various opaque
+		// statements. We should have a cleaner way of plumbing these.
+		avoidBuffering: ef.planner.curPlan.avoidBuffering,
+		auditEvents:    ef.planner.curPlan.auditEvents,
 	}
 	if len(subqueries) > 0 {
 		res.subqueryPlans = make([]subquery, len(subqueries))
@@ -1164,19 +1172,19 @@ func (ef *execFactory) ConstructExplain(
 			stmtType:      stmtType,
 		}, nil
 
+	case tree.ExplainVec:
+		return &explainVecNode{
+			plan:     p.plan,
+			stmtType: stmtType,
+		}, nil
+
 	case tree.ExplainPlan:
 		if analyzeSet {
 			return nil, errors.New("EXPLAIN ANALYZE only supported with (DISTSQL) option")
 		}
-		// NOEXPAND and NOOPTIMIZE must always be set when using the optimizer to
-		// prevent the plans from being modified.
-		opts := *options
-		opts.Flags.Add(tree.ExplainFlagNoExpand)
-		opts.Flags.Add(tree.ExplainFlagNoOptimize)
 		return ef.planner.makeExplainPlanNodeWithPlan(
 			context.TODO(),
-			&opts,
-			false, /* optimizeSubqueries */
+			options,
 			p.plan,
 			p.subqueryPlans,
 			p.postqueryPlans,
@@ -1328,6 +1336,8 @@ func (ef *execFactory) ConstructUpdate(
 	updateColOrdSet exec.ColumnOrdinalSet,
 	returnColOrdSet exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
+	passthrough sqlbase.ResultColumns,
+	skipFKChecks bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
@@ -1345,6 +1355,11 @@ func (ef *execFactory) ConstructUpdate(
 
 	// Construct the check helper if there are any check constraints.
 	checkHelper := sqlbase.NewInputCheckHelper(checks, tabDesc)
+
+	checkFKs := row.CheckFKs
+	if skipFKChecks {
+		checkFKs = row.SkipFKs
+	}
 
 	// Determine the foreign key tables involved in the update.
 	fkTables, err := row.MakeFkMetadata(
@@ -1371,6 +1386,7 @@ func (ef *execFactory) ConstructUpdate(
 		updateColDescs,
 		fetchColDescs,
 		row.UpdaterDefault,
+		checkFKs,
 		ef.planner.EvalContext(),
 		&ef.planner.alloc,
 	)
@@ -1399,6 +1415,9 @@ func (ef *execFactory) ConstructUpdate(
 		}
 
 		returnCols = sqlbase.ResultColumnsFromColDescs(returnColDescs)
+
+		// Add the passthrough columns to the returning columns.
+		returnCols = append(returnCols, passthrough...)
 
 		// Update the rowIdxToRetIdx for the mutation. Update returns
 		// the non-mutation columns specified, in the same order they are
@@ -1436,6 +1455,7 @@ func (ef *execFactory) ConstructUpdate(
 			updateValues:   make(tree.Datums, len(ru.UpdateCols)),
 			updateColsIdx:  updateColsIdx,
 			rowIdxToRetIdx: rowIdxToRetIdx,
+			numPassthrough: len(passthrough),
 		},
 	}
 
@@ -1513,6 +1533,7 @@ func (ef *execFactory) ConstructUpsert(
 		updateColDescs,
 		fetchColDescs,
 		row.UpdaterDefault,
+		row.CheckFKs,
 		ef.planner.EvalContext(),
 		&ef.planner.alloc,
 	)

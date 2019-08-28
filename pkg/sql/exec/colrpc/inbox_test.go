@@ -15,9 +15,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -48,7 +48,7 @@ var _ flowStreamServer = callbackFlowStreamServer{}
 func TestInboxCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	typs := []types.T{types.Int64}
+	typs := []coltypes.T{coltypes.Int64}
 	t.Run("ReaderWaitingForStreamHandler", func(t *testing.T) {
 		inbox, err := NewInbox(typs)
 		require.NoError(t, err)
@@ -56,7 +56,7 @@ func TestInboxCancellation(t *testing.T) {
 		// Cancel the context.
 		cancelFn()
 		// Next should not block if the context is canceled.
-		err = exec.CatchVectorizedRuntimeError(func() { inbox.Next(ctx) })
+		err = execerror.CatchVectorizedRuntimeError(func() { inbox.Next(ctx) })
 		require.True(t, testutils.IsError(err, "context canceled"), err)
 		// Now, the remote stream arrives.
 		err = inbox.RunWithStream(context.Background(), mockFlowStreamServer{})
@@ -114,7 +114,7 @@ func TestInboxCancellation(t *testing.T) {
 func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	inbox, err := NewInbox([]types.T{types.Int64})
+	inbox, err := NewInbox([]coltypes.T{coltypes.Int64})
 	require.NoError(t, err)
 
 	rpcLayer := makeMockFlowStreamRPCLayer()
@@ -139,7 +139,7 @@ func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 func TestInboxTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	inbox, err := NewInbox([]types.T{types.Int64})
+	inbox, err := NewInbox([]coltypes.T{coltypes.Int64})
 	require.NoError(t, err)
 
 	var (
@@ -148,7 +148,7 @@ func TestInboxTimeout(t *testing.T) {
 		rpcLayer    = makeMockFlowStreamRPCLayer()
 	)
 	go func() {
-		readerErrCh <- exec.CatchVectorizedRuntimeError(func() { inbox.Next(ctx) })
+		readerErrCh <- execerror.CatchVectorizedRuntimeError(func() { inbox.Next(ctx) })
 	}()
 
 	// Timeout the inbox.

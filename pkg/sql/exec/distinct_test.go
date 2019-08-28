@@ -15,22 +15,22 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestSortedDistinct(t *testing.T) {
 	tcs := []struct {
 		distinctCols []uint32
-		colTypes     []types.T
+		colTypes     []coltypes.T
 		numCols      int
 		tuples       []tuple
 		expected     []tuple
 	}{
 		{
 			distinctCols: []uint32{0, 1, 2},
-			colTypes:     []types.T{types.Float64, types.Int64, types.Bytes},
+			colTypes:     []coltypes.T{coltypes.Float64, coltypes.Int64, coltypes.Bytes},
 			numCols:      4,
 			tuples: tuples{
 				{nil, nil, nil, nil},
@@ -54,7 +54,7 @@ func TestSortedDistinct(t *testing.T) {
 		},
 		{
 			distinctCols: []uint32{1, 0, 2},
-			colTypes:     []types.T{types.Float64, types.Int64, types.Bytes},
+			colTypes:     []coltypes.T{coltypes.Float64, coltypes.Int64, coltypes.Bytes},
 			numCols:      4,
 			tuples: tuples{
 				{nil, nil, nil, nil},
@@ -78,7 +78,7 @@ func TestSortedDistinct(t *testing.T) {
 		},
 		{
 			distinctCols: []uint32{0, 1, 2},
-			colTypes:     []types.T{types.Float64, types.Int64, types.Bytes},
+			colTypes:     []coltypes.T{coltypes.Float64, coltypes.Int64, coltypes.Bytes},
 			numCols:      4,
 			tuples: tuples{
 				{1.0, 2, "30", 4},
@@ -114,7 +114,7 @@ func BenchmarkSortedDistinct(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64, types.Int64})
+	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
 	aCol := batch.ColVec(1).Int64()
 	bCol := batch.ColVec(2).Int64()
 	lastA := int64(0)
@@ -134,7 +134,7 @@ func BenchmarkSortedDistinct(b *testing.B) {
 	source := NewRepeatableBatchSource(batch)
 	source.Init()
 
-	distinct, err := NewOrderedDistinct(source, []uint32{1, 2}, []types.T{types.Int64, types.Int64, types.Int64})
+	distinct, err := NewOrderedDistinct(source, []uint32{1, 2}, []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
 	if err != nil {
 		b.Fatal(err)
 	}

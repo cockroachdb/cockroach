@@ -17,18 +17,19 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,7 +58,7 @@ type cTableInfo struct {
 	cols []sqlbase.ColumnDescriptor
 
 	// The exec types corresponding to the table columns in cols.
-	typs []types.T
+	typs []coltypes.T
 
 	// The ordered list of ColumnIDs that are required.
 	neededColsList []int
@@ -92,8 +93,8 @@ type cTableInfo struct {
 	// id pair at the start of the key.
 	knownPrefixLength int
 
-	keyValTypes []semtypes.T
-	extraTypes  []semtypes.T
+	keyValTypes []types.T
+	extraTypes  []types.T
 
 	da sqlbase.DatumAlloc
 }
@@ -226,6 +227,10 @@ type CFetcher struct {
 		// having to call batch.Vec too often in the tight loop.
 		colvecs []coldata.Vec
 	}
+
+	// estimatedStaticMemoryUsage is the best guess about how much memory the
+	// CFetcher will use.
+	estimatedStaticMemoryUsage int
 }
 
 // Init sets up a Fetcher for a given table and index. If we are using a
@@ -259,10 +264,10 @@ func (rf *CFetcher) Init(
 	}
 	sort.Sort(m)
 	colDescriptors := tableArgs.Cols
-	typs := make([]types.T, len(colDescriptors))
+	typs := make([]coltypes.T, len(colDescriptors))
 	for i := range typs {
-		typs[i] = conv.FromColumnType(&colDescriptors[i].Type)
-		if typs[i] == types.Unhandled {
+		typs[i] = typeconv.FromColumnType(&colDescriptors[i].Type)
+		if typs[i] == coltypes.Unhandled {
 			return errors.Errorf("unhandled type %+v", &colDescriptors[i].Type)
 		}
 	}
@@ -283,6 +288,7 @@ func (rf *CFetcher) Init(
 	}
 	rf.machine.batch = coldata.NewMemBatch(typs)
 	rf.machine.colvecs = rf.machine.batch.ColVecs()
+	rf.estimatedStaticMemoryUsage = exec.EstimateBatchSizeBytes(typs, coldata.BatchSize)
 
 	var err error
 
@@ -553,7 +559,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInitFetch:
 			moreKeys, kv, newSpan, err := rf.fetcher.nextKV(ctx)
 			if err != nil {
-				return nil, exec.NewStorageError(err)
+				return nil, execerror.NewStorageError(err)
 			}
 			if !moreKeys {
 				rf.machine.state[0] = stateEmitLastBatch
@@ -589,7 +595,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			for i := range rf.machine.colvecs {
 				rf.machine.colvecs[i].Nulls().UnsetNulls()
 			}
-			rf.machine.batch.SetSelection(false)
+			rf.machine.batch.ResetInternalBatch()
 			rf.shiftState()
 		case stateDecodeFirstKVOfRow:
 			if rf.mustDecodeIndexKey || rf.traceKV {
@@ -655,7 +661,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			for {
 				moreRows, kv, _, err := rf.fetcher.nextKV(ctx)
 				if err != nil {
-					return nil, exec.NewStorageError(err)
+					return nil, execerror.NewStorageError(err)
 				}
 				if debugState {
 					log.Infof(ctx, "found kv %s, seeking to prefix %s", kv.Key, rf.machine.seekPrefix)
@@ -678,7 +684,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateFetchNextKVWithUnfinishedRow:
 			moreKVs, kv, _, err := rf.fetcher.nextKV(ctx)
 			if err != nil {
-				return nil, exec.NewStorageError(err)
+				return nil, execerror.NewStorageError(err)
 			}
 			if !moreKVs {
 				// No more data. Finalize the row and exit.
@@ -779,7 +785,7 @@ func (rf *CFetcher) pushState(state fetcherState) {
 
 // getDatumAt returns the converted datum object at the given (colIdx, rowIdx).
 // This function is meant for tracing and should not be used in hot paths.
-func (rf *CFetcher) getDatumAt(colIdx int, rowIdx uint16, typ semtypes.T) tree.Datum {
+func (rf *CFetcher) getDatumAt(colIdx int, rowIdx uint16, typ types.T) tree.Datum {
 	if rf.machine.colvecs[colIdx].Nulls().NullAt(rowIdx) {
 		return tree.DNull
 	}
@@ -1002,15 +1008,15 @@ func (rf *CFetcher) processValueBytes(
 	}
 
 	var (
-		colIDDiff              uint32
-		lastColID              sqlbase.ColumnID
-		typeOffset, dataOffset int
-		typ                    encoding.Type
-		lastColIDIndex         int
-		lastNeededColIndex     int
+		colIDDiff          uint32
+		lastColID          sqlbase.ColumnID
+		dataOffset         int
+		typ                encoding.Type
+		lastColIDIndex     int
+		lastNeededColIndex int
 	)
 	for len(valueBytes) > 0 && rf.machine.remainingValueColsByIdx.Len() > 0 {
-		typeOffset, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
+		_, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
 		}
@@ -1057,7 +1063,7 @@ func (rf *CFetcher) processValueBytes(
 
 		valTyp := &table.cols[idx].Type
 		valueBytes, err = colencoding.DecodeTableValueToCol(vec, rf.machine.rowIdx, typ, dataOffset, valTyp,
-			valueBytes[typeOffset:])
+			valueBytes)
 		if err != nil {
 			return "", "", err
 		}
@@ -1116,7 +1122,12 @@ func (rf *CFetcher) fillNulls() error {
 // GetRangesInfo returns information about the ranges where the rows came from.
 // The RangeInfo's are deduped and not ordered.
 func (rf *CFetcher) GetRangesInfo() []roachpb.RangeInfo {
-	return rf.fetcher.getRangesInfo()
+	f := rf.fetcher.kvBatchFetcher
+	if f == nil {
+		// Not yet initialized.
+		return nil
+	}
+	return f.getRangesInfo()
 }
 
 // getCurrentColumnFamilyID returns the column family id of the key in
@@ -1137,4 +1148,10 @@ func (rf *CFetcher) getCurrentColumnFamilyID() (sqlbase.FamilyID, error) {
 		return 0, scrub.WrapError(scrub.IndexKeyDecodingError, err)
 	}
 	return sqlbase.FamilyID(id), nil
+}
+
+// EstimateStaticMemoryUsage estimates how much memory is pre-allocated by the
+// CFetcher.
+func (rf *CFetcher) EstimateStaticMemoryUsage() int {
+	return rf.estimatedStaticMemoryUsage
 }

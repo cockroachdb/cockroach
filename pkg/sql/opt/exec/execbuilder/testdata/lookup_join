@@ -1,4 +1,4 @@
-# LogicTest: 5node-dist-opt
+# LogicTest: 5node-dist
 
 statement ok
 CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c))
@@ -120,7 +120,7 @@ ALTER TABLE data EXPERIMENTAL_RELOCATE
 
 # Verify data placement.
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE data]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
@@ -239,7 +239,7 @@ distinct                    ·            ·                  (name)            
 
 # Verify data placement.
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE books]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE books]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       NULL     {5}       5
@@ -675,18 +675,18 @@ render            ·         ·            (a, b, c)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
-render            ·                      ·                (a, b, c)  ·
- │                render 0               a                ·          ·
- │                render 1               b                ·          ·
- │                render 2               c                ·          ·
- └── lookup-join  ·                      ·                (a, b, c)  ·
-      │           table                  def@primary      ·          ·
-      │           type                   semi             ·          ·
-      │           equality               (a, c) = (f, e)  ·          ·
-      │           equality cols are key  ·                ·          ·
-      └── scan    ·                      ·                (a, b, c)  ·
-·                 table                  abc@primary      ·          ·
-·                 spans                  ALL              ·          ·
+render            ·                      ·                (a, b, c)        ·
+ │                render 0               a                ·                ·
+ │                render 1               b                ·                ·
+ │                render 2               c                ·                ·
+ └── lookup-join  ·                      ·                (a, b, c, e, f)  ·
+      │           table                  def@primary      ·                ·
+      │           type                   inner            ·                ·
+      │           equality               (a, c) = (f, e)  ·                ·
+      │           equality cols are key  ·                ·                ·
+      └── scan    ·                      ·                (a, b, c)        ·
+·                 table                  abc@primary      ·                ·
+·                 spans                  ALL              ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND c=e)

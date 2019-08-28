@@ -174,6 +174,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		cb.updateCols,
 		requestedCols,
 		row.UpdaterOnlyColumns,
+		row.CheckFKs,
 		cb.evalCtx,
 		&cb.alloc,
 	)

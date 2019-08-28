@@ -1,4 +1,4 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata 5node-local 5node-dist 5node-dist-opt 5node-dist-metadata 5node-dist-disk
+# LogicTest: local fakedist fakedist-metadata 5node-local 5node-dist 5node-dist-metadata 5node-dist-disk
 
 statement ok
 CREATE TABLE kv (
@@ -3001,6 +3001,213 @@ Laptop      Dell             800.00   NULL  800.00
 Tablet      iPad             700.00   NULL  700.00
 Tablet      Kindle Fire      150.00   NULL  150.00
 Tablet      Samsung          200.00   NULL  200.00
+
+query RTR
+SELECT
+	price, array_agg(price) OVER w, sum(price) OVER w
+FROM
+	products
+WINDOW
+	w AS (
+		ORDER BY
+			price
+		RANGE
+			UNBOUNDED PRECEDING EXCLUDE CURRENT ROW
+	)
+ORDER BY
+	price
+----
+150.00   NULL                                                                     NULL
+200.00   {150.00,200.00}                                                          350.00
+200.00   {150.00,200.00}                                                          350.00
+400.00   {150.00,200.00,200.00}                                                   550.00
+500.00   {150.00,200.00,200.00,400.00}                                            950.00
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00}                       2850.00
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00}                       2850.00
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00}                       2850.00
+800.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00}                3550.00
+900.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00}         4350.00
+1200.00  {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00,900.00}  5250.00
+
+query RTR
+SELECT
+	price, array_agg(price) OVER w, max(price) OVER w
+FROM
+	products
+WINDOW
+	w AS (
+		ORDER BY
+			price
+		RANGE
+			UNBOUNDED PRECEDING EXCLUDE GROUP
+	)
+ORDER BY
+	price
+----
+150.00   NULL                                                                     NULL
+200.00   {150.00}                                                                 150.00
+200.00   {150.00}                                                                 150.00
+400.00   {150.00,200.00,200.00}                                                   200.00
+500.00   {150.00,200.00,200.00,400.00}                                            400.00
+700.00   {150.00,200.00,200.00,400.00,500.00}                                     500.00
+700.00   {150.00,200.00,200.00,400.00,500.00}                                     500.00
+700.00   {150.00,200.00,200.00,400.00,500.00}                                     500.00
+800.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00}                700.00
+900.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00}         800.00
+1200.00  {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00,900.00}  900.00
+
+query RTR
+SELECT
+	price, array_agg(price) OVER w, avg(price) OVER w
+FROM
+	products
+WINDOW
+	w AS (
+		ORDER BY
+			price
+		RANGE
+			UNBOUNDED PRECEDING EXCLUDE TIES
+	)
+ORDER BY
+	price
+----
+150.00   {150.00}                                                                         150.00
+200.00   {150.00,200.00}                                                                  175.00
+200.00   {150.00,200.00}                                                                  175.00
+400.00   {150.00,200.00,200.00,400.00}                                                    237.50
+500.00   {150.00,200.00,200.00,400.00,500.00}                                             290.00
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00}                                      358.33333333333333333
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00}                                      358.33333333333333333
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00}                                      358.33333333333333333
+800.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00}                 483.33333333333333333
+900.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00,900.00}          525.00
+1200.00  {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00,900.00,1200.00}  586.36363636363636364
+
+query RTR
+SELECT
+	price, array_agg(price) OVER w, avg(price) OVER w
+FROM
+	products
+WINDOW
+	w AS (
+		ORDER BY
+			price
+		RANGE
+			UNBOUNDED PRECEDING EXCLUDE NO OTHERS
+	)
+ORDER BY
+	price
+----
+150.00   {150.00}                                                                         150.00
+200.00   {150.00,200.00,200.00}                                                           183.33333333333333333
+200.00   {150.00,200.00,200.00}                                                           183.33333333333333333
+400.00   {150.00,200.00,200.00,400.00}                                                    237.50
+500.00   {150.00,200.00,200.00,400.00,500.00}                                             290.00
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00}                        443.75
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00}                        443.75
+700.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00}                        443.75
+800.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00}                 483.33333333333333333
+900.00   {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00,900.00}          525.00
+1200.00  {150.00,200.00,200.00,400.00,500.00,700.00,700.00,700.00,800.00,900.00,1200.00}  586.36363636363636364
+
+query TTTT
+SELECT
+	first_value(product_name) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE CURRENT ROW
+	),
+	first_value(product_name) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE GROUP
+	),
+	first_value(product_name) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE TIES
+	),
+	first_value(product_name) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE NO OTHERS
+	)
+FROM
+	products
+WINDOW
+	w AS (ORDER BY group_id)
+ORDER BY
+	group_id
+----
+NULL             NULL             Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  Microsoft Lumia  Microsoft Lumia
+
+query TTTT
+SELECT
+	last_value(product_name) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE CURRENT ROW
+	),
+	last_value(product_name) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE GROUP
+	),
+	last_value(product_name) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE TIES
+	),
+	last_value(product_name) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE NO OTHERS
+	)
+FROM
+	products
+WINDOW
+	w AS (ORDER BY group_id)
+ORDER BY
+	group_id
+----
+NULL             NULL             Microsoft Lumia  Microsoft Lumia
+Microsoft Lumia  Microsoft Lumia  HTC One          HTC One
+HTC One          HTC One          Nexus            Nexus
+Nexus            Nexus            iPhone           iPhone
+iPhone           iPhone           HP Elite         HP Elite
+HP Elite         HP Elite         Lenovo Thinkpad  Lenovo Thinkpad
+Lenovo Thinkpad  Lenovo Thinkpad  Sony VAIO        Sony VAIO
+Sony VAIO        Sony VAIO        Dell             Dell
+Dell             Dell             iPad             iPad
+iPad             iPad             Kindle Fire      Kindle Fire
+Kindle Fire      Kindle Fire      Samsung          Samsung
+
+query TTTT
+SELECT
+	nth_value(product_name, 2) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE CURRENT ROW
+	),
+	nth_value(product_name, 3) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE GROUP
+	),
+	nth_value(product_name, 4) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE TIES
+	),
+	nth_value(product_name, 5) OVER (
+		w RANGE UNBOUNDED PRECEDING EXCLUDE NO OTHERS
+	)
+FROM
+	products
+WINDOW
+	w AS (ORDER BY group_id)
+ORDER BY
+	group_id
+----
+NULL     NULL   NULL    NULL
+NULL     NULL   NULL    NULL
+HTC One  NULL   NULL    NULL
+HTC One  Nexus  iPhone  NULL
+HTC One  Nexus  iPhone  HP Elite
+HTC One  Nexus  iPhone  HP Elite
+HTC One  Nexus  iPhone  HP Elite
+HTC One  Nexus  iPhone  HP Elite
+HTC One  Nexus  iPhone  HP Elite
+HTC One  Nexus  iPhone  HP Elite
+HTC One  Nexus  iPhone  HP Elite
 
 # Test for #32702
 

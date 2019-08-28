@@ -74,3 +74,12 @@ func cancelSessionsBuildChildReqOrdering(
 	}
 	return parent.(*memo.CancelSessionsExpr).Props.Ordering
 }
+
+func exportBuildChildReqOrdering(
+	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
+) physical.OrderingChoice {
+	if childIdx != 0 {
+		return physical.OrderingChoice{}
+	}
+	return parent.(*memo.ExportExpr).Props.Ordering
+}

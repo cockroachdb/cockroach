@@ -318,73 +318,6 @@ right-join (hash)
            ├── variable: x [type=int]
            └── variable: u [type=int]
 
-# Right-join-apply.
-opt
-SELECT * FROM xysd RIGHT JOIN uv ON (SELECT u FROM uv WHERE u=x OFFSET 1) IS NULL
-----
-right-join (hash)
- ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int!null)
- ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- ├── prune: (1-6)
- ├── reject-nulls: (1-4)
- ├── interesting orderings: (+1) (-3,+4,+1)
- ├── project
- │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1) (-3,+4,+1)
- │    └── select
- │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:8(int)
- │         ├── key: (1)
- │         ├── fd: ()-->(8), (1)-->(2-4), (3,4)~~>(1,2)
- │         ├── prune: (2-4)
- │         ├── interesting orderings: (+1) (-3,+4,+1)
- │         ├── left-join-apply
- │         │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:8(int)
- │         │    ├── key: (1)
- │         │    ├── fd: (1)-->(2-4,8), (3,4)~~>(1,2)
- │         │    ├── prune: (2-4)
- │         │    ├── reject-nulls: (8)
- │         │    ├── interesting orderings: (+1) (-3,+4,+1)
- │         │    ├── scan xysd
- │         │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │         │    │    ├── key: (1)
- │         │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │         │    │    ├── prune: (1-4)
- │         │    │    └── interesting orderings: (+1) (-3,+4,+1)
- │         │    ├── max1-row
- │         │    │    ├── columns: u:8(int!null)
- │         │    │    ├── outer: (1)
- │         │    │    ├── cardinality: [0 - 1]
- │         │    │    ├── key: ()
- │         │    │    ├── fd: ()-->(8)
- │         │    │    └── offset
- │         │    │         ├── columns: u:8(int!null)
- │         │    │         ├── outer: (1)
- │         │    │         ├── fd: ()-->(8)
- │         │    │         ├── select
- │         │    │         │    ├── columns: u:8(int!null)
- │         │    │         │    ├── outer: (1)
- │         │    │         │    ├── fd: ()-->(8)
- │         │    │         │    ├── scan uv
- │         │    │         │    │    ├── columns: u:8(int)
- │         │    │         │    │    └── prune: (8)
- │         │    │         │    └── filters
- │         │    │         │         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
- │         │    │         │              ├── variable: u [type=int]
- │         │    │         │              └── variable: x [type=int]
- │         │    │         └── const: 1 [type=int]
- │         │    └── filters (true)
- │         └── filters
- │              └── is [type=bool, outer=(8), constraints=(/8: [/NULL - /NULL]; tight), fd=()-->(8)]
- │                   ├── variable: u [type=int]
- │                   └── null [type=unknown]
- ├── scan uv
- │    ├── columns: u:5(int) v:6(int!null)
- │    └── prune: (5,6)
- └── filters (true)
-
 # Full-join.
 build
 SELECT *, rowid FROM xysd FULL JOIN uv ON x=u
@@ -413,87 +346,28 @@ full-join (hash)
            ├── variable: x [type=int]
            └── variable: u [type=int]
 
-# Full-join-apply.
-opt
-SELECT * FROM xysd FULL JOIN uv ON (SELECT u FROM uv WHERE u=x OFFSET 1) IS NULL
-----
-project
- ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int)
- ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- ├── prune: (1-6)
- ├── interesting orderings: (+1) (-3,+4,+1)
- └── full-join-apply
-      ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) u:8(int)
-      ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
-      ├── prune: (2-6)
-      ├── reject-nulls: (1-6,8)
-      ├── interesting orderings: (+1) (-3,+4,+1)
-      ├── scan xysd
-      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
-      │    ├── prune: (1-4)
-      │    └── interesting orderings: (+1) (-3,+4,+1)
-      ├── left-join (hash)
-      │    ├── columns: u:5(int) v:6(int!null) u:8(int)
-      │    ├── outer: (1)
-      │    ├── fd: ()~~>(8)
-      │    ├── prune: (5,6)
-      │    ├── reject-nulls: (8)
-      │    ├── scan uv
-      │    │    ├── columns: u:5(int) v:6(int!null)
-      │    │    └── prune: (5,6)
-      │    ├── max1-row
-      │    │    ├── columns: u:8(int!null)
-      │    │    ├── outer: (1)
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(8)
-      │    │    └── offset
-      │    │         ├── columns: u:8(int!null)
-      │    │         ├── outer: (1)
-      │    │         ├── fd: ()-->(8)
-      │    │         ├── select
-      │    │         │    ├── columns: u:8(int!null)
-      │    │         │    ├── outer: (1)
-      │    │         │    ├── fd: ()-->(8)
-      │    │         │    ├── scan uv
-      │    │         │    │    ├── columns: u:8(int)
-      │    │         │    │    └── prune: (8)
-      │    │         │    └── filters
-      │    │         │         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      │    │         │              ├── variable: u [type=int]
-      │    │         │              └── variable: x [type=int]
-      │    │         └── const: 1 [type=int]
-      │    └── filters (true)
-      └── filters
-           └── is [type=bool, outer=(8), constraints=(/8: [/NULL - /NULL]; tight), fd=()-->(8)]
-                ├── variable: u [type=int]
-                └── null [type=unknown]
-
 # Semi-join.
 opt
 SELECT * FROM xysd WHERE EXISTS(SELECT * FROM uv WHERE x=u)
 ----
-semi-join (hash)
+project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (2-4)
- ├── interesting orderings: (+1) (-3,+4,+1)
- ├── scan xysd
- │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    ├── prune: (1-4)
- │    └── interesting orderings: (+1) (-3,+4,+1)
- ├── scan uv
- │    ├── columns: u:5(int) v:6(int!null)
- │    └── prune: (5,6)
- └── filters
-      └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           ├── variable: x [type=int]
-           └── variable: u [type=int]
+ └── inner-join (lookup xysd)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null)
+      ├── key columns: [5] = [1]
+      ├── key: (5)
+      ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(5), (5)==(1)
+      ├── distinct-on
+      │    ├── columns: u:5(int)
+      │    ├── grouping columns: u:5(int)
+      │    ├── key: (5)
+      │    └── scan uv
+      │         ├── columns: u:5(int)
+      │         └── prune: (5)
+      └── filters (true)
 
 # Semi-join-apply.
 opt
@@ -512,18 +386,16 @@ semi-join-apply
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── offset
- │    ├── columns: u:5(int) v:6(int!null)
+ │    ├── columns: v:6(int!null)
  │    ├── outer: (1)
  │    ├── fd: ()-->(6)
- │    ├── prune: (5)
  │    ├── select
- │    │    ├── columns: u:5(int) v:6(int!null)
+ │    │    ├── columns: v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── fd: ()-->(6)
- │    │    ├── prune: (5)
  │    │    ├── scan uv
- │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    └── prune: (5,6)
+ │    │    │    ├── columns: v:6(int!null)
+ │    │    │    └── prune: (6)
  │    │    └── filters
  │    │         └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │              ├── variable: v [type=int]
@@ -548,19 +420,17 @@ semi-join-apply
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── semi-join (hash)
- │    ├── columns: u:5(int) v:6(int!null)
+ │    ├── columns: v:6(int!null)
  │    ├── outer: (1)
  │    ├── fd: ()-->(6)
- │    ├── prune: (5)
  │    ├── scan uv
- │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    └── prune: (5,6)
+ │    │    ├── columns: v:6(int!null)
+ │    │    └── prune: (6)
  │    ├── scan mn
- │    │    ├── columns: m:8(int!null) n:9(int)
+ │    │    ├── columns: m:8(int!null)
  │    │    ├── key: (8)
- │    │    ├── fd: (8)-->(9), (9)~~>(8)
- │    │    ├── prune: (8,9)
- │    │    └── interesting orderings: (+8) (+9,+8)
+ │    │    ├── prune: (8)
+ │    │    └── interesting orderings: (+8)
  │    └── filters
  │         ├── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
  │         │    ├── variable: x [type=int]
@@ -587,8 +457,8 @@ anti-join (hash)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
- │    ├── columns: u:5(int) v:6(int!null)
- │    └── prune: (5,6)
+ │    ├── columns: u:5(int)
+ │    └── prune: (5)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            ├── variable: x [type=int]
@@ -611,18 +481,16 @@ anti-join-apply
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── offset
- │    ├── columns: u:5(int) v:6(int!null)
+ │    ├── columns: v:6(int!null)
  │    ├── outer: (1)
  │    ├── fd: ()-->(6)
- │    ├── prune: (5)
  │    ├── select
- │    │    ├── columns: u:5(int) v:6(int!null)
+ │    │    ├── columns: v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── fd: ()-->(6)
- │    │    ├── prune: (5)
  │    │    ├── scan uv
- │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    └── prune: (5,6)
+ │    │    │    ├── columns: v:6(int!null)
+ │    │    │    └── prune: (6)
  │    │    └── filters
  │    │         └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │              ├── variable: v [type=int]
@@ -744,33 +612,38 @@ select
 opt
 SELECT * FROM (SELECT count(*) cnt FROM xysd) WHERE EXISTS(SELECT * FROM uv WHERE cnt=1)
 ----
-semi-join (hash)
+project
  ├── columns: cnt:5(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
- ├── select
- │    ├── columns: count_rows:5(int!null)
- │    ├── cardinality: [0 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(5)
- │    ├── scalar-group-by
- │    │    ├── columns: count_rows:5(int)
- │    │    ├── cardinality: [1 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(5)
- │    │    ├── prune: (5)
- │    │    ├── scan xysd@secondary
- │    │    └── aggregations
- │    │         └── count-rows [type=int]
- │    └── filters
- │         └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
- │              ├── variable: count_rows [type=int]
- │              └── const: 1 [type=int]
- ├── scan uv
- │    ├── columns: u:6(int) v:7(int!null)
- │    └── prune: (6,7)
- └── filters (true)
+ └── inner-join (hash)
+      ├── columns: count_rows:5(int!null)
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(5)
+      ├── select
+      │    ├── columns: count_rows:5(int!null)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(5)
+      │    ├── scalar-group-by
+      │    │    ├── columns: count_rows:5(int)
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(5)
+      │    │    ├── prune: (5)
+      │    │    ├── scan xysd@secondary
+      │    │    └── aggregations
+      │    │         └── count-rows [type=int]
+      │    └── filters
+      │         └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+      │              ├── variable: count_rows [type=int]
+      │              └── const: 1 [type=int]
+      ├── scan uv
+      │    ├── limit: 1
+      │    └── key: ()
+      └── filters (true)
 
 # Calculate semi-join-apply cardinality.
 opt
@@ -791,19 +664,17 @@ semi-join-apply
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── limit
- │    ├── columns: u:5(int!null) v:6(int!null)
+ │    ├── columns: u:5(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 5]
  │    ├── fd: ()-->(5)
- │    ├── prune: (6)
  │    ├── select
- │    │    ├── columns: u:5(int!null) v:6(int!null)
+ │    │    ├── columns: u:5(int!null)
  │    │    ├── outer: (1)
  │    │    ├── fd: ()-->(5)
- │    │    ├── prune: (6)
  │    │    ├── scan uv
- │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    └── prune: (5,6)
+ │    │    │    ├── columns: u:5(int)
+ │    │    │    └── prune: (5)
  │    │    └── filters
  │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  │    │              ├── variable: x [type=int]
@@ -827,8 +698,8 @@ anti-join (hash)
  │    └── tuple [type=tuple{int}]
  │         └── const: 2 [type=int]
  ├── scan uv
- │    ├── columns: u:2(int) v:3(int!null)
- │    └── prune: (2,3)
+ │    ├── columns: u:2(int)
+ │    └── prune: (2)
  └── filters
       └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
            ├── variable: u [type=int]
@@ -853,19 +724,17 @@ anti-join-apply
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── limit
- │    ├── columns: u:5(int!null) v:6(int!null)
+ │    ├── columns: u:5(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 5]
  │    ├── fd: ()-->(5)
- │    ├── prune: (6)
  │    ├── select
- │    │    ├── columns: u:5(int!null) v:6(int!null)
+ │    │    ├── columns: u:5(int!null)
  │    │    ├── outer: (1)
  │    │    ├── fd: ()-->(5)
- │    │    ├── prune: (6)
  │    │    ├── scan uv
- │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    └── prune: (5,6)
+ │    │    │    ├── columns: u:5(int)
+ │    │    │    └── prune: (5)
  │    │    └── filters
  │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  │    │              ├── variable: x [type=int]

@@ -15,8 +15,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 )
 
@@ -27,6 +28,8 @@ type unorderedSynchronizerMsg struct {
 	inputIdx int
 	b        coldata.Batch
 }
+
+var _ Operator = &UnorderedSynchronizer{}
 
 // UnorderedSynchronizer is an Operator that combines multiple Operator streams
 // into one.
@@ -68,6 +71,16 @@ type UnorderedSynchronizer struct {
 	errCh             chan error
 }
 
+// ChildCount implements the OpNode interface.
+func (s *UnorderedSynchronizer) ChildCount() int {
+	return len(s.inputs)
+}
+
+// Child implements the OpNode interface.
+func (s *UnorderedSynchronizer) Child(nth int) OpNode {
+	return s.inputs[nth]
+}
+
 // NewUnorderedSynchronizer creates a new UnorderedSynchronizer. On the first
 // call to Next, len(inputs) goroutines are spawned to read each input
 // asynchronously (to not be limited by a slow input). These will increment
@@ -75,7 +88,7 @@ type UnorderedSynchronizer struct {
 // these spawned goroutines will have completed on any error or zero-length
 // batch received from Next.
 func NewUnorderedSynchronizer(
-	inputs []Operator, typs []types.T, wg *sync.WaitGroup,
+	inputs []Operator, typs []coltypes.T, wg *sync.WaitGroup,
 ) *UnorderedSynchronizer {
 	readNextBatch := make([]chan struct{}, len(inputs))
 	for i := range readNextBatch {
@@ -141,7 +154,7 @@ func (s *UnorderedSynchronizer) init(ctx context.Context) {
 				inputIdx: inputIdx,
 			}
 			for {
-				if err := CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
+				if err := execerror.CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
 					select {
 					// Non-blocking write to errCh, if an error is present the main
 					// goroutine will use that and cancel all inputs.
@@ -187,6 +200,8 @@ func (s *UnorderedSynchronizer) init(ctx context.Context) {
 // Next is part of the Operator interface.
 func (s *UnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	if s.done {
+		// TODO(yuzefovich): do we want to be on the safe side and explicitly set
+		// the length here (and below) to 0?
 		return s.zeroBatch
 	}
 	if !s.initialized {
@@ -204,7 +219,7 @@ func (s *UnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			// propagate this error through a panic.
 			s.cancelFn()
 			s.internalWaitGroup.Wait()
-			panic(err)
+			execerror.VectorizedInternalPanic(err)
 		}
 	case msg := <-s.batchCh:
 		if msg == nil {
@@ -214,7 +229,7 @@ func (s *UnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			select {
 			case err := <-s.errCh:
 				if err != nil {
-					panic(err)
+					execerror.VectorizedInternalPanic(err)
 				}
 			default:
 			}

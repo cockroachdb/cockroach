@@ -16,8 +16,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -135,10 +135,10 @@ func TestOrderedSync(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		numCols := len(tc.sources[0][0])
-		columnTypes := make([]types.T, numCols)
+		columnTypes := make([]coltypes.T, numCols)
 		cols := make([]int, numCols)
 		for i := range columnTypes {
-			columnTypes[i] = types.Int64
+			columnTypes[i] = coltypes.Int64
 			cols[i] = i
 		}
 		runTests(t, tc.sources, tc.expected, orderedVerifier, cols, func(inputs []Operator) (Operator, error) {
@@ -189,7 +189,7 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 				Direction: encoding.Ascending,
 			},
 		},
-		columnTypes: []types.T{types.Int64},
+		columnTypes: []coltypes.T{coltypes.Int64},
 	}
 	op.Init()
 	out := newOpTestOutput(&op, []int{0}, expected)
@@ -204,7 +204,7 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 	numInputs := int64(3)
 	batches := make([]coldata.Batch, numInputs)
 	for i := range batches {
-		batches[i] = coldata.NewMemBatch([]types.T{types.Int64})
+		batches[i] = coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
 		batches[i].SetLength(coldata.BatchSize)
 	}
 	for i := int64(0); i < coldata.BatchSize*numInputs; i++ {
@@ -222,7 +222,7 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 		ordering: sqlbase.ColumnOrdering{
 			{ColIdx: 0, Direction: encoding.Ascending},
 		},
-		columnTypes: []types.T{types.Int64},
+		columnTypes: []coltypes.T{coltypes.Int64},
 	}
 	op.Init()
 

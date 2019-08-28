@@ -1017,16 +1017,38 @@ class ChangeReplicasTrigger : public ::google::protobuf::MessageLite /* @@protoc
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
       deprecated_updated_replicas() const;
 
-  bool has_replica() const;
-  void clear_replica();
-  static const int kReplicaFieldNumber = 2;
+  int internal_added_replicas_size() const;
+  void clear_internal_added_replicas();
+  static const int kInternalAddedReplicasFieldNumber = 6;
+  ::cockroach::roachpb::ReplicaDescriptor* mutable_internal_added_replicas(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
+      mutable_internal_added_replicas();
+  const ::cockroach::roachpb::ReplicaDescriptor& internal_added_replicas(int index) const;
+  ::cockroach::roachpb::ReplicaDescriptor* add_internal_added_replicas();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
+      internal_added_replicas() const;
+
+  int internal_removed_replicas_size() const;
+  void clear_internal_removed_replicas();
+  static const int kInternalRemovedReplicasFieldNumber = 7;
+  ::cockroach::roachpb::ReplicaDescriptor* mutable_internal_removed_replicas(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
+      mutable_internal_removed_replicas();
+  const ::cockroach::roachpb::ReplicaDescriptor& internal_removed_replicas(int index) const;
+  ::cockroach::roachpb::ReplicaDescriptor* add_internal_removed_replicas();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
+      internal_removed_replicas() const;
+
+  bool has_deprecated_replica() const;
+  void clear_deprecated_replica();
+  static const int kDeprecatedReplicaFieldNumber = 2;
   private:
-  const ::cockroach::roachpb::ReplicaDescriptor& _internal_replica() const;
+  const ::cockroach::roachpb::ReplicaDescriptor& _internal_deprecated_replica() const;
   public:
-  const ::cockroach::roachpb::ReplicaDescriptor& replica() const;
-  ::cockroach::roachpb::ReplicaDescriptor* release_replica();
-  ::cockroach::roachpb::ReplicaDescriptor* mutable_replica();
-  void set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica);
+  const ::cockroach::roachpb::ReplicaDescriptor& deprecated_replica() const;
+  ::cockroach::roachpb::ReplicaDescriptor* release_deprecated_replica();
+  ::cockroach::roachpb::ReplicaDescriptor* mutable_deprecated_replica();
+  void set_allocated_deprecated_replica(::cockroach::roachpb::ReplicaDescriptor* deprecated_replica);
 
   // .cockroach.roachpb.RangeDescriptor desc = 5;
   bool has_desc() const;
@@ -1040,11 +1062,11 @@ class ChangeReplicasTrigger : public ::google::protobuf::MessageLite /* @@protoc
   ::cockroach::roachpb::RangeDescriptor* mutable_desc();
   void set_allocated_desc(::cockroach::roachpb::RangeDescriptor* desc);
 
-  // .cockroach.roachpb.ReplicaChangeType change_type = 1;
-  void clear_change_type();
-  static const int kChangeTypeFieldNumber = 1;
-  ::cockroach::roachpb::ReplicaChangeType change_type() const;
-  void set_change_type(::cockroach::roachpb::ReplicaChangeType value);
+  // .cockroach.roachpb.ReplicaChangeType deprecated_change_type = 1;
+  void clear_deprecated_change_type();
+  static const int kDeprecatedChangeTypeFieldNumber = 1;
+  ::cockroach::roachpb::ReplicaChangeType deprecated_change_type() const;
+  void set_deprecated_change_type(::cockroach::roachpb::ReplicaChangeType value);
 
   void clear_deprecated_next_replica_id();
   static const int kDeprecatedNextReplicaIdFieldNumber = 4;
@@ -1056,9 +1078,11 @@ class ChangeReplicasTrigger : public ::google::protobuf::MessageLite /* @@protoc
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor > deprecated_updated_replicas_;
-  ::cockroach::roachpb::ReplicaDescriptor* replica_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor > internal_added_replicas_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor > internal_removed_replicas_;
+  ::cockroach::roachpb::ReplicaDescriptor* deprecated_replica_;
   ::cockroach::roachpb::RangeDescriptor* desc_;
-  int change_type_;
+  int deprecated_change_type_;
   ::google::protobuf::int32 deprecated_next_replica_id_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
@@ -3333,65 +3357,65 @@ inline void MergeTrigger::set_allocated_freeze_start(::cockroach::util::hlc::Tim
 
 // ChangeReplicasTrigger
 
-// .cockroach.roachpb.ReplicaChangeType change_type = 1;
-inline void ChangeReplicasTrigger::clear_change_type() {
-  change_type_ = 0;
+// .cockroach.roachpb.ReplicaChangeType deprecated_change_type = 1;
+inline void ChangeReplicasTrigger::clear_deprecated_change_type() {
+  deprecated_change_type_ = 0;
 }
-inline ::cockroach::roachpb::ReplicaChangeType ChangeReplicasTrigger::change_type() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ChangeReplicasTrigger.change_type)
-  return static_cast< ::cockroach::roachpb::ReplicaChangeType >(change_type_);
+inline ::cockroach::roachpb::ReplicaChangeType ChangeReplicasTrigger::deprecated_change_type() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ChangeReplicasTrigger.deprecated_change_type)
+  return static_cast< ::cockroach::roachpb::ReplicaChangeType >(deprecated_change_type_);
 }
-inline void ChangeReplicasTrigger::set_change_type(::cockroach::roachpb::ReplicaChangeType value) {
+inline void ChangeReplicasTrigger::set_deprecated_change_type(::cockroach::roachpb::ReplicaChangeType value) {
   
-  change_type_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ChangeReplicasTrigger.change_type)
+  deprecated_change_type_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ChangeReplicasTrigger.deprecated_change_type)
 }
 
-inline bool ChangeReplicasTrigger::has_replica() const {
-  return this != internal_default_instance() && replica_ != NULL;
+inline bool ChangeReplicasTrigger::has_deprecated_replica() const {
+  return this != internal_default_instance() && deprecated_replica_ != NULL;
 }
-inline const ::cockroach::roachpb::ReplicaDescriptor& ChangeReplicasTrigger::_internal_replica() const {
-  return *replica_;
+inline const ::cockroach::roachpb::ReplicaDescriptor& ChangeReplicasTrigger::_internal_deprecated_replica() const {
+  return *deprecated_replica_;
 }
-inline const ::cockroach::roachpb::ReplicaDescriptor& ChangeReplicasTrigger::replica() const {
-  const ::cockroach::roachpb::ReplicaDescriptor* p = replica_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ChangeReplicasTrigger.replica)
+inline const ::cockroach::roachpb::ReplicaDescriptor& ChangeReplicasTrigger::deprecated_replica() const {
+  const ::cockroach::roachpb::ReplicaDescriptor* p = deprecated_replica_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ChangeReplicasTrigger.deprecated_replica)
   return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ReplicaDescriptor*>(
       &::cockroach::roachpb::_ReplicaDescriptor_default_instance_);
 }
-inline ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::release_replica() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ChangeReplicasTrigger.replica)
+inline ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::release_deprecated_replica() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ChangeReplicasTrigger.deprecated_replica)
   
-  ::cockroach::roachpb::ReplicaDescriptor* temp = replica_;
-  replica_ = NULL;
+  ::cockroach::roachpb::ReplicaDescriptor* temp = deprecated_replica_;
+  deprecated_replica_ = NULL;
   return temp;
 }
-inline ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::mutable_replica() {
+inline ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::mutable_deprecated_replica() {
   
-  if (replica_ == NULL) {
+  if (deprecated_replica_ == NULL) {
     auto* p = CreateMaybeMessage<::cockroach::roachpb::ReplicaDescriptor>(GetArenaNoVirtual());
-    replica_ = p;
+    deprecated_replica_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ChangeReplicasTrigger.replica)
-  return replica_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ChangeReplicasTrigger.deprecated_replica)
+  return deprecated_replica_;
 }
-inline void ChangeReplicasTrigger::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica) {
+inline void ChangeReplicasTrigger::set_allocated_deprecated_replica(::cockroach::roachpb::ReplicaDescriptor* deprecated_replica) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
-    delete reinterpret_cast< ::google::protobuf::MessageLite*>(replica_);
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(deprecated_replica_);
   }
-  if (replica) {
+  if (deprecated_replica) {
     ::google::protobuf::Arena* submessage_arena = NULL;
     if (message_arena != submessage_arena) {
-      replica = ::google::protobuf::internal::GetOwnedMessage(
-          message_arena, replica, submessage_arena);
+      deprecated_replica = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, deprecated_replica, submessage_arena);
     }
     
   } else {
     
   }
-  replica_ = replica;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ChangeReplicasTrigger.replica)
+  deprecated_replica_ = deprecated_replica;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ChangeReplicasTrigger.deprecated_replica)
 }
 
 inline int ChangeReplicasTrigger::deprecated_updated_replicas_size() const {
@@ -3479,6 +3503,58 @@ inline void ChangeReplicasTrigger::set_allocated_desc(::cockroach::roachpb::Rang
   }
   desc_ = desc;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ChangeReplicasTrigger.desc)
+}
+
+inline int ChangeReplicasTrigger::internal_added_replicas_size() const {
+  return internal_added_replicas_.size();
+}
+inline ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::mutable_internal_added_replicas(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ChangeReplicasTrigger.internal_added_replicas)
+  return internal_added_replicas_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
+ChangeReplicasTrigger::mutable_internal_added_replicas() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ChangeReplicasTrigger.internal_added_replicas)
+  return &internal_added_replicas_;
+}
+inline const ::cockroach::roachpb::ReplicaDescriptor& ChangeReplicasTrigger::internal_added_replicas(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ChangeReplicasTrigger.internal_added_replicas)
+  return internal_added_replicas_.Get(index);
+}
+inline ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::add_internal_added_replicas() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.ChangeReplicasTrigger.internal_added_replicas)
+  return internal_added_replicas_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
+ChangeReplicasTrigger::internal_added_replicas() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.ChangeReplicasTrigger.internal_added_replicas)
+  return internal_added_replicas_;
+}
+
+inline int ChangeReplicasTrigger::internal_removed_replicas_size() const {
+  return internal_removed_replicas_.size();
+}
+inline ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::mutable_internal_removed_replicas(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ChangeReplicasTrigger.internal_removed_replicas)
+  return internal_removed_replicas_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
+ChangeReplicasTrigger::mutable_internal_removed_replicas() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ChangeReplicasTrigger.internal_removed_replicas)
+  return &internal_removed_replicas_;
+}
+inline const ::cockroach::roachpb::ReplicaDescriptor& ChangeReplicasTrigger::internal_removed_replicas(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ChangeReplicasTrigger.internal_removed_replicas)
+  return internal_removed_replicas_.Get(index);
+}
+inline ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::add_internal_removed_replicas() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.ChangeReplicasTrigger.internal_removed_replicas)
+  return internal_removed_replicas_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
+ChangeReplicasTrigger::internal_removed_replicas() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.ChangeReplicasTrigger.internal_removed_replicas)
+  return internal_removed_replicas_;
 }
 
 // -------------------------------------------------------------------

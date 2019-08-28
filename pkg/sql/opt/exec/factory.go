@@ -63,6 +63,7 @@ type Factory interface {
 		reverse bool,
 		maxResults uint64,
 		reqOrdering OutputOrdering,
+		rowCount float64,
 	) (Node, error)
 
 	// ConstructVirtualScan returns a node that represents the scan of a virtual
@@ -103,7 +104,8 @@ type Factory interface {
 	//
 	// memo, rightProps, and right are the memo, required physical properties, and
 	// RelExpr of the right side of the join that will be repeatedly modified,
-	// re-planned and executed for every row from the left side.
+	// re-planned and executed for every row from the left side. The rightProps
+	// always includes a presentation.
 	//
 	// fakeRight is a pre-planned node that is the right side of the join with
 	// all outer columns replaced by NULL. The physical properties of this node
@@ -151,6 +153,7 @@ type Factory interface {
 		onCond tree.TypedExpr,
 		leftOrdering, rightOrdering sqlbase.ColumnOrdering,
 		reqOrdering OutputOrdering,
+		leftEqColsAreKey, rightEqColsAreKey bool,
 	) (Node, error)
 
 	// ConstructGroupBy returns a node that runs an aggregation. A set of
@@ -321,6 +324,10 @@ type Factory interface {
 	// columns in the same order as they appear in the table schema, with the
 	// fetch columns first and the update columns second. The rowsNeeded parameter
 	// is true if a RETURNING clause needs the updated row(s) as output.
+	// The passthrough parameter contains all the result columns that are part
+	// of the input node that the update node needs to return (passing through
+	// from the input). The pass through columns are used to return any column
+	// from the FROM tables that are referenced in the RETURNING clause.
 	ConstructUpdate(
 		input Node,
 		table cat.Table,
@@ -328,6 +335,8 @@ type Factory interface {
 		updateCols ColumnOrdinalSet,
 		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
+		passthrough sqlbase.ResultColumns,
+		skipFKChecks bool,
 	) (Node, error)
 
 	// ConstructUpsert creates a node that implements an INSERT..ON CONFLICT or
@@ -454,6 +463,14 @@ type Factory interface {
 
 	// ConstructCancelSessions creates a node that implements CANCEL SESSIONS.
 	ConstructCancelSessions(input Node, ifExists bool) (Node, error)
+
+	// ConstructExport creates a node that implements EXPORT.
+	ConstructExport(
+		input Node,
+		fileName tree.TypedExpr,
+		fileFormat string,
+		options []KVOption,
+	) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being
@@ -562,4 +579,12 @@ type ExplainEnvData struct {
 	Tables    []tree.TableName
 	Sequences []tree.TableName
 	Views     []tree.TableName
+}
+
+// KVOption represents information about a statement option
+// (see tree.KVOptions).
+type KVOption struct {
+	Key string
+	// If there is no value, Value is DNull.
+	Value tree.TypedExpr
 }

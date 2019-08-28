@@ -160,12 +160,6 @@ func TestTrace(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				// TODO(justin): remove this and make sure the new results make sense.
-				// The optimizer elides some renders that the heuristic planner does
-				// not which makes the results different.
-				if _, err := sqlDB.Exec("SET OPTIMIZER = OFF"); err != nil {
-					t.Fatal(err)
-				}
 				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
 					t.Fatal(err)
 				}
@@ -197,12 +191,6 @@ func TestTrace(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				// TODO(justin): remove this and make sure the new results make sense.
-				// The optimizer elides some renders that the heuristic planner does
-				// not which makes the results different.
-				if _, err := sqlDB.Exec("SET OPTIMIZER = off"); err != nil {
-					t.Fatal(err)
-				}
 				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
 					t.Fatal(err)
 				}
@@ -305,7 +293,7 @@ func TestTrace(t *testing.T) {
 							// TODO(andrei): Pull the check for an empty session_trace out of
 							// the sub-tests so we can use cluster.ServerConn(i) here.
 							pgURL, cleanup := sqlutils.PGUrl(
-								t, cluster.Server(i).ServingAddr(), "TestTrace", url.User(security.RootUser))
+								t, cluster.Server(i).ServingSQLAddr(), "TestTrace", url.User(security.RootUser))
 							defer cleanup()
 							sqlDB, err := gosql.Open("postgres", pgURL.String())
 							if err != nil {

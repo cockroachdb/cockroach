@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
-	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -52,6 +52,20 @@ to avoid pre-loading a dataset.`,
 const defaultGeneratorName = "movr"
 
 var defaultGenerator workload.Generator
+var defaultLocalities = []roachpb.Locality{
+	// Default localities for a 3 node cluster
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east1"}, {Key: "az", Value: "b"}}},
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east1"}, {Key: "az", Value: "c"}}},
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east1"}, {Key: "az", Value: "d"}}},
+	// Default localities for a 6 node cluster
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "us-west1"}, {Key: "az", Value: "a"}}},
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "us-west1"}, {Key: "az", Value: "b"}}},
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "us-west1"}, {Key: "az", Value: "c"}}},
+	// Default localities for a 9 node cluster
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "europe-west1"}, {Key: "az", Value: "b"}}},
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "europe-west1"}, {Key: "az", Value: "c"}}},
+	{Tiers: []roachpb.Tier{{Key: "region", Value: "europe-west1"}, {Key: "az", Value: "d"}}},
+}
 
 func init() {
 	for _, meta := range workload.Registered() {
@@ -87,18 +101,35 @@ func setupTransientServers(
 	cleanup = func() {}
 	ctx := context.Background()
 
+	if demoCtx.nodes <= 0 {
+		return "", "", cleanup, errors.Errorf("must have a positive number of nodes")
+	}
+
+	// The user specified some localities for their nodes.
+	if len(demoCtx.localities) != 0 {
+		// Error out of localities don't line up with requested node
+		// count before doing any sort of setup.
+		if len(demoCtx.localities) != demoCtx.nodes {
+			return "", "", cleanup, errors.Errorf("number of localities specified must equal number of nodes")
+		}
+	} else {
+		demoCtx.localities = make([]roachpb.Locality, demoCtx.nodes)
+		for i := 0; i < demoCtx.nodes; i++ {
+			demoCtx.localities[i] = defaultLocalities[i%len(defaultLocalities)]
+		}
+	}
+
 	// Set up logging. For demo/transient server we use non-standard
 	// behavior where we avoid file creation if possible.
 	df := cmd.Flags().Lookup(cliflags.LogDir.Name)
 	sf := cmd.Flags().Lookup(logflags.LogToStderrName)
 	if !df.Changed && !sf.Changed {
-		// User did not request logging flags; shut down logging under
-		// errors and make logs appear on stderr.
+		// User did not request logging flags; shut down all logging.
 		// Otherwise, the demo command would cause a cockroach-data
 		// directory to appear in the current directory just for logs.
 		_ = df.Value.Set("")
 		df.Changed = true
-		_ = sf.Value.Set(log.Severity_ERROR.String())
+		_ = sf.Value.Set(log.Severity_NONE.String())
 		sf.Changed = true
 	}
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd)
@@ -107,38 +138,38 @@ func setupTransientServers(
 	}
 	cleanup = func() { stopper.Stop(ctx) }
 
-	// Set up the default zone configuration. We are using an in-memory store
-	// so we really want to disable replication.
-	cfg := config.DefaultZoneConfig()
-	sysCfg := config.DefaultSystemZoneConfig()
-
-	if demoCtx.nodes < 3 {
-		cfg.NumReplicas = proto.Int32(1)
-		sysCfg.NumReplicas = proto.Int32(1)
-	}
-
 	// Create the first transient server. The others will join this one.
 	args := base.TestServerArgs{
 		PartOfCluster: true,
 		Insecure:      true,
-		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				DefaultZoneConfigOverride:       &cfg,
-				DefaultSystemZoneConfigOverride: &sysCfg,
-			},
-		},
-		Stopper: stopper,
+		Stopper:       stopper,
 	}
+
 	serverFactory := server.TestServerFactory
-	s := serverFactory.New(args).(*server.TestServer)
-	if err := s.Start(args); err != nil {
-		return connURL, adminURL, cleanup, err
-	}
-	args.JoinAddr = s.ServingAddr()
-	for i := 0; i < demoCtx.nodes-1; i++ {
-		s := serverFactory.New(args).(*server.TestServer)
-		if err := s.Start(args); err != nil {
+	var s *server.TestServer
+	for i := 0; i < demoCtx.nodes; i++ {
+		// All the nodes connect to the address of the first server created.
+		if s != nil {
+			args.JoinAddr = s.ServingRPCAddr()
+		}
+		if demoCtx.localities != nil {
+			args.Locality = demoCtx.localities[i]
+		}
+		serv := serverFactory.New(args).(*server.TestServer)
+		if err := serv.Start(args); err != nil {
 			return connURL, adminURL, cleanup, err
+		}
+		// Remember the first server created.
+		if i == 0 {
+			s = serv
+		}
+	}
+
+	if demoCtx.nodes < 3 {
+		// Set up the default zone configuration. We are using an in-memory store
+		// so we really want to disable replication.
+		if err := cliDisableReplication(ctx, s.Server); err != nil {
+			return ``, ``, cleanup, err
 		}
 	}
 
@@ -149,7 +180,7 @@ func setupTransientServers(
 	url := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(security.RootUser),
-		Host:     s.ServingAddr(),
+		Host:     s.ServingSQLAddr(),
 		RawQuery: options.Encode(),
 	}
 	if gen != nil {

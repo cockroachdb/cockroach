@@ -23,11 +23,13 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // {{/*
@@ -36,7 +38,7 @@ import (
 var _ apd.Decimal
 
 const (
-	_FAMILY = semtypes.Family(0)
+	_FAMILY = types.Family(0)
 	_WIDTH  = int32(0)
 )
 
@@ -47,7 +49,7 @@ func _ROWS_TO_COL_VEC(
 ) error { // */}}
 	// {{define "rowsToColVec"}}
 	col := vec._TemplateType()
-	datumToPhysicalFn := conv.GetDatumToPhysicalFn(columnType)
+	datumToPhysicalFn := typeconv.GetDatumToPhysicalFn(columnType)
 	for i := range rows {
 		row := rows[i]
 		if row[columnIdx].Datum == nil {
@@ -63,7 +65,9 @@ func _ROWS_TO_COL_VEC(
 			if err != nil {
 				return err
 			}
-			col[i] = v.(_GOTYPE)
+
+			castV := v.(_GOTYPE)
+			execgen.SET(col, i, castV)
 		}
 	}
 	// {{end}}
@@ -73,13 +77,16 @@ func _ROWS_TO_COL_VEC(
 
 // */}}
 
+// Use execgen package to remove unused import warning.
+var _ interface{} = execgen.UNSAFEGET
+
 // EncDatumRowsToColVec converts one column from EncDatumRows to a column
 // vector. columnIdx is the 0-based index of the column in the EncDatumRows.
 func EncDatumRowsToColVec(
 	rows sqlbase.EncDatumRows,
 	vec coldata.Vec,
 	columnIdx int,
-	columnType *semtypes.T,
+	columnType *types.T,
 	alloc *sqlbase.DatumAlloc,
 ) error {
 
@@ -93,14 +100,14 @@ func EncDatumRowsToColVec(
 			_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)
 		// {{end}}
 		default:
-			panic(fmt.Sprintf("unsupported width %d for column type %s", columnType.Width(), columnType.String()))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unsupported width %d for column type %s", columnType.Width(), columnType.String()))
 		}
 		// {{ else }}
 		_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)
 		// {{end}}
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unsupported column type %s", columnType.String()))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unsupported column type %s", columnType.String()))
 	}
 	return nil
 }

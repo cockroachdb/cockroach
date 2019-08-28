@@ -2525,6 +2525,10 @@ func AsJSON(d Datum) (json.JSON, error) {
 		return builder.Build(), nil
 	case *DTuple:
 		builder := json.NewObjectBuilder(len(t.D))
+		// We need to make sure that t.typ is initialized before getting the tuple
+		// labels (it is valid for t.typ be left uninitialized when instantiating a
+		// DTuple).
+		t.maybePopulateType()
 		labels := t.typ.TupleLabels()
 		for i, e := range t.D {
 			j, err := AsJSON(e)
@@ -2681,8 +2685,9 @@ func AsDTuple(e Expr) (*DTuple, bool) {
 	return nil, false
 }
 
-// ResolvedType implements the TypedExpr interface.
-func (d *DTuple) ResolvedType() *types.T {
+// maybePopulateType populates the tuple's type if it hasn't yet been
+// populated.
+func (d *DTuple) maybePopulateType() {
 	if d.typ == nil {
 		contents := make([]types.T, len(d.D))
 		for i, v := range d.D {
@@ -2690,6 +2695,11 @@ func (d *DTuple) ResolvedType() *types.T {
 		}
 		d.typ = types.MakeTuple(contents)
 	}
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (d *DTuple) ResolvedType() *types.T {
+	d.maybePopulateType()
 	return d.typ
 }
 
@@ -3277,6 +3287,30 @@ func NewDOid(d DInt) *DOid {
 	return &oid
 }
 
+// AsDOid attempts to retrieve a DOid from an Expr, returning a DOid and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DOid wrapped by a
+// *DOidWrapper is possible.
+func AsDOid(e Expr) (*DOid, bool) {
+	switch t := e.(type) {
+	case *DOid:
+		return t, true
+	case *DOidWrapper:
+		return AsDOid(t.Wrapped)
+	}
+	return NewDOid(0), false
+}
+
+// MustBeDOid attempts to retrieve a DOid from an Expr, panicking if the
+// assertion fails.
+func MustBeDOid(e Expr) *DOid {
+	i, ok := AsDOid(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DOid, found %T", e))
+	}
+	return i
+}
+
 // NewDOidWithName is a helper routine to create a *DOid initialized from a DInt
 // and a string.
 func NewDOidWithName(d DInt, typ *types.T, name string) *DOid {
@@ -3603,12 +3637,12 @@ func NewDOidVectorFromDArray(d *DArray) Datum {
 // pointed at (even if shared between Datum instances) but excluding
 // allocation overhead.
 //
-// The second argument indicates whether data of this type have different
+// The second return value indicates whether data of this type have different
 // sizes.
 //
 // It holds for every Datum d that d.Size() >= DatumSize(d.ResolvedType())
 func DatumTypeSize(t *types.T) (uintptr, bool) {
-	// The following are composite types.
+	// The following are composite types or types that support multiple widths.
 	switch t.Family() {
 	case types.TupleFamily:
 		if types.IsWildcardTupleType(t) {
@@ -3622,6 +3656,8 @@ func DatumTypeSize(t *types.T) (uintptr, bool) {
 			variable = variable || typvariable
 		}
 		return sz, variable
+	case types.IntFamily, types.FloatFamily:
+		return uintptr(t.Width() / 8), false
 	}
 
 	// All the primary types have fixed size information.

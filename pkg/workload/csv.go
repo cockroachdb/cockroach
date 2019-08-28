@@ -20,8 +20,8 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/pkg/errors"
@@ -139,15 +139,15 @@ func colDatumToCSVString(col coldata.Vec, rowIdx int) string {
 		return `NULL`
 	}
 	switch col.Type() {
-	case types.Bool:
+	case coltypes.Bool:
 		return strconv.FormatBool(col.Bool()[rowIdx])
-	case types.Int64:
+	case coltypes.Int64:
 		return strconv.FormatInt(col.Int64()[rowIdx], 10)
-	case types.Float64:
+	case coltypes.Float64:
 		return strconv.FormatFloat(col.Float64()[rowIdx], 'f', -1, 64)
-	case types.Bytes:
+	case coltypes.Bytes:
 		// See the HACK comment in ColBatchToRows.
-		bytes := col.Bytes()[rowIdx]
+		bytes := col.Bytes().Get(rowIdx)
 		return *(*string)(unsafe.Pointer(&bytes))
 	}
 	panic(fmt.Sprintf(`unhandled type %s`, col.Type().GoTypeName()))

@@ -492,6 +492,9 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 	case *windowNode:
 		return dsp.checkSupportForNode(n.plan)
 
+	case *exportNode:
+		return dsp.checkSupportForNode(n.source)
+
 	default:
 		return cannotDistribute, newQueryNotSupportedErrorf("unsupported node %T", node)
 	}
@@ -637,8 +640,8 @@ type SpanPartition struct {
 
 type distSQLNodeHealth struct {
 	gossip     *gossip.Gossip
-	connHealth func(roachpb.NodeID) error
 	isLive     func(roachpb.NodeID) (bool, error)
+	connHealth func(roachpb.NodeID, rpc.ConnectionClass) error
 }
 
 func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) error {
@@ -650,7 +653,7 @@ func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) er
 		// artifact of rpcContext's reconnection mechanism at the time of
 		// writing). This is better than having it used in 100% of cases
 		// (until the liveness check below kicks in).
-		err := h.connHealth(nodeID)
+		err := h.connHealth(nodeID, rpc.DefaultClass)
 		if err != nil && err != rpc.ErrNotHeartbeated {
 			// This host is known to be unhealthy. Don't use it (use the gateway
 			// instead). Note: this can never happen for our nodeID (which
@@ -1119,6 +1122,9 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		}
 
 		tr.MaxResults = n.maxResults
+		if n.estimatedRowCount > p.MaxEstimatedRowCount {
+			p.MaxEstimatedRowCount = n.estimatedRowCount
+		}
 
 		proc := distsqlplan.Processor{
 			Node: sp.Node,
@@ -2269,10 +2275,12 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		}
 	} else {
 		core.MergeJoiner = &distsqlpb.MergeJoinerSpec{
-			LeftOrdering:  leftMergeOrd,
-			RightOrdering: rightMergeOrd,
-			OnExpr:        onExpr,
-			Type:          joinType,
+			LeftOrdering:         leftMergeOrd,
+			RightOrdering:        rightMergeOrd,
+			OnExpr:               onExpr,
+			Type:                 joinType,
+			LeftEqColumnsAreKey:  n.pred.leftEqKey,
+			RightEqColumnsAreKey: n.pred.rightEqKey,
 		}
 	}
 
@@ -2412,6 +2420,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	case *windowNode:
 		plan, err = dsp.createPlanForWindow(planCtx, n)
 
+	case *exportNode:
+		plan, err = dsp.createPlanForExport(planCtx, n)
+
 	default:
 		// Can't handle a node? We wrap it and continue on our way.
 		plan, err = dsp.wrapPlan(planCtx, n)
@@ -2463,7 +2474,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (PhysicalP
 	if err := walkPlan(planCtx.ctx, n, planObserver{
 		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
 			switch plan.(type) {
-			case *explainDistSQLNode, *explainPlanNode:
+			case *explainDistSQLNode, *explainPlanNode, *explainVecNode:
 				// Don't continue recursing into explain nodes - they need to be left
 				// alone since they handle their own planning later.
 				return false, nil
@@ -3252,6 +3263,36 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 		plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(plan.ResultTypes))
 	}
 
+	return plan, nil
+}
+
+// createPlanForExport creates a physical plan for EXPORT.
+// We add a new stage of CSVWriter processors to the input plan.
+func (dsp *DistSQLPlanner) createPlanForExport(
+	planCtx *PlanningCtx, n *exportNode,
+) (PhysicalPlan, error) {
+	plan, err := dsp.createPlanForNode(planCtx, n.source)
+	if err != nil {
+		return PhysicalPlan{}, err
+	}
+
+	core := distsqlpb.ProcessorCoreUnion{CSVWriter: &distsqlpb.CSVWriterSpec{
+		Destination: n.fileName,
+		NamePattern: exportFilePatternDefault,
+		Options:     n.csvOpts,
+		ChunkRows:   int64(n.chunkSize),
+	}}
+
+	resTypes := make([]types.T, len(sqlbase.ExportColumns))
+	for i := range sqlbase.ExportColumns {
+		resTypes[i] = *sqlbase.ExportColumns[i].Typ
+	}
+	plan.AddNoGroupingStage(
+		core, distsqlpb.PostProcessSpec{}, resTypes, distsqlpb.Ordering{},
+	)
+
+	// The CSVWriter produces the same columns as the EXPORT statement.
+	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(sqlbase.ExportColumns))
 	return plan, nil
 }
 

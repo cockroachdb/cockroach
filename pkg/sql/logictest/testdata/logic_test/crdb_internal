@@ -1,3 +1,10 @@
+# LogicTest: local fakedist fakedist-metadata fakedist-disk
+# The local-mixed-19.1-19.2 configuration is excluded for this file because
+# it doesn't work with node_executable_version(). The tests where we create
+# splits and then view the un-mergeable splits with
+# SELECT ... FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
+# are also failing.
+
 query error database "crdb_internal" does not exist
 ALTER DATABASE crdb_internal RENAME TO not_crdb_internal
 
@@ -33,6 +40,7 @@ node_queries
 node_runtime_info
 node_sessions
 node_statement_statistics
+node_txn_stats
 partitions
 predefined_comments
 ranges
@@ -170,10 +178,10 @@ SELECT * FROM crdb_internal.builtin_functions WHERE function = ''
 ----
 function  signature  category  details
 
-query ITTITTTTTTT colnames
+query ITTITTTTTTTT colnames
 SELECT * FROM crdb_internal.create_statements WHERE database_name = ''
 ----
-database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name  create_statement  state  create_nofks  alter_statements  validate_statements
+database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name  create_statement  state  create_nofks  alter_statements  validate_statements zone_configuration_statements
 
 query ITITTBTB colnames
 SELECT * FROM crdb_internal.table_columns WHERE descriptor_name = ''
@@ -200,10 +208,10 @@ SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
 
-query ITTTTT colnames
+query ITTTTTTTTT colnames
 SELECT * FROM crdb_internal.zones WHERE false
 ----
-zone_id  zone_name cli_specifier  config_yaml  config_sql  config_protobuf
+zone_id  target  range_name  database_name  table_name  index_name  partition_name  config_yaml  config_sql  config_protobuf
 
 query ITTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.ranges WHERE range_id < 0
@@ -222,17 +230,17 @@ INSERT INTO system.zones (id, config) VALUES
   (54, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
 
 query IT
-SELECT zone_id, cli_specifier FROM crdb_internal.zones ORDER BY 1
+SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
-0   .default
-1   system
-15  system.jobs
-16  .meta
-17  .system
-18  .timeseries
-22  .liveness
-53  testdb
-54  testdb.foo
+0   RANGE default
+1   DATABASE system
+15  TABLE system.public.jobs
+16  RANGE meta
+17  RANGE system
+18  RANGE timeseries
+22  RANGE liveness
+53  DATABASE testdb
+54  TABLE testdb.public.foo
 
 query T
 SELECT quote_literal(config_yaml) FROM crdb_internal.zones WHERE zone_id = 0
@@ -392,9 +400,6 @@ true
 
 # Check that privileged builtins are only allowed for 'root'
 user testuser
-
-query error insufficient privilege
-select crdb_internal.force_retry(interval '0s')
 
 query error insufficient privilege
 select crdb_internal.force_panic('foo')
@@ -567,3 +572,8 @@ start_pretty
 /Table/59/1/1
 /Table/59/1/2
 /Table/59/1/3
+
+query T
+SELECT crdb_internal.cluster_name()
+----
+testclustername
