@@ -422,44 +422,42 @@ GROUP BY
 ORDER BY
     o_orderpriority;
 ----
-group-by
+sort
  ├── columns: o_orderpriority:6(char!null) order_count:26(int)
- ├── grouping columns: o_orderpriority:6(char!null)
  ├── key: (6)
  ├── fd: (6)-->(26)
  ├── ordering: +6
- ├── project
- │    ├── columns: o_orderkey:1(int!null) o_orderdate:5(date!null) o_orderpriority:6(char!null)
- │    ├── key: (1)
- │    ├── fd: (1)-->(5,6)
- │    ├── ordering: +6
- │    └── sort
- │         ├── columns: o_orderkey:1(int!null) o_orderdate:5(date!null) o_orderpriority:6(char!null) l_orderkey:10(int!null)
- │         ├── key: (10)
- │         ├── fd: (1)-->(5,6), (1)==(10), (10)==(1)
- │         ├── ordering: +6
- │         └── inner-join (lookup orders)
- │              ├── columns: o_orderkey:1(int!null) o_orderdate:5(date!null) o_orderpriority:6(char!null) l_orderkey:10(int!null)
- │              ├── key columns: [10] = [1]
- │              ├── key: (10)
- │              ├── fd: (1)-->(5,6), (1)==(10), (10)==(1)
- │              ├── distinct-on
- │              │    ├── columns: l_orderkey:10(int!null)
- │              │    ├── grouping columns: l_orderkey:10(int!null)
- │              │    ├── internal-ordering: +10
- │              │    ├── key: (10)
- │              │    └── select
- │              │         ├── columns: l_orderkey:10(int!null) l_commitdate:21(date!null) l_receiptdate:22(date!null)
- │              │         ├── ordering: +10
- │              │         ├── scan lineitem
- │              │         │    ├── columns: l_orderkey:10(int!null) l_commitdate:21(date!null) l_receiptdate:22(date!null)
- │              │         │    └── ordering: +10
- │              │         └── filters
- │              │              └── l_commitdate < l_receiptdate [type=bool, outer=(21,22), constraints=(/21: (/NULL - ]; /22: (/NULL - ])]
- │              └── filters
- │                   └── (o_orderdate >= '1993-07-01') AND (o_orderdate < '1993-10-01') [type=bool, outer=(5), constraints=(/5: [/'1993-07-01' - /'1993-09-30']; tight)]
- └── aggregations
-      └── count-rows [type=int]
+ └── group-by
+      ├── columns: o_orderpriority:6(char!null) count_rows:26(int)
+      ├── grouping columns: o_orderpriority:6(char!null)
+      ├── key: (6)
+      ├── fd: (6)-->(26)
+      ├── project
+      │    ├── columns: o_orderkey:1(int!null) o_orderdate:5(date!null) o_orderpriority:6(char!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(5,6)
+      │    └── inner-join (lookup orders)
+      │         ├── columns: o_orderkey:1(int!null) o_orderdate:5(date!null) o_orderpriority:6(char!null) l_orderkey:10(int!null)
+      │         ├── key columns: [10] = [1]
+      │         ├── key: (10)
+      │         ├── fd: (1)-->(5,6), (1)==(10), (10)==(1)
+      │         ├── distinct-on
+      │         │    ├── columns: l_orderkey:10(int!null)
+      │         │    ├── grouping columns: l_orderkey:10(int!null)
+      │         │    ├── internal-ordering: +10
+      │         │    ├── key: (10)
+      │         │    └── select
+      │         │         ├── columns: l_orderkey:10(int!null) l_commitdate:21(date!null) l_receiptdate:22(date!null)
+      │         │         ├── ordering: +10
+      │         │         ├── scan lineitem
+      │         │         │    ├── columns: l_orderkey:10(int!null) l_commitdate:21(date!null) l_receiptdate:22(date!null)
+      │         │         │    └── ordering: +10
+      │         │         └── filters
+      │         │              └── l_commitdate < l_receiptdate [type=bool, outer=(21,22), constraints=(/21: (/NULL - ]; /22: (/NULL - ])]
+      │         └── filters
+      │              └── (o_orderdate >= '1993-07-01') AND (o_orderdate < '1993-10-01') [type=bool, outer=(5), constraints=(/5: [/'1993-07-01' - /'1993-09-30']; tight)]
+      └── aggregations
+           └── count-rows [type=int]
 
 # --------------------------------------------------
 # Q5
@@ -1665,8 +1663,9 @@ sort
       ├── grouping columns: p_brand:9(char!null) p_type:10(varchar!null) p_size:11(int!null)
       ├── key: (9-11)
       ├── fd: (9-11)-->(22)
-      ├── inner-join (hash)
+      ├── inner-join (lookup part)
       │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) p_partkey:6(int!null) p_brand:9(char!null) p_type:10(varchar!null) p_size:11(int!null)
+      │    ├── key columns: [1] = [6]
       │    ├── key: (2,6)
       │    ├── fd: (6)-->(9-11), (1)==(6), (6)==(1)
       │    ├── anti-join (merge)
@@ -1691,20 +1690,10 @@ sort
       │    │    │    └── filters
       │    │    │         └── s_comment LIKE '%Customer%Complaints%' [type=bool, outer=(21), constraints=(/21: (/NULL - ])]
       │    │    └── filters (true)
-      │    ├── select
-      │    │    ├── columns: p_partkey:6(int!null) p_brand:9(char!null) p_type:10(varchar!null) p_size:11(int!null)
-      │    │    ├── key: (6)
-      │    │    ├── fd: (6)-->(9-11)
-      │    │    ├── scan part
-      │    │    │    ├── columns: p_partkey:6(int!null) p_brand:9(char!null) p_type:10(varchar!null) p_size:11(int!null)
-      │    │    │    ├── key: (6)
-      │    │    │    └── fd: (6)-->(9-11)
-      │    │    └── filters
-      │    │         ├── p_brand != 'Brand#45' [type=bool, outer=(9), constraints=(/9: (/NULL - /'Brand#45') [/e'Brand#45\x00' - ]; tight)]
-      │    │         ├── p_type NOT LIKE 'MEDIUM POLISHED %' [type=bool, outer=(10), constraints=(/10: (/NULL - ])]
-      │    │         └── p_size IN (3, 9, 14, 19, 23, 36, 45, 49) [type=bool, outer=(11), constraints=(/11: [/3 - /3] [/9 - /9] [/14 - /14] [/19 - /19] [/23 - /23] [/36 - /36] [/45 - /45] [/49 - /49]; tight)]
       │    └── filters
-      │         └── p_partkey = ps_partkey [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │         ├── p_brand != 'Brand#45' [type=bool, outer=(9), constraints=(/9: (/NULL - /'Brand#45') [/e'Brand#45\x00' - ]; tight)]
+      │         ├── p_type NOT LIKE 'MEDIUM POLISHED %' [type=bool, outer=(10), constraints=(/10: (/NULL - ])]
+      │         └── p_size IN (3, 9, 14, 19, 23, 36, 45, 49) [type=bool, outer=(11), constraints=(/11: [/3 - /3] [/9 - /9] [/14 - /14] [/19 - /19] [/23 - /23] [/36 - /36] [/45 - /45] [/49 - /49]; tight)]
       └── aggregations
            └── count [type=int, outer=(2)]
                 └── agg-distinct [type=int]
@@ -1876,20 +1865,20 @@ limit
  │    └── group-by
  │         ├── columns: c_custkey:1(int) c_name:2(varchar) o_orderkey:9(int!null) o_totalprice:12(float) o_orderdate:13(date) sum:51(float)
  │         ├── grouping columns: o_orderkey:9(int!null)
+ │         ├── internal-ordering: +(9|18)
  │         ├── key: (9)
  │         ├── fd: (1)-->(2), (9)-->(1,2,12,13,51)
- │         ├── inner-join (hash)
+ │         ├── inner-join (lookup lineitem)
  │         │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_quantity:22(float!null)
+ │         │    ├── key columns: [9] = [18]
  │         │    ├── fd: (1)-->(2), (9)-->(10,12,13), (9)==(18), (18)==(9), (1)==(10), (10)==(1)
- │         │    ├── scan customer
- │         │    │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null)
- │         │    │    ├── key: (1)
- │         │    │    └── fd: (1)-->(2)
- │         │    ├── inner-join (merge)
- │         │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_quantity:22(float!null)
- │         │    │    ├── left ordering: +9
- │         │    │    ├── right ordering: +18
- │         │    │    ├── fd: (9)-->(10,12,13), (9)==(18), (18)==(9)
+ │         │    ├── ordering: +(9|18) [actual: +9]
+ │         │    ├── inner-join (lookup customer)
+ │         │    │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null)
+ │         │    │    ├── key columns: [10] = [1]
+ │         │    │    ├── key: (9)
+ │         │    │    ├── fd: (9)-->(10,12,13), (1)-->(2), (1)==(10), (10)==(1)
+ │         │    │    ├── ordering: +9
  │         │    │    ├── project
  │         │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null)
  │         │    │    │    ├── key: (9)
@@ -1921,12 +1910,8 @@ limit
  │         │    │    │         │    └── filters
  │         │    │    │         │         └── sum > 300.0 [type=bool, outer=(50), constraints=(/50: [/300.00000000000006 - ]; tight)]
  │         │    │    │         └── filters (true)
- │         │    │    ├── scan lineitem
- │         │    │    │    ├── columns: l_orderkey:18(int!null) l_quantity:22(float!null)
- │         │    │    │    └── ordering: +18
  │         │    │    └── filters (true)
- │         │    └── filters
- │         │         └── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │         │    └── filters (true)
  │         └── aggregations
  │              ├── sum [type=float, outer=(22)]
  │              │    └── variable: l_quantity [type=float]
@@ -2075,8 +2060,9 @@ sort
  ├── ordering: +2
  └── project
       ├── columns: s_name:2(char!null) s_address:3(varchar!null)
-      └── inner-join (hash)
+      └── inner-join (lookup nation)
            ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_address:3(varchar!null) s_nationkey:4(int!null) n_nationkey:8(int!null) n_name:9(char!null)
+           ├── key columns: [4] = [8]
            ├── key: (1)
            ├── fd: ()-->(9), (1)-->(2-4), (4)==(8), (8)==(4)
            ├── project
@@ -2143,18 +2129,8 @@ sort
            │         │         └── filters
            │         │              └── ps_partkey = p_partkey [type=bool, outer=(12,17), constraints=(/12: (/NULL - ]; /17: (/NULL - ]), fd=(12)==(17), (17)==(12)]
            │         └── filters (true)
-           ├── select
-           │    ├── columns: n_nationkey:8(int!null) n_name:9(char!null)
-           │    ├── key: (8)
-           │    ├── fd: ()-->(9)
-           │    ├── scan nation
-           │    │    ├── columns: n_nationkey:8(int!null) n_name:9(char!null)
-           │    │    ├── key: (8)
-           │    │    └── fd: (8)-->(9)
-           │    └── filters
-           │         └── n_name = 'CANADA' [type=bool, outer=(9), constraints=(/9: [/'CANADA' - /'CANADA']; tight), fd=()-->(9)]
            └── filters
-                └── s_nationkey = n_nationkey [type=bool, outer=(4,8), constraints=(/4: (/NULL - ]; /8: (/NULL - ]), fd=(4)==(8), (8)==(4)]
+                └── n_name = 'CANADA' [type=bool, outer=(9), constraints=(/9: [/'CANADA' - /'CANADA']; tight), fd=()-->(9)]
 
 # --------------------------------------------------
 # Q21
@@ -2233,8 +2209,9 @@ limit
  │         │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:8(int!null) l1.l_suppkey:10(int!null) l1.l_commitdate:19(date!null) l1.l_receiptdate:20(date!null) o_orderkey:24(int!null) o_orderstatus:26(char!null)
  │         │    │    ├── key columns: [10] = [1]
  │         │    │    ├── fd: ()-->(26), (8)==(24), (24)==(8), (1)-->(2,4), (1)==(10), (10)==(1)
- │         │    │    ├── inner-join (hash)
+ │         │    │    ├── inner-join (lookup orders)
  │         │    │    │    ├── columns: l1.l_orderkey:8(int!null) l1.l_suppkey:10(int!null) l1.l_commitdate:19(date!null) l1.l_receiptdate:20(date!null) o_orderkey:24(int!null) o_orderstatus:26(char!null)
+ │         │    │    │    ├── key columns: [8] = [24]
  │         │    │    │    ├── fd: ()-->(26), (8)==(24), (24)==(8)
  │         │    │    │    ├── semi-join (hash)
  │         │    │    │    │    ├── columns: l1.l_orderkey:8(int!null) l1.l_suppkey:10(int!null) l1.l_commitdate:19(date!null) l1.l_receiptdate:20(date!null)
@@ -2265,18 +2242,8 @@ limit
  │         │    │    │    │    └── filters
  │         │    │    │    │         ├── l2.l_orderkey = l1.l_orderkey [type=bool, outer=(8,37), constraints=(/8: (/NULL - ]; /37: (/NULL - ]), fd=(8)==(37), (37)==(8)]
  │         │    │    │    │         └── l2.l_suppkey != l1.l_suppkey [type=bool, outer=(10,39), constraints=(/10: (/NULL - ]; /39: (/NULL - ])]
- │         │    │    │    ├── select
- │         │    │    │    │    ├── columns: o_orderkey:24(int!null) o_orderstatus:26(char!null)
- │         │    │    │    │    ├── key: (24)
- │         │    │    │    │    ├── fd: ()-->(26)
- │         │    │    │    │    ├── scan orders
- │         │    │    │    │    │    ├── columns: o_orderkey:24(int!null) o_orderstatus:26(char!null)
- │         │    │    │    │    │    ├── key: (24)
- │         │    │    │    │    │    └── fd: (24)-->(26)
- │         │    │    │    │    └── filters
- │         │    │    │    │         └── o_orderstatus = 'F' [type=bool, outer=(26), constraints=(/26: [/'F' - /'F']; tight), fd=()-->(26)]
  │         │    │    │    └── filters
- │         │    │    │         └── o_orderkey = l1.l_orderkey [type=bool, outer=(8,24), constraints=(/8: (/NULL - ]; /24: (/NULL - ]), fd=(8)==(24), (24)==(8)]
+ │         │    │    │         └── o_orderstatus = 'F' [type=bool, outer=(26), constraints=(/26: [/'F' - /'F']; tight), fd=()-->(26)]
  │         │    │    └── filters (true)
  │         │    └── filters
  │         │         └── n_name = 'SAUDI ARABIA' [type=bool, outer=(34), constraints=(/34: [/'SAUDI ARABIA' - /'SAUDI ARABIA']; tight), fd=()-->(34)]
@@ -2333,55 +2300,60 @@ GROUP BY
 ORDER BY
     cntrycode;
 ----
-sort
+group-by
  ├── columns: cntrycode:27(string) numcust:28(int) totacctbal:29(float)
+ ├── grouping columns: cntrycode:27(string)
  ├── key: (27)
  ├── fd: (27)-->(28,29)
  ├── ordering: +27
- └── group-by
-      ├── columns: cntrycode:27(string) count_rows:28(int) sum:29(float)
-      ├── grouping columns: cntrycode:27(string)
-      ├── key: (27)
-      ├── fd: (27)-->(28,29)
-      ├── project
-      │    ├── columns: cntrycode:27(string) c_acctbal:6(float!null)
-      │    ├── anti-join (lookup orders@o_ck)
-      │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
-      │    │    ├── key columns: [1] = [19]
-      │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(5,6)
-      │    │    ├── select
-      │    │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(5,6)
-      │    │    │    ├── scan customer
-      │    │    │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
-      │    │    │    │    ├── key: (1)
-      │    │    │    │    └── fd: (1)-->(5,6)
-      │    │    │    └── filters
-      │    │    │         ├── substring(c_phone, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [type=bool, outer=(5)]
-      │    │    │         └── gt [type=bool, outer=(6), subquery, constraints=(/6: (/NULL - ])]
-      │    │    │              ├── variable: c_acctbal [type=float]
-      │    │    │              └── subquery [type=float]
-      │    │    │                   └── scalar-group-by
-      │    │    │                        ├── columns: avg:17(float)
-      │    │    │                        ├── cardinality: [1 - 1]
-      │    │    │                        ├── key: ()
-      │    │    │                        ├── fd: ()-->(17)
-      │    │    │                        ├── select
-      │    │    │                        │    ├── columns: c_phone:13(char!null) c_acctbal:14(float!null)
-      │    │    │                        │    ├── scan customer
-      │    │    │                        │    │    └── columns: c_phone:13(char!null) c_acctbal:14(float!null)
-      │    │    │                        │    └── filters
-      │    │    │                        │         ├── c_acctbal > 0.0 [type=bool, outer=(14), constraints=(/14: [/5e-324 - ]; tight)]
-      │    │    │                        │         └── substring(c_phone, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [type=bool, outer=(13)]
-      │    │    │                        └── aggregations
-      │    │    │                             └── avg [type=float, outer=(14)]
-      │    │    │                                  └── variable: c_acctbal [type=float]
-      │    │    └── filters (true)
-      │    └── projections
-      │         └── substring(c_phone, 1, 2) [type=string, outer=(5)]
-      └── aggregations
-           ├── count-rows [type=int]
-           └── sum [type=float, outer=(6)]
-                └── variable: c_acctbal [type=float]
+ ├── sort
+ │    ├── columns: c_acctbal:6(float!null) cntrycode:27(string)
+ │    ├── ordering: +27
+ │    └── project
+ │         ├── columns: cntrycode:27(string) c_acctbal:6(float!null)
+ │         ├── anti-join (merge)
+ │         │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
+ │         │    ├── left ordering: +1
+ │         │    ├── right ordering: +19
+ │         │    ├── key: (1)
+ │         │    ├── fd: (1)-->(5,6)
+ │         │    ├── select
+ │         │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
+ │         │    │    ├── key: (1)
+ │         │    │    ├── fd: (1)-->(5,6)
+ │         │    │    ├── ordering: +1
+ │         │    │    ├── scan customer
+ │         │    │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
+ │         │    │    │    ├── key: (1)
+ │         │    │    │    ├── fd: (1)-->(5,6)
+ │         │    │    │    └── ordering: +1
+ │         │    │    └── filters
+ │         │    │         ├── substring(c_phone, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [type=bool, outer=(5)]
+ │         │    │         └── gt [type=bool, outer=(6), subquery, constraints=(/6: (/NULL - ])]
+ │         │    │              ├── variable: c_acctbal [type=float]
+ │         │    │              └── subquery [type=float]
+ │         │    │                   └── scalar-group-by
+ │         │    │                        ├── columns: avg:17(float)
+ │         │    │                        ├── cardinality: [1 - 1]
+ │         │    │                        ├── key: ()
+ │         │    │                        ├── fd: ()-->(17)
+ │         │    │                        ├── select
+ │         │    │                        │    ├── columns: c_phone:13(char!null) c_acctbal:14(float!null)
+ │         │    │                        │    ├── scan customer
+ │         │    │                        │    │    └── columns: c_phone:13(char!null) c_acctbal:14(float!null)
+ │         │    │                        │    └── filters
+ │         │    │                        │         ├── c_acctbal > 0.0 [type=bool, outer=(14), constraints=(/14: [/5e-324 - ]; tight)]
+ │         │    │                        │         └── substring(c_phone, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [type=bool, outer=(13)]
+ │         │    │                        └── aggregations
+ │         │    │                             └── avg [type=float, outer=(14)]
+ │         │    │                                  └── variable: c_acctbal [type=float]
+ │         │    ├── scan orders@o_ck
+ │         │    │    ├── columns: o_custkey:19(int!null)
+ │         │    │    └── ordering: +19
+ │         │    └── filters (true)
+ │         └── projections
+ │              └── substring(c_phone, 1, 2) [type=string, outer=(5)]
+ └── aggregations
+      ├── count-rows [type=int]
+      └── sum [type=float, outer=(6)]
+           └── variable: c_acctbal [type=float]
