@@ -1510,7 +1510,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name != 'optimizer' AND name != 'crdb_version'
+  name != 'optimizer' AND name != 'crdb_version' AND name != 'webui'
 ----
 name                                 setting             category  short_desc  extra_desc  vartype
 application_name                     ·                   NULL      NULL        NULL        string
@@ -1564,7 +1564,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name != 'optimizer' AND name != 'crdb_version'
+  name != 'optimizer' AND name != 'crdb_version' and name != 'webui'
 ----
 name                                 setting             unit  context  enumvals  boot_val            reset_val
 application_name                     ·                   NULL  user     NULL      ·                   ·
@@ -1662,6 +1662,7 @@ transaction_read_only                NULL    NULL     NULL     NULL        NULL
 transaction_status                   NULL    NULL     NULL     NULL        NULL
 vectorize                            NULL    NULL     NULL     NULL        NULL
 vectorize_row_count_threshold        NULL    NULL     NULL     NULL        NULL
+webui                                NULL    NULL     NULL     NULL        NULL
 
 # pg_catalog.pg_sequence
 

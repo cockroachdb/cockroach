@@ -803,6 +803,13 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(_ *settings.Values) string { return "" },
 	},
+
+	// WebUI URL.
+	`webui`: {
+		Get: func(evalCtx *extendedEvalContext) string {
+			return evalCtx.ExecCfg.NodeInfo.AdminURL().String()
+		},
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
