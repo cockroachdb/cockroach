@@ -184,9 +184,9 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 
 	var mb mutationBuilder
 	if ins.OnConflict != nil && ins.OnConflict.IsUpsertAlias() {
-		mb.init(b, opt.UpsertOp, tab, *alias)
+		mb.init(b, "upsert", tab, *alias)
 	} else {
-		mb.init(b, opt.InsertOp, tab, *alias)
+		mb.init(b, "insert", tab, *alias)
 	}
 
 	// Compute target columns in two cases:
@@ -615,7 +615,7 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
-	mb.buildFKChecks()
+	mb.buildFKChecksForInsert()
 
 	private := mb.makeMutationPrivate(returning != nil)
 	mb.outScope.expr = mb.b.factory.ConstructInsert(mb.outScope.expr, mb.checks, private)

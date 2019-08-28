@@ -59,7 +59,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	b.checkPrivilege(opt.DepByName(tn), tab, privilege.SELECT)
 
 	var mb mutationBuilder
-	mb.init(b, opt.DeleteOp, tab, *alias)
+	mb.init(b, "delete", tab, *alias)
 
 	// Build the input expression that selects the rows that will be deleted:
 	//
@@ -85,7 +85,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 // buildDelete constructs a Delete operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildDelete(returning tree.ReturningExprs) {
-	mb.buildFKChecks()
+	mb.buildFKChecksForDelete()
 
 	private := mb.makeMutationPrivate(returning != nil)
 	mb.outScope.expr = mb.b.factory.ConstructDelete(mb.outScope.expr, mb.checks, private)
