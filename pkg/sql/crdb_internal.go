@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1869,7 +1870,8 @@ CREATE VIEW crdb_internal.ranges AS SELECT
 	replicas,
 	learner_replicas,
 	split_enforced_until,
-	crdb_internal.lease_holder(start_key) AS lease_holder
+	crdb_internal.lease_holder(start_key) AS lease_holder,
+  range_size
 FROM crdb_internal.ranges_no_leases
 `,
 	resultColumns: sqlbase.ResultColumns{
@@ -1885,6 +1887,7 @@ FROM crdb_internal.ranges_no_leases
 		{Name: "learner_replicas", Typ: types.Int2Vector},
 		{Name: "split_enforced_until", Typ: types.Timestamp},
 		{Name: "lease_holder", Typ: types.Int},
+		{Name: "range_size", Typ: types.Int},
 	},
 }
 
@@ -1906,7 +1909,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
   index_name           STRING NOT NULL,
 	replicas             INT[] NOT NULL,
 	learner_replicas     INT[] NOT NULL,
-  split_enforced_until TIMESTAMP
+  split_enforced_until TIMESTAMP,
+  range_size           INT
 )
 `,
 	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
@@ -1943,7 +1947,33 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		if err != nil {
 			return nil, err
 		}
-		var desc roachpb.RangeDescriptor
+
+		var (
+			desc             roachpb.RangeDescriptor
+			rangeDescriptors []roachpb.RangeDescriptor
+			rangeSizes       []int
+		)
+
+		// Calculate information about range sizes.
+		b := &client.Batch{}
+		for _, r := range ranges {
+			if err := r.ValueProto(&desc); err != nil {
+				return nil, err
+			}
+			rangeDescriptors = append(rangeDescriptors, desc)
+			b.AddRawRequest(&roachpb.RangeStatsRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key: roachpb.Key(desc.StartKey),
+				},
+			})
+		}
+		if err := p.Txn().Run(ctx, b); err != nil {
+			return nil, err
+		}
+		for _, resp := range b.RawResponse().Responses {
+			info := resp.GetInner().(*roachpb.RangeStatsResponse)
+			rangeSizes = append(rangeSizes, int(info.MVCCStats.LiveBytes))
+		}
 
 		i := 0
 
@@ -1952,12 +1982,9 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				return nil, nil
 			}
 
-			r := ranges[i]
+			desc := rangeDescriptors[i]
+			rangeSize := rangeSizes[i]
 			i++
-
-			if err := r.ValueProto(&desc); err != nil {
-				return nil, err
-			}
 
 			var voterReplicas, learnerReplicas []int
 			for _, rd := range desc.Replicas().Voters() {
@@ -2012,6 +2039,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				votersArr,
 				learnersArr,
 				splitEnforcedUntil,
+				tree.NewDInt(tree.DInt(rangeSize)),
 			}, nil
 		}, nil
 	},
