@@ -37,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -81,7 +83,19 @@ var (
 // createTestEngine returns a new in-memory engine with 1MB of storage
 // capacity.
 func createTestEngine() Engine {
-	return NewInMem(roachpb.Attributes{}, 1<<20)
+	//return NewInMem(roachpb.Attributes{}, 1<<20)
+	return createTestPebbleEngine()
+}
+
+// createTestPebbleEngine returns a new in-memory Pebble storage engine.
+func createTestPebbleEngine() Engine {
+	peb, err := NewPebble("", &pebble.Options{
+		FS: vfs.NewMem(),
+	})
+	if err != nil {
+		return nil
+	}
+	return peb
 }
 
 // makeTxn creates a new transaction using the specified base
@@ -389,7 +403,7 @@ func TestMVCCPutWithTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	engine := createTestEngine()
+	engine := createTestPebbleEngine()
 	defer engine.Close()
 
 	if err := MVCCPut(ctx, engine, nil, testKey1, txn1.OrigTimestamp, value1, txn1); err != nil {
@@ -398,11 +412,12 @@ func TestMVCCPutWithTxn(t *testing.T) {
 
 	for _, ts := range []hlc.Timestamp{{Logical: 1}, {Logical: 2}, {WallTime: 1}} {
 		value, _, err := MVCCGet(ctx, engine, testKey1, ts, MVCCGetOptions{Txn: txn1})
+
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !bytes.Equal(value1.RawBytes, value.RawBytes) {
-			t.Fatalf("the value %s in get result does not match the value %s in request",
+			t.Fatalf("the value %+v in get result does not match the value %+v in request",
 				value1.RawBytes, value.RawBytes)
 		}
 	}
@@ -412,7 +427,7 @@ func TestMVCCPutWithoutTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	engine := createTestEngine()
+	engine := createTestPebbleEngine()
 	defer engine.Close()
 
 	err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil)
@@ -1677,13 +1692,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 	}
 }
 
-func TestMVCCScan(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	engine := createTestEngine()
-	defer engine.Close()
-
+func mvccScanTest(t *testing.T, ctx context.Context, engine Engine) {
 	if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -1772,11 +1781,31 @@ func TestMVCCScan(t *testing.T) {
 	}
 }
 
-func TestMVCCScanMaxNum(t *testing.T) {
+func TestMVCCScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
 	engine := createTestEngine()
+	defer engine.Close()
+
+	mvccScanTest(t, ctx, engine)
+}
+
+func TestMVCCScanPebble(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	engine := createTestPebbleEngine()
+	defer engine.Close()
+
+	mvccScanTest(t, ctx, engine)
+}
+
+func TestMVCCScanMaxNum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	engine := createTestPebbleEngine()
 	defer engine.Close()
 
 	if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
@@ -5805,8 +5834,10 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 		}
 
 		if i == 1 {
-			if err := engine.(InMem).Compact(); err != nil {
-				t.Fatal(err)
+			if eng, ok := engine.(InMem); ok {
+				if err := eng.Compact(); err != nil {
+					t.Fatal(err)
+				}
 			}
 		}
 
@@ -5818,8 +5849,10 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 		}
 
 		if i == 1 {
-			if err := engine.(InMem).Compact(); err != nil {
-				t.Fatal(err)
+			if eng, ok := engine.(InMem); ok {
+				if err := eng.Compact(); err != nil {
+					t.Fatal(err)
+				}
 			}
 		}
 

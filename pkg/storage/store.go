@@ -832,17 +832,19 @@ func NewStore(
 	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
 
-	s.compactor = compactor.NewCompactor(
-		s.cfg.Settings,
-		s.engine.(engine.WithSSTables),
-		func() (roachpb.StoreCapacity, error) {
-			return s.Capacity(false /* useCached */)
-		},
-		func(ctx context.Context) {
-			s.asyncGossipStore(ctx, "compactor-initiated rocksdb compaction", false /* useCached */)
-		},
-	)
-	s.metrics.registry.AddMetricStruct(s.compactor.Metrics)
+	if engine, ok := s.engine.(engine.WithSSTables); ok {
+		s.compactor = compactor.NewCompactor(
+			s.cfg.Settings,
+			engine,
+			func() (roachpb.StoreCapacity, error) {
+				return s.Capacity(false /* useCached */)
+			},
+			func(ctx context.Context) {
+				s.asyncGossipStore(ctx, "compactor-initiated rocksdb compaction", false /* useCached */)
+			},
+		)
+		s.metrics.registry.AddMetricStruct(s.compactor.Metrics)
+	}
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
@@ -1457,7 +1459,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	// Start the storage engine compactor.
-	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) {
+	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) && s.compactor != nil {
 		s.compactor.Start(s.AnnotateCtx(context.Background()), s.stopper)
 	}
 
