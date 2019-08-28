@@ -182,7 +182,12 @@ type Reader interface {
 	// function f on each key value pair. If f returns an error or if the scan
 	// itself encounters an error, the iteration will stop and return the error.
 	// If the first result of f is true, the iteration stops and returns a nil
-	// error.
+	// error. Note that this method is not expected take into account the
+	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
+	// in the iteration.
+	//
+	// TODO(itsbilal): Change type of start and end to roachpb.Key instead of
+	// MVCCKey. All keys passed in have zero timestamps anyway.
 	Iterate(start, end MVCCKey, f func(MVCCKeyValue) (stop bool, err error)) error
 	// NewIterator returns a new instance of an Iterator over this
 	// engine. The caller must invoke Iterator.Close() when finished
@@ -389,6 +394,9 @@ type Batch interface {
 	// TODO(tbg): it seems insane that you cannot read from a WriteOnlyBatch but
 	// you can read from a Distinct on top of a WriteOnlyBatch but randomly don't
 	// see the batch at all. I was personally just bitten by this.
+	//
+	// TODO(itsbilal): Improve comments around how/why distinct batches are an
+	// optimization in the rocksdb write path.
 	Distinct() ReadWriter
 	// Empty returns whether the batch has been written to or not.
 	Empty() bool
