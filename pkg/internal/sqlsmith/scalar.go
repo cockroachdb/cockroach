@@ -444,7 +444,7 @@ func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr
 		args = append(args, castType(arg, argTyp))
 	}
 
-	if fn.def.Class == tree.WindowClass && s.schema.vectorizable {
+	if fn.def.Class == tree.WindowClass && s.schema.disableWindowFuncs {
 		return nil, false
 	}
 
@@ -452,7 +452,7 @@ func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr
 	// Use a window function if:
 	// - we chose an aggregate function, then 1/6 chance, but not if we're in a HAVING (noWindow == true)
 	// - we explicitly chose a window function
-	if fn.def.Class == tree.WindowClass || (!s.schema.vectorizable && !ctx.noWindow && s.d6() == 1 && fn.def.Class == tree.AggregateClass) {
+	if fn.def.Class == tree.WindowClass || (!s.schema.disableWindowFuncs && !ctx.noWindow && s.d6() == 1 && fn.def.Class == tree.AggregateClass) {
 		var parts tree.Exprs
 		s.schema.sample(len(refs), 2, func(i int) {
 			parts = append(parts, refs[i].item)
