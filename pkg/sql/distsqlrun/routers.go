@@ -101,8 +101,7 @@ type routerOutput struct {
 
 	stats RouterOutputStats
 
-	// memoryMonitor and diskMonitor are references to mu.rowContainer's monitors,
-	// used for stats extraction.
+	// memoryMonitor and diskMonitor are mu.rowContainer's monitors.
 	memoryMonitor, diskMonitor *mon.BytesMonitor
 }
 
@@ -241,27 +240,24 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *FlowCtx, types []types.
 		// This method must be called before we start() so we don't need
 		// to take the mutex.
 		evalCtx := flowCtx.NewEvalCtx()
-		memoryMonitor := evalCtx.Mon
-		diskMonitor := flowCtx.Cfg.DiskMonitor
-		if rb.statsCollectionEnabled {
-			// Start private monitors for stats collection.
-			memoryMonitorName := fmt.Sprintf("router-stat-mem-%d", rb.outputs[i].streamID)
-			memoryMonitor = NewMonitor(ctx, memoryMonitor, memoryMonitorName)
-			diskMonitorName := fmt.Sprintf("router-stat-disk-%d", rb.outputs[i].streamID)
-			diskMonitor = NewMonitor(ctx, diskMonitor, diskMonitorName)
-		}
+		rb.outputs[i].memoryMonitor = NewLimitedMonitor(
+			ctx, evalCtx.Mon, flowCtx.Cfg,
+			fmt.Sprintf("router-limited-%d", rb.outputs[i].streamID),
+		)
+		rb.outputs[i].diskMonitor = NewMonitor(
+			ctx, flowCtx.Cfg.DiskMonitor,
+			fmt.Sprintf("router-disk-%d", rb.outputs[i].streamID),
+		)
 
 		rb.outputs[i].mu.rowContainer.Init(
 			nil, /* ordering */
 			types,
 			evalCtx,
 			flowCtx.Cfg.TempStorage,
-			memoryMonitor,
-			diskMonitor,
+			rb.outputs[i].memoryMonitor,
+			rb.outputs[i].diskMonitor,
 			0, /* rowCapacity */
 		)
-		rb.outputs[i].memoryMonitor = memoryMonitor
-		rb.outputs[i].diskMonitor = diskMonitor
 
 		// Initialize any outboxes.
 		if o, ok := rb.outputs[i].stream.(*outbox); ok {
@@ -357,12 +353,8 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 			ro.mu.rowContainer.Close(ctx)
 			ro.mu.Unlock()
 
-			if rb.statsCollectionEnabled {
-				// Stats collection requires private BytesMonitors, so ensure that they
-				// are stopped.
-				ro.memoryMonitor.Stop(ctx)
-				ro.diskMonitor.Stop(ctx)
-			}
+			ro.memoryMonitor.Stop(ctx)
+			ro.diskMonitor.Stop(ctx)
 
 			wg.Done()
 		}(ctx, rb, &rb.outputs[i], wg)
