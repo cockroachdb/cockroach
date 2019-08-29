@@ -43,7 +43,9 @@ import (
 // that tracks the lifetime of the background router goroutines.
 func setupRouter(
 	t testing.TB,
+	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
+	diskMonitor *mon.BytesMonitor,
 	spec distsqlpb.OutputRouterSpec,
 	inputTypes []types.T,
 	streams []RowReceiver,
@@ -55,7 +57,10 @@ func setupRouter(
 
 	ctx := context.TODO()
 	flowCtx := FlowCtx{
-		Cfg:     &ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
+		Cfg: &ServerConfig{
+			Settings:    st,
+			DiskMonitor: diskMonitor,
+		},
 		EvalCtx: evalCtx,
 	}
 	r.init(ctx, &flowCtx, inputTypes)
@@ -72,8 +77,12 @@ func TestRouters(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 	alloc := &sqlbase.DatumAlloc{}
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := context.TODO()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
+	diskMonitor := makeTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
 
 	// Generate tables of possible values for each column; we have fewer possible
 	// values than rows to guarantee many occurrences of each value.
@@ -136,7 +145,7 @@ func TestRouters(t *testing.T) {
 				tc.spec.Streams[i] = distsqlpb.StreamEndpointSpec{StreamID: distsqlpb.StreamID(i)}
 			}
 
-			r, wg := setupRouter(t, evalCtx, tc.spec, types, recvs)
+			r, wg := setupRouter(t, st, evalCtx, diskMonitor, tc.spec, types, recvs)
 
 			for i := 0; i < numRows; i++ {
 				row := make(sqlbase.EncDatumRow, numCols)
@@ -281,8 +290,12 @@ var (
 func TestConsumerStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := context.TODO()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
+	diskMonitor := makeTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
 
 	testCases := []struct {
 		name string
@@ -314,7 +327,7 @@ func TestConsumerStatus(t *testing.T) {
 			}
 
 			colTypes := []types.T{*types.Int}
-			router, wg := setupRouter(t, evalCtx, tc.spec, colTypes, recvs)
+			router, wg := setupRouter(t, st, evalCtx, diskMonitor, tc.spec, colTypes, recvs)
 
 			// row0 will be a row that the router sends to the first stream, row1 to
 			// the 2nd stream.
@@ -433,8 +446,12 @@ func preimageAttack(
 func TestMetadataIsForwarded(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := context.TODO()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
+	diskMonitor := makeTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
 
 	testCases := []struct {
 		name string
@@ -464,7 +481,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 				recvs[i] = &chans[i]
 				tc.spec.Streams[i] = distsqlpb.StreamEndpointSpec{StreamID: distsqlpb.StreamID(i)}
 			}
-			router, wg := setupRouter(t, evalCtx, tc.spec, nil /* no columns */, recvs)
+			router, wg := setupRouter(t, st, evalCtx, diskMonitor, tc.spec, nil /* no columns */, recvs)
 
 			err1 := errors.Errorf("test error 1")
 			err2 := errors.Errorf("test error 2")
@@ -590,8 +607,14 @@ func TestRouterBlocks(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			ctx := context.TODO()
 			evalCtx := tree.MakeTestingEvalContext(st)
+			defer evalCtx.Stop(ctx)
+			diskMonitor := makeTestDiskMonitor(ctx, st)
+			defer diskMonitor.Stop(ctx)
 			flowCtx := FlowCtx{
-				Cfg:     &ServerConfig{Settings: st},
+				Cfg: &ServerConfig{
+					Settings:    st,
+					DiskMonitor: diskMonitor,
+				},
 				EvalCtx: &evalCtx,
 			}
 			router.init(ctx, &flowCtx, colTypes)
@@ -885,8 +908,11 @@ func BenchmarkRouter(b *testing.B) {
 	colTypes := sqlbase.MakeIntCols(numCols)
 
 	ctx := context.Background()
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
+	diskMonitor := makeTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
 
 	input := NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
 
@@ -920,7 +946,7 @@ func BenchmarkRouter(b *testing.B) {
 							recvs[i] = &chans[i]
 							spec.Streams[i] = distsqlpb.StreamEndpointSpec{StreamID: distsqlpb.StreamID(i)}
 						}
-						r, wg := setupRouter(b, evalCtx, spec, colTypes, recvs)
+						r, wg := setupRouter(b, st, evalCtx, diskMonitor, spec, colTypes, recvs)
 						for i := range chans {
 							go drainRowChannel(&chans[i])
 						}

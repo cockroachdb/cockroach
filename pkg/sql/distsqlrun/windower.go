@@ -198,24 +198,6 @@ func newWindower(
 	}
 	w.outputRow = make(sqlbase.EncDatumRow, len(w.outputTypes))
 
-	if err := w.InitWithEvalCtx(
-		w,
-		post,
-		w.outputTypes,
-		flowCtx,
-		evalCtx,
-		processorID,
-		output,
-		nil, /* memMonitor */
-		ProcStateOpts{InputsToDrain: []RowSource{w.input},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
-				w.close()
-				return nil
-			}},
-	); err != nil {
-		return nil, err
-	}
-
 	st := flowCtx.Cfg.Settings
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// windower will overflow to disk if this limit is not enough.
@@ -237,7 +219,25 @@ func newWindower(
 	}
 	limitedMon := mon.MakeMonitorInheritWithLimit("windower-limited", limit, evalCtx.Mon)
 	limitedMon.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
-	w.MemMonitor = &limitedMon
+
+	if err := w.InitWithEvalCtx(
+		w,
+		post,
+		w.outputTypes,
+		flowCtx,
+		evalCtx,
+		processorID,
+		output,
+		&limitedMon,
+		ProcStateOpts{InputsToDrain: []RowSource{w.input},
+			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+				w.close()
+				return nil
+			}},
+	); err != nil {
+		return nil, err
+	}
+
 	w.diskMonitor = NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "windower-disk")
 	w.allRowsPartitioned = rowcontainer.NewHashDiskBackedRowContainer(
 		nil, /* memRowContainer */

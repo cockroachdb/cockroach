@@ -239,9 +239,7 @@ func newJoinReader(
 		if limit <= 0 {
 			limit = settingWorkMemBytes.Get(&st.SV)
 		}
-		limitedMon := mon.MakeMonitorInheritWithLimit("joinreader-limited", limit, flowCtx.EvalCtx.Mon)
-		limitedMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
-		jr.MemMonitor = &limitedMon
+		jr.MemMonitor = NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "joiner-limited")
 		jr.diskMonitor = NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "joinreader-disk")
 		drc := rowcontainer.NewDiskBackedIndexedRowContainer(
 			nil, /* ordering */
