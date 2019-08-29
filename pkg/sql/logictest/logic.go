@@ -417,6 +417,13 @@ var logicTestConfigs = []testClusterConfig{
 		overrideAutoStats:   "false",
 	},
 	{
+		name:                "local-vec-off",
+		numNodes:            1,
+		overrideDistSQLMode: "off",
+		overrideAutoStats:   "false",
+		overrideVectorize:   "off",
+	},
+	{
 		name:                "local-mixed-19.1-19.2",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
@@ -448,6 +455,14 @@ var logicTestConfigs = []testClusterConfig{
 		useFakeSpanResolver: true,
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
+	},
+	{
+		name:                "fakedist-vec-off",
+		numNodes:            3,
+		useFakeSpanResolver: true,
+		overrideDistSQLMode: "on",
+		overrideAutoStats:   "false",
+		overrideVectorize:   "off",
 	},
 	{
 		name:                "fakedist-vec",
@@ -527,8 +542,10 @@ func parseTestConfig(names []string) []logicTestConfigIdx {
 var (
 	defaultConfigNames = []string{
 		"local",
+		"local-vec-off",
 		"local-mixed-19.1-19.2",
 		"fakedist",
+		"fakedist-vec-off",
 		"fakedist-metadata",
 		"fakedist-disk",
 	}
@@ -1139,7 +1156,20 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		); err != nil {
 			t.Fatal(err)
 		}
+	} else {
+		// vectorize is set to 'auto', and we override the vectorize row count
+		// threshold so that all logic tests when run through the vectorized engine
+		// do not pay attention to whether there are stats on the tables. This will
+		// force execution of all queries consisting only of streaming operators to
+		// go through the vectorized engine.
+		if _, err := t.cluster.ServerConn(0).Exec(
+			"SET CLUSTER SETTING sql.defaults.vectorize_row_count_threshold = 0",
+		); err != nil {
+			t.Fatal(err)
+		}
+
 	}
+
 	if cfg.overrideAutoStats != "" {
 		if _, err := t.cluster.ServerConn(0).Exec(
 			"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = $1::bool", cfg.overrideAutoStats,
