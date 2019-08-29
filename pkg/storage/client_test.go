@@ -1166,7 +1166,7 @@ func (m *multiTestContext) changeReplicas(
 		// We can't use storage.IsSnapshotError() because the original error object
 		// is lost. We could make a this into a roachpb.Error but it seems overkill
 		// for this one usage.
-		if testutils.IsError(err, "snapshot failed: .*") {
+		if testutils.IsError(err, "snapshot failed: .*|descriptor changed") {
 			log.Info(ctx, err)
 			continue
 		}
