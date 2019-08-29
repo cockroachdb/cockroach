@@ -1,6 +1,6 @@
 # The tests in this file target the legacy FK paths.
 statement ok
-SET experimental_optimizer_foreign_keys = false
+SET optimizer_foreign_keys = false
 
 subtest AllCascadingActions
 ### A test of all cascading actions in their most basic form.
