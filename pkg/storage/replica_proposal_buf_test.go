@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
 	"golang.org/x/sync/errgroup"
@@ -257,4 +258,74 @@ func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 	err := b.flushLocked()
 	require.Equal(t, propErr, err)
 	require.Equal(t, num, p.registered)
+}
+
+// TestProposalBufferRegistrationWithInsertionErrors tests that if during
+// proposal insertion we reserve array indexes but are unable to actually insert
+// them due to errors, we simply ignore said indexes when flushing proposals.
+func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var p testProposer
+	var b propBuf
+	b.Init(&p)
+
+	num := propBufArrayMinSize
+	for i := 0; i < num / 2; i++ {
+		pd, data := newPropData(i % 2 == 0)
+		_, err := b.Insert(pd, data)
+		require.Nil(t, err)
+	}
+
+	var insertErr =  errors.New("failed insertion")
+	b.testing.leaseIndexFilter = func(*ProposalData) (indexOverride uint64, err error) {
+		return 0, insertErr
+	}
+
+	for i := 0; i < num / 2; i++ {
+		pd, data := newPropData(i % 2 == 0)
+		_, err := b.Insert(pd, data)
+		require.Equal(t, insertErr, err)
+	}
+	require.Equal(t, propBufArrayMinSize, b.Len())
+
+	require.Nil(t, b.flushLocked())
+
+	require.Equal(t, 0, b.Len())
+	require.Equal(t, propBufArrayMinSize / 2, p.registered)
+}
+
+// TestPropBufCnt tests the basic behaviour of the counter maintained by the
+// proposal buffer.
+func TestPropBufCnt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var count propBufCnt
+	const numReqs = 10
+
+	reqLeaseInc := makePropBufCntReq(true)
+	reqLeaseNoInc := makePropBufCntReq(false)
+
+	for i := 0; i < numReqs; i++ {
+		count.update(reqLeaseInc)
+	}
+
+	res := count.read()
+	assert.Equal(t, numReqs, res.arrayLen())
+	assert.Equal(t, numReqs - 1, res.arrayIndex())
+	assert.Equal(t, uint64(numReqs), res.leaseIndexOffset())
+
+	for i := 0; i < numReqs; i++ {
+		count.update(reqLeaseNoInc)
+	}
+
+	res = count.read()
+	assert.Equal(t, 2 * numReqs, res.arrayLen() )
+	assert.Equal(t,  (2 * numReqs) - 1, res.arrayIndex())
+	assert.Equal(t,  uint64(numReqs), res.leaseIndexOffset())
+
+	res = count.clear()
+	assert.Equal(t, 0, res.arrayLen())
+	assert.Equal(t, -1, res.arrayIndex())
+	assert.Equal(t, uint64(numReqs), res.leaseIndexOffset())
 }

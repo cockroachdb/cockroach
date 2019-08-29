@@ -185,7 +185,7 @@ func (b *propBuf) LastAssignedLeaseIndexRLocked() uint64 {
 // It is also expected that the byte slice has sufficient capacity to marshal
 // the maximum lease index field into it. After adding the proposal to the
 // buffer, the assigned max lease index is returned.
-func (b *propBuf) Insert(p *ProposalData, data []byte) (uint64, error) {
+func (b *propBuf) Insert(p *ProposalData, data []byte) (_ uint64, err error) {
 	// Request a new max lease applied index for any request that isn't itself
 	// a lease request. Lease requests don't need unique max lease index values
 	// because their max lease indexes are ignored. See checkForcedErrLocked.
@@ -400,6 +400,11 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 	// stop trying to propose commands to raftGroup.
 	var firstErr error
 	for i, p := range buf {
+		if p == nil {
+			// If we run into an error during proposal insertion, we may have reserved
+			// an array index without actually inserting a proposal.
+			continue
+		}
 		buf[i] = nil // clear buffer
 
 		// Raft processing bookkeeping.
