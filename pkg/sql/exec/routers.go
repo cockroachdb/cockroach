@@ -12,17 +12,20 @@ package exec
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // routerOutput is an interface implemented by router outputs. It exists for
 // easier test mocking of outputs.
 type routerOutput interface {
+	OpNode
 	// addBatch adds the elements specified by the selection vector from batch to
 	// the output. It returns whether or not the output changed its state to
 	// blocked (see implementations).
@@ -36,7 +39,10 @@ type routerOutput interface {
 const defaultRouterOutputBlockedThreshold = coldata.BatchSize * 2
 
 type routerOutputOp struct {
-	types []types.T
+	// input is a reference to our router.
+	input OpNode
+
+	types []coltypes.T
 	// zeroBatch is used to return a 0 length batch in some cases.
 	zeroBatch coldata.Batch
 
@@ -62,19 +68,35 @@ type routerOutputOp struct {
 	outputBatchSize  int
 }
 
+func (o *routerOutputOp) ChildCount() int {
+	return 1
+}
+
+func (o *routerOutputOp) Child(nth int) OpNode {
+	if nth == 0 {
+		return o.input
+	}
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
+}
+
 var _ Operator = &routerOutputOp{}
 
 // newRouterOutputOp creates a new router output. The caller must ensure that
 // unblockedEventsChan is a buffered channel, as the router output will write to
 // it.
-func newRouterOutputOp(types []types.T, unblockedEventsChan chan<- struct{}) *routerOutputOp {
+func newRouterOutputOp(types []coltypes.T, unblockedEventsChan chan<- struct{}) *routerOutputOp {
 	return newRouterOutputOpWithBlockedThresholdAndBatchSize(
 		types, unblockedEventsChan, defaultRouterOutputBlockedThreshold, coldata.BatchSize,
 	)
 }
 
 func newRouterOutputOpWithBlockedThresholdAndBatchSize(
-	types []types.T, unblockedEventsChan chan<- struct{}, blockedThreshold int, outputBatchSize int,
+	types []coltypes.T,
+	unblockedEventsChan chan<- struct{},
+	blockedThreshold int,
+	outputBatchSize int,
 ) *routerOutputOp {
 	o := &routerOutputOp{
 		types:               types,
@@ -244,9 +266,9 @@ func (o *routerOutputOp) reset() {
 // destination for each row. These destinations are exposed as Operators
 // returned by the constructor.
 type HashRouter struct {
-	input Operator
-	// types are the input types.
-	types []types.T
+	OneInputNode
+	// types are the input coltypes.
+	types []coltypes.T
 	// ht is not fully initialized to a hashTable, only the utility methods are
 	// used.
 	ht hashTable
@@ -262,7 +284,10 @@ type HashRouter struct {
 	unblockedEventsChan <-chan struct{}
 	numBlockedOutputs   int
 
-	bufferedMeta []distsqlpb.ProducerMetadata
+	mu struct {
+		syncutil.Mutex
+		bufferedMeta []distsqlpb.ProducerMetadata
+	}
 
 	scratch struct {
 		// buckets is scratch space for the computed hash value of a group of columns
@@ -277,7 +302,7 @@ type HashRouter struct {
 // input and hashes each row according to hashCols to one of numOutputs outputs.
 // These outputs are exposed as Operators.
 func NewHashRouter(
-	input Operator, types []types.T, hashCols []int, numOutputs int,
+	input Operator, types []coltypes.T, hashCols []int, numOutputs int,
 ) (*HashRouter, []Operator) {
 	outputs := make([]routerOutput, numOutputs)
 	outputsAsOps := make([]Operator, numOutputs)
@@ -294,18 +319,22 @@ func NewHashRouter(
 		outputs[i] = op
 		outputsAsOps[i] = op
 	}
-	return newHashRouterWithOutputs(input, types, hashCols, unblockEventsChan, outputs), outputsAsOps
+	router := newHashRouterWithOutputs(input, types, hashCols, unblockEventsChan, outputs)
+	for i := range outputs {
+		outputs[i].(*routerOutputOp).input = router
+	}
+	return router, outputsAsOps
 }
 
 func newHashRouterWithOutputs(
 	input Operator,
-	types []types.T,
+	types []coltypes.T,
 	hashCols []int,
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,
 ) *HashRouter {
 	r := &HashRouter{
-		input:               input,
+		OneInputNode:        NewOneInputNode(input),
 		types:               types,
 		hashCols:            hashCols,
 		outputs:             outputs,
@@ -325,10 +354,18 @@ func newHashRouterWithOutputs(
 func (r *HashRouter) Run(ctx context.Context) {
 	r.input.Init()
 	cancelOutputs := func(err error) {
-		r.bufferedMeta = append(r.bufferedMeta, distsqlpb.ProducerMetadata{Err: err})
+		if err != nil {
+			r.mu.Lock()
+			r.mu.bufferedMeta = append(r.mu.bufferedMeta, distsqlpb.ProducerMetadata{Err: err})
+			r.mu.Unlock()
+		}
 		for _, o := range r.outputs {
 			o.cancel()
 		}
+	}
+	var done bool
+	processNextBatch := func() {
+		done = r.processNextBatch(ctx)
 	}
 	for {
 		// Check for cancellation.
@@ -362,10 +399,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 			}
 		}
 
-		var done bool
-		if err := CatchVectorizedRuntimeError(func() {
-			done = r.processNextBatch(ctx)
-		}); err != nil {
+		if err := execerror.CatchVectorizedRuntimeError(processNextBatch); err != nil {
 			cancelOutputs(err)
 			return
 		}
@@ -377,8 +411,9 @@ func (r *HashRouter) Run(ctx context.Context) {
 	}
 }
 
-// processNextBatch reads the next batch from its input, hashes it and adds each
-// column to its corresponding output, returning whether the input is done.
+// processNextBatch reads the next batch from its input, hashes it and adds
+// each column to its corresponding output, returning whether the input is
+// done.
 func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 	r.ht.initHash(r.scratch.buckets, uint64(len(r.scratch.buckets)))
 	b := r.input.Next(ctx)
@@ -446,7 +481,9 @@ func (r *HashRouter) reset() {
 
 // DrainMeta is part of the MetadataGenerator interface.
 func (r *HashRouter) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
-	meta := r.bufferedMeta
-	r.bufferedMeta = r.bufferedMeta[:0]
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	meta := r.mu.bufferedMeta
+	r.mu.bufferedMeta = r.mu.bufferedMeta[:0]
 	return meta
 }

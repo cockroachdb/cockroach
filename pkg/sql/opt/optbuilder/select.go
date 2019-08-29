@@ -98,14 +98,6 @@ func (b *Builder) buildDataSource(
 		}
 
 		ds, resName := b.resolveDataSource(tn, privilege.SELECT)
-		if b.insideViewDef {
-			// Overwrite the table name in the AST to the fully resolved version.
-			// TODO(radu): modifying the AST in-place is hacky; we will need to switch
-			// to using AST annotations.
-			*tn = resName
-			tn.ExplicitCatalog = true
-			tn.ExplicitSchema = true
-		}
 		switch t := ds.(type) {
 		case cat.Table:
 			tabMeta := b.addTable(t, &resName)
@@ -450,7 +442,8 @@ func (b *Builder) buildScan(
 			}
 		}
 		outScope.expr = b.factory.ConstructScan(&private)
-		b.addCheckConstraintsToScan(outScope, tabMeta)
+
+		b.addCheckConstraintsForTable(outScope, tabMeta, ordinals != nil /* allowMissingColumns */)
 
 		if b.trackViewDeps {
 			dep := opt.ViewDep{DataSource: tab}
@@ -467,10 +460,16 @@ func (b *Builder) buildScan(
 	return outScope
 }
 
-// addCheckConstraintsToScan finds all the check constraints that apply to the
+// addCheckConstraintsForTable finds all the check constraints that apply to the
 // table and adds them to the table metadata. To do this, the scalar expression
 // of the check constraints are built here.
-func (b *Builder) addCheckConstraintsToScan(scope *scope, tabMeta *opt.TableMeta) {
+//
+// If allowMissingColumns is true, we ignore check constraints that involve
+// columns not in the current scope (useful when we build a scan that doesn't
+// contain all table columns).
+func (b *Builder) addCheckConstraintsForTable(
+	scope *scope, tabMeta *opt.TableMeta, allowMissingColumns bool,
+) {
 	tab := tabMeta.Table
 	// Find all the check constraints that apply to the table and add them
 	// to the table meta data. To do this, we must build them into scalar
@@ -482,13 +481,31 @@ func (b *Builder) addCheckConstraintsToScan(scope *scope, tabMeta *opt.TableMeta
 		if !checkConstraint.Validated {
 			continue
 		}
-		expr, err := parser.ParseExpr(string(checkConstraint.Constraint))
+		expr, err := parser.ParseExpr(checkConstraint.Constraint)
 		if err != nil {
 			panic(err)
 		}
 
-		texpr := scope.resolveAndRequireType(expr, types.Bool)
-		tabMeta.AddConstraint(b.buildScalar(texpr, scope, nil, nil, nil))
+		var texpr tree.TypedExpr
+		func() {
+			if allowMissingColumns {
+				// Swallow any undefined column errors.
+				defer func() {
+					if r := recover(); r != nil {
+						if err, ok := r.(error); ok {
+							if code := pgerror.GetPGCode(err); code == pgcode.UndefinedColumn {
+								return
+							}
+						}
+						panic(r)
+					}
+				}()
+			}
+			texpr = scope.resolveAndRequireType(expr, types.Bool)
+		}()
+		if texpr != nil {
+			tabMeta.AddConstraint(b.buildScalar(texpr, scope, nil, nil, nil))
+		}
 	}
 }
 
@@ -684,6 +701,20 @@ func (b *Builder) buildSelect(
 	orderBy := stmt.OrderBy
 	limit := stmt.Limit
 	with := stmt.With
+	forLocked := stmt.ForLocked
+
+	switch forLocked {
+	case tree.ForNone:
+	case tree.ForUpdate:
+	case tree.ForNoKeyUpdate:
+	case tree.ForShare:
+	case tree.ForKeyShare:
+		// CockroachDB treats all of the FOR LOCKED modes as no-ops. Since all
+		// transactions are serializable in CockroachDB, clients can't observe
+		// whether or not FOR UPDATE (or any of the other weaker modes) actually
+		// created a lock. This behavior may improve as the transaction model gains
+		// more capabilities.
+	}
 
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		stmt = s.Select

@@ -197,7 +197,7 @@ func (p *planNodeToRowSource) ConsumerClosed() {
 	p.InternalClose()
 }
 
-// IsException implements the vectorizeAlwaysException interface.
+// IsException implements the VectorizeAlwaysException interface.
 func (p *planNodeToRowSource) IsException() bool {
 	_, ok := p.node.(*setVarNode)
 	return ok

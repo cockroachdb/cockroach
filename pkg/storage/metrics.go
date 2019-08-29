@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -1170,12 +1169,6 @@ type StoreMetrics struct {
 
 	// Closed timestamp metrics.
 	ClosedTimestampMaxBehindNanos *metric.Gauge
-
-	// Stats for efficient merges.
-	mu struct {
-		syncutil.Mutex
-		stats enginepb.MVCCStats
-	}
 }
 
 func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
@@ -1396,41 +1389,35 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 	return sm
 }
 
-// updateGaugesLocked breaks out individual metrics from the MVCCStats object.
-// This process should be locked with each stat application to ensure that all
-// gauges increase/decrease in step with the application of updates. However,
-// this locking is not exposed to the registry level, and therefore a single
-// snapshot of these gauges in the registry might mix the values of two
+// incMVCCGauges increments each individual metric from an MVCCStats delta. The
+// method uses a series of atomic operations without any external locking, so a
+// single snapshot of these gauges in the registry might mix the values of two
 // subsequent updates.
-func (sm *StoreMetrics) updateMVCCGaugesLocked() {
-	sm.LiveBytes.Update(sm.mu.stats.LiveBytes)
-	sm.KeyBytes.Update(sm.mu.stats.KeyBytes)
-	sm.ValBytes.Update(sm.mu.stats.ValBytes)
-	sm.TotalBytes.Update(sm.mu.stats.Total())
-	sm.IntentBytes.Update(sm.mu.stats.IntentBytes)
-	sm.LiveCount.Update(sm.mu.stats.LiveCount)
-	sm.KeyCount.Update(sm.mu.stats.KeyCount)
-	sm.ValCount.Update(sm.mu.stats.ValCount)
-	sm.IntentCount.Update(sm.mu.stats.IntentCount)
-	sm.IntentAge.Update(sm.mu.stats.IntentAge)
-	sm.GcBytesAge.Update(sm.mu.stats.GCBytesAge)
-	sm.LastUpdateNanos.Update(sm.mu.stats.LastUpdateNanos)
-	sm.SysBytes.Update(sm.mu.stats.SysBytes)
-	sm.SysCount.Update(sm.mu.stats.SysCount)
+func (sm *StoreMetrics) incMVCCGauges(delta enginepb.MVCCStats) {
+	sm.LiveBytes.Inc(delta.LiveBytes)
+	sm.KeyBytes.Inc(delta.KeyBytes)
+	sm.ValBytes.Inc(delta.ValBytes)
+	sm.TotalBytes.Inc(delta.Total())
+	sm.IntentBytes.Inc(delta.IntentBytes)
+	sm.LiveCount.Inc(delta.LiveCount)
+	sm.KeyCount.Inc(delta.KeyCount)
+	sm.ValCount.Inc(delta.ValCount)
+	sm.IntentCount.Inc(delta.IntentCount)
+	sm.IntentAge.Inc(delta.IntentAge)
+	sm.GcBytesAge.Inc(delta.GCBytesAge)
+	sm.LastUpdateNanos.Inc(delta.LastUpdateNanos)
+	sm.SysBytes.Inc(delta.SysBytes)
+	sm.SysCount.Inc(delta.SysCount)
 }
 
-func (sm *StoreMetrics) addMVCCStats(stats enginepb.MVCCStats) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	sm.mu.stats.Add(stats)
-	sm.updateMVCCGaugesLocked()
+func (sm *StoreMetrics) addMVCCStats(delta enginepb.MVCCStats) {
+	sm.incMVCCGauges(delta)
 }
 
-func (sm *StoreMetrics) subtractMVCCStats(stats enginepb.MVCCStats) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	sm.mu.stats.Subtract(stats)
-	sm.updateMVCCGaugesLocked()
+func (sm *StoreMetrics) subtractMVCCStats(delta enginepb.MVCCStats) {
+	var neg enginepb.MVCCStats
+	neg.Subtract(delta)
+	sm.incMVCCGauges(neg)
 }
 
 func (sm *StoreMetrics) updateRocksDBStats(stats engine.Stats) {

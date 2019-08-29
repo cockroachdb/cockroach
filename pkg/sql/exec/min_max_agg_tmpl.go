@@ -21,10 +21,15 @@ package exec
 
 import (
 	"bytes"
+	"math"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
+	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
 )
@@ -41,21 +46,32 @@ var _ apd.Decimal
 // Dummy import to pull in "tree" package.
 var _ tree.Datum
 
+// Dummy import to pull in "math" package.
+var _ = math.MaxInt64
+
+// _GOTYPESLICE is the template Go type slice variable for this operator. It
+// will be replaced by the Go slice representation for each type in coltypes.T, for
+// example []int64 for coltypes.Int64.
+type _GOTYPESLICE interface{}
+
 // _ASSIGN_CMP is the template function for assigning true to the first input
 // if the second input compares successfully to the third input. The comparison
 // operator is tree.LT for MIN and is tree.GT for MAX.
 func _ASSIGN_CMP(_, _, _ string) bool {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // */}}
+
+// Use execgen package to remove unused import warning.
+var _ interface{} = execgen.UNSAFEGET
 
 // {{range .}} {{/* for each aggregation (min and max) */}}
 
 // {{/* Capture the aggregation name so we can use it in the inner loop. */}}
 // {{$agg := .AggNameLower}}
 
-func new_AGG_TITLEAgg(t types.T) (aggregateFunc, error) {
+func new_AGG_TITLEAgg(t coltypes.T) (aggregateFunc, error) {
 	switch t {
 	// {{range .Overloads}}
 	case _TYPES_T:
@@ -76,7 +92,7 @@ type _AGG_TYPEAgg struct {
 	// group, instead of on each iteration.
 	curAgg _GOTYPE
 	// vec points to the output vector we are updating.
-	vec []_GOTYPE
+	vec _GOTYPESLICE
 	// nulls points to the output null vector that we are updating.
 	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
@@ -94,7 +110,8 @@ func (a *_AGG_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 }
 
 func (a *_AGG_TYPEAgg) Reset() {
-	copy(a.vec, zero_TYPEColumn)
+	// TODO(asubiotto): Zeros don't seem necessary.
+	execgen.ZERO(a.vec)
 	a.curAgg = zero_TYPEColumn[0]
 	a.curIdx = -1
 	a.foundNonNullForCurrentGroup = false
@@ -109,7 +126,9 @@ func (a *_AGG_TYPEAgg) CurrentOutputIndex() int {
 func (a *_AGG_TYPEAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
-		copy(a.vec[idx+1:], zero_TYPEColumn)
+		vecLen := execgen.LEN(a.vec)
+		target := execgen.SLICE(a.vec, idx+1, vecLen)
+		execgen.ZERO(target)
 		a.nulls.UnsetNullsAfter(uint16(idx + 1))
 	}
 }
@@ -126,7 +145,7 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		if !a.foundNonNullForCurrentGroup {
 			a.nulls.SetNull(uint16(a.curIdx))
 		}
-		a.vec[a.curIdx] = a.curAgg
+		execgen.SET(a.vec, a.curIdx, a.curAgg)
 		a.curIdx++
 		a.done = true
 		return
@@ -140,8 +159,8 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 				_ACCUMULATE_MINMAX(a, nulls, i, true)
 			}
 		} else {
-			col = col[:inputLen]
-			for i := range col {
+			col = execgen.SLICE(col, 0, int(inputLen))
+			for execgen.RANGE(i, col) {
 				_ACCUMULATE_MINMAX(a, nulls, i, true)
 			}
 		}
@@ -152,8 +171,8 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 				_ACCUMULATE_MINMAX(a, nulls, i, false)
 			}
 		} else {
-			col = col[:inputLen]
-			for i := range col {
+			col = execgen.SLICE(col, 0, int(inputLen))
+			for execgen.RANGE(i, col) {
 				_ACCUMULATE_MINMAX(a, nulls, i, false)
 			}
 		}
@@ -183,14 +202,14 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 			if !a.foundNonNullForCurrentGroup {
 				a.nulls.SetNull(uint16(a.curIdx))
 			}
-			a.vec[a.curIdx] = a.curAgg
+			execgen.SET(a.vec, a.curIdx, a.curAgg)
 		}
 		a.curIdx++
 		a.foundNonNullForCurrentGroup = false
 		// The next element of vec is guaranteed  to be initialized to the zero
 		// value. We can't use zero_TYPEColumn here because this is outside of
 		// the earlier template block.
-		a.curAgg = a.vec[a.curIdx]
+		a.curAgg = execgen.UNSAFEGET(a.vec, a.curIdx)
 	}
 	var isNull bool
 	// {{ if .HasNulls }}
@@ -200,13 +219,14 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 	// {{ end }}
 	if !isNull {
 		if !a.foundNonNullForCurrentGroup {
-			a.curAgg = col[i]
+			a.curAgg = execgen.UNSAFEGET(col, int(i))
 			a.foundNonNullForCurrentGroup = true
 		} else {
 			var cmp bool
-			_ASSIGN_CMP("cmp", "col[i]", "a.curAgg")
+			candidate := execgen.UNSAFEGET(col, int(i))
+			_ASSIGN_CMP("cmp", "candidate", "a.curAgg")
 			if cmp {
-				a.curAgg = col[i]
+				a.curAgg = candidate
 			}
 		}
 	}

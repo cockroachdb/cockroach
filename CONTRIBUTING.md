@@ -71,6 +71,12 @@ download and install various dependencies. After running `make build`,
 the `cockroach` executable will be in your current directory and can
 be run as shown in the [README](README.md).
 
+Note that if you use the builder image, you should ensure that your
+Docker installation grants 4GB or more of RAM to containers. On some
+systems, the default configuration limits containers to 2GB memory
+usage and this can be insufficient to build/link a CockroachDB
+executable.
+
 ### Other Considerations
 
 - The default binary contains core open-source functionally covered by
@@ -98,17 +104,17 @@ See our separate [style guide](docs/style.md) document.
 When you're ready to commit, be sure to write a Good Commit Message™.
 
 Our commit message guidelines are detailed here:
-https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages
+https://wiki.crdb.io/wiki/spaces/CRDB/pages/73072807/Git+Commit+Messages
 
 In summary (the wiki page details the rationales and provides further suggestions):
 - Keep in mind who reads: think of the reviewer, think of the release notes
-- [Separate subject from body with a blank line](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-title)
-- [Use the body to explain *what* and *why* vs. *how*](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-description)
-- [Prefix the subject line with the affected package/area](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-title)
-- [Include a release note annotation](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#release-notes), in the right position
-- [Use the imperative mood in the subject line](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-title)
-- [Keep the commit title concise but information-rich](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-title)
-- [Wrap the body at some consistent width under 100 characters](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-description)
+- [Separate subject from body with a blank line](https://wiki.crdb.io/wiki/spaces/CRDB/pages/73072807/Git+Commit+Messages)
+- [Use the body to explain *what* and *why* vs. *how*](https://wiki.crdb.io/wiki/spaces/CRDB/pages/73072807/Git+Commit+Messages#GitCommitMessages-Commitdescription)
+- [Prefix the subject line with the affected package/area](https://wiki.crdb.io/wiki/spaces/CRDB/pages/73072807/Git+Commit+Messages#GitCommitMessages-Committitle)
+- [Include a release note annotation](https://wiki.crdb.io/wiki/spaces/CRDB/pages/73072807/Git+Commit+Messages#GitCommitMessages-Releasenotes), in the right position
+- [Use the imperative mood in the subject line](https://wiki.crdb.io/wiki/spaces/CRDB/pages/73072807/Git+Commit+Messages#GitCommitMessages-Committitle)
+- [Keep the commit title concise but information-rich](https://wiki.crdb.io/wiki/spaces/CRDB/pages/73072807/Git+Commit+Messages#GitCommitMessages-Committitle)
+- [Wrap the body at some consistent width under 100 characters](https://wiki.crdb.io/wiki/spaces/CRDB/pages/73072807/Git+Commit+Messages#GitCommitMessages-Commitdescription)
 
 ## Code Review Workflow
 
@@ -194,7 +200,7 @@ In summary (the wiki page details the rationales and provides further suggestion
   "merge skew".  When you're ready to merge, add a comment to your PR of the
   form `bors r+`. Craig (our Bors bot)
   will run CI on your changes, and if it passes, merge them.  For more
-  information, see [the wiki](https://github.com/cockroachdb/cockroach/wiki/Bors-merge-bot).
+  information, see [the wiki](https://wiki.crdb.io/wiki/spaces/CRDB/pages/73204099/Bors+Merge+Bot)
 
 ## Debugging
 
@@ -207,7 +213,7 @@ Peeking into a running cluster can be done in several ways:
   what happens inside of `Node`/`Store`/`Replica` and the other inside
   of the coordinator (`TxnCoordSender`).
 - [pprof](https://golang.org/pkg/net/http/pprof/) gives us (among
-  other things) heap and cpu profiles; [this wiki page](https://github.com/cockroachdb/cockroach/wiki/pprof)
+  other things) heap and cpu profiles; [this wiki page](https://wiki.crdb.io/wiki/spaces/CRDB/pages/73203940/Profiling+CockroachDB)
   gives an overview and walks you through using it to profile Cockroach.
   [This golang blog post](http://blog.golang.org/profiling-go-programs)
   explains it extremely well and [this one by Dmitry

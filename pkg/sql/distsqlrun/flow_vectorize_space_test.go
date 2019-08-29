@@ -33,11 +33,11 @@ func TestVectorizeSpaceError(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 
-	// Without a limit, the default sorter creates a vectorized operater
+	// Without a limit, the default sorter creates a vectorized operator
 	// that we don't know memory usage of statically.
 	sorterCore := &distsqlpb.SorterSpec{
 		OutputOrdering: distsqlpb.Ordering{

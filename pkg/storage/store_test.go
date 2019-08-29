@@ -1413,7 +1413,7 @@ func TestStoreRangeIDAllocation(t *testing.T) {
 		replicas := []roachpb.ReplicaDescriptor{{StoreID: store.StoreID()}}
 		desc, err := store.NewRangeDescriptor(context.Background(),
 			roachpb.RKey(fmt.Sprintf("%03d", i)), roachpb.RKey(fmt.Sprintf("%03d", i+1)),
-			roachpb.MakeReplicaDescriptors(&replicas))
+			roachpb.MakeReplicaDescriptors(replicas))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2487,12 +2487,10 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	// in a single batch.
 	manual.Increment(txnwait.TxnLivenessThreshold.Nanoseconds() + 1)
 
-	// Query the range with a single INCONSISTENT scan, which should
-	// cause all intents to be resolved.
+	// Query the range with a single scan, which should cause all intents
+	// to be resolved.
 	sArgs := scanArgs(key1, key10.Next())
-	if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
-		ReadConsistency: roachpb.INCONSISTENT,
-	}, &sArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), store.TestSender(), &sArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -2811,9 +2809,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 	}
 
 	// Generate a minimal fake snapshot.
-	snapData := &roachpb.RaftSnapshotData{
-		RangeDescriptor: *repl1.Desc(),
-	}
+	snapData := &roachpb.RaftSnapshotData{}
 	data, err := protoutil.Marshal(snapData)
 	if err != nil {
 		t.Fatal(err)
@@ -2897,9 +2893,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	}
 
 	// Generate a minimal fake snapshot.
-	snapData := &roachpb.RaftSnapshotData{
-		RangeDescriptor: *repl1.Desc(),
-	}
+	snapData := &roachpb.RaftSnapshotData{}
 	data, err := protoutil.Marshal(snapData)
 	if err != nil {
 		t.Fatal(err)

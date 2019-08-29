@@ -47,7 +47,7 @@ func TestBank(t *testing.T) {
 			sqlDB := sqlutils.MakeSQLRunner(db)
 			sqlDB.Exec(t, `DROP TABLE IF EXISTS bank`)
 
-			bank := FromConfig(test.rows, defaultPayloadBytes, test.ranges)
+			bank := FromConfig(test.rows, test.rows, defaultPayloadBytes, test.ranges)
 			bankTable := bank.Tables()[0]
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, bankTable.Name, bankTable.Schema))
 
@@ -57,7 +57,7 @@ func TestBank(t *testing.T) {
 
 			var rangeCount int
 			sqlDB.QueryRow(t,
-				fmt.Sprintf(`SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE %s]`, bankTable.Name),
+				fmt.Sprintf(`SELECT count(*) FROM [SHOW RANGES FROM TABLE %s]`, bankTable.Name),
 			).Scan(&rangeCount)
 			if rangeCount != test.expectedRanges {
 				t.Errorf("got %d ranges expected %d", rangeCount, test.expectedRanges)

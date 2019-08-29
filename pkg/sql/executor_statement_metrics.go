@@ -48,6 +48,10 @@ const (
 	plannerStartExecStmt    // Execution starts.
 	plannerEndExecStmt      // Execution ends.
 
+	// Transaction phases.
+	transactionStart // Transaction starts.
+	transactionEnd   // Transaction ends.
+
 	// sessionNumPhases must be listed last so that it can be used to
 	// define arrays sufficiently large to hold all the other values.
 	sessionNumPhases
@@ -75,6 +79,7 @@ type EngineMetrics struct {
 	SQLExecLatency        *metric.Histogram
 	DistSQLServiceLatency *metric.Histogram
 	SQLServiceLatency     *metric.Histogram
+	SQLTxnLatency         *metric.Histogram
 
 	// TxnAbortCount counts transactions that were aborted, either due
 	// to non-retriable errors, or retriable errors when the client-side
@@ -123,7 +128,7 @@ func (ex *connExecutor) recordStatementSummary(
 	bytesRead int64,
 	rowsRead int64,
 ) {
-	phaseTimes := planner.statsCollector.PhaseTimes()
+	phaseTimes := ex.statsCollector.phaseTimes
 
 	// Compute the run latency. This is always recorded in the
 	// server metrics.
@@ -162,7 +167,7 @@ func (ex *connExecutor) recordStatementSummary(
 		m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
 	}
 
-	planner.statsCollector.RecordStatement(
+	ex.statsCollector.recordStatement(
 		stmt, planner.curPlan.savedPlanForStats,
 		flags.IsSet(planFlagDistributed), flags.IsSet(planFlagOptUsed), flags.IsSet(planFlagImplicitTxn),
 		automaticRetryCount, rowsAffected, err,
@@ -195,8 +200,6 @@ func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
 	m := &ex.metrics.EngineMetrics
 	if planFlags.IsSet(planFlagOptUsed) {
 		m.SQLOptCount.Inc(1)
-	} else if planFlags.IsSet(planFlagOptFallback) {
-		m.SQLOptFallbackCount.Inc(1)
 	}
 
 	if planFlags.IsSet(planFlagOptCacheHit) {

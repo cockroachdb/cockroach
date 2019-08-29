@@ -52,8 +52,8 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -129,11 +129,11 @@ func (w *bulkingest) Tables() []workload.Table {
 	}
 	schema += ")"
 
-	var bulkingestColTypes = []types.T{
-		types.Int64,
-		types.Int64,
-		types.Int64,
-		types.Bytes,
+	var bulkingestColTypes = []coltypes.T{
+		coltypes.Int64,
+		coltypes.Int64,
+		coltypes.Int64,
+		coltypes.Bytes,
 	}
 
 	table := workload.Table{
@@ -159,13 +159,14 @@ func (w *bulkingest) Tables() []workload.Table {
 				var payload []byte
 				payload, *alloc = alloc.Alloc(w.cCount*w.payloadBytes, 0 /* extraCap */)
 				randutil.ReadTestdataBytes(rng, payload)
+				payloadCol.Reset()
 				for rowIdx := 0; rowIdx < w.cCount; rowIdx++ {
 					c := rowIdx
 					off := c * w.payloadBytes
 					aCol[rowIdx] = int64(a)
 					bCol[rowIdx] = int64(b)
 					cCol[rowIdx] = int64(c)
-					payloadCol[rowIdx] = payload[off : off+w.payloadBytes]
+					payloadCol.Set(rowIdx, payload[off:off+w.payloadBytes])
 				}
 			},
 		},

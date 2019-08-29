@@ -249,8 +249,8 @@ func typeCollate(e opt.ScalarExpr) *types.T {
 // typeArrayFlatten returns the type of the subquery as an array.
 func typeArrayFlatten(e opt.ScalarExpr) *types.T {
 	input := e.Child(0).(RelExpr)
-	colID, _ := input.Relational().OutputCols.Next(0)
-	return types.MakeArray(input.Memo().Metadata().ColumnMeta(opt.ColumnID(colID)).Type)
+	colID := e.(*ArrayFlattenExpr).RequestedCol
+	return types.MakeArray(input.Memo().Metadata().ColumnMeta(colID).Type)
 }
 
 // typeIfErr returns the type of the IfErrExpr. The type is boolean if
@@ -354,8 +354,8 @@ func typeCast(e opt.ScalarExpr) *types.T {
 // its first (and only) column.
 func typeSubquery(e opt.ScalarExpr) *types.T {
 	input := e.Child(0).(RelExpr)
-	colID, _ := input.Relational().OutputCols.Next(0)
-	return input.Memo().Metadata().ColumnMeta(opt.ColumnID(colID)).Type
+	colID := input.Relational().OutputCols.SingleColumn()
+	return input.Memo().Metadata().ColumnMeta(colID).Type
 }
 
 func typeColumnAccess(e opt.ScalarExpr) *types.T {

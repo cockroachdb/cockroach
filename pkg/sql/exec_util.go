@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -114,18 +115,6 @@ var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
 	"set to true to enable session tracing", false,
 )
 
-// OptimizerClusterMode controls the cluster default for when the cost-based optimizer is used.
-var OptimizerClusterMode = settings.RegisterEnumSetting(
-	"sql.defaults.optimizer",
-	"default cost-based optimizer mode",
-	"on",
-	map[int64]string{
-		int64(sessiondata.OptimizerLocal): "local",
-		int64(sessiondata.OptimizerOff):   "off",
-		int64(sessiondata.OptimizerOn):    "on",
-	},
-)
-
 // ReorderJoinsLimitClusterSettingName is the name of the cluster setting for
 // the maximum number of joins to reorder.
 const ReorderJoinsLimitClusterSettingName = "sql.defaults.reorder_joins_limit"
@@ -145,16 +134,38 @@ var ReorderJoinsLimitClusterValue = settings.RegisterValidatedIntSetting(
 	},
 )
 
+var optDrivenFKClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.optimizer_foreign_keys.enabled",
+	"enables optimizer-driven foreign key checks by default",
+	false,
+)
+
 // VectorizeClusterMode controls the cluster default for when automatic
 // vectorization is enabled.
 var VectorizeClusterMode = settings.RegisterEnumSetting(
-	"sql.defaults.experimental_vectorize",
-	"default experimental_vectorize mode",
-	"off",
+	"sql.defaults.vectorize",
+	"default vectorize mode",
+	"auto",
 	map[int64]string{
-		int64(sessiondata.VectorizeOff):    "off",
-		int64(sessiondata.VectorizeOn):     "on",
-		int64(sessiondata.VectorizeAlways): "always",
+		int64(sessiondata.VectorizeOff):            "off",
+		int64(sessiondata.VectorizeAuto):           "auto",
+		int64(sessiondata.VectorizeExperimentalOn): "experimental_on",
+	},
+)
+
+// VectorizeRowCountThresholdClusterValue controls the cluster default for the
+// vectorize row count threshold. When it is met, the vectorized execution
+// engine will be used if possible.
+var VectorizeRowCountThresholdClusterValue = settings.RegisterValidatedIntSetting(
+	"sql.defaults.vectorize_row_count_threshold",
+	"default vectorize row count threshold",
+	exec.DefaultVectorizeRowCountThreshold,
+	func(v int64) error {
+		if v < 0 {
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"cannot set sql.defaults.vectorize_row_count_threshold to a negative value: %d", v)
+		}
+		return nil
 	},
 )
 
@@ -256,6 +267,12 @@ var (
 		Help:        "Number of statements resulting in a planning or runtime error",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
+	}
+	MetaSQLTxnLatency = metric.Metadata{
+		Name:        "sql.txn.latency",
+		Help:        "Latency of SQL transactions",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 
 	// Below are the metadata for the statement started counters.
@@ -1800,11 +1817,11 @@ func (m *sessionDataMutator) SetReorderJoinsLimit(val int) {
 }
 
 func (m *sessionDataMutator) SetVectorize(val sessiondata.VectorizeExecMode) {
-	m.data.Vectorize = val
+	m.data.VectorizeMode = val
 }
 
-func (m *sessionDataMutator) SetOptimizerMode(val sessiondata.OptimizerMode) {
-	m.data.OptimizerMode = val
+func (m *sessionDataMutator) SetVectorizeRowCountThreshold(val uint64) {
+	m.data.VectorizeRowCountThreshold = val
 }
 
 func (m *sessionDataMutator) SetOptimizerFKs(val bool) {
@@ -1849,43 +1866,32 @@ func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {
 	m.data.SequenceState.RecordValue(seqID, val)
 }
 
-type sqlStatsCollectorImpl struct {
-	// sqlStats tracks per-application statistics for all
-	// applications on each node.
+type sqlStatsCollector struct {
+	// sqlStats tracks per-application statistics for all applications on each
+	// node.
 	sqlStats *sqlStats
-	// appStats track per-application SQL usage statistics. This is a pointer into
-	// sqlStats set as the session's current app.
+	// appStats track per-application SQL usage statistics. This is a pointer
+	// into sqlStats set as the session's current app.
 	appStats *appStats
-	// phaseTimes tracks session-level phase times. It is copied-by-value
-	// to each planner in session.newPlanner.
-	phaseTimes phaseTimes
+	// phaseTimes tracks session-level phase times.
+	phaseTimes *phaseTimes
 }
 
-// sqlStatsCollectorImpl implements the sqlStatsCollector interface.
-var _ sqlStatsCollector = &sqlStatsCollectorImpl{}
-
-// newSQLStatsCollectorImpl creates an instance of sqlStatsCollectorImpl.
-//
-// note that phaseTimes is an array, not a slice, so this performs a copy-by-value.
-func newSQLStatsCollectorImpl(
-	sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes,
-) *sqlStatsCollectorImpl {
-	return &sqlStatsCollectorImpl{
+// newSQLStatsCollector creates an instance of sqlStatsCollector. Note that
+// phaseTimes is an array, not a slice, so this performs a copy-by-value.
+func newSQLStatsCollector(
+	sqlStats *sqlStats, appStats *appStats, phaseTimes phaseTimes,
+) *sqlStatsCollector {
+	return &sqlStatsCollector{
 		sqlStats:   sqlStats,
 		appStats:   appStats,
-		phaseTimes: *phaseTimes,
+		phaseTimes: &phaseTimes,
 	}
 }
 
-// PhaseTimes is part of the sqlStatsCollector interface.
-func (s *sqlStatsCollectorImpl) PhaseTimes() *phaseTimes {
-	return &s.phaseTimes
-}
-
-// RecordStatement is part of the sqlStatsCollector interface.
-//
-// samplePlanDescription can be nil, as these are only sampled periodically per unique fingerprint.
-func (s *sqlStatsCollectorImpl) RecordStatement(
+// recordStatement records stats for one statement. samplePlanDescription can
+// be nil, as these are only sampled periodically per unique fingerprint.
+func (s *sqlStatsCollector) recordStatement(
 	stmt *Statement,
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	distSQLUsed bool,
@@ -1902,17 +1908,15 @@ func (s *sqlStatsCollectorImpl) RecordStatement(
 		parseLat, planLat, runLat, svcLat, ovhLat, bytesRead, rowsRead)
 }
 
-// SQLStats is part of the sqlStatsCollector interface.
-func (s *sqlStatsCollectorImpl) SQLStats() *sqlStats {
-	return s.sqlStats
+// recordTransaction records stats for one transaction.
+func (s *sqlStatsCollector) recordTransaction(txnTimeSec float64, ev txnEvent, implicit bool) {
+	s.appStats.recordTransaction(txnTimeSec, ev, implicit)
 }
 
-func (s *sqlStatsCollectorImpl) Reset(
-	sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes,
-) {
-	*s = sqlStatsCollectorImpl{
+func (s *sqlStatsCollector) reset(sqlStats *sqlStats, appStats *appStats, phaseTimes phaseTimes) {
+	*s = sqlStatsCollector{
 		sqlStats:   sqlStats,
 		appStats:   appStats,
-		phaseTimes: *phaseTimes,
+		phaseTimes: &phaseTimes,
 	}
 }

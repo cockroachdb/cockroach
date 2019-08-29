@@ -13,16 +13,18 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 )
 
 // fnOp is an operator that executes an arbitrary function for its side-effects,
 // once per input batch, passing the input batch unmodified along.
 type fnOp struct {
-	input Operator
+	OneInputNode
 
 	fn func()
 }
+
+var _ resettableOperator = fnOp{}
 
 func (f fnOp) Init() {
 	f.input.Init()
@@ -33,3 +35,5 @@ func (f fnOp) Next(ctx context.Context) coldata.Batch {
 	f.fn()
 	return batch
 }
+
+func (f fnOp) reset() {}

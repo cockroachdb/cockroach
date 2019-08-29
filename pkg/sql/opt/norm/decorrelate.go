@@ -328,10 +328,6 @@ func (c *CustomFuncs) ConstructNonApplyJoin(
 		return c.f.ConstructInnerJoin(left, right, on, private)
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		return c.f.ConstructLeftJoin(left, right, on, private)
-	case opt.RightJoinOp, opt.RightJoinApplyOp:
-		return c.f.ConstructRightJoin(left, right, on, private)
-	case opt.FullJoinOp, opt.FullJoinApplyOp:
-		return c.f.ConstructFullJoin(left, right, on, private)
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
 		return c.f.ConstructSemiJoin(left, right, on, private)
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
@@ -350,10 +346,6 @@ func (c *CustomFuncs) ConstructApplyJoin(
 		return c.f.ConstructInnerJoinApply(left, right, on, private)
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		return c.f.ConstructLeftJoinApply(left, right, on, private)
-	case opt.RightJoinOp, opt.RightJoinApplyOp:
-		return c.f.ConstructRightJoinApply(left, right, on, private)
-	case opt.FullJoinOp, opt.FullJoinApplyOp:
-		return c.f.ConstructFullJoinApply(left, right, on, private)
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
 		return c.f.ConstructSemiJoinApply(left, right, on, private)
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
@@ -450,7 +442,7 @@ func (c *CustomFuncs) EnsureCanaryCol(in memo.RelExpr, aggs memo.AggregationsExp
 			// passthrough aggregate like ConstAgg.
 			id, ok := in.Relational().NotNullCols.Next(0)
 			if ok && !aggs.OutputCols().Contains(id) {
-				return opt.ColumnID(id)
+				return id
 			}
 
 			// Synthesize a new column ID.
@@ -548,7 +540,7 @@ func (c *CustomFuncs) TranslateNonIgnoreAggs(
 					if !ok {
 						panic(errors.AssertionFailedf("expected input expression to have not-null column"))
 					}
-					canaryCol = opt.ColumnID(id)
+					canaryCol = id
 				}
 				aggCanaryVar = c.f.ConstructVariable(canaryCol)
 			}
@@ -610,7 +602,7 @@ func (c *CustomFuncs) EnsureAggsCanIgnoreNulls(
 			if !ok {
 				panic(errors.AssertionFailedf("expected input expression to have not-null column"))
 			}
-			notNullColID := opt.ColumnID(id)
+			notNullColID := id
 			newAgg = c.f.ConstructCount(c.f.ConstructVariable(notNullColID))
 
 		default:
@@ -705,12 +697,8 @@ func (c *CustomFuncs) ConstructNoColsRow() memo.RelExpr {
 // referenceSingleColumn returns a Variable operator that refers to the one and
 // only column that is projected by the input expression.
 func (c *CustomFuncs) referenceSingleColumn(in memo.RelExpr) opt.ScalarExpr {
-	cols := in.Relational().OutputCols
-	if cols.Len() != 1 {
-		panic(errors.AssertionFailedf("expression does not have exactly one column"))
-	}
-	colID, _ := cols.Next(0)
-	return c.f.ConstructVariable(opt.ColumnID(colID))
+	colID := in.Relational().OutputCols.SingleColumn()
+	return c.f.ConstructVariable(colID)
 }
 
 // subqueryHoister searches scalar expression trees looking for correlated
@@ -809,9 +797,15 @@ func (r *subqueryHoister) hoistAll(scalar opt.ScalarExpr) opt.ScalarExpr {
 		}
 
 		// Replace the Subquery operator with a Variable operator referring to
-		// the first (and only) column in the hoisted query.
-		colID, _ := subqueryProps.OutputCols.Next(0)
-		return r.f.ConstructVariable(opt.ColumnID(colID))
+		// the output column of the hoisted query.
+		var colID opt.ColumnID
+		switch t := scalar.(type) {
+		case *memo.ArrayFlattenExpr:
+			colID = t.RequestedCol
+		default:
+			colID = subqueryProps.OutputCols.SingleColumn()
+		}
+		return r.f.ConstructVariable(colID)
 	}
 
 	return r.f.Replace(scalar, func(nd opt.Expr) opt.Expr {

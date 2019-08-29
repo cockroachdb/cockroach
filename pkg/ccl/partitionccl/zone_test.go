@@ -55,66 +55,54 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 	tableID := sqlutils.QueryTableID(t, db, "d", "t")
 
 	defaultRow := sqlutils.ZoneRow{
-		ID:           keys.RootNamespaceID,
-		CLISpecifier: ".default",
-		Config:       s.(*server.TestServer).Cfg.DefaultZoneConfig,
+		ID:     keys.RootNamespaceID,
+		Config: s.(*server.TestServer).Cfg.DefaultZoneConfig,
 	}
 	defaultOverrideRow := sqlutils.ZoneRow{
-		ID:           keys.RootNamespaceID,
-		CLISpecifier: ".default",
-		Config:       zoneOverride,
+		ID:     keys.RootNamespaceID,
+		Config: zoneOverride,
 	}
 	dbRow := sqlutils.ZoneRow{
-		ID:           dbID,
-		CLISpecifier: "d",
-		Config:       zoneOverride,
+		ID:     dbID,
+		Config: zoneOverride,
 	}
 	tableRow := sqlutils.ZoneRow{
-		ID:           tableID,
-		CLISpecifier: "d.t",
-		Config:       zoneOverride,
+		ID:     tableID,
+		Config: zoneOverride,
 	}
 	primaryRow := sqlutils.ZoneRow{
-		ID:           tableID,
-		CLISpecifier: "d.t@primary",
-		Config:       zoneOverride,
+		ID:     tableID,
+		Config: zoneOverride,
 	}
 	p0Row := sqlutils.ZoneRow{
-		ID:           tableID,
-		CLISpecifier: "d.t.p0",
-		Config:       zoneOverride,
+		ID:     tableID,
+		Config: zoneOverride,
 	}
 	p1Row := sqlutils.ZoneRow{
-		ID:           tableID,
-		CLISpecifier: "d.t.p1",
-		Config:       zoneOverride,
+		ID:     tableID,
+		Config: zoneOverride,
 	}
 
 	// Partially filled config rows
 	partialDbRow := sqlutils.ZoneRow{
-		ID:           dbID,
-		CLISpecifier: "d",
-		Config:       partialZoneOverride,
+		ID:     dbID,
+		Config: partialZoneOverride,
 	}
 	partialTableRow := sqlutils.ZoneRow{
-		ID:           tableID,
-		CLISpecifier: "d.t",
-		Config:       partialZoneOverride,
+		ID:     tableID,
+		Config: partialZoneOverride,
 	}
 	partialPrimaryRow := sqlutils.ZoneRow{
-		ID:           tableID,
-		CLISpecifier: "d.t@primary",
-		Config:       partialZoneOverride,
+		ID:     tableID,
+		Config: partialZoneOverride,
 	}
 	partialP0Row := sqlutils.ZoneRow{
-		ID:           tableID,
-		CLISpecifier: "d.t.p0",
-		Config:       partialZoneOverride,
+		ID:     tableID,
+		Config: partialZoneOverride,
 	}
 	partialP1Row := sqlutils.ZoneRow{
-		ID:           tableID,
-		CLISpecifier: "d.t.p1",
-		Config:       partialZoneOverride,
+		ID:     tableID,
+		Config: partialZoneOverride,
 	}
 
 	// Remove stock zone configs installed at cluster bootstrap. Otherwise this

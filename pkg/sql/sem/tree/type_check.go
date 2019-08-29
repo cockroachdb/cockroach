@@ -916,6 +916,16 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 		expr.Filter = typedFilter
 	}
 
+	if expr.OrderBy != nil {
+		for i := range expr.OrderBy {
+			typedExpr, err := expr.OrderBy[i].Expr.TypeCheck(ctx, types.Any)
+			if err != nil {
+				return nil, err
+			}
+			expr.OrderBy[i].Expr = typedExpr
+		}
+	}
+
 	for i, subExpr := range typedSubExprs {
 		expr.Exprs[i] = subExpr
 	}

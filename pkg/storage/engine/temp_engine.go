@@ -11,9 +11,15 @@
 package engine
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/petermattis/pebble"
+	"github.com/petermattis/pebble/cache"
+	"github.com/petermattis/pebble/vfs"
 )
 
 type rocksDBTempEngine struct {
@@ -40,6 +46,10 @@ func (r *rocksDBTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 func NewTempEngine(
 	tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, error) {
+	if tempStorage.Engine == base.EngineTypePebble {
+		return NewPebbleTempEngine(tempStorage, storeSpec)
+	}
+
 	if tempStorage.InMemory {
 		// TODO(arjun): Limit the size of the store once #16750 is addressed.
 		// Technically we do not pass any attributes to temporary store.
@@ -57,11 +67,77 @@ func NewTempEngine(
 		UseFileRegistry: storeSpec.UseFileRegistry,
 		ExtraOptions:    storeSpec.ExtraOptions,
 	}
-	cache := NewRocksDBCache(0)
-	db, err := NewRocksDB(cfg, cache)
+	rocksDBCache := NewRocksDBCache(0)
+	db, err := NewRocksDB(cfg, rocksDBCache)
 	if err != nil {
 		return nil, err
 	}
 
 	return &rocksDBTempEngine{db: db}, nil
+}
+
+type pebbleTempEngine struct {
+	db *pebble.DB
+}
+
+// Close implements the diskmap.Factory interface.
+func (r *pebbleTempEngine) Close() {
+	err := r.db.Close()
+	if err != nil {
+		log.Fatal(context.TODO(), err)
+	}
+}
+
+// NewSortedDiskMap implements the diskmap.Factory interface.
+func (r *pebbleTempEngine) NewSortedDiskMap() diskmap.SortedDiskMap {
+	return newPebbleMap(r.db, false /* allowDuplications */)
+}
+
+// NewSortedDiskMultiMap implements the diskmap.Factory interface.
+func (r *pebbleTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
+	return newPebbleMap(r.db, true /* allowDuplicates */)
+}
+
+// NewPebbleTempEngine creates a new engine for DistSQL processors to use when the
+// working set is larger than can be stored in memory.
+func NewPebbleTempEngine(
+	tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
+) (diskmap.Factory, error) {
+	// Default options as copied over from pebble/cmd/pebble/db.go
+	opts := &pebble.Options{
+		// Pebble doesn't currently support 0-size caches, so use a 128MB cache for
+		// now.
+		Cache: cache.New(128 << 20),
+		// The Pebble temp engine does not use MVCC Encoding. Instead, the
+		// caller-provided key is used as-is (with the prefix prepended). See
+		// pebbleMap.makeKey and pebbleMap.makeKeyWithSequence on how this works.
+		// Use the default bytes.Compare-like comparer.
+		Comparer:                    pebble.DefaultComparer,
+		DisableWAL:                  true,
+		MemTableSize:                64 << 20,
+		MemTableStopWritesThreshold: 4,
+		MinFlushRate:                4 << 20,
+		L0CompactionThreshold:       2,
+		L0StopWritesThreshold:       400,
+		LBaseMaxBytes:               64 << 20, // 64 MB
+		Levels: []pebble.LevelOptions{{
+			BlockSize: 32 << 10,
+		}},
+		Merger: &pebble.Merger{
+			Name: "cockroach_merge_operator",
+		},
+	}
+
+	path := tempStorage.Path
+	if tempStorage.InMemory {
+		opts.FS = vfs.NewMem()
+		path = ""
+	}
+
+	p, err := pebble.Open(path, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pebbleTempEngine{db: p}, nil
 }

@@ -193,7 +193,6 @@ func init() {
 
 		sqlShellCmd,
 		userCmd,
-		zoneCmd,
 		nodeCmd,
 		dumpCmd,
 

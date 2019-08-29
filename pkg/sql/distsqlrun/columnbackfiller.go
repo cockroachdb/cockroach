@@ -86,14 +86,14 @@ func (cb *columnBackfiller) runChunk(
 	readAsOf hlc.Timestamp,
 ) (roachpb.Key, error) {
 	var key roachpb.Key
-	err := cb.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		if cb.flowCtx.testingKnobs.RunBeforeBackfillChunk != nil {
-			if err := cb.flowCtx.testingKnobs.RunBeforeBackfillChunk(sp); err != nil {
+	err := cb.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk != nil {
+			if err := cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk(sp); err != nil {
 				return err
 			}
 		}
-		if cb.flowCtx.testingKnobs.RunAfterBackfillChunk != nil {
-			defer cb.flowCtx.testingKnobs.RunAfterBackfillChunk()
+		if cb.flowCtx.Cfg.TestingKnobs.RunAfterBackfillChunk != nil {
+			defer cb.flowCtx.Cfg.TestingKnobs.RunAfterBackfillChunk()
 		}
 
 		// TODO(knz): do KV tracing in DistSQL processors.

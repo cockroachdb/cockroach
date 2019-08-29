@@ -32,7 +32,7 @@ func TestReduceSQL(t *testing.T) {
 	t.Skip("unnecessary")
 	reducesql.LogUnknown = *printUnknown
 
-	reduce.Walk(t, "testdata", isInterestingSQL, reducesql.SQLPasses)
+	reduce.Walk(t, "testdata", reducesql.Pretty, isInterestingSQL, reducesql.SQLPasses)
 }
 
 func isInterestingSQL(contains string) reduce.InterestingFn {
@@ -52,7 +52,7 @@ func isInterestingSQL(contains string) reduce.InterestingFn {
 		url := url.URL{
 			Scheme:   "postgres",
 			User:     url.User(security.RootUser),
-			Host:     server.ServingAddr(),
+			Host:     server.ServingSQLAddr(),
 			RawQuery: options.Encode(),
 		}
 

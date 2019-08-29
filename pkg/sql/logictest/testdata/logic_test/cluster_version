@@ -12,7 +12,7 @@ SELECT crdb_internal.node_executable_version()
 
 user testuser
 
-statement error only superusers are allowed to SET CLUSTER SETTING
+statement error only users with the admin role are allowed to SET CLUSTER SETTING
 SET CLUSTER SETTING version = '2.0'
 
 user root

@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -76,12 +77,13 @@ var debugZipTablesPerNode = []string{
 
 	"crdb_internal.leases",
 
-	"crdb_internal.node_statement_statistics",
 	"crdb_internal.node_build_info",
 	"crdb_internal.node_metrics",
 	"crdb_internal.node_queries",
 	"crdb_internal.node_runtime_info",
 	"crdb_internal.node_sessions",
+	"crdb_internal.node_statement_statistics",
+	"crdb_internal.node_txn_stats",
 }
 
 type zipper struct {
@@ -198,7 +200,23 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	status := serverpb.NewStatusClient(conn)
 	admin := serverpb.NewAdminClient(conn)
 
-	sqlConn, err := getPasswordAndMakeSQLClient("cockroach sql")
+	// Retrieve the node status to get the SQL address.
+	nodeS, err := status.Node(baseCtx, &serverpb.NodeRequest{NodeId: "local"})
+	if err != nil {
+		return err
+	}
+	sqlAddr := nodeS.Desc.SQLAddress
+	if sqlAddr.IsEmpty() {
+		// No SQL address: either a pre-19.2 node, or same address for both
+		// SQL and RPC.
+		sqlAddr = nodeS.Desc.Address
+	}
+	cliCtx.clientConnHost, cliCtx.clientConnPort, err = net.SplitHostPort(sqlAddr.AddressField)
+	if err != nil {
+		return err
+	}
+
+	sqlConn, err := getPasswordAndMakeSQLClient("cockroach zip")
 	if err != nil {
 		log.Warningf(baseCtx, "unable to open a SQL session. Debug information will be incomplete: %s", err)
 	}
@@ -292,7 +310,13 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				// not work and if it doesn't, we let the invalid curSQLConn get
 				// used anyway so that anything that does *not* need it will
 				// still happen.
-				curSQLConn := guessNodeURL(sqlConn.url, node.Desc.Address.AddressField)
+				sqlAddr := node.Desc.SQLAddress
+				if sqlAddr.IsEmpty() {
+					// No SQL address: either a pre-19.2 node, or same address for both
+					// SQL and RPC.
+					sqlAddr = node.Desc.Address
+				}
+				curSQLConn := guessNodeURL(sqlConn.url, sqlAddr.AddressField)
 				if err := z.createJSON(prefix+"/status.json", node); err != nil {
 					return err
 				}

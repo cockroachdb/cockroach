@@ -33,12 +33,10 @@ func TestFuncNull(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	run := func(t *testing.T, q string) {
-		t.Run(q, func(t *testing.T) {
-			rows, err := db.QueryContext(ctx, q)
-			if err == nil {
-				rows.Close()
-			}
-		})
+		rows, err := db.QueryContext(ctx, q)
+		if err == nil {
+			rows.Close()
+		}
 	}
 
 	for _, name := range builtins.AllBuiltinNames {

@@ -452,7 +452,7 @@ guarantee that the current store is _Q_'s leaseholder—or that the current stor
 even has a replica of _Q_ at all.
 
 To prevent unnecessary RPC chatter, the merge queue uses several heuristics to
-void sending `RangeStats requests when it seems like the merge is unlikely to be
+void sending RangeStats requests when it seems like the merge is unlikely to be
 permitted. For example, if it determines that _P_ and _Q_ store different
 tables, the split between them is mandatory and it won't bother sending the
 RangeStats requests. Similarly, if _P_ is above the minimum size threshold, it
@@ -851,13 +851,14 @@ consistency.
 
 The first broad safety mechanism is replica set alignment, which is required so
 that every store participating in the merge has a copy of both halves of the
-data in the merged range. Replica sets are first optimistically by the merge
-queue. The replicas might drift apart, e.g., because the ranges in question were
-also targeted for a rebalance by the replicate queue, so the merge transaction
-verifies that the replica sets are still aligned from within the transaction. If
-a concurrent split or rebalance were to occur on the implicated ranges,
-transactional isolation kicks in and aborts one of the transactions, so we know
-that the replica sets are still aligned at the moment that the merge commits.
+data in the merged range. Replica sets are first optimistically aligned by the
+merge queue. The replicas might drift apart, e.g., because the ranges in
+question were also targeted for a rebalance by the replicate queue, so the
+merge transaction verifies that the replica sets are still aligned from within
+the transaction. If a concurrent split or rebalance were to occur on the
+implicated ranges, transactional isolation kicks in and aborts one of the
+transactions, so we know that the replica sets are still aligned at the moment
+that the merge commits.
 
 Crucially, we need to maintain alignment until the merge applies on all replicas
 that were present at the time of the merge. This is enforced by refusing to

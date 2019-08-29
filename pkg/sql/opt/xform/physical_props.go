@@ -63,6 +63,8 @@ func BuildChildPhysicalProps(
 		childProps.Presentation = parent.(*memo.CancelQueriesExpr).Props.Presentation
 	case opt.CancelSessionsOp:
 		childProps.Presentation = parent.(*memo.CancelSessionsExpr).Props.Presentation
+	case opt.ExportOp:
+		childProps.Presentation = parent.(*memo.ExportExpr).Props.Presentation
 	}
 
 	childProps.Ordering = ordering.BuildChildRequired(parent, &parentProps.Ordering, nth)

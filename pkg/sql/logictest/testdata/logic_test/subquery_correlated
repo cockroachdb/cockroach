@@ -1,4 +1,4 @@
-# LogicTest: local-opt fakedist-opt
+# LogicTest: local fakedist
 
 # ------------------------------------------------------------------------------
 # Create a simple schema that models customers and orders. Each customer has an
@@ -1150,3 +1150,23 @@ ORDER BY
 statement ok
 DROP TABLE stuff;
 DROP TABLE users;
+
+# Regression test for #38867.
+query T
+SELECT (
+		SELECT
+			ARRAY (
+			  SELECT c.relname
+			  FROM pg_inherits AS i JOIN pg_class AS c ON c.oid = i.inhparent
+			  WHERE i.inhrelid = rel.oid
+			  ORDER BY inhseqno
+			)
+)
+FROM pg_class AS rel
+LIMIT 5;
+----
+{}
+{}
+{}
+{}
+{}

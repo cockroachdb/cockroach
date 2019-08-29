@@ -42,6 +42,7 @@ type IntAlloc struct {
 }
 
 // Release releases an IntAlloc back into the IntPool.
+// It is safe to release into a closed pool.
 func (ia *IntAlloc) Release() {
 	ia.p.qp.Add((*intAlloc)(ia))
 }
@@ -77,6 +78,11 @@ func (ia *IntAlloc) String() string {
 		return strconv.Itoa(0)
 	}
 	return strconv.FormatUint(ia.alloc, 10)
+}
+
+// from returns true if this IntAlloc is from p.
+func (ia *IntAlloc) from(p *IntPool) bool {
+	return ia.p == p
 }
 
 // intAlloc is used to make IntAlloc implement Resource without muddling its
@@ -123,6 +129,31 @@ func (p *IntPool) Acquire(ctx context.Context, v uint64) (*IntAlloc, error) {
 		return nil, err
 	}
 	return p.newIntAlloc(r.want), nil
+}
+
+// Release will release allocs back to their pool. Allocs which are from p are
+// merged into a single alloc before being added to avoid synchronizing
+// on p multiple times. Allocs which did not come from p are released
+// one at a time. It is legal to pass nil values in allocs.
+func (p *IntPool) Release(allocs ...*IntAlloc) {
+	var toRelease *IntAlloc
+	for _, alloc := range allocs {
+		switch {
+		case alloc == nil:
+			continue
+		case !alloc.from(p):
+			// If alloc is not from p, call Release() on it directly.
+			alloc.Release()
+			continue
+		case toRelease == nil:
+			toRelease = alloc
+		default:
+			toRelease.Merge(alloc)
+		}
+	}
+	if toRelease != nil {
+		toRelease.Release()
+	}
 }
 
 // IntRequestFunc is used to request a quantity of quota determined when quota is
@@ -256,7 +287,7 @@ func (p *IntPool) Capacity() uint64 {
 // decCapacity decrements the capacity by c.
 func (p *IntPool) decCapacity(c uint64) {
 	// This is how you decrement from a uint64.
-	atomic.AddUint64(&p.capacity, ^uint64(c-1))
+	atomic.AddUint64(&p.capacity, ^(c - 1))
 	// Wake up the request at the front of the queue. The decrement above may race
 	// with an ongoing request (which is why it's an atomic access), but in any
 	// case that request is evaluated again.

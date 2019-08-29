@@ -1,4 +1,4 @@
-# LogicTest: 5node-dist-opt
+# LogicTest: 5node-dist
 
 # The following tables form the interleaved hierarchy:
 #   name:             primary key:                # rows:   'a' = id mod X :
@@ -104,7 +104,7 @@ ALTER TABLE grandchild2 EXPERIMENTAL_RELOCATE
 
 # Verify data placement.
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE parent1]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE parent1]
 ----
 start_key                   end_key                     replicas  lease_holder
 NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
@@ -129,7 +129,7 @@ NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
 /38/#/56/1/78/38/#/58/1/38  NULL                        {5}       5
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE child1]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE child1]
 ----
 start_key                   end_key                     replicas  lease_holder
 NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
@@ -154,7 +154,7 @@ NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
 /38/#/56/1/78/38/#/58/1/38  NULL                        {5}       5
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE grandchild1]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE grandchild1]
 ----
 start_key                   end_key                     replicas  lease_holder
 NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
@@ -254,18 +254,19 @@ EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
   OR pid1 >= 31 AND pid1 <= 33
   OR pa1 > 0
 ----
-render           ·               ·
- └── merge-join  ·               ·
-      │          type            inner
-      │          equality        (pid1) = (pid1)
-      │          mergeJoinOrder  +"(pid1=pid1)"
-      ├── scan   ·               ·
-      │          table           grandchild2@primary
-      │          spans           ALL
-      └── scan   ·               ·
-·                table           parent1@primary
-·                spans           ALL
-·                filter          ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (pid1) = (pid1)
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(pid1=pid1)"
+      ├── scan   ·                   ·
+      │          table               grandchild2@primary
+      │          spans               ALL
+      └── scan   ·                   ·
+·                table               parent1@primary
+·                spans               ALL
+·                filter              ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)
 
 # Join on multiple interleaved columns with an overarching ancestor (parent1).
 # Note there are 5 nodes because the filter cid2 >= 12 AND cid2 <= 14
@@ -295,17 +296,18 @@ EXPLAIN
     OR child2.cid2 >= 12 AND child2.cid2 <= 14
     OR gcid2 >= 49 AND gcid2 <= 51
 ----
-merge-join  ·               ·
- │          type            inner
- │          equality        (pid1, cid2, cid3) = (pid1, cid2, cid3)
- │          mergeJoinOrder  +"(pid1=pid1)",+"(cid2=cid2)",+"(cid3=cid3)"
- ├── scan   ·               ·
- │          table           child2@primary
- │          spans           ALL
- └── scan   ·               ·
-·           table           grandchild2@primary
-·           spans           ALL
-·           filter          (((pid1 >= 5) AND (pid1 <= 7)) OR ((cid2 >= 12) AND (cid2 <= 14))) OR ((gcid2 >= 49) AND (gcid2 <= 51))
+merge-join  ·                  ·
+ │          type               inner
+ │          equality           (pid1, cid2, cid3) = (pid1, cid2, cid3)
+ │          left cols are key  ·
+ │          mergeJoinOrder     +"(pid1=pid1)",+"(cid2=cid2)",+"(cid3=cid3)"
+ ├── scan   ·                  ·
+ │          table              child2@primary
+ │          spans              ALL
+ └── scan   ·                  ·
+·           table              grandchild2@primary
+·           spans              ALL
+·           filter             (((pid1 >= 5) AND (pid1 <= 7)) OR ((cid2 >= 12) AND (cid2 <= 14))) OR ((gcid2 >= 49) AND (gcid2 <= 51))
 
 # Aggregation over parent and child keys.
 query T
@@ -366,7 +368,7 @@ ALTER TABLE outer_p1 EXPERIMENTAL_RELOCATE
   SELECT ARRAY[(((i-3)/5)%4)::INT + 1], i FROM generate_series(3, 40, 5) AS g(i)
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE outer_p1]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE outer_p1]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /0       {5}       5

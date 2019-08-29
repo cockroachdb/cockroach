@@ -10,7 +10,7 @@
 
 package exec
 
-import "github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+import "github.com/cockroachdb/cockroach/pkg/col/coldata"
 
 // vecComparator is a helper for the ordered synchronizer. It stores multiple
 // column vectors of a single type and facilitates comparing values between

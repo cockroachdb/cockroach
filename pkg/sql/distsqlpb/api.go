@@ -32,7 +32,7 @@ type DistSQLVersion uint32
 
 // MakeEvalContext serializes some of the fields of a tree.EvalContext into a
 // distsqlpb.EvalContext proto.
-func MakeEvalContext(evalCtx tree.EvalContext) EvalContext {
+func MakeEvalContext(evalCtx *tree.EvalContext) EvalContext {
 	var be BytesEncodeFormat
 	switch evalCtx.SessionData.DataConversion.BytesEncodeFormat {
 	case sessiondata.BytesEncodeHex:
@@ -53,7 +53,7 @@ func MakeEvalContext(evalCtx tree.EvalContext) EvalContext {
 		ApplicationName:    evalCtx.SessionData.ApplicationName,
 		BytesEncodeFormat:  be,
 		ExtraFloatDigits:   int32(evalCtx.SessionData.DataConversion.ExtraFloatDigits),
-		Vectorize:          int32(evalCtx.SessionData.Vectorize),
+		Vectorize:          int32(evalCtx.SessionData.VectorizeMode),
 	}
 
 	// Populate the search path. Make sure not to include the implicit pg_catalog,

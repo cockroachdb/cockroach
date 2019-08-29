@@ -244,11 +244,11 @@ func formatCols(tab Table, numCols int, colOrdinal func(tab Table, i int) int) s
 func formatCatalogFKRef(
 	catalog Catalog, inbound bool, fkRef ForeignKeyConstraint, tp treeprinter.Node,
 ) {
-	originDS, err := catalog.ResolveDataSourceByID(context.TODO(), Flags{}, fkRef.OriginTableID())
+	originDS, _, err := catalog.ResolveDataSourceByID(context.TODO(), Flags{}, fkRef.OriginTableID())
 	if err != nil {
 		panic(err)
 	}
-	refDS, err := catalog.ResolveDataSourceByID(context.TODO(), Flags{}, fkRef.ReferencedTableID())
+	refDS, _, err := catalog.ResolveDataSourceByID(context.TODO(), Flags{}, fkRef.ReferencedTableID())
 	if err != nil {
 		panic(err)
 	}
@@ -256,9 +256,13 @@ func formatCatalogFKRef(
 	if inbound {
 		title = "REFERENCED BY " + title
 	}
-	match := ""
+	var extra bytes.Buffer
 	if fkRef.MatchMethod() != tree.MatchSimple {
-		match = fmt.Sprintf(" %s", fkRef.MatchMethod())
+		fmt.Fprintf(&extra, " %s", fkRef.MatchMethod())
+	}
+
+	if action := fkRef.DeleteReferenceAction(); action != tree.NoAction {
+		fmt.Fprintf(&extra, " ON DELETE %s", action.String())
 	}
 
 	tp.Childf(
@@ -269,7 +273,7 @@ func formatCatalogFKRef(
 		formatCols(originDS.(Table), fkRef.ColumnCount(), fkRef.OriginColumnOrdinal),
 		refDS.Name(),
 		formatCols(refDS.(Table), fkRef.ColumnCount(), fkRef.ReferencedColumnOrdinal),
-		match,
+		extra.String(),
 	)
 }
 

@@ -107,8 +107,13 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 		rel.Cardinality = props.ZeroCardinality
 	} else if rel.FuncDeps.HasMax1Row() {
 		rel.Cardinality = rel.Cardinality.Limit(1)
-	} else if hardLimit > 0 && hardLimit < math.MaxUint32 {
-		rel.Cardinality = rel.Cardinality.Limit(uint32(hardLimit))
+	} else {
+		if hardLimit > 0 && hardLimit < math.MaxUint32 {
+			rel.Cardinality = rel.Cardinality.Limit(uint32(hardLimit))
+		}
+		if scan.Constraint != nil {
+			b.updateCardinalityFromConstraint(scan.Constraint, rel)
+		}
 	}
 
 	// Statistics
@@ -224,6 +229,8 @@ func (b *logicalPropsBuilder) buildSelectProps(sel *SelectExpr, rel *props.Relat
 		rel.Cardinality = props.ZeroCardinality
 	} else if rel.FuncDeps.HasMax1Row() {
 		rel.Cardinality = rel.Cardinality.Limit(1)
+	} else {
+		b.updateCardinalityFromFilters(sel.Filters, rel)
 	}
 
 	// Statistics
@@ -291,7 +298,7 @@ func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Rel
 			// arithmetic.
 			composite := false
 			for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {
-				typ := b.mem.Metadata().ColumnMeta(opt.ColumnID(i)).Type
+				typ := b.mem.Metadata().ColumnMeta(i).Type
 				if sqlbase.DatumTypeHasCompositeKeyEncoding(typ) {
 					composite = true
 					break
@@ -349,18 +356,6 @@ func (b *logicalPropsBuilder) buildInnerJoinApplyProps(
 
 func (b *logicalPropsBuilder) buildLeftJoinApplyProps(
 	join *LeftJoinApplyExpr, rel *props.Relational,
-) {
-	b.buildJoinProps(join, rel)
-}
-
-func (b *logicalPropsBuilder) buildRightJoinApplyProps(
-	join *RightJoinApplyExpr, rel *props.Relational,
-) {
-	b.buildJoinProps(join, rel)
-}
-
-func (b *logicalPropsBuilder) buildFullJoinApplyProps(
-	join *FullJoinApplyExpr, rel *props.Relational,
 ) {
 	b.buildJoinProps(join, rel)
 }
@@ -809,59 +804,60 @@ func (b *logicalPropsBuilder) buildShowTraceForSessionProps(
 
 func (b *logicalPropsBuilder) buildOpaqueRelProps(op *OpaqueRelExpr, rel *props.Relational) {
 	b.buildBasicProps(op, op.Columns, rel)
-	rel.CanHaveSideEffects = true
-	rel.CanMutate = true
+}
+
+func (b *logicalPropsBuilder) buildOpaqueMutationProps(
+	op *OpaqueMutationExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(op, op.Columns, rel)
+}
+
+func (b *logicalPropsBuilder) buildOpaqueDDLProps(op *OpaqueDDLExpr, rel *props.Relational) {
+	b.buildBasicProps(op, op.Columns, rel)
 }
 
 func (b *logicalPropsBuilder) buildAlterTableSplitProps(
 	split *AlterTableSplitExpr, rel *props.Relational,
 ) {
 	b.buildBasicProps(split, split.Columns, rel)
-	rel.CanHaveSideEffects = true
-	rel.CanMutate = true
 }
 
 func (b *logicalPropsBuilder) buildAlterTableUnsplitProps(
 	unsplit *AlterTableUnsplitExpr, rel *props.Relational,
 ) {
 	b.buildBasicProps(unsplit, unsplit.Columns, rel)
-	rel.CanHaveSideEffects = true
-	rel.CanMutate = true
 }
 
 func (b *logicalPropsBuilder) buildAlterTableUnsplitAllProps(
 	unsplitAll *AlterTableUnsplitAllExpr, rel *props.Relational,
 ) {
 	b.buildBasicProps(unsplitAll, unsplitAll.Columns, rel)
-	rel.CanHaveSideEffects = true
-	rel.CanMutate = true
 }
 
 func (b *logicalPropsBuilder) buildAlterTableRelocateProps(
 	relocate *AlterTableRelocateExpr, rel *props.Relational,
 ) {
 	b.buildBasicProps(relocate, relocate.Columns, rel)
-	rel.CanHaveSideEffects = true
-	rel.CanMutate = true
 }
 
 func (b *logicalPropsBuilder) buildControlJobsProps(ctl *ControlJobsExpr, rel *props.Relational) {
 	b.buildBasicProps(ctl, opt.ColList{}, rel)
-	rel.CanHaveSideEffects = true
 }
 
 func (b *logicalPropsBuilder) buildCancelQueriesProps(
 	cancel *CancelQueriesExpr, rel *props.Relational,
 ) {
 	b.buildBasicProps(cancel, opt.ColList{}, rel)
-	rel.CanHaveSideEffects = true
 }
 
 func (b *logicalPropsBuilder) buildCancelSessionsProps(
 	cancel *CancelSessionsExpr, rel *props.Relational,
 ) {
 	b.buildBasicProps(cancel, opt.ColList{}, rel)
-	rel.CanHaveSideEffects = true
+}
+
+func (b *logicalPropsBuilder) buildExportProps(export *ExportExpr, rel *props.Relational) {
+	b.buildBasicProps(export, export.Columns, rel)
 }
 
 func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relational) {
@@ -1192,6 +1188,14 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 		if private.IsColumnOutput(i) {
 			colID := private.Table.ColumnID(i)
 			rel.OutputCols.Add(colID)
+		}
+	}
+
+	// The output columns of the mutation will also include all
+	// columns it allowed to pass through.
+	for _, col := range private.PassthroughCols {
+		if col != 0 {
+			rel.OutputCols.Add(col)
 		}
 	}
 
@@ -1537,6 +1541,44 @@ func (b *logicalPropsBuilder) addFiltersToFuncDep(filters FiltersExpr, fdset *pr
 	}
 }
 
+// updateCardinalityFromFilters determines whether a tight cardinality bound
+// can be determined from the filters, and updates the cardinality accordingly.
+// Specifically, it may be possible to determine a tight bound if the key
+// column(s) are constrained to a finite number of values.
+func (b *logicalPropsBuilder) updateCardinalityFromFilters(
+	filters FiltersExpr, rel *props.Relational,
+) {
+	for i := range filters {
+		filterProps := filters[i].ScalarProps(b.mem)
+		if filterProps.Constraints == nil {
+			continue
+		}
+
+		for j, n := 0, filterProps.Constraints.Length(); j < n; j++ {
+			c := filterProps.Constraints.Constraint(j)
+			b.updateCardinalityFromConstraint(c, rel)
+		}
+	}
+}
+
+// updateCardinalityFromConstraint determines whether a tight cardinality
+// bound can be determined from the constraint, and updates the cardinality
+// accordingly. Specifically, it may be possible to determine a tight bound
+// if the key column(s) are constrained to a finite number of values.
+func (b *logicalPropsBuilder) updateCardinalityFromConstraint(
+	c *constraint.Constraint, rel *props.Relational,
+) {
+	cols := c.Columns.ColSet()
+	if !rel.FuncDeps.ColsAreLaxKey(cols) {
+		return
+	}
+
+	count := c.CalculateMaxResults(b.evalCtx, cols, rel.NotNullCols)
+	if count != 0 && count < math.MaxUint32 {
+		rel.Cardinality = rel.Cardinality.Limit(uint32(count))
+	}
+}
+
 // ensureLookupJoinInputProps lazily populates the relational properties that
 // apply to the lookup side of the join, as if it were a Scan operator.
 func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *props.Relational {
@@ -1749,7 +1791,7 @@ func (h *joinPropsHelper) notNullCols() opt.ColSet {
 	// Left/full outer joins can result in right columns becoming null.
 	// Otherwise, propagate not null setting from right child.
 	switch h.joinType {
-	case opt.LeftJoinOp, opt.FullJoinOp, opt.LeftJoinApplyOp, opt.FullJoinApplyOp,
+	case opt.LeftJoinOp, opt.FullJoinOp, opt.LeftJoinApplyOp,
 		opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 
 	default:
@@ -1759,7 +1801,7 @@ func (h *joinPropsHelper) notNullCols() opt.ColSet {
 	// Right/full outer joins can result in left columns becoming null.
 	// Otherwise, propagate not null setting from left child.
 	switch h.joinType {
-	case opt.RightJoinOp, opt.FullJoinOp, opt.RightJoinApplyOp, opt.FullJoinApplyOp:
+	case opt.RightJoinOp, opt.FullJoinOp:
 
 	default:
 		notNullCols.UnionWith(h.leftProps.NotNullCols)
@@ -1817,13 +1859,13 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 			rel.FuncDeps.AddFrom(&h.filtersFD)
 			addOuterColsToFuncDep(rel.OuterCols, &rel.FuncDeps)
 
-		case opt.RightJoinOp, opt.RightJoinApplyOp:
+		case opt.RightJoinOp:
 			rel.FuncDeps.MakeOuter(h.leftProps.OutputCols, notNullInputCols)
 
 		case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 			rel.FuncDeps.MakeOuter(h.rightProps.OutputCols, notNullInputCols)
 
-		case opt.FullJoinOp, opt.FullJoinApplyOp:
+		case opt.FullJoinOp:
 			// Clear the relation's key if all columns are nullable, because
 			// duplicate all-null rows are possible:
 			//
@@ -1879,10 +1921,10 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		return innerJoinCard.AtLeast(left)
 
-	case opt.RightJoinOp, opt.RightJoinApplyOp:
+	case opt.RightJoinOp:
 		return innerJoinCard.AtLeast(right)
 
-	case opt.FullJoinOp, opt.FullJoinApplyOp:
+	case opt.FullJoinOp:
 		if innerJoinCard.IsZero() {
 			// In this case, we know that each left or right row will generate an
 			// output row.

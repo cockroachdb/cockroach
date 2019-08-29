@@ -22,9 +22,10 @@ package vecbuiltins
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 )
 
 // {{/*
@@ -32,19 +33,19 @@ import (
 // _UPDATE_RANK_ is the template function for updating the state of rank
 // operators.
 func _UPDATE_RANK_() {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // _UPDATE_RANK_INCREMENT is the template function for updating the state of
 // rank operators.
 func _UPDATE_RANK_INCREMENT() {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // */}}
 
 type rankInitFields struct {
-	input exec.Operator
+	exec.OneInputNode
 	// distinctCol is the output column of the chain of ordered distinct
 	// operators in which true will indicate that a new rank needs to be assigned
 	// to the corresponding tuple.
@@ -69,7 +70,7 @@ type _RANK_STRINGOp struct {
 var _ exec.Operator = &_RANK_STRINGOp{}
 
 func (r *_RANK_STRINGOp) Init() {
-	r.input.Init()
+	r.Input().Init()
 	// RANK and DENSE_RANK start counting from 1. Before we assign the rank to a
 	// tuple in the batch, we first increment r.rank, so setting this
 	// rankIncrement to 1 will update r.rank to 1 on the very first tuple (as
@@ -78,25 +79,26 @@ func (r *_RANK_STRINGOp) Init() {
 }
 
 func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
-	batch := r.input.Next(ctx)
-	if batch.Length() == 0 {
-		return batch
-	}
-
+	batch := r.Input().Next(ctx)
 	// {{ if .HasPartition }}
 	if r.partitionColIdx == batch.Width() {
-		batch.AppendCol(types.Bool)
+		batch.AppendCol(coltypes.Bool)
 	} else if r.partitionColIdx > batch.Width() {
-		panic("unexpected: column partitionColIdx is neither present nor the next to be appended")
+		execerror.VectorizedInternalPanic("unexpected: column partitionColIdx is neither present nor the next to be appended")
 	}
 	partitionCol := batch.ColVec(r.partitionColIdx).Bool()
 	// {{ end }}
 
 	if r.outputColIdx == batch.Width() {
-		batch.AppendCol(types.Int64)
+		batch.AppendCol(coltypes.Int64)
 	} else if r.outputColIdx > batch.Width() {
-		panic("unexpected: column outputColIdx is neither present nor the next to be appended")
+		execerror.VectorizedInternalPanic("unexpected: column outputColIdx is neither present nor the next to be appended")
 	}
+
+	if batch.Length() == 0 {
+		return batch
+	}
+
 	rankCol := batch.ColVec(r.outputColIdx).Int64()
 	sel := batch.Selection()
 	// TODO(yuzefovich): template out sel vs non-sel cases.

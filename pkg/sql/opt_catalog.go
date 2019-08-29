@@ -181,7 +181,7 @@ func (oc *optCatalog) ResolveDataSource(
 // ResolveDataSourceByID is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveDataSourceByID(
 	ctx context.Context, flags cat.Flags, dataSourceID cat.StableID,
-) (cat.DataSource, error) {
+) (_ cat.DataSource, isAdding bool, _ error) {
 	if flags.AvoidDescriptorCaches {
 		defer func(prev bool) {
 			oc.planner.avoidCachedDescriptors = prev
@@ -193,13 +193,14 @@ func (oc *optCatalog) ResolveDataSourceByID(
 
 	if err != nil || tableLookup.IsAdding {
 		if err == sqlbase.ErrDescriptorNotFound || tableLookup.IsAdding {
-			return nil, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
+			return nil, tableLookup.IsAdding, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
 		}
-		return nil, err
+		return nil, false, err
 	}
 
 	// The name is only used for virtual tables, which can't be looked up by ID.
-	return oc.dataSourceForDesc(ctx, cat.Flags{}, tableLookup.Desc, &tree.TableName{})
+	ds, err := oc.dataSourceForDesc(ctx, cat.Flags{}, tableLookup.Desc, &tree.TableName{})
+	return ds, false, err
 }
 
 func getDescForCatalogObject(o cat.Object) (sqlbase.DescriptorProto, error) {
@@ -252,14 +253,14 @@ func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error
 	return oc.planner.CheckAnyPrivilege(ctx, desc)
 }
 
-// IsSuperUser is part of the cat.Catalog interface.
-func (oc *optCatalog) IsSuperUser(ctx context.Context, action string) (bool, error) {
-	return oc.planner.IsSuperUser(ctx, action)
+// HasAdminRole is part of the cat.Catalog interface.
+func (oc *optCatalog) HasAdminRole(ctx context.Context) (bool, error) {
+	return oc.planner.HasAdminRole(ctx)
 }
 
-// RequireSuperUser is part of the cat.Catalog interface.
-func (oc *optCatalog) RequireSuperUser(ctx context.Context, action string) error {
-	return oc.planner.RequireSuperUser(ctx, action)
+// RequireAdminRole is part of the cat.Catalog interface.
+func (oc *optCatalog) RequireAdminRole(ctx context.Context, action string) error {
+	return oc.planner.RequireAdminRole(ctx, action)
 }
 
 // FullyQualifiedName is part of the cat.Catalog interface.
@@ -556,37 +557,36 @@ func newOptTable(
 				idxZone = &copyZone
 			}
 		}
-
 		ot.indexes[i].init(ot, i, idxDesc, idxZone)
-		if fk := &idxDesc.ForeignKey; fk.IsSet() {
-			ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
-				name:            idxDesc.ForeignKey.Name,
-				originTable:     ot.ID(),
-				originIndex:     idxDesc.ID,
-				referencedTable: cat.StableID(fk.Table),
-				referencedIndex: fk.Index,
-				numCols:         int(fk.SharedPrefixLen),
-				validity:        fk.Validity,
-				match:           fk.Match,
-				deleteAction:    fk.OnDelete,
-			})
-		}
-		for j := range idxDesc.ReferencedBy {
-			fk := &idxDesc.ReferencedBy[j]
-			ot.inboundFKs = append(ot.inboundFKs, optForeignKeyConstraint{
-				name:            idxDesc.ForeignKey.Name,
-				originTable:     cat.StableID(fk.Table),
-				originIndex:     fk.Index,
-				referencedTable: ot.ID(),
-				referencedIndex: idxDesc.ID,
-				// TODO(justin): this field is currently not populated, so it will
-				// always be zero and should not be used from this side.
-				numCols:      int(fk.SharedPrefixLen),
-				validity:     fk.Validity,
-				match:        fk.Match,
-				deleteAction: fk.OnDelete,
-			})
-		}
+	}
+
+	for i := range ot.desc.OutboundFKs {
+		fk := &ot.desc.OutboundFKs[i]
+		ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
+			name:              fk.Name,
+			originTable:       ot.ID(),
+			originColumns:     fk.OriginColumnIDs,
+			referencedTable:   cat.StableID(fk.ReferencedTableID),
+			referencedColumns: fk.ReferencedColumnIDs,
+			validity:          fk.Validity,
+			match:             fk.Match,
+			deleteAction:      fk.OnDelete,
+			updateAction:      fk.OnUpdate,
+		})
+	}
+	for i := range ot.desc.InboundFKs {
+		fk := &ot.desc.InboundFKs[i]
+		ot.inboundFKs = append(ot.inboundFKs, optForeignKeyConstraint{
+			name:              fk.Name,
+			originTable:       cat.StableID(fk.OriginTableID),
+			originColumns:     fk.OriginColumnIDs,
+			referencedTable:   ot.ID(),
+			referencedColumns: fk.ReferencedColumnIDs,
+			validity:          fk.Validity,
+			match:             fk.Match,
+			deleteAction:      fk.OnDelete,
+			updateAction:      fk.OnUpdate,
+		})
 	}
 
 	ot.primaryFamily.init(ot, &desc.Families[0])
@@ -1147,18 +1147,16 @@ func (oi *optFamily) Table() cat.Table {
 type optForeignKeyConstraint struct {
 	name string
 
-	originTable cat.StableID
-	originIndex sqlbase.IndexID
+	originTable   cat.StableID
+	originColumns []sqlbase.ColumnID
 
-	referencedTable cat.StableID
-	referencedIndex sqlbase.IndexID
+	referencedTable   cat.StableID
+	referencedColumns []sqlbase.ColumnID
 
-	numCols      int
 	validity     sqlbase.ConstraintValidity
 	match        sqlbase.ForeignKeyReference_Match
 	deleteAction sqlbase.ForeignKeyReference_Action
-
-	id cat.StableID
+	updateAction sqlbase.ForeignKeyReference_Action
 }
 
 var _ cat.ForeignKeyConstraint = &optForeignKeyConstraint{}
@@ -1180,7 +1178,7 @@ func (fk *optForeignKeyConstraint) ReferencedTableID() cat.StableID {
 
 // ColumnCount is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) ColumnCount() int {
-	return fk.numCols
+	return len(fk.originColumns)
 }
 
 // OriginColumnOrdinal is part of the cat.ForeignKeyConstraint interface.
@@ -1193,12 +1191,7 @@ func (fk *optForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i 
 	}
 
 	tab := originTable.(*optTable)
-	index, err := tab.desc.FindIndexByID(fk.originIndex)
-	if err != nil {
-		panic(errors.AssertionFailedf("%v", err))
-	}
-
-	ord, _ := tab.lookupColumnOrdinal(index.ColumnIDs[i])
+	ord, _ := tab.lookupColumnOrdinal(fk.originColumns[i])
 	return ord
 }
 
@@ -1211,12 +1204,7 @@ func (fk *optForeignKeyConstraint) ReferencedColumnOrdinal(referencedTable cat.T
 		))
 	}
 	tab := referencedTable.(*optTable)
-	index, err := tab.desc.FindIndexByID(fk.referencedIndex)
-	if err != nil {
-		panic(errors.AssertionFailedf("%v", err))
-	}
-
-	ord, _ := tab.lookupColumnOrdinal(index.ColumnIDs[i])
+	ord, _ := tab.lookupColumnOrdinal(fk.referencedColumns[i])
 	return ord
 }
 
@@ -1235,9 +1223,9 @@ func (fk *optForeignKeyConstraint) DeleteReferenceAction() tree.ReferenceAction 
 	return sqlbase.ForeignKeyReferenceActionType[fk.deleteAction]
 }
 
-// ID is part of the cat.ForeignKeyConstraint interface.
-func (fk *optForeignKeyConstraint) ID() cat.StableID {
-	return fk.id
+// UpdateReferenceAction is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) UpdateReferenceAction() tree.ReferenceAction {
+	return sqlbase.ForeignKeyReferenceActionType[fk.updateAction]
 }
 
 // optVirtualTable is similar to optTable but is used with virtual tables.

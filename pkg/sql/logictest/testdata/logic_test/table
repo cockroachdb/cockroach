@@ -461,7 +461,7 @@ query TT
 SHOW CREATE TABLE test.null_default
 ----
 test.public.null_default  CREATE TABLE null_default (
-                          ts TIMESTAMP NULL DEFAULT NULL,
+                          ts TIMESTAMP NULL,
                           FAMILY "primary" (ts, rowid)
 )
 

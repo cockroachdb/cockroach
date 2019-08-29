@@ -168,12 +168,15 @@ func MakeColumnDefDescs(
 		); err != nil {
 			return nil, nil, nil, err
 		}
-		// We keep the type checked expression so that the type annotation
-		// gets properly stored.
-		d.DefaultExpr.Expr = typedExpr
 
-		s := tree.Serialize(d.DefaultExpr.Expr)
-		col.DefaultExpr = &s
+		// Keep the type checked expression so that the type annotation gets
+		// properly stored, only if the default expression is not NULL.
+		// Otherwise we want to keep the default expression nil.
+		if typedExpr != tree.DNull {
+			d.DefaultExpr.Expr = typedExpr
+			s := tree.Serialize(d.DefaultExpr.Expr)
+			col.DefaultExpr = &s
+		}
 	}
 
 	if d.IsComputed() {
@@ -259,13 +262,12 @@ type ConstraintDetail struct {
 	Details     string
 	Unvalidated bool
 
-	// Only populated for FK, PK, and Unique Constraints.
+	// Only populated for PK and Unique Constraints.
 	Index *IndexDescriptor
 
 	// Only populated for FK Constraints.
-	FK              *ForeignKeyReference
+	FK              *ForeignKeyConstraint
 	ReferencedTable *TableDescriptor
-	ReferencedIndex *IndexDescriptor
 
 	// Only populated for Check Constraints.
 	CheckConstraint *TableDescriptor_CheckConstraint
@@ -350,15 +352,8 @@ func (desc *TableDescriptor) collectConstraintInfo(
 		}
 	}
 
-	fks, err := desc.AllActiveAndInactiveForeignKeys()
-	if err != nil {
-		return nil, err
-	}
-	for id, fk := range fks {
-		idx, err := desc.FindIndexByID(id)
-		if err != nil {
-			return nil, err
-		}
+	fks := desc.AllActiveAndInactiveForeignKeys()
+	for _, fk := range fks {
 		if _, ok := info[fk.Name]; ok {
 			return nil, pgerror.Newf(pgcode.DuplicateObject,
 				"duplicate constraint name: %q", fk.Name)
@@ -366,30 +361,26 @@ func (desc *TableDescriptor) collectConstraintInfo(
 		detail := ConstraintDetail{Kind: ConstraintTypeFK}
 		// Constraints in the Validating state are considered Unvalidated for this purpose
 		detail.Unvalidated = fk.Validity != ConstraintValidity_Validated
-		numCols := len(idx.ColumnIDs)
-		if fk.SharedPrefixLen > 0 {
-			numCols = int(fk.SharedPrefixLen)
+		var err error
+		detail.Columns, err = desc.NamesForColumnIDs(fk.OriginColumnIDs)
+		if err != nil {
+			return nil, err
 		}
-		detail.Columns = idx.ColumnNames[:numCols]
-		detail.Index = idx
 		detail.FK = fk
 
 		if tableLookup != nil {
-			other, err := tableLookup(fk.Table)
+			other, err := tableLookup(fk.ReferencedTableID)
 			if err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"error resolving table %d referenced in foreign key",
-					log.Safe(fk.Table))
+					log.Safe(fk.ReferencedTableID))
 			}
-			otherIdx, err := other.FindIndexByID(fk.Index)
+			referencedColumnNames, err := other.NamesForColumnIDs(fk.ReferencedColumnIDs)
 			if err != nil {
-				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-					"error resolving index %d in table %s referenced in foreign key",
-					log.Safe(fk.Index), other.Name)
+				return nil, err
 			}
-			detail.Details = fmt.Sprintf("%s.%v", other.Name, otherIdx.ColumnNames)
+			detail.Details = fmt.Sprintf("%s.%v", other.Name, referencedColumnNames)
 			detail.ReferencedTable = other
-			detail.ReferencedIndex = otherIdx
 		}
 		info[fk.Name] = detail
 	}
@@ -421,4 +412,50 @@ func (desc *TableDescriptor) collectConstraintInfo(
 		info[c.Name] = detail
 	}
 	return info, nil
+}
+
+// FindFKReferencedIndex finds the first index in the supplied referencedTable
+// that can satisfy a foreign key of the supplied column ids.
+func FindFKReferencedIndex(
+	referencedTable *TableDescriptor, referencedColIDs ColumnIDs,
+) (*IndexDescriptor, error) {
+	// Search for a unique index on the referenced table that matches our foreign
+	// key columns.
+	if ColumnIDs(referencedTable.PrimaryIndex.ColumnIDs).HasPrefix(referencedColIDs) {
+		return &referencedTable.PrimaryIndex, nil
+	}
+	// If the PK doesn't match, find the index corresponding to the referenced column.
+	for _, idx := range referencedTable.Indexes {
+		if idx.Unique && ColumnIDs(idx.ColumnIDs).HasPrefix(referencedColIDs) {
+			return &idx, nil
+		}
+	}
+	return nil, pgerror.Newf(
+		pgcode.ForeignKeyViolation,
+		"there is no unique constraint matching given keys for referenced table %s",
+		referencedTable.Name,
+	)
+}
+
+// FindFKOriginIndex finds the first index in the supplied originTable
+// that can satisfy an outgoing foreign key of the supplied column ids.
+func FindFKOriginIndex(
+	originTable *TableDescriptor, originColIDs ColumnIDs,
+) (*IndexDescriptor, error) {
+	// Search for an index on the origin table that matches our foreign
+	// key columns.
+	if ColumnIDs(originTable.PrimaryIndex.ColumnIDs).HasPrefix(originColIDs) {
+		return &originTable.PrimaryIndex, nil
+	}
+	// If the PK doesn't match, find the index corresponding to the origin column.
+	for _, idx := range originTable.Indexes {
+		if ColumnIDs(idx.ColumnIDs).HasPrefix(originColIDs) {
+			return &idx, nil
+		}
+	}
+	return nil, pgerror.Newf(
+		pgcode.ForeignKeyViolation,
+		"there is no index matching given keys for referenced table %s",
+		originTable.Name,
+	)
 }

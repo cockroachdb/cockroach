@@ -55,10 +55,12 @@ func TestWindowerAccountingForResults(t *testing.T) {
 	defer tempEngine.Close()
 
 	flowCtx := &FlowCtx{
-		Settings:    st,
-		EvalCtx:     &evalCtx,
-		diskMonitor: diskMonitor,
-		TempStorage: tempEngine,
+		EvalCtx: &evalCtx,
+		Cfg: &ServerConfig{
+			Settings:    st,
+			TempStorage: tempEngine,
+			DiskMonitor: diskMonitor,
+		},
 	}
 
 	post := &distsqlpb.PostProcessSpec{}
@@ -199,9 +201,11 @@ func BenchmarkWindower(b *testing.B) {
 	defer diskMonitor.Stop(ctx)
 
 	flowCtx := &FlowCtx{
-		Settings:    st,
-		EvalCtx:     &evalCtx,
-		diskMonitor: diskMonitor,
+		EvalCtx: &evalCtx,
+		Cfg: &ServerConfig{
+			Settings:    st,
+			DiskMonitor: diskMonitor,
+		},
 	}
 
 	rowsGenerators := []func(int, int) sqlbase.EncDatumRows{

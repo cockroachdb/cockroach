@@ -23,11 +23,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -43,25 +46,28 @@ var _ tree.Datum
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
 
-// _TYPES_T is the template type variable for types.T. It will be replaced by
-// types.Foo for each type Foo in the types.T type.
-const _TYPES_T = types.Unhandled
+// Dummy import to pull in "math" package.
+var _ = math.MaxInt64
+
+// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
+// coltypes.Foo for each type Foo in the coltypes.T type.
+const _TYPES_T = coltypes.Unhandled
 
 // _GOTYPE is the template Go type variable for this operator. It will be
-// replaced by the Go type equivalent for each type in types.T, for example
-// int64 for types.Int64.
+// replaced by the Go type equivalent for each type in coltypes.T, for example
+// int64 for coltypes.Int64.
 type _GOTYPE interface{}
 
 // _ASSIGN_EQ is the template equality function for assigning the first input
 // to the result of the the second input == the third input.
 func _ASSIGN_EQ(_, _, _ interface{}) uint64 {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // _ASSIGN_LT is the template equality function for assigning the first input
 // to the result of the the second input < the third input.
 func _ASSIGN_LT(_, _, _ interface{}) uint64 {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // _L_SEL_IND is the template type variable for the loop variable that
@@ -89,10 +95,15 @@ const _MJ_OVERLOAD = 0
 
 // */}}
 
+// Use execgen package to remove unused import warning.
+var _ interface{} = execgen.UNSAFEGET
+
 // {{ range $joinType := .JoinTypes }}
 type mergeJoin_JOIN_TYPE_STRINGOp struct {
 	mergeJoinBase
 }
+
+var _ StaticMemoryOperator = &mergeJoin_JOIN_TYPE_STRINGOp{}
 
 // {{ end }}
 
@@ -140,8 +151,10 @@ func _PROBE_SWITCH(
 				}
 				// {{ end }}
 
-				lVal := lKeys[_L_SEL_IND]
-				rVal := rKeys[_R_SEL_IND]
+				lSelIdx := _L_SEL_IND
+				lVal := execgen.UNSAFEGET(lKeys, int(lSelIdx))
+				rSelIdx := _R_SEL_IND
+				rVal := execgen.UNSAFEGET(rKeys, int(rSelIdx))
 
 				var match bool
 				_ASSIGN_EQ("match", "lVal", "rVal")
@@ -163,7 +176,8 @@ func _PROBE_SWITCH(
 								break
 							}
 							// {{ end }}
-							newLVal := lKeys[_L_SEL_IND]
+							lSelIdx := _L_SEL_IND
+							newLVal := execgen.UNSAFEGET(lKeys, int(lSelIdx))
 							_ASSIGN_EQ("match", "newLVal", "lVal")
 							if !match {
 								lComplete = true
@@ -186,7 +200,8 @@ func _PROBE_SWITCH(
 								break
 							}
 							// {{ end }}
-							newRVal := rKeys[_R_SEL_IND]
+							rSelIdx := _R_SEL_IND
+							newRVal := execgen.UNSAFEGET(rKeys, int(rSelIdx))
 							_ASSIGN_EQ("match", "newRVal", "rVal")
 							if !match {
 								rComplete = true
@@ -253,7 +268,7 @@ func _PROBE_SWITCH(
 		}
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colType))
 	}
 	// {{end}}
 	// {{/*
@@ -274,7 +289,7 @@ func _LEFT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{ if or $.JoinType.IsLeftOuter $.JoinType.IsLeftAnti }}
 	if lGroup.unmatched {
 		if curLIdx+1 != curLLength {
-			panic(fmt.Sprintf("unexpectedly length %d of the left unmatched group is not 1", curLLength-curLIdx))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unexpectedly length %d of the left unmatched group is not 1", curLLength-curLIdx))
 		}
 		// The row already does not have a match, so we don't need to do any
 		// additional processing.
@@ -314,7 +329,7 @@ func _RIGHT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{ if $.JoinType.IsRightOuter }}
 	if rGroup.unmatched {
 		if curRIdx+1 != curRLength {
-			panic(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curRLength-curRIdx))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curRLength-curRIdx))
 		}
 		// The row already does not have a match, so we don't need to do any
 		// additional processing.
@@ -410,7 +425,8 @@ func _INCREMENT_LEFT_SWITCH(
 			break
 		}
 		// {{ end }}
-		newLVal := lKeys[_L_SEL_IND]
+		lSelIdx = _L_SEL_IND
+		newLVal := execgen.UNSAFEGET(lKeys, int(lSelIdx))
 		// {{with _MJ_OVERLOAD}}
 		_ASSIGN_EQ("match", "newLVal", "lVal")
 		// {{end}}
@@ -467,7 +483,8 @@ func _INCREMENT_RIGHT_SWITCH(
 			break
 		}
 		// {{ end }}
-		newRVal := rKeys[_R_SEL_IND]
+		rSelIdx = _R_SEL_IND
+		newRVal := execgen.UNSAFEGET(rKeys, int(rSelIdx))
 		// {{with _MJ_OVERLOAD}}
 		_ASSIGN_EQ("match", "newRVal", "rVal")
 		// {{end}}
@@ -643,9 +660,9 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 					// {{ end }}
 
 					if !isNull {
-						val = srcCol[srcStartIdx]
+						val = execgen.UNSAFEGET(srcCol, srcStartIdx)
 						for i := 0; i < toAppend; i++ {
-							outCol[outStartIdx] = val
+							execgen.SET(outCol, outStartIdx, val)
 							outStartIdx++
 						}
 					}
@@ -670,7 +687,7 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 		o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colType))
 	}
 	// {{end}}
 	// {{/*
@@ -788,17 +805,20 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 					// instead of copy.
 					if toAppend == 1 {
 						// {{ if _HAS_SELECTION }}
-						outCol[outStartIdx] = srcCol[sel[o.builderState.right.curSrcStartIdx]]
+						v := execgen.UNSAFEGET(srcCol, int(sel[o.builderState.right.curSrcStartIdx]))
+						execgen.SET(outCol, outStartIdx, v)
 						// {{ else }}
-						outCol[outStartIdx] = srcCol[o.builderState.right.curSrcStartIdx]
+						v := execgen.UNSAFEGET(srcCol, o.builderState.right.curSrcStartIdx)
+						execgen.SET(outCol, outStartIdx, v)
 						// {{ end }}
 					} else {
 						// {{ if _HAS_SELECTION }}
 						for i := 0; i < toAppend; i++ {
-							outCol[i+outStartIdx] = srcCol[sel[i+o.builderState.right.curSrcStartIdx]]
+							v := execgen.UNSAFEGET(srcCol, int(sel[i+o.builderState.right.curSrcStartIdx]))
+							execgen.SET(outCol, i+outStartIdx, v)
 						}
 						// {{ else }}
-						copy(outCol[outStartIdx:], srcCol[o.builderState.right.curSrcStartIdx:o.builderState.right.curSrcStartIdx+toAppend])
+						execgen.COPYSLICE(outCol, srcCol, outStartIdx, o.builderState.right.curSrcStartIdx, o.builderState.right.curSrcStartIdx+toAppend)
 						// {{ end }}
 					}
 				}
@@ -825,7 +845,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 		o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colType))
 	}
 	// {{end}}
 	// {{/*
@@ -930,12 +950,14 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 			if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(lastBufferedTupleIdx)) {
 				return true
 			}
-			prevVal := bufferedGroup.ColVec(int(colIdx))._TemplateType()[lastBufferedTupleIdx]
+			bufferedCol := bufferedGroup.ColVec(int(colIdx))._TemplateType()
+			prevVal := execgen.UNSAFEGET(bufferedCol, int(lastBufferedTupleIdx))
 			var curVal _GOTYPE
 			if batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt64(tupleToLookAtIdx) {
 				return true
 			}
-			curVal = batch.ColVec(int(colIdx))._TemplateType()[tupleToLookAtIdx]
+			col := batch.ColVec(int(colIdx))._TemplateType()
+			curVal = execgen.UNSAFEGET(col, int(tupleToLookAtIdx))
 			var match bool
 			_ASSIGN_EQ("match", "prevVal", "curVal")
 			if !match {
@@ -943,7 +965,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 			}
 		// {{end}}
 		default:
-			panic(fmt.Sprintf("unhandled type %d", colTyp))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colTyp))
 		}
 	}
 	return false
@@ -1048,8 +1070,6 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource() {
 		toBuild:     o.proberState.lLength - o.proberState.lIdx,
 		nullGroup:   true,
 	}
-	o.builderState.lBatch = o.proberState.lBatch
-	o.builderState.rBatch = o.proberState.rBatch
 
 	o.proberState.lIdx = o.proberState.lLength
 	// {{ end }}
@@ -1096,8 +1116,6 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustRightSource() {
 		toBuild:     o.proberState.rLength - o.proberState.rIdx,
 		unmatched:   true,
 	}
-	o.builderState.lBatch = o.proberState.lBatch
-	o.builderState.rBatch = o.proberState.rBatch
 
 	o.proberState.rIdx = o.proberState.rLength
 	// {{ end }}
@@ -1126,6 +1144,19 @@ func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	o.outputReady = true
 	// {{ if or $.JoinType.IsInner $.JoinType.IsLeftSemi }}
 	o.setBuilderSourceToBufferedGroup()
+	// {{ else }}
+	// First we make sure that batches of the builder state are always set. This
+	// is needed because the batches are accessed outside of _LEFT_SWITCH and
+	// _RIGHT_SWITCH (before the merge joiner figures out whether there are any
+	// groups to be built).
+	o.builderState.lBatch = o.proberState.lBatch
+	o.builderState.rBatch = o.proberState.rBatch
+	// Next, we need to make sure that builder state is set up for a case when
+	// neither exhaustLeftSource nor exhaustRightSource is called below. In such
+	// scenario the merge joiner is done, so it'll be outputting zero-length
+	// batches from now on.
+	o.builderState.lGroups = o.builderState.lGroups[:0]
+	o.builderState.rGroups = o.builderState.rGroups[:0]
 	// {{ end }}
 	// {{ if or $.JoinType.IsLeftOuter $.JoinType.IsLeftAnti }}
 	// At least one of the sources is finished. If it was the right one,
@@ -1194,6 +1225,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 		case mjEntry:
 			if o.needToResetOutput {
 				o.needToResetOutput = false
+				o.output.ResetInternalBatch()
 				for _, vec := range o.output.ColVecs() {
 					// We only need to explicitly reset nulls since the values will be
 					// copied over and the correct length will be set.
@@ -1233,7 +1265,6 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			}
 
 			if o.outputReady || o.builderState.outCount == o.outputBatchSize {
-				o.output.SetSelection(false)
 				o.output.SetLength(o.builderState.outCount)
 				// Reset builder out count.
 				o.builderState.outCount = uint16(0)
@@ -1242,7 +1273,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 				return o.output
 			}
 		default:
-			panic(fmt.Sprintf("unexpected merge joiner state in Next: %v", o.state))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected merge joiner state in Next: %v", o.state))
 		}
 	}
 }

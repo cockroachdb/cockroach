@@ -97,8 +97,7 @@ func registerImportTPCC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       `import/experimental-direct-ingestion`,
-		Skip:       `bricks cluster`,
-		MinVersion: `v19.1.0`,
+		MinVersion: `v19.2.0`,
 		Cluster:    makeClusterSpec(3, cpu(16)),
 		Timeout:    2 * time.Hour,
 		Run: func(ctx context.Context, t *test, c *cluster) {

@@ -74,10 +74,6 @@ type Builder struct {
 	// These fields are set during the building process and can be used after
 	// Build is called.
 
-	// IsCorrelated is set to true during semantic analysis if a scalar variable was
-	// pulled from an outer scope, that is, if the query was found to be correlated.
-	IsCorrelated bool
-
 	// HadPlaceholders is set to true if we replaced any placeholders with their
 	// values.
 	HadPlaceholders bool
@@ -123,6 +119,17 @@ type Builder struct {
 	// trackViewDeps would be false inside that inner view).
 	trackViewDeps bool
 	viewDeps      opt.ViewDeps
+
+	// If set, the data source names in the AST are rewritten to the fully
+	// qualified version (after resolution). Used to construct the strings for
+	// CREATE VIEW and CREATE TABLE AS queries.
+	// TODO(radu): modifying the AST in-place is hacky; we will need to switch to
+	// using AST annotations.
+	qualifyDataSourceNamesInAST bool
+
+	// isCorrelated is set to true if we already reported to telemetry that the
+	// query contains a correlated subquery.
+	isCorrelated bool
 }
 
 // New creates a new Builder structure initialized with the given
@@ -265,6 +272,9 @@ func (b *Builder) buildStmt(
 
 	case *tree.CancelSessions:
 		return b.buildCancelSessions(stmt, inScope)
+
+	case *tree.Export:
+		return b.buildExport(stmt, inScope)
 
 	default:
 		// See if this statement can be rewritten to another statement using the

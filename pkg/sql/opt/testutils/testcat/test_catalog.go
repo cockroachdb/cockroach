@@ -157,13 +157,13 @@ func (tc *Catalog) ResolveDataSource(
 // ResolveDataSourceByID is part of the cat.Catalog interface.
 func (tc *Catalog) ResolveDataSourceByID(
 	ctx context.Context, flags cat.Flags, id cat.StableID,
-) (cat.DataSource, error) {
+) (_ cat.DataSource, isAdding bool, _ error) {
 	for _, ds := range tc.testSchema.dataSources {
 		if ds.ID() == id {
-			return ds, nil
+			return ds, false, nil
 		}
 	}
-	return nil, pgerror.Newf(pgcode.UndefinedTable,
+	return nil, false, pgerror.Newf(pgcode.UndefinedTable,
 		"relation [%d] does not exist", id)
 }
 
@@ -197,13 +197,13 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 	return nil
 }
 
-// IsSuperUser is part of the cat.Catalog interface.
-func (tc *Catalog) IsSuperUser(ctx context.Context, action string) (bool, error) {
+// HasAdminRole is part of the cat.Catalog interface.
+func (tc *Catalog) HasAdminRole(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// RequireSuperUser is part of the cat.Catalog interface.
-func (tc *Catalog) RequireSuperUser(ctx context.Context, action string) error {
+// RequireAdminRole is part of the cat.Catalog interface.
+func (tc *Catalog) RequireAdminRole(ctx context.Context, action string) error {
 	return nil
 }
 
@@ -1028,8 +1028,7 @@ type ForeignKeyConstraint struct {
 	validated    bool
 	matchMethod  tree.CompositeKeyMatchMethod
 	deleteAction tree.ReferenceAction
-
-	id cat.StableID
+	updateAction tree.ReferenceAction
 }
 
 var _ cat.ForeignKeyConstraint = &ForeignKeyConstraint{}
@@ -1092,9 +1091,9 @@ func (fk *ForeignKeyConstraint) DeleteReferenceAction() tree.ReferenceAction {
 	return fk.deleteAction
 }
 
-// ID is part of the cat.ForeignKeyConstraint interface.
-func (fk *ForeignKeyConstraint) ID() cat.StableID {
-	return fk.id
+// UpdateReferenceAction is part of the cat.ForeignKeyConstraint interface.
+func (fk *ForeignKeyConstraint) UpdateReferenceAction() tree.ReferenceAction {
+	return fk.updateAction
 }
 
 // Sequence implements the cat.Sequence interface for testing purposes.

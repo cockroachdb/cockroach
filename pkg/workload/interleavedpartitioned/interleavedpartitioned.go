@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -810,12 +810,12 @@ func (w *interleavedPartitioned) sessionsInitialRow(rowIdx int) []interface{} {
 	}
 }
 
-var childColTypes = []types.T{
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
+var childColTypes = []coltypes.T{
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
 }
 
 func (w *interleavedPartitioned) childInitialRowBatchFunc(
@@ -834,26 +834,26 @@ func (w *interleavedPartitioned) childInitialRowBatchFunc(
 		createdCol := cb.ColVec(3).Bytes()
 		updatedCol := cb.ColVec(4).Bytes()
 		for rowIdx := 0; rowIdx < nPerBatch; rowIdx++ {
-			sessionIDCol[rowIdx] = []byte(sessionID)
-			idCol[rowIdx] = []byte(randString(rng, 50))
-			valueCol[rowIdx] = []byte(randString(rng, 50))
-			createdCol[rowIdx] = []byte(nowString)
-			updatedCol[rowIdx] = []byte(nowString)
+			sessionIDCol.Set(rowIdx, []byte(sessionID))
+			idCol.Set(rowIdx, []byte(randString(rng, 50)))
+			valueCol.Set(rowIdx, []byte(randString(rng, 50)))
+			createdCol.Set(rowIdx, []byte(nowString))
+			updatedCol.Set(rowIdx, []byte(nowString))
 		}
 	}
 }
 
-var deviceColTypes = []types.T{
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
+var deviceColTypes = []coltypes.T{
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
 }
 
 func (w *interleavedPartitioned) deviceInitialRowBatch(
@@ -876,24 +876,24 @@ func (w *interleavedPartitioned) deviceInitialRowBatch(
 	createdCol := cb.ColVec(8).Bytes()
 	updatedCol := cb.ColVec(9).Bytes()
 	for rowIdx := 0; rowIdx < w.devicesPerSession; rowIdx++ {
-		sessionIDCol[rowIdx] = []byte(sessionID)
-		idCol[rowIdx] = []byte(randString(rng, 100))
-		deviceIDCol[rowIdx] = []byte(randString(rng, 50))
-		nameCol[rowIdx] = []byte(randString(rng, 50))
-		makeCol[rowIdx] = []byte(randString(rng, 50))
-		macaddressCol[rowIdx] = []byte(randString(rng, 50))
-		modelCol[rowIdx] = []byte(randString(rng, 50))
-		serialNumberCol[rowIdx] = []byte(randString(rng, 50))
-		createdCol[rowIdx] = []byte(nowString)
-		updatedCol[rowIdx] = []byte(nowString)
+		sessionIDCol.Set(rowIdx, []byte(sessionID))
+		idCol.Set(rowIdx, []byte(randString(rng, 100)))
+		deviceIDCol.Set(rowIdx, []byte(randString(rng, 50)))
+		nameCol.Set(rowIdx, []byte(randString(rng, 50)))
+		makeCol.Set(rowIdx, []byte(randString(rng, 50)))
+		macaddressCol.Set(rowIdx, []byte(randString(rng, 50)))
+		modelCol.Set(rowIdx, []byte(randString(rng, 50)))
+		serialNumberCol.Set(rowIdx, []byte(randString(rng, 50)))
+		createdCol.Set(rowIdx, []byte(nowString))
+		updatedCol.Set(rowIdx, []byte(nowString))
 	}
 }
 
-var queryColTypes = []types.T{
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
-	types.Bytes,
+var queryColTypes = []coltypes.T{
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
+	coltypes.Bytes,
 }
 
 func (w *interleavedPartitioned) queryInitialRowBatch(
@@ -910,10 +910,10 @@ func (w *interleavedPartitioned) queryInitialRowBatch(
 	createdCol := cb.ColVec(2).Bytes()
 	updatedCol := cb.ColVec(3).Bytes()
 	for rowIdx := 0; rowIdx < w.queriesPerSession; rowIdx++ {
-		sessionIDCol[rowIdx] = []byte(sessionID)
-		idCol[rowIdx] = []byte(randString(rng, 50))
-		createdCol[rowIdx] = []byte(nowString)
-		updatedCol[rowIdx] = []byte(nowString)
+		sessionIDCol.Set(rowIdx, []byte(sessionID))
+		idCol.Set(rowIdx, []byte(randString(rng, 50)))
+		createdCol.Set(rowIdx, []byte(nowString))
+		updatedCol.Set(rowIdx, []byte(nowString))
 	}
 }
 

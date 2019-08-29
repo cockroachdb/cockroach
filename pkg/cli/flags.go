@@ -13,6 +13,7 @@ package cli
 import (
 	"flag"
 	"net"
+	"regexp"
 	"strings"
 	"time"
 
@@ -24,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -42,7 +43,10 @@ import (
 // - the underlying context parameters must receive defaults in
 //   initCLIDefaults() even when they are otherwise overridden by the
 //   flags logic, because some tests to not use the flag logic at all.
-var serverListenPort, serverAdvertiseAddr, serverAdvertisePort string
+var serverListenPort string
+var serverAdvertiseAddr, serverAdvertisePort string
+var serverSQLAddr, serverSQLPort string
+var serverSQLAdvertiseAddr, serverSQLAdvertisePort string
 var serverHTTPAddr, serverHTTPPort string
 var localityAdvertiseHosts localityList
 
@@ -52,6 +56,11 @@ func initPreFlagsDefaults() {
 	serverListenPort = base.DefaultPort
 	serverAdvertiseAddr = ""
 	serverAdvertisePort = ""
+
+	serverSQLAddr = ""
+	serverSQLPort = ""
+	serverSQLAdvertiseAddr = ""
+	serverSQLAdvertisePort = ""
 
 	serverHTTPAddr = ""
 	serverHTTPPort = base.DefaultHTTPPort
@@ -168,10 +177,10 @@ func (a addrSetter) String() string {
 	return net.JoinHostPort(*a.addr, *a.port)
 }
 
-// Type implements the pflag.Value interface
+// Type implements the pflag.Value interface.
 func (a addrSetter) Type() string { return "<addr/host>[:<port>]" }
 
-// Set implement the pflag.Value interface.
+// Set implements the pflag.Value interface.
 func (a addrSetter) Set(v string) error {
 	addr, port, err := netutil.SplitHostPort(v, *a.port)
 	if err != nil {
@@ -181,6 +190,42 @@ func (a addrSetter) Set(v string) error {
 	*a.port = port
 	return nil
 }
+
+// clusterNameSetter wraps the cluster name variable
+// and verifies its format during configuration.
+type clusterNameSetter struct {
+	clusterName *string
+}
+
+// String implements the pflag.Value interface.
+func (a clusterNameSetter) String() string { return *a.clusterName }
+
+// Type implements the pflag.Value interface.
+func (a clusterNameSetter) Type() string { return "<identifier>" }
+
+// Set implements the pflag.Value interface.
+func (a clusterNameSetter) Set(v string) error {
+	if v == "" {
+		return errors.New("cluster name cannot be empty")
+	}
+	if len(v) > maxClusterNameLength {
+		return errors.Newf(`cluster name can contain at most %d characters`, maxClusterNameLength)
+	}
+	if !clusterNameRe.MatchString(v) {
+		return errClusterNameInvalidFormat
+	}
+	*a.clusterName = v
+	return nil
+}
+
+var errClusterNameInvalidFormat = errors.New(`cluster name must contain only letters, numbers or the "-" and "." characters`)
+
+// clusterNameRe matches valid cluster names.
+// For example, "a", "a123" and "a-b" are OK,
+// but "0123", "a-" and "123a" are not OK.
+var clusterNameRe = regexp.MustCompile(`^[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9]|)$`)
+
+const maxClusterNameLength = 256
 
 const backgroundEnvVar = "COCKROACH_BACKGROUND_RESTART"
 
@@ -197,17 +242,12 @@ func init() {
 	for _, cmd := range StartCmds {
 		AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
 			// Finalize the configuration of network and logging settings.
-			extraServerFlagInit()
+			if err := extraServerFlagInit(cmd); err != nil {
+				return err
+			}
 			return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
 		})
 	}
-
-	// start-single-node starts with default replication of 1.
-	AddPersistentPreRunE(startSingleNodeCmd, func(cmd *cobra.Command, _ []string) error {
-		serverCfg.DefaultSystemZoneConfig.NumReplicas = proto.Int32(1)
-		serverCfg.DefaultZoneConfig.NumReplicas = proto.Int32(1)
-		return nil
-	})
 
 	// Map any flags registered in the standard "flag" package into the
 	// top-level cockroach command.
@@ -270,6 +310,8 @@ func init() {
 		// Server flags.
 		VarFlag(f, addrSetter{&startCtx.serverListenAddr, &serverListenPort}, cliflags.ListenAddr)
 		VarFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)
+		VarFlag(f, addrSetter{&serverSQLAddr, &serverSQLPort}, cliflags.ListenSQLAddr)
+		VarFlag(f, addrSetter{&serverSQLAdvertiseAddr, &serverSQLAdvertisePort}, cliflags.SQLAdvertiseAddr)
 		VarFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
 
 		// Backward-compatibility flags.
@@ -328,9 +370,13 @@ func init() {
 		// --join, because it delegates its logic to that of 'start', and
 		// 'start' will check that the flag is properly defined.
 		VarFlag(f, &serverCfg.JoinList, cliflags.Join)
+		VarFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
+		BoolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification, false)
 		// We also hide it from help for 'start-single-node'.
 		if cmd == startSingleNodeCmd {
 			_ = f.MarkHidden(cliflags.Join.Name)
+			_ = f.MarkHidden(cliflags.ClusterName.Name)
+			_ = f.MarkHidden(cliflags.DisableClusterNameVerification.Name)
 		}
 
 		// Engine flags.
@@ -341,6 +387,9 @@ func init() {
 		// refers to becomes known.
 		VarFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
 		StringFlag(f, &startCtx.tempDir, cliflags.TempDir, startCtx.tempDir)
+		VarFlag(f, &startCtx.tempEngine, cliflags.TempEngine)
+		// Hide the tempEngine flag while it's experimental.
+		_ = f.MarkHidden(cliflags.TempEngine.Name)
 		StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir, startCtx.externalIODir)
 
 		VarFlag(f, serverCfg.SQLAuditLogDirName, cliflags.SQLAuditLogDirName)
@@ -405,7 +454,6 @@ func init() {
 		/* StartCmds are covered above */
 	}
 	clientCmds = append(clientCmds, userCmds...)
-	clientCmds = append(clientCmds, zoneCmds...)
 	clientCmds = append(clientCmds, nodeCmds...)
 	clientCmds = append(clientCmds, systemBenchCmds...)
 	clientCmds = append(clientCmds, initCmd)
@@ -475,10 +523,6 @@ func init() {
 	// Quit command.
 	BoolFlag(quitCmd.Flags(), &quitCtx.serverDecommission, cliflags.Decommission, quitCtx.serverDecommission)
 
-	zf := setZoneCmd.Flags()
-	StringFlag(zf, &zoneCtx.zoneConfig, cliflags.ZoneConfig, zoneCtx.zoneConfig)
-	BoolFlag(zf, &zoneCtx.zoneDisableReplication, cliflags.ZoneDisableReplication, zoneCtx.zoneDisableReplication)
-
 	for _, cmd := range append([]*cobra.Command{sqlShellCmd, demoCmd}, demoCmd.Commands()...) {
 		f := cmd.Flags()
 		VarFlag(f, &sqlCtx.setStmts, cliflags.Set)
@@ -492,7 +536,6 @@ func init() {
 
 	// Commands that establish a SQL connection.
 	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd, demoCmd}
-	sqlCmds = append(sqlCmds, zoneCmds...)
 	sqlCmds = append(sqlCmds, userCmds...)
 	sqlCmds = append(sqlCmds, demoCmd.Commands()...)
 	for _, cmd := range sqlCmds {
@@ -541,6 +584,10 @@ func init() {
 	// We add this command as a persistent flag so you can do stuff like
 	// ./cockroach demo movr --nodes=3.
 	IntFlag(demoFlags, &demoCtx.nodes, cliflags.DemoNodes, 1)
+	// The --empty flag is only valid for the top level demo command,
+	// so we use the regular flag set.
+	BoolFlag(demoCmd.Flags(), &demoCtx.useEmptyDatabase, cliflags.UseEmptyDatabase, false)
+	VarFlag(demoFlags, &demoCtx.localities, cliflags.DemoNodeLocality)
 
 	// sqlfmt command.
 	fmtFlags := sqlfmtCmd.Flags()
@@ -575,8 +622,11 @@ func init() {
 	}
 }
 
-func extraServerFlagInit() {
+func extraServerFlagInit(cmd *cobra.Command) error {
+	// Construct the main RPC listen address.
 	serverCfg.Addr = net.JoinHostPort(startCtx.serverListenAddr, serverListenPort)
+
+	// Fill in the defaults for --advertise-addr.
 	if serverAdvertiseAddr == "" {
 		serverAdvertiseAddr = startCtx.serverListenAddr
 	}
@@ -584,21 +634,60 @@ func extraServerFlagInit() {
 		serverAdvertisePort = serverListenPort
 	}
 	serverCfg.AdvertiseAddr = net.JoinHostPort(serverAdvertiseAddr, serverAdvertisePort)
+
+	// Fill in the defaults for --sql-addr.
+	if serverSQLAddr == "" {
+		serverSQLAddr = startCtx.serverListenAddr
+	}
+	if serverSQLPort == "" {
+		serverSQLPort = serverListenPort
+	}
+	serverCfg.SQLAddr = net.JoinHostPort(serverSQLAddr, serverSQLPort)
+	serverCfg.SplitListenSQL = cmd.Flags().Lookup(cliflags.ListenSQLAddr.Name).Changed
+
+	// Fill in the defaults for --advertise-sql-addr.
+	advSpecified := cmd.Flags().Lookup(cliflags.AdvertiseAddr.Name).Changed ||
+		cmd.Flags().Lookup(cliflags.AdvertiseHost.Name).Changed
+	if serverSQLAdvertiseAddr == "" {
+		if advSpecified {
+			serverSQLAdvertiseAddr = serverAdvertiseAddr
+		} else {
+			serverSQLAdvertiseAddr = serverSQLAddr
+		}
+	}
+	if serverSQLAdvertisePort == "" {
+		if advSpecified && !serverCfg.SplitListenSQL {
+			serverSQLAdvertisePort = serverAdvertisePort
+		} else {
+			serverSQLAdvertisePort = serverSQLPort
+		}
+	}
+	serverCfg.SQLAdvertiseAddr = net.JoinHostPort(serverSQLAdvertiseAddr, serverSQLAdvertisePort)
+
+	// Fill in the defaults for --http-addr.
 	if serverHTTPAddr == "" {
 		serverHTTPAddr = startCtx.serverListenAddr
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
+
+	// Fill the advertise port into the locality advertise addresses.
 	for i, addr := range localityAdvertiseHosts {
-		if !strings.Contains(localityAdvertiseHosts[i].Address.AddressField, ":") {
-			localityAdvertiseHosts[i].Address.AddressField = net.JoinHostPort(addr.Address.AddressField, serverAdvertisePort)
+		host, port, err := netutil.SplitHostPort(addr.Address.AddressField, serverAdvertisePort)
+		if err != nil {
+			return err
 		}
+		localityAdvertiseHosts[i].Address.AddressField = net.JoinHostPort(host, port)
 	}
 	serverCfg.LocalityAddresses = localityAdvertiseHosts
+
+	return nil
 }
 
 func extraClientFlagInit() {
 	serverCfg.Addr = net.JoinHostPort(cliCtx.clientConnHost, cliCtx.clientConnPort)
 	serverCfg.AdvertiseAddr = serverCfg.Addr
+	serverCfg.SQLAddr = net.JoinHostPort(cliCtx.clientConnHost, cliCtx.clientConnPort)
+	serverCfg.SQLAdvertiseAddr = serverCfg.SQLAddr
 	if serverHTTPAddr == "" {
 		serverHTTPAddr = startCtx.serverListenAddr
 	}

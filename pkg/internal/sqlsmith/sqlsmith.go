@@ -17,7 +17,6 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -69,12 +68,14 @@ type Smither struct {
 	statements                    statementWeights
 	tableExprs                    tableExprWeights
 
-	disableWith      bool
-	disableImpureFns bool
-	disableLimits    bool
-	simpleDatums     bool
-	avoidConsts      bool
-	ignoreFNs        []*regexp.Regexp
+	disableWith        bool
+	disableImpureFns   bool
+	disableLimits      bool
+	disableWindowFuncs bool
+	simpleDatums       bool
+	avoidConsts        bool
+	vectorizable       bool
+	ignoreFNs          []*regexp.Regexp
 }
 
 // NewSmither creates a new Smither. db is used to populate existing tables
@@ -129,7 +130,7 @@ func (s *Smither) Generate() string {
 // tables or columns.
 func (s *Smither) GenerateExpr() tree.TypedExpr {
 	scope := s.makeScope()
-	return makeScalar(scope, sqlbase.RandScalarType(s.rnd), nil)
+	return makeScalar(scope, s.randScalarType(), nil)
 }
 
 func (s *Smither) name(prefix string) tree.Name {
@@ -232,6 +233,39 @@ func (d avoidConsts) Apply(s *Smither) {
 	s.avoidConsts = true
 }
 
+// DisableWindowFuncs disables window functions.
+func DisableWindowFuncs() SmitherOption {
+	return disableWindowFuncs{}
+}
+
+type disableWindowFuncs struct{}
+
+func (d disableWindowFuncs) Apply(s *Smither) {
+	s.disableWindowFuncs = true
+}
+
+// Vectorizable causes the Smither to limit query generation to queries
+// supported by vectorized execution.
+func Vectorizable() SmitherOption {
+	return multiOption{
+		DisableMutations(),
+		DisableWith(),
+		DisableWindowFuncs(),
+		AvoidConsts(),
+		// This must be last so it can make the final changes to table
+		// exprs and statements.
+		vectorizable{},
+	}
+}
+
+type vectorizable struct{}
+
+func (d vectorizable) Apply(s *Smither) {
+	s.vectorizable = true
+	s.statements = nonMutatingStatements
+	s.tableExprs = vectorizableTableExprs
+}
+
 type multiOption []SmitherOption
 
 func (d multiOption) Apply(s *Smither) {
@@ -263,9 +297,10 @@ func PostgresMode() SmitherOption {
 	}
 }
 
-// SeedTable is a SQL statement that creates a table with most data types and
-// some sample rows.
-const SeedTable = `
+const (
+	// SeedTable is a SQL statement that creates a table with most data types and
+	// some sample rows.
+	SeedTable = `
 CREATE TABLE IF NOT EXISTS tab_orig AS
 	SELECT
 		g::INT2 AS _int2,
@@ -287,3 +322,20 @@ CREATE TABLE IF NOT EXISTS tab_orig AS
 	FROM
 		generate_series(1, 5) AS g;
 `
+
+	// VecSeedTable is like SeedTable except only types supported by vectorized
+	// execution are used.
+	VecSeedTable = `
+CREATE TABLE IF NOT EXISTS tab_orig AS
+	SELECT
+		g::INT8 AS _int8,
+		g::FLOAT8 AS _float8,
+		'2001-01-01'::DATE + g AS _date,
+		g % 2 = 1 AS _bool,
+		g::DECIMAL AS _decimal,
+		g::STRING AS _string,
+		g::STRING::BYTES AS _bytes
+	FROM
+		generate_series(1, 5) AS g;
+`
+)

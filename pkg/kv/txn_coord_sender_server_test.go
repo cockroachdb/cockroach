@@ -95,7 +95,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 			Clock:             s.Clock(),
 			Stopper:           s.Stopper(),
 		},
-		s.DistSender(),
+		s.DistSenderI().(*kv.DistSender),
 	)
 	db := client.NewDB(ambient, tsf, s.Clock())
 	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
@@ -112,8 +112,8 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 
 	// Now wait until the heartbeat loop notices that the transaction is aborted.
 	testutils.SucceedsSoon(t, func() error {
-		if txn.GetTxnCoordMeta(ctx).Txn.Status != roachpb.ABORTED {
-			return fmt.Errorf("txn not aborted yet")
+		if txn.Sender().(*kv.TxnCoordSender).IsTracking() {
+			return fmt.Errorf("txn heartbeat loop running")
 		}
 		return nil
 	})

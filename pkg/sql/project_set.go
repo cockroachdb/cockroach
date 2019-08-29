@@ -355,12 +355,3 @@ func (n *projectSetNode) Close(ctx context.Context) {
 		}
 	}
 }
-
-func (n *projectSetNode) computePhysicalProps() {
-	// We can pass through properties because projectSetNode preserves
-	// all input columns, and they come first.
-	n.props = planPhysicalProps(n.source)
-	// However any key in the source is destroyed because rows may repeat
-	// multiple times.
-	n.props.weakKeys = nil
-}

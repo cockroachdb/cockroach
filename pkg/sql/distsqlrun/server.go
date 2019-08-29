@@ -146,8 +146,9 @@ type ServerConfig struct {
 	Metrics *DistSQLMetrics
 
 	// NodeID is the id of the node on which this Server is running.
-	NodeID    *base.NodeIDContainer
-	ClusterID *base.ClusterIDContainer
+	NodeID      *base.NodeIDContainer
+	ClusterID   *base.ClusterIDContainer
+	ClusterName string
 
 	// JobRegistry manages jobs being used by this Server.
 	JobRegistry *jobs.Registry
@@ -394,7 +395,6 @@ func (ds *ServerImpl) setupFlow(
 				BytesEncodeFormat: be,
 				ExtraFloatDigits:  int(req.EvalContext.ExtraFloatDigits),
 			},
-			Vectorize: sessiondata.VectorizeExecMode(req.EvalContext.Vectorize),
 		}
 		// Enable better compatibility with PostgreSQL date math.
 		if req.Version >= 22 {
@@ -412,6 +412,7 @@ func (ds *ServerImpl) setupFlow(
 			Settings:    ds.ServerConfig.Settings,
 			SessionData: sd,
 			ClusterID:   ds.ServerConfig.ClusterID.Get(),
+			ClusterName: ds.ServerConfig.ClusterName,
 			NodeID:      nodeID,
 			ReCache:     ds.regexpCache,
 			Mon:         &monitor,
@@ -438,28 +439,21 @@ func (ds *ServerImpl) setupFlow(
 	}
 	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := FlowCtx{
-		Settings:       ds.Settings,
-		RuntimeStats:   ds.RuntimeStats,
 		AmbientContext: ds.AmbientContext,
-		stopper:        ds.Stopper,
+		Cfg:            &ds.ServerConfig,
 		id:             req.Flow.FlowID,
 		EvalCtx:        evalCtx,
-		nodeDialer:     ds.NodeDialer,
-		Gossip:         ds.Gossip,
 		txn:            txn,
-		ClientDB:       ds.DB,
-		executor:       ds.Executor,
-		LeaseManager:   ds.LeaseManager,
-		testingKnobs:   ds.TestingKnobs,
 		NodeID:         nodeID,
-		TempStorage:    ds.TempStorage,
-		BulkAdder:      ds.BulkAdder,
-		diskMonitor:    ds.DiskMonitor,
-		JobRegistry:    ds.JobRegistry,
 		traceKV:        req.TraceKV,
 		local:          localState.IsLocal,
 	}
-	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs)
+	// req always contains the desired vectorize mode, regardless of whether we
+	// have non-nil localState.EvalContext. We don't want to update EvalContext
+	// itself when the vectorize mode needs to be changed because we would need
+	// to restore the original value which can have data races under stress.
+	isVectorized := sessiondata.VectorizeExecMode(req.EvalContext.Vectorize) != sessiondata.VectorizeOff
+	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs, isVectorized)
 	if err := f.setup(ctx, &req.Flow); err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
 		tracing.FinishSpan(sp)

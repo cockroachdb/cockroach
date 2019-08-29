@@ -29,7 +29,7 @@ func genSumAgg(wr io.Writer) error {
 	s := string(t)
 
 	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "types.{{.LTyp}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 
@@ -44,7 +44,7 @@ func genSumAgg(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, binaryOpToOverloads[tree.Plus])
+	return tmpl.Execute(wr, sameTypeBinaryOpToOverloads[tree.Plus])
 }
 
 func init() {

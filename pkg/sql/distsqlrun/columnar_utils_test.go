@@ -49,10 +49,12 @@ func verifyColOperator(
 	diskMonitor := makeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 	flowCtx := &FlowCtx{
-		EvalCtx:     &evalCtx,
-		Settings:    cluster.MakeTestingClusterSettings(),
-		TempStorage: tempEngine,
-		diskMonitor: diskMonitor,
+		EvalCtx: &evalCtx,
+		Cfg: &ServerConfig{
+			Settings:    st,
+			TempStorage: tempEngine,
+			DiskMonitor: diskMonitor,
+		},
 	}
 
 	inputsProc := make([]RowSource, len(inputs))
@@ -85,20 +87,16 @@ func verifyColOperator(
 		return err
 	}
 
-	outputToInputColIdx := make([]int, len(outputTypes))
-	for i := range outputTypes {
-		outputToInputColIdx[i] = i
-	}
 	outColOp, err := newMaterializer(
 		flowCtx,
 		int32(len(inputs))+2,
 		result.op,
 		outputTypes,
-		outputToInputColIdx,
 		&distsqlpb.PostProcessSpec{},
 		nil, /* output */
 		nil, /* metadataSourcesQueue */
 		nil, /* outputStatsToTrace */
+		nil, /* cancelFlow */
 	)
 	if err != nil {
 		return err

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -1551,7 +1552,7 @@ func (s *adminServer) DataDistribution(
 		if droppedAtTime == nil {
 			// TODO(vilterp): figure out a way to get zone configs for tables that are dropped
 			zoneConfigQuery := fmt.Sprintf(
-				`SELECT zone_id, cli_specifier FROM [SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
+				`SELECT zone_id FROM [SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
 				(*tree.Name)(dbName), (*tree.Name)(tableName),
 			)
 			rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
@@ -1625,9 +1626,9 @@ func (s *adminServer) DataDistribution(
 	// Get zone configs.
 	// TODO(vilterp): this can be done in parallel with getting table/db names and replica counts.
 	zoneConfigsQuery := `
-		SELECT zone_name, config_sql, config_protobuf
+		SELECT target, config_sql, config_protobuf
 		FROM crdb_internal.zones
-		WHERE zone_name IS NOT NULL
+		WHERE target IS NOT NULL
 	`
 	rows2, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
 		ctx, "admin-replica-matrix", nil /* txn */, userName, zoneConfigsQuery,
@@ -1637,7 +1638,7 @@ func (s *adminServer) DataDistribution(
 	}
 
 	for _, row := range rows2 {
-		zoneName := string(tree.MustBeDString(row[0]))
+		target := string(tree.MustBeDString(row[0]))
 		zcSQL := tree.MustBeDString(row[1])
 		zcBytes := tree.MustBeDBytes(row[2])
 		var zcProto config.ZoneConfig
@@ -1645,8 +1646,8 @@ func (s *adminServer) DataDistribution(
 			return nil, s.serverError(err)
 		}
 
-		resp.ZoneConfigs[zoneName] = serverpb.DataDistributionResponse_ZoneConfig{
-			ZoneName:  zoneName,
+		resp.ZoneConfigs[target] = serverpb.DataDistributionResponse_ZoneConfig{
+			Target:    target,
 			Config:    zcProto,
 			ConfigSQL: string(zcSQL),
 		}
@@ -2126,7 +2127,8 @@ func (s *adminServer) dialNode(
 	if err != nil {
 		return nil, err
 	}
-	conn, err := s.server.rpcContext.GRPCDialNode(addr.String(), nodeID).Connect(ctx)
+	conn, err := s.server.rpcContext.GRPCDialNode(
+		addr.String(), nodeID, rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		return nil, err
 	}

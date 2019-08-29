@@ -246,7 +246,12 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 		fromCols[i] = tab.FindOrdinal(string(c))
 	}
 
-	targetTable := tc.Table(&d.Table)
+	var targetTable *Table
+	if d.Table.TableName == tab.Name() {
+		targetTable = tab
+	} else {
+		targetTable = tc.Table(&d.Table)
+	}
 
 	toCols := make([]int, len(d.ToCols))
 	for i, c := range d.ToCols {
@@ -327,14 +332,6 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 		tab.addIndex(&idx, nonUniqueIndex)
 	}
 
-	// We can't use the ordinal in either the origin or referenced table to
-	// identify the constraint, so we use a pairing function to uniquely combine
-	// them.
-	// TODO(justin): remove this once descriptors are symmetric.
-	targetOrd := len(targetTable.inboundFKs)
-	sourceOrd := len(tab.outboundFKs)
-	id := cat.StableID(1 + pair(targetOrd, sourceOrd))
-
 	fk := ForeignKeyConstraint{
 		name:                     constraintName,
 		originTableID:            tab.ID(),
@@ -344,16 +341,10 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 		validated:                true,
 		matchMethod:              d.Match,
 		deleteAction:             d.Actions.Delete,
-		id:                       id,
+		updateAction:             d.Actions.Update,
 	}
 	tab.outboundFKs = append(tab.outboundFKs, fk)
 	targetTable.inboundFKs = append(targetTable.inboundFKs, fk)
-}
-
-// pair is a one-to-one function from pairs of integers to integers. See
-// https://en.wikipedia.org/wiki/Pairing_function.
-func pair(n, m int) int {
-	return (n+m)*(n+m+1)/2 + m
 }
 
 func (tt *Table) addColumn(def *tree.ColumnTableDef) {

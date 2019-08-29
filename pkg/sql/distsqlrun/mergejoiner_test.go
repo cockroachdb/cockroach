@@ -700,8 +700,8 @@ func TestMergeJoiner(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
-				Settings: st,
-				EvalCtx:  &evalCtx,
+				Cfg:     &ServerConfig{Settings: st},
+				EvalCtx: &evalCtx,
 			}
 
 			post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: c.outCols}
@@ -806,8 +806,8 @@ func TestConsumerClosed(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
-				Settings: st,
-				EvalCtx:  &evalCtx,
+				Cfg:     &ServerConfig{Settings: st},
+				EvalCtx: &evalCtx,
 			}
 			post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: outCols}
 			m, err := newMergeJoiner(&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
@@ -830,8 +830,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 
 	spec := &distsqlpb.MergeJoinerSpec{

@@ -12,7 +12,6 @@ package main
 
 import (
 	"context"
-	"encoding/xml"
 	"fmt"
 	"regexp"
 	"sort"
@@ -180,6 +179,8 @@ func registerHibernate(r *testRegistry) {
 		var passUnexpectedCount, passExpectedCount, notRunCount int
 		// Put all the results in a giant map of [testname]result
 		results := make(map[string]string)
+		// Put all issue hints in a map of [testname]issue
+		allIssueHints := make(map[string]string)
 		// Current failures are any tests that reported as failed, regardless of if
 		// they were expected or not.
 		var currentFailures, allTests []string
@@ -208,9 +209,12 @@ func registerHibernate(r *testRegistry) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			tests, passed, err := extractFailureFromHibernateXML(fileOutput)
+			tests, passed, issueHints, err := extractFailureFromJUnitXML(fileOutput)
 			if err != nil {
 				t.Fatal(err)
+			}
+			for testName, issue := range issueHints {
+				allIssueHints[testName] = issue
 			}
 			for i, test := range tests {
 				// There is at least a single test that's run twice, so if we already
@@ -220,6 +224,9 @@ func registerHibernate(r *testRegistry) {
 				}
 				allTests = append(allTests, test)
 				issue, expectedFailure := expectedFailures[test]
+				if len(issue) == 0 || issue == "unknown" {
+					issue = issueHints[test]
+				}
 				pass := passed[i]
 				switch {
 				case pass && !expectedFailure:
@@ -237,7 +244,8 @@ func registerHibernate(r *testRegistry) {
 					failExpectedCount++
 					currentFailures = append(currentFailures, test)
 				case !pass && !expectedFailure:
-					results[test] = fmt.Sprintf("--- FAIL: %s (unexpected)", test)
+					results[test] = fmt.Sprintf("--- FAIL: %s - %s (unexpected)",
+						test, maybeAddGithubLink(issue))
 					failUnexpectedCount++
 					currentFailures = append(currentFailures, test)
 				}
@@ -299,6 +307,9 @@ func registerHibernate(r *testRegistry) {
 			fmt.Fprintf(&b, "var %s = blacklist{\n", blacklistName)
 			for _, test := range currentFailures {
 				issue := expectedFailures[test]
+				if len(issue) == 0 || issue == "unknown" {
+					issue = allIssueHints[test]
+				}
 				if len(issue) == 0 {
 					issue = "unknown"
 				}
@@ -321,37 +332,6 @@ func registerHibernate(r *testRegistry) {
 			runHibernate(ctx, t, c)
 		},
 	})
-}
-
-func extractFailureFromHibernateXML(contents []byte) ([]string, []bool, error) {
-	type Failure struct {
-		Message string `xml:"message,attr"`
-	}
-	type TestCase struct {
-		Name      string  `xml:"name,attr"`
-		ClassName string  `xml:"classname,attr"`
-		Failure   Failure `xml:"failure,omitempty"`
-	}
-	type TestSuite struct {
-		XMLName   xml.Name   `xml:"testsuite"`
-		TestCases []TestCase `xml:"testcase"`
-	}
-
-	var testSuite TestSuite
-	_ = testSuite.XMLName
-
-	if err := xml.Unmarshal(contents, &testSuite); err != nil {
-		return nil, nil, err
-	}
-
-	var tests []string
-	var passed []bool
-	for _, testCase := range testSuite.TestCases {
-		tests = append(tests, fmt.Sprintf("%s.%s", testCase.ClassName, testCase.Name))
-		passed = append(passed, len(testCase.Failure.Message) == 0)
-	}
-
-	return tests, passed, nil
 }
 
 const hibernateDatabaseGradle = `

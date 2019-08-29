@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
 	"google.golang.org/grpc"
 )
@@ -212,12 +213,18 @@ func createTestStoreWithOpts(
 	}
 	// Wait for the store's single range to have quorum before proceeding.
 	repl := store.LookupReplica(roachpb.RKeyMin)
-	testutils.SucceedsSoon(t, func() error {
-		if !repl.HasQuorum() {
-			return errors.New("first range has not reached quorum")
-		}
-		return nil
-	})
+
+	// Send a request through the range to make sure everything is warmed up
+	// and works.
+	// NB: it's unclear if this code is necessary.
+	var ba roachpb.BatchRequest
+	get := roachpb.GetRequest{}
+	get.Key = keys.LocalMax
+	ba.Header.Replica = repl.Desc().Replicas().Voters()[0]
+	ba.Header.RangeID = repl.RangeID
+	ba.Add(&get)
+	_, pErr := store.Send(ctx, ba)
+	require.NoError(t, pErr.GoError())
 
 	// Wait for the system config to be available in gossip. All sorts of things
 	// might not work properly while the system config is not available.
@@ -244,6 +251,9 @@ type multiTestContext struct {
 	manualClock *hlc.ManualClock
 	clock       *hlc.Clock
 	rpcContext  *rpc.Context
+	// rpcTestingKnobs are optional configuration for the rpcContext.
+	rpcTestingKnobs rpc.ContextTestingKnobs
+
 	// By default, a multiTestContext starts with a bunch of system ranges, just
 	// like a regular Server after bootstrap. If startWithSingleRange is set,
 	// we'll start with a single range spanning all the key space. The split
@@ -306,6 +316,7 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 		mCopy.engines = nil
 		mCopy.engineStoppers = nil
 		mCopy.startWithSingleRange = false
+		mCopy.rpcTestingKnobs = rpc.ContextTestingKnobs{}
 		var empty multiTestContext
 		if !reflect.DeepEqual(empty, mCopy) {
 			t.Fatalf("illegal fields set in multiTestContext:\n%s", pretty.Diff(empty, mCopy))
@@ -338,8 +349,8 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	if m.rpcContext == nil {
-		m.rpcContext = rpc.NewContext(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, m.clock,
-			m.transportStopper, &st.Version)
+		m.rpcContext = rpc.NewContextWithTestingKnobs(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, m.clock,
+			m.transportStopper, &st.Version, m.rpcTestingKnobs)
 		// Ensure that tests using this test context and restart/shut down
 		// their servers do not inadvertently start talking to servers from
 		// unrelated concurrent tests.
@@ -913,7 +924,8 @@ func (m *multiTestContext) addStore(idx int) {
 	// having to worry about such conditions we pre-warm the connection
 	// cache. See #8440 for an example of the headaches the long dial times
 	// cause.
-	if _, err := m.rpcContext.GRPCDialNode(ln.Addr().String(), nodeID).Connect(ctx); err != nil {
+	if _, err := m.rpcContext.GRPCDialNode(ln.Addr().String(), nodeID,
+		rpc.DefaultClass).Connect(ctx); err != nil {
 		m.t.Fatal(err)
 	}
 
@@ -984,11 +996,12 @@ func (m *multiTestContext) stopStore(i int) {
 
 	m.mu.Lock()
 	m.stoppers[i] = nil
-	// Break the transport breaker for this node so that messages sent between a
-	// store stopping and that store restarting will never remain in-flight in
+	// Break the transport breakers for this node so that messages sent between
+	// a store stopping and that store restarting will never remain in-flight in
 	// the transport and end up reaching the store. This has been the cause of
 	// flakiness in the past.
-	m.transport.GetCircuitBreaker(m.idents[i].NodeID).Break()
+	m.transport.GetCircuitBreaker(m.idents[i].NodeID, rpc.DefaultClass).Break()
+	m.transport.GetCircuitBreaker(m.idents[i].NodeID, rpc.SystemClass).Break()
 	m.senders[i].RemoveStore(m.stores[i])
 	m.stores[i] = nil
 	m.mu.Unlock()
@@ -1022,7 +1035,8 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 		m.t.Fatal(err)
 	}
 	m.senders[i].AddStore(store)
-	m.transport.GetCircuitBreaker(m.idents[i].NodeID).Reset()
+	m.transport.GetCircuitBreaker(m.idents[i].NodeID, rpc.DefaultClass).Reset()
+	m.transport.GetCircuitBreaker(m.idents[i].NodeID, rpc.SystemClass).Reset()
 	m.mu.Unlock()
 	cfg.NodeLiveness.StartHeartbeat(ctx, stopper, func(ctx context.Context) {
 		now := m.clocks[i].Now()
@@ -1128,12 +1142,14 @@ func (m *multiTestContext) changeReplicas(
 		}
 
 		_, err := m.dbs[0].AdminChangeReplicas(
-			ctx, startKey.AsRawKey(), changeType,
-			[]roachpb.ReplicationTarget{{
-				NodeID:  m.idents[dest].NodeID,
-				StoreID: m.idents[dest].StoreID,
-			}},
+			ctx, startKey.AsRawKey(),
 			desc,
+			roachpb.MakeReplicationChanges(
+				changeType,
+				roachpb.ReplicationTarget{
+					NodeID:  m.idents[dest].NodeID,
+					StoreID: m.idents[dest].StoreID,
+				}),
 		)
 
 		if err == nil || testutils.IsError(err, alreadyDoneErr) {
@@ -1150,7 +1166,7 @@ func (m *multiTestContext) changeReplicas(
 		// We can't use storage.IsSnapshotError() because the original error object
 		// is lost. We could make a this into a roachpb.Error but it seems overkill
 		// for this one usage.
-		if testutils.IsError(err, "snapshot failed: .*") {
+		if testutils.IsError(err, "snapshot failed: .*|descriptor changed") {
 			log.Info(ctx, err)
 			continue
 		}
@@ -1196,6 +1212,9 @@ func (m *multiTestContext) replicateRangeNonFatal(rangeID roachpb.RangeID, dests
 			}
 			if e := expectedReplicaIDs[i]; repDesc.ReplicaID != e {
 				return errors.Errorf("expected replica %s to have ID %d", repl, e)
+			}
+			if t := repDesc.GetType(); t != roachpb.VOTER_FULL {
+				return errors.Errorf("expected replica %s to be a voter was %s", repl, t)
 			}
 			if !repl.Desc().ContainsKey(startKey) {
 				return errors.Errorf("expected replica %s to contain %s", repl, startKey)

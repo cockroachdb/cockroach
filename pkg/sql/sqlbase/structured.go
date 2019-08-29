@@ -72,6 +72,19 @@ func (c ColumnIDs) Len() int           { return len(c) }
 func (c ColumnIDs) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 func (c ColumnIDs) Less(i, j int) bool { return c[i] < c[j] }
 
+// HasPrefix returns true if the input list is a prefix of this list.
+func (c ColumnIDs) HasPrefix(input ColumnIDs) bool {
+	if len(input) > len(c) {
+		return false
+	}
+	for i := range input {
+		if input[i] != c[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // FamilyID is a custom type for ColumnFamilyDescriptor IDs.
 type FamilyID uint32
 
@@ -135,6 +148,10 @@ type ImmutableTableDescriptor struct {
 	// are all set to nullable while column backfilling is still in
 	// progress, as mutation columns may have NULL values.
 	ReadableColumns []ColumnDescriptor
+
+	// TODO (lucy): populate these and use them
+	// inboundFKs  []*ForeignKeyConstraint
+	// outboundFKs []*ForeignKeyConstraint
 }
 
 // InvalidMutationID is the uninitialised mutation id.
@@ -260,16 +277,25 @@ func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor 
 	return desc
 }
 
+// protoGetter is a sub-interface of client.Txn that can fetch protobufs in a
+// transaction.
+type protoGetter interface {
+	// GetProto retrieves a protoutil.Message that's stored at key, storing it
+	// into the input msg parameter. If the key doesn't exist, the input proto
+	// will be reset.
+	GetProto(ctx context.Context, key interface{}, msg protoutil.Message) error
+}
+
 // GetDatabaseDescFromID retrieves the database descriptor for the database
-// ID passed in using an existing txn. Returns an error if the descriptor
-// doesn't exist or if it exists and is not a database.
+// ID passed in using an existing proto getter. Returns an error if the
+// descriptor doesn't exist or if it exists and is not a database.
 func GetDatabaseDescFromID(
-	ctx context.Context, txn *client.Txn, id ID,
+	ctx context.Context, protoGetter protoGetter, id ID,
 ) (*DatabaseDescriptor, error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
 
-	if err := txn.GetProto(ctx, descKey, desc); err != nil {
+	if err := protoGetter.GetProto(ctx, descKey, desc); err != nil {
 		return nil, err
 	}
 	db := desc.GetDatabase()
@@ -280,30 +306,54 @@ func GetDatabaseDescFromID(
 }
 
 // GetTableDescFromID retrieves the table descriptor for the table
-// ID passed in using an existing txn. Returns an error if the
+// ID passed in using an existing proto getter. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a table.
-func GetTableDescFromID(ctx context.Context, txn *client.Txn, id ID) (*TableDescriptor, error) {
+func GetTableDescFromID(
+	ctx context.Context, protoGetter protoGetter, id ID,
+) (*TableDescriptor, error) {
+	table, err := getTableDescFromIDRaw(ctx, protoGetter, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := table.MaybeFillInDescriptor(ctx, protoGetter); err != nil {
+		return nil, err
+	}
+
+	return table, nil
+}
+
+// getTableDescFromIDRaw retrieves the table descriptor for the table
+// ID passed in using an existing proto getter. Returns an error if the
+// descriptor doesn't exist or if it exists and is not a table. Note that it
+// does not "fill in" the descriptor, which performs various upgrade steps for
+// migrations and is *required* before ordinary presentation to other code. This
+// method is for internal use only and shouldn't get exposed.
+func getTableDescFromIDRaw(
+	ctx context.Context, protoGetter protoGetter, id ID,
+) (*TableDescriptor, error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
 
-	if err := txn.GetProto(ctx, descKey, desc); err != nil {
+	if err := protoGetter.GetProto(ctx, descKey, desc); err != nil {
 		return nil, err
 	}
 	table := desc.GetTable()
 	if table == nil {
 		return nil, ErrDescriptorNotFound
 	}
+
 	return table, nil
 }
 
 // GetMutableTableDescFromID retrieves the table descriptor for the table
-// ID passed in using an existing txn. Returns an error if the
+// ID passed in using an existing proto getter. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a table.
 // Otherwise a mutable copy of the table is returned.
 func GetMutableTableDescFromID(
-	ctx context.Context, txn *client.Txn, id ID,
+	ctx context.Context, protoGetter protoGetter, id ID,
 ) (*MutableTableDescriptor, error) {
-	table, err := GetTableDescFromID(ctx, txn, id)
+	table, err := GetTableDescFromID(ctx, protoGetter, id)
 	if err != nil {
 		return nil, err
 	}
@@ -454,6 +504,10 @@ func (desc *IndexDescriptor) ColNamesFormat(ctx *tree.FmtCtx) {
 	}
 }
 
+// TODO (tyler): Issue #39771 This method needs more thorough testing, probably
+// in structured_test.go. Or possibly replace it with a format method taking
+// a format context as argument.
+
 // ColNamesString returns a string describing the column names and directions
 // in this index.
 func (desc *IndexDescriptor) ColNamesString() string {
@@ -461,6 +515,8 @@ func (desc *IndexDescriptor) ColNamesString() string {
 	desc.ColNamesFormat(f)
 	return f.CloseAndGetString()
 }
+
+// TODO (tyler): Issue #39771 Same comment as ColNamesString above.
 
 // SQLString returns the SQL string describing this index. If non-empty,
 // "ON tableName" is included in the output in the correct place.
@@ -473,11 +529,11 @@ func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
 		f.WriteString("INVERTED ")
 	}
 	f.WriteString("INDEX ")
+	f.FormatNameP(&desc.Name)
 	if *tableName != AnonymousTable {
-		f.WriteString("ON ")
+		f.WriteString(" ON ")
 		f.FormatNode(tableName)
 	}
-	f.FormatNameP(&desc.Name)
 	f.WriteString(" (")
 	desc.ColNamesFormat(f)
 	f.WriteByte(')')
@@ -513,12 +569,6 @@ func (desc *TableDescriptor) TypeName() string {
 // SetName implements the DescriptorProto interface.
 func (desc *TableDescriptor) SetName(name string) {
 	desc.Name = name
-}
-
-// IsEmpty checks if the descriptor is uninitialized.
-func (desc *TableDescriptor) IsEmpty() bool {
-	// Valid tables cannot have an ID of 0.
-	return desc.ID == 0
 }
 
 // IsTable returns true if the TableDescriptor actually describes a
@@ -624,9 +674,13 @@ func (desc *TableDescriptor) AllActiveAndInactiveChecks() []*TableDescriptor_Che
 	// including it twice. (Note that even though unvalidated check constraints
 	// cannot be added as of 19.1, they can still exist if they were created under
 	// previous versions.)
-	checks := make([]*TableDescriptor_CheckConstraint, 0, len(desc.Checks)+len(desc.Mutations))
+	checks := make([]*TableDescriptor_CheckConstraint, 0, len(desc.Checks))
 	for _, c := range desc.Checks {
-		if c.Validity != ConstraintValidity_Validating {
+		// While a constraint is being validated for existing rows or being dropped,
+		// the constraint is present both on the table descriptor and in the
+		// mutations list in the Validating or Dropping state, so those constraints
+		// are excluded here to avoid double-counting.
+		if c.Validity != ConstraintValidity_Validating && c.Validity != ConstraintValidity_Dropping {
 			checks = append(checks, c)
 		}
 	}
@@ -643,34 +697,24 @@ func (desc *TableDescriptor) AllActiveAndInactiveChecks() []*TableDescriptor_Che
 // writes, and "inactive" ones queued in the mutations list. An error is
 // returned if multiple foreign keys (including mutations) are found for the
 // same index.
-func (desc *TableDescriptor) AllActiveAndInactiveForeignKeys() (
-	map[IndexID]*ForeignKeyReference,
-	error,
-) {
-	fks := make(map[IndexID]*ForeignKeyReference)
-	// While a foreign key constraint is being validated for existing rows, the
-	// foreign key reference is present both on the index descriptor and in the
-	// mutations list in the Validating state, so those FKs are excluded here to
-	// avoid double-counting.
-	if desc.PrimaryIndex.ForeignKey.IsSet() && desc.PrimaryIndex.ForeignKey.Validity != ConstraintValidity_Validating {
-		fks[desc.PrimaryIndex.ID] = &desc.PrimaryIndex.ForeignKey
-	}
-	for i := range desc.Indexes {
-		idx := &desc.Indexes[i]
-		if idx.ForeignKey.IsSet() && idx.ForeignKey.Validity != ConstraintValidity_Validating {
-			fks[idx.ID] = &idx.ForeignKey
+func (desc *TableDescriptor) AllActiveAndInactiveForeignKeys() []*ForeignKeyConstraint {
+	fks := make([]*ForeignKeyConstraint, 0, len(desc.OutboundFKs))
+	for i := range desc.OutboundFKs {
+		fk := &desc.OutboundFKs[i]
+		// While a constraint is being validated for existing rows or being dropped,
+		// the constraint is present both on the table descriptor and in the
+		// mutations list in the Validating or Dropping state, so those constraints
+		// are excluded here to avoid double-counting.
+		if fk.Validity != ConstraintValidity_Validating && fk.Validity != ConstraintValidity_Dropping {
+			fks = append(fks, fk)
 		}
 	}
 	for i := range desc.Mutations {
 		if c := desc.Mutations[i].GetConstraint(); c != nil && c.ConstraintType == ConstraintToUpdate_FOREIGN_KEY {
-			if _, ok := fks[c.ForeignKeyIndex]; ok {
-				return nil, errors.AssertionFailedf(
-					"foreign key mutation found for index that already has a foreign key")
-			}
-			fks[c.ForeignKeyIndex] = &c.ForeignKey
+			fks = append(fks, &c.ForeignKey)
 		}
 	}
-	return fks, nil
+	return fks
 }
 
 // ForeachNonDropIndex runs a function on all indexes, including those being
@@ -710,10 +754,329 @@ func generatedFamilyName(familyID FamilyID, columnNames []string) string {
 // This includes format upgrades and optional changes that can be handled by all version
 // (for example: additional default privileges).
 // Returns true if any changes were made.
-func (desc *TableDescriptor) MaybeFillInDescriptor() bool {
-	changedVersion := desc.maybeUpgradeFormatVersion()
-	changedPrivileges := desc.Privileges.MaybeFixPrivileges(desc.ID)
-	return changedVersion || changedPrivileges
+func (desc *TableDescriptor) MaybeFillInDescriptor(
+	ctx context.Context, protoGetter protoGetter,
+) error {
+	desc.maybeUpgradeFormatVersion()
+	desc.Privileges.MaybeFixPrivileges(desc.ID)
+	if protoGetter != nil {
+		if _, err := desc.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, false /* skipFKsWithNoMatchingTable*/); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// MapProtoGetter is a protoGetter that has a hard-coded map of keys to proto
+// messages.
+type MapProtoGetter struct {
+	Protos map[interface{}]protoutil.Message
+}
+
+// GetProto implements the protoGetter interface.
+func (m MapProtoGetter) GetProto(
+	ctx context.Context, key interface{}, msg protoutil.Message,
+) error {
+	msg.Reset()
+	if other, ok := m.Protos[string(key.(roachpb.Key))]; ok {
+		bytes := make([]byte, other.Size())
+		if _, err := other.MarshalTo(bytes); err != nil {
+			return err
+		}
+		if err := protoutil.Unmarshal(bytes, msg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// MaybeUpgradeForeignKeyRepresentation destructively modifies the input table
+// descriptor by replacing all old-style foreign key references (the ForeignKey
+// and ReferencedBy fields on IndexDescriptor) with new-style foreign key
+// references (the InboundFKs and OutboundFKs fields on TableDescriptor). It
+// uses the supplied proto getter to look up the referenced descriptor on
+// outgoing FKs and the origin descriptor on incoming FKs. It returns true in
+// the first position if the descriptor was upgraded at all (i.e. had old-style
+// references on it) and an error if the descriptor was unable to be upgraded
+// for some reason.
+// If skipFKsWithNoMatchingTable is set to true, if a *table* that's supposed to
+// contain the matching forward/back-reference for an FK is not found, the FK
+// is dropped from the table and no error is returned.
+// TODO(lucy): Write tests for when skipFKsWithNoMatchingTable is true.
+func (desc *TableDescriptor) MaybeUpgradeForeignKeyRepresentation(
+	ctx context.Context, protoGetter protoGetter, skipFKsWithNoMatchingTable bool,
+) (bool, error) {
+	if desc.Dropped() {
+		// If the table has been dropped, it's permitted to have corrupted foreign
+		// keys, so we have no chance to properly upgrade it. Just return as-is.
+		return false, nil
+	}
+	otherUnupgradedTables := make(map[ID]*TableDescriptor)
+	changed := false
+	// No need to process mutations, since only descriptors written on a 19.2
+	// cluster (after finalizing the upgrade) have foreign key mutations.
+	for i := range desc.Indexes {
+		newChanged, err := maybeUpgradeForeignKeyRepOnIndex(
+			ctx, protoGetter, otherUnupgradedTables, desc, &desc.Indexes[i], skipFKsWithNoMatchingTable,
+		)
+		if err != nil {
+			return false, err
+		}
+		changed = changed || newChanged
+	}
+	newChanged, err := maybeUpgradeForeignKeyRepOnIndex(
+		ctx, protoGetter, otherUnupgradedTables, desc, &desc.PrimaryIndex, skipFKsWithNoMatchingTable,
+	)
+	if err != nil {
+		return false, err
+	}
+	changed = changed || newChanged
+
+	return changed, nil
+}
+
+// maybeUpgradeForeignKeyRepOnIndex is the meat of the previous function - it
+// tries to upgrade a particular index's foreign key representation.
+func maybeUpgradeForeignKeyRepOnIndex(
+	ctx context.Context,
+	protoGetter protoGetter,
+	otherUnupgradedTables map[ID]*TableDescriptor,
+	desc *TableDescriptor,
+	idx *IndexDescriptor,
+	skipFKsWithNoMatchingTable bool,
+) (bool, error) {
+	var changed bool
+	if idx.ForeignKey.IsSet() {
+		ref := &idx.ForeignKey
+		if _, ok := otherUnupgradedTables[ref.Table]; !ok {
+			tbl, err := getTableDescFromIDRaw(ctx, protoGetter, ref.Table)
+			if err != nil {
+				if err == ErrDescriptorNotFound && skipFKsWithNoMatchingTable {
+					// Ignore this FK and keep going.
+				} else {
+					return false, err
+				}
+			} else {
+				otherUnupgradedTables[ref.Table] = tbl
+			}
+		}
+		if tbl, ok := otherUnupgradedTables[ref.Table]; ok {
+			referencedIndex, err := tbl.FindIndexByID(ref.Index)
+			if err != nil {
+				return false, err
+			}
+			numCols := ref.SharedPrefixLen
+			outFK := ForeignKeyConstraint{
+				OriginTableID:                     desc.ID,
+				OriginColumnIDs:                   idx.ColumnIDs[:numCols],
+				ReferencedTableID:                 ref.Table,
+				ReferencedColumnIDs:               referencedIndex.ColumnIDs[:numCols],
+				Name:                              ref.Name,
+				Validity:                          ref.Validity,
+				OnDelete:                          ref.OnDelete,
+				OnUpdate:                          ref.OnUpdate,
+				Match:                             ref.Match,
+				LegacyOriginIndex:                 idx.ID,
+				LegacyReferencedIndex:             referencedIndex.ID,
+				LegacyUpgradedFromOriginReference: idx.ForeignKey,
+			}
+			desc.OutboundFKs = append(desc.OutboundFKs, outFK)
+		}
+		changed = true
+		idx.ForeignKey = ForeignKeyReference{}
+	}
+
+	for refIdx := range idx.ReferencedBy {
+		ref := &(idx.ReferencedBy[refIdx])
+		if _, ok := otherUnupgradedTables[ref.Table]; !ok {
+			tbl, err := getTableDescFromIDRaw(ctx, protoGetter, ref.Table)
+			if err != nil {
+				if err == ErrDescriptorNotFound && skipFKsWithNoMatchingTable {
+					// Ignore this FK and keep going.
+				} else {
+					return false, err
+				}
+			} else {
+				otherUnupgradedTables[ref.Table] = tbl
+			}
+		}
+
+		if otherTable, ok := otherUnupgradedTables[ref.Table]; ok {
+			originIndex, err := otherTable.FindIndexByID(ref.Index)
+			if err != nil {
+				return false, err
+			}
+			// There are two cases. Either the other table is old (not upgraded yet),
+			// or it's new (already upgraded).
+			var inFK ForeignKeyConstraint
+			if !originIndex.ForeignKey.IsSet() {
+				// The other table has either no foreign key, indicating a corrupt
+				// reference, or the other table was upgraded. Assume the second for now.
+				// If we also find no matching reference in the new-style foreign keys,
+				// that indicates a corrupt reference.
+				var forwardFK *ForeignKeyConstraint
+				for i := range otherTable.OutboundFKs {
+					otherFK := &otherTable.OutboundFKs[i]
+					// To find a match, we need to compare the reference's table id and
+					// index id, which are the only two available fields on backreferences
+					// in the old representation. Note that we have to compare the index id
+					// to the matching new forward reference's LegacyOriginIndex field,
+					// which although marked as Legacy, is populated every time we create
+					// a new-style fk during the duration of 19.2.
+					if otherFK.ReferencedTableID == desc.ID &&
+						otherFK.LegacyOriginIndex == ref.Index {
+						// Found a match.
+						forwardFK = otherFK
+						break
+					}
+				}
+				if forwardFK == nil {
+					// Corrupted foreign key - there was no forward reference for the back
+					// reference.
+					return false, errors.AssertionFailedf(
+						"error finding foreign key on table %d for backref %+v",
+						otherTable.ID, ref)
+				}
+				inFK = ForeignKeyConstraint{
+					OriginTableID:                         ref.Table,
+					OriginColumnIDs:                       forwardFK.OriginColumnIDs,
+					ReferencedTableID:                     desc.ID,
+					ReferencedColumnIDs:                   forwardFK.ReferencedColumnIDs,
+					Name:                                  forwardFK.Name,
+					Validity:                              forwardFK.Validity,
+					OnDelete:                              forwardFK.OnDelete,
+					OnUpdate:                              forwardFK.OnUpdate,
+					Match:                                 forwardFK.Match,
+					LegacyOriginIndex:                     originIndex.ID,
+					LegacyReferencedIndex:                 idx.ID,
+					LegacyUpgradedFromReferencedReference: *ref,
+				}
+			} else {
+				// We have an old (not upgraded yet) table, with a matching forward
+				// foreign key.
+				numCols := originIndex.ForeignKey.SharedPrefixLen
+				inFK = ForeignKeyConstraint{
+					OriginTableID:                         ref.Table,
+					OriginColumnIDs:                       originIndex.ColumnIDs[:numCols],
+					ReferencedTableID:                     desc.ID,
+					ReferencedColumnIDs:                   idx.ColumnIDs[:numCols],
+					Name:                                  originIndex.ForeignKey.Name,
+					Validity:                              originIndex.ForeignKey.Validity,
+					OnDelete:                              originIndex.ForeignKey.OnDelete,
+					OnUpdate:                              originIndex.ForeignKey.OnUpdate,
+					Match:                                 originIndex.ForeignKey.Match,
+					LegacyOriginIndex:                     originIndex.ID,
+					LegacyReferencedIndex:                 idx.ID,
+					LegacyUpgradedFromReferencedReference: *ref,
+				}
+			}
+			desc.InboundFKs = append(desc.InboundFKs, inFK)
+		}
+		changed = true
+	}
+	idx.ReferencedBy = nil
+	return changed, nil
+}
+
+// MaybeDowngradeForeignKeyRepresentation non-destructively downgrades the
+// receiver into the old foreign key representation (the ForeignKey
+// and ReferencedBy fields on IndexDescriptor if and only if the cluster version
+// has not yet been upgraded to VersionTopLevelForeignKeys. It returns true in
+// the first position if the downgrade occurred, along with a new
+// TableDescriptor object that is the downgraded descriptor. The receiver is not
+// modified in either case.
+func (desc *TableDescriptor) MaybeDowngradeForeignKeyRepresentation(
+	ctx context.Context, clusterSettings *cluster.Settings,
+) (bool, *TableDescriptor, error) {
+	downgradeUnnecessary := clusterSettings.Version.IsActive(cluster.VersionTopLevelForeignKeys)
+	if downgradeUnnecessary {
+		return false, desc, nil
+	}
+	descCopy := protoutil.Clone(desc).(*TableDescriptor)
+	changed := false
+
+	// No need to process mutations, since only descriptors written on a 19.2
+	// cluster (after finalizing the upgrade) have foreign key mutations.
+	for _, fk := range descCopy.OutboundFKs {
+		// If this foreign key was just added to the descriptor (since the last time
+		// it was read from disk), the Legacy* fields should have been populated
+		// to ensure compatibility.
+		// TODO(lucy): Do this in a follow-up PR.
+		ref := ForeignKeyReference{
+			Table:           fk.ReferencedTableID,
+			Index:           fk.LegacyReferencedIndex,
+			Name:            fk.Name,
+			Validity:        fk.Validity,
+			SharedPrefixLen: int32(len(fk.OriginColumnIDs)),
+			OnDelete:        fk.OnDelete,
+			OnUpdate:        fk.OnUpdate,
+			Match:           fk.Match,
+		}
+		// Validate that the resultant downgraded foreign key reference is identical
+		// to the one that we expected. All fields should be the same, except for
+		// potentially the Name and Validity.
+		if err := validateDowngradedFKReference(ref, fk.LegacyUpgradedFromOriginReference); err != nil {
+			return false, nil, err
+		}
+
+		idx, err := descCopy.FindIndexByID(fk.LegacyOriginIndex)
+		if err != nil {
+			return false, nil, err
+		}
+		idx.ForeignKey = ref
+		changed = true
+	}
+	descCopy.OutboundFKs = nil
+
+	for i := range descCopy.InboundFKs {
+		// If this foreign key was just added to the descriptor (since the last time
+		// it was read from disk), the Legacy* fields should have been populated
+		// to ensure compatibility.
+		fk := &descCopy.InboundFKs[i]
+		backref := ForeignKeyReference{
+			Table: fk.OriginTableID,
+			Index: fk.LegacyOriginIndex,
+		}
+		if err := validateDowngradedFKReference(backref, fk.LegacyUpgradedFromReferencedReference); err != nil {
+			return false, nil, err
+		}
+		backrefIdx, err := descCopy.FindIndexByID(fk.LegacyReferencedIndex)
+		if err != nil {
+			return false, nil, err
+		}
+		backrefIdx.ReferencedBy = append(backrefIdx.ReferencedBy, backref)
+		changed = true
+	}
+	descCopy.InboundFKs = nil
+	return changed, descCopy, nil
+}
+
+func validateDowngradedFKReference(downgraded, original ForeignKeyReference) error {
+	if downgraded.Index != original.Index {
+		return errors.AssertionFailedf("downgraded.Index(%d) != original.Index (%d)",
+			downgraded.Index, original.Index)
+	}
+	if downgraded.Table != original.Table {
+		return errors.AssertionFailedf("downgraded.Table(%d) != original.Table (%d)",
+			downgraded.Table, original.Table)
+	}
+	if downgraded.SharedPrefixLen != original.SharedPrefixLen {
+		return errors.AssertionFailedf("downgraded.SharedPrefixLen(%d) != original.SharedPrefixLen (%d)",
+			downgraded.SharedPrefixLen, original.SharedPrefixLen)
+	}
+	if downgraded.OnDelete != original.OnDelete {
+		return errors.AssertionFailedf("downgraded.OnDelete(%d) != original.OnDelete (%d)",
+			downgraded.OnDelete, original.OnDelete)
+	}
+	if downgraded.OnUpdate != original.OnUpdate {
+		return errors.AssertionFailedf("downgraded.OnUpdate(%d) != original.OnUpdate (%d)",
+			downgraded.OnUpdate, original.OnUpdate)
+	}
+	if downgraded.Match != original.Match {
+		return errors.AssertionFailedf("downgraded.Match(%d) != original.Match (%d)",
+			downgraded.Match, original.Match)
+	}
+	return nil
 }
 
 // maybeUpgradeFormatVersion transforms the TableDescriptor to the latest
@@ -832,7 +1195,7 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 	if desc.ID == 0 {
 		desc.ID = keys.MinUserDescID
 	}
-	err := desc.ValidateTable(nil)
+	err := desc.ValidateTable()
 	desc.ID = savedID
 	return err
 }
@@ -1152,10 +1515,8 @@ func (desc *MutableTableDescriptor) MaybeIncrementVersion(
 
 // Validate validates that the table descriptor is well formed. Checks include
 // both single table and cross table invariants.
-func (desc *TableDescriptor) Validate(
-	ctx context.Context, txn *client.Txn, st *cluster.Settings,
-) error {
-	err := desc.ValidateTable(st)
+func (desc *TableDescriptor) Validate(ctx context.Context, txn *client.Txn) error {
+	err := desc.ValidateTable()
 	if err != nil {
 		return err
 	}
@@ -1206,48 +1567,49 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 		return targetTable, targetIndex, nil
 	}
 
-	for _, index := range desc.AllNonDropIndexes() {
-		// Check foreign keys.
-		if index.ForeignKey.IsSet() {
-			targetTable, targetIndex, err := findTargetIndex(
-				index.ForeignKey.Table, index.ForeignKey.Index)
-			if err != nil {
-				return errors.Wrapf(err, "invalid foreign key")
-			}
-			found := false
-			for _, backref := range targetIndex.ReferencedBy {
-				if backref.Table == desc.ID && backref.Index == index.ID {
-					found = true
-					break
-				}
-			}
-			if !found {
-				return errors.AssertionFailedf("missing fk back reference to %q@%q from %q@%q",
-					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
+	// Check foreign keys.
+	for i := range desc.OutboundFKs {
+		fk := &desc.OutboundFKs[i]
+		referencedTable, err := getTable(fk.ReferencedTableID)
+		if err != nil {
+			return errors.Wrapf(err,
+				"invalid foreign key: missing table=%d", errors.Safe(fk.ReferencedTableID))
+		}
+		found := false
+		for i := range referencedTable.InboundFKs {
+			backref := &referencedTable.InboundFKs[i]
+			if backref.OriginTableID == desc.ID && backref.Name == fk.Name {
+				found = true
+				break
 			}
 		}
-		fkBackrefs := make(map[ForeignKeyReference]struct{})
-		for _, backref := range index.ReferencedBy {
-			if _, ok := fkBackrefs[backref]; ok {
-				return errors.AssertionFailedf("duplicated fk backreference %+v", backref)
-			}
-			fkBackrefs[backref] = struct{}{}
-			targetTable, err := getTable(backref.Table)
-			if err != nil {
-				return errors.Wrapf(err, "invalid fk backreference table=%d index=%d",
-					backref.Table, errors.Safe(backref.Index))
-			}
-			targetIndex, err := targetTable.FindIndexByID(backref.Index)
-			if err != nil {
-				return errors.Wrapf(err, "invalid fk backreference table=%s index=%d",
-					targetTable.Name, errors.Safe(backref.Index))
-			}
-			if fk := targetIndex.ForeignKey; fk.Table != desc.ID || fk.Index != index.ID {
-				return errors.AssertionFailedf("broken fk backward reference from %q@%q to %q@%q",
-					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
+		if !found {
+			return errors.AssertionFailedf("missing fk back reference %q to %q from %q",
+				fk.Name, desc.Name, referencedTable.Name)
+		}
+	}
+	for i := range desc.InboundFKs {
+		backref := &desc.InboundFKs[i]
+		originTable, err := getTable(backref.OriginTableID)
+		if err != nil {
+			return errors.Wrapf(err,
+				"invalid foreign key backreference: missing table=%d", errors.Safe(backref.OriginTableID))
+		}
+		found := false
+		for i := range originTable.OutboundFKs {
+			fk := &originTable.OutboundFKs[i]
+			if fk.ReferencedTableID == desc.ID && fk.Name == backref.Name {
+				found = true
+				break
 			}
 		}
+		if !found {
+			return errors.AssertionFailedf("missing fk forward reference %q to %q from %q",
+				backref.Name, desc.Name, originTable.Name)
+		}
+	}
 
+	for _, index := range desc.AllNonDropIndexes() {
 		// Check interleaves.
 		if len(index.Interleave.Ancestors) > 0 {
 			// Only check the most recent ancestor, the rest of them don't point
@@ -1312,7 +1674,7 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 // are consistent. Use Validate to validate that cross-table references are
 // correct.
 // If version is supplied, the descriptor is checked for version incompatibilities.
-func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
+func (desc *TableDescriptor) ValidateTable() error {
 	if err := validateName(desc.Name, "table"); err != nil {
 		return err
 	}
@@ -1608,7 +1970,7 @@ func (desc *TableDescriptor) PrimaryKeyString() string {
 
 // validatePartitioningDescriptor validates that a PartitioningDescriptor, which
 // may represent a subpartition, is well-formed. Checks include validating the
-// table-level uniqueness of all partition names, validating that the encoded
+// index-level uniqueness of all partition names, validating that the encoded
 // tuples match the corresponding column types, and that range partitions are
 // stored sorted by upper bound. colOffset is non-zero for subpartitions and
 // indicates how many index columns to skip over.
@@ -1658,8 +2020,6 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 				return fmt.Errorf("PARTITION %s: name must be unique (used twice in index %q)",
 					name, indexName)
 			}
-			return fmt.Errorf("PARTITION %s: name must be unique (used in both index %q and index %q)",
-				name, indexName, idxDesc.Name)
 		}
 		partitionNames[name] = idxDesc.Name
 		return nil
@@ -1735,20 +2095,6 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 	}
 
 	return nil
-}
-
-// FindNonDropPartitionByName returns the PartitionDescriptor and the
-// IndexDescriptor that the partition with the specified name belongs to. If no
-// such partition exists, an error is returned.
-func (desc *TableDescriptor) FindNonDropPartitionByName(
-	name string,
-) (*PartitioningDescriptor, *IndexDescriptor, error) {
-	for _, idx := range desc.AllNonDropIndexes() {
-		if p := idx.FindPartitionByName(name); p != nil {
-			return p, idx, nil
-		}
-	}
-	return nil, nil, fmt.Errorf("partition %q does not exist", name)
 }
 
 // validatePartitioning validates that any PartitioningDescriptors contained in
@@ -2183,6 +2529,21 @@ func (desc *TableDescriptor) FindCheckByName(
 	return nil, fmt.Errorf("check %q does not exist", name)
 }
 
+// NamesForColumnIDs returns the names for the given column ids, or an error
+// if one or more column ids was missing. Note - this allocates! It's not for
+// hot path code.
+func (desc *TableDescriptor) NamesForColumnIDs(ids ColumnIDs) ([]string, error) {
+	names := make([]string, len(ids))
+	for i, id := range ids {
+		col, err := desc.FindColumnByID(id)
+		if err != nil {
+			return nil, err
+		}
+		names[i] = col.Name
+	}
+	return names, nil
+}
+
 // RenameIndexDescriptor renames an index descriptor.
 func (desc *MutableTableDescriptor) RenameIndexDescriptor(
 	index *IndexDescriptor, name string,
@@ -2207,11 +2568,13 @@ func (desc *MutableTableDescriptor) RenameIndexDescriptor(
 	return fmt.Errorf("index with id = %d does not exist", id)
 }
 
-// DropConstraint drops a constraint.
+// DropConstraint drops a constraint, either by removing it from the table
+// descriptor or by queuing a mutation for a schema change.
 func (desc *MutableTableDescriptor) DropConstraint(
 	name string,
 	detail ConstraintDetail,
-	removeFK func(*MutableTableDescriptor, *IndexDescriptor) error,
+	removeFK func(*MutableTableDescriptor, *ForeignKeyConstraint) error,
+	settings *cluster.Settings,
 ) error {
 	switch detail.Kind {
 	case ConstraintTypePK:
@@ -2224,28 +2587,66 @@ func (desc *MutableTableDescriptor) DropConstraint(
 
 	case ConstraintTypeCheck:
 		if detail.CheckConstraint.Validity == ConstraintValidity_Validating {
-			return unimplemented.Newf("rename-constraint-check-mutation",
-				"constraint %q in the middle of being added, try again later",
-				tree.ErrNameStringP(&detail.CheckConstraint.Name))
+			return unimplemented.Newf("drop-constraint-check-mutation",
+				"constraint %q in the middle of being added, try again later", name)
+		}
+		if detail.CheckConstraint.Validity == ConstraintValidity_Dropping {
+			return unimplemented.Newf("drop-constraint-check-mutation",
+				"constraint %q in the middle of being dropped", name)
 		}
 		for i, c := range desc.Checks {
 			if c.Name == name {
-				desc.Checks = append(desc.Checks[:i], desc.Checks[i+1:]...)
-				break
+				// If the constraint is unvalidated, there's no assumption that it must
+				// hold for all rows, so it can be dropped immediately.
+				// We also drop the constraint immediately instead of queuing a mutation
+				// unless the cluster is fully upgraded to 19.2, for backward
+				// compatibility.
+				if detail.CheckConstraint.Validity == ConstraintValidity_Unvalidated ||
+					!settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
+					desc.Checks = append(desc.Checks[:i], desc.Checks[i+1:]...)
+					return nil
+				}
+				c.Validity = ConstraintValidity_Dropping
+				desc.AddCheckMutation(c, DescriptorMutation_DROP)
+				return nil
 			}
 		}
-		return nil
+		return errors.Errorf("constraint %q not found on table %q", name, desc.Name)
 
 	case ConstraintTypeFK:
-		idx, err := desc.FindIndexByID(detail.Index.ID)
-		if err != nil {
-			return err
+		if detail.FK.Validity == ConstraintValidity_Validating {
+			return unimplemented.Newf("drop-constraint-fk-mutation",
+				"constraint %q in the middle of being added, try again later", name)
 		}
-		if err := removeFK(desc, idx); err != nil {
-			return err
+		if detail.FK.Validity == ConstraintValidity_Dropping {
+			return unimplemented.Newf("drop-constraint-fk-mutation",
+				"constraint %q in the middle of being dropped", name)
 		}
-		idx.ForeignKey = ForeignKeyReference{}
-		return nil
+		// Search through the descriptor's foreign key constraints and delete the
+		// one that we're supposed to be deleting.
+		for i := range desc.OutboundFKs {
+			ref := &desc.OutboundFKs[i]
+			if ref.Name == name {
+				// If the constraint is unvalidated, there's no assumption that it must
+				// hold for all rows, so it can be dropped immediately.
+				// We also drop the constraint immediately instead of queuing a mutation
+				// unless the cluster is fully upgraded to 19.2, for backward
+				// compatibility.
+				if detail.FK.Validity == ConstraintValidity_Unvalidated ||
+					!settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
+					// Remove the backreference.
+					if err := removeFK(desc, detail.FK); err != nil {
+						return err
+					}
+					desc.OutboundFKs = append(desc.OutboundFKs[:i], desc.OutboundFKs[i+1:]...)
+					return nil
+				}
+				ref.Validity = ConstraintValidity_Dropping
+				desc.AddForeignKeyMutation(ref, DescriptorMutation_DROP)
+				return nil
+			}
+		}
+		return errors.AssertionFailedf("constraint %q not found on table %q", name, desc.Name)
 
 	default:
 		return unimplemented.Newf(fmt.Sprintf("drop-constraint-%s", detail.Kind),
@@ -2256,7 +2657,10 @@ func (desc *MutableTableDescriptor) DropConstraint(
 
 // RenameConstraint renames a constraint.
 func (desc *MutableTableDescriptor) RenameConstraint(
-	detail ConstraintDetail, oldName, newName string, dependentViewRenameError func(string, ID) error,
+	detail ConstraintDetail,
+	oldName, newName string,
+	dependentViewRenameError func(string, ID) error,
+	renameFK func(*MutableTableDescriptor, *ForeignKeyConstraint, string) error,
 ) error {
 	switch detail.Kind {
 	case ConstraintTypePK, ConstraintTypeUnique:
@@ -2274,15 +2678,16 @@ func (desc *MutableTableDescriptor) RenameConstraint(
 				"constraint %q in the middle of being added, try again later",
 				tree.ErrNameStringP(&detail.FK.Name))
 		}
-		idx, err := desc.FindIndexByID(detail.Index.ID)
+		// Update the name on the referenced table descriptor.
+		if err := renameFK(desc, detail.FK, newName); err != nil {
+			return err
+		}
+		// Update the name on this table descriptor.
+		fk, err := desc.FindFKByName(detail.FK.Name)
 		if err != nil {
 			return err
 		}
-		if !idx.ForeignKey.IsSet() || idx.ForeignKey.Name != oldName {
-			return errors.AssertionFailedf("constraint %q not found",
-				tree.ErrNameString(newName))
-		}
-		idx.ForeignKey.Name = newName
+		fk.Name = newName
 		return nil
 
 	case ConstraintTypeCheck:
@@ -2362,6 +2767,48 @@ func (desc *TableDescriptor) GetIndexMutationCapabilities(id IndexID) (bool, boo
 	return false, false
 }
 
+// FindFKByName returns the FK constraint on the table with the given name.
+// Must return a pointer to the FK in the TableDescriptor, so that
+// callers can use returned values to modify the TableDesc.
+func (desc *TableDescriptor) FindFKByName(name string) (*ForeignKeyConstraint, error) {
+	for i := range desc.OutboundFKs {
+		fk := &desc.OutboundFKs[i]
+		if fk.Name == name {
+			return fk, nil
+		}
+	}
+	return nil, fmt.Errorf("fk %q does not exist", name)
+}
+
+// FindFKForBackRef searches the table descriptor for the foreign key constraint
+// that matches the supplied backref, which is present on the supplied table id.
+// Our current restriction that each column in a table can be on the referencing
+// side of at most one FK relationship means that there's no possibility of
+// ambiguity when finding the forward FK reference for a given backreference,
+// since ambiguity would require an identical list of referencing columns. This
+// would continue to hold even if we were to lift that restriction (see #38850), as long as
+// it were still prohibited to create multiple foreign key relationships with
+// exactly identical lists of referenced and referencing columns, which we think
+// is a reasonable restriction (even though Postgres does allow doing this).
+func (desc *TableDescriptor) FindFKForBackRef(
+	referencedTableID ID, backref *ForeignKeyConstraint,
+) (*ForeignKeyConstraint, error) {
+	for i := range desc.OutboundFKs {
+		fk := &desc.OutboundFKs[i]
+		if fk.ReferencedTableID == referencedTableID && fk.Name == backref.Name {
+			if fk.LegacyReferencedIndex != backref.LegacyReferencedIndex ||
+				fk.LegacyOriginIndex != backref.LegacyOriginIndex {
+				return nil, errors.AssertionFailedf("fk found for backref %s but pinned indexes were different: "+
+					"%d != %d || %d != %d", fk.Name, fk.LegacyOriginIndex, backref.LegacyOriginIndex,
+					fk.LegacyReferencedIndex, backref.LegacyReferencedIndex)
+			}
+
+			return fk, nil
+		}
+	}
+	return nil, errors.AssertionFailedf("could not find fk for backref %v", backref)
+}
+
 // IsInterleaved returns true if any part of this this table is interleaved with
 // another table's data.
 func (desc *TableDescriptor) IsInterleaved() bool {
@@ -2414,20 +2861,22 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 					return errors.AssertionFailedf("invalid constraint validity state: %d", t.Constraint.Check.Validity)
 				}
 			case ConstraintToUpdate_FOREIGN_KEY:
-				idx, err := desc.FindIndexByID(t.Constraint.ForeignKeyIndex)
-				if err != nil {
-					return err
-				}
 				switch t.Constraint.ForeignKey.Validity {
 				case ConstraintValidity_Validating:
 					// Constraint already added, just mark it as Validated
-					idx.ForeignKey.Validity = ConstraintValidity_Validated
+					for i := range desc.OutboundFKs {
+						fk := &desc.OutboundFKs[i]
+						if fk.Name == t.Constraint.Name {
+							fk.Validity = ConstraintValidity_Validated
+							break
+						}
+					}
 				case ConstraintValidity_Unvalidated:
 					// Takes care of adding the Foreign Key to the table index. Adding the
 					// backreference to the referenced table index must be taken care of
 					// in another call.
 					// TODO (tyler): Combine both of these tasks in the same place.
-					idx.ForeignKey = t.Constraint.ForeignKey
+					desc.OutboundFKs = append(desc.OutboundFKs, t.Constraint.ForeignKey)
 				}
 			case ConstraintToUpdate_NOT_NULL:
 				// Remove the dummy check constraint that was in place during validation
@@ -2453,47 +2902,49 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 		}
 		// Nothing else to be done. The column/index was already removed from the
 		// set of column/index descriptors at mutation creation time.
+		// Constraints to be dropped are dropped before column/index backfills.
 	}
 	return nil
 }
 
 // AddCheckMutation adds a check constraint mutation to desc.Mutations.
-func (desc *MutableTableDescriptor) AddCheckMutation(ck *TableDescriptor_CheckConstraint) {
+func (desc *MutableTableDescriptor) AddCheckMutation(
+	ck *TableDescriptor_CheckConstraint, direction DescriptorMutation_Direction,
+) {
 	m := DescriptorMutation{
 		Descriptor_: &DescriptorMutation_Constraint{
 			Constraint: &ConstraintToUpdate{
 				ConstraintType: ConstraintToUpdate_CHECK, Name: ck.Name, Check: *ck,
 			},
 		},
-		Direction: DescriptorMutation_ADD,
+		Direction: direction,
 	}
 	desc.addMutation(m)
 }
 
-// AddForeignKeyValidationMutation adds a foreign key constraint validation mutation to desc.Mutations.
-func (desc *MutableTableDescriptor) AddForeignKeyValidationMutation(
-	fk *ForeignKeyReference, idx IndexID,
+// AddForeignKeyMutation adds a foreign key constraint mutation to desc.Mutations.
+func (desc *MutableTableDescriptor) AddForeignKeyMutation(
+	fk *ForeignKeyConstraint, direction DescriptorMutation_Direction,
 ) {
 	m := DescriptorMutation{
 		Descriptor_: &DescriptorMutation_Constraint{
 			Constraint: &ConstraintToUpdate{
-				ConstraintType:  ConstraintToUpdate_FOREIGN_KEY,
-				Name:            fk.Name,
-				ForeignKey:      *fk,
-				ForeignKeyIndex: idx,
+				ConstraintType: ConstraintToUpdate_FOREIGN_KEY,
+				Name:           fk.Name,
+				ForeignKey:     *fk,
 			},
 		},
-		Direction: DescriptorMutation_ADD,
+		Direction: direction,
 	}
 	desc.addMutation(m)
 }
 
-// makeNotNullCheckConstraint creates a dummy check constraint equivalent to a
+// MakeNotNullCheckConstraint creates a dummy check constraint equivalent to a
 // NOT NULL constraint on a column, so that NOT NULL constraints can be added
 // and dropped correctly in the schema changer. This function mutates inuseNames
 // to add the new constraint name.
-func makeNotNullCheckConstraint(
-	colName string, colID ColumnID, inuseNames map[string]struct{},
+func MakeNotNullCheckConstraint(
+	colName string, colID ColumnID, inuseNames map[string]struct{}, validity ConstraintValidity,
 ) *TableDescriptor_CheckConstraint {
 	name := fmt.Sprintf("%s_auto_not_null", colName)
 	// If generated name isn't unique, attempt to add a number to the end to
@@ -2522,33 +2973,33 @@ func makeNotNullCheckConstraint(
 	return &TableDescriptor_CheckConstraint{
 		Name:                name,
 		Expr:                tree.Serialize(expr),
-		Validity:            ConstraintValidity_Validating,
+		Validity:            validity,
 		ColumnIDs:           []ColumnID{colID},
 		IsNonNullConstraint: true,
 	}
 }
 
-// AddNotNullValidationMutation adds a not null constraint validation mutation
-// to desc.Mutations. Similarly to other schema elements, adding a non-null
+// AddNotNullMutation adds a not null constraint mutation to desc.Mutations.
+// Similarly to other schema elements, adding or dropping a non-null
 // constraint requires a multi-state schema change, including a bulk validation
 // step, before the Nullable flag can be set to false on the descriptor. This is
 // done by adding a dummy check constraint of the form "x IS NOT NULL" that is
 // treated like other check constraints being added, until the completion of the
 // schema change, at which the check constraint is deleted. This function
 // mutates inuseNames to add the new constraint name.
-func (desc *MutableTableDescriptor) AddNotNullValidationMutation(
-	colName string, colID ColumnID, inuseNames map[string]struct{},
+func (desc *MutableTableDescriptor) AddNotNullMutation(
+	ck *TableDescriptor_CheckConstraint, direction DescriptorMutation_Direction,
 ) {
-	ck := makeNotNullCheckConstraint(colName, colID, inuseNames)
 	m := DescriptorMutation{
 		Descriptor_: &DescriptorMutation_Constraint{
 			Constraint: &ConstraintToUpdate{
 				ConstraintType: ConstraintToUpdate_NOT_NULL,
-				NotNullColumn:  colID,
+				Name:           ck.Name,
+				NotNullColumn:  ck.ColumnIDs[0],
 				Check:          *ck,
 			},
 		},
-		Direction: DescriptorMutation_ADD,
+		Direction: direction,
 	}
 	desc.addMutation(m)
 }
@@ -2643,17 +3094,10 @@ func (desc *ImmutableTableDescriptor) MakeFirstMutationPublic(
 // ColumnNeedsBackfill returns true if adding the given column requires a
 // backfill (dropping a column always requires a backfill).
 func ColumnNeedsBackfill(desc *ColumnDescriptor) bool {
-	// Consider the case where the user explicitly states the default value of a
-	// new column to be NULL. desc.DefaultExpr is not nil, but the string "NULL"
-	if desc.DefaultExpr != nil {
-		if defaultExpr, err := parser.ParseExpr(*desc.DefaultExpr); err != nil {
-			panic(errors.NewAssertionErrorWithWrappedErrf(err,
-				"failed to parse default expression %s", *desc.DefaultExpr))
-		} else if defaultExpr == tree.DNull {
-			return false
-		}
+	if desc.HasNullDefault() {
+		return false
 	}
-	return desc.DefaultExpr != nil || !desc.Nullable || desc.IsComputed()
+	return desc.HasDefault() || !desc.Nullable || desc.IsComputed()
 }
 
 // HasColumnBackfillMutation returns whether the table has any queued column
@@ -2677,7 +3121,7 @@ func (desc *TableDescriptor) HasColumnBackfillMutation() bool {
 
 // GoingOffline returns true if the table is being dropped or is importing.
 func (desc *TableDescriptor) GoingOffline() bool {
-	return desc.Dropped() || desc.State == TableDescriptor_IMPORTING
+	return desc.Dropped() || desc.State == TableDescriptor_OFFLINE
 }
 
 // Dropped returns true if the table is being dropped.
@@ -2818,13 +3262,9 @@ func (f ForeignKeyReference) IsSet() bool {
 // InvalidateFKConstraints sets all FK constraints to un-validated.
 func (desc *TableDescriptor) InvalidateFKConstraints() {
 	// We don't use GetConstraintInfo because we want to edit the passed desc.
-	if desc.PrimaryIndex.ForeignKey.IsSet() {
-		desc.PrimaryIndex.ForeignKey.Validity = ConstraintValidity_Unvalidated
-	}
-	for i := range desc.Indexes {
-		if desc.Indexes[i].ForeignKey.IsSet() {
-			desc.Indexes[i].ForeignKey.Validity = ConstraintValidity_Unvalidated
-		}
+	for i := range desc.OutboundFKs {
+		fk := &desc.OutboundFKs[i]
+		fk.Validity = ConstraintValidity_Unvalidated
 	}
 }
 
@@ -3023,6 +3463,19 @@ func (desc *ColumnDescriptor) IsNullable() bool {
 	return desc.Nullable
 }
 
+// HasNullDefault checks that the column descriptor has a default of NULL.
+func (desc *ColumnDescriptor) HasNullDefault() bool {
+	if !desc.HasDefault() {
+		return false
+	}
+	defaultExpr, err := parser.ParseExpr(*desc.DefaultExpr)
+	if err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err,
+			"failed to parse default expression %s", *desc.DefaultExpr))
+	}
+	return defaultExpr == tree.DNull
+}
+
 // ColID is part of the cat.Column interface.
 func (desc *ColumnDescriptor) ColID() cat.StableID {
 	return cat.StableID(desc.ID)
@@ -3150,20 +3603,19 @@ func (desc *DatabaseDescriptor) GetAuditMode() TableDescriptor_AuditMode {
 // FindAllReferences returns all the references from a table.
 func (desc *TableDescriptor) FindAllReferences() (map[ID]struct{}, error) {
 	refs := map[ID]struct{}{}
+	for i := range desc.OutboundFKs {
+		fk := &desc.OutboundFKs[i]
+		refs[fk.ReferencedTableID] = struct{}{}
+	}
+	for i := range desc.InboundFKs {
+		fk := &desc.InboundFKs[i]
+		refs[fk.OriginTableID] = struct{}{}
+	}
 	if err := desc.ForeachNonDropIndex(func(index *IndexDescriptor) error {
 		for _, a := range index.Interleave.Ancestors {
 			refs[a.TableID] = struct{}{}
 		}
 		for _, c := range index.InterleavedBy {
-			refs[c.Table] = struct{}{}
-		}
-
-		if index.ForeignKey.IsSet() {
-			to := index.ForeignKey.Table
-			refs[to] = struct{}{}
-		}
-
-		for _, c := range index.ReferencedBy {
 			refs[c.Table] = struct{}{}
 		}
 		return nil

@@ -462,6 +462,9 @@ func (b *Builder) resolveTable(
 // resolveDataSource returns the data source in the catalog with the given name.
 // If the name does not resolve to a table, or if the current user does not have
 // the given privilege, then resolveDataSource raises an error.
+//
+// If the b.qualifyDataSourceNamesInAST flag is set, tn is updated to contain
+// the fully qualified name.
 func (b *Builder) resolveDataSource(
 	tn *tree.TableName, priv privilege.Kind,
 ) (cat.DataSource, cat.DataSourceName) {
@@ -475,6 +478,12 @@ func (b *Builder) resolveDataSource(
 		panic(err)
 	}
 	b.checkPrivilege(opt.DepByName(tn), ds, priv)
+
+	if b.qualifyDataSourceNamesInAST {
+		*tn = resName
+		tn.ExplicitCatalog = true
+		tn.ExplicitSchema = true
+	}
 	return ds, resName
 }
 
@@ -488,7 +497,7 @@ func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) 
 		// Avoid taking table leases when we're creating a view.
 		flags.AvoidDescriptorCaches = true
 	}
-	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, flags, cat.StableID(ref.TableID))
+	ds, _, err := b.catalog.ResolveDataSourceByID(b.ctx, flags, cat.StableID(ref.TableID))
 	if err != nil {
 		panic(pgerror.Wrapf(err, pgcode.UndefinedObject, "%s", tree.ErrString(ref)))
 	}

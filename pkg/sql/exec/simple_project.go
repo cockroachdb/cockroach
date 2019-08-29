@@ -13,14 +13,15 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 )
 
 // simpleProjectOp is an operator that implements "simple projection" - removal of
 // columns that aren't needed by later operators.
 type simpleProjectOp struct {
-	input Operator
+	OneInputNode
 
 	batch *projectingBatch
 }
@@ -47,14 +48,16 @@ func (b *projectingBatch) ColVec(i int) coldata.Vec {
 }
 
 func (b *projectingBatch) ColVecs() []coldata.Vec {
-	panic("projectingBatch doesn't support ColVecs()")
+	execerror.VectorizedInternalPanic("projectingBatch doesn't support ColVecs()")
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 func (b *projectingBatch) Width() int {
 	return len(b.projection)
 }
 
-func (b *projectingBatch) AppendCol(t types.T) {
+func (b *projectingBatch) AppendCol(t coltypes.T) {
 	b.Batch.AppendCol(t)
 	b.projection = append(b.projection, uint32(b.Batch.Width())-1)
 }
@@ -77,8 +80,8 @@ func NewSimpleProjectOp(input Operator, numInputCols int, projection []uint32) O
 		}
 	}
 	return &simpleProjectOp{
-		input: input,
-		batch: newProjectionBatch(projection),
+		OneInputNode: NewOneInputNode(input),
+		batch:        newProjectionBatch(projection),
 	}
 }
 

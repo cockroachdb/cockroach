@@ -120,6 +120,11 @@ type PhysicalPlan struct {
 	// Used internally to avoid creating flow IDs for local flows. This boolean
 	// specifies whether there is more than one node involved in a plan.
 	remotePlan bool
+
+	// MaxEstimatedRowCount tracks the maximum estimated row count that a table
+	// reader in this plan will output. This information is used to decide
+	// whether to use the vectorized execution engine.
+	MaxEstimatedRowCount uint64
 }
 
 // NewStageID creates a stage identifier that can be used in processor specs.

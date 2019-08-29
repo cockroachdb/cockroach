@@ -6,6 +6,8 @@ This document is a long-winded guide to preparing and submitting your first
 contribution to CockroachDB. It's primarily intended as required reading for new
 Cockroach Labs engineers, but may prove useful to external contributors too.
 
+It is also complementary to the public wiki page at https://wiki.crdb.io/wiki/spaces/CRDB/pages/73072641/How+to+submit+a+good+CockroachDB+PR
+
 **Table of contents**
 + [The development cycle](#the-development-cycle)
   + [First things first](#first-things-first)
@@ -600,6 +602,7 @@ Here's a checklist of action items to keep you sane:
     + [ ] Push to a feature branch on your personal fork
     + [ ] Verify you've followed [CONTRIBUTING.md]
     + [ ] Verify you've followed [docs/style.md]
+	+ [ ] Verify you've read the [wiki page on PRs]
     + [ ] Ensure files you've added, if any, have a license block
     + [ ] Run make check
     + [ ] Split your change into logical commits with good messages
@@ -636,4 +639,5 @@ Here's a checklist of action items to keep you sane:
 [this repository's wiki]: https://github.com/cockroachdb/cockroach/wiki/Jargon
 [by humans for humans]: https://mtlynch.io/human-code-reviews-1/
 [minimally nice maintainer]: https://brson.github.io/2017/04/05/minimally-nice-maintainer
-[Bors merge bot]: https://github.com/cockroachdb/cockroach/wiki/Bors-merge-bot
+[Bors merge bot]: https://wiki.crdb.io/wiki/spaces/CRDB/pages/73204099/Bors+Merge+Bot
+[wiki page on PRs]: https://wiki.crdb.io/wiki/spaces/CRDB/pages/73072641/How+to+submit+a+good+CockroachDB+PR

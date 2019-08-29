@@ -136,6 +136,7 @@ var ComparisonOpReverseMap = map[Operator]tree.ComparisonOperator{
 	JsonExistsOp:     tree.JSONExists,
 	JsonSomeExistsOp: tree.JSONSomeExists,
 	JsonAllExistsOp:  tree.JSONAllExists,
+	OverlapsOp:       tree.Overlaps,
 }
 
 // BinaryOpReverseMap maps from an optimizer operator type to a semantic tree
@@ -281,8 +282,8 @@ func AggregateIsNullOnEmpty(op Operator) bool {
 type OpaqueMetadata interface {
 	ImplementsOpaqueMetadata()
 
-	// String is used when printing optimizer trees and should contain a short
-	// description of the statement.
+	// String is a short description used when printing optimizer trees and when
+	// forming error messages; it should be the SQL statement tag.
 	String() string
 }
 

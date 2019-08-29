@@ -155,9 +155,9 @@ func BenchmarkProjectSet(b *testing.B) {
 		b.Run(c.description, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				flowCtx := FlowCtx{
-					Settings: st,
-					EvalCtx:  &evalCtx,
-					txn:      nil,
+					Cfg:     &ServerConfig{Settings: st},
+					EvalCtx: &evalCtx,
+					txn:     nil,
 				}
 
 				in := NewRowBuffer(c.inputTypes, c.input, RowBufferArgs{})

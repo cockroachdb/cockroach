@@ -14,12 +14,12 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -30,12 +30,12 @@ func TestDecodeTableValueToCol(t *testing.T) {
 	var scratch []byte
 	nCols := 1000
 	datums := make([]tree.Datum, nCols)
-	colTyps := make([]*semtypes.T, nCols)
-	typs := make([]types.T, nCols)
+	colTyps := make([]*types.T, nCols)
+	typs := make([]coltypes.T, nCols)
 	for i := 0; i < nCols; i++ {
 		ct := sqlbase.RandType(rng)
-		et := conv.FromColumnType(ct)
-		if et == types.Unhandled {
+		et := typeconv.FromColumnType(ct)
+		if et == coltypes.Unhandled {
 			i--
 			continue
 		}

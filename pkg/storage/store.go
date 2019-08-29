@@ -95,11 +95,6 @@ const (
 	systemDataGossipInterval = 1 * time.Minute
 )
 
-var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeType{
-	roachpb.ADD_REPLICA:    raftpb.ConfChangeAddNode,
-	roachpb.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
-}
-
 var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_SCHEDULER_CONCURRENCY", 8*runtime.NumCPU())
 
@@ -412,6 +407,7 @@ type Store struct {
 	raftEntryCache     *raftentry.Cache
 	limiters           batcheval.Limiters
 	txnWaitMetrics     *txnwait.Metrics
+	sss                SSTSnapshotStorage
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -865,6 +861,16 @@ func NewStore(
 	s.limiters.ConcurrentExportRequests = limit.MakeConcurrentRequestLimiter(
 		"exportRequestLimiter", int(ExportRequestsLimit.Get(&cfg.Settings.SV)),
 	)
+
+	// The snapshot storage is usually empty at this point since it is cleared
+	// after each snapshot application, except when the node crashed right before
+	// it can clean it up. If this fails it's not a correctness issue since the
+	// storage is also cleared before receiving a snapshot.
+	s.sss = NewSSTSnapshotStorage(s.engine, s.limiters.BulkIOWriteRate)
+	if err := s.sss.Clear(); err != nil {
+		log.Warningf(ctx, "failed to clear snapshot storage: %v", err)
+	}
+
 	// On low-CPU instances, a default limit value may still allow ExportRequests
 	// to tie up all cores so cap limiter at cores-1 when setting value is higher.
 	exportCores := runtime.NumCPU() - 1
@@ -2091,7 +2097,7 @@ func (s *Store) NewRangeDescriptor(
 		EndKey:        end,
 		NextReplicaID: roachpb.ReplicaID(len(repls) + 1),
 	}
-	desc.SetReplicas(roachpb.MakeReplicaDescriptors(&repls))
+	desc.SetReplicas(roachpb.MakeReplicaDescriptors(repls))
 	return desc, nil
 }
 
@@ -2123,8 +2129,55 @@ func splitPostApply(
 		log.Fatalf(ctx, "unable to find RHS replica: %+v", err)
 	}
 	{
-		rightRng.mu.Lock()
 		// Already holding raftMu, see above.
+		rightRng.mu.Lock()
+		// The right hand side of the split may have been removed and re-added
+		// in the meantime, and the replicaID in RightDesc may be stale.
+		// Consequently the call below may fail with a RaftGroupDeletedError. In
+		// general, this protects earlier incarnations of the replica that were
+		// since replicaGC'ed from reneging on promises made earlier (for
+		// example, once the HardState is removed, a replica could cast a
+		// different vote for the same term).
+		//
+		// It is safe to circumvent that in this case because the RHS must have
+		// remained uninitialized (the LHS blocks all user data, and since our
+		// Raft logs start at a nonzero index a snapshot must go through before
+		// any log entries are appended). This means the data in that range is
+		// just a HardState which we "logically" snapshot by assigning it data
+		// formerly located within the LHS.
+		//
+		// Note that if we ever have a way to replicaGC uninitialized replicas,
+		// the RHS may have been gc'ed and so the HardState would be gone. In
+		// that case, the requirement that the HardState remains would have been
+		// violated if the bypass below were used, which is why we place an
+		// assertion.
+		//
+		// See:
+		// https://github.com/cockroachdb/cockroach/issues/21146#issuecomment-365757329
+		tombstoneKey := keys.RaftTombstoneKey(rightRng.RangeID)
+		var tombstone roachpb.RaftTombstone
+		if ok, err := engine.MVCCGetProto(
+			ctx, r.store.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
+		); err != nil {
+			log.Fatalf(ctx, "unable to load tombstone for RHS: %+v", err)
+		} else if ok {
+			log.Fatalf(ctx, "split trigger found right-hand side with tombstone %+v: %v", tombstone, rightRng)
+		}
+		// NB: the safety argument above implies that we don't have to worry
+		// about restoring the existing minReplicaID if it's nonzero. No
+		// promises have been made, so none need to be kept.
+		rightRng.mu.minReplicaID = 0
+		rightDesc, ok := split.RightDesc.GetReplicaDescriptor(r.StoreID())
+		if !ok {
+			log.Fatalf(ctx, "replica descriptor of local store not found in right hand side of split")
+		}
+		// We also have to potentially wind back the replicaID to avoid an error
+		// below. We can't overwrite unconditionally since usually the replicaID is
+		// zero (and thus special) and in that case, moving it forward out-of-band
+		// results in an broken state.
+		if rightRng.mu.replicaID > rightDesc.ReplicaID {
+			rightRng.mu.replicaID = rightDesc.ReplicaID
+		}
 		err := rightRng.initRaftMuLockedReplicaMuLocked(&split.RightDesc, r.store.Clock(), 0)
 		rightRng.mu.Unlock()
 		if err != nil {
@@ -2503,6 +2556,7 @@ func (s *Store) RemoveReplica(
 func (s *Store) removeReplicaImpl(
 	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
 ) error {
+	rep.raftMu.AssertHeld()
 	// We check both rep.mu.ReplicaID and rep.mu.state.Desc's replica ID because
 	// they can differ in cases when a replica's ID is increased due to an
 	// incoming raft message (see #14231 for background).
@@ -2523,6 +2577,15 @@ func (s *Store) removeReplicaImpl(
 
 	if _, err := s.GetReplica(rep.RangeID); err != nil {
 		return err
+	}
+
+	if !rep.IsInitialized() {
+		// The split trigger relies on the fact that it can bypass the tombstone
+		// check for the RHS, but this is only true as long as we never delete
+		// its HardState.
+		//
+		// See the comment in splitPostApply for details.
+		log.Fatalf(ctx, "can not replicaGC uninitialized replicas")
 	}
 
 	// During merges, the context might have the subsuming range, so we explicitly
@@ -2734,15 +2797,6 @@ func (s *Store) Registry() *metric.Registry {
 // Metrics returns the store's metric struct.
 func (s *Store) Metrics() *StoreMetrics {
 	return s.metrics
-}
-
-// MVCCStats returns the current MVCCStats accumulated for this store.
-// TODO(mrtracy): This should be removed as part of #4465, this is only needed
-// to support the current NodeStatus structures which will be changing.
-func (s *Store) MVCCStats() enginepb.MVCCStats {
-	s.metrics.mu.Lock()
-	defer s.metrics.mu.Unlock()
-	return s.metrics.mu.stats
 }
 
 // Descriptor returns a StoreDescriptor including current store
@@ -3165,17 +3219,20 @@ func (s *Store) maybeWaitForPushee(
 func (s *Store) HandleSnapshot(
 	header *SnapshotRequest_Header, stream SnapshotResponseStream,
 ) error {
-	s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
-
-	if s.IsDraining() {
-		return stream.Send(&SnapshotResponse{
-			Status:  SnapshotResponse_DECLINED,
-			Message: storeDrainingMsg,
-		})
-	}
-
 	ctx := s.AnnotateCtx(stream.Context())
-	return s.receiveSnapshot(ctx, header, stream)
+	const name = "storage.Store: handle snapshot"
+	return s.stopper.RunTaskWithErr(ctx, name, func(ctx context.Context) error {
+		s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
+
+		if s.IsDraining() {
+			return stream.Send(&SnapshotResponse{
+				Status:  SnapshotResponse_DECLINED,
+				Message: storeDrainingMsg,
+			})
+		}
+
+		return s.receiveSnapshot(ctx, header, stream)
+	})
 }
 
 func (s *Store) uncoalesceBeats(
@@ -3230,6 +3287,10 @@ func (s *Store) uncoalesceBeats(
 func (s *Store) HandleRaftRequest(
 	ctx context.Context, req *RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *roachpb.Error {
+	// NB: unlike the other two RaftMessageHandler methods implemented by Store,
+	// this one doesn't need to directly run through a Stopper task because it
+	// delegates all work through a raftScheduler, whose workers' lifetimes are
+	// already tied to the Store's Stopper.
 	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
 		if req.RangeID != 0 {
 			log.Fatalf(ctx, "coalesced heartbeats must have rangeID == 0")
@@ -3345,7 +3406,7 @@ func (s *Store) processRaftRequestWithReplica(
 		)
 	}
 
-	drop := maybeDropMsgApp(r.AnnotateCtx(context.Background()), (*replicaMsgAppDropper)(r), &req.Message, req.RangeStartKey)
+	drop := maybeDropMsgApp(ctx, (*replicaMsgAppDropper)(r), &req.Message, req.RangeStartKey)
 	if !drop {
 		if err := r.stepRaftGroup(req); err != nil {
 			return roachpb.NewError(err)
@@ -3354,12 +3415,11 @@ func (s *Store) processRaftRequestWithReplica(
 	return nil
 }
 
-// processRaftSnapshotRequest processes the incoming snapshot Raft request on
-// the request's specified replica. This snapshot can be preemptive or not. If
-// not, the function makes sure to handle any updated Raft Ready state. It also
-// adds and later removes the (potentially) necessary placeholder to protect
-// against concurrent access to the keyspace encompassed by the snapshot but not
-// yet guarded by the replica.
+// processRaftSnapshotRequest processes the incoming non-preemptive snapshot
+// Raft request on the request's specified replica. The function makes sure to
+// handle any updated Raft Ready state. It also adds and later removes the
+// (potentially) necessary placeholder to protect against concurrent access to
+// the keyspace encompassed by the snapshot but not yet guarded by the replica.
 func (s *Store) processRaftSnapshotRequest(
 	ctx context.Context, snapHeader *SnapshotRequest_Header, inSnap IncomingSnapshot,
 ) *roachpb.Error {
@@ -3439,76 +3499,85 @@ func (s *Store) processRaftSnapshotRequest(
 // It requires that s.mu is not held.
 func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageResponse) error {
 	ctx = s.AnnotateCtx(ctx)
-	repl, replErr := s.GetReplica(resp.RangeID)
-	if replErr == nil {
-		// Best-effort context annotation of replica.
-		ctx = repl.AnnotateCtx(ctx)
-	}
-	switch val := resp.Union.GetValue().(type) {
-	case *roachpb.Error:
-		switch tErr := val.GetDetail().(type) {
-		case *roachpb.ReplicaTooOldError:
-			if replErr != nil {
-				// RangeNotFoundErrors are expected here; nothing else is.
-				if _, ok := replErr.(*roachpb.RangeNotFoundError); !ok {
-					log.Error(ctx, replErr)
-				}
-				return nil
-			}
-
-			repl.mu.Lock()
-			// If the replica ID in the error does not match then we know
-			// that the replica has been removed and re-added quickly. In
-			// that case, we don't want to add it to the replicaGCQueue.
-			if tErr.ReplicaID != repl.mu.replicaID {
-				repl.mu.Unlock()
-				log.Infof(ctx, "replica too old response with old replica ID: %s", tErr.ReplicaID)
-				return nil
-			}
-			// If the replica ID in the error does match, we know the replica
-			// will be removed and we can cancel any pending commands. This is
-			// sometimes necessary to unblock PushTxn operations that are
-			// necessary for the replica GC to succeed.
-			repl.cancelPendingCommandsLocked()
-			// The replica will be garbage collected soon (we are sure
-			// since our replicaID is definitely too old), but in the meantime we
-			// already want to bounce all traffic from it. Note that the replica
-			// could be re-added with a higher replicaID, in which this error is
-			// cleared in setReplicaIDRaftMuLockedMuLocked.
-			if repl.mu.destroyStatus.IsAlive() {
-				storeID := repl.store.StoreID()
-				repl.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(repl.RangeID, storeID), destroyReasonRemovalPending)
-			}
-			repl.mu.Unlock()
-
-			s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityRemoved)
-		case *roachpb.RaftGroupDeletedError:
-			if replErr != nil {
-				// RangeNotFoundErrors are expected here; nothing else is.
-				if _, ok := replErr.(*roachpb.RangeNotFoundError); !ok {
-					log.Error(ctx, replErr)
-				}
-				return nil
-			}
-
-			// If the replica is talking to a replica that's been deleted, it must be
-			// out of date. While this may just mean it's slightly behind, it can
-			// also mean that it is so far behind it no longer knows where any of the
-			// other replicas are (#23994). Add it to the replica GC queue to do a
-			// proper check.
-			s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityDefault)
-		case *roachpb.StoreNotFoundError:
-			log.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
-				resp.FromReplica.NodeID, resp.FromReplica.StoreID, resp.FromReplica, val)
-			return val.GetDetail() // close Raft connection
-		default:
-			log.Warningf(ctx, "got error from r%d, replica %s: %s",
-				resp.RangeID, resp.FromReplica, val)
+	const name = "storage.Store: handle raft response"
+	return s.stopper.RunTaskWithErr(ctx, name, func(ctx context.Context) error {
+		repl, replErr := s.GetReplica(resp.RangeID)
+		if replErr == nil {
+			// Best-effort context annotation of replica.
+			ctx = repl.AnnotateCtx(ctx)
 		}
-	default:
-		log.Warningf(ctx, "got unknown raft response type %T from replica %s: %s", val, resp.FromReplica, val)
-	}
-	return nil
+		switch val := resp.Union.GetValue().(type) {
+		case *roachpb.Error:
+			switch tErr := val.GetDetail().(type) {
+			case *roachpb.ReplicaTooOldError:
+				if replErr != nil {
+					// RangeNotFoundErrors are expected here; nothing else is.
+					if _, ok := replErr.(*roachpb.RangeNotFoundError); !ok {
+						log.Error(ctx, replErr)
+					}
+					return nil
+				}
+
+				// Grab the raftMu in addition to the replica mu because
+				// cancelFailedProposalsLocked below requires it.
+				repl.raftMu.Lock()
+				defer repl.raftMu.Unlock()
+				repl.mu.Lock()
+				defer repl.mu.Unlock()
+
+				// If the replica ID in the error does not match then we know
+				// that the replica has been removed and re-added quickly. In
+				// that case, we don't want to add it to the replicaGCQueue.
+				if tErr.ReplicaID != repl.mu.replicaID {
+					log.Infof(ctx, "replica too old response with old replica ID: %s", tErr.ReplicaID)
+					return nil
+				}
+
+				// If the replica ID in the error does match, we know the replica
+				// will be removed and we can cancel any pending commands. This is
+				// sometimes necessary to unblock PushTxn operations that are
+				// necessary for the replica GC to succeed.
+				repl.cancelPendingCommandsLocked()
+
+				// The replica will be garbage collected soon (we are sure
+				// since our replicaID is definitely too old), but in the meantime we
+				// already want to bounce all traffic from it. Note that the replica
+				// could be re-added with a higher replicaID, in which this error is
+				// cleared in setReplicaIDRaftMuLockedMuLocked.
+				if repl.mu.destroyStatus.IsAlive() {
+					storeID := repl.store.StoreID()
+					repl.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(repl.RangeID, storeID), destroyReasonRemovalPending)
+				}
+
+				s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityRemoved)
+			case *roachpb.RaftGroupDeletedError:
+				if replErr != nil {
+					// RangeNotFoundErrors are expected here; nothing else is.
+					if _, ok := replErr.(*roachpb.RangeNotFoundError); !ok {
+						log.Error(ctx, replErr)
+					}
+					return nil
+				}
+
+				// If the replica is talking to a replica that's been deleted, it must be
+				// out of date. While this may just mean it's slightly behind, it can
+				// also mean that it is so far behind it no longer knows where any of the
+				// other replicas are (#23994). Add it to the replica GC queue to do a
+				// proper check.
+				s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityDefault)
+			case *roachpb.StoreNotFoundError:
+				log.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
+					resp.FromReplica.NodeID, resp.FromReplica.StoreID, resp.FromReplica, val)
+				return val.GetDetail() // close Raft connection
+			default:
+				log.Warningf(ctx, "got error from r%d, replica %s: %s",
+					resp.RangeID, resp.FromReplica, val)
+			}
+		default:
+			log.Warningf(ctx, "got unknown raft response type %T from replica %s: %s", val, resp.FromReplica, val)
+		}
+		return nil
+	})
 }
 
 // enqueueRaftUpdateCheck asynchronously registers the given range ID to be
@@ -3532,24 +3601,23 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 	var hadError bool
 	for i, info := range infos {
 		last := i == len(infos)-1
-		pErr := s.withReplicaForRequest(info.respStream.Context(), info.req,
-			func(ctx context.Context, r *Replica) *roachpb.Error {
-				// Save the last Replica we see, since we don't know in advance which
-				// requests will fail during Replica retrieval. We want this later
-				// so we can handle the Raft Ready state all at once.
-				lastRepl = r
-				pErr := s.processRaftRequestWithReplica(ctx, r, info.req)
-				if last {
-					// If this is the last request, we can handle raft.Ready without
-					// giving up the lock. Set lastRepl to nil, so we don't handle it
-					// down below as well.
-					lastRepl = nil
-					if _, expl, err := r.handleRaftReadyRaftMuLocked(ctx, noSnap); err != nil {
-						fatalOnRaftReadyErr(ctx, expl, err)
-					}
+		pErr := s.withReplicaForRequest(ctx, info.req, func(ctx context.Context, r *Replica) *roachpb.Error {
+			// Save the last Replica we see, since we don't know in advance which
+			// requests will fail during Replica retrieval. We want this later
+			// so we can handle the Raft Ready state all at once.
+			lastRepl = r
+			pErr := s.processRaftRequestWithReplica(ctx, r, info.req)
+			if last {
+				// If this is the last request, we can handle raft.Ready without
+				// giving up the lock. Set lastRepl to nil, so we don't handle it
+				// down below as well.
+				lastRepl = nil
+				if _, expl, err := r.handleRaftReadyRaftMuLocked(ctx, noSnap); err != nil {
+					fatalOnRaftReadyErr(ctx, expl, err)
 				}
-				return pErr
-			})
+			}
+			return pErr
+		})
 		if pErr != nil {
 			hadError = true
 			if err := info.respStream.Send(newRaftMessageResponse(info.req, pErr)); err != nil {
@@ -3720,7 +3788,7 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 					// Raft transport, so ConnHealth should usually indicate a real problem if
 					// it gives us an error back. The check can also have false positives if the
 					// node goes down after populating the map, but that matters even less.
-					entry.IsLive = (s.cfg.NodeDialer.ConnHealth(nodeID) == nil)
+					entry.IsLive = (s.cfg.NodeDialer.ConnHealth(nodeID, rpc.SystemClass) == nil)
 					nextMap[nodeID] = entry
 				}
 				s.livenessMap.Store(nextMap)
@@ -3802,7 +3870,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 		log.Infof(ctx, "sending raft request (coalesced) %+v", chReq)
 	}
 
-	if !s.cfg.Transport.SendAsync(chReq) {
+	if !s.cfg.Transport.SendAsync(chReq, rpc.SystemClass) {
 		for _, beat := range beats {
 			if value, ok := s.mu.replicas.Load(int64(beat.RangeID)); ok {
 				(*Replica)(value).addUnreachableRemoteReplica(beat.ToReplicaID)

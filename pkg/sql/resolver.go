@@ -583,24 +583,33 @@ type tableLookupFn = *internalLookupCtx
 func newInternalLookupCtx(
 	descs []sqlbase.DescriptorProto, prefix *DatabaseDescriptor,
 ) *internalLookupCtx {
+	wrappedDescs := make([]sqlbase.Descriptor, len(descs))
+	for i, desc := range descs {
+		wrappedDescs[i] = *sqlbase.WrapDescriptor(desc)
+	}
+	return newInternalLookupCtxFromDescriptors(wrappedDescs, prefix)
+}
+
+func newInternalLookupCtxFromDescriptors(
+	descs []sqlbase.Descriptor, prefix *DatabaseDescriptor,
+) *internalLookupCtx {
 	dbNames := make(map[sqlbase.ID]string)
 	dbDescs := make(map[sqlbase.ID]*DatabaseDescriptor)
 	tbDescs := make(map[sqlbase.ID]*TableDescriptor)
 	var tbIDs, dbIDs []sqlbase.ID
 	// Record database descriptors for name lookups.
 	for _, desc := range descs {
-		switch d := desc.(type) {
-		case *sqlbase.DatabaseDescriptor:
-			dbNames[d.ID] = d.Name
-			dbDescs[d.ID] = d
-			if prefix == nil || prefix.ID == d.ID {
-				dbIDs = append(dbIDs, d.ID)
+		if database := desc.GetDatabase(); database != nil {
+			dbNames[database.ID] = database.Name
+			dbDescs[database.ID] = database
+			if prefix == nil || prefix.ID == database.ID {
+				dbIDs = append(dbIDs, database.ID)
 			}
-		case *sqlbase.TableDescriptor:
-			tbDescs[d.ID] = d
-			if prefix == nil || prefix.ID == d.ParentID {
+		} else if table := desc.GetTable(); table != nil {
+			tbDescs[table.ID] = table
+			if prefix == nil || prefix.ID == table.ParentID {
 				// Only make the table visible for iteration if the prefix was included.
-				tbIDs = append(tbIDs, d.ID)
+				tbIDs = append(tbIDs, table.ID)
 			}
 		}
 	}
@@ -640,6 +649,40 @@ func (l *internalLookupCtx) getParentName(table *TableDescriptor) string {
 		parentName = fmt.Sprintf("[%d]", table.GetParentID())
 	}
 	return parentName
+}
+
+// getParentAsTableName returns a TreeTable object of the parent table for a
+// given table ID. Used to get the parent table of a table with interleaved
+// indexes.
+func (l *internalLookupCtx) getParentAsTableName(
+	parentTableID sqlbase.ID, dbPrefix string,
+) (tree.TableName, error) {
+	var parentName tree.TableName
+	parentTable, err := l.getTableByID(parentTableID)
+	if err != nil {
+		return tree.TableName{}, err
+	}
+	parentDbDesc, err := l.getDatabaseByID(parentTable.ParentID)
+	if err != nil {
+		return tree.TableName{}, err
+	}
+	parentName = tree.MakeTableName(tree.Name(parentDbDesc.Name), tree.Name(parentTable.Name))
+	parentName.ExplicitSchema = parentDbDesc.Name != dbPrefix
+	return parentName, nil
+}
+
+// getTableAsTableName returns a TableName object fot a given TableDescriptor.
+func (l *internalLookupCtx) getTableAsTableName(
+	table *sqlbase.TableDescriptor, dbPrefix string,
+) (tree.TableName, error) {
+	var tableName tree.TableName
+	tableDbDesc, err := l.getDatabaseByID(table.ParentID)
+	if err != nil {
+		return tree.TableName{}, err
+	}
+	tableName = tree.MakeTableName(tree.Name(tableDbDesc.Name), tree.Name(table.Name))
+	tableName.ExplicitSchema = tableDbDesc.Name != dbPrefix
+	return tableName, nil
 }
 
 // The versions below are part of the work for #34240.

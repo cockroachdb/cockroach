@@ -12,6 +12,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -110,4 +111,103 @@ func TestShowBackup(t *testing.T) {
 	if len(pathRows) != 2 {
 		t.Fatalf("expected 2 files, but got %d", len(pathRows))
 	}
+
+	// SCHEMAS: Test the creation statement.
+	var showBackupRows [][]string
+	var expected []string
+
+	// Test that tables, views and sequences are all supported.
+	{
+		viewTableSeq := localFoo + "/tableviewseq"
+		sqlDB.Exec(t, `CREATE TABLE data.tableA (a int primary key, b int)`)
+		sqlDB.Exec(t, `CREATE VIEW data.viewA AS SELECT a from data.tableA`)
+		sqlDB.Exec(t, `CREATE SEQUENCE data.seqA START 1 INCREMENT 2 MAXVALUE 20`)
+		sqlDB.Exec(t, `BACKUP data.tableA, data.viewA, data.seqA TO $1;`, viewTableSeq)
+
+		expectedCreateTable := `CREATE TABLE tablea (
+				a INT8 NOT NULL,
+				b INT8 NULL,
+				CONSTRAINT "primary" PRIMARY KEY (a ASC),
+				FAMILY "primary" (a, b)
+			)`
+		expectedCreateView := `CREATE VIEW viewa (a) AS SELECT a FROM data.public.tablea`
+		expectedCreateSeq := `CREATE SEQUENCE seqa MINVALUE 1 MAXVALUE 20 INCREMENT 2 START 1`
+
+		showBackupRows = sqlDB.QueryStr(t, fmt.Sprintf(`SHOW BACKUP SCHEMAS '%s'`, viewTableSeq))
+		expected = []string{
+			expectedCreateTable,
+			expectedCreateView,
+			expectedCreateSeq,
+		}
+		for i, row := range showBackupRows {
+			createStmt := row[6]
+			if !eqWhitespace(createStmt, expected[i]) {
+				t.Fatalf("mismatched create statement: %s, want %s", createStmt, expected[i])
+			}
+		}
+	}
+
+	// Test that foreign keys that reference tables that are in the backup
+	// are included.
+	{
+		includedFK := localFoo + "/includedFK"
+		sqlDB.Exec(t, `CREATE TABLE data.FKSrc (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `CREATE TABLE data.FKRefTable (a INT PRIMARY KEY, B INT REFERENCES data.FKSrc(a))`)
+		sqlDB.Exec(t, `CREATE DATABASE data2`)
+		sqlDB.Exec(t, `CREATE TABLE data2.FKRefTable (a INT PRIMARY KEY, B INT REFERENCES data.FKSrc(a))`)
+		sqlDB.Exec(t, `BACKUP data.FKSrc, data.FKRefTable, data2.FKRefTable TO $1;`, includedFK)
+
+		wantSameDB := `CREATE TABLE fkreftable (
+				a INT8 NOT NULL,
+				b INT8 NULL,
+				CONSTRAINT "primary" PRIMARY KEY (a ASC),
+				CONSTRAINT fk_b_ref_fksrc FOREIGN KEY (b) REFERENCES fksrc(a),
+				INDEX fkreftable_auto_index_fk_b_ref_fksrc (b ASC),
+				FAMILY "primary" (a, b)
+			)`
+		wantDiffDB := `CREATE TABLE fkreftable (
+				a INT8 NOT NULL,
+				b INT8 NULL,
+				CONSTRAINT "primary" PRIMARY KEY (a ASC),
+				CONSTRAINT fk_b_ref_fksrc FOREIGN KEY (b) REFERENCES data.public.fksrc(a),
+				INDEX fkreftable_auto_index_fk_b_ref_fksrc (b ASC),
+				FAMILY "primary" (a, b)
+			)`
+
+		showBackupRows = sqlDB.QueryStr(t, fmt.Sprintf(`SHOW BACKUP SCHEMAS '%s'`, includedFK))
+		createStmtSameDB := showBackupRows[1][6]
+		if !eqWhitespace(createStmtSameDB, wantSameDB) {
+			t.Fatalf("mismatched create statement: %s, want %s", createStmtSameDB, wantSameDB)
+		}
+
+		createStmtDiffDB := showBackupRows[2][6]
+		if !eqWhitespace(createStmtDiffDB, wantDiffDB) {
+			t.Fatalf("mismatched create statement: %s, want %s", createStmtDiffDB, wantDiffDB)
+		}
+	}
+
+	// Foreign keys that were not included in the backup are not mentioned in
+	// the create statement.
+	{
+		missingFK := localFoo + "/missingFK"
+		sqlDB.Exec(t, `BACKUP data2.FKRefTable TO $1;`, missingFK)
+
+		want := `CREATE TABLE fkreftable (
+				a INT8 NOT NULL,
+				b INT8 NULL,
+				CONSTRAINT "primary" PRIMARY KEY (a ASC),
+				INDEX fkreftable_auto_index_fk_b_ref_fksrc (b ASC),
+				FAMILY "primary" (a, b)
+			)`
+
+		showBackupRows = sqlDB.QueryStr(t, fmt.Sprintf(`SHOW BACKUP SCHEMAS '%s'`, missingFK))
+		createStmt := showBackupRows[0][6]
+		if !eqWhitespace(createStmt, want) {
+			t.Fatalf("mismatched create statement: %s, want %s", createStmt, want)
+		}
+	}
+}
+
+func eqWhitespace(a, b string) bool {
+	return strings.Replace(a, "\t", "", -1) == strings.Replace(b, "\t", "", -1)
 }

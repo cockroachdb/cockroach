@@ -778,11 +778,12 @@
 
 # HoistJoinSubquery extracts subqueries from a join filter and joins them with
 # the join's right input. This and other subquery hoisting patterns create a
-# single, top-level relational query with no nesting.
+# single, top-level relational query with no nesting. This rule only applies to
+# join types which have a legal apply variant.
 #
 # This rule is marked as low priority for the same reason as HoistSelectExists.
 [HoistJoinSubquery, Normalize, LowPriority]
-(Join
+(InnerJoin | LeftJoin | SemiJoin | AntiJoin
     $left:*
     $right:*
     $on:[ ... $item:* & (HasHoistableSubquery $item) ... ]

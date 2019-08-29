@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -80,6 +81,74 @@ func loadBackupDescs(
 		return nil, errors.Newf("no backups found")
 	}
 	return backupDescs, nil
+}
+
+// getBackupLocalityInfo takes a list of store URIs that together contain a
+// partitioned backup, the first of which must contain the main BACKUP manifest,
+// and searches for BACKUP_PART files in each store to build a map of (non-
+// default) original backup locality values to URIs that currently contain
+// the backup files.
+func getBackupLocalityInfo(
+	ctx context.Context, uris []string, settings *cluster.Settings,
+) (jobspb.RestoreDetails_BackupLocalityInfo, error) {
+	var info jobspb.RestoreDetails_BackupLocalityInfo
+	if len(uris) == 1 {
+		return info, nil
+	}
+	stores := make([]storageccl.ExportStorage, len(uris))
+	for i, uri := range uris {
+		conf, err := storageccl.ExportStorageConfFromURI(uri)
+		if err != nil {
+			return info, errors.Wrapf(err, "export configuration")
+		}
+		store, err := storageccl.MakeExportStorage(ctx, conf, settings)
+		if err != nil {
+			return info, errors.Wrapf(err, "make storage")
+		}
+		defer store.Close()
+		stores[i] = store
+	}
+
+	// First read the main backup descriptor, which is required to be at the first
+	// URI in the list. We don't read the table descriptors, so there's no need to
+	// upgrade them.
+	mainBackupDesc, err := readBackupDescriptor(ctx, stores[0], BackupDescriptorName)
+	if err != nil {
+		return info, err
+	}
+
+	// Now get the list of expected partial per-store backup manifest filenames
+	// and attempt to find them.
+	urisByOrigLocality := make(map[string]string)
+	for _, filename := range mainBackupDesc.PartitionDescriptorFilenames {
+		found := false
+		for i, store := range stores {
+			if desc, err := readBackupPartitionDescriptor(ctx, store, filename); err == nil {
+				if desc.BackupID != mainBackupDesc.ID {
+					return info, errors.Errorf(
+						"expected backup part to have backup ID %s, found %s",
+						mainBackupDesc.ID, desc.BackupID,
+					)
+				}
+				origLocalityKV := desc.LocalityKV
+				kv := roachpb.Tier{}
+				if err := kv.FromString(origLocalityKV); err != nil {
+					return info, errors.Wrapf(err, "reading backup manifest from %s", uris[i])
+				}
+				if _, ok := urisByOrigLocality[origLocalityKV]; ok {
+					return info, errors.Errorf("duplicate locality %s found in backup", origLocalityKV)
+				}
+				urisByOrigLocality[origLocalityKV] = uris[i]
+				found = true
+				break
+			}
+		}
+		if !found {
+			return info, errors.Errorf("expected manifest %s not found in backup locations", filename)
+		}
+	}
+	info.URIsByOriginalLocalityKV = urisByOrigLocality
+	return info, nil
 }
 
 func loadSQLDescsFromBackupsAtTime(
@@ -258,21 +327,16 @@ func allocateTableRewrites(
 	// options.
 	for _, table := range tablesByID {
 		// Check that foreign key targets exist.
-		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
-			if index.ForeignKey.IsSet() {
-				to := index.ForeignKey.Table
-				if _, ok := tablesByID[to]; !ok {
-					if _, ok := opts[restoreOptSkipMissingFKs]; !ok {
-						return errors.Errorf(
-							"cannot restore table %q without referenced table %d (or %q option)",
-							table.Name, to, restoreOptSkipMissingFKs,
-						)
-					}
+		for i := range table.OutboundFKs {
+			fk := &table.OutboundFKs[i]
+			if _, ok := tablesByID[fk.ReferencedTableID]; !ok {
+				if _, ok := opts[restoreOptSkipMissingFKs]; !ok {
+					return nil, errors.Errorf(
+						"cannot restore table %q without referenced table %d (or %q option)",
+						table.Name, fk.ReferencedTableID, restoreOptSkipMissingFKs,
+					)
 				}
 			}
-			return nil
-		}); err != nil {
-			return nil, err
 		}
 
 		// Check that referenced sequences exist.
@@ -476,34 +540,56 @@ func RewriteTableDescs(
 				}
 				index.InterleavedBy[j].Table = childRewrite.TableID
 			}
-
-			if index.ForeignKey.IsSet() {
-				to := index.ForeignKey.Table
-				if indexRewrite, ok := tableRewrites[to]; ok {
-					index.ForeignKey.Table = indexRewrite.TableID
-				} else {
-					// If indexRewrite doesn't exist, the user has specified
-					// restoreOptSkipMissingFKs. Error checking in the case the user hasn't has
-					// already been done in allocateTableRewrites.
-					index.ForeignKey = sqlbase.ForeignKeyReference{}
-				}
-
-				// TODO(dt): if there is an existing (i.e. non-restoring) table with
-				// a db and name matching the one the FK pointed to at backup, should
-				// we update the FK to point to it?
-			}
-
-			origRefs := index.ReferencedBy
-			index.ReferencedBy = nil
-			for _, ref := range origRefs {
-				if refRewrite, ok := tableRewrites[ref.Table]; ok {
-					ref.Table = refRewrite.TableID
-					index.ReferencedBy = append(index.ReferencedBy, ref)
-				}
-			}
 			return nil
 		}); err != nil {
 			return err
+		}
+
+		// TODO(lucy): deal with outbound foreign key mutations here as well.
+		origFKs := table.OutboundFKs
+		table.OutboundFKs = nil
+		for i := range origFKs {
+			fk := &origFKs[i]
+			to := fk.ReferencedTableID
+			if indexRewrite, ok := tableRewrites[to]; ok {
+				fk.ReferencedTableID = indexRewrite.TableID
+				fk.OriginTableID = tableRewrite.TableID
+				// Also update the table ID on the old FK proto that exists for
+				// validation, if applicable, so that the validation doesn't fail when
+				// we downgrade the table descriptors for 19.1 nodes.
+				// TODO(lucy, jordan): Remove this in 20.1.
+				if fk.LegacyUpgradedFromOriginReference.Table != 0 {
+					fk.LegacyUpgradedFromOriginReference.Table = indexRewrite.TableID
+				}
+			} else {
+				// If indexRewrite doesn't exist, the user has specified
+				// restoreOptSkipMissingFKs. Error checking in the case the user hasn't has
+				// already been done in allocateTableRewrites.
+				continue
+			}
+
+			// TODO(dt): if there is an existing (i.e. non-restoring) table with
+			// a db and name matching the one the FK pointed to at backup, should
+			// we update the FK to point to it?
+			table.OutboundFKs = append(table.OutboundFKs, *fk)
+		}
+
+		origInboundFks := table.InboundFKs
+		table.InboundFKs = nil
+		for i := range origInboundFks {
+			ref := &origInboundFks[i]
+			if refRewrite, ok := tableRewrites[ref.OriginTableID]; ok {
+				ref.ReferencedTableID = tableRewrite.TableID
+				ref.OriginTableID = refRewrite.TableID
+				// Also update the table ID on the old FK proto that exists for
+				// validation, if applicable, so that the validation doesn't fail when
+				// we downgrade the table descriptors for 19.1 nodes.
+				// TODO(lucy, jordan): Remove this in 20.1.
+				if ref.LegacyUpgradedFromReferencedReference.Table != 0 {
+					ref.LegacyUpgradedFromReferencedReference.Table = refRewrite.TableID
+				}
+				table.InboundFKs = append(table.InboundFKs, *ref)
+			}
 		}
 
 		for i, dest := range table.DependsOn {
@@ -633,6 +719,7 @@ func errOnMissingRange(span intervalccl.Range, start, end hlc.Timestamp) error {
 func makeImportSpans(
 	tableSpans []roachpb.Span,
 	backups []BackupDescriptor,
+	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	lowWaterMark roachpb.Key,
 	onMissing func(span intervalccl.Range, start, end hlc.Timestamp) error,
 ) ([]importEntry, hlc.Timestamp, error) {
@@ -672,7 +759,7 @@ func makeImportSpans(
 	// backup2 files) so they will retain that alternation in the output of
 	// OverlapCoveringMerge.
 	var maxEndTime hlc.Timestamp
-	for _, b := range backups {
+	for i, b := range backups {
 		if maxEndTime.Less(b.EndTime) {
 			maxEndTime = b.EndTime
 		}
@@ -697,14 +784,32 @@ func makeImportSpans(
 		}
 		backupCoverings = append(backupCoverings, backupSpanCovering)
 		var backupFileCovering intervalccl.Covering
+
+		var storesByLocalityKV map[string]roachpb.ExportStorage
+		if backupLocalityInfo != nil && backupLocalityInfo[i].URIsByOriginalLocalityKV != nil {
+			storesByLocalityKV = make(map[string]roachpb.ExportStorage)
+			for kv, uri := range backupLocalityInfo[i].URIsByOriginalLocalityKV {
+				conf, err := storageccl.ExportStorageConfFromURI(uri)
+				if err != nil {
+					return nil, hlc.Timestamp{}, err
+				}
+				storesByLocalityKV[kv] = conf
+			}
+		}
 		for _, f := range b.Files {
+			dir := b.Dir
+			if storesByLocalityKV != nil {
+				if newDir, ok := storesByLocalityKV[f.LocalityKV]; ok {
+					dir = newDir
+				}
+			}
 			backupFileCovering = append(backupFileCovering, intervalccl.Range{
 				Start: f.Span.Key,
 				End:   f.Span.EndKey,
 				Payload: importEntry{
 					Span:      f.Span,
 					entryType: backupFile,
-					dir:       b.Dir,
+					dir:       dir,
 					file:      f,
 				},
 			})
@@ -949,7 +1054,9 @@ func WriteTableDescs(
 			// TODO(dt): support restoring privs.
 			desc.Privileges = sqlbase.NewDefaultPrivilegeDescriptor()
 			wroteDBs[desc.ID] = desc
-			sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, desc.ID, desc)
+			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, desc.ID, desc); err != nil {
+				return err
+			}
 			b.CPut(sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, desc.Name), desc.ID, nil)
 		}
 		for i := range tables {
@@ -969,7 +1076,9 @@ func WriteTableDescs(
 				// TODO(dt): Make this more configurable.
 				tables[i].Privileges = parentDB.GetPrivileges()
 			}
-			sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, tables[i].ID, tables[i])
+			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, tables[i].ID, tables[i]); err != nil {
+				return err
+			}
 			b.CPut(sqlbase.MakeNameMetadataKey(tables[i].ParentID, tables[i].Name), tables[i].ID, nil)
 		}
 		for _, kv := range extra {
@@ -983,7 +1092,7 @@ func WriteTableDescs(
 		}
 
 		for _, table := range tables {
-			if err := table.Validate(ctx, txn, settings); err != nil {
+			if err := table.Validate(ctx, txn); err != nil {
 				return errors.Wrapf(err,
 					"validate table %d", errors.Safe(table.ID))
 			}
@@ -994,21 +1103,24 @@ func WriteTableDescs(
 }
 
 func restoreJobDescription(
-	p sql.PlanHookState, restore *tree.Restore, from []string, opts map[string]string,
+	p sql.PlanHookState, restore *tree.Restore, from [][]string, opts map[string]string,
 ) (string, error) {
 	r := &tree.Restore{
 		AsOf:    restore.AsOf,
 		Options: optsToKVOptions(opts),
 		Targets: restore.Targets,
-		From:    make(tree.Exprs, len(restore.From)),
+		From:    make([]tree.PartitionedBackup, len(restore.From)),
 	}
 
-	for i, f := range from {
-		sf, err := storageccl.SanitizeExportStorageURI(f)
-		if err != nil {
-			return "", err
+	for i, backup := range from {
+		r.From[i] = make(tree.PartitionedBackup, len(backup))
+		for j, uri := range backup {
+			sf, err := storageccl.SanitizeExportStorageURI(uri)
+			if err != nil {
+				return "", err
+			}
+			r.From[i][j] = tree.NewDString(sf)
 		}
-		r.From[i] = tree.NewDString(sf)
 	}
 
 	ann := p.ExtendedEvalContext().Annotations
@@ -1066,13 +1178,13 @@ func restore(
 	gossip *gossip.Gossip,
 	settings *cluster.Settings,
 	backupDescs []BackupDescriptor,
+	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
-	sqlDescs []sqlbase.Descriptor,
-	tableRewrites TableRewriteMap,
-	overrideDB string,
+	tables []*sqlbase.TableDescriptor,
+	oldTableIDs []sqlbase.ID,
+	spans []roachpb.Span,
 	job *jobs.Job,
-	resultsCh chan<- tree.Datums,
-) (roachpb.BulkOpSummary, []*sqlbase.DatabaseDescriptor, []*sqlbase.TableDescriptor, error) {
+) (roachpb.BulkOpSummary, error) {
 	// A note about contexts and spans in this method: the top-level context
 	// `restoreCtx` is used for orchestration logging. All operations that carry
 	// out work get their individual contexts.
@@ -1084,34 +1196,6 @@ func restore(
 		highWaterMark     int
 	}{
 		highWaterMark: -1,
-	}
-
-	var databases []*sqlbase.DatabaseDescriptor
-	var tables []*sqlbase.TableDescriptor
-	var oldTableIDs []sqlbase.ID
-	for _, desc := range sqlDescs {
-		if tableDesc := desc.GetTable(); tableDesc != nil {
-			tables = append(tables, tableDesc)
-			oldTableIDs = append(oldTableIDs, tableDesc.ID)
-		}
-		if dbDesc := desc.GetDatabase(); dbDesc != nil {
-			if rewrite, ok := tableRewrites[dbDesc.ID]; ok {
-				dbDesc.ID = rewrite.TableID
-				databases = append(databases, dbDesc)
-			}
-		}
-	}
-
-	log.Eventf(restoreCtx, "starting restore for %d tables", len(tables))
-
-	// We get the spans of the restoring tables _as they appear in the backup_,
-	// that is, in the 'old' keyspace, before we reassign the table IDs.
-	spans := spansForAllTableIndexes(tables, nil)
-
-	// Assign new IDs and privileges to the tables, and update all references to
-	// use the new IDs.
-	if err := RewriteTableDescs(tables, tableRewrites, overrideDB); err != nil {
-		return mu.res, nil, nil, err
 	}
 
 	// TODO(jeffreyxiao): Remove this check in 20.1.
@@ -1133,9 +1217,20 @@ func restore(
 	// Get TableRekeys to use when importing raw data.
 	var rekeys []roachpb.ImportRequest_TableRekey
 	for i := range tables {
-		newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(tables[i]))
+		// Downgrade all tables that we're writing to the cluster, if we're in a
+		// mixed 19.1/19.2 state.
+		// TODO(lucy, jordan): Remove in 20.1.
+		downgraded, newDesc, err := tables[i].MaybeDowngradeForeignKeyRepresentation(restoreCtx, settings)
 		if err != nil {
-			return mu.res, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
+			return mu.res, errors.NewAssertionErrorWithWrappedErrf(err, "downgrading table %d", tables[i].ID)
+		}
+		tableToSerialize := tables[i]
+		if downgraded {
+			tableToSerialize = newDesc
+		}
+		newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(tableToSerialize))
+		if err != nil {
+			return mu.res, errors.NewAssertionErrorWithWrappedErrf(err,
 				"marshaling descriptor")
 		}
 		rekeys = append(rekeys, roachpb.ImportRequest_TableRekey{
@@ -1145,15 +1240,15 @@ func restore(
 	}
 	kr, err := storageccl.MakeKeyRewriterFromRekeys(rekeys)
 	if err != nil {
-		return mu.res, nil, nil, err
+		return mu.res, err
 	}
 
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
-	importSpans, _, err := makeImportSpans(spans, backupDescs, highWaterMark, errOnMissingRange)
+	importSpans, _, err := makeImportSpans(spans, backupDescs, backupLocalityInfo, highWaterMark, errOnMissingRange)
 	if err != nil {
-		return mu.res, nil, nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
+		return mu.res, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
 
 	for i := range importSpans {
@@ -1285,10 +1380,10 @@ func restore(
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
-		return mu.res, nil, nil, errors.Wrapf(err, "importing %d ranges", len(importSpans))
+		return mu.res, errors.Wrapf(err, "importing %d ranges", len(importSpans))
 	}
 
-	return mu.res, databases, tables, nil
+	return mu.res, nil
 }
 
 // RestoreHeader is the header for RESTORE stmt results.
@@ -1311,9 +1406,13 @@ func restorePlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	fromFn, err := p.TypeAsStringArray(restoreStmt.From, "RESTORE")
-	if err != nil {
-		return nil, nil, nil, false, err
+	fromFns := make([]func() ([]string, error), len(restoreStmt.From))
+	for i := range restoreStmt.From {
+		fromFn, err := p.TypeAsStringArray(tree.Exprs(restoreStmt.From[i]), "RESTORE")
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		fromFns[i] = fromFn
 	}
 
 	optsFn, err := p.TypeAsStringOpts(restoreStmt.Options, restoreOptionExpectValues)
@@ -1332,7 +1431,7 @@ func restorePlanHook(
 			return err
 		}
 
-		if err := p.RequireSuperUser(ctx, "RESTORE"); err != nil {
+		if err := p.RequireAdminRole(ctx, "RESTORE"); err != nil {
 			return err
 		}
 
@@ -1340,9 +1439,12 @@ func restorePlanHook(
 			return errors.Errorf("RESTORE cannot be used inside a transaction")
 		}
 
-		from, err := fromFn()
-		if err != nil {
-			return err
+		from := make([][]string, len(fromFns))
+		for i := range fromFns {
+			from[i], err = fromFns[i]()
+			if err != nil {
+				return err
+			}
 		}
 		var endTime hlc.Timestamp
 		if restoreStmt.AsOf.Expr != nil {
@@ -1366,26 +1468,41 @@ func doRestorePlan(
 	ctx context.Context,
 	restoreStmt *tree.Restore,
 	p sql.PlanHookState,
-	from []string,
+	from [][]string,
 	endTime hlc.Timestamp,
 	opts map[string]string,
 	resultsCh chan<- tree.Datums,
 ) error {
-	backupDescs, err := loadBackupDescs(ctx, from, p.ExecCfg().Settings)
+	defaultURIs := make([]string, len(from))
+	localityInfo := make([]jobspb.RestoreDetails_BackupLocalityInfo, len(from))
+	for i, uris := range from {
+		// The first URI in the list must contain the main BACKUP manifest.
+		defaultURIs[i] = uris[0]
+		info, err := getBackupLocalityInfo(ctx, uris, p.ExecCfg().Settings)
+		if err != nil {
+			return err
+		}
+		localityInfo[i] = info
+	}
+	mainBackupDescs, err := loadBackupDescs(ctx, defaultURIs, p.ExecCfg().Settings)
 	if err != nil {
+		return err
+	}
+	_, skipMissingFKs := opts[restoreOptSkipMissingFKs]
+	if err := maybeUpgradeTableDescsInBackupDescriptors(ctx, mainBackupDescs, skipMissingFKs); err != nil {
 		return err
 	}
 
 	if !endTime.IsEmpty() {
 		ok := false
-		for _, b := range backupDescs {
+		for _, b := range mainBackupDescs {
 			// Find the backup that covers the requested time.
 			if b.StartTime.Less(endTime) && !b.EndTime.Less(endTime) {
 				ok = true
 				// Ensure that the backup actually has revision history.
 				if b.MVCCFilter != MVCCFilter_All {
 					return errors.Errorf(
-						"incompatible RESTORE timestamp: BACKUP for requested time  needs option '%s'", backupOptRevisionHistory,
+						"incompatible RESTORE timestamp: BACKUP for requested time needs option '%s'", backupOptRevisionHistory,
 					)
 				}
 				// Ensure that the revision history actually covers the requested time -
@@ -1407,7 +1524,7 @@ func doRestorePlan(
 		}
 	}
 
-	sqlDescs, restoreDBs, err := selectTargets(ctx, p, backupDescs, restoreStmt.Targets, endTime)
+	sqlDescs, restoreDBs, err := selectTargets(ctx, p, mainBackupDescs, restoreStmt.Targets, endTime)
 	if err != nil {
 		return err
 	}
@@ -1445,6 +1562,19 @@ func doRestorePlan(
 		return err
 	}
 
+	// Before marshaling table descriptors in RestoreDetails, possibly downgrade
+	// them to the old 19.1 representation.
+	// TODO(lucy, jordan): Remove in 20.1.
+	for i := range tables {
+		downgraded, newDesc, err := tables[i].MaybeDowngradeForeignKeyRepresentation(ctx, p.ExecCfg().Settings)
+		if err != nil {
+			return err
+		}
+		if downgraded {
+			tables[i] = newDesc
+		}
+	}
+
 	_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 		Description: description,
 		Username:    p.User(),
@@ -1455,11 +1585,12 @@ func doRestorePlan(
 			return sqlDescIDs
 		}(),
 		Details: jobspb.RestoreDetails{
-			EndTime:       endTime,
-			TableRewrites: tableRewrites,
-			URIs:          from,
-			TableDescs:    tables,
-			OverrideDB:    opts[restoreOptIntoDB],
+			EndTime:            endTime,
+			TableRewrites:      tableRewrites,
+			URIs:               defaultURIs,
+			BackupLocalityInfo: localityInfo,
+			TableDescs:         tables,
+			OverrideDB:         opts[restoreOptIntoDB],
 		},
 		Progress: jobspb.RestoreProgress{},
 	})
@@ -1469,15 +1600,29 @@ func doRestorePlan(
 	return <-errCh
 }
 
+// loadBackupSQLDescs extracts the backup descriptors, the latest backup
+// descriptor, and all the Descriptors for a backup to be restored. It upgrades
+// the table descriptors to the new FK representation if necessary. FKs that
+// can't be restored because the necessary tables are missing are omitted; if
+// skip_missing_foreign_keys was set, we should have aborted the RESTORE and
+// returned an error prior to this.
 func loadBackupSQLDescs(
 	ctx context.Context, details jobspb.RestoreDetails, settings *cluster.Settings,
-) ([]BackupDescriptor, []sqlbase.Descriptor, error) {
+) ([]BackupDescriptor, BackupDescriptor, []sqlbase.Descriptor, error) {
 	backupDescs, err := loadBackupDescs(ctx, details.URIs, settings)
 	if err != nil {
-		return nil, nil, err
+		return nil, BackupDescriptor{}, nil, err
 	}
 
-	allDescs, _ := loadSQLDescsFromBackupsAtTime(backupDescs, details.EndTime)
+	// Upgrade the table descriptors to use the new FK representation.
+	// TODO(lucy, jordan): This should become unnecessary in 20.1 when we stop
+	// writing old-style descs in RestoreDetails (unless a job persists across
+	// an upgrade?).
+	if err := maybeUpgradeTableDescsInBackupDescriptors(ctx, backupDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
+		return nil, BackupDescriptor{}, nil, err
+	}
+
+	allDescs, latestBackupDesc := loadSQLDescsFromBackupsAtTime(backupDescs, details.EndTime)
 
 	var sqlDescs []sqlbase.Descriptor
 	for _, desc := range allDescs {
@@ -1485,7 +1630,7 @@ func loadBackupSQLDescs(
 			sqlDescs = append(sqlDescs, desc)
 		}
 	}
-	return backupDescs, sqlDescs, nil
+	return backupDescs, latestBackupDesc, sqlDescs, nil
 }
 
 type restoreResumer struct {
@@ -1494,7 +1639,104 @@ type restoreResumer struct {
 	res            roachpb.BulkOpSummary
 	databases      []*sqlbase.DatabaseDescriptor
 	tables         []*sqlbase.TableDescriptor
+	exec           sqlutil.InternalExecutor
+	latestStats    []*stats.TableStatistic
 	statsRefresher *stats.Refresher
+}
+
+// remapRelevantStatistics changes the table ID references in the stats
+// from those they had in the backed-up database to what they should be
+// in the restored database.
+// It also selects only the statistics which belong to one of the tables
+// being restored. If the tableRewrites can re-write the table ID, then that
+// table is being restored.
+func remapRelevantStatistics(
+	backup BackupDescriptor, tableRewrites TableRewriteMap,
+) []*stats.TableStatistic {
+	relevantTableStatistics := make([]*stats.TableStatistic, 0, len(backup.Statistics))
+
+	for i := range backup.Statistics {
+		stat := backup.Statistics[i]
+		tableRewrite, ok := tableRewrites[stat.TableID]
+		if !ok {
+			// Table re-write not present, so statistic should not be imported.
+			continue
+		}
+		stat.TableID = tableRewrite.TableID
+		relevantTableStatistics = append(relevantTableStatistics, stat)
+	}
+
+	return relevantTableStatistics
+}
+
+// createImportingTables create the tables that we will restore into. It also
+// fetches the information from the old tables that we need for the restore.
+func createImportingTables(
+	ctx context.Context, p sql.PlanHookState, sqlDescs []sqlbase.Descriptor, r *restoreResumer,
+) (
+	[]*sqlbase.DatabaseDescriptor,
+	[]*sqlbase.TableDescriptor,
+	[]sqlbase.ID,
+	[]roachpb.Span,
+	error,
+) {
+	details := r.job.Details().(jobspb.RestoreDetails)
+
+	var databases []*sqlbase.DatabaseDescriptor
+	var tables []*sqlbase.TableDescriptor
+	var oldTableIDs []sqlbase.ID
+	for _, desc := range sqlDescs {
+		if tableDesc := desc.GetTable(); tableDesc != nil {
+			tables = append(tables, tableDesc)
+			oldTableIDs = append(oldTableIDs, tableDesc.ID)
+		}
+		if dbDesc := desc.GetDatabase(); dbDesc != nil {
+			if rewrite, ok := details.TableRewrites[dbDesc.ID]; ok {
+				dbDesc.ID = rewrite.TableID
+				databases = append(databases, dbDesc)
+			}
+		}
+	}
+
+	// We get the spans of the restoring tables _as they appear in the backup_,
+	// that is, in the 'old' keyspace, before we reassign the table IDs.
+	spans := spansForAllTableIndexes(tables, nil)
+
+	log.Eventf(ctx, "starting restore for %d tables", len(tables))
+
+	// Assign new IDs and privileges to the tables, and update all references to
+	// use the new IDs.
+	if err := RewriteTableDescs(tables, details.TableRewrites, details.OverrideDB); err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	for _, desc := range tables {
+		desc.Version++
+		desc.State = sqlbase.TableDescriptor_OFFLINE
+		desc.OfflineReason = "restoring"
+	}
+
+	if !details.PrepareCompleted {
+		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			// Write the new TableDescriptors which are set in the OFFLINE state.
+			if err := WriteTableDescs(ctx, txn, databases, tables, r.job.Payload().Username, r.settings, nil); err != nil {
+				return errors.Wrapf(err, "restoring %d TableDescriptors", len(r.tables))
+			}
+
+			details.PrepareCompleted = true
+			details.TableDescs = tables
+
+			// Update the job once all descs have been prepared for ingestion.
+			err := r.job.WithTxn(txn).SetDetails(ctx, details)
+
+			return err
+		})
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+	}
+
+	return databases, tables, oldTableIDs, spans, nil
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -1504,28 +1746,35 @@ func (r *restoreResumer) Resume(
 	details := r.job.Details().(jobspb.RestoreDetails)
 	p := phs.(sql.PlanHookState)
 
-	backupDescs, sqlDescs, err := loadBackupSQLDescs(ctx, details, r.settings)
+	backupDescs, latestBackupDesc, sqlDescs, err := loadBackupSQLDescs(ctx, details, r.settings)
 	if err != nil {
 		return err
 	}
 
-	res, databases, tables, err := restore(
+	databases, tables, oldTableIDs, spans, err := createImportingTables(ctx, p, sqlDescs, r)
+	if err != nil {
+		return err
+	}
+	r.tables = tables
+	r.databases = databases
+
+	res, err := restore(
 		ctx,
 		p.ExecCfg().DB,
 		p.ExecCfg().Gossip,
 		p.ExecCfg().Settings,
 		backupDescs,
+		details.BackupLocalityInfo,
 		details.EndTime,
-		sqlDescs,
-		details.TableRewrites,
-		details.OverrideDB,
+		tables,
+		oldTableIDs,
+		spans,
 		r.job,
-		resultsCh,
 	)
 	r.res = res
-	r.databases = databases
-	r.tables = tables
+	r.exec = p.ExecCfg().InternalExecutor
 	r.statsRefresher = p.ExecCfg().StatsRefresher
+	r.latestStats = remapRelevantStatistics(latestBackupDesc, details.TableRewrites)
 	return err
 }
 
@@ -1536,27 +1785,62 @@ func (r *restoreResumer) Resume(
 func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
+	// No need to mark the tables as dropped if they were not even created in the
+	// first place.
+	if !details.PrepareCompleted {
+		return nil
+	}
+
 	// Needed to trigger the schema change manager.
 	if err := txn.SetSystemConfigTrigger(); err != nil {
 		return err
 	}
 	b := txn.NewBatch()
-	for _, tableDesc := range details.TableDescs {
+	for _, tbl := range details.TableDescs {
+		tableDesc := *tbl
+		tableDesc.Version++
 		tableDesc.State = sqlbase.TableDescriptor_DROP
-		sql.WriteNewDescToBatch(ctx, false /* kvTrace */, r.settings, b, tableDesc.ID, tableDesc)
+		b.CPutDeprecated(
+			sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.Name),
+			nil,
+			tableDesc.ID,
+		)
+		b.CPutDeprecated(
+			sqlbase.MakeDescMetadataKey(tableDesc.ID),
+			sqlbase.WrapDescriptor(&tableDesc),
+			sqlbase.WrapDescriptor(tbl),
+		)
 	}
-	return txn.Run(ctx, b)
+	if err := txn.Run(ctx, b); err != nil {
+		return errors.Wrap(err, "dropping tables")
+	}
+
+	return nil
 }
 
 // OnSuccess is part of the jobs.Resumer interface.
 func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 	log.Event(ctx, "making tables live")
 
-	// Write the new TableDescriptors and flip the namespace entries over to
-	// them. After this call, any queries on a table will be served by the newly
-	// restored data.
-	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, r.job.Payload().Username, r.settings, nil); err != nil {
-		return errors.Wrapf(err, "restoring %d TableDescriptors", len(r.tables))
+	if err := stats.InsertNewStats(ctx, r.exec, txn, r.latestStats); err != nil {
+		return errors.Wrapf(err, "could not reinsert table statistics")
+	}
+
+	// Write the new TableDescriptors and flip state over to public so they can be
+	// accessed.
+	b := txn.NewBatch()
+	for _, tbl := range r.tables {
+		tableDesc := *tbl
+		tableDesc.Version++
+		tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+		b.CPutDeprecated(
+			sqlbase.MakeDescMetadataKey(tableDesc.ID),
+			sqlbase.WrapDescriptor(&tableDesc),
+			sqlbase.WrapDescriptor(tbl),
+		)
+	}
+	if err := txn.Run(ctx, b); err != nil {
+		return errors.Wrap(err, "publishing tables")
 	}
 
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of

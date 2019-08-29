@@ -1,3 +1,6 @@
+# Stats for TPC-C with 10 warehouses, collected soon after the initial data
+# import.
+
 exec-ddl
 ALTER TABLE customer INJECT STATISTICS '[
     {

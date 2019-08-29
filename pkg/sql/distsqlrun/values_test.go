@@ -72,8 +72,8 @@ func TestValuesProcessor(t *testing.T) {
 					evalCtx := tree.NewTestingEvalContext(st)
 					defer evalCtx.Stop(context.Background())
 					flowCtx := FlowCtx{
-						Settings: st,
-						EvalCtx:  evalCtx,
+						Cfg:     &ServerConfig{Settings: st},
+						EvalCtx: evalCtx,
 					}
 
 					v, err := newValuesProcessor(&flowCtx, 0 /* processorID */, &spec, &distsqlpb.PostProcessSpec{}, out)
@@ -131,8 +131,8 @@ func BenchmarkValuesProcessor(b *testing.B) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 	post := distsqlpb.PostProcessSpec{}
 	output := RowDisposer{}

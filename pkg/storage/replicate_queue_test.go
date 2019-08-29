@@ -39,11 +39,18 @@ import (
 func TestReplicateQueueRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	testutils.RunTrueAndFalse(t, "atomic", func(t *testing.T, atomic bool) {
+		testReplicateQueueRebalanceInner(t, atomic)
+	})
+}
+
+func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
 	if testing.Short() {
 		t.Skip("short flag")
 	}
 
 	const numNodes = 5
+
 	tc := testcluster.StartTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
@@ -59,15 +66,38 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
 		storage.LoadBasedRebalancingMode.Override(&st.SV, int64(storage.LBRebalancingOff))
+		// NB: usually it's preferred to set the cluster settings, but this is less
+		// boilerplate than setting it and then waiting for all nodes to have it.
+		storage.UseAtomicReplicationChanges.Override(&st.SV, atomic)
 	}
 
-	const newRanges = 5
+	const newRanges = 10
+	trackedRanges := map[roachpb.RangeID]struct{}{}
 	for i := 0; i < newRanges; i++ {
 		tableID := keys.MinUserDescID + i
 		splitKey := keys.MakeTablePrefix(uint32(tableID))
-		if _, _, err := tc.SplitRange(splitKey); err != nil {
-			t.Fatal(err)
-		}
+		// Retry the splits on descriptor errors which are likely as the replicate
+		// queue is already hard at work.
+		testutils.SucceedsSoon(t, func() error {
+			desc := tc.LookupRangeOrFatal(t, splitKey)
+			if i > 0 && len(desc.Replicas().Voters()) > 3 {
+				// Some system ranges have five replicas but user ranges only three,
+				// so we'll see downreplications early in the startup process which
+				// we want to ignore. Delay the splits so that we don't create
+				// more over-replicated ranges.
+				// We don't do this for i=0 since that range stays at five replicas.
+				return errors.Errorf("still downreplicating: %s", &desc)
+			}
+			_, rightDesc, err := tc.SplitRange(splitKey)
+			if err != nil {
+				return err
+			}
+			t.Logf("split off %s", &rightDesc)
+			if i > 0 {
+				trackedRanges[rightDesc.RangeID] = struct{}{}
+			}
+			return nil
+		})
 	}
 
 	countReplicas := func() []int {
@@ -105,6 +135,24 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		}
 		return nil
 	})
+
+	// Query the range log to see if anything unexpected happened. Concretely,
+	// we'll make sure that our tracked ranges never had >3 replicas.
+	infos, err := queryRangeLog(tc.Conns[0], `SELECT info FROM system.rangelog ORDER BY timestamp DESC`)
+	require.NoError(t, err)
+	for _, info := range infos {
+		if _, ok := trackedRanges[info.UpdatedDesc.RangeID]; !ok || len(info.UpdatedDesc.Replicas().Voters()) <= 3 {
+			continue
+		}
+		// If we have atomic changes enabled, we expect to never see four replicas
+		// on our tracked ranges. If we don't have atomic changes, we can't avoid
+		// it.
+		if atomic {
+			t.Error(info)
+		} else {
+			t.Log(info)
+		}
+	}
 }
 
 // Test that up-replication only proceeds if there are a good number of
@@ -170,10 +218,14 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 		return nil
 	})
 
-	if err := verifyRangeLog(
+	infos, err := filterRangeLog(
 		tc.Conns[0], storagepb.RangeLogEventType_add, storagepb.ReasonRangeUnderReplicated,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if len(infos) < 1 {
+		t.Fatalf("found no upreplication due to underreplication in the range logs")
 	}
 }
 
@@ -249,47 +301,52 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 		return nil
 	})
 
-	if err := verifyRangeLog(
+	infos, err := filterRangeLog(
 		tc.Conns[0], storagepb.RangeLogEventType_remove, storagepb.ReasonRangeOverReplicated,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if len(infos) < 1 {
+		t.Fatalf("found no downreplication due to over-replication in the range logs")
 	}
 }
 
-func verifyRangeLog(
-	conn *gosql.DB, eventType storagepb.RangeLogEventType, reason storagepb.RangeLogEventReason,
-) error {
-	rows, err := conn.Query(
-		"SELECT info FROM system.rangelog WHERE \"eventType\" = $1;", eventType.String())
+// queryRangeLog queries the range log. The query must be of type:
+// `SELECT info from system.rangelog ...`.
+func queryRangeLog(
+	conn *gosql.DB, query string, args ...interface{},
+) ([]storagepb.RangeLogEvent_Info, error) {
+	rows, err := conn.Query(query, args...)
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	var sl []storagepb.RangeLogEvent_Info
 	defer rows.Close()
 	var numEntries int
 	for rows.Next() {
 		numEntries++
 		var infoStr string
 		if err := rows.Scan(&infoStr); err != nil {
-			return err
+			return nil, err
 		}
 		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr), &info); err != nil {
-			return errors.Errorf("error unmarshalling info string %q: %s", infoStr, err)
+			return nil, errors.Errorf("error unmarshaling info string %q: %s", infoStr, err)
 		}
-		if a, e := info.Reason, reason; a != e {
-			return errors.Errorf("expected range log event reason %s, got %s from info %v", e, a, info)
-		}
-		if info.Details == "" {
-			return errors.Errorf("got empty range log event details: %v", info)
-		}
+		sl = append(sl, info)
 	}
 	if err := rows.Err(); err != nil {
-		return err
+		return nil, err
 	}
-	if numEntries == 0 {
-		return errors.New("no range log entries found for up-replication events")
-	}
-	return nil
+	return sl, nil
+}
+
+func filterRangeLog(
+	conn *gosql.DB, eventType storagepb.RangeLogEventType, reason storagepb.RangeLogEventReason,
+) ([]storagepb.RangeLogEvent_Info, error) {
+	return queryRangeLog(conn, `SELECT info FROM system.rangelog WHERE "eventType" = $1 AND info LIKE concat('%', $2, '%');`, eventType.String(), reason)
 }
 
 func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
@@ -329,6 +386,8 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
+				ScanMinIdleTime: time.Millisecond,
+				ScanMaxIdleTime: time.Millisecond,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						DefaultZoneConfigOverride: &zcfg,
@@ -392,7 +451,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		forceProcess()
 		r := db.QueryRow(
-			"select replicas from [show experimental_ranges from table t] where start_key='/2'")
+			"select replicas from [show ranges from table t] where start_key='/2'")
 		var repl string
 		if err := r.Scan(&repl); err != nil {
 			return err
@@ -407,7 +466,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		forceProcess()
 		r := db.QueryRow(
-			"select replicas from [show experimental_ranges from table t] where start_key is null")
+			"select replicas from [show ranges from table t] where start_key is null")
 		var repl string
 		if err := r.Scan(&repl); err != nil {
 			return err

@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strconv"
 	"testing"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -465,6 +467,106 @@ func BenchmarkConcurrentIntQuotaPool(b *testing.B) {
 		{512, 511},
 	} {
 		b.Run(test(c.workers, c.quota))
+	}
+}
+
+// TestIntpoolRelease tests the Release method of intpool to ensure that it releases
+// what is expected and behaves as documented.
+func TestIntpoolRelease(t *testing.T) {
+	ctx := context.Background()
+	const numPools = 3
+	const capacity = 3
+	// Populated full because it's handy for cases where all quota is returned.
+	var full [numPools]uint64
+	for i := 0; i < numPools; i++ {
+		full[i] = capacity
+	}
+	makePools := func() (pools [numPools]*quotapool.IntPool) {
+		for i := 0; i < numPools; i++ {
+			pools[i] = quotapool.NewIntPool(strconv.Itoa(i), capacity)
+		}
+		return pools
+	}
+
+	type acquisition struct {
+		pool int
+		q    uint64
+	}
+	type testCase struct {
+		toAcquire   []*acquisition
+		exclude     int
+		releasePool int
+		expQuota    [numPools]uint64
+	}
+	// First acquire all the quota, then release all but the trailing exclude
+	// allocs into the releasePool and ensure that the pools have expQuota.
+	// Finally release the rest of the allocs and ensure that the pools are full.
+	runTest := func(c *testCase) func(t *testing.T) {
+		return func(t *testing.T) {
+			pools := makePools()
+			allocs := make([]*quotapool.IntAlloc, len(c.toAcquire))
+			for i, acq := range c.toAcquire {
+				if acq == nil {
+					continue
+				}
+				require.True(t, acq.q <= capacity)
+				alloc, err := pools[acq.pool].Acquire(ctx, acq.q)
+				require.NoError(t, err)
+				allocs[i] = alloc
+			}
+			prefix := len(allocs) - c.exclude
+			pools[c.releasePool].Release(allocs[:prefix]...)
+			for i, p := range pools {
+				require.Equal(t, c.expQuota[i], p.ApproximateQuota())
+			}
+			pools[c.releasePool].Release(allocs[prefix:]...)
+			for i, p := range pools {
+				require.Equal(t, full[i], p.ApproximateQuota())
+			}
+		}
+	}
+	for i, c := range []testCase{
+		{
+			toAcquire: []*acquisition{
+				{0, 1},
+				{1, 2},
+				{1, 1},
+				nil,
+			},
+			expQuota: full,
+		},
+		{
+			releasePool: 1,
+			toAcquire: []*acquisition{
+				{0, 1},
+				{1, 2},
+				{1, 1},
+				nil,
+			},
+			expQuota: full,
+		},
+		{
+			toAcquire: []*acquisition{
+				nil,
+				{0, capacity},
+				{1, capacity},
+				{2, capacity},
+			},
+			exclude:  1,
+			expQuota: [numPools]uint64{0: capacity, 1: capacity},
+		},
+		{
+			toAcquire: []*acquisition{
+				nil,
+				{0, capacity},
+				{1, capacity},
+				{2, capacity},
+			},
+			exclude:  3,
+			expQuota: [numPools]uint64{},
+		},
+	} {
+		t.Run(strconv.Itoa(i), runTest(&c))
 	}
 }
 

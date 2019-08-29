@@ -16,9 +16,9 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -99,11 +99,11 @@ func BenchmarkLikeOps(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]types.T{types.Bytes})
+	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Bytes})
 	col := batch.ColVec(0).Bytes()
 	width := 64
-	for i := int64(0); i < coldata.BatchSize; i++ {
-		col[i] = randutil.RandBytes(rng, width)
+	for i := 0; i < coldata.BatchSize; i++ {
+		col.Set(i, randutil.RandBytes(rng, width))
 	}
 
 	// Set a known prefix and suffix on half the batch so we're not filtering
@@ -111,8 +111,8 @@ func BenchmarkLikeOps(b *testing.B) {
 	prefix := "abc"
 	suffix := "xyz"
 	for i := 0; i < coldata.BatchSize/2; i++ {
-		copy(col[i][:3], prefix)
-		copy(col[i][width-3:], suffix)
+		copy(col.Get(i)[:3], prefix)
+		copy(col.Get(i)[width-3:], suffix)
 	}
 
 	batch.SetLength(coldata.BatchSize)
@@ -120,20 +120,20 @@ func BenchmarkLikeOps(b *testing.B) {
 	source.Init()
 
 	prefixOp := &selPrefixBytesBytesConstOp{
-		input:    source,
-		colIdx:   0,
-		constArg: []byte(prefix),
+		OneInputNode: NewOneInputNode(source),
+		colIdx:       0,
+		constArg:     []byte(prefix),
 	}
 	suffixOp := &selSuffixBytesBytesConstOp{
-		input:    source,
-		colIdx:   0,
-		constArg: []byte(suffix),
+		OneInputNode: NewOneInputNode(source),
+		colIdx:       0,
+		constArg:     []byte(suffix),
 	}
 	pattern := fmt.Sprintf("^%s.*%s$", prefix, suffix)
 	regexpOp := &selRegexpBytesBytesConstOp{
-		input:    source,
-		colIdx:   0,
-		constArg: regexp.MustCompile(pattern),
+		OneInputNode: NewOneInputNode(source),
+		colIdx:       0,
+		constArg:     regexp.MustCompile(pattern),
 	}
 
 	testCases := []struct {

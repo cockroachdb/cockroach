@@ -1,0 +1,1342 @@
+# LogicTest: local-mixed-19.1-19.2
+# This test file is essentially the same as the schema_change_in_txn test file
+# in 19.1. These tests are only run in the test configuration that simulates a
+# 19.2 node running in a 19.1 cluster. In that state, schema changes related to
+# foreign keys behave as they do in 19.1, because the new table descriptor
+# mutations are not backward compatible. The most significant difference is that
+# FKs are not validated when added in 19.1, hence the need for different logic
+# tests.
+
+# Disable automatic stats to avoid flakiness (sometimes causes retry errors).
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
+subtest create_and_add_fk_in_same_txn
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE test.parent (id int primary key)
+
+statement ok
+INSERT INTO test.parent values (1)
+
+statement ok
+CREATE TABLE test.child (id int primary key, parent_id int)
+
+# The index on parent_id is added automatically because test.child is empty
+statement ok
+ALTER TABLE test.child ADD CONSTRAINT fk_child_parent_id FOREIGN KEY (parent_id) REFERENCES test.parent (id);
+
+statement ok
+INSERT INTO test.child VALUES (1, 1)
+
+# Check that the auto-created index is visible
+query II rowsort
+SELECT * FROM test.child@child_auto_index_fk_child_parent_id
+----
+1 1
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE test.child, test.parent
+
+subtest create_and_add_fk_in_separate_txns
+
+statement ok
+CREATE TABLE test.parent (id int primary key)
+
+statement ok
+INSERT INTO test.parent values (1)
+
+statement ok
+CREATE TABLE test.child (id int primary key, parent_id int)
+
+statement ok
+BEGIN
+
+# The index on parent_id is added automatically because test.child is empty
+statement ok
+ALTER TABLE test.child ADD CONSTRAINT fk_child_parent_id FOREIGN KEY (parent_id) REFERENCES test.parent (id);
+
+statement ok
+INSERT INTO test.child VALUES (1, 1)
+
+statement ok
+COMMIT
+
+# Check that the auto-created index is visible
+query II rowsort
+SELECT * FROM test.child@child_auto_index_fk_child_parent_id
+----
+1 1
+
+statement ok
+DROP TABLE test.child, test.parent
+
+subtest auto_add_fk_with_composite_index_to_empty_table
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE parent_composite_index (a_id INT NOT NULL, b_id INT NOT NULL, PRIMARY KEY (a_id, b_id))
+
+statement ok
+CREATE TABLE child_composite_index (id SERIAL NOT NULL, parent_a_id INT, parent_b_id INT, PRIMARY KEY (id))
+
+# The (composite) index needed for the fk constraint is automatically added because the table is empty
+statement ok
+ALTER TABLE child_composite_index ADD CONSTRAINT fk_id FOREIGN KEY (parent_a_id, parent_b_id) REFERENCES parent_composite_index;
+
+statement ok
+INSERT INTO parent_composite_index VALUES (100, 200)
+
+statement ok
+INSERT INTO child_composite_index VALUES (1, 100, 200)
+
+# Check that the auto-created index is visible
+query III rowsort
+SELECT * FROM child_composite_index@child_composite_index_auto_index_fk_id
+----
+1 100 200
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE parent_composite_index, child_composite_index
+
+subtest auto_add_fk_to_nonempty_table_error
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE nonempty_a (id SERIAL NOT NULL, self_id INT, b_id INT NOT NULL, PRIMARY KEY (id))
+
+statement ok
+CREATE TABLE nonempty_b (id SERIAL NOT NULL, PRIMARY KEY (id))
+
+statement ok
+INSERT INTO nonempty_b VALUES (1), (2), (3);
+
+statement ok
+INSERT INTO nonempty_a VALUES (1, NULL, 1)
+
+# Fails because self_id is not indexed, and an index will not be automatically created because the table is nonempty
+statement error foreign key requires an existing index on columns \("self_id"\)
+ALTER TABLE nonempty_a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES nonempty_a;
+
+statement ok
+COMMIT
+
+subtest auto_add_fk_index_name_collision
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE parent_name_collision (id SERIAL NOT NULL, PRIMARY KEY (id))
+
+statement ok
+CREATE TABLE child_name_collision (id SERIAL NOT NULL, parent_id INT, other_col INT)
+
+statement ok
+CREATE INDEX child_name_collision_auto_index_fk_id ON child_name_collision (other_col)
+
+# Testing the unusual case where an index already exists that has the same name
+# as the index to be auto-generated when adding a fk constraint to an empty
+# table (but the existing index is not on the referencing column), in which
+# case the ALTER TABLE will fail due to the name collision.
+statement error duplicate index name: "child_name_collision_auto_index_fk_id"
+ALTER TABLE child_name_collision ADD CONSTRAINT fk_id FOREIGN KEY (parent_id) references parent_name_collision
+
+statement ok
+COMMIT
+
+subtest auto_add_fk_duplicate_cols_error
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE parent (a_id INT, b_id INT, PRIMARY KEY (a_id, b_id))
+
+statement ok
+CREATE TABLE child_duplicate_cols (id INT, parent_id INT, PRIMARY KEY (id))
+
+# The fk constraint is invalid because it has duplicate columns, so automatically adding the index fails
+statement error index \"child_duplicate_cols_auto_index_fk\" contains duplicate column \"parent_id\"
+ALTER TABLE child_duplicate_cols ADD CONSTRAINT fk FOREIGN KEY (parent_id, parent_id) references parent
+
+statement ok
+COMMIT
+
+subtest create_with_other_commands_in_txn
+
+statement ok
+CREATE TABLE kv (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE test.parent (id int primary key)
+
+statement ok
+INSERT into test.parent values (1)
+
+statement ok
+CREATE TABLE test.chill (id int primary key, parent_id int)
+
+# random schema change that doesn't require a backfill.
+statement ok
+ALTER TABLE test.chill RENAME TO test.child
+
+statement ok
+INSERT INTO test.child VALUES (1, 1)
+
+# index is over data added in the transaction so the backfill runs
+# within the trasaction.
+statement ok
+CREATE INDEX idx_child_parent_id ON test.child (parent_id)
+
+# FK can be added because the index is visible.
+statement ok
+ALTER TABLE test.child ADD CONSTRAINT fk_child_parent_id FOREIGN KEY (parent_id) REFERENCES test.parent (id);
+
+statement ok
+INSERT INTO test.child VALUES (2, 1)
+
+# check that the index is indeed visible.
+query II rowsort
+SELECT * FROM test.child@idx_child_parent_id
+----
+1 1
+2 1
+
+# create index on a table that was created outside of the trasanction
+statement ok
+CREATE INDEX foo ON test.kv (quantity)
+
+statement ok
+COMMIT
+
+# foo is visible
+query TI rowsort
+SELECT * FROM test.kv@foo
+----
+cups   10
+forks  15
+plates 30
+
+subtest create_index_references_create_table_outside_txn
+
+statement ok
+BEGIN
+
+# create index on a table that was created outside of the transaction
+statement ok
+CREATE INDEX bar ON test.kv (quantity)
+
+# bar is invisible
+statement error index "bar" not found
+SELECT * FROM test.kv@bar
+
+statement ok
+COMMIT
+
+# bar is still invisible because the error above prevents the
+# transaction from committing.
+statement error index "bar" not found
+SELECT * FROM test.kv@bar
+
+subtest create_reference_to_create_outside_txn_17949
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE b (parent_id INT REFERENCES parent(id));
+
+# schema changes are permitted on the table even though it's in the ADD state.
+statement ok
+CREATE INDEX foo ON b (parent_id)
+
+statement ok
+ALTER TABLE b ADD COLUMN d INT DEFAULT 23, ADD CONSTRAINT bar UNIQUE (parent_id)
+
+query TT
+SHOW CREATE TABLE b
+----
+b  CREATE TABLE b (
+   parent_id INT8 NULL,
+   d INT8 NULL DEFAULT 23:::INT8,
+   CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES parent(id),
+   INDEX b_auto_index_fk_parent_id_ref_parent (parent_id ASC),
+   INDEX foo (parent_id ASC),
+   UNIQUE INDEX bar (parent_id ASC),
+   FAMILY "primary" (parent_id, rowid, d)
+)
+
+# table b is not visible to the transaction #17949
+statement error pgcode 42P01 relation "b" does not exist
+INSERT INTO b VALUES (1);
+
+statement ok
+COMMIT
+
+subtest create_as_with_add_column_index_in_txn
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE stock (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement count 3
+SELECT * FROM stock
+
+# index is only over data added in the transaction so the backfill occurs
+# within the trasaction.
+statement ok
+CREATE INDEX idx_quantity ON stock (quantity)
+
+# Add two columns and a constraint in the same statement.
+statement ok
+ALTER TABLE stock ADD COLUMN c INT AS (quantity + 4) STORED, ADD COLUMN d INT DEFAULT 23, ADD CONSTRAINT bar UNIQUE (c)
+
+# check that the index and columns are indeed visible.
+query TIII rowsort
+SELECT * FROM test.stock@idx_quantity
+----
+cups   10 14 23
+forks  15 19 23
+plates 30 34 23
+
+# check that the constraint bar is indeed visible.
+query TIII rowsort
+SELECT * FROM test.stock@bar
+----
+cups   10 14 23
+forks  15 19 23
+plates 30 34 23
+
+statement ok
+COMMIT
+
+subtest create_as_with_reuse_column_index_name_in_txn
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE warehouse (item STRING PRIMARY KEY, quantity INT, UNIQUE (quantity), INDEX bar (quantity))
+
+statement ok
+INSERT INTO warehouse VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement ok
+DROP INDEX warehouse@bar
+
+statement ok
+ALTER TABLE warehouse DROP quantity
+
+# See if the column and index names can be reused.
+statement ok
+ALTER TABLE warehouse ADD COLUMN quantity INT DEFAULT 23
+
+statement ok
+CREATE INDEX bar ON warehouse (item)
+
+# check that the index is indeed visible.
+query TI rowsort
+SELECT * FROM warehouse@bar
+----
+cups   23
+forks  23
+plates 23
+
+# drop a column created in the same transaction
+statement ok
+ALTER TABLE warehouse DROP COLUMN quantity
+
+query T rowsort
+SELECT * FROM warehouse@bar
+----
+cups
+forks
+plates
+
+statement ok
+COMMIT
+
+subtest create_as_drop_and_create_in_txn
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE hood (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement count 3
+SELECT * FROM hood
+
+statement ok
+DROP TABLE hood
+
+statement ok
+CREATE TABLE hood (item, quantity) AS VALUES ('plates', 10), ('knives', 30), ('spoons', 12)
+
+statement count 3
+SELECT * FROM hood
+
+query TI rowsort
+SELECT * FROM hood
+----
+plates 10
+knives 30
+spoons 12
+
+statement ok
+COMMIT
+
+subtest create_as_rename_and_create_in_txn
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE shop (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement count 3
+SELECT * FROM shop
+
+statement ok
+ALTER TABLE shop RENAME TO ship
+
+statement ok
+CREATE TABLE shop (item, quantity) AS VALUES ('spoons', 11), ('plates', 34), ('knives', 22)
+
+statement count 3
+SELECT * FROM shop
+
+query TI rowsort
+SELECT * FROM shop
+----
+spoons 11
+plates 34
+knives 22
+
+query TI rowsort
+SELECT * FROM ship
+----
+cups   10
+plates 30
+forks  15
+
+statement ok
+COMMIT
+
+subtest create_as_fail_unique_index
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE shopping (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 10)
+
+statement count 3
+SELECT * FROM shopping
+
+statement error pgcode 23505 violates unique constraint "bar"
+CREATE UNIQUE INDEX bar ON shopping (quantity)
+
+statement ok
+COMMIT
+
+# Ensure the above transaction didn't commit.
+query error pgcode 42P01 relation \"shopping\" does not exist
+SELECT * FROM shopping
+
+subtest add_column_not_null_violation
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE shopping (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 10)
+
+statement count 3
+SELECT * FROM shopping
+
+statement error pgcode 23502 null value in column \"q\" violates not-null constraint
+ALTER TABLE shopping ADD COLUMN q DECIMAL NOT NULL
+
+statement ok
+COMMIT
+
+# Ensure the above transaction didn't commit.
+statement error pgcode 42P01 relation \"shopping\" does not exist
+SELECT * FROM shopping
+
+subtest add_column_computed_column_failure
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE shopping (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 10)
+
+statement count 3
+SELECT * FROM shopping
+
+statement error pgcode 42P15 division by zero
+ALTER TABLE shopping ADD COLUMN c int AS (quantity::int // 0) STORED
+
+statement ok
+COMMIT
+
+subtest create_as_add_multiple_columns
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE cutlery (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement count 3
+SELECT * FROM cutlery
+
+# Add two columns, one with a computed and the other without any default.
+statement ok
+ALTER TABLE cutlery ADD COLUMN c INT AS (quantity + 4) STORED, ADD COLUMN d INT
+
+query TIII rowsort
+SELECT * FROM test.cutlery
+----
+cups   10 14 NULL
+plates 30 34 NULL
+forks  15 19 NULL
+
+statement ok
+COMMIT
+
+subtest table_rename_within_txn
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE dontwant (k CHAR PRIMARY KEY, v CHAR)
+
+statement ok
+CREATE TABLE want (k CHAR PRIMARY KEY, v CHAR)
+
+statement ok
+INSERT INTO dontwant (k,v) VALUES ('a', 'b')
+
+statement ok
+INSERT INTO want (k,v) VALUES ('c', 'd')
+
+statement ok
+ALTER TABLE want RENAME TO forlater
+
+statement ok
+ALTER TABLE dontwant RENAME TO want
+
+statement ok
+INSERT INTO want (k,v) VALUES ('e', 'f')
+
+statement ok
+COMMIT
+
+query TT rowsort
+SELECT * FROM want
+----
+a b
+e f
+
+subtest fk_in_same_txn
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE parents (k CHAR PRIMARY KEY)
+
+statement ok
+INSERT INTO parents (k) VALUES ('b')
+
+statement ok
+CREATE TABLE children (k CHAR PRIMARY KEY, v CHAR REFERENCES parents)
+
+statement ok
+INSERT INTO children (k,v) VALUES ('a', 'b')
+
+# Add a column to test a column backfill in the midst of FK checks.
+statement ok
+ALTER TABLE children ADD COLUMN d INT DEFAULT 23
+
+query TTI
+SELECT * FROM children
+----
+a b 23
+
+statement ok
+COMMIT
+
+subtest add_drop_add_constraint
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE class (k CHAR PRIMARY KEY)
+
+statement ok
+INSERT INTO class (k) VALUES ('b')
+
+statement ok
+CREATE TABLE student (k CHAR PRIMARY KEY, v CHAR REFERENCES class)
+
+statement ok
+INSERT INTO student (k,v) VALUES ('a', 'b')
+
+statement ok
+ALTER TABLE student DROP CONSTRAINT fk_v_ref_class
+
+statement ok
+ALTER TABLE student ADD FOREIGN KEY (v) REFERENCES class
+
+query TT
+SELECT * FROM student
+----
+a b
+
+statement ok
+COMMIT
+
+subtest interleaved_in_same_txn
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE customers (k CHAR PRIMARY KEY)
+
+statement ok
+INSERT INTO customers (k) VALUES ('b')
+
+statement ok
+CREATE TABLE orders (k CHAR PRIMARY KEY, v CHAR) INTERLEAVE IN PARENT customers (k)
+
+statement ok
+INSERT INTO orders (k,v) VALUES ('a', 'b')
+
+# Add a column to test a column backfill over an interleaved child.
+statement ok
+ALTER TABLE orders ADD COLUMN d INT DEFAULT 23
+
+query TTI
+SELECT * FROM orders
+----
+a b 23
+
+statement ok
+COMMIT
+
+subtest truncate_and_insert
+
+statement ok
+BEGIN
+
+statement ok
+TRUNCATE want
+
+statement ok
+INSERT INTO want (k,v) VALUES ('a', 'b')
+
+statement ok
+CREATE INDEX foo on want (v)
+
+query TT
+SELECT * FROM want@foo
+----
+a b
+
+statement ok
+COMMIT
+
+query TT
+SELECT * FROM want
+----
+a b
+
+statement ok
+BEGIN
+
+statement ok
+TRUNCATE orders
+
+# table orders is not visible to the transaction #17949
+statement error pgcode 42P01 relation "orders" does not exist
+INSERT INTO orders (k,v) VALUES ('a', 'b')
+
+statement ok
+COMMIT;
+
+statement ok
+BEGIN
+
+statement ok
+TRUNCATE customers CASCADE
+
+# table customers is not visible to the transaction #17949
+statement error pgcode 42P01 relation "customers" does not exist
+INSERT INTO customers (k) VALUES ('b')
+
+statement ok
+COMMIT;
+
+subtest rollback_mutations
+
+statement ok
+INSERT INTO customers (k) VALUES ('z'), ('x')
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE customers ADD i INT DEFAULT 5
+
+statement ok
+ALTER TABLE customers ADD j INT DEFAULT 4
+
+statement ok
+ALTER TABLE customers ADD l INT DEFAULT 3
+
+statement ok
+ALTER TABLE customers ADD m CHAR
+
+statement ok
+ALTER TABLE customers ADD n CHAR DEFAULT 'a'
+
+statement ok
+CREATE INDEX j_idx ON customers (j)
+
+statement ok
+CREATE INDEX l_idx ON customers (l)
+
+statement ok
+CREATE INDEX m_idx ON customers (m)
+
+statement ok
+CREATE UNIQUE INDEX i_idx ON customers (i)
+
+statement ok
+CREATE UNIQUE INDEX n_idx ON customers (n)
+
+statement error pgcode XXA00 violates unique constraint
+COMMIT
+
+query TTBTTTB
+SHOW COLUMNS FROM customers
+----
+k  CHAR  false  NULL  ·  {primary}  false
+
+query error pq: index "j_idx" not found
+SELECT * FROM customers@j_idx
+
+query TTT
+SELECT status,
+       running_status,
+       regexp_replace(description, 'ROLL BACK JOB \d+.*', 'ROLL BACK JOB') as description
+  FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE' ORDER BY job_id DESC LIMIT 2
+----
+running  waiting for GC TTL  ROLL BACK JOB
+failed   NULL                ALTER TABLE test.public.customers ADD COLUMN i INT8 DEFAULT 5;ALTER TABLE test.public.customers ADD COLUMN j INT8 DEFAULT 4;ALTER TABLE test.public.customers ADD COLUMN l INT8 DEFAULT 3;ALTER TABLE test.public.customers ADD COLUMN m CHAR;ALTER TABLE test.public.customers ADD COLUMN n CHAR DEFAULT 'a';CREATE INDEX j_idx ON test.public.customers (j);CREATE INDEX l_idx ON test.public.customers (l);CREATE INDEX m_idx ON test.public.customers (m);CREATE UNIQUE INDEX i_idx ON test.public.customers (i);CREATE UNIQUE INDEX n_idx ON test.public.customers (n)
+
+subtest add_multiple_computed_elements
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE customers ADD i INT DEFAULT 5
+
+statement ok
+ALTER TABLE customers ADD j INT AS (i-1) STORED
+
+statement ok
+ALTER TABLE customers ADD COLUMN d INT DEFAULT 15, ADD COLUMN e INT AS (d + (i-1)) STORED
+
+statement ok
+COMMIT
+
+query TIIII rowsort
+SELECT * FROM customers
+----
+b  5  4  15  19
+x  5  4  15  19
+z  5  4  15  19
+
+query TT
+SELECT status, description FROM [SHOW JOBS]
+WHERE job_type = 'SCHEMA CHANGE' ORDER BY job_id DESC LIMIT 1
+----
+succeeded  ALTER TABLE test.public.customers ADD COLUMN i INT8 DEFAULT 5;ALTER TABLE test.public.customers ADD COLUMN j INT8 AS (i - 1) STORED;ALTER TABLE test.public.customers ADD COLUMN d INT8 DEFAULT 15, ADD COLUMN e INT8 AS (d + (i - 1)) STORED
+
+# VALIDATE CONSTRAINT will not hang when executed in the same txn as
+# a schema change in the same txn #32118
+# TODO(lucy): The FK upgrade work caused a regression here, and VALIDATE
+# CONSTRAINT will hang when run in the same transaction as another schema
+# change, in the 19.1/19.2 mixed version state. Once we stop trying to use the
+# internal executor from the planner, this class of problems related to VALIDATE
+# CONSTRAINT will go away, but ideally we would fix this for the 19.1-to-19.2
+# upgrade path.
+# subtest validate_in_schema_change_txn
+#
+# statement ok
+# CREATE TABLE products (sku STRING PRIMARY KEY, upc STRING UNIQUE, vendor STRING)
+#
+# statement ok
+# CREATE TABLE orders2 (
+#   id INT8 PRIMARY KEY,
+#   product STRING DEFAULT 'sprockets',
+#   INDEX (product)
+# )
+#
+# statement ok
+# BEGIN
+#
+# statement ok
+# ALTER TABLE orders2 ADD FOREIGN KEY (product) REFERENCES products
+#
+# statement ok
+# ALTER TABLE orders2 VALIDATE CONSTRAINT fk_product_ref_products
+#
+# statement ok
+# COMMIT
+
+# Verify that check constraints can be added on columns being added in the same transaction
+subtest check_on_add_col
+
+statement ok
+CREATE TABLE check_table (k INT PRIMARY KEY)
+
+statement ok
+INSERT INTO check_table VALUES (1)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE check_table ADD c INT
+
+statement ok
+ALTER TABLE check_table ADD CONSTRAINT c_0 CHECK (c > 0)
+
+statement ok
+ALTER TABLE check_table ADD d INT DEFAULT 1
+
+statement ok
+ALTER TABLE check_table ADD CONSTRAINT d_0 CHECK (d > 0)
+
+statement ok
+COMMIT
+
+query TTTTB
+SHOW CONSTRAINTS FROM check_table
+----
+check_table  c_0      CHECK        CHECK ((c > 0))      true
+check_table  d_0      CHECK        CHECK ((d > 0))      true
+check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)  true
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE check_table ADD e INT DEFAULT 0
+
+statement ok
+ALTER TABLE check_table ADD CONSTRAINT e_0 CHECK (e > 0)
+
+statement error pgcode XXA00 validation of CHECK "e > 0" failed on row: k=1, c=NULL, d=1, e=0
+COMMIT
+
+# Test rollbacks after error in expression evaluation
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE check_table ADD e STRING DEFAULT 'a'
+
+statement ok
+ALTER TABLE check_table ADD CONSTRAINT e_0 CHECK (e::INT > 0)
+
+statement error pgcode XXA00 validate check constraint: could not parse "a" as type int
+COMMIT
+
+# Constraint e_0 was not added
+query TTTTB
+SHOW CONSTRAINTS FROM check_table
+----
+check_table  c_0      CHECK        CHECK ((c > 0))      true
+check_table  d_0      CHECK        CHECK ((d > 0))      true
+check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)  true
+
+# Adding column e was rolled back
+query TTBTTTB
+SHOW COLUMNS FROM check_table
+----
+k  INT8  false  NULL      ·  {primary}  false
+c  INT8  true   NULL      ·  {}         false
+d  INT8  true   1:::INT8  ·  {}         false
+
+statement ok
+DROP TABLE check_table
+
+# Test that a check constraint is rolled back if adding other schema elements in the same transaction fails
+subtest rollback_check
+
+statement ok
+CREATE TABLE check_table (k INT PRIMARY KEY, a INT)
+
+statement ok
+INSERT INTO check_table VALUES (0, 0), (1, 0)
+
+statement ok
+BEGIN
+
+statement ok
+CREATE UNIQUE INDEX idx ON check_table (a)
+
+statement ok
+ALTER TABLE check_table ADD CHECK (a >= 0)
+
+statement error pgcode XXA00 violates unique constraint "idx"
+COMMIT
+
+query TTTTB
+SHOW CONSTRAINTS FROM check_table
+----
+check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)  true
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE check_table ADD CHECK (a >= 0)
+
+statement ok
+ALTER TABLE check_table ADD CHECK (a < 0)
+
+statement error pgcode XXA00 validation of CHECK \"a < 0\" failed on row: k=0, a=0
+COMMIT
+
+query TTTTB
+SHOW CONSTRAINTS FROM check_table
+----
+check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)  true
+
+statement ok
+DROP TABLE check_table
+
+subtest check_constraint_being_added
+
+statement ok
+CREATE TABLE check_table (k INT PRIMARY KEY)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE check_table ADD f INT
+
+statement ok
+ALTER TABLE check_table ADD CONSTRAINT f_0 CHECK (f > 0)
+
+statement error constraint "f_0" in the middle of being added
+ALTER TABLE check_table DROP CONSTRAINT f_0
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE check_table ADD g INT
+
+statement ok
+ALTER TABLE check_table ADD CONSTRAINT g_0 CHECK (g > 0)
+
+statement error referencing constraint "g_0" in the middle of being added
+ALTER TABLE check_table DROP COLUMN g
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE check_table ADD h INT
+
+statement ok
+ALTER TABLE check_table ADD CONSTRAINT h_0 CHECK (h > 0)
+
+statement error constraint "h_0" in the middle of being added
+ALTER TABLE check_table VALIDATE CONSTRAINT h_0
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE check_table
+
+subtest check_rename
+
+statement ok
+CREATE TABLE check_table (k INT PRIMARY KEY)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE check_table ADD f INT
+
+statement ok
+ALTER TABLE check_table ADD CONSTRAINT f_0 CHECK (f > 0)
+
+statement error constraint "f_0" in the middle of being added
+ALTER TABLE check_table RENAME CONSTRAINT f_0 to f_1
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE check_table ADD f INT
+
+statement error constraint "f_0" in the middle of being added
+ALTER TABLE check_table ADD CONSTRAINT f_0 CHECK (f > 0),
+                        RENAME CONSTRAINT f_0 to f_1
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE check_table
+
+# Test adding a check constraint to a table that was created in the same transaction
+subtest check_on_new_table
+
+# Test multiple successful constraint adds in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE check_table (a INT)
+
+statement ok
+INSERT INTO check_table VALUES (0)
+
+# This validates the constraint for existing rows, because it's in the same txn as CREATE TABLE
+statement ok
+ALTER TABLE check_table ADD CONSTRAINT ck_a CHECK (a = 0)
+
+statement ok
+ALTER TABLE check_table ADD COLUMN b INT DEFAULT 1
+
+# This validates the constraint for existing rows, because it's in the same txn as CREATE TABLE
+statement ok
+ALTER TABLE check_table ADD CONSTRAINT ck_b CHECK (b > 0)
+
+# Test ADD COLUMN and ADD CONSTRAINT in the same ALTER TABLE statement
+statement ok
+ALTER TABLE check_table ADD COLUMN c INT DEFAULT 2, ADD CONSTRAINT ck_c CHECK (c > b)
+
+statement ok
+COMMIT
+
+# Verify that the constraints had been validated in the above txn
+query TTTTB
+SHOW CONSTRAINTS FROM check_table
+----
+check_table  ck_a  CHECK  CHECK ((a = 0))  true
+check_table  ck_b  CHECK  CHECK ((b > 0))  true
+check_table  ck_c  CHECK  CHECK ((c > b))  true
+
+# Also test insert/update to ensure constraint was added in a valid state (with correct column IDs, etc.)
+
+statement ok
+INSERT INTO check_table VALUES (0, 1, 2)
+
+statement ok
+UPDATE check_table SET b = 1 WHERE b IS NULL
+
+statement ok
+DROP TABLE check_table
+
+# Test when check validation fails
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE check_table (a INT)
+
+statement ok
+INSERT INTO check_table VALUES (0)
+
+# This validates the constraint for existing rows, because it's in the same txn as CREATE TABLE
+statement error validation of CHECK "a > 0" failed on row: a=0
+ALTER TABLE check_table ADD CONSTRAINT ck CHECK (a > 0)
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE check_table (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO check_table VALUES (0)
+
+statement ok
+ALTER TABLE check_table ADD COLUMN b INT DEFAULT 0
+
+# This validates the constraint for existing rows, because it's in the same txn as CREATE TABLE
+statement error validation of CHECK "b > 0" failed on row: a=0, b=0
+ALTER TABLE check_table ADD CONSTRAINT ck CHECK (b > 0)
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE check_table (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO check_table VALUES (0)
+
+# Test ADD COLUMN and ADD CONSTRAINT in the same ALTER TABLE statement
+statement error validation of CHECK "c > 0" failed on row: a=0, c=0
+ALTER TABLE check_table ADD COLUMN c INT DEFAULT 0, ADD CONSTRAINT ck CHECK (c > 0)
+
+statement ok
+COMMIT
+
+# Test that if a new column has a check that references a public column, writes to the public column ignore the check (until a later state in the schema change process)
+subtest 35193_column_with_default_value
+
+statement ok
+CREATE TABLE t (a INT)
+
+# Insert a pre-existing row to test updates
+statement ok
+INSERT INTO t VALUES (2)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN b INT DEFAULT 1
+
+statement ok
+ALTER TABLE t ADD CHECK (a > b)
+
+statement ok
+INSERT INTO t (a) VALUES (3)
+
+statement ok
+UPDATE t SET a = 4 WHERE a < 4
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE t
+
+# Perform some writes that would violate the constraint, which shouldn't cause an error until the entire transaction is done
+
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN c INT DEFAULT 10
+
+statement ok
+ALTER TABLE t ADD CHECK (a < c)
+
+statement ok
+INSERT INTO t (a) VALUES (11)
+
+statement error pgcode XXA00 validation of CHECK \"a < c\" failed on row: a=11, .* c=10
+COMMIT
+
+# Insert a pre-existing row to test updates
+statement ok
+INSERT INTO t VALUES (2)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN c INT DEFAULT 10
+
+statement ok
+ALTER TABLE t ADD CHECK (a < c)
+
+statement ok
+UPDATE t SET a = 12 WHERE a < 12
+
+statement error pgcode XXA00 validation of CHECK \"a < c\" failed on row: a=12, .*, c=10
+COMMIT
+
+statement ok
+DROP TABLE t
+
+# Test that we're not picking up NULL values for the new column that just haven't been backfilled
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+INSERT INTO t VALUES (2)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN d INT DEFAULT 1
+
+statement ok
+ALTER TABLE t ADD CHECK (a > d AND d IS NOT NULL)
+
+statement ok
+INSERT INTO t (a) VALUES (3)
+
+statement ok
+UPDATE t SET a = 4 WHERE a < 4
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE t
+
+# Test that if a new column has a check that references a public column, writes to the public column ignore the check (until a later state in the schema change process)
+subtest 35193_computed_column
+
+statement ok
+CREATE TABLE t (a INT)
+
+# Insert a pre-existing row to test updates
+statement ok
+INSERT INTO t VALUES (2)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN b INT AS (a - 1) STORED
+
+statement ok
+ALTER TABLE t ADD CHECK (a > b)
+
+statement ok
+INSERT INTO t (a) VALUES (3)
+
+statement ok
+UPDATE t SET a = 4 WHERE a < 4
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE t
+
+# Perform some writes that would violate the constraint, which shouldn't cause an error until the entire transaction is done
+
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN c INT AS (a - 1) STORED
+
+statement ok
+ALTER TABLE t ADD CHECK (a < c)
+
+statement ok
+INSERT INTO t (a) VALUES (11)
+
+statement error pgcode XXA00 validation of CHECK \"a < c\" failed on row: a=11, .* c=10
+COMMIT
+
+# Insert a pre-existing row to test updates
+statement ok
+INSERT INTO t VALUES (2)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN c INT AS (a - 1) STORED
+
+statement ok
+ALTER TABLE t ADD CHECK (a < c)
+
+statement ok
+UPDATE t SET a = 12 WHERE a < 12
+
+statement error pgcode XXA00 validation of CHECK \"a < c\" failed on row: a=12, .*, c=11
+COMMIT
+
+statement ok
+DROP TABLE t
+
+# Test that we're not picking up NULL values for the new column that just haven't been backfilled
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+INSERT INTO t VALUES (2)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN d INT AS (a - 1) STORED
+
+statement ok
+ALTER TABLE t ADD CHECK (a > d AND d IS NOT NULL)
+
+statement ok
+INSERT INTO t (a) VALUES (3)
+
+statement ok
+UPDATE t SET a = 4 WHERE a < 4
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE t

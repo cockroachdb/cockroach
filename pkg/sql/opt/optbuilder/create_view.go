@@ -31,10 +31,12 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 	// The result is not otherwise used.
 	b.insideViewDef = true
 	b.trackViewDeps = true
+	b.qualifyDataSourceNamesInAST = true
 	defer func() {
 		b.insideViewDef = false
 		b.trackViewDeps = false
 		b.viewDeps = nil
+		b.qualifyDataSourceNamesInAST = false
 	}()
 
 	defScope := b.buildSelect(cv.AsSource, nil /* desiredTypes */, inScope)

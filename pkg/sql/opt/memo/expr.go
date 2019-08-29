@@ -403,6 +403,7 @@ type WindowFrame struct {
 	Mode           tree.WindowFrameMode
 	StartBoundType tree.WindowFrameBoundType
 	EndBoundType   tree.WindowFrameBoundType
+	FrameExclusion tree.WindowFrameExclusion
 }
 
 // NeedResults returns true if the mutation operator can return the rows that

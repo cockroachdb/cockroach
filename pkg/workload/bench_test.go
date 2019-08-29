@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
@@ -24,14 +24,15 @@ import (
 
 func columnByteSize(col coldata.Vec) int64 {
 	switch col.Type() {
-	case types.Int64:
+	case coltypes.Int64:
 		return int64(len(col.Int64()) * 8)
-	case types.Float64:
+	case coltypes.Float64:
 		return int64(len(col.Float64()) * 8)
-	case types.Bytes:
+	case coltypes.Bytes:
 		var bytes int64
-		for _, b := range col.Bytes() {
-			bytes += int64(len(b))
+		colBytes := col.Bytes()
+		for i := 0; i < colBytes.Len(); i++ {
+			bytes += int64(len(colBytes.Get(i)))
 		}
 		return bytes
 	default:

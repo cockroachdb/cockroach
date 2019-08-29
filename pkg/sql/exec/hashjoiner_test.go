@@ -13,11 +13,14 @@ package exec
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"testing"
+	"unsafe"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -31,13 +34,13 @@ func TestHashJoinerInt64(t *testing.T) {
 	for i, f := range floats {
 		_, err := decs[i].SetFloat64(f)
 		if err != nil {
-			panic(fmt.Sprintf("%v", err))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("%v", err))
 		}
 	}
 
 	tcs := []struct {
-		leftTypes  []types.T
-		rightTypes []types.T
+		leftTypes  []coltypes.T
+		rightTypes []coltypes.T
 
 		leftTuples  tuples
 		rightTuples tuples
@@ -57,8 +60,8 @@ func TestHashJoinerInt64(t *testing.T) {
 		expectedTuples tuples
 	}{
 		{
-			leftTypes:  []types.T{types.Int64},
-			rightTypes: []types.T{types.Int64},
+			leftTypes:  []coltypes.T{coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64},
 
 			leftTuples: tuples{
 				{0},
@@ -91,8 +94,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []types.T{types.Int64},
-			rightTypes: []types.T{types.Int64},
+			leftTypes:  []coltypes.T{coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64},
 
 			leftTuples: tuples{
 				{0},
@@ -124,8 +127,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []types.T{types.Int64},
-			rightTypes: []types.T{types.Int64},
+			leftTypes:  []coltypes.T{coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64},
 
 			// Test right outer join.
 			leftTuples: tuples{
@@ -151,8 +154,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []types.T{types.Int64},
-			rightTypes: []types.T{types.Int64},
+			leftTypes:  []coltypes.T{coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64},
 
 			// Test null handling only on probe column.
 			leftTuples: tuples{
@@ -173,8 +176,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []types.T{types.Int64},
-			rightTypes: []types.T{types.Int64},
+			leftTypes:  []coltypes.T{coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64},
 
 			// Test null handling only on build column.
 			leftTuples: tuples{
@@ -199,8 +202,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []types.T{types.Int64, types.Int64},
-			rightTypes: []types.T{types.Int64, types.Int64},
+			leftTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64, coltypes.Int64},
 
 			// Test null handling in output columns.
 			leftTuples: tuples{
@@ -229,8 +232,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []types.T{types.Int64},
-			rightTypes: []types.T{types.Int64},
+			leftTypes:  []coltypes.T{coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64},
 
 			// Test null handling in hash join key column.
 			leftTuples: tuples{
@@ -262,8 +265,8 @@ func TestHashJoinerInt64(t *testing.T) {
 		},
 		{
 			// Test handling of multiple column non-distinct equality keys.
-			leftTypes:  []types.T{types.Int64, types.Int64, types.Int64},
-			rightTypes: []types.T{types.Int64, types.Int64, types.Int64},
+			leftTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 
 			leftTuples: tuples{
 				{0, 0, 1},
@@ -297,8 +300,8 @@ func TestHashJoinerInt64(t *testing.T) {
 		},
 		{
 			// Test handling of duplicate equality keys that map to same buckets.
-			leftTypes:  []types.T{types.Int64},
-			rightTypes: []types.T{types.Int64},
+			leftTypes:  []coltypes.T{coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64},
 
 			leftTuples: tuples{
 				{0},
@@ -341,8 +344,8 @@ func TestHashJoinerInt64(t *testing.T) {
 		},
 		{
 			// Test handling of duplicate equality keys.
-			leftTypes:  []types.T{types.Int64},
-			rightTypes: []types.T{types.Int64},
+			leftTypes:  []coltypes.T{coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64},
 
 			leftTuples: tuples{
 				{0},
@@ -377,9 +380,9 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			// Test handling of various output column types.
-			leftTypes:  []types.T{types.Bool, types.Int64, types.Bytes, types.Int64},
-			rightTypes: []types.T{types.Int64, types.Float64, types.Int32},
+			// Test handling of various output column coltypes.
+			leftTypes:  []coltypes.T{coltypes.Bool, coltypes.Int64, coltypes.Bytes, coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64, coltypes.Float64, coltypes.Int32},
 
 			leftTuples: tuples{
 				{false, 5, "a", 10},
@@ -409,8 +412,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []types.T{types.Int64},
-			rightTypes: []types.T{types.Int64},
+			leftTypes:  []coltypes.T{coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64},
 
 			// Reverse engineering hash table hash heuristic to find key values that
 			// hash to the same bucket.
@@ -440,8 +443,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []types.T{types.Int64},
-			rightTypes: []types.T{types.Int64},
+			leftTypes:  []coltypes.T{coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64},
 
 			// Test a N:1 inner join where the right side key has duplicate values.
 			leftTuples: tuples{
@@ -475,8 +478,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []types.T{types.Int64, types.Int64, types.Int64},
-			rightTypes: []types.T{types.Int64, types.Int64, types.Int64},
+			leftTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 
 			// Test inner join on multiple equality columns.
 			leftTuples: tuples{
@@ -510,8 +513,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []types.T{types.Int64, types.Int64, types.Int64},
-			rightTypes: []types.T{types.Int64, types.Int64},
+			leftTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64, coltypes.Int64},
 
 			// Test multiple column with values that hash to the same bucket.
 			leftTuples: tuples{
@@ -543,10 +546,10 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []types.T{types.Bytes, types.Bool, types.Int8, types.Int16, types.Int32, types.Int64, types.Bytes},
-			rightTypes: []types.T{types.Int64, types.Int32, types.Int16, types.Int8, types.Bool, types.Bytes},
+			leftTypes:  []coltypes.T{coltypes.Bytes, coltypes.Bool, coltypes.Int8, coltypes.Int16, coltypes.Int32, coltypes.Int64, coltypes.Bytes},
+			rightTypes: []coltypes.T{coltypes.Int64, coltypes.Int32, coltypes.Int16, coltypes.Int8, coltypes.Bool, coltypes.Bytes},
 
-			// Test multiple equality columns of different types.
+			// Test multiple equality columns of different coltypes.
 			leftTuples: tuples{
 				{"foo", false, int8(10), int16(100), int32(1000), int64(10000), "aaa"},
 				{"foo", true, 10, 100, 1000, 10000, "bbb"},
@@ -579,8 +582,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []types.T{types.Float32, types.Float64},
-			rightTypes: []types.T{types.Float64, types.Float32},
+			leftTypes:  []coltypes.T{coltypes.Float32, coltypes.Float64},
+			rightTypes: []coltypes.T{coltypes.Float64, coltypes.Float32},
 
 			// Test equality columns of type float.
 			leftTuples: tuples{
@@ -608,8 +611,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []types.T{types.Int64, types.Int64, types.Int64, types.Int64},
-			rightTypes: []types.T{types.Int64, types.Int64, types.Int64, types.Int64},
+			leftTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64, coltypes.Int64},
 
 			// Test use right side as build table.
 			leftTuples: tuples{
@@ -639,10 +642,10 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []types.T{types.Decimal},
-			rightTypes: []types.T{types.Decimal},
+			leftTypes:  []coltypes.T{coltypes.Decimal},
+			rightTypes: []coltypes.T{coltypes.Decimal},
 
-			// Test types.Decimal type as equality column.
+			// Test coltypes.Decimal type as equality column.
 			leftTuples: tuples{
 				{decs[0]},
 				{decs[1]},
@@ -667,8 +670,8 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []types.T{types.Int64},
-			rightTypes: []types.T{types.Int64},
+			leftTypes:  []coltypes.T{coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64},
 
 			joinType: sqlbase.JoinType_LEFT_SEMI,
 
@@ -739,10 +742,10 @@ func TestHashJoinerInt64(t *testing.T) {
 func BenchmarkHashJoiner(b *testing.B) {
 	ctx := context.Background()
 	nCols := 4
-	sourceTypes := make([]types.T, nCols)
+	sourceTypes := make([]coltypes.T, nCols)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
-		sourceTypes[colIdx] = types.Int64
+		sourceTypes[colIdx] = coltypes.Int64
 	}
 
 	batch := coldata.NewMemBatch(sourceTypes)
@@ -825,4 +828,35 @@ func BenchmarkHashJoiner(b *testing.B) {
 			}
 		})
 	}
+}
+
+// TestHashingDoesNotAllocate ensures that our use of the noescape hack to make
+// sure hashing with unsafe.Pointer doesn't allocate still works correctly.
+func TestHashingDoesNotAllocate(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	var sum uintptr
+	foundAllocations := 0
+	for i := 0; i < 10; i++ {
+		// Sometimes, Go allocates somewhere else. To make this test not flaky,
+		// let's just make sure that at least one of the rounds of this loop doesn't
+		// allocate at all.
+		s := &runtime.MemStats{}
+		runtime.ReadMemStats(s)
+		numAlloc := s.TotalAlloc
+		i := 10
+		x := memhash64(noescape(unsafe.Pointer(&i)), 0)
+		runtime.ReadMemStats(s)
+
+		if numAlloc != s.TotalAlloc {
+			foundAllocations++
+		}
+		sum += x
+	}
+	if foundAllocations == 10 {
+		// Uhoh, we allocated every single time. This probably means we regressed,
+		// and our hash function allocates.
+		t.Fatalf("memhash64(noescape(&i)) allocated at least once")
+	}
+	t.Log(sum)
 }

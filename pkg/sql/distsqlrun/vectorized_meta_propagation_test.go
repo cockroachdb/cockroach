@@ -37,8 +37,8 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := FlowCtx{
-		EvalCtx:  &evalCtx,
-		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx: &evalCtx,
+		Cfg:     &ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 
 	nRows := 10
@@ -71,11 +71,11 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		2, /* processorID */
 		noop,
 		types,
-		[]int{0},
 		&distsqlpb.PostProcessSpec{},
 		nil, /* output */
 		[]distsqlpb.MetadataSource{col},
 		nil, /* outputStatsToTrace */
+		nil, /* cancelFlow */
 	)
 	if err != nil {
 		t.Fatal(err)

@@ -13,7 +13,6 @@ package cockroach.storage;
 option go_package = "storage";
 
 import "roachpb/internal_raft.proto";
-import "roachpb/metadata.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/engine/enginepb/mvcc3.proto";
 import "gogoproto/gogo.proto";

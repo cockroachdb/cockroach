@@ -21,7 +21,7 @@ statement ok
 ALTER TABLE ab EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 2)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE ab]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE ab]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /2       {1}       1

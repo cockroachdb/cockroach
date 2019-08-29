@@ -260,7 +260,14 @@ func runWideReplication(ctx context.Context, t *test, c *cluster) {
 	defer db.Close()
 
 	zones := func() []string {
-		rows, err := db.Query(`SELECT zone_name FROM crdb_internal.zones`)
+		oldVersion := false
+		rows, err := db.Query(`SELECT target FROM crdb_internal.zones`)
+		// TODO(solon): Remove this block once we are no longer running roachtest
+		// against version 19.1 and earlier.
+		if err != nil && strings.Contains(err.Error(), `column "target" does not exist`) {
+			oldVersion = true
+			rows, err = db.Query(`SELECT zone_name FROM crdb_internal.zones`)
+		}
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -270,6 +277,19 @@ func runWideReplication(ctx context.Context, t *test, c *cluster) {
 			var name string
 			if err := rows.Scan(&name); err != nil {
 				t.Fatal(err)
+			}
+			// TODO(solon): Remove this block once we are no longer running roachtest
+			// against version 19.1 and earlier.
+			if oldVersion {
+				which := "RANGE"
+				if name[0] == '.' {
+					name = name[1:]
+				} else if strings.Count(name, ".") == 0 {
+					which = "DATABASE"
+				} else {
+					which = "TABLE"
+				}
+				name = fmt.Sprintf("%s %s", which, name)
 			}
 			results = append(results, name)
 		}
@@ -287,16 +307,7 @@ func runWideReplication(ctx context.Context, t *test, c *cluster) {
 		// Change every zone to have the same number of replicas as the number of
 		// nodes in the cluster.
 		for _, zone := range zones() {
-			which := "RANGE"
-			if zone[0] == '.' {
-				zone = zone[1:]
-			} else if strings.Count(zone, ".") == 0 {
-				which = "DATABASE"
-			} else {
-				which = "TABLE"
-			}
-			run(fmt.Sprintf(`ALTER %s %s CONFIGURE ZONE USING num_replicas = %d`,
-				which, zone, width))
+			run(fmt.Sprintf(`ALTER %s CONFIGURE ZONE USING num_replicas = %d`, zone, width))
 		}
 	}
 	setReplication(nodes)

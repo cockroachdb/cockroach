@@ -12,8 +12,10 @@ package exec
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 )
 
 // Operator is a column vector operator that produces a Batch as output.
@@ -32,11 +34,94 @@ type Operator interface {
 	// Canceling the provided context results in forceful termination of
 	// execution.
 	Next(context.Context) coldata.Batch
+
+	OpNode
+}
+
+// OpNode is an interface to operator-like structures with children.
+type OpNode interface {
+	// ChildCount returns the number of children (inputs) of the operator.
+	ChildCount() int
+
+	// Child returns the nth child (input) of the operator.
+	Child(nth int) OpNode
+}
+
+// NewOneInputNode returns an OpNode with a single Operator input.
+func NewOneInputNode(input Operator) OneInputNode {
+	return OneInputNode{input: input}
+}
+
+// OneInputNode is an OpNode with a single Operator input.
+type OneInputNode struct {
+	input Operator
+}
+
+// ChildCount implements the OpNode interface.
+func (OneInputNode) ChildCount() int {
+	return 1
+}
+
+// Child implements the OpNode interface.
+func (n OneInputNode) Child(nth int) OpNode {
+	if nth == 0 {
+		return n.input
+	}
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
+}
+
+// Input returns the single input of this OneInputNode as an Operator.
+func (n OneInputNode) Input() Operator {
+	return n.input
+}
+
+// ZeroInputNode is an OpNode with no inputs.
+type ZeroInputNode struct{}
+
+// ChildCount implements the OpNode interface.
+func (ZeroInputNode) ChildCount() int {
+	return 0
+}
+
+// Child implements the OpNode interface.
+func (ZeroInputNode) Child(nth int) OpNode {
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
+}
+
+// newTwoInputNode returns an OpNode with two Operator inputs.
+func newTwoInputNode(inputOne, inputTwo Operator) twoInputNode {
+	return twoInputNode{inputOne: inputOne, inputTwo: inputTwo}
+}
+
+type twoInputNode struct {
+	inputOne Operator
+	inputTwo Operator
+}
+
+func (twoInputNode) ChildCount() int {
+	return 2
+}
+
+func (n *twoInputNode) Child(nth int) OpNode {
+	switch nth {
+	case 0:
+		return n.inputOne
+	case 1:
+		return n.inputTwo
+	}
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid idx %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 // StaticMemoryOperator is an interface that streaming operators can implement
 // if they are able to declare their memory usage upfront.
 type StaticMemoryOperator interface {
+	Operator
 	// EstimateStaticMemoryUsage estimates the memory usage (in bytes)
 	// of an operator.
 	EstimateStaticMemoryUsage() int
@@ -55,14 +140,14 @@ type resettableOperator interface {
 }
 
 type noopOperator struct {
-	input Operator
+	OneInputNode
 }
 
 var _ Operator = &noopOperator{}
 
 // NewNoop returns a new noop Operator.
 func NewNoop(input Operator) Operator {
-	return &noopOperator{input: input}
+	return &noopOperator{OneInputNode: NewOneInputNode(input)}
 }
 
 func (n *noopOperator) Init() {
@@ -80,14 +165,14 @@ func (n *noopOperator) reset() {
 }
 
 type zeroOperator struct {
-	input Operator
+	OneInputNode
 }
 
 var _ Operator = &zeroOperator{}
 
 // NewZeroOp creates a new operator which just returns an empty batch.
 func NewZeroOp(input Operator) Operator {
-	return &zeroOperator{input: input}
+	return &zeroOperator{OneInputNode: NewOneInputNode(input)}
 }
 
 func (s *zeroOperator) Init() {
@@ -102,6 +187,7 @@ func (s *zeroOperator) Next(ctx context.Context) coldata.Batch {
 }
 
 type singleTupleNoInputOperator struct {
+	ZeroInputNode
 	batch  coldata.Batch
 	nexted bool
 }
@@ -121,7 +207,7 @@ func (s *singleTupleNoInputOperator) Init() {
 }
 
 func (s *singleTupleNoInputOperator) Next(ctx context.Context) coldata.Batch {
-	s.batch.SetSelection(false)
+	s.batch.ResetInternalBatch()
 	if s.nexted {
 		s.batch.SetLength(0)
 		return s.batch

@@ -517,11 +517,18 @@ func (g *Gossip) GetResolvers() []resolver.Resolver {
 	return append([]resolver.Resolver(nil), g.resolvers...)
 }
 
-// GetNodeIDAddress looks up the address of the node by ID.
+// GetNodeIDAddress looks up the RPC address of the node by ID.
 func (g *Gossip) GetNodeIDAddress(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	return g.getNodeIDAddressLocked(nodeID)
+}
+
+// GetNodeIDSQLAddress looks up the SQL address of the node by ID.
+func (g *Gossip) GetNodeIDSQLAddress(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.getNodeIDSQLAddressLocked(nodeID)
 }
 
 // GetNodeIDForStoreID looks up the NodeID by StoreID.
@@ -966,6 +973,18 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID roachpb.NodeID) (*util.Unresolved
 		}
 	}
 	return &nd.Address, nil
+}
+
+// getNodeIDAddressLocked looks up the SQL address of the node by ID. The mutex is
+// assumed held by the caller. This method is called externally via
+// GetNodeIDSQLAddress or internally when looking up a "distant" node address to
+// connect directly to.
+func (g *Gossip) getNodeIDSQLAddressLocked(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
+	nd, err := g.getNodeDescriptorLocked(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	return &nd.SQLAddress, nil
 }
 
 // AddInfo adds or updates an info object. Returns an error if info
