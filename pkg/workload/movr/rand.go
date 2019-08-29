@@ -51,6 +51,16 @@ func randVehicleStatus(rng *rand.Rand) string {
 	}
 }
 
+func randLatLong(rng *rand.Rand) (float64, float64) {
+	lat, long := float64(-180+rng.Intn(360)), float64(-90+rng.Intn(180))
+	return lat, long
+}
+
+func randCity(rng *rand.Rand) string {
+	idx := rng.Int31n(int32(len(cities)))
+	return cities[idx].city
+}
+
 func randVehicleMetadata(rng *rand.Rand, vehicleType string) string {
 	m := map[string]string{
 		`color`: vehicleColors[rng.Intn(len(vehicleColors))],

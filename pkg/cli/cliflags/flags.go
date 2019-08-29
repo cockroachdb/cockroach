@@ -897,6 +897,11 @@ The line length where sqlfmt will try to wrap.`,
 		Description: `How many in-memory nodes to create for the demo.`,
 	}
 
+	RunDemoWorkload = FlagInfo{
+		Name:        "with-load",
+		Description: `Run a demo workload against the pre-loaded database.`,
+	}
+
 	DemoNodeLocality = FlagInfo{
 		Name: "demo-locality",
 		Description: `
