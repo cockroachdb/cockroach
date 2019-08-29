@@ -704,6 +704,7 @@ func (sc *SchemaChanger) distBackfill(
 	filter backfill.MutationFilter,
 	targetSpans []roachpb.Span,
 ) error {
+	inMemoryStatusEnabled := sc.execCfg.Settings.Version.IsActive(cluster.VersionAtomicChangeReplicasTrigger)
 	duration := checkpointInterval
 	if sc.testingKnobs.WriteCheckpointInterval > 0 {
 		duration = sc.testingKnobs.WriteCheckpointInterval
@@ -878,6 +879,24 @@ func (sc *SchemaChanger) distBackfill(
 				return cbw.Err()
 			}); err != nil {
 				return err
+			}
+			if !inMemoryStatusEnabled {
+				var resumeSpans []roachpb.Span
+				// There is a worker node of older version that will communicate
+				// its done work by writing to the jobs table.
+				// In this case we intersect todoSpans with what the old node(s)
+				// have set in the jobs table not to overwrite their done work.
+				if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+					var err error
+					resumeSpans, _, _, err = distsqlrun.GetResumeSpans(
+						ctx, sc.jobRegistry, txn, sc.tableID, sc.mutationID, filter)
+					return err
+				}); err != nil {
+					return err
+				}
+				// A \intersect B = A - (A - B)
+				todoSpans = roachpb.SubtractSpans(todoSpans, roachpb.SubtractSpans(todoSpans, resumeSpans))
+
 			}
 			// Record what is left to do for the job.
 			// TODO(spaskob): Execute this at a regular cadence.
