@@ -68,7 +68,7 @@ func (p {{template "opRConstName" .}}) Next(ctx context.Context) coldata.Batch {
 	projCol := projVec.{{.RetTyp}}()
 	if sel := batch.Selection(); sel != nil {
 		for _, i := range sel {
-			arg := {{.LTyp.Get "unsafe" "col" "int(i)"}}
+			arg := {{.LTyp.Get "col" "int(i)"}}
 			{{(.Assign "projCol[i]" "arg" "p.constArg")}}
 		}
 	} else {
@@ -76,7 +76,7 @@ func (p {{template "opRConstName" .}}) Next(ctx context.Context) coldata.Batch {
 		colLen := {{.LTyp.Len "col"}}
 		_ = projCol[colLen-1]
 		for {{.LTyp.Range "i" "col"}} {
-			arg := {{.LTyp.Get "unsafe" "col" "i"}}
+			arg := {{.LTyp.Get "col" "i"}}
 			{{(.Assign "projCol[i]" "arg" "p.constArg")}}
 		}
 	}
@@ -121,7 +121,7 @@ func (p {{template "opLConstName" .}}) Next(ctx context.Context) coldata.Batch {
 	projCol := projVec.{{.RetTyp}}()
 	if sel := batch.Selection(); sel != nil {
 		for _, i := range sel {
-			arg := {{.RTyp.Get "unsafe" "col" "int(i)"}}
+			arg := {{.RTyp.Get "col" "int(i)"}}
 			{{(.Assign "projCol[i]" "p.constArg" "arg")}}
 		}
 	} else {
@@ -129,7 +129,7 @@ func (p {{template "opLConstName" .}}) Next(ctx context.Context) coldata.Batch {
 		colLen := {{.RTyp.Len "col"}}
 		_ = projCol[colLen-1]
 		for {{.RTyp.Range "i" "col"}} {
-			arg := {{.RTyp.Get "unsafe" "col" "i"}}
+			arg := {{.RTyp.Get "col" "i"}}
 			{{(.Assign "projCol[i]" "p.constArg" "arg")}}
 		}
 	}
@@ -176,8 +176,8 @@ func (p {{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 	col2 := vec2.{{.RTyp}}()
 	if sel := batch.Selection(); sel != nil {
 		for _, i := range sel {
-			arg1 := {{.LTyp.Get "unsafe" "col1" "int(i)"}}
-			arg2 := {{.RTyp.Get "unsafe" "col2" "int(i)"}}
+			arg1 := {{.LTyp.Get "col1" "int(i)"}}
+			arg2 := {{.RTyp.Get "col2" "int(i)"}}
 			{{(.Assign "projCol[i]" "arg1" "arg2")}}
 		}
 	} else {
@@ -186,8 +186,8 @@ func (p {{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 		_ = projCol[colLen-1]
 		_ = {{.LTyp.Slice "col2" "0" "colLen-1"}}
 		for {{.LTyp.Range "i" "col1"}} {
-			arg1 := {{.LTyp.Get "unsafe" "col1" "i"}}
-			arg2 := {{.LTyp.Get "unsafe" "col2" "i"}}
+			arg1 := {{.LTyp.Get "col1" "i"}}
+			arg2 := {{.LTyp.Get "col2" "i"}}
 			{{(.Assign "projCol[i]" "arg1" "arg2")}}
 		}
 	}

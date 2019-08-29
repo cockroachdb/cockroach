@@ -93,8 +93,8 @@ func (g *execgen) run(args ...string) bool {
 	return true
 }
 
-var emptyCommentRegex = regexp.MustCompile(`[ \t]*//[ \t]*\n`)
-var emptyBlockCommentRegex = regexp.MustCompile(`[ \t]*/\*[ \t]*\*/[ \t]*\n`)
+var emptyCommentRegex = regexp.MustCompile(`[ \t]*//[ \t]*$`)
+var emptyBlockCommentRegex = regexp.MustCompile(`[ \t]*/\*[ \t]*\*/[ \t]*$`)
 
 func (g *execgen) generate(genFunc generator, out string) error {
 	var buf bytes.Buffer
