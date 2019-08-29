@@ -1048,6 +1048,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 					`SELECT name FROM crdb_internal.tables WHERE database_name = 'pause' AND state = 'OFFLINE'`,
 					[][]string{{"bank"}},
 				)
+				sqlDB.Exec(t, `ALTER TABLE pause.bank CONFIGURE ZONE USING constraints='[+dc=dc1]'`)
 			}
 			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
 			jobutils.WaitForJob(t, sqlDB, jobID)

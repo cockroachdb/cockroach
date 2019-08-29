@@ -258,18 +258,21 @@ func (r fkResolver) CurrentSearchPath() sessiondata.SearchPath {
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) CommonLookupFlags(required bool) sql.CommonLookupFlags {
-	return sql.CommonLookupFlags{}
+func (r fkResolver) CommonLookupFlags(required bool) tree.CommonLookupFlags {
+	return tree.CommonLookupFlags{}
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) ObjectLookupFlags(required bool, requireMutable bool) sql.ObjectLookupFlags {
-	return sql.ObjectLookupFlags{}
+func (r fkResolver) ObjectLookupFlags(required bool, requireMutable bool) tree.ObjectLookupFlags {
+	return tree.ObjectLookupFlags{
+		CommonLookupFlags: tree.CommonLookupFlags{Required: required},
+		RequireMutable:    requireMutable,
+	}
 }
 
 // Implements the tree.TableNameExistingResolver interface.
 func (r fkResolver) LookupObject(
-	ctx context.Context, requireMutable bool, dbName, scName, obName string,
+	ctx context.Context, lookupFlags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
 	if scName != "" {
 		obName = strings.TrimPrefix(obName, scName+".")

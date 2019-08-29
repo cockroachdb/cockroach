@@ -41,8 +41,8 @@ type SchemaResolver interface {
 	LogicalSchemaAccessor() SchemaAccessor
 	CurrentDatabase() string
 	CurrentSearchPath() sessiondata.SearchPath
-	CommonLookupFlags(required bool) CommonLookupFlags
-	ObjectLookupFlags(required bool, requireMutable bool) ObjectLookupFlags
+	CommonLookupFlags(required bool) tree.CommonLookupFlags
+	ObjectLookupFlags(required bool, requireMutable bool) tree.ObjectLookupFlags
 	LookupTableByID(ctx context.Context, id sqlbase.ID) (row.TableEntry, error)
 }
 
@@ -78,9 +78,9 @@ func GetObjectNames(
 	explicitPrefix bool,
 ) (res TableNames, err error) {
 	return sc.LogicalSchemaAccessor().GetObjectNames(ctx, txn, dbDesc, scName,
-		DatabaseListFlags{
+		tree.DatabaseListFlags{
 			CommonLookupFlags: sc.CommonLookupFlags(true /*required*/),
-			explicitPrefix:    explicitPrefix,
+			ExplicitPrefix:    explicitPrefix,
 		})
 }
 
@@ -95,10 +95,10 @@ func ResolveExistingObject(
 	ctx context.Context,
 	sc SchemaResolver,
 	tn *ObjectName,
-	required bool,
+	lookupFlags tree.ObjectLookupFlags,
 	requiredType ResolveRequiredType,
 ) (res *ImmutableTableDescriptor, err error) {
-	desc, err := resolveExistingObjectImpl(ctx, sc, tn, required, false /* requiredMutable */, requiredType)
+	desc, err := resolveExistingObjectImpl(ctx, sc, tn, lookupFlags, requiredType)
 	if err != nil || desc == nil {
 		return nil, err
 	}
@@ -119,7 +119,11 @@ func ResolveMutableExistingObject(
 	required bool,
 	requiredType ResolveRequiredType,
 ) (res *MutableTableDescriptor, err error) {
-	desc, err := resolveExistingObjectImpl(ctx, sc, tn, required, true /* requiredMutable */, requiredType)
+	lookupFlags := tree.ObjectLookupFlags{
+		CommonLookupFlags: tree.CommonLookupFlags{Required: required},
+		RequireMutable:    true,
+	}
+	desc, err := resolveExistingObjectImpl(ctx, sc, tn, lookupFlags, requiredType)
 	if err != nil || desc == nil {
 		return nil, err
 	}
@@ -130,16 +134,15 @@ func resolveExistingObjectImpl(
 	ctx context.Context,
 	sc SchemaResolver,
 	tn *ObjectName,
-	required bool,
-	requiredMutable bool,
+	lookupFlags tree.ObjectLookupFlags,
 	requiredType ResolveRequiredType,
 ) (res tree.NameResolutionResult, err error) {
-	found, descI, err := tn.ResolveExisting(ctx, sc, requiredMutable, sc.CurrentDatabase(), sc.CurrentSearchPath())
+	found, descI, err := tn.ResolveExisting(ctx, sc, lookupFlags, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
 		return nil, err
 	}
 	if !found {
-		if required {
+		if lookupFlags.Required {
 			return nil, sqlbase.NewUndefinedRelationError(tn)
 		}
 		return nil, nil
@@ -161,7 +164,7 @@ func resolveExistingObjectImpl(
 		return nil, sqlbase.NewWrongObjectTypeError(tn, requiredTypeNames[requiredType])
 	}
 
-	if requiredMutable {
+	if lookupFlags.RequireMutable {
 		return descI.(*MutableTableDescriptor), nil
 	}
 
@@ -202,7 +205,8 @@ func (p *planner) ResolveUncachedTableDescriptor(
 	ctx context.Context, tn *ObjectName, required bool, requiredType ResolveRequiredType,
 ) (table *ImmutableTableDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		table, err = ResolveExistingObject(ctx, p, tn, required, requiredType)
+		lookupFlags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: required}}
+		table, err = ResolveExistingObject(ctx, p, tn, lookupFlags, requiredType)
 	})
 	return table, err
 }
@@ -280,25 +284,26 @@ func (p *planner) LookupSchema(
 
 // LookupObject implements the tree.TableNameExistingResolver interface.
 func (p *planner) LookupObject(
-	ctx context.Context, requireMutable bool, dbName, scName, tbName string,
+	ctx context.Context, lookupFlags tree.ObjectLookupFlags, dbName, scName, tbName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
 	sc := p.LogicalSchemaAccessor()
 	p.tableName = tree.MakeTableNameWithSchema(tree.Name(dbName), tree.Name(scName), tree.Name(tbName))
-	objDesc, err := sc.GetObjectDesc(ctx, p.txn, &p.tableName, p.ObjectLookupFlags(false /*required*/, requireMutable))
+	lookupFlags.CommonLookupFlags = p.CommonLookupFlags(false /* required */)
+	objDesc, err := sc.GetObjectDesc(ctx, p.txn, &p.tableName, lookupFlags)
 	return objDesc != nil, objDesc, err
 }
 
-func (p *planner) CommonLookupFlags(required bool) CommonLookupFlags {
-	return CommonLookupFlags{
-		required:    required,
-		avoidCached: p.avoidCachedDescriptors,
+func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
+	return tree.CommonLookupFlags{
+		Required:    required,
+		AvoidCached: p.avoidCachedDescriptors,
 	}
 }
 
-func (p *planner) ObjectLookupFlags(required, requireMutable bool) ObjectLookupFlags {
-	return ObjectLookupFlags{
+func (p *planner) ObjectLookupFlags(required, requireMutable bool) tree.ObjectLookupFlags {
+	return tree.ObjectLookupFlags{
 		CommonLookupFlags: p.CommonLookupFlags(required),
-		requireMutable:    requireMutable,
+		RequireMutable:    requireMutable,
 	}
 }
 
@@ -379,7 +384,7 @@ func findTableContainingIndex(
 	sc SchemaResolver,
 	dbName, scName string,
 	idxName tree.UnrestrictedName,
-	lookupFlags CommonLookupFlags,
+	lookupFlags tree.CommonLookupFlags,
 ) (result *tree.TableName, desc *MutableTableDescriptor, err error) {
 	sa := sc.LogicalSchemaAccessor()
 	dbDesc, err := sa.GetDatabaseDesc(ctx, txn, dbName, lookupFlags)
@@ -388,7 +393,7 @@ func findTableContainingIndex(
 	}
 
 	tns, err := sa.GetObjectNames(ctx, txn, dbDesc, scName,
-		DatabaseListFlags{CommonLookupFlags: lookupFlags, explicitPrefix: true})
+		tree.DatabaseListFlags{CommonLookupFlags: lookupFlags, ExplicitPrefix: true})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -417,7 +422,7 @@ func findTableContainingIndex(
 		result = tn
 		desc = tableDesc
 	}
-	if result == nil && lookupFlags.required {
+	if result == nil && lookupFlags.Required {
 		return nil, nil, pgerror.Newf(pgcode.UndefinedObject,
 			"index %q does not exist", idxName)
 	}
@@ -546,18 +551,19 @@ var _ SchemaResolver = &fkSelfResolver{}
 
 // LookupObject implements the tree.TableNameExistingResolver interface.
 func (r *fkSelfResolver) LookupObject(
-	ctx context.Context, requireMutable bool, dbName, scName, tbName string,
+	ctx context.Context, lookupFlags tree.ObjectLookupFlags, dbName, scName, tbName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
 	if dbName == r.newTableName.Catalog() &&
 		scName == r.newTableName.Schema() &&
 		tbName == r.newTableName.Table() {
 		table := r.newTableDesc
-		if requireMutable {
+		if lookupFlags.RequireMutable {
 			return true, sqlbase.NewMutableExistingTableDescriptor(*table), nil
 		}
 		return true, sqlbase.NewImmutableTableDescriptor(*table), nil
 	}
-	return r.SchemaResolver.LookupObject(ctx, requireMutable, dbName, scName, tbName)
+	lookupFlags.IncludeOffline = false
+	return r.SchemaResolver.LookupObject(ctx, lookupFlags, dbName, scName, tbName)
 }
 
 // internalLookupCtx can be used in contexts where all descriptors
@@ -725,7 +731,8 @@ func (p *planner) ResolveExistingObjectEx(
 	requiredType ResolveRequiredType,
 ) (res *ImmutableTableDescriptor, err error) {
 	tn := name.ToTableName()
-	desc, err := resolveExistingObjectImpl(ctx, p, &tn, required, false /* requiredMutable */, requiredType)
+	lookupFlags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: required}}
+	desc, err := resolveExistingObjectImpl(ctx, p, &tn, lookupFlags, requiredType)
 	if err != nil || desc == nil {
 		return nil, err
 	}
