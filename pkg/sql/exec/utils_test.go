@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"testing/quick"
 
@@ -26,11 +27,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/pkg/errors"
+	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/assert"
 )
 
 // tuple represents a row with any-type columns.
 type tuple []interface{}
+
+func (t tuple) String() string {
+	var sb strings.Builder
+	sb.WriteString("[")
+	for i := range t {
+		if i != 0 {
+			sb.WriteString(", ")
+		}
+		if d, ok := t[i].(apd.Decimal); ok {
+			sb.WriteString(d.String())
+		} else {
+			sb.WriteString(fmt.Sprintf("%v", t[i]))
+		}
+	}
+	sb.WriteString("]")
+	return sb.String()
+}
 
 // tuples represents a table of a single type.
 type tuples []tuple
@@ -516,6 +535,11 @@ func (r *opTestOutput) next(ctx context.Context) tuple {
 			var val reflect.Value
 			if colBytes, ok := vec.Col().(*coldata.Bytes); ok {
 				val = reflect.ValueOf(append([]byte(nil), colBytes.Get(int(curIdx))...))
+			} else if vec.Type() == coltypes.Decimal {
+				colDec := vec.Decimal()
+				var newDec apd.Decimal
+				newDec.Set(&colDec[curIdx])
+				val = reflect.ValueOf(newDec)
 			} else {
 				val = reflect.ValueOf(vec.Col()).Index(int(curIdx))
 			}
@@ -590,10 +614,31 @@ func tupleEquals(expected tuple, actual tuple) bool {
 	return true
 }
 
+func makeError(expected tuples, actual tuples) error {
+	var expStr, actStr strings.Builder
+	for i := range expected {
+		expStr.WriteString(fmt.Sprintf("%d: %s\n", i, expected[i].String()))
+	}
+	for i := range actual {
+		actStr.WriteString(fmt.Sprintf("%d: %s\n", i, actual[i].String()))
+	}
+
+	diff := difflib.UnifiedDiff{
+		A:       difflib.SplitLines(expStr.String()),
+		B:       difflib.SplitLines(actStr.String()),
+		Context: 100,
+	}
+	text, err := difflib.GetUnifiedDiffString(diff)
+	if err != nil {
+		return errors.Errorf("expected didn't match actual, failed to make diff %s", err)
+	}
+	return errors.Errorf("expected didn't match actual. diff:\n%s", text)
+}
+
 // assertTuplesSetsEqual asserts that two sets of tuples are equal.
 func assertTuplesSetsEqual(expected tuples, actual tuples) error {
 	if len(expected) != len(actual) {
-		return errors.Errorf("expected %+v, actual %+v", expected, actual)
+		return makeError(expected, actual)
 	}
 	actualTupleUsed := make([]bool, len(actual))
 	for _, te := range expected {
@@ -608,7 +653,7 @@ func assertTuplesSetsEqual(expected tuples, actual tuples) error {
 			}
 		}
 		if !matched {
-			return errors.Errorf("expected %+v, actual %+v\n", expected, actual)
+			return makeError(expected, actual)
 		}
 	}
 	return nil
@@ -622,7 +667,7 @@ func assertTuplesOrderedEqual(expected tuples, actual tuples) error {
 	}
 	for i := range expected {
 		if !tupleEquals(expected[i], actual[i]) {
-			return errors.Errorf("expected %+v, actual %+v\n", expected, actual)
+			return makeError(expected, actual)
 		}
 	}
 	return nil

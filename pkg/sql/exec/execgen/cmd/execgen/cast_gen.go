@@ -37,11 +37,11 @@ func genCastOperators(wr io.Writer) error {
 	s = strings.Replace(s, "_FROM_TYPE_SLICE", "execgen.SLICE", -1)
 	s = replaceManipulationFuncs(".FromTyp", s)
 
-	// replace the _FROM_TYPE_GET's with execgen.GET's of the correct type.
-	s = strings.Replace(s, "_FROM_TYPE_GET", "execgen.GET", -1)
+	// replace the _FROM_TYPE_UNSAFEGET's with execgen.UNSAFEGET's of the correct type.
+	s = strings.Replace(s, "_FROM_TYPE_UNSAFEGET", "execgen.UNSAFEGET", -1)
 	s = replaceManipulationFuncs(".FromTyp", s)
 
-	// replace the _TO_TYPE_GET's with execgen.SET's of the correct type
+	// replace the _TO_TYPE_SET's with execgen.SET's of the correct type
 	s = strings.Replace(s, "_TO_TYPE_SET", "execgen.SET", -1)
 	s = replaceManipulationFuncs(".ToTyp", s)
 
