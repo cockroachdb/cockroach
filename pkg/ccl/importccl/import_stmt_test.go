@@ -2518,6 +2518,8 @@ func TestImportMVCCChecksums(t *testing.T) {
 func TestImportMysql(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/40263")
+
 	const (
 		nodes = 3
 	)
