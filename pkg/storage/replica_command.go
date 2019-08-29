@@ -2086,6 +2086,7 @@ func removeTargetFromSlice(
 func removeLearners(
 	ctx context.Context, db *client.DB, desc *roachpb.RangeDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
+	origDesc := desc
 	learners := desc.Replicas().Learners()
 	if len(learners) == 0 {
 		return desc, nil
@@ -2095,13 +2096,20 @@ func removeLearners(
 		targets[i].NodeID = learners[i].NodeID
 		targets[i].StoreID = learners[i].StoreID
 	}
+	chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, targets...)
 	log.VEventf(ctx, 2, `removing learner replicas %v from %v`, targets, desc)
-	newDesc, err := db.AdminChangeReplicas(ctx, desc.StartKey, *desc,
-		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, targets...))
-	if err != nil {
-		return nil, errors.Wrapf(err, `removing learners from %s`, desc)
+	// NB: unroll the removals because at the time of writing, we can't atomically
+	// remove multiple learners. This will be fixed in:
+	//
+	// https://github.com/cockroachdb/cockroach/pull/40268
+	for i := range chgs {
+		var err error
+		desc, err = db.AdminChangeReplicas(ctx, desc.StartKey, *desc, chgs[i:i+1])
+		if err != nil {
+			return nil, errors.Wrapf(err, `removing learners from %s`, origDesc)
+		}
 	}
-	return newDesc, nil
+	return desc, nil
 }
 
 // adminScatter moves replicas and leaseholders for a selection of ranges.
