@@ -12,6 +12,7 @@ package roachpb
 
 import (
 	"bytes"
+	"context"
 	"math"
 	"math/rand"
 	"reflect"
@@ -1881,4 +1882,19 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPrepareTransactionForRetry_MixedSuccessError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Regression test for:
+	// https://github.com/cockroachdb/cockroach/issues/40328
+
+	txn := MakeTransaction("test", Key("a"), 1, makeTS(10, 1), 0)
+	pErr := NewErrorWithTxn(WrapWithMixedSuccessError(NewTransactionAbortedError(ABORT_REASON_CLIENT_REJECT)), &txn)
+
+	newTxn := PrepareTransactionForRetry(
+		context.Background(), pErr, MinUserPriority, hlc.NewClock(hlc.UnixNano, 100))
+
+	require.NotEqual(t, txn.ID, newTxn.ID)
 }

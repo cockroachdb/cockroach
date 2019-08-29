@@ -1221,9 +1221,14 @@ func PrepareTransactionForRetry(
 		log.Fatalf(ctx, "missing txn for retryable error: %s", pErr)
 	}
 
+	detail := pErr.GetDetail()
+	if msErr, ok := pErr.GetDetail().(*MixedSuccessError); ok {
+		detail = msErr.Wrapped.GetInner().(ErrorDetailInterface)
+	}
+
 	txn := *pErr.GetTxn()
 	aborted := false
-	switch tErr := pErr.GetDetail().(type) {
+	switch tErr := detail.(type) {
 	case *TransactionAbortedError:
 		// The txn coming with a TransactionAbortedError is not supposed to be used
 		// for the restart. Instead, a brand new transaction is created.
