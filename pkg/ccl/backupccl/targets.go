@@ -71,9 +71,9 @@ func (r *descriptorResolver) LookupSchema(
 
 // LookupObject implements the tree.TableNameExistingResolver interface.
 func (r *descriptorResolver) LookupObject(
-	_ context.Context, requireMutable bool, dbName, scName, obName string,
+	_ context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (bool, tree.NameResolutionResult, error) {
-	if requireMutable {
+	if flags.RequireMutable {
 		panic("did not expect request for mutable descriptor")
 	}
 	if scName != tree.PublicSchema {
@@ -204,7 +204,7 @@ func descriptorsMatchingTargets(
 
 		switch p := pattern.(type) {
 		case *tree.TableName:
-			found, descI, err := p.ResolveExisting(ctx, resolver, false /*requireMutable*/, currentDatabase, searchPath)
+			found, descI, err := p.ResolveExisting(ctx, resolver, tree.ObjectLookupFlags{}, currentDatabase, searchPath)
 			if err != nil {
 				return ret, err
 			}

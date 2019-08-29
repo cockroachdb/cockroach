@@ -153,8 +153,8 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		fqTableName = n.p.ResolvedName(t).FQString()
 
 	case *tree.TableRef:
-		flags := ObjectLookupFlags{CommonLookupFlags: CommonLookupFlags{
-			avoidCached: n.p.avoidCachedDescriptors,
+		flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
+			AvoidCached: n.p.avoidCachedDescriptors,
 		}}
 		tableDesc, err = n.p.Tables().getTableVersionByID(ctx, n.p.txn, sqlbase.ID(t.TableID), flags)
 		if err != nil {

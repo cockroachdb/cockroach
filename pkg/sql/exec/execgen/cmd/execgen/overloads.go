@@ -407,6 +407,19 @@ func (decimalCustomizer) getCmpOpCompareFunc() compareFunc {
 func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op overload, target, l, r string) string {
 		// todo(jordan): should tree.ExactCtx be used here? (#39540)
+		if op.BinOp == tree.Div {
+			return fmt.Sprintf(`
+			{
+				cond, err := tree.DecimalCtx.%s(&%s, &%s, &%s)
+				if cond.DivisionByZero() {
+					execerror.NonVectorizedPanic(tree.ErrDivByZero)
+				}
+				if err != nil {
+					execerror.NonVectorizedPanic(err)
+				}
+			}
+			`, binaryOpDecMethod[op.BinOp], target, l, r)
+		}
 		return fmt.Sprintf("if _, err := tree.DecimalCtx.%s(&%s, &%s, &%s); err != nil { execerror.NonVectorizedPanic(err) }",
 			binaryOpDecMethod[op.BinOp], target, l, r)
 	}
@@ -676,12 +689,22 @@ func (c decimalIntCustomizer) getCmpOpCompareFunc() compareFunc {
 
 func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op overload, target, l, r string) string {
-		args := map[string]string{"Op": binaryOpDecMethod[op.BinOp], "Target": target, "Left": l, "Right": r}
+		isDivision := op.BinOp == tree.Div
+		args := map[string]interface{}{
+			"Op":         binaryOpDecMethod[op.BinOp],
+			"IsDivision": isDivision,
+			"Target":     target, "Left": l, "Right": r,
+		}
 		buf := strings.Builder{}
 		// todo(rafi): is there a way to avoid allocating on each operation?
 		// todo(jordan): should tree.ExactCtx be used here? (#39540)
 		t := template.Must(template.New("").Parse(`
 			{
+				{{ if .IsDivision }}
+				if {{.Right}} == 0 {
+					execerror.NonVectorizedPanic(tree.ErrDivByZero)
+				}
+				{{ end }}
 				tmpDec := &apd.Decimal{}
 				tmpDec.SetFinite(int64({{.Right}}), 0)
 				if _, err := tree.DecimalCtx.{{.Op}}(&{{.Target}}, &{{.Left}}, tmpDec); err != nil {
@@ -739,7 +762,12 @@ func (c intDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 
 func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op overload, target, l, r string) string {
-		args := map[string]string{"Op": binaryOpDecMethod[op.BinOp], "Target": target, "Left": l, "Right": r}
+		isDivision := op.BinOp == tree.Div
+		args := map[string]interface{}{
+			"Op":         binaryOpDecMethod[op.BinOp],
+			"IsDivision": isDivision,
+			"Target":     target, "Left": l, "Right": r,
+		}
 		buf := strings.Builder{}
 		// todo(rafi): is there a way to avoid allocating on each operation?
 		// todo(jordan): should tree.ExactCtx be used here? (#39540)
@@ -747,7 +775,15 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 			{
 				tmpDec := &apd.Decimal{}
 				tmpDec.SetFinite(int64({{.Left}}), 0)
-				if _, err := tree.DecimalCtx.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}}); err != nil {
+				{{ if .IsDivision }}
+				cond, err := tree.DecimalCtx.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})
+				if cond.DivisionByZero() {
+					execerror.NonVectorizedPanic(tree.ErrDivByZero)
+				}
+				{{ else }}
+				_, err := tree.DecimalCtx.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})
+				{{ end }}
+				if err != nil {
 					execerror.NonVectorizedPanic(err)
 				}
 			}

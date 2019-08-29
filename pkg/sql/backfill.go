@@ -556,7 +556,7 @@ func (sc *SchemaChanger) validateConstraints(
 func (sc *SchemaChanger) getTableVersion(
 	ctx context.Context, txn *client.Txn, tc *TableCollection, version sqlbase.DescriptorVersion,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
-	tableDesc, err := tc.getTableVersionByID(ctx, txn, sc.tableID, ObjectLookupFlags{})
+	tableDesc, err := tc.getTableVersionByID(ctx, txn, sc.tableID, tree.ObjectLookupFlags{})
 	if err != nil {
 		return nil, err
 	}
@@ -835,7 +835,7 @@ func (sc *SchemaChanger) distBackfill(
 					}
 
 					for k := range fkTables {
-						table, err := tc.getTableVersionByID(ctx, txn, k, ObjectLookupFlags{})
+						table, err := tc.getTableVersionByID(ctx, txn, k, tree.ObjectLookupFlags{})
 						if err != nil {
 							return err
 						}

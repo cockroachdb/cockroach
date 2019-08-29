@@ -10,7 +10,7 @@
 
 /*
 Package ordering contains operator-specific logic related to orderings - whether
-ops can provide required orderings, what orderings do they need to require from
+ops can provide Required orderings, what orderings do they need to require from
 their children, etc.
 
 The package provides generic APIs that can be called on any RelExpr, as well as

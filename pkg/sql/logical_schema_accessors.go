@@ -48,15 +48,15 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 	txn *client.Txn,
 	dbDesc *DatabaseDescriptor,
 	scName string,
-	flags DatabaseListFlags,
+	flags tree.DatabaseListFlags,
 ) (TableNames, error) {
 	if entry, ok := l.vt.getVirtualSchemaEntry(scName); ok {
 		names := make(TableNames, len(entry.orderedDefNames))
 		for i, name := range entry.orderedDefNames {
 			names[i] = tree.MakeTableNameWithSchema(
 				tree.Name(dbDesc.Name), tree.Name(entry.desc.Name), tree.Name(name))
-			names[i].ExplicitCatalog = flags.explicitPrefix
-			names[i].ExplicitSchema = flags.explicitPrefix
+			names[i].ExplicitCatalog = flags.ExplicitPrefix
+			names[i].ExplicitSchema = flags.ExplicitPrefix
 		}
 
 		return names, nil
@@ -68,12 +68,12 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 
 // GetObjectDesc implements the ObjectAccessor interface.
 func (l *LogicalSchemaAccessor) GetObjectDesc(
-	ctx context.Context, txn *client.Txn, name *ObjectName, flags ObjectLookupFlags,
+	ctx context.Context, txn *client.Txn, name *ObjectName, flags tree.ObjectLookupFlags,
 ) (ObjectDescriptor, error) {
 	if scEntry, ok := l.vt.getVirtualSchemaEntry(name.Schema()); ok {
 		tableName := name.Table()
 		if t, ok := scEntry.defs[tableName]; ok {
-			if flags.requireMutable {
+			if flags.RequireMutable {
 				return sqlbase.NewMutableExistingTableDescriptor(*t.desc), nil
 			}
 			return sqlbase.NewImmutableTableDescriptor(*t.desc), nil
@@ -83,7 +83,7 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 				"virtual schema table not implemented: %s.%s", name.Schema(), tableName)
 		}
 
-		if flags.required {
+		if flags.Required {
 			return nil, sqlbase.NewUndefinedRelationError(name)
 		}
 		return nil, nil

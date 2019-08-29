@@ -112,7 +112,7 @@ func (p *planner) getDataSource(
 			return ds, err
 		}
 
-		desc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, ResolveAnyDescType)
+		desc, err := ResolveExistingObject(ctx, p, tn, tree.ObjectLookupFlagsWithRequired(), ResolveAnyDescType)
 		if err != nil {
 			return planDataSource{}, err
 		}
@@ -198,8 +198,8 @@ func (p *planner) getTableScanByRef(
 	indexFlags *tree.IndexFlags,
 	scanVisibility scanVisibility,
 ) (planDataSource, error) {
-	flags := ObjectLookupFlags{CommonLookupFlags: CommonLookupFlags{
-		avoidCached: p.avoidCachedDescriptors,
+	flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
+		AvoidCached: p.avoidCachedDescriptors,
 	}}
 	desc, err := p.Tables().getTableVersionByID(ctx, p.txn, sqlbase.ID(tref.TableID), flags)
 	if err != nil {

@@ -107,7 +107,7 @@ func newCopyMachine(
 		retErr = cleanup(ctx, retErr)
 	}()
 
-	tableDesc, err := ResolveExistingObject(ctx, &c.p, &n.Table, true /*required*/, ResolveRequireTableDesc)
+	tableDesc, err := ResolveExistingObject(ctx, &c.p, &n.Table, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}

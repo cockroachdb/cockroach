@@ -258,9 +258,9 @@ func (p *planner) resolveTableForZone(
 	} else if zs.TargetsTable() {
 		var immutRes *ImmutableTableDescriptor
 		p.runWithOptions(resolveFlags{skipCache: true}, func() {
-			immutRes, err = ResolveExistingObject(
-				ctx, p, &zs.TableOrIndex.Table, true /*required*/, ResolveAnyDescType,
-			)
+			flags := tree.ObjectLookupFlagsWithRequired()
+			flags.IncludeOffline = true
+			immutRes, err = ResolveExistingObject(ctx, p, &zs.TableOrIndex.Table, flags, ResolveAnyDescType)
 		})
 		if err != nil {
 			return nil, err

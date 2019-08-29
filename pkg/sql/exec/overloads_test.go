@@ -161,6 +161,24 @@ func TestMixedTypeInteger(t *testing.T) {
 	require.Equal(t, 0, res.Cmp(d.SetFinite(5, 0)))
 }
 
+func TestDecimalDivByZero(t *testing.T) {
+	nonZeroDec, zeroDec := apd.Decimal{}, apd.Decimal{}
+	nonZeroDec.SetFinite(4, 0)
+	zeroDec.SetFinite(0, 0)
+
+	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivDecimalInt8(nonZeroDec, 0) }))
+	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivDecimalInt16(nonZeroDec, 0) }))
+	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivDecimalInt32(nonZeroDec, 0) }))
+	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivDecimalInt64(nonZeroDec, 0) }))
+
+	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivInt64Decimal(2, zeroDec) }))
+	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivInt32Decimal(2, zeroDec) }))
+	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivInt16Decimal(2, zeroDec) }))
+	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivInt8Decimal(2, zeroDec) }))
+
+	require.Equal(t, tree.ErrDivByZero, execerror.CatchVectorizedRuntimeError(func() { performDivDecimalDecimal(nonZeroDec, zeroDec) }))
+}
+
 func TestDecimalComparison(t *testing.T) {
 	d := apd.Decimal{}
 	if _, err := d.SetFloat64(1.234); err != nil {
