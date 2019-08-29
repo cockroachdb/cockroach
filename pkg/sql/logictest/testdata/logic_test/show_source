@@ -37,9 +37,8 @@ default_tablespace                   ·
 default_transaction_isolation        serializable
 default_transaction_read_only        off
 distsql                              off
-experimental_enable_zigzag_join      on
+enable_zigzag_join                   on
 experimental_force_split_at          off
-experimental_optimizer_foreign_keys  off
 experimental_serial_normalization    rowid
 extra_float_digits                   0
 force_savepoint_restart              off
@@ -50,6 +49,7 @@ locality                             region=test,dc=dc1
 lock_timeout                         0
 max_index_keys                       32
 node_id                              1
+optimizer_foreign_keys  off
 reorder_joins_limit                  4
 results_buffer_size                  16384
 row_security                         off
