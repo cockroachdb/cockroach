@@ -781,33 +781,39 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 				} else
 				// {{ end }}
 				{
-					// {{ if _HAS_NULLS }}
-					// {{ if _HAS_SELECTION }}
-					out.Nulls().ExtendWithSel(src.Nulls(), uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend), sel)
-					// {{ else }}
-					out.Nulls().Extend(src.Nulls(), uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend))
-					// {{ end }}
-					// {{ end }}
-
 					// Optimization in the case that group length is 1, use assign
 					// instead of copy.
 					if toAppend == 1 {
+						// TODO(yuzefovich): think about making execgen.SET set both the
+						// value and the null.
 						// {{ if _HAS_SELECTION }}
+						// {{ if _HAS_NULLS }}
+						if src.Nulls().NullAt(sel[o.builderState.right.curSrcStartIdx]) {
+							out.Nulls().SetNull(uint16(outStartIdx))
+						}
+						// {{ end }}
 						v := execgen.UNSAFEGET(srcCol, int(sel[o.builderState.right.curSrcStartIdx]))
 						execgen.SET(outCol, outStartIdx, v)
 						// {{ else }}
+						// {{ if _HAS_NULLS }}
+						if src.Nulls().NullAt64(uint64(o.builderState.right.curSrcStartIdx)) {
+							out.Nulls().SetNull(uint16(outStartIdx))
+						}
+						// {{ end }}
 						v := execgen.UNSAFEGET(srcCol, o.builderState.right.curSrcStartIdx)
 						execgen.SET(outCol, outStartIdx, v)
 						// {{ end }}
 					} else {
-						// {{ if _HAS_SELECTION }}
-						for i := 0; i < toAppend; i++ {
-							v := execgen.UNSAFEGET(srcCol, int(sel[i+o.builderState.right.curSrcStartIdx]))
-							execgen.SET(outCol, i+outStartIdx, v)
-						}
-						// {{ else }}
-						execgen.COPYSLICE(outCol, srcCol, outStartIdx, o.builderState.right.curSrcStartIdx, o.builderState.right.curSrcStartIdx+toAppend)
-						// {{ end }}
+						out.Copy(
+							coldata.CopyArgs{
+								ColType:     colType,
+								Src:         src,
+								Sel:         sel,
+								DestIdx:     uint64(outStartIdx),
+								SrcStartIdx: uint64(o.builderState.right.curSrcStartIdx),
+								SrcEndIdx:   uint64(o.builderState.right.curSrcStartIdx + toAppend),
+							},
+						)
 					}
 				}
 

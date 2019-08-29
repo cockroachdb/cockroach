@@ -406,22 +406,6 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 				SrcEndIdx:   uint16(groupEndIdx),
 			},
 		)
-		if sel != nil {
-			bufferedGroup.ColVec(cIdx).Nulls().ExtendWithSel(
-				batch.ColVec(cIdx).Nulls(),
-				destStartIdx,
-				uint16(groupStartIdx),
-				uint16(groupLength),
-				sel,
-			)
-		} else {
-			bufferedGroup.ColVec(cIdx).Nulls().Extend(
-				batch.ColVec(cIdx).Nulls(),
-				destStartIdx,
-				uint16(groupStartIdx),
-				uint16(groupLength),
-			)
-		}
 	}
 
 	// We've added groupLength number of tuples to bufferedGroup, so we need to
