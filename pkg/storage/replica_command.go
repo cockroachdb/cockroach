@@ -1299,14 +1299,9 @@ type internalReplicationChange struct {
 	typ    internalChangeType
 }
 
-func execChangeReplicasTxn(
-	ctx context.Context,
-	store *Store,
-	desc *roachpb.RangeDescriptor,
-	reason storagepb.RangeLogEventReason,
-	details string,
-	chgs []internalReplicationChange,
-) (*roachpb.RangeDescriptor, error) {
+func prepareChangeReplicasTrigger(
+	store *Store, desc *roachpb.RangeDescriptor, chgs []internalReplicationChange,
+) (*roachpb.ChangeReplicasTrigger, error) {
 	updatedDesc := *desc
 	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
 
@@ -1419,6 +1414,18 @@ func execChangeReplicasTxn(
 	if _, err := crt.ConfChange(nil); err != nil {
 		return nil, errors.Wrapf(err, "programming error: malformed trigger created from desc %s to %s", desc, &updatedDesc)
 	}
+	return crt, nil
+}
+
+func execChangeReplicasTxn(
+	ctx context.Context,
+	store *Store,
+	desc *roachpb.RangeDescriptor,
+	reason storagepb.RangeLogEventReason,
+	details string,
+	chgs []internalReplicationChange,
+) (*roachpb.RangeDescriptor, error) {
+	var returnDesc *roachpb.RangeDescriptor
 
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 	if err := store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -1428,14 +1435,18 @@ func execChangeReplicasTxn(
 		if err != nil {
 			return err
 		}
-		log.Infof(ctx, "change replicas (add %v remove %v): existing descriptor %s", added, removed, desc)
+		crt, err := prepareChangeReplicasTrigger(store, desc, chgs)
+		if err != nil {
+			return err
+		}
+		log.Infof(ctx, "change replicas (add %v remove %v): existing descriptor %s", crt.Added(), crt.Removed(), desc)
 
 		{
 			b := txn.NewBatch()
 
 			// Important: the range descriptor must be the first thing touched in the transaction
 			// so the transaction record is co-located with the range being modified.
-			if err := updateRangeDescriptor(b, descKey, dbDescValue, &updatedDesc); err != nil {
+			if err := updateRangeDescriptor(b, descKey, dbDescValue, crt.Desc); err != nil {
 				return err
 			}
 
@@ -1450,12 +1461,12 @@ func execChangeReplicasTxn(
 			typ      roachpb.ReplicaChangeType
 			repDescs []roachpb.ReplicaDescriptor
 		}{
-			{roachpb.ADD_REPLICA, added},
-			{roachpb.REMOVE_REPLICA, removed},
+			{roachpb.ADD_REPLICA, crt.Added()},
+			{roachpb.REMOVE_REPLICA, crt.Removed()},
 		} {
 			for _, repDesc := range tup.repDescs {
 				if err := store.logChange(
-					ctx, txn, tup.typ, repDesc, updatedDesc, reason, details,
+					ctx, txn, tup.typ, repDesc, *crt.Desc, reason, details,
 				); err != nil {
 					return err
 				}
@@ -1467,7 +1478,7 @@ func execChangeReplicasTxn(
 		b := txn.NewBatch()
 
 		// Update range descriptor addressing record(s).
-		if err := updateRangeAddressing(b, &updatedDesc); err != nil {
+		if err := updateRangeAddressing(b, crt.Desc); err != nil {
 			return err
 		}
 
@@ -1482,6 +1493,7 @@ func execChangeReplicasTxn(
 			return err
 		}
 
+		returnDesc = crt.Desc
 		return nil
 	}); err != nil {
 		log.Event(ctx, err.Error())
@@ -1491,7 +1503,7 @@ func execChangeReplicasTxn(
 		return nil, errors.Wrapf(err, "change replicas of r%d failed", desc.RangeID)
 	}
 	log.Event(ctx, "txn complete")
-	return &updatedDesc, nil
+	return returnDesc, nil
 }
 
 // sendSnapshot sends a snapshot of the replica state to the specified replica.
