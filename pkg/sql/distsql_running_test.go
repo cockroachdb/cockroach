@@ -99,7 +99,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			Clock:             s.Clock(),
 			Stopper:           s.Stopper(),
 		},
-		s.DistSender(),
+		s.DistSenderI().(*kv.DistSender),
 	)
 	shortDB := client.NewDB(ambient, tsf, s.Clock())
 
@@ -122,8 +122,8 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 			// Now wait until the heartbeat loop notices that the transaction is aborted.
 			testutils.SucceedsSoon(t, func() error {
-				if txn.GetTxnCoordMeta(ctx).Txn.Status != roachpb.ABORTED {
-					return fmt.Errorf("txn not aborted yet")
+				if txn.Sender().(*kv.TxnCoordSender).IsTracking() {
+					return fmt.Errorf("txn heartbeat loop running")
 				}
 				return nil
 			})
@@ -149,7 +149,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		// We need to re-plan every time, since close() below makes
 		// the plan unusable across retries.
 		p.stmt = &Statement{Statement: stmt}
-		if err := p.makePlan(ctx); err != nil {
+		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
 		}
 		defer p.curPlan.close(ctx)

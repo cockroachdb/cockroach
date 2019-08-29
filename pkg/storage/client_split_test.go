@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -56,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -478,28 +480,28 @@ func TestSplitTriggerRaftSnapshotRace(t *testing.T) {
 	perm := rand.Perm(numSplits)
 	idx := int32(-1) // accessed atomically
 
-	checkNoSnaps := func(when string) {
+	numRaftSnaps := func(when string) int {
+		var totalSnaps int
 		for i := 0; i < numNodes; i++ {
 			var n int // num rows (sanity check against test rotting)
 			var c int // num Raft snapshots
 			if err := tc.ServerConn(i).QueryRow(`
 SELECT count(*), sum(value) FROM crdb_internal.node_metrics WHERE
-	name LIKE 'queue.raftsnapshot.process.%'
-OR
-	name LIKE 'queue.raftsnapshot.pending'
+	name = 'range.snapshots.normal-applied'
 `).Scan(&n, &c); err != nil {
 				t.Fatal(err)
 			}
-			if expRows := 3; n != expRows {
+			if expRows := 1; n != expRows {
 				t.Fatalf("%s: expected %d rows, got %d", when, expRows, n)
 			}
-			if c > 0 {
-				t.Fatalf("observed %d Raft snapshots %s splits", c, when)
-			}
+			totalSnaps += c
 		}
+		return totalSnaps
 	}
 
-	checkNoSnaps("before")
+	// There are usually no raft snaps before, but there is a race condition where
+	// they can occasionally happen during upreplication.
+	numSnapsBefore := numRaftSnaps("before")
 
 	doSplit := func(ctx context.Context) error {
 		_, _, err := tc.SplitRange(
@@ -511,7 +513,8 @@ OR
 		t.Fatal(err)
 	}
 
-	checkNoSnaps("after")
+	// Check that no snaps happened during the splits.
+	require.Equal(t, numSnapsBefore, numRaftSnaps("after"))
 }
 
 // TestStoreRangeSplitIdempotency executes a split of a range and
@@ -2089,7 +2092,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 						From: uint64(replicas[1].ReplicaID),
 						Term: term,
 					},
-				}); !sent {
+				}, rpc.DefaultClass); !sent {
 					t.Error("transport failed to send vote request")
 				}
 				select {
@@ -3187,4 +3190,111 @@ func TestStoreSplitDisappearingReplicas(t *testing.T) {
 			t.Fatalf("%q: split unexpected error: %s", key, pErr)
 		}
 	}
+}
+
+// Regression test for #21146. This verifies the behavior of when the
+// application of some split command (part of the lhs's log) is delayed on some
+// store and meanwhile the rhs has rebalanced away and back, ending up with a
+// larger ReplicaID than the split thinks it will have.
+func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	blockPromoteCh := make(chan struct{})
+	knobs := base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+		ReplicaAddStopAfterLearnerSnapshot: func() bool {
+			<-blockPromoteCh
+			return false
+		},
+		ReplicaAddSkipLearnerRollback: func() bool {
+			return true
+		},
+	}}
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	k := tc.ScratchRange(t)
+	desc := tc.LookupRangeOrFatal(t, k)
+
+	// First construct a range with a learner replica on the second node (index 1)
+	// and split it, ending up with an orphaned learner on each side of the split.
+	// After the learner is created, but before the split, block all incoming raft
+	// traffic to the learner on the lhs of the split (which is still on the
+	// second node).
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		_, err := tc.AddReplicas(k, tc.Target(1))
+		return err
+	})
+
+	store, _ := getFirstStoreReplica(t, tc.Server(1), k)
+	tc.Servers[1].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
+		rangeID:            desc.RangeID,
+		RaftMessageHandler: store,
+	})
+
+	_, kRHS := k, k.Next()
+	descLHS, descRHS := tc.SplitRangeOrFatal(t, kRHS)
+
+	close(blockPromoteCh)
+	if err := g.Wait(); !testutils.IsError(err, `descriptor changed`) {
+		t.Fatalf(`expected "descriptor changed" error got: %+v`, err)
+	}
+
+	// Now repeatedly remove and re-add the learner on the rhs, so it has a
+	// different replicaID than the split trigger expects.
+	for i := 0; i < 5; i++ {
+		_, err := tc.RemoveReplicas(kRHS, tc.Target(1))
+		require.NoError(t, err)
+		_, err = tc.AddReplicas(kRHS, tc.Target(1))
+		if !testutils.IsError(err, `snapshot intersects existing range`) {
+			t.Fatalf(`expected snapshot intersects existing range" error got: %+v`, err)
+		}
+	}
+
+	// Normally AddReplicas will return the latest version of the RangeDescriptor,
+	// but because we're getting snapshot errors and using the
+	// ReplicaAddSkipLearnerRollback hook, we have to look it up again ourselves
+	// to find the current replicaID for the RHS learner.
+	descRHS = tc.LookupRangeOrFatal(t, kRHS)
+	learnerDescRHS, ok := descRHS.GetReplicaDescriptor(store.StoreID())
+	require.True(t, ok)
+
+	// Wait for there to be an in-memory, uninitialized learner replica with the
+	// latest ReplicaID. Note: it cannot become initialized at this point because
+	// it needs a snapshot to do that and (as can be seen in the error check
+	// above) snapshots will intersect the lhs replica (which doesn't know about
+	// the split because we've blocked its raft traffic, and so it still covers
+	// the pre-split keyspace).
+	testutils.SucceedsSoon(t, func() error {
+		repl, err := store.GetReplica(descRHS.RangeID)
+		if err != nil {
+			return err
+		}
+		status := repl.RaftStatus()
+		if status == nil {
+			return errors.New("raft group not initialized")
+		}
+		if replicaID := roachpb.ReplicaID(status.ID); replicaID != learnerDescRHS.ReplicaID {
+			return errors.Errorf("expected %d got %d", learnerDescRHS.ReplicaID, replicaID)
+		}
+		return nil
+	})
+
+	// Re-enable raft and wait for the lhs to catch up to the post-split
+	// descriptor. This used to panic with "raft group deleted".
+	tc.Servers[1].RaftTransport().Listen(store.StoreID(), store)
+	testutils.SucceedsSoon(t, func() error {
+		repl, err := store.GetReplica(descLHS.RangeID)
+		if err != nil {
+			return err
+		}
+		if desc := repl.Desc(); !descLHS.Equal(desc) {
+			return errors.Errorf("expected %s got %s", &descLHS, desc)
+		}
+		return nil
+	})
 }

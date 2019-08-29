@@ -370,7 +370,7 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 		}
 		r.seenTuples = 0
 
-		return r.moreResultsNeeded()
+		return r.moreResultsNeeded(ctx)
 	}
 	if _ /* flushed */, err := r.conn.maybeFlush(r.pos); err != nil {
 		return err
@@ -381,7 +381,7 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 // moreResultsNeeded is a restricted connection handler that waits for more
 // requests for rows from the active portal, during the "execute portal" flow
 // when a limit has been specified.
-func (r *limitedCommandResult) moreResultsNeeded() error {
+func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 	// In an implicit transaction, a portal suspension is immediately
 	// followed by closing the portal.
 	if r.implicitTxn {
@@ -389,22 +389,37 @@ func (r *limitedCommandResult) moreResultsNeeded() error {
 		return sql.ErrLimitedResultClosed
 	}
 
-	r.conn.stmtBuf.AdvanceOne()
+	// Keep track of the previous CmdPos so we can rewind if needed.
+	prevPos := r.conn.stmtBuf.AdvanceOne()
 	for {
-		cmd, _, err := r.conn.stmtBuf.CurCmd()
+		cmd, curPos, err := r.conn.stmtBuf.CurCmd()
 		if err != nil {
 			return err
 		}
-		// TODO(mjibson): It would be nice to support the
-		// sql.DeletePreparedStmt type here (Close in PG parlance,
-		// which can delete portals or prepared statements). This would
-		// require having stmtbuf rewind by one. Again, this double
-		// state machine thing is not great.
 		switch c := cmd.(type) {
+		case sql.DeletePreparedStmt:
+			// The client wants to close a portal or statement. We
+			// support the case where it is exactly this
+			// portal. This is done by closing the portal in
+			// the same way implicit transactions do, but also
+			// rewinding the stmtBuf to still point to the portal
+			// close so that the state machine can do its part of
+			// the cleanup. We are in effect peeking to see if the
+			// next message is a delete portal.
+			if c.Type != pgwirebase.PreparePortal || c.Name != r.portalName {
+				return errors.WithDetail(sql.ErrLimitedResultNotSupported,
+					"cannot close a portal while a different one is open")
+			}
+			r.typ = noCompletionMsg
+			// Rewind to before the delete so the AdvanceOne in
+			// connExecutor.execCmd ends up back on it.
+			r.conn.stmtBuf.Rewind(ctx, prevPos)
+			return sql.ErrLimitedResultClosed
 		case sql.ExecPortal:
 			// The happy case: the client wants more rows from the portal.
 			if c.Name != r.portalName {
-				return errors.WithDetail(sql.ErrLimitedResultNotSupported, "portals must be executed to completion")
+				return errors.WithDetail(sql.ErrLimitedResultNotSupported,
+					"cannot execute a portal while a different one is open")
 			}
 			r.limit = c.Limit
 			// In order to get the correct command tag, we need to reset the seen rows.
@@ -423,7 +438,10 @@ func (r *limitedCommandResult) moreResultsNeeded() error {
 			}
 		default:
 			// We got some other message, but we only support executing to completion.
-			return errors.WithDetail(sql.ErrLimitedResultNotSupported, "portals must be executed to completion")
+			return errors.WithSafeDetails(sql.ErrLimitedResultNotSupported,
+				"cannot perform operation %T while a different portal is open",
+				errors.Safe(c))
 		}
+		prevPos = curPos
 	}
 }

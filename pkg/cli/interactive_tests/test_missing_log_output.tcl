@@ -73,7 +73,7 @@ start_test "Check that panic reports are printed to the log even when --logtostd
 send "$argv start-single-node -s=path=logs/db --insecure --logtostderr\r"
 eexpect "CockroachDB node starting"
 
-system "$argv sql --insecure -e \"select crdb_internal.force_panic('helloworld')\" || true"
+system "($argv sql --insecure -e \"select crdb_internal.force_panic('helloworld')\" || true)&"
 # Check the panic is reported on the server's stderr
 eexpect "panic: helloworld"
 eexpect "panic while executing"

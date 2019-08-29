@@ -370,6 +370,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	rootSQLMemoryMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(s.cfg.SQLMemoryPoolSize))
 
+	// bulkMemoryMonitor is the parent to all child SQL monitors tracking bulk
+	// operations (IMPORT, index backfill). It is itself a child of the
+	// ParentMemoryMonitor.
+	bulkMemoryMonitor := mon.MakeMonitorInheritWithLimit("bulk-mon", 0 /* limit */, &rootSQLMemoryMonitor)
+	bulkMetrics := bulk.MakeBulkMetrics(cfg.HistogramWindowInterval())
+	s.registry.AddMetricStruct(bulkMetrics)
+	bulkMemoryMonitor.SetMetrics(bulkMetrics.CurBytesCount, bulkMetrics.MaxBytesHist)
+	bulkMemoryMonitor.Start(context.Background(), &rootSQLMemoryMonitor, mon.BoundAccount{})
+
 	// Set up the DistSQL temp engine.
 
 	useStoreSpec := cfg.Stores.Specs[s.cfg.TempStorageConfig.SpecIdx]
@@ -534,14 +543,20 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Stopper:        s.stopper,
 		NodeID:         &s.nodeIDContainer,
 		ClusterID:      &s.rpcContext.ClusterID,
+		ClusterName:    s.cfg.ClusterName,
 
 		TempStorage: tempEngine,
-		BulkAdder: func(ctx context.Context, db *client.DB, bufferSize, flushSize int64, ts hlc.Timestamp) (storagebase.BulkAdder, error) {
-			return bulk.MakeBulkAdder(db, s.distSender.RangeDescriptorCache(), bufferSize, flushSize, ts)
-		},
 		DiskMonitor: s.cfg.TempStorageConfig.Mon,
 
 		ParentMemoryMonitor: &rootSQLMemoryMonitor,
+		BulkAdder: func(
+			ctx context.Context, db *client.DB, ts hlc.Timestamp, opts storagebase.BulkAdderOptions,
+		) (storagebase.BulkAdder, error) {
+			// Attach a child memory monitor to enable control over the BulkAdder's
+			// memory usage.
+			bulkMon := distsqlrun.NewMonitor(ctx, &bulkMemoryMonitor, fmt.Sprintf("bulk-adder-monitor"))
+			return bulk.MakeBulkAdder(ctx, db, s.distSender.RangeDescriptorCache(), ts, opts, bulkMon)
+		},
 
 		Metrics: &distSQLMetrics,
 
@@ -837,17 +852,21 @@ func inspectEngines(
 // file", these are written once the listeners are available, before the server
 // is necessarily ready to serve.
 type listenerInfo struct {
-	listen    string // the (RPC) listen address
-	advertise string // equals `listen` unless --advertise-addr is used
-	http      string // the HTTP endpoint
+	listenRPC    string // the (RPC) listen address, rewritten after name resolution and port allocation
+	advertiseRPC string // contains the original addr part of --listen/--advertise, with actual port number after port allocation if original was 0
+	listenHTTP   string // the HTTP endpoint
+	listenSQL    string // the SQL endpoint, rewritten after name resolution and port allocation
+	advertiseSQL string // contains the original addr part of --sql-addr, with actual port number after port allocation if original was 0
 }
 
 // Iter returns a mapping of file names to desired contents.
 func (li listenerInfo) Iter() map[string]string {
 	return map[string]string{
-		"cockroach.advertise-addr": li.advertise,
-		"cockroach.http-addr":      li.http,
-		"cockroach.listen-addr":    li.listen,
+		"cockroach.advertise-addr":     li.advertiseRPC,
+		"cockroach.http-addr":          li.listenHTTP,
+		"cockroach.listen-addr":        li.listenRPC,
+		"cockroach.sql-addr":           li.listenSQL,
+		"cockroach.advertise-sql-addr": li.advertiseSQL,
 	}
 }
 
@@ -1102,166 +1121,47 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	ctx = s.AnnotateCtx(ctx)
 
+	// Start the time sanity checker.
 	s.startTime = timeutil.Now()
 	s.startMonitoringForwardClockJumps(ctx)
 
+	// Connect the node as loopback handler for RPC requests to the
+	// local node.
+	s.rpcContext.SetLocalInternalServer(s.node)
+
+	// Load the TLS configuration for the HTTP server.
 	uiTLSConfig, err := s.cfg.GetUIServerTLSConfig()
 	if err != nil {
 		return err
 	}
 
-	httpServer := netutil.MakeServer(s.stopper, uiTLSConfig, s)
+	// connManager tracks incoming connections accepted via listeners
+	// and automatically closes them when the stopper indicates a
+	// shutdown.
+	// This handles both:
+	// - HTTP connections for the admin UI with an optional TLS handshake over HTTP.
+	// - SQL client connections with a TLS handshake over TCP.
+	// (gRPC connections are handled separately via s.grpc and perform
+	// their TLS handshake on their own)
+	connManager := netutil.MakeServer(s.stopper, uiTLSConfig, s)
 
-	// The following code is a specialization of util/net.go's ListenAndServe
-	// which adds pgwire support. A single port is used to serve all protocols
-	// (pg, http, h2) via the following construction:
-	//
-	// non-TLS case:
-	// net.Listen -> cmux.New
-	//               |
-	//               -  -> pgwire.Match -> pgwire.Server.ServeConn
-	//               -  -> cmux.Any -> grpc.(*Server).Serve
-	//
-	// TLS case:
-	// net.Listen -> cmux.New
-	//               |
-	//               -  -> pgwire.Match -> pgwire.Server.ServeConn
-	//               -  -> cmux.Any -> grpc.(*Server).Serve
-	//
-	// Note that the difference between the TLS and non-TLS cases exists due to
-	// Go's lack of an h2c (HTTP2 Clear Text) implementation. See inline comments
-	// in util.ListenAndServe for an explanation of how h2c is implemented there
-	// and here.
-
-	ln, err := net.Listen("tcp", s.cfg.Addr)
-	if err != nil {
-		return ListenError{error: err, Addr: s.cfg.Addr}
-	}
-	if err := base.UpdateAddrs(ctx, &s.cfg.Addr, &s.cfg.AdvertiseAddr, ln.Addr()); err != nil {
-		return errors.Wrapf(err, "internal error: cannot parse listen address")
-	}
-	log.Eventf(ctx, "listening on port %s", s.cfg.Addr)
-
-	s.rpcContext.SetLocalInternalServer(s.node)
-
-	// The cmux matches don't shut down properly unless serve is called on the
-	// cmux at some point. Use serveOnMux to ensure it's called during shutdown
-	// if we wouldn't otherwise reach the point where we start serving on it.
-	var serveOnMux sync.Once
-	m := cmux.New(ln)
-
-	pgL := m.Match(func(r io.Reader) bool {
-		return pgwire.Match(r)
-	})
-
-	anyL := m.Match(cmux.Any())
-
-	httpLn, err := net.Listen("tcp", s.cfg.HTTPAddr)
-	if err != nil {
-		return ListenError{
-			error: err,
-			Addr:  s.cfg.HTTPAddr,
-		}
-	}
-	if err := base.UpdateAddrs(ctx, &s.cfg.HTTPAddr, &s.cfg.HTTPAdvertiseAddr, httpLn.Addr()); err != nil {
-		return errors.Wrapf(err, "internal error: cannot parse http listen address")
-	}
-
+	// Start a context for the asynchronous network workers.
 	workersCtx := s.AnnotateCtx(context.Background())
 
-	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
-		<-s.stopper.ShouldQuiesce()
-		if err := httpLn.Close(); err != nil {
-			log.Fatal(workersCtx, err)
-		}
-	})
-
-	if uiTLSConfig != nil {
-		httpMux := cmux.New(httpLn)
-		clearL := httpMux.Match(cmux.HTTP1())
-		tlsL := httpMux.Match(cmux.Any())
-
-		s.stopper.RunWorker(workersCtx, func(context.Context) {
-			netutil.FatalIfUnexpected(httpMux.Serve())
-		})
-
-		s.stopper.RunWorker(workersCtx, func(context.Context) {
-			mux := http.NewServeMux()
-			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusTemporaryRedirect)
-			})
-			mux.Handle("/health", s)
-
-			plainRedirectServer := netutil.MakeServer(s.stopper, uiTLSConfig, mux)
-
-			netutil.FatalIfUnexpected(plainRedirectServer.Serve(clearL))
-		})
-
-		httpLn = tls.NewListener(tlsL, uiTLSConfig)
+	// Start the admin UI server. This opens the HTTP listen socket,
+	// optionally sets up TLS, and dispatches the server worker for the
+	// web UI.
+	if err := s.startServeUI(ctx, workersCtx, connManager, uiTLSConfig); err != nil {
+		return err
 	}
 
-	s.stopper.RunWorker(workersCtx, func(context.Context) {
-		netutil.FatalIfUnexpected(httpServer.Serve(httpLn))
-	})
-
-	s.stopper.RunWorker(workersCtx, func(context.Context) {
-		<-s.stopper.ShouldQuiesce()
-		// TODO(bdarnell): Do we need to also close the other listeners?
-		netutil.FatalIfUnexpected(anyL.Close())
-		<-s.stopper.ShouldStop()
-		s.grpc.Stop()
-		serveOnMux.Do(func() {
-			// A cmux can't gracefully shut down without Serve being called on it.
-			netutil.FatalIfUnexpected(m.Serve())
-		})
-	})
-
-	s.stopper.RunWorker(workersCtx, func(context.Context) {
-		netutil.FatalIfUnexpected(s.grpc.Serve(anyL))
-	})
-
-	// Running the SQL migrations safely requires that we aren't serving SQL
-	// requests at the same time -- to ensure that, block the serving of SQL
-	// traffic until the migrations are done, as indicated by this channel.
-	serveSQL := make(chan bool)
-
-	tcpKeepAlive := envutil.EnvOrDefaultDuration("COCKROACH_SQL_TCP_KEEP_ALIVE", time.Minute)
-	var loggedKeepAliveStatus int32
-
-	// Attempt to set TCP keep-alive on connection. Don't fail on errors.
-	setTCPKeepAlive := func(ctx context.Context, conn net.Conn) {
-		if tcpKeepAlive == 0 {
-			return
-		}
-
-		muxConn, ok := conn.(*cmux.MuxConn)
-		if !ok {
-			return
-		}
-		tcpConn, ok := muxConn.Conn.(*net.TCPConn)
-		if !ok {
-			return
-		}
-
-		// Only log success/failure once.
-		doLog := atomic.CompareAndSwapInt32(&loggedKeepAliveStatus, 0, 1)
-		if err := tcpConn.SetKeepAlive(true); err != nil {
-			if doLog {
-				log.Warningf(ctx, "failed to enable TCP keep-alive for pgwire: %v", err)
-			}
-			return
-
-		}
-		if err := tcpConn.SetKeepAlivePeriod(tcpKeepAlive); err != nil {
-			if doLog {
-				log.Warningf(ctx, "failed to set TCP keep-alive duration for pgwire: %v", err)
-			}
-			return
-		}
-
-		if doLog {
-			log.VEventf(ctx, 2, "setting TCP keep-alive to %s for pgwire", tcpKeepAlive)
-		}
+	// Start the RPC server. This opens the RPC/SQL listen socket,
+	// and dispatches the server worker for the RPC.
+	// The SQL listener is returned, to start the SQL server later
+	// below when the server has initialized.
+	pgL, startRPCServer, err := s.startListenRPCAndSQL(ctx, workersCtx)
+	if err != nil {
+		return err
 	}
 
 	// Enable the debug endpoints first to provide an earlier window into what's
@@ -1348,9 +1248,11 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Write listener info files early in the startup sequence. `listenerInfo` has a comment.
 	listenerFiles := listenerInfo{
-		advertise: s.cfg.AdvertiseAddr,
-		http:      s.cfg.HTTPAdvertiseAddr,
-		listen:    s.cfg.Addr,
+		listenRPC:    s.cfg.Addr,
+		advertiseRPC: s.cfg.AdvertiseAddr,
+		listenSQL:    s.cfg.SQLAddr,
+		advertiseSQL: s.cfg.SQLAdvertiseAddr,
+		listenHTTP:   s.cfg.HTTPAdvertiseAddr,
 	}.Iter()
 
 	for _, storeSpec := range s.cfg.Stores.Specs {
@@ -1376,6 +1278,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// advertise addresses.
 	listenAddrU := util.NewUnresolvedAddr("tcp", s.cfg.Addr)
 	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
+	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
 	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, listenAddrU, advAddrU)
 	s.gossip.Start(advAddrU, filtered)
 	log.Event(ctx, "started gossip")
@@ -1427,11 +1330,7 @@ func (s *Server) Start(ctx context.Context) error {
 		//
 		// TODO(knz): This may need tweaking when #24118 is addressed.
 
-		s.stopper.RunWorker(workersCtx, func(context.Context) {
-			serveOnMux.Do(func() {
-				netutil.FatalIfUnexpected(m.Serve())
-			})
-		})
+		startRPCServer(workersCtx)
 
 		ready := make(chan struct{})
 		if s.cfg.ReadyFn != nil {
@@ -1485,11 +1384,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	// This opens the main listener.
-	s.stopper.RunWorker(workersCtx, func(context.Context) {
-		serveOnMux.Do(func() {
-			netutil.FatalIfUnexpected(m.Serve())
-		})
-	})
+	startRPCServer(workersCtx)
 
 	// We ran this before, but might've bootstrapped in the meantime. This time
 	// we'll get the actual list of bootstrapped and empty engines.
@@ -1510,8 +1405,9 @@ func (s *Server) Start(ctx context.Context) error {
 	// we're joining an existing cluster for the first time.
 	if err := s.node.start(
 		ctx,
-		advAddrU,
+		advAddrU, advSQLAddrU,
 		bootstrappedEngines, emptyEngines,
+		s.cfg.ClusterName,
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 		cv,
@@ -1543,7 +1439,7 @@ func (s *Server) Start(ctx context.Context) error {
 	})
 
 	// We can now add the node registry.
-	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAdvertiseAddr)
+	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAdvertiseAddr, s.cfg.SQLAdvertiseAddr)
 
 	// Begin recording runtime statistics.
 	s.startSampleEnvironment(ctx, DefaultMetricsSampleInterval)
@@ -1589,7 +1485,12 @@ func (s *Server) Start(ctx context.Context) error {
 
 	log.Infof(ctx, "starting %s server at %s (use: %s)",
 		s.cfg.HTTPRequestScheme(), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
-	log.Infof(ctx, "starting grpc/postgres server at %s", s.cfg.Addr)
+	rpcConnType := "grpc/postgres"
+	if s.cfg.SplitListenSQL {
+		rpcConnType = "grpc"
+		log.Infof(ctx, "starting postgres server at %s (use: %s)", s.cfg.SQLAddr, s.cfg.SQLAdvertiseAddr)
+	}
+	log.Infof(ctx, "starting %s server at %s", rpcConnType, s.cfg.Addr)
 	log.Infof(ctx, "advertising CockroachDB node at %s", s.cfg.AdvertiseAddr)
 
 	log.Event(ctx, "accepting connections")
@@ -1659,10 +1560,9 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 	log.Infof(ctx, "done ensuring all necessary migrations have run")
-	close(serveSQL)
 
-	log.Info(ctx, "serving sql connections")
-	// Start servicing SQL connections.
+	// Start garbage collecting system events.
+	s.startSystemLogsGC(ctx)
 
 	// Serve UI assets.
 	//
@@ -1705,22 +1605,218 @@ func (s *Server) Start(ctx context.Context) error {
 	// Attempt to upgrade cluster version.
 	s.startAttemptUpgrade(ctx)
 
-	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
-	s.stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
-		select {
-		case <-serveSQL:
-		case <-s.stopper.ShouldQuiesce():
-			return
+	// Start serving SQL clients.
+	if err := s.startServeSQL(ctx, workersCtx, connManager, pgL); err != nil {
+		return err
+	}
+
+	// Record that this node joined the cluster in the event log. Since this
+	// executes a SQL query, this must be done after the SQL layer is ready.
+	s.node.recordJoinEvent()
+
+	// Delete all orphaned table leases created by a prior instance of this
+	// node. This also uses SQL.
+	s.leaseMgr.DeleteOrphanedLeases(timeThreshold)
+
+	log.Event(ctx, "server ready")
+
+	return nil
+}
+
+// startListenRPCAndSQL starts the RPC and SQL listeners.
+// It returns the SQL listener, which can be used
+// to start the SQL server when initialization has completed.
+// It also returns a function that starts the RPC server,
+// when the cluster is known to have bootstrapped or
+// when waiting for init().
+func (s *Server) startListenRPCAndSQL(
+	ctx, workersCtx context.Context,
+) (sqlListener net.Listener, startRPCServer func(ctx context.Context), err error) {
+	rpcChanName := "rpc/sql"
+	if s.cfg.SplitListenSQL {
+		rpcChanName = "rpc"
+	}
+	ln, err := listen(ctx, &s.cfg.Addr, &s.cfg.AdvertiseAddr, rpcChanName)
+	if err != nil {
+		return nil, nil, err
+	}
+	log.Eventf(ctx, "listening on port %s", s.cfg.Addr)
+
+	var pgL net.Listener
+	if s.cfg.SplitListenSQL {
+		pgL, err = listen(ctx, &s.cfg.SQLAddr, &s.cfg.SQLAdvertiseAddr, "sql")
+		if err != nil {
+			return nil, nil, err
 		}
-		netutil.FatalIfUnexpected(httpServer.ServeWith(pgCtx, s.stopper, pgL, func(conn net.Conn) {
+		// The SQL listener shutdown worker, which closes everything under
+		// the SQL port when the stopper indicates we are shutting down.
+		s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
+			<-s.stopper.ShouldQuiesce()
+			if err := pgL.Close(); err != nil {
+				log.Fatal(workersCtx, err)
+			}
+		})
+		log.Eventf(ctx, "listening on sql port %s", s.cfg.SQLAddr)
+	}
+
+	// The following code is a specialization of util/net.go's ListenAndServe
+	// which adds pgwire support. A single port is used to serve all protocols
+	// (pg, http, h2) via the following construction:
+	//
+	// non-TLS case:
+	// net.Listen -> cmux.New
+	//               |
+	//               -  -> pgwire.Match -> pgwire.Server.ServeConn
+	//               -  -> cmux.Any -> grpc.(*Server).Serve
+	//
+	// TLS case:
+	// net.Listen -> cmux.New
+	//               |
+	//               -  -> pgwire.Match -> pgwire.Server.ServeConn
+	//               -  -> cmux.Any -> grpc.(*Server).Serve
+	//
+	// Note that the difference between the TLS and non-TLS cases exists due to
+	// Go's lack of an h2c (HTTP2 Clear Text) implementation. See inline comments
+	// in util.ListenAndServe for an explanation of how h2c is implemented there
+	// and here.
+
+	// serveOnMux is used to ensure that the mux gets listened on eventually,
+	// either via the returned startRPCServer() or upon stopping.
+	var serveOnMux sync.Once
+
+	m := cmux.New(ln)
+
+	if !s.cfg.SplitListenSQL {
+		// If the pg port is split, it will be opened above. Otherwise,
+		// we make it hang off the RPC listener via cmux here.
+		pgL = m.Match(func(r io.Reader) bool {
+			return pgwire.Match(r)
+		})
+		// Also if the pg port is not split, the actual listen
+		// and advertise address for SQL become equal to that of RPC,
+		// regardless of what was configured.
+		s.cfg.SQLAddr = s.cfg.Addr
+		s.cfg.SQLAdvertiseAddr = s.cfg.AdvertiseAddr
+	}
+
+	anyL := m.Match(cmux.Any())
+
+	// The remainder shutdown worker.
+	s.stopper.RunWorker(workersCtx, func(context.Context) {
+		<-s.stopper.ShouldQuiesce()
+		// TODO(bdarnell): Do we need to also close the other listeners?
+		netutil.FatalIfUnexpected(anyL.Close())
+		<-s.stopper.ShouldStop()
+		s.grpc.Stop()
+		serveOnMux.Do(func() {
+			// The cmux matches don't shut down properly unless serve is called on the
+			// cmux at some point. Use serveOnMux to ensure it's called during shutdown
+			// if we wouldn't otherwise reach the point where we start serving on it.
+			netutil.FatalIfUnexpected(m.Serve())
+		})
+	})
+
+	// Serve the gRPC endpoint.
+	s.stopper.RunWorker(workersCtx, func(context.Context) {
+		netutil.FatalIfUnexpected(s.grpc.Serve(anyL))
+	})
+
+	// startRPCServer starts the RPC server. We do not do this
+	// immediately because we want the cluster to be ready (or ready to
+	// initialize) before we accept RPC requests. The caller
+	// (Server.Start) will call this at the right moment.
+	startRPCServer = func(ctx context.Context) {
+		s.stopper.RunWorker(ctx, func(context.Context) {
+			serveOnMux.Do(func() {
+				netutil.FatalIfUnexpected(m.Serve())
+			})
+		})
+	}
+
+	return pgL, startRPCServer, nil
+}
+
+func (s *Server) startServeUI(
+	ctx, workersCtx context.Context, connManager netutil.Server, uiTLSConfig *tls.Config,
+) error {
+	httpLn, err := listen(ctx, &s.cfg.HTTPAddr, &s.cfg.HTTPAdvertiseAddr, "http")
+	if err != nil {
+		return err
+	}
+	log.Eventf(ctx, "listening on http port %s", s.cfg.HTTPAddr)
+
+	// The HTTP listener shutdown worker, which closes everything under
+	// the HTTP port when the stopper indicates we are shutting down.
+	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
+		<-s.stopper.ShouldQuiesce()
+		if err := httpLn.Close(); err != nil {
+			log.Fatal(workersCtx, err)
+		}
+	})
+
+	if uiTLSConfig != nil {
+		httpMux := cmux.New(httpLn)
+		clearL := httpMux.Match(cmux.HTTP1())
+		tlsL := httpMux.Match(cmux.Any())
+
+		// Dispatch incoming requests to either clearL or tlsL.
+		s.stopper.RunWorker(workersCtx, func(context.Context) {
+			netutil.FatalIfUnexpected(httpMux.Serve())
+		})
+
+		// Serve the plain HTTP (non-TLS) connection over clearL.
+		// This produces a HTTP redirect to the `https` URL for the path /,
+		// handles the request normally (via s.ServeHTTP) for the path /health,
+		// and produces 404 for anything else.
+		s.stopper.RunWorker(workersCtx, func(context.Context) {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusTemporaryRedirect)
+			})
+			mux.Handle("/health", s)
+
+			plainRedirectServer := netutil.MakeServer(s.stopper, uiTLSConfig, mux)
+
+			netutil.FatalIfUnexpected(plainRedirectServer.Serve(clearL))
+		})
+
+		httpLn = tls.NewListener(tlsL, uiTLSConfig)
+	}
+
+	// Serve the HTTP endpoint. This will be the original httpLn
+	// listening on --http-listen-addr without TLS if uiTLSConfig was
+	// nil, or overridden above if uiTLSConfig was not nil to come from
+	// the TLS negotiation over the HTTP port.
+	s.stopper.RunWorker(workersCtx, func(context.Context) {
+		netutil.FatalIfUnexpected(connManager.Serve(httpLn))
+	})
+
+	return nil
+}
+
+func (s *Server) startServeSQL(
+	ctx, workersCtx context.Context, connManager netutil.Server, pgL net.Listener,
+) error {
+	log.Info(ctx, "serving sql connections")
+	// Start servicing SQL connections.
+
+	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
+	tcpKeepAlive := tcpKeepAliveManager{
+		tcpKeepAlive: envutil.EnvOrDefaultDuration("COCKROACH_SQL_TCP_KEEP_ALIVE", time.Minute),
+	}
+
+	s.stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
+		netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, s.stopper, pgL, func(conn net.Conn) {
 			connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
-			setTCPKeepAlive(connCtx, conn)
+			tcpKeepAlive.configure(connCtx, conn)
 
 			if err := s.pgServer.ServeConn(connCtx, conn); err != nil {
 				log.Error(connCtx, err)
 			}
 		}))
 	})
+
+	// If a unix socket was requested, start serving there too.
 	if len(s.cfg.SocketFile) != 0 {
 		log.Infof(ctx, "starting postgres server at unix:%s", s.cfg.SocketFile)
 
@@ -1738,12 +1834,7 @@ func (s *Server) Start(ctx context.Context) error {
 		})
 
 		s.stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
-			select {
-			case <-serveSQL:
-			case <-s.stopper.ShouldQuiesce():
-				return
-			}
-			netutil.FatalIfUnexpected(httpServer.ServeWith(pgCtx, s.stopper, unixLn, func(conn net.Conn) {
+			netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, s.stopper, unixLn, func(conn net.Conn) {
 				connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
 				if err := s.pgServer.ServeConn(connCtx, conn); err != nil {
 					log.Error(connCtx, err)
@@ -1751,19 +1842,6 @@ func (s *Server) Start(ctx context.Context) error {
 			}))
 		})
 	}
-
-	s.startSystemLogsGC(ctx)
-
-	// Record that this node joined the cluster in the event log. Since this
-	// executes a SQL query, this must be done after the SQL layer is ready.
-	s.node.recordJoinEvent()
-
-	// Delete all orphaned table leases created by a prior instance of this
-	// node.
-	s.leaseMgr.DeleteOrphanedLeases(timeThreshold)
-
-	log.Event(ctx, "server ready")
-
 	return nil
 }
 
@@ -2099,4 +2177,81 @@ func (w *gzipResponseWriter) Close() error {
 
 func init() {
 	tracing.RegisterTagRemapping("n", "node")
+}
+
+// configure attempts to set TCP keep-alive on
+// connection. Does not fail on errors.
+func (k *tcpKeepAliveManager) configure(ctx context.Context, conn net.Conn) {
+	if k.tcpKeepAlive == 0 {
+		return
+	}
+
+	muxConn, ok := conn.(*cmux.MuxConn)
+	if !ok {
+		return
+	}
+	tcpConn, ok := muxConn.Conn.(*net.TCPConn)
+	if !ok {
+		return
+	}
+
+	// Only log success/failure once.
+	doLog := atomic.CompareAndSwapInt32(&k.loggedKeepAliveStatus, 0, 1)
+	if err := tcpConn.SetKeepAlive(true); err != nil {
+		if doLog {
+			log.Warningf(ctx, "failed to enable TCP keep-alive for pgwire: %v", err)
+		}
+		return
+
+	}
+	if err := tcpConn.SetKeepAlivePeriod(k.tcpKeepAlive); err != nil {
+		if doLog {
+			log.Warningf(ctx, "failed to set TCP keep-alive duration for pgwire: %v", err)
+		}
+		return
+	}
+
+	if doLog {
+		log.VEventf(ctx, 2, "setting TCP keep-alive to %s for pgwire", k.tcpKeepAlive)
+	}
+}
+
+type tcpKeepAliveManager struct {
+	// The keepalive duration.
+	tcpKeepAlive time.Duration
+	// loggedKeepAliveStatus ensures that errors about setting the TCP
+	// keepalive status are only reported once.
+	loggedKeepAliveStatus int32
+}
+
+func listen(
+	ctx context.Context, addr, advertiseAddr *string, connName string,
+) (net.Listener, error) {
+	ln, err := net.Listen("tcp", *addr)
+	if err != nil {
+		return nil, ListenError{
+			error: err,
+			Addr:  *addr,
+		}
+	}
+	if err := base.UpdateAddrs(ctx, addr, advertiseAddr, ln.Addr()); err != nil {
+		return nil, errors.Wrapf(err, "internal error: cannot parse %s listen address", connName)
+	}
+	return ln, nil
+}
+
+// RunLocalSQL calls fn on a SQL internal executor on this server.
+// This is meant for use for SQL initialization during bootstrapping.
+//
+// The internal SQL interface should be used instead of a regular SQL
+// network connection for SQL initializations when setting up a new
+// server, because it is possible for the server to listen on a
+// network interface that is not reachable from loopback. It is also
+// possible for the TLS certificates to be invalid when used locally
+// (e.g. if the hostname in the cert is an advertised address that's
+// only reachable externally).
+func (s *Server) RunLocalSQL(
+	ctx context.Context, fn func(ctx context.Context, sqlExec *sql.InternalExecutor) error,
+) error {
+	return fn(ctx, s.internalExecutor)
 }

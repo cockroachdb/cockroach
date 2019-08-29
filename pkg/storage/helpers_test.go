@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
@@ -262,8 +264,8 @@ func (r *Replica) LastAssignedLeaseIndex() uint64 {
 // SetQuotaPool allows the caller to set a replica's quota pool initialized to
 // a given quota. Additionally it initializes the replica's quota release queue
 // and its command sizes map. Only safe to call on the replica that is both
-// lease holder and raft leader.
-func (r *Replica) InitQuotaPool(quota int64) error {
+// lease holder and raft leader while holding the raftMu.
+func (r *Replica) InitQuotaPool(quota uint64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var appliedIndex uint64
@@ -277,19 +279,19 @@ func (r *Replica) InitQuotaPool(quota int64) error {
 
 	r.mu.proposalQuotaBaseIndex = appliedIndex
 	if r.mu.proposalQuota != nil {
-		r.mu.proposalQuota.close()
+		r.mu.proposalQuota.Close("re-creating")
 	}
-	r.mu.proposalQuota = newQuotaPool(quota)
+	r.mu.proposalQuota = quotapool.NewIntPool(r.rangeStr.String(), quota)
 	r.mu.quotaReleaseQueue = nil
 	return nil
 }
 
 // QuotaAvailable returns the quota available in the replica's quota pool. Only
 // safe to call on the replica that is both lease holder and raft leader.
-func (r *Replica) QuotaAvailable() int64 {
+func (r *Replica) QuotaAvailable() uint64 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mu.proposalQuota.approximateQuota()
+	return r.mu.proposalQuota.ApproximateQuota()
 }
 
 func (r *Replica) QuotaReleaseQueueLen() int {
@@ -344,15 +346,6 @@ func (r *Replica) IsRaftGroupInitialized() bool {
 	return r.mu.internalRaftGroup != nil
 }
 
-// HasQuorum returns true iff the range that this replica is part of
-// can achieve quorum.
-func (r *Replica) HasQuorum() bool {
-	desc := r.Desc()
-	liveReplicas, _ := r.store.allocator.storePool.liveAndDeadReplicas(desc.RangeID, desc.InternalReplicas)
-	quorum := computeQuorum(len(desc.InternalReplicas))
-	return len(liveReplicas) >= quorum
-}
-
 // GetStoreList exposes getStoreList for testing only, but with a hardcoded
 // storeFilter of storeFilterNone.
 func (sp *StorePool) GetStoreList(rangeID roachpb.RangeID) (StoreList, int, int) {
@@ -391,7 +384,7 @@ func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, engine.MVCCKeyVal
 		Value: v.RawBytes,
 	}
 
-	if err := sst.Add(kv); err != nil {
+	if err := sst.Put(kv.Key, kv.Value); err != nil {
 		panic(errors.Wrap(err, "while finishing SSTable"))
 	}
 	b, err := sst.Finish()
@@ -484,8 +477,10 @@ func (nl *NodeLiveness) SetDecommissioningInternal(
 
 // GetCircuitBreaker returns the circuit breaker controlling
 // connection attempts to the specified node.
-func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
-	return t.dialer.GetCircuitBreaker(nodeID)
+func (t *RaftTransport) GetCircuitBreaker(
+	nodeID roachpb.NodeID, class rpc.ConnectionClass,
+) *circuit.Breaker {
+	return t.dialer.GetCircuitBreaker(nodeID, class)
 }
 
 func WriteRandomDataToRange(

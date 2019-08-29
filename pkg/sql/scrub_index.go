@@ -16,13 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 // indexCheckOperation implements the checkOperation interface. It is a
@@ -52,9 +49,8 @@ type indexCheckOperation struct {
 // indexCheckRun contains the run-time state for indexCheckOperation
 // during local execution.
 type indexCheckRun struct {
-	started bool
-	// Intermediate values.
-	rows     *rowcontainer.RowContainer
+	started  bool
+	rows     []tree.Datums
 	rowIndex int
 }
 
@@ -77,81 +73,76 @@ func newIndexCheckOperation(
 func (o *indexCheckOperation) Start(params runParams) error {
 	ctx := params.ctx
 
-	columns, columnNames, columnTypes := getColumns(o.tableDesc, o.indexDesc)
-
-	// Because the row results include both primary key data and secondary
-	// key data, the row results will contain two copies of the column
-	// data.
-	columnTypes = append(columnTypes, columnTypes...)
-
-	// Find the row indexes for all of the primary index columns.
-	primaryColIdxs, err := getPrimaryColIdxs(o.tableDesc, columns)
-	if err != nil {
-		return err
+	colToIdx := make(map[sqlbase.ColumnID]int)
+	for i := range o.tableDesc.Columns {
+		id := o.tableDesc.Columns[i].ID
+		colToIdx[id] = i
 	}
 
-	checkQuery := createIndexCheckQuery(columnNames, o.tableDesc, o.tableName, o.indexDesc, o.asOf)
-	plan, err := params.p.delegateQuery(ctx, "SCRUB TABLE ... WITH OPTIONS INDEX", checkQuery, nil, nil)
-	if err != nil {
-		log.Errorf(ctx, "failed to create query plan for query: %s", checkQuery)
-		return errors.NewAssertionErrorWithWrappedErrf(err, "could not create query plan")
+	var pkColumns, otherColumns []*sqlbase.ColumnDescriptor
+
+	for _, colID := range o.tableDesc.PrimaryIndex.ColumnIDs {
+		col := &o.tableDesc.Columns[colToIdx[colID]]
+		pkColumns = append(pkColumns, col)
+		colToIdx[colID] = -1
 	}
 
-	// All columns projected in the plan generated from the query are
-	// needed. The columns are the index columns and extra columns in the
-	// index, twice -- for the primary and then secondary index.
-	needed := make([]bool, len(planColumns(plan)))
-	for i := range needed {
-		needed[i] = true
-	}
-
-	// Optimize the plan. This is required in order to populate scanNode
-	// spans.
-	plan, err = params.p.optimizePlan(ctx, plan, needed)
-	if err != nil {
-		plan.Close(ctx)
-		return err
-	}
-	defer plan.Close(ctx)
-
-	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
-	physPlan, err := scrubPlanDistSQL(ctx, planCtx, plan)
-	if err != nil {
-		return err
-	}
-
-	// Set NullEquality to true on all MergeJoinerSpecs. This changes the
-	// behavior of the query's equality semantics in the ON predicate. The
-	// equalities will now evaluate NULL = NULL to true, which is what we
-	// desire when testing the equivilance of two index entries. There
-	// might be multiple merge joiners (with hash-routing).
-	var foundMergeJoiner bool
-	for i := range physPlan.Processors {
-		if physPlan.Processors[i].Spec.Core.MergeJoiner != nil {
-			physPlan.Processors[i].Spec.Core.MergeJoiner.NullEquality = true
-			foundMergeJoiner = true
+	maybeAddOtherCol := func(colID sqlbase.ColumnID) {
+		pos := colToIdx[colID]
+		if pos == -1 {
+			// Skip PK column.
+			return
 		}
-	}
-	if !foundMergeJoiner {
-		return errors.Errorf("could not find MergeJoinerSpec in plan")
+		col := &o.tableDesc.Columns[pos]
+		otherColumns = append(otherColumns, col)
 	}
 
-	rows, err := scrubRunDistSQL(ctx, planCtx, params.p, physPlan, columnTypes)
+	// Collect all of the columns we are fetching from the index. This
+	// includes the columns involved in the index: columns, extra columns,
+	// and store columns.
+	for _, colID := range o.indexDesc.ColumnIDs {
+		maybeAddOtherCol(colID)
+	}
+	for _, colID := range o.indexDesc.ExtraColumnIDs {
+		maybeAddOtherCol(colID)
+	}
+	for _, colID := range o.indexDesc.StoreColumnIDs {
+		maybeAddOtherCol(colID)
+	}
+
+	colNames := func(cols []*sqlbase.ColumnDescriptor) []string {
+		res := make([]string, len(cols))
+		for i := range cols {
+			res[i] = cols[i].Name
+		}
+		return res
+	}
+
+	checkQuery := createIndexCheckQuery(
+		colNames(pkColumns), colNames(otherColumns),
+		o.tableDesc.ID, o.indexDesc.ID, o.asOf,
+	)
+
+	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
+		ctx, "scrub-index", params.p.txn, checkQuery,
+	)
 	if err != nil {
-		rows.Close(ctx)
 		return err
 	}
 
 	o.run.started = true
 	o.run.rows = rows
-	o.primaryColIdxs = primaryColIdxs
-	o.columns = columns
+	o.primaryColIdxs = make([]int, len(pkColumns))
+	for i := range o.primaryColIdxs {
+		o.primaryColIdxs[i] = i
+	}
+	o.columns = append(pkColumns, otherColumns...)
 	return nil
 }
 
 // Next implements the checkOperation interface.
 func (o *indexCheckOperation) Next(params runParams) (tree.Datums, error) {
-	row := o.run.rows.At(o.run.rowIndex)
+	row := o.run.rows[o.run.rowIndex]
 	o.run.rowIndex++
 
 	// Check if this row has results from the left. See the comment above
@@ -230,98 +221,128 @@ func (o *indexCheckOperation) Started() bool {
 
 // Done implements the checkOperation interface.
 func (o *indexCheckOperation) Done(ctx context.Context) bool {
-	return o.run.rows == nil || o.run.rowIndex >= o.run.rows.Len()
+	return o.run.rows == nil || o.run.rowIndex >= len(o.run.rows)
 }
 
 // Close4 implements the checkOperation interface.
 func (o *indexCheckOperation) Close(ctx context.Context) {
-	if o.run.rows != nil {
-		o.run.rows.Close(ctx)
-	}
+	o.run.rows = nil
 }
 
 // createIndexCheckQuery will make the index check query for a given
-// table and secondary index. It will also take into account an AS OF
-// SYSTEM TIME clause. For example, given the following table schema:
+// table and secondary index.
 //
-//   CREATE TABLE test (
-//     k INT, s INT, v INT, misc INT,
-//     PRIMARY KEY (k, s),
-//     INDEX v_idx (v),
+// The primary column names and the rest of the index
+// columnsIt will also take into account an AS OF
+// SYSTEM TIME clause.
+//
+// For example, given the following table schema:
+//
+//   CREATE TABLE table (
+//     k INT, l INT, a INT, b INT, c INT,
+//     PRIMARY KEY (k, l),
+//     INDEX idx (a,b),
 //   )
 //
 // The generated query to check the `v_idx` will be:
 //
-//   SELECT left.k, left.s, left.v, right.k, right.s, right.v
+//   SELECT pri.k  pri.l, pri.a, pri.b,
+//          sec.k, sec.l, sec.a, sec.b
 //   FROM
-//     (SELECT * FROM test@{NO_INDEX_JOIN} AS left ORDER BY k, s, v)
+//     (SELECT k, l, a, b FROM [tbl_id AS table_pri]@{FORCE_INDEX=[1]}) AS pri
 //   FULL OUTER JOIN
-//     (SELECT * FROM test@{FORCE_INDEX=v_idx} AS right ORDER BY k, s, v)
+//     (SELECT k, l, a, b FROM [tbl_id AS table_sec]@{FORCE_INDEX=[idx_id]} AS sec
 //   ON
-//      left.k = right.k AND
-//      left.s = right.s AND
-//      left.v = right.v AND
-//   WHERE (left.k  IS NULL AND left.s  IS NULL) OR
-//         (right.k IS NULL AND right.s IS NULL)
+//     pri.k = sec.k AND
+//     pri.l = sec.l AND
+//     pri.a IS NOT DISTINCT FROM sec.a AND
+//     pri.b IS NOT DISTINCT FROM sec.b
+//   WHERE
+//     pri.k IS NULL OR sec.k IS NULL
 //
-// In short, this query is:
-// 1) Scanning the primary index and the secondary index.
-// 2) Ordering both of them by the primary then secondary index columns.
-//    This is done to force a distSQL merge join.
-// 3) Joining both sides on all of the columns contained by the secondary
-//    index key-value pairs. NB: The distSQL plan generated from this
-//    query is toggled to make NULL = NULL evaluate to true using the
-//    MergeJoinerSpec.NullEquality flag. Otherwise, we would need an ON
-//    predicate which uses hash join and is extremely slow.
-// 4) Filtering to achieve an anti-join. It looks for when the primary
-//    index values are null, as they are non-nullable columns. The first
-//    line of the predicate takes rows on the right for the anti-join.
-//    The second line of the predicate takes rows on the left for the
-//    anti-join.
+// Explanation:
+//   1) We scan both the primary index and the secondary index.
 //
-// Because this is an anti-join, the results are as follows:
-// - If any primary index column on the left is NULL, that means the
-//   right columns are present. This is because of the invariant that
-//   primary index columns are never null.
-// - Otherwise, the left columns is present.
+//   2) We join them on equality on the PK columns and "IS NOT DISTINCT FROM" on
+//      the other index columns. "IS NOT DISTINCT FROM" is like equality except
+//      that NULL equals NULL; it is not needed for the PK columns because those
+//      can't be NULL.
+//
+//      Note: currently, only the PK columns will be used as join equality
+//      columns, but that is sufficient.
+//
+//   3) We select the "outer" rows (those that had no match), effectively
+//      achieving a "double" anti-join. We use the PK columns which cannot be
+//      NULL except on these rows.
+//
+//   4) The results are as follows:
+//       - if a PK column on the left is NULL, that means that the right-hand
+//         side row from the secondary index had no match in the primary index.
+//       - if a PK column on the right is NULL, that means that the left-hand
+//         side row from the primary key had no match in the secondary index.
 //
 func createIndexCheckQuery(
-	columnNames []string,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
-	tableName *tree.TableName,
-	indexDesc *sqlbase.IndexDescriptor,
+	pkColumns []string,
+	otherColumns []string,
+	tableID sqlbase.ID,
+	indexID sqlbase.IndexID,
 	asOf hlc.Timestamp,
 ) string {
 	var asOfClauseStr string
 	// If SCRUB is called with AS OF SYSTEM TIME <expr> the
 	// checkIndexQuery will also include the as of clause.
 	if asOf != hlc.MaxTimestamp {
-		asOfClauseStr = fmt.Sprintf("AS OF SYSTEM TIME %d", asOf.WallTime)
+		asOfClauseStr = fmt.Sprintf(" AS OF SYSTEM TIME %d", asOf.WallTime)
 	}
 
+	allColumns := append(pkColumns, otherColumns...)
 	// We need to make sure we can handle the non-public column `rowid`
 	// that is created for implicit primary keys. In order to do so, the
 	// rendered columns need to explicit in the inner selects.
 	const checkIndexQuery = `
-				SELECT %[1]s, %[2]s
-				FROM
-					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[1]} %[10]s ORDER BY %[5]s) AS leftside
-				FULL OUTER JOIN
-					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[%[4]d]} %[10]s ORDER BY %[5]s) AS rightside
-					ON %[6]s
-				WHERE (%[7]s) OR
-							(%[8]s)`
-	columnNamesList := fmt.Sprintf(`"%s"`, strings.Join(columnNames, `","`))
-	return fmt.Sprintf(checkIndexQuery,
-		tableColumnsProjection("leftside", columnNames),  // 1
-		tableColumnsProjection("rightside", columnNames), // 2
-		tableName.String(), // 3
-		indexDesc.ID,       // 4
-		columnNamesList,    // 5
-		tableColumnsEQ("leftside", "rightside", columnNames, columnNames),                                      // 6
-		tableColumnsIsNullPredicate("leftside", tableDesc.PrimaryIndex.ColumnNames, "AND", true /* isNull */),  // 7
-		tableColumnsIsNullPredicate("rightside", tableDesc.PrimaryIndex.ColumnNames, "AND", true /* isNull */), // 8
-		columnNamesList, // 9
-		asOfClauseStr,   // 10
+    SELECT %[1]s, %[2]s
+    FROM
+      (SELECT %[8]s FROM [%[3]d AS table_pri]@{FORCE_INDEX=[1]}%[9]s) AS pri
+    FULL OUTER JOIN
+      (SELECT %[8]s FROM [%[3]d AS table_sec]@{FORCE_INDEX=[%[4]d]}%[9]s) AS sec
+    ON %[5]s
+    WHERE %[6]s IS NULL OR %[7]s IS NULL`
+	return fmt.Sprintf(
+		checkIndexQuery,
+
+		// 1: pri.k, pri.l, pri.a, pri.b
+		strings.Join(colRefs("pri", allColumns), ", "),
+
+		// 2: sec.k, sec.l, sec.a, sec.b
+		strings.Join(colRefs("sec", allColumns), ", "),
+
+		// 3
+		tableID,
+
+		// 4
+		indexID,
+
+		// 5: pri.k = sec.k AND pri.l = sec.l AND
+		//    pri.a IS NOT DISTINCT FROM sec.a AND pri.b IS NOT DISTINCT FROM sec.b
+		// Note: otherColumns can be empty.
+		strings.Join(
+			append(
+				pairwiseOp(colRefs("pri", pkColumns), colRefs("sec", pkColumns), "="),
+				pairwiseOp(colRefs("pri", otherColumns), colRefs("sec", otherColumns), "IS NOT DISTINCT FROM")...,
+			),
+			" AND ",
+		),
+
+		// 6: pri.k
+		colRef("pri", pkColumns[0]),
+
+		// 7: sec.k
+		colRef("sec", pkColumns[0]),
+
+		// 8: k, l, a, b
+		strings.Join(colRefs("", append(pkColumns, otherColumns...)), ", "),
+
+		// 9
+		asOfClauseStr,
 	)
 }

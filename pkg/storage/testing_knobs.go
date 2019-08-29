@@ -189,12 +189,29 @@ type StoreTestingKnobs struct {
 	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
 	// error is returned from the hook, it's sent as an ERROR SnapshotResponse.
 	ReceiveSnapshot func(*SnapshotRequest_Header) error
+	// ReplicaAddSkipRollback causes replica addition to skip the learner rollback
+	// that happens when promotion to a voter fails.
+	ReplicaAddSkipLearnerRollback func() bool
 	// ReplicaAddStopAfterLearnerSnapshot causes replica addition to return early
 	// if the func returns true. Specifically, after the learner txn is successful
 	// and after the LEARNER type snapshot, but before promoting it to a voter.
 	// This ensures the `*Replica` will be materialized on the Store when it
 	// returns.
 	ReplicaAddStopAfterLearnerSnapshot func() bool
+	// ReplicaAddStopAfterJointConfig causes replica addition to return early if
+	// the func returns true. This happens before transitioning out of a joint
+	// configuration, after the joint configuration has been entered by means
+	// of a first ChangeReplicas transaction. If the replication change does
+	// not use joint consensus, this early return is identical to the regular
+	// return path.
+	ReplicaAddStopAfterJointConfig func() bool
+	// ReplicationAlwaysUseJointConfig causes replica addition to always go
+	// through a joint configuration, even when this isn't necessary (because
+	// the replication change affects only one replica).
+	ReplicationAlwaysUseJointConfig func() bool
+	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
+	// applying a snapshot.
+	BeforeSnapshotSSTIngestion func(IncomingSnapshot, SnapshotRequest_Type, []string) error
 
 	// MaxApplicationBatchSize enforces a maximum size on application batches.
 	// This can be useful for testing conditions which require commands to be

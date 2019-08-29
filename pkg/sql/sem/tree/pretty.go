@@ -538,7 +538,29 @@ func (node *Select) docTable(p *PrettyCfg) []pretty.TableRow {
 	}
 	items = append(items, node.OrderBy.docRow(p))
 	items = append(items, node.Limit.docTable(p)...)
+	items = append(items, node.ForLocked.docTable(p)...)
 	return items
+}
+
+func (node ForLocked) doc(p *PrettyCfg) pretty.Doc {
+	return p.rlTable(node.docTable(p)...)
+}
+
+func (node ForLocked) docTable(p *PrettyCfg) []pretty.TableRow {
+	var keyword string
+	switch node {
+	case ForNone:
+		return nil
+	case ForUpdate:
+		keyword = "FOR UPDATE"
+	case ForNoKeyUpdate:
+		keyword = "FOR NO KEY UPDATE"
+	case ForShare:
+		keyword = "FOR SHARE"
+	case ForKeyShare:
+		keyword = "FOR KEY SHARE"
+	}
+	return []pretty.TableRow{p.row("", pretty.Keyword(keyword))}
 }
 
 func (node *SelectClause) doc(p *PrettyCfg) pretty.Doc {
@@ -744,6 +766,9 @@ func (wf *WindowFrame) docRow(p *PrettyCfg) pretty.TableRow {
 			p.row("BETWEEN", d),
 			p.row("AND", p.Doc(wf.Bounds.EndBound)),
 		)
+	}
+	if wf.Exclusion != NoExclusion {
+		d = pretty.Stack(d, p.Doc(wf.Exclusion))
 	}
 	return p.row(kw, d)
 }
@@ -1023,7 +1048,12 @@ func (node *Update) doc(p *PrettyCfg) pretty.Doc {
 	items = append(items,
 		node.With.docRow(p),
 		p.row("UPDATE", p.Doc(node.Table)),
-		p.row("SET", p.Doc(&node.Exprs)),
+		p.row("SET", p.Doc(&node.Exprs)))
+	if len(node.From) > 0 {
+		items = append(items,
+			p.row("FROM", p.Doc(&node.From)))
+	}
+	items = append(items,
 		node.Where.docRow(p),
 		node.OrderBy.docRow(p))
 	items = append(items, node.Limit.docTable(p)...)
@@ -1763,7 +1793,7 @@ func (node *Backup) doc(p *PrettyCfg) pretty.Doc {
 
 	items = append(items, p.row("BACKUP", pretty.Nil))
 	items = append(items, node.Targets.docRow(p))
-	items = append(items, p.row("TO", p.Doc(node.To)))
+	items = append(items, p.row("TO", p.Doc(&node.To)))
 
 	if node.AsOf.Expr != nil {
 		items = append(items, node.AsOf.docRow(p))
@@ -1782,7 +1812,11 @@ func (node *Restore) doc(p *PrettyCfg) pretty.Doc {
 
 	items = append(items, p.row("RESTORE", pretty.Nil))
 	items = append(items, node.Targets.docRow(p))
-	items = append(items, p.row("FROM", p.Doc(&node.From)))
+	from := make([]pretty.Doc, len(node.From))
+	for i := range node.From {
+		from[i] = p.Doc(&node.From[i])
+	}
+	items = append(items, p.row("FROM", p.commaSeparated(from...)))
 
 	if node.AsOf.Expr != nil {
 		items = append(items, node.AsOf.docRow(p))

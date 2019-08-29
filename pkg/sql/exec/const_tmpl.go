@@ -23,8 +23,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/pkg/errors"
 )
 
@@ -35,28 +36,33 @@ import (
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
 
-// _TYPES_T is the template type variable for types.T. It will be replaced by
-// types.Foo for each type Foo in the types.T type.
-const _TYPES_T = types.Unhandled
+// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
+// coltypes.Foo for each type Foo in the coltypes.T type.
+const _TYPES_T = coltypes.Unhandled
 
 // _GOTYPE is the template Go type variable for this operator. It will be
-// replaced by the Go type equivalent for each type in types.T, for example
-// int64 for types.Int64.
+// replaced by the Go type equivalent for each type in coltypes.T, for example
+// int64 for coltypes.Int64.
 type _GOTYPE interface{}
 
 // */}}
 
+// Use execgen package to remove unused import warning.
+var _ interface{} = execgen.UNSAFEGET
+
 // NewConstOp creates a new operator that produces a constant value constVal of
 // type t at index outputIdx.
-func NewConstOp(input Operator, t types.T, constVal interface{}, outputIdx int) (Operator, error) {
+func NewConstOp(
+	input Operator, t coltypes.T, constVal interface{}, outputIdx int,
+) (Operator, error) {
 	switch t {
 	// {{range .}}
 	case _TYPES_T:
 		return &const_TYPEOp{
-			input:     input,
-			outputIdx: outputIdx,
-			typ:       t,
-			constVal:  constVal.(_GOTYPE),
+			OneInputNode: NewOneInputNode(input),
+			outputIdx:    outputIdx,
+			typ:          t,
+			constVal:     constVal.(_GOTYPE),
 		}, nil
 	// {{end}}
 	default:
@@ -67,9 +73,9 @@ func NewConstOp(input Operator, t types.T, constVal interface{}, outputIdx int) 
 // {{range .}}
 
 type const_TYPEOp struct {
-	input Operator
+	OneInputNode
 
-	typ       types.T
+	typ       coltypes.T
 	outputIdx int
 	constVal  _GOTYPE
 }
@@ -80,15 +86,22 @@ func (c const_TYPEOp) Init() {
 
 func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
-	if batch.Length() == 0 {
-		return batch
-	}
-
+	n := batch.Length()
 	if batch.Width() == c.outputIdx {
 		batch.AppendCol(c.typ)
-		col := batch.ColVec(c.outputIdx)._TemplateType()
-		for i := range col {
-			col[i] = c.constVal
+	}
+	if n == 0 {
+		return batch
+	}
+	col := batch.ColVec(c.outputIdx)._TemplateType()
+	if sel := batch.Selection(); sel != nil {
+		for _, i := range sel[:n] {
+			execgen.SET(col, int(i), c.constVal)
+		}
+	} else {
+		col = execgen.SLICE(col, 0, int(n))
+		for execgen.RANGE(i, col) {
+			execgen.SET(col, i, c.constVal)
 		}
 	}
 	return batch
@@ -100,13 +113,13 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 // value at index outputIdx.
 func NewConstNullOp(input Operator, outputIdx int) Operator {
 	return &constNullOp{
-		input:     input,
-		outputIdx: outputIdx,
+		OneInputNode: NewOneInputNode(input),
+		outputIdx:    outputIdx,
 	}
 }
 
 type constNullOp struct {
-	input     Operator
+	OneInputNode
 	outputIdx int
 }
 
@@ -116,14 +129,22 @@ func (c constNullOp) Init() {
 
 func (c constNullOp) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
-	if batch.Length() == 0 {
+	n := batch.Length()
+	if n == 0 {
 		return batch
 	}
 
 	if batch.Width() == c.outputIdx {
-		batch.AppendCol(types.Int8)
-		col := batch.ColVec(c.outputIdx)
-		col.Nulls().SetNulls()
+		batch.AppendCol(coltypes.Int8)
+	}
+	col := batch.ColVec(c.outputIdx)
+	nulls := col.Nulls()
+	if sel := batch.Selection(); sel != nil {
+		for _, i := range sel[:n] {
+			nulls.SetNull(i)
+		}
+	} else {
+		nulls.SetNulls()
 	}
 	return batch
 }

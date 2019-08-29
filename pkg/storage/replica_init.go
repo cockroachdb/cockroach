@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/split"
@@ -148,6 +149,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 		replicaID = repDesc.ReplicaID
 	}
 	r.rangeStr.store(replicaID, r.mu.state.Desc)
+	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey))
 	if err := r.setReplicaIDRaftMuLockedMuLocked(replicaID); err != nil {
 		return err
 	}
@@ -321,5 +323,6 @@ func (r *Replica) setDesc(ctx context.Context, desc *roachpb.RangeDescriptor) {
 	}
 
 	r.rangeStr.store(r.mu.replicaID, desc)
+	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey))
 	r.mu.state.Desc = desc
 }

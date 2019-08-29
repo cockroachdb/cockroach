@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 var (
@@ -933,8 +935,12 @@ func (t *Transaction) Restart(
 	// - the conflicting transaction's upgradePriority
 	t.UpgradePriority(MakePriority(userPriority))
 	t.UpgradePriority(upgradePriority)
-	t.WriteTooOld = false
+	// Reset all epoch-scoped state.
 	t.Sequence = 0
+	t.WriteTooOld = false
+	t.OrigTimestampWasObserved = false
+	t.IntentSpans = nil
+	t.InFlightWrites = nil
 }
 
 // BumpEpoch increments the transaction's epoch, allowing for an in-place
@@ -977,30 +983,68 @@ func (t *Transaction) Update(o *Transaction) {
 	if t.ID == (uuid.UUID{}) {
 		*t = *o
 		return
+	} else if t.ID != o.ID {
+		log.Fatalf(context.Background(), "updating txn %v with different txn %v", t, o)
+		return
 	}
 	if len(t.Key) == 0 {
 		t.Key = o.Key
 	}
-	if !t.Status.IsFinalized() {
-		if (t.Epoch < o.Epoch) || (t.Epoch == o.Epoch && o.Status != PENDING) {
+
+	// Update epoch-scoped state, depending on the two transactions' epochs.
+	if t.Epoch < o.Epoch {
+		// Replace all epoch-scoped state.
+		t.Epoch = o.Epoch
+		t.Status = o.Status
+		t.WriteTooOld = o.WriteTooOld
+		t.OrigTimestampWasObserved = o.OrigTimestampWasObserved
+		t.Sequence = o.Sequence
+		t.IntentSpans = o.IntentSpans
+		t.InFlightWrites = o.InFlightWrites
+	} else if t.Epoch == o.Epoch {
+		// Forward all epoch-scoped state.
+		switch t.Status {
+		case PENDING:
 			t.Status = o.Status
+		case STAGING:
+			if o.Status != PENDING {
+				t.Status = o.Status
+			}
+		case ABORTED:
+			if o.Status == COMMITTED {
+				log.Warningf(context.Background(), "updating ABORTED txn %v with COMMITTED txn %v", t, o)
+			}
+		case COMMITTED:
+			// Nothing to do.
+		}
+
+		// If the refreshed timestamp move forward, overwrite
+		// WriteTooOld, otherwise the flags are cumulative.
+		if t.RefreshedTimestamp.Less(o.RefreshedTimestamp) {
+			t.WriteTooOld = o.WriteTooOld
+			t.OrigTimestampWasObserved = o.OrigTimestampWasObserved
+		} else {
+			t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
+			t.OrigTimestampWasObserved = t.OrigTimestampWasObserved || o.OrigTimestampWasObserved
+		}
+
+		if t.Sequence < o.Sequence {
+			t.Sequence = o.Sequence
+		}
+		if len(o.IntentSpans) > 0 {
+			t.IntentSpans = o.IntentSpans
+		}
+		if len(o.InFlightWrites) > 0 {
+			t.InFlightWrites = o.InFlightWrites
+		}
+	} else /* t.Epoch > o.Epoch */ {
+		// Ignore epoch-specific state from previous epoch.
+		if o.Status == COMMITTED {
+			log.Warningf(context.Background(), "updating txn %v with COMMITTED txn at earlier epoch %v", t, o)
 		}
 	}
 
-	// If the epoch or refreshed timestamp move forward, overwrite
-	// WriteTooOld, otherwise the flags are cumulative.
-	if t.Epoch < o.Epoch || t.RefreshedTimestamp.Less(o.RefreshedTimestamp) {
-		t.WriteTooOld = o.WriteTooOld
-		t.OrigTimestampWasObserved = o.OrigTimestampWasObserved
-	} else {
-		t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
-		t.OrigTimestampWasObserved = t.OrigTimestampWasObserved || o.OrigTimestampWasObserved
-	}
-
-	if t.Epoch < o.Epoch {
-		t.Epoch = o.Epoch
-	}
-
+	// Forward each of the transaction timestamps.
 	t.Timestamp.Forward(o.Timestamp)
 	t.LastHeartbeat.Forward(o.LastHeartbeat)
 	t.OrigTimestamp.Forward(o.OrigTimestamp)
@@ -1025,17 +1069,9 @@ func (t *Transaction) Update(o *Transaction) {
 	for _, v := range o.ObservedTimestamps {
 		t.UpdateObservedTimestamp(v.NodeID, v.Timestamp)
 	}
-	t.UpgradePriority(o.Priority)
 
-	if t.Sequence < o.Sequence {
-		t.Sequence = o.Sequence
-	}
-	if len(o.IntentSpans) > 0 {
-		t.IntentSpans = o.IntentSpans
-	}
-	if len(o.InFlightWrites) > 0 {
-		t.InFlightWrites = o.InFlightWrites
-	}
+	// Ratchet the transaction priority.
+	t.UpgradePriority(o.Priority)
 }
 
 // UpgradePriority sets transaction priority to the maximum of current
@@ -1298,13 +1334,241 @@ func writeTooOldRetryTimestamp(txn *Transaction, err *WriteTooOldError) hlc.Time
 	return err.ActualTimestamp
 }
 
+// Replicas returns all of the replicas present in the descriptor after this
+// trigger applies.
+func (crt ChangeReplicasTrigger) Replicas() []ReplicaDescriptor {
+	if crt.Desc != nil {
+		return crt.Desc.Replicas().All()
+	}
+	return crt.DeprecatedUpdatedReplicas
+}
+
+// ConfChange returns the configuration change described by the trigger.
+func (crt ChangeReplicasTrigger) ConfChange(encodedCtx []byte) (raftpb.ConfChangeI, error) {
+	return confChangeImpl(crt, encodedCtx)
+}
+
+func (crt ChangeReplicasTrigger) alwaysV2() bool {
+	// NB: we can return true in 20.1, but we don't win anything unless
+	// we are actively trying to migrate out of V1 membership changes, which
+	// could modestly simplify small areas of our codebase.
+	return false
+}
+
+// confChangeImpl is the implementation of (ChangeReplicasTrigger).ConfChange
+// narrowed down to the inputs it actually needs for better testability.
+func confChangeImpl(
+	crt interface {
+		Added() []ReplicaDescriptor
+		Removed() []ReplicaDescriptor
+		Replicas() []ReplicaDescriptor
+		alwaysV2() bool
+	},
+	encodedCtx []byte,
+) (raftpb.ConfChangeI, error) {
+	added, removed, replicas := crt.Added(), crt.Removed(), crt.Replicas()
+
+	var sl []raftpb.ConfChangeSingle
+
+	checkExists := func(in ReplicaDescriptor) error {
+		for _, rDesc := range replicas {
+			if rDesc.ReplicaID == in.ReplicaID {
+				if a, b := in.GetType(), rDesc.GetType(); a != b {
+					return errors.Errorf("have %s, but descriptor has %s", in, rDesc)
+				}
+				return nil
+			}
+		}
+		return errors.Errorf("%s missing from descriptors %v", in, replicas)
+	}
+	checkNotExists := func(in ReplicaDescriptor) error {
+		for _, rDesc := range replicas {
+			if rDesc.ReplicaID == in.ReplicaID {
+				return errors.Errorf("%s must no longer be present in descriptor", in)
+			}
+		}
+		return nil
+	}
+
+	for _, rDesc := range added {
+		// The incoming descriptor must also be present in the set of all
+		// replicas, which is ultimately the authoritative one because that's
+		// what's written to the KV store.
+		if err := checkExists(rDesc); err != nil {
+			return nil, err
+		}
+
+		var changeType raftpb.ConfChangeType
+		switch rDesc.GetType() {
+		case VOTER_FULL:
+			// We're adding a new voter.
+			changeType = raftpb.ConfChangeAddNode
+		case VOTER_INCOMING:
+			// We're adding a voter, but will transition into a joint config
+			// first.
+			changeType = raftpb.ConfChangeAddNode
+		case LEARNER:
+			// We're adding a new learner. Note that we're guaranteed by
+			// virtue of the upstream ChangeReplicas txn that this learner
+			// is not currently a voter. If we wanted to support that (i.e.
+			// demotions) we'd need to introduce a new
+			// replica type VOTER_DEMOTING for that purpose.
+			changeType = raftpb.ConfChangeAddLearnerNode
+		default:
+			return nil, errors.Errorf("can't add replica in state %v", rDesc.GetType())
+		}
+		sl = append(sl, raftpb.ConfChangeSingle{
+			Type:   changeType,
+			NodeID: uint64(rDesc.ReplicaID),
+		})
+	}
+
+	for _, rDesc := range removed {
+		switch rDesc.GetType() {
+		case VOTER_OUTGOING:
+			// If a voter is removed through joint consensus, it will
+			// be turned into an outgoing voter first.
+			if err := checkExists(rDesc); err != nil {
+				return nil, err
+			}
+		case VOTER_FULL, LEARNER:
+			// A learner or full voter can't be in the desc after.
+			if err := checkNotExists(rDesc); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, errors.Errorf("can't remove replica in state %v", rDesc.GetType())
+		}
+		sl = append(sl, raftpb.ConfChangeSingle{
+			Type:   raftpb.ConfChangeRemoveNode,
+			NodeID: uint64(rDesc.ReplicaID),
+		})
+	}
+
+	// Check whether we're entering a joint state. This is the case precisely when
+	// the resulting descriptors tells us that this is the case. Note that we've
+	// made sure above that all of the additions/removals are in tune with that
+	// descriptor already.
+	var enteringJoint bool
+	for _, rDesc := range replicas {
+		switch rDesc.GetType() {
+		case VOTER_INCOMING, VOTER_OUTGOING:
+			enteringJoint = true
+		default:
+		}
+	}
+	wantLeaveJoint := len(added)+len(removed) == 0
+	if !enteringJoint {
+		if len(added)+len(removed) > 1 {
+			return nil, errors.Errorf("change requires joint consensus")
+		}
+	} else if wantLeaveJoint {
+		return nil, errors.Errorf("descriptor enters joint state, but trigger is requesting to leave one")
+	}
+
+	var cc raftpb.ConfChangeI
+
+	if enteringJoint || crt.alwaysV2() {
+		// V2 membership changes, which allow atomic replication changes. We
+		// track the joint state in the range descriptor and thus we need to be
+		// in charge of when to leave the joint state.
+		transition := raftpb.ConfChangeTransitionJointExplicit
+		if !enteringJoint {
+			// If we're using V2 just to avoid V1 (and not because we actually
+			// have a change that requires V2), then use an auto transition
+			// which skips the joint state. This is necessary: our descriptor
+			// says we're not supposed to go through one.
+			transition = raftpb.ConfChangeTransitionAuto
+		}
+		cc = raftpb.ConfChangeV2{
+			Transition: transition,
+			Changes:    sl,
+			Context:    encodedCtx,
+		}
+	} else if wantLeaveJoint {
+		// Transitioning out of a joint config.
+		cc = raftpb.ConfChangeV2{
+			Context: encodedCtx,
+		}
+	} else {
+		// Legacy path with exactly one change.
+		cc = raftpb.ConfChange{
+			Type:    sl[0].Type,
+			NodeID:  sl[0].NodeID,
+			Context: encodedCtx,
+		}
+	}
+	return cc, nil
+}
+
 var _ fmt.Stringer = &ChangeReplicasTrigger{}
 
 func (crt ChangeReplicasTrigger) String() string {
+	var nextReplicaID ReplicaID
+	var afterReplicas []ReplicaDescriptor
+	added, removed := crt.Added(), crt.Removed()
 	if crt.Desc != nil {
-		return fmt.Sprintf("%s(%s): updated=%s next=%d", crt.ChangeType, crt.Replica, crt.Desc.Replicas(), crt.Desc.NextReplicaID)
+		nextReplicaID = crt.Desc.NextReplicaID
+		// NB: we don't want to mutate InternalReplicas, so we don't call
+		// .Replicas()
+		//
+		// TODO(tbg): revisit after #39489 is merged.
+		afterReplicas = crt.Desc.InternalReplicas
+	} else {
+		nextReplicaID = crt.DeprecatedNextReplicaID
+		afterReplicas = crt.DeprecatedUpdatedReplicas
 	}
-	return fmt.Sprintf("%s(%s): updated=%s next=%d", crt.ChangeType, crt.Replica, crt.DeprecatedUpdatedReplicas, crt.DeprecatedNextReplicaID)
+	var chgS strings.Builder
+	cc, err := crt.ConfChange(nil)
+	if err != nil {
+		fmt.Fprintf(&chgS, "<malformed ChangeReplicasTrigger: %s>", err)
+	} else {
+		ccv2 := cc.AsV2()
+		if ccv2.LeaveJoint() {
+			// NB: this isn't missing a trailing space.
+			//
+			// TODO(tbg): could list the replicas that will actually leave the
+			// voter set.
+			fmt.Fprintf(&chgS, "LEAVE_JOINT")
+		}
+		if _, ok := ccv2.EnterJoint(); ok {
+			fmt.Fprintf(&chgS, "ENTER_JOINT ")
+		}
+	}
+	if len(added) > 0 {
+		fmt.Fprintf(&chgS, "%s%s", ADD_REPLICA, added)
+	}
+	if len(removed) > 0 {
+		if len(added) > 0 {
+			chgS.WriteString(", ")
+		}
+		fmt.Fprintf(&chgS, "%s%s", REMOVE_REPLICA, removed)
+	}
+	fmt.Fprintf(&chgS, ": after=%s next=%d", afterReplicas, nextReplicaID)
+	return chgS.String()
+}
+
+func (crt ChangeReplicasTrigger) legacy() (ReplicaDescriptor, bool) {
+	if len(crt.InternalAddedReplicas)+len(crt.InternalRemovedReplicas) == 0 && crt.DeprecatedReplica.ReplicaID != 0 {
+		return crt.DeprecatedReplica, true
+	}
+	return ReplicaDescriptor{}, false
+}
+
+// Added returns the replicas added by this change (if there are any).
+func (crt ChangeReplicasTrigger) Added() []ReplicaDescriptor {
+	if rDesc, ok := crt.legacy(); ok && crt.DeprecatedChangeType == ADD_REPLICA {
+		return []ReplicaDescriptor{rDesc}
+	}
+	return crt.InternalAddedReplicas
+}
+
+// Removed returns the replicas removed by this change (if there are any).
+func (crt ChangeReplicasTrigger) Removed() []ReplicaDescriptor {
+	if rDesc, ok := crt.legacy(); ok && crt.DeprecatedChangeType == REMOVE_REPLICA {
+		return []ReplicaDescriptor{rDesc}
+	}
+	return crt.InternalRemovedReplicas
 }
 
 // LeaseSequence is a custom type for a lease sequence number.

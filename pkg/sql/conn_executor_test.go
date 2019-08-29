@@ -94,7 +94,7 @@ func TestSessionFinishRollsBackTxn(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 	{
 		pgURL, cleanup := sqlutils.PGUrl(
-			t, s.ServingAddr(), "TestSessionFinishRollsBackTxn", url.User(security.RootUser))
+			t, s.ServingSQLAddr(), "TestSessionFinishRollsBackTxn", url.User(security.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -119,7 +119,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		t.Run(state, func(t *testing.T) {
 			// Create a low-level lib/pq connection so we can close it at will.
 			pgURL, cleanupDB := sqlutils.PGUrl(
-				t, s.ServingAddr(), state, url.User(security.RootUser))
+				t, s.ServingSQLAddr(), state, url.User(security.RootUser))
 			defer cleanupDB()
 			c, err := pq.Open(pgURL.String())
 			if err != nil {
@@ -361,7 +361,7 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 	pgURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(security.RootUser),
-		Host:     s.ServingAddr(),
+		Host:     s.ServingSQLAddr(),
 		RawQuery: "sslmode=disable&application_name=mytest",
 	}
 	rawSQL, err := gosql.Open("postgres", pgURL.String())

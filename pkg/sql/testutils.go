@@ -99,7 +99,7 @@ func (dsp *DistSQLPlanner) Exec(
 	}
 	p := localPlanner.(*planner)
 	p.stmt = &Statement{Statement: stmt}
-	if err := p.makePlan(ctx); err != nil {
+	if err := p.makeOptimizerPlan(ctx); err != nil {
 		return err
 	}
 	rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {

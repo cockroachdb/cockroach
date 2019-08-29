@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/apply"
 	"github.com/cockroachdb/cockroach/pkg/storage/compactor"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -33,8 +34,8 @@ func funcName(f interface{}) string {
 // marshaled downstream of raft. It returns a function that removes the
 // instrumentation and returns the list of downstream-of-raft protos.
 func TrackRaftProtos() func() []reflect.Type {
-	// Grab the name of the function that roots all raft operations.
-	stageRaftFunc := funcName((*Replica).stageRaftCommand)
+	// Grab the name of the function that roots all raft application.
+	applyRaftEntryFunc := funcName((*apply.Task).ApplyCommittedEntries)
 	// We only need to track protos that could cause replica divergence
 	// by being written to disk downstream of raft.
 	whitelist := []string{
@@ -104,7 +105,7 @@ func TrackRaftProtos() func() []reflect.Type {
 				break
 			}
 
-			if strings.Contains(f.Function, stageRaftFunc) {
+			if strings.Contains(f.Function, applyRaftEntryFunc) {
 				belowRaftProtos.Lock()
 				belowRaftProtos.inner[t] = struct{}{}
 				belowRaftProtos.Unlock()

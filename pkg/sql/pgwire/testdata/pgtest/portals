@@ -290,3 +290,55 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"here"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute a portal partially and close it.
+
+send
+Query {"String": "BEGIN"}
+Parse {"Query": "SELECT * FROM generate_series(1, 2)"}
+Bind
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Close the empty portal then try to execute it. 80 = 'P'
+send
+Close {"ObjectType": 80}
+Execute
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CloseComplete"}
+{"Type":"ErrorResponse","Code":"34000"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Query {"String": "ROLLBACK"}
+Query {"String": "SELECT 'here'"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"here"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

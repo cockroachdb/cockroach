@@ -42,7 +42,15 @@ var _ Processor = &indexBackfiller{}
 var _ chunkBackfiller = &indexBackfiller{}
 
 var backfillerBufferSize = settings.RegisterByteSizeSetting(
-	"schemachanger.backfiller.buffer_size", "amount to buffer in memory during backfills", 196<<20,
+	"schemachanger.backfiller.buffer_size", "the initial size of the BulkAdder buffer handling index backfills", 32<<20,
+)
+
+var backfillerMaxBufferSize = settings.RegisterByteSizeSetting(
+	"schemachanger.backfiller.max_buffer_size", "the maximum size of the BulkAdder buffer handling index backfills", 512<<20,
+)
+
+var backfillerBufferIncrementSize = settings.RegisterByteSizeSetting(
+	"schemachanger.backfiller.buffer_increment", "the size by which the BulkAdder attempts to grow its buffer before flushing", 32<<20,
 )
 
 var backillerSSTSize = settings.RegisterByteSizeSetting(
@@ -77,14 +85,22 @@ func newIndexBackfiller(
 }
 
 func (ib *indexBackfiller) prepare(ctx context.Context) error {
-	bufferSize := backfillerBufferSize.Get(&ib.flowCtx.Settings.SV)
-	sstSize := backillerSSTSize.Get(&ib.flowCtx.Settings.SV)
-	adder, err := ib.flowCtx.BulkAdder(ctx, ib.flowCtx.ClientDB, bufferSize, sstSize, ib.spec.ReadAsOf)
+	minBufferSize := backfillerBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
+	maxBufferSize := backfillerMaxBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
+	sstSize := backillerSSTSize.Get(&ib.flowCtx.Cfg.Settings.SV)
+	stepSize := backfillerBufferIncrementSize.Get(&ib.flowCtx.Cfg.Settings.SV)
+	opts := storagebase.BulkAdderOptions{
+		SSTSize:        uint64(sstSize),
+		MinBufferSize:  uint64(minBufferSize),
+		MaxBufferSize:  uint64(maxBufferSize),
+		StepBufferSize: uint64(stepSize),
+		SkipDuplicates: ib.ContainsInvertedIndex(),
+	}
+	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, ib.spec.ReadAsOf, opts)
 	if err != nil {
 		return err
 	}
 	ib.adder = adder
-	ib.adder.SkipLocalDuplicates(ib.ContainsInvertedIndex())
 	return nil
 }
 
@@ -125,13 +141,14 @@ func (ib *indexBackfiller) runChunk(
 	chunkSize int64,
 	readAsOf hlc.Timestamp,
 ) (roachpb.Key, error) {
-	if ib.flowCtx.testingKnobs.RunBeforeBackfillChunk != nil {
-		if err := ib.flowCtx.testingKnobs.RunBeforeBackfillChunk(sp); err != nil {
+	knobs := &ib.flowCtx.Cfg.TestingKnobs
+	if knobs.RunBeforeBackfillChunk != nil {
+		if err := knobs.RunBeforeBackfillChunk(sp); err != nil {
 			return nil, err
 		}
 	}
-	if ib.flowCtx.testingKnobs.RunAfterBackfillChunk != nil {
-		defer ib.flowCtx.testingKnobs.RunAfterBackfillChunk()
+	if knobs.RunAfterBackfillChunk != nil {
+		defer knobs.RunAfterBackfillChunk()
 	}
 
 	ctx, traceSpan := tracing.ChildSpan(tctx, "chunk")
@@ -141,7 +158,7 @@ func (ib *indexBackfiller) runChunk(
 
 	start := timeutil.Now()
 	var entries []sqlbase.IndexEntry
-	if err := ib.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := ib.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetFixedTimestamp(ctx, readAsOf)
 
 		// TODO(knz): do KV tracing in DistSQL processors.
@@ -159,7 +176,7 @@ func (ib *indexBackfiller) runChunk(
 			return nil, ib.wrapDupError(ctx, err)
 		}
 	}
-	if ib.flowCtx.testingKnobs.RunAfterBackfillChunk != nil {
+	if knobs.RunAfterBackfillChunk != nil {
 		if err := ib.adder.Flush(ctx); err != nil {
 			return nil, ib.wrapDupError(ctx, err)
 		}

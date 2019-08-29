@@ -57,6 +57,11 @@ func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
 		return errTableDropped
 	case tableDesc.Adding():
 		return errTableAdding
+	case tableDesc.State == sqlbase.TableDescriptor_OFFLINE:
+		if tableDesc.OfflineReason != "" {
+			return errors.Errorf("table %q is offline: %s", tableDesc.Name, tableDesc.OfflineReason)
+		}
+		return errors.Errorf("table %q is offline", tableDesc.Name)
 	case tableDesc.State != sqlbase.TableDescriptor_PUBLIC:
 		return errors.Errorf("table in unknown state: %s", tableDesc.State.String())
 	}
@@ -632,6 +637,16 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 ) (sqlbase.MutationID, error) {
 	mutationID := tableDesc.ClusterVersion.NextMutationID
 
+	// If the table being schema changed was created in the same txn, we do not
+	// want to update/create a job as we expect the schema change to be executed
+	// immediately (not via the schema changer). For tables created in the same
+	// txn the next mutation ID will not have been allocated and the mutationID
+	// will be an invalid ID. This is fine because the mutation will be processed
+	// immediately.
+	if tableDesc.IsNewTable() {
+		return mutationID, nil
+	}
+
 	var job *jobs.Job
 	var spanList []jobspb.ResumeSpanList
 	if len(tableDesc.MutationJobs) > len(tableDesc.ClusterVersion.MutationJobs) {
@@ -821,13 +836,8 @@ func (p *planner) writeTableDescToBatch(
 	}
 
 	if tableDesc.IsNewTable() {
-		if err := runSchemaChangesInTxn(ctx,
-			p.txn,
-			p.Tables(),
-			p.execCfg,
-			p.EvalContext(),
-			tableDesc,
-			p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		if err := runSchemaChangesInTxn(
+			ctx, p, tableDesc, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 		); err != nil {
 			return err
 		}
@@ -841,7 +851,7 @@ func (p *planner) writeTableDescToBatch(
 		p.queueSchemaChange(tableDesc.TableDesc(), mutationID)
 	}
 
-	if err := tableDesc.ValidateTable(p.extendedEvalCtx.Settings); err != nil {
+	if err := tableDesc.ValidateTable(); err != nil {
 		return errors.AssertionFailedf("table descriptor is not valid: %s\n%v", err, tableDesc)
 	}
 
@@ -849,7 +859,5 @@ func (p *planner) writeTableDescToBatch(
 		return err
 	}
 
-	writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), p.execCfg.Settings,
-		b, tableDesc.GetID(), tableDesc)
-	return nil
+	return writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), p.execCfg.Settings, b, tableDesc.GetID(), tableDesc.TableDesc())
 }

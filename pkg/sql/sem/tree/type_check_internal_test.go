@@ -109,12 +109,12 @@ func exprs(fns ...copyableExpr) []copyableExpr {
 }
 func intConst(s string) copyableExpr {
 	return func() tree.Expr {
-		return &tree.NumVal{Value: constant.MakeFromLiteral(s, token.INT, 0), OrigString: s}
+		return tree.NewNumVal(constant.MakeFromLiteral(s, token.INT, 0), s, false /* negative */)
 	}
 }
 func decConst(s string) copyableExpr {
 	return func() tree.Expr {
-		return &tree.NumVal{Value: constant.MakeFromLiteral(s, token.FLOAT, 0), OrigString: s}
+		return tree.NewNumVal(constant.MakeFromLiteral(s, token.FLOAT, 0), s, false /* negative */)
 	}
 }
 func dint(i tree.DInt) copyableExpr {

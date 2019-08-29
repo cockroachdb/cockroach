@@ -65,7 +65,7 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		}
 	}
 
-	if err := p.RequireSuperUser(ctx, "CREATE DATABASE"); err != nil {
+	if err := p.RequireAdminRole(ctx, "CREATE DATABASE"); err != nil {
 		return nil, err
 	}
 

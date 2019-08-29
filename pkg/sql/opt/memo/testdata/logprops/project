@@ -347,6 +347,7 @@ SELECT a, b FROM ab WHERE (a, b) IN ((1, 1), (2, 2))
 ----
 select
  ├── columns: a:1(int!null) b:2(int!null)
+ ├── cardinality: [0 - 2]
  ├── key: (1,2)
  ├── interesting orderings: (+1,+2)
  ├── scan ab

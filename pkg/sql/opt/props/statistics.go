@@ -42,6 +42,12 @@ import (
 // See memo/statistics_builder.go for more information about how statistics are
 // calculated.
 type Statistics struct {
+	// Available indicates whether the underlying table statistics for this
+	// expression were available. If true, RowCount contains a real estimate.
+	// If false, RowCount does not represent reality, and should only be used
+	// for relative cost comparison.
+	Available bool
+
 	// RowCount is the estimated number of rows returned by the expression.
 	// Note that - especially when there are no stats available - the scaling of
 	// the row counts can be unpredictable; thus, a row count of 0.001 should be
@@ -65,6 +71,7 @@ func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 	if relProps.Cardinality.IsZero() {
 		s.RowCount = 0
 		s.Selectivity = 0
+		s.Available = true
 		return true
 	}
 	s.Selectivity = 1

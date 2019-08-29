@@ -64,7 +64,7 @@ func (x *Constraint_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (Constraint_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_zone_93acc96d6078c6b2, []int{1, 0}
+	return fileDescriptor_zone_db9e8f274931475b, []int{1, 0}
 }
 
 // GCPolicy defines garbage collection policies which apply to MVCC
@@ -84,7 +84,7 @@ func (m *GCPolicy) Reset()         { *m = GCPolicy{} }
 func (m *GCPolicy) String() string { return proto.CompactTextString(m) }
 func (*GCPolicy) ProtoMessage()    {}
 func (*GCPolicy) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_93acc96d6078c6b2, []int{0}
+	return fileDescriptor_zone_db9e8f274931475b, []int{0}
 }
 func (m *GCPolicy) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -121,7 +121,7 @@ type Constraint struct {
 func (m *Constraint) Reset()      { *m = Constraint{} }
 func (*Constraint) ProtoMessage() {}
 func (*Constraint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_93acc96d6078c6b2, []int{1}
+	return fileDescriptor_zone_db9e8f274931475b, []int{1}
 }
 func (m *Constraint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -161,7 +161,7 @@ func (m *Constraints) Reset()         { *m = Constraints{} }
 func (m *Constraints) String() string { return proto.CompactTextString(m) }
 func (*Constraints) ProtoMessage()    {}
 func (*Constraints) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_93acc96d6078c6b2, []int{2}
+	return fileDescriptor_zone_db9e8f274931475b, []int{2}
 }
 func (m *Constraints) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -196,7 +196,7 @@ func (m *LeasePreference) Reset()         { *m = LeasePreference{} }
 func (m *LeasePreference) String() string { return proto.CompactTextString(m) }
 func (*LeasePreference) ProtoMessage()    {}
 func (*LeasePreference) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_93acc96d6078c6b2, []int{3}
+	return fileDescriptor_zone_db9e8f274931475b, []int{3}
 }
 func (m *LeasePreference) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -274,7 +274,7 @@ func (m *ZoneConfig) Reset()         { *m = ZoneConfig{} }
 func (m *ZoneConfig) String() string { return proto.CompactTextString(m) }
 func (*ZoneConfig) ProtoMessage()    {}
 func (*ZoneConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_93acc96d6078c6b2, []int{4}
+	return fileDescriptor_zone_db9e8f274931475b, []int{4}
 }
 func (m *ZoneConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -300,9 +300,8 @@ func (m *ZoneConfig) XXX_DiscardUnknown() {
 var xxx_messageInfo_ZoneConfig proto.InternalMessageInfo
 
 type Subzone struct {
-	// IndexID is the ID of the SQL table index that the subzone represents. It
-	// must always be set even though partition names are unique across all of a
-	// table's indices.
+	// IndexID is the ID of the SQL table index that the subzone represents.
+	// Always set.
 	IndexID uint32 `protobuf:"varint,1,opt,name=index_id,json=indexId" json:"index_id"`
 	// PartitionName is the partition of the SQL table index that the subzone
 	// represents. It is empty when the subzone represents the entire index.
@@ -316,7 +315,7 @@ func (m *Subzone) Reset()         { *m = Subzone{} }
 func (m *Subzone) String() string { return proto.CompactTextString(m) }
 func (*Subzone) ProtoMessage()    {}
 func (*Subzone) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_93acc96d6078c6b2, []int{5}
+	return fileDescriptor_zone_db9e8f274931475b, []int{5}
 }
 func (m *Subzone) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -362,7 +361,7 @@ func (m *SubzoneSpan) Reset()         { *m = SubzoneSpan{} }
 func (m *SubzoneSpan) String() string { return proto.CompactTextString(m) }
 func (*SubzoneSpan) ProtoMessage()    {}
 func (*SubzoneSpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_93acc96d6078c6b2, []int{6}
+	return fileDescriptor_zone_db9e8f274931475b, []int{6}
 }
 func (m *SubzoneSpan) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2380,9 +2379,9 @@ var (
 	ErrIntOverflowZone   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("config/zone.proto", fileDescriptor_zone_93acc96d6078c6b2) }
+func init() { proto.RegisterFile("config/zone.proto", fileDescriptor_zone_db9e8f274931475b) }
 
-var fileDescriptor_zone_93acc96d6078c6b2 = []byte{
+var fileDescriptor_zone_db9e8f274931475b = []byte{
 	// 851 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x54, 0xbf, 0x73, 0xe3, 0x44,
 	0x14, 0xf6, 0xda, 0x8e, 0xad, 0x7b, 0x76, 0x12, 0xdf, 0xde, 0x71, 0xf1, 0x05, 0xce, 0x32, 0x9a,

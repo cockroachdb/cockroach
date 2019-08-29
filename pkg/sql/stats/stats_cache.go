@@ -13,9 +13,7 @@ package stats
 import (
 	"context"
 	"sync"
-	"time"
 
-	"github.com/aws/aws-sdk-go/aws/awsutil"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,45 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 )
-
-// A TableStatistic object holds a statistic for a particular column or group
-// of columns. It mirrors the structure of the system.table_statistics table,
-// excluding the histogram.
-type TableStatistic struct {
-	// The ID of the table.
-	TableID sqlbase.ID
-
-	// The ID for this statistic.  It need not be globally unique,
-	// but must be unique for this table.
-	StatisticID uint64
-
-	// Optional user-defined name for the statistic.
-	Name string
-
-	// The column ID(s) for which this statistic is generated.
-	ColumnIDs []sqlbase.ColumnID
-
-	// The time at which the statistic was created.
-	CreatedAt time.Time
-
-	// The total number of rows in the table.
-	RowCount uint64
-
-	// The estimated number of distinct values of the columns in ColumnIDs.
-	DistinctCount uint64
-
-	// The number of rows that have a NULL in any of the columns in ColumnIDs.
-	NullCount uint64
-
-	// Histogram (if available)
-	// TODO(radu): perhaps store the histogram in a more convenient format (Datums
-	// instead of bytes).
-	Histogram *HistogramData
-}
-
-func (s TableStatistic) String() string {
-	return awsutil.Prettify(s)
-}
 
 // A TableStatisticsCache contains two underlying LRU caches:
 // (1) A cache of []*TableStatistic objects, keyed by table ID.

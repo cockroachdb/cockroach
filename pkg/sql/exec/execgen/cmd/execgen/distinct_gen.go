@@ -30,7 +30,8 @@ func genDistinctOps(wr io.Writer) error {
 
 	// Replace the template variables.
 	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "types.{{.LTyp}}", -1)
+	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 
@@ -39,6 +40,7 @@ func genDistinctOps(wr io.Writer) error {
 
 	innerLoopRe := regexp.MustCompile(`_CHECK_DISTINCT\(.*\)`)
 	s = innerLoopRe.ReplaceAllString(s, `{{template "checkDistinct" .}}`)
+	s = replaceManipulationFuncs(".LTyp", s)
 
 	innerLoopNullsRe := regexp.MustCompile(`_CHECK_DISTINCT_WITH_NULLS\(.*\)`)
 	s = innerLoopNullsRe.ReplaceAllString(s, `{{template "checkDistinctWithNulls" .}}`)
@@ -49,7 +51,7 @@ func genDistinctOps(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, comparisonOpToOverloads[tree.NE])
+	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.NE])
 }
 func init() {
 	registerGenerator(genDistinctOps, "distinct.eg.go")

@@ -1,0 +1,131 @@
+new-map main duplicates=false
+----
+
+batch main
+put a 1
+put b 2
+put a 3
+----
+
+iter main
+rewind
+next
+next
+----
+a:3
+b:2
+.
+
+batch main
+put d3 3
+put cd 2
+put c 1
+----
+
+iter main
+rewind
+next
+next
+next
+next
+next
+----
+a:3
+b:2
+c:1
+cd:2
+d3:3
+.
+
+iter main
+rewind
+next
+next
+rewind
+seek c
+next
+next
+next
+----
+a:3
+b:2
+c:1
+a:3
+c:1
+cd:2
+d3:3
+.
+
+close-map main
+----
+
+new-map sandbox1
+----
+
+new-map sandbox2
+----
+
+batch sandbox1
+put x 1
+put y 2
+----
+
+iter sandbox2
+seek x
+----
+.
+
+iter sandbox1
+seek x
+next
+next
+----
+x:1
+y:2
+.
+
+batch sandbox2
+put p 3
+put q 4
+----
+
+iter sandbox1
+rewind
+next
+next
+----
+x:1
+y:2
+.
+
+iter sandbox2
+rewind
+next
+next
+----
+p:3
+q:4
+.
+
+close-map sandbox1
+----
+
+raw-count
+----
+count=2
+
+iter sandbox2
+rewind
+next
+next
+----
+p:3
+q:4
+.
+
+close-map sandbox2
+----
+
+raw-count
+----
+count=0

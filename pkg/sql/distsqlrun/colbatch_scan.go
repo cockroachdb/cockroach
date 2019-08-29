@@ -13,19 +13,28 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
 )
 
+// TODO(yuzefovich): reading the data through a pair of colBatchScan and
+// materializer turns out to be more efficient than through a table reader (at
+// the moment, the exception is the case of reading very small number of rows
+// because we still pre-allocate batches of 1024 size). Once we can control the
+// initial size of pre-allocated batches (probably via a batch allocator), we
+// should get rid off table readers entirely. We will have to be careful about
+// propagating the metadata though.
+
 // colBatchScan is the exec.Operator implementation of TableReader. It reads a table
 // from kv, presenting it as coldata.Batches via the exec.Operator interface.
 type colBatchScan struct {
+	exec.ZeroInputNode
 	spans     roachpb.Spans
 	flowCtx   *FlowCtx
 	rf        *row.CFetcher
@@ -38,7 +47,11 @@ type colBatchScan struct {
 	init bool
 }
 
-var _ exec.Operator = &colBatchScan{}
+var _ exec.StaticMemoryOperator = &colBatchScan{}
+
+func (s *colBatchScan) EstimateStaticMemoryUsage() int {
+	return s.rf.EstimateStaticMemoryUsage()
+}
 
 func (s *colBatchScan) Init() {
 	s.ctx = context.Background()

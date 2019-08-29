@@ -1,4 +1,4 @@
-# LogicTest: fakedist-opt
+# LogicTest: fakedist
 
 # Tests that verify we retrieve the stats correctly. Note that we can't create
 # statistics if distsql mode is OFF.
@@ -12,7 +12,7 @@ CREATE STATISTICS u ON u FROM uv;
 CREATE STATISTICS v ON v FROM uv
 
 statement ok
-set experimental_enable_zigzag_join = false
+set enable_zigzag_join = false
 
 # Verify we scan index v which has the more selective constraint.
 query TTTTT

@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -44,7 +44,7 @@ type Processor interface {
 type ProcOutputHelper struct {
 	numInternalCols int
 	// output can be optionally passed in for use with EmitRow and
-	// emitHelper.
+	// EmitHelper.
 	// If output is nil, one can invoke ProcessRow to obtain the
 	// post-processed row directly.
 	output   RowReceiver
@@ -205,7 +205,7 @@ func (h *ProcOutputHelper) neededColumns() (colIdxs util.FastIntSet) {
 	return colIdxs
 }
 
-// emitHelper is a utility wrapper on top of ProcOutputHelper.EmitRow().
+// EmitHelper is a utility wrapper on top of ProcOutputHelper.EmitRow().
 // It takes a row to emit and, if anything happens other than the normal
 // situation where the emitting succeeds and the consumer still needs rows, both
 // the (potentially many) inputs and the output are properly closed after
@@ -227,7 +227,7 @@ func (h *ProcOutputHelper) neededColumns() (colIdxs util.FastIntSet) {
 //
 // Returns true if more rows are needed, false otherwise. If false is returned
 // both the inputs and the output have been properly closed.
-func emitHelper(
+func EmitHelper(
 	ctx context.Context,
 	output *ProcOutputHelper,
 	row sqlbase.EncDatumRow,
@@ -241,7 +241,7 @@ func emitHelper(
 	var consumerStatus ConsumerStatus
 	if meta != nil {
 		if row != nil {
-			panic("both row data and metadata in the same emitHelper call")
+			panic("both row data and metadata in the same EmitHelper call")
 		}
 		// Bypass EmitRow() and send directly to output.output.
 		foundErr := meta.Err != nil
@@ -285,7 +285,7 @@ func emitHelper(
 // rendering processing; the output has not been closed and it's the caller's
 // responsibility to push the error to the output.
 //
-// Note: check out emitHelper() for a useful wrapper.
+// Note: check out EmitHelper() for a useful wrapper.
 func (h *ProcOutputHelper) EmitRow(
 	ctx context.Context, row sqlbase.EncDatumRow,
 ) (ConsumerStatus, error) {
@@ -914,6 +914,22 @@ func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon
 	return &monitor
 }
 
+// NewLimitedMonitor is a utility function used by processors to create a new
+// limited memory monitor with the given name and start it. The returned
+// monitor must be closed. The limit is determined by settingWorkMemBytes
+// or config.TestingKnobs.MemoryLimitBytes.
+func NewLimitedMonitor(
+	ctx context.Context, parent *mon.BytesMonitor, config *ServerConfig, name string,
+) *mon.BytesMonitor {
+	limit := config.TestingKnobs.MemoryLimitBytes
+	if limit <= 0 {
+		limit = settingWorkMemBytes.Get(&config.Settings.SV)
+	}
+	limitedMon := mon.MakeMonitorInheritWithLimit(name, limit, parent)
+	limitedMon.Start(ctx, parent, mon.BoundAccount{})
+	return &limitedMon
+}
+
 // getInputStats is a utility function to check whether the given input is
 // collecting stats, returning true and the stats if so. If false is returned,
 // the input is not collecting stats.
@@ -922,7 +938,7 @@ func getInputStats(flowCtx *FlowCtx, input RowSource) (InputStats, bool) {
 	if !ok {
 		return InputStats{}, false
 	}
-	if flowCtx.testingKnobs.DeterministicStats {
+	if flowCtx.Cfg.TestingKnobs.DeterministicStats {
 		isc.InputStats.StallTime = 0
 	}
 	return isc.InputStats, true
@@ -938,7 +954,7 @@ func getFetcherInputStats(flowCtx *FlowCtx, f rowFetcher) (InputStats, bool) {
 		return InputStats{}, false
 	}
 	// Add row fetcher start scan stall time to Next() stall time.
-	if !flowCtx.testingKnobs.DeterministicStats {
+	if !flowCtx.Cfg.TestingKnobs.DeterministicStats {
 		is.StallTime += rfsc.startScanStallTime
 	}
 	return is, true
@@ -1213,16 +1229,16 @@ type LocalProcessor interface {
 }
 
 // VectorizeAlwaysException is an object that returns whether or not execution
-// should continue if experimental_vectorize=always and an error occurred when
+// should continue if vectorize=experimental_always and an error occurred when
 // setting up the vectorized flow. Consider the case in which
-// experimental_vectorize=always. The user must be able to unset this session
+// vectorize=experimental_always. The user must be able to unset this session
 // variable without getting an error.
 type VectorizeAlwaysException interface {
 	// IsException returns whether this object should be an exception to the rule
 	// that an inability to run this node in a vectorized flow should produce an
 	// error.
 	// TODO(asubiotto): This is the cleanest way I can think of to not error out
-	// on SET statements when running with experimental_vectorize = always. If
+	// on SET statements when running with vectorize = experimental_always. If
 	// there is a better way, we should get rid of this interface.
 	IsException() bool
 }

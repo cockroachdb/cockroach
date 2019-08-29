@@ -13,9 +13,10 @@ package exec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 )
 
 // NewWindowSortingPartitioner creates a new exec.Operator that orders input
@@ -25,7 +26,7 @@ import (
 // every tuple that is the first within its partition.
 func NewWindowSortingPartitioner(
 	input Operator,
-	inputTyps []types.T,
+	inputTyps []coltypes.T,
 	partitionIdxs []uint32,
 	ordCols []distsqlpb.Ordering_Column,
 	partitionColIdx int,
@@ -46,11 +47,15 @@ func NewWindowSortingPartitioner(
 		return nil, err
 	}
 
-	return &windowSortingPartitioner{input: input, distinctCol: distinctCol, partitionColIdx: partitionColIdx}, nil
+	return &windowSortingPartitioner{
+		OneInputNode:    NewOneInputNode(input),
+		distinctCol:     distinctCol,
+		partitionColIdx: partitionColIdx,
+	}, nil
 }
 
 type windowSortingPartitioner struct {
-	input Operator
+	OneInputNode
 
 	// distinctCol is the output column of the chain of ordered distinct
 	// operators in which true will indicate that a new partition begins with the
@@ -65,13 +70,13 @@ func (p *windowSortingPartitioner) Init() {
 
 func (p *windowSortingPartitioner) Next(ctx context.Context) coldata.Batch {
 	b := p.input.Next(ctx)
+	if p.partitionColIdx == b.Width() {
+		b.AppendCol(coltypes.Bool)
+	} else if p.partitionColIdx > b.Width() {
+		execerror.VectorizedInternalPanic("unexpected: column partitionColIdx is neither present nor the next to be appended")
+	}
 	if b.Length() == 0 {
 		return b
-	}
-	if p.partitionColIdx == b.Width() {
-		b.AppendCol(types.Bool)
-	} else if p.partitionColIdx > b.Width() {
-		panic("unexpected: column partitionColIdx is neither present nor the next to be appended")
 	}
 	partitionVec := b.ColVec(p.partitionColIdx).Bool()
 	sel := b.Selection()

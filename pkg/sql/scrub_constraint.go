@@ -16,11 +16,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -46,7 +44,7 @@ type sqlCheckConstraintCheckOperation struct {
 // sqlCheckConstraintCheckOperation during local execution.
 type sqlCheckConstraintCheckRun struct {
 	started  bool
-	rows     *rowcontainer.RowContainer
+	rows     []tree.Datums
 	rowIndex int
 }
 
@@ -73,43 +71,35 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 	if err != nil {
 		return err
 	}
+	// Generate a query of the form:
+	//    SELECT a,b,c FROM db.t WHERE NOT (condition)
+	// We always fully qualify the table in the query.
+	tn := *o.tableName
+	tn.ExplicitCatalog = true
+	tn.ExplicitSchema = true
 	sel := &tree.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(o.tableDesc.Columns, false /* forUpdateOrDelete */),
 		From: tree.From{
-			Tables: tree.TableExprs{o.tableName},
+			Tables: tree.TableExprs{&tn},
 		},
-		Where: &tree.Where{Expr: &tree.NotExpr{Expr: expr}},
+		Where: &tree.Where{
+			Type: tree.AstWhere,
+			Expr: &tree.NotExpr{Expr: expr},
+		},
 	}
 	if o.asOf != hlc.MaxTimestamp {
-		sel.From.AsOf = tree.AsOfClause{Expr: &tree.NumVal{Value: constant.MakeInt64(o.asOf.WallTime)}}
+		sel.From.AsOf = tree.AsOfClause{
+			Expr: tree.NewNumVal(
+				constant.MakeInt64(o.asOf.WallTime),
+				"", /* origString */
+				false /* negative */),
+		}
 	}
 
-	// This could potentially use a variant of planner.SelectClause that could
-	// use the tableDesc we have, but this is a rare operation and the benefit
-	// would be marginal compared to the work of the actual query, so the added
-	// complexity seems unjustified.
-	plan, err := params.p.SelectClause(ctx, sel, nil /* orderBy */, nil, /* limit */
-		nil /* with */, nil /* desiredTypes */, publicColumns)
+	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
+		ctx, "check-constraint", params.p.txn, tree.AsStringWithFlags(sel, tree.FmtParsable),
+	)
 	if err != nil {
-		return err
-	}
-	plan, err = params.p.optimizePlan(ctx, plan, allColumns(plan))
-	if err != nil {
-		return err
-	}
-	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
-	physPlan, err := scrubPlanDistSQL(ctx, planCtx, plan)
-	if err != nil {
-		return err
-	}
-	columns := planColumns(plan)
-	columnTypes := make([]types.T, len(columns))
-	for i := range planColumns(plan) {
-		columnTypes[i] = *columns[i].Typ
-	}
-	rows, err := scrubRunDistSQL(ctx, planCtx, params.p, physPlan, columnTypes)
-	if err != nil {
-		rows.Close(ctx)
 		return err
 	}
 
@@ -127,7 +117,7 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 
 // Next implements the checkOperation interface.
 func (o *sqlCheckConstraintCheckOperation) Next(params runParams) (tree.Datums, error) {
-	row := o.run.rows.At(o.run.rowIndex)
+	row := o.run.rows[o.run.rowIndex]
 	o.run.rowIndex++
 	timestamp := tree.MakeDTimestamp(
 		params.extendedEvalCtx.GetStmtTimestamp(), time.Nanosecond)
@@ -170,12 +160,10 @@ func (o *sqlCheckConstraintCheckOperation) Started() bool {
 
 // Done implements the checkOperation interface.
 func (o *sqlCheckConstraintCheckOperation) Done(ctx context.Context) bool {
-	return o.run.rows == nil || o.run.rowIndex >= o.run.rows.Len()
+	return o.run.rows == nil || o.run.rowIndex >= len(o.run.rows)
 }
 
 // Close implements the checkOperation interface.
 func (o *sqlCheckConstraintCheckOperation) Close(ctx context.Context) {
-	if o.run.rows != nil {
-		o.run.rows.Close(ctx)
-	}
+	o.run.rows = nil
 }

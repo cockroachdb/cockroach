@@ -156,11 +156,10 @@ func (c *CustomFuncs) CanConstructBinary(op opt.Operator, left, right opt.Scalar
 	return memo.BinaryOverloadExists(op, left.DataType(), right.DataType())
 }
 
-// ArrayType returns the type of the first output column wrapped
+// ArrayType returns the type of the given column wrapped
 // in an array.
-func (c *CustomFuncs) ArrayType(in memo.RelExpr) *types.T {
-	inCol, _ := c.OutputCols(in).Next(0)
-	inTyp := c.mem.Metadata().ColumnMeta(opt.ColumnID(inCol)).Type
+func (c *CustomFuncs) ArrayType(inCol opt.ColumnID) *types.T {
+	inTyp := c.mem.Metadata().ColumnMeta(inCol).Type
 	return types.MakeArray(inTyp)
 }
 
@@ -311,6 +310,11 @@ func (c *CustomFuncs) ColsAreEqual(left, right opt.ColSet) bool {
 // and right sets.
 func (c *CustomFuncs) ColsIntersect(left, right opt.ColSet) bool {
 	return left.Intersects(right)
+}
+
+// IntersectionCols returns the intersection of the left and right column sets.
+func (c *CustomFuncs) IntersectionCols(left, right opt.ColSet) opt.ColSet {
+	return left.Intersection(right)
 }
 
 // UnionCols returns the union of the left and right column sets.
@@ -1004,7 +1008,7 @@ func (c *CustomFuncs) addConjuncts(
 func (c *CustomFuncs) ConstructEmptyValues(cols opt.ColSet) memo.RelExpr {
 	colList := make(opt.ColList, 0, cols.Len())
 	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
-		colList = append(colList, opt.ColumnID(i))
+		colList = append(colList, i)
 	}
 	return c.f.ConstructValues(memo.EmptyScalarListExpr, &memo.ValuesPrivate{
 		Cols: colList,
@@ -1161,7 +1165,7 @@ func (c *CustomFuncs) projectColMapSide(toList, fromList opt.ColList) memo.Proje
 func (c *CustomFuncs) CanMapOnSetOp(src *memo.FiltersItem) bool {
 	filterProps := src.ScalarProps(c.mem)
 	for i, ok := filterProps.OuterCols.Next(0); ok; i, ok = filterProps.OuterCols.Next(i + 1) {
-		colType := c.f.Metadata().ColumnMeta(opt.ColumnID(i)).Type
+		colType := c.f.Metadata().ColumnMeta(i).Type
 		if sqlbase.DatumTypeHasCompositeKeyEncoding(colType) {
 			return false
 		}
@@ -1601,14 +1605,19 @@ func (c *CustomFuncs) ConvertConstArrayToTuple(scalar opt.ScalarExpr) opt.Scalar
 // CastToCollatedString returns the given string or collated string as a
 // collated string constant with the given locale.
 func (c *CustomFuncs) CastToCollatedString(str opt.ScalarExpr, locale string) opt.ScalarExpr {
+	datum := str.(*memo.ConstExpr).Value
+	if wrap, ok := datum.(*tree.DOidWrapper); ok {
+		datum = wrap.Wrapped
+	}
+
 	var value string
-	switch t := str.(*memo.ConstExpr).Value.(type) {
+	switch t := datum.(type) {
 	case *tree.DString:
 		value = string(*t)
 	case *tree.DCollatedString:
 		value = t.Contents
 	default:
-		panic(errors.AssertionFailedf("unexpected type for COLLATE: %T", log.Safe(str.(*memo.ConstExpr).Value)))
+		panic(errors.AssertionFailedf("unexpected type for COLLATE: %T", t))
 	}
 
 	return c.f.ConstructConst(tree.NewDCollatedString(value, locale, &c.f.evalCtx.CollationEnv))
@@ -1626,10 +1635,10 @@ func (c *CustomFuncs) SubqueryOrdering(sub *memo.SubqueryPrivate) physical.Order
 	return oc
 }
 
-// FirstCol returns the first column in the input expression.
-func (c *CustomFuncs) FirstCol(in memo.RelExpr) opt.ColumnID {
-	inCol, _ := c.OutputCols(in).Next(0)
-	return opt.ColumnID(inCol)
+// SubqueryRequestedCol returns the requested column from a SubqueryPrivate.
+// This function should only be used with ArrayFlatten expressions.
+func (c *CustomFuncs) SubqueryRequestedCol(sub *memo.SubqueryPrivate) opt.ColumnID {
+	return sub.RequestedCol
 }
 
 // MakeArrayAggCol returns a ColPrivate with the given type and an "array_agg" label.

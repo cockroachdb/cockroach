@@ -1,12 +1,12 @@
 # LogicTest: local
 
 statement error unimplemented
-SELECT * FROM system.users FOR UPDATE
+SELECT 'a'::INTERVAL(123)
 
 query TI colnames
 SELECT *
   FROM crdb_internal.feature_usage
- WHERE feature_name LIKE '%syntax.#6583%'
+ WHERE feature_name LIKE '%syntax.#32564%'
 ----
 feature_name                usage_count
-unimplemented.syntax.#6583  1
+unimplemented.syntax.#32564  1

@@ -255,11 +255,14 @@ func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error
 	if !ok {
 		// Not in the structured data namespace.
 		objectID = keys.RootNamespaceID
-	} else if objectID <= keys.MaxReservedDescID {
-		// For now, you can only set a zone config on the system database as a whole,
-		// not on any of its constituent tables. This is largely because all the
+	} else if objectID <= keys.MaxSystemConfigDescID || isPseudoTableID(objectID) {
+		// For now, you cannot set the zone config on gossiped tables. The only
+		// way to set a zone config on these tables is to modify config for the
+		// system database as a whole. This is largely because all the
 		// "system config" tables are colocated in the same range by default and
 		// thus couldn't be managed separately.
+		// Furthermore pseudo-table ids should be considered to be a part of the
+		// system database as they aren't real tables.
 		objectID = keys.SystemDatabaseID
 	}
 
@@ -277,6 +280,16 @@ func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error
 	}
 
 	return s.getZoneConfigForKey(objectID, keySuffix)
+}
+
+// isPseudoTableID returns true if id is in keys.PseudoTableIDs.
+func isPseudoTableID(id uint32) bool {
+	for _, pseudoTableID := range keys.PseudoTableIDs {
+		if id == pseudoTableID {
+			return true
+		}
+	}
+	return false
 }
 
 // GetZoneConfigForObject returns the combined zone config for the given object

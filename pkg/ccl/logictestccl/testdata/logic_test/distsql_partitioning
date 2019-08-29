@@ -12,6 +12,14 @@ ALTER TABLE t1 PARTITION BY LIST (x) (
     PARTITION p3 VALUES IN (3)
 )
 
+query TTTTTTTT colnames
+SHOW PARTITIONS FROM DATABASE test
+----
+database_name table_name partition_name parent_partition column_names index_name partition_value zone_config
+test t1 p1 NULL x t1@primary (1) NULL
+test t1 p2 NULL x t1@primary (2) NULL
+test t1 p3 NULL x t1@primary (3) NULL
+
 statement ok
 ALTER PARTITION p1 OF TABLE t1 CONFIGURE ZONE USING constraints='[+dc=dc1]';
 ALTER PARTITION p2 OF TABLE t1 CONFIGURE ZONE USING constraints='[+dc=dc2]';
@@ -20,24 +28,24 @@ ALTER PARTITION p3 OF TABLE t1 CONFIGURE ZONE USING constraints='[+dc=dc3]'
 query TTTTTTTT colnames
 SHOW PARTITIONS FROM DATABASE test
 ----
-database_name table_name partition_name parent_partition column_names index_name partition_value zone_constraints
-test t1 p1 NULL x t1@primary (1) [+dc=dc1]
-test t1 p2 NULL x t1@primary (2) [+dc=dc2]
-test t1 p3 NULL x t1@primary (3) [+dc=dc3]
+database_name table_name partition_name parent_partition column_names index_name partition_value zone_config
+test t1 p1 NULL x t1@primary (1) constraints = '[+dc=dc1]'
+test t1 p2 NULL x t1@primary (2) constraints = '[+dc=dc2]'
+test t1 p3 NULL x t1@primary (3) constraints = '[+dc=dc3]'
 
 query TTTTTTTT
 SHOW PARTITIONS FROM TABLE t1
 ----
-test t1 p1 NULL x t1@primary (1) [+dc=dc1]
-test t1 p2 NULL x t1@primary (2) [+dc=dc2]
-test t1 p3 NULL x t1@primary (3) [+dc=dc3]
+test t1 p1 NULL x t1@primary (1) constraints = '[+dc=dc1]'
+test t1 p2 NULL x t1@primary (2) constraints = '[+dc=dc2]'
+test t1 p3 NULL x t1@primary (3) constraints = '[+dc=dc3]'
 
 query TTTTTTTT
 SHOW PARTITIONS FROM INDEX t1@primary
 ----
-test t1 p1 NULL x t1@primary (1) [+dc=dc1]
-test t1 p2 NULL x t1@primary (2) [+dc=dc2]
-test t1 p3 NULL x t1@primary (3) [+dc=dc3]
+test t1 p1 NULL x t1@primary (1) constraints = '[+dc=dc1]'
+test t1 p2 NULL x t1@primary (2) constraints = '[+dc=dc2]'
+test t1 p3 NULL x t1@primary (3) constraints = '[+dc=dc3]'
 
 statement ok
 CREATE TABLE t2 (x INT PRIMARY KEY)
@@ -55,23 +63,23 @@ ALTER PARTITION p2 OF TABLE t2 CONFIGURE ZONE USING constraints='[+dc=dc2]'
 query TTTTTTTT
 SHOW PARTITIONS FROM DATABASE test
 ----
-test t1 p1 NULL x t1@primary     (1)       [+dc=dc1]
-test t1 p2 NULL x t1@primary     (2)       [+dc=dc2]
-test t1 p3 NULL x t1@primary     (3)       [+dc=dc3]
-test t2 p1 NULL x t2@primary  (1) TO (2)   [+dc=dc1]
-test t2 p2 NULL x t2@primary  (2) TO (3)   [+dc=dc2]
+test t1 p1 NULL x t1@primary     (1)       constraints = '[+dc=dc1]'
+test t1 p2 NULL x t1@primary     (2)       constraints = '[+dc=dc2]'
+test t1 p3 NULL x t1@primary     (3)       constraints = '[+dc=dc3]'
+test t2 p1 NULL x t2@primary  (1) TO (2)   constraints = '[+dc=dc1]'
+test t2 p2 NULL x t2@primary  (2) TO (3)   constraints = '[+dc=dc2]'
 
 query TTTTTTTT
 SHOW PARTITIONS FROM TABLE t2
 ----
-test t2 p1 NULL x t2@primary  (1) TO (2)  [+dc=dc1]
-test t2 p2 NULL x t2@primary  (2) TO (3)  [+dc=dc2]
+test t2 p1 NULL x t2@primary  (1) TO (2)  constraints = '[+dc=dc1]'
+test t2 p2 NULL x t2@primary  (2) TO (3)  constraints = '[+dc=dc2]'
 
 query TTTTTTTT
 SHOW PARTITIONS FROM INDEX t2@primary
 ----
-test t2 p1 NULL x t2@primary  (1) TO (2)  [+dc=dc1]
-test t2 p2 NULL x t2@primary  (2) TO (3)  [+dc=dc2]
+test t2 p1 NULL x t2@primary  (1) TO (2)  constraints = '[+dc=dc1]'
+test t2 p2 NULL x t2@primary  (2) TO (3)  constraints = '[+dc=dc2]'
 
 statement ok
 CREATE TABLE t3 (x INT PRIMARY KEY, y INT, INDEX sec (y))
@@ -91,22 +99,22 @@ ALTER INDEX sec PARTITION BY LIST (y) (
 statement ok
 ALTER PARTITION p1 OF TABLE t3 CONFIGURE ZONE USING constraints='[+dc=dc1]';
 ALTER PARTITION p2 OF TABLE t3 CONFIGURE ZONE USING constraints='[+dc=dc2]';
-ALTER PARTITION p3 OF TABLE t3 CONFIGURE ZONE USING constraints='[+dc=dc3]';
-ALTER PARTITION p4 OF TABLE t3 CONFIGURE ZONE USING constraints='[+dc=dc4]'
+ALTER PARTITION p3 OF INDEX t3@sec CONFIGURE ZONE USING constraints='[+dc=dc3]';
+ALTER PARTITION p4 OF INDEX t3@sec CONFIGURE ZONE USING constraints='[+dc=dc4]'
 
 query TTTTTTTT
 SHOW PARTITIONS FROM TABLE t3
 ----
-test t3 p1 NULL x t3@primary  (1)  [+dc=dc1]
-test t3 p2 NULL x t3@primary  (2)  [+dc=dc2]
-test t3 p3 NULL y t3@sec      (3)  [+dc=dc3]
-test t3 p4 NULL y t3@sec      (4)  [+dc=dc4]
+test t3 p1 NULL x t3@primary  (1)  constraints = '[+dc=dc1]'
+test t3 p2 NULL x t3@primary  (2)  constraints = '[+dc=dc2]'
+test t3 p3 NULL y t3@sec      (3)  constraints = '[+dc=dc3]'
+test t3 p4 NULL y t3@sec      (4)  constraints = '[+dc=dc4]'
 
 query TTTTTTTT
 SHOW PARTITIONS FROM INDEX t3@sec
 ----
-test t3 p3 NULL y t3@sec      (3)  [+dc=dc3]
-test t3 p4 NULL y t3@sec      (4)  [+dc=dc4]
+test t3 p3 NULL y t3@sec      (3)  constraints = '[+dc=dc3]'
+test t3 p4 NULL y t3@sec      (4)  constraints = '[+dc=dc4]'
 
 statement ok
 CREATE TABLE t4 (x INT, y INT, PRIMARY KEY (x, y))
@@ -132,8 +140,8 @@ ALTER PARTITION p2_a OF TABLE t4 CONFIGURE ZONE USING constraints='[+dc=dc5]'
 query TTTTTTTT
 SHOW PARTITIONS FROM TABLE t4
 ----
-test t4 p1   NULL x t4@primary  (1)  [+dc=dc1]
-test t4 p1_a p1   y t4@primary  (2)  [+dc=dc2]
-test t4 p1_b p1   y t4@primary  (3)  [+dc=dc3]
-test t4 p2   NULL x t4@primary  (4)  [+dc=dc4]
-test t4 p2_a p2   y t4@primary  (5)  [+dc=dc5]
+test t4 p1   NULL x t4@primary  (1)  constraints = '[+dc=dc1]'
+test t4 p1_a p1   y t4@primary  (2)  constraints = '[+dc=dc2]'
+test t4 p1_b p1   y t4@primary  (3)  constraints = '[+dc=dc3]'
+test t4 p2   NULL x t4@primary  (4)  constraints = '[+dc=dc4]'
+test t4 p2_a p2   y t4@primary  (5)  constraints = '[+dc=dc5]'

@@ -109,7 +109,7 @@ func (c *CustomFuncs) makeAggCols(
 	// Append aggregate functions wrapping a Variable reference to each column.
 	i := 0
 	for id, ok := cols.Next(0); ok; id, ok = cols.Next(id + 1) {
-		varExpr := c.f.ConstructVariable(opt.ColumnID(id))
+		varExpr := c.f.ConstructVariable(id)
 
 		var outAgg opt.ScalarExpr
 		switch aggOp {
@@ -127,7 +127,7 @@ func (c *CustomFuncs) makeAggCols(
 		}
 
 		outAggs[i].Agg = outAgg
-		outAggs[i].Col = opt.ColumnID(id)
+		outAggs[i].Col = id
 		i++
 	}
 }

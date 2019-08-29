@@ -12,7 +12,6 @@ package sqlsmith
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -86,10 +85,15 @@ var (
 		{1, makeUpdateReturning},
 	}
 	nonMutatingTableExprs = tableExprWeights{
-		{20, makeJoinExpr},
-		{10, makeSchemaTable},
+		{40, makeEquiJoinExpr},
+		{20, makeSchemaTable},
+		{10, makeJoinExpr},
 		{1, makeValuesTable},
 		{2, makeSelectTable},
+	}
+	vectorizableTableExprs = tableExprWeights{
+		{20, makeEquiJoinExpr},
+		{20, makeSchemaTable},
 	}
 	allTableExprs = append(mutatingTableExprs, nonMutatingTableExprs...)
 
@@ -216,6 +220,58 @@ func makeJoinExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs
 	return joinExpr, joinRefs, true
 }
 
+func makeEquiJoinExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+	left, leftRefs, ok := makeTableExpr(s, refs, true)
+	if !ok {
+		return nil, nil, false
+	}
+	right, rightRefs, ok := makeTableExpr(s, refs, true)
+	if !ok {
+		return nil, nil, false
+	}
+
+	// Determine overlapping types.
+	var available [][2]tree.TypedExpr
+	for _, leftCol := range leftRefs {
+		for _, rightCol := range rightRefs {
+			if leftCol.typ.Equivalent(rightCol.typ) {
+				available = append(available, [2]tree.TypedExpr{
+					typedParen(leftCol.item, leftCol.typ),
+					typedParen(rightCol.item, rightCol.typ),
+				})
+			}
+		}
+	}
+	if len(available) == 0 {
+		// left and right didn't have any columns with the same type.
+		return nil, nil, false
+	}
+
+	s.schema.rnd.Shuffle(len(available), func(i, j int) {
+		available[i], available[j] = available[j], available[i]
+	})
+
+	var cond tree.TypedExpr
+	for (cond == nil || s.coin()) && len(available) > 0 {
+		v := available[0]
+		available = available[1:]
+		expr := tree.NewTypedComparisonExpr(tree.EQ, v[0], v[1])
+		if cond == nil {
+			cond = expr
+		} else {
+			cond = tree.NewTypedAndExpr(cond, expr)
+		}
+	}
+
+	joinExpr := &tree.JoinTableExpr{
+		Left:  left,
+		Right: right,
+		Cond:  &tree.OnJoinCond{Expr: cond},
+	}
+	joinRefs := leftRefs.extend(rightRefs...)
+	return joinExpr, joinRefs, true
+}
+
 // STATEMENTS
 
 func (s *scope) makeWith() (*tree.With, tableRefs) {
@@ -236,7 +292,7 @@ func (s *scope) makeWith() (*tree.With, tableRefs) {
 		var ok bool
 		var stmt tree.SelectStatement
 		var stmtRefs colRefs
-		stmt, stmtRefs, tables, ok = s.makeSelectStmt(makeDesiredTypes(s), nil /* refs */, tables)
+		stmt, stmtRefs, tables, ok = s.makeSelectStmt(s.schema.makeDesiredTypes(), nil /* refs */, tables)
 		if !ok {
 			continue
 		}
@@ -267,17 +323,6 @@ func (s *scope) makeWith() (*tree.With, tableRefs) {
 	return &tree.With{
 		CTEList: ctes,
 	}, tables
-}
-
-func makeDesiredTypes(s *scope) []*types.T {
-	var typs []*types.T
-	for {
-		typs = append(typs, sqlbase.RandType(s.schema.rnd))
-		if s.d6() < 2 {
-			break
-		}
-	}
-	return typs
 }
 
 var orderDirections = []tree.Direction{
@@ -374,7 +419,7 @@ func (s *scope) makeSelectClause(
 
 	var fromRefs colRefs
 	// Sometimes generate a SELECT with no FROM clause.
-	requireFrom := s.d6() != 1
+	requireFrom := s.schema.vectorizable || s.d6() != 1
 	for (requireFrom && len(clause.From.Tables) < 1) || s.coin() {
 		var from tree.TableExpr
 		if len(withTables) == 0 || s.coin() {
@@ -394,6 +439,10 @@ func (s *scope) makeSelectClause(
 			fromRefs = append(fromRefs, exprRefs...)
 		}
 		clause.From.Tables = append(clause.From.Tables, from)
+		// Restrict so that we don't have a crazy amount of rows due to many joins.
+		if len(clause.From.Tables) >= 4 {
+			break
+		}
 	}
 
 	selectListRefs := refs
@@ -404,7 +453,10 @@ func (s *scope) makeSelectClause(
 		orderByRefs = fromRefs
 		selectListRefs = selectListRefs.extend(fromRefs...)
 
-		if s.d6() <= 2 {
+		// TODO(mjibson): vec only supports GROUP BYs on fully-ordered
+		// columns, which we could support here. Also see #39240 which
+		// will support this more generally.
+		if !s.schema.vectorizable && s.d6() <= 2 {
 			// Enable GROUP BY. Choose some random subset of the
 			// fromRefs.
 			// TODO(mjibson): Refence handling and aggregation functions
@@ -454,7 +506,7 @@ func (s *scope) makeSelectClause(
 }
 
 func makeSelect(s *scope) (tree.Statement, bool) {
-	stmt, _, ok := s.makeSelect(makeDesiredTypes(s), nil)
+	stmt, _, ok := s.makeSelect(s.schema.makeDesiredTypes(), nil)
 	return stmt, ok
 }
 
@@ -497,7 +549,7 @@ func (s *scope) makeSelectList(
 	}
 	// If we still don't have any then there weren't any refs.
 	if len(desiredTypes) == 0 {
-		desiredTypes = makeDesiredTypes(s)
+		desiredTypes = s.schema.makeDesiredTypes()
 	}
 	result := make(tree.SelectExprs, len(desiredTypes))
 	selectRefs := make(colRefs, len(desiredTypes))
@@ -709,7 +761,7 @@ func (s *scope) makeInsertReturning(refs colRefs) (tree.TableExpr, colRefs, bool
 }
 
 func makeValuesTable(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
-	types := makeDesiredTypes(s)
+	types := s.schema.makeDesiredTypes()
 	values, valuesRefs := makeValues(s, types, refs)
 	return values, valuesRefs, true
 }
@@ -848,7 +900,7 @@ func makeLimit(s *scope) *tree.Limit {
 }
 
 func (s *scope) makeReturning(table *tableRef) (*tree.ReturningExprs, colRefs) {
-	desiredTypes := makeDesiredTypes(s)
+	desiredTypes := s.schema.makeDesiredTypes()
 
 	refs := make(colRefs, len(table.Columns))
 	for i, c := range table.Columns {

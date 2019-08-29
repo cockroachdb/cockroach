@@ -903,6 +903,7 @@ SELECT k FROM a WHERE k = ANY (1, 2, 3)
 scan a
  ├── columns: k:1(int!null)
  ├── constraint: /1: [/1 - /3]
+ ├── cardinality: [0 - 3]
  └── key: (1)
 
 opt expect=SimplifyEqualsAnyTuple
@@ -969,6 +970,7 @@ SELECT k FROM a WHERE k = ANY ARRAY[1, 2, 3]
 scan a
  ├── columns: k:1(int!null)
  ├── constraint: /1: [/1 - /3]
+ ├── cardinality: [0 - 3]
  └── key: (1)
 
 opt expect=(SimplifyAnyScalarArray,SimplifyEqualsAnyTuple)
@@ -987,6 +989,7 @@ SELECT k FROM a WHERE k = ANY '{1,2,3}'::INT[]
 scan a
  ├── columns: k:1(int!null)
  ├── constraint: /1: [/1 - /3]
+ ├── cardinality: [0 - 3]
  └── key: (1)
 
 # --------------------------------------------------
@@ -1284,3 +1287,127 @@ project
            └── scan a
                 ├── columns: k:7(int!null)
                 └── key: (7)
+
+exec-ddl
+CREATE TABLE pg_class (
+     oid OID NULL,
+     relname NAME NOT NULL,
+     relnamespace OID NULL,
+     reltype OID NULL,
+     reloftype OID NULL,
+     relowner OID NULL,
+     relam OID NULL,
+     relfilenode OID NULL,
+     reltablespace OID NULL,
+     relpages INT4 NULL,
+     reltuples FLOAT4 NULL,
+     relallvisible INT4 NULL,
+     reltoastrelid OID NULL,
+     relhasindex BOOL NULL,
+     relisshared BOOL NULL,
+     relpersistence CHAR NULL,
+     relistemp BOOL NULL,
+     relkind CHAR NULL,
+     relnatts INT2 NULL,
+     relchecks INT2 NULL,
+     relhasoids BOOL NULL,
+     relhaspkey BOOL NULL,
+     relhasrules BOOL NULL,
+     relhastriggers BOOL NULL,
+     relhassubclass BOOL NULL,
+     relfrozenxid INT8 NULL,
+     relacl STRING[] NULL,
+     reloptions STRING[] NULL
+)
+----
+
+exec-ddl
+CREATE TABLE pg_inherits (
+      inhrelid OID NULL,
+      inhparent OID NULL,
+      inhseqno INT4 NULL
+)
+----
+
+# Regression test for #38867.
+norm expect=NormalizeArrayFlattenToAgg
+SELECT (
+		SELECT
+			ARRAY (
+			  SELECT c.relname
+			  FROM pg_inherits AS i JOIN pg_class AS c ON c.oid = i.inhparent
+			  WHERE i.inhrelid = rel.oid
+			  ORDER BY inhseqno
+			)
+)
+FROM pg_class AS rel
+----
+project
+ ├── columns: array:66(name[])
+ ├── inner-join-apply
+ │    ├── columns: rel.oid:1(oid) array_agg:63(name[]) array:64(name[])
+ │    ├── scan rel
+ │    │    └── columns: rel.oid:1(oid)
+ │    ├── inner-join-apply
+ │    │    ├── columns: array_agg:63(name[]) array:64(name[])
+ │    │    ├── outer: (1)
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(63,64)
+ │    │    ├── project
+ │    │    │    ├── columns: array_agg:63(name[])
+ │    │    │    ├── outer: (1)
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(63)
+ │    │    │    ├── group-by
+ │    │    │    │    ├── columns: inhrelid:30(oid) array_agg:65(name[])
+ │    │    │    │    ├── internal-ordering: +32 opt(30)
+ │    │    │    │    ├── outer: (1)
+ │    │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    ├── fd: ()-->(30,65)
+ │    │    │    │    ├── sort
+ │    │    │    │    │    ├── columns: inhrelid:30(oid) inhparent:31(oid) inhseqno:32(int4) c.oid:34(oid) c.relname:35(name)
+ │    │    │    │    │    ├── outer: (1)
+ │    │    │    │    │    ├── cardinality: [1 - ]
+ │    │    │    │    │    ├── fd: (31)==(34), (34)==(31)
+ │    │    │    │    │    ├── ordering: +32 opt(30) [actual: +32]
+ │    │    │    │    │    └── left-join (hash)
+ │    │    │    │    │         ├── columns: inhrelid:30(oid) inhparent:31(oid) inhseqno:32(int4) c.oid:34(oid) c.relname:35(name)
+ │    │    │    │    │         ├── outer: (1)
+ │    │    │    │    │         ├── cardinality: [1 - ]
+ │    │    │    │    │         ├── fd: (31)==(34), (34)==(31)
+ │    │    │    │    │         ├── values
+ │    │    │    │    │         │    ├── cardinality: [1 - 1]
+ │    │    │    │    │         │    ├── key: ()
+ │    │    │    │    │         │    └── tuple [type=tuple]
+ │    │    │    │    │         ├── inner-join (hash)
+ │    │    │    │    │         │    ├── columns: inhrelid:30(oid) inhparent:31(oid!null) inhseqno:32(int4) c.oid:34(oid!null) c.relname:35(name!null)
+ │    │    │    │    │         │    ├── fd: (31)==(34), (34)==(31)
+ │    │    │    │    │         │    ├── scan i
+ │    │    │    │    │         │    │    └── columns: inhrelid:30(oid) inhparent:31(oid) inhseqno:32(int4)
+ │    │    │    │    │         │    ├── scan c
+ │    │    │    │    │         │    │    └── columns: c.oid:34(oid) c.relname:35(name!null)
+ │    │    │    │    │         │    └── filters
+ │    │    │    │    │         │         └── c.oid = inhparent [type=bool, outer=(31,34), constraints=(/31: (/NULL - ]; /34: (/NULL - ]), fd=(31)==(34), (34)==(31)]
+ │    │    │    │    │         └── filters
+ │    │    │    │    │              └── inhrelid = rel.oid [type=bool, outer=(1,30), constraints=(/1: (/NULL - ]; /30: (/NULL - ]), fd=(1)==(30), (30)==(1)]
+ │    │    │    │    └── aggregations
+ │    │    │    │         ├── array-agg [type=name[], outer=(35)]
+ │    │    │    │         │    └── variable: c.relname [type=name]
+ │    │    │    │         └── any-not-null-agg [type=oid, outer=(30)]
+ │    │    │    │              └── variable: inhrelid [type=oid]
+ │    │    │    └── projections
+ │    │    │         └── CASE WHEN inhrelid IS NOT NULL THEN array_agg END [type=name[], outer=(30,65)]
+ │    │    ├── values
+ │    │    │    ├── columns: array:64(name[])
+ │    │    │    ├── outer: (63)
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(64)
+ │    │    │    └── (COALESCE(array_agg, ARRAY[]),) [type=tuple{name[]}]
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── projections
+      └── variable: array [type=name[], outer=(64)]

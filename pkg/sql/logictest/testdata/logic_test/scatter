@@ -1,4 +1,4 @@
-# LogicTest: local local-opt
+# LogicTest: local
 
 statement ok
 CREATE TABLE t (a INT PRIMARY KEY)

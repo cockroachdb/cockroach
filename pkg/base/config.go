@@ -35,6 +35,9 @@ const (
 
 	// From IANA Service Name and Transport Protocol Port Number Registry. See
 	// https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml?search=cockroachdb
+	//
+	// This is used for both RPC and SQL connections unless --sql-addr
+	// is used on the command line and/or SQLAddr is set in the Config object.
 	DefaultPort = "26257"
 
 	// The default port for HTTP-for-humans.
@@ -43,6 +46,7 @@ const (
 	// NB: net.JoinHostPort is not a constant.
 	defaultAddr     = ":" + DefaultPort
 	defaultHTTPAddr = ":" + DefaultHTTPPort
+	defaultSQLAddr  = ":" + DefaultPort
 
 	// NetworkTimeout is the timeout used for network operations.
 	NetworkTimeout = 3 * time.Second
@@ -133,6 +137,17 @@ type lazyCertificateManager struct {
 	err  error
 }
 
+// EngineType specifies type of storage engine (eg. rocksdb, pebble).
+type EngineType int
+
+// Engine types.
+const (
+	// Denotes RocksDB as the underlying storage engine type.
+	EngineTypeRocksDB EngineType = iota
+	// Denotes Pebble as the underlying storage engine type.
+	EngineTypePebble
+)
+
 // Config is embedded by server.Config. A base config is not meant to be used
 // directly, but embedding configs should call cfg.InitDefaults().
 type Config struct {
@@ -157,12 +172,32 @@ type Config struct {
 	// route to an interface that Addr is listening on.
 	AdvertiseAddr string
 
+	// ClusterName is the name used as a sanity check when a node joins
+	// an uninitialized cluster, or when an uninitialized node joins an
+	// initialized cluster. The initial RPC handshake verifies that the
+	// name matches on both sides. Once the cluster ID has been
+	// negotiated on both sides, the cluster name is not used any more.
+	ClusterName string
+
+	// DisableClusterNameVerification, when set, alters the cluster name
+	// verification to only verify that a non-empty cluster name on
+	// both sides match. This is meant for use while rolling an
+	// existing cluster into using a new cluster name.
+	DisableClusterNameVerification bool
+
+	// SplitListenSQL indicates whether to listen for SQL
+	// clients on a separate address from RPC requests.
+	SplitListenSQL bool
+
+	// SQLAddr is the configured SQL listen address.
+	// This is used if SplitListenSQL is set to true.
+	SQLAddr string
+
+	// SQLAdvertiseAddr is the advertised SQL address.
+	// This is computed from SQLAddr if specified otherwise Addr.
+	SQLAdvertiseAddr string
+
 	// HTTPAddr is the configured HTTP listen address.
-	//
-	// This is temporary, and will be removed when grpc.(*Server).ServeHTTP
-	// performance problems are addressed upstream.
-	//
-	// See https://github.com/grpc/grpc-go/issues/586.
 	HTTPAddr string
 
 	// HTTPAdvertiseAddr is the advertised HTTP address.
@@ -205,9 +240,15 @@ func (cfg *Config) InitDefaults() {
 	cfg.Addr = defaultAddr
 	cfg.AdvertiseAddr = cfg.Addr
 	cfg.HTTPAddr = defaultHTTPAddr
+	cfg.HTTPAdvertiseAddr = ""
+	cfg.SplitListenSQL = false
+	cfg.SQLAddr = defaultSQLAddr
+	cfg.SQLAdvertiseAddr = cfg.SQLAddr
 	cfg.SSLCertsDir = DefaultCertsDirectory
 	cfg.certificateManager = lazyCertificateManager{}
 	cfg.RPCHeartbeatInterval = defaultRPCHeartbeatInterval
+	cfg.ClusterName = ""
+	cfg.DisableClusterNameVerification = false
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of Insecure.
@@ -298,7 +339,7 @@ func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
 	return &url.URL{
 		Scheme:   "postgresql",
 		User:     user,
-		Host:     cfg.AdvertiseAddr,
+		Host:     cfg.SQLAdvertiseAddr,
 		RawQuery: options.Encode(),
 	}, nil
 }
@@ -630,6 +671,8 @@ const (
 // pertaining to temp storage flags, specifically --temp-dir and
 // --max-disk-temp-storage.
 type TempStorageConfig struct {
+	// Engine specifies whether to use rocksdb or pebble for temp storage.
+	Engine EngineType
 	// InMemory specifies whether the temporary storage will remain
 	// in-memory or occupy a temporary subdirectory on-disk.
 	InMemory bool
@@ -653,6 +696,7 @@ func TempStorageConfigFromEnv(
 	st *cluster.Settings,
 	firstStore StoreSpec,
 	parentDir string,
+	engine EngineType,
 	maxSizeBytes int64,
 	specIdx int,
 ) TempStorageConfig {
@@ -683,6 +727,7 @@ func TempStorageConfigFromEnv(
 	}
 
 	return TempStorageConfig{
+		Engine:   engine,
 		InMemory: inMem,
 		Mon:      &monitor,
 		SpecIdx:  specIdx,

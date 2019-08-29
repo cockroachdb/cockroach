@@ -15,7 +15,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -298,7 +297,7 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	}
 	desc.PrimaryIndex = sqlbase.IndexDescriptor{}
 
-	err = desc.ValidateTable(cluster.MakeTestingClusterSettings())
+	err = desc.ValidateTable()
 	if !testutils.IsError(err, sqlbase.ErrMissingPrimaryKey.Error()) {
 		t.Fatalf("unexpected error: %v", err)
 	}

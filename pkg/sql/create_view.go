@@ -174,7 +174,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn, params.EvalContext().Settings); err != nil {
+	if err := desc.Validate(params.ctx, params.p.txn); err != nil {
 		return err
 	}
 

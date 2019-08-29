@@ -352,7 +352,7 @@ func writeSST(
 	defer sst.Close()
 	for _, kv := range kvs {
 		kv.Key.Timestamp = ts
-		if err := sst.Add(kv); err != nil {
+		if err := sst.Put(kv.Key, kv.Value); err != nil {
 			return err
 		}
 	}

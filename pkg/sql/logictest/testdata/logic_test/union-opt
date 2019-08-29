@@ -1,4 +1,4 @@
-# LogicTest: local-opt fakedist-opt
+# LogicTest: local fakedist
 
 # This test is broken in the heuristic planner. It pushes down the filter when
 # it shouldn't because of the composite type in the filter condition.

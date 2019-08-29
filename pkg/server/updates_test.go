@@ -528,7 +528,7 @@ func TestReportUsage(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Try a correlated subquery to check that feature reporting.
-		if _, err := db.Exec(`SELECT x	FROM (VALUES (1)) AS b(x) WHERE EXISTS(SELECT * FROM (VALUES (1)) AS a(x) WHERE a.x = b.x)`); err != nil {
+		if _, err := db.Exec(`SELECT x FROM (VALUES (1)) AS b(x) WHERE EXISTS(SELECT * FROM (VALUES (1)) AS a(x) WHERE a.x = b.x)`); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -690,19 +690,20 @@ func TestReportUsage(t *testing.T) {
 
 		// Although the query is executed 10 times, due to plan caching
 		// keyed by the SQL text, the planning only occurs once.
+		// TODO(radu): fix this (#39361).
 		"sql.plan.ops.cast.string::inet":                                            1,
 		"sql.plan.ops.bin.jsonb - string":                                           1,
 		"sql.plan.builtins.crdb_internal.force_assertion_error(msg: string) -> int": 1,
 		"sql.plan.ops.array.ind":                                                    1,
 		"sql.plan.ops.array.cons":                                                   1,
 		"sql.plan.ops.array.flatten":                                                1,
+		// The CTE counter is exercised by `WITH a AS (SELECT 1) ...`.
+		"sql.plan.cte": 1,
 
 		// The subquery counter is exercised by `(1, 20, 30, 40) = (SELECT ...)`.
 		"sql.plan.subquery": 1,
 		// The correlated sq counter is exercised by `WHERE EXISTS ( ... )` above.
 		"sql.plan.subquery.correlated": 1,
-		// The CTE counter is exercised by `WITH a AS (SELECT 1) ...`.
-		"sql.plan.cte": 10,
 
 		"unimplemented.#33285.json_object_agg":          10,
 		"unimplemented.pg_catalog.pg_stat_wal_receiver": 10,
@@ -828,41 +829,58 @@ func TestReportUsage(t *testing.T) {
 			// Let's ignore all internal queries for this test.
 			continue
 		}
-		foundKeys = append(foundKeys,
-			fmt.Sprintf("[%v,%v,%v] %s", s.Key.Opt, s.Key.DistSQL, s.Key.Failed, s.Key.Query))
+		var tags []string
+		if s.Key.Opt {
+			tags = append(tags, "opt")
+		}
+
+		if s.Key.DistSQL {
+			tags = append(tags, "dist")
+		} else {
+			tags = append(tags, "nodist")
+		}
+
+		if s.Key.Failed {
+			tags = append(tags, "failed")
+		} else {
+			tags = append(tags, "ok")
+		}
+
+		foundKeys = append(foundKeys, fmt.Sprintf("[%s] %s", strings.Join(tags, ","), s.Key.Query))
 	}
 	sort.Strings(foundKeys)
 	expectedKeys := []string{
-		`[false,false,false] ALTER DATABASE _ CONFIGURE ZONE = _`,
-		`[false,false,false] ALTER TABLE _ CONFIGURE ZONE = _`,
-		`[false,false,false] CREATE DATABASE _`,
-		`[false,false,false] SET CLUSTER SETTING "cluster.organization" = _`,
-		`[false,false,false] SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
-		`[false,false,false] SET CLUSTER SETTING "server.time_until_store_dead" = _`,
-		`[false,false,false] SET application_name = $1`,
-		`[false,false,false] SET application_name = DEFAULT`,
-		`[false,false,false] SET application_name = _`,
-		`[true,false,false] CREATE TABLE _ (_ INT8 NOT NULL DEFAULT unique_rowid())`,
-		`[true,false,false] CREATE TABLE _ (_ INT8, CONSTRAINT _ CHECK (_ > _))`,
-		`[true,false,false] INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
-		`[true,false,false] INSERT INTO _ VALUES (_), (__more2__)`,
-		`[true,false,false] INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
-		`[true,false,false] INSERT INTO _(_, _) VALUES (_, _)`,
-		`[true,false,false] SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
-		`[true,false,false] SELECT _ FROM (VALUES (_)) AS _ (_) WHERE EXISTS (SELECT * FROM (VALUES (_)) AS _ (_) WHERE _._ = _._)`,
-		"[true,false,false] SELECT _::STRING::INET, _::JSONB - _, ARRAY (SELECT _)[_]",
-		`[true,false,false] UPDATE _ SET _ = _ + _`,
-		"[true,false,false] WITH _ AS (SELECT _) SELECT * FROM _",
-		`[true,false,true] CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
-		`[true,false,true] SELECT _ / $1`,
-		`[true,false,true] SELECT _ / _`,
-		`[true,false,true] SELECT crdb_internal.force_assertion_error(_)`,
-		`[true,false,true] SELECT crdb_internal.force_error(_, $1)`,
-		`[true,false,true] SELECT crdb_internal.set_vmodule(_)`,
-		`[true,true,false] SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
-		`[true,true,false] SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
-		`[true,true,false] SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
+		`[opt,nodist,ok] ALTER DATABASE _ CONFIGURE ZONE = _`,
+		`[opt,nodist,ok] ALTER TABLE _ CONFIGURE ZONE = _`,
+		`[opt,nodist,ok] CREATE DATABASE _`,
+		`[opt,nodist,ok] SET CLUSTER SETTING "cluster.organization" = _`,
+		`[opt,nodist,ok] SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
+		`[opt,nodist,ok] SET CLUSTER SETTING "server.time_until_store_dead" = _`,
+		`[opt,nodist,ok] SET application_name = $1`,
+		`[opt,nodist,ok] SET application_name = DEFAULT`,
+		`[opt,nodist,ok] SET application_name = _`,
+		`[opt,nodist,ok] CREATE TABLE _ (_ INT8 NOT NULL DEFAULT unique_rowid())`,
+		`[opt,nodist,ok] CREATE TABLE _ (_ INT8, CONSTRAINT _ CHECK (_ > _))`,
+		`[opt,nodist,ok] INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
+		`[opt,nodist,ok] INSERT INTO _ VALUES (_), (__more2__)`,
+		`[opt,nodist,ok] INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
+		`[opt,nodist,ok] INSERT INTO _(_, _) VALUES (_, _)`,
+		`[opt,nodist,ok] SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
+		`[opt,nodist,ok] SELECT _ FROM (VALUES (_)) AS _ (_) WHERE EXISTS (SELECT * FROM (VALUES (_)) AS _ (_) WHERE _._ = _._)`,
+		"[opt,nodist,ok] SELECT _::STRING::INET, _::JSONB - _, ARRAY (SELECT _)[_]",
+		`[opt,nodist,ok] UPDATE _ SET _ = _ + _`,
+		"[opt,nodist,ok] WITH _ AS (SELECT _) SELECT * FROM _",
+		`[opt,nodist,failed] CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
+		`[opt,nodist,failed] SELECT _ / $1`,
+		`[opt,nodist,failed] SELECT _ / _`,
+		`[opt,nodist,failed] SELECT crdb_internal.force_assertion_error(_)`,
+		`[opt,nodist,failed] SELECT crdb_internal.force_error(_, $1)`,
+		`[opt,nodist,failed] SELECT crdb_internal.set_vmodule(_)`,
+		`[opt,dist,ok] SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
+		`[opt,dist,ok] SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
+		`[opt,dist,ok] SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
 	}
+	sort.Strings(expectedKeys)
 	t.Logf("expected:\n%s\ngot:\n%s", pretty.Sprint(expectedKeys), pretty.Sprint(foundKeys))
 	for i, found := range foundKeys {
 		if i >= len(expectedKeys) {

@@ -118,74 +118,71 @@ func TestEncodings(t *testing.T) {
 	var conv sessiondata.DataConversionConfig
 	ctx := context.Background()
 	evalCtx := tree.MakeTestingEvalContext(nil)
-	for _, tc := range tests {
-		t.Run(tc.SQL, func(t *testing.T) {
-			d := tc.Datum
-			t.Log(tc.SQL)
-			t.Log(d)
+	t.Run("encode", func(t *testing.T) {
+		t.Run(pgwirebase.FormatText.String(), func(t *testing.T) {
+			for _, tc := range tests {
+				d := tc.Datum
 
-			t.Run("encode", func(t *testing.T) {
-				t.Run(pgwirebase.FormatText.String(), func(t *testing.T) {
-					buf.reset()
-					buf.textFormatter.Buffer.Reset()
-					buf.writeTextDatum(ctx, d, conv)
-					if buf.err != nil {
-						t.Fatal(buf.err)
-					}
-					got := verifyLen(t)
-					if !bytes.Equal(got, tc.TextAsBinary) {
-						t.Errorf("unexpected text encoding:\n\t%q found,\n\t%q expected", got, tc.Text)
-					}
-				})
-				t.Run(pgwirebase.FormatBinary.String(), func(t *testing.T) {
-					buf.reset()
-					buf.writeBinaryDatum(ctx, d, time.UTC, tc.Oid)
-					if buf.err != nil {
-						t.Fatal(buf.err)
-					}
-					got := verifyLen(t)
-					if !bytes.Equal(got, tc.Binary) {
-						t.Errorf("unexpected binary encoding:\n\t%v found,\n\t%v expected", got, tc.Binary)
-					}
-				})
-			})
-			t.Run("decode", func(t *testing.T) {
-				switch tc.Datum.(type) {
-				case *tree.DFloat:
-					// Skip floats because postgres rounds them different than Go.
-					t.Skip()
-				case *tree.DTuple:
-					// Unsupported.
-					t.Skip()
+				buf.reset()
+				buf.textFormatter.Buffer.Reset()
+				buf.writeTextDatum(ctx, d, conv)
+				if buf.err != nil {
+					t.Fatal(buf.err)
 				}
-				for code, value := range map[pgwirebase.FormatCode][]byte{
-					pgwirebase.FormatText:   tc.TextAsBinary,
-					pgwirebase.FormatBinary: tc.Binary,
-				} {
-					t.Run(code.String(), func(t *testing.T) {
-						t.Logf("code: %s\nvalue: %q (%[2]s)\noid: %v", code, value, tc.Oid)
-						d, err := pgwirebase.DecodeOidDatum(nil, tc.Oid, code, value)
-						if err != nil {
-							t.Fatal(err)
-						}
-						// Text decoding returns a string for some kinds of arrays. If that's the
-						// case, manually do the conversion to array.
-						darr, isdarr := tc.Datum.(*tree.DArray)
-						if isdarr && d.ResolvedType().Family() == types.StringFamily {
-							t.Log("convert string to array")
-							d, err = tree.ParseDArrayFromString(&evalCtx, string(value), darr.ParamTyp)
-							if err != nil {
-								t.Fatal(err)
-							}
-						}
-						if d.Compare(&evalCtx, tc.Datum) != 0 {
-							t.Fatalf("%v != %v", d, tc.Datum)
-						}
-					})
+				got := verifyLen(t)
+				if !bytes.Equal(got, tc.TextAsBinary) {
+					t.Errorf("unexpected text encoding:\n\t%q found,\n\t%q expected", got, tc.Text)
 				}
-			})
+			}
 		})
-	}
+		t.Run(pgwirebase.FormatBinary.String(), func(t *testing.T) {
+			for _, tc := range tests {
+				d := tc.Datum
+				buf.reset()
+				buf.writeBinaryDatum(ctx, d, time.UTC, tc.Oid)
+				if buf.err != nil {
+					t.Fatal(buf.err)
+				}
+				got := verifyLen(t)
+				if !bytes.Equal(got, tc.Binary) {
+					t.Errorf("unexpected binary encoding:\n\t%v found,\n\t%v expected", got, tc.Binary)
+				}
+			}
+		})
+	})
+	t.Run("decode", func(t *testing.T) {
+		for _, tc := range tests {
+			switch tc.Datum.(type) {
+			case *tree.DFloat:
+				// Skip floats because postgres rounds them different than Go.
+				continue
+			case *tree.DTuple:
+				// Unsupported.
+				continue
+			}
+			for code, value := range map[pgwirebase.FormatCode][]byte{
+				pgwirebase.FormatText:   tc.TextAsBinary,
+				pgwirebase.FormatBinary: tc.Binary,
+			} {
+				d, err := pgwirebase.DecodeOidDatum(nil, tc.Oid, code, value)
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Text decoding returns a string for some kinds of arrays. If that's
+				// the case, manually do the conversion to array.
+				darr, isdarr := tc.Datum.(*tree.DArray)
+				if isdarr && d.ResolvedType().Family() == types.StringFamily {
+					d, err = tree.ParseDArrayFromString(&evalCtx, string(value), darr.ParamTyp)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+				if d.Compare(&evalCtx, tc.Datum) != 0 {
+					t.Fatalf("%v != %v", d, tc.Datum)
+				}
+			}
+		}
+	})
 }
 
 // TestExoticNumericEncodings goes through specific, legal pgwire encodings

@@ -81,7 +81,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		}
 	}()
 
-	_, existingQueue := tp.getQueue(1)
+	_, existingQueue := tp.getQueue(1, rpc.SystemClass)
 	if existingQueue {
 		t.Fatal("queue already exists")
 	}
@@ -99,7 +99,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		wg.Done()
 	}()
 	var stats raftTransportStats
-	tp.startProcessNewQueue(ctxBoom, 1, &stats)
+	tp.startProcessNewQueue(ctxBoom, 1, rpc.SystemClass, &stats)
 
 	wg.Wait()
 }

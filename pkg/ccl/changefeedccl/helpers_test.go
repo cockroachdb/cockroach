@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -225,7 +226,7 @@ func sinklessTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) f
 		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
 
-		sink, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+		sink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 		defer cleanup()
 		f := cdctest.MakeSinklessFeedFactory(s, sink)
 		testFn(t, db, f)
@@ -258,7 +259,7 @@ func enterpriseTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory))
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
 		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
-		sink, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+		sink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 		defer cleanup()
 		f := cdctest.MakeTableFeedFactory(s, db, flushCh, sink)
 
@@ -329,5 +330,6 @@ func forceTableGC(
 	database, table string,
 ) {
 	t.Helper()
-	serverutils.ForceTableGC(t, tsi, sqlDB.DB, database, table, tsi.Clock().Now())
+	sqlutils.ForceTableGC(
+		t, tsi.DistSenderI().(*kv.DistSender), sqlDB.DB, database, table, tsi.Clock().Now())
 }

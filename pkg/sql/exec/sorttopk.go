@@ -15,9 +15,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 )
 
 const (
@@ -29,10 +30,10 @@ const (
 // columns given in orderingCols and returns the first K rows. The inputTypes
 // must correspond 1-1 with the columns in the input operator.
 func NewTopKSorter(
-	input Operator, inputTypes []types.T, orderingCols []distsqlpb.Ordering_Column, k uint16,
+	input Operator, inputTypes []coltypes.T, orderingCols []distsqlpb.Ordering_Column, k uint16,
 ) Operator {
 	return &topKSorter{
-		input:        input,
+		OneInputNode: NewOneInputNode(input),
 		inputTypes:   inputTypes,
 		orderingCols: orderingCols,
 		k:            k,
@@ -58,9 +59,9 @@ const (
 )
 
 type topKSorter struct {
-	input        Operator
+	OneInputNode
 	orderingCols []distsqlpb.Ordering_Column
-	inputTypes   []types.T
+	inputTypes   []coltypes.T
 	k            uint16 // TODO(solon): support larger k values
 
 	// state is the current state of the sort.
@@ -98,7 +99,9 @@ func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
 	case topKSortEmitting:
 		return t.emit()
 	}
-	panic(fmt.Sprintf("invalid sort state %v", t.state))
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid sort state %v", t.state))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 // spool reads in the entire input, always storing the top K rows it has seen so
@@ -186,7 +189,7 @@ func (t *topKSorter) spool(ctx context.Context) {
 }
 
 func (t *topKSorter) emit() coldata.Batch {
-	t.output.SetSelection(false)
+	t.output.ResetInternalBatch()
 	toEmit := t.topK.Length() - t.emitted
 	if toEmit == 0 {
 		// We're done.
@@ -223,7 +226,7 @@ func (t *topKSorter) compareRow(vecIdx1, vecIdx2 int, rowIdx1, rowIdx2 uint16) i
 			case distsqlpb.Ordering_Column_DESC:
 				return -res
 			default:
-				panic(fmt.Sprintf("unexpected direction value %d", d))
+				execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected direction value %d", d))
 			}
 		}
 	}

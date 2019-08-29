@@ -67,17 +67,18 @@ type fkExistenceCheckBaseHelper struct {
 	// searched index.
 	ids map[sqlbase.ColumnID]int
 
-	// ref is a copy of the ForeignKeyReference object in the table
+	// ref is a copy of the ForeignKeyConstraint object in the table
 	// descriptor.  During the check this is used to decide how to check
 	// the value (MATCH style).
 	//
 	// TODO(knz): the entire reference object is not needed during the
-	// mutation, only the match style. Simplify this.
-	ref sqlbase.ForeignKeyReference
+	// mutation, only the match style and name. Simplify this.
+	ref *sqlbase.ForeignKeyConstraint
 
 	// searchTable is the descriptor of the searched table. Stored only
 	// for error messages; lookups use the pre-computed searchPrefix.
 	searchTable *sqlbase.ImmutableTableDescriptor
+
 	// mutatedIdx is the descriptor for the target index being mutated.
 	// Stored only for error messages.
 	mutatedIdx *sqlbase.IndexDescriptor
@@ -117,37 +118,26 @@ type fkExistenceCheckBaseHelper struct {
 func makeFkExistenceCheckBaseHelper(
 	txn *client.Txn,
 	otherTables FkTableMetadata,
+	ref *sqlbase.ForeignKeyConstraint,
+	searchIdx *sqlbase.IndexDescriptor,
 	mutatedIdx *sqlbase.IndexDescriptor,
-	ref sqlbase.ForeignKeyReference,
 	colMap map[sqlbase.ColumnID]int,
 	alloc *sqlbase.DatumAlloc,
 	dir FKCheckType,
 ) (ret fkExistenceCheckBaseHelper, err error) {
 	// Look up the searched table.
-	searchTable := otherTables[ref.Table].Desc
+	searchTable := otherTables[ref.ReferencedTableID].Desc
 	if searchTable == nil {
-		return ret, errors.AssertionFailedf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
+		return ret, errors.AssertionFailedf("referenced table %d not in provided table map %+v", ref.ReferencedTableID, otherTables)
 	}
-	// Look up the searched index.
-	searchIdx, err := searchTable.FindIndexByID(ref.Index)
-	if err != nil {
-		return ret, err
-	}
-
-	// Determine the number of columns being looked up.
-	prefixLen := len(searchIdx.ColumnIDs)
-	if len(mutatedIdx.ColumnIDs) < prefixLen {
-		prefixLen = len(mutatedIdx.ColumnIDs)
-	}
-
 	// Determine the columns being looked up.
-	ids, err := computeFkCheckColumnIDs(ref.Match, mutatedIdx, searchIdx, colMap, prefixLen)
+	ids, err := computeFkCheckColumnIDs(ref, mutatedIdx, searchIdx, colMap)
 	if err != nil {
 		return ret, err
 	}
 
 	// Precompute the KV lookup prefix.
-	searchPrefix := sqlbase.MakeIndexKeyPrefix(searchTable.TableDesc(), ref.Index)
+	searchPrefix := sqlbase.MakeIndexKeyPrefix(searchTable.TableDesc(), searchIdx.ID)
 
 	// Initialize the row fetcher.
 	tableArgs := FetcherTableArgs{
@@ -170,11 +160,11 @@ func makeFkExistenceCheckBaseHelper(
 		ref:           ref,
 		searchTable:   searchTable,
 		searchIdx:     searchIdx,
-		ids:           ids,
-		prefixLen:     prefixLen,
-		searchPrefix:  searchPrefix,
 		mutatedIdx:    mutatedIdx,
-		valuesScratch: make(tree.Datums, prefixLen),
+		ids:           ids,
+		prefixLen:     len(ref.OriginColumnIDs),
+		searchPrefix:  searchPrefix,
+		valuesScratch: make(tree.Datums, len(ref.OriginColumnIDs)),
 	}, nil
 }
 
@@ -185,17 +175,16 @@ func makeFkExistenceCheckBaseHelper(
 // https://www.postgresql.org/docs/11/sql-createtable.html for details on the
 // different composite foreign key matching methods.
 func computeFkCheckColumnIDs(
-	match sqlbase.ForeignKeyReference_Match,
+	ref *sqlbase.ForeignKeyConstraint,
 	mutatedIdx *sqlbase.IndexDescriptor,
 	searchIdx *sqlbase.IndexDescriptor,
 	colMap map[sqlbase.ColumnID]int,
-	prefixLen int,
 ) (ids map[sqlbase.ColumnID]int, err error) {
-	ids = make(map[sqlbase.ColumnID]int, len(mutatedIdx.ColumnIDs))
+	ids = make(map[sqlbase.ColumnID]int, len(ref.OriginColumnIDs))
 
-	switch match {
+	switch ref.Match {
 	case sqlbase.ForeignKeyReference_SIMPLE:
-		for i, writeColID := range mutatedIdx.ColumnIDs[:prefixLen] {
+		for i, writeColID := range ref.OriginColumnIDs {
 			if found, ok := colMap[writeColID]; ok {
 				ids[searchIdx.ColumnIDs[i]] = found
 			} else {
@@ -206,11 +195,22 @@ func computeFkCheckColumnIDs(
 
 	case sqlbase.ForeignKeyReference_FULL:
 		var missingColumns []string
-		for i, writeColID := range mutatedIdx.ColumnIDs[:prefixLen] {
+		for _, writeColID := range ref.OriginColumnIDs {
+			colOrdinal := -1
+			for i, colID := range mutatedIdx.ColumnIDs {
+				if writeColID == colID {
+					colOrdinal = i
+					break
+				}
+			}
+			if colOrdinal == -1 {
+				return nil, errors.AssertionFailedf("index %q on columns %+v does not contain column %d",
+					mutatedIdx.Name, mutatedIdx.ColumnIDs, writeColID)
+			}
 			if found, ok := colMap[writeColID]; ok {
-				ids[searchIdx.ColumnIDs[i]] = found
+				ids[searchIdx.ColumnIDs[colOrdinal]] = found
 			} else {
-				missingColumns = append(missingColumns, mutatedIdx.ColumnNames[i])
+				missingColumns = append(missingColumns, mutatedIdx.ColumnNames[colOrdinal])
 			}
 		}
 
@@ -222,7 +222,7 @@ func computeFkCheckColumnIDs(
 			return nil, pgerror.Newf(pgcode.ForeignKeyViolation,
 				"missing value for column %q in multi-part foreign key", missingColumns[0])
 
-		case prefixLen:
+		case len(ref.OriginColumnIDs):
 			// All the columns are nulls, don't check the foreign key.
 			return nil, errSkipUnusedFK
 
@@ -236,7 +236,7 @@ func computeFkCheckColumnIDs(
 		return nil, unimplemented.NewWithIssue(20305, "MATCH PARTIAL not supported")
 
 	default:
-		return nil, errors.AssertionFailedf("unknown composite key match type: %v", match)
+		return nil, errors.AssertionFailedf("unknown composite key match type: %v", ref.Match)
 	}
 }
 

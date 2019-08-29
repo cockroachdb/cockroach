@@ -64,10 +64,12 @@ func TestOutbox(t *testing.T) {
 
 	clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
 	flowCtx := FlowCtx{
-		Settings:   st,
-		stopper:    stopper,
-		EvalCtx:    &evalCtx,
-		nodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
+		EvalCtx: &evalCtx,
+		Cfg: &ServerConfig{
+			Settings:   st,
+			Stopper:    stopper,
+			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
+		},
 	}
 	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 	streamID := distsqlpb.StreamID(42)
@@ -218,10 +220,12 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 
 	clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
 	flowCtx := FlowCtx{
-		Settings:   st,
-		stopper:    stopper,
-		EvalCtx:    &evalCtx,
-		nodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
+		EvalCtx: &evalCtx,
+		Cfg: &ServerConfig{
+			Settings:   st,
+			Stopper:    stopper,
+			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
+		},
 	}
 	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 	streamID := distsqlpb.StreamID(42)
@@ -290,10 +294,12 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 
 			clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
 			flowCtx := FlowCtx{
-				Settings:   st,
-				stopper:    stopper,
-				EvalCtx:    &evalCtx,
-				nodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
+				EvalCtx: &evalCtx,
+				Cfg: &ServerConfig{
+					Settings:   st,
+					Stopper:    stopper,
+					NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
+				},
 			}
 			flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 			streamID := distsqlpb.StreamID(42)
@@ -329,7 +335,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			} else {
 				// We're going to perform a RunSyncFlow call and then have the client
 				// cancel the call's context.
-				conn, err := flowCtx.nodeDialer.Dial(ctx, staticNodeID)
+				conn, err := flowCtx.Cfg.NodeDialer.Dial(ctx, staticNodeID, rpc.DefaultClass)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -365,7 +371,12 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				// Wait for the consumer to connect.
 				call := <-mockServer.RunSyncFlowCalls
 				outbox = newOutboxSyncFlowStream(call.Stream)
-				outbox.setFlowCtx(&FlowCtx{Settings: cluster.MakeTestingClusterSettings(), stopper: stopper})
+				outbox.setFlowCtx(&FlowCtx{
+					Cfg: &ServerConfig{
+						Settings: cluster.MakeTestingClusterSettings(),
+						Stopper:  stopper,
+					},
+				})
 				outbox.init(sqlbase.OneIntCol)
 				// In a RunSyncFlow call, the outbox runs under the call's context.
 				outbox.start(call.Stream.Context(), &wg, cancel)
@@ -419,10 +430,12 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 
 	clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
 	flowCtx := FlowCtx{
-		Settings:   st,
-		stopper:    stopper,
-		EvalCtx:    &evalCtx,
-		nodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
+		EvalCtx: &evalCtx,
+		Cfg: &ServerConfig{
+			Settings:   st,
+			Stopper:    stopper,
+			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
+		},
 	}
 	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 	streamID := distsqlpb.StreamID(42)
@@ -469,11 +482,13 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		Settings: st,
-		stopper:  stopper,
-		EvalCtx:  &evalCtx,
-		// a nil nodeDialer will always fail to connect.
-		nodeDialer: nil,
+		EvalCtx: &evalCtx,
+		Cfg: &ServerConfig{
+			Settings: st,
+			Stopper:  stopper,
+			// a nil nodeDialer will always fail to connect.
+			NodeDialer: nil,
+		},
 	}
 	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 	streamID := distsqlpb.StreamID(42)
@@ -539,10 +554,12 @@ func BenchmarkOutbox(b *testing.B) {
 
 			clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
 			flowCtx := FlowCtx{
-				Settings:   st,
-				stopper:    stopper,
-				EvalCtx:    &evalCtx,
-				nodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
+				EvalCtx: &evalCtx,
+				Cfg: &ServerConfig{
+					Settings:   st,
+					Stopper:    stopper,
+					NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
+				},
 			}
 			outbox := newOutbox(&flowCtx, staticNodeID, flowID, streamID)
 			outbox.init(sqlbase.MakeIntCols(numCols))

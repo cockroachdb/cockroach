@@ -286,6 +286,21 @@ func (dr *DeleteRangeResponse) combine(c combinable) error {
 	return nil
 }
 
+var _ combinable = &DeleteRangeResponse{}
+
+// combine implements the combinable interface.
+func (dr *RevertRangeResponse) combine(c combinable) error {
+	otherDR := c.(*RevertRangeResponse)
+	if dr != nil {
+		if err := dr.ResponseHeader.combine(otherDR.Header()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var _ combinable = &RevertRangeResponse{}
+
 // combine implements the combinable interface.
 func (rr *ResolveIntentRangeResponse) combine(c combinable) error {
 	otherRR := c.(*ResolveIntentRangeResponse)
@@ -1039,7 +1054,7 @@ func (*ClearRangeRequest) flags() int { return isWrite | isRange | isAlone }
 
 // Note that RevertRange commands cannot be part of a transaction as
 // they clear all MVCC versions above their target time.
-func (*RevertRangeRequest) flags() int { return isWrite | isRange | isAlone }
+func (*RevertRangeRequest) flags() int { return isWrite | isRange }
 
 func (*ScanRequest) flags() int { return isRead | isRange | isTxn | updatesReadTSCache | needsRefresh }
 func (*ReverseScanRequest) flags() int {
@@ -1169,4 +1184,70 @@ func (e *RangeFeedEvent) MustSetValue(value interface{}) {
 	if !e.SetValue(value) {
 		panic(fmt.Sprintf("%T excludes %T", e, value))
 	}
+}
+
+// MakeReplicationChanges returns a slice of changes of the given type with an
+// item for each target.
+func MakeReplicationChanges(
+	changeType ReplicaChangeType, targets ...ReplicationTarget,
+) []ReplicationChange {
+	chgs := make([]ReplicationChange, 0, len(targets))
+	for _, target := range targets {
+		chgs = append(chgs, ReplicationChange{
+			ChangeType: changeType,
+			Target:     target,
+		})
+	}
+	return chgs
+}
+
+// AddChanges adds a batch of changes to the request in a backwards-compatible
+// way.
+func (acrr *AdminChangeReplicasRequest) AddChanges(chgs ...ReplicationChange) {
+	acrr.InternalChanges = append(acrr.InternalChanges, chgs...)
+
+	acrr.DeprecatedChangeType = chgs[0].ChangeType
+	for _, chg := range chgs {
+		acrr.DeprecatedTargets = append(acrr.DeprecatedTargets, chg.Target)
+	}
+}
+
+// ReplicationChanges is a slice of ReplicationChange.
+type ReplicationChanges []ReplicationChange
+
+func (rc ReplicationChanges) byType(typ ReplicaChangeType) []ReplicationTarget {
+	var sl []ReplicationTarget
+	for _, chg := range rc {
+		if chg.ChangeType == typ {
+			sl = append(sl, chg.Target)
+		}
+	}
+	return sl
+}
+
+// Additions returns a slice of all contained replication changes that add replicas.
+func (rc ReplicationChanges) Additions() []ReplicationTarget {
+	return rc.byType(ADD_REPLICA)
+}
+
+// Removals returns a slice of all contained replication changes that remove replicas.
+func (rc ReplicationChanges) Removals() []ReplicationTarget {
+	return rc.byType(REMOVE_REPLICA)
+}
+
+// Changes returns the changes requested by this AdminChangeReplicasRequest, taking
+// the deprecated method of doing so into account.
+func (acrr *AdminChangeReplicasRequest) Changes() []ReplicationChange {
+	if len(acrr.InternalChanges) > 0 {
+		return acrr.InternalChanges
+	}
+
+	sl := make([]ReplicationChange, len(acrr.DeprecatedTargets))
+	for _, target := range acrr.DeprecatedTargets {
+		sl = append(sl, ReplicationChange{
+			ChangeType: acrr.DeprecatedChangeType,
+			Target:     target,
+		})
+	}
+	return sl
 }

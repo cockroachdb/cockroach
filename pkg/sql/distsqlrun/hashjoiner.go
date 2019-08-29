@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // hashJoinerInitialBufferSize controls the size of the initial buffering phase
@@ -169,22 +169,22 @@ func newHashJoiner(
 		return nil, err
 	}
 
-	st := h.flowCtx.Settings
+	st := h.flowCtx.Cfg.Settings
 	ctx := h.flowCtx.EvalCtx.Ctx()
 	h.useTempStorage = settingUseTempStorageJoins.Get(&st.SV) ||
-		h.flowCtx.testingKnobs.MemoryLimitBytes > 0 ||
+		h.flowCtx.Cfg.TestingKnobs.MemoryLimitBytes > 0 ||
 		h.testingKnobMemFailPoint != hjStateUnknown
 	if h.useTempStorage {
 		// Limit the memory use by creating a child monitor with a hard limit.
 		// The hashJoiner will overflow to disk if this limit is not enough.
-		limit := h.flowCtx.testingKnobs.MemoryLimitBytes
+		limit := h.flowCtx.Cfg.TestingKnobs.MemoryLimitBytes
 		if limit <= 0 {
 			limit = settingWorkMemBytes.Get(&st.SV)
 		}
 		limitedMon := mon.MakeMonitorInheritWithLimit("hashjoiner-limited", limit, flowCtx.EvalCtx.Mon)
 		limitedMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
 		h.MemMonitor = &limitedMon
-		h.diskMonitor = NewMonitor(ctx, flowCtx.diskMonitor, "hashjoiner-disk")
+		h.diskMonitor = NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "hashjoiner-disk")
 		// Override initialBufferSize to be half of this processor's memory
 		// limit. We consume up to h.initialBufferSize bytes from each input
 		// stream.
@@ -741,7 +741,7 @@ func (h *hashJoiner) initStoredRows() error {
 			h.evalCtx,
 			h.MemMonitor,
 			h.diskMonitor,
-			h.flowCtx.TempStorage,
+			h.flowCtx.Cfg.TempStorage,
 		)
 		h.storedRows = &hrc
 	} else {

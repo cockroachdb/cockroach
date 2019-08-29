@@ -32,18 +32,6 @@ func TestLogic(t *testing.T) {
 	RunLogicTest(t, "testdata/logic_test/[^.]*")
 }
 
-// TestPlannerLogic tests the heuristic planner by running EXPLAIN and SHOW
-// TRACE queries that show the plan that was produced. These tests are split
-// off from the TestLogic tests because the expected output is specific to how
-// the planner works. The cost-based optimizer will often return different
-// results for the same EXPLAIN statement, as it often chooses different ways
-// to execute the same logical query. Note that the cost-based optimizer tests
-// are housed in the various sql/opt packages.
-func TestPlannerLogic(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	RunLogicTest(t, "testdata/planner_test/[^.]*")
-}
-
 // TestSqlLiteLogic runs the subset of SqlLite logic tests that do not require
 // support for correlated subqueries. The heuristic planner does not support
 // correlated subqueries, so until that is fully deprecated, it can only run

@@ -91,10 +91,9 @@ var logStatementsExecuteEnabled = settings.RegisterBoolSetting(
 // maybeLogStatement conditionally records the current statement
 // (p.curPlan) to the exec / audit logs.
 func (p *planner) maybeLogStatement(
-	ctx context.Context, lbl string, numRetries, rows int, err error,
+	ctx context.Context, lbl string, numRetries, rows int, err error, queryReceived time.Time,
 ) {
-	p.maybeLogStatementInternal(
-		ctx, lbl, numRetries, rows, err, p.statsCollector.PhaseTimes()[sessionQueryReceived])
+	p.maybeLogStatementInternal(ctx, lbl, numRetries, rows, err, queryReceived)
 }
 
 func (p *planner) maybeLogStatementInternal(

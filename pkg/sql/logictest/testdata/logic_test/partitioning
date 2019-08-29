@@ -1,4 +1,4 @@
-# LogicTest: local local-opt
+# LogicTest: local
 
 statement error pgcode XXC01 creating or manipulating partitions requires a CCL binary
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (

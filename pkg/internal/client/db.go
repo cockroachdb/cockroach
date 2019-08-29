@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -357,9 +358,24 @@ func (db *DB) PutInline(ctx context.Context, key, value interface{}) error {
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
-func (db *DB) CPut(ctx context.Context, key, value, expValue interface{}) error {
+func (db *DB) CPut(ctx context.Context, key, value interface{}, expValue *roachpb.Value) error {
 	b := &Batch{}
 	b.CPut(key, value, expValue)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
+// CPutDeprecated conditionally sets the value for a key if the existing value is equal
+// to expValue. To conditionally set a value only if there is no existing entry
+// pass nil for expValue. Note that this must be an interface{}(nil), not a
+// typed nil value (e.g. []byte(nil)).
+//
+// Returns an error if the existing value is not equal to expValue.
+//
+// key can be either a byte slice or a string. value can be any key type, a
+// protoutil.Message or any Go primitive type (bool, int, etc).
+func (db *DB) CPutDeprecated(ctx context.Context, key, value, expValue interface{}) error {
+	b := &Batch{}
+	b.CPutDeprecated(key, value, expValue)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
@@ -524,12 +540,28 @@ func (db *DB) AdminTransferLease(
 func (db *DB) AdminChangeReplicas(
 	ctx context.Context,
 	key interface{},
-	changeType roachpb.ReplicaChangeType,
-	targets []roachpb.ReplicationTarget,
 	expDesc roachpb.RangeDescriptor,
+	chgs []roachpb.ReplicationChange,
 ) (*roachpb.RangeDescriptor, error) {
+	if ctx.Value("testing") == nil {
+		// Disallow trying to add and remove replicas in the same set of
+		// changes. This will only work when the node receiving the request is
+		// running 19.2 (code, not cluster version).
+		//
+		// TODO(tbg): remove this when 19.2 is released.
+		var typ *roachpb.ReplicaChangeType
+		for i := range chgs {
+			chg := &chgs[i]
+			if typ == nil {
+				typ = &chg.ChangeType
+			} else if *typ != chg.ChangeType {
+				return nil, errors.Errorf("can not mix %s and %s", *typ, chg.ChangeType)
+			}
+		}
+	}
+
 	b := &Batch{}
-	b.adminChangeReplicas(key, changeType, targets, expDesc)
+	b.adminChangeReplicas(key, expDesc, chgs)
 	if err := getOneErr(db.Run(ctx, b), b); err != nil {
 		return nil, err
 	}
@@ -568,10 +600,14 @@ func (db *DB) WriteBatch(ctx context.Context, begin, end interface{}, data []byt
 // AddSSTable links a file into the RocksDB log-structured merge-tree. Existing
 // data in the range is cleared.
 func (db *DB) AddSSTable(
-	ctx context.Context, begin, end interface{}, data []byte, disallowShadowing bool,
+	ctx context.Context,
+	begin, end interface{},
+	data []byte,
+	disallowShadowing bool,
+	stats *enginepb.MVCCStats,
 ) error {
 	b := &Batch{}
-	b.addSSTable(begin, end, data, disallowShadowing)
+	b.addSSTable(begin, end, data, disallowShadowing, stats)
 	return getOneErr(db.Run(ctx, b), b)
 }
 

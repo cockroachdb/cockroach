@@ -631,7 +631,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 		t.Fatal(err)
 	}
 	sqlDB.Exec(t, `INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, zoneConfigBytes)
-	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.kv@foo"); !exists {
+	if !sqlutils.ZoneConfigExists(t, sqlDB, "INDEX t.public.kv@foo") {
 		t.Fatal("zone config for index does not exist")
 	}
 
@@ -642,7 +642,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	}
 
 	// Verify that the index and its zone config still exist.
-	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.kv@foo"); !exists {
+	if !sqlutils.ZoneConfigExists(t, sqlDB, "INDEX t.public.kv@foo") {
 		t.Fatal("zone config for index no longer exists")
 	}
 	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
@@ -655,7 +655,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 
 	// Verify the index can now be properly dropped from an OSS binary.
 	sqlDB.Exec(t, `DROP INDEX t.kv@foo`)
-	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.kv@foo"); exists {
+	if sqlutils.ZoneConfigExists(t, sqlDB, "INDEX t.public.kv@foo") {
 		t.Fatal("zone config for index still exists after dropping index")
 	}
 	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)

@@ -13,14 +13,14 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 )
 
 // oneShotOp is an operator that does an arbitrary operation on the first batch
 // that it gets, then deletes itself from the operator tree. This is useful for
 // first-Next initialization that has to happen in an operator.
 type oneShotOp struct {
-	input Operator
+	OneInputNode
 
 	outputSourceRef *Operator
 

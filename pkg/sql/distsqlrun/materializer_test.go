@@ -40,8 +40,8 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 	c, err := newColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
@@ -53,11 +53,11 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		1, /* processorID */
 		c,
 		typs,
-		[]int{0, 1},
 		&distsqlpb.PostProcessSpec{},
 		nil, /* output */
 		nil, /* metadataSourcesQueue */
 		nil, /* outputStatsToTrace */
+		nil, /* cancelFlow */
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -121,8 +121,8 @@ func TestMaterializeTypes(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 	c, err := newColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
@@ -138,11 +138,11 @@ func TestMaterializeTypes(t *testing.T) {
 		1, /* processorID */
 		c,
 		types,
-		outputToInputColIdx,
 		&distsqlpb.PostProcessSpec{},
 		nil, /* output */
 		nil, /* metadataSourcesQueue */
 		nil, /* outputStatsToTrace */
+		nil, /* cancelFlow */
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -177,8 +177,8 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 	c, err := newColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
@@ -192,11 +192,11 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 			1, /* processorID */
 			c,
 			types,
-			[]int{0, 1},
 			&distsqlpb.PostProcessSpec{},
 			nil, /* output */
 			nil, /* metadataSourcesQueue */
 			nil, /* outputStatsToTrace */
+			nil, /* cancelFlow */
 		)
 		if err != nil {
 			b.Fatal(err)

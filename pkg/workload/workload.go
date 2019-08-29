@@ -24,8 +24,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/pkg/errors"
@@ -172,7 +172,7 @@ type BatchedTuples struct {
 
 // Tuples is like TypedTuples except that it tries to guess the type of each
 // datum. However, if the function ever returns nil for one of the datums, you
-// need to use TypedTuples instead and specify the types.
+// need to use TypedTuples instead and specify the coltypes.
 func Tuples(count int, fn func(int) []interface{}) BatchedTuples {
 	return TypedTuples(count, nil /* colTypes */, fn)
 }
@@ -186,7 +186,7 @@ const (
 // intended to be easier to use than directly specifying a BatchedTuples, but
 // the tradeoff is some bit of performance. If colTypes is nil, an attempt is
 // made to infer them.
-func TypedTuples(count int, colTypes []types.T, fn func(int) []interface{}) BatchedTuples {
+func TypedTuples(count int, colTypes []coltypes.T, fn func(int) []interface{}) BatchedTuples {
 	// The FillBatch we create has to be concurrency safe, so we can't let it do
 	// the one-time initialization of colTypes without this protection.
 	var colTypesOnce sync.Once
@@ -200,7 +200,7 @@ func TypedTuples(count int, colTypes []types.T, fn func(int) []interface{}) Batc
 
 			colTypesOnce.Do(func() {
 				if colTypes == nil {
-					colTypes = make([]types.T, len(row))
+					colTypes = make([]coltypes.T, len(row))
 					for i, datum := range row {
 						if datum == nil {
 							panic(fmt.Sprintf(
@@ -208,9 +208,9 @@ func TypedTuples(count int, colTypes []types.T, fn func(int) []interface{}) Batc
 						} else {
 							switch datum.(type) {
 							case time.Time:
-								colTypes[i] = types.Bytes
+								colTypes[i] = coltypes.Bytes
 							default:
-								colTypes[i] = types.FromGoType(datum)
+								colTypes[i] = coltypes.FromGoType(datum)
 							}
 						}
 					}
@@ -229,11 +229,11 @@ func TypedTuples(count int, colTypes []types.T, fn func(int) []interface{}) Batc
 				case float64:
 					col.Float64()[0] = d
 				case string:
-					col.Bytes()[0] = []byte(d)
+					col.Bytes().Set(0, []byte(d))
 				case []byte:
-					col.Bytes()[0] = d
+					col.Bytes().Set(0, d)
 				case time.Time:
-					col.Bytes()[0] = []byte(d.Round(time.Microsecond).UTC().Format(timestampOutputFormat))
+					col.Bytes().Set(0, []byte(d.Round(time.Microsecond).UTC().Format(timestampOutputFormat)))
 				default:
 					panic(fmt.Sprintf(`unhandled datum type %T`, d))
 				}
@@ -262,27 +262,27 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 	for colIdx, col := range cb.ColVecs() {
 		nulls := col.Nulls()
 		switch col.Type() {
-		case types.Bool:
+		case coltypes.Bool:
 			for rowIdx, datum := range col.Bool() {
 				if !nulls.NullAt64(uint64(rowIdx)) {
 					datums[rowIdx*numCols+colIdx] = datum
 				}
 			}
-		case types.Int64:
+		case coltypes.Int64:
 			for rowIdx, datum := range col.Int64() {
 				if !nulls.NullAt64(uint64(rowIdx)) {
 					datums[rowIdx*numCols+colIdx] = datum
 				}
 			}
-		case types.Float64:
+		case coltypes.Float64:
 			for rowIdx, datum := range col.Float64() {
 				if !nulls.NullAt64(uint64(rowIdx)) {
 					datums[rowIdx*numCols+colIdx] = datum
 				}
 			}
-		case types.Bytes:
+		case coltypes.Bytes:
 			// HACK: workload's Table schemas are SQL schemas, but the initial data is
-			// returned as a coldata.Batch, which has a more limited set of types.
+			// returned as a coldata.Batch, which has a more limited set of coltypes.
 			// (Or, in the case of simple workloads that return a []interface{}, it's
 			// roundtripped through coldata.Batch by the `Tuples` helper.)
 			//
@@ -294,9 +294,10 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 			// data/splits are okay with the fidelity loss. So, to avoid the
 			// complexity and the undesirable pkg/sql/parser dep, we simply treat them
 			// all as bytes and let the caller deal with the ambiguity.
-			for rowIdx, datum := range col.Bytes() {
+			colBytes := col.Bytes()
+			for rowIdx := 0; rowIdx < colBytes.Len(); rowIdx++ {
 				if !nulls.NullAt64(uint64(rowIdx)) {
-					datums[rowIdx*numCols+colIdx] = datum
+					datums[rowIdx*numCols+colIdx] = colBytes.Get(rowIdx)
 				}
 			}
 		default:

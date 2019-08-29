@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -242,7 +242,7 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *FlowCtx, types []types.
 		// to take the mutex.
 		evalCtx := flowCtx.NewEvalCtx()
 		memoryMonitor := evalCtx.Mon
-		diskMonitor := flowCtx.diskMonitor
+		diskMonitor := flowCtx.Cfg.DiskMonitor
 		if rb.statsCollectionEnabled {
 			// Start private monitors for stats collection.
 			memoryMonitorName := fmt.Sprintf("router-stat-mem-%d", rb.outputs[i].streamID)
@@ -255,7 +255,7 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *FlowCtx, types []types.
 			nil, /* ordering */
 			types,
 			evalCtx,
-			flowCtx.TempStorage,
+			flowCtx.Cfg.TempStorage,
 			memoryMonitor,
 			diskMonitor,
 			0, /* rowCapacity */

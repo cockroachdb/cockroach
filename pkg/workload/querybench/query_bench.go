@@ -30,8 +30,7 @@ type queryBench struct {
 	connFlags       *workload.ConnFlags
 	queryFile       string
 	numRunsPerQuery int
-	useOptimizer    bool
-	useVectorized   bool
+	vectorize       string
 	verbose         bool
 
 	queries []string
@@ -52,18 +51,26 @@ var queryBenchMeta = workload.Meta{
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`query-file`: {RuntimeOnly: true},
 			`optimizer`:  {RuntimeOnly: true},
-			`vectorized`: {RuntimeOnly: true},
+			`vectorize`:  {RuntimeOnly: true},
 			`num-runs`:   {RuntimeOnly: true},
 		}
 		g.flags.StringVar(&g.queryFile, `query-file`, ``, `File of newline separated queries to run`)
 		g.flags.IntVar(&g.numRunsPerQuery, `num-runs`, 0, `Specifies the number of times each query in the query file to be run `+
 			`(note that --duration and --max-ops take precedence, so if duration or max-ops is reached, querybench will exit without honoring --num-runs)`)
-		g.flags.BoolVar(&g.useOptimizer, `optimizer`, true, `Use cost-based optimizer`)
-		g.flags.BoolVar(&g.useVectorized, `vectorized`, false, `Turn experimental vectorized execution on`)
+		g.flags.StringVar(&g.vectorize, `vectorize`, "", `Set vectorize session variable`)
 		g.flags.BoolVar(&g.verbose, `verbose`, true, `Prints out the queries being run as well as histograms`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
+}
+
+// vectorizeSetting19_1Translation is a mapping from the 19.2+ vectorize session
+// variable value to the 19.1 syntax.
+var vectorizeSetting19_1Translation = map[string]string{
+	"experimental_on":     "on",
+	"experimental_always": "always",
+	// Translate auto as on, this was not an option in 19.1.
+	"auto": "on",
 }
 
 // Meta implements the Generator interface.
@@ -115,14 +122,18 @@ func (g *queryBench) Ops(urls []string, reg *histogram.Registry) (workload.Query
 	db.SetMaxOpenConns(g.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(g.connFlags.Concurrency + 1)
 
-	if !g.useOptimizer {
-		_, err := db.Exec("SET optimizer=off")
-		if err != nil {
-			return workload.QueryLoad{}, err
+	if g.vectorize != "" {
+		_, err := db.Exec("SET vectorize=" + g.vectorize)
+		if err != nil && strings.Contains(err.Error(), "unrecognized configuration") {
+			if _, ok := vectorizeSetting19_1Translation[g.vectorize]; !ok {
+				// Unrecognized setting value.
+				return workload.QueryLoad{}, err
+			}
+			// Fall back to using the pre-19.2 syntax.
+			// TODO(asubiotto): Remove this once we stop running this test against
+			//  19.1.
+			_, err = db.Exec("SET experimental_vectorize=" + vectorizeSetting19_1Translation[g.vectorize])
 		}
-	}
-	if g.useVectorized {
-		_, err := db.Exec("SET experimental_vectorize=on")
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}

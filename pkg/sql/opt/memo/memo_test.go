@@ -213,6 +213,93 @@ func TestMemoIsStale(t *testing.T) {
 	notStale()
 }
 
+// TestStatsAvailable tests that the statisticsBuilder correctly identifies
+// for each expression whether statistics were available on the base table.
+// This test is here (instead of statistics_builder_test.go) to avoid import
+// cycles.
+func TestStatsAvailable(t *testing.T) {
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+	catalog := testcat.New()
+	if _, err := catalog.ExecuteDDL(
+		"CREATE TABLE t (a INT, b INT)",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	var o xform.Optimizer
+
+	testNotAvailable := func(expr memo.RelExpr) {
+		traverseExpr(expr, func(e memo.RelExpr) {
+			if e.Relational().Stats.Available {
+				t.Fatal("stats should not be available")
+			}
+		})
+	}
+
+	// Stats should not be available for any expression.
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM t WHERE a=1")
+	testNotAvailable(o.Memo().RootExpr().(memo.RelExpr))
+
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT sum(a), b FROM t GROUP BY b")
+	testNotAvailable(o.Memo().RootExpr().(memo.RelExpr))
+
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx,
+		"SELECT * FROM t AS t1, t AS t2 WHERE t1.a = t2.a AND t1.b = 5",
+	)
+	testNotAvailable(o.Memo().RootExpr().(memo.RelExpr))
+
+	if _, err := catalog.ExecuteDDL(
+		`ALTER TABLE t INJECT STATISTICS '[
+		{
+			"columns": ["a"],
+			"created_at": "2018-01-01 1:00:00.00000+00:00",
+			"row_count": 1000,
+			"distinct_count": 500
+		},
+		{
+			"columns": ["b"],
+			"created_at": "2018-01-01 1:30:00.00000+00:00",
+			"row_count": 1000,
+			"distinct_count": 500
+		}
+	]'`); err != nil {
+		t.Fatal(err)
+	}
+
+	testAvailable := func(expr memo.RelExpr) {
+		traverseExpr(expr, func(e memo.RelExpr) {
+			if !e.Relational().Stats.Available {
+				t.Fatal("stats should be available")
+			}
+		})
+	}
+
+	// Stats should be available for all expressions.
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM t WHERE a=1")
+	testAvailable(o.Memo().RootExpr().(memo.RelExpr))
+
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT sum(a), b FROM t GROUP BY b")
+	testAvailable(o.Memo().RootExpr().(memo.RelExpr))
+
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx,
+		"SELECT * FROM t AS t1, t AS t2 WHERE t1.a = t2.a AND t1.b = 5",
+	)
+	testAvailable(o.Memo().RootExpr().(memo.RelExpr))
+}
+
+// traverseExpr is a helper function to recursively traverse a relational
+// expression and apply a function to the root as well as each relational
+// child.
+func traverseExpr(expr memo.RelExpr, f func(memo.RelExpr)) {
+	f(expr)
+	for i, n := 0, expr.ChildCount(); i < n; i++ {
+		if child, ok := expr.Child(i).(memo.RelExpr); ok {
+			traverseExpr(child, f)
+		}
+	}
+}
+
 // runDataDrivenTest runs data-driven testcases of the form
 //   <command>
 //   <SQL statement>

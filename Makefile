@@ -51,10 +51,10 @@ TESTS := .
 ## Benchmarks to run for use with `make bench`.
 BENCHES :=
 
-## Space delimited list of logic test files to run, for make testlogic/testccllogic/testoptlogic/testplannerlogic.
+## Space delimited list of logic test files to run, for make testlogic/testccllogic/testoptlogic.
 FILES :=
 
-## Name of a logic test configuration to run, for make testlogic/testccllogic/testoptlogic/testplannerlogic.
+## Name of a logic test configuration to run, for make testlogic/testccllogic/testoptlogic.
 ## (default: all configs. It's not possible yet to specify multiple configs in this way.)
 TESTCONFIG :=
 
@@ -130,6 +130,9 @@ help: ## Print help for targets with comments.
 		"make testlogic FILES='prepare fk'" "Run the logic tests in the files named prepare and fk." \
 		"make testlogic FILES=fk SUBTESTS='20042|20045'" "Run the logic tests within subtests 20042 and 20045 in the file named fk." \
 		"make testlogic TESTCONFIG=local" "Run the logic tests for the cluster configuration 'local'." \
+		"make fuzz" "Run all fuzz tests for 12m each (or whatever the default TESTTIMEOUT is)." \
+		"make fuzz PKG=./pkg/sql/... TESTTIMEOUT=1m" "Run all fuzz tests under the sql directory for 1m each." \
+		"make fuzz PKG=./pkg/sql/sem/tree TESTS=Decimal TESTTIMEOUT=1m" "Run the Decimal fuzz tests in the tree directory for 1m." \
 		"make check-libroach TESTS=ccl" "Run the libroach tests matching .*ccl.*"
 
 BUILDTYPE := development
@@ -303,13 +306,13 @@ bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
 		./vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
 		./vendor/github.com/cockroachdb/stress \
 		./vendor/github.com/golang/dep/cmd/dep \
-		./vendor/github.com/golang/lint/golint \
 		./vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
 		./vendor/github.com/kevinburke/go-bindata/go-bindata \
 		./vendor/github.com/kisielk/errcheck \
 		./vendor/github.com/mattn/goveralls \
 		./vendor/github.com/mibk/dupl \
 		./vendor/github.com/wadey/gocovmerge \
+		./vendor/golang.org/x/lint/golint \
 		./vendor/golang.org/x/perf/cmd/benchstat \
 		./vendor/golang.org/x/tools/cmd/goyacc \
 		./vendor/golang.org/x/tools/cmd/stringer \
@@ -782,9 +785,9 @@ PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources bin/.cpp_p
 DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions
 
 EXECGEN_TARGETS = \
+  pkg/col/coldata/vec.eg.go \
   pkg/sql/exec/any_not_null_agg.eg.go \
   pkg/sql/exec/avg_agg.eg.go \
-  pkg/sql/exec/coldata/vec.eg.go \
   pkg/sql/exec/const.eg.go \
   pkg/sql/exec/distinct.eg.go \
   pkg/sql/exec/hashjoiner.eg.go \
@@ -947,7 +950,7 @@ bench benchshort: TESTTIMEOUT := $(BENCHTIMEOUT)
 # that longer running benchmarks can skip themselves.
 benchshort: override TESTFLAGS += -benchtime=1ns -short
 
-.PHONY: check test testshort testrace testlogic testbaselogic testplannerlogic testccllogic testoptlogic bench benchshort
+.PHONY: check test testshort testrace testlogic testbaselogic testccllogic testoptlogic bench benchshort
 test: ## Run tests.
 check test testshort testrace bench benchshort:
 	$(xgo) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
@@ -970,13 +973,10 @@ roachprod-stress roachprod-stressrace: bin/roachprod-stress
 	    -test.run "$(TESTS)" $(filter-out -v,$(TESTFLAGS)) -test.v -test.timeout $(TESTTIMEOUT); \
 	fi
 
-testlogic: testbaselogic testplannerlogic testoptlogic testccllogic
+testlogic: testbaselogic testoptlogic testccllogic
 
 testbaselogic: ## Run SQL Logic Tests.
 testbaselogic: bin/logictest
-
-testplannerlogic: ## Run SQL Logic Tests for the heuristic planner.
-testplannerlogic: bin/logictest
 
 testccllogic: ## Run SQL CCL Logic Tests.
 testccllogic: bin/logictestccl
@@ -987,7 +987,6 @@ testoptlogic: bin/logictestopt
 logic-test-selector := $(if $(TESTCONFIG),^$(TESTCONFIG)$$)/$(if $(FILES),^$(subst $(space),$$|^,$(FILES))$$)/$(SUBTESTS)
 testbaselogic: TESTS := TestLogic/$(logic-test-selector)
 testccllogic: TESTS := TestCCLLogic/$(logic-test-selector)
-testplannerlogic: TESTS := TestPlannerLogic/$(logic-test-selector)
 testoptlogic: TESTS := TestExecBuild/$(logic-test-selector)
 
 # Note: we specify -config here in addition to the filter on TESTS
@@ -996,8 +995,8 @@ testoptlogic: TESTS := TestExecBuild/$(logic-test-selector)
 # does not prevent loading and initializing every default config in
 # turn (including setting up the test clusters, etc.). By specifying
 # -config, the extra initialization overhead is averted.
-testbaselogic testccllogic testplannerlogic testoptlogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql) $(if $(TESTCONFIG),-config $(TESTCONFIG))
-testbaselogic testccllogic testplannerlogic testoptlogic:
+testbaselogic testccllogic testoptlogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql) $(if $(TESTCONFIG),-config $(TESTCONFIG))
+testbaselogic testccllogic testoptlogic:
 	cd $($(<F)-package) && $(<F) -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 testraceslow: override GOFLAGS += -race
@@ -1043,7 +1042,7 @@ lint lintshort: TESTTIMEOUT := $(LINTTIMEOUT)
 .PHONY: lint
 lint: override TAGS += lint
 lint: ## Run all style checkers and linters.
-lint: bin/returncheck
+lint: bin/returncheck bin/roachlint
 	@if [ -t 1 ]; then echo '$(yellow)NOTE: `make lint` is very slow! Perhaps `make lintshort`?$(term-reset)'; fi
 	@# Run 'go build -i' to ensure we have compiled object files available for all
 	@# packages. In Go 1.10, only 'go vet' recompiles on demand. For details:
@@ -1054,6 +1053,7 @@ lint: bin/returncheck
 .PHONY: lintshort
 lintshort: override TAGS += lint
 lintshort: ## Run a fast subset of the style checkers and linters.
+lintshort: bin/roachlint
 	$(xgo) test ./pkg/testutils/lint -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -timeout $(TESTTIMEOUT) -run 'TestLint/$(TESTS)'
 
 .PHONY: protobuf
@@ -1457,9 +1457,9 @@ settings-doc-gen := $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),
 $(SETTINGS_DOC_PAGE): $(settings-doc-gen)
 	@$(settings-doc-gen) gen settings-list --format=html > $@
 
+pkg/col/coldata/vec.eg.go: pkg/col/coldata/vec_tmpl.go
 pkg/sql/exec/any_not_null_agg.eg.go: pkg/sql/exec/any_not_null_agg_tmpl.go
 pkg/sql/exec/avg_agg.eg.go: pkg/sql/exec/avg_agg_tmpl.go
-pkg/sql/exec/coldata/vec.eg.go: pkg/sql/exec/coldata/vec_tmpl.go
 pkg/sql/exec/const.eg.go: pkg/sql/exec/const_tmpl.go
 pkg/sql/exec/distinct.eg.go: pkg/sql/exec/distinct_tmpl.go
 pkg/sql/exec/hashjoiner.eg.go: pkg/sql/exec/hashjoiner_tmpl.go
@@ -1564,6 +1564,7 @@ bins = \
   bin/cockroach-short \
   bin/docgen \
   bin/execgen \
+  bin/fuzz \
   bin/generate-binary \
   bin/terraformgen \
   bin/github-post \
@@ -1575,6 +1576,7 @@ bins = \
   bin/publish-provisional-artifacts \
   bin/optgen \
   bin/returncheck \
+  bin/roachlint \
   bin/roachprod \
   bin/roachprod-stress \
   bin/roachtest \
@@ -1622,6 +1624,11 @@ $(testbins): bin/%: bin/%.d | bin/prereqs $(SUBMODULES_TARGET)
 bin/prereqs: ./pkg/cmd/prereqs/*.go
 	@echo go install -v ./pkg/cmd/prereqs
 	@$(GO_INSTALL) -v ./pkg/cmd/prereqs
+
+.PHONY: fuzz
+fuzz: ## Run fuzz tests.
+fuzz: bin/fuzz
+	bin/fuzz $(TESTFLAGS) -tests $(TESTS) -timeout $(TESTTIMEOUT) $(PKG)
 
 .PRECIOUS: bin/%.d
 bin/%.d: ;

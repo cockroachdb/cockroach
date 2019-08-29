@@ -26,25 +26,40 @@ import (
 // timeseries key prefix will already have been stripped off.
 var PrettyPrintTimeseriesKey func(key roachpb.Key) string
 
-type dictEntry struct {
-	name   string
+// DictEntry contains info on pretty-printing and pretty-scanning keys in a
+// region of the key space.
+type DictEntry struct {
+	Name   string
 	prefix roachpb.Key
 	// print the key's pretty value, key has been removed prefix data
 	ppFunc func(valDirs []encoding.Direction, key roachpb.Key) string
-	// Parses the relevant prefix of the input into a roachpb.Key, returning
-	// the remainder and the key corresponding to the consumed prefix of
+	// PSFunc parses the relevant prefix of the input into a roachpb.Key,
+	// returning the remainder and the key corresponding to the consumed prefix of
 	// 'input'. Allowed to panic on errors.
-	psFunc func(input string) (string, roachpb.Key)
+	PSFunc KeyParserFunc
 }
 
+// KeyParserFunc is a function able to reverse pretty-printed keys.
+type KeyParserFunc func(input string) (string, roachpb.Key)
+
 func parseUnsupported(_ string) (string, roachpb.Key) {
-	panic(&errUglifyUnsupported{})
+	panic(&ErrUglifyUnsupported{})
+}
+
+// KeyComprehensionTable contains information about how to decode pretty-printed
+// keys, split by key spans.
+type KeyComprehensionTable []struct {
+	Name    string
+	start   roachpb.Key
+	end     roachpb.Key
+	Entries []DictEntry
 }
 
 var (
-	constKeyDict = []struct {
-		name  string
-		value roachpb.Key
+	// ConstKeyDict translates some pretty-printed keys.
+	ConstKeyDict = []struct {
+		Name  string
+		Value roachpb.Key
 	}{
 		{"/Max", MaxKey},
 		{"/Min", MinKey},
@@ -52,23 +67,19 @@ var (
 		{"/Meta2/Max", Meta2KeyMax},
 	}
 
-	keyDict = []struct {
-		name    string
-		start   roachpb.Key
-		end     roachpb.Key
-		entries []dictEntry
-	}{
-		{name: "/Local", start: localPrefix, end: LocalMax, entries: []dictEntry{
-			{name: "/Store", prefix: roachpb.Key(localStorePrefix),
-				ppFunc: localStoreKeyPrint, psFunc: localStoreKeyParse},
-			{name: "/RangeID", prefix: roachpb.Key(LocalRangeIDPrefix),
-				ppFunc: localRangeIDKeyPrint, psFunc: localRangeIDKeyParse},
-			{name: "/Range", prefix: LocalRangePrefix, ppFunc: localRangeKeyPrint,
-				psFunc: parseUnsupported},
+	// KeyDict drives the pretty-printing and pretty-scanning of the key space.
+	KeyDict = KeyComprehensionTable{
+		{Name: "/Local", start: localPrefix, end: LocalMax, Entries: []DictEntry{
+			{Name: "/Store", prefix: roachpb.Key(localStorePrefix),
+				ppFunc: localStoreKeyPrint, PSFunc: localStoreKeyParse},
+			{Name: "/RangeID", prefix: roachpb.Key(LocalRangeIDPrefix),
+				ppFunc: localRangeIDKeyPrint, PSFunc: localRangeIDKeyParse},
+			{Name: "/Range", prefix: LocalRangePrefix, ppFunc: localRangeKeyPrint,
+				PSFunc: parseUnsupported},
 		}},
-		{name: "/Meta1", start: Meta1Prefix, end: Meta1KeyMax, entries: []dictEntry{
-			{name: "", prefix: Meta1Prefix, ppFunc: print,
-				psFunc: func(input string) (string, roachpb.Key) {
+		{Name: "/Meta1", start: Meta1Prefix, end: Meta1KeyMax, Entries: []DictEntry{
+			{Name: "", prefix: Meta1Prefix, ppFunc: print,
+				PSFunc: func(input string) (string, roachpb.Key) {
 					input = mustShiftSlash(input)
 					unq, err := strconv.Unquote(input)
 					if err != nil {
@@ -82,13 +93,13 @@ var (
 				},
 			}},
 		},
-		{name: "/Meta2", start: Meta2Prefix, end: Meta2KeyMax, entries: []dictEntry{
-			{name: "", prefix: Meta2Prefix, ppFunc: print,
-				psFunc: func(input string) (string, roachpb.Key) {
+		{Name: "/Meta2", start: Meta2Prefix, end: Meta2KeyMax, Entries: []DictEntry{
+			{Name: "", prefix: Meta2Prefix, ppFunc: print,
+				PSFunc: func(input string) (string, roachpb.Key) {
 					input = mustShiftSlash(input)
 					unq, err := strconv.Unquote(input)
 					if err != nil {
-						panic(&errUglifyUnsupported{err})
+						panic(&ErrUglifyUnsupported{err})
 					}
 					if len(unq) == 0 {
 						return "", Meta2Prefix
@@ -97,26 +108,26 @@ var (
 				},
 			}},
 		},
-		{name: "/System", start: SystemPrefix, end: SystemMax, entries: []dictEntry{
-			{name: "/NodeLiveness", prefix: NodeLivenessPrefix,
+		{Name: "/System", start: SystemPrefix, end: SystemMax, Entries: []DictEntry{
+			{Name: "/NodeLiveness", prefix: NodeLivenessPrefix,
 				ppFunc: decodeKeyPrint,
-				psFunc: parseUnsupported,
+				PSFunc: parseUnsupported,
 			},
-			{name: "/NodeLivenessMax", prefix: NodeLivenessKeyMax,
+			{Name: "/NodeLivenessMax", prefix: NodeLivenessKeyMax,
 				ppFunc: decodeKeyPrint,
-				psFunc: parseUnsupported,
+				PSFunc: parseUnsupported,
 			},
-			{name: "/StatusNode", prefix: StatusNodePrefix,
+			{Name: "/StatusNode", prefix: StatusNodePrefix,
 				ppFunc: decodeKeyPrint,
-				psFunc: parseUnsupported,
+				PSFunc: parseUnsupported,
 			},
-			{name: "/tsd", prefix: TimeseriesPrefix,
+			{Name: "/tsd", prefix: TimeseriesPrefix,
 				ppFunc: decodeTimeseriesKey,
-				psFunc: parseUnsupported,
+				PSFunc: parseUnsupported,
 			},
 		}},
-		{name: "/Table", start: TableDataMin, end: TableDataMax, entries: []dictEntry{
-			{name: "", prefix: nil, ppFunc: decodeKeyPrint, psFunc: tableKeyParse},
+		{Name: "/Table", start: TableDataMin, end: TableDataMax, Entries: []DictEntry{
+			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: tableKeyParse},
 		}},
 	}
 
@@ -205,7 +216,7 @@ func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
 	for _, s := range constSubKeyDict {
 		if strings.HasPrefix(input, s.name) {
 			if s.key.Equal(localStoreSuggestedCompactionSuffix) {
-				panic(&errUglifyUnsupported{errors.New("cannot parse suggested compaction key")})
+				panic(&ErrUglifyUnsupported{errors.New("cannot parse suggested compaction key")})
 			}
 			output = MakeStoreKey(s.key, nil)
 			return
@@ -241,10 +252,36 @@ func tableKeyParse(input string) (remainder string, output roachpb.Key) {
 	}
 	tableID, err := strconv.ParseUint(tableIDStr, 10, 32)
 	if err != nil {
-		panic(&errUglifyUnsupported{err})
+		panic(&ErrUglifyUnsupported{err})
 	}
 	output = roachpb.Key(MakeTablePrefix(uint32(tableID)))
+	if remainder != "" {
+		var indexKey roachpb.Key
+		remainder, indexKey = tableIndexParse(remainder)
+		output = append(output, indexKey...)
+	}
 	return
+}
+
+// tableIndexParse parses an index id out of the input and returns the remainder.
+// The input is expected to be of the form "/<index id>[/...]".
+func tableIndexParse(input string) (string, roachpb.Key) {
+	input = mustShiftSlash(input)
+	slashPos := strings.Index(input, "/")
+	if slashPos < 0 {
+		// We accept simply "/<id>"; if there's no further slashes, the whole string
+		// has to be the index id.
+		slashPos = len(input)
+	}
+	remainder := input[slashPos:] // `/something/else` -> `/else`
+	indexIDStr := input[:slashPos]
+	indexID, err := strconv.ParseUint(indexIDStr, 10, 32)
+	if err != nil {
+		panic(&ErrUglifyUnsupported{err})
+	}
+
+	output := encoding.EncodeUvarintAscending(nil /* key */, indexID)
+	return remainder, output
 }
 
 const strLogIndex = "/logIndex:"
@@ -332,7 +369,7 @@ func localRangeIDKeyParse(input string) (remainder string, key roachpb.Key) {
 	}
 	if suffix != nil {
 		if input != "" {
-			panic(&errUglifyUnsupported{errors.New("nontrivial detail")})
+			panic(&ErrUglifyUnsupported{errors.New("nontrivial detail")})
 		}
 		var detail roachpb.RKey
 		// TODO(tschottdorf): can't do this, init cycle:
@@ -344,7 +381,7 @@ func localRangeIDKeyParse(input string) (remainder string, key roachpb.Key) {
 		key = maker(roachpb.RangeID(rangeID), suffix, detail)
 		return
 	}
-	panic(&errUglifyUnsupported{errors.New("unhandled general range key")})
+	panic(&ErrUglifyUnsupported{errors.New("unhandled general range key")})
 }
 
 func localRangeIDKeyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
@@ -442,12 +479,14 @@ func localRangeKeyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 	return buf.String()
 }
 
-type errUglifyUnsupported struct {
-	wrapped error
+// ErrUglifyUnsupported is returned when UglyPrint doesn't know how to process a
+// key.
+type ErrUglifyUnsupported struct {
+	Wrapped error
 }
 
-func (euu *errUglifyUnsupported) Error() string {
-	return fmt.Sprintf("unsupported pretty key: %v", euu.wrapped)
+func (euu *ErrUglifyUnsupported) Error() string {
+	return fmt.Sprintf("unsupported pretty key: %v", euu.Wrapped)
 }
 
 func abortSpanKeyParse(rangeID roachpb.RangeID, input string) (string, roachpb.Key) {
@@ -455,11 +494,11 @@ func abortSpanKeyParse(rangeID roachpb.RangeID, input string) (string, roachpb.K
 	input = mustShiftSlash(input)
 	_, input = mustShift(input[:len(input)-1])
 	if len(input) != len(uuid.UUID{}.String()) {
-		panic(&errUglifyUnsupported{errors.New("txn id not available")})
+		panic(&ErrUglifyUnsupported{errors.New("txn id not available")})
 	}
 	id, err := uuid.FromString(input)
 	if err != nil {
-		panic(&errUglifyUnsupported{err})
+		panic(&ErrUglifyUnsupported{err})
 	}
 	return "", AbortSpanKey(rangeID, id)
 }
@@ -493,36 +532,36 @@ func decodeTimeseriesKey(_ []encoding.Direction, key roachpb.Key) string {
 	return PrettyPrintTimeseriesKey(key)
 }
 
-// prettyPrintInternal parse key with prefix in keyDict.
+// prettyPrintInternal parse key with prefix in KeyDict.
 // For table keys, valDirs correspond to the encoding direction of each encoded
 // value in key.
 // If valDirs is unspecified, the default encoding direction for each value
 // type is used (see encoding.go:prettyPrintFirstValue).
-// If the key doesn't match any prefix in keyDict, return its byte value with
+// If the key doesn't match any prefix in KeyDict, return its byte value with
 // quotation and false, or else return its human readable value and true.
 func prettyPrintInternal(valDirs []encoding.Direction, key roachpb.Key, quoteRawKeys bool) string {
-	for _, k := range constKeyDict {
-		if key.Equal(k.value) {
-			return k.name
+	for _, k := range ConstKeyDict {
+		if key.Equal(k.Value) {
+			return k.Name
 		}
 	}
 
 	helper := func(key roachpb.Key) (string, bool) {
 		var b strings.Builder
-		for _, k := range keyDict {
+		for _, k := range KeyDict {
 			if key.Compare(k.start) >= 0 && (k.end == nil || key.Compare(k.end) <= 0) {
-				b.WriteString(k.name)
+				b.WriteString(k.Name)
 				if k.end != nil && k.end.Compare(key) == 0 {
 					b.WriteString("/Max")
 					return b.String(), true
 				}
 
 				hasPrefix := false
-				for _, e := range k.entries {
+				for _, e := range k.Entries {
 					if bytes.HasPrefix(key, e.prefix) {
 						hasPrefix = true
 						key = key[len(e.prefix):]
-						b.WriteString(e.name)
+						b.WriteString(e.Name)
 						b.WriteString(e.ppFunc(valDirs, key))
 						break
 					}
@@ -572,80 +611,10 @@ func prettyPrintInternal(valDirs []encoding.Direction, key roachpb.Key, quoteRaw
 // descending directions.
 // If valDirs is unspecified, the default encoding direction for each value
 // type is used (see encoding.go:prettyPrintFirstValue).
+//
+// See keysutil.UglyPrint() for an inverse.
 func PrettyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 	return prettyPrintInternal(valDirs, key, true /* quoteRawKeys */)
-}
-
-var errIllegalInput = errors.New("illegal input")
-
-// UglyPrint is a partial right inverse to PrettyPrint: it takes a key
-// formatted for human consumption and attempts to translate it into a
-// roachpb.Key. Not all key types are supported and no optimization has been
-// performed. This is intended for use in debugging only.
-func UglyPrint(input string) (_ roachpb.Key, rErr error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if err, ok := r.(error); ok {
-				rErr = err
-				return
-			}
-			rErr = errors.Errorf("%v", r)
-		}
-	}()
-
-	origInput := input
-	var output roachpb.Key
-
-	mkErr := func(err error) (roachpb.Key, error) {
-		if err == nil {
-			err = errIllegalInput
-		}
-		err = errors.Errorf(`can't parse "%s" after reading %s: %s`,
-			input, origInput[:len(origInput)-len(input)], err)
-		return nil, &errUglifyUnsupported{err}
-	}
-
-	var entries []dictEntry // nil if not pinned to a subrange
-outer:
-	for len(input) > 0 {
-		if entries != nil {
-			for _, v := range entries {
-				if strings.HasPrefix(input, v.name) {
-					input = input[len(v.name):]
-					if v.psFunc == nil {
-						return mkErr(nil)
-					}
-					remainder, key := v.psFunc(input)
-					input = remainder
-					output = append(output, key...)
-					entries = nil
-					continue outer
-				}
-			}
-			return nil, &errUglifyUnsupported{errors.New("known key, but unsupported subtype")}
-		}
-		for _, v := range constKeyDict {
-			if strings.HasPrefix(input, v.name) {
-				output = append(output, v.value...)
-				input = input[len(v.name):]
-				continue outer
-			}
-		}
-		for _, v := range keyDict {
-			if strings.HasPrefix(input, v.name) {
-				// No appending to output yet, the dictionary will take care of
-				// it.
-				input = input[len(v.name):]
-				entries = v.entries
-				continue outer
-			}
-		}
-		return mkErr(errors.New("can't handle key"))
-	}
-	if out := PrettyPrint(nil /* valDirs */, output); out != origInput {
-		return nil, errors.Errorf("constructed key deviates from original: %s vs %s", out, origInput)
-	}
-	return output, nil
 }
 
 func init() {

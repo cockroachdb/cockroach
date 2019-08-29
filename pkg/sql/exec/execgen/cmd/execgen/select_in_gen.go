@@ -33,19 +33,14 @@ func genSelectIn(wr io.Writer) error {
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 
+	s = replaceManipulationFuncs(".LTyp", s)
+
 	tmpl, err := template.New("select_in").Parse(s)
 	if err != nil {
 		return err
 	}
 
-	var opOverloads []*overload
-	for _, overload := range comparisonOpOverloads {
-		if overload.CmpOp == tree.EQ {
-			opOverloads = append(opOverloads, overload)
-		}
-	}
-
-	return tmpl.Execute(wr, opOverloads)
+	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.EQ])
 }
 
 func init() {

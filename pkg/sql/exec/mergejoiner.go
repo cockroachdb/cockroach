@@ -12,10 +12,12 @@ package exec
 
 import (
 	"context"
+	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -137,7 +139,7 @@ type mergeJoinInput struct {
 
 	// sourceTypes specify the types of the input columns of the source table for
 	// the merge joiner.
-	sourceTypes []types.T
+	sourceTypes []coltypes.T
 
 	// The distincter is used in the finishGroup phase, and is used only to
 	// determine where the current group ends, in the case that the group ended
@@ -153,6 +155,7 @@ type mergeJoinInput struct {
 // feedOperator is used to feed the distincter with input by manually setting
 // the next batch.
 type feedOperator struct {
+	ZeroInputNode
 	batch coldata.Batch
 }
 
@@ -189,8 +192,8 @@ func NewMergeJoinOp(
 	right Operator,
 	leftOutCols []uint32,
 	rightOutCols []uint32,
-	leftTypes []types.T,
-	rightTypes []types.T,
+	leftTypes []coltypes.T,
+	rightTypes []coltypes.T,
 	leftOrdering []distsqlpb.Ordering_Column,
 	rightOrdering []distsqlpb.Ordering_Column,
 ) (Operator, error) {
@@ -209,7 +212,9 @@ func NewMergeJoinOp(
 	case sqlbase.JoinType_LEFT_ANTI:
 		return &mergeJoinLeftAntiOp{base}, err
 	default:
-		panic("unsupported join type")
+		execerror.VectorizedInternalPanic("unsupported join type")
+		// This code is unreachable, but the compiler cannot infer that.
+		return nil, nil
 	}
 }
 
@@ -248,8 +253,8 @@ func newMergeJoinBase(
 	right Operator,
 	leftOutCols []uint32,
 	rightOutCols []uint32,
-	leftTypes []types.T,
-	rightTypes []types.T,
+	leftTypes []coltypes.T,
+	rightTypes []coltypes.T,
 	leftOrdering []distsqlpb.Ordering_Column,
 	rightOrdering []distsqlpb.Ordering_Column,
 ) (mergeJoinBase, error) {
@@ -268,6 +273,7 @@ func newMergeJoinBase(
 	}
 
 	base := mergeJoinBase{
+		twoInputNode: newTwoInputNode(left, right),
 		left: mergeJoinInput{
 			source:      left,
 			outCols:     leftOutCols,
@@ -298,6 +304,7 @@ func newMergeJoinBase(
 
 // mergeJoinBase extract the common logic between all merge join operators.
 type mergeJoinBase struct {
+	twoInputNode
 	left  mergeJoinInput
 	right mergeJoinInput
 
@@ -317,16 +324,40 @@ type mergeJoinBase struct {
 	builderState mjBuilderState
 }
 
+func (o *mergeJoinBase) getOutColTypes() []coltypes.T {
+	if len(o.right.outCols) == 0 {
+		// We do not have output columns from the right input in case of LEFT SEMI
+		// and LEFT ANTI joins, and we should not have the corresponding columns in
+		// the output batch, so we simply return the types of the left input.
+		return o.left.sourceTypes
+	}
+	return append(o.left.sourceTypes, o.right.sourceTypes...)
+}
+
+func (o *mergeJoinBase) EstimateStaticMemoryUsage() int {
+	const sizeOfGroup = int(unsafe.Sizeof(group{}))
+	leftDistincter := o.left.distincter.(StaticMemoryOperator)
+	rightDistincter := o.right.distincter.(StaticMemoryOperator)
+	return EstimateBatchSizeBytes(
+		o.getOutColTypes(), coldata.BatchSize,
+	) + // base.output
+		EstimateBatchSizeBytes(
+			o.left.sourceTypes, coldata.BatchSize,
+		) + // base.proberState.lBufferedGroup
+		EstimateBatchSizeBytes(
+			o.right.sourceTypes, coldata.BatchSize,
+		) + // base.proberState.rBufferedGroup
+		4*sizeOfGroup*coldata.BatchSize + // base.groups
+		leftDistincter.EstimateStaticMemoryUsage() + // base.left.distincter
+		rightDistincter.EstimateStaticMemoryUsage() // base.right.distincter
+}
+
 func (o *mergeJoinBase) Init() {
 	o.initWithBatchSize(coldata.BatchSize)
 }
 
 func (o *mergeJoinBase) initWithBatchSize(outBatchSize uint16) {
-	outColTypes := make([]types.T, len(o.left.sourceTypes)+len(o.right.sourceTypes))
-	copy(outColTypes, o.left.sourceTypes)
-	copy(outColTypes[len(o.left.sourceTypes):], o.right.sourceTypes)
-
-	o.output = coldata.NewMemBatchWithSize(outColTypes, int(outBatchSize))
+	o.output = coldata.NewMemBatchWithSize(o.getOutColTypes(), int(outBatchSize))
 	o.left.source.Init()
 	o.right.source.Init()
 	o.outputBatchSize = outBatchSize
@@ -370,7 +401,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 				ColType:     cType,
 				Src:         batch.ColVec(cIdx),
 				Sel:         sel,
-				DestIdx:     uint64(destStartIdx),
+				DestIdx:     destStartIdx,
 				SrcStartIdx: uint16(groupStartIdx),
 				SrcEndIdx:   uint16(groupEndIdx),
 			},
@@ -378,7 +409,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 		if sel != nil {
 			bufferedGroup.ColVec(cIdx).Nulls().ExtendWithSel(
 				batch.ColVec(cIdx).Nulls(),
-				uint64(destStartIdx),
+				destStartIdx,
 				uint16(groupStartIdx),
 				uint16(groupLength),
 				sel,
@@ -386,7 +417,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 		} else {
 			bufferedGroup.ColVec(cIdx).Nulls().Extend(
 				batch.ColVec(cIdx).Nulls(),
-				uint64(destStartIdx),
+				destStartIdx,
 				uint16(groupStartIdx),
 				uint16(groupLength),
 			)

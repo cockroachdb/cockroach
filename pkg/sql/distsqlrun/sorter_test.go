@@ -302,15 +302,17 @@ func TestSorter(t *testing.T) {
 						diskMonitor := makeTestDiskMonitor(ctx, st)
 						defer diskMonitor.Stop(ctx)
 						flowCtx := FlowCtx{
-							EvalCtx:     &evalCtx,
-							Settings:    cluster.MakeTestingClusterSettings(),
-							TempStorage: tempEngine,
-							diskMonitor: diskMonitor,
+							EvalCtx: &evalCtx,
+							Cfg: &ServerConfig{
+								Settings:    cluster.MakeTestingClusterSettings(),
+								TempStorage: tempEngine,
+								DiskMonitor: diskMonitor,
+							},
 						}
 						// Override the default memory limit. This will result in using
 						// a memory row container which will hit this limit and fall
 						// back to using a disk row container.
-						flowCtx.testingKnobs.MemoryLimitBytes = memLimit.bytes
+						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memLimit.bytes
 
 						in := NewRowBuffer(c.types, c.input, RowBufferArgs{})
 						out := &RowBuffer{}
@@ -415,9 +417,11 @@ func BenchmarkSortAll(b *testing.B) {
 	diskMonitor := makeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 	flowCtx := FlowCtx{
-		Settings:    st,
-		EvalCtx:     &evalCtx,
-		diskMonitor: diskMonitor,
+		EvalCtx: &evalCtx,
+		Cfg: &ServerConfig{
+			Settings:    st,
+			DiskMonitor: diskMonitor,
+		},
 	}
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -455,9 +459,11 @@ func BenchmarkSortLimit(b *testing.B) {
 	diskMonitor := makeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 	flowCtx := FlowCtx{
-		Settings:    st,
-		EvalCtx:     &evalCtx,
-		diskMonitor: diskMonitor,
+		EvalCtx: &evalCtx,
+		Cfg: &ServerConfig{
+			Settings:    st,
+			DiskMonitor: diskMonitor,
+		},
 	}
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -499,9 +505,11 @@ func BenchmarkSortChunks(b *testing.B) {
 	diskMonitor := makeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 	flowCtx := FlowCtx{
-		Settings:    st,
-		EvalCtx:     &evalCtx,
-		diskMonitor: diskMonitor,
+		EvalCtx: &evalCtx,
+		Cfg: &ServerConfig{
+			Settings:    st,
+			DiskMonitor: diskMonitor,
+		},
 	}
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))

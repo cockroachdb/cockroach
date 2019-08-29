@@ -75,18 +75,18 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 		}
 
 		// Check available types.
-		c := &tree.NumVal{Value: val, OrigString: str, Negative: neg}
+		c := tree.NewNumVal(val, str, neg)
 		avail := c.AvailableTypes()
 		if !reflect.DeepEqual(avail, test.avail) {
 			t.Errorf("%d: expected the available type set %v for %v, found %v",
-				i, test.avail, c.Value.ExactString(), avail)
+				i, test.avail, c.ExactString(), avail)
 		}
 
 		// Make sure it can be resolved as each of those types.
 		for _, availType := range avail {
 			if res, err := c.ResolveAsType(&tree.SemaContext{}, availType); err != nil {
 				t.Errorf("%d: expected resolving %v as available type %s would succeed, found %v",
-					i, c.Value.ExactString(), availType, err)
+					i, c.ExactString(), availType, err)
 			} else {
 				resErr := func(parsed, resolved interface{}) {
 					t.Errorf("%d: expected resolving %v as available type %s would produce a tree.Datum"+

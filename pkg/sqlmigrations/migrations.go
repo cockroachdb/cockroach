@@ -745,7 +745,7 @@ func upgradeDescsWithFn(
 							// Use ValidateTable() instead of Validate()
 							// because of #26422. We still do not know why
 							// a table can reference a dropped database.
-							if err := table.ValidateTable(nil); err != nil {
+							if err := table.ValidateTable(); err != nil {
 								return err
 							}
 

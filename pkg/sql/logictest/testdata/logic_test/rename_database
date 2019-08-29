@@ -103,7 +103,7 @@ GRANT ALL ON DATABASE t TO testuser
 
 user testuser
 
-statement error only superusers are allowed to ALTER DATABASE ... RENAME
+statement error only users with the admin role are allowed to ALTER DATABASE ... RENAME
 ALTER DATABASE t RENAME TO v
 
 query T

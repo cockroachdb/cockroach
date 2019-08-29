@@ -36,23 +36,46 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft/tracker"
 )
 
-// TODO(dan): Test learners and quota pool.
-// TODO(dan): Grep the codebase for "preemptive" and audit.
-// TODO(dan): Write a test like TestLearnerAdminChangeReplicasRace for the
-//   replicate queue leadership transfer race.
-
-type learnerTestKnobs struct {
-	storeKnobs                       storage.StoreTestingKnobs
-	replicaAddStopAfterLearnerAtomic int64
+func predIncoming(rDesc roachpb.ReplicaDescriptor) bool {
+	return rDesc.GetType() == roachpb.VOTER_INCOMING
+}
+func predOutgoing(rDesc roachpb.ReplicaDescriptor) bool {
+	return rDesc.GetType() == roachpb.VOTER_OUTGOING
 }
 
-func makeLearnerTestKnobs() (base.TestingKnobs, *learnerTestKnobs) {
-	var k learnerTestKnobs
+type replicationTestKnobs struct {
+	storeKnobs                       storage.StoreTestingKnobs
+	replicaAddStopAfterLearnerAtomic int64
+	replicaAddStopAfterJointConfig   int64
+	replicationAlwaysUseJointConfig  int64
+}
+
+func (rtl *replicationTestKnobs) withStopAfterLearnerAtomic(f func()) {
+	prev := atomic.SwapInt64(&rtl.replicaAddStopAfterLearnerAtomic, 1)
+	defer atomic.StoreInt64(&rtl.replicaAddStopAfterLearnerAtomic, prev)
+	f()
+}
+
+func (rtl *replicationTestKnobs) withStopAfterJointConfig(f func()) {
+	au := atomic.SwapInt64(&rtl.replicationAlwaysUseJointConfig, 1)
+	sa := atomic.SwapInt64(&rtl.replicaAddStopAfterJointConfig, 1)
+	defer atomic.StoreInt64(&rtl.replicationAlwaysUseJointConfig, au)
+	defer atomic.StoreInt64(&rtl.replicaAddStopAfterJointConfig, sa)
+	f()
+}
+
+func makeReplicationTestKnobs() (base.TestingKnobs, *replicationTestKnobs) {
+	var k replicationTestKnobs
 	k.storeKnobs.ReplicaAddStopAfterLearnerSnapshot = func() bool {
 		return atomic.LoadInt64(&k.replicaAddStopAfterLearnerAtomic) > 0
+	}
+	k.storeKnobs.ReplicaAddStopAfterJointConfig = func() bool {
+		return atomic.LoadInt64(&k.replicaAddStopAfterJointConfig) > 0
+	}
+	k.storeKnobs.ReplicationAlwaysUseJointConfig = func() bool {
+		return atomic.LoadInt64(&k.replicationAlwaysUseJointConfig) > 0
 	}
 	return base.TestingKnobs{Store: &k.storeKnobs}, &k
 }
@@ -112,7 +135,7 @@ func TestAddReplicaViaLearner(t *testing.T) {
 
 	blockUntilSnapshotCh := make(chan struct{})
 	blockSnapshotsCh := make(chan struct{})
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
 		close(blockUntilSnapshotCh)
 		select {
@@ -129,7 +152,6 @@ func TestAddReplicaViaLearner(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
 
@@ -195,7 +217,7 @@ func TestLearnerRaftConfState(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	ctx := context.Background()
 	const numNodes = 2
 	serverArgsPerNode := make(map[int]base.TestServerArgs)
@@ -215,15 +237,14 @@ func TestLearnerRaftConfState(t *testing.T) {
 		// contrast to other tests, run this `defer Stop` in an anonymous func.
 		tc.Stopper().Stop(ctx)
 	}()
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	// Add a learner replica, send a snapshot so that it's materialized as a
 	// Replica on the Store, but don't promote it to a voter.
 	scratchStartKey := tc.ScratchRange(t)
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 1)
-	desc := tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 0)
+	var desc roachpb.RangeDescriptor
+	ltk.withStopAfterLearnerAtomic(func() {
+		desc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	})
 	require.Len(t, desc.Replicas().Learners(), 1)
 	learnerReplicaID := desc.Replicas().Learners()[0].ReplicaID
 
@@ -252,7 +273,7 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var rejectSnapshots int64
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
 		if atomic.LoadInt64(&rejectSnapshots) > 0 {
 			return errors.New(`nope`)
@@ -265,8 +286,6 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
 	atomic.StoreInt64(&rejectSnapshots, 1)
@@ -284,25 +303,23 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 	require.Empty(t, desc.Replicas().Learners())
 }
 
-func TestSplitWithLearner(t *testing.T) {
+func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	// Add a learner replica, send a snapshot so that it's materialized as a
 	// Replica on the Store, but don't promote it to a voter.
 	scratchStartKey := tc.ScratchRange(t)
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 1)
-	_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 0)
+	ltk.withStopAfterLearnerAtomic(func() {
+		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	})
 
 	// Splitting a learner is allowed. This orphans the two learners, but the
 	// replication queue will eventually clean this up.
@@ -310,83 +327,130 @@ func TestSplitWithLearner(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, left.Replicas().Learners(), 1)
 	require.Len(t, right.Replicas().Learners(), 1)
+
+	// Remove the learner on the RHS.
+	right = tc.RemoveReplicasOrFatal(t, right.StartKey.AsRawKey(), tc.Target(1))
+
+	// Put an incoming voter on the RHS and split again. This works because the
+	// split auto-transitions us out of the joint conf before doing work.
+	atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
+	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
+	right = tc.AddReplicasOrFatal(t, right.StartKey.AsRawKey(), tc.Target(1))
+	require.Len(t, right.Replicas().Filter(predIncoming), 1)
+	left, right, err = tc.SplitRange(right.StartKey.AsRawKey().Next())
+	require.NoError(t, err)
+	require.False(t, left.Replicas().InAtomicReplicationChange(), left)
+	require.False(t, right.Replicas().InAtomicReplicationChange(), right)
 }
 
-func TestReplicateQueueSeesLearner(t *testing.T) {
+func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// NB also see TestAllocatorRemoveLearner for a lower-level test.
 
 	ctx := context.Background()
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	// Add a learner replica, send a snapshot so that it's materialized as a
 	// Replica on the Store, but don't promote it to a voter.
 	scratchStartKey := tc.ScratchRange(t)
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 1)
-	_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 0)
+	ltk.withStopAfterLearnerAtomic(func() {
+		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	})
 
 	// Run the replicate queue.
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-	require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
-	_, errMsg, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
-	require.NoError(t, err)
-	require.Equal(t, ``, errMsg)
-	require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
+	{
+		require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
+		_, errMsg, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
+		require.NoError(t, err)
+		require.Equal(t, ``, errMsg)
+		require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
 
-	// Make sure it deleted the learner.
-	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
-	require.Empty(t, desc.Replicas().Learners())
+		// Make sure it deleted the learner.
+		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
+		require.Empty(t, desc.Replicas().Learners())
 
-	// Bonus points: the replicate queue keeps processing until there is nothing
-	// to do, so it should have upreplicated the range to 3.
-	require.Len(t, desc.Replicas().Voters(), 3)
+		// Bonus points: the replicate queue keeps processing until there is nothing
+		// to do, so it should have upreplicated the range to 3.
+		require.Len(t, desc.Replicas().Voters(), 3)
+	}
+
+	// Create a VOTER_OUTGOING, i.e. a joint configuration.
+	ltk.withStopAfterJointConfig(func() {
+		desc := tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(2))
+		require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
+		trace, errMsg, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
+		require.NoError(t, err)
+		require.Equal(t, ``, errMsg)
+		formattedTrace := tracing.FormatRecordedSpans(trace)
+		expectedMessages := []string{
+			`transitioning out of joint configuration`,
+		}
+		if err := testutils.MatchInOrder(formattedTrace, expectedMessages...); err != nil {
+			t.Fatal(err)
+		}
+
+		desc = tc.LookupRangeOrFatal(t, scratchStartKey)
+		require.False(t, desc.Replicas().InAtomicReplicationChange(), desc)
+		// Queue processed again, so we're back to three replicas.
+		require.Len(t, desc.Replicas().Voters(), 3)
+	})
 }
 
-func TestGCQueueSeesLearner(t *testing.T) {
+func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	// Add a learner replica, send a snapshot so that it's materialized as a
 	// Replica on the Store, but don't promote it to a voter.
 	scratchStartKey := tc.ScratchRange(t)
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 1)
-	_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 0)
+	ltk.withStopAfterLearnerAtomic(func() {
+		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	})
 
 	// Run the replicaGC queue.
-	store, repl := getFirstStoreReplica(t, tc.Server(1), scratchStartKey)
-	trace, errMsg, err := store.ManuallyEnqueue(ctx, "replicaGC", repl, true /* skipShouldQueue */)
-	require.NoError(t, err)
-	require.Equal(t, ``, errMsg)
-	const msg = `not gc'able, replica is still in range descriptor: (n2,s2):2LEARNER`
-	require.Contains(t, tracing.FormatRecordedSpans(trace), msg)
+	checkNoGC := func() roachpb.RangeDescriptor {
+		store, repl := getFirstStoreReplica(t, tc.Server(1), scratchStartKey)
+		trace, errMsg, err := store.ManuallyEnqueue(ctx, "replicaGC", repl, true /* skipShouldQueue */)
+		require.NoError(t, err)
+		require.Equal(t, ``, errMsg)
+		const msg = `not gc'able, replica is still in range descriptor: (n2,s2):`
+		require.Contains(t, tracing.FormatRecordedSpans(trace), msg)
+		return tc.LookupRangeOrFatal(t, scratchStartKey)
+	}
 
+	desc := checkNoGC()
 	// Make sure it didn't collect the learner.
-	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 	require.NotEmpty(t, desc.Replicas().Learners())
+
+	// Now get the range into a joint config.
+	tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(1)) // remove learner
+	ltk.withStopAfterJointConfig(func() {
+		desc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+		require.Len(t, desc.Replicas().Filter(predIncoming), 1, desc)
+	})
+
+	postDesc := checkNoGC()
+	require.Equal(t, desc, postDesc)
 }
 
 func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	blockSnapshotsCh := make(chan struct{})
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
+	ltk.storeKnobs.DisableRaftSnapshotQueue = true
 	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
 		select {
 		case <-blockSnapshotsCh:
@@ -400,8 +464,6 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	// Create a learner replica.
 	scratchStartKey := tc.ScratchRange(t)
@@ -411,27 +473,28 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 		return err
 	})
 
-	// Wait until raft knows that the learner needs a snapshot.
-	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-	testutils.SucceedsSoon(t, func() error {
-		for _, p := range repl.RaftStatus().Progress {
-			if p.State == tracker.StateSnapshot {
-				return nil
-			}
-		}
-		return errors.New(`expected some replica to need a snapshot`)
-	})
-
 	// Note the value of the metrics before.
 	generatedBefore := getFirstStoreMetric(t, tc.Server(0), `range.snapshots.generated`)
 	raftAppliedBefore := getFirstStoreMetric(t, tc.Server(0), `range.snapshots.normal-applied`)
 
-	// Run the raftsnapshot queue.
-	trace, errMsg, err := store.ManuallyEnqueue(ctx, "raftsnapshot", repl, true /* skipShouldQueue */)
-	require.NoError(t, err)
-	require.Equal(t, ``, errMsg)
-	const msg = `not sending snapshot type RAFT to learner: (n2,s2):2LEARNER`
-	require.Contains(t, tracing.FormatRecordedSpans(trace), msg)
+	// Run the raftsnapshot queue. SucceedsSoon because it may take a bit for
+	// raft to figure out that the replica needs a snapshot.
+	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
+	testutils.SucceedsSoon(t, func() error {
+		trace, errMsg, err := store.ManuallyEnqueue(ctx, "raftsnapshot", repl, true /* skipShouldQueue */)
+		if err != nil {
+			return err
+		}
+		if errMsg != `` {
+			return errors.New(errMsg)
+		}
+		const msg = `skipping snapshot; replica is likely a learner in the process of being added: (n2,s2):2LEARNER`
+		formattedTrace := tracing.FormatRecordedSpans(trace)
+		if !strings.Contains(formattedTrace, msg) {
+			return errors.Errorf(`expected "%s" in trace got:\n%s`, msg, formattedTrace)
+		}
+		return nil
+	})
 
 	// Make sure it didn't send any RAFT snapshots.
 	require.Equal(t, generatedBefore, getFirstStoreMetric(t, tc.Server(0), `range.snapshots.generated`))
@@ -448,7 +511,7 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 
 	blockUntilSnapshotCh := make(chan struct{}, 2)
 	blockSnapshotsCh := make(chan struct{})
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
 		blockUntilSnapshotCh <- struct{}{}
 		<-blockSnapshotsCh
@@ -460,8 +523,6 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	// Add the learner.
 	scratchStartKey := tc.ScratchRange(t)
@@ -476,7 +537,8 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 	<-blockUntilSnapshotCh
 
 	// Removes the learner out from under the coordinator running on behalf of
-	// AddReplicas.
+	// AddReplicas. This simulates the replicate queue running concurrently. The
+	// first thing the replicate queue would do is remove any learners it sees.
 	_, err := tc.RemoveReplicas(scratchStartKey, tc.Target(1))
 	require.NoError(t, err)
 	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
@@ -495,24 +557,99 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 	require.Len(t, desc.Replicas().Learners(), 0)
 }
 
+// This test verifies the result of a race between the replicate queue running
+// for the same range from two different nodes. This can happen around
+// leadership changes.
+func TestLearnerReplicateQueueRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var skipReceiveSnapshotKnobAtomic int64 = 1
+	blockUntilSnapshotCh := make(chan struct{}, 2)
+	blockSnapshotsCh := make(chan struct{})
+	knobs, ltk := makeReplicationTestKnobs()
+	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
+		if atomic.LoadInt64(&skipReceiveSnapshotKnobAtomic) > 0 {
+			return nil
+		}
+		blockUntilSnapshotCh <- struct{}{}
+		<-blockSnapshotsCh
+		return nil
+	}
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchStartKey := tc.ScratchRange(t)
+	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
+
+	// Start with 2 replicas so the replicate queue can go from 2->3, otherwise it
+	// will refuse to upreplicate to a fragile quorum of 1->2.
+	tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	atomic.StoreInt64(&skipReceiveSnapshotKnobAtomic, 0)
+
+	// Run the replicate queue, this will add a learner to node 3 and start
+	// sending it a snapshot. This will eventually fail and we assert some things
+	// about the trace to prove it failed in the way we want.
+	queue1ErrCh := make(chan error, 1)
+	go func() {
+		queue1ErrCh <- func() error {
+			trace, errMsg, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
+			if err != nil {
+				return err
+			}
+			if !strings.Contains(errMsg, `descriptor changed`) {
+				return errors.Errorf(`expected "descriptor changed" error got: %s`, errMsg)
+			}
+			formattedTrace := tracing.FormatRecordedSpans(trace)
+			expectedMessages := []string{
+				`could not promote .*n3,s3.* to voter, rolling back: change replicas of r\d+ failed: descriptor changed`,
+				`learner to roll back not found`,
+			}
+			return testutils.MatchInOrder(formattedTrace, expectedMessages...)
+		}()
+	}()
+
+	// Wait until the snapshot starts, which happens after the learner has been
+	// added.
+	<-blockUntilSnapshotCh
+
+	// Removes the learner on node 3 out from under the replicate queue. This
+	// simulates a second replicate queue running concurrently. The first thing
+	// this second replicate queue would do is remove any learners it sees,
+	// leaving the 2 voters.
+	desc, err := tc.RemoveReplicas(scratchStartKey, tc.Target(2))
+	require.NoError(t, err)
+	require.Len(t, desc.Replicas().Voters(), 2)
+	require.Len(t, desc.Replicas().Learners(), 0)
+
+	// Unblock the snapshot, and surprise the replicate queue. It should retry,
+	// get a descriptor changed error, and realize it should stop.
+	close(blockSnapshotsCh)
+	require.NoError(t, <-queue1ErrCh)
+	desc = tc.LookupRangeOrFatal(t, scratchStartKey)
+	require.Len(t, desc.Replicas().Voters(), 2)
+	require.Len(t, desc.Replicas().Learners(), 0)
+}
+
 func TestLearnerNoAcceptLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	// Add a learner replica, send a snapshot so that it's materialized as a
 	// Replica on the Store, but don't promote it to a voter.
 	scratchStartKey := tc.ScratchRange(t)
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 1)
-	_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 0)
+	ltk.withStopAfterLearnerAtomic(func() {
+		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	})
 
 	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 	err := tc.TransferRangeLease(desc, tc.Target(1))
@@ -521,7 +658,38 @@ func TestLearnerNoAcceptLease(t *testing.T) {
 	}
 }
 
-func TestLearnerFollowerRead(t *testing.T) {
+// TestJointConfigLease verifies that incoming and outgoing voters can't have the
+// lease transferred to them.
+func TestJointConfigLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	knobs, ltk := makeReplicationTestKnobs()
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	k := tc.ScratchRange(t)
+	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
+	atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
+	desc := tc.AddReplicasOrFatal(t, k, tc.Target(1))
+	require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
+
+	err := tc.TransferRangeLease(desc, tc.Target(1))
+	exp := `cannot transfer lease to replica of type VOTER_INCOMING`
+	require.True(t, testutils.IsError(err, exp), err)
+
+	// NB: we don't have to transition out of the previous joint config first
+	// because this is done automatically by ChangeReplicas before it does what
+	// it's asked to do.
+	desc = tc.RemoveReplicasOrFatal(t, k, tc.Target(1))
+	err = tc.TransferRangeLease(desc, tc.Target(1))
+	exp = `cannot transfer lease to replica of type VOTER_OUTGOING`
+	require.True(t, testutils.IsError(err, exp), err)
+}
+
+func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	if util.RaceEnabled {
@@ -531,69 +699,95 @@ func TestLearnerFollowerRead(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = $1`, testingTargetDuration)
 	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.close_fraction = $1`, closeFraction)
 	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 1)
-	scratchDesc := tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 0)
-
-	req := roachpb.BatchRequest{Header: roachpb.Header{
-		RangeID:   scratchDesc.RangeID,
-		Timestamp: tc.Server(0).Clock().Now(),
-	}}
-	req.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{
-		Key: scratchDesc.StartKey.AsRawKey(), EndKey: scratchDesc.EndKey.AsRawKey(),
-	}})
-
-	_, repl := getFirstStoreReplica(t, tc.Server(1), scratchStartKey)
-	testutils.SucceedsSoon(t, func() error {
-		// Trace the Send call so we can verify that it hit the exact `learner
-		// replicas cannot serve follower reads` branch that we're trying to test.
-		sendCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "manual read request")
-		defer cancel()
-		_, pErr := repl.Send(sendCtx, req)
-		err := pErr.GoError()
-		if !testutils.IsError(err, `not lease holder`) {
-			return errors.Errorf(`expected "not lease holder" error got: %+v`, err)
-		}
-		const msg = `learner replicas cannot serve follower reads`
-		formattedTrace := tracing.FormatRecordedSpans(collect())
-		if !strings.Contains(formattedTrace, msg) {
-			return errors.Errorf("expected a trace with `%s` got:\n%s", msg, formattedTrace)
-		}
-		return nil
+	var scratchDesc roachpb.RangeDescriptor
+	ltk.withStopAfterLearnerAtomic(func() {
+		scratchDesc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 	})
+
+	check := func() {
+		req := roachpb.BatchRequest{Header: roachpb.Header{
+			RangeID:   scratchDesc.RangeID,
+			Timestamp: tc.Server(0).Clock().Now(),
+		}}
+		req.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{
+			Key: scratchDesc.StartKey.AsRawKey(), EndKey: scratchDesc.EndKey.AsRawKey(),
+		}})
+
+		_, repl := getFirstStoreReplica(t, tc.Server(1), scratchStartKey)
+		testutils.SucceedsSoon(t, func() error {
+			// Trace the Send call so we can verify that it hit the exact `learner
+			// replicas cannot serve follower reads` branch that we're trying to test.
+			sendCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "manual read request")
+			defer cancel()
+			_, pErr := repl.Send(sendCtx, req)
+			err := pErr.GoError()
+			if !testutils.IsError(err, `not lease holder`) {
+				return errors.Errorf(`expected "not lease holder" error got: %+v`, err)
+			}
+			const msg = `cannot serve follower reads`
+			formattedTrace := tracing.FormatRecordedSpans(collect())
+			if !strings.Contains(formattedTrace, msg) {
+				return errors.Errorf("expected a trace with `%s` got:\n%s", msg, formattedTrace)
+			}
+			return nil
+		})
+	}
+
+	// Can't serve follower read from the LEARNER.
+	check()
+
+	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
+	atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
+
+	scratchDesc = tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	// Removing a learner doesn't get you into a joint state (no voters changed).
+	require.False(t, scratchDesc.Replicas().InAtomicReplicationChange(), scratchDesc)
+	scratchDesc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+
+	// Re-adding the voter (and remaining in joint config) does.
+	require.True(t, scratchDesc.Replicas().InAtomicReplicationChange(), scratchDesc)
+	require.Len(t, scratchDesc.Replicas().Filter(predIncoming), 1)
+
+	// Can't serve follower read from the VOTER_INCOMING.
+	check()
+
+	// Removing the voter (and remaining in joint config) does.
+	scratchDesc = tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	require.True(t, scratchDesc.Replicas().InAtomicReplicationChange(), scratchDesc)
+	require.Len(t, scratchDesc.Replicas().Filter(predOutgoing), 1)
+
+	// Can't serve follower read from the VOTER_OUTGOING.
+	check()
 }
 
 func TestLearnerAdminRelocateRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 1)
-	_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
-	_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(2))
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 0)
+	ltk.withStopAfterLearnerAtomic(func() {
+		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(2))
+	})
 
 	// Test AdminRelocateRange's treatment of learners by having one that it has
 	// to remove and one that should stay and become a voter.
@@ -613,18 +807,16 @@ func TestLearnerAdminRelocateRange(t *testing.T) {
 	require.Empty(t, desc.Replicas().Learners())
 }
 
-func TestLearnerAdminMerge(t *testing.T) {
+func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
 	splitKey1 := scratchStartKey.Next()
@@ -632,34 +824,85 @@ func TestLearnerAdminMerge(t *testing.T) {
 	_, _ = tc.SplitRangeOrFatal(t, splitKey1)
 	_, _ = tc.SplitRangeOrFatal(t, splitKey2)
 
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 1)
-	_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
-	_ = tc.AddReplicasOrFatal(t, splitKey2, tc.Target(1))
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 0)
+	// Three ranges (in that order):
+	// desc1: will have a learner (later joint voter)
+	// desc2 (unnamed): is always left vanilla
+	// desc3: like desc1
+	//
+	// This allows testing merges that have a learner on the RHS (on desc2) and
+	// the LHS (on desc1).
+	var desc1, desc3 roachpb.RangeDescriptor
+	ltk.withStopAfterLearnerAtomic(func() {
+		desc1 = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+		desc3 = tc.AddReplicasOrFatal(t, splitKey2, tc.Target(1))
+	})
 
-	// Learner on the lhs should fail.
-	err := tc.Server(0).DB().AdminMerge(ctx, scratchStartKey)
-	if !testutils.IsError(err, `cannot merge range with non-voter replicas on lhs`) {
-		t.Fatalf(`expected "cannot merge range with non-voter replicas on lhs" error got: %+v`, err)
+	checkFails := func() {
+		err := tc.Server(0).DB().AdminMerge(ctx, scratchStartKey)
+		if exp := `cannot merge range with non-voter replicas on`; !testutils.IsError(err, exp) {
+			t.Fatalf(`expected "%s" error got: %+v`, exp, err)
+		}
+		err = tc.Server(0).DB().AdminMerge(ctx, splitKey1)
+		if exp := `cannot merge range with non-voter replicas on`; !testutils.IsError(err, exp) {
+			t.Fatalf(`expected "%s" error got: %+v`, exp, err)
+		}
 	}
-	// Learner on the rhs should fail.
-	err = tc.Server(0).DB().AdminMerge(ctx, splitKey1)
-	if !testutils.IsError(err, `cannot merge range with non-voter replicas on rhs`) {
-		t.Fatalf(`expected "cannot merge range with non-voter replicas on rhs" error got: %+v`, err)
-	}
+
+	// LEARNER on the lhs or rhs should fail.
+	// desc{1,2,3} = (VOTER_FULL, LEARNER) (VOTER_FULL) (VOTER_FULL, LEARNER)
+	checkFails()
+
+	// Turn the learners on desc1 and desc3 into VOTER_INCOMINGs.
+	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
+	atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
+	desc1 = tc.RemoveReplicasOrFatal(t, desc1.StartKey.AsRawKey(), tc.Target(1))
+	desc1 = tc.AddReplicasOrFatal(t, desc1.StartKey.AsRawKey(), tc.Target(1))
+	require.Len(t, desc1.Replicas().Filter(predIncoming), 1)
+	desc3 = tc.RemoveReplicasOrFatal(t, desc3.StartKey.AsRawKey(), tc.Target(1))
+	desc3 = tc.AddReplicasOrFatal(t, desc3.StartKey.AsRawKey(), tc.Target(1))
+	require.Len(t, desc1.Replicas().Filter(predIncoming), 1)
+
+	// VOTER_INCOMING on the lhs or rhs should fail.
+	// desc{1,2,3} = (VOTER_FULL, VOTER_INCOMING) (VOTER_FULL) (VOTER_FULL, VOTER_INCOMING)
+	checkFails()
+
+	// Turn the incoming voters on desc1 and desc3 into VOTER_OUTGOINGs.
+	// desc{1,2,3} = (VOTER_FULL, VOTER_OUTGOING) (VOTER_FULL) (VOTER_FULL, VOTER_OUTGOING)
+	desc1 = tc.RemoveReplicasOrFatal(t, desc1.StartKey.AsRawKey(), tc.Target(1))
+	require.Len(t, desc1.Replicas().Filter(predOutgoing), 1)
+	desc3 = tc.RemoveReplicasOrFatal(t, desc3.StartKey.AsRawKey(), tc.Target(1))
+	require.Len(t, desc3.Replicas().Filter(predOutgoing), 1)
+
+	// VOTER_OUTGOING on the lhs or rhs should fail.
+	checkFails()
+
+	// Add a VOTER_INCOMING to desc2 to make sure it actually excludes this type
+	// of replicas from merges (rather than really just checking whether the
+	// replica sets are equal).
+	// desc{1,2,3} = (VOTER_FULL, VOTER_OUTGOING) (VOTER_FULL, VOTER_INCOMING) (VOTER_FULL, VOTER_OUTGOING)
+	desc2 := tc.AddReplicasOrFatal(t, splitKey1, tc.Target(1))
+	require.Len(t, desc2.Replicas().Filter(predIncoming), 1)
+
+	checkFails()
+
+	// Ditto VOTER_OUTGOING.
+	// desc{1,2,3} = (VOTER_FULL, VOTER_OUTGOING) (VOTER_FULL, VOTER_OUTGOING) (VOTER_FULL, VOTER_OUTGOING)
+	desc2 = tc.RemoveReplicasOrFatal(t, desc2.StartKey.AsRawKey(), tc.Target(1))
+	require.Len(t, desc2.Replicas().Filter(predOutgoing), 1)
+
+	checkFails()
 }
 
-func TestMergeQueueSeesLearner(t *testing.T) {
+func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	knobs, ltk := makeLearnerTestKnobs()
+	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
 	// TestCluster currently overrides this when used with ReplicationManual.
 	db.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = true`)
 
@@ -667,34 +910,89 @@ func TestMergeQueueSeesLearner(t *testing.T) {
 	origDesc := tc.LookupRangeOrFatal(t, scratchStartKey)
 
 	splitKey := scratchStartKey.Next()
-	_, _ = tc.SplitRangeOrFatal(t, splitKey)
 
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 1)
-	_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
-	atomic.StoreInt64(&ltk.replicaAddStopAfterLearnerAtomic, 0)
-
-	// Unsplit the range to clear the sticky bit.
-	require.NoError(t, tc.Server(0).DB().AdminUnsplit(ctx, splitKey))
-
-	// Run the merge queue.
-	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-	trace, errMsg, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
-	require.NoError(t, err)
-	require.Equal(t, ``, errMsg)
-	formattedTrace := tracing.FormatRecordedSpans(trace)
-	expectedMessages := []string{
-		`removing learner replicas \[n2,s2\]`,
-		`merging to produce range: /Table/Max-/Max`,
-	}
-	if err := testutils.MatchInOrder(formattedTrace, expectedMessages...); err != nil {
-		t.Fatal(err)
+	splitAndUnsplit := func() roachpb.RangeDescriptor {
+		desc, _ := tc.SplitRangeOrFatal(t, splitKey)
+		// Unsplit the range to clear the sticky bit.
+		require.NoError(t, tc.Server(0).DB().AdminUnsplit(ctx, splitKey))
+		return desc
 	}
 
-	// Sanity check that the desc has the same bounds it did originally.
-	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
-	require.Equal(t, origDesc.StartKey, desc.StartKey)
-	require.Equal(t, origDesc.EndKey, desc.EndKey)
-	// The merge removed the learner.
-	require.Len(t, desc.Replicas().Voters(), 1)
-	require.Empty(t, desc.Replicas().Learners())
+	// Run the merge queue while there's a learner on the LHS.
+	{
+		splitAndUnsplit()
+
+		ltk.withStopAfterLearnerAtomic(func() {
+			_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+		})
+
+		store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
+		trace, errMsg, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
+		require.NoError(t, err)
+		require.Equal(t, ``, errMsg)
+		formattedTrace := tracing.FormatRecordedSpans(trace)
+		expectedMessages := []string{
+			`removing learner replicas \[n2,s2\]`,
+			`merging to produce range: /Table/Max-/Max`,
+		}
+		if err := testutils.MatchInOrder(formattedTrace, expectedMessages...); err != nil {
+			t.Fatal(err)
+		}
+
+		// Sanity check that the desc has the same bounds it did originally.
+		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
+		require.Equal(t, origDesc.StartKey, desc.StartKey)
+		require.Equal(t, origDesc.EndKey, desc.EndKey)
+		// The merge removed the learner.
+		require.Len(t, desc.Replicas().Voters(), 1)
+		require.Empty(t, desc.Replicas().Learners())
+	}
+
+	// Create the RHS again and repeat the same game, except this time the LHS
+	// gets a VOTER_INCOMING for s2, and then the merge queue runs into it. It
+	// will transition the LHS out of the joint config and then do the merge.
+	{
+		desc := splitAndUnsplit()
+
+		ltk.withStopAfterJointConfig(func() {
+			desc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+		})
+		require.Len(t, desc.Replicas().Filter(predIncoming), 1, desc)
+
+		checkTransitioningOut := func() {
+			t.Helper()
+			store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
+			trace, errMsg, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
+			require.NoError(t, err)
+			require.Equal(t, ``, errMsg)
+			formattedTrace := tracing.FormatRecordedSpans(trace)
+			expectedMessages := []string{
+				`transitioning out of joint configuration`,
+				`merging to produce range: /Table/Max-/Max`,
+			}
+			if err := testutils.MatchInOrder(formattedTrace, expectedMessages...); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		checkTransitioningOut()
+		desc = tc.LookupRangeOrFatal(t, scratchStartKey)
+		require.Len(t, desc.Replicas().Voters(), 2)
+		require.False(t, desc.Replicas().InAtomicReplicationChange(), desc)
+
+		// Repeat the game, except now we start with two replicas and we're
+		// giving the RHS a VOTER_OUTGOING.
+		desc = splitAndUnsplit()
+		ltk.withStopAfterJointConfig(func() {
+			descRight := tc.RemoveReplicasOrFatal(t, desc.EndKey.AsRawKey(), tc.Target(1))
+			require.Len(t, descRight.Replicas().Filter(predOutgoing), 1, desc)
+		})
+
+		// This should transition out (i.e. remove the voter on s2 for the RHS)
+		// and then do its thing, which means in the end we have two voters again.
+		checkTransitioningOut()
+		desc = tc.LookupRangeOrFatal(t, scratchStartKey)
+		require.Len(t, desc.Replicas().Voters(), 2)
+		require.False(t, desc.Replicas().InAtomicReplicationChange(), desc)
+	}
 }

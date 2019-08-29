@@ -592,13 +592,13 @@ func (c *Constraint) CalculateMaxResults(
 	// Check if the longest prefix of columns for which all the spans have the
 	// same start and end values covers all columns.
 	prefix := c.Prefix(evalCtx)
-	distinctVals := uint64(1)
+	var distinctVals uint64
 	if prefix < numCols-1 {
 		return 0
 	} else if prefix == numCols-1 {
 		// If the prefix does not include the last column, calculate the number of
 		// distinct values possible in the span. This is only supported for int
-		// types.
+		// and date types.
 		for i := 0; i < c.Spans.Count(); i++ {
 			sp := c.Spans.Get(i)
 			start := sp.StartKey()
@@ -613,17 +613,37 @@ func (c *Constraint) CalculateMaxResults(
 			// updateDistinctCountsFromConstraint. It would be nice to extract this
 			// logic somewhere.
 			colIdx := numCols - 1
-			if start.Value(colIdx).ResolvedType().Family() != types.IntFamily ||
-				end.Value(colIdx).ResolvedType().Family() != types.IntFamily {
+			startVal := start.Value(colIdx)
+			endVal := end.Value(colIdx)
+			var startIntVal, endIntVal int64
+			if startVal.ResolvedType().Family() == types.IntFamily &&
+				endVal.ResolvedType().Family() == types.IntFamily {
+				startIntVal = int64(*startVal.(*tree.DInt))
+				endIntVal = int64(*endVal.(*tree.DInt))
+			} else if startVal.ResolvedType().Family() == types.DateFamily &&
+				endVal.ResolvedType().Family() == types.DateFamily {
+				startDate := startVal.(*tree.DDate)
+				endDate := endVal.(*tree.DDate)
+				if !startDate.IsFinite() || !endDate.IsFinite() {
+					// One of the boundaries is not finite, so we can't determine the
+					// distinct count for this column.
+					return 0
+				}
+				startIntVal = int64(startDate.PGEpochDays())
+				endIntVal = int64(endDate.PGEpochDays())
+			} else {
 				return 0
 			}
-			startVal := int(*start.Value(colIdx).(*tree.DInt))
-			endVal := int(*end.Value(colIdx).(*tree.DInt))
+
 			if c.Columns.Get(colIdx).Ascending() {
-				distinctVals += uint64(endVal - startVal)
+				distinctVals += uint64(endIntVal - startIntVal)
 			} else {
-				distinctVals += uint64(startVal - endVal)
+				distinctVals += uint64(startIntVal - endIntVal)
 			}
+
+			// Add one since both start and end boundaries should be inclusive
+			// (due to Span.PreferInclusive).
+			distinctVals++
 		}
 	} else {
 		distinctVals = uint64(c.Spans.Count())

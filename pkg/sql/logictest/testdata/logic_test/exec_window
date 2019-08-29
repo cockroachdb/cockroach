@@ -11,7 +11,7 @@ INSERT INTO t VALUES
   (1, 2, 3)
 
 statement ok
-SET experimental_vectorize=always
+SET vectorize=experimental_always
 
 # Test that non-default window frames are not supported.
 statement error window functions with non-default window frames are not supported

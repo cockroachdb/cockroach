@@ -392,7 +392,7 @@ FROM system.eventlog
 WHERE "eventType" = 'set_zone_config'
 ORDER BY "timestamp"
 ----
-1  {"Target":"test.a","Options":"range_max_bytes = 67108865, range_min_bytes = 16777216","User":"root"}
+1  {"Target":"TABLE test.public.a","Options":"range_max_bytes = 67108865, range_min_bytes = 16777216","User":"root"}
 
 query IT
 SELECT "reportingID", "info"
@@ -400,7 +400,7 @@ FROM system.eventlog
 WHERE "eventType" = 'remove_zone_config'
 ORDER BY "timestamp"
 ----
-1  {"Target":"test.a","User":"root"}
+1  {"Target":"TABLE test.public.a","User":"root"}
 
 statement ok
 DROP TABLE a

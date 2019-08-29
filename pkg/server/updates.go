@@ -282,7 +282,7 @@ func (s *Server) maybeReportDiagnostics(
 	if log.DiagnosticsReportingEnabled.Get(&s.st.SV) {
 		s.reportDiagnostics(ctx)
 	}
-	s.pgServer.SQLServer.ResetStatementStats(ctx)
+	s.pgServer.SQLServer.ResetSQLStats(ctx)
 
 	return scheduled.Add(diagnosticReportFrequency.Get(&s.st.SV))
 }

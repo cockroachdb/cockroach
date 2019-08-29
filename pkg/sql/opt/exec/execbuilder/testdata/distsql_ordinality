@@ -1,4 +1,4 @@
-# LogicTest: 5node-dist-opt
+# LogicTest: 5node-dist
 
 statement ok
 CREATE TABLE xyz (
@@ -21,7 +21,7 @@ ALTER TABLE xyz EXPERIMENTAL_RELOCATE VALUES
 
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE xyz]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE xyz]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /2       {1}       1

@@ -783,5 +783,5 @@ func (oc *OrderingColumnChoice) AnyID() opt.ColumnID {
 	if !ok {
 		panic(errors.AssertionFailedf("column choice group should have at least one column id"))
 	}
-	return opt.ColumnID(id)
+	return id
 }

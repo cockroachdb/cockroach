@@ -34,8 +34,24 @@ func registerKV(r *testRegistry) {
 		readPercent int
 		batchSize   int
 		blockSize   int
+		splits      int // 0 implies default, negative implies 0
 		encryption  bool
 		sequential  bool
+		duration    time.Duration
+		tags        []string
+	}
+	computeNumSplits := func(opts kvOptions) int {
+		// TODO(ajwerner): set this default to a more sane value or remove it and
+		// rely on load-based splitting.
+		const defaultNumSplits = 1000
+		switch {
+		case opts.splits == 0:
+			return defaultNumSplits
+		case opts.splits < 0:
+			return 0
+		default:
+			return opts.splits
+		}
 	}
 	runKV := func(ctx context.Context, t *test, c *cluster, opts kvOptions) {
 		nodes := c.spec.NodeCount - 1
@@ -47,8 +63,12 @@ func registerKV(r *testRegistry) {
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
-			splits := " --splits=1000"
-			duration := " --duration=" + ifLocal("10s", "10m")
+
+			splits := " --splits=" + strconv.Itoa(computeNumSplits(opts))
+			if opts.duration == 0 {
+				opts.duration = 10 * time.Minute
+			}
+			duration := " --duration=" + ifLocal("10s", opts.duration.String())
 			readPercent := fmt.Sprintf(" --read-percent=%d", opts.readPercent)
 			histograms := " --histograms=" + perfArtifactsDir + "/stats.json"
 			var batchSize string
@@ -84,8 +104,12 @@ func registerKV(r *testRegistry) {
 		{nodes: 1, cpus: 32, readPercent: 95},
 		{nodes: 3, cpus: 8, readPercent: 0},
 		{nodes: 3, cpus: 8, readPercent: 95},
+		{nodes: 3, cpus: 8, readPercent: 0, splits: -1 /* no splits */},
+		{nodes: 3, cpus: 8, readPercent: 95, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 0},
 		{nodes: 3, cpus: 32, readPercent: 95},
+		{nodes: 3, cpus: 32, readPercent: 0, splits: -1 /* no splits */},
+		{nodes: 3, cpus: 32, readPercent: 95, splits: -1 /* no splits */},
 
 		// Configs with large block sizes.
 		{nodes: 3, cpus: 8, readPercent: 0, blockSize: 1 << 12 /* 4 KB */},
@@ -115,11 +139,18 @@ func registerKV(r *testRegistry) {
 		// Configs with a sequential access pattern.
 		{nodes: 3, cpus: 32, readPercent: 0, sequential: true},
 		{nodes: 3, cpus: 32, readPercent: 95, sequential: true},
+
+		// Weekly larger scale configurations.
+		{nodes: 32, cpus: 8, readPercent: 0, tags: []string{"weekly"}, duration: time.Hour},
+		{nodes: 32, cpus: 8, readPercent: 95, tags: []string{"weekly"}, duration: time.Hour},
 	} {
 		opts := opts
 
 		var nameParts []string
 		nameParts = append(nameParts, fmt.Sprintf("kv%d", opts.readPercent))
+		if len(opts.tags) > 0 {
+			nameParts = append(nameParts, strings.Join(opts.tags, "/"))
+		}
 		nameParts = append(nameParts, fmt.Sprintf("enc=%t", opts.encryption))
 		nameParts = append(nameParts, fmt.Sprintf("nodes=%d", opts.nodes))
 		if opts.cpus != 8 { // support legacy test name which didn't include cpu
@@ -130,6 +161,9 @@ func registerKV(r *testRegistry) {
 		}
 		if opts.blockSize != 0 { // support legacy test name which didn't include block size
 			nameParts = append(nameParts, fmt.Sprintf("size=%dkb", opts.blockSize>>10))
+		}
+		if opts.splits != 0 { // support legacy test name which didn't include splits
+			nameParts = append(nameParts, fmt.Sprintf("splt=%d", computeNumSplits(opts)))
 		}
 		if opts.sequential {
 			nameParts = append(nameParts, fmt.Sprintf("seq"))
@@ -147,6 +181,7 @@ func registerKV(r *testRegistry) {
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runKV(ctx, t, c, opts)
 			},
+			Tags: opts.tags,
 		})
 	}
 }
@@ -537,17 +572,16 @@ func registerKVRangeLookups(r *testRegistry) {
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			defer close(doneWorkload)
-			cmd := fmt.Sprintf("./workload init kv {pgurl:1-%d}", nodes)
+			cmd := fmt.Sprintf("./workload init kv {pgurl:1-%d} --splits=1000", nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
 			close(doneInit)
 			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
-			splits := " --splits=1000"
 			duration := " --duration=" + ifLocal("10s", "10m")
 			readPercent := " --read-percent=50"
 			// We run kv with --tolerate-errors, since the relocate workload is
 			// expected to create `result is ambiguous (removing replica)` errors.
 			cmd = fmt.Sprintf("./workload run kv --tolerate-errors"+
-				concurrency+splits+duration+readPercent+
+				concurrency+duration+readPercent+
 				" {pgurl:1-%d}", nodes)
 			start := timeutil.Now()
 			c.Run(ctx, c.Node(nodes+1), cmd)
@@ -576,7 +610,6 @@ func registerKVRangeLookups(r *testRegistry) {
 								kv.kv
 							SPLIT AT
 								VALUES (CAST(floor(random() * 9223372036854775808) AS INT))
-							WITH EXPIRATION '1s'
 						`)
 						if err != nil && !pgerror.IsSQLRetryableError(err) {
 							return err
@@ -605,7 +638,7 @@ func registerKVRangeLookups(r *testRegistry) {
 		workloadType              rangeLookupWorkloadType
 		maximumRangeLookupsPerSec float64
 	}{
-		{2, splitWorkload, 10.0},
+		{2, splitWorkload, 15.0},
 		// Relocates are expected to fail periodically when relocating random
 		// ranges, so use more workers.
 		{4, relocateWorkload, 50.0},
@@ -622,8 +655,9 @@ func registerKVRangeLookups(r *testRegistry) {
 			panic("unexpected")
 		}
 		r.Add(testSpec{
-			Name:    fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
-			Cluster: makeClusterSpec(nodes+1, cpu(cpus)),
+			Name:       fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
+			MinVersion: "v19.2.0",
+			Cluster:    makeClusterSpec(nodes+1, cpu(cpus)),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runRangeLookups(ctx, t, c, item.workers, item.workloadType, item.maximumRangeLookupsPerSec)
 			},

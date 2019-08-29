@@ -45,39 +45,7 @@ type explainPlanNode struct {
 	// postqueryPlans contains the postquery plans for the explained query.
 	postqueryPlans []postquery
 
-	// expanded indicates whether to invoke expandPlan() on the sub-node.
-	expanded bool
-
-	// optimized indicates whether to invoke setNeededColumns() on the sub-node.
-	optimized bool
-
-	// optimizeSubqueries indicates whether to invoke optimizeSubquery and
-	// setUnlimited on the subqueries.
-	optimizeSubqueries bool
-
 	run explainPlanRun
-}
-
-// newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
-func (p *planner) makeExplainPlanNode(
-	ctx context.Context, opts *tree.ExplainOptions, origStmt tree.Statement,
-) (planNode, error) {
-	// Build the plan for the query being explained.  We want to capture all the
-	// analyzed sub- and postqueries in the explain node, so we are going to
-	// override the planner's sub- and postquery plan slices.
-	defer func(s []subquery) { p.curPlan.subqueryPlans = s }(p.curPlan.subqueryPlans)
-	p.curPlan.subqueryPlans = nil
-	defer func(q []postquery) { p.curPlan.postqueryPlans = q }(p.curPlan.postqueryPlans)
-	p.curPlan.postqueryPlans = nil
-
-	plan, err := p.newPlan(ctx, origStmt, nil)
-	if err != nil {
-		return nil, err
-	}
-	return p.makeExplainPlanNodeWithPlan(
-		ctx, opts, true, /* optimizeSubqueries */
-		plan, p.curPlan.subqueryPlans, p.curPlan.postqueryPlans,
-	)
 }
 
 // makeExplainPlanNodeWithPlan instantiates a planNode that EXPLAINs an
@@ -85,7 +53,6 @@ func (p *planner) makeExplainPlanNode(
 func (p *planner) makeExplainPlanNodeWithPlan(
 	ctx context.Context,
 	opts *tree.ExplainOptions,
-	optimizeSubqueries bool,
 	plan planNode,
 	subqueryPlans []subquery,
 	postqueryPlans []postquery,
@@ -133,13 +100,10 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 	}
 
 	node := &explainPlanNode{
-		explainer:          e,
-		expanded:           !opts.Flags.Contains(tree.ExplainFlagNoExpand),
-		optimized:          !opts.Flags.Contains(tree.ExplainFlagNoOptimize),
-		optimizeSubqueries: optimizeSubqueries,
-		plan:               plan,
-		subqueryPlans:      subqueryPlans,
-		postqueryPlans:     postqueryPlans,
+		explainer:      e,
+		plan:           plan,
+		subqueryPlans:  subqueryPlans,
+		postqueryPlans: postqueryPlans,
 		run: explainPlanRun{
 			results: p.newContainerValuesNode(columns, 0),
 		},
@@ -154,22 +118,6 @@ type explainPlanRun struct {
 }
 
 func (e *explainPlanNode) startExec(params runParams) error {
-	if e.optimizeSubqueries {
-		// The sub-plan's subqueries have been captured local to the EXPLAIN
-		// node so that they would not be automatically started for
-		// execution by planTop.start(). But this also means they were not
-		// yet processed by makePlan()/optimizePlan(). Do it here.
-		for i := range e.subqueryPlans {
-			if err := params.p.optimizeSubquery(params.ctx, &e.subqueryPlans[i]); err != nil {
-				return err
-			}
-
-			// Trigger limit propagation. This would be done otherwise when
-			// starting the plan. However we do not want to start the plan.
-			params.p.setUnlimited(e.subqueryPlans[i].plan)
-		}
-	}
-
 	return params.p.populateExplain(params.ctx, &e.explainer, e.run.results, e.plan, e.subqueryPlans, e.postqueryPlans)
 }
 

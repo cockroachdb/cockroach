@@ -36,7 +36,7 @@ func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
-	url, cleanupConn := sqlutils.PGUrl(t, s.ServingAddr(), "SetupServer", url.User(security.RootUser))
+	url, cleanupConn := sqlutils.PGUrl(t, s.ServingSQLAddr(), "SetupServer", url.User(security.RootUser))
 	defer cleanupConn()
 	conn, err := pq.Open(url.String())
 	if err != nil {

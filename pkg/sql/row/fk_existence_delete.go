@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 // fkExistenceCheckForDelete is an auxiliary object that facilitates the
@@ -46,29 +47,53 @@ func makeFkExistenceCheckHelperForDelete(
 	}
 
 	// We need an existence check helper for every referencing
-	// table. Today, referencing tables are determined by
-	// the index descriptors.
-	// TODO(knz): make foreign key constraints independent
-	// of index definitions.
-	for _, idx := range table.AllNonDropIndexes() {
-		for _, ref := range idx.ReferencedBy {
-			if otherTables[ref.Table].IsAdding {
-				// We can assume that a table being added but not yet public is empty,
-				// and thus does not need to be checked for FK violations.
-				continue
-			}
-			fk, err := makeFkExistenceCheckBaseHelper(txn, otherTables, idx, ref, colMap, alloc, CheckDeletes)
-			if err == errSkipUnusedFK {
-				continue
-			}
-			if err != nil {
-				return fkExistenceCheckForDelete{}, err
-			}
-			if h.fks == nil {
-				h.fks = make(map[sqlbase.IndexID][]fkExistenceCheckBaseHelper)
-			}
-			h.fks[idx.ID] = append(h.fks[idx.ID], fk)
+	// table.
+	for i := range table.InboundFKs {
+		ref := &table.InboundFKs[i]
+		originTable := otherTables[ref.OriginTableID]
+		if originTable.IsAdding {
+			// We can assume that a table being added but not yet public is empty,
+			// and thus does not need to be checked for FK violations.
+			continue
 		}
+		// TODO(jordan,radu): this is busted, rip out when HP is removed.
+		// Fake a forward foreign key constraint. The HP requires an index on the
+		// reverse table, which won't be required by the CBO. So in HP, fail if we
+		// don't have this precondition.
+		// This will never be on an actual table descriptor, so we don't need to
+		// populate all the legacy index fields.
+		fakeRef := &sqlbase.ForeignKeyConstraint{
+			ReferencedTableID:   ref.OriginTableID,
+			ReferencedColumnIDs: ref.OriginColumnIDs,
+			OriginTableID:       ref.ReferencedTableID,
+			OriginColumnIDs:     ref.ReferencedColumnIDs,
+			// N.B.: Back-references always must have SIMPLE match method, because ... TODO(jordan): !!!
+			Match:    sqlbase.ForeignKeyReference_SIMPLE,
+			OnDelete: ref.OnDelete,
+			OnUpdate: ref.OnUpdate,
+		}
+		searchIdx, err := originTable.Desc.TableDesc().FindIndexByID(ref.LegacyOriginIndex)
+		if err != nil {
+			return fkExistenceCheckForDelete{}, errors.NewAssertionErrorWithWrappedErrf(
+				err, "failed to find index %d (table %d) for deletion", ref.LegacyOriginIndex, ref.OriginTableID)
+		}
+		mutatedIdx, err := table.TableDesc().FindIndexByID(ref.LegacyReferencedIndex)
+		if err != nil {
+			return fkExistenceCheckForDelete{}, errors.NewAssertionErrorWithWrappedErrf(
+				err, "failed to find available index %d (table %d) for deletion", ref.LegacyReferencedIndex, ref.ReferencedTableID)
+		}
+		fk, err := makeFkExistenceCheckBaseHelper(txn, otherTables, fakeRef, searchIdx, mutatedIdx, colMap, alloc,
+			CheckDeletes)
+		if err == errSkipUnusedFK {
+			continue
+		}
+		if err != nil {
+			return fkExistenceCheckForDelete{}, err
+		}
+		if h.fks == nil {
+			h.fks = make(map[sqlbase.IndexID][]fkExistenceCheckBaseHelper)
+		}
+		h.fks[mutatedIdx.ID] = append(h.fks[mutatedIdx.ID], fk)
 	}
 
 	return h, nil
@@ -79,7 +104,7 @@ func (h fkExistenceCheckForDelete) addAllIdxChecks(
 	ctx context.Context, row tree.Datums, traceKV bool,
 ) error {
 	for idx := range h.fks {
-		if err := queueFkExistenceChecksForRow(ctx, h.checker, h.fks, idx, row, traceKV); err != nil {
+		if err := queueFkExistenceChecksForRow(ctx, h.checker, h.fks[idx], row, traceKV); err != nil {
 			return err
 		}
 	}

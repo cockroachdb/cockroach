@@ -31,7 +31,7 @@ type mysqloutfileReader struct {
 var _ inputConverter = &mysqloutfileReader{}
 
 func newMysqloutfileReader(
-	kvCh chan []roachpb.KeyValue,
+	kvCh chan row.KVBatch,
 	opts roachpb.MySQLOutfileOptions,
 	tableDesc *sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,
@@ -64,8 +64,10 @@ func (d *mysqloutfileReader) readFiles(
 }
 
 func (d *mysqloutfileReader) readFile(
-	ctx context.Context, input io.Reader, inputIdx int32, inputName string, progressFn progressFn,
+	ctx context.Context, input *fileReader, inputIdx int32, inputName string, progressFn progressFn,
 ) error {
+	d.conv.KvBatch.Source = inputIdx
+	d.conv.FractionFn = input.ReadFraction
 	var count int64 = 1
 
 	var row []tree.Datum

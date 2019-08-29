@@ -50,7 +50,7 @@ func registerHotSpotSplits(r *testRegistry) {
 
 			const blockSize = 1 << 19 // 512 KB
 			return c.RunL(ctx, quietL, appNode, fmt.Sprintf(
-				"./workload run kv --read-percent=0 --splits=0 --tolerate-errors --concurrency=%d "+
+				"./workload run kv --read-percent=0 --tolerate-errors --concurrency=%d "+
 					"--min-block-bytes=%d --max-block-bytes=%d --duration=%s {pgurl:1-3}",
 				concurrency, blockSize, blockSize, duration.String()))
 		})

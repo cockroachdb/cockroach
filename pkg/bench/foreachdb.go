@@ -37,26 +37,6 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 		b.Fatal(err)
 	}
 
-	if _, err := db.Exec(`SET OPTIMIZER=OFF`); err != nil {
-		b.Fatal(err)
-	}
-
-	f(b, db)
-}
-
-func benchmarkCockroachOpt(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
-	s, db, _ := serverutils.StartServer(
-		b, base.TestServerArgs{UseDatabase: "bench"})
-	defer s.Stopper().Stop(context.TODO())
-
-	if _, err := db.Exec(`CREATE DATABASE bench`); err != nil {
-		b.Fatal(err)
-	}
-
-	if _, err := db.Exec(`SET OPTIMIZER=ON`); err != nil {
-		b.Fatal(err)
-	}
-
 	f(b, db)
 }
 
@@ -150,7 +130,6 @@ func benchmarkMySQL(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 func ForEachDB(b *testing.B, fn func(*testing.B, *gosql.DB)) {
 	for _, dbFn := range []func(*testing.B, func(*testing.B, *gosql.DB)){
 		benchmarkCockroach,
-		benchmarkCockroachOpt,
 		benchmarkMultinodeCockroach,
 		benchmarkPostgres,
 		benchmarkMySQL,

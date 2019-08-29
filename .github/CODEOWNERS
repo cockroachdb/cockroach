@@ -8,68 +8,12 @@
 
 /docs/RFCS/                  @cockroachdb/rfc-prs
 
-/pkg/gossip/                 @cockroachdb/core-prs
-/pkg/internal/               @cockroachdb/core-prs
-/pkg/kv/                     @cockroachdb/core-prs
-/pkg/roachpb/                @cockroachdb/core-prs
-/pkg/rpc/                    @cockroachdb/core-prs
-/pkg/server/                 @cockroachdb/core-prs @cockroachdb/server-prs
-/pkg/storage/                @cockroachdb/core-prs
-/pkg/migration/              @cockroachdb/core-prs
-/pkg/sqlmigrations           @cockroachdb/core-prs @cockroachdb/sql-wiring-prs
-
-/pkg/ccl/                    @cockroachdb/sql-ccl-prs
-/pkg/ccl/backupccl           @cockroachdb/sql-bulk-prs
-/pkg/ccl/importccl           @cockroachdb/sql-bulk-prs
-/pkg/ccl/storageccl          @cockroachdb/sql-bulk-prs
-/pkg/cli/                    @cockroachdb/cli-prs
-/pkg/cli/sql*.go             @cockroachdb/sql-ui-prs @cockroachdb/cli-prs
-
-/pkg/sql/                    @cockroachdb/sql-rest-prs
-
 /pkg/sql/opt/                @cockroachdb/sql-opt-prs
 /pkg/sql/stats/              @cockroachdb/sql-opt-prs
 
-/pkg/sql/parser/             @cockroachdb/sql-language-prs
-
-/pkg/sql/pgwire/             @cockroachdb/sql-wiring-prs
-/pkg/sql/privilege/          @cockroachdb/sql-wiring-prs @cockroachdb/sql-language-prs @cockroachdb/sql-execution-prs
-
-/pkg/sql/sqlbase/            @cockroachdb/sql-planning-prs @cockroachdb/sql-execution-prs @cockroachdb/sql-async-prs
-
-/pkg/sql/*.go                @cockroachdb/sql-planning-prs @cockroachdb/sql-execution-prs
-
-/pkg/sql/executor*           @cockroachdb/sql-execution-prs
-/pkg/sql/mon/                @cockroachdb/sql-execution-prs
-/pkg/sql/sqlutil/*executor* @cockroachdb/sql-execution-prs
-
-/pkg/sql/schema*             @cockroachdb/sql-async-prs
-/pkg/sql/lease*              @cockroachdb/sql-async-prs
-
-/pkg/sql/jobs/               @cockroachdb/cluster-jobs-prs
-
-/pkg/sql/distsql*.go         @cockroachdb/distsql-prs @cockroachdb/sql-planning-prs
-/pkg/sql/distsqlplan/        @cockroachdb/distsql-prs @cockroachdb/sql-planning-prs
-/pkg/sql/distsqlrun/         @cockroachdb/distsql-prs @cockroachdb/sql-execution-prs
-
-# We purposefully disable testlogic notifications to disable notifications
-# otherwise caught by the @sql-rest team. Typically, testlogic changes are part
-# of a bigger change that will trigger notifications to the correct sub-team.
-/pkg/sql/testlogic/
+/pkg/cli/                    @cockroachdb/cli-prs
 
 /pkg/ui/                     @cockroachdb/admin-ui-prs
 /pkg/ui/embedded.go
 /pkg/ui/src/js/protos.d.ts
 /pkg/ui/src/js/protos.js
-
-/build/                      @cockroachdb/build-prs
-/c-deps/                     @cockroachdb/build-prs
-/githooks/                   @cockroachdb/build-prs
-/scripts/                    @cockroachdb/build-prs
-**/Makefile                  @cockroachdb/build-prs
-/Gopkg.*                     @cockroachdb/build-prs
-/.*                          @cockroachdb/build-prs
-/.github/                    @cockroachdb/build-prs
-
-/c-deps/libroach/            @cockroachdb/core-prs
-/c-deps/libroach/ccl/        @cockroachdb/core-prs @cockroachdb/sql-ccl-prs

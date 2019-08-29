@@ -905,7 +905,7 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	}
 	tc.repl.mu.Lock()
 	_, _, pErr := checkForcedErr(
-		context.Background(), makeIDKey(), raftCmd, nil /* proposal */, false, /* proposedLocally */
+		context.Background(), makeIDKey(), &raftCmd, false, /* isLocal */
 		&tc.repl.mu.state,
 	)
 	tc.repl.mu.Unlock()
@@ -5979,18 +5979,12 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	if _, err := tc.repl.ChangeReplicas(
-		context.Background(),
-		roachpb.ADD_REPLICA,
-		roachpb.ReplicationTarget{
-			NodeID:  tc.store.Ident.NodeID,
-			StoreID: 9999,
-		},
-		tc.repl.Desc(),
-		storagepb.ReasonRebalance,
-		"",
-	); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
-		t.Fatalf("must not be able to add second replica to same node (err=%s)", err)
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+		NodeID:  tc.store.Ident.NodeID,
+		StoreID: 9999,
+	})
+	if _, err := tc.repl.ChangeReplicas(context.Background(), tc.repl.Desc(), SnapshotRequest_REBALANCE, storagepb.ReasonRebalance, "", chgs); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
+		t.Fatalf("must not be able to add second replica to same node (err=%+v)", err)
 	}
 }
 
@@ -6506,18 +6500,26 @@ func TestReplicaDestroy(t *testing.T) {
 
 	repl.setDesc(ctx, newDesc)
 	expectedErr := "replica descriptor's ID has changed"
-	if err := tc.store.removeReplicaImpl(ctx, tc.repl, origDesc.NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); !testutils.IsError(err, expectedErr) {
-		t.Fatalf("expected error %q but got %v", expectedErr, err)
-	}
+	func() {
+		tc.repl.raftMu.Lock()
+		defer tc.repl.raftMu.Unlock()
+		if err := tc.store.removeReplicaImpl(ctx, tc.repl, origDesc.NextReplicaID, RemoveOptions{
+			DestroyData: true,
+		}); !testutils.IsError(err, expectedErr) {
+			t.Fatalf("expected error %q but got %v", expectedErr, err)
+		}
+	}()
 
 	// Now try a fresh descriptor and succeed.
-	if err := tc.store.removeReplicaImpl(ctx, tc.repl, repl.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	func() {
+		tc.repl.raftMu.Lock()
+		defer tc.repl.raftMu.Unlock()
+		if err := tc.store.removeReplicaImpl(ctx, tc.repl, repl.Desc().NextReplicaID, RemoveOptions{
+			DestroyData: true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	iter := rditer.NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(), false /* replicatedOnly */)
 	defer iter.Close()
@@ -6559,13 +6561,13 @@ func TestQuotaPoolReleasedOnFailedProposal(t *testing.T) {
 	}
 
 	type magicKey struct{}
-	var minQuotaSize int64
+	var minQuotaSize uint64
 	propErr := errors.New("proposal error")
 
 	tc.repl.mu.Lock()
 	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64, _ error) {
 		if v := p.ctx.Value(magicKey{}); v != nil {
-			minQuotaSize = tc.repl.mu.proposalQuota.approximateQuota() + p.quotaSize
+			minQuotaSize = tc.repl.mu.proposalQuota.ApproximateQuota() + p.quotaAlloc.Acquired()
 			return 0, propErr
 		}
 		return 0, nil
@@ -6601,11 +6603,15 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 	}
 
 	ctx := repl.AnnotateCtx(context.Background())
-	if err := tc.store.removeReplicaImpl(ctx, repl, repl.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	func() {
+		tc.repl.raftMu.Lock()
+		defer tc.repl.raftMu.Unlock()
+		if err := tc.store.removeReplicaImpl(ctx, repl, repl.Desc().NextReplicaID, RemoveOptions{
+			DestroyData: true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	if _, _, err := repl.handleRaftReady(ctx, noSnap); err != nil {
 		t.Fatal(err)
@@ -8528,9 +8534,11 @@ func TestCancelPendingCommands(t *testing.T) {
 	default:
 	}
 
+	tc.repl.raftMu.Lock()
 	tc.repl.mu.Lock()
 	tc.repl.cancelPendingCommandsLocked()
 	tc.repl.mu.Unlock()
+	tc.repl.raftMu.Unlock()
 
 	pErr := <-errChan
 	if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
@@ -11586,6 +11594,9 @@ func TestHighestMaxLeaseIndexReproposalFinishesCommand(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.manualClock = hlc.NewManualClock(123)
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	// Set the RaftMaxCommittedSizePerReady so that only a single raft entry is
+	// applied at a time, which makes it easier to line up the timing of reproposals.
+	cfg.RaftMaxCommittedSizePerReady = 1
 	// Set up tracing.
 	tracer := tracing.NewTracer()
 	tracer.Configure(&cfg.Settings.SV)
@@ -11603,7 +11614,6 @@ func TestHighestMaxLeaseIndexReproposalFinishesCommand(t *testing.T) {
 	// seen is used to detect the first application of our proposal.
 	var seen bool
 	cfg.TestingKnobs = StoreTestingKnobs{
-		MaxApplicationBatchSize: 1,
 		// Set the TestingProposalFilter in order to know the CmdIDKey for our
 		// request by detecting its txnID.
 		TestingProposalFilter: func(args storagebase.ProposalFilterArgs) *roachpb.Error {

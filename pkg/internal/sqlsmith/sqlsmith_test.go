@@ -14,7 +14,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"math/rand"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -30,6 +32,7 @@ var (
 	flagNum         = flag.Int("num", 100, "number of statements to generate")
 	flagNoMutations = flag.Bool("no-mutations", false, "disables mutations during testing")
 	flagNoWiths     = flag.Bool("no-withs", false, "disables WITHs during testing")
+	flagVec         = flag.Bool("vec", false, "attempt to generate vectorized-friendly queries")
 )
 
 func init() {
@@ -46,11 +49,12 @@ func TestGenerateParse(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	rnd, _ := randutil.NewPseudoRand()
+	// Set COCKROACH_RANDOM_SEED to make this test deterministic between
+	// runs.
+	randutil.SeedForTests()
+	rnd := rand.New(rand.NewSource(rand.Int63()))
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
-	db.Exec(t, SeedTable)
-
 	var opts []SmitherOption
 	if *flagNoMutations {
 		opts = append(opts, DisableMutations())
@@ -58,11 +62,23 @@ func TestGenerateParse(t *testing.T) {
 	if *flagNoWiths {
 		opts = append(opts, DisableWith())
 	}
+	if *flagVec {
+		opts = append(opts, Vectorizable())
+		db.Exec(t, VecSeedTable)
+	} else {
+		db.Exec(t, SeedTable)
+	}
 
 	smither, err := NewSmither(sqlDB, rnd, opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	if *flagVec {
+		// After all introspection is done, turn vec on.
+		db.Exec(t, `SET vectorize = experimental_always`)
+	}
+
 	seen := map[string]bool{}
 	for i := 0; i < *flagNum; i++ {
 		stmt := smither.Generate()
@@ -76,11 +92,15 @@ func TestGenerateParse(t *testing.T) {
 		stmt = prettyCfg.Pretty(parsed.AST)
 		fmt.Print("STMT: ", i, "\n", stmt, ";\n\n")
 		if *flagExec {
+			db.Exec(t, `SET statement_timeout = '9s'`)
 			if _, err := sqlDB.Exec(stmt); err != nil {
 				es := err.Error()
 				if !seen[es] {
 					seen[es] = true
 					fmt.Printf("ERR (%d): %v\n", i, err)
+					if *flagVec && strings.Contains(es, "unable to vectorize execution plan") {
+						t.Fatal()
+					}
 				}
 			}
 		}

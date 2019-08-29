@@ -1,0 +1,30 @@
+# LogicTest: 5node-dist-vec
+
+statement ok
+CREATE TABLE t (k INT, v INT)
+
+statement ok
+INSERT INTO t VALUES (1, 10), (2, 20), (3, 30)
+
+statement ok
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 1)
+
+statement ok
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+
+statement ok
+INSERT INTO xy VALUES (2, 200), (3, 300), (4, 400)
+
+statement ok
+ALTER TABLE t SPLIT AT VALUES (3), (4)
+
+statement ok
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 2), (ARRAY[2], 3), (ARRAY[3], 4)
+
+# Test that LEFT SEMI hash join outputs batches only with the columns from the
+# left side.
+query II rowsort
+SELECT * FROM t WHERE EXISTS(SELECT * FROM xy WHERE x=t.k)
+----
+2  20
+3  30

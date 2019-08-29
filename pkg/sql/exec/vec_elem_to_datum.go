@@ -14,25 +14,26 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/lib/pq/oid"
 )
 
 // PhysicalTypeColElemToDatum converts an element in a colvec to a datum of semtype ct.
 func PhysicalTypeColElemToDatum(
-	col coldata.Vec, rowIdx uint16, da sqlbase.DatumAlloc, ct semtypes.T,
+	col coldata.Vec, rowIdx uint16, da sqlbase.DatumAlloc, ct types.T,
 ) tree.Datum {
 	switch ct.Family() {
-	case semtypes.BoolFamily:
+	case types.BoolFamily:
 		if col.Bool()[rowIdx] {
 			return tree.DBoolTrue
 		}
 		return tree.DBoolFalse
-	case semtypes.IntFamily:
+	case types.IntFamily:
 		switch ct.Width() {
 		case 8:
 			return da.NewDInt(tree.DInt(col.Int8()[rowIdx]))
@@ -43,23 +44,25 @@ func PhysicalTypeColElemToDatum(
 		default:
 			return da.NewDInt(tree.DInt(col.Int64()[rowIdx]))
 		}
-	case semtypes.FloatFamily:
+	case types.FloatFamily:
 		return da.NewDFloat(tree.DFloat(col.Float64()[rowIdx]))
-	case semtypes.DecimalFamily:
+	case types.DecimalFamily:
 		return da.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]})
-	case semtypes.DateFamily:
+	case types.DateFamily:
 		return tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(col.Int64()[rowIdx]))
-	case semtypes.StringFamily:
-		b := col.Bytes()[rowIdx]
+	case types.StringFamily:
+		b := col.Bytes().Get(int(rowIdx))
 		if ct.Oid() == oid.T_name {
 			return da.NewDName(tree.DString(*(*string)(unsafe.Pointer(&b))))
 		}
 		return da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
-	case semtypes.BytesFamily:
-		return da.NewDBytes(tree.DBytes(col.Bytes()[rowIdx]))
-	case semtypes.OidFamily:
+	case types.BytesFamily:
+		return da.NewDBytes(tree.DBytes(col.Bytes().Get(int(rowIdx))))
+	case types.OidFamily:
 		return da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
 	default:
-		panic(fmt.Sprintf("Unsupported column type %s", ct.String()))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("Unsupported column type %s", ct.String()))
+		// This code is unreachable, but the compiler cannot infer that.
+		return nil
 	}
 }

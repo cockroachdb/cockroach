@@ -93,6 +93,7 @@ union
  ├── scan b
  │    ├── columns: b.k:1(int!null)
  │    ├── constraint: /1: [/2 - /9]
+ │    ├── cardinality: [0 - 8]
  │    └── key: (1)
  └── select
       ├── columns: w:7(int!null)
@@ -160,10 +161,12 @@ except
  ├── columns: k:1(int!null)
  ├── left columns: k:1(int!null)
  ├── right columns: w:7(int)
+ ├── cardinality: [0 - 8]
  ├── key: (1)
  ├── scan b
  │    ├── columns: k:1(int!null)
  │    ├── constraint: /1: [/2 - /9]
+ │    ├── cardinality: [0 - 8]
  │    └── key: (1)
  └── select
       ├── columns: w:7(int!null)
@@ -183,9 +186,11 @@ except-all
  ├── columns: k:1(int!null)
  ├── left columns: k:1(int!null)
  ├── right columns: w:7(int)
+ ├── cardinality: [0 - 8]
  ├── scan b
  │    ├── columns: k:1(int!null)
  │    ├── constraint: /1: [/2 - /9]
+ │    ├── cardinality: [0 - 8]
  │    └── key: (1)
  └── select
       ├── columns: w:7(int!null)
@@ -205,10 +210,12 @@ intersect
  ├── columns: k:1(int!null)
  ├── left columns: k:1(int!null)
  ├── right columns: w:7(int)
+ ├── cardinality: [0 - 8]
  ├── key: (1)
  ├── scan b
  │    ├── columns: k:1(int!null)
  │    ├── constraint: /1: [/2 - /9]
+ │    ├── cardinality: [0 - 8]
  │    └── key: (1)
  └── select
       ├── columns: w:7(int!null)
@@ -228,9 +235,11 @@ intersect-all
  ├── columns: k:1(int!null)
  ├── left columns: k:1(int!null)
  ├── right columns: w:7(int)
+ ├── cardinality: [0 - 8]
  ├── scan b
  │    ├── columns: k:1(int!null)
  │    ├── constraint: /1: [/2 - /9]
+ │    ├── cardinality: [0 - 8]
  │    └── key: (1)
  └── select
       ├── columns: w:7(int!null)
@@ -254,11 +263,13 @@ union
  ├── key: (11)
  ├── select
  │    ├── columns: b.k:1(int!null)
+ │    ├── cardinality: [0 - 8]
  │    ├── side-effects
  │    ├── key: (1)
  │    ├── scan b
  │    │    ├── columns: b.k:1(int!null)
  │    │    ├── constraint: /1: [/2 - /9]
+ │    │    ├── cardinality: [0 - 8]
  │    │    └── key: (1)
  │    └── filters
  │         └── random() < 0.5 [type=bool, side-effects]

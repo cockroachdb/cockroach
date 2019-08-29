@@ -15,7 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Statement, error) {
@@ -33,14 +36,14 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 
 		const showTablePartitionsQuery = `
 		SELECT
-			database_name,
+			tables.database_name,
 			tables.name AS table_name,
 			partitions.name AS partition_name,
 			partitions.parent_name AS parent_partition,
 			partitions.column_names,
 			concat(tables.name, '@', table_indexes.index_name) AS index_name,
 			coalesce(partitions.list_value, partitions.range_value) as partition_value,
-			regexp_extract(config_yaml, e'constraints: (\\[.*\\])') AS zone_constraints
+		  replace(regexp_extract(config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as zone_config
 		FROM
 			crdb_internal.partitions
 			JOIN crdb_internal.tables ON partitions.table_id = tables.table_id
@@ -48,23 +51,25 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 					table_indexes.descriptor_id = tables.table_id
 					AND table_indexes.index_id = partitions.index_id
 			LEFT JOIN crdb_internal.zones ON
-					zones.zone_name
-					= concat(database_name, '.', tables.name, '.', partitions.name)
+					zones.database_name = tables.database_name
+					AND zones.table_name = tables.name
+					AND zones.index_name = table_indexes.index_name
+					AND zones.partition_name = partitions.name
 		WHERE
-			tables.name = %[1]s AND database_name = %[2]s;
+			tables.name = %[1]s AND tables.database_name = %[2]s;
 		`
 		return parse(fmt.Sprintf(showTablePartitionsQuery, lex.EscapeSQLString(resName.Table()), lex.EscapeSQLString(resName.Catalog())))
 	} else if n.IsDB {
 		const showDatabasePartitionsQuery = `
 		SELECT
-			database_name,
+			tables.database_name,
 			tables.name AS table_name,
 			partitions.name AS partition_name,
 			partitions.parent_name AS parent_partition,
 			partitions.column_names,
 			concat(tables.name, '@', table_indexes.index_name) AS index_name,
 			coalesce(partitions.list_value, partitions.range_value) as partition_value,
-			regexp_extract(config_yaml, e'constraints: (\\[.*\\])') AS zone_constraints
+		  replace(regexp_extract(config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as zone_config
 		FROM
 			%[1]s.crdb_internal.partitions
 			JOIN %[1]s.crdb_internal.tables ON partitions.table_id = tables.table_id
@@ -72,10 +77,12 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 					table_indexes.descriptor_id = tables.table_id
 					AND table_indexes.index_id = partitions.index_id
 			LEFT JOIN %[1]s.crdb_internal.zones ON
-					zones.zone_name
-					= concat(database_name, '.', tables.name, '.', partitions.name)
+					zones.database_name = tables.database_name
+					AND zones.table_name = tables.name
+					AND zones.index_name = table_indexes.index_name
+					AND zones.partition_name = partitions.name
 		WHERE
-			database_name = %[2]s
+			tables.database_name = %[2]s
 		ORDER BY
 			tables.name, partitions.name;
 		`
@@ -84,6 +91,14 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 
 	flags := cat.Flags{AvoidDescriptorCaches: true, NoTableStats: true}
 	tn := n.Index.Table
+
+	// Throw a more descriptive error if the user did not use the index hint syntax.
+	if tn.TableName == "" {
+		err := errors.New("no table specified")
+		err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+		err = errors.WithHint(err, "Specify a table using the hint syntax of table@index")
+		return nil, err
+	}
 
 	dataSource, resName, err := d.catalog.ResolveDataSource(d.ctx, flags, &tn)
 	if err != nil {
@@ -99,14 +114,14 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 	WITH
 		dummy AS (SELECT * FROM %[3]s@%[4]s LIMIT 0)
 	SELECT
-		database_name,
+		tables.database_name,
 		tables.name AS table_name,
 		partitions.name AS partition_name,
 		partitions.parent_name AS parent_partition,
 		partitions.column_names,
 		concat(tables.name, '@', table_indexes.index_name) AS index_name,
 		coalesce(partitions.list_value, partitions.range_value) as partition_value,
-		regexp_extract(config_yaml, e'constraints: (\\[.*\\])') AS zone_constraints
+	  replace(regexp_extract(config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as zone_config
 	FROM
 		crdb_internal.partitions
 		JOIN crdb_internal.table_indexes ON
@@ -114,10 +129,12 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 				AND partitions.table_id = table_indexes.descriptor_id
 		JOIN crdb_internal.tables ON table_indexes.descriptor_id = tables.table_id
 		LEFT JOIN crdb_internal.zones ON
-				zones.zone_name
-				= concat(database_name, '.', tables.name, '.', partitions.name)
+				zones.database_name = tables.database_name
+				AND zones.table_name = tables.name
+				AND zones.index_name = table_indexes.index_name
+				AND zones.partition_name = partitions.name
 	WHERE
-		index_name = %[1]s AND tables.name = %[2]s;
+		table_indexes.index_name = %[1]s AND tables.name = %[2]s;
 	`
 	return parse(fmt.Sprintf(showIndexPartitionsQuery,
 		lex.EscapeSQLString(n.Index.Index.String()),

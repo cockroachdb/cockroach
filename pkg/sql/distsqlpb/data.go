@@ -209,6 +209,9 @@ type ProducerMetadata struct {
 	// SamplerProgress contains incremental progress information from the sampler
 	// processor.
 	SamplerProgress *RemoteProducerMetadata_SamplerProgress
+	// BulkProcessorProgress contains incremental progress information from a bulk
+	// operation processor (backfiller, import, etc).
+	BulkProcessorProgress *RemoteProducerMetadata_BulkProcessorProgress
 	// Metrics contains information about goodput of the node.
 	Metrics *RemoteProducerMetadata_Metrics
 }
@@ -273,6 +276,8 @@ func RemoteProducerMetaToLocalMeta(
 		meta.RowNum = v.RowNum
 	case *RemoteProducerMetadata_SamplerProgress_:
 		meta.SamplerProgress = v.SamplerProgress
+	case *RemoteProducerMetadata_BulkProcessorProgress_:
+		meta.BulkProcessorProgress = v.BulkProcessorProgress
 	case *RemoteProducerMetadata_Error:
 		meta.Err = v.Error.ErrorDetail(ctx)
 	case *RemoteProducerMetadata_Metrics_:
@@ -312,6 +317,10 @@ func LocalMetaToRemoteProducerMeta(
 	} else if meta.SamplerProgress != nil {
 		rpm.Value = &RemoteProducerMetadata_SamplerProgress_{
 			SamplerProgress: meta.SamplerProgress,
+		}
+	} else if meta.BulkProcessorProgress != nil {
+		rpm.Value = &RemoteProducerMetadata_BulkProcessorProgress_{
+			BulkProcessorProgress: meta.BulkProcessorProgress,
 		}
 	} else if meta.Metrics != nil {
 		rpm.Value = &RemoteProducerMetadata_Metrics_{

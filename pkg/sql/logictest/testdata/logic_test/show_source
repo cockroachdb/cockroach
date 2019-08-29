@@ -1,4 +1,4 @@
-# LogicTest: local local-opt
+# LogicTest: local
 
 query T colnames
 SELECT * FROM [SHOW client_encoding]
@@ -37,11 +37,9 @@ default_tablespace                   ·
 default_transaction_isolation        serializable
 default_transaction_read_only        off
 distsql                              off
-experimental_enable_zigzag_join      on
+enable_zigzag_join                   on
 experimental_force_split_at          off
-experimental_optimizer_foreign_keys  off
 experimental_serial_normalization    rowid
-experimental_vectorize               off
 extra_float_digits                   0
 force_savepoint_restart              off
 idle_in_transaction_session_timeout  0
@@ -51,6 +49,7 @@ locality                             region=test,dc=dc1
 lock_timeout                         0
 max_index_keys                       32
 node_id                              1
+optimizer_foreign_keys  off
 reorder_joins_limit                  4
 results_buffer_size                  16384
 row_security                         off
@@ -69,6 +68,8 @@ transaction_isolation                serializable
 transaction_priority                 normal
 transaction_read_only                off
 transaction_status                   NoTxn
+vectorize                            auto
+vectorize_row_count_threshold        1000
 
 query T colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
@@ -97,12 +98,12 @@ test
 query TT colnames
 SELECT * FROM [SHOW ZONE CONFIGURATIONS] LIMIT 0
 ----
-zone_name  config_sql
+target  config_sql
 
 query TT colnames
 SELECT * FROM [SHOW ZONE CONFIGURATION FOR TABLE system.users] LIMIT 0
 ----
-zone_name  config_sql
+target  config_sql
 
 query T colnames,rowsort
 SELECT * FROM [SHOW DATABASES]
@@ -288,13 +289,13 @@ testuser
 
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE system.descriptor]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE system.descriptor]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       NULL     {1}       1
 
 query TTTI colnames
-CREATE INDEX ix ON foo(x); SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX foo@ix]
+CREATE INDEX ix ON foo(x); SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX foo@ix]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       NULL     {1}       1

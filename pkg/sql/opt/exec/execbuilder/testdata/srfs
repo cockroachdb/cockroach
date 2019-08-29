@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 subtest generate_series
 
@@ -94,31 +94,33 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT x, y, z, information_schema._pg_expandarray(ARRAY[x, y, z])
   FROM xy NATURAL JOIN xz WHERE y < z ORDER BY 1, 2, 3
 ----
-render                          ·               ·                                                      (x, y, z, "information_schema._pg_expandarray")  ·
- │                              render 0        x                                                      ·                                                ·
- │                              render 1        y                                                      ·                                                ·
- │                              render 2        z                                                      ·                                                ·
- │                              render 3        "information_schema._pg_expandarray"                   ·                                                ·
- └── sort                       ·               ·                                                      ("information_schema._pg_expandarray", x, y, z)  +x
-      │                         order           +x                                                     ·                                                ·
-      └── render                ·               ·                                                      ("information_schema._pg_expandarray", x, y, z)  ·
-           │                    render 0        ((x, n) AS x, n)                                       ·                                                ·
-           │                    render 1        x                                                      ·                                                ·
-           │                    render 2        y                                                      ·                                                ·
-           │                    render 3        z                                                      ·                                                ·
-           └── project set      ·               ·                                                      (x, y, x, z, x, n)                               ·
-                │               render 0        information_schema._pg_expandarray(ARRAY[@1, @2, @4])  ·                                                ·
-                └── merge-join  ·               ·                                                      (x, y, x, z)                                     ·
-                     │          type            inner                                                  ·                                                ·
-                     │          equality        (x) = (x)                                              ·                                                ·
-                     │          mergeJoinOrder  +"(x=x)"                                               ·                                                ·
-                     │          pred            y < z                                                  ·                                                ·
-                     ├── scan   ·               ·                                                      (x, y)                                           +x
-                     │          table           xy@primary                                             ·                                                ·
-                     │          spans           ALL                                                    ·                                                ·
-                     └── scan   ·               ·                                                      (x, z)                                           +x
-·                               table           xz@primary                                             ·                                                ·
-·                               spans           ALL                                                    ·                                                ·
+render                          ·                   ·                                                      (x, y, z, "information_schema._pg_expandarray")  ·
+ │                              render 0            x                                                      ·                                                ·
+ │                              render 1            y                                                      ·                                                ·
+ │                              render 2            z                                                      ·                                                ·
+ │                              render 3            "information_schema._pg_expandarray"                   ·                                                ·
+ └── sort                       ·                   ·                                                      ("information_schema._pg_expandarray", x, y, z)  +x
+      │                         order               +x                                                     ·                                                ·
+      └── render                ·                   ·                                                      ("information_schema._pg_expandarray", x, y, z)  ·
+           │                    render 0            ((x, n) AS x, n)                                       ·                                                ·
+           │                    render 1            x                                                      ·                                                ·
+           │                    render 2            y                                                      ·                                                ·
+           │                    render 3            z                                                      ·                                                ·
+           └── project set      ·                   ·                                                      (x, y, x, z, x, n)                               ·
+                │               render 0            information_schema._pg_expandarray(ARRAY[@1, @2, @4])  ·                                                ·
+                └── merge-join  ·                   ·                                                      (x, y, x, z)                                     ·
+                     │          type                inner                                                  ·                                                ·
+                     │          equality            (x) = (x)                                              ·                                                ·
+                     │          left cols are key   ·                                                      ·                                                ·
+                     │          right cols are key  ·                                                      ·                                                ·
+                     │          mergeJoinOrder      +"(x=x)"                                               ·                                                ·
+                     │          pred                y < z                                                  ·                                                ·
+                     ├── scan   ·                   ·                                                      (x, y)                                           +x
+                     │          table               xy@primary                                             ·                                                ·
+                     │          spans               ALL                                                    ·                                                ·
+                     └── scan   ·                   ·                                                      (x, z)                                           +x
+·                               table               xz@primary                                             ·                                                ·
+·                               spans               ALL                                                    ·                                                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series(x, z) FROM xz WHERE z < ANY(SELECT generate_series(x, y) FROM xy)
@@ -143,26 +145,28 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_subscripts(ARRAY[0, x, 1, 2]), generate_series(x, y), unnest(ARRAY[0, x, y, z]), y, z
   FROM xy NATURAL LEFT OUTER JOIN xz
 ----
-render                ·               ·                                        (generate_subscripts, generate_series, unnest, y, z)        ·
- │                    render 0        generate_subscripts                      ·                                                           ·
- │                    render 1        generate_series                          ·                                                           ·
- │                    render 2        unnest                                   ·                                                           ·
- │                    render 3        y                                        ·                                                           ·
- │                    render 4        z                                        ·                                                           ·
- └── project set      ·               ·                                        (x, y, x, z, generate_subscripts, generate_series, unnest)  ·
-      │               render 0        generate_subscripts(ARRAY[0, @1, 1, 2])  ·                                                           ·
-      │               render 1        generate_series(@1, @2)                  ·                                                           ·
-      │               render 2        unnest(ARRAY[0, @1, @2, @4])             ·                                                           ·
-      └── merge-join  ·               ·                                        (x, y, x, z)                                                ·
-           │          type            left outer                               ·                                                           ·
-           │          equality        (x) = (x)                                ·                                                           ·
-           │          mergeJoinOrder  +"(x=x)"                                 ·                                                           ·
-           ├── scan   ·               ·                                        (x, y)                                                      +x
-           │          table           xy@primary                               ·                                                           ·
-           │          spans           ALL                                      ·                                                           ·
-           └── scan   ·               ·                                        (x, z)                                                      +x
-·                     table           xz@primary                               ·                                                           ·
-·                     spans           ALL                                      ·                                                           ·
+render                ·                   ·                                        (generate_subscripts, generate_series, unnest, y, z)        ·
+ │                    render 0            generate_subscripts                      ·                                                           ·
+ │                    render 1            generate_series                          ·                                                           ·
+ │                    render 2            unnest                                   ·                                                           ·
+ │                    render 3            y                                        ·                                                           ·
+ │                    render 4            z                                        ·                                                           ·
+ └── project set      ·                   ·                                        (x, y, x, z, generate_subscripts, generate_series, unnest)  ·
+      │               render 0            generate_subscripts(ARRAY[0, @1, 1, 2])  ·                                                           ·
+      │               render 1            generate_series(@1, @2)                  ·                                                           ·
+      │               render 2            unnest(ARRAY[0, @1, @2, @4])             ·                                                           ·
+      └── merge-join  ·                   ·                                        (x, y, x, z)                                                ·
+           │          type                left outer                               ·                                                           ·
+           │          equality            (x) = (x)                                ·                                                           ·
+           │          left cols are key   ·                                        ·                                                           ·
+           │          right cols are key  ·                                        ·                                                           ·
+           │          mergeJoinOrder      +"(x=x)"                                 ·                                                           ·
+           ├── scan   ·                   ·                                        (x, y)                                                      +x
+           │          table               xy@primary                               ·                                                           ·
+           │          spans               ALL                                      ·                                                           ·
+           └── scan   ·                   ·                                        (x, z)                                                      +x
+·                     table               xz@primary                               ·                                                           ·
+·                     spans               ALL                                      ·                                                           ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series((SELECT unnest(ARRAY[x, y]) FROM xy), z) FROM xz

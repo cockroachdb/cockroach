@@ -20,7 +20,7 @@ import (
 )
 
 func TestReduceGo(t *testing.T) {
-	reduce.Walk(t, "testdata", isInterestingGo, goPasses)
+	reduce.Walk(t, "testdata", nil /* filter */, isInterestingGo, goPasses)
 }
 
 var (
@@ -28,7 +28,7 @@ var (
 		removeLine,
 		simplifyConsts,
 	}
-	removeLine = reduce.MakeIntPass(func(s string, i int) (string, bool, error) {
+	removeLine = reduce.MakeIntPass("remove line", func(s string, i int) (string, bool, error) {
 		sp := strings.Split(s, "\n")
 		if i >= len(sp) {
 			return "", false, nil
@@ -37,7 +37,7 @@ var (
 		return out, true, nil
 	})
 	simplifyConstsRE = regexp.MustCompile(`[a-z0-9][a-z0-9]+`)
-	simplifyConsts   = reduce.MakeIntPass(func(s string, i int) (string, bool, error) {
+	simplifyConsts   = reduce.MakeIntPass("simplify consts", func(s string, i int) (string, bool, error) {
 		out := simplifyConstsRE.ReplaceAllStringFunc(s, func(found string) string {
 			i--
 			if i == -1 {

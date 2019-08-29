@@ -103,6 +103,7 @@ message DetailsResponse {
   util.UnresolvedAddr address = 2 [ (gogoproto.nullable) = false ];
   build.Info build_info = 3 [ (gogoproto.nullable) = false ];
   SystemInfo system_info = 4 [ (gogoproto.nullable) = false ];
+  util.UnresolvedAddr sql_address = 5 [ (gogoproto.nullable) = false, (gogoproto.customname) = "SQLAddress" ];
 }
 
 message NodesRequest {}

@@ -10,7 +10,9 @@ export TMPDIR=$PWD/artifacts/bench
 mkdir -p "$TMPDIR"
 
 tc_start_block "Compile C dependencies"
-run build/builder.sh make -Otarget c-deps
+# Buffer noisy output and only print it on failure.
+run build/builder.sh make -Otarget c-deps &> artifacts/bench-c-build.log || (cat artifacts/bench-c-build.log && false)
+rm artifacts/bench-c-build.log
 tc_end_block "Compile C dependencies"
 
 tc_start_block "Run Benchmarks"

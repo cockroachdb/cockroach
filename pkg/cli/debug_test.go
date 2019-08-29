@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -248,8 +249,9 @@ func TestRemoveDeadReplicas(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	grpcConn, err := tc.Server(0).RPCContext().GRPCDialNode(
-		tc.Server(0).ServingAddr(),
+		tc.Server(0).ServingRPCAddr(),
 		tc.Server(0).NodeID(),
+		rpc.DefaultClass,
 	).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -272,7 +274,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 	}
 
 	s := sqlutils.MakeSQLRunner(tc.Conns[0])
-	row := s.QueryRow(t, "select replicas from [show experimental_ranges from table system.namespace] limit 1")
+	row := s.QueryRow(t, "select replicas from [show ranges from table system.namespace] limit 1")
 	var replicaStr string
 	row.Scan(&replicaStr)
 	if replicaStr != "{1,4,5}" {

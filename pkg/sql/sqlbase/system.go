@@ -385,7 +385,8 @@ var (
 		NextColumnID: 3,
 		Families: []ColumnFamilyDescriptor{
 			{Name: "primary", ID: 0, ColumnNames: []string{"id"}, ColumnIDs: singleID1},
-			{Name: "fam_2_config", ID: 2, ColumnNames: []string{"config"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_2_config", ID: keys.ZonesTableConfigColFamID, ColumnNames: []string{"config"},
+				ColumnIDs: []ColumnID{keys.ZonesTableConfigColumnID}, DefaultColumnID: keys.ZonesTableConfigColumnID},
 		},
 		PrimaryIndex: IndexDescriptor{
 			Name:             "primary",
@@ -887,6 +888,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &DescriptorTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &UsersTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &ZonesTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &SettingsTable)
 
 	// Add all the other system tables.
 	target.AddDescriptor(keys.SystemDatabaseID, &LeaseTable)
@@ -894,7 +896,6 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &RangeEventTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &UITable)
 	target.AddDescriptor(keys.SystemDatabaseID, &JobsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &SettingsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &WebSessionsTable)
 
 	// Tables introduced in 2.0, added here for 2.1.

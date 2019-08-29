@@ -39,6 +39,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+func strToValue(s string) *roachpb.Value {
+	v := roachpb.MakeValueFromBytes([]byte(s))
+	return &v
+}
+
 // createTestDB creates a local test server and starts it. The caller
 // is responsible for stopping the test server.
 func createTestDB(t testing.TB) *localtestcluster.LocalTestCluster {
@@ -62,13 +67,6 @@ func makeTS(walltime int64, logical int32) hlc.Timestamp {
 		WallTime: walltime,
 		Logical:  logical,
 	}
-}
-
-// isTracking returns true if the heartbeat loop is running.
-func (tc *TxnCoordSender) isTracking() bool {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	return tc.interceptorAlloc.txnHeartbeater.mu.txnEnd != nil
 }
 
 // TestTxnCoordSenderBeginTransaction verifies that a command sent with a
@@ -374,7 +372,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 			// This relies on the heartbeat loop stopping once it figures out that the txn
 			// has been aborted.
 			testutils.SucceedsSoon(t, func() error {
-				if tc.isTracking() {
+				if tc.IsTracking() {
 					return fmt.Errorf("transaction is not aborted")
 				}
 				return nil
@@ -414,7 +412,7 @@ func getTxn(ctx context.Context, txn *client.Txn) (*roachpb.Transaction, *roachp
 func verifyCleanup(key roachpb.Key, eng engine.Engine, t *testing.T, coords ...*TxnCoordSender) {
 	testutils.SucceedsSoon(t, func() error {
 		for _, coord := range coords {
-			if coord.isTracking() {
+			if coord.IsTracking() {
 				return fmt.Errorf("expected no heartbeat")
 			}
 		}
@@ -537,7 +535,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	{
-		err, ok := txn.CPut(ctx, key, []byte("x"), []byte("born to fail")).(*roachpb.ConditionFailedError)
+		err, ok := txn.CPut(ctx, key, []byte("x"), strToValue("born to fail")).(*roachpb.ConditionFailedError)
 		if !ok {
 			t.Fatal(err)
 		}
@@ -652,7 +650,7 @@ func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 
 		testutils.SucceedsSoon(t, func() error {
 			// Locking the TxnCoordSender to prevent a data race.
-			if tc.isTracking() {
+			if tc.IsTracking() {
 				return errors.Errorf("expected garbage collection")
 			}
 			return nil
@@ -1160,7 +1158,7 @@ func TestTxnRestartCount(t *testing.T) {
 	// Wait for heartbeat to start.
 	tc := txn.Sender().(*TxnCoordSender)
 	testutils.SucceedsSoon(t, func() error {
-		if !tc.isTracking() {
+		if !tc.IsTracking() {
 			return errors.New("expected heartbeat to start")
 		}
 		return nil
@@ -1389,7 +1387,7 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 	); pErr != nil {
 		t.Fatal(pErr)
 	}
-	if !txn.Sender().(*TxnCoordSender).isTracking() {
+	if !txn.Sender().(*TxnCoordSender).IsTracking() {
 		t.Fatalf("expected TxnCoordSender to be tracking after the write")
 	}
 
@@ -1401,20 +1399,20 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if txn.Sender().(*TxnCoordSender).isTracking() {
+		if txn.Sender().(*TxnCoordSender).IsTracking() {
 			return fmt.Errorf("still tracking")
 		}
 		return nil
 	})
 }
 
-// Test that intent tracking behaves correctly for
-// transactions that attempt to run a batch containing both a BeginTransaction
-// and an EndTransaction. Since in case of an error it's not easy to determine
-// whether any intents have been laid down (i.e. in case the batch was split by
-// the DistSender and then there was mixed success for the sub-batches, or in
-// case a retriable error is returned), the test verifies that all possible
-// intents are properly tracked and attached to a subsequent EndTransaction.
+// Test that intent tracking behaves correctly for transactions that attempt to
+// run a batch containing both a BeginTransaction and an EndTransaction. Since
+// in case of an error it's not easy to determine whether any intents have been
+// laid down (i.e. in case the batch was split by the DistSender and then there
+// was mixed success for the sub-batches, or in case a retriable error is
+// returned), the test verifies that all possible intents are properly tracked
+// and attached to a subsequent EndTransaction.
 func TestOnePCErrorTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -1487,7 +1485,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 
 	// As always, check that the rollback we just sent stops the heartbeat loop.
 	testutils.SucceedsSoon(t, func() error {
-		if txn.Sender().(*TxnCoordSender).isTracking() {
+		if txn.Sender().(*TxnCoordSender).IsTracking() {
 			return fmt.Errorf("still tracking")
 		}
 		return nil

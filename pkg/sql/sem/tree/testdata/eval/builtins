@@ -1,0 +1,39 @@
+eval
+sqrt(4.0)
+----
+2
+
+eval
+sqrt(1 * -0:::float)
+----
+-0.0
+
+eval
+sqrt(1.0 * -0)
+----
+0
+
+eval
+sqrt(-1:::float * 0)
+----
+-0.0
+
+eval
+sign(1)
+----
+1
+
+eval
+sign(-1)
+----
+-1
+
+eval
+sign(0)
+----
+0
+
+eval
+sign(-0)
+----
+0

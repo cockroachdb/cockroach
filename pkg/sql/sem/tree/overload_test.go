@@ -128,10 +128,10 @@ func makeTestOverload(retType *types.T, params ...*types.T) overloadImpl {
 func TestTypeCheckOverloadedExprs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	intConst := func(s string) Expr {
-		return &NumVal{Value: constant.MakeFromLiteral(s, token.INT, 0), OrigString: s}
+		return NewNumVal(constant.MakeFromLiteral(s, token.INT, 0), s, false /* negative */)
 	}
 	decConst := func(s string) Expr {
-		return &NumVal{Value: constant.MakeFromLiteral(s, token.FLOAT, 0), OrigString: s}
+		return NewNumVal(constant.MakeFromLiteral(s, token.FLOAT, 0), s, false /* negative */)
 	}
 	strConst := func(s string) Expr {
 		return &StrVal{s: s}

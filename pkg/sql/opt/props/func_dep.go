@@ -932,7 +932,7 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 			foundAll := true
 			for c, ok := beforeCols.Next(0); ok; c, ok = beforeCols.Next(c + 1) {
 				var id opt.ColumnID
-				if id, foundAll = equivMap[opt.ColumnID(c)]; !foundAll {
+				if id, foundAll = equivMap[c]; !foundAll {
 					break
 				}
 				afterCols.Add(id)
@@ -1579,7 +1579,7 @@ func (f *FuncDepSet) makeEquivMap(from, to opt.ColSet) map[opt.ColumnID]opt.Colu
 				equivMap = make(map[opt.ColumnID]opt.ColumnID)
 			}
 			id, _ := closure.Next(0)
-			equivMap[opt.ColumnID(i)] = opt.ColumnID(id)
+			equivMap[i] = id
 		}
 	}
 	return equivMap

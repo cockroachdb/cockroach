@@ -1,4 +1,4 @@
-# LogicTest: local local-opt
+# LogicTest: local
 
 statement error unrecognized configuration parameter "foo"
 SET foo = bar
@@ -169,24 +169,27 @@ statement error invalid value for parameter "distsql": "bogus"
 SET distsql = bogus
 
 statement ok
-SET experimental_vectorize = on
+SET vectorize = auto
 
 statement ok
-SET experimental_vectorize = always
+SET vectorize = experimental_on
 
 statement ok
-SET experimental_vectorize = off
+SET vectorize = experimental_always
 
-statement error invalid value for parameter "experimental_vectorize": "bogus"
-SET experimental_vectorize = bogus
+statement ok
+SET vectorize = off
+
+statement error invalid value for parameter "vectorize": "bogus"
+SET vectorize = bogus
 
 statement ok
 SET optimizer = on
 
-statement ok
+statement error invalid value for parameter "optimizer": "local"
 SET optimizer = local
 
-statement ok
+statement error invalid value for parameter "optimizer": "off"
 SET optimizer = off
 
 statement error invalid value for parameter "optimizer": "bogus"

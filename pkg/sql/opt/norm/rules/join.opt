@@ -101,7 +101,7 @@
 #       be ordered before PushFilterIntoJoinLeft (otherwise,
 #       PushFilterIntoJoinLeft might need to be applied multiple times).
 [MapFilterIntoJoinLeft, Normalize]
-(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply | SemiJoin | SemiJoinApply
+(InnerJoin | InnerJoinApply | RightJoin | SemiJoin | SemiJoinApply
     $left:* & ^(HasOuterCols $left)
     $right:*
     $on:[
@@ -171,7 +171,7 @@
 #
 # Citations: [1]
 [PushFilterIntoJoinLeft, Normalize]
-(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply | SemiJoin | SemiJoinApply
+(InnerJoin | InnerJoinApply | RightJoin | SemiJoin | SemiJoinApply
     $left:* & ^(HasOuterCols $left)
     $right:*
     $on:[
@@ -224,7 +224,7 @@
 # join only populates the right side with NULL values when it would otherwise
 # not be present.
 [SimplifyLeftJoinWithoutFilters, Normalize]
-(LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
+(LeftJoin | LeftJoinApply | FullJoin
     $left:*
     $right:* & ^(CanHaveZeroRows $right)
     $on:[]
@@ -245,7 +245,7 @@
 # join only populates the left side with NULL values when it would otherwise not
 # be present.
 [SimplifyRightJoinWithoutFilters, Normalize]
-(RightJoin | RightJoinApply | FullJoin | FullJoinApply
+(RightJoin | FullJoin
     $left:* & ^(CanHaveZeroRows $left)
     $right:*
     $on:[]
@@ -278,7 +278,7 @@
 #   =>
 #   SELECT * FROM orders o INNER JOIN customers c ON o.customer_id = c.id
 [SimplifyLeftJoinWithFilters, Normalize]
-(LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
+(LeftJoin | LeftJoinApply | FullJoin
     $left:*
     $right:*
     $on:^[] & (JoinFiltersMatchAllLeftRows $left $right $on)
@@ -299,7 +299,7 @@
 # is symmetric with SimplifyLeftJoinWithFilters; see that rule for more details
 # and examples.
 [SimplifyRightJoinWithFilters, Normalize]
-(RightJoin | RightJoinApply | FullJoin | FullJoinApply
+(RightJoin | FullJoin
     $left:*
     $right:*
     $on:^[] & (JoinFiltersMatchAllLeftRows $right $left $on)

@@ -11,7 +11,7 @@
 // {{/*
 // +build execgen_template
 //
-// This file is the execgen template for distinct.eg.go. It's formatted in a
+// This file is the execgen template for select_in.eg.go. It's formatted in a
 // special way, so it's both valid Go and a valid text/template input. This
 // permits editing this file with editor support.
 //
@@ -22,13 +22,18 @@ package exec
 import (
 	"bytes"
 	"context"
+	"math"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
+	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -40,17 +45,23 @@ type _TYPE interface{}
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
 
-// Dummy import to pull in "types" package
-var _ types.T
+// Dummy import to pull in "coltypes" package
+var _ coltypes.T
 
 // Dummy import to pull in "bytes" package
 var _ bytes.Buffer
 
+// Dummy import to pull in "math" package.
+var _ = math.MaxInt64
+
 func _ASSIGN_EQ(_, _, _ interface{}) uint64 {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // */}}
+
+// Use execgen package to remove unused import warning.
+var _ interface{} = execgen.UNSAFEGET
 
 // Enum used to represent comparison results
 type comparisonResult int
@@ -62,17 +73,17 @@ const (
 )
 
 func GetInProjectionOperator(
-	ct *semtypes.T, input Operator, colIdx int, resultIdx int, datumTuple *tree.DTuple, negate bool,
+	ct *types.T, input Operator, colIdx int, resultIdx int, datumTuple *tree.DTuple, negate bool,
 ) (Operator, error) {
 	var err error
-	switch t := conv.FromColumnType(ct); t {
+	switch t := typeconv.FromColumnType(ct); t {
 	// {{range .}}
-	case types._TYPE:
+	case coltypes._TYPE:
 		obj := &projectInOp_TYPE{
-			input:     input,
-			colIdx:    colIdx,
-			outputIdx: resultIdx,
-			negate:    negate,
+			OneInputNode: NewOneInputNode(input),
+			colIdx:       colIdx,
+			outputIdx:    resultIdx,
+			negate:       negate,
 		}
 		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(ct, datumTuple)
 		if err != nil {
@@ -86,16 +97,16 @@ func GetInProjectionOperator(
 }
 
 func GetInOperator(
-	ct *semtypes.T, input Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
+	ct *types.T, input Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
 ) (Operator, error) {
 	var err error
-	switch t := conv.FromColumnType(ct); t {
+	switch t := typeconv.FromColumnType(ct); t {
 	// {{range .}}
-	case types._TYPE:
+	case coltypes._TYPE:
 		obj := &selectInOp_TYPE{
-			input:  input,
-			colIdx: colIdx,
-			negate: negate,
+			OneInputNode: NewOneInputNode(input),
+			colIdx:       colIdx,
+			negate:       negate,
 		}
 		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(ct, datumTuple)
 		if err != nil {
@@ -111,7 +122,7 @@ func GetInOperator(
 // {{range .}}
 
 type selectInOp_TYPE struct {
-	input     Operator
+	OneInputNode
 	colIdx    int
 	filterRow []_GOTYPE
 	hasNulls  bool
@@ -119,7 +130,7 @@ type selectInOp_TYPE struct {
 }
 
 type projectInOp_TYPE struct {
-	input     Operator
+	OneInputNode
 	colIdx    int
 	outputIdx int
 	filterRow []_GOTYPE
@@ -130,11 +141,11 @@ type projectInOp_TYPE struct {
 var _ StaticMemoryOperator = &projectInOp_TYPE{}
 
 func (p *projectInOp_TYPE) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]types.T{types.Bool}, coldata.BatchSize)
+	return EstimateBatchSizeBytes([]coltypes.T{coltypes.Bool}, coldata.BatchSize)
 }
 
-func fillDatumRow_TYPE(ct *semtypes.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
-	conv := conv.GetDatumToPhysicalFn(ct)
+func fillDatumRow_TYPE(ct *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
+	conv := typeconv.GetDatumToPhysicalFn(ct)
 	var result []_GOTYPE
 	hasNulls := false
 	for _, d := range datumTuple.D {
@@ -197,7 +208,8 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !nulls.NullAt(uint16(i)) && cmpIn_TYPE(col[i], si.filterRow, si.hasNulls) == compVal {
+					v := execgen.UNSAFEGET(col, int(i))
+					if !nulls.NullAt(uint16(i)) && cmpIn_TYPE(v, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = uint16(i)
 						idx++
 					}
@@ -205,9 +217,10 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				col = col[:n]
-				for i := range col {
-					if !nulls.NullAt(uint16(i)) && cmpIn_TYPE(col[i], si.filterRow, si.hasNulls) == compVal {
+				col = execgen.SLICE(col, 0, int(n))
+				for execgen.RANGE(i, col) {
+					v := execgen.UNSAFEGET(col, i)
+					if !nulls.NullAt(uint16(i)) && cmpIn_TYPE(v, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = uint16(i)
 						idx++
 					}
@@ -217,7 +230,8 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if cmpIn_TYPE(col[i], si.filterRow, si.hasNulls) == compVal {
+					v := execgen.UNSAFEGET(col, int(i))
+					if cmpIn_TYPE(v, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = uint16(i)
 						idx++
 					}
@@ -225,9 +239,10 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				col = col[:n]
-				for i := range col {
-					if cmpIn_TYPE(col[i], si.filterRow, si.hasNulls) == compVal {
+				col = execgen.SLICE(col, 0, int(n))
+				for execgen.RANGE(i, col) {
+					v := execgen.UNSAFEGET(col, i)
+					if cmpIn_TYPE(v, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = uint16(i)
 						idx++
 					}
@@ -244,12 +259,11 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 
 func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 	batch := pi.input.Next(ctx)
+	if pi.outputIdx == batch.Width() {
+		batch.AppendCol(coltypes.Bool)
+	}
 	if batch.Length() == 0 {
 		return batch
-	}
-
-	if pi.outputIdx == batch.Width() {
-		batch.AppendCol(types.Bool)
 	}
 
 	vec := batch.ColVec(pi.colIdx)
@@ -274,7 +288,8 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(uint16(i)) {
 					projNulls.SetNull(uint16(i))
 				} else {
-					cmpRes := cmpIn_TYPE(col[i], pi.filterRow, pi.hasNulls)
+					v := execgen.UNSAFEGET(col, int(i))
+					cmpRes := cmpIn_TYPE(v, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(uint16(i))
 					} else {
@@ -283,12 +298,13 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[:n]
-			for i := range col {
+			col = execgen.SLICE(col, 0, int(n))
+			for execgen.RANGE(i, col) {
 				if nulls.NullAt(uint16(i)) {
 					projNulls.SetNull(uint16(i))
 				} else {
-					cmpRes := cmpIn_TYPE(col[i], pi.filterRow, pi.hasNulls)
+					v := execgen.UNSAFEGET(col, i)
+					cmpRes := cmpIn_TYPE(v, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(uint16(i))
 					} else {
@@ -301,7 +317,8 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				cmpRes := cmpIn_TYPE(col[i], pi.filterRow, pi.hasNulls)
+				v := execgen.UNSAFEGET(col, int(i))
+				cmpRes := cmpIn_TYPE(v, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(uint16(i))
 				} else {
@@ -309,9 +326,10 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[:n]
-			for i := range col {
-				cmpRes := cmpIn_TYPE(col[i], pi.filterRow, pi.hasNulls)
+			col = execgen.SLICE(col, 0, int(n))
+			for execgen.RANGE(i, col) {
+				v := execgen.UNSAFEGET(col, i)
+				cmpRes := cmpIn_TYPE(v, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(uint16(i))
 				} else {

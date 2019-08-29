@@ -101,6 +101,7 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *alterUserSetPasswordNode:
 	case *cancelQueriesNode:
 	case *cancelSessionsNode:
+	case *changePrivilegesNode:
 	case *commentOnTableNode:
 	case *commentOnColumnNode:
 	case *commentOnDatabaseNode:
@@ -119,7 +120,9 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *dropTableNode:
 	case *dropViewNode:
 	case *errorIfRowsNode:
+	case *exportNode:
 	case *explainDistSQLNode:
+	case *explainVecNode:
 	case *hookFnNode:
 	case *relocateNode:
 	case *renameColumnNode:

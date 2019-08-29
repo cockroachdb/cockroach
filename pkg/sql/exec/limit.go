@@ -13,13 +13,13 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 )
 
 // limitOp is an operator that implements limit, returning only the first n
 // tuples from its input.
 type limitOp struct {
-	input Operator
+	OneInputNode
 
 	internalBatch coldata.Batch
 	limit         uint64
@@ -35,8 +35,8 @@ var _ Operator = &limitOp{}
 // NewLimitOp returns a new limit operator with the given limit.
 func NewLimitOp(input Operator, limit uint64) Operator {
 	c := &limitOp{
-		input: input,
-		limit: limit,
+		OneInputNode: NewOneInputNode(input),
+		limit:        limit,
 	}
 	return c
 }

@@ -360,6 +360,7 @@ func (r *testRunner) runWorker(
 	}()
 
 	var c *cluster // The cluster currently being used.
+	var err error
 	// When this method returns we'll destroy the cluster we had at the time.
 	// Note that, if debug was set, c has been set to nil.
 	defer func() {
@@ -401,9 +402,7 @@ func (r *testRunner) runWorker(
 				c = nil
 			}
 		}
-
 		var testToRun testToRunRes
-		var err error
 		wStatus.SetTest(nil /* test */, testToRunRes{})
 		wStatus.SetStatus("getting work")
 		testToRun, c, err = r.getWork(
@@ -452,7 +451,6 @@ func (r *testRunner) runWorker(
 		l.PrintfCtx(ctx, "starting test: %s:%d", testToRun.spec.Name, testToRun.runNum)
 		var success bool
 		success, err = r.runTest(ctx, t, testToRun.runNum, c, testRunnerLogPath, stdout, testL)
-		testL.close()
 		if err != nil {
 			shout(ctx, l, stdout, "test returned error: %s: %s", t.Name(), err)
 			// Mark the test as failed if it isn't already.
@@ -466,6 +464,7 @@ func (r *testRunner) runWorker(
 			}
 			l.PrintfCtx(ctx, msg)
 		}
+		testL.close()
 		if err != nil || t.Failed() {
 			failureMsg := fmt.Sprintf("%s (%d) - ", testToRun.spec.Name, testToRun.runNum)
 			if err != nil {
@@ -567,7 +566,7 @@ func (r *testRunner) runTest(
 
 			if teamCity {
 				shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
-					t.Name(), teamCityEscape(string(output)), t.Name(),
+					t.Name(), teamCityEscape(output), t.Name(),
 				)
 
 				// Copy a snapshot of the testrunner's log to the test's artifacts dir
@@ -667,25 +666,8 @@ func (r *testRunner) runTest(
 	// timeout.
 	success := false
 	done := make(chan struct{})
-	var collectClusterLogsOnce sync.Once
 	go func() {
 		defer close(done) // closed only after we've grabbed the debug info below
-
-		defer func() {
-			// Detect replica divergence (i.e. ranges in which replicas have arrived
-			// at the same log position with different states).
-			c.FailOnReplicaDivergence(ctx, t)
-			// Detect dead nodes in an inner defer. Note that this will call
-			// t.printfAndFail() when appropriate, which will cause the code below to
-			// enter the t.Failed() branch.
-			c.FailOnDeadNodes(ctx, t)
-
-			if !t.Failed() {
-				success = true
-				return
-			}
-			collectClusterLogsOnce.Do(func() { r.collectClusterLogs(ctx, c, t.l) })
-		}()
 
 		// This is the call to actually run the test.
 		t.spec.Run(runCtx, t, c)
@@ -712,16 +694,40 @@ func (r *testRunner) runTest(
 		case <-time.After(5 * time.Minute):
 			msg := "test timed out and afterwards failed to respond to cancelation"
 			t.l.PrintfCtx(ctx, msg)
-			collectClusterLogsOnce.Do(func() { r.collectClusterLogs(ctx, c, t.l) })
+			r.collectClusterLogs(ctx, c, t.l)
 			// We return an error here because the test goroutine is still running, so
 			// we want to alert the caller of this unusual situation.
 			return false, fmt.Errorf(msg)
 		}
 	}
-	return success, nil
+
+	// Detect replica divergence (i.e. ranges in which replicas have arrived
+	// at the same log position with different states).
+	c.FailOnReplicaDivergence(ctx, t)
+	// Detect dead nodes in an inner defer. Note that this will call
+	// t.printfAndFail() when appropriate, which will cause the code below to
+	// enter the t.Failed() branch.
+	c.FailOnDeadNodes(ctx, t)
+
+	if t.Failed() {
+		r.collectClusterLogs(ctx, c, t.l)
+		return false, nil
+	}
+	return true, nil
 }
 
 func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, l *logger) {
+	// NB: fetch the logs even when we have a debug zip because
+	// debug zip can't ever get the logs for down nodes.
+	// We only save artifacts for failed tests in CI, so this
+	// duplication is acceptable.
+	// NB: fetch the logs *first* in case one of the other steps
+	// below has problems. For example, `debug zip` is known to
+	// hang sometimes at the time of writing, see:
+	// https://github.com/cockroachdb/cockroach/issues/39620
+	if err := c.FetchLogs(ctx); err != nil {
+		l.Printf("failed to download logs: %s", err)
+	}
 	l.PrintfCtx(ctx, "collecting cluster logs")
 	if err := c.FetchDebugZip(ctx); err != nil {
 		l.Printf("failed to download logs: %s", err)
@@ -737,13 +743,6 @@ func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, l *logg
 	}
 	if err := c.CopyRoachprodState(ctx); err != nil {
 		l.Printf("failed to copy roachprod state: %s", err)
-	}
-	// NB: fetch the logs even when we have a debug zip because
-	// debug zip can't ever get the logs for down nodes.
-	// We only save artifacts for failed tests in CI, so this
-	// duplication is acceptable.
-	if err := c.FetchLogs(ctx); err != nil {
-		l.Printf("failed to download logs: %s", err)
 	}
 }
 
@@ -822,6 +821,9 @@ func (r *testRunner) getWork(
 		l.PrintfCtx(ctx, "Using existing cluster: %s. Wiping", c.name)
 		if err := c.WipeE(ctx, l); err != nil {
 			return testToRunRes{}, nil, err
+		}
+		if err := c.RunL(ctx, l, c.All(), "rm -rf "+perfArtifactsDir); err != nil {
+			return testToRunRes{}, nil, errors.Wrapf(err, "failed to remove perf artifacts dir")
 		}
 		// Overwrite the spec of the cluster with the one coming from the test. In
 		// particular, this overwrites the reuse policy to reflect what the test

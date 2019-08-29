@@ -21,8 +21,8 @@ import (
 // TestExecBuild runs logic tests that are specific to how the optimizer builds
 // queries.
 //
-// The test files should use combinations of the local-opt, fakedist-opt and
-// 5node-dist-opt configs. For tests that only have EXPLAIN (PLAN) statements,
+// The test files should use combinations of the local, fakedist and
+// 5node-dist configs. For tests that only have EXPLAIN (PLAN) statements,
 // it's sufficient to run on a single configuration.
 func TestExecBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)()

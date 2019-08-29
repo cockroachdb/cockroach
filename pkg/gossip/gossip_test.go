@@ -171,8 +171,9 @@ func TestGossipLocalityResolver(t *testing.T) {
 	node1PrivateAddress := util.MakeUnresolvedAddr("tcp", "1.0.0.1")
 	node2PrivateAddress := util.MakeUnresolvedAddr("tcp", "2.0.0.1")
 
-	node1PublicAddress := util.MakeUnresolvedAddr("tcp", "1.1.1.1:1")
-	node2PublicAddress := util.MakeUnresolvedAddr("tcp", "2.2.2.2:2")
+	node1PublicAddressRPC := util.MakeUnresolvedAddr("tcp", "1.1.1.1:1")
+	node2PublicAddressRPC := util.MakeUnresolvedAddr("tcp", "2.2.2.2:3")
+	node2PublicAddressSQL := util.MakeUnresolvedAddr("tcp", "2.2.2.2:4")
 
 	var node1LocalityList []roachpb.LocalityAddress
 	nodeLocalityAddress := roachpb.LocalityAddress{}
@@ -190,8 +191,17 @@ func TestGossipLocalityResolver(t *testing.T) {
 	node2LocalityList = append(node2LocalityList, nodeLocalityAddress2)
 
 	g := NewTestWithLocality(1, rpcContext, rpc.NewServer(rpcContext), stopper, metric.NewRegistry(), gossipLocalityAdvertiseList, config.DefaultZoneConfigRef())
-	node1 := &roachpb.NodeDescriptor{NodeID: 1, Address: node1PublicAddress, LocalityAddress: node1LocalityList}
-	node2 := &roachpb.NodeDescriptor{NodeID: 2, Address: node2PublicAddress, LocalityAddress: node2LocalityList}
+	node1 := &roachpb.NodeDescriptor{
+		NodeID:          1,
+		Address:         node1PublicAddressRPC,
+		LocalityAddress: node1LocalityList,
+	}
+	node2 := &roachpb.NodeDescriptor{
+		NodeID:          2,
+		Address:         node2PublicAddressRPC,
+		SQLAddress:      node2PublicAddressSQL,
+		LocalityAddress: node2LocalityList,
+	}
 
 	if err := g.SetNodeDescriptor(node1); err != nil {
 		t.Fatal(err)
@@ -213,8 +223,17 @@ func TestGossipLocalityResolver(t *testing.T) {
 		t.Error(err)
 	}
 
-	if *nodeAddress != node2PublicAddress {
-		t.Fatalf("expected: %s but got: %s address", node2PublicAddress, *nodeAddress)
+	if *nodeAddress != node2PublicAddressRPC {
+		t.Fatalf("expected: %s but got: %s address", node2PublicAddressRPC, *nodeAddress)
+	}
+
+	nodeAddressSQL, err := g.GetNodeIDSQLAddress(node2.NodeID)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if *nodeAddressSQL != node2PublicAddressSQL {
+		t.Fatalf("expected: %s but got: %s address", node2PublicAddressSQL, *nodeAddressSQL)
 	}
 }
 

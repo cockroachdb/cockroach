@@ -96,6 +96,10 @@ func TestStatusJson(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	sqlAddr, err := ts.Gossip().GetNodeIDSQLAddress(nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var nodes serverpb.NodesResponse
 	testutils.SucceedsSoon(t, func() error {
@@ -122,6 +126,9 @@ func TestStatusJson(t *testing.T) {
 			t.Errorf("expected: %d, got: %d", e, a)
 		}
 		if a, e := details.Address, *addr; a != e {
+			t.Errorf("expected: %v, got: %v", e, a)
+		}
+		if a, e := details.SQLAddress, *sqlAddr; a != e {
 			t.Errorf("expected: %v, got: %v", e, a)
 		}
 		if a, e := details.BuildInfo, build.GetInfo(); a != e {
@@ -275,9 +282,9 @@ func TestStatusGetFiles(t *testing.T) {
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
 	rpcContext := newRPCTestContext(ts, rootConfig)
 
-	url := ts.ServingAddr()
+	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -943,9 +950,9 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 		EndKey:   []byte(roachpb.RKeyMax),
 	}
 
-	url := ts.ServingAddr()
+	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(ctx)
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -973,9 +980,9 @@ func TestNodesGRPCResponse(t *testing.T) {
 	rpcContext := newRPCTestContext(ts, rootConfig)
 	var request serverpb.NodesRequest
 
-	url := ts.ServingAddr()
+	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1174,9 +1181,9 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 	// interpreting said metadata).
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
 	rpcContext := newRPCTestContext(ts, rootConfig)
-	url := ts.ServingAddr()
+	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1374,9 +1381,9 @@ func TestListSessionsSecurity(t *testing.T) {
 	// gRPC requests behave as root and thus are always allowed.
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
 	rpcContext := newRPCTestContext(ts, rootConfig)
-	url := ts.ServingAddr()
+	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

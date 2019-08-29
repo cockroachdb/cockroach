@@ -18,9 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 )
 
@@ -51,12 +53,63 @@ func EvalAddSSTable(
 	}
 
 	// Verify that the keys in the sstable are within the range specified by the
-	// request header, verify the key-value checksums, and compute the new
-	// MVCCStats.
-	stats, err := verifySSTable(
-		args.Data, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
+	// request header, and if the request did not include pre-computed stats,
+	// compute the expected MVCC stats delta of ingesting the SST.
+	dataIter, err := engine.NewMemSSTIterator(args.Data, true)
 	if err != nil {
-		return result.Result{}, errors.Wrap(err, "verifying sstable data")
+		return result.Result{}, err
+	}
+	defer dataIter.Close()
+
+	// Check that the first key is in the expected range.
+	dataIter.Seek(engine.MVCCKey{Key: keys.MinKey})
+	ok, err := dataIter.Valid()
+	if err != nil {
+		return result.Result{}, err
+	} else if ok {
+		if unsafeKey := dataIter.UnsafeKey(); unsafeKey.Less(mvccStartKey) {
+			return result.Result{}, errors.Errorf("first key %s not in request range [%s,%s)",
+				unsafeKey.Key, mvccStartKey.Key, mvccEndKey.Key)
+		}
+	}
+
+	// Get the MVCCStats for the SST being ingested.
+	var stats enginepb.MVCCStats
+	if args.MVCCStats != nil {
+		stats = *args.MVCCStats
+	}
+
+	// Stats are computed on-the-fly when shadowing of keys is disallowed. If we
+	// took the fast path and race is enabled, assert the stats were correctly
+	// computed.
+	verifyFastPath := args.DisallowShadowing && util.RaceEnabled
+	if args.MVCCStats == nil || verifyFastPath {
+		log.VEventf(ctx, 2, "computing MVCCStats for SSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
+
+		computed, err := engine.ComputeStatsGo(dataIter, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
+		if err != nil {
+			return result.Result{}, errors.Wrap(err, "computing SSTable MVCC stats")
+		}
+
+		if verifyFastPath {
+			// Update the timestamp to that of the recently computed stats to get the
+			// diff passing.
+			stats.LastUpdateNanos = computed.LastUpdateNanos
+			if !stats.Equal(computed) {
+				log.Fatalf(ctx, "fast-path MVCCStats computation gave wrong result: diff(fast, computed) = %s",
+					pretty.Diff(stats, computed))
+			}
+		}
+		stats = computed
+	}
+
+	dataIter.Seek(mvccEndKey)
+	ok, err = dataIter.Valid()
+	if err != nil {
+		return result.Result{}, err
+	} else if ok {
+		return result.Result{}, errors.Errorf("last key %s not in request range [%s,%s)",
+			dataIter.UnsafeKey(), mvccStartKey.Key, mvccEndKey.Key)
 	}
 
 	// The above MVCCStats represents what is in this new SST.
@@ -100,6 +153,18 @@ func EvalAddSSTable(
 	// Callers can trigger such a re-computation to fixup any discrepancies (and
 	// remove the ContainsEstimates flag) after they are done ingesting files by
 	// sending an explicit recompute.
+	//
+	// TODO(adityamaru): There is a significant performance win to be achieved by
+	// ensuring that the stats computed are not estimates as it prevents
+	// recompuation on splits. Running AddSSTable with disallowShadowing=true gets
+	// us close to this as we do not allow colliding keys to be ingested. However,
+	// in the situation that two SSTs have KV(s) which "perfectly" shadow an
+	// existing key (equal ts and value), we do not consider this a collision.
+	// While the KV would just overwrite the existing data, the stats would be
+	// added below, causing a double count for those KVs. One solution is to
+	// compute the stats for these "skipped" KVs on-the-fly while checking for the
+	// collision condition and returning their stats. The final stats would then
+	// be ms + stats - skipped_stats, and this would be accurate.
 	stats.ContainsEstimates = true
 	ms.Add(stats)
 
@@ -120,9 +185,13 @@ func checkForKeyCollisions(
 	mvccEndKey engine.MVCCKey,
 	data []byte,
 ) error {
+	// We could get a spansetBatch so fetch the underlying rocksDBBatchEngine as
+	// we need access to the underlying C.DBIterator later, and the
+	// dbIteratorGetter is not implemented by a spansetBatch.
+	rocksDBEngine := spanset.GetDBEngine(batch, roachpb.Span{Key: mvccStartKey.Key, EndKey: mvccEndKey.Key})
 
 	// Create iterator over the existing data.
-	existingDataIter := batch.NewIterator(engine.IterOptions{UpperBound: mvccEndKey.Key})
+	existingDataIter := rocksDBEngine.NewIterator(engine.IterOptions{UpperBound: mvccEndKey.Key})
 	defer existingDataIter.Close()
 	existingDataIter.Seek(mvccStartKey)
 	if ok, err := existingDataIter.Valid(); err != nil {
@@ -153,47 +222,4 @@ func checkForKeyCollisions(
 
 	checkErr := engine.CheckForKeyCollisions(existingDataIter, sstIterator)
 	return checkErr
-}
-
-func verifySSTable(
-	data []byte, start, end engine.MVCCKey, nowNanos int64,
-) (enginepb.MVCCStats, error) {
-	// To verify every KV is a valid roachpb.KeyValue in the range [start, end)
-	// we a) pass a verify flag on the iterator so that as ComputeStatsGo calls
-	// Next, we're also verifying each KV pair. We explicitly check the first key
-	// is >= start and then that we do not find a key after end.
-	dataIter, err := engine.NewMemSSTIterator(data, true)
-	if err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	defer dataIter.Close()
-
-	// Check that the first key is in the expected range.
-	dataIter.Seek(engine.MVCCKey{Key: keys.MinKey})
-	ok, err := dataIter.Valid()
-	if err != nil {
-		return enginepb.MVCCStats{}, err
-	} else if ok {
-		if unsafeKey := dataIter.UnsafeKey(); unsafeKey.Less(start) {
-			return enginepb.MVCCStats{}, errors.Errorf("first key %s not in request range [%s,%s)",
-				unsafeKey.Key, start.Key, end.Key)
-		}
-	}
-
-	stats, err := engine.ComputeStatsGo(dataIter, start, end, nowNanos)
-	if err != nil {
-		return stats, err
-	}
-
-	dataIter.Seek(end)
-	ok, err = dataIter.Valid()
-	if err != nil {
-		return enginepb.MVCCStats{}, err
-	} else if ok {
-		if unsafeKey := dataIter.UnsafeKey(); !unsafeKey.Less(end) {
-			return enginepb.MVCCStats{}, errors.Errorf("last key %s not in request range [%s,%s)",
-				unsafeKey.Key, start.Key, end.Key)
-		}
-	}
-	return stats, nil
 }

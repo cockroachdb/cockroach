@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -47,10 +48,9 @@ import (
 )
 
 // SplitTable splits a range in the table, creates a replica for the right
-// side of the split on targetNodeIdx, and moves the lease for the right
-// side of the split to targetNodeIdx. This forces the querying against
-// the table to be distributed. vals is a list of values forming a primary
-// key for the table.
+// side of the split on TargetNodeIdx, and moves the lease for the right
+// side of the split to TargetNodeIdx for each SplitPoint. This forces the
+// querying against the table to be distributed.
 //
 // TODO(radu): SplitTable or its equivalent should be added to TestCluster.
 //
@@ -60,32 +60,68 @@ func SplitTable(
 	t *testing.T,
 	tc serverutils.TestClusterInterface,
 	desc *sqlbase.TableDescriptor,
-	targetNodeIdx int,
-	vals ...interface{},
+	sps []SplitPoint,
 ) {
 	if tc.ReplicationMode() != base.ReplicationManual {
 		t.Fatal("SplitTable called on a test cluster that was not in manual replication mode")
 	}
 
-	pik, err := sqlbase.TestingMakePrimaryIndexKey(desc, vals...)
-	if err != nil {
-		t.Fatal(err)
+	rkts := make(map[roachpb.RangeID]rangeAndKT)
+	for _, sp := range sps {
+		pik, err := sqlbase.TestingMakePrimaryIndexKey(desc, sp.Vals...)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, rightRange, err := tc.Server(0).SplitRange(pik)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		rightRangeStartKey := rightRange.StartKey.AsRawKey()
+		target := tc.Target(sp.TargetNodeIdx)
+
+		rkts[rightRange.RangeID] = rangeAndKT{
+			rightRange,
+			serverutils.KeyAndTargets{StartKey: rightRangeStartKey, Targets: []roachpb.ReplicationTarget{target}}}
 	}
 
-	_, rightRange, err := tc.Server(0).SplitRange(pik)
-	if err != nil {
-		t.Fatal(err)
+	var kts []serverutils.KeyAndTargets
+	for _, rkt := range rkts {
+		kts = append(kts, rkt.KT)
+	}
+	descs, errs := tc.AddReplicasMulti(kts...)
+	for _, err := range errs {
+		if err != nil && !testutils.IsError(err, "is already present") {
+			t.Fatal(err)
+		}
 	}
 
-	rightRangeStartKey := rightRange.StartKey.AsRawKey()
-	rightRange, err = tc.AddReplicas(rightRangeStartKey, tc.Target(targetNodeIdx))
-	if err != nil && !testutils.IsError(err, "is already present") {
-		t.Fatal(err)
-	}
+	for _, desc := range descs {
+		rkt, ok := rkts[desc.RangeID]
+		if !ok {
+			continue
+		}
 
-	if err := tc.TransferRangeLease(rightRange, tc.Target(targetNodeIdx)); err != nil {
-		t.Fatal(err)
+		for _, target := range rkt.KT.Targets {
+			if err := tc.TransferRangeLease(desc, target); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
+}
+
+// SplitPoint describes a split point that is passed to SplitTable.
+type SplitPoint struct {
+	// TargetNodeIdx is the node that will have the lease for the new range.
+	TargetNodeIdx int
+	// Vals is list of values forming a primary key for the table.
+	Vals []interface{}
+}
+
+type rangeAndKT struct {
+	Range roachpb.RangeDescriptor
+	KT    serverutils.KeyAndTargets
 }
 
 // TestPlanningDuringSplits verifies that table reader planning (resolving
@@ -155,7 +191,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 
 			// Create a gosql.DB for this worker.
 			pgURL, cleanupGoDB := sqlutils.PGUrl(
-				t, tc.Server(0).ServingAddr(), fmt.Sprintf("%d", idx), url.User(security.RootUser),
+				t, tc.Server(0).ServingSQLAddr(), fmt.Sprintf("%d", idx), url.User(security.RootUser),
 			)
 			defer cleanupGoDB()
 
@@ -310,7 +346,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	//
 	// TODO(andrei): This is super hacky. What this test really wants to do is to
 	// precisely control the contents of the range cache on node 4.
-	tc.Server(3).DistSender().DisableFirstRangeUpdates()
+	tc.Server(3).DistSenderI().(*kv.DistSender).DisableFirstRangeUpdates()
 	db3 := tc.ServerConn(3)
 	// Do a query on node 4 so that it populates the its cache with an initial
 	// descriptor containing all the SQL key space. If we don't do this, the state
@@ -335,7 +371,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	}
 
 	// Ensure that the range cache is populated (see #31235).
-	_, err = db0.Exec(`SHOW EXPERIMENTAL_RANGES FROM TABLE "right"`)
+	_, err = db0.Exec(`SHOW RANGES FROM TABLE "right"`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -423,7 +459,7 @@ func TestDistSQLDeadHosts(t *testing.T) {
 		))
 	}
 
-	r.Exec(t, "SHOW EXPERIMENTAL_RANGES FROM TABLE t")
+	r.Exec(t, "SHOW RANGES FROM TABLE t")
 
 	r.Exec(t, fmt.Sprintf("INSERT INTO t SELECT i, i*i FROM generate_series(1, %d) AS g(i)", n))
 
@@ -519,7 +555,7 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 	})
 
 	// Ensure that the range cache is populated (see #31235).
-	r.Exec(t, "SHOW EXPERIMENTAL_RANGES FROM TABLE nums")
+	r.Exec(t, "SHOW RANGES FROM TABLE nums")
 
 	const query = "SELECT count(*) FROM NUMS"
 	expectPlan := func(expectedPlan [][]string) {
@@ -789,7 +825,7 @@ func TestPartitionSpans(t *testing.T) {
 				gossip:       mockGossip,
 				nodeHealth: distSQLNodeHealth{
 					gossip: mockGossip,
-					connHealth: func(node roachpb.NodeID) error {
+					connHealth: func(node roachpb.NodeID, _ rpc.ConnectionClass) error {
 						for _, n := range tc.deadNodes {
 							if int(node) == n {
 								return fmt.Errorf("test node is unhealthy")
@@ -973,7 +1009,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 				gossip:       mockGossip,
 				nodeHealth: distSQLNodeHealth{
 					gossip: mockGossip,
-					connHealth: func(roachpb.NodeID) error {
+					connHealth: func(roachpb.NodeID, rpc.ConnectionClass) error {
 						// All the nodes are healthy.
 						return nil
 					},
@@ -1068,7 +1104,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		gossip:       mockGossip,
 		nodeHealth: distSQLNodeHealth{
 			gossip: mockGossip,
-			connHealth: func(node roachpb.NodeID) error {
+			connHealth: func(node roachpb.NodeID, _ rpc.ConnectionClass) error {
 				_, err := mockGossip.GetNodeIDAddress(node)
 				return err
 			},
@@ -1144,10 +1180,10 @@ func TestCheckNodeHealth(t *testing.T) {
 		return true, nil
 	}
 
-	connHealthy := func(roachpb.NodeID) error {
+	connHealthy := func(roachpb.NodeID, rpc.ConnectionClass) error {
 		return nil
 	}
-	connUnhealthy := func(roachpb.NodeID) error {
+	connUnhealthy := func(roachpb.NodeID, rpc.ConnectionClass) error {
 		return errors.New("injected conn health error")
 	}
 	_ = connUnhealthy
@@ -1175,7 +1211,7 @@ func TestCheckNodeHealth(t *testing.T) {
 	}
 
 	connHealthTests := []struct {
-		connHealth func(roachpb.NodeID) error
+		connHealth func(roachpb.NodeID, rpc.ConnectionClass) error
 		exp        string
 	}{
 		{connHealthy, ""},

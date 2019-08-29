@@ -1,4 +1,4 @@
-# LogicTest: fakedist fakedist-opt
+# LogicTest: fakedist
 
 # ------------------------------------------------------------------------------
 # Zigzag join tests on non-inverted indexes.
@@ -7,7 +7,7 @@
 statement ok
 CREATE TABLE a (n INT PRIMARY KEY, a INT, b INT, c STRING, INDEX a_idx(a), INDEX b_idx(b));
 INSERT INTO a SELECT a,a,a%3,'foo' FROM generate_series(1,10) AS g(a) ;
-SET experimental_enable_zigzag_join = true
+SET enable_zigzag_join = true
 
 query III rowsort
 SELECT n,a,b FROM a WHERE a = 4 AND b = 1
@@ -35,7 +35,7 @@ SELECT * FROM a WHERE a = 5 AND b = 2 AND c = 'foo'
 
 # Turn off zigzag joins and verify output.
 statement ok
-SET experimental_enable_zigzag_join = false
+SET enable_zigzag_join = false
 
 query III rowsort
 SELECT n,a,b FROM a WHERE a = 4 AND b = 1
@@ -129,7 +129,7 @@ INSERT INTO d VALUES (31,  '{"a": {"b": "c", "d": "e"}, "f": "g"}')
 ## Multi-path contains queries with zigzag joins enabled.
 
 statement ok
-SET experimental_enable_zigzag_join = true;
+SET enable_zigzag_join = true;
 
 query IT
 SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
@@ -174,4 +174,4 @@ SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 16  [{"a": {"b": [1, [2]]}}, "d"]
 
 statement ok
-SET experimental_enable_zigzag_join = false;
+SET enable_zigzag_join = false;

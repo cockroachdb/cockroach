@@ -16,9 +16,9 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // Width is used when a type family has a width that has an associated distinct
@@ -27,11 +27,10 @@ import (
 // columnConversion struct.
 type Width struct {
 	Width    int32
-	ExecType string
-	GoType   string
+	ExecType coltypes.T
 }
 
-// columnConversion defines a conversion from a types.ColumnType to an
+// columnConversion defines a conversion from a coltypes.ColumnType to an
 // exec.ColVec.
 type columnConversion struct {
 	// Family is the type family of the ColumnType.
@@ -43,8 +42,7 @@ type columnConversion struct {
 
 	// ExecType is the exec.T to which we're converting. It should correspond to
 	// a method name on exec.ColVec.
-	ExecType string
-	GoType   string
+	ExecType coltypes.T
 }
 
 func genRowsToVec(wr io.Writer) error {
@@ -56,19 +54,21 @@ func genRowsToVec(wr io.Writer) error {
 	s := string(f)
 
 	// Replace the template variables.
-	s = strings.Replace(s, "_TemplateType", "{{.ExecType}}", -1)
-	s = strings.Replace(s, "_GOTYPE", "{{.GoType}}", -1)
-	s = strings.Replace(s, "_FAMILY", "semtypes.{{.Family}}", -1)
+	s = strings.Replace(s, "_TemplateType", "{{.ExecType.String}}", -1)
+	s = strings.Replace(s, "_GOTYPE", "{{.ExecType.GoTypeName}}", -1)
+	s = strings.Replace(s, "_FAMILY", "types.{{.Family}}", -1)
 	s = strings.Replace(s, "_WIDTH", "{{.Width}}", -1)
 
 	rowsToVecRe := makeFunctionRegex("_ROWS_TO_COL_VEC", 4)
 	s = rowsToVecRe.ReplaceAllString(s, `{{ template "rowsToColVec" . }}`)
 
+	s = replaceManipulationFuncs(".ExecType", s)
+
 	// Build the list of supported column conversions.
-	conversionsMap := make(map[semtypes.Family]*columnConversion)
-	for _, ct := range semtypes.OidToType {
-		t := conv.FromColumnType(ct)
-		if t == types.Unhandled {
+	conversionsMap := make(map[types.Family]*columnConversion)
+	for _, ct := range types.OidToType {
+		t := typeconv.FromColumnType(ct)
+		if t == coltypes.Unhandled {
 			continue
 		}
 
@@ -83,11 +83,10 @@ func genRowsToVec(wr io.Writer) error {
 
 		if ct.Width() != 0 {
 			conversion.Widths = append(
-				conversion.Widths, Width{Width: ct.Width(), ExecType: t.String(), GoType: t.GoTypeName()},
+				conversion.Widths, Width{Width: ct.Width(), ExecType: t},
 			)
 		} else {
-			conversion.ExecType = t.String()
-			conversion.GoType = t.GoTypeName()
+			conversion.ExecType = t
 		}
 	}
 

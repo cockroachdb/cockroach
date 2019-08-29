@@ -202,9 +202,8 @@ anti-join (merge)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan b
- │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── columns: x:6(int!null)
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── filters
       └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
@@ -455,19 +454,21 @@ semi-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  ├── left ordering: +1
  ├── right ordering: +6
+ ├── cardinality: [0 - 2]
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── constraint: /1: [/7 - /7] [/10 - /10]
+ │    ├── cardinality: [0 - 2]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan b
- │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── columns: x:6(int!null)
  │    ├── constraint: /6: [/7 - /7] [/10 - /10]
+ │    ├── cardinality: [0 - 2]
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── filters (true)
 
@@ -518,6 +519,7 @@ left-join (merge)
  ├── scan b
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── constraint: /6: [/7 - /7] [/10 - /10]
+ │    ├── cardinality: [0 - 2]
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
@@ -565,6 +567,7 @@ right-join (merge)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── constraint: /1: [/7 - /7] [/10 - /10]
+ │    ├── cardinality: [0 - 2]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
@@ -671,10 +674,10 @@ anti-join (merge)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan b
- │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── columns: x:6(int!null)
  │    ├── constraint: /6: [/7 - /7] [/10 - /10]
+ │    ├── cardinality: [0 - 2]
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── filters (true)
 
@@ -1178,28 +1181,25 @@ semi-join-apply
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  ├── anti-join (hash)
- │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string!null) j:7(jsonb)
+ │    ├── columns: k:3(int!null) s:6(string!null)
  │    ├── outer: (2)
  │    ├── key: (3)
- │    ├── fd: ()-->(6), (3)-->(4,5,7)
+ │    ├── fd: ()-->(6)
  │    ├── select
- │    │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string!null) j:7(jsonb)
+ │    │    ├── columns: k:3(int!null) s:6(string!null)
  │    │    ├── key: (3)
- │    │    ├── fd: ()-->(6), (3)-->(4,5,7)
+ │    │    ├── fd: ()-->(6)
  │    │    ├── scan a
- │    │    │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
+ │    │    │    ├── columns: k:3(int!null) s:6(string)
  │    │    │    ├── key: (3)
- │    │    │    └── fd: (3)-->(4-7)
+ │    │    │    └── fd: (3)-->(6)
  │    │    └── filters
  │    │         └── s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
  │    ├── select
- │    │    ├── columns: k:8(int!null) i:9(int!null) f:10(float!null) s:11(string) j:12(jsonb)
- │    │    ├── key: (8)
- │    │    ├── fd: ()-->(9), (8)-->(10-12)
+ │    │    ├── columns: i:9(int!null)
+ │    │    ├── fd: ()-->(9)
  │    │    ├── scan a
- │    │    │    ├── columns: k:8(int!null) i:9(int) f:10(float!null) s:11(string) j:12(jsonb)
- │    │    │    ├── key: (8)
- │    │    │    └── fd: (8)-->(9-12)
+ │    │    │    └── columns: i:9(int)
  │    │    └── filters
  │    │         └── i = 10 [type=bool, outer=(9), constraints=(/9: [/10 - /10]; tight), fd=()-->(9)]
  │    └── filters
@@ -2440,16 +2440,16 @@ full-join (hash)
       └── (u + v) = 1 [type=bool, outer=(3,4)]
 
 opt expect-not=ExtractJoinEqualities
-SELECT * FROM xy FULL OUTER JOIN uv ON (SELECT k FROM a WHERE i=x)=u
+SELECT * FROM xy INNER JOIN uv ON (SELECT k FROM a WHERE i=x)=u
 ----
 project
- ├── columns: x:1(int) y:2(int) u:3(int) v:4(int)
+ ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
  ├── key: (1,3)
  ├── fd: (1)-->(2), (1,3)-->(4)
- └── full-join-apply
-      ├── columns: x:1(int) y:2(int) u:3(int) v:4(int) k:5(int)
+ └── inner-join-apply
+      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) k:5(int)
       ├── key: (1,3)
-      ├── fd: (1)-->(2), (1,3)-->(4,5)
+      ├── fd: (1)-->(2), (1,3)-->(4,5), (3)==(5), (5)==(3)
       ├── scan xy
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── key: (1)
@@ -2489,16 +2489,16 @@ project
            └── u = k [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
 
 opt expect-not=ExtractJoinEqualities
-SELECT * FROM xy FULL OUTER JOIN uv ON x=(SELECT k FROM a WHERE i=u)
+SELECT * FROM xy INNER JOIN uv ON x=(SELECT k FROM a WHERE i=u)
 ----
 project
- ├── columns: x:1(int) y:2(int) u:3(int) v:4(int)
- ├── key: (1,3)
- ├── fd: (1)-->(2), (3)-->(4)
- └── full-join (hash)
-      ├── columns: x:1(int) y:2(int) u:3(int) v:4(int) k:5(int)
-      ├── key: (1,3)
-      ├── fd: (1)-->(2), (3)-->(4,5)
+ ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
+ ├── key: (3)
+ ├── fd: (1)-->(2), (3)-->(1,2,4)
+ └── inner-join (hash)
+      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) k:5(int!null)
+      ├── key: (3)
+      ├── fd: (1)-->(2), (3)-->(4,5), (1)==(5), (5)==(1)
       ├── scan xy
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── key: (1)

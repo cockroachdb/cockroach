@@ -12,7 +12,6 @@ syntax = "proto2";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "roachpb/metadata.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -43,11 +42,10 @@ message RaftSnapshotData {
     optional bytes value = 2;
     optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
   }
-  // The latest RangeDescriptor
-  optional RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false];
   repeated KeyValue KV = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "KV"];
   // These are really raftpb.Entry, but we model them as raw bytes to avoid
   // roundtripping through memory.
   repeated bytes log_entries = 3;
+  reserved 1;
 }

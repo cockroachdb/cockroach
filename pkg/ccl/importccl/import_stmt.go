@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -62,6 +63,7 @@ const (
 	importOptionSkipFKs    = "skip_foreign_keys"
 
 	importOptionDirectIngest = "experimental_direct_ingestion"
+	importOptionSortedIngest = "experimental_sorted_ingestion"
 
 	pgCopyDelimiter = "delimiter"
 	pgCopyNull      = "nullif"
@@ -87,6 +89,7 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	importOptionSkipFKs: sql.KVStringOptRequireNoValue,
 
 	importOptionDirectIngest: sql.KVStringOptRequireNoValue,
+	importOptionSortedIngest: sql.KVStringOptRequireNoValue,
 
 	pgMaxRowSize: sql.KVStringOptRequireValue,
 }
@@ -158,7 +161,7 @@ func importPlanHook(
 
 		walltime := p.ExecCfg().Clock.Now().WallTime
 
-		if err := p.RequireSuperUser(ctx, "IMPORT"); err != nil {
+		if err := p.RequireAdminRole(ctx, "IMPORT"); err != nil {
 			return err
 		}
 
@@ -372,6 +375,11 @@ func importPlanHook(
 		}
 
 		_, ingestDirectly := opts[importOptionDirectIngest]
+		_, ingestSorted := opts[importOptionSortedIngest]
+		if ingestDirectly && ingestSorted {
+			return pgerror.Newf(pgcode.Syntax, "cannot use %q with %q", importOptionDirectIngest, importOptionSortedIngest)
+		}
+		ingestDirectly = !ingestSorted
 
 		var tableDetails []jobspb.ImportDetails_Table
 		jobDesc, err := importJobDescription(p, importStmt, nil, files, opts)
@@ -403,7 +411,7 @@ func importPlanHook(
 
 			// Validate target columns.
 			var intoCols []string
-			var isTargetCol = make(map[string]bool, len(importStmt.IntoCols))
+			var isTargetCol = make(map[string]bool)
 			for _, name := range importStmt.IntoCols {
 				var err error
 				if _, err = found.FindActiveColumnByName(name.String()); err != nil {
@@ -422,7 +430,7 @@ func importPlanHook(
 					return errors.Errorf("cannot IMPORT INTO a table with a DEFAULT expression for any of its columns")
 				}
 
-				if !isTargetCol[col.Name] && !col.IsNullable() {
+				if len(isTargetCol) != 0 && !isTargetCol[col.Name] && !col.IsNullable() {
 					return errors.Errorf("all non-target columns in IMPORT INTO must be nullable")
 				}
 			}
@@ -633,6 +641,10 @@ type importResumer struct {
 	settings       *cluster.Settings
 	res            roachpb.BulkOpSummary
 	statsRefresher *stats.Refresher
+
+	testingKnobs struct {
+		afterImport func() error
+	}
 }
 
 // Prepares descriptors for newly created tables being imported into.
@@ -674,7 +686,9 @@ func prepareNewTableDescsForIngestion(
 	}
 
 	for i := range tableDescs {
-		tableDescs[i].State = sqlbase.TableDescriptor_IMPORTING
+		tableDescs[i].State = sqlbase.TableDescriptor_OFFLINE
+		tableDescs[i].OfflineReason = "importing"
+
 	}
 
 	var seqValKVs []roachpb.KeyValue
@@ -718,7 +732,8 @@ func prepareExistingTableDescForIngestion(
 	// Take the table offline for import.
 	// TODO(dt): audit everywhere we get table descs (leases or otherwise) to
 	// ensure that filtering by state handles IMPORTING correctly.
-	importing.State = sqlbase.TableDescriptor_IMPORTING
+	importing.State = sqlbase.TableDescriptor_OFFLINE
+	importing.OfflineReason = "importing"
 	// TODO(dt): de-validate all the FKs.
 
 	if err := txn.SetSystemConfigTrigger(); err != nil {
@@ -729,7 +744,7 @@ func prepareExistingTableDescForIngestion(
 	// upgrade and downgrade, because IMPORT does not operate in mixed-version
 	// states.
 	// TODO(jordan,lucy): remove this comment once 19.2 is released.
-	err := txn.CPut(ctx, sqlbase.MakeDescMetadataKey(desc.ID),
+	err := txn.CPutDeprecated(ctx, sqlbase.MakeDescMetadataKey(desc.ID),
 		sqlbase.WrapDescriptor(&importing), sqlbase.WrapDescriptor(desc))
 	if err != nil {
 		return nil, errors.Wrap(err, "another operation is currently operating on the table")
@@ -749,18 +764,26 @@ func prepareExistingTableDescForIngestion(
 func (r *importResumer) prepareTableDescsForIngestion(
 	ctx context.Context, p sql.PlanHookState, details jobspb.ImportDetails,
 ) error {
-	importDetails := details
-	var hasExistingTables bool
 	err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		var err error
+		importDetails := details
+		importDetails.Tables = make([]jobspb.ImportDetails_Table, len(details.Tables))
+
 		newTableDescToIdx := make(map[*sqlbase.TableDescriptor]int, len(importDetails.Tables))
+		var hasExistingTables bool
+		var err error
 		var newTableDescs []jobspb.ImportDetails_Table
-		for i, table := range importDetails.Tables {
+		var desc *sqlbase.TableDescriptor
+		for i, table := range details.Tables {
 			if !table.IsNew {
-				importDetails.Tables[i].Desc, err = prepareExistingTableDescForIngestion(ctx, txn, table.Desc, p)
+				desc, err = prepareExistingTableDescForIngestion(ctx, txn, table.Desc, p)
 				if err != nil {
 					return err
 				}
+				importDetails.Tables[i] = jobspb.ImportDetails_Table{Desc: desc, Name: table.Name,
+					SeqVal:     table.SeqVal,
+					IsNew:      table.IsNew,
+					TargetCols: table.TargetCols}
+
 				hasExistingTables = true
 			} else {
 				newTableDescToIdx[table.Desc] = i
@@ -781,8 +804,12 @@ func (r *importResumer) prepareTableDescsForIngestion(
 			if err != nil {
 				return err
 			}
-			for _, v := range res {
-				importDetails.Tables[newTableDescToIdx[v]].Desc = v
+			for i, table := range res {
+				importDetails.Tables[i] = jobspb.ImportDetails_Table{Desc: table,
+					Name:       details.Tables[i].Name,
+					SeqVal:     details.Tables[i].SeqVal,
+					IsNew:      details.Tables[i].IsNew,
+					TargetCols: details.Tables[i].TargetCols}
 			}
 		}
 
@@ -799,9 +826,9 @@ func (r *importResumer) prepareTableDescsForIngestion(
 
 		// Update the job once all descs have been prepared for ingestion.
 		err = r.job.WithTxn(txn).SetDetails(ctx, importDetails)
+
 		return err
 	})
-
 	return err
 }
 
@@ -899,6 +926,12 @@ func (r *importResumer) Resume(
 	if err != nil {
 		return err
 	}
+	if r.testingKnobs.afterImport != nil {
+		if err := r.testingKnobs.afterImport(); err != nil {
+			return err
+		}
+	}
+
 	r.res = res
 	r.statsRefresher = p.ExecCfg().StatsRefresher
 	return nil
@@ -923,6 +956,32 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 		return nil
 	}
 
+	var revert []*sqlbase.TableDescriptor
+	for _, tbl := range details.Tables {
+		if !tbl.IsNew {
+			revert = append(revert, tbl.Desc)
+		}
+	}
+
+	// NB: if a revert fails it will abort the rest of this failure txn, which is
+	// also what brings tables back online. We _could_ change the error handling
+	// or just move the revert into Resume()'s error return path, however it isn't
+	// clear that just bringing a table back online with partially imported data
+	// that may or may not be partially reverted is actually a good idea. It seems
+	// better to do the revert here so that the table comes back if and only if,
+	// it was rolled back to its pre-IMPORT state, and instead provide a manual
+	// admin knob (e.g. ALTER TABLE REVERT TO SYSTEM TIME) if anything goes wrong.
+	if len(revert) > 0 {
+		// Sanity check Walltime so it doesn't become a TRUNCATE if there's a bug.
+		if details.Walltime == 0 {
+			return errors.Errorf("invalid pre-IMPORT time to rollback")
+		}
+		ts := hlc.Timestamp{WallTime: details.Walltime}.Prev()
+		if err := sql.RevertTables(ctx, txn.DB(), revert, ts, sql.RevertTableDefaultBatchSize); err != nil {
+			return errors.Wrap(err, "rolling back partially completed IMPORT")
+		}
+	}
+
 	b := txn.NewBatch()
 	for _, tbl := range details.Tables {
 		tableDesc := *tbl.Desc
@@ -936,22 +995,16 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 			// possible. This is safe since the table data was never visible to users,
 			// and so we don't need to preserve MVCC semantics.
 			tableDesc.DropTime = 1
-			b.CPut(sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.Name), nil, tableDesc.ID)
+			b.CPutDeprecated(sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.Name), nil, tableDesc.ID)
 		} else {
 			// IMPORT did not create this table, so we should not drop it.
-			// TODO(dt): consider trying to delete whatever was ingested before
-			// returning the table to public. Unfortunately the ingestion isn't
-			// transactional, so there is no clean way to just rollback our changes,
-			// but we could iterate by time to delete before returning to public.
-			// TODO(dt): re-validate any FKs?
-			tableDesc.Version++
 			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
 		}
 		// Note that this CPut is safe with respect to mixed-version descriptor
 		// upgrade and downgrade, because IMPORT does not operate in mixed-version
 		// states.
 		// TODO(jordan,lucy): remove this comment once 19.2 is released.
-		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
+		b.CPutDeprecated(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
 	}
 	return errors.Wrap(txn.Run(ctx, b), "rolling back tables")
 }
@@ -974,23 +1027,17 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 		if !tbl.IsNew {
 			// NB: This is not using AllNonDropIndexes or directly mutating the
 			// constraints returned by the other usual helpers because we need to
-			// replace the `Indexes` and `Checks` slices of tableDesc with copies that
-			// we can mutate. We need to do that because tableDesc is a shallow copy
-			// of tbl.Desc that we'll be asserting is the current version when we
+			// replace the `OutboundFKs` and `Checks` slices of tableDesc with copies
+			// that we can mutate. We need to do that because tableDesc is a shallow
+			// copy of tbl.Desc that we'll be asserting is the current version when we
 			// CPut below.
 			//
 			// Set FK constraints to unvalidated before publishing the table imported
 			// into.
-			if tableDesc.PrimaryIndex.ForeignKey.IsSet() {
-				tableDesc.PrimaryIndex.ForeignKey.Validity = sqlbase.ConstraintValidity_Unvalidated
-			}
-
-			tableDesc.Indexes = make([]sqlbase.IndexDescriptor, len(tbl.Desc.Indexes))
-			copy(tableDesc.Indexes, tbl.Desc.Indexes)
-			for i := range tableDesc.Indexes {
-				if tableDesc.Indexes[i].ForeignKey.IsSet() {
-					tableDesc.Indexes[i].ForeignKey.Validity = sqlbase.ConstraintValidity_Unvalidated
-				}
+			tableDesc.OutboundFKs = make([]sqlbase.ForeignKeyConstraint, len(tableDesc.OutboundFKs))
+			copy(tableDesc.OutboundFKs, tbl.Desc.OutboundFKs)
+			for i := range tableDesc.OutboundFKs {
+				tableDesc.OutboundFKs[i].Validity = sqlbase.ConstraintValidity_Unvalidated
 			}
 
 			// Set CHECK constraints to unvalidated before publishing the table imported into.
@@ -1007,7 +1054,7 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 		// upgrade and downgrade, because IMPORT does not operate in mixed-version
 		// states.
 		// TODO(jordan,lucy): remove this comment once 19.2 is released.
-		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
+		b.CPutDeprecated(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
 	}
 	if err := txn.Run(ctx, b); err != nil {
 		return errors.Wrap(err, "publishing tables")

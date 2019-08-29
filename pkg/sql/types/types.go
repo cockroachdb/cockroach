@@ -593,7 +593,7 @@ func MakeQChar(width int32) *T {
 //
 func MakeCollatedString(strType *T, locale string) *T {
 	switch strType.Oid() {
-	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char:
+	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name:
 		return &T{InternalType: InternalType{
 			Family: CollatedStringFamily, Oid: strType.Oid(), Width: strType.Width(), Locale: &locale}}
 	}
@@ -1480,7 +1480,11 @@ func (t *T) upgradeType() error {
 		t.InternalType.ArrayContents = Oid
 
 	case name:
-		t.InternalType.Family = StringFamily
+		if t.InternalType.Locale != nil {
+			t.InternalType.Family = CollatedStringFamily
+		} else {
+			t.InternalType.Family = StringFamily
+		}
 		t.InternalType.Oid = oid.T_name
 		if t.Width() != 0 {
 			return errors.AssertionFailedf("name type cannot have non-zero width: %d", t.Width())

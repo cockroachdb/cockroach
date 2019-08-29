@@ -115,8 +115,8 @@ func TestDistinct(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
-				Settings: st,
-				EvalCtx:  &evalCtx,
+				Cfg:     &ServerConfig{Settings: st},
+				EvalCtx: &evalCtx,
 			}
 
 			d, err := NewDistinct(&flowCtx, 0 /* processorID */, &ds, in, &distsqlpb.PostProcessSpec{}, out)
@@ -153,8 +153,8 @@ func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 	spec := &distsqlpb.DistinctSpec{
 		DistinctColumns: []uint32{0, 1},

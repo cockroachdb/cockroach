@@ -16,7 +16,9 @@ type=$(go env GOOS)
 tc_end_block "Prepare environment for acceptance tests"
 
 tc_start_block "Compile CockroachDB"
-run pkg/acceptance/prepare.sh
+# Buffer noisy output and only print it on failure.
+run pkg/acceptance/prepare.sh &> artifacts/acceptance-compile.log || (cat artifacts/acceptance-compile.log && false)
+rm artifacts/acceptance-compile.log
 run ln -s cockroach-linux-2.6.32-gnu-amd64 cockroach  # For the tests that run without Docker.
 tc_end_block "Compile CockroachDB"
 

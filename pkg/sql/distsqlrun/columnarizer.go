@@ -13,11 +13,11 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -26,6 +26,7 @@ import (
 // chunk into a coldata.Batch column by column.
 type columnarizer struct {
 	ProcessorBase
+	exec.ZeroInputNode
 
 	input RowSource
 	da    sqlbase.DatumAlloc
@@ -34,10 +35,9 @@ type columnarizer struct {
 	batch           coldata.Batch
 	accumulatedMeta []distsqlpb.ProducerMetadata
 	ctx             context.Context
-	typs            []types.T
+	typs            []coltypes.T
 }
 
-var _ exec.Operator = &columnarizer{}
 var _ exec.StaticMemoryOperator = &columnarizer{}
 
 // newColumnarizer returns a new columnarizer.
@@ -61,7 +61,7 @@ func newColumnarizer(
 	); err != nil {
 		return nil, err
 	}
-	c.typs, err = conv.FromColumnTypes(c.OutputTypes())
+	c.typs, err = typeconv.FromColumnTypes(c.OutputTypes())
 
 	return c, err
 }
@@ -81,6 +81,7 @@ func (c *columnarizer) Init() {
 }
 
 func (c *columnarizer) Next(context.Context) coldata.Batch {
+	c.batch.ResetInternalBatch()
 	// Buffer up n rows.
 	nRows := uint16(0)
 	columnTypes := c.OutputTypes()

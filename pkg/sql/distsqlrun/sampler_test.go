@@ -25,7 +25,9 @@ import (
 )
 
 // runSampler runs the sampler aggregator on numRows and returns numSamples rows.
-func runSampler(t *testing.T, numRows, numSamples int) []int {
+func runSampler(
+	t *testing.T, numRows, numSamples int, memLimitBytes int64, expectOutOfMemory bool,
+) []int {
 	rows := make([]sqlbase.EncDatumRow, numRows)
 	for i := range rows {
 		rows[i] = sqlbase.EncDatumRow{sqlbase.IntEncDatum(i)}
@@ -46,9 +48,12 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
+	// Override the default memory limit. If memLimitBytes is small but
+	// non-zero, the processor will hit this limit and disable sampling.
+	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memLimitBytes
 
 	spec := &distsqlpb.SamplerSpec{SampleSize: uint32(numSamples)}
 	p, err := newSamplerProcessor(
@@ -62,12 +67,16 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 	// Verify we have numSamples distinct rows.
 	res := make([]int, 0, numSamples)
 	seen := make(map[tree.DInt]bool)
+	histogramDisabled := false
 	n := 0
 	for {
 		row, meta := out.Next()
 		if meta != nil {
 			if meta.SamplerProgress == nil {
 				t.Fatalf("unexpected metadata: %v", meta)
+			}
+			if meta.SamplerProgress.HistogramDisabled {
+				histogramDisabled = true
 			}
 			continue
 		} else if row == nil {
@@ -86,7 +95,11 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 		res = append(res, int(v))
 		n++
 	}
-	if n != numSamples {
+	if expectOutOfMemory {
+		if !histogramDisabled {
+			t.Fatal("expected processor to disable histogram collection")
+		}
+	} else if n != numSamples {
 		t.Fatalf("expected %d rows, got %d", numSamples, n)
 	}
 	return res
@@ -108,7 +121,9 @@ func TestSampler(t *testing.T) {
 	// and exit early. This speeds up the test.
 	for r := 0; r < maxRuns; r += minRuns {
 		for i := 0; i < minRuns; i++ {
-			for _, v := range runSampler(t, numRows, numSamples) {
+			for _, v := range runSampler(
+				t, numRows, numSamples, 0 /* memLimitBytes */, false, /* expectOutOfMemory */
+			) {
 				freq[v]++
 			}
 		}
@@ -131,6 +146,17 @@ func TestSampler(t *testing.T) {
 		}
 	}
 	t.Error(err)
+}
+
+func TestSamplerMemoryLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	numRows := 100
+	numSamples := 20
+
+	runSampler(t, numRows, numSamples, 0 /* memLimitBytes */, false /* expectOutOfMemory */)
+	runSampler(t, numRows, numSamples, 1 /* memLimitBytes */, true /* expectOutOfMemory */)
+	runSampler(t, numRows, numSamples, 20 /* memLimitBytes */, true /* expectOutOfMemory */)
+	runSampler(t, numRows, numSamples, 20*1024 /* memLimitBytes */, false /* expectOutOfMemory */)
 }
 
 func TestSamplerSketch(t *testing.T) {
@@ -170,8 +196,8 @@ func TestSamplerSketch(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 
 	spec := &distsqlpb.SamplerSpec{

@@ -27,7 +27,7 @@ import (
 var HistogramClusterMode = settings.RegisterBoolSetting(
 	"sql.stats.histogram_collection.enabled",
 	"histogram collection mode",
-	false,
+	true,
 )
 
 // EquiDepthHistogram creates a histogram where each bucket contains roughly
@@ -209,5 +209,14 @@ func expectedDistinctCount(k, n float64) float64 {
 	// See https://math.stackexchange.com/questions/72223/finding-expected-
 	//   number-of-distinct-values-selected-from-a-set-of-integers for more info.
 	count := n * (1 - math.Pow((n-1)/n, k))
+
+	// It's possible that if n is very large, floating point precision errors
+	// will cause count to be 0. In that case, just return min(n, k).
+	if count == 0 {
+		count = k
+		if n < k {
+			count = n
+		}
+	}
 	return count
 }

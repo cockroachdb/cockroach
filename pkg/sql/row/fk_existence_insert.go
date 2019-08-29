@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 // fkExistenceCheckForInsert is an auxiliary object that facilitates the existence
@@ -54,25 +55,36 @@ func makeFkExistenceCheckHelperForInsert(
 		},
 	}
 
-	// We need an existence check helper for every referenced
-	// table. Today, referenced tables are determined by
-	// the index descriptors.
-	// TODO(knz): make foreign key constraints independent
-	// of index definitions.
-	for _, idx := range table.AllNonDropIndexes() {
-		if idx.ForeignKey.IsSet() {
-			fk, err := makeFkExistenceCheckBaseHelper(txn, otherTables, idx, idx.ForeignKey, colMap, alloc, CheckInserts)
-			if err == errSkipUnusedFK {
-				continue
-			}
-			if err != nil {
-				return h, err
-			}
-			if h.fks == nil {
-				h.fks = make(map[sqlbase.IndexID][]fkExistenceCheckBaseHelper)
-			}
-			h.fks[idx.ID] = append(h.fks[idx.ID], fk)
+	// We need an existence check helper for every referenced table.
+	for i := range table.OutboundFKs {
+		ref := &table.OutboundFKs[i]
+		// Look up the searched table.
+		searchTable := otherTables[ref.ReferencedTableID].Desc
+		if searchTable == nil {
+			return h, errors.AssertionFailedf("referenced table %d not in provided table map %+v", ref.ReferencedTableID,
+				otherTables)
 		}
+		searchIdx, err := searchTable.TableDesc().FindIndexByID(ref.LegacyReferencedIndex)
+		if err != nil {
+			return h, errors.NewAssertionErrorWithWrappedErrf(err,
+				"failed to find search index %d for fk %q", ref.LegacyReferencedIndex, ref.Name)
+		}
+		mutatedIdx, err := table.TableDesc().FindIndexByID(ref.LegacyOriginIndex)
+		if err != nil {
+			return h, errors.NewAssertionErrorWithWrappedErrf(err,
+				"failed to find search index %d for fk %q", ref.LegacyOriginIndex, ref.Name)
+		}
+		fk, err := makeFkExistenceCheckBaseHelper(txn, otherTables, ref, searchIdx, mutatedIdx, colMap, alloc, CheckInserts)
+		if err == errSkipUnusedFK {
+			continue
+		}
+		if err != nil {
+			return h, err
+		}
+		if h.fks == nil {
+			h.fks = make(map[sqlbase.IndexID][]fkExistenceCheckBaseHelper)
+		}
+		h.fks[mutatedIdx.ID] = append(h.fks[mutatedIdx.ID], fk)
 	}
 
 	return h, nil
@@ -83,7 +95,7 @@ func (h fkExistenceCheckForInsert) addAllIdxChecks(
 	ctx context.Context, row tree.Datums, traceKV bool,
 ) error {
 	for idx := range h.fks {
-		if err := queueFkExistenceChecksForRow(ctx, h.checker, h.fks, idx, row, traceKV); err != nil {
+		if err := queueFkExistenceChecksForRow(ctx, h.checker, h.fks[idx], row, traceKV); err != nil {
 			return err
 		}
 	}

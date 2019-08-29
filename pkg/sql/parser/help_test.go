@@ -69,6 +69,9 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER RANGE foo CONFIGURE ??`, `ALTER RANGE`},
 		{`ALTER RANGE ??`, `ALTER RANGE`},
 
+		{`ALTER PARTITION ??`, `ALTER PARTITION`},
+		{`ALTER PARTITION p OF INDEX tbl@idx ??`, `ALTER PARTITION`},
+
 		{`CANCEL ??`, `CANCEL`},
 		{`CANCEL JOB ??`, `CANCEL JOBS`},
 		{`CANCEL JOBS ??`, `CANCEL JOBS`},
@@ -241,6 +244,7 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW TRACE FOR SESSION ??`, `SHOW TRACE`},
 		{`SHOW TRACE FOR ??`, `SHOW TRACE`},
 
+		{`SHOW JOB ??`, `SHOW JOBS`},
 		{`SHOW JOBS ??`, `SHOW JOBS`},
 		{`SHOW AUTOMATIC JOBS ??`, `SHOW JOBS`},
 
@@ -295,7 +299,7 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW SYNTAX ??`, `SHOW SYNTAX`},
 		{`SHOW SYNTAX 'foo' ??`, `SHOW SYNTAX`},
 
-		{`SHOW EXPERIMENTAL_RANGES ??`, `SHOW RANGES`},
+		{`SHOW RANGES ??`, `SHOW RANGES`},
 
 		{`SHOW USERS ??`, `SHOW USERS`},
 

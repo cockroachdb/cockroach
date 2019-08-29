@@ -1385,6 +1385,15 @@ func (c *cluster) FetchCores(ctx context.Context) error {
 		return nil
 	}
 
+	if true {
+		// TeamCity does not handle giant artifacts well. We'd generally profit
+		// from having the cores, but we should push them straight into a temp
+		// bucket on S3 instead. OTOH, the ROI of this may be low; I don't know
+		// of a recent example where we've wanted the Core dumps.
+		c.l.Printf("skipped fetching cores\n")
+		return nil
+	}
+
 	c.l.Printf("fetching cores\n")
 	c.status("fetching cores")
 
@@ -1971,6 +1980,9 @@ func getDiskUsageInBytes(
 		var err error
 		out, err = c.RunWithBuffer(ctx, logger, c.Node(nodeIdx), fmt.Sprint("du -sk {store-dir} | grep -oE '^[0-9]+'"))
 		if err != nil {
+			if ctx.Err() != nil {
+				return 0, ctx.Err()
+			}
 			// `du` can fail if files get removed out from under it. RocksDB likes to do that
 			// during compactions and such. It's rare enough to just retry.
 			logger.Printf("retrying disk usage computation after spurious error: %s", err)
@@ -2072,10 +2084,12 @@ func (m *monitor) Go(fn func(context.Context) error) {
 	})
 }
 
+var errTestAlreadyFailed = errors.New("already failed")
+
 func (m *monitor) WaitE() error {
 	if m.t.Failed() {
 		// If the test has failed, don't try to limp along.
-		return errors.New("already failed")
+		return errTestAlreadyFailed
 	}
 
 	return m.wait(roachprod, "monitor", m.nodes)
@@ -2086,7 +2100,7 @@ func (m *monitor) Wait() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
-	if err := m.WaitE(); err != nil {
+	if err := m.WaitE(); err != nil && err != errTestAlreadyFailed && !m.t.Failed() {
 		m.t.Fatal(err)
 	}
 }

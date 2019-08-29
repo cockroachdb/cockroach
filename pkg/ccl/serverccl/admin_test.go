@@ -56,8 +56,8 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 
 	// Assert that we get all roachblog zone configs back.
 	expectedZoneConfigNames := map[string]struct{}{
-		"roachblog.comments.eu": {},
-		"roachblog.comments.us": {},
+		"PARTITION eu OF INDEX roachblog.public.comments@primary": {},
+		"PARTITION us OF INDEX roachblog.public.comments@primary": {},
 	}
 
 	var resp serverpb.DataDistributionResponse
@@ -67,7 +67,7 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 
 	actualZoneConfigNames := map[string]struct{}{}
 	for name := range resp.ZoneConfigs {
-		if strings.HasPrefix(name, "roachblog.") {
+		if strings.Contains(name, "roachblog") {
 			actualZoneConfigNames[name] = struct{}{}
 		}
 	}

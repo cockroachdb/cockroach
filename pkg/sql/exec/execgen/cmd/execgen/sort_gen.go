@@ -17,7 +17,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -25,15 +25,17 @@ type sortOverload struct {
 	*overload
 	Dir       string
 	DirString string
+	Nulls     bool
 }
 
 type sortOverloads struct {
-	LTyp      types.T
+	LTyp      coltypes.T
 	Overloads []sortOverload
 }
 
-// sortOverloads maps type to distsqlpb.Ordering_Column_Direction to overload.
-var typesToSortOverloads map[types.T]sortOverloads
+// typesToSortOverloads maps types to whether nulls are handled to
+// the overload representing the sort direction.
+var typesToSortOverloads map[coltypes.T]map[bool]sortOverloads
 
 func genSortOps(wr io.Writer) error {
 	d, err := ioutil.ReadFile("pkg/sql/exec/sort_tmpl.go")
@@ -44,15 +46,19 @@ func genSortOps(wr io.Writer) error {
 	s := string(d)
 
 	// Replace the template variables.
-	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "types.{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
+	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "coltypes.{{$typ}}", -1)
+	s = strings.Replace(s, "_TYPE", "{{$typ}}", -1)
 	s = strings.Replace(s, "_DIR_ENUM", "{{.Dir}}", -1)
 	s = strings.Replace(s, "_DIR", "{{.DirString}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
+	s = strings.Replace(s, "_ISNULL", "{{$isNull}}", -1)
+	s = strings.Replace(s, "_HANDLES_NULLS", "{{if .Nulls}}WithNulls{{else}}{{end}}", -1)
 
 	assignLtRe := regexp.MustCompile(`_ASSIGN_LT\((.*),(.*),(.*)\)`)
 	s = assignLtRe.ReplaceAllString(s, "{{.Assign $1 $2 $3}}")
+
+	s = replaceManipulationFuncs(".LTyp", s)
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("sort_op").Parse(s)
@@ -74,6 +80,7 @@ func genQuickSortOps(wr io.Writer) error {
 	// Replace the template variables.
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_DIR", "{{.DirString}}", -1)
+	s = strings.Replace(s, "_HANDLES_NULLS", "{{if .Nulls}}WithNulls{{else}}{{end}}", -1)
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("quicksort").Parse(s)
@@ -87,17 +94,22 @@ func genQuickSortOps(wr io.Writer) error {
 func init() {
 	registerGenerator(genSortOps, "sort.eg.go")
 	registerGenerator(genQuickSortOps, "quicksort.eg.go")
-	typesToSortOverloads = make(map[types.T]sortOverloads)
-	for _, o := range comparisonOpToOverloads[tree.LT] {
-		typesToSortOverloads[o.LTyp] = sortOverloads{
-			LTyp: o.LTyp,
-			Overloads: []sortOverload{
-				{overload: o, Dir: "distsqlpb.Ordering_Column_ASC", DirString: "Asc"},
-				{}},
+	typesToSortOverloads = make(map[coltypes.T]map[bool]sortOverloads)
+	for _, o := range sameTypeComparisonOpToOverloads[tree.LT] {
+		typesToSortOverloads[o.LTyp] = make(map[bool]sortOverloads)
+		for _, b := range []bool{true, false} {
+			typesToSortOverloads[o.LTyp][b] = sortOverloads{
+				LTyp: o.LTyp,
+				Overloads: []sortOverload{
+					{overload: o, Dir: "distsqlpb.Ordering_Column_ASC", DirString: "Asc", Nulls: b},
+					{}},
+			}
 		}
 	}
-	for _, o := range comparisonOpToOverloads[tree.GT] {
-		typesToSortOverloads[o.LTyp].Overloads[1] = sortOverload{
-			overload: o, Dir: "distsqlpb.Ordering_Column_DESC", DirString: "Desc"}
+	for _, o := range sameTypeComparisonOpToOverloads[tree.GT] {
+		for _, b := range []bool{true, false} {
+			typesToSortOverloads[o.LTyp][b].Overloads[1] = sortOverload{
+				overload: o, Dir: "distsqlpb.Ordering_Column_DESC", DirString: "Desc", Nulls: b}
+		}
 	}
 }

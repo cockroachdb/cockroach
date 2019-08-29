@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -33,7 +34,8 @@ func TestServer(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	conn, err := s.RPCContext().GRPCDialNode(s.ServingAddr(), s.NodeID()).Connect(ctx)
+	conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(),
+		rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +162,7 @@ func TestDistSQLServerGossipsVersion(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	var v distsqlpb.DistSQLVersionGossipInfo
-	if err := s.Gossip().GetInfoProto(
+	if err := s.GossipI().(*gossip.Gossip).GetInfoProto(
 		gossip.MakeDistSQLNodeVersionKey(s.NodeID()), &v,
 	); err != nil {
 		t.Fatal(err)

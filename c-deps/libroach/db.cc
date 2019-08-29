@@ -32,8 +32,8 @@
 #include "iterator.h"
 #include "merge.h"
 #include "options.h"
-#include "row_counter.h"
 #include "protos/roachpb/errors.pb.h"
+#include "row_counter.h"
 #include "snapshot.h"
 #include "status.h"
 #include "table_props.h"
@@ -560,7 +560,7 @@ DBIterState DBCheckForKeyCollisions(DBIterator* existingIter, DBIterator* sstIte
       // INTO. We do not expect to encounter any inline values, and thus we
       // report an error.
       if (meta.has_raw_bytes()) {
-        state.status = FmtStatus("inline values are unsupported when checking for key collisions");
+        state.status = FmtStatus("InlineError");
       } else if (meta.has_txn()) {
         // Check for a write intent.
         //
@@ -602,8 +602,21 @@ DBIterState DBCheckForKeyCollisions(DBIterator* existingIter, DBIterator* sstIte
         continue;
       }
 
+      // If the ingested KV has an identical timestamp and value as the existing
+      // data then we do not consider it to be a collision. We move the iterator
+      // over the existing data to the next potentially colliding key (skipping
+      // all versions of the current key), and resume iteration.
+      bool has_equal_timestamp = existing_ts == sst_ts;
+      bool has_equal_value =
+          kComparator.Compare(existingIter->rep->value(), sstIter->rep->value()) == 0;
+      if (has_equal_timestamp && has_equal_value) {
+        DBIterNext(existingIter, true /* skip_current_key_versions */);
+        continue;
+      }
+
       state.valid = false;
-      state.status = FmtStatus("key collision at %s", sstKey.data());
+      state.key.key = ToDBSlice(sstKey);
+      state.status = FmtStatus("key collision");
       return state;
     } else if (compare < 0) {
       targetKey.key = ToDBSlice(sstKey);
@@ -894,6 +907,7 @@ DBSstFileWriter* DBSstFileWriterNew() {
   // https://github.com/facebook/rocksdb/blob/972f96b3fbae1a4675043bdf4279c9072ad69645/include/rocksdb/table.h#L198
   table_options.format_version = 0;
   table_options.checksum = rocksdb::kCRC32c;
+  table_options.whole_key_filtering = false;
 
   rocksdb::Options* options = new rocksdb::Options();
   options->comparator = &kComparator;
@@ -946,16 +960,22 @@ DBStatus DBSstFileWriterDelete(DBSstFileWriter* fw, DBKey key) {
   return kSuccess;
 }
 
-DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data) {
-  rocksdb::Status status = fw->rep.Finish();
+DBStatus DBSstFileWriterDeleteRange(DBSstFileWriter *fw, DBKey start, DBKey end) {
+  rocksdb::Status status = fw->rep.DeleteRange(EncodeKey(start), EncodeKey(end));
   if (!status.ok()) {
     return ToDBStatus(status);
   }
+  return kSuccess;
+}
 
+DBStatus DBSstFileWriterCopyData(DBSstFileWriter* fw, DBString* data) {
   uint64_t file_size;
-  status = fw->memenv->GetFileSize("sst", &file_size);
+  rocksdb::Status status = fw->memenv->GetFileSize("sst", &file_size);
   if (!status.ok()) {
     return ToDBStatus(status);
+  }
+  if (file_size == 0) {
+    return kSuccess;
   }
 
   const rocksdb::EnvOptions soptions;
@@ -992,6 +1012,23 @@ DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data) {
   data->len = sst_contents.size();
 
   return kSuccess;
+}
+
+DBStatus DBSstFileWriterTruncate(DBSstFileWriter* fw, DBString* data) {
+  DBStatus status = DBSstFileWriterCopyData(fw, data);
+  if (status.data != NULL) {
+    return status;
+  }
+  return ToDBStatus(fw->memenv->Truncate("sst", 0));
+}
+
+DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data) {
+  rocksdb::Status status = fw->rep.Finish();
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+
+  return DBSstFileWriterCopyData(fw, data);
 }
 
 void DBSstFileWriterClose(DBSstFileWriter* fw) { delete fw; }

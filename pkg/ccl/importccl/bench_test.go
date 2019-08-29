@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -134,7 +135,7 @@ func benchmarkAddSSTable(b *testing.B, dir string, tables []tableSSTable) {
 		b.StartTimer()
 		for _, t := range tables {
 			totalBytes += int64(len(t.sstData))
-			require.NoError(b, kvDB.AddSSTable(ctx, t.span.Key, t.span.EndKey, t.sstData, true /* disallowShadowing */))
+			require.NoError(b, kvDB.AddSSTable(ctx, t.span.Key, t.span.EndKey, t.sstData, true /* disallowShadowing */, nil /* stats */))
 		}
 		b.StopTimer()
 
@@ -167,19 +168,18 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 			b.Fatal(err)
 		}
 
-		kvCh := make(chan []roachpb.KeyValue)
+		kvCh := make(chan row.KVBatch)
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {
 			defer close(kvCh)
 			wc := importccl.NewWorkloadKVConverter(
-				tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh)
+				0, tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh)
 			evalCtx := &tree.EvalContext{SessionData: &sessiondata.SessionData{}}
-			finishedBatchFn := func() {}
-			return wc.Worker(ctx, evalCtx, finishedBatchFn)
+			return wc.Worker(ctx, evalCtx)
 		})
 		for kvBatch := range kvCh {
-			for i := range kvBatch {
-				kv := &kvBatch[i]
+			for i := range kvBatch.KVs {
+				kv := &kvBatch.KVs[i]
 				bytes += int64(len(kv.Key) + len(kv.Value.RawBytes))
 			}
 		}

@@ -22,9 +22,8 @@ import (
 
 // ZoneRow represents a row returned by SHOW ZONE CONFIGURATION.
 type ZoneRow struct {
-	ID           uint32
-	CLISpecifier string
-	Config       config.ZoneConfig
+	ID     uint32
+	Config config.ZoneConfig
 }
 
 func (row ZoneRow) sqlRowString() ([]string, error) {
@@ -34,7 +33,6 @@ func (row ZoneRow) sqlRowString() ([]string, error) {
 	}
 	return []string{
 		fmt.Sprintf("%d", row.ID),
-		row.CLISpecifier,
 		string(configProto),
 	}, nil
 }
@@ -42,16 +40,13 @@ func (row ZoneRow) sqlRowString() ([]string, error) {
 // RemoveAllZoneConfigs removes all installed zone configs.
 func RemoveAllZoneConfigs(t testing.TB, sqlDB *SQLRunner) {
 	t.Helper()
-	for _, zone := range sqlDB.QueryStr(t, "SELECT cli_specifier FROM crdb_internal.zones") {
-		zs, err := config.ParseCLIZoneSpecifier(zone[0])
-		if err != nil {
-			t.Fatal(err)
-		}
-		if zs.NamedZone == config.DefaultZoneName {
+	for _, row := range sqlDB.QueryStr(t, "SHOW ALL ZONE CONFIGURATIONS") {
+		target := row[0]
+		if target == fmt.Sprintf("RANGE %s", config.DefaultZoneName) {
 			// The default zone cannot be removed.
 			continue
 		}
-		sqlDB.Exec(t, fmt.Sprintf("ALTER %s CONFIGURE ZONE DISCARD", &zs))
+		DeleteZoneConfig(t, sqlDB, target)
 	}
 }
 
@@ -88,7 +83,7 @@ func VerifyZoneConfigForTarget(t testing.TB, sqlDB *SQLRunner, target string, ro
 		t.Fatal(err)
 	}
 	sqlDB.CheckQueryResults(t, fmt.Sprintf(`
-SELECT zone_id, cli_specifier, config_protobuf
+SELECT zone_id, config_protobuf
   FROM [SHOW ZONE CONFIGURATION FOR %s]`, target),
 		[][]string{sqlRow})
 }
@@ -105,19 +100,15 @@ func VerifyAllZoneConfigs(t testing.TB, sqlDB *SQLRunner, rows ...ZoneRow) {
 			t.Fatal(err)
 		}
 	}
-	sqlDB.CheckQueryResults(t, `
-SELECT zone_id, cli_specifier, config_protobuf
-  FROM crdb_internal.zones
-  WHERE cli_specifier IS NOT NULL`, expected)
+	sqlDB.CheckQueryResults(t, `SELECT zone_id, config_protobuf FROM crdb_internal.zones`, expected)
 }
 
-// ZoneConfigExists returns whether a zone config with the provided cliSpecifier
-// exists.
-func ZoneConfigExists(t testing.TB, sqlDB *SQLRunner, cliSpecifier string) bool {
+// ZoneConfigExists returns whether a zone config with the provided name exists.
+func ZoneConfigExists(t testing.TB, sqlDB *SQLRunner, name string) bool {
 	t.Helper()
 	var exists bool
 	sqlDB.QueryRow(
-		t, "SELECT EXISTS (SELECT 1 FROM crdb_internal.zones WHERE cli_specifier = $1)", cliSpecifier,
+		t, "SELECT EXISTS (SELECT 1 FROM crdb_internal.zones WHERE target = $1)", name,
 	).Scan(&exists)
 	return exists
 }

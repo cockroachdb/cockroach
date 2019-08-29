@@ -139,9 +139,8 @@ message Subzone {
   option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
-  // IndexID is the ID of the SQL table index that the subzone represents. It
-  // must always be set even though partition names are unique across all of a
-  // table's indices.
+  // IndexID is the ID of the SQL table index that the subzone represents.
+  // Always set.
   optional uint32 index_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "IndexID"];
 
   // PartitionName is the partition of the SQL table index that the subzone

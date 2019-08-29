@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -105,11 +106,19 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(upd.FetchCols)+len(upd.UpdateCols)+len(upd.CheckCols))
+	colList := make(opt.ColList, 0, len(upd.FetchCols)+len(upd.UpdateCols)+len(upd.CheckCols)+len(upd.PassthroughCols))
 	colList = appendColsWhenPresent(colList, upd.FetchCols)
 	colList = appendColsWhenPresent(colList, upd.UpdateCols)
-	colList = appendColsWhenPresent(colList, upd.CheckCols)
 
+	// The RETURNING clause of the Update can refer to the columns
+	// in any of the FROM tables. As a result, the Update may need
+	// to passthrough those columns so the projection above can use
+	// them.
+	if upd.NeedResults() {
+		colList = appendColsWhenPresent(colList, upd.PassthroughCols)
+	}
+
+	colList = appendColsWhenPresent(colList, upd.CheckCols)
 	input, err := b.buildMutationInput(upd.Input, colList, &upd.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
@@ -122,6 +131,17 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	updateColOrds := ordinalSetFromColList(upd.UpdateCols)
 	returnColOrds := ordinalSetFromColList(upd.ReturnCols)
 	checkOrds := ordinalSetFromColList(upd.CheckCols)
+
+	// Construct the result columns for the passthrough set.
+	var passthroughCols sqlbase.ResultColumns
+	if upd.NeedResults() {
+		for _, passthroughCol := range upd.PassthroughCols {
+			colMeta := b.mem.Metadata().ColumnMeta(passthroughCol)
+			passthroughCols = append(passthroughCols, sqlbase.ResultColumn{Name: colMeta.Alias, Typ: colMeta.Type})
+		}
+	}
+
+	disableExecFKs := len(upd.Checks) > 0
 	node, err := b.factory.ConstructUpdate(
 		input.root,
 		tab,
@@ -129,8 +149,14 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		updateColOrds,
 		returnColOrds,
 		checkOrds,
+		passthroughCols,
+		disableExecFKs,
 	)
 	if err != nil {
+		return execPlan{}, err
+	}
+
+	if err := b.buildFKChecks(upd.Checks); err != nil {
 		return execPlan{}, err
 	}
 
@@ -354,6 +380,16 @@ func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 			ord++
 		}
 	}
+
+	// The output columns of the mutation will also include all
+	// columns it allowed to pass through.
+	for _, colID := range private.PassthroughCols {
+		if colID != 0 {
+			colMap.Set(int(colID), ord)
+			ord++
+		}
+	}
+
 	return colMap
 }
 
@@ -382,7 +418,7 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 				// Generate an error of the form:
 				//   ERROR:  insert on table "child" violates foreign key constraint "foo"
 				//   DETAIL: Key (child_p)=(2) is not present in table "parent".
-				msg.WriteString("insert on table ")
+				fmt.Fprintf(&msg, "%s on table ", c.OpName)
 				lex.EncodeEscapedSQLIdent(&msg, string(origin.Alias.TableName))
 				msg.WriteString(" violates foreign key constraint ")
 				lex.EncodeEscapedSQLIdent(&msg, fk.Name())
@@ -390,26 +426,37 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 				details.WriteString("Key (")
 				for i := 0; i < fk.ColumnCount(); i++ {
 					if i > 0 {
-						details.WriteString(" ,")
+						details.WriteString(", ")
 					}
 					col := origin.Table.Column(fk.OriginColumnOrdinal(origin.Table, i))
 					details.WriteString(string(col.ColName()))
 				}
 				details.WriteString(")=(")
+				sawNull := false
 				for i, col := range c.KeyCols {
 					if i > 0 {
 						details.WriteString(", ")
 					}
-					details.WriteString(row[query.getColumnOrdinal(col)].String())
+					d := row[query.getColumnOrdinal(col)]
+					if d == tree.DNull {
+						sawNull = true
+						break
+					}
+					details.WriteString(d.String())
 				}
-				details.WriteString(") is not present in table ")
-				lex.EncodeEscapedSQLIdent(&details, string(referenced.Alias.TableName))
-				details.WriteByte('.')
+				if sawNull {
+					details.Reset()
+					details.WriteString("MATCH FULL does not allow mixing of null and nonnull key values.")
+				} else {
+					details.WriteString(") is not present in table ")
+					lex.EncodeEscapedSQLIdent(&details, string(referenced.Alias.TableName))
+					details.WriteByte('.')
+				}
 			} else {
 				// Generate an error of the form:
 				//   ERROR:  delete on table "parent" violates foreign key constraint "child_child_p_fkey" on table "child"
 				//   DETAIL: Key (p)=(1) is still referenced from table "child".
-				msg.WriteString("delete on table ")
+				fmt.Fprintf(&msg, "%s on table ", c.OpName)
 				lex.EncodeEscapedSQLIdent(&msg, string(referenced.Alias.TableName))
 				msg.WriteString(" violates foreign key constraint")
 				// TODO(justin): get the name of the FK constraint (it's not populated

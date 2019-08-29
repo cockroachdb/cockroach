@@ -514,6 +514,7 @@ func (h *hasher) HashWindowFrame(val WindowFrame) {
 	h.HashInt(int(val.StartBoundType))
 	h.HashInt(int(val.EndBoundType))
 	h.HashInt(int(val.Mode))
+	h.HashInt(int(val.FrameExclusion))
 }
 
 func (h *hasher) HashTupleOrdinal(val TupleOrdinal) {
@@ -521,10 +522,14 @@ func (h *hasher) HashTupleOrdinal(val TupleOrdinal) {
 }
 
 func (h *hasher) HashPhysProps(val *physical.Required) {
-	for i := range val.Presentation {
-		col := &val.Presentation[i]
-		h.HashString(col.Alias)
-		h.HashColumnID(col.ID)
+	// Note: the Any presentation is not the same as the 0-column presentation.
+	if !val.Presentation.Any() {
+		h.HashInt(len(val.Presentation))
+		for i := range val.Presentation {
+			col := &val.Presentation[i]
+			h.HashString(col.Alias)
+			h.HashColumnID(col.ID)
+		}
 	}
 	h.HashOrderingChoice(val.Ordering)
 }
@@ -585,6 +590,13 @@ func (h *hasher) HashZipExpr(val ZipExpr) {
 func (h *hasher) HashFKChecksExpr(val FKChecksExpr) {
 	for i := range val {
 		h.HashRelExpr(val[i].Check)
+	}
+}
+
+func (h *hasher) HashKVOptionsExpr(val KVOptionsExpr) {
+	for i := range val {
+		h.HashString(val[i].Key)
+		h.HashScalarExpr(val[i].Value)
 	}
 }
 
@@ -819,7 +831,8 @@ func (h *hasher) IsViewDepsEqual(l, r opt.ViewDeps) bool {
 func (h *hasher) IsWindowFrameEqual(l, r WindowFrame) bool {
 	return l.StartBoundType == r.StartBoundType &&
 		l.EndBoundType == r.EndBoundType &&
-		l.Mode == r.Mode
+		l.Mode == r.Mode &&
+		l.FrameExclusion == r.FrameExclusion
 }
 
 func (h *hasher) IsTupleOrdinalEqual(l, r TupleOrdinal) bool {
@@ -922,6 +935,18 @@ func (h *hasher) IsFKChecksExprEqual(l, r FKChecksExpr) bool {
 	}
 	for i := range l {
 		if l[i].Check != r[i].Check {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsKVOptionsExprEqual(l, r KVOptionsExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i].Key != r[i].Key || l[i].Value != r[i].Value {
 			return false
 		}
 	}

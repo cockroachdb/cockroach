@@ -145,6 +145,7 @@ func computeStatsDelta(
 		}
 		// If we took the fast path but race is enabled, assert stats were correctly computed.
 		if fast {
+			delta.ContainsEstimates = computed.ContainsEstimates
 			if !delta.Equal(computed) {
 				log.Fatalf(ctx, "fast-path MVCCStats computation gave wrong result: diff(fast, computed) = %s",
 					pretty.Diff(delta, computed))

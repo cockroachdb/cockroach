@@ -81,6 +81,7 @@ func TestConn(t *testing.T) {
 		t.Fatal(err)
 	}
 	serverAddr := ln.Addr()
+	log.Infof(context.TODO(), "started listener on %s", serverAddr)
 
 	var g errgroup.Group
 	ctx := context.TODO()
@@ -659,7 +660,7 @@ func TestConnClose(t *testing.T) {
 		t.Fatal(err)
 	}
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingAddr(), "testConnClose" /* prefix */, url.User(security.RootUser),
+		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(security.RootUser),
 	)
 	defer cleanupFunc()
 	noBufferDB, err := gosql.Open("postgres", pgURL.String())
@@ -796,6 +797,7 @@ func TestReadTimeoutConnExits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	log.Infof(context.TODO(), "started listener on %s", ln.Addr())
 	defer func() {
 		if err := ln.Close(); err != nil {
 			t.Fatal(err)
@@ -867,7 +869,7 @@ func TestConnResultsBufferSize(t *testing.T) {
 		require.Equal(t, `16384`, size)
 	}
 
-	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
 	q := pgURL.Query()
 
@@ -950,7 +952,7 @@ func TestConnCloseCancelsAuth(t *testing.T) {
 
 	// We're going to open a client connection and do the minimum so that the
 	// server gets to the authentication phase, where it will block.
-	conn, err := net.Dial("tcp", s.ServingAddr())
+	conn, err := net.Dial("tcp", s.ServingSQLAddr())
 	if err != nil {
 		t.Fatal(err)
 	}

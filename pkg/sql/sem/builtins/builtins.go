@@ -555,23 +555,6 @@ var builtins = map[string]builtinDefinition{
 		},
 	),
 
-	"inet_contains_or_contained_by": makeBuiltin(defProps(),
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"val", types.INet},
-				{"val", types.INet},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				ipAddr := tree.MustBeDIPAddr(args[0]).IPAddr
-				other := tree.MustBeDIPAddr(args[1]).IPAddr
-				return tree.MakeDBool(tree.DBool(ipAddr.ContainsOrContainedBy(&other))), nil
-			},
-			Info: "Test for subnet inclusion, using only the network parts of the addresses. " +
-				"The host part of the addresses is ignored.",
-		},
-	),
-
 	"inet_contains_or_equals": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -2337,6 +2320,46 @@ may increase either contention or retry errors, or both.`,
 		}, "Calculates the tangent of `val`."),
 	),
 
+	// https://www.postgresql.org/docs/9.6/functions-datetime.html
+	"timezone": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"timestamp", types.Timestamp},
+				{"timezone", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				ts := tree.MustBeDTimestamp(args[0])
+				tzStr := string(tree.MustBeDString(args[1]))
+				loc, err := timeutil.TimeZoneStringToLocation(tzStr)
+				if err != nil {
+					return nil, err
+				}
+				_, before := ts.Time.Zone()
+				_, after := ts.Time.In(loc).Zone()
+				return tree.MakeDTimestampTZ(ts.Time.Add(time.Duration(before-after)*time.Second), time.Microsecond), nil
+			},
+			Info: "Treat given time stamp without time zone as located in the specified time zone",
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"timestamptz", types.TimestampTZ},
+				{"timezone", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Timestamp),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				ts := tree.MustBeDTimestampTZ(args[0])
+				tzStr := string(tree.MustBeDString(args[1]))
+				loc, err := timeutil.TimeZoneStringToLocation(tzStr)
+				if err != nil {
+					return nil, err
+				}
+				return ts.EvalAtTimeZone(ctx, loc), nil
+			},
+			Info: "Convert given time stamp with time zone to the new time zone, with no time zone designation",
+		},
+	),
+
 	"trunc": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Trunc(x))), nil
@@ -2908,6 +2931,18 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"crdb_internal.cluster_name": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDString(ctx.ClusterName), nil
+			},
+			Info: "Returns the cluster name.",
+		},
+	),
+
 	"crdb_internal.force_error": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
@@ -2997,9 +3032,6 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"val", types.Interval}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if err := checkPrivilegedUser(ctx); err != nil {
-					return nil, err
-				}
 				minDuration := args[0].(*tree.DInterval).Duration
 				elapsed := duration.MakeDuration(int64(ctx.StmtTimestamp.Sub(ctx.TxnTimestamp)), 0, 0)
 				if elapsed.Compare(minDuration) < 0 {
@@ -3221,7 +3253,8 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 			{"start_pos", types.Int},
 			{"length", types.Int},
 		},
-		ReturnType: tree.FixedReturnType(types.String),
+		SpecializedVecBuiltin: tree.SubstringStringIntInt,
+		ReturnType:            tree.FixedReturnType(types.String),
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			runes := []rune(string(tree.MustBeDString(args[0])))
 			// SQL strings are 1-indexed.

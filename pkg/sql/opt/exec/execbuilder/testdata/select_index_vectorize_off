@@ -1,10 +1,10 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 # This file contains test cases that cannot be run with the vectorized
 # execution engine.
 
 statement ok
-SET experimental_vectorize=off
+SET vectorize=off
 
 # Check that no extraneous rows are fetched due to excessive batching (#15910)
 # The test is composed of three parts: populate a table, check

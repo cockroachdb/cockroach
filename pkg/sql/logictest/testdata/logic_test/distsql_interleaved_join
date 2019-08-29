@@ -1,4 +1,4 @@
-# LogicTest: 5node-dist 5node-dist-opt 5node-dist-metadata
+# LogicTest: 5node-dist 5node-dist-metadata
 
 # The following tables form the interleaved hierarchy:
 #   name:             primary key:                # rows:   'a' = id mod X :
@@ -192,7 +192,7 @@ ALTER TABLE grandchild2 EXPERIMENTAL_RELOCATE
 
 # Verify data placement.
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE parent1]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE parent1]
 ----
 start_key                   end_key                     replicas  lease_holder
 NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
@@ -217,7 +217,7 @@ NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
 /38/#/56/1/78/38/#/58/1/38  NULL                        {5}       5
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE child1]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE child1]
 ----
 start_key                   end_key                     replicas  lease_holder
 NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
@@ -242,7 +242,7 @@ NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
 /38/#/56/1/78/38/#/58/1/38  NULL                        {5}       5
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE grandchild1]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE grandchild1]
 ----
 start_key                   end_key                     replicas  lease_holder
 NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
@@ -513,7 +513,7 @@ ALTER TABLE outer_p1 EXPERIMENTAL_RELOCATE
   SELECT ARRAY[(((i-3)/5)%4)::INT + 1], i FROM generate_series(3, 40, 5) AS g(i)
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE outer_p1]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE outer_p1]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /0       {5}       5

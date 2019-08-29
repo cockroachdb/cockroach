@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -205,7 +206,7 @@ func createBenchmarkChangefeed(
 		nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
 	)
 	poller := makePoller(
-		settings, s.DB(), feedClock, s.Gossip(), spans, details, initialHighWater, buf,
+		settings, s.DB(), feedClock, s.GossipI().(*gossip.Gossip), spans, details, initialHighWater, buf,
 		leaseMgr, metrics, &mm,
 	)
 

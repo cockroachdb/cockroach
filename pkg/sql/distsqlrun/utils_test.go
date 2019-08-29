@@ -148,7 +148,8 @@ func createDummyStream() (
 	}
 
 	rpcContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
-	conn, err := rpcContext.GRPCDialNode(addr.String(), staticNodeID).Connect(context.Background())
+	conn, err := rpcContext.GRPCDialNode(addr.String(), staticNodeID,
+		rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -185,9 +186,9 @@ func runProcessorTest(
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
-		txn:      txn,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
+		txn:     txn,
 	}
 
 	p, err := newProcessor(

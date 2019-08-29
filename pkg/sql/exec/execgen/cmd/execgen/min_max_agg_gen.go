@@ -49,28 +49,32 @@ func genMinMaxAgg(wr io.Writer) error {
 	s := string(t)
 	s = strings.Replace(s, "_AGG_TITLE", "{{.AggNameTitle}}", -1)
 	s = strings.Replace(s, "_AGG", "{{$agg}}", -1)
+	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
 	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "types.{{.LTyp}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 
 	assignCmpRe := regexp.MustCompile(`_ASSIGN_CMP\((.*),(.*),(.*)\)`)
 	s = assignCmpRe.ReplaceAllString(s, "{{.Global.Assign $1 $2 $3}}")
 
 	accumulateMinMax := makeFunctionRegex("_ACCUMULATE_MINMAX", 4)
-	s = accumulateMinMax.ReplaceAllString(s, `{{template "accumulateMinMax" buildDict "Global" . "HasNulls" $4}}`)
+	s = accumulateMinMax.ReplaceAllString(s, `{{template "accumulateMinMax" buildDict "Global" . "LTyp" .LTyp "HasNulls" $4}}`)
+
+	s = replaceManipulationFuncs(".LTyp", s)
 
 	tmpl, err := template.New("min_max_agg").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
+
 	if err != nil {
 		return err
 	}
 	data := []aggOverloads{
 		{
 			Agg:       distsqlpb.AggregatorSpec_MIN,
-			Overloads: comparisonOpToOverloads[tree.LT],
+			Overloads: sameTypeComparisonOpToOverloads[tree.LT],
 		},
 		{
 			Agg:       distsqlpb.AggregatorSpec_MAX,
-			Overloads: comparisonOpToOverloads[tree.GT],
+			Overloads: sameTypeComparisonOpToOverloads[tree.GT],
 		},
 	}
 	return tmpl.Execute(wr, data)

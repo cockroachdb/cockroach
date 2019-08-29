@@ -62,7 +62,7 @@ func TestScanner(t *testing.T) {
 		{`^`, []int{'^'}},
 		{`$`, []int{'$'}},
 		{`&`, []int{'&'}},
-		{`&&`, []int{INET_CONTAINS_OR_CONTAINED_BY}},
+		{`&&`, []int{AND_AND}},
 		{`|`, []int{'|'}},
 		{`||`, []int{CONCAT}},
 		{`#`, []int{'#'}},

@@ -13,31 +13,37 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // CancelChecker is an Operator that checks whether query cancellation has
 // occurred. The check happens on every batch.
 type CancelChecker struct {
-	Operator
+	OneInputNode
 
 	// Number of times check() has been called since last context cancellation
 	// check.
 	callsSinceLastCheck uint32
 }
 
+// Init is part of the Operator interface.
+func (c *CancelChecker) Init() {
+	c.input.Init()
+}
+
 var _ Operator = &CancelChecker{}
 
 // NewCancelChecker creates a new CancelChecker.
 func NewCancelChecker(op Operator) *CancelChecker {
-	return &CancelChecker{Operator: op}
+	return &CancelChecker{OneInputNode: NewOneInputNode(op)}
 }
 
 // Next is part of Operator interface.
 func (c *CancelChecker) Next(ctx context.Context) coldata.Batch {
 	c.checkEveryCall(ctx)
-	return c.Operator.Next(ctx)
+	return c.input.Next(ctx)
 }
 
 // Interval of check() calls to wait between checks for context cancellation.
@@ -64,7 +70,7 @@ func (c *CancelChecker) check(ctx context.Context) {
 func (c *CancelChecker) checkEveryCall(ctx context.Context) {
 	select {
 	case <-ctx.Done():
-		panic(sqlbase.QueryCanceledError)
+		execerror.NonVectorizedPanic(sqlbase.QueryCanceledError)
 	default:
 	}
 }

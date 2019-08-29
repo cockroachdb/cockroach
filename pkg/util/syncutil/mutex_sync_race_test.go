@@ -13,7 +13,11 @@
 
 package syncutil
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestAssertHeld(t *testing.T) {
 	type mutex interface {
@@ -34,15 +38,31 @@ func TestAssertHeld(t *testing.T) {
 		c.m.AssertHeld()
 		c.m.Unlock()
 
-		func() {
-			defer func() {
-				if r := recover(); r == nil {
-					t.Fatal("did not get expected panic")
-				} else if a, e := r.(string), "mutex is not locked"; a != e {
-					t.Fatalf("got %q, expected %q", a, e)
-				}
-			}()
-			c.m.AssertHeld()
-		}()
+		// The unsuccessful case.
+		require.PanicsWithValue(t, "mutex is not write locked", c.m.AssertHeld)
 	}
+}
+
+func TestAssertRHeld(t *testing.T) {
+	var m RWMutex
+
+	// The normal, successful case.
+	m.RLock()
+	m.AssertRHeld()
+	m.RUnlock()
+
+	// The normal case with two readers.
+	m.RLock()
+	m.RLock()
+	m.AssertRHeld()
+	m.RUnlock()
+	m.RUnlock()
+
+	// The case where a write lock is held.
+	m.Lock()
+	m.AssertRHeld()
+	m.Unlock()
+
+	// The unsuccessful case with no readers.
+	require.PanicsWithValue(t, "mutex is not read locked", m.AssertRHeld)
 }

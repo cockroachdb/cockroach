@@ -115,7 +115,7 @@ func (f *fkExistenceBatchChecker) runCheck(
 				if oldRow == nil {
 					return pgerror.Newf(pgcode.ForeignKeyViolation,
 						"foreign key violation: non-empty columns %s referenced in table %q",
-						fk.mutatedIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
+						fk.mutatedIdx.ColumnNames[fk.prefixLen], fk.searchTable.Name)
 				}
 
 				for valueIdx, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {

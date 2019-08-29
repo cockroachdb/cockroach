@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -58,6 +57,7 @@ const (
 
 	advertiseAddrLabelKey = "advertise-addr"
 	httpAddrLabelKey      = "http-addr"
+	sqlAddrLabelKey       = "sql-addr"
 )
 
 type quantile struct {
@@ -82,7 +82,6 @@ var recordHistogramQuantiles = []quantile{
 type storeMetrics interface {
 	StoreID() roachpb.StoreID
 	Descriptor(bool) (*roachpb.StoreDescriptor, error)
-	MVCCStats() enginepb.MVCCStats
 	Registry() *metric.Registry
 }
 
@@ -170,7 +169,7 @@ func (mr *MetricsRecorder) AddNode(
 	reg *metric.Registry,
 	desc roachpb.NodeDescriptor,
 	startedAt int64,
-	advertiseAddr, httpAddr string,
+	advertiseAddr, httpAddr, sqlAddr string,
 ) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
@@ -188,6 +187,7 @@ func (mr *MetricsRecorder) AddNode(
 
 	metadata.AddLabel(advertiseAddrLabelKey, advertiseAddr)
 	metadata.AddLabel(httpAddrLabelKey, httpAddr)
+	metadata.AddLabel(sqlAddrLabelKey, sqlAddr)
 	nodeIDGauge := metric.NewGauge(metadata)
 	nodeIDGauge.Update(int64(desc.NodeID))
 	reg.AddMetric(nodeIDGauge)

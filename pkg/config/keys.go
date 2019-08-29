@@ -27,7 +27,7 @@ func MakeZoneKeyPrefix(id uint32) roachpb.Key {
 // MakeZoneKey returns the key for id's entry in the system.zones table.
 func MakeZoneKey(id uint32) roachpb.Key {
 	k := MakeZoneKeyPrefix(id)
-	return keys.MakeFamilyKey(k, uint32(keys.ZonesTableConfigColumnID))
+	return keys.MakeFamilyKey(k, uint32(keys.ZonesTableConfigColFamID))
 }
 
 // DecodeObjectID decodes the object ID from the front of key. It returns the

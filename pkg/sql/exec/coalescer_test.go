@@ -15,26 +15,26 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 func TestCoalescer(t *testing.T) {
 	// Large tuple number for coalescing.
 	nRows := coldata.BatchSize*3 + 7
 	large := make(tuples, nRows)
-	largeTypes := []types.T{types.Int64}
+	largeTypes := []coltypes.T{coltypes.Int64}
 
 	for i := 0; i < nRows; i++ {
 		large[i] = tuple{int64(i)}
 	}
 
 	tcs := []struct {
-		colTypes []types.T
+		colTypes []coltypes.T
 		tuples   tuples
 	}{
 		{
-			colTypes: []types.T{types.Int64, types.Bytes},
+			colTypes: []coltypes.T{coltypes.Int64, coltypes.Bytes},
 			tuples: tuples{
 				{0, "0"},
 				{1, "1"},
@@ -64,12 +64,12 @@ func TestCoalescer(t *testing.T) {
 func BenchmarkCoalescer(b *testing.B) {
 	ctx := context.Background()
 	// The input operator to the coalescer returns a batch of random size from [1,
-	// col.BatchSize) each time.
+	// coldata.BatchSize) each time.
 	nCols := 4
-	sourceTypes := make([]types.T, nCols)
+	sourceTypes := make([]coltypes.T, nCols)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
-		sourceTypes[colIdx] = types.Int64
+		sourceTypes[colIdx] = coltypes.Int64
 	}
 
 	batch := coldata.NewMemBatch(sourceTypes)
@@ -89,8 +89,8 @@ func BenchmarkCoalescer(b *testing.B) {
 				source := newRandomLengthBatchSource(batch)
 
 				co := &coalescerOp{
-					input:      source,
-					inputTypes: sourceTypes,
+					OneInputNode: NewOneInputNode(source),
+					inputTypes:   sourceTypes,
 				}
 
 				co.Init()

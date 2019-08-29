@@ -1,4 +1,4 @@
-# LogicTest: 5node-dist 5node-dist-opt 5node-dist-metadata 5node-dist-disk
+# LogicTest: 5node-dist 5node-dist-metadata 5node-dist-disk
 
 # First, we set up two data tables:
 #   - NumToSquare maps integers from 1 to 100 to their squares
@@ -27,13 +27,13 @@ INSERT INTO NumToStr SELECT i, to_english(i) FROM generate_series(1, 100*100) AS
 
 # Verify data placement.
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE NumToSquare]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE NumToSquare]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       NULL     {1}       1
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE NumToStr]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE NumToStr]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /2000    {1}       1

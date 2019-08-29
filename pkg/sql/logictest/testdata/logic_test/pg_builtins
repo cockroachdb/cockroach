@@ -1,0 +1,16 @@
+query T
+SELECT aclexplode(NULL)
+----
+
+query T
+SELECT aclexplode(ARRAY[]::text[])
+----
+
+query T
+SELECT aclexplode(ARRAY['foo'])
+----
+
+query O
+SELECT pg_my_temp_schema()
+----
+0

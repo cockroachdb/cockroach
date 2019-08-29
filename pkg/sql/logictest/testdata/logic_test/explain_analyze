@@ -1,4 +1,4 @@
-# LogicTest: fakedist fakedist-opt
+# LogicTest: fakedist
 
 # Regression tests for weird explain analyze cases.
 

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -209,7 +210,7 @@ func TestCacheBasic(t *testing.T) {
 	// Create a cache and iteratively query the cache for each tableID. This
 	// will result in the cache getting populated. When the stats cache size is
 	// exceeded, entries should be evicted according to the LRU policy.
-	sc := NewTableStatisticsCache(2 /* cacheSize */, s.Gossip(), db, ex)
+	sc := NewTableStatisticsCache(2 /* cacheSize */, s.GossipI().(*gossip.Gossip), db, ex)
 	for _, tableID := range tableIDs {
 		if err := checkStatsForTable(ctx, sc, expectedStats[tableID], tableID); err != nil {
 			t.Fatal(err)
@@ -263,7 +264,7 @@ func TestCacheWait(t *testing.T) {
 	}
 	sort.Sort(tableIDs)
 
-	sc := NewTableStatisticsCache(len(tableIDs), s.Gossip(), db, ex)
+	sc := NewTableStatisticsCache(len(tableIDs), s.GossipI().(*gossip.Gossip), db, ex)
 	for _, tableID := range tableIDs {
 		if err := checkStatsForTable(ctx, sc, expectedStats[tableID], tableID); err != nil {
 			t.Fatal(err)

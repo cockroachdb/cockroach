@@ -21,11 +21,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -183,7 +184,7 @@ func TestOutboxInbox(t *testing.T) {
 	// Do the actual testing.
 	t.Run(fmt.Sprintf("cancellationScenario=%s", cancellationScenarioName), func(t *testing.T) {
 		var (
-			typs        = []types.T{types.Int64}
+			typs        = []coltypes.T{coltypes.Int64}
 			inputBuffer = exec.NewBatchBuffer()
 			// Generate some random behavior before passing the random number
 			// generator to be used in the Outbox goroutine (to avoid races). These
@@ -256,7 +257,7 @@ func TestOutboxInbox(t *testing.T) {
 		var readerErr error
 		for {
 			var outputBatch coldata.Batch
-			if err := exec.CatchVectorizedRuntimeError(func() {
+			if err := execerror.CatchVectorizedRuntimeError(func() {
 				outputBatch = inbox.Next(readerCtx)
 			}); err != nil {
 				readerErr = err
@@ -419,7 +420,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			var (
 				serverStreamNotification = <-mockServer.InboundStreams
 				serverStream             = serverStreamNotification.Stream
-				typs                     = []types.T{types.Int64}
+				typs                     = []coltypes.T{coltypes.Int64}
 				input                    = exec.NewRandomDataOp(
 					rng,
 					exec.RandomDataOpArgs{
@@ -496,7 +497,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	serverStreamNotification := <-mockServer.InboundStreams
 	serverStream := serverStreamNotification.Stream
 
-	typs := []types.T{types.Int64}
+	typs := []coltypes.T{coltypes.Int64}
 
 	batch := coldata.NewMemBatch(typs)
 	batch.SetLength(coldata.BatchSize)

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -695,7 +696,7 @@ func TestReplicaRangefeedNudgeSlowClosedTimestamp(t *testing.T) {
 	rangeFeedChs := make([]chan *roachpb.RangeFeedEvent, len(repls))
 	rangeFeedErrC := make(chan error, len(repls))
 	for i := range repls {
-		ds := tc.Server(i).DistSender()
+		ds := tc.Server(i).DistSenderI().(*kv.DistSender)
 		rangeFeedCh := make(chan *roachpb.RangeFeedEvent)
 		rangeFeedChs[i] = rangeFeedCh
 		go func() {

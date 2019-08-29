@@ -724,7 +724,7 @@ func TestGRPCAuthentication(t *testing.T) {
 		}},
 	}
 
-	conn, err := grpc.DialContext(ctx, s.Addr(),
+	conn, err := grpc.DialContext(ctx, s.ServingRPCAddr(),
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 			InsecureSkipVerify: true,
 		})))
@@ -749,7 +749,7 @@ func TestGRPCAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conn, err = grpc.DialContext(ctx, s.Addr(),
+	conn, err = grpc.DialContext(ctx, s.ServingRPCAddr(),
 		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	if err != nil {
 		t.Fatal(err)

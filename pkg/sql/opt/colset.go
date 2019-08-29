@@ -10,7 +10,10 @@
 
 package opt
 
-import "github.com/cockroachdb/cockroach/pkg/util"
+import (
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
+)
 
 // ColSet efficiently stores an unordered set of column ids.
 type ColSet struct {
@@ -85,3 +88,13 @@ func (s ColSet) SubsetOf(rhs ColSet) bool { return s.set.SubsetOf(rhs.set) }
 // numbers are shown as ranges. For example, for the set {1, 2, 3  5, 6, 10},
 // the output is "(1-3,5,6,10)".
 func (s ColSet) String() string { return s.set.String() }
+
+// SingleColumn returns the single column in s. Panics if s does not contain
+// exactly one column.
+func (s ColSet) SingleColumn() ColumnID {
+	if s.Len() != 1 {
+		panic(errors.AssertionFailedf("expected a single column but found %d columns", s.Len()))
+	}
+	col, _ := s.Next(0)
+	return col
+}

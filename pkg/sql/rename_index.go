@@ -87,7 +87,7 @@ func (n *renameIndexNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
+	if err := tableDesc.Validate(ctx, p.txn); err != nil {
 		return err
 	}
 

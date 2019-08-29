@@ -511,15 +511,11 @@ func (b *Builder) checkSubqueryOuterCols(
 		return
 	}
 
-	if !b.IsCorrelated {
-		// Remember whether the query was correlated for the heuristic planner,
-		// to enhance error messages.
-		// TODO(knz): this can go away when the HP disappears.
-		b.IsCorrelated = true
-
-		// Register the use of correlation to telemetry.
-		// Note: we don't blindly increment the counter every time this
-		// method is called, to avoid double counting the same query.
+	// Register the use of correlation to telemetry.
+	// Note: we don't blindly increment the counter every time this
+	// method is called, to avoid double counting the same query.
+	if !b.isCorrelated {
+		b.isCorrelated = true
 		telemetry.Inc(sqltelemetry.CorrelatedSubqueryUseCounter)
 	}
 
@@ -553,7 +549,7 @@ func (b *Builder) checkSubqueryOuterCols(
 			!subqueryOuterCols.SubsetOf(inScope.groupby.aggOutScope.colSet()) {
 			subqueryOuterCols.DifferenceWith(inScope.groupby.aggOutScope.colSet())
 			colID, _ := subqueryOuterCols.Next(0)
-			col := inScope.getColumn(opt.ColumnID(colID))
+			col := inScope.getColumn(colID)
 			panic(pgerror.Newf(
 				pgcode.Grouping,
 				"subquery uses ungrouped column \"%s\" from outer query",
@@ -617,6 +613,8 @@ func (b *Builder) constructComparison(
 		return b.factory.ConstructJsonAllExists(left, right)
 	case tree.JSONSomeExists:
 		return b.factory.ConstructJsonSomeExists(left, right)
+	case tree.Overlaps:
+		return b.factory.ConstructOverlaps(left, right)
 	}
 	panic(errors.AssertionFailedf("unhandled comparison operator: %s", log.Safe(cmp)))
 }

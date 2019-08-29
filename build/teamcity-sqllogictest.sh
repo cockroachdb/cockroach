@@ -23,6 +23,6 @@ build/builder.sh \
 # numeric typing differences.
 build/builder.sh \
   stdbuf -oL -eL \
-  make test TESTFLAGS="-v -bigtest -config local-opt,fakedist-opt -flex-types" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestSqlLiteCorrelatedLogic$$' 2>&1 \
+  make test TESTFLAGS="-v -bigtest -config local,fakedist -flex-types" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestSqlLiteCorrelatedLogic$$' 2>&1 \
   | tee "artifacts/sqllite-correlated.log" \
   | go-test-teamcity

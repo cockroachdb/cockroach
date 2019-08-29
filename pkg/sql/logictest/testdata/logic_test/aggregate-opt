@@ -1,4 +1,4 @@
-# LogicTest: local-opt fakedist-opt
+# LogicTest: local fakedist
 
 statement ok
 CREATE TABLE tab (
@@ -21,6 +21,12 @@ SELECT array_agg(col1 ORDER BY col1) FROM tab
 ----
 array_agg
 {-3,-2,-1,0,1,2}
+
+query T colnames
+SELECT array_agg(col1 ORDER BY col2*100+col1) FROM tab
+----
+array_agg
+{-1,1,-2,2,-3,0}
 
 query T colnames
 SELECT json_agg(col1 ORDER BY col1) FROM tab

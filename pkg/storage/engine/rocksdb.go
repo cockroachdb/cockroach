@@ -1685,10 +1685,25 @@ func (r *rocksDBBatch) Close() {
 		r.batch = nil
 	}
 	r.builder.reset()
-	*r = rocksDBBatch{
-		builder: r.builder,
-		closed:  true,
-	}
+	r.closed = true
+
+	// Zero all the remaining fields individually. We can't just copy a new
+	// struct onto r, since r.builder has a sync.NoCopy.
+	r.batch = nil
+	r.parent = nil
+	r.flushes = 0
+	r.flushedCount = 0
+	r.flushedSize = 0
+	r.prefixIter = reusableBatchIterator{}
+	r.normalIter = reusableBatchIterator{}
+	r.distinctOpen = false
+	r.distinctNeedsFlush = false
+	r.writeOnly = false
+	r.syncCommit = false
+	r.committed = false
+	r.commitErr = nil
+	r.commitWG = sync.WaitGroup{}
+
 	batchPool.Put(r)
 }
 
@@ -2019,8 +2034,8 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 		}
 		r.batch = nil
 		count, size = r.flushedCount, r.flushedSize
-	} else if len(r.builder.repr) > 0 {
-		count, size = r.builder.count, len(r.builder.repr)
+	} else if r.builder.Len() > 0 {
+		count, size = int(r.builder.Count()), r.builder.Len()
 
 		// Fast-path which avoids flushing mutations to the C++ batch. Instead, we
 		// directly apply the mutations to the database.
@@ -2046,7 +2061,7 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 }
 
 func (r *rocksDBBatch) Empty() bool {
-	return r.flushes == 0 && r.builder.count == 0 && !r.builder.logData
+	return r.flushes == 0 && r.builder.Count() == 0 && !r.builder.logData
 }
 
 func (r *rocksDBBatch) Len() int {
@@ -2088,14 +2103,14 @@ func (r *rocksDBBatch) Distinct() ReadWriter {
 }
 
 func (r *rocksDBBatch) flushMutations() {
-	if r.builder.count == 0 {
+	if r.builder.Count() == 0 {
 		return
 	}
 	r.ensureBatch()
 	r.distinctNeedsFlush = false
 	r.flushes++
-	r.flushedCount += r.builder.count
-	r.flushedSize += len(r.builder.repr)
+	r.flushedCount += int(r.builder.Count())
+	r.flushedSize += r.builder.Len()
 	if err := dbApplyBatchRepr(r.batch, r.builder.Finish(), false); err != nil {
 		panic(err)
 	}
@@ -2739,7 +2754,7 @@ func dbGetProto(
 		// Make a byte slice that is backed by result.data. This slice
 		// cannot live past the lifetime of this method, but we're only
 		// using it to unmarshal the roachpb.
-		data := cSliceToUnsafeGoBytes(C.DBSlice(result))
+		data := cSliceToUnsafeGoBytes(result)
 		err = protoutil.Unmarshal(data, msg)
 	}
 	C.free(unsafe.Pointer(result.data))
@@ -2912,21 +2927,25 @@ func CheckForKeyCollisions(existingIter Iterator, sstIter Iterator) error {
 			if err := protoutil.Unmarshal(cStringToGoBytes(intentErr), &e); err != nil {
 				return errors.Wrap(err, "failed to decode write intent error")
 			}
-
 			return &e
+		} else if err.Error() == "InlineError" {
+			return errors.Errorf("inline values are unsupported when checking for key collisions")
 		}
+		err = errors.Wrap(&RocksDBError{msg: cToGoKey(state.key).String()}, "ingested key collides with an existing one")
 	}
 
 	return err
 }
 
 // RocksDBSstFileWriter creates a file suitable for importing with
-// RocksDBSstFileReader.
+// RocksDBSstFileReader. It implements the Writer interface.
 type RocksDBSstFileWriter struct {
 	fw *C.DBSstFileWriter
 	// DataSize tracks the total key and value bytes added so far.
 	DataSize int64
 }
+
+var _ Writer = &RocksDBSstFileWriter{}
 
 // MakeRocksDBSstFileWriter creates a new RocksDBSstFileWriter with the default
 // configuration.
@@ -2936,28 +2955,106 @@ func MakeRocksDBSstFileWriter() (RocksDBSstFileWriter, error) {
 	return RocksDBSstFileWriter{fw: fw}, err
 }
 
-// Add puts a kv entry into the sstable being built. An error is returned if it
-// is not greater than any previously added entry (according to the comparator
-// configured during writer creation). `Close` cannot have been called.
-func (fw *RocksDBSstFileWriter) Add(kv MVCCKeyValue) error {
-	if fw.fw == nil {
-		return errors.New("cannot call Open on a closed writer")
-	}
-	fw.DataSize += int64(len(kv.Key.Key)) + int64(len(kv.Value))
-	return statusToError(C.DBSstFileWriterAdd(fw.fw, goToCKey(kv.Key), goToCSlice(kv.Value)))
+// ApplyBatchRepr implements the Writer interface.
+func (fw *RocksDBSstFileWriter) ApplyBatchRepr(repr []byte, sync bool) error {
+	panic("unimplemented")
 }
 
-// Delete puts a deletion tombstone into the sstable being built. See
-// the Add method for more.
-func (fw *RocksDBSstFileWriter) Delete(k MVCCKey) error {
+// Clear implements the Writer interface. Note that it inserts a tombstone
+// rather than actually remove the entry from the storage engine. An error is
+// returned if it is not greater than any previous key used in Put or Clear
+// (according to the comparator configured during writer creation). Close
+// cannot have been called.
+func (fw *RocksDBSstFileWriter) Clear(key MVCCKey) error {
 	if fw.fw == nil {
-		return errors.New("cannot call Delete on a closed writer")
+		return errors.New("cannot call Clear on a closed writer")
 	}
-	fw.DataSize += int64(len(k.Key))
-	return statusToError(C.DBSstFileWriterDelete(fw.fw, goToCKey(k)))
+	fw.DataSize += int64(len(key.Key))
+	return statusToError(C.DBSstFileWriterDelete(fw.fw, goToCKey(key)))
 }
 
-var _ = (*RocksDBSstFileWriter).Delete
+// SingleClear implements the Writer interface.
+func (fw *RocksDBSstFileWriter) SingleClear(key MVCCKey) error {
+	panic("unimplemented")
+}
+
+// ClearRange implements the Writer interface. Note that it inserts a range deletion
+// tombstone rather than actually remove the entries from the storage engine.
+// It can be called at any time with respect to Put and Clear.
+func (fw *RocksDBSstFileWriter) ClearRange(start, end MVCCKey) error {
+	if fw.fw == nil {
+		return errors.New("cannot call ClearRange on a closed writer")
+	}
+	fw.DataSize += int64(len(start.Key)) + int64(len(end.Key))
+	return statusToError(C.DBSstFileWriterDeleteRange(fw.fw, goToCKey(start), goToCKey(end)))
+}
+
+// ClearIterRange implements the Writer interface.
+//
+// NOTE: This method is fairly expensive as it performs a Cgo call for every
+// key deleted.
+func (fw *RocksDBSstFileWriter) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+	if fw.fw == nil {
+		return errors.New("cannot call ClearIterRange on a closed writer")
+	}
+	iter.Seek(start)
+	for {
+		valid, err := iter.Valid()
+		if err != nil {
+			return err
+		}
+		if !valid || !iter.Key().Less(end) {
+			break
+		}
+		if err := fw.Clear(iter.Key()); err != nil {
+			return err
+		}
+		iter.Next()
+	}
+	return nil
+}
+
+// Merge implements the Writer interface.
+func (fw *RocksDBSstFileWriter) Merge(key MVCCKey, value []byte) error {
+	panic("unimplemented")
+}
+
+// Put implements the Writer interface. It puts a kv entry into the sstable
+// being built. An error is returned if it is not greater than any previous key
+// used in Put or Clear (according to the comparator configured during writer
+// creation). Close cannot have been called.
+func (fw *RocksDBSstFileWriter) Put(key MVCCKey, value []byte) error {
+	if fw.fw == nil {
+		return errors.New("cannot call Put on a closed writer")
+	}
+	fw.DataSize += int64(len(key.Key)) + int64(len(value))
+	return statusToError(C.DBSstFileWriterAdd(fw.fw, goToCKey(key), goToCSlice(value)))
+}
+
+// LogData implements the Writer interface.
+func (fw *RocksDBSstFileWriter) LogData(data []byte) error {
+	panic("unimplemented")
+}
+
+// LogLogicalOp implements the Writer interface.
+func (fw *RocksDBSstFileWriter) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
+	// No-op. Logical logging disabled.
+}
+
+// Truncate truncates the writer's current memory buffer and returns the
+// contents it contained. May be called multiple times. The function may not
+// truncate and return all keys if the underlying RocksDB blocks have not been
+// flushed. Close cannot have been called.
+func (fw *RocksDBSstFileWriter) Truncate() ([]byte, error) {
+	if fw.fw == nil {
+		return nil, errors.New("cannot call Truncate on a closed writer")
+	}
+	var contents C.DBString
+	if err := statusToError(C.DBSstFileWriterTruncate(fw.fw, &contents)); err != nil {
+		return nil, err
+	}
+	return cStringToGoBytes(contents), nil
+}
 
 // Finish finalizes the writer and returns the constructed file's contents. At
 // least one kv entry must have been added.

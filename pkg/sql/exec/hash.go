@@ -59,8 +59,18 @@ func add(p unsafe.Pointer, x uintptr) unsafe.Pointer {
 	return unsafe.Pointer(uintptr(p) + x)
 }
 
-//go:linkname noescape runtime.noescape
-func noescape(p unsafe.Pointer) unsafe.Pointer
+// This function is copied from the Go runtime.
+// noescape hides a pointer from escape analysis.  noescape is
+// the identity function but escape analysis doesn't think the
+// output depends on the input.  noescape is inlined and currently
+// compiles down to zero instructions.
+// USE CAREFULLY!
+//go:nosplit
+func noescape(p unsafe.Pointer) unsafe.Pointer {
+	x := uintptr(p)
+	//lint:ignore SA4016 x ^ 0 is a no-op that fools escape analysis.
+	return unsafe.Pointer(x ^ 0)
+}
 
 func memhash(p unsafe.Pointer, seed, s uintptr) uintptr {
 	h := uint64(seed + s*hashKey[0])

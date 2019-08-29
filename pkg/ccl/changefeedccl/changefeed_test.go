@@ -1476,7 +1476,7 @@ func TestChangefeedPermissions(t *testing.T) {
 
 		s := f.Server()
 		pgURL, cleanupFunc := sqlutils.PGUrl(
-			t, s.ServingAddr(), "TestChangefeedPermissions-testuser", url.User("testuser"),
+			t, s.ServingSQLAddr(), "TestChangefeedPermissions-testuser", url.User("testuser"),
 		)
 		defer cleanupFunc()
 		testuser, err := gosql.Open("postgres", pgURL.String())
@@ -1489,8 +1489,8 @@ func TestChangefeedPermissions(t *testing.T) {
 		if strings.Contains(t.Name(), `enterprise`) {
 			stmt = `CREATE CHANGEFEED FOR foo`
 		}
-		if _, err := testuser.Exec(stmt); !testutils.IsError(err, `only superusers`) {
-			t.Errorf(`expected 'only superusers' error got: %+v`, err)
+		if _, err := testuser.Exec(stmt); !testutils.IsError(err, `only users with the admin role`) {
+			t.Errorf(`expected 'only users with the admin role' error got: %+v`, err)
 		}
 	}
 
@@ -1509,7 +1509,7 @@ func TestChangefeedDescription(t *testing.T) {
 		// Intentionally don't use the TestFeedFactory because we want to
 		// control the placeholders.
 		s := f.Server()
-		sink, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+		sink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 		defer cleanup()
 		sink.Scheme = sinkSchemeExperimentalSQL
 		sink.Path = `d`
@@ -1698,7 +1698,7 @@ func TestChangefeedNodeShutdown(t *testing.T) {
 	// Create a factory which uses server 1 as the output of the Sink, but
 	// executes the CREATE CHANGEFEED statement on server 0.
 	sink, cleanup := sqlutils.PGUrl(
-		t, tc.Server(0).ServingAddr(), t.Name(), url.User(security.RootUser))
+		t, tc.Server(0).ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
 	f := cdctest.MakeTableFeedFactory(tc.Server(1), tc.ServerConn(0), flushCh, sink)
 	foo := feed(t, f, "CREATE CHANGEFEED FOR foo")

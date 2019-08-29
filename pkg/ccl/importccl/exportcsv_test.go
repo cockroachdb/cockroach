@@ -55,9 +55,6 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	zoneConfig := config.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(5000)
 	config.TestingSetZoneConfig(last+1, zoneConfig)
-	if err := workloadsql.Split(ctx, conn, wk.Tables()[0], 1 /* concurrency */); err != nil {
-		t.Fatal(err)
-	}
 	db.Exec(t, "ALTER TABLE bank SCATTER")
 	db.Exec(t, "SELECT 'force a scan to repopulate range cache' FROM [SELECT count(*) FROM bank]")
 
@@ -211,7 +208,7 @@ func TestExportShow(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal:///show' FROM SELECT * FROM [SHOW DATABASES]`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal:///show' FROM SELECT * FROM [SHOW DATABASES] ORDER BY database_name`)
 	content, err := ioutil.ReadFile(filepath.Join(dir, "show", "n1.0.csv"))
 	if err != nil {
 		t.Fatal(err)

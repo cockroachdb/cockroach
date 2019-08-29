@@ -16,8 +16,8 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 func TestSelectInInt64(t *testing.T) {
@@ -68,11 +68,11 @@ func TestSelectInInt64(t *testing.T) {
 			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, []int{0},
 				func(input []Operator) (Operator, error) {
 					op := selectInOpInt64{
-						input:     input[0],
-						colIdx:    0,
-						filterRow: c.filterRow,
-						negate:    c.negate,
-						hasNulls:  c.hasNulls,
+						OneInputNode: NewOneInputNode(input[0]),
+						colIdx:       0,
+						filterRow:    c.filterRow,
+						negate:       c.negate,
+						hasNulls:     c.hasNulls,
 					}
 					return &op, nil
 				})
@@ -82,7 +82,7 @@ func TestSelectInInt64(t *testing.T) {
 
 func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
-	batch := coldata.NewMemBatch([]types.T{types.Int64})
+	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
 	col1 := batch.ColVec(0).Int64()
 
 	for i := int64(0); i < coldata.BatchSize; i++ {
@@ -114,9 +114,9 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 	source := NewRepeatableBatchSource(batch)
 	source.Init()
 	inOp := &selectInOpInt64{
-		input:     source,
-		colIdx:    0,
-		filterRow: []int64{1, 2, 3},
+		OneInputNode: NewOneInputNode(source),
+		colIdx:       0,
+		filterRow:    []int64{1, 2, 3},
 	}
 	inOp.Init()
 
@@ -201,12 +201,12 @@ func TestProjectInInt64(t *testing.T) {
 			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, []int{1},
 				func(input []Operator) (Operator, error) {
 					op := projectInOpInt64{
-						input:     input[0],
-						colIdx:    0,
-						outputIdx: 1,
-						filterRow: c.filterRow,
-						negate:    c.negate,
-						hasNulls:  c.hasNulls,
+						OneInputNode: NewOneInputNode(input[0]),
+						colIdx:       0,
+						outputIdx:    1,
+						filterRow:    c.filterRow,
+						negate:       c.negate,
+						hasNulls:     c.hasNulls,
 					}
 					return &op, nil
 				})
