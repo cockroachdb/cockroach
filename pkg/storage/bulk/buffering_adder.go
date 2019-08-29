@@ -84,15 +84,21 @@ func MakeBulkAdder(
 	if opts.SSTSize == 0 {
 		opts.SSTSize = 16 << 20
 	}
+	if opts.SplitAndScatterAfter == 0 {
+		// splitting _before_ hitting max reduces chance of auto-splitting after the
+		// range is full and is more expensive to split/move.
+		opts.SplitAndScatterAfter = 48 << 20
+	}
 
 	b := &BufferingAdder{
 		name: opts.Name,
 		sink: SSTBatcher{
 			db:                db,
-			maxSize:           int64(opts.SSTSize),
+			maxSize:           opts.SSTSize,
 			rc:                rangeCache,
 			skipDuplicates:    opts.SkipDuplicates,
 			disallowShadowing: opts.DisallowShadowing,
+			splitAfter:        opts.SplitAndScatterAfter,
 		},
 		timestamp:           timestamp,
 		curBufferSize:       opts.MinBufferSize,
@@ -129,12 +135,13 @@ func (b *BufferingAdder) SetOnFlush(fn func()) {
 // Close closes the underlying SST builder.
 func (b *BufferingAdder) Close(ctx context.Context) {
 	log.VEventf(ctx, 2,
-		"bulk adder %s ingested %s, flushed %d times, %d due to buffer size. Flushed %d files, %d due to ranges, %d due to sst size. Used %d bytes.",
+		"bulk adder %s ingested %s, flushed %d due to buffer (%s) size. Flushed chunked as %d files (%d after split-retries), %d due to ranges, %d due to sst size.",
 		b.name,
 		sz(b.sink.totalRows.DataSize),
-		b.flushCounts.total, b.flushCounts.bufferSize,
-		b.sink.flushCounts.total, b.sink.flushCounts.split, b.sink.flushCounts.sstSize,
-		b.memAcc.Used(),
+		b.flushCounts.bufferSize,
+		sz(b.memAcc.Used()),
+		b.sink.flushCounts.total, b.sink.flushCounts.files,
+		b.sink.flushCounts.split, b.sink.flushCounts.sstSize,
 	)
 	b.sink.Close()
 

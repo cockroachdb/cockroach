@@ -223,6 +223,10 @@ func (m mockSender) AddSSTable(
 	return m(roachpb.Span{Key: begin.(roachpb.Key), EndKey: end.(roachpb.Key)})
 }
 
+func (m mockSender) SplitAndScatter(ctx context.Context, _ roachpb.Key, _ hlc.Timestamp) error {
+	return nil
+}
+
 // TestAddBigSpanningSSTWithSplits tests a situation where a large
 // spanning SST is being ingested over a span with a lot of splits.
 func TestAddBigSpanningSSTWithSplits(t *testing.T) {
@@ -278,7 +282,7 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 	const kb = 1 << 10
 
 	t.Logf("Adding %dkb sst spanning %d splits from %v to %v", len(sst)/kb, len(splits), start, end)
-	if err := bulk.AddSSTable(
+	if _, err := bulk.AddSSTable(
 		context.TODO(), mock, start, end, sst, false /* disallowShadowing */, enginepb.MVCCStats{},
 	); err != nil {
 		t.Fatal(err)
