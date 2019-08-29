@@ -505,6 +505,23 @@ func (db *DB) AdminSplit(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// SplitAndScatter is a helper that wraps AdminSplit + AdminScatter.
+func (db *DB) SplitAndScatter(
+	ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp,
+) error {
+	if err := db.AdminSplit(ctx, key, key, expirationTime); err != nil {
+		return err
+	}
+	scatterReq := &roachpb.AdminScatterRequest{
+		RequestHeader:   roachpb.RequestHeaderFromSpan(roachpb.Span{Key: key, EndKey: key.Next()}),
+		RandomizeLeases: true,
+	}
+	if _, pErr := SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
+		return pErr.GoError()
+	}
+	return nil
+}
+
 // AdminUnsplit removes the sticky bit of the range specified by splitKey.
 //
 // splitKey is the start key of the range whose sticky bit should be removed.

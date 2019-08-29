@@ -1083,14 +1083,6 @@ func TestImportCSVStmt(t *testing.T) {
 				}
 			}
 
-			// Verify spans don't have trailing '/0'.
-			ranges := sqlDB.QueryStr(t, `SHOW ranges FROM TABLE t`)
-			for _, r := range ranges {
-				const end = `/0`
-				if strings.HasSuffix(r[0], end) || strings.HasSuffix(r[1], end) {
-					t.Errorf("bad span: %s - %s", r[0], r[1])
-				}
-			}
 		})
 	}
 
@@ -1483,15 +1475,6 @@ func TestImportIntoCSV(t *testing.T) {
 			}
 			if result != expectedNulls {
 				t.Fatalf("expected %d rows, got %d", expectedNulls, result)
-			}
-
-			// Verify spans don't have trailing '/0'.
-			ranges := sqlDB.QueryStr(t, `SHOW ranges FROM TABLE t`)
-			for _, r := range ranges {
-				const end = `/0`
-				if strings.HasSuffix(r[0], end) || strings.HasSuffix(r[1], end) {
-					t.Errorf("bad span: %s - %s", r[0], r[1])
-				}
 			}
 		})
 	}
