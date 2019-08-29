@@ -515,3 +515,37 @@ func (l *Locality) Set(value string) error {
 	l.Tiers = tiers
 	return nil
 }
+
+// DefaultLocationInformation is used to populate the system.locations
+// table. The region values here are specific to GCP.
+var DefaultLocationInformation = []struct {
+	Locality  Locality
+	Latitude  string
+	Longitude string
+}{
+	{
+		Locality:  Locality{Tiers: []Tier{{Key: "region", Value: "us-east1"}}},
+		Latitude:  "33.836082",
+		Longitude: "-81.163727",
+	},
+	{
+		Locality:  Locality{Tiers: []Tier{{Key: "region", Value: "us-east4"}}},
+		Latitude:  "37.478397",
+		Longitude: "-76.453077",
+	},
+	{
+		Locality:  Locality{Tiers: []Tier{{Key: "region", Value: "us-central1"}}},
+		Latitude:  "42.032974",
+		Longitude: "-93.581543",
+	},
+	{
+		Locality:  Locality{Tiers: []Tier{{Key: "region", Value: "us-west1"}}},
+		Latitude:  "43.804133",
+		Longitude: "-120.554201",
+	},
+	{
+		Locality:  Locality{Tiers: []Tier{{Key: "region", Value: "europe-west1"}}},
+		Latitude:  "50.44816",
+		Longitude: "3.81886",
+	},
+}

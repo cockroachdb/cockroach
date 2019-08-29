@@ -206,6 +206,11 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "propagate the ts purge interval to the new setting names",
 		workFn: retireOldTsPurgeIntervalSettings,
 	},
+	{
+		// Introduced in ? TODO (rohany): what version is this?
+		name:   "update system.locations with default location data",
+		workFn: updateSystemLocationData,
+	},
 }
 
 func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
@@ -916,5 +921,29 @@ ON CONFLICT (name) DO NOTHING`,
 		return err
 	}
 
+	return nil
+}
+
+func updateSystemLocationData(ctx context.Context, r runner) error {
+	// See if the system.locations table already has data in it.
+	// If so, we don't want to do anything.
+	row, err := r.sqlExecutor.QueryRow(ctx, "update-system-locations",
+		nil, `SELECT count(*) FROM system.locations`)
+	if err != nil {
+		return err
+	}
+	count := int(tree.MustBeDInt(row[0]))
+	if count != 0 {
+		return nil
+	}
+
+	for _, loc := range roachpb.DefaultLocationInformation {
+		stmt := `UPSERT INTO system.locations VALUES ($1, $2, $3, $4)`
+		tier := loc.Locality.Tiers[0]
+		if _, err := r.sqlExecutor.Exec(ctx, "update-system-locations", nil,
+			stmt, tier.Key, tier.Value, loc.Latitude, loc.Longitude); err != nil {
+			return err
+		}
+	}
 	return nil
 }
