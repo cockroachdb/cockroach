@@ -240,10 +240,21 @@ func TestBackupRestorePartitioned(t *testing.T) {
 	defer cleanupFn()
 
 	// Ensure that each node has at least one leaseholder. (These splits were
-	// made in backupRestoreTestSetup.)
-	sqlDB.Exec(t, `ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0)`)
-	sqlDB.Exec(t, `ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 100)`)
-	sqlDB.Exec(t, `ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 200)`)
+	// made in backupRestoreTestSetup.) These are wrapped with SucceedsSoon()
+	// because EXPERIMENTAL_RELOCATE can fail if there are other replication
+	// changes happening.
+	testutils.SucceedsSoon(t, func() error {
+		sqlDB.Exec(t, `ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0)`)
+		return nil
+	})
+	testutils.SucceedsSoon(t, func() error {
+		sqlDB.Exec(t, `ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 100)`)
+		return nil
+	})
+	testutils.SucceedsSoon(t, func() error {
+		sqlDB.Exec(t, `ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 200)`)
+		return nil
+	})
 
 	const localFoo1 = localFoo + "/1"
 	const localFoo2 = localFoo + "/2"
