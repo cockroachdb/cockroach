@@ -563,20 +563,27 @@ func validateNoRepeatKeysInZone(zone *config.ZoneConfig) error {
 		// loop is probably better than allocating a map.
 		for i, curr := range constraints.Constraints {
 			for _, other := range constraints.Constraints[i+1:] {
-				if curr.Type == config.Constraint_REQUIRED {
-					// Verify that there is not another +k=v pair where k=curr.Key, and
-					// that -k=v does not exist.
-					if other.Type == config.Constraint_REQUIRED && other.Key == curr.Key ||
-						other.Type == config.Constraint_PROHIBITED && other.Key == curr.Key && other.Value == curr.Value {
+				// We don't want to enter the other validation logic if both of the constraints
+				// are attributes, due to the keys being the same for attributes.
+				if curr.Key == "" && other.Key == "" {
+					if curr.Value == other.Value {
 						return pgerror.Newf(pgcode.CheckViolation,
 							"incompatible zone constraints: %q and %q", curr, other)
 					}
-				} else if curr.Type == config.Constraint_PROHIBITED {
-					// If we have a -k=v pair, verify that there are not any
-					// +k=v pairs in the constraints.
-					if other.Type == config.Constraint_REQUIRED && other.Key == curr.Key && other.Value == curr.Value {
-						return pgerror.Newf(pgcode.CheckViolation,
-							"incompatible zone constraints: %q and %q", curr, other)
+				} else {
+					if curr.Type == config.Constraint_REQUIRED {
+						if other.Type == config.Constraint_REQUIRED && other.Key == curr.Key ||
+							other.Type == config.Constraint_PROHIBITED && other.Key == curr.Key && other.Value == curr.Value {
+							return pgerror.Newf(pgcode.CheckViolation,
+								"incompatible zone constraints: %q and %q", curr, other)
+						}
+					} else if curr.Type == config.Constraint_PROHIBITED {
+						// If we have a -k=v pair, verify that there are not any
+						// +k=v pairs in the constraints.
+						if other.Type == config.Constraint_REQUIRED && other.Key == curr.Key && other.Value == curr.Value {
+							return pgerror.Newf(pgcode.CheckViolation,
+								"incompatible zone constraints: %q and %q", curr, other)
+						}
 					}
 				}
 			}
