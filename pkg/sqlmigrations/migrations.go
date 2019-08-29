@@ -207,7 +207,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: retireOldTsPurgeIntervalSettings,
 	},
 	{
-		// Introduced in ? TODO (rohany): what version is this?
+		// Introduced in v19.2.
 		name:   "update system.locations with default location data",
 		workFn: updateSystemLocationData,
 	},
