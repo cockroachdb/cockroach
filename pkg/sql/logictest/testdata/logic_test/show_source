@@ -49,7 +49,7 @@ locality                             region=test,dc=dc1
 lock_timeout                         0
 max_index_keys                       32
 node_id                              1
-optimizer_foreign_keys  off
+optimizer_foreign_keys               off
 reorder_joins_limit                  4
 results_buffer_size                  16384
 row_security                         off
@@ -69,7 +69,7 @@ transaction_priority                 normal
 transaction_read_only                off
 transaction_status                   NoTxn
 vectorize                            auto
-vectorize_row_count_threshold        1000
+vectorize_row_count_threshold        0
 
 query T colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]

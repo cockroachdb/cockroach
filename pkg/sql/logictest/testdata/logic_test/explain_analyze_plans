@@ -1,7 +1,7 @@
 # LogicTest: 5node-dist
 
 # These tests are different from explain_analyze because they require manual
-# data placement and are run without the optimizer.
+# data placement.
 
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)
@@ -98,4 +98,4 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lFGL1DAQx9_9FGGeFFKapq
 query T
 SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT k FROM kv WHERE k = 0];
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkD9LxEAQxXs_xfJsR7JptzrsrvHktJMUe9nhCCbZMDNRjyPfXZIFxUK48v3Ztz_mijEnfooDK8IbajSESXLLqllWqxT26QvBE7pxmm21G0KbhRGusM56RsBrPPV85JhYKg9CYotdv81O0g1RLrv3DxBepjhqcJV_qHx1D8JhtuB2NQiSP9UJxxTcuqAW-95ZN3BwXkE4XYx_Cu4RzULIs_0yqcUzI9QL3c59ZJ3yqPwH-b9lvzQETmcut9E8S8vPktvtmyIP27vNSKxW0rqI_ViipVnuvgMAAP__mHp6ww==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkDFPwzAUhHd-hXWshjirp65dKCpsKINrPxULJ7b8XiqqKv8dJWYBCYnxvvOdfb5hyoGe3EgM-4Yeg0ap2RNzritqB_bhE9ZoxKnMsuJBw-dKsDdIlESweHWnREdygWpnoBFIXExbbalxdPW6-7hA46W4ia3qzENnuntoHGaxatdD4-TEvxOrPEtZ4Vojc0m_EFMiL_ES5WqVeTQbE5eSkjiSVYYxLBot8v1aFncm2H7R_190JC55Yvox5q9mswwaFM7Ufo3zXD091-y3a5o8bLkNBGJpbt_EfmrWMix3XwEAAP__bYGETQ==
