@@ -190,10 +190,11 @@ func TestIsEndOfStatement(t *testing.T) {
 	}
 }
 
-// Test handleCliCmd cases for metacommands that are aliases for sql statements
-func TestHandleCliCmdSqlAliasMetacommands(t *testing.T) {
+// Test handleCliCmd cases for client-side commands that are aliases for sql
+// statements.
+func TestHandleCliCmdSqlAlias(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	metaCommandTestsTable := []struct {
+	clientSideCommandTestsTable := []struct {
 		commandString string
 		wantSQLStmt   string
 	}{
@@ -201,10 +202,11 @@ func TestHandleCliCmdSqlAliasMetacommands(t *testing.T) {
 		{`\dt`, `SHOW TABLES`},
 		{`\du`, `SHOW USERS`},
 		{`\d mytable`, `SHOW COLUMNS FROM mytable`},
+		{`\d`, `SHOW TABLES`},
 	}
 
 	var c cliState
-	for _, tt := range metaCommandTestsTable {
+	for _, tt := range clientSideCommandTestsTable {
 		c = setupTestCliState()
 		c.lastInputLine = tt.commandString
 		gotState := c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
@@ -217,10 +219,10 @@ func TestHandleCliCmdSqlAliasMetacommands(t *testing.T) {
 func TestHandleCliCmdSlashDInvalidSyntax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	metaCommandTestsTable := []string{`\d`, `\d goodarg badarg`, `\dz`}
+	clientSideCommandTests := []string{`\d goodarg badarg`, `\dz`}
 
 	var c cliState
-	for _, tt := range metaCommandTestsTable {
+	for _, tt := range clientSideCommandTests {
 		c = setupTestCliState()
 		c.lastInputLine = tt
 		gotState := c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
