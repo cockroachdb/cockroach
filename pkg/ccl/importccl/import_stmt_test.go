@@ -214,11 +214,18 @@ d
 
 		// MySQL OUTFILE
 		{
-			name:   "unexpected number of columns",
+			name:   "too many imported columns",
 			create: `i int8`,
 			typ:    "MYSQLOUTFILE",
 			data:   "1\t2",
 			err:    "row 1: too many columns, expected 1",
+		},
+		{
+			name:   "unexpected number of columns",
+			create: `a string, b string`,
+			typ:    "MYSQLOUTFILE",
+			data:   "1,2",
+			err:    "row 1: unexpected number of columns, expected 2 got 1",
 		},
 		{
 			name:   "unmatched field enclosure",
