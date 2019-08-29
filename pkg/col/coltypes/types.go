@@ -159,32 +159,46 @@ func (t T) GoTypeSliceName() string {
 }
 
 // Get is a function that should only be used in templates.
-func (t T) Get(safe string, target, i string) string {
-	if safe != "safe" && safe != "unsafe" {
-		panic(fmt.Sprintf("unknown safe argument %s, use either safe or unsafe", safe))
-	}
-	if t == Bytes {
-		getString := fmt.Sprintf("%s.Get(%s)", target, i)
-		if safe == "safe" {
-			getString = "append([]byte(nil), " + getString + "...)"
-		}
-		return getString
+func (t T) Get(target, i string) string {
+	switch t {
+	case Bytes:
+		return fmt.Sprintf("%s.Get(%s)", target, i)
 	}
 	return fmt.Sprintf("%s[%s]", target, i)
 }
 
+// CopyVal is a function that should only be used in templates.
+func (t T) CopyVal(dest, src string) string {
+	switch t {
+	case Bytes:
+		return fmt.Sprintf("%[1]s = append(%[1]s[:0], %[2]s...)", dest, src)
+	case Decimal:
+		return fmt.Sprintf("%s.Set(&%s)", dest, src)
+	}
+	return fmt.Sprintf("%s = %s", dest, src)
+}
+
 // Set is a function that should only be used in templates.
 func (t T) Set(target, i, new string) string {
-	if t == Bytes {
+	switch t {
+	case Bytes:
 		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
+	case Decimal:
+		return fmt.Sprintf("%s[%s].Set(&%s)", target, i, new)
 	}
 	return fmt.Sprintf("%s[%s] = %s", target, i, new)
 }
 
 // Swap is a function that should only be used in templates.
 func (t T) Swap(target, i, j string) string {
-	if t == Bytes {
+	switch t {
+	case Bytes:
 		return fmt.Sprintf("%s.Swap(%s, %s)", target, i, j)
+	case Decimal:
+		return fmt.Sprintf(`var tmp apd.Decimal
+tmp.Set(&%[1]s[%[2]s])
+%[1]s[%[2]s].Set(&%[1]s[%[3]s])
+%[1]s[%[3]s].Set(&%[1]s[%[2]s])`, target, i, j)
 	}
 	return fmt.Sprintf("%[1]s[%[2]s], %[1]s[%[3]s] = %[1]s[%[3]s], %[1]s[%[2]s]", target, i, j)
 }
@@ -199,26 +213,53 @@ func (t T) Slice(target, start, end string) string {
 
 // CopySlice is a function that should only be used in templates.
 func (t T) CopySlice(target, src, destIdx, srcStartIdx, srcEndIdx string) string {
-	if t == Bytes {
+	switch t {
+	case Bytes:
 		return fmt.Sprintf("%s.CopySlice(%s, %s, %s, %s)", target, src, destIdx, srcStartIdx, srcEndIdx)
+	case Decimal:
+		return fmt.Sprintf(`
+__tgt_slice := %[1]s[%[2]s:]
+__src_slice := %[3]s[%[4]s:%[5]s]
+for i := range __src_slice {
+    __tgt_slice[i].Set(&__src_slice[i])
+}`, target, destIdx, src, srcStartIdx, srcEndIdx)
 	}
 	return fmt.Sprintf("copy(%s[%s:], %s[%s:%s])", target, destIdx, src, srcStartIdx, srcEndIdx)
 }
 
 // AppendSlice is a function that should only be used in templates.
 func (t T) AppendSlice(target, src, destIdx, srcStartIdx, srcEndIdx string) string {
-	if t == Bytes {
+	switch t {
+	case Bytes:
 		return fmt.Sprintf("%s.AppendSlice(%s, %s, %s, %s)", target, src, destIdx, srcStartIdx, srcEndIdx)
+	case Decimal:
+		return fmt.Sprintf(`__desiredCap := %[2]s + %[5]s - %[4]s
+if cap(%[1]s) >= __desiredCap {
+	%[1]s = %[1]s[:__desiredCap]
+} else {
+  __new_slice := make([]apd.Decimal, __desiredCap)
+  copy(__new_slice, %[1]s)
+  %[1]s = __new_slice
+}
+__src_slice := %[3]s[%[4]s:%[5]s]
+__dst_slice := %[1]s[%[2]s:]
+for i := range __src_slice {
+  __dst_slice[i].Set(&__src_slice[i])
+}`, target, destIdx, src, srcStartIdx, srcEndIdx)
 	}
 	return fmt.Sprintf("%[1]s = append(%[1]s[:%s], %s[%s:%s]...)", target, destIdx, src, srcStartIdx, srcEndIdx)
 }
 
 // AppendVal is a function that should only be used in templates.
 func (t T) AppendVal(target, v string) string {
-	if t == Bytes {
+	switch t {
+	case Bytes:
 		return fmt.Sprintf("%s.AppendVal(%s)", target, v)
+	case Decimal:
+		return fmt.Sprintf(`%[1]s = append(%[1]s, apd.Decimal{})
+%[1]s[len(%[1]s)-1].Set(&%[2]s)`, target, v)
 	}
-	return fmt.Sprintf("%[1]s = append(%[1]s, %s)", target, v)
+	return fmt.Sprintf("%[1]s = append(%[1]s, %[2]s)", target, v)
 }
 
 // Len is a function that should only be used in templates.
@@ -239,8 +280,13 @@ func (t T) Range(loopVariableIdent string, target string) string {
 
 // Zero is a function that should only be used in templates.
 func (t T) Zero(target string) string {
-	if t == Bytes {
+	switch t {
+	case Bytes:
 		return fmt.Sprintf("%s.Zero()", target)
+	case Decimal:
+		return fmt.Sprintf(`for n := 0; n < len(%[1]s); n++ {
+    %[1]s[n].SetInt64(0)
+}`, target)
 	}
 	return fmt.Sprintf("for n := 0; n < len(%[1]s); n += copy(%[1]s[n:], zero%sColumn) {}", target, t.String())
 }

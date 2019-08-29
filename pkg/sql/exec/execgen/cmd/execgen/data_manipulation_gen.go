@@ -27,12 +27,12 @@ var dataManipulationReplacementInfos = []dataManipulationReplacementInfo{
 	{
 		templatePlaceholder: "execgen.UNSAFEGET",
 		numArgs:             2,
-		replaceWith:         "Get \"unsafe\"",
+		replaceWith:         "Get",
 	},
 	{
-		templatePlaceholder: "execgen.GET",
+		templatePlaceholder: "execgen.COPYVAL",
 		numArgs:             2,
-		replaceWith:         "Get \"safe\"",
+		replaceWith:         "CopyVal",
 	},
 	{
 		templatePlaceholder: "execgen.SET",
