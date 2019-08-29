@@ -4,7 +4,13 @@ const.eg.go
 distinct.eg.go
 hashjoiner.eg.go
 like_ops.eg.go
-mergejoiner.eg.go
+mergejoinbase.eg.go
+mergejoiner_fullouter.eg.go
+mergejoiner_inner.eg.go
+mergejoiner_leftanti.eg.go
+mergejoiner_leftouter.eg.go
+mergejoiner_leftsemi.eg.go
+mergejoiner_rightouter.eg.go
 min_max_agg.eg.go
 projection_ops.eg.go
 quicksort.eg.go

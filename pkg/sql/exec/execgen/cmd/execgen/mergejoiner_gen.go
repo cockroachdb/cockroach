@@ -11,6 +11,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"strings"
@@ -50,7 +51,7 @@ type joinTypeInfo struct {
 	String string
 }
 
-func genMergeJoinOps(wr io.Writer) error {
+func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 	d, err := ioutil.ReadFile("pkg/sql/exec/mergejoiner_tmpl.go")
 	if err != nil {
 		return err
@@ -67,8 +68,8 @@ func genMergeJoinOps(wr io.Writer) error {
 	s = strings.Replace(s, "_IS_L_SEL", "{{$sel.IsLSel}}", -1)
 	s = strings.Replace(s, "_IS_R_SEL", "{{$sel.IsRSel}}", -1)
 	s = strings.Replace(s, "_SEL_ARG", "$sel", -1)
-	s = strings.Replace(s, "_JOIN_TYPE_STRING", "{{$joinType.String}}", -1)
-	s = strings.Replace(s, "_JOIN_TYPE", "$joinType", -1)
+	s = strings.Replace(s, "_JOIN_TYPE_STRING", "{{$.JoinType.String}}", -1)
+	s = strings.Replace(s, "_JOIN_TYPE", "$.JoinType", -1)
 	s = strings.Replace(s, "_MJ_OVERLOAD", "$mjOverload", -1)
 	s = strings.Replace(s, "_L_HAS_NULLS", "$.lHasNulls", -1)
 	s = strings.Replace(s, "_R_HAS_NULLS", "$.rHasNulls", -1)
@@ -169,6 +170,18 @@ func genMergeJoinOps(wr io.Writer) error {
 		},
 	}
 
+	return tmpl.Execute(wr, struct {
+		MJOverloads     interface{}
+		SelPermutations interface{}
+		JoinType        interface{}
+	}{
+		MJOverloads:     mjOverloads,
+		SelPermutations: selPermutations,
+		JoinType:        jti,
+	})
+}
+
+func init() {
 	joinTypeInfos := []joinTypeInfo{
 		{
 			IsInner: true,
@@ -197,17 +210,13 @@ func genMergeJoinOps(wr io.Writer) error {
 		},
 	}
 
-	return tmpl.Execute(wr, struct {
-		MJOverloads     interface{}
-		SelPermutations interface{}
-		JoinTypes       interface{}
-	}{
-		MJOverloads:     mjOverloads,
-		SelPermutations: selPermutations,
-		JoinTypes:       joinTypeInfos,
-	})
-}
+	mergeJoinGenerator := func(jti joinTypeInfo) generator {
+		return func(wr io.Writer) error {
+			return genMergeJoinOps(wr, jti)
+		}
+	}
 
-func init() {
-	registerGenerator(genMergeJoinOps, "mergejoiner.eg.go")
+	for _, join := range joinTypeInfos {
+		registerGenerator(mergeJoinGenerator(join), fmt.Sprintf("mergejoiner_%s.eg.go", strings.ToLower(join.String)))
+	}
 }

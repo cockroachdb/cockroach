@@ -85,7 +85,7 @@ const _R_SEL_IND = 0
 // code.
 const _SEL_ARG = 0
 
-// _JOIN_TYPE is used in place of the string "$joinType", since that isn't
+// _JOIN_TYPE is used in place of the string "$.JoinType", since that isn't
 // valid go code.
 const _JOIN_TYPE = 0
 
@@ -98,14 +98,11 @@ const _MJ_OVERLOAD = 0
 // Use execgen package to remove unused import warning.
 var _ interface{} = execgen.UNSAFEGET
 
-// {{ range $joinType := .JoinTypes }}
 type mergeJoin_JOIN_TYPE_STRINGOp struct {
 	mergeJoinBase
 }
 
 var _ StaticMemoryOperator = &mergeJoin_JOIN_TYPE_STRINGOp{}
-
-// {{ end }}
 
 // {{/*
 // This code snippet is the "meat" of the probing phase.
@@ -118,7 +115,6 @@ func _PROBE_SWITCH(
 ) { // */}}
 	// {{define "probeSwitch"}}
 	// {{ $sel := $.SelPermutation }}
-	// {{ $joinType := $.JoinType }}
 	// {{ $mjOverloads := $.Global.MJOverloads }}
 	switch colType {
 	// {{range $mjOverload := $.Global.MJOverloads }}
@@ -545,7 +541,6 @@ func _PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 
 // */}}
 
-// {{ range $joinType := $.JoinTypes }}
 // {{ range $sel := $.SelPermutations }}
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) probeBodyLSel_IS_L_SELRSel_IS_R_SEL() {
 	lSel := o.proberState.lBatch.Selection()
@@ -591,14 +586,12 @@ EqLoop:
 }
 
 // {{ end }}
-// {{ end }}
 
 // {{/*
 // This code snippet builds the output corresponding to the left side (i.e. is
 // the main body of buildLeftGroups()).
 func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool) { // */}}
 	// {{define "leftSwitch"}}
-	// {{ $joinType := .JoinType }}
 	switch colType {
 	// {{ range $.Global.MJOverloads }}
 	case _TYPES_T:
@@ -695,8 +688,6 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 
 // */}}
 
-// {{ range $joinType := .JoinTypes }}
-
 // buildLeftGroups takes a []group and expands each group into the output by
 // repeating each row in the group numRepeats times. For example, given an
 // input table:
@@ -754,14 +745,11 @@ LeftColLoop:
 	o.builderState.left.reset()
 }
 
-// {{ end }}
-
 // {{/*
 // This code snippet builds the output corresponding to the right side (i.e. is
 // the main body of buildRightGroups()).
 func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool) { // */}}
 	// {{define "rightSwitch"}}
-	// {{ $joinType := .JoinType }}
 
 	switch colType {
 	// {{range $.Global.MJOverloads }}
@@ -853,8 +841,6 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 
 // */}}
 
-// {{ range $joinType := .JoinTypes }}
-
 // buildRightGroups takes a []group and repeats each group numRepeats times.
 // For example, given an input table:
 //  R1 |  R2
@@ -912,66 +898,6 @@ RightColLoop:
 	}
 	o.builderState.right.reset()
 }
-
-// {{ end }}
-
-// isBufferedGroupFinished checks to see whether or not the buffered group
-// corresponding to input continues in batch.
-func (o *mergeJoinBase) isBufferedGroupFinished(
-	input *mergeJoinInput, batch coldata.Batch, rowIdx int,
-) bool {
-	if batch.Length() == 0 {
-		return true
-	}
-	bufferedGroup := o.proberState.lBufferedGroup
-	if input == &o.right {
-		bufferedGroup = o.proberState.rBufferedGroup
-	}
-	lastBufferedTupleIdx := bufferedGroup.length - 1
-	tupleToLookAtIdx := uint64(rowIdx)
-	sel := batch.Selection()
-	if sel != nil {
-		tupleToLookAtIdx = uint64(sel[rowIdx])
-	}
-
-	// Check all equality columns in the first row of batch to make sure we're in
-	// the same group.
-	for _, colIdx := range input.eqCols[:len(input.eqCols)] {
-		colTyp := input.sourceTypes[colIdx]
-
-		switch colTyp {
-		// {{ range $.MJOverloads }}
-		case _TYPES_T:
-			// We perform this null check on every equality column of the last
-			// buffered tuple regardless of the join type since it is done only once
-			// per batch. In some cases (like INNER JOIN, or LEFT OUTER JOIN with the
-			// right side being an input) this check will always return false since
-			// nulls couldn't be buffered up though.
-			if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(lastBufferedTupleIdx)) {
-				return true
-			}
-			bufferedCol := bufferedGroup.ColVec(int(colIdx))._TemplateType()
-			prevVal := execgen.UNSAFEGET(bufferedCol, int(lastBufferedTupleIdx))
-			var curVal _GOTYPE
-			if batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt64(tupleToLookAtIdx) {
-				return true
-			}
-			col := batch.ColVec(int(colIdx))._TemplateType()
-			curVal = execgen.UNSAFEGET(col, int(tupleToLookAtIdx))
-			var match bool
-			_ASSIGN_EQ("match", "prevVal", "curVal")
-			if !match {
-				return true
-			}
-		// {{end}}
-		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colTyp))
-		}
-	}
-	return false
-}
-
-// {{ range $joinType := .JoinTypes }}
 
 // probe is where we generate the groups slices that are used in the build
 // phase. We do this by first assuming that every row in both batches
@@ -1133,8 +1059,6 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) build() {
 	o.builderState.outCount = o.calculateOutputCount(o.builderState.lGroups)
 }
 
-// {{ end }}
-
 // {{/*
 // This code snippet is executed when at least one of the input sources has
 // been exhausted. It processes any remaining tuples and then sets up the
@@ -1189,8 +1113,6 @@ func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 }
 
 // */}}
-
-// {{ range $joinType := .JoinTypes }}
 
 // calculateOutputCount uses the toBuild field of each group and the output
 // batch size to determine the output count. Note that as soon as a group is
@@ -1277,5 +1199,3 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 		}
 	}
 }
-
-// {{ end }}
