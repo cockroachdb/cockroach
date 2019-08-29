@@ -87,6 +87,22 @@ type HashRowContainer interface {
 	Close(context.Context)
 }
 
+// SpillableSortableHashRowContainer is a HashRowContainer that can be forced
+// to spill to disk and can be sorted.
+type SpillableSortableHashRowContainer interface {
+	HashRowContainer
+	SpillableRowContainer
+
+	// Sort sorts the rows according to the current ordering (the one set at
+	// initialization).
+	Sort(context.Context)
+
+	// NewAllRowsIterator creates AllRowsIterator that can iterate over all rows
+	// (equivalent to an unmarked iterator when the container doesn't do marking)
+	// and will be recreated if the spilling to disk occurs.
+	NewAllRowsIterator(context.Context) (*AllRowsIterator, error)
+}
+
 // columnEncoder is a utility struct used by implementations of HashRowContainer
 // to encode equality columns, the result of which is used as a key to a bucket.
 type columnEncoder struct {
@@ -194,7 +210,7 @@ type HashMemRowContainer struct {
 	storedEqCols columns
 }
 
-var _ HashRowContainer = &HashMemRowContainer{}
+var _ SpillableSortableHashRowContainer = &HashMemRowContainer{}
 
 // MakeHashMemRowContainer creates a HashMemRowContainer from the given
 // rowContainer. This rowContainer must still be Close()d by the caller.
@@ -280,6 +296,14 @@ func (h *HashMemRowContainer) ReserveMarkMemoryMaybe(ctx context.Context) error 
 	}
 	h.markMemoryReserved = true
 	return nil
+}
+
+// NewAllRowsIterator is part of SpillableSortableHashRowContainer interface.
+func (h *HashMemRowContainer) NewAllRowsIterator(ctx context.Context) (*AllRowsIterator, error) {
+	if h.shouldMark {
+		return nil, errors.Errorf("AllRowsIterator can only be created when the container doesn't do marking")
+	}
+	return &AllRowsIterator{RowIterator: h.NewUnmarkedIterator(ctx), container: h}, nil
 }
 
 // hashMemRowBucketIterator iterates over the rows in a bucket.
@@ -763,23 +787,23 @@ type HashDiskBackedRowContainer struct {
 	allRowsIterators []*AllRowsIterator
 }
 
-var _ HashRowContainer = &HashDiskBackedRowContainer{}
+var _ SpillableSortableHashRowContainer = &HashDiskBackedRowContainer{}
 
-// MakeHashDiskBackedRowContainer makes a HashDiskBackedRowContainer.
+// NewHashDiskBackedRowContainer makes a HashDiskBackedRowContainer.
 // mrc (the first argument) can either be nil (in which case
 // HashMemRowContainer will be built upon an empty MemRowContainer) or non-nil
 // (in which case mrc is used as underlying MemRowContainer under
 // HashMemRowContainer). The latter case is used by the hashJoiner since when
 // initializing HashDiskBackedRowContainer it will have accumulated rows from
 // both sides of the join in MemRowContainers, and we can reuse one of them.
-func MakeHashDiskBackedRowContainer(
+func NewHashDiskBackedRowContainer(
 	mrc *MemRowContainer,
 	evalCtx *tree.EvalContext,
 	memoryMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
 	engine diskmap.Factory,
-) HashDiskBackedRowContainer {
-	return HashDiskBackedRowContainer{
+) *HashDiskBackedRowContainer {
+	return &HashDiskBackedRowContainer{
 		mrc:              mrc,
 		evalCtx:          evalCtx,
 		memoryMonitor:    memoryMonitor,
@@ -978,22 +1002,24 @@ func (h *HashDiskBackedRowContainer) Sort(ctx context.Context) {
 	}
 }
 
-// AllRowsIterator iterates over all rows in HashDiskBackedRowContainer which
-// should be initialized to not do marking. This iterator will be recreated
-// in-place if the container spills to disk.
+// AllRowsIterator iterates over all rows in HashRowContainer which should be
+// initialized to not do marking. This iterator will be recreated in-place if
+// the container spills to disk.
 type AllRowsIterator struct {
 	RowIterator
 
-	container *HashDiskBackedRowContainer
+	container HashRowContainer
 }
 
 // Close implements RowIterator interface.
 func (i *AllRowsIterator) Close() {
 	i.RowIterator.Close()
-	for j, iterator := range i.container.allRowsIterators {
-		if i == iterator {
-			i.container.allRowsIterators = append(i.container.allRowsIterators[:j], i.container.allRowsIterators[j+1:]...)
-			return
+	if c, isDiskBacked := i.container.(*HashDiskBackedRowContainer); isDiskBacked {
+		for j, iterator := range c.allRowsIterators {
+			if i == iterator {
+				c.allRowsIterators = append(c.allRowsIterators[:j], c.allRowsIterators[j+1:]...)
+				return
+			}
 		}
 	}
 }

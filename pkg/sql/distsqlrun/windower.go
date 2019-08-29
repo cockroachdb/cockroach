@@ -103,6 +103,10 @@ const (
 	windowerEmittingRows
 )
 
+// memRequiredByWindower indicates the minimum amount of RAM (in bytes) that
+// the windower needs.
+const memRequiredByWindower = 100000
+
 // windower is the processor that performs computation of window functions
 // that have the same PARTITION BY clause. It passes through all of its input
 // columns and puts the output of a window function windowFn at
@@ -126,8 +130,9 @@ type windower struct {
 	cancelChecker *sqlbase.CancelChecker
 
 	partitionBy                []uint32
-	allRowsPartitioned         *rowcontainer.HashDiskBackedRowContainer
-	partition                  *rowcontainer.DiskBackedIndexedRowContainer
+	useTempStorage             bool
+	allRowsPartitioned         rowcontainer.SpillableSortableHashRowContainer
+	partition                  rowcontainer.SpillableIndexedRowContainer
 	orderOfWindowFnsProcessing []int
 	windowFns                  []*windowFunc
 	builtins                   []tree.WindowFunc
@@ -160,34 +165,9 @@ func newWindower(
 	evalCtx := flowCtx.NewEvalCtx()
 	w.inputTypes = input.OutputTypes()
 	ctx := evalCtx.Ctx()
-	memMonitor := NewMonitor(ctx, evalCtx.Mon, "windower-mem")
-	w.acc = memMonitor.MakeBoundAccount()
-	w.diskMonitor = NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "windower-disk")
-	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		w.input = NewInputStatCollector(w.input)
-		w.finishTrace = w.outputStatsToTrace
-	}
 
-	windowFns := spec.WindowFns
 	w.partitionBy = spec.PartitionBy
-	allRowsPartitioned := rowcontainer.MakeHashDiskBackedRowContainer(
-		nil, /* memRowContainer */
-		evalCtx,
-		memMonitor,
-		w.diskMonitor,
-		flowCtx.Cfg.TempStorage,
-	)
-	w.allRowsPartitioned = &allRowsPartitioned
-	if err := w.allRowsPartitioned.Init(
-		ctx,
-		false, /* shouldMark */
-		w.inputTypes,
-		w.partitionBy,
-		true, /* encodeNull */
-	); err != nil {
-		return nil, err
-	}
-
+	windowFns := spec.WindowFns
 	w.windowFns = make([]*windowFunc, 0, len(windowFns))
 	w.builtins = make([]tree.WindowFunc, 0, len(windowFns))
 	// windower passes through all of its input columns and appends an output
@@ -227,7 +207,7 @@ func newWindower(
 		evalCtx,
 		processorID,
 		output,
-		memMonitor,
+		nil, /* memMonitor */
 		ProcStateOpts{InputsToDrain: []RowSource{w.input},
 			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
 				w.close()
@@ -235,6 +215,82 @@ func newWindower(
 			}},
 	); err != nil {
 		return nil, err
+	}
+
+	st := flowCtx.Cfg.Settings
+	w.useTempStorage = settingUseTempStorageWindow.Get(&st.SV) ||
+		flowCtx.Cfg.TestingKnobs.MemoryLimitBytes > 0
+	if w.useTempStorage {
+		// Limit the memory use by creating a child monitor with a hard limit.
+		// windower will overflow to disk if this limit is not enough.
+		limit := flowCtx.Cfg.TestingKnobs.MemoryLimitBytes
+		if limit <= 0 {
+			limit = settingWorkMemBytes.Get(&st.SV)
+			if limit < memRequiredByWindower {
+				return nil, errors.Errorf(
+					"window functions require %d bytes of RAM but only %d are in the budget. "+
+						"Consider increasing sql.distsql.temp_storage.workmem setting",
+					memRequiredByWindower, limit)
+			}
+		} else {
+			if limit < memRequiredByWindower {
+				// The limit is set very low by the tests, but the windower requires
+				// some amount of RAM, so we override the limit.
+				limit = memRequiredByWindower
+			}
+		}
+		limitedMon := mon.MakeMonitorInheritWithLimit("windower-limited", limit, evalCtx.Mon)
+		limitedMon.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
+		w.MemMonitor = &limitedMon
+		w.diskMonitor = NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "windower-disk")
+		w.allRowsPartitioned = rowcontainer.NewHashDiskBackedRowContainer(
+			nil, /* memRowContainer */
+			evalCtx,
+			w.MemMonitor,
+			w.diskMonitor,
+			flowCtx.Cfg.TempStorage,
+		)
+		if err := w.allRowsPartitioned.Init(
+			ctx,
+			false, /* shouldMark */
+			w.inputTypes,
+			w.partitionBy,
+			true, /* encodeNull */
+		); err != nil {
+			return nil, err
+		}
+	} else {
+		w.MemMonitor = NewMonitor(ctx, evalCtx.Mon, "windower-mem")
+		rc := &rowcontainer.MemRowContainer{}
+		ordering := sqlbase.ColumnOrdering{}
+		for _, col := range w.partitionBy {
+			ordering = append(ordering, sqlbase.ColumnOrderInfo{ColIdx: int(col)})
+		}
+		rc.InitWithMon(
+			ordering,
+			w.inputTypes,
+			evalCtx,
+			w.MemMonitor,
+			0, /* rowCapacity */
+		)
+		allRowsPartitioned := rowcontainer.MakeHashMemRowContainer(rc)
+		w.allRowsPartitioned = &allRowsPartitioned
+		if err := w.allRowsPartitioned.Init(
+			ctx,
+			false, /* shouldMark */
+			w.inputTypes,
+			w.partitionBy,
+			true, /* encodeNull */
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	w.acc = w.MemMonitor.MakeBoundAccount()
+
+	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+		w.input = NewInputStatCollector(w.input)
+		w.finishTrace = w.outputStatsToTrace
 	}
 
 	return w, nil
@@ -291,7 +347,9 @@ func (w *windower) close() {
 		}
 		w.acc.Close(w.Ctx)
 		w.MemMonitor.Stop(w.Ctx)
-		w.diskMonitor.Stop(w.Ctx)
+		if w.diskMonitor != nil {
+			w.diskMonitor.Stop(w.Ctx)
+		}
 	}
 }
 
@@ -452,7 +510,7 @@ func (w *windower) findOrderOfWindowFnsToProcessIn() {
 func (w *windower) processPartition(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
-	partition *rowcontainer.DiskBackedIndexedRowContainer,
+	partition rowcontainer.IndexedRowContainer,
 	partitionIdx int,
 ) error {
 	var peerGrouper tree.PeerGroupChecker
@@ -666,15 +724,27 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 	// w.partition will have ordering as needed by the first window function to
 	// be processed.
 	ordering := distsqlpb.ConvertToColumnOrdering(w.windowFns[w.orderOfWindowFnsProcessing[0]].ordering)
-	w.partition = rowcontainer.MakeDiskBackedIndexedRowContainer(
-		ordering,
-		w.inputTypes,
-		w.evalCtx,
-		w.flowCtx.Cfg.TempStorage,
-		w.MemMonitor,
-		w.diskMonitor,
-		0, /* rowCapacity */
-	)
+	if w.useTempStorage {
+		w.partition = rowcontainer.NewDiskBackedIndexedRowContainer(
+			ordering,
+			w.inputTypes,
+			w.evalCtx,
+			w.flowCtx.Cfg.TempStorage,
+			w.MemMonitor,
+			w.diskMonitor,
+			0, /* rowCapacity */
+		)
+	} else {
+		rc := &rowcontainer.MemRowContainer{}
+		rc.InitWithMon(
+			ordering,
+			w.inputTypes,
+			w.evalCtx,
+			w.MemMonitor,
+			0, /* rowCapacity */
+		)
+		w.partition = rc
+	}
 	i, err := w.allRowsPartitioned.NewAllRowsIterator(ctx)
 	if err != nil {
 		return err
@@ -795,7 +865,7 @@ type windowFunc struct {
 type partitionPeerGrouper struct {
 	ctx       context.Context
 	evalCtx   *tree.EvalContext
-	partition *rowcontainer.DiskBackedIndexedRowContainer
+	partition rowcontainer.IndexedRowContainer
 	ordering  distsqlpb.Ordering
 	rowCopy   sqlbase.EncDatumRow
 	err       error

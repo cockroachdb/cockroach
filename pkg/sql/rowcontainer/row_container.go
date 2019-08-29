@@ -63,6 +63,16 @@ type SortableRowContainer interface {
 	Close(context.Context)
 }
 
+// SpillableRowContainer is a container that can be forced to spill to disk.
+type SpillableRowContainer interface {
+	// UsingDisk returns whether the container is currently using disk.
+	UsingDisk() bool
+
+	// SpillToDisk attempts to spill the container to disk and returns any error
+	// if it occurs.
+	SpillToDisk(context.Context) error
+}
+
 // ReorderableRowContainer is a SortableRowContainer that can change the
 // ordering on which the rows are sorted.
 type ReorderableRowContainer interface {
@@ -81,6 +91,13 @@ type IndexedRowContainer interface {
 
 	// GetRow returns a row at the given index or an error.
 	GetRow(ctx context.Context, idx int) (tree.IndexedRow, error)
+}
+
+// SpillableIndexedRowContainer is an IndexedRowContainer that can also be
+// forced to spill to disk.
+type SpillableIndexedRowContainer interface {
+	IndexedRowContainer
+	SpillableRowContainer
 }
 
 // RowIterator is a simple iterator used to iterate over sqlbase.EncDatumRows.
@@ -134,7 +151,7 @@ type MemRowContainer struct {
 }
 
 var _ heap.Interface = &MemRowContainer{}
-var _ SortableRowContainer = &MemRowContainer{}
+var _ SpillableIndexedRowContainer = &MemRowContainer{}
 
 // Init initializes the MemRowContainer. The MemRowContainer uses evalCtx.Mon
 // to track memory usage.
@@ -244,6 +261,16 @@ func (mc *MemRowContainer) MaybeReplaceMax(ctx context.Context, row sqlbase.EncD
 		heap.Fix(mc, 0)
 	}
 	return nil
+}
+
+// UsingDisk is part of SpillableIndexedRowContainer interface.
+func (mc *MemRowContainer) UsingDisk() bool {
+	return false
+}
+
+// SpillToDisk is part of SpillableIndexedRowContainer interface.
+func (mc *MemRowContainer) SpillToDisk(context.Context) error {
+	return pgerror.New(pgcode.OutOfMemory, "out of memory error")
 }
 
 // InitTopK rearranges the rows in the MemRowContainer into a Max-Heap.
@@ -481,7 +508,7 @@ func (f *DiskBackedRowContainer) UsingDisk() bool {
 // memory error. Returns whether the DiskBackedRowContainer spilled to disk and
 // an error if one occurred while doing so.
 func (f *DiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (bool, error) {
-	if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
+	if !sqlbase.IsOutOfMemoryError(err) {
 		return false, nil
 	}
 	if spillErr := f.SpillToDisk(ctx); spillErr != nil {
@@ -561,7 +588,9 @@ type DiskBackedIndexedRowContainer struct {
 	DisableCache bool
 }
 
-// MakeDiskBackedIndexedRowContainer creates a DiskBackedIndexedRowContainer
+var _ SpillableIndexedRowContainer = &DiskBackedIndexedRowContainer{}
+
+// NewDiskBackedIndexedRowContainer creates a DiskBackedIndexedRowContainer
 // with the given engine as the underlying store that rows are stored on when
 // it spills to disk.
 // Arguments:
@@ -575,7 +604,7 @@ type DiskBackedIndexedRowContainer struct {
 //  - diskMonitor is used to monitor this container's disk usage.
 //  - rowCapacity (if not 0) specifies the number of rows in-memory container
 //    should be preallocated for.
-func MakeDiskBackedIndexedRowContainer(
+func NewDiskBackedIndexedRowContainer(
 	ordering sqlbase.ColumnOrdering,
 	typs []types.T,
 	evalCtx *tree.EvalContext,

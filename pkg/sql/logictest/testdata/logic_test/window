@@ -3545,3 +3545,19 @@ SELECT *, avg(w) OVER (PARTITION BY w, z ORDER BY y) FROM wxyz ORDER BY z, w, y 
 ----
 2  10  2  0  2
 4  10  2  0  4
+
+# Test that windower respects the memory limit set via the cluster setting.
+statement ok
+SET CLUSTER SETTING sql.distsql.temp_storage.workmem='100KB'
+
+statement ok
+CREATE TABLE l (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO l SELECT g FROM generate_series(0,10000) g(g)
+
+statement error memory budget exceeded
+SELECT array_agg(a) OVER () FROM l LIMIT 1
+
+statement ok
+RESET CLUSTER SETTING sql.distsql.temp_storage.workmem

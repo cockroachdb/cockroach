@@ -95,6 +95,12 @@ var settingUseTempStorageJoins = settings.RegisterBoolSetting(
 	true,
 )
 
+var settingUseTempStorageWindow = settings.RegisterBoolSetting(
+	"sql.distsql.temp_storage.window_functions.enabled",
+	"set to true to enable use of disk for distributed sql window functions",
+	true,
+)
+
 var settingWorkMemBytes = settings.RegisterByteSizeSetting(
 	"sql.distsql.temp_storage.workmem",
 	"maximum amount of memory in bytes a processor can use before falling back to temp storage",
