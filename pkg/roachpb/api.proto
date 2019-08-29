@@ -720,6 +720,7 @@ message AdminUnsplitResponse {
 // now encompass all keys from its original start key to the end key
 // of the subsumed range. If AdminMerge is called on the final range
 // in the key space, it is a noop.
+// The request must be addressed to the start key of the left hand side.
 message AdminMergeRequest {
   option (gogoproto.equal) = true;
 
