@@ -53,10 +53,8 @@ func (m *memColumn) Append(args AppendArgs) {
 	case _TYPES_T:
 		fromCol := args.Src._TemplateType()
 		toCol := m._TemplateType()
-		numToAppend := args.SrcEndIdx - args.SrcStartIdx
 		if args.Sel == nil {
 			execgen.APPENDSLICE(toCol, fromCol, int(args.DestIdx), int(args.SrcStartIdx), int(args.SrcEndIdx))
-			m.nulls.Extend(args.Src.Nulls(), args.DestIdx, args.SrcStartIdx, numToAppend)
 		} else {
 			sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
 			// TODO(asubiotto): We could be more efficient for fixed width types by
@@ -67,10 +65,8 @@ func (m *memColumn) Append(args AppendArgs) {
 				val := execgen.UNSAFEGET(fromCol, int(selIdx))
 				execgen.APPENDVAL(toCol, val)
 			}
-			// TODO(asubiotto): Change Extend* signatures to allow callers to pass in
-			// SrcEndIdx instead of numToAppend.
-			m.nulls.ExtendWithSel(args.Src.Nulls(), args.DestIdx, args.SrcStartIdx, numToAppend, args.Sel)
 		}
+		m.nulls.append(args)
 		m.col = toCol
 	// {{end}}
 	default:
@@ -93,7 +89,7 @@ func _COPY_WITH_SEL(
 				// {{if .SelOnDest}}
 				execgen.SET(toCol, int(selIdx), v)
 				// {{else}}
-				execgen.SET(toCol, i, v)
+				execgen.SET(toCol, i+int(args.DestIdx), v)
 				// {{end}}
 			}
 		}
@@ -106,7 +102,7 @@ func _COPY_WITH_SEL(
 		// {{if .SelOnDest}}
 		execgen.SET(toCol, int(selIdx), v)
 		// {{else}}
-		execgen.SET(toCol, i, v)
+		execgen.SET(toCol, i+int(args.DestIdx), v)
 		// {{end}}
 	}
 	// {{end}}
@@ -142,16 +138,7 @@ func (m *memColumn) Copy(args CopyArgs) {
 		}
 		// No Sel or Sel64.
 		execgen.COPYSLICE(toCol, fromCol, int(args.DestIdx), int(args.SrcStartIdx), int(args.SrcEndIdx))
-		if args.Src.MaybeHasNulls() {
-			// TODO(asubiotto): This should use Extend but Extend only takes uint16
-			// arguments.
-			srcNulls := args.Src.Nulls()
-			for curDestIdx, curSrcIdx := args.DestIdx, args.SrcStartIdx; curSrcIdx < args.SrcEndIdx; curDestIdx, curSrcIdx = curDestIdx+1, curSrcIdx+1 {
-				if srcNulls.NullAt64(curSrcIdx) {
-					m.nulls.SetNull64(curDestIdx)
-				}
-			}
-		}
+		m.nulls.copy(args)
 	// {{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %s", args.ColType))

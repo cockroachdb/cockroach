@@ -220,7 +220,7 @@ func TestSetAndUnsetNulls(t *testing.T) {
 	}
 }
 
-func TestExtend(t *testing.T) {
+func TestNullsDuplicate(t *testing.T) {
 	for _, destStartIdx := range pos {
 		for _, srcStartIdx := range pos {
 			for _, srcEndIdx := range pos {
@@ -230,7 +230,7 @@ func TestExtend(t *testing.T) {
 						srcStartIdx, toAppend)
 					t.Run(name, func(t *testing.T) {
 						n := nulls3.Copy()
-						n.Extend(&nulls5, destStartIdx, uint16(srcStartIdx), uint16(toAppend))
+						n.duplicate(&nulls5, nil /* sel */, destStartIdx, srcStartIdx, srcEndIdx)
 						for i := uint64(0); i < destStartIdx; i++ {
 							require.Equal(t, nulls3.NullAt64(i), n.NullAt64(i))
 						}
@@ -251,7 +251,7 @@ func TestExtend(t *testing.T) {
 	}
 }
 
-func TestExtendSel(t *testing.T) {
+func TestNullsDuplicateWithSel(t *testing.T) {
 	// Make a selection vector with every even index. (This turns nulls10 into
 	// nulls5.)
 	sel := make([]uint16, BatchSize)
@@ -268,7 +268,7 @@ func TestExtendSel(t *testing.T) {
 						srcStartIdx, toAppend)
 					t.Run(name, func(t *testing.T) {
 						n := nulls3.Copy()
-						n.ExtendWithSel(&nulls10, destStartIdx, uint16(srcStartIdx), uint16(toAppend), sel)
+						n.duplicate(&nulls10, sel, destStartIdx, srcStartIdx, srcEndIdx)
 						for i := uint64(0); i < destStartIdx; i++ {
 							require.Equal(t, nulls3.NullAt64(i), n.NullAt64(i))
 						}

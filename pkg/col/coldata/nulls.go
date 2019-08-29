@@ -225,39 +225,24 @@ func (n *Nulls) swap(i, j uint64) {
 	n.nulls[j/8] = (n.nulls[j/8] & ^jMask) | (ni << (j % 8))
 }
 
-// Extend extends the nulls vector with the next toAppend values from src,
-// starting at srcStartIdx.
-func (n *Nulls) Extend(src *Nulls, destStartIdx uint64, srcStartIdx uint16, toAppend uint16) {
-	if toAppend == 0 {
-		return
-	}
-	outputLen := destStartIdx + uint64(toAppend)
-	// We will need ceil(outputLen/8) bytes to encode the combined nulls.
-	needed := (outputLen-1)/8 + 1
-	current := uint64(len(n.nulls))
-	if current < needed {
-		n.nulls = append(n.nulls, filledNulls[:needed-current]...)
-	}
-	if src.MaybeHasNulls() {
-		for i := uint16(0); i < toAppend; i++ {
-			// TODO(yuzefovich): this can be done more efficiently with a bitwise OR:
-			// like n.nulls[i] |= vec.nulls[i].
-			if src.NullAt(srcStartIdx + i) {
-				n.SetNull64(destStartIdx + uint64(i))
-			}
-		}
-	}
+func (n *Nulls) append(args AppendArgs) {
+	n.duplicate(args.Src.Nulls(), args.Sel, args.DestIdx, uint64(args.SrcStartIdx), uint64(args.SrcEndIdx))
 }
 
-// ExtendWithSel extends the nulls vector with the next toAppend values from
-// src, starting at srcStartIdx and using the provided selection vector.
-func (n *Nulls) ExtendWithSel(
-	src *Nulls, destStartIdx uint64, srcStartIdx uint16, toAppend uint16, sel []uint16,
-) {
-	if toAppend == 0 {
+func (n *Nulls) copy(args CopyArgs) {
+	n.duplicate(args.Src.Nulls(), args.Sel, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
+}
+
+// duplicate copies over a slice [srcStartIdx: srcEndIdx] of src and puts it
+// starting at destIdx. If the length of this nulls is smaller than destIdx,
+// then this nulls is extended; otherwise, any overlapping old values are
+// overwritten, and this nulls is also extended if necessary.
+func (n *Nulls) duplicate(src *Nulls, sel []uint16, destIdx, srcStartIdx, srcEndIdx uint64) {
+	if srcStartIdx == srcEndIdx {
 		return
 	}
-	outputLen := destStartIdx + uint64(toAppend)
+	toDuplicate := srcEndIdx - srcStartIdx
+	outputLen := destIdx + toDuplicate
 	// We will need ceil(outputLen/8) bytes to encode the combined nulls.
 	needed := (outputLen-1)/8 + 1
 	current := uint64(len(n.nulls))
@@ -265,13 +250,23 @@ func (n *Nulls) ExtendWithSel(
 		n.nulls = append(n.nulls, filledNulls[:needed-current]...)
 	}
 	if src.MaybeHasNulls() {
-		for i := uint16(0); i < toAppend; i++ {
-			// TODO(yuzefovich): this can be done more efficiently with a bitwise OR:
-			// like n.nulls[i] |= vec.nulls[i].
-			if src.NullAt(sel[srcStartIdx+i]) {
-				n.SetNull64(destStartIdx + uint64(i))
+		if sel != nil {
+			for i := uint64(0); i < toDuplicate; i++ {
+				if src.NullAt(sel[srcStartIdx+i]) {
+					n.SetNull64(destIdx + i)
+				}
+			}
+		} else {
+			for i := uint64(0); i < toDuplicate; i++ {
+				// TODO(yuzefovich): this can be done more efficiently with a bitwise OR:
+				// like n.nulls[i] |= vec.nulls[i].
+				if src.NullAt64(srcStartIdx + i) {
+					n.SetNull64(destIdx + i)
+				}
 			}
 		}
+	} else {
+		n.UnsetNullRange(destIdx, destIdx+toDuplicate)
 	}
 }
 
