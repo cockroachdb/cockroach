@@ -501,8 +501,8 @@ func (rq *replicateQueue) findRemoveTarget(
 	}
 	if len(candidates) == 0 {
 		// If we timed out and still don't have any valid candidates, give up.
-		return roachpb.ReplicaDescriptor{}, "", errors.Errorf("no removable replicas from range that needs a removal: %s",
-			rangeRaftProgress(repl.RaftStatus(), existingReplicas))
+		return roachpb.ReplicaDescriptor{}, "", &benignError{errors.Errorf("no removable replicas from range that needs a removal: %s",
+			rangeRaftProgress(repl.RaftStatus(), existingReplicas))}
 	}
 
 	return rq.allocator.RemoveTarget(ctx, zone, candidates, existingReplicas)
