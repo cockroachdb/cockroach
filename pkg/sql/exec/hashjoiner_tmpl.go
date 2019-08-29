@@ -183,7 +183,7 @@ func _REHASH_BODY(
 	// {{ if .HasSel }}
 	_ = sel[nKeys-1]
 	// {{ else }}
-	_ = execgen.GET(keys, int(nKeys-1))
+	_ = execgen.UNSAFEGET(keys, int(nKeys-1))
 	// {{ end }}
 	for i := uint64(0); i < nKeys; i++ {
 		ht.cancelChecker.check(ctx)

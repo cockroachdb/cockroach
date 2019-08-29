@@ -50,8 +50,8 @@ func _ASSIGN_CAST(to, from interface{}) {
 	execerror.VectorizedInternalPanic("")
 }
 
-// This will be replaced with execgen.GET.
-func _FROM_TYPE_GET(to, from interface{}) interface{} {
+// This will be replaced with execgen.UNSAFEGET
+func _FROM_TYPE_UNSAFEGET(to, from interface{}) interface{} {
 	execerror.VectorizedInternalPanic("")
 }
 
@@ -68,7 +68,7 @@ func _FROM_TYPE_SLICE(col, i, j interface{}) interface{} {
 // */}}
 
 // Use execgen package to remove unused import warning.
-var _ interface{} = execgen.GET
+var _ interface{} = execgen.UNSAFEGET
 
 func GetCastOperator(
 	input Operator, colIdx int, resultIdx int, fromType *semtypes.T, toType *semtypes.T,
@@ -142,7 +142,7 @@ func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 				if vecNulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := _FROM_TYPE_GET(col, int(i))
+					v := _FROM_TYPE_UNSAFEGET(col, int(i))
 					var r _GOTYPE
 					_ASSIGN_CAST(r, v)
 					_TO_TYPE_SET(projCol, int(i), r)
@@ -154,7 +154,7 @@ func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 				if vecNulls.NullAt(uint16(i)) {
 					projNulls.SetNull(uint16(i))
 				} else {
-					v := _FROM_TYPE_GET(col, int(i))
+					v := _FROM_TYPE_UNSAFEGET(col, int(i))
 					var r _GOTYPE
 					_ASSIGN_CAST(r, v)
 					_TO_TYPE_SET(projCol, int(i), r)
@@ -165,7 +165,7 @@ func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				v := _FROM_TYPE_GET(col, int(i))
+				v := _FROM_TYPE_UNSAFEGET(col, int(i))
 				var r _GOTYPE
 				_ASSIGN_CAST(r, v)
 				_TO_TYPE_SET(projCol, int(i), r)
@@ -173,7 +173,7 @@ func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 		} else {
 			col = _FROM_TYPE_SLICE(col, 0, int(n))
 			for execgen.RANGE(i, col) {
-				v := _FROM_TYPE_GET(col, int(i))
+				v := _FROM_TYPE_UNSAFEGET(col, int(i))
 				var r _GOTYPE
 				_ASSIGN_CAST(r, v)
 				_TO_TYPE_SET(projCol, int(i), r)

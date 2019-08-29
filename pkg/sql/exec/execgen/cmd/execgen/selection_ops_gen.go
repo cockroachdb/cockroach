@@ -43,7 +43,7 @@ if sel := batch.Selection(); sel != nil {
 	sel = sel[:n]
 	for _, i := range sel {
 		var cmp bool
-		arg := {{.Global.LTyp.Get "unsafe" "col" "int(i)"}}
+		arg := {{.Global.LTyp.Get "col" "int(i)"}}
 		{{(.Global.Assign "cmp" "arg" "p.constArg")}}
 		if cmp {{if .HasNulls}}&& !nulls.NullAt(i) {{end}}{
 			sel[idx] = i
@@ -56,7 +56,7 @@ if sel := batch.Selection(); sel != nil {
 	col = {{.Global.LTyp.Slice "col" "0" "int(n)"}}
 	for {{.Global.LTyp.Range "i" "col"}} {
 		var cmp bool
-		arg := {{.Global.LTyp.Get "unsafe" "col" "i"}}
+		arg := {{.Global.LTyp.Get "col" "i"}}
 		{{(.Global.Assign "cmp" "arg" "p.constArg")}}
 		if cmp {{if .HasNulls}}&& !nulls.NullAt(uint16(i)) {{end}}{
 			sel[idx] = uint16(i)
@@ -71,8 +71,8 @@ if sel := batch.Selection(); sel != nil {
 	sel = sel[:n]
 	for _, i := range sel {
 		var cmp bool
-		arg1 := {{.Global.LTyp.Get "unsafe" "col1" "int(i)"}}
-		arg2 := {{.Global.RTyp.Get "unsafe" "col2" "int(i)"}}
+		arg1 := {{.Global.LTyp.Get "col1" "int(i)"}}
+		arg2 := {{.Global.RTyp.Get "col2" "int(i)"}}
 		{{(.Global.Assign "cmp" "arg1" "arg2")}}
 		if cmp {{if .HasNulls}}&& !nulls.NullAt(i) {{end}}{
 			sel[idx] = i
@@ -87,8 +87,8 @@ if sel := batch.Selection(); sel != nil {
 	col2 = {{.Global.RTyp.Slice "col2" "0" "col1Len"}}
 	for {{.Global.LTyp.Range "i" "col1"}} {
 		var cmp bool
-		arg1 := {{.Global.LTyp.Get "unsafe" "col1" "i"}}
-		arg2 := {{.Global.RTyp.Get "unsafe" "col2" "i"}}
+		arg1 := {{.Global.LTyp.Get "col1" "i"}}
+		arg2 := {{.Global.RTyp.Get "col2" "i"}}
 		{{(.Global.Assign "cmp" "arg1" "arg2")}}
 		if cmp {{if .HasNulls}}&& !nulls.NullAt(uint16(i)) {{end}}{
 			sel[idx] = uint16(i)
