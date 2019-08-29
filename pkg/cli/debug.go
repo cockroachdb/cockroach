@@ -707,7 +707,7 @@ func runDebugCheckStoreRaft(ctx context.Context, db *engine.RocksDB) error {
 	}
 
 	for rangeID, info := range replicaInfo {
-		if info.truncatedIndex != info.firstIndex-1 {
+		if info.truncatedIndex != 0 && info.truncatedIndex != info.firstIndex-1 {
 			hasError = true
 			fmt.Printf("range %s: truncated index %v should equal first index %v - 1\n",
 				rangeID, info.truncatedIndex, info.firstIndex)
