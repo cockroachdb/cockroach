@@ -28,8 +28,8 @@ import (
 )
 
 // A Manager maintains an interval tree of key and key range latches. Latch
-// acquitions affecting keys or key ranges must wait on already-acquired latches
-// which overlap their key ranges to be released.
+// acquisitions affecting keys or key ranges must wait on already-acquired
+// latches which overlap their key ranges to be released.
 //
 // Latch acquisition attempts invoke Manager.Acquire and provide details about
 // the spans that they plan to touch and the timestamps they plan to touch them
