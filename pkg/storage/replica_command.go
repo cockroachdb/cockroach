@@ -1193,8 +1193,10 @@ func (r *Replica) atomicReplicationChange(
 		}
 	}
 
-	if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterLearnerSnapshot; fn != nil && fn() {
-		return desc, nil
+	if len(chgs.Additions()) > 0 {
+		if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterLearnerSnapshot; fn != nil && fn() {
+			return desc, nil
+		}
 	}
 
 	for _, target := range chgs.Removals() {
