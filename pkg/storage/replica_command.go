@@ -109,6 +109,50 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) strin
 	return s
 }
 
+// prepareSplitDescs returns the left and right descriptor of the split whose
+// right side is assigned rightRangeID and starts at splitKey. The supplied
+// expiration is the "sticky bit" stored on the right descriptor.
+func prepareSplitDescs(
+	st *cluster.Settings,
+	rightRangeID roachpb.RangeID,
+	splitKey roachpb.RKey,
+	expiration hlc.Timestamp,
+	leftDesc *roachpb.RangeDescriptor,
+) (*roachpb.RangeDescriptor, *roachpb.RangeDescriptor) {
+	// Create right hand side range descriptor.
+	rightDesc := roachpb.NewRangeDescriptor(rightRangeID, splitKey, leftDesc.EndKey, leftDesc.Replicas())
+
+	// Init updated version of existing range descriptor.
+	{
+		tmp := *leftDesc
+		leftDesc = &tmp
+	}
+
+	leftDesc.IncrementGeneration()
+	maybeMarkGenerationComparable(st, leftDesc)
+	leftDesc.EndKey = splitKey
+
+	// Set the generation of the right hand side descriptor to match that of the
+	// (updated) left hand side. See the comment on the field for an explanation
+	// of why generations are useful.
+	rightDesc.Generation = leftDesc.Generation
+	maybeMarkGenerationComparable(st, rightDesc)
+
+	// TODO(jeffreyxiao): Remove this check in 20.1.
+	// Note that the client API for splitting has expiration time as
+	// non-nullable, but the internal representation of a sticky bit is nullable
+	// for backwards compatibility. If expiration time is the zero timestamp, we
+	// must be sure not to set the sticky bit to the zero timestamp because the
+	// byte representation of setting the stickyBit to nil is different than
+	// setting it to hlc.Timestamp{}. This check ensures that CPuts would not
+	// fail on older versions.
+	if (expiration != hlc.Timestamp{}) {
+		rightDesc.StickyBit = &expiration
+	}
+
+	return leftDesc, rightDesc
+}
+
 // adminSplitWithDescriptor divides the range into into two ranges, using
 // either args.SplitKey (if provided) or an internally computed key that aims
 // to roughly equipartition the range by size. The split is done inside of a
@@ -202,13 +246,13 @@ func (r *Replica) adminSplitWithDescriptor(
 		// Even if the range is already split, we should still update the sticky
 		// bit if it has a later expiration time.
 		if desc.GetStickyBit().Less(args.ExpirationTime) {
-			newDesc := *desc
-			newDesc.StickyBit = &args.ExpirationTime
 			err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 				dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
 				if err != nil {
 					return err
 				}
+				newDesc := *desc
+				newDesc.StickyBit = &args.ExpirationTime
 
 				b := txn.NewBatch()
 				descKey := keys.RangeDescriptorKey(desc.StartKey)
@@ -250,31 +294,6 @@ func (r *Replica) adminSplitWithDescriptor(
 	if err != nil {
 		return reply, errors.Wrap(err, "unable to allocate range id for right hand side")
 	}
-	rightDesc := roachpb.NewRangeDescriptor(rightRangeID, splitKey, desc.EndKey, desc.Replicas())
-
-	// TODO(jeffreyxiao): Remove this check in 20.1.
-	// Note that the client API for splitting has expiration time as
-	// non-nullable, but the internal representation of a sticky bit is nullable
-	// for backwards compatibility. If expiration time is the zero timestamp, we
-	// must be sure not to set the sticky bit to the zero timestamp because the
-	// byte representation of setting the stickyBit to nil is different than
-	// setting it to hlc.Timestamp{}. This check ensures that CPuts would not
-	// fail on older versions.
-	if (args.ExpirationTime != hlc.Timestamp{}) {
-		rightDesc.StickyBit = &args.ExpirationTime
-	}
-
-	// Init updated version of existing range descriptor.
-	leftDesc := *desc
-	leftDesc.IncrementGeneration()
-	r.maybeMarkGenerationComparable(&leftDesc)
-	leftDesc.EndKey = splitKey
-
-	// Set the generation of the right hand side descriptor to match that of the
-	// (updated) left hand side. See the comment on the field for an explanation
-	// of why generations are useful.
-	rightDesc.Generation = leftDesc.Generation
-	r.maybeMarkGenerationComparable(rightDesc)
 
 	var extra string
 	if delayable {
@@ -282,25 +301,30 @@ func (r *Replica) adminSplitWithDescriptor(
 	}
 	extra += splitSnapshotWarningStr(r.RangeID, r.RaftStatus())
 
-	log.Infof(ctx, "initiating a split of this range at key %s [r%d] (%s)%s",
-		splitKey.StringWithDirs(nil /* valDirs */, 50 /* maxLen */), rightDesc.RangeID, reason, extra)
-
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "split closure begins")
 		defer log.Event(ctx, "split closure ends")
 		txn.SetDebugName(splitTxnName)
+
+		dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
+		if err != nil {
+			return err
+		}
+
+		leftDesc, rightDesc := prepareSplitDescs(r.ClusterSettings(), rightRangeID, splitKey, args.ExpirationTime, desc)
+
+		if txn.Epoch() == 0 {
+			log.Infof(ctx, "initiating a split of this range at key %s [r%d] (%s)%s",
+				splitKey.StringWithDirs(nil /* valDirs */, 50 /* maxLen */), rightDesc.RangeID, reason, extra)
+		}
+
 		// Update existing range descriptor for left hand side of
 		// split. Note that we mutate the descriptor for the left hand
 		// side of the split first to locate the txn record there.
 		{
-			dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
-			if err != nil {
-				return err
-			}
-
 			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
-			if err := updateRangeDescriptor(b, leftDescKey, dbDescValue, &leftDesc); err != nil {
+			if err := updateRangeDescriptor(b, leftDescKey, dbDescValue, leftDesc); err != nil {
 				return err
 			}
 			// Commit this batch first to ensure that the transaction record
@@ -327,20 +351,20 @@ func (r *Replica) adminSplitWithDescriptor(
 		// instead of a transaction; there's no reason this logging
 		// shouldn't be done in parallel via the batch with the updated
 		// range addressing.
-		if err := r.store.logSplit(ctx, txn, leftDesc, *rightDesc); err != nil {
+		if err := r.store.logSplit(ctx, txn, *leftDesc, *rightDesc); err != nil {
 			return err
 		}
 
 		b := txn.NewBatch()
 
-		// Create range descriptor for right hand side of the split.
+		// Write range descriptor for right hand side of the split.
 		rightDescKey := keys.RangeDescriptorKey(rightDesc.StartKey)
 		if err := updateRangeDescriptor(b, rightDescKey, nil, rightDesc); err != nil {
 			return err
 		}
 
 		// Update range descriptor addressing record(s).
-		if err := splitRangeAddressing(b, rightDesc, &leftDesc); err != nil {
+		if err := splitRangeAddressing(b, rightDesc, leftDesc); err != nil {
 			return err
 		}
 
@@ -350,7 +374,7 @@ func (r *Replica) adminSplitWithDescriptor(
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				SplitTrigger: &roachpb.SplitTrigger{
-					LeftDesc:  leftDesc,
+					LeftDesc:  *leftDesc,
 					RightDesc: *rightDesc,
 				},
 			},
@@ -415,10 +439,11 @@ func (r *Replica) adminUnsplitWithDescriptor(
 			return err
 		}
 
-		b := txn.NewBatch()
 		newDesc := *desc
 		newDesc.StickyBit = &hlc.Timestamp{}
 		descKey := keys.RangeDescriptorKey(newDesc.StartKey)
+
+		b := txn.NewBatch()
 		if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
 			return err
 		}
@@ -610,7 +635,7 @@ func (r *Replica) AdminMerge(
 			updatedLeftDesc.Generation = rightDesc.Generation
 		}
 		updatedLeftDesc.IncrementGeneration()
-		r.maybeMarkGenerationComparable(&updatedLeftDesc)
+		maybeMarkGenerationComparable(r.ClusterSettings(), &updatedLeftDesc)
 		updatedLeftDesc.EndKey = rightDesc.EndKey
 		log.Infof(ctx, "initiating a merge of %s into this range (%s)", &rightDesc, reason)
 
@@ -2189,8 +2214,8 @@ func (r *Replica) adminScatter(
 
 // maybeMarkGenerationComparable sets GenerationComparable if the cluster is at
 // a high enough version such that GenerationComparable won't be lost.
-func (r *Replica) maybeMarkGenerationComparable(desc *roachpb.RangeDescriptor) {
-	if r.store.ClusterSettings().Version.IsActive(cluster.VersionGenerationComparable) {
+func maybeMarkGenerationComparable(st *cluster.Settings, desc *roachpb.RangeDescriptor) {
+	if st.Version.IsActive(cluster.VersionGenerationComparable) {
 		desc.GenerationComparable = proto.Bool(true)
 	}
 }
