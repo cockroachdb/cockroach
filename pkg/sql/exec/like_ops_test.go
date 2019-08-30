@@ -119,21 +119,22 @@ func BenchmarkLikeOps(b *testing.B) {
 	source := NewRepeatableBatchSource(batch)
 	source.Init()
 
-	prefixOp := &selPrefixBytesBytesConstOp{
+	selConstOpBase := selConstOpBase{
 		OneInputNode: NewOneInputNode(source),
 		colIdx:       0,
-		constArg:     []byte(prefix),
+	}
+	prefixOp := &selPrefixBytesBytesConstOp{
+		selConstOpBase: selConstOpBase,
+		constArg:       []byte(prefix),
 	}
 	suffixOp := &selSuffixBytesBytesConstOp{
-		OneInputNode: NewOneInputNode(source),
-		colIdx:       0,
-		constArg:     []byte(suffix),
+		selConstOpBase: selConstOpBase,
+		constArg:       []byte(suffix),
 	}
 	pattern := fmt.Sprintf("^%s.*%s$", prefix, suffix)
 	regexpOp := &selRegexpBytesBytesConstOp{
-		OneInputNode: NewOneInputNode(source),
-		colIdx:       0,
-		constArg:     regexp.MustCompile(pattern),
+		selConstOpBase: selConstOpBase,
+		constArg:       regexp.MustCompile(pattern),
 	}
 
 	testCases := []struct {
