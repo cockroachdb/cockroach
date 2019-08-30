@@ -2371,6 +2371,60 @@ may increase either contention or retry errors, or both.`,
 		}, "Truncates the decimal values of `val`."),
 	),
 
+	"width_bucket": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{{"operand", types.Decimal}, {"b1", types.Decimal},
+				{"b2", types.Decimal}, {"count", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				operand, _ := args[0].(*tree.DDecimal).Float64()
+				b1, _ := args[1].(*tree.DDecimal).Float64()
+				b2, _ := args[2].(*tree.DDecimal).Float64()
+				count := int(tree.MustBeDInt(args[3]))
+				return tree.NewDInt(tree.DInt(widthBucket(operand, b1, b2, count))), nil
+			},
+			Info: "return the bucket number to which operand would be assigned in a histogram having count " +
+				"equal-width buckets spanning the range b1 to b2.",
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{{"operand", types.Int}, {"b1", types.Int},
+				{"b2", types.Int}, {"count", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				operand := float64(tree.MustBeDInt(args[0]))
+				b1 := float64(tree.MustBeDInt(args[1]))
+				b2 := float64(tree.MustBeDInt(args[2]))
+				count := int(tree.MustBeDInt(args[3]))
+				return tree.NewDInt(tree.DInt(widthBucket(operand, b1, b2, count))), nil
+			},
+			Info: "return the bucket number to which operand would be assigned in a histogram having count " +
+				"equal-width buckets spanning the range b1 to b2.",
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"operand", types.Any}, {"thresholds", types.AnyArray}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				operand := args[0]
+				thresholds := tree.MustBeDArray(args[1])
+
+				if !operand.ResolvedType().Equivalent(thresholds.Array[0].ResolvedType()) {
+					return tree.NewDInt(0), errors.New("Operand and thresholds must be of the same type")
+				}
+
+				for i, v := range thresholds.Array {
+					if operand.Compare(ctx, v) < 0 {
+						return tree.NewDInt(tree.DInt(i)), nil
+					}
+				}
+
+				return tree.NewDInt(tree.DInt(thresholds.Len())), nil
+			},
+			Info: "return the bucket number to which operand would be assigned given an array listing the " +
+				"lower bounds of the buckets; returns 0 for an input less than the first lower bound; the " +
+				"thresholds array must be sorted, smallest first, or unexpected results will be obtained",
+		},
+	),
+
 	// Array functions.
 
 	"string_to_array": makeBuiltin(arrayPropsNullableArgs(),
@@ -4685,6 +4739,25 @@ func rpad(s string, length int, fill string) (string, error) {
 	}
 
 	return buf.String(), nil
+}
+
+// widthBucket returns the bucket number to which operand would be assigned in a histogram having count
+// equal-width buckets spanning the range b1 to b2
+func widthBucket(operand float64, b1 float64, b2 float64, count int) int {
+	bucket := 0
+	if (b1 < b2 && operand > b2) || (b1 > b2 && operand < b2) {
+		return count + 1
+	}
+
+	if (b1 < b2 && operand < b1) || (b1 > b2 && operand > b1) {
+		return 0
+	}
+
+	width := (b2 - b1) / float64(count)
+	difference := operand - b1
+	bucket = int(math.Floor(difference/width) + 1)
+
+	return bucket
 }
 
 // CleanEncodingName sanitizes the string meant to represent a
