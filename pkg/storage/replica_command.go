@@ -238,6 +238,37 @@ func splitTxnAttempt(
 	return txn.Run(ctx, b)
 }
 
+func splitTxnStickyUpdateAttempt(
+	ctx context.Context, txn *client.Txn, desc *roachpb.RangeDescriptor, expiration hlc.Timestamp,
+) error {
+	dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
+	if err != nil {
+		return err
+	}
+	newDesc := *desc
+	newDesc.StickyBit = &expiration
+
+	b := txn.NewBatch()
+	descKey := keys.RangeDescriptorKey(desc.StartKey)
+	if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
+		return err
+	}
+	if err := updateRangeAddressing(b, &newDesc); err != nil {
+		return err
+	}
+	// End the transaction manually, instead of letting RunTransaction loop
+	// do it, in order to provide a sticky bit trigger.
+	b.AddRawRequest(&roachpb.EndTransactionRequest{
+		Commit: true,
+		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+			StickyBitTrigger: &roachpb.StickyBitTrigger{
+				StickyBit: expiration,
+			},
+		},
+	})
+	return txn.Run(ctx, b)
+}
+
 // adminSplitWithDescriptor divides the range into into two ranges, using
 // either args.SplitKey (if provided) or an internally computed key that aims
 // to roughly equipartition the range by size. The split is done inside of a
@@ -332,32 +363,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		// bit if it has a later expiration time.
 		if desc.GetStickyBit().Less(args.ExpirationTime) {
 			err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-				dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
-				if err != nil {
-					return err
-				}
-				newDesc := *desc
-				newDesc.StickyBit = &args.ExpirationTime
-
-				b := txn.NewBatch()
-				descKey := keys.RangeDescriptorKey(desc.StartKey)
-				if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
-					return err
-				}
-				if err := updateRangeAddressing(b, &newDesc); err != nil {
-					return err
-				}
-				// End the transaction manually, instead of letting RunTransaction loop
-				// do it, in order to provide a sticky bit trigger.
-				b.AddRawRequest(&roachpb.EndTransactionRequest{
-					Commit: true,
-					InternalCommitTrigger: &roachpb.InternalCommitTrigger{
-						StickyBitTrigger: &roachpb.StickyBitTrigger{
-							StickyBit: args.ExpirationTime,
-						},
-					},
-				})
-				return txn.Run(ctx, b)
+				return splitTxnStickyUpdateAttempt(ctx, txn, desc, args.ExpirationTime)
 			})
 			// The ConditionFailedError can occur because the descriptors acting as
 			// expected values in the CPuts used to update the range descriptor are
