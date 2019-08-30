@@ -20,8 +20,9 @@ import (
 // column is an interface that represents a raw array of a Go native type.
 type column interface{}
 
-// AppendArgs represents the arguments passed in to Vec.Append.
-type AppendArgs struct {
+// SliceArgs represents the arguments passed in to Vec.Append and
+// Nulls.duplicate.
+type SliceArgs struct {
 	// ColType is the type of both the destination and source slices.
 	ColType coltypes.T
 	// Src is the data being appended.
@@ -33,22 +34,17 @@ type AppendArgs struct {
 	DestIdx uint64
 	// SrcStartIdx is the index of the first element in Src that Append will
 	// append.
-	SrcStartIdx uint16
+	SrcStartIdx uint64
 	// SrcEndIdx is the exclusive end index of Src. i.e. the element in the index
 	// before SrcEndIdx is the last element appended to the destination slice,
 	// similar to Src[SrcStartIdx:SrcEndIdx].
-	SrcEndIdx uint16
+	SrcEndIdx uint64
 }
 
-// CopyArgs represents the arguments passed in to Vec.Copy.
-type CopyArgs struct {
-	// ColType is the type of both the destination and source slices.
-	ColType coltypes.T
-	// Src is the data being copied.
-	Src Vec
-	// Sel is an optional slice specifying indices to copy to the destination
-	// slice. Note that Src{Start,End}Idx apply to Sel.
-	Sel []uint16
+// ExtendedSliceArgs represents the extension of SliceArgs that is passed in to
+// Vec.Copy.
+type ExtendedSliceArgs struct {
+	SliceArgs
 	// Sel64 overrides Sel. Used when the amount of data being copied exceeds the
 	// representation capabilities of a []uint16.
 	Sel64 []uint64
@@ -57,14 +53,6 @@ type CopyArgs struct {
 	// selection vector is applied to the source vector, but the results are
 	// copied densely into the destination vector.
 	SelOnDest bool
-	// DestIdx is the first index that Copy will copy to.
-	DestIdx uint64
-	// SrcStartIdx is the index of the first element in Src that Copy will copy.
-	SrcStartIdx uint64
-	// SrcEndIdx is the exclusive end index of Src. i.e. the element in the index
-	// before SrcEndIdx is the last element copied into the destination slice,
-	// similar to Src[SrcStartIdx:SrcEndIdx].
-	SrcEndIdx uint64
 }
 
 // Vec is an interface that represents a column vector that's accessible by
@@ -104,21 +92,21 @@ type Vec interface {
 	// Do not call this from normal code - it'll always panic.
 	_TemplateType() []interface{}
 
-	// Append uses AppendArgs to append elements of a source Vec into this Vec.
+	// Append uses SliceArgs to append elements of a source Vec into this Vec.
 	// It is logically equivalent to:
 	// destVec = append(destVec[:args.DestIdx], args.Src[args.SrcStartIdx:args.SrcEndIdx])
 	// An optional Sel slice can also be provided to apply a filter on the source
 	// Vec.
-	// Refer to the AppendArgs comment for specifics and TestAppend for examples.
-	Append(AppendArgs)
+	// Refer to the SliceArgs comment for specifics and TestAppend for examples.
+	Append(SliceArgs)
 
-	// Copy uses CopyArgs to copy elements of a source Vec into this Vec. It is
+	// Copy uses ExtendedSliceArgs to copy elements of a source Vec into this Vec. It is
 	// logically equivalent to:
 	// copy(destVec[args.DestIdx:], args.Src[args.SrcStartIdx:args.SrcEndIdx])
 	// An optional Sel slice can also be provided to apply a filter on the source
 	// Vec.
-	// Refer to the CopyArgs comment for specifics and TestCopy for examples.
-	Copy(CopyArgs)
+	// Refer to the ExtendedSliceArgs comment for specifics and TestCopy for examples.
+	Copy(ExtendedSliceArgs)
 
 	// Slice returns a new Vec representing a slice of the current Vec from
 	// [start, end).

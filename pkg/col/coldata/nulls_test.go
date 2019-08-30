@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/stretchr/testify/require"
 )
 
@@ -221,6 +222,10 @@ func TestSetAndUnsetNulls(t *testing.T) {
 }
 
 func TestNullsDuplicate(t *testing.T) {
+	args := SliceArgs{
+		// Neither type nor the length here matter.
+		Src: NewMemColumn(coltypes.Bool, 0),
+	}
 	for _, destStartIdx := range pos {
 		for _, srcStartIdx := range pos {
 			for _, srcEndIdx := range pos {
@@ -230,7 +235,11 @@ func TestNullsDuplicate(t *testing.T) {
 						srcStartIdx, toAppend)
 					t.Run(name, func(t *testing.T) {
 						n := nulls3.Copy()
-						n.duplicate(&nulls5, nil /* sel */, destStartIdx, srcStartIdx, srcEndIdx)
+						args.Src.SetNulls(&nulls5)
+						args.DestIdx = destStartIdx
+						args.SrcStartIdx = srcStartIdx
+						args.SrcEndIdx = srcEndIdx
+						n.duplicate(args)
 						for i := uint64(0); i < destStartIdx; i++ {
 							require.Equal(t, nulls3.NullAt64(i), n.NullAt64(i))
 						}
@@ -252,11 +261,15 @@ func TestNullsDuplicate(t *testing.T) {
 }
 
 func TestNullsDuplicateWithSel(t *testing.T) {
+	args := SliceArgs{
+		// Neither type nor the length here matter.
+		Src: NewMemColumn(coltypes.Bool, 0),
+		Sel: make([]uint16, BatchSize),
+	}
 	// Make a selection vector with every even index. (This turns nulls10 into
 	// nulls5.)
-	sel := make([]uint16, BatchSize)
-	for i := range sel {
-		sel[i] = uint16(i) * 2
+	for i := range args.Sel {
+		args.Sel[i] = uint16(i) * 2
 	}
 
 	for _, destStartIdx := range pos {
@@ -268,7 +281,11 @@ func TestNullsDuplicateWithSel(t *testing.T) {
 						srcStartIdx, toAppend)
 					t.Run(name, func(t *testing.T) {
 						n := nulls3.Copy()
-						n.duplicate(&nulls10, sel, destStartIdx, srcStartIdx, srcEndIdx)
+						args.Src.SetNulls(&nulls10)
+						args.DestIdx = destStartIdx
+						args.SrcStartIdx = srcStartIdx
+						args.SrcEndIdx = srcEndIdx
+						n.duplicate(args)
 						for i := uint64(0); i < destStartIdx; i++ {
 							require.Equal(t, nulls3.NullAt64(i), n.NullAt64(i))
 						}

@@ -47,7 +47,7 @@ var _ apd.Decimal
 
 // */}}
 
-func (m *memColumn) Append(args AppendArgs) {
+func (m *memColumn) Append(args SliceArgs) {
 	switch args.ColType {
 	// {{range .}}
 	case _TYPES_T:
@@ -66,7 +66,7 @@ func (m *memColumn) Append(args AppendArgs) {
 				execgen.APPENDVAL(toCol, val)
 			}
 		}
-		m.nulls.append(args)
+		m.nulls.duplicate(args)
 		m.col = toCol
 	// {{end}}
 	default:
@@ -76,7 +76,11 @@ func (m *memColumn) Append(args AppendArgs) {
 
 // {{/*
 func _COPY_WITH_SEL(
-	m *memColumn, args CopyArgs, fromCol, toCol _GOTYPESLICE, sel interface{}, _SEL_ON_DEST bool,
+	m *memColumn,
+	args ExtendedSliceArgs,
+	fromCol, toCol _GOTYPESLICE,
+	sel interface{},
+	_SEL_ON_DEST bool,
 ) { // */}}
 	// {{define "copyWithSel"}}
 	if args.Src.MaybeHasNulls() {
@@ -111,7 +115,7 @@ func _COPY_WITH_SEL(
 
 // */}}
 
-func (m *memColumn) Copy(args CopyArgs) {
+func (m *memColumn) Copy(args ExtendedSliceArgs) {
 	m.Nulls().UnsetNullRange(args.DestIdx, args.DestIdx+(args.SrcEndIdx-args.SrcStartIdx))
 
 	switch args.ColType {
@@ -138,7 +142,7 @@ func (m *memColumn) Copy(args CopyArgs) {
 		}
 		// No Sel or Sel64.
 		execgen.COPYSLICE(toCol, fromCol, int(args.DestIdx), int(args.SrcStartIdx), int(args.SrcEndIdx))
-		m.nulls.copy(args)
+		m.nulls.duplicate(args.SliceArgs)
 	// {{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %s", args.ColType))

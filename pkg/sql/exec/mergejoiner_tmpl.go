@@ -805,13 +805,15 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 						// {{ end }}
 					} else {
 						out.Copy(
-							coldata.CopyArgs{
-								ColType:     colType,
-								Src:         src,
-								Sel:         sel,
-								DestIdx:     uint64(outStartIdx),
-								SrcStartIdx: uint64(o.builderState.right.curSrcStartIdx),
-								SrcEndIdx:   uint64(o.builderState.right.curSrcStartIdx + toAppend),
+							coldata.ExtendedSliceArgs{
+								SliceArgs: coldata.SliceArgs{
+									ColType:     colType,
+									Src:         src,
+									Sel:         sel,
+									DestIdx:     uint64(outStartIdx),
+									SrcStartIdx: uint64(o.builderState.right.curSrcStartIdx),
+									SrcEndIdx:   uint64(o.builderState.right.curSrcStartIdx + toAppend),
+								},
 							},
 						)
 					}
