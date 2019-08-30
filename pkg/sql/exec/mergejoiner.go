@@ -397,13 +397,13 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	groupEndIdx := groupStartIdx + groupLength
 	for cIdx, cType := range input.sourceTypes {
 		bufferedGroup.ColVec(cIdx).Append(
-			coldata.AppendArgs{
+			coldata.SliceArgs{
 				ColType:     cType,
 				Src:         batch.ColVec(cIdx),
 				Sel:         sel,
 				DestIdx:     destStartIdx,
-				SrcStartIdx: uint16(groupStartIdx),
-				SrcEndIdx:   uint16(groupEndIdx),
+				SrcStartIdx: uint64(groupStartIdx),
+				SrcEndIdx:   uint64(groupEndIdx),
 			},
 		)
 	}
