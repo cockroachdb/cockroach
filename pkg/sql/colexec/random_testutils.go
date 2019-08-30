@@ -40,7 +40,16 @@ func randomTypes(rng *rand.Rand, n int) []coltypes.T {
 // RandomVec populates vec with n random values of typ, setting each value to
 // null with a probability of nullProbability. It is assumed that n is in bounds
 // of the given vec.
-func RandomVec(rng *rand.Rand, typ coltypes.T, vec coldata.Vec, n int, nullProbability float64) {
+// bytesFixedLength (when greater than zero) specifies the fixed length of the
+// bytes slice to be generated. It is used only if typ == coltypes.Bytes.
+func RandomVec(
+	rng *rand.Rand,
+	typ coltypes.T,
+	bytesFixedLength int,
+	vec coldata.Vec,
+	n int,
+	nullProbability float64,
+) {
 	switch typ {
 	case coltypes.Bool:
 		bools := vec.Bool()
@@ -54,7 +63,11 @@ func RandomVec(rng *rand.Rand, typ coltypes.T, vec coldata.Vec, n int, nullProba
 	case coltypes.Bytes:
 		bytes := vec.Bytes()
 		for i := 0; i < n; i++ {
-			randBytes := make([]byte, rng.Intn(maxVarLen))
+			bytesLen := bytesFixedLength
+			if bytesLen <= 0 {
+				bytesLen = rng.Intn(maxVarLen)
+			}
+			randBytes := make([]byte, bytesLen)
 			// Read always returns len(bytes[i]) and nil.
 			_, _ = rand.Read(randBytes)
 			bytes.Set(i, randBytes)
@@ -116,7 +129,7 @@ func RandomBatch(
 		length = capacity
 	}
 	for i, typ := range typs {
-		RandomVec(rng, typ, batch.ColVec(i), length, nullProbability)
+		RandomVec(rng, typ, 0 /* bytesFixedLength */, batch.ColVec(i), length, nullProbability)
 	}
 	batch.SetLength(uint16(length))
 	return batch

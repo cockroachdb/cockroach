@@ -119,9 +119,11 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 func TestArrowBatchConverterRejectsUnsupportedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	typs := []coltypes.T{coltypes.Decimal, coltypes.Timestamp}
-	_, err := NewArrowBatchConverter(typs)
-	require.Error(t, err)
+	unsupportedTypes := []coltypes.T{coltypes.Decimal, coltypes.Timestamp}
+	for _, typ := range unsupportedTypes {
+		_, err := NewArrowBatchConverter([]coltypes.T{typ})
+		require.Error(t, err)
+	}
 }
 
 func TestArrowBatchConverterRandom(t *testing.T) {
