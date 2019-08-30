@@ -33,9 +33,11 @@ func TestSelLTInt64Int64ConstOp(t *testing.T) {
 	tups := tuples{{0}, {1}, {2}, {nil}}
 	runTests(t, []tuples{tups}, tuples{{0}, {1}}, orderedVerifier, []int{0}, func(input []Operator) (Operator, error) {
 		return &selLTInt64Int64ConstOp{
-			OneInputNode: NewOneInputNode(input[0]),
-			colIdx:       0,
-			constArg:     2,
+			selConstOpBase: selConstOpBase{
+				OneInputNode: NewOneInputNode(input[0]),
+				colIdx:       0,
+			},
+			constArg: 2,
 		}, nil
 	})
 }
@@ -52,9 +54,11 @@ func TestSelLTInt64Int64(t *testing.T) {
 	}
 	runTests(t, []tuples{tups}, tuples{{0, 1}}, orderedVerifier, []int{0, 1}, func(input []Operator) (Operator, error) {
 		return &selLTInt64Int64Op{
-			OneInputNode: NewOneInputNode(input[0]),
-			col1Idx:      0,
-			col2Idx:      1,
+			selOpBase: selOpBase{
+				OneInputNode: NewOneInputNode(input[0]),
+				col1Idx:      0,
+				col2Idx:      1,
+			},
 		}, nil
 	})
 }
@@ -70,9 +74,11 @@ func TestGetSelectionConstOperator(t *testing.T) {
 		t.Error(err)
 	}
 	expected := &selLTInt64Int64ConstOp{
-		OneInputNode: NewOneInputNode(input),
-		colIdx:       colIdx,
-		constArg:     constVal,
+		selConstOpBase: selConstOpBase{
+			OneInputNode: NewOneInputNode(input),
+			colIdx:       colIdx,
+		},
+		constArg: constVal,
 	}
 	if !reflect.DeepEqual(op, expected) {
 		t.Errorf("got %+v, expected %+v", op, expected)
@@ -90,9 +96,11 @@ func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
 		t.Error(err)
 	}
 	expected := &selLTInt64Int16ConstOp{
-		OneInputNode: NewOneInputNode(input),
-		colIdx:       colIdx,
-		constArg:     constVal,
+		selConstOpBase: selConstOpBase{
+			OneInputNode: NewOneInputNode(input),
+			colIdx:       colIdx,
+		},
+		constArg: constVal,
 	}
 	if !reflect.DeepEqual(op, expected) {
 		t.Errorf("got %+v, expected %+v", op, expected)
@@ -110,9 +118,11 @@ func TestGetSelectionOperator(t *testing.T) {
 		t.Error(err)
 	}
 	expected := &selGEInt16Int16Op{
-		OneInputNode: NewOneInputNode(input),
-		col1Idx:      col1Idx,
-		col2Idx:      col2Idx,
+		selOpBase: selOpBase{
+			OneInputNode: NewOneInputNode(input),
+			col1Idx:      col1Idx,
+			col2Idx:      col2Idx,
+		},
 	}
 	if !reflect.DeepEqual(op, expected) {
 		t.Errorf("got %+v, expected %+v", op, expected)
@@ -150,9 +160,11 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasN
 	source.Init()
 
 	plusOp := &selLTInt64Int64ConstOp{
-		OneInputNode: NewOneInputNode(source),
-		colIdx:       0,
-		constArg:     0,
+		selConstOpBase: selConstOpBase{
+			OneInputNode: NewOneInputNode(source),
+			colIdx:       0,
+		},
+		constArg: 0,
 	}
 	plusOp.Init()
 
@@ -208,9 +220,11 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 	source.Init()
 
 	plusOp := &selLTInt64Int64Op{
-		OneInputNode: NewOneInputNode(source),
-		col1Idx:      0,
-		col2Idx:      1,
+		selOpBase: selOpBase{
+			OneInputNode: NewOneInputNode(source),
+			col1Idx:      0,
+			col2Idx:      1,
+		},
 	}
 	plusOp.Init()
 
