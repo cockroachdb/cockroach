@@ -52,6 +52,13 @@ var binaryOpDecMethod = map[tree.BinaryOperator]string{
 	tree.Div:   "Quo",
 }
 
+var binaryOpDecCtx = map[tree.BinaryOperator]string{
+	tree.Plus:  "ExactCtx",
+	tree.Minus: "ExactCtx",
+	tree.Mult:  "ExactCtx",
+	tree.Div:   "DecimalCtx",
+}
+
 var comparisonOpInfix = map[tree.ComparisonOperator]string{
 	tree.EQ: "==",
 	tree.NE: "!=",
@@ -406,11 +413,10 @@ func (decimalCustomizer) getCmpOpCompareFunc() compareFunc {
 
 func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op overload, target, l, r string) string {
-		// todo(jordan): should tree.ExactCtx be used here? (#39540)
 		if op.BinOp == tree.Div {
 			return fmt.Sprintf(`
 			{
-				cond, err := tree.DecimalCtx.%s(&%s, &%s, &%s)
+				cond, err := tree.%s.%s(&%s, &%s, &%s)
 				if cond.DivisionByZero() {
 					execerror.NonVectorizedPanic(tree.ErrDivByZero)
 				}
@@ -418,10 +424,10 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 					execerror.NonVectorizedPanic(err)
 				}
 			}
-			`, binaryOpDecMethod[op.BinOp], target, l, r)
+			`, binaryOpDecCtx[op.BinOp], binaryOpDecMethod[op.BinOp], target, l, r)
 		}
-		return fmt.Sprintf("if _, err := tree.DecimalCtx.%s(&%s, &%s, &%s); err != nil { execerror.NonVectorizedPanic(err) }",
-			binaryOpDecMethod[op.BinOp], target, l, r)
+		return fmt.Sprintf("if _, err := tree.%s.%s(&%s, &%s, &%s); err != nil { execerror.NonVectorizedPanic(err) }",
+			binaryOpDecCtx[op.BinOp], binaryOpDecMethod[op.BinOp], target, l, r)
 	}
 }
 
@@ -621,7 +627,6 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 			// Note that this is the '/' operator, which has a decimal result.
 			// TODO(rafi): implement the '//' floor division operator.
 			// todo(rafi): is there a way to avoid allocating on each operation?
-			// todo(jordan): should tree.ExactCtx be used here? (#39540)
 			t = template.Must(template.New("").Parse(`
 			{
 				if {{.Right}} == 0 {
@@ -691,13 +696,13 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op overload, target, l, r string) string {
 		isDivision := op.BinOp == tree.Div
 		args := map[string]interface{}{
+			"Ctx":        binaryOpDecCtx[op.BinOp],
 			"Op":         binaryOpDecMethod[op.BinOp],
 			"IsDivision": isDivision,
 			"Target":     target, "Left": l, "Right": r,
 		}
 		buf := strings.Builder{}
 		// todo(rafi): is there a way to avoid allocating on each operation?
-		// todo(jordan): should tree.ExactCtx be used here? (#39540)
 		t := template.Must(template.New("").Parse(`
 			{
 				{{ if .IsDivision }}
@@ -707,7 +712,7 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 				{{ end }}
 				tmpDec := &apd.Decimal{}
 				tmpDec.SetFinite(int64({{.Right}}), 0)
-				if _, err := tree.DecimalCtx.{{.Op}}(&{{.Target}}, &{{.Left}}, tmpDec); err != nil {
+				if _, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, tmpDec); err != nil {
 					execerror.NonVectorizedPanic(err)
 				}
 			}
@@ -764,24 +769,24 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op overload, target, l, r string) string {
 		isDivision := op.BinOp == tree.Div
 		args := map[string]interface{}{
+			"Ctx":        binaryOpDecCtx[op.BinOp],
 			"Op":         binaryOpDecMethod[op.BinOp],
 			"IsDivision": isDivision,
 			"Target":     target, "Left": l, "Right": r,
 		}
 		buf := strings.Builder{}
 		// todo(rafi): is there a way to avoid allocating on each operation?
-		// todo(jordan): should tree.ExactCtx be used here? (#39540)
 		t := template.Must(template.New("").Parse(`
 			{
 				tmpDec := &apd.Decimal{}
 				tmpDec.SetFinite(int64({{.Left}}), 0)
 				{{ if .IsDivision }}
-				cond, err := tree.DecimalCtx.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})
+				cond, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})
 				if cond.DivisionByZero() {
 					execerror.NonVectorizedPanic(tree.ErrDivByZero)
 				}
 				{{ else }}
-				_, err := tree.DecimalCtx.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})
+				_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})
 				{{ end }}
 				if err != nil {
 					execerror.NonVectorizedPanic(err)
