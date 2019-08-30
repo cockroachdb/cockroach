@@ -100,6 +100,24 @@ func (a Attributes) String() string {
 	return strings.Join(a.Attrs, ",")
 }
 
+// NewRangeDescriptor returns a RangeDescriptor populated from the input.
+func NewRangeDescriptor(
+	rangeID RangeID, start, end RKey, replicas ReplicaDescriptors,
+) *RangeDescriptor {
+	repls := append([]ReplicaDescriptor(nil), replicas.All()...)
+	for i := range repls {
+		repls[i].ReplicaID = ReplicaID(i + 1)
+	}
+	desc := &RangeDescriptor{
+		RangeID:       rangeID,
+		StartKey:      start,
+		EndKey:        end,
+		NextReplicaID: ReplicaID(len(repls) + 1),
+	}
+	desc.SetReplicas(MakeReplicaDescriptors(repls))
+	return desc
+}
+
 // RSpan returns the RangeDescriptor's resolved span.
 func (r *RangeDescriptor) RSpan() RSpan {
 	return RSpan{Key: r.StartKey, EndKey: r.EndKey}
