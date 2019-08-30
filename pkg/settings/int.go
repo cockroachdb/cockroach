@@ -25,7 +25,7 @@ var _ Setting = &IntSetting{}
 
 // Get retrieves the int value in the setting.
 func (i *IntSetting) Get(sv *Values) int64 {
-	return sv.getInt64(i.slotIdx)
+	return sv.container.getInt64(i.slotIdx)
 }
 
 func (i *IntSetting) String(sv *Values) string {
@@ -57,21 +57,30 @@ func (i *IntSetting) Validate(v int64) error {
 	return nil
 }
 
-// Override changes the setting without validation.
+// Override changes the setting without validation and also overrides the
+// default value.
+//
 // For testing usage only.
 func (i *IntSetting) Override(sv *Values, v int64) {
 	sv.setInt64(i.slotIdx, v)
+	sv.setDefaultOverrideInt64(i.slotIdx, v)
 }
 
 func (i *IntSetting) set(sv *Values, v int64) error {
 	if err := i.Validate(v); err != nil {
 		return err
 	}
-	i.Override(sv, v)
+	sv.setInt64(i.slotIdx, v)
 	return nil
 }
 
 func (i *IntSetting) setToDefault(sv *Values) {
+	// See if the default value was overridden.
+	ok, val, _ := sv.getDefaultOverride(i.slotIdx)
+	if ok {
+		i.set(sv, val)
+		return
+	}
 	if err := i.set(sv, i.defaultValue); err != nil {
 		panic(err)
 	}

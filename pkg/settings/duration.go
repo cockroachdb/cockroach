@@ -13,7 +13,7 @@ package settings
 import (
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // DurationSetting is the interface of a setting variable that will be
@@ -61,10 +61,13 @@ func (d *DurationSetting) Validate(v time.Duration) error {
 	return nil
 }
 
-// Override changes the setting without validation.
+// Override changes the setting without validation and also overrides the
+// default value.
+//
 // For testing usage only.
 func (d *DurationSetting) Override(sv *Values, v time.Duration) {
 	sv.setInt64(d.slotIdx, int64(v))
+	sv.setDefaultOverrideInt64(d.slotIdx, int64(v))
 }
 
 func (d *DurationSetting) set(sv *Values, v time.Duration) error {
@@ -76,6 +79,12 @@ func (d *DurationSetting) set(sv *Values, v time.Duration) error {
 }
 
 func (d *DurationSetting) setToDefault(sv *Values) {
+	// See if the default value was overridden.
+	ok, val, _ := sv.getDefaultOverride(d.slotIdx)
+	if ok {
+		d.set(sv, time.Duration(val))
+		return
+	}
 	if err := d.set(sv, d.defaultValue); err != nil {
 		panic(err)
 	}
