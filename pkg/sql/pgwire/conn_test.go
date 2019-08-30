@@ -793,7 +793,7 @@ func TestMaliciousInputs(t *testing.T) {
 func TestReadTimeoutConnExits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Cannot use net.Pipe because deadlines are not supported.
-	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
+	ln, err := net.Listen("tcp", util.TestAddr.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -835,7 +835,7 @@ func TestReadTimeoutConnExits(t *testing.T) {
 		}()
 	}()
 
-	c, err := net.Dial(ln.Addr().Network(), ln.Addr().String())
+	c, err := net.Dial("tcp", ln.Addr().String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -852,6 +852,72 @@ func TestReadTimeoutConnExits(t *testing.T) {
 	}
 	cancel()
 	if err := <-errChan; err != context.Canceled {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestTcpConnExitsOnCloseRead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ln, err := net.Listen("tcp", util.TestAddr.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.Infof(context.TODO(), "started listener on %s", ln.Addr())
+	defer func() {
+		if err := ln.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	expectedRead := []byte("expectedRead")
+
+	errChan := make(chan error)
+	// Channel to receive original server connection from goroutine
+	connChan := make(chan net.Conn)
+	go func() {
+		defer close(errChan)
+		errChan <- func() error {
+			c, err := ln.Accept()
+			if err != nil {
+				return err
+			}
+			defer c.Close()
+			connChan <- c
+
+			// Assert that reads are performed normally.
+			readBytes := make([]byte, len(expectedRead))
+			if _, err := c.Read(readBytes); err != nil {
+				return err
+			}
+			if !bytes.Equal(readBytes, expectedRead) {
+				return errors.Errorf("expected %v got %v", expectedRead, readBytes)
+			}
+
+			_, err = c.Read(make([]byte, 1))
+			return err
+		}()
+	}()
+
+	c, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	if _, err := c.Write(expectedRead); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case err := <-errChan:
+		t.Fatalf("goroutine unexpectedly returned: %v", err)
+	case conn := <-connChan:
+		tcpConn := conn.(*net.TCPConn)
+		tcpConn.CloseRead()
+		break
+	}
+
+	if err := <-errChan; err != io.EOF {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
