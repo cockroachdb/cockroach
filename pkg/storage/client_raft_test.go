@@ -2918,8 +2918,10 @@ func TestReplicaGCRace(t *testing.T) {
 func TestStoreRangeMoveDecommissioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if testutils.NightlyStress() && util.RaceEnabled {
-		t.Skip("can't handle nightly stress: #37811")
+	if util.RaceEnabled {
+		// Six nodes is too much to reliably run under testrace with our aggressive
+		// liveness timings.
+		t.Skip("skipping under testrace: #39807 and #37811")
 	}
 
 	sc := storage.TestStoreConfig(nil)
