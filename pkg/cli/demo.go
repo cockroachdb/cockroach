@@ -22,11 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
@@ -45,13 +47,21 @@ interactive SQL prompt to it. Various datasets are available to be preloaded as
 subcommands: e.g. "cockroach demo startrek". See --help for a full list.
 
 By default, the 'movr' dataset is pre-loaded. You can also use --empty
-to avoid pre-loading a dataset.`,
+to avoid pre-loading a dataset.
+
+cockroach demo attempts to connect to a Cockroach Labs server to obtain a
+temporary enterprise license for demoing enterprise features and enable
+telemetry back to Cockroach Labs. In order to disable this behavior, set the
+environment variable "COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING".
+`,
 	Example: `  cockroach demo`,
 	Args:    cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(func(cmd *cobra.Command, _ []string) error {
 		return runDemo(cmd, nil /* gen */)
 	}),
 }
+
+const demoOrg = "Cockroach Labs - Production Testing"
 
 const defaultGeneratorName = "movr"
 
@@ -99,6 +109,10 @@ func init() {
 		genDemoCmd.Flags().AddFlagSet(genFlags)
 	}
 }
+
+// GetAndApplyLicense is not implemented in order to keep OSS/BSL builds successful.
+// The cliccl package sets this function if enterprise features are available to demo.
+var GetAndApplyLicense func(dbConn *gosql.DB, clusterID uuid.UUID, org string) (bool, error)
 
 func setupTransientServers(
 	cmd *cobra.Command, gen workload.Generator,
@@ -192,6 +206,33 @@ func setupTransientServers(
 		url.Path = gen.Meta().Name
 	}
 	urlStr := url.String()
+
+	// Start up the update check loop.
+	// We don't do this in (*server.Server).Start() because we don't want it
+	// in tests.
+	if !cluster.TelemetryOptOut() {
+		s.PeriodicallyCheckForUpdates(ctx)
+		// If we allow telemetry, then also try and get an enterprise license for the demo.
+		// GetAndApplyLicense will be nil in the pure OSS/BSL build of cockroach.
+		if GetAndApplyLicense != nil {
+			db, err := gosql.Open("postgres", urlStr)
+			if err != nil {
+				return ``, ``, cleanup, err
+			}
+			// Perform license acquisition asynchronously to avoid delay in cli startup.
+			go func() {
+				defer db.Close()
+				success, err := GetAndApplyLicense(db, s.ClusterID(), demoOrg)
+				if err != nil {
+					exitWithError("demo", err)
+				}
+				if !success {
+					const msg = "Unable to acquire demo license. Enterprise features are not enabled in this session.\n"
+					fmt.Fprint(stderr, msg)
+				}
+			}()
+		}
+	}
 
 	// If there is a load generator, create its database and load its
 	// fixture.

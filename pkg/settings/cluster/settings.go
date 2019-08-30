@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -72,6 +73,11 @@ type Settings struct {
 	// Set to 1 if a profile is active (if the profile is being grabbed through
 	// the `pprofui` server as opposed to the raw endpoint).
 	cpuProfiling int32 // atomic
+}
+
+// TelemetryOptOut is a place for controlling whether to opt out of telemetry or not.
+func TelemetryOptOut() bool {
+	return envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
 }
 
 // IsCPUProfiling returns true if a pprofui CPU profile is being recorded. This can

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -555,8 +554,6 @@ func createCommentTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.CommentsTable)
 }
 
-var reportingOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
-
 func runStmtAsRootWithRetry(
 	ctx context.Context, r runner, opName string, stmt string, qargs ...interface{},
 ) error {
@@ -585,7 +582,7 @@ var SettingsDefaultOverrides = map[string]string{
 
 func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 	// We're opting-out of the automatic opt-in. See discussion in updates.go.
-	if reportingOptOut {
+	if cluster.TelemetryOptOut() {
 		return nil
 	}
 	return runStmtAsRootWithRetry(
