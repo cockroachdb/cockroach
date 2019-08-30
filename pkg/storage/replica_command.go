@@ -302,8 +302,6 @@ func (r *Replica) adminSplitWithDescriptor(
 	extra += splitSnapshotWarningStr(r.RangeID, r.RaftStatus())
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		log.Event(ctx, "split closure begins")
-		defer log.Event(ctx, "split closure ends")
 		txn.SetDebugName(splitTxnName)
 
 		dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
