@@ -897,10 +897,10 @@ func ParseDDecimal(s string) (*DDecimal, error) {
 // SetString sets d to s. Any non-standard NaN values are converted to a
 // normal NaN. Any negative zero is converted to positive.
 func (d *DDecimal) SetString(s string) error {
-	// Using HighPrecisionCtx here restricts the max and min exponents to 2000,
-	// and the precision to 2000 places. Any rounding or other inexact conversion
-	// will result in an error.
-	_, res, err := HighPrecisionCtx.SetString(&d.Decimal, s)
+	// ExactCtx should be able to handle any decimal, but if there is any rounding
+	// or other inexact conversion, it will result in an error.
+	//_, res, err := HighPrecisionCtx.SetString(&d.Decimal, s)
+	_, res, err := ExactCtx.SetString(&d.Decimal, s)
 	if res != 0 || err != nil {
 		return makeParseError(s, types.Decimal, nil)
 	}
