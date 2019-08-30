@@ -1468,21 +1468,47 @@ func prepareChangeReplicasTrigger(
 func execChangeReplicasTxn(
 	ctx context.Context,
 	store *Store,
-	desc *roachpb.RangeDescriptor,
+	referenceDesc *roachpb.RangeDescriptor,
 	reason storagepb.RangeLogEventReason,
 	details string,
 	chgs []internalReplicationChange,
 ) (*roachpb.RangeDescriptor, error) {
 	var returnDesc *roachpb.RangeDescriptor
 
-	descKey := keys.RangeDescriptorKey(desc.StartKey)
+	descKey := keys.RangeDescriptorKey(referenceDesc.StartKey)
+
+	check := func(kvDesc *roachpb.RangeDescriptor) bool {
+		if len(chgs) == 0 {
+			// If there are no changes, we're trying to leave a joint config,
+			// so that's all we care about. But since leaving a joint config
+			// is done opportunistically whenever one is encountered, this is
+			// more likely to race than other operations. So we verify literally
+			// nothing about the descriptor, but once we get the descriptor out
+			// from conditionalGetDescValueFromDB, we'll check if it's in a
+			// joint config and if not, noop.
+			return true
+		}
+		// Otherwise, check that the descriptors are equal.
+		//
+		// TODO(tbg): check that the replica sets are equal only. I was going to
+		// do that but then discovered #40367. Try again in the 20.1 cycle.
+		return checkDescsEqual(referenceDesc)(kvDesc)
+	}
+
 	if err := store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "attempting txn")
 		txn.SetDebugName(replicaChangeTxnName)
-		_, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc.StartKey, checkDescsEqual(desc))
+		desc, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, referenceDesc.StartKey, check)
 		if err != nil {
 			return err
 		}
+		if len(chgs) == 0 && !desc.Replicas().InAtomicReplicationChange() {
+			// Nothing to do. See comment in 'check' above for details.
+			returnDesc = desc
+			return nil
+		}
+		// Note that we are now using the descriptor from KV, not the one passed
+		// into this method.
 		crt, err := prepareChangeReplicasTrigger(store, desc, chgs)
 		if err != nil {
 			return err
@@ -1545,10 +1571,13 @@ func execChangeReplicasTxn(
 		return nil
 	}); err != nil {
 		log.Event(ctx, err.Error())
-		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
+		// NB: desc may not be the descriptor we actually compared against, but
+		// either way this gives a good idea of what happened which is all it's
+		// supposed to do.
+		if msg, ok := maybeDescriptorChangedError(referenceDesc, err); ok {
 			err = &benignError{errors.New(msg)}
 		}
-		return nil, errors.Wrapf(err, "change replicas of r%d failed", desc.RangeID)
+		return nil, errors.Wrapf(err, "change replicas of r%d failed", referenceDesc.RangeID)
 	}
 	log.Event(ctx, "txn complete")
 	return returnDesc, nil
