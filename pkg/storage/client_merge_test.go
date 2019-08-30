@@ -2259,7 +2259,7 @@ func TestStoreRangeMergeDeadFollowerDuringTxn(t *testing.T) {
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
 	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
-	expErr := "merge of range into .* failed: waiting for all right-hand replicas to catch up"
+	expErr := "merge failed: waiting for all right-hand replicas to catch up"
 	if !testutils.IsPError(pErr, expErr) {
 		t.Fatalf("expected %q error, but got %v", expErr, pErr)
 	}

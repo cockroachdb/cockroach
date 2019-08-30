@@ -517,23 +517,6 @@ func (r *Replica) AdminMerge(
 ) (roachpb.AdminMergeResponse, *roachpb.Error) {
 	var reply roachpb.AdminMergeResponse
 
-	origLeftDesc := r.Desc()
-	if origLeftDesc.EndKey.Equal(roachpb.RKeyMax) {
-		// Merging the final range doesn't make sense.
-		return reply, roachpb.NewErrorf("cannot merge final range")
-	}
-
-	// Ensure that every current replica of the LHS has been initialized.
-	// Otherwise there is a rare race where the replica GC queue can GC a
-	// replica of the RHS too early. The comment on
-	// TestStoreRangeMergeUninitializedLHSFollower explains the situation in full.
-	if err := waitForReplicasInit(
-		ctx, r.store.cfg.NodeDialer, origLeftDesc.RangeID, origLeftDesc.Replicas().All(),
-	); err != nil {
-		return reply, roachpb.NewError(errors.Wrap(
-			err, "waiting for all left-hand replicas to initialize"))
-	}
-
 	runMergeTxn := func(txn *client.Txn) error {
 		log.Event(ctx, "merge txn begins")
 		txn.SetDebugName(mergeTxnName)
@@ -553,8 +536,30 @@ func (r *Replica) AdminMerge(
 			return err
 		}
 
+		// NB: reads do NOT impact transaction record placement.
+
+		origLeftDesc := r.Desc()
+		if origLeftDesc.EndKey.Equal(roachpb.RKeyMax) {
+			// Merging the final range doesn't make sense.
+			return errors.New("cannot merge final range")
+		}
+
+		dbOrigLeftDescValue, err := conditionalGetDescValueFromDB(ctx, txn, origLeftDesc)
+		if err != nil {
+			return err
+		}
+
+		// Ensure that every current replica of the LHS has been initialized.
+		// Otherwise there is a rare race where the replica GC queue can GC a
+		// replica of the RHS too early. The comment on
+		// TestStoreRangeMergeUninitializedLHSFollower explains the situation in full.
+		if err := waitForReplicasInit(
+			ctx, r.store.cfg.NodeDialer, origLeftDesc.RangeID, origLeftDesc.Replicas().All(),
+		); err != nil {
+			return errors.Wrap(err, "waiting for all left-hand replicas to initialize")
+		}
+
 		// Do a consistent read of the right hand side's range descriptor.
-		// NB: this read does NOT impact transaction record placement.
 		var rightDesc roachpb.RangeDescriptor
 		rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
 		dbRightDescKV, err := txn.Get(ctx, rightDescKey)
@@ -613,11 +618,6 @@ func (r *Replica) AdminMerge(
 		// transaction is this conditional put to change the left hand side's
 		// descriptor end key.
 		{
-			dbOrigLeftDescValue, err := conditionalGetDescValueFromDB(ctx, txn, origLeftDesc)
-			if err != nil {
-				return err
-			}
-
 			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(updatedLeftDesc.StartKey)
 			if err := updateRangeDescriptor(
@@ -725,8 +725,7 @@ func (r *Replica) AdminMerge(
 		}
 		if _, canRetry := errors.Cause(err).(*roachpb.TransactionRetryWithProtoRefreshError); !canRetry {
 			if err != nil {
-				return reply, roachpb.NewErrorf("merge of range into %d failed: %s",
-					origLeftDesc.RangeID, err)
+				return reply, roachpb.NewErrorf("merge failed: %s", err)
 			}
 			return reply, nil
 		}
