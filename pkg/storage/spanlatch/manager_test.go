@@ -33,25 +33,30 @@ var write = true
 var zeroTS = hlc.Timestamp{}
 
 func spans(from, to string, write bool) *spanset.SpanSet {
-	var span roachpb.Span
+	var spans spanset.SpanSet
+	add(&spans, from, to, write)
+	return &spans
+}
+
+func add(spans *spanset.SpanSet, from, to string, write bool) {
+	var start, end roachpb.Key
 	if to == "" {
-		span = roachpb.Span{Key: roachpb.Key(from)}
+		start = roachpb.Key(from)
 	} else {
-		span = roachpb.Span{Key: roachpb.Key(from), EndKey: roachpb.Key(to)}
+		start = roachpb.Key(from)
+		end = roachpb.Key(to)
 	}
 	if strings.HasPrefix(from, "local") {
-		span.Key = append(keys.LocalRangePrefix, span.Key...)
-		if span.EndKey != nil {
-			span.EndKey = append(keys.LocalRangePrefix, span.EndKey...)
+		start = append(keys.LocalRangePrefix, start...)
+		if end != nil {
+			end = append(keys.LocalRangePrefix, end...)
 		}
 	}
-	var spans spanset.SpanSet
 	access := spanset.SpanReadOnly
 	if write {
 		access = spanset.SpanReadWrite
 	}
-	spans.Add(access, span)
-	return &spans
+	spans.Add(access, roachpb.Span{Key: start, EndKey: end})
 }
 
 func testLatchSucceeds(t *testing.T, lgC <-chan *Guard) *Guard {
@@ -118,7 +123,7 @@ func TestLatchManager(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var m Manager
 
-	// Try latches with no overlapping already-acquired lathes.
+	// Try latches with no overlapping already-acquired latches.
 	lg1 := m.MustAcquire(spans("a", "", write), zeroTS)
 	m.Release(lg1)
 
@@ -135,6 +140,50 @@ func TestLatchManager(t *testing.T) {
 	// First write completes, second grabs latch.
 	m.Release(lg3)
 	testLatchSucceeds(t, lg4C)
+}
+
+func TestLatchManagerAcquireOverlappingSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var m Manager
+
+	// Acquire overlapping latches with different access patterns.
+	//    |----------|        <- Read latch [a-c)@t1
+	//        |----------|    <- Write latch [b-d)@t1
+	//
+	//    ^   ^      ^   ^
+	//    |   |      |   |
+	//    a   b      c   d
+	//
+	var ts0, ts1 = hlc.Timestamp{WallTime: 0}, hlc.Timestamp{WallTime: 1}
+	var spanSet spanset.SpanSet
+	add(&spanSet, "a", "c", read)
+	add(&spanSet, "b", "d", write)
+	lg1 := m.MustAcquire(&spanSet, ts1)
+
+	lg2C := m.MustAcquireCh(spans("a", "b", read), ts0)
+	lg2 := testLatchSucceeds(t, lg2C)
+	m.Release(lg2)
+
+	// We acquire reads at lower timestamps than writes to check for blocked
+	// acquisitions based on the original latch, not the latches declared in
+	// earlier test cases.
+	var latchCs []<-chan *Guard
+	latchCs = append(latchCs, m.MustAcquireCh(spans("a", "b", write), ts1))
+	latchCs = append(latchCs, m.MustAcquireCh(spans("b", "c", read), ts0))
+	latchCs = append(latchCs, m.MustAcquireCh(spans("b", "c", write), ts1))
+	latchCs = append(latchCs, m.MustAcquireCh(spans("c", "d", write), ts1))
+	latchCs = append(latchCs, m.MustAcquireCh(spans("c", "d", read), ts0))
+
+	for _, lgC := range latchCs {
+		testLatchBlocks(t, lgC)
+	}
+
+	m.Release(lg1)
+
+	for _, lgC := range latchCs {
+		lg := testLatchSucceeds(t, lgC)
+		m.Release(lg)
+	}
 }
 
 func TestLatchManagerNoWaitOnReadOnly(t *testing.T) {
@@ -207,11 +256,11 @@ func TestLatchManagerMultipleOverlappingSpans(t *testing.T) {
 	lg4 := m.MustAcquire(spans("g", "", write), zeroTS)
 
 	// Attempt to acquire latches overlapping each of them.
-	var spans spanset.SpanSet
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("a")})
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("b")})
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("e")})
-	lg5C := m.MustAcquireCh(&spans, zeroTS)
+	var spanSet spanset.SpanSet
+	add(&spanSet, "a", "", write)
+	add(&spanSet, "b", "", write)
+	add(&spanSet, "e", "", write)
+	lg5C := m.MustAcquireCh(&spanSet, zeroTS)
 
 	// Blocks until the first three prerequisite latches release.
 	testLatchBlocks(t, lg5C)
