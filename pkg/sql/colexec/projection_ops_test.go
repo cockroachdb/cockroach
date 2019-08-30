@@ -19,9 +19,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestProjPlusInt64Int64ConstOp(t *testing.T) {
@@ -170,6 +175,83 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	}
 	if !reflect.DeepEqual(op, expected) {
 		t.Errorf("got %+v, expected %+v", op, expected)
+	}
+}
+
+// TestRandomComparisons runs binary comparisons against all scalar types
+// (supported by the vectorized engine) with random non-null data verifying
+// that the result of Datum.Compare matches the result of the exec projection.
+func TestRandomComparisons(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const numTuples = 2048
+	rng, _ := randutil.NewPseudoRand()
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := evalCtx.Ctx()
+	expected := make([]bool, numTuples)
+	var da sqlbase.DatumAlloc
+	lDatums := make([]tree.Datum, numTuples)
+	rDatums := make([]tree.Datum, numTuples)
+	for _, ct := range types.Scalar {
+		if ct.Family() == types.DateFamily {
+			// TODO(jordan): #40354 tracks failure to compare infinite dates.
+			continue
+		}
+		typ := typeconv.FromColumnType(ct)
+		if typ == coltypes.Unhandled {
+			continue
+		}
+		typs := []coltypes.T{typ, typ, coltypes.Bool}
+		bytesFixedLength := 0
+		if ct.Family() == types.UuidFamily {
+			bytesFixedLength = 16
+		}
+		b := coldata.NewMemBatchWithSize(typs, numTuples)
+		lVec := b.ColVec(0)
+		rVec := b.ColVec(1)
+		ret := b.ColVec(2)
+		RandomVec(rng, typ, bytesFixedLength, lVec, numTuples, 0)
+		RandomVec(rng, typ, bytesFixedLength, rVec, numTuples, 0)
+		for i := range lDatums {
+			lDatums[i] = PhysicalTypeColElemToDatum(lVec, uint16(i), da, ct)
+			rDatums[i] = PhysicalTypeColElemToDatum(rVec, uint16(i), da, ct)
+		}
+		for _, cmpOp := range []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
+			for i := range lDatums {
+				cmp := lDatums[i].Compare(evalCtx, rDatums[i])
+				var b bool
+				switch cmpOp {
+				case tree.EQ:
+					b = cmp == 0
+				case tree.NE:
+					b = cmp != 0
+				case tree.LT:
+					b = cmp < 0
+				case tree.LE:
+					b = cmp <= 0
+				case tree.GT:
+					b = cmp > 0
+				case tree.GE:
+					b = cmp >= 0
+				}
+				expected[i] = b
+			}
+			input := newChunkingBatchSource(typs, []coldata.Vec{lVec, rVec, ret}, numTuples)
+			op, err := GetProjectionOperator(ct, ct, cmpOp, input, 0, 1, 2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			op.Init()
+			var idx uint16
+			for batch := op.Next(ctx); batch.Length() > 0; batch = op.Next(ctx) {
+				for i := uint16(0); i < batch.Length(); i++ {
+					absIdx := idx + i
+					assert.Equal(t, expected[absIdx], batch.ColVec(2).Bool()[i],
+						"expected %s %s %s (%s[%d]) to be %t found %t", lDatums[absIdx], cmpOp, rDatums[absIdx], ct, absIdx,
+						expected[absIdx], ret.Bool()[i])
+				}
+				idx += batch.Length()
+			}
+		}
 	}
 }
 
