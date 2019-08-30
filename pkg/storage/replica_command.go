@@ -153,6 +153,91 @@ func prepareSplitDescs(
 	return leftDesc, rightDesc
 }
 
+func splitTxnAttempt(
+	ctx context.Context,
+	store *Store,
+	txn *client.Txn,
+	rightRangeID roachpb.RangeID,
+	splitKey roachpb.RKey,
+	expiration hlc.Timestamp,
+	oldDesc *roachpb.RangeDescriptor,
+) error {
+	txn.SetDebugName(splitTxnName)
+
+	dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, oldDesc)
+	if err != nil {
+		return err
+	}
+	// TODO(tbg): return desc from conditionalGetDescValueFromDB and don't pass
+	// in oldDesc any more (just the start key).
+	desc := oldDesc
+	oldDesc = nil // prevent accidental use
+
+	leftDesc, rightDesc := prepareSplitDescs(store.ClusterSettings(), rightRangeID, splitKey, expiration, desc)
+
+	// Update existing range descriptor for left hand side of
+	// split. Note that we mutate the descriptor for the left hand
+	// side of the split first to locate the txn record there.
+	{
+		b := txn.NewBatch()
+		leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
+		if err := updateRangeDescriptor(b, leftDescKey, dbDescValue, leftDesc); err != nil {
+			return err
+		}
+		// Commit this batch first to ensure that the transaction record
+		// is created in the right place (split trigger relies on this),
+		// but also to ensure the transaction record is created _before_
+		// intents for the RHS range descriptor or addressing records.
+		// Keep in mind that the BeginTransaction request is injected
+		// to accompany the first write request, but if part of a batch
+		// which spans ranges, the dist sender does not guarantee the
+		// order which parts of the split batch arrive.
+		//
+		// Sending the batch containing only the first write guarantees
+		// the transaction record is written first, preventing cases
+		// where splits are aborted early due to conflicts with meta
+		// intents (see #9265).
+		log.Event(ctx, "updating LHS descriptor")
+		if err := txn.Run(ctx, b); err != nil {
+			return err
+		}
+	}
+
+	// Log the split into the range event log.
+	if err := store.logSplit(ctx, txn, *leftDesc, *rightDesc); err != nil {
+		return err
+	}
+
+	b := txn.NewBatch()
+
+	// Write range descriptor for right hand side of the split.
+	rightDescKey := keys.RangeDescriptorKey(rightDesc.StartKey)
+	if err := updateRangeDescriptor(b, rightDescKey, nil, rightDesc); err != nil {
+		return err
+	}
+
+	// Update range descriptor addressing record(s).
+	if err := splitRangeAddressing(b, rightDesc, leftDesc); err != nil {
+		return err
+	}
+
+	// End the transaction manually, instead of letting RunTransaction
+	// loop do it, in order to provide a split trigger.
+	b.AddRawRequest(&roachpb.EndTransactionRequest{
+		Commit: true,
+		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+			SplitTrigger: &roachpb.SplitTrigger{
+				LeftDesc:  *leftDesc,
+				RightDesc: *rightDesc,
+			},
+		},
+	})
+
+	// Commit txn with final batch (RHS descriptor and meta).
+	log.Event(ctx, "commit txn with batch containing RHS descriptor and meta records")
+	return txn.Run(ctx, b)
+}
+
 // adminSplitWithDescriptor divides the range into into two ranges, using
 // either args.SplitKey (if provided) or an internally computed key that aims
 // to roughly equipartition the range by size. The split is done inside of a
@@ -301,82 +386,11 @@ func (r *Replica) adminSplitWithDescriptor(
 	}
 	extra += splitSnapshotWarningStr(r.RangeID, r.RaftStatus())
 
+	log.Infof(ctx, "initiating a split of this range at key %s [r%d] (%s)%s",
+		splitKey.StringWithDirs(nil /* valDirs */, 50 /* maxLen */), rightRangeID, reason, extra)
+
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		txn.SetDebugName(splitTxnName)
-
-		dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
-		if err != nil {
-			return err
-		}
-
-		leftDesc, rightDesc := prepareSplitDescs(r.ClusterSettings(), rightRangeID, splitKey, args.ExpirationTime, desc)
-
-		if txn.Epoch() == 0 {
-			log.Infof(ctx, "initiating a split of this range at key %s [r%d] (%s)%s",
-				splitKey.StringWithDirs(nil /* valDirs */, 50 /* maxLen */), rightDesc.RangeID, reason, extra)
-		}
-
-		// Update existing range descriptor for left hand side of
-		// split. Note that we mutate the descriptor for the left hand
-		// side of the split first to locate the txn record there.
-		{
-			b := txn.NewBatch()
-			leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
-			if err := updateRangeDescriptor(b, leftDescKey, dbDescValue, leftDesc); err != nil {
-				return err
-			}
-			// Commit this batch first to ensure that the transaction record
-			// is created in the right place (split trigger relies on this),
-			// but also to ensure the transaction record is created _before_
-			// intents for the RHS range descriptor or addressing records.
-			// Keep in mind that the BeginTransaction request is injected
-			// to accompany the first write request, but if part of a batch
-			// which spans ranges, the dist sender does not guarantee the
-			// order which parts of the split batch arrive.
-			//
-			// Sending the batch containing only the first write guarantees
-			// the transaction record is written first, preventing cases
-			// where splits are aborted early due to conflicts with meta
-			// intents (see #9265).
-			log.Event(ctx, "updating LHS descriptor")
-			if err := txn.Run(ctx, b); err != nil {
-				return err
-			}
-		}
-
-		// Log the split into the range event log.
-		if err := r.store.logSplit(ctx, txn, *leftDesc, *rightDesc); err != nil {
-			return err
-		}
-
-		b := txn.NewBatch()
-
-		// Write range descriptor for right hand side of the split.
-		rightDescKey := keys.RangeDescriptorKey(rightDesc.StartKey)
-		if err := updateRangeDescriptor(b, rightDescKey, nil, rightDesc); err != nil {
-			return err
-		}
-
-		// Update range descriptor addressing record(s).
-		if err := splitRangeAddressing(b, rightDesc, leftDesc); err != nil {
-			return err
-		}
-
-		// End the transaction manually, instead of letting RunTransaction
-		// loop do it, in order to provide a split trigger.
-		b.AddRawRequest(&roachpb.EndTransactionRequest{
-			Commit: true,
-			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
-				SplitTrigger: &roachpb.SplitTrigger{
-					LeftDesc:  *leftDesc,
-					RightDesc: *rightDesc,
-				},
-			},
-		})
-
-		// Commit txn with final batch (RHS descriptor and meta).
-		log.Event(ctx, "commit txn with batch containing RHS descriptor and meta records")
-		return txn.Run(ctx, b)
+		return splitTxnAttempt(ctx, r.store, txn, rightRangeID, splitKey, args.ExpirationTime, desc)
 	}); err != nil {
 		// The ConditionFailedError can occur because the descriptors acting
 		// as expected values in the CPuts used to update the left or right
