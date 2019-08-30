@@ -804,7 +804,7 @@ func TestReadTimeoutConnExits(t *testing.T) {
 		}
 	}()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 	expectedRead := []byte("expectedRead")
 
 	// Start a goroutine that performs reads using a readTimeoutConn.
@@ -818,10 +818,9 @@ func TestReadTimeoutConnExits(t *testing.T) {
 			}
 			defer c.Close()
 
-			readTimeoutConn := newReadTimeoutConn(c, func() error { return ctx.Err() })
 			// Assert that reads are performed normally.
 			readBytes := make([]byte, len(expectedRead))
-			if _, err := readTimeoutConn.Read(readBytes); err != nil {
+			if _, err := c.Read(readBytes); err != nil {
 				return err
 			}
 			if !bytes.Equal(readBytes, expectedRead) {
@@ -830,7 +829,7 @@ func TestReadTimeoutConnExits(t *testing.T) {
 
 			// The main goroutine will cancel the context, which should abort
 			// this read with an appropriate error.
-			_, err = readTimeoutConn.Read(make([]byte, 1))
+			_, err = c.Read(make([]byte, 1))
 			return err
 		}()
 	}()

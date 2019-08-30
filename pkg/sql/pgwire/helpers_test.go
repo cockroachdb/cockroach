@@ -11,7 +11,6 @@
 package pgwire
 
 import (
-	"context"
 	"time"
 )
 
@@ -23,13 +22,13 @@ func (s *Server) DrainImpl(drainWait time.Duration, cancelWait time.Duration) er
 // that the cancellation of any context.CancelFunc in s.mu.connCancelMap does
 // not trigger a response by the associated connection. A slice of the original
 // context.CancelFuncs is returned.
-func (s *Server) OverwriteCancelMap() []context.CancelFunc {
+func (s *Server) OverwriteCancelMap() []*closeableReadConn {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	cancel := func() {}
-	originalCancels := make([]context.CancelFunc, 0, len(s.mu.connCancelMap))
+	cancel := closeableReadConn{}
+	originalCancels := make([]*closeableReadConn, 0, len(s.mu.connCancelMap))
 	for done, originalCancel := range s.mu.connCancelMap {
-		s.mu.connCancelMap[done] = cancel
+		s.mu.connCancelMap[done] = &cancel
 		originalCancels = append(originalCancels, originalCancel)
 	}
 	return originalCancels

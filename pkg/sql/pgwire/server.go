@@ -126,9 +126,17 @@ var (
 	sslUnsupported = []byte{'N'}
 )
 
+type closeableReadConn struct {
+	net.TCPConn
+}
+
 // cancelChanMap keeps track of channels that are closed after the associated
 // cancellation function has been called and the cancellation has taken place.
-type cancelChanMap map[chan struct{}]context.CancelFunc
+type cancelChanMap map[chan struct{}]*closeableReadConn
+
+func (c *closeableReadConn) closeRead() {
+	c.CloseRead()
+}
 
 // Server implements the server side of the PostgreSQL wire protocol.
 type Server struct {
@@ -388,11 +396,8 @@ func (s *Server) drainImpl(drainWait time.Duration, cancelWait time.Duration) er
 		if !s.mu.draining {
 			return true
 		}
-		for _, cancel := range connCancelMap {
-			// There is a possibility that different calls to SetDraining have
-			// overlapping connCancelMaps, but context.CancelFunc calls are
-			// idempotent.
-			cancel()
+		for _, conn := range connCancelMap {
+			conn.closeRead()
 		}
 		return false
 	}(); stop {
@@ -415,12 +420,12 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 	s.mu.Lock()
 	draining := s.mu.draining
 	if !draining {
-		var cancel context.CancelFunc
-		ctx, cancel = contextutil.WithCancel(ctx)
+		ctx, _ = contextutil.WithCancel(ctx)
 		done := make(chan struct{})
-		s.mu.connCancelMap[done] = cancel
+		tcpConn := conn.(*closeableReadConn)
+		s.mu.connCancelMap[done] = tcpConn
 		defer func() {
-			cancel()
+			tcpConn.closeRead()
 			close(done)
 			s.mu.Lock()
 			delete(s.mu.connCancelMap, done)
