@@ -246,10 +246,11 @@ func (r *Replica) adminSplitWithDescriptor(
 	log.Event(ctx, "found split key")
 
 	// Create right hand side range descriptor.
-	rightDesc, err := r.store.NewRangeDescriptor(ctx, splitKey, desc.EndKey, desc.Replicas())
+	rightRangeID, err := r.store.AllocateRangeID(ctx)
 	if err != nil {
-		return reply, errors.Errorf("unable to allocate right hand side range descriptor: %s", err)
+		return reply, errors.Wrap(err, "unable to allocate range id for right hand side")
 	}
+	rightDesc := roachpb.NewRangeDescriptor(rightRangeID, splitKey, desc.EndKey, desc.Replicas())
 
 	// TODO(jeffreyxiao): Remove this check in 20.1.
 	// Note that the client API for splitting has expiration time as
