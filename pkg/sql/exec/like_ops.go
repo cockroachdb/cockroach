@@ -94,18 +94,20 @@ func GetLikeOperator(
 		return nil, err
 	}
 	pat := []byte(pattern)
+	base := selConstOpBase{
+		OneInputNode: NewOneInputNode(input),
+		colIdx:       colIdx,
+	}
 	switch likeOpType {
 	case likeConstant:
 		return &selEQBytesBytesConstOp{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			constArg:     pat,
+			selConstOpBase: base,
+			constArg:       pat,
 		}, nil
 	case likeConstantNegate:
 		return &selNEBytesBytesConstOp{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			constArg:     pat,
+			selConstOpBase: base,
+			constArg:       pat,
 		}, nil
 	case likeNeverMatch:
 		return NewZeroOp(input), nil
@@ -115,27 +117,23 @@ func GetLikeOperator(
 		return NewNoop(input), nil
 	case likeSuffix:
 		return &selSuffixBytesBytesConstOp{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			constArg:     pat,
+			selConstOpBase: base,
+			constArg:       pat,
 		}, nil
 	case likeSuffixNegate:
 		return &selNotSuffixBytesBytesConstOp{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			constArg:     pat,
+			selConstOpBase: base,
+			constArg:       pat,
 		}, nil
 	case likePrefix:
 		return &selPrefixBytesBytesConstOp{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			constArg:     pat,
+			selConstOpBase: base,
+			constArg:       pat,
 		}, nil
 	case likePrefixNegate:
 		return &selNotPrefixBytesBytesConstOp{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			constArg:     pat,
+			selConstOpBase: base,
+			constArg:       pat,
 		}, nil
 	case likeRegexp:
 		re, err := tree.ConvertLikeToRegexp(ctx, pattern, false, '\\')
@@ -143,9 +141,8 @@ func GetLikeOperator(
 			return nil, err
 		}
 		return &selRegexpBytesBytesConstOp{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			constArg:     re,
+			selConstOpBase: base,
+			constArg:       re,
 		}, nil
 	case likeRegexpNegate:
 		re, err := tree.ConvertLikeToRegexp(ctx, pattern, false, '\\')
@@ -153,9 +150,8 @@ func GetLikeOperator(
 			return nil, err
 		}
 		return &selNotRegexpBytesBytesConstOp{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			constArg:     re,
+			selConstOpBase: base,
+			constArg:       re,
 		}, nil
 	default:
 		return nil, errors.AssertionFailedf("unsupported like op type %d", likeOpType)
@@ -177,20 +173,21 @@ func GetLikeProjectionOperator(
 		return nil, err
 	}
 	pat := []byte(pattern)
+	projConstOpBase := projConstOpBase{
+		OneInputNode: NewOneInputNode(input),
+		colIdx:       colIdx,
+		outputIdx:    resultIdx,
+	}
 	switch likeOpType {
 	case likeConstant:
 		return &projEQBytesBytesConstOp{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			constArg:     pat,
-			outputIdx:    resultIdx,
+			projConstOpBase: projConstOpBase,
+			constArg:        pat,
 		}, nil
 	case likeConstantNegate:
 		return &projNEBytesBytesConstOp{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			constArg:     pat,
-			outputIdx:    resultIdx,
+			projConstOpBase: projConstOpBase,
+			constArg:        pat,
 		}, nil
 	case likeNeverMatch:
 		return NewConstOp(input, coltypes.Bool, false, resultIdx)
@@ -200,31 +197,23 @@ func GetLikeProjectionOperator(
 		return NewConstOp(input, coltypes.Bool, true, resultIdx)
 	case likeSuffix:
 		return &projSuffixBytesBytesConstOp{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			constArg:     pat,
-			outputIdx:    resultIdx,
+			projConstOpBase: projConstOpBase,
+			constArg:        pat,
 		}, nil
 	case likeSuffixNegate:
 		return &projNotSuffixBytesBytesConstOp{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			constArg:     pat,
-			outputIdx:    resultIdx,
+			projConstOpBase: projConstOpBase,
+			constArg:        pat,
 		}, nil
 	case likePrefix:
 		return &projPrefixBytesBytesConstOp{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			constArg:     pat,
-			outputIdx:    resultIdx,
+			projConstOpBase: projConstOpBase,
+			constArg:        pat,
 		}, nil
 	case likePrefixNegate:
 		return &projNotPrefixBytesBytesConstOp{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			constArg:     pat,
-			outputIdx:    resultIdx,
+			projConstOpBase: projConstOpBase,
+			constArg:        pat,
 		}, nil
 	case likeRegexp:
 		re, err := tree.ConvertLikeToRegexp(ctx, pattern, false, '\\')
@@ -232,10 +221,8 @@ func GetLikeProjectionOperator(
 			return nil, err
 		}
 		return &projRegexpBytesBytesConstOp{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			constArg:     re,
-			outputIdx:    resultIdx,
+			projConstOpBase: projConstOpBase,
+			constArg:        re,
 		}, nil
 	case likeRegexpNegate:
 		re, err := tree.ConvertLikeToRegexp(ctx, pattern, false, '\\')
@@ -243,10 +230,8 @@ func GetLikeProjectionOperator(
 			return nil, err
 		}
 		return &projNotRegexpBytesBytesConstOp{
-			OneInputNode: NewOneInputNode(input),
-			colIdx:       colIdx,
-			constArg:     re,
-			outputIdx:    resultIdx,
+			projConstOpBase: projConstOpBase,
+			constArg:        re,
 		}, nil
 	default:
 		return nil, errors.AssertionFailedf("unsupported like op type %d", likeOpType)
