@@ -27,10 +27,12 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 	runTests(t, []tuples{{{1}, {2}, {nil}}}, tuples{{1, 2}, {2, 3}, {nil, nil}}, orderedVerifier,
 		[]int{0, 1}, func(input []Operator) (Operator, error) {
 			return &projPlusInt64Int64ConstOp{
-				OneInputNode: NewOneInputNode(input[0]),
-				colIdx:       0,
-				constArg:     1,
-				outputIdx:    1,
+				projConstOpBase: projConstOpBase{
+					OneInputNode: NewOneInputNode(input[0]),
+					colIdx:       0,
+					outputIdx:    1,
+				},
+				constArg: 1,
 			}, nil
 		})
 }
@@ -40,10 +42,12 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 		orderedVerifier, []int{0, 1, 2},
 		func(input []Operator) (Operator, error) {
 			return &projPlusInt64Int64Op{
-				OneInputNode: NewOneInputNode(input[0]),
-				col1Idx:      0,
-				col2Idx:      1,
-				outputIdx:    2,
+				projOpBase: projOpBase{
+					OneInputNode: NewOneInputNode(input[0]),
+					col1Idx:      0,
+					col2Idx:      1,
+					outputIdx:    2,
+				},
 			}, nil
 		})
 }
@@ -75,10 +79,12 @@ func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, h
 	source.Init()
 
 	plusOp := &projPlusInt64Int64ConstOp{
-		OneInputNode: NewOneInputNode(source),
-		colIdx:       0,
-		constArg:     1,
-		outputIdx:    1,
+		projConstOpBase: projConstOpBase{
+			OneInputNode: NewOneInputNode(source),
+			colIdx:       0,
+			outputIdx:    1,
+		},
+		constArg: 1,
 	}
 	plusOp.Init()
 
@@ -110,10 +116,12 @@ func TestGetProjectionConstOperator(t *testing.T) {
 		t.Error(err)
 	}
 	expected := &projMultFloat64Float64ConstOp{
-		OneInputNode: NewOneInputNode(input),
-		colIdx:       colIdx,
-		constArg:     constVal,
-		outputIdx:    outputIdx,
+		projConstOpBase: projConstOpBase{
+			OneInputNode: NewOneInputNode(input),
+			colIdx:       colIdx,
+			outputIdx:    outputIdx,
+		},
+		constArg: constVal,
 	}
 	if !reflect.DeepEqual(op, expected) {
 		t.Errorf("got %+v, expected %+v", op, expected)
@@ -132,10 +140,12 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 		t.Error(err)
 	}
 	expected := &projGEInt64Int16ConstOp{
-		OneInputNode: NewOneInputNode(input),
-		colIdx:       colIdx,
-		constArg:     constVal,
-		outputIdx:    outputIdx,
+		projConstOpBase: projConstOpBase{
+			OneInputNode: NewOneInputNode(input),
+			colIdx:       colIdx,
+			outputIdx:    outputIdx,
+		},
+		constArg: constVal,
 	}
 	if !reflect.DeepEqual(op, expected) {
 		t.Errorf("got %+v, expected %+v", op, expected)
@@ -154,10 +164,12 @@ func TestGetProjectionOperator(t *testing.T) {
 		t.Error(err)
 	}
 	expected := &projMultInt16Int16Op{
-		OneInputNode: NewOneInputNode(input),
-		col1Idx:      col1Idx,
-		col2Idx:      col2Idx,
-		outputIdx:    outputIdx,
+		projOpBase: projOpBase{
+			OneInputNode: NewOneInputNode(input),
+			col1Idx:      col1Idx,
+			col2Idx:      col2Idx,
+			outputIdx:    outputIdx,
+		},
 	}
 	if !reflect.DeepEqual(op, expected) {
 		t.Errorf("got %+v, expected %+v", op, expected)
@@ -226,20 +238,20 @@ func benchmarkProjOp(
 func BenchmarkProjOp(b *testing.B) {
 	projOpMap := map[string]func(*RepeatableBatchSource, coltypes.T) Operator{
 		"projPlusIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
+			base := projOpBase{
+				OneInputNode: NewOneInputNode(source),
+				col1Idx:      0,
+				col2Idx:      1,
+				outputIdx:    2,
+			}
 			switch intType {
 			case coltypes.Int64:
 				return &projPlusInt64Int64Op{
-					OneInputNode: NewOneInputNode(source),
-					col1Idx:      0,
-					col2Idx:      1,
-					outputIdx:    2,
+					projOpBase: base,
 				}
 			case coltypes.Int32:
 				return &projPlusInt32Int32Op{
-					OneInputNode: NewOneInputNode(source),
-					col1Idx:      0,
-					col2Idx:      1,
-					outputIdx:    2,
+					projOpBase: base,
 				}
 			default:
 				b.Fatalf("unsupported type: %s", intType)
@@ -247,20 +259,20 @@ func BenchmarkProjOp(b *testing.B) {
 			}
 		},
 		"projMinusIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
+			base := projOpBase{
+				OneInputNode: NewOneInputNode(source),
+				col1Idx:      0,
+				col2Idx:      1,
+				outputIdx:    2,
+			}
 			switch intType {
 			case coltypes.Int64:
 				return &projMinusInt64Int64Op{
-					OneInputNode: NewOneInputNode(source),
-					col1Idx:      0,
-					col2Idx:      1,
-					outputIdx:    2,
+					projOpBase: base,
 				}
 			case coltypes.Int32:
 				return &projMinusInt32Int32Op{
-					OneInputNode: NewOneInputNode(source),
-					col1Idx:      0,
-					col2Idx:      1,
-					outputIdx:    2,
+					projOpBase: base,
 				}
 			default:
 				b.Fatalf("unsupported type: %s", intType)
@@ -268,20 +280,20 @@ func BenchmarkProjOp(b *testing.B) {
 			}
 		},
 		"projMultIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
+			base := projOpBase{
+				OneInputNode: NewOneInputNode(source),
+				col1Idx:      0,
+				col2Idx:      1,
+				outputIdx:    2,
+			}
 			switch intType {
 			case coltypes.Int64:
 				return &projMultInt64Int64Op{
-					OneInputNode: NewOneInputNode(source),
-					col1Idx:      0,
-					col2Idx:      1,
-					outputIdx:    2,
+					projOpBase: base,
 				}
 			case coltypes.Int32:
 				return &projMultInt32Int32Op{
-					OneInputNode: NewOneInputNode(source),
-					col1Idx:      0,
-					col2Idx:      1,
-					outputIdx:    2,
+					projOpBase: base,
 				}
 			default:
 				b.Fatalf("unsupported type: %s", intType)
@@ -289,20 +301,20 @@ func BenchmarkProjOp(b *testing.B) {
 			}
 		},
 		"projDivIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
+			base := projOpBase{
+				OneInputNode: NewOneInputNode(source),
+				col1Idx:      0,
+				col2Idx:      1,
+				outputIdx:    2,
+			}
 			switch intType {
 			case coltypes.Int64:
 				return &projDivInt64Int64Op{
-					OneInputNode: NewOneInputNode(source),
-					col1Idx:      0,
-					col2Idx:      1,
-					outputIdx:    2,
+					projOpBase: base,
 				}
 			case coltypes.Int32:
 				return &projDivInt32Int32Op{
-					OneInputNode: NewOneInputNode(source),
-					col1Idx:      0,
-					col2Idx:      1,
-					outputIdx:    2,
+					projOpBase: base,
 				}
 			default:
 				b.Fatalf("unsupported type: %s", intType)
