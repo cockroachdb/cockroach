@@ -61,6 +61,9 @@ type Settings struct {
 	// Manual defaults to false. If set, lets this ClusterSetting's MakeUpdater
 	// method return a dummy updater that simply throws away all values. This is
 	// for use in tests for which manual control is desired.
+	//
+	// Also see the Override() method that different types of settings provide for
+	// overwriting the default of a single setting.
 	Manual atomic.Value // bool
 
 	Version ExposedClusterVersion
@@ -255,6 +258,7 @@ func MakeTestingClusterSettingsWithVersion(minVersion, serverVersion roachpb.Ver
 // MakeClusterSettings makes a new ClusterSettings object for the given minimum
 // supported and server version, respectively.
 func MakeClusterSettings(minVersion, serverVersion roachpb.Version) *Settings {
+
 	s := &Settings{}
 
 	// Initialize the setting. Note that baseVersion starts out with the zero
