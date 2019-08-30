@@ -347,10 +347,6 @@ func (r *Replica) adminSplitWithDescriptor(
 		}
 
 		// Log the split into the range event log.
-		// TODO(spencer): event logging API should accept a batch
-		// instead of a transaction; there's no reason this logging
-		// shouldn't be done in parallel via the batch with the updated
-		// range addressing.
 		if err := r.store.logSplit(ctx, txn, *leftDesc, *rightDesc); err != nil {
 			return err
 		}
