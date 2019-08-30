@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"fmt"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -24,6 +25,7 @@ const (
 	sizeOfInt32   = int(unsafe.Sizeof(int32(0)))
 	sizeOfInt64   = int(unsafe.Sizeof(int64(0)))
 	sizeOfFloat64 = int(unsafe.Sizeof(float64(0)))
+	sizeOfTime    = int(unsafe.Sizeof(time.Time{}))
 )
 
 // EstimateBatchSizeBytes returns an estimated amount of bytes needed to
@@ -56,8 +58,7 @@ func EstimateBatchSizeBytes(vecTypes []coltypes.T, batchLength int) int {
 			// to hold the arbitrary precision decimal objects.
 			acc += 50
 		case coltypes.Timestamp:
-			// time.Time has 2 int64s and a pointer.
-			acc += sizeOfInt64 * 3
+			acc += sizeOfTime
 		default:
 			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", t))
 		}

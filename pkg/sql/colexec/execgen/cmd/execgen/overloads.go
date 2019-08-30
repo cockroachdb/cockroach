@@ -1024,9 +1024,8 @@ func (c timestampCustomizer) getCmpOpCompareFunc() compareFunc {
 func (timestampCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
 		return fmt.Sprintf(`
-		  s, ns := %[2]s.Second(), %[2]s.Nanosecond()
+		  s := %[2]s.UnixNano()
 		  %[1]s = memhash64(noescape(unsafe.Pointer(&s)), %[1]s)
-		  %[1]s = memhash64(noescape(unsafe.Pointer(&ns)), %[1]s)
 		`, target, v)
 	}
 }
