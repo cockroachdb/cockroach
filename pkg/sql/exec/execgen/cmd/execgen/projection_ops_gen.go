@@ -35,18 +35,30 @@ import (
 	"github.com/pkg/errors"
 )
 
+// projConstOpBase contains all of the fields for binary projections with a
+// constant, except for the constant itself.
+type projConstOpBase struct {
+	OneInputNode
+  colIdx int
+  outputIdx int
+}
+
+// projOpBase contains all of the fields for non-constant binary projections.
+type projOpBase struct {
+	OneInputNode
+  col1Idx int
+  col2Idx int
+  outputIdx int
+}
+
 {{define "opRConstName"}}proj{{.Name}}{{.LTyp}}{{.RTyp}}ConstOp{{end}}
 {{define "opLConstName"}}proj{{.Name}}{{.LTyp}}Const{{.RTyp}}Op{{end}}
 {{define "opName"}}proj{{.Name}}{{.LTyp}}{{.RTyp}}Op{{end}}
 
 {{define "projRConstOp"}}
 type {{template "opRConstName" .}} struct {
-	OneInputNode
-
-	colIdx   int
+  projConstOpBase
 	constArg {{.RGoType}}
-
-	outputIdx int
 }
 
 func (p {{template "opRConstName" .}}) EstimateStaticMemoryUsage() int {
@@ -94,12 +106,8 @@ func (p {{template "opRConstName" .}}) Init() {
 
 {{define "projLConstOp"}}
 type {{template "opLConstName" .}} struct {
-	OneInputNode
-
-	colIdx   int
+  projConstOpBase
 	constArg {{.LGoType}}
-
-	outputIdx int
 }
 
 func (p {{template "opLConstName" .}}) EstimateStaticMemoryUsage() int {
@@ -147,12 +155,7 @@ func (p {{template "opLConstName" .}}) Init() {
 
 {{define "projOp"}}
 type {{template "opName" .}} struct {
-	OneInputNode
-
-	col1Idx int
-	col2Idx int
-
-	outputIdx int
+  projOpBase
 }
 
 func (p {{template "opName" .}}) EstimateStaticMemoryUsage() int {
@@ -184,7 +187,7 @@ func (p {{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 		col1 = {{.LTyp.Slice "col1" "0" "int(n)"}}
 		colLen := {{.LTyp.Len "col1"}}
 		_ = projCol[colLen-1]
-		_ = {{.LTyp.Slice "col2" "0" "colLen-1"}}
+		_ = {{.LTyp.Get "col2" "colLen-1"}}
 		for {{.LTyp.Range "i" "col1"}} {
 			arg1 := {{.LTyp.Get "col1" "i"}}
 			arg2 := {{.LTyp.Get "col2" "i"}}
@@ -229,6 +232,11 @@ func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
 	constArg tree.Datum,
   outputIdx int,
 ) (Operator, error) {
+  projConstOpBase := projConstOpBase {
+    OneInputNode: NewOneInputNode(input),
+    colIdx: colIdx,
+    outputIdx: outputIdx,
+  }
 	c, err := typeconv.GetDatumToPhysicalFn({{if $left}}leftColType{{else}}rightColType{{end}})(constArg)
 	if err != nil {
 		return nil, err
@@ -245,12 +253,7 @@ func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
 				{{range $overloads}}
 				{{if .IsBinOp}}
 				case tree.{{.Name}}:
-					return &{{if $left}}{{template "opLConstName" .}}{{else}}{{template "opRConstName" .}}{{end}}{
-						OneInputNode: NewOneInputNode(input),
-						colIdx:   colIdx,
-						constArg: c.({{if $left}}{{.LGoType}}{{else}}{{.RGoType}}{{end}}),
-						outputIdx: outputIdx,
-					}, nil
+					return &{{if $left}}{{template "opLConstName" .}}{{else}}{{template "opRConstName" .}}{{end}}{projConstOpBase: projConstOpBase, constArg: c.({{if $left}}{{.LGoType}}{{else}}{{.RGoType}}{{end}})}, nil
 				{{end}}
 				{{end}}
 				default:
@@ -261,12 +264,7 @@ func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
 				{{range $overloads}}
 				{{if .IsCmpOp}}
 				case tree.{{.Name}}:
-					return &{{if $left}}{{template "opLConstName" .}}{{else}}{{template "opRConstName" .}}{{end}}{
-						OneInputNode: NewOneInputNode(input),
-						colIdx:   colIdx,
-						constArg: c.({{if $left}}{{.LGoType}}{{else}}{{.RGoType}}{{end}}),
-						outputIdx: outputIdx,
-					}, nil
+					return &{{if $left}}{{template "opLConstName" .}}{{else}}{{template "opRConstName" .}}{{end}}{projConstOpBase: projConstOpBase, constArg: c.({{if $left}}{{.LGoType}}{{else}}{{.RGoType}}{{end}})}, nil
 				{{end}}
 				{{end}}
 				default:
@@ -297,6 +295,7 @@ func GetProjectionOperator(
 	col2Idx int,
   outputIdx int,
 ) (Operator, error) {
+  projOpBase := projOpBase{OneInputNode: NewOneInputNode(input), col1Idx: col1Idx, col2Idx: col2Idx, outputIdx: outputIdx}
 	switch leftType := typeconv.FromColumnType(leftColType); leftType {
 	{{range $lTyp, $rTypToOverloads := .LTypToRTypToOverloads}}
 	case coltypes.{{$lTyp}}:
@@ -308,13 +307,7 @@ func GetProjectionOperator(
 				switch op {
 				{{range $overloads}}
 				{{if .IsBinOp}}
-				case tree.{{.Name}}:
-					return &{{template "opName" .}}{
-						OneInputNode: NewOneInputNode(input),
-						col1Idx:   col1Idx,
-						col2Idx:   col2Idx,
-						outputIdx: outputIdx,
-					}, nil
+				case tree.{{.Name}}: return &{{template "opName" .}}{projOpBase: projOpBase}, nil
 				{{end}}
 				{{end}}
 				default:
@@ -324,13 +317,7 @@ func GetProjectionOperator(
 				switch op {
 				{{range $overloads}}
 				{{if .IsCmpOp}}
-				case tree.{{.Name}}:
-					return &{{template "opName" .}}{
-						OneInputNode: NewOneInputNode(input),
-						col1Idx:   col1Idx,
-						col2Idx:   col2Idx,
-						outputIdx: outputIdx,
-					}, nil
+				case tree.{{.Name}}: return &{{template "opName" .}}{projOpBase: projOpBase}, nil
 				{{end}}
 				{{end}}
 				default:

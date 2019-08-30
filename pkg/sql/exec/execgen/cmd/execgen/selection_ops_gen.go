@@ -35,6 +35,20 @@ import (
 	"github.com/pkg/errors"
 )
 
+// selConstOpBase contains all of the fields for binary selections with a
+// constant, except for the constant itself.
+type selConstOpBase struct {
+	OneInputNode
+  colIdx int
+}
+
+// projOpBase contains all of the fields for non-constant binary selections.
+type selOpBase struct {
+	OneInputNode
+  col1Idx int
+  col2Idx int
+}
+
 {{define "opConstName"}}sel{{.Name}}{{.LTyp}}{{.RTyp}}ConstOp{{end}}
 {{define "opName"}}sel{{.Name}}{{.LTyp}}{{.RTyp}}Op{{end}}
 
@@ -100,9 +114,7 @@ if sel := batch.Selection(); sel != nil {
 
 {{define "selConstOp"}}
 type {{template "opConstName" .}} struct {
-	OneInputNode
-
-	colIdx   int
+  selConstOpBase
 	constArg {{.RGoType}}
 }
 
@@ -137,10 +149,7 @@ func (p {{template "opConstName" .}}) Init() {
 
 {{define "selOp"}}
 type {{template "opName" .}} struct {
-	OneInputNode
-
-	col1Idx int
-	col2Idx int
+  selOpBase
 }
 
 func (p *{{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
@@ -201,6 +210,10 @@ func GetSelectionConstOperator(
 	if err != nil {
 		return nil, err
 	}
+  selConstOpBase := selConstOpBase {
+		OneInputNode: NewOneInputNode(input),
+		colIdx: colIdx,
+  }
 	switch leftType := typeconv.FromColumnType(leftColType); leftType {
 	{{range $lTyp, $rTypToOverloads := .}}
 	case coltypes.{{$lTyp}}:
@@ -210,11 +223,7 @@ func GetSelectionConstOperator(
 			switch cmpOp {
 			{{range $overloads}}
 			case tree.{{.Name}}:
-				return &{{template "opConstName" .}}{
-					OneInputNode: NewOneInputNode(input),
-					colIdx:   colIdx,
-					constArg: c.({{.RGoType}}),
-				}, nil
+				return &{{template "opConstName" .}}{selConstOpBase: selConstOpBase, constArg: c.({{.RGoType}})}, nil
 			{{end}}
 			default:
 				return nil, errors.Errorf("unhandled comparison operator: %s", cmpOp)
@@ -239,6 +248,11 @@ func GetSelectionOperator(
 	col1Idx int,
 	col2Idx int,
 ) (Operator, error) {
+  selOpBase := selOpBase {
+		OneInputNode: NewOneInputNode(input),
+		col1Idx: col1Idx,
+		col2Idx: col2Idx,
+  }
 	switch leftType := typeconv.FromColumnType(leftColType); leftType {
 	{{range $lTyp, $rTypToOverloads := .}}
 	case coltypes.{{$lTyp}}:
@@ -248,11 +262,7 @@ func GetSelectionOperator(
 			switch cmpOp {
 			{{range $overloads}}
 			case tree.{{.Name}}:
-				return &{{template "opName" .}}{
-					OneInputNode: NewOneInputNode(input),
-					col1Idx: col1Idx,
-					col2Idx: col2Idx,
-				}, nil
+				return &{{template "opName" .}}{selOpBase: selOpBase}, nil
 			{{end}}
 			default:
 				return nil, errors.Errorf("unhandled comparison operator: %s", cmpOp)
