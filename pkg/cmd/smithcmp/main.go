@@ -24,7 +24,6 @@ import (
 	"math/big"
 	"math/rand"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -96,7 +95,10 @@ func main() {
 	if opts.Postgres {
 		smithOpts = append(smithOpts, sqlsmith.PostgresMode())
 	} else if compare {
-		smithOpts = append(smithOpts, sqlsmith.CompareMode())
+		smithOpts = append(smithOpts,
+			sqlsmith.CompareMode(),
+			sqlsmith.DisableCRDBFns(),
+		)
 	}
 	if _, ok := conns[opts.Smither]; !ok {
 		log.Fatalf("Smither option not present in databases: %s", opts.Smither)
@@ -137,7 +139,13 @@ func main() {
 			fmt.Printf("pinging %s...", name)
 			if err := conn.Ping(); err != nil {
 				fmt.Printf("\n%s: ping failure: %v\nprevious SQL:\n%s;\n", name, err, stmt)
-				os.Exit(1)
+				// Try to reconnect.
+				db := opts.Databases[name]
+				newConn, err := NewConn(db.Addr, db.InitSQL, opts.InitSQL)
+				if err != nil {
+					log.Fatalf("tried to reconnect: %v\n", err)
+				}
+				conns[name] = newConn
 			}
 			fmt.Printf(" %s\n", timeutil.Since(start))
 		}
@@ -167,12 +175,6 @@ func compareConns(stmt string, smitherName string, conns map[string]*Conn) error
 			if err != nil {
 				return errors.Wrap(err, name)
 			}
-			// Even if the statement has an ORDER BY, it still
-			// doesn't guarantee a stable output because it may
-			// have been on a column not in the output or the
-			// output could have multiple equal values that sort
-			// the same. So we have to sort everything ourselves.
-			sortVals(vals)
 			lock.Lock()
 			vvs[name] = vals
 			lock.Unlock()
@@ -203,47 +205,6 @@ func compareConns(stmt string, smitherName string, conns map[string]*Conn) error
 		fmt.Printf(" %s\n", timeutil.Since(compareStart))
 	}
 	return nil
-}
-
-func lessVal(a, b interface{}) bool {
-	if a == nil {
-		return true
-	}
-	if b == nil {
-		return false
-	}
-	switch a := a.(type) {
-	case float64:
-		return a < b.(float64)
-	case int64:
-		return a < b.(int64)
-	case uint32:
-		return a < b.(uint32)
-	case []pgtype.Value:
-		b := b.([]pgtype.Value)
-		for i := range a {
-			if lessVal(a[i], b[i]) {
-				return true
-			}
-		}
-		return false
-	default:
-		return fmt.Sprint(a) < fmt.Sprint(b)
-	}
-}
-
-// sortVals sorts from right to left.
-func sortVals(vals [][]interface{}) {
-	if len(vals) == 0 || len(vals[0]) == 0 {
-		return
-	}
-	cols := len(vals[0])
-	for col := cols - 1; col >= 0; col-- {
-		sort.SliceStable(vals, func(i, j int) bool {
-			a, b := vals[i][col], vals[j][col]
-			return lessVal(a, b)
-		})
-	}
 }
 
 func compareVals(a, b interface{}) error {

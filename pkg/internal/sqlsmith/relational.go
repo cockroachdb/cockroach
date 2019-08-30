@@ -506,7 +506,35 @@ func (s *scope) makeSelectClause(
 }
 
 func makeSelect(s *scope) (tree.Statement, bool) {
-	stmt, _, ok := s.makeSelect(s.schema.makeDesiredTypes(), nil)
+	stmt, refs, ok := s.makeSelect(s.schema.makeDesiredTypes(), nil)
+	if !ok {
+		return stmt, ok
+	}
+	if s.schema.outputSort {
+		order := make(tree.OrderBy, len(refs))
+		for i, r := range refs {
+			order[i] = &tree.Order{
+				Expr: r.item,
+			}
+		}
+		stmt = &tree.Select{
+			Select: &tree.SelectClause{
+				Exprs: tree.SelectExprs{
+					tree.SelectExpr{
+						Expr: tree.UnqualifiedStar{},
+					},
+				},
+				From: tree.From{
+					Tables: tree.TableExprs{
+						&tree.Subquery{
+							Select: &tree.ParenSelect{Select: stmt},
+						},
+					},
+				},
+			},
+			OrderBy: order,
+		}
+	}
 	return stmt, ok
 }
 
