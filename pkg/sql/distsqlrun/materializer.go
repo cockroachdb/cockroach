@@ -168,7 +168,7 @@ func (m *materializer) next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 					continue
 				}
 			}
-			m.row[colIdx].Datum = exec.PhysicalTypeColElemToDatum(col, rowIdx, m.da, typs[colIdx])
+			m.row[colIdx].Datum = exec.PhysicalTypeColElemToDatum(col, rowIdx, m.da, &typs[colIdx])
 		}
 		return m.ProcessRowHelper(m.row), nil
 	}

@@ -789,7 +789,7 @@ func (rf *CFetcher) getDatumAt(colIdx int, rowIdx uint16, typ types.T) tree.Datu
 	if rf.machine.colvecs[colIdx].Nulls().NullAt(rowIdx) {
 		return tree.DNull
 	}
-	return exec.PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, rf.table.da, typ)
+	return exec.PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, rf.table.da, &typ)
 }
 
 // processValue processes the state machine's current value component, setting

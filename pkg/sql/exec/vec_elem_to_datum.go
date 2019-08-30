@@ -12,6 +12,7 @@ package exec
 
 import (
 	"fmt"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -25,7 +26,7 @@ import (
 
 // PhysicalTypeColElemToDatum converts an element in a colvec to a datum of semtype ct.
 func PhysicalTypeColElemToDatum(
-	col coldata.Vec, rowIdx uint16, da sqlbase.DatumAlloc, ct types.T,
+	col coldata.Vec, rowIdx uint16, da sqlbase.DatumAlloc, ct *types.T,
 ) tree.Datum {
 	switch ct.Family() {
 	case types.BoolFamily:
@@ -60,6 +61,8 @@ func PhysicalTypeColElemToDatum(
 		return da.NewDBytes(tree.DBytes(col.Bytes().Get(int(rowIdx))))
 	case types.OidFamily:
 		return da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
+	case types.TimestampFamily:
+		return tree.MakeDTimestamp(col.Timestamp()[rowIdx], time.Microsecond)
 	default:
 		execerror.VectorizedInternalPanic(fmt.Sprintf("Unsupported column type %s", ct.String()))
 		// This code is unreachable, but the compiler cannot infer that.
