@@ -164,7 +164,7 @@ func splitTxnAttempt(
 ) error {
 	txn.SetDebugName(splitTxnName)
 
-	dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, oldDesc)
+	_, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, oldDesc.StartKey, checkDescsEqual(oldDesc))
 	if err != nil {
 		return err
 	}
@@ -241,7 +241,7 @@ func splitTxnAttempt(
 func splitTxnStickyUpdateAttempt(
 	ctx context.Context, txn *client.Txn, desc *roachpb.RangeDescriptor, expiration hlc.Timestamp,
 ) error {
-	dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
+	_, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc.StartKey, checkDescsEqual(desc))
 	if err != nil {
 		return err
 	}
@@ -448,7 +448,7 @@ func (r *Replica) adminUnsplitWithDescriptor(
 	}
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
+		_, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc.StartKey, checkDescsEqual(desc))
 		if err != nil {
 			return err
 		}
@@ -584,7 +584,7 @@ func (r *Replica) AdminMerge(
 			return errors.New("cannot merge final range")
 		}
 
-		dbOrigLeftDescValue, err := conditionalGetDescValueFromDB(ctx, txn, origLeftDesc)
+		_, dbOrigLeftDescValue, err := conditionalGetDescValueFromDB(ctx, txn, origLeftDesc.StartKey, checkDescsEqual(origLeftDesc))
 		if err != nil {
 			return err
 		}
@@ -1477,7 +1477,7 @@ func execChangeReplicasTxn(
 	if err := store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "attempting txn")
 		txn.SetDebugName(replicaChangeTxnName)
-		dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
+		_, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc.StartKey, checkDescsEqual(desc))
 		if err != nil {
 			return err
 		}
@@ -1798,6 +1798,29 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 	return true
 }
 
+func checkDescsEqual(desc *roachpb.RangeDescriptor) func(*roachpb.RangeDescriptor) bool {
+	// TODO(jeffreyxiao): This hacky fix ensures that we don't fail the
+	// conditional get because of the ordering of InternalReplicas. Calling
+	// Replicas() will sort the list of InternalReplicas as a side-effect. The
+	// invariant of having InternalReplicas sorted is not maintained in 19.1.
+	// Additionally, in 19.2, it's possible for the in-memory copy of
+	// RangeDescriptor to become sorted from a call to Replicas() without
+	// updating the copy in kv. These two factors makes it possible for the
+	// in-memory copy to be out of sync from the copy in kv. The sorted invariant
+	// of InternalReplicas is used by ReplicaDescriptors.Voters() and
+	// ReplicaDescriptors.Learners().
+	if desc != nil {
+		desc.Replicas() // for sorting side-effect
+	}
+	return func(desc2 *roachpb.RangeDescriptor) bool {
+		if desc2 != nil {
+			desc2.Replicas() // for sorting side-effect
+		}
+
+		return desc.Equal(desc2)
+	}
+}
+
 // conditionalGetDescValueFromDB fetches an encoded RangeDescriptor from kv,
 // checks that it matches the given expectation using proto Equals, and returns
 // the raw fetched roachpb.Value. If the fetched value doesn't match the
@@ -1809,40 +1832,28 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 // then passing the returned *roachpb.Value as the expected value in a CPut does
 // the same thing, but also correctly handles proto equality. See #38308.
 func conditionalGetDescValueFromDB(
-	ctx context.Context, txn *client.Txn, expectation *roachpb.RangeDescriptor,
-) (*roachpb.Value, error) {
-	descKey := keys.RangeDescriptorKey(expectation.StartKey)
+	ctx context.Context,
+	txn *client.Txn,
+	startKey roachpb.RKey,
+	check func(*roachpb.RangeDescriptor) bool,
+) (*roachpb.RangeDescriptor, *roachpb.Value, error) {
+	descKey := keys.RangeDescriptorKey(startKey)
 	existingDescKV, err := txn.Get(ctx, descKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "fetching current range descriptor value")
+		return nil, nil, errors.Wrap(err, "fetching current range descriptor value")
 	}
 	var existingDesc *roachpb.RangeDescriptor
 	if existingDescKV.Value != nil {
 		existingDesc = &roachpb.RangeDescriptor{}
 		if err := existingDescKV.Value.GetProto(existingDesc); err != nil {
-			return nil, errors.Wrap(err, "decoding current range descriptor value")
+			return nil, nil, errors.Wrap(err, "decoding current range descriptor value")
 		}
 	}
-	// TODO(jeffreyxiao): This hacky fix ensures that we don't fail the
-	// conditional get because of the ordering of InternalReplicas. Calling
-	// Replicas() will sort the list of InternalReplicas as a side-effect. The
-	// invariant of having InternalReplicas sorted is not maintained in 19.1.
-	// Additionally, in 19.2, it's possible for the in-memory copy of
-	// RangeDescriptor to become sorted from a call to Replicas() without
-	// updating the copy in kv. These two factors makes it possible for the
-	// in-memory copy to be out of sync from the copy in kv. The sorted invariant
-	// of InternalReplicas is used by ReplicaDescriptors.Voters() and
-	// ReplicaDescriptors.Learners().
-	if existingDesc != nil {
-		existingDesc.Replicas() // for sorting side-effect
+
+	if !check(existingDesc) {
+		return nil, nil, &roachpb.ConditionFailedError{ActualValue: existingDescKV.Value}
 	}
-	if expectation != nil {
-		expectation.Replicas() // for sorting side-effect
-	}
-	if !existingDesc.Equal(expectation) {
-		return nil, &roachpb.ConditionFailedError{ActualValue: existingDescKV.Value}
-	}
-	return existingDescKV.Value, nil
+	return existingDesc, existingDescKV.Value, nil
 }
 
 // updateRangeDescriptor adds a ConditionalPut on the range descriptor. The
