@@ -31,6 +31,7 @@ enum ConstraintValidity {
 }
 
 message ForeignKeyReference {
+  option (gogoproto.equal) = true;
   enum Action {
     option (gogoproto.goproto_enum_stringer) = false;
     NO_ACTION = 0;
@@ -68,6 +69,7 @@ message ForeignKeyReference {
 // and referenced tables, so that the optimizer can have full freedom to choose
 // the best possible index to satisfy constraint checks at runtime.
 message ForeignKeyConstraint {
+  option (gogoproto.equal) = true;
   optional uint32 origin_table_id = 1 [(gogoproto.nullable) = false,
                                       (gogoproto.customname) = "OriginTableID",
                                       (gogoproto.casttype) = "ID"];
@@ -109,6 +111,7 @@ message ForeignKeyConstraint {
 }
 
 message ColumnDescriptor {
+  option (gogoproto.equal) = true;
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ColumnID"];
@@ -130,6 +133,7 @@ message ColumnDescriptor {
 
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.
 message ColumnFamilyDescriptor {
+  option (gogoproto.equal) = true;
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "FamilyID"];
@@ -166,7 +170,9 @@ message ColumnFamilyDescriptor {
 // There are two components (table 2 is the parent and table 1 is the
 // grandparent) with shared lengths 2 and 1.
 message InterleaveDescriptor {
+  option (gogoproto.equal) = true;
   message Ancestor {
+    option (gogoproto.equal) = true;
     // TableID is the ID of the table being interleaved into.
     optional uint32 table_id = 1 [(gogoproto.nullable) = false,
         (gogoproto.customname) = "TableID", (gogoproto.casttype) = "ID"];
@@ -195,9 +201,11 @@ message InterleaveDescriptor {
 // partition may optionally be itself divided into further partitions, called
 // subpartitions.
 message PartitioningDescriptor {
+  option (gogoproto.equal) = true;
   // List represents a list partitioning, which maps individual tuples to
   // partitions.
   message List {
+    option (gogoproto.equal) = true;
     // Name is the partition name.
     optional string name = 1 [(gogoproto.nullable) = false];
     // Values is an unordered set of the tuples included in this partition. Each
@@ -213,6 +221,7 @@ message PartitioningDescriptor {
   // partitions by specifying exclusive upper bounds. The range partitions in a
   // PartitioningDescriptor are required to be sorted by UpperBound.
   message Range {
+    option (gogoproto.equal) = true;
     // Name is the partition name.
     optional string name = 1 [(gogoproto.nullable) = false];
     // FromInclusive is the inclusive lower bound of this range partition. It is
@@ -281,6 +290,7 @@ message PartitioningDescriptor {
 //   extra_column_ids:    2      // k2
 //   store_column_ids:    5      // w
 message IndexDescriptor {
+  option (gogoproto.equal) = true;
   // The direction of a column in the index.
   enum Direction {
     ASC = 0;
@@ -384,6 +394,7 @@ message IndexDescriptor {
 // constraints added to columns that are being added are correctly enforced
 // before the column becomes public.
 message ConstraintToUpdate {
+  option (gogoproto.equal) = true;
   enum ConstraintType {
     CHECK = 0;
     FOREIGN_KEY = 1;
@@ -411,6 +422,7 @@ message ConstraintToUpdate {
 // Mutations for constraints work differently from columns and
 // indexes; see the documentation for ConstraintToUpdate.
 message DescriptorMutation {
+  option (gogoproto.equal) = true;
   oneof descriptor {
     ColumnDescriptor column = 1;
     IndexDescriptor index = 2;
@@ -476,6 +488,7 @@ message DescriptorMutation {
 // structured metadata key. The TableDescriptor has a globally-unique ID,
 // while its member {Column,Index}Descriptors have locally-unique IDs.
 message TableDescriptor {
+  option (gogoproto.equal) = true;
   // Needed for the descriptorProto interface.
   option (gogoproto.goproto_getters) = true;
 
@@ -532,6 +545,7 @@ message TableDescriptor {
   // it is legal for more than one goroutine to attempt to execute it. This
   // lease reduces write contention on the schema change.
   message SchemaChangeLease {
+    option (gogoproto.equal) = true;
     optional uint32 node_id = 1 [(gogoproto.nullable) = false,
         (gogoproto.customname) = "NodeID",
         (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
@@ -569,6 +583,7 @@ message TableDescriptor {
   optional string offline_reason = 38 [(gogoproto.nullable) = false];
 
   message CheckConstraint {
+    option (gogoproto.equal) = true;
     optional string expr = 1 [(gogoproto.nullable) = false];
     optional string name = 2 [(gogoproto.nullable) = false];
     optional ConstraintValidity validity = 3 [(gogoproto.nullable) = false];
@@ -649,6 +664,7 @@ message TableDescriptor {
   // assignment for C, and the old assignments for B.
   //
   message NameInfo {
+    option (gogoproto.equal) = true;
     // The database that the table belonged to before the rename (tables can be
     // renamed from one db to another).
     optional uint32 parent_id = 1 [(gogoproto.nullable) = false,
@@ -683,6 +699,7 @@ message TableDescriptor {
            (gogoproto.casttype) = "ID"];
 
   message Reference {
+    option (gogoproto.equal) = true;
     // The ID of the relation that depends on this one.
     optional uint32 id = 1 [(gogoproto.nullable) = false,
              (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
@@ -703,6 +720,7 @@ message TableDescriptor {
            (gogoproto.customname) = "DependedOnBy"];
 
   message MutationJob {
+    option (gogoproto.equal) = true;
     // The mutation id of this mutation job.
     optional uint32 mutation_id = 1 [(gogoproto.nullable) = false,
              (gogoproto.customname) = "MutationID", (gogoproto.casttype) = "MutationID"];
@@ -718,6 +736,7 @@ message TableDescriptor {
   repeated MutationJob mutationJobs = 27 [(gogoproto.nullable) = false];
 
   message SequenceOpts {
+    option (gogoproto.equal) = true;
     // How much to increment the sequence by when nextval() is called.
     optional int64 increment = 1 [(gogoproto.nullable) = false];
     // Minimum value of the sequence.
@@ -743,6 +762,7 @@ message TableDescriptor {
   optional int64 drop_time = 29 [(gogoproto.nullable) = false];
 
   message Replacement {
+    option (gogoproto.equal) = true;
     optional uint32 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
     optional util.hlc.Timestamp time = 2 [(gogoproto.nullable) = false];
   }
@@ -765,6 +785,7 @@ message TableDescriptor {
   optional int64 drop_job_id = 32 [(gogoproto.nullable) = false, (gogoproto.customname) = "DropJobID"];
 
   message GCDescriptorMutation {
+    option (gogoproto.equal) = true;
     optional int64 index_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "IndexID",
                                 (gogoproto.casttype) = "IndexID"];
 
@@ -805,6 +826,7 @@ message TableDescriptor {
 // ID shared with the TableDescriptor ID.
 // Permissions are applied to all tables in the namespace.
 message DatabaseDescriptor {
+  option (gogoproto.equal) = true;
   // Needed for the descriptorProto interface.
   option (gogoproto.goproto_getters) = true;
 
@@ -816,6 +838,7 @@ message DatabaseDescriptor {
 
 // Descriptor is a union type holding either a table or database descriptor.
 message Descriptor {
+  option (gogoproto.equal) = true;
   oneof union {
     TableDescriptor table = 1;
     DatabaseDescriptor database = 2;

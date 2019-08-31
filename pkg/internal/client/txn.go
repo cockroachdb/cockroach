@@ -349,21 +349,6 @@ func (txn *Txn) CPut(ctx context.Context, key, value interface{}, expValue *roac
 	return getOneErr(txn.Run(ctx, b), b)
 }
 
-// CPutDeprecated conditionally sets the value for a key if the existing value is equal
-// to expValue. To conditionally set a value only if there is no existing entry
-// pass nil for expValue. Note that this must be an interface{}(nil), not a
-// typed nil value (e.g. []byte(nil)).
-//
-// Returns an error if the existing value is not equal to expValue.
-//
-// key can be either a byte slice or a string. value can be any key type, a
-// protoutil.Message or any Go primitive type (bool, int, etc).
-func (txn *Txn) CPutDeprecated(ctx context.Context, key, value, expValue interface{}) error {
-	b := txn.NewBatch()
-	b.CPutDeprecated(key, value, expValue)
-	return getOneErr(txn.Run(ctx, b), b)
-}
-
 // InitPut sets the first value for a key to value. An error is reported if a
 // value already exists for the key and it's not equal to the value passed in.
 // If failOnTombstones is set to true, tombstones count as mismatched values
