@@ -74,9 +74,9 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 		panic(pgerror.DangerousStatementf("UPDATE without WHERE clause"))
 	}
 
+	var ctes []cteSource
 	if upd.With != nil {
-		inScope = b.buildCTE(upd.With.CTEList, inScope)
-		defer b.checkCTEUsage(inScope)
+		inScope, ctes = b.buildCTE(upd.With.CTEList, inScope)
 	}
 
 	// UPDATE xx AS yy - we want to know about xx (tn) because
@@ -91,10 +91,10 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	}
 
 	// Check Select permission as well, since existing values must be read.
-	b.checkPrivilege(tn, tab, privilege.SELECT)
+	b.checkPrivilege(opt.DepByName(tn), tab, privilege.SELECT)
 
 	var mb mutationBuilder
-	mb.init(b, opt.UpdateOp, tab, *alias)
+	mb.init(b, "update", tab, *alias)
 
 	// Build the input expression that selects the rows that will be updated:
 	//
@@ -103,7 +103,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	//   ORDER BY <order-by> LIMIT <limit>
 	//
 	// All columns from the update table will be projected.
-	mb.buildInputForUpdateOrDelete(inScope, upd.Where, upd.Limit, upd.OrderBy)
+	mb.buildInputForUpdate(inScope, upd.From, upd.Where, upd.Limit, upd.OrderBy)
 
 	// Derive the columns that will be updated from the SET expressions.
 	mb.addTargetColsForUpdate(upd.Exprs)
@@ -121,6 +121,8 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	} else {
 		mb.buildUpdate(nil /* returning */)
 	}
+
+	mb.outScope.expr = b.wrapWithCTEs(mb.outScope.expr, ctes)
 
 	return mb.outScope
 }
@@ -322,8 +324,14 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	mb.addCheckConstraintCols()
 
-	private := mb.makeMutationPrivate(returning != nil)
-	mb.outScope.expr = mb.b.factory.ConstructUpdate(mb.outScope.expr, mb.checks, private)
+	mb.buildFKChecksForUpdate()
 
+	private := mb.makeMutationPrivate(returning != nil)
+	for _, col := range mb.extraAccessibleCols {
+		if col.id != 0 {
+			private.PassthroughCols = append(private.PassthroughCols, col.id)
+		}
+	}
+	mb.outScope.expr = mb.b.factory.ConstructUpdate(mb.outScope.expr, mb.checks, private)
 	mb.buildReturning(returning)
 }

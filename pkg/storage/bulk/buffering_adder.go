@@ -17,8 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
 )
 
@@ -31,7 +33,13 @@ type BufferingAdder struct {
 	timestamp hlc.Timestamp
 
 	// threshold at which buffered entries will be flushed to SSTBatcher.
-	flushSize int
+	curBufferSize uint64
+
+	// ceiling till which we can grow curBufferSize if bulkMon permits.
+	maxBufferSize uint64
+
+	// unit by which we increment the curBufferSize.
+	incrementBufferSize uint64
 
 	// currently buffered kvs.
 	curBuf kvBuf
@@ -40,41 +48,107 @@ type BufferingAdder struct {
 		total      int
 		bufferSize int
 	}
+
+	// name of the BufferingAdder for the purpose of logging only.
+	name string
+
+	bulkMon *mon.BytesMonitor
+	memAcc  mon.BoundAccount
+
+	onFlush func()
 }
 
-// MakeBulkAdder makes a storagebase.BulkAdder that buffers and sorts K/Vs passed
-// to add into SSTs that are then ingested.
+var _ storagebase.BulkAdder = &BufferingAdder{}
+
+// MakeBulkAdder makes a storagebase.BulkAdder that buffers and sorts K/Vs
+// passed to add into SSTs that are then ingested. rangeCache if set is
+// consulted to avoid generating an SST that will span a range boundary and thus
+// encounter an error and need to be split and retired to be applied.
 func MakeBulkAdder(
+	ctx context.Context,
 	db sender,
 	rangeCache *kv.RangeDescriptorCache,
-	flushBytes, sstBytes int64,
 	timestamp hlc.Timestamp,
+	opts storagebase.BulkAdderOptions,
+	bulkMon *mon.BytesMonitor,
 ) (*BufferingAdder, error) {
-	if flushBytes <= 0 || sstBytes <= 0 {
-		return nil, errors.Errorf("flush size and sst bytes must be > 0")
+	if opts.MinBufferSize == 0 {
+		opts.MinBufferSize = 32 << 20
 	}
+	if opts.MaxBufferSize == 0 {
+		opts.MaxBufferSize = 128 << 20
+	}
+	if opts.StepBufferSize == 0 {
+		opts.StepBufferSize = 32 << 20
+	}
+	if opts.SSTSize == 0 {
+		opts.SSTSize = 16 << 20
+	}
+	if opts.SplitAndScatterAfter == 0 {
+		// splitting _before_ hitting max reduces chance of auto-splitting after the
+		// range is full and is more expensive to split/move.
+		opts.SplitAndScatterAfter = 48 << 20
+	}
+
 	b := &BufferingAdder{
-		sink:      SSTBatcher{db: db, maxSize: sstBytes, rc: rangeCache},
-		timestamp: timestamp,
-		flushSize: int(flushBytes),
+		name: opts.Name,
+		sink: SSTBatcher{
+			db:                db,
+			maxSize:           opts.SSTSize,
+			rc:                rangeCache,
+			skipDuplicates:    opts.SkipDuplicates,
+			disallowShadowing: opts.DisallowShadowing,
+			splitAfter:        opts.SplitAndScatterAfter,
+		},
+		timestamp:           timestamp,
+		curBufferSize:       opts.MinBufferSize,
+		maxBufferSize:       opts.MaxBufferSize,
+		incrementBufferSize: opts.StepBufferSize,
+		bulkMon:             bulkMon,
 	}
+
+	// If no monitor is attached to the instance of a bulk adder, we do not
+	// control its memory usage.
+	if bulkMon == nil {
+		return b, nil
+	}
+
+	// At minimum a bulk adder needs enough space to store a buffer of
+	// curBufferSize, and a subsequent SST of SSTSize in-memory. If the memory
+	// account is unable to reserve this minimum threshold we cannot continue.
+	//
+	// TODO(adityamaru): IMPORT should also reserve memory for a single SST which
+	// it will store in-memory before sending it to RocksDB.
+	b.memAcc = bulkMon.MakeBoundAccount()
+	if err := b.memAcc.Grow(ctx, int64(b.curBufferSize)); err != nil {
+		return nil, errors.Wrap(err, "Not enough memory available to create a BulkAdder. Try setting a higher --max-sql-memory.")
+	}
+
 	return b, nil
 }
 
-// SkipLocalDuplicates configures skipping of duplicate keys in local batches.
-func (b *BufferingAdder) SkipLocalDuplicates(skip bool) {
-	b.sink.skipDuplicates = skip
+// SetOnFlush sets a callback to run after the buffering adder flushes.
+func (b *BufferingAdder) SetOnFlush(fn func()) {
+	b.onFlush = fn
 }
 
 // Close closes the underlying SST builder.
 func (b *BufferingAdder) Close(ctx context.Context) {
 	log.VEventf(ctx, 2,
-		"bulk adder ingested %s, flushed %d times, %d due to buffer size. Flushed %d files, %d due to ranges, %d due to sst size",
+		"bulk adder %s ingested %s, flushed %d due to buffer (%s) size. Flushed chunked as %d files (%d after split-retries), %d due to ranges, %d due to sst size.",
+		b.name,
 		sz(b.sink.totalRows.DataSize),
-		b.flushCounts.total, b.flushCounts.bufferSize,
-		b.sink.flushCounts.total, b.sink.flushCounts.split, b.sink.flushCounts.sstSize,
+		b.flushCounts.bufferSize,
+		sz(b.memAcc.Used()),
+		b.sink.flushCounts.total, b.sink.flushCounts.files,
+		b.sink.flushCounts.split, b.sink.flushCounts.sstSize,
 	)
 	b.sink.Close()
+
+	if b.bulkMon != nil {
+		b.memAcc.Close(ctx)
+		b.bulkMon.Stop(ctx)
+	}
 }
 
 // Add adds a key to the buffer and checks if it needs to flush.
@@ -83,22 +157,47 @@ func (b *BufferingAdder) Add(ctx context.Context, key roachpb.Key, value []byte)
 		return err
 	}
 
-	if b.curBuf.MemSize > b.flushSize {
-		b.flushCounts.bufferSize++
-		log.VEventf(ctx, 3, "buffer size triggering flush of %s buffer", sz(b.curBuf.MemSize))
-		return b.Flush(ctx)
+	if b.curBuf.MemSize > int(b.curBufferSize) {
+		// This is an optimization to try and increase the current buffer size if
+		// our memory account permits it. This would lead to creation of a fewer
+		// number of SSTs.
+		//
+		// To prevent a single import from growing its buffer indefinitely we check
+		// if it has exceeded its upper bound.
+		if b.bulkMon != nil && b.curBufferSize < b.maxBufferSize {
+			if err := b.memAcc.Grow(ctx, int64(b.incrementBufferSize)); err != nil {
+				// If we are unable to reserve the additional memory then flush the
+				// buffer, and continue as normal.
+				b.flushCounts.bufferSize++
+				log.VEventf(ctx, 3, "buffer size triggering flush of %s buffer", sz(b.curBuf.MemSize))
+				return b.Flush(ctx)
+			}
+			b.curBufferSize += b.incrementBufferSize
+		} else {
+			b.flushCounts.bufferSize++
+			log.VEventf(ctx, 3, "buffer size triggering flush of %s buffer", sz(b.curBuf.MemSize))
+			return b.Flush(ctx)
+		}
 	}
 	return nil
 }
 
 // CurrentBufferFill returns the current buffer fill percentage.
 func (b *BufferingAdder) CurrentBufferFill() float32 {
-	return float32(b.curBuf.MemSize) / float32(b.flushSize)
+	return float32(b.curBuf.MemSize) / float32(b.curBufferSize)
+}
+
+// IsEmpty returns true if the adder has no un-flushed data in its buffer.
+func (b *BufferingAdder) IsEmpty() bool {
+	return b.curBuf.Len() == 0
 }
 
 // Flush flushes any buffered kvs to the batcher.
 func (b *BufferingAdder) Flush(ctx context.Context) error {
 	if b.curBuf.Len() == 0 {
+		if b.onFlush != nil {
+			b.onFlush()
+		}
 		return nil
 	}
 	if err := b.sink.Reset(); err != nil {
@@ -133,7 +232,9 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 			sz(b.curBuf.MemSize), files, sz(written/int64(files)), dueToSplits, dueToSize,
 		)
 	}
-
+	if b.onFlush != nil {
+		b.onFlush()
+	}
 	b.curBuf.Reset()
 	return nil
 }

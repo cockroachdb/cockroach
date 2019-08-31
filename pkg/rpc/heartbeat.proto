@@ -63,6 +63,10 @@ message PingResponse {
   optional string pong = 1 [(gogoproto.nullable) = false];
   optional int64 server_time = 2 [(gogoproto.nullable) = false];
   optional roachpb.Version server_version = 3 [(gogoproto.nullable) = false];
+  // Cluster name to prevent joining a new node to the wrong cluster.
+  optional string cluster_name = 4 [(gogoproto.nullable) = false];
+  // Skip cluster name check if either side's name is empty / not configured.
+  optional bool disable_cluster_name_verification = 5 [(gogoproto.nullable) = false];
 }
 
 service Heartbeat {

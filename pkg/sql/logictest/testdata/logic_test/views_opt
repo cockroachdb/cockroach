@@ -1,0 +1,27 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT)
+
+statement error INSERT cannot be used inside a view definition
+CREATE VIEW crud_view AS SELECT a, b FROM [INSERT INTO ab VALUES (100, 100) RETURNING a, b]
+
+statement ok
+CREATE TABLE cd (c INT PRIMARY KEY, b INT)
+
+statement ok
+INSERT INTO ab VALUES (1, 1), (2, 2), (3, 3)
+
+statement ok
+INSERT INTO cd VALUES (2, 2), (3, 3), (4, 4)
+
+# View containing a correlated subquery.
+statement ok
+CREATE VIEW v1 AS SELECT a, b, EXISTS(SELECT c FROM cd WHERE cd.c=ab.a) FROM ab;
+
+query IIB rowsort
+SELECT * FROM v1
+----
+1  1  false
+2  2  true
+3  3  true

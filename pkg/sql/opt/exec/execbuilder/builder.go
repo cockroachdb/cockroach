@@ -12,6 +12,7 @@ package execbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,6 +26,7 @@ import (
 type Builder struct {
 	factory            exec.Factory
 	mem                *memo.Memo
+	catalog            cat.Catalog
 	e                  opt.Expr
 	disableTelemetry   bool
 	evalCtx            *tree.EvalContext
@@ -48,17 +50,34 @@ type Builder struct {
 	// each relational subexpression when evalCtx.SessionData.SaveTablesPrefix is
 	// non-empty.
 	nameGen *memo.ExprNameGenerator
+
+	// withExprs is the set of With expressions which may be referenced elsewhere
+	// in the query.
+	// TODO(justin): set this up so that we can look them up by index lookups
+	// rather than scans.
+	withExprs []builtWithExpr
 }
 
 // New constructs an instance of the execution node builder using the
 // given factory to construct nodes. The Build method will build the execution
 // node tree from the given optimized expression tree.
-func New(factory exec.Factory, mem *memo.Memo, e opt.Expr, evalCtx *tree.EvalContext) *Builder {
+//
+// catalog is only needed if the statement contains an EXPLAIN (OPT, CATALOG).
+func New(
+	factory exec.Factory, mem *memo.Memo, catalog cat.Catalog, e opt.Expr, evalCtx *tree.EvalContext,
+) *Builder {
 	var nameGen *memo.ExprNameGenerator
 	if evalCtx != nil && evalCtx.SessionData.SaveTablesPrefix != "" {
 		nameGen = memo.NewExprNameGenerator(evalCtx.SessionData.SaveTablesPrefix)
 	}
-	return &Builder{factory: factory, mem: mem, e: e, evalCtx: evalCtx, nameGen: nameGen}
+	return &Builder{
+		factory: factory,
+		mem:     mem,
+		catalog: catalog,
+		e:       e,
+		evalCtx: evalCtx,
+		nameGen: nameGen,
+	}
 }
 
 // DisableTelemetry prevents the execbuilder from updating telemetry counters.
@@ -119,4 +138,22 @@ func (b *Builder) BuildScalar(ivh *tree.IndexedVarHelper) (tree.TypedExpr, error
 
 func (b *Builder) decorrelationError() error {
 	return errors.Errorf("could not decorrelate subquery")
+}
+
+// builtWithExpr is metadata regarding a With expression which has already been
+// added to the set of subqueries for the query.
+type builtWithExpr struct {
+	id opt.WithID
+	// outputCols maps the output ColumnIDs of the With expression to the ordinal
+	// positions they are output to. See execPlan.outputCols for more details.
+	outputCols opt.ColMap
+	bufferNode exec.Node
+}
+
+func (b *Builder) addBuiltWithExpr(id opt.WithID, outputCols opt.ColMap, bufferNode exec.Node) {
+	b.withExprs = append(b.withExprs, builtWithExpr{
+		id:         id,
+		outputCols: outputCols,
+		bufferNode: bufferNode,
+	})
 }

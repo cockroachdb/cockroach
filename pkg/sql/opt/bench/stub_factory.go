@@ -24,6 +24,8 @@ import (
 // stubFactory is a do-nothing implementation of exec.Factory, used for testing.
 type stubFactory struct{}
 
+var _ exec.Factory = &stubFactory{}
+
 func (f *stubFactory) ConstructValues(
 	rows [][]tree.TypedExpr, cols sqlbase.ResultColumns,
 ) (exec.Node, error) {
@@ -39,6 +41,7 @@ func (f *stubFactory) ConstructScan(
 	reverse bool,
 	maxResults uint64,
 	reqOrdering exec.OutputOrdering,
+	rowCount float64,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
@@ -94,6 +97,7 @@ func (f *stubFactory) ConstructMergeJoin(
 	onCond tree.TypedExpr,
 	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
 	reqOrdering exec.OutputOrdering,
+	leftEqColsAreKey, rightEqColsAreKey bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
@@ -222,8 +226,8 @@ func (f *stubFactory) ConstructInsert(
 	input exec.Node,
 	table cat.Table,
 	insertCols exec.ColumnOrdinalSet,
+	returnCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
-	rowsNeeded bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
@@ -234,8 +238,10 @@ func (f *stubFactory) ConstructUpdate(
 	table cat.Table,
 	fetchCols exec.ColumnOrdinalSet,
 	updateCols exec.ColumnOrdinalSet,
+	returnCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
-	rowsNeeded bool,
+	passthrough sqlbase.ResultColumns,
+	skipFKChecks bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
@@ -247,14 +253,18 @@ func (f *stubFactory) ConstructUpsert(
 	insertCols exec.ColumnOrdinalSet,
 	fetchCols exec.ColumnOrdinalSet,
 	updateCols exec.ColumnOrdinalSet,
+	returnCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
-	rowsNeeded bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
 
 func (f *stubFactory) ConstructDelete(
-	input exec.Node, table cat.Table, fetchCols exec.ColumnOrdinalSet, rowsNeeded bool,
+	input exec.Node,
+	table cat.Table,
+	fetchCols exec.ColumnOrdinalSet,
+	returnCols exec.ColumnOrdinalSet,
+	skipFKChecks bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
@@ -309,6 +319,44 @@ func (f *stubFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node,
 
 func (f *stubFactory) ConstructAlterTableRelocate(
 	index cat.Index, input exec.Node, relocateLease bool,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
+func (f *stubFactory) ConstructBuffer(value exec.Node, label string) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
+func (f *stubFactory) ConstructScanBuffer(ref exec.Node, label string) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
+func (f *stubFactory) ConstructControlJobs(
+	command tree.JobCommand, input exec.Node,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
+func (f *stubFactory) ConstructCancelQueries(input exec.Node, ifExists bool) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
+func (f *stubFactory) ConstructCancelSessions(input exec.Node, ifExists bool) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
+func (f *stubFactory) ConstructCreateView(
+	schema cat.Schema,
+	viewName string,
+	viewQuery string,
+	columns sqlbase.ResultColumns,
+	deps opt.ViewDeps,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
+func (f *stubFactory) ConstructExport(
+	input exec.Node, fileName tree.TypedExpr, fileFormat string, options []exec.KVOption,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }

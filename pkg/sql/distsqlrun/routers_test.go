@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -54,7 +54,10 @@ func setupRouter(
 	}
 
 	ctx := context.TODO()
-	flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: evalCtx}
+	flowCtx := FlowCtx{
+		Cfg:     &ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
+		EvalCtx: evalCtx,
+	}
 	r.init(ctx, &flowCtx, inputTypes)
 	wg := &sync.WaitGroup{}
 	r.start(ctx, wg, nil /* ctxCancel */)
@@ -587,7 +590,10 @@ func TestRouterBlocks(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			ctx := context.TODO()
 			evalCtx := tree.MakeTestingEvalContext(st)
-			flowCtx := FlowCtx{Settings: st, EvalCtx: &evalCtx}
+			flowCtx := FlowCtx{
+				Cfg:     &ServerConfig{Settings: st},
+				EvalCtx: &evalCtx,
+			}
 			router.init(ctx, &flowCtx, colTypes)
 			var wg sync.WaitGroup
 			router.start(ctx, &wg, nil /* ctxCancel */)
@@ -702,10 +708,12 @@ func TestRouterDiskSpill(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContextWithMon(st, &monitor)
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		Settings:    st,
-		EvalCtx:     &evalCtx,
-		TempStorage: tempEngine,
-		diskMonitor: diskMonitor,
+		EvalCtx: &evalCtx,
+		Cfg: &ServerConfig{
+			Settings:    st,
+			TempStorage: tempEngine,
+			DiskMonitor: diskMonitor,
+		},
 	}
 	alloc := &sqlbase.DatumAlloc{}
 

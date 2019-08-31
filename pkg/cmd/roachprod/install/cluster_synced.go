@@ -116,14 +116,16 @@ func (c *SyncedCluster) GetInternalIP(index int) (string, error) {
 	}
 	defer session.Close()
 
+	var stdout, stderr strings.Builder
+	session.SetStdout(&stdout)
+	session.SetStderr(&stderr)
 	cmd := `hostname --all-ip-addresses`
-	out, err := session.CombinedOutput(cmd)
-	if err != nil {
+	if err := session.Run(cmd); err != nil {
 		return "", errors.Wrapf(err,
-			"GetInternalIP: failed to execute hostname on %s:%d: (output) %s",
-			c.Name, index, out)
+			"GetInternalIP: failed to execute hostname on %s:%d:\n(stdout) %s\n(stderr) %s",
+			c.Name, index, stdout.String(), stderr.String())
 	}
-	return strings.TrimSpace(string(out)), nil
+	return strings.TrimSpace(stdout.String()), nil
 }
 
 // Start TODO(peter): document
@@ -1410,16 +1412,25 @@ func (c *SyncedCluster) Get(src, dest string) {
 }
 
 func (c *SyncedCluster) pgurls(nodes []int) map[int]string {
+	hosts := c.pghosts(nodes)
+	m := make(map[int]string, len(hosts))
+	for node, host := range hosts {
+		m[node] = c.Impl.NodeURL(c, host, c.Impl.NodePort(c, node))
+	}
+	return m
+}
+
+func (c *SyncedCluster) pghosts(nodes []int) map[int]string {
 	ips := make([]string, len(nodes))
 	c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
 		var err error
 		ips[i], err = c.GetInternalIP(nodes[i])
-		return nil, errors.Wrapf(err, "pgurls")
+		return nil, errors.Wrapf(err, "pghosts")
 	})
 
 	m := make(map[int]string, len(ips))
 	for i, ip := range ips {
-		m[nodes[i]] = c.Impl.NodeURL(c, ip, c.Impl.NodePort(c, nodes[i]))
+		m[nodes[i]] = ip
 	}
 	return m
 }
@@ -1486,7 +1497,7 @@ func (c *SyncedCluster) SSH(sshArgs, args []string) error {
 
 func (c *SyncedCluster) scp(src, dest string) error {
 	args := []string{
-		"scp", "-v", "-r", "-C",
+		"scp", "-r", "-C",
 		"-o", "StrictHostKeyChecking=no",
 	}
 	args = append(args, sshAuthArgs()...)

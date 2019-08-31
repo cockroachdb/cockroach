@@ -15,9 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/errors"
 )
 
 // optTableUpserter implements the upsert operation when it is planned by the
@@ -53,6 +53,9 @@ type optTableUpserter struct {
 	// updateCols indicate which columns need an update during a conflict.
 	updateCols []sqlbase.ColumnDescriptor
 
+	// returnCols indicate which columns need to be returned by the Upsert.
+	returnCols []sqlbase.ColumnDescriptor
+
 	// canaryOrdinal is the ordinal position of the column within the input row
 	// that is used to decide whether to execute an insert or update operation.
 	// If the canary column is null, then an insert will be performed; otherwise,
@@ -67,6 +70,14 @@ type optTableUpserter struct {
 
 	// ru is used when updating rows.
 	ru row.Updater
+
+	// tabColIdxToRetIdx is the mapping from the columns in the table to the
+	// columns in the resultRowBuffer. A value of -1 is used to indicate
+	// that the table column at that index is not part of the resultRowBuffer
+	// of the mutation. Otherwise, the value at the i-th index refers to the
+	// index of the resultRowBuffer where the i-th column of the table is
+	// to be returned.
+	tabColIdxToRetIdx []int
 }
 
 // init is part of the tableWriter interface.
@@ -77,7 +88,12 @@ func (tu *optTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) err
 	}
 
 	if tu.collectRows {
-		tu.resultRow = make(tree.Datums, len(tu.colIDToReturnIndex))
+		tu.resultRow = make(tree.Datums, len(tu.returnCols))
+		tu.rowsUpserted = rowcontainer.NewRowContainer(
+			evalCtx.Mon.MakeBoundAccount(),
+			sqlbase.ColTypeInfoFromColDescs(tu.returnCols),
+			tu.insertRows.Len(),
+		)
 	}
 
 	tu.ru, err = row.MakeUpdater(
@@ -87,6 +103,7 @@ func (tu *optTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) err
 		tu.updateCols,
 		tu.fetchCols,
 		row.UpdaterDefault,
+		row.CheckFKs,
 		evalCtx,
 		tu.alloc,
 	)
@@ -161,12 +178,27 @@ func (tu *optTableUpserter) insertNonConflictingRow(
 
 	// Reshape the row if needed.
 	if tu.insertReorderingRequired {
-		resultRow := tu.makeResultFromRow(insertRow, tu.ri.InsertColIDtoRowIndex)
-		_, err := tu.rowsUpserted.AddRow(ctx, resultRow)
+		tableRow := tu.makeResultFromRow(insertRow, tu.ri.InsertColIDtoRowIndex)
+
+		// TODO(ridwanmsharif): Why didn't they update the value of tu.resultRow
+		//  before? Is it safe to be doing it now?
+		// Map the upserted columns into the result row before adding it.
+		for tabIdx := range tableRow {
+			if retIdx := tu.tabColIdxToRetIdx[tabIdx]; retIdx >= 0 {
+				tu.resultRow[retIdx] = tableRow[tabIdx]
+			}
+		}
+		_, err := tu.rowsUpserted.AddRow(ctx, tu.resultRow)
 		return err
 	}
 
-	_, err := tu.rowsUpserted.AddRow(ctx, insertRow)
+	// Map the upserted columns into the result row before adding it.
+	for tabIdx := range insertRow {
+		if retIdx := tu.tabColIdxToRetIdx[tabIdx]; retIdx >= 0 {
+			tu.resultRow[retIdx] = insertRow[tabIdx]
+		}
+	}
+	_, err := tu.rowsUpserted.AddRow(ctx, tu.resultRow)
 	return err
 }
 
@@ -208,22 +240,30 @@ func (tu *optTableUpserter) updateConflictingRow(
 		return nil
 	}
 
-	// We now need a row that has the shape of the result row.
+	// We now need a row that has the shape of the result row with
+	// the appropriate return columns. Make sure all the fetch columns
+	// are present.
+	tableRow := tu.makeResultFromRow(fetchRow, tu.ru.FetchColIDtoRowIndex)
+
+	// Make sure all the updated columns are present.
 	for colID, returnIndex := range tu.colIDToReturnIndex {
 		// If an update value for a given column exists, use that; else use the
-		// existing value of that column.
+		// existing value of that column if it has been fetched.
 		rowIndex, ok := tu.ru.UpdateColIDtoRowIndex[colID]
 		if ok {
-			tu.resultRow[returnIndex] = updateValues[rowIndex]
-		} else {
-			rowIndex, ok = tu.ru.FetchColIDtoRowIndex[colID]
-			if !ok {
-				return errors.AssertionFailedf("no existing value is available for column")
-			}
-			tu.resultRow[returnIndex] = fetchRow[rowIndex]
+			tableRow[returnIndex] = updateValues[rowIndex]
 		}
 	}
 
+	// Map the upserted columns into the result row before adding it.
+	for tabIdx := range tableRow {
+		if retIdx := tu.tabColIdxToRetIdx[tabIdx]; retIdx >= 0 {
+			tu.resultRow[retIdx] = tableRow[tabIdx]
+		}
+	}
+
+	// The resulting row may have nil values for columns that aren't
+	// being upserted, updated or fetched.
 	_, err = tu.rowsUpserted.AddRow(ctx, tu.resultRow)
 	return err
 }

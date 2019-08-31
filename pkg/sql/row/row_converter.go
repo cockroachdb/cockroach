@@ -26,7 +26,12 @@ import (
 type KVInserter func(roachpb.KeyValue)
 
 // CPut is not implmented.
-func (i KVInserter) CPut(key, value, expValue interface{}) {
+func (i KVInserter) CPut(key, value interface{}, expValue *roachpb.Value) {
+	panic("unimplemented")
+}
+
+// CPutDeprecated is not implmented.
+func (i KVInserter) CPutDeprecated(key, value, expValue interface{}) {
 	panic("unimplemented")
 }
 
@@ -155,6 +160,18 @@ func GenerateInsertRow(
 	return rowVals, nil
 }
 
+// KVBatch represents a batch of KVs generated from converted rows.
+type KVBatch struct {
+	// Source is where the row data in the batch came from.
+	Source int32
+	// LastRow is the index of the last converted row in source in this batch.
+	LastRow uint64
+	// Progress represents the fraction of the input that generated this row.
+	Progress float32
+	// KVs is the actual converted KV data.
+	KVs []roachpb.KeyValue
+}
+
 // DatumRowConverter converts Datums into kvs and streams it to the destination
 // channel.
 type DatumRowConverter struct {
@@ -162,11 +179,16 @@ type DatumRowConverter struct {
 	Datums []tree.Datum
 
 	// kv destination and current batch
-	KvCh     chan<- []roachpb.KeyValue
-	KvBatch  []roachpb.KeyValue
+	KvCh     chan<- KVBatch
+	KvBatch  KVBatch
 	BatchCap int
 
 	tableDesc *sqlbase.ImmutableTableDescriptor
+
+	// Tracks which column indices in the set of visible columns are part of the
+	// user specified target columns. This can be used before populating Datums
+	// to filter out unwanted column data.
+	IsTargetCol map[int]struct{}
 
 	// The rest of these are derived from tableDesc, just cached here.
 	hidden                int
@@ -177,13 +199,20 @@ type DatumRowConverter struct {
 	VisibleColTypes       []*types.T
 	defaultExprs          []tree.TypedExpr
 	computedIVarContainer sqlbase.RowIndexedVarContainer
+
+	// FractionFn is used to set the progress header in KVBatches.
+	CompletedRowFn func() uint64
+	FractionFn     func() float32
 }
 
 const kvDatumRowConverterBatchSize = 5000
 
 // NewDatumRowConverter returns an instance of a DatumRowConverter.
 func NewDatumRowConverter(
-	tableDesc *sqlbase.TableDescriptor, evalCtx *tree.EvalContext, kvCh chan<- []roachpb.KeyValue,
+	tableDesc *sqlbase.TableDescriptor,
+	targetColNames tree.NameList,
+	evalCtx *tree.EvalContext,
+	kvCh chan<- KVBatch,
 ) (*DatumRowConverter, error) {
 	immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc)
 	c := &DatumRowConverter{
@@ -192,21 +221,50 @@ func NewDatumRowConverter(
 		EvalCtx:   evalCtx,
 	}
 
-	ri, err := MakeInserter(nil /* txn */, immutDesc, nil, /* fkTables */
-		immutDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
-	if err != nil {
-		return nil, errors.Wrap(err, "make row inserter")
+	var targetColDescriptors []sqlbase.ColumnDescriptor
+	var err error
+	// IMPORT INTO allows specifying target columns which could be a subset of
+	// immutDesc.VisibleColumns. If no target columns are specified we assume all
+	// columns of the table descriptor are to be inserted into.
+	if len(targetColNames) != 0 {
+		if targetColDescriptors, err = sqlbase.ProcessTargetColumns(immutDesc, targetColNames,
+			true /* ensureColumns */, false /* allowMutations */); err != nil {
+			return nil, err
+		}
+	} else {
+		targetColDescriptors = immutDesc.VisibleColumns()
 	}
-	c.ri = ri
+
+	isTargetColID := make(map[sqlbase.ColumnID]struct{})
+	for _, col := range targetColDescriptors {
+		isTargetColID[col.ID] = struct{}{}
+	}
+
+	c.IsTargetCol = make(map[int]struct{})
+	for i, col := range immutDesc.VisibleColumns() {
+		if _, ok := isTargetColID[col.ID]; !ok {
+			continue
+		}
+		c.IsTargetCol[i] = struct{}{}
+	}
 
 	var txCtx transform.ExprTransformContext
-	// Although we don't yet support DEFAULT expressions on visible columns,
-	// we do on hidden columns (which is only the default _rowid one). This
-	// allows those expressions to run.
-	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(immutDesc.Columns, immutDesc, &txCtx, c.EvalCtx)
+	// We do not currently support DEFAULT expressions on target or non-target
+	// columns. All non-target columns must be nullable and will be set to NULL
+	// during import. We do however support DEFAULT on hidden columns (which is
+	// only the default _rowid one). This allows those expressions to run.
+	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(targetColDescriptors, immutDesc, &txCtx, c.EvalCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default columns")
 	}
+
+	ri, err := MakeInserter(nil /* txn */, immutDesc, nil, /* fkTables */
+		cols, false /* checkFKs */, &sqlbase.DatumAlloc{})
+	if err != nil {
+		return nil, errors.Wrap(err, "make row inserter")
+	}
+
+	c.ri = ri
 	c.cols = cols
 	c.defaultExprs = defaultExprs
 
@@ -215,7 +273,8 @@ func NewDatumRowConverter(
 	for i := range c.VisibleCols {
 		c.VisibleColTypes[i] = c.VisibleCols[i].DatumType()
 	}
-	c.Datums = make([]tree.Datum, len(c.VisibleCols), len(cols))
+
+	c.Datums = make([]tree.Datum, len(targetColDescriptors), len(cols))
 
 	// Check for a hidden column. This should be the unique_rowid PK if present.
 	c.hidden = -1
@@ -235,7 +294,7 @@ func NewDatumRowConverter(
 
 	padding := 2 * (len(immutDesc.Indexes) + len(immutDesc.Families))
 	c.BatchCap = kvDatumRowConverterBatchSize + padding
-	c.KvBatch = make([]roachpb.KeyValue, 0, c.BatchCap)
+	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 
 	c.computedIVarContainer = sqlbase.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
@@ -277,7 +336,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, fileIndex int32, rowIndex i
 		ctx,
 		KVInserter(func(kv roachpb.KeyValue) {
 			kv.Value.InitChecksum(kv.Key)
-			c.KvBatch = append(c.KvBatch, kv)
+			c.KvBatch.KVs = append(c.KvBatch.KVs, kv)
 		}),
 		insertRow,
 		true, /* ignoreConflicts */
@@ -287,7 +346,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, fileIndex int32, rowIndex i
 		return errors.Wrap(err, "insert row")
 	}
 	// If our batch is full, flush it and start a new one.
-	if len(c.KvBatch) >= kvDatumRowConverterBatchSize {
+	if len(c.KvBatch.KVs) >= kvDatumRowConverterBatchSize {
 		if err := c.SendBatch(ctx); err != nil {
 			return err
 		}
@@ -298,14 +357,20 @@ func (c *DatumRowConverter) Row(ctx context.Context, fileIndex int32, rowIndex i
 // SendBatch streams kv operations from the current KvBatch to the destination
 // channel, and resets the KvBatch to empty.
 func (c *DatumRowConverter) SendBatch(ctx context.Context) error {
-	if len(c.KvBatch) == 0 {
+	if len(c.KvBatch.KVs) == 0 {
 		return nil
+	}
+	if c.FractionFn != nil {
+		c.KvBatch.Progress = c.FractionFn()
+	}
+	if c.CompletedRowFn != nil {
+		c.KvBatch.LastRow = c.CompletedRowFn()
 	}
 	select {
 	case c.KvCh <- c.KvBatch:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	c.KvBatch = make([]roachpb.KeyValue, 0, c.BatchCap)
+	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 	return nil
 }

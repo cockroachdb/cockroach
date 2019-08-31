@@ -156,9 +156,11 @@ type TableDef interface {
 	SetName(name Name)
 }
 
-func (*ColumnTableDef) tableDef() {}
-func (*IndexTableDef) tableDef()  {}
-func (*FamilyTableDef) tableDef() {}
+func (*ColumnTableDef) tableDef()               {}
+func (*IndexTableDef) tableDef()                {}
+func (*FamilyTableDef) tableDef()               {}
+func (*ForeignKeyConstraintTableDef) tableDef() {}
+func (*CheckConstraintTableDef) tableDef()      {}
 
 // TableDefs represents a list of table definitions.
 type TableDefs []TableDef
@@ -356,8 +358,14 @@ func (node *ColumnTableDef) HasColumnFamily() bool {
 // Format implements the NodeFormatter interface.
 func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Name)
-	ctx.WriteByte(' ')
-	ctx.WriteString(node.columnTypeString())
+
+	// ColumnTableDef node type will not be specified if it represents a CREATE
+	// TABLE ... AS query.
+	if node.Type != nil {
+		ctx.WriteByte(' ')
+		ctx.WriteString(node.columnTypeString())
+	}
+
 	if node.Nullable.Nullability != SilentNull && node.Nullable.ConstraintName != "" {
 		ctx.WriteString(" CONSTRAINT ")
 		ctx.FormatNode(&node.Nullable.ConstraintName)
@@ -569,7 +577,9 @@ type ConstraintTableDef interface {
 	constraintTableDef()
 }
 
-func (*UniqueConstraintTableDef) constraintTableDef() {}
+func (*UniqueConstraintTableDef) constraintTableDef()     {}
+func (*ForeignKeyConstraintTableDef) constraintTableDef() {}
+func (*CheckConstraintTableDef) constraintTableDef()      {}
 
 // UniqueConstraintTableDef represents a unique constraint within a CREATE
 // TABLE statement.
@@ -714,12 +724,6 @@ func (node *ForeignKeyConstraintTableDef) Format(ctx *FmtCtx) {
 func (node *ForeignKeyConstraintTableDef) SetName(name Name) {
 	node.Name = name
 }
-
-func (*ForeignKeyConstraintTableDef) tableDef()           {}
-func (*ForeignKeyConstraintTableDef) constraintTableDef() {}
-
-func (*CheckConstraintTableDef) tableDef()           {}
-func (*CheckConstraintTableDef) constraintTableDef() {}
 
 // CheckConstraintTableDef represents a check constraint within a CREATE
 // TABLE statement.
@@ -885,19 +889,36 @@ func (node *RangePartition) Format(ctx *FmtCtx) {
 
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
-	IfNotExists   bool
-	Table         TableName
-	Interleave    *InterleaveDef
-	PartitionBy   *PartitionBy
-	Defs          TableDefs
-	AsSource      *Select
-	AsColumnNames NameList // Only to be used in conjunction with AsSource
+	IfNotExists bool
+	Table       TableName
+	Interleave  *InterleaveDef
+	PartitionBy *PartitionBy
+	// In CREATE...AS queries, Defs represents a list of ColumnTableDefs, one for
+	// each column, and a ConstraintTableDef for each constraint on a subset of
+	// these columns.
+	Defs     TableDefs
+	AsSource *Select
 }
 
 // As returns true if this table represents a CREATE TABLE ... AS statement,
 // false otherwise.
 func (node *CreateTable) As() bool {
 	return node.AsSource != nil
+}
+
+// AsHasUserSpecifiedPrimaryKey returns true if a CREATE TABLE ... AS statement
+// has a PRIMARY KEY constraint specified.
+func (node *CreateTable) AsHasUserSpecifiedPrimaryKey() bool {
+	if node.As() {
+		for _, def := range node.Defs {
+			if d, ok := def.(*ColumnTableDef); !ok {
+				return false
+			} else if d.PrimaryKey {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Format implements the NodeFormatter interface.
@@ -914,9 +935,9 @@ func (node *CreateTable) Format(ctx *FmtCtx) {
 // but the CREATE TABLE tableName part.
 func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 	if node.As() {
-		if len(node.AsColumnNames) > 0 {
+		if len(node.Defs) > 0 {
 			ctx.WriteString(" (")
-			ctx.FormatNode(&node.AsColumnNames)
+			ctx.FormatNode(&node.Defs)
 			ctx.WriteByte(')')
 		}
 		ctx.WriteString(" AS ")

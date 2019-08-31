@@ -33,9 +33,9 @@ func benchmarkImportFixture(b *testing.B, gen workload.Generator) {
 
 		b.StartTimer()
 		const filesPerNode = 1
-		const directIngest, noInjectStats, skipPostLoad, csvServer = true, false, true, ``
+		const directIngest, noInjectStats, csvServer = true, false, ``
 		importBytes, err := ImportFixture(
-			ctx, db, gen, `d`, directIngest, filesPerNode, noInjectStats, skipPostLoad, csvServer,
+			ctx, db, gen, `d`, directIngest, filesPerNode, noInjectStats, csvServer,
 		)
 		require.NoError(b, err)
 		bytes += importBytes

@@ -57,6 +57,7 @@ project
       ├── side-effects, mutations
       ├── key: (5)
       ├── fd: ()-->(1), (5)-->(2-4)
+      ├── prune: (1-4)
       └── select
            ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
            ├── key: (11)
@@ -92,6 +93,7 @@ project
       ├── side-effects, mutations
       ├── key: ()
       ├── fd: ()-->(1-5)
+      ├── prune: (1-4)
       └── select
            ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
            ├── cardinality: [0 - 1]
@@ -125,6 +127,7 @@ project
       ├── side-effects, mutations
       ├── key: (5)
       ├── fd: (2)==(3), (3)==(2), (5)-->(1-4)
+      ├── prune: (1-4)
       └── select
            ├── columns: a:7(int!null) b:8(int!null) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
            ├── key: (11)

@@ -84,12 +84,17 @@ const (
 	// ExplainOpt shows the optimized relational expression (from the cost-based
 	// optimizer).
 	ExplainOpt
+
+	// ExplainVec shows the physical vectorized plan for a query and whether a
+	// query would be run in "auto" vectorized mode.
+	ExplainVec
 )
 
 var explainModeStrings = map[string]ExplainMode{
 	"plan":    ExplainPlan,
 	"distsql": ExplainDistSQL,
 	"opt":     ExplainOpt,
+	"vec":     ExplainVec,
 }
 
 // ExplainModeName returns the human-readable name of a given ExplainMode.
@@ -107,22 +112,20 @@ const (
 	ExplainFlagVerbose = iota
 	ExplainFlagSymVars
 	ExplainFlagTypes
-	ExplainFlagNoExpand
 	ExplainFlagNoNormalize
-	ExplainFlagNoOptimize
 	ExplainFlagAnalyze
 	ExplainFlagEnv
+	ExplainFlagCatalog
 )
 
 var explainFlagStrings = map[string]int{
 	"verbose":     ExplainFlagVerbose,
 	"symvars":     ExplainFlagSymVars,
 	"types":       ExplainFlagTypes,
-	"noexpand":    ExplainFlagNoExpand,
 	"nonormalize": ExplainFlagNoNormalize,
-	"nooptimize":  ExplainFlagNoOptimize,
 	"analyze":     ExplainFlagAnalyze,
 	"env":         ExplainFlagEnv,
+	"catalog":     ExplainFlagCatalog,
 }
 
 // ParseOptions parses the options for an EXPLAIN statement.

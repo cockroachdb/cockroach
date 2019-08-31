@@ -68,12 +68,15 @@ type Smither struct {
 	statements                    statementWeights
 	tableExprs                    tableExprWeights
 
-	disableWith      bool
-	disableImpureFns bool
-	disableLimits    bool
-	simpleDatums     bool
-	avoidConsts      bool
-	ignoreFNs        []*regexp.Regexp
+	disableWith        bool
+	disableImpureFns   bool
+	disableLimits      bool
+	disableWindowFuncs bool
+	simpleDatums       bool
+	avoidConsts        bool
+	vectorizable       bool
+	outputSort         bool
+	ignoreFNs          []*regexp.Regexp
 }
 
 // NewSmither creates a new Smither. db is used to populate existing tables
@@ -122,6 +125,13 @@ func (s *Smither) Generate() string {
 		i = 0
 		return prettyCfg.Pretty(stmt)
 	}
+}
+
+// GenerateExpr returns a random SQL expression that does not depend on any
+// tables or columns.
+func (s *Smither) GenerateExpr() tree.TypedExpr {
+	scope := s.makeScope()
+	return makeScalar(scope, s.randScalarType(), nil)
 }
 
 func (s *Smither) name(prefix string) tree.Name {
@@ -224,6 +234,50 @@ func (d avoidConsts) Apply(s *Smither) {
 	s.avoidConsts = true
 }
 
+// DisableWindowFuncs disables window functions.
+func DisableWindowFuncs() SmitherOption {
+	return disableWindowFuncs{}
+}
+
+type disableWindowFuncs struct{}
+
+func (d disableWindowFuncs) Apply(s *Smither) {
+	s.disableWindowFuncs = true
+}
+
+// Vectorizable causes the Smither to limit query generation to queries
+// supported by vectorized execution.
+func Vectorizable() SmitherOption {
+	return multiOption{
+		DisableMutations(),
+		DisableWith(),
+		DisableWindowFuncs(),
+		AvoidConsts(),
+		// This must be last so it can make the final changes to table
+		// exprs and statements.
+		vectorizable{},
+	}
+}
+
+type vectorizable struct{}
+
+func (d vectorizable) Apply(s *Smither) {
+	s.vectorizable = true
+	s.statements = nonMutatingStatements
+	s.tableExprs = vectorizableTableExprs
+}
+
+// OutputSort adds a top-level ORDER BY on all columns.
+func OutputSort() SmitherOption {
+	return outputSort{}
+}
+
+type outputSort struct{}
+
+func (d outputSort) Apply(s *Smither) {
+	s.outputSort = true
+}
+
 type multiOption []SmitherOption
 
 func (d multiOption) Apply(s *Smither) {
@@ -239,6 +293,7 @@ func CompareMode() SmitherOption {
 		DisableMutations(),
 		DisableImpureFns(),
 		DisableLimits(),
+		OutputSort(),
 	}
 }
 
@@ -254,3 +309,46 @@ func PostgresMode() SmitherOption {
 		IgnoreFNs("^version"),
 	}
 }
+
+const (
+	// SeedTable is a SQL statement that creates a table with most data types and
+	// some sample rows.
+	SeedTable = `
+CREATE TABLE IF NOT EXISTS tab_orig AS
+	SELECT
+		g::INT2 AS _int2,
+		g::INT4 AS _int4,
+		g::INT8 AS _int8,
+		g::FLOAT4 AS _float4,
+		g::FLOAT8 AS _float8,
+		'2001-01-01'::DATE + g AS _date,
+		'2001-01-01'::TIMESTAMP + g * '1 day'::INTERVAL AS _timestamp,
+		'2001-01-01'::TIMESTAMPTZ + g * '1 day'::INTERVAL AS _timestamptz,
+		g * '1 day'::INTERVAL AS _interval,
+		g % 2 = 1 AS _bool,
+		g::DECIMAL AS _decimal,
+		g::STRING AS _string,
+		g::STRING::BYTES AS _bytes,
+		substring('00000000-0000-0000-0000-' || g::STRING || '00000000000', 1, 36)::UUID AS _uuid,
+		'0.0.0.0'::INET + g AS _inet,
+		g::STRING::JSONB AS _jsonb
+	FROM
+		generate_series(1, 5) AS g;
+`
+
+	// VecSeedTable is like SeedTable except only types supported by vectorized
+	// execution are used.
+	VecSeedTable = `
+CREATE TABLE IF NOT EXISTS tab_orig AS
+	SELECT
+		g::INT8 AS _int8,
+		g::FLOAT8 AS _float8,
+		'2001-01-01'::DATE + g AS _date,
+		g % 2 = 1 AS _bool,
+		g::DECIMAL AS _decimal,
+		g::STRING AS _string,
+		g::STRING::BYTES AS _bytes
+	FROM
+		generate_series(1, 5) AS g;
+`
+)

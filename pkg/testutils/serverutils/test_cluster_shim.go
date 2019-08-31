@@ -52,10 +52,27 @@ type TestClusterInterface interface {
 		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) (roachpb.RangeDescriptor, error)
 
+	// AddReplicasMulti is the same as AddReplicas but will execute multiple jobs.
+	AddReplicasMulti(
+		kts ...KeyAndTargets,
+	) ([]roachpb.RangeDescriptor, []error)
+
+	// AddReplicasOrFatal is the same as AddReplicas but will Fatal the test on
+	// error.
+	AddReplicasOrFatal(
+		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	) roachpb.RangeDescriptor
+
 	// RemoveReplicas removes one or more replicas from a range.
 	RemoveReplicas(
 		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) (roachpb.RangeDescriptor, error)
+
+	// RemoveReplicasOrFatal is the same as RemoveReplicas but will Fatal the test on
+	// error.
+	RemoveReplicasOrFatal(
+		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	) roachpb.RangeDescriptor
 
 	// FindRangeLeaseHolder returns the current lease holder for the given range.
 	// In particular, it returns one particular node's (the hint, if specified) view
@@ -85,6 +102,10 @@ type TestClusterInterface interface {
 
 	// LookupRange returns the descriptor of the range containing key.
 	LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error)
+
+	// LookupRangeOrFatal is the same as LookupRange but will Fatal the test on
+	// error.
+	LookupRangeOrFatal(t testing.TB, key roachpb.Key) roachpb.RangeDescriptor
 
 	// Target returns a roachpb.ReplicationTarget for the specified server.
 	Target(serverIdx int) roachpb.ReplicationTarget
@@ -118,4 +139,10 @@ func StartTestCluster(t testing.TB, numNodes int, args base.TestClusterArgs) Tes
 			"from the package's TestMain()")
 	}
 	return clusterFactoryImpl.StartTestCluster(t, numNodes, args)
+}
+
+// KeyAndTargets contains replica startKey and targets.
+type KeyAndTargets struct {
+	StartKey roachpb.Key
+	Targets  []roachpb.ReplicationTarget
 }

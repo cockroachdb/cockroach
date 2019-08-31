@@ -156,7 +156,10 @@ func calcRangeCounter(
 	numReplicas int32,
 	clusterNodes int,
 ) (rangeCounter, unavailable, underreplicated, overreplicated bool) {
-	for _, rd := range desc.Replicas().Unwrap() {
+	// It seems unlikely that a learner replica would be the first live one, but
+	// there's no particular reason to exclude them. Note that `All` returns the
+	// voters first.
+	for _, rd := range desc.Replicas().All() {
 		if livenessMap[rd.NodeID].IsLive {
 			rangeCounter = rd.StoreID == storeID
 			break
@@ -165,25 +168,28 @@ func calcRangeCounter(
 	// We also compute an estimated per-range count of under-replicated and
 	// unavailable ranges for each range based on the liveness table.
 	if rangeCounter {
-		liveReplicas := calcLiveReplicas(desc, livenessMap)
-		if liveReplicas < desc.Replicas().QuorumSize() {
-			unavailable = true
-		}
+		unavailable = !desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
+			_, live := livenessMap[rDesc.NodeID]
+			return live
+		})
 		needed := GetNeededReplicas(numReplicas, clusterNodes)
-		if needed > liveReplicas {
+		liveVoterReplicas := calcLiveVoterReplicas(desc, livenessMap)
+		if needed > liveVoterReplicas {
 			underreplicated = true
-		} else if needed < liveReplicas {
+		} else if needed < liveVoterReplicas {
 			overreplicated = true
 		}
 	}
 	return
 }
 
-// calcLiveReplicas returns a count of the live replicas; a live replica is
-// determined by checking its node in the provided liveness map.
-func calcLiveReplicas(desc *roachpb.RangeDescriptor, livenessMap IsLiveMap) int {
+// calcLiveVoterReplicas returns a count of the live voter replicas; a live
+// replica is determined by checking its node in the provided liveness map. This
+// method is used when indicating under-replication so only voter replicas are
+// considered.
+func calcLiveVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap IsLiveMap) int {
 	var live int
-	for _, rd := range desc.Replicas().Unwrap() {
+	for _, rd := range desc.Replicas().Voters() {
 		if livenessMap[rd.NodeID].IsLive {
 			live++
 		}
@@ -197,7 +203,7 @@ func calcBehindCount(
 	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap IsLiveMap,
 ) int64 {
 	var behindCount int64
-	for _, rd := range desc.Replicas().Unwrap() {
+	for _, rd := range desc.Replicas().All() {
 		if progress, ok := raftStatus.Progress[uint64(rd.ReplicaID)]; ok {
 			if progress.Match > 0 &&
 				progress.Match < raftStatus.Commit {

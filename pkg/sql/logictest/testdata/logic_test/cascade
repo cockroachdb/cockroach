@@ -1,4 +1,6 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
+# The tests in this file target the legacy FK paths.
+statement ok
+SET optimizer_foreign_keys = false
 
 subtest AllCascadingActions
 ### A test of all cascading actions in their most basic form.

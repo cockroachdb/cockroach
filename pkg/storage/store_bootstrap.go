@@ -153,13 +153,14 @@ func WriteInitialClusterData(
 		if !bootstrapVersion.Less(cluster.VersionByKey(cluster.VersionGenerationComparable)) {
 			desc.GenerationComparable = proto.Bool(true)
 		}
-		desc.SetReplicas(roachpb.MakeReplicaDescriptors([]roachpb.ReplicaDescriptor{
+		replicas := []roachpb.ReplicaDescriptor{
 			{
 				NodeID:    1,
 				StoreID:   1,
 				ReplicaID: 1,
 			},
-		}))
+		}
+		desc.SetReplicas(roachpb.MakeReplicaDescriptors(replicas))
 		if err := desc.Validate(); err != nil {
 			return err
 		}
@@ -238,7 +239,6 @@ func WriteInitialClusterData(
 			*desc,
 			lease,
 			hlc.Timestamp{}, /* gcThreshold */
-			hlc.Timestamp{}, /* txnSpanGCThreshold */
 			bootstrapVersion,
 			truncStateType,
 		)

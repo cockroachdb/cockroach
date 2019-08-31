@@ -607,7 +607,7 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 			intents := roachpb.AsIntents(et.Txn.IntentSpans, &et.Txn)
 			if err := ir.cleanupFinishedTxnIntents(ctx, rangeID, &et.Txn, intents, now, et.Poison, nil); err != nil {
 				if ir.every.ShouldLog() {
-					log.Warningf(ctx, "failed to cleanup transaction intents: %+v", err)
+					log.Warningf(ctx, "failed to cleanup transaction intents: %v", err)
 				}
 			}
 		}); err != nil {
@@ -815,7 +815,7 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 			}
 			if err != nil {
 				if ir.every.ShouldLog() {
-					log.Warningf(ctx, "failed to gc transaction record: %+v", err)
+					log.Warningf(ctx, "failed to gc transaction record: %v", err)
 				}
 			}
 		})

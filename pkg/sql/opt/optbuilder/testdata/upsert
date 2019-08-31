@@ -2,7 +2,7 @@ exec-ddl
 CREATE TABLE abc (
     a INT NOT NULL,
     b INT DEFAULT (10),
-    c INT AS (abc.b + 1) STORED,
+    c INT AS (b + 1) STORED,
     UNIQUE(a),
     UNIQUE(b, c)
 )
@@ -48,11 +48,11 @@ CREATE TABLE mutation (
 
 exec-ddl
 CREATE TABLE checks (
-	a INT PRIMARY KEY CHECK (a > 0),
-	b INT,
-	c INT,
+    a INT PRIMARY KEY CHECK (a > 0),
+    b INT,
+    c INT,
     d INT AS (c + 1) STORED,
-    CHECK (checks.b < d)
+    CHECK (b < d)
 )
 ----
 

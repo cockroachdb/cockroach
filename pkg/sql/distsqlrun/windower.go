@@ -162,7 +162,7 @@ func newWindower(
 	ctx := evalCtx.Ctx()
 	memMonitor := NewMonitor(ctx, evalCtx.Mon, "windower-mem")
 	w.acc = memMonitor.MakeBoundAccount()
-	w.diskMonitor = NewMonitor(ctx, flowCtx.diskMonitor, "windower-disk")
+	w.diskMonitor = NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "windower-disk")
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		w.input = NewInputStatCollector(w.input)
 		w.finishTrace = w.outputStatsToTrace
@@ -175,7 +175,7 @@ func newWindower(
 		evalCtx,
 		memMonitor,
 		w.diskMonitor,
-		flowCtx.TempStorage,
+		flowCtx.Cfg.TempStorage,
 	)
 	w.allRowsPartitioned = &allRowsPartitioned
 	if err := w.allRowsPartitioned.Init(
@@ -476,7 +476,10 @@ func (w *windower) processPartition(
 		}
 
 		if windowFn.frame != nil {
-			frameRun.Frame = windowFn.frame.ConvertToAST()
+			var err error
+			if frameRun.Frame, err = windowFn.frame.ConvertToAST(); err != nil {
+				return err
+			}
 			startBound, endBound := windowFn.frame.Bounds.Start, windowFn.frame.Bounds.End
 			if startBound.BoundType == distsqlpb.WindowerSpec_Frame_OFFSET_PRECEDING ||
 				startBound.BoundType == distsqlpb.WindowerSpec_Frame_OFFSET_FOLLOWING {
@@ -586,10 +589,10 @@ func (w *windower) processPartition(
 
 		if !frameRun.IsDefaultFrame() {
 			// We have a custom frame not equivalent to default one, so if we have
-			// an aggregate function, we want to reset it for each row.
-			// Not resetting is an optimization since we're not computing
-			// the result over the whole frame but only as a result of the current
-			// row and previous results of aggregation.
+			// an aggregate function, we want to reset it for each row. Not resetting
+			// is an optimization since we're not computing the result over the whole
+			// frame but only as a result of the current row and previous results of
+			// aggregation.
 			builtins.ShouldReset(builtin)
 		}
 
@@ -598,6 +601,7 @@ func (w *windower) processPartition(
 		}
 		frameRun.CurRowPeerGroupNum = 0
 
+		var prevRes tree.Datum
 		for frameRun.RowIdx < partition.Len() {
 			// Perform calculations on each row in the current peer group.
 			peerGroupEndIdx := frameRun.PeerHelper.GetFirstPeerIdx(frameRun.CurRowPeerGroupNum) + frameRun.PeerHelper.GetRowCount(frameRun.CurRowPeerGroupNum)
@@ -613,7 +617,19 @@ func (w *windower) processPartition(
 				if err != nil {
 					return err
 				}
+				if prevRes == nil || prevRes != res {
+					// We don't want to double count the same memory, and since the same
+					// memory can only be reused contiguously as res, comparing against
+					// result of the previous row is sufficient.
+					// We have already accounted for the size of a nil datum prior to
+					// allocating the slice for window values, so we need to keep that in
+					// mind.
+					if err := w.growMemAccount(&w.acc, int64(res.Size())-sizeOfDatum); err != nil {
+						return err
+					}
+				}
 				w.windowValues[partitionIdx][windowFnIdx][row.GetIdx()] = res
+				prevRes = res
 			}
 			if err := frameRun.PeerHelper.Update(frameRun); err != nil {
 				return err
@@ -654,7 +670,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 		ordering,
 		w.inputTypes,
 		w.evalCtx,
-		w.flowCtx.TempStorage,
+		w.flowCtx.Cfg.TempStorage,
 		w.MemMonitor,
 		w.diskMonitor,
 		0, /* rowCapacity */

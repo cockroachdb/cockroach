@@ -3,7 +3,7 @@ CREATE TABLE abcde (
     a INT NOT NULL,
     b INT,
     c INT DEFAULT (10),
-    d INT AS (abcde.b + c + 1) STORED,
+    d INT AS (b + c + 1) STORED,
     e INT AS (a) STORED
 )
 ----
@@ -36,11 +36,11 @@ CREATE TABLE mutation (
 
 exec-ddl
 CREATE TABLE checks (
-	a INT PRIMARY KEY CHECK (a > 0),
-	b INT,
-	c INT,
+    a INT PRIMARY KEY CHECK (a > 0),
+    b INT,
+    c INT,
     d INT AS (c + 1) STORED,
-    CHECK (checks.b < d)
+    CHECK (b < d)
 )
 ----
 
@@ -423,7 +423,45 @@ error (42703): statement source "UPDATE abcde SET a = 1" does not return any col
 build
 WITH cte AS (SELECT b FROM [UPDATE abcde SET a=b RETURNING *]) UPDATE abcde SET a=b
 ----
-error (0A000): unimplemented: common table expression "cte" with side effects was not used in query
+with &1 (cte)
+ ├── project
+ │    ├── columns: b:2(int)
+ │    └── project
+ │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
+ │         └── update abcde
+ │              ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
+ │              ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ │              ├── update-mapping:
+ │              │    ├──  b:8 => a:1
+ │              │    ├──  column13:13 => d:4
+ │              │    └──  b:8 => e:5
+ │              └── project
+ │                   ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │                   ├── scan abcde
+ │                   │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │                   └── projections
+ │                        └── plus [type=int]
+ │                             ├── plus [type=int]
+ │                             │    ├── variable: b [type=int]
+ │                             │    └── variable: c [type=int]
+ │                             └── const: 1 [type=int]
+ └── update abcde
+      ├── columns: <none>
+      ├── fetch columns: a:20(int) b:21(int) c:22(int) d:23(int) e:24(int) rowid:25(int)
+      ├── update-mapping:
+      │    ├──  b:21 => a:14
+      │    ├──  column26:26 => d:17
+      │    └──  b:21 => e:18
+      └── project
+           ├── columns: column26:26(int) a:20(int!null) b:21(int) c:22(int) d:23(int) e:24(int) rowid:25(int!null)
+           ├── scan abcde
+           │    └── columns: a:20(int!null) b:21(int) c:22(int) d:23(int) e:24(int) rowid:25(int!null)
+           └── projections
+                └── plus [type=int]
+                     ├── plus [type=int]
+                     │    ├── variable: b [type=int]
+                     │    └── variable: c [type=int]
+                     └── const: 1 [type=int]
 
 # With alias, original table name should be inaccessible.
 build
@@ -1124,67 +1162,78 @@ error (42804): value type int doesn't match type string of column "x"
 build
 WITH cte AS (SELECT x FROM xyz) UPDATE abcde SET a=b WHERE EXISTS(SELECT * FROM cte)
 ----
-update abcde
- ├── columns: <none>
- ├── fetch columns: a:10(int) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int)
- ├── update-mapping:
- │    ├──  b:11 => a:4
- │    ├──  column16:16 => d:7
- │    └──  b:11 => e:8
- └── project
-      ├── columns: column16:16(int) a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
-      ├── select
-      │    ├── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
-      │    ├── scan abcde
-      │    │    └── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
-      │    └── filters
-      │         └── exists [type=bool]
-      │              └── project
-      │                   ├── columns: x:1(string!null)
-      │                   └── scan xyz
-      │                        └── columns: x:1(string!null) y:2(int) z:3(float)
-      └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: b [type=int]
-                │    └── variable: c [type=int]
-                └── const: 1 [type=int]
+with &1 (cte)
+ ├── project
+ │    ├── columns: xyz.x:1(string!null)
+ │    └── scan xyz
+ │         └── columns: xyz.x:1(string!null) y:2(int) z:3(float)
+ └── update abcde
+      ├── columns: <none>
+      ├── fetch columns: a:10(int) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int)
+      ├── update-mapping:
+      │    ├──  b:11 => a:4
+      │    ├──  column17:17 => d:7
+      │    └──  b:11 => e:8
+      └── project
+           ├── columns: column17:17(int) a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+           ├── select
+           │    ├── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+           │    ├── scan abcde
+           │    │    └── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+           │    └── filters
+           │         └── exists [type=bool]
+           │              └── with-scan &1 (cte)
+           │                   ├── columns: x:16(string!null)
+           │                   └── mapping:
+           │                        └──  xyz.x:1(string) => x:16(string)
+           └── projections
+                └── plus [type=int]
+                     ├── plus [type=int]
+                     │    ├── variable: b [type=int]
+                     │    └── variable: c [type=int]
+                     └── const: 1 [type=int]
 
 # Use CTE within SET expression.
 build
 WITH a AS (SELECT y, y+1 AS y1 FROM xyz) UPDATE abcde SET (a, b) = (SELECT * FROM a)
 ----
-update abcde
- ├── columns: <none>
- ├── fetch columns: a:11(int) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int)
- ├── update-mapping:
- │    ├──  y:2 => a:5
- │    ├──  y1:4 => b:6
- │    ├──  column17:17 => d:8
- │    └──  y:2 => e:9
- └── project
-      ├── columns: column17:17(int) y:2(int) y1:4(int) a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null)
-      ├── left-join-apply
-      │    ├── columns: y:2(int) y1:4(int) a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null)
-      │    ├── scan abcde
-      │    │    └── columns: a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null)
-      │    ├── max1-row
-      │    │    ├── columns: y:2(int) y1:4(int)
-      │    │    └── project
-      │    │         ├── columns: y1:4(int) y:2(int)
-      │    │         ├── scan xyz
-      │    │         │    └── columns: x:1(string!null) y:2(int) z:3(float)
-      │    │         └── projections
-      │    │              └── plus [type=int]
-      │    │                   ├── variable: y [type=int]
-      │    │                   └── const: 1 [type=int]
-      │    └── filters (true)
-      └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: y1 [type=int]
-                │    └── variable: c [type=int]
-                └── const: 1 [type=int]
+with &1 (a)
+ ├── project
+ │    ├── columns: y1:4(int) xyz.y:2(int)
+ │    ├── scan xyz
+ │    │    └── columns: x:1(string!null) xyz.y:2(int) z:3(float)
+ │    └── projections
+ │         └── plus [type=int]
+ │              ├── variable: xyz.y [type=int]
+ │              └── const: 1 [type=int]
+ └── update abcde
+      ├── columns: <none>
+      ├── fetch columns: a:11(int) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int)
+      ├── update-mapping:
+      │    ├──  y:17 => a:5
+      │    ├──  y1:18 => b:6
+      │    ├──  column19:19 => d:8
+      │    └──  y:17 => e:9
+      └── project
+           ├── columns: column19:19(int) a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null) y:17(int) y1:18(int)
+           ├── left-join-apply
+           │    ├── columns: a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null) y:17(int) y1:18(int)
+           │    ├── scan abcde
+           │    │    └── columns: a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null)
+           │    ├── max1-row
+           │    │    ├── columns: y:17(int) y1:18(int)
+           │    │    └── with-scan &1 (a)
+           │    │         ├── columns: y:17(int) y1:18(int)
+           │    │         └── mapping:
+           │    │              ├──  xyz.y:2(int) => y:17(int)
+           │    │              └──  y1:4(int) => y1:18(int)
+           │    └── filters (true)
+           └── projections
+                └── plus [type=int]
+                     ├── plus [type=int]
+                     │    ├── variable: y1 [type=int]
+                     │    └── variable: c [type=int]
+                     └── const: 1 [type=int]
 
 # ------------------------------------------------------------------------------
 # Tests with mutations.

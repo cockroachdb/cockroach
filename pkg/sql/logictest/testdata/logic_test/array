@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-metadata fakedist-opt
-
 # pg arrays must preserve control characters when converted to string,
 # but their direct representation as string does not escape the
 # control characters. In order for the test file to remain valid
@@ -862,10 +860,15 @@ DROP TABLE a
 
 # Element append
 
+# Postgres also requires that the string be explicitly casted, so we're no worse
+# for wear despite this being a little annoying.
 query T
-SELECT ARRAY['a','b','c'] || 'd'
+SELECT ARRAY['a','b','c'] || 'd'::text
 ----
 {a,b,c,d}
+
+query error unsupported binary operator
+SELECT ARRAY['a','b','c'] || 'd'
 
 query T
 SELECT ARRAY[1,2,3] || 4

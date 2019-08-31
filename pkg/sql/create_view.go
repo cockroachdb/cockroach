@@ -24,9 +24,13 @@ import (
 
 // createViewNode represents a CREATE VIEW statement.
 type createViewNode struct {
-	n             *tree.CreateView
-	dbDesc        *sqlbase.DatabaseDescriptor
-	sourceColumns sqlbase.ResultColumns
+	viewName tree.Name
+	// viewQuery contains the view definition, with all table names fully
+	// qualified.
+	viewQuery string
+	dbDesc    *sqlbase.DatabaseDescriptor
+	columns   sqlbase.ResultColumns
+
 	// planDeps tracks which tables and views the view being created
 	// depends on. This is collected during the construction of
 	// the view query's logical plan.
@@ -85,27 +89,29 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 		f.Close() // We don't need the string.
 	}
 
-	numColNames := len(n.ColumnNames)
-	numColumns := len(sourceColumns)
-	if numColNames != 0 && numColNames != numColumns {
-		return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
-			"CREATE VIEW specifies %d column name%s, but data source has %d column%s",
-			numColNames, util.Pluralize(int64(numColNames)),
-			numColumns, util.Pluralize(int64(numColumns))))
+	if numColNames := len(n.ColumnNames); numColNames != 0 {
+		if numColumns := len(sourceColumns); numColNames != numColumns {
+			return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
+				"CREATE VIEW specifies %d column name%s, but data source has %d column%s",
+				numColNames, util.Pluralize(int64(numColNames)),
+				numColumns, util.Pluralize(int64(numColumns))))
+		}
+		sourceColumns = overrideColumnNames(sourceColumns, n.ColumnNames)
 	}
 
-	log.VEventf(ctx, 2, "collected view dependencies:\n%s", planDeps.String())
-
 	return &createViewNode{
-		n:             n,
-		dbDesc:        dbDesc,
-		sourceColumns: sourceColumns,
-		planDeps:      planDeps,
+		viewName:  n.Name.TableName,
+		viewQuery: tree.AsStringWithFlags(n.AsSource, tree.FmtParsable),
+		dbDesc:    dbDesc,
+		columns:   sourceColumns,
+		planDeps:  planDeps,
 	}, nil
 }
 
 func (n *createViewNode) startExec(params runParams) error {
-	viewName := n.n.Name.Table()
+	viewName := string(n.viewName)
+	log.VEventf(params.ctx, 2, "dependencies for view %s:\n%s", viewName, n.planDeps.String())
+
 	tKey := sqlbase.NewTableKey(n.dbDesc.ID, viewName)
 	key := tKey.Key()
 	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
@@ -123,14 +129,15 @@ func (n *createViewNode) startExec(params runParams) error {
 	// Inherit permissions from the database descriptor.
 	privs := n.dbDesc.GetPrivileges()
 
-	desc, err := n.makeViewTableDesc(
-		params,
+	desc, err := makeViewTableDesc(
 		viewName,
-		n.n.ColumnNames,
+		n.viewQuery,
 		n.dbDesc.ID,
 		id,
-		n.sourceColumns,
+		n.columns,
+		params.p.txn.CommitTimestamp(),
 		privs,
+		&params.p.semaCtx,
 	)
 	if err != nil {
 		return err
@@ -167,12 +174,13 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn, params.EvalContext().Settings); err != nil {
+	if err := desc.Validate(params.ctx, params.p.txn); err != nil {
 		return err
 	}
 
 	// Log Create View event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
+	tn := tree.MakeTableName(tree.Name(n.dbDesc.Name), n.viewName)
 	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 		params.ctx,
 		params.p.txn,
@@ -181,9 +189,13 @@ func (n *createViewNode) startExec(params runParams) error {
 		int32(params.extendedEvalCtx.NodeID),
 		struct {
 			ViewName  string
-			Statement string
+			ViewQuery string
 			User      string
-		}{n.n.Name.FQString(), n.n.String(), params.SessionData().User},
+		}{
+			ViewName:  tn.FQString(),
+			ViewQuery: n.viewQuery,
+			User:      params.SessionData().User,
+		},
 	)
 }
 
@@ -198,58 +210,20 @@ func (n *createViewNode) Close(ctx context.Context)  {}
 // dependencies in the same transaction that the view is created and it
 // doesn't matter if reads/writes use a cached descriptor that doesn't
 // include the back-references.
-func (n *createViewNode) makeViewTableDesc(
-	params runParams,
+func makeViewTableDesc(
 	viewName string,
-	columnNames tree.NameList,
+	viewQuery string,
 	parentID sqlbase.ID,
 	id sqlbase.ID,
 	resultColumns []sqlbase.ResultColumn,
-	privileges *sqlbase.PrivilegeDescriptor,
-) (sqlbase.MutableTableDescriptor, error) {
-	desc := InitTableDescriptor(id, parentID, viewName,
-		params.p.txn.CommitTimestamp(), privileges)
-	desc.ViewQuery = tree.AsStringWithFlags(n.n.AsSource, tree.FmtParsable)
-	for i, colRes := range resultColumns {
-		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
-		if len(columnNames) > i {
-			columnTableDef.Name = columnNames[i]
-		}
-		// The new types in the CREATE VIEW column specs never use
-		// SERIAL so we need not process SERIAL types here.
-		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, &params.p.semaCtx)
-		if err != nil {
-			return desc, err
-		}
-		desc.AddColumn(col)
-	}
-	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
-	// happens to work in gc, but does not work in gccgo.
-	//
-	// See https://github.com/golang/go/issues/23188.
-	err := desc.AllocateIDs()
-	return desc, err
-}
-
-// MakeViewTableDesc returns the table descriptor for a new view.
-func MakeViewTableDesc(
-	n *tree.CreateView,
-	resultColumns sqlbase.ResultColumns,
-	parentID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
 ) (sqlbase.MutableTableDescriptor, error) {
-	viewName := n.Name.Table()
 	desc := InitTableDescriptor(id, parentID, viewName, creationTime, privileges)
-	desc.ViewQuery = tree.AsStringWithFlags(n.AsSource, tree.FmtParsable)
-
-	for i, colRes := range resultColumns {
+	desc.ViewQuery = viewQuery
+	for _, colRes := range resultColumns {
 		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
-		if len(n.ColumnNames) > i {
-			columnTableDef.Name = n.ColumnNames[i]
-		}
 		// The new types in the CREATE VIEW column specs never use
 		// SERIAL so we need not process SERIAL types here.
 		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx)
@@ -258,10 +232,16 @@ func MakeViewTableDesc(
 		}
 		desc.AddColumn(col)
 	}
-	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
-	// happens to work in gc, but does not work in gccgo.
-	//
-	// See https://github.com/golang/go/issues/23188.
-	err := desc.AllocateIDs()
-	return desc, err
+	if err := desc.AllocateIDs(); err != nil {
+		return sqlbase.MutableTableDescriptor{}, err
+	}
+	return desc, nil
+}
+
+func overrideColumnNames(cols sqlbase.ResultColumns, newNames tree.NameList) sqlbase.ResultColumns {
+	res := append(sqlbase.ResultColumns(nil), cols...)
+	for i := range res {
+		res[i].Name = string(newNames[i])
+	}
+	return res
 }

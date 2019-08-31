@@ -14,6 +14,7 @@ insert child
  ├── insert-mapping:
  │    ├──  column1:3 => c:1
  │    └──  column2:4 => child.p:2
+ ├── input binding: &1
  ├── values
  │    ├── columns: column1:3(int!null) column2:4(int!null)
  │    ├── tuple [type=tuple{int, int}]
@@ -25,23 +26,50 @@ insert child
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column2:4(int!null)
-                ├── project
-                │    ├── columns: column2:4(int!null)
-                │    └── values
-                │         ├── columns: column1:3(int!null) column2:4(int!null)
-                │         ├── tuple [type=tuple{int, int}]
-                │         │    ├── const: 100 [type=int]
-                │         │    └── const: 1 [type=int]
-                │         └── tuple [type=tuple{int, int}]
-                │              ├── const: 200 [type=int]
-                │              └── const: 1 [type=int]
-                ├── scan t.public.parent
-                │    └── columns: t.public.parent.p:5(int!null)
+                ├── columns: column2:7(int!null)
+                ├── with-scan &1
+                │    ├── columns: column2:7(int!null)
+                │    └── mapping:
+                │         └──  column2:4(int) => column2:7(int)
+                ├── scan parent
+                │    └── columns: parent.p:5(int!null)
                 └── filters
                      └── eq [type=bool]
                           ├── variable: column2 [type=int]
-                          └── variable: t.public.parent.p [type=int]
+                          └── variable: parent.p [type=int]
+
+# Use a non-constant input.
+exec-ddl
+CREATE TABLE xy (x INT, y INT)
+----
+
+build
+INSERT INTO child SELECT x, y FROM xy
+----
+insert child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├──  x:3 => c:1
+ │    └──  xy.y:4 => child.p:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: x:3(int) xy.y:4(int)
+ │    └── scan xy
+ │         └── columns: x:3(int) xy.y:4(int) rowid:5(int!null)
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: y:8(int)
+                ├── with-scan &1
+                │    ├── columns: y:8(int)
+                │    └── mapping:
+                │         └──  xy.y:4(int) => y:8(int)
+                ├── scan parent
+                │    └── columns: parent.p:6(int!null)
+                └── filters
+                     └── eq [type=bool]
+                          ├── variable: y [type=int]
+                          └── variable: parent.p [type=int]
 
 exec-ddl
 CREATE TABLE child_nullable (c INT PRIMARY KEY, p INT REFERENCES parent(p));
@@ -57,6 +85,7 @@ insert child_nullable
  ├── insert-mapping:
  │    ├──  column1:3 => c:1
  │    └──  column2:4 => child_nullable.p:2
+ ├── input binding: &1
  ├── values
  │    ├── columns: column1:3(int!null) column2:4(int)
  │    ├── tuple [type=tuple{int, int}]
@@ -69,30 +98,23 @@ insert child_nullable
  └── f-k-checks
       └── f-k-checks-item: child_nullable(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column2:4(int!null)
+                ├── columns: column2:7(int!null)
                 ├── select
-                │    ├── columns: column2:4(int!null)
-                │    ├── project
-                │    │    ├── columns: column2:4(int)
-                │    │    └── values
-                │    │         ├── columns: column1:3(int!null) column2:4(int)
-                │    │         ├── tuple [type=tuple{int, int}]
-                │    │         │    ├── const: 100 [type=int]
-                │    │         │    └── const: 1 [type=int]
-                │    │         └── tuple [type=tuple{int, int}]
-                │    │              ├── const: 200 [type=int]
-                │    │              └── cast: INT8 [type=int]
-                │    │                   └── null [type=unknown]
+                │    ├── columns: column2:7(int!null)
+                │    ├── with-scan &1
+                │    │    ├── columns: column2:7(int)
+                │    │    └── mapping:
+                │    │         └──  column2:4(int) => column2:7(int)
                 │    └── filters
                 │         └── is-not [type=bool]
                 │              ├── variable: column2 [type=int]
                 │              └── null [type=unknown]
-                ├── scan t.public.parent
-                │    └── columns: t.public.parent.p:5(int!null)
+                ├── scan parent
+                │    └── columns: parent.p:5(int!null)
                 └── filters
                      └── eq [type=bool]
                           ├── variable: column2 [type=int]
-                          └── variable: t.public.parent.p [type=int]
+                          └── variable: parent.p [type=int]
 
 # The column is nullable but we know that the input is not null, so we don't
 # need to plan the filter.
@@ -104,6 +126,7 @@ insert child_nullable
  ├── insert-mapping:
  │    ├──  column1:3 => c:1
  │    └──  column2:4 => child_nullable.p:2
+ ├── input binding: &1
  ├── values
  │    ├── columns: column1:3(int!null) column2:4(int!null)
  │    ├── tuple [type=tuple{int, int}]
@@ -115,23 +138,17 @@ insert child_nullable
  └── f-k-checks
       └── f-k-checks-item: child_nullable(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column2:4(int!null)
-                ├── project
-                │    ├── columns: column2:4(int!null)
-                │    └── values
-                │         ├── columns: column1:3(int!null) column2:4(int!null)
-                │         ├── tuple [type=tuple{int, int}]
-                │         │    ├── const: 100 [type=int]
-                │         │    └── const: 1 [type=int]
-                │         └── tuple [type=tuple{int, int}]
-                │              ├── const: 200 [type=int]
-                │              └── const: 1 [type=int]
-                ├── scan t.public.parent
-                │    └── columns: t.public.parent.p:5(int!null)
+                ├── columns: column2:7(int!null)
+                ├── with-scan &1
+                │    ├── columns: column2:7(int!null)
+                │    └── mapping:
+                │         └──  column2:4(int) => column2:7(int)
+                ├── scan parent
+                │    └── columns: parent.p:5(int!null)
                 └── filters
                      └── eq [type=bool]
                           ├── variable: column2 [type=int]
-                          └── variable: t.public.parent.p [type=int]
+                          └── variable: parent.p [type=int]
 
 # Check planning of filter with FULL match (which should be the same on a
 # single column).
@@ -147,6 +164,7 @@ insert child_nullable_full
  ├── insert-mapping:
  │    ├──  column1:3 => c:1
  │    └──  column2:4 => child_nullable_full.p:2
+ ├── input binding: &1
  ├── values
  │    ├── columns: column1:3(int!null) column2:4(int)
  │    ├── tuple [type=tuple{int, int}]
@@ -159,30 +177,23 @@ insert child_nullable_full
  └── f-k-checks
       └── f-k-checks-item: child_nullable_full(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: column2:4(int!null)
+                ├── columns: column2:7(int!null)
                 ├── select
-                │    ├── columns: column2:4(int!null)
-                │    ├── project
-                │    │    ├── columns: column2:4(int)
-                │    │    └── values
-                │    │         ├── columns: column1:3(int!null) column2:4(int)
-                │    │         ├── tuple [type=tuple{int, int}]
-                │    │         │    ├── const: 100 [type=int]
-                │    │         │    └── const: 1 [type=int]
-                │    │         └── tuple [type=tuple{int, int}]
-                │    │              ├── const: 200 [type=int]
-                │    │              └── cast: INT8 [type=int]
-                │    │                   └── null [type=unknown]
+                │    ├── columns: column2:7(int!null)
+                │    ├── with-scan &1
+                │    │    ├── columns: column2:7(int)
+                │    │    └── mapping:
+                │    │         └──  column2:4(int) => column2:7(int)
                 │    └── filters
                 │         └── is-not [type=bool]
                 │              ├── variable: column2 [type=int]
                 │              └── null [type=unknown]
-                ├── scan t.public.parent
-                │    └── columns: t.public.parent.p:5(int!null)
+                ├── scan parent
+                │    └── columns: parent.p:5(int!null)
                 └── filters
                      └── eq [type=bool]
                           ├── variable: column2 [type=int]
-                          └── variable: t.public.parent.p [type=int]
+                          └── variable: parent.p [type=int]
 
 # Tests with multicolumn FKs.
 exec-ddl
@@ -208,6 +219,7 @@ insert multi_col_child
  │    ├──  column2:6 => multi_col_child.p:2
  │    ├──  column3:7 => multi_col_child.q:3
  │    └──  column4:8 => multi_col_child.r:4
+ ├── input binding: &1
  ├── values
  │    ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int)
  │    └── tuple [type=tuple{int, int, int, int}]
@@ -221,21 +233,15 @@ insert multi_col_child
  └── f-k-checks
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: column2:6(int!null) column3:7(int!null) column4:8(int!null)
+                ├── columns: column2:13(int!null) column3:14(int!null) column4:15(int!null)
                 ├── select
-                │    ├── columns: column2:6(int!null) column3:7(int!null) column4:8(int!null)
-                │    ├── project
-                │    │    ├── columns: column2:6(int) column3:7(int) column4:8(int)
-                │    │    └── values
-                │    │         ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int)
-                │    │         └── tuple [type=tuple{int, int, int, int}]
-                │    │              ├── const: 4 [type=int]
-                │    │              ├── cast: INT8 [type=int]
-                │    │              │    └── null [type=unknown]
-                │    │              ├── cast: INT8 [type=int]
-                │    │              │    └── null [type=unknown]
-                │    │              └── cast: INT8 [type=int]
-                │    │                   └── null [type=unknown]
+                │    ├── columns: column2:13(int!null) column3:14(int!null) column4:15(int!null)
+                │    ├── with-scan &1
+                │    │    ├── columns: column2:13(int) column3:14(int) column4:15(int)
+                │    │    └── mapping:
+                │    │         ├──  column2:6(int) => column2:13(int)
+                │    │         ├──  column3:7(int) => column3:14(int)
+                │    │         └──  column4:8(int) => column4:15(int)
                 │    └── filters
                 │         ├── is-not [type=bool]
                 │         │    ├── variable: column2 [type=int]
@@ -246,18 +252,18 @@ insert multi_col_child
                 │         └── is-not [type=bool]
                 │              ├── variable: column4 [type=int]
                 │              └── null [type=unknown]
-                ├── scan t.public.multi_col_parent
-                │    └── columns: t.public.multi_col_parent.p:9(int!null) t.public.multi_col_parent.q:10(int!null) t.public.multi_col_parent.r:11(int!null)
+                ├── scan multi_col_parent
+                │    └── columns: multi_col_parent.p:9(int!null) multi_col_parent.q:10(int!null) multi_col_parent.r:11(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column2 [type=int]
-                     │    └── variable: t.public.multi_col_parent.p [type=int]
+                     │    └── variable: multi_col_parent.p [type=int]
                      ├── eq [type=bool]
                      │    ├── variable: column3 [type=int]
-                     │    └── variable: t.public.multi_col_parent.q [type=int]
+                     │    └── variable: multi_col_parent.q [type=int]
                      └── eq [type=bool]
                           ├── variable: column4 [type=int]
-                          └── variable: t.public.multi_col_parent.r [type=int]
+                          └── variable: multi_col_parent.r [type=int]
 
 # Only p and q are nullable.
 build
@@ -270,6 +276,7 @@ insert multi_col_child
  │    ├──  column2:6 => multi_col_child.p:2
  │    ├──  column3:7 => multi_col_child.q:3
  │    └──  column4:8 => multi_col_child.r:4
+ ├── input binding: &1
  ├── values
  │    ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int!null)
  │    ├── tuple [type=tuple{int, int, int, int}]
@@ -287,25 +294,15 @@ insert multi_col_child
  └── f-k-checks
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: column2:6(int!null) column3:7(int!null) column4:8(int!null)
+                ├── columns: column2:13(int!null) column3:14(int!null) column4:15(int!null)
                 ├── select
-                │    ├── columns: column2:6(int!null) column3:7(int!null) column4:8(int!null)
-                │    ├── project
-                │    │    ├── columns: column2:6(int) column3:7(int) column4:8(int!null)
-                │    │    └── values
-                │    │         ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int!null)
-                │    │         ├── tuple [type=tuple{int, int, int, int}]
-                │    │         │    ├── const: 2 [type=int]
-                │    │         │    ├── cast: INT8 [type=int]
-                │    │         │    │    └── null [type=unknown]
-                │    │         │    ├── const: 20 [type=int]
-                │    │         │    └── const: 20 [type=int]
-                │    │         └── tuple [type=tuple{int, int, int, int}]
-                │    │              ├── const: 3 [type=int]
-                │    │              ├── const: 20 [type=int]
-                │    │              ├── cast: INT8 [type=int]
-                │    │              │    └── null [type=unknown]
-                │    │              └── const: 20 [type=int]
+                │    ├── columns: column2:13(int!null) column3:14(int!null) column4:15(int!null)
+                │    ├── with-scan &1
+                │    │    ├── columns: column2:13(int) column3:14(int) column4:15(int!null)
+                │    │    └── mapping:
+                │    │         ├──  column2:6(int) => column2:13(int)
+                │    │         ├──  column3:7(int) => column3:14(int)
+                │    │         └──  column4:8(int) => column4:15(int)
                 │    └── filters
                 │         ├── is-not [type=bool]
                 │         │    ├── variable: column2 [type=int]
@@ -313,18 +310,18 @@ insert multi_col_child
                 │         └── is-not [type=bool]
                 │              ├── variable: column3 [type=int]
                 │              └── null [type=unknown]
-                ├── scan t.public.multi_col_parent
-                │    └── columns: t.public.multi_col_parent.p:9(int!null) t.public.multi_col_parent.q:10(int!null) t.public.multi_col_parent.r:11(int!null)
+                ├── scan multi_col_parent
+                │    └── columns: multi_col_parent.p:9(int!null) multi_col_parent.q:10(int!null) multi_col_parent.r:11(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column2 [type=int]
-                     │    └── variable: t.public.multi_col_parent.p [type=int]
+                     │    └── variable: multi_col_parent.p [type=int]
                      ├── eq [type=bool]
                      │    ├── variable: column3 [type=int]
-                     │    └── variable: t.public.multi_col_parent.q [type=int]
+                     │    └── variable: multi_col_parent.q [type=int]
                      └── eq [type=bool]
                           ├── variable: column4 [type=int]
-                          └── variable: t.public.multi_col_parent.r [type=int]
+                          └── variable: multi_col_parent.r [type=int]
 
 # All the FK columns are not-null; no filter necessary.
 build
@@ -337,6 +334,7 @@ insert multi_col_child
  │    ├──  column2:6 => multi_col_child.p:2
  │    ├──  column3:7 => multi_col_child.q:3
  │    └──  column4:8 => multi_col_child.r:4
+ ├── input binding: &1
  ├── values
  │    ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null) column4:8(int!null)
  │    └── tuple [type=tuple{int, int, int, int}]
@@ -347,28 +345,25 @@ insert multi_col_child
  └── f-k-checks
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: column2:6(int!null) column3:7(int!null) column4:8(int!null)
-                ├── project
-                │    ├── columns: column2:6(int!null) column3:7(int!null) column4:8(int!null)
-                │    └── values
-                │         ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null) column4:8(int!null)
-                │         └── tuple [type=tuple{int, int, int, int}]
-                │              ├── const: 1 [type=int]
-                │              ├── const: 10 [type=int]
-                │              ├── const: 10 [type=int]
-                │              └── const: 10 [type=int]
-                ├── scan t.public.multi_col_parent
-                │    └── columns: t.public.multi_col_parent.p:9(int!null) t.public.multi_col_parent.q:10(int!null) t.public.multi_col_parent.r:11(int!null)
+                ├── columns: column2:13(int!null) column3:14(int!null) column4:15(int!null)
+                ├── with-scan &1
+                │    ├── columns: column2:13(int!null) column3:14(int!null) column4:15(int!null)
+                │    └── mapping:
+                │         ├──  column2:6(int) => column2:13(int)
+                │         ├──  column3:7(int) => column3:14(int)
+                │         └──  column4:8(int) => column4:15(int)
+                ├── scan multi_col_parent
+                │    └── columns: multi_col_parent.p:9(int!null) multi_col_parent.q:10(int!null) multi_col_parent.r:11(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column2 [type=int]
-                     │    └── variable: t.public.multi_col_parent.p [type=int]
+                     │    └── variable: multi_col_parent.p [type=int]
                      ├── eq [type=bool]
                      │    ├── variable: column3 [type=int]
-                     │    └── variable: t.public.multi_col_parent.q [type=int]
+                     │    └── variable: multi_col_parent.q [type=int]
                      └── eq [type=bool]
                           ├── variable: column4 [type=int]
-                          └── variable: t.public.multi_col_parent.r [type=int]
+                          └── variable: multi_col_parent.r [type=int]
 
 exec-ddl
 CREATE TABLE multi_col_child_full  (
@@ -389,6 +384,7 @@ insert multi_col_child_full
  │    ├──  column2:6 => multi_col_child_full.p:2
  │    ├──  column3:7 => multi_col_child_full.q:3
  │    └──  column4:8 => multi_col_child_full.r:4
+ ├── input binding: &1
  ├── values
  │    ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int)
  │    └── tuple [type=tuple{int, int, int, int}]
@@ -402,21 +398,15 @@ insert multi_col_child_full
  └── f-k-checks
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: column2:6(int) column3:7(int) column4:8(int)
+                ├── columns: column2:13(int) column3:14(int) column4:15(int)
                 ├── select
-                │    ├── columns: column2:6(int) column3:7(int) column4:8(int)
-                │    ├── project
-                │    │    ├── columns: column2:6(int) column3:7(int) column4:8(int)
-                │    │    └── values
-                │    │         ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int)
-                │    │         └── tuple [type=tuple{int, int, int, int}]
-                │    │              ├── const: 4 [type=int]
-                │    │              ├── cast: INT8 [type=int]
-                │    │              │    └── null [type=unknown]
-                │    │              ├── cast: INT8 [type=int]
-                │    │              │    └── null [type=unknown]
-                │    │              └── cast: INT8 [type=int]
-                │    │                   └── null [type=unknown]
+                │    ├── columns: column2:13(int) column3:14(int) column4:15(int)
+                │    ├── with-scan &1
+                │    │    ├── columns: column2:13(int) column3:14(int) column4:15(int)
+                │    │    └── mapping:
+                │    │         ├──  column2:6(int) => column2:13(int)
+                │    │         ├──  column3:7(int) => column3:14(int)
+                │    │         └──  column4:8(int) => column4:15(int)
                 │    └── filters
                 │         └── or [type=bool]
                 │              ├── or [type=bool]
@@ -429,18 +419,18 @@ insert multi_col_child_full
                 │              └── is-not [type=bool]
                 │                   ├── variable: column4 [type=int]
                 │                   └── null [type=unknown]
-                ├── scan t.public.multi_col_parent
-                │    └── columns: t.public.multi_col_parent.p:9(int!null) t.public.multi_col_parent.q:10(int!null) t.public.multi_col_parent.r:11(int!null)
+                ├── scan multi_col_parent
+                │    └── columns: multi_col_parent.p:9(int!null) multi_col_parent.q:10(int!null) multi_col_parent.r:11(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column2 [type=int]
-                     │    └── variable: t.public.multi_col_parent.p [type=int]
+                     │    └── variable: multi_col_parent.p [type=int]
                      ├── eq [type=bool]
                      │    ├── variable: column3 [type=int]
-                     │    └── variable: t.public.multi_col_parent.q [type=int]
+                     │    └── variable: multi_col_parent.q [type=int]
                      └── eq [type=bool]
                           ├── variable: column4 [type=int]
-                          └── variable: t.public.multi_col_parent.r [type=int]
+                          └── variable: multi_col_parent.r [type=int]
 
 # Only p and q are nullable; no filter necessary.
 build
@@ -453,6 +443,7 @@ insert multi_col_child_full
  │    ├──  column2:6 => multi_col_child_full.p:2
  │    ├──  column3:7 => multi_col_child_full.q:3
  │    └──  column4:8 => multi_col_child_full.r:4
+ ├── input binding: &1
  ├── values
  │    ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int!null)
  │    ├── tuple [type=tuple{int, int, int, int}]
@@ -470,35 +461,25 @@ insert multi_col_child_full
  └── f-k-checks
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: column2:6(int) column3:7(int) column4:8(int!null)
-                ├── project
-                │    ├── columns: column2:6(int) column3:7(int) column4:8(int!null)
-                │    └── values
-                │         ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int!null)
-                │         ├── tuple [type=tuple{int, int, int, int}]
-                │         │    ├── const: 2 [type=int]
-                │         │    ├── cast: INT8 [type=int]
-                │         │    │    └── null [type=unknown]
-                │         │    ├── const: 20 [type=int]
-                │         │    └── const: 20 [type=int]
-                │         └── tuple [type=tuple{int, int, int, int}]
-                │              ├── const: 3 [type=int]
-                │              ├── const: 20 [type=int]
-                │              ├── cast: INT8 [type=int]
-                │              │    └── null [type=unknown]
-                │              └── const: 20 [type=int]
-                ├── scan t.public.multi_col_parent
-                │    └── columns: t.public.multi_col_parent.p:9(int!null) t.public.multi_col_parent.q:10(int!null) t.public.multi_col_parent.r:11(int!null)
+                ├── columns: column2:13(int) column3:14(int) column4:15(int!null)
+                ├── with-scan &1
+                │    ├── columns: column2:13(int) column3:14(int) column4:15(int!null)
+                │    └── mapping:
+                │         ├──  column2:6(int) => column2:13(int)
+                │         ├──  column3:7(int) => column3:14(int)
+                │         └──  column4:8(int) => column4:15(int)
+                ├── scan multi_col_parent
+                │    └── columns: multi_col_parent.p:9(int!null) multi_col_parent.q:10(int!null) multi_col_parent.r:11(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column2 [type=int]
-                     │    └── variable: t.public.multi_col_parent.p [type=int]
+                     │    └── variable: multi_col_parent.p [type=int]
                      ├── eq [type=bool]
                      │    ├── variable: column3 [type=int]
-                     │    └── variable: t.public.multi_col_parent.q [type=int]
+                     │    └── variable: multi_col_parent.q [type=int]
                      └── eq [type=bool]
                           ├── variable: column4 [type=int]
-                          └── variable: t.public.multi_col_parent.r [type=int]
+                          └── variable: multi_col_parent.r [type=int]
 
 # All the FK columns are not-null; no filter necessary.
 build
@@ -511,6 +492,7 @@ insert multi_col_child_full
  │    ├──  column2:6 => multi_col_child_full.p:2
  │    ├──  column3:7 => multi_col_child_full.q:3
  │    └──  column4:8 => multi_col_child_full.r:4
+ ├── input binding: &1
  ├── values
  │    ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null) column4:8(int!null)
  │    └── tuple [type=tuple{int, int, int, int}]
@@ -521,28 +503,25 @@ insert multi_col_child_full
  └── f-k-checks
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: column2:6(int!null) column3:7(int!null) column4:8(int!null)
-                ├── project
-                │    ├── columns: column2:6(int!null) column3:7(int!null) column4:8(int!null)
-                │    └── values
-                │         ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null) column4:8(int!null)
-                │         └── tuple [type=tuple{int, int, int, int}]
-                │              ├── const: 1 [type=int]
-                │              ├── const: 10 [type=int]
-                │              ├── const: 10 [type=int]
-                │              └── const: 10 [type=int]
-                ├── scan t.public.multi_col_parent
-                │    └── columns: t.public.multi_col_parent.p:9(int!null) t.public.multi_col_parent.q:10(int!null) t.public.multi_col_parent.r:11(int!null)
+                ├── columns: column2:13(int!null) column3:14(int!null) column4:15(int!null)
+                ├── with-scan &1
+                │    ├── columns: column2:13(int!null) column3:14(int!null) column4:15(int!null)
+                │    └── mapping:
+                │         ├──  column2:6(int) => column2:13(int)
+                │         ├──  column3:7(int) => column3:14(int)
+                │         └──  column4:8(int) => column4:15(int)
+                ├── scan multi_col_parent
+                │    └── columns: multi_col_parent.p:9(int!null) multi_col_parent.q:10(int!null) multi_col_parent.r:11(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column2 [type=int]
-                     │    └── variable: t.public.multi_col_parent.p [type=int]
+                     │    └── variable: multi_col_parent.p [type=int]
                      ├── eq [type=bool]
                      │    ├── variable: column3 [type=int]
-                     │    └── variable: t.public.multi_col_parent.q [type=int]
+                     │    └── variable: multi_col_parent.q [type=int]
                      └── eq [type=bool]
                           ├── variable: column4 [type=int]
-                          └── variable: t.public.multi_col_parent.r [type=int]
+                          └── variable: multi_col_parent.r [type=int]
 
 exec-ddl
 CREATE TABLE multi_ref_parent_a (a INT PRIMARY KEY, other INT)
@@ -573,6 +552,7 @@ insert multi_ref_child
  │    ├──  column2:6 => multi_ref_child.a:2
  │    ├──  column3:7 => multi_ref_child.b:3
  │    └──  column4:8 => multi_ref_child.c:4
+ ├── input binding: &1
  ├── values
  │    ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int)
  │    └── tuple [type=tuple{int, int, int, int}]
@@ -586,48 +566,33 @@ insert multi_ref_child
  └── f-k-checks
       ├── f-k-checks-item: multi_ref_child(a) -> multi_ref_parent_a(a)
       │    └── anti-join (hash)
-      │         ├── columns: column2:6(int!null)
+      │         ├── columns: column2:11(int!null)
       │         ├── select
-      │         │    ├── columns: column2:6(int!null)
-      │         │    ├── project
-      │         │    │    ├── columns: column2:6(int)
-      │         │    │    └── values
-      │         │    │         ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int)
-      │         │    │         └── tuple [type=tuple{int, int, int, int}]
-      │         │    │              ├── const: 1 [type=int]
-      │         │    │              ├── cast: INT8 [type=int]
-      │         │    │              │    └── null [type=unknown]
-      │         │    │              ├── cast: INT8 [type=int]
-      │         │    │              │    └── null [type=unknown]
-      │         │    │              └── cast: INT8 [type=int]
-      │         │    │                   └── null [type=unknown]
+      │         │    ├── columns: column2:11(int!null)
+      │         │    ├── with-scan &1
+      │         │    │    ├── columns: column2:11(int)
+      │         │    │    └── mapping:
+      │         │    │         └──  column2:6(int) => column2:11(int)
       │         │    └── filters
       │         │         └── is-not [type=bool]
       │         │              ├── variable: column2 [type=int]
       │         │              └── null [type=unknown]
-      │         ├── scan t.public.multi_ref_parent_a
-      │         │    └── columns: t.public.multi_ref_parent_a.a:9(int!null)
+      │         ├── scan multi_ref_parent_a
+      │         │    └── columns: multi_ref_parent_a.a:9(int!null)
       │         └── filters
       │              └── eq [type=bool]
       │                   ├── variable: column2 [type=int]
-      │                   └── variable: t.public.multi_ref_parent_a.a [type=int]
+      │                   └── variable: multi_ref_parent_a.a [type=int]
       └── f-k-checks-item: multi_ref_child(b,c) -> multi_ref_parent_bc(b,c)
            └── anti-join (hash)
-                ├── columns: column3:7(int!null) column4:8(int!null)
+                ├── columns: column3:15(int!null) column4:16(int!null)
                 ├── select
-                │    ├── columns: column3:7(int!null) column4:8(int!null)
-                │    ├── project
-                │    │    ├── columns: column3:7(int) column4:8(int)
-                │    │    └── values
-                │    │         ├── columns: column1:5(int!null) column2:6(int) column3:7(int) column4:8(int)
-                │    │         └── tuple [type=tuple{int, int, int, int}]
-                │    │              ├── const: 1 [type=int]
-                │    │              ├── cast: INT8 [type=int]
-                │    │              │    └── null [type=unknown]
-                │    │              ├── cast: INT8 [type=int]
-                │    │              │    └── null [type=unknown]
-                │    │              └── cast: INT8 [type=int]
-                │    │                   └── null [type=unknown]
+                │    ├── columns: column3:15(int!null) column4:16(int!null)
+                │    ├── with-scan &1
+                │    │    ├── columns: column3:15(int) column4:16(int)
+                │    │    └── mapping:
+                │    │         ├──  column3:7(int) => column3:15(int)
+                │    │         └──  column4:8(int) => column4:16(int)
                 │    └── filters
                 │         ├── is-not [type=bool]
                 │         │    ├── variable: column3 [type=int]
@@ -635,12 +600,12 @@ insert multi_ref_child
                 │         └── is-not [type=bool]
                 │              ├── variable: column4 [type=int]
                 │              └── null [type=unknown]
-                ├── scan t.public.multi_ref_parent_bc
-                │    └── columns: t.public.multi_ref_parent_bc.b:11(int!null) t.public.multi_ref_parent_bc.c:12(int!null)
+                ├── scan multi_ref_parent_bc
+                │    └── columns: multi_ref_parent_bc.b:12(int!null) multi_ref_parent_bc.c:13(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column3 [type=int]
-                     │    └── variable: t.public.multi_ref_parent_bc.b [type=int]
+                     │    └── variable: multi_ref_parent_bc.b [type=int]
                      └── eq [type=bool]
                           ├── variable: column4 [type=int]
-                          └── variable: t.public.multi_ref_parent_bc.c [type=int]
+                          └── variable: multi_ref_parent_bc.c [type=int]

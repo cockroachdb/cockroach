@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 statement ok
 CREATE TABLE test_kv(k INT PRIMARY KEY, v INT, w DECIMAL);
   CREATE UNIQUE INDEX test_v_idx ON test_kv(v);
@@ -83,9 +81,9 @@ query ITIIITITT colnames
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, dependson_type, dependson_id, dependson_index_id
 ----
 descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_type  dependson_index_id  dependson_name    dependson_details
-54             test_kvr1        1         NULL       53            fk              1                   fk_k_ref_test_kv  SharedPrefixLen: 1
-55             test_kvr2        2         NULL       53            fk              1                   fk_v_ref_test_kv  SharedPrefixLen: 1
-56             test_kvr3        2         NULL       53            fk              2                   fk_v_ref_test_kv  SharedPrefixLen: 1
+54             test_kvr1        NULL      NULL       53            fk              1                   fk_k_ref_test_kv  NULL
+55             test_kvr2        NULL      NULL       53            fk              1                   fk_v_ref_test_kv  NULL
+56             test_kvr3        NULL      NULL       53            fk              2                   fk_v_ref_test_kv  NULL
 57             test_kvi1        1         NULL       53            interleave      1                   NULL              SharedPrefixLen: 1
 58             test_kvi2        2         NULL       53            interleave      1                   NULL              SharedPrefixLen: 1
 59             test_v1          NULL      NULL       53            view            NULL                NULL              NULL
@@ -95,12 +93,12 @@ query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, dependedonby_type, dependedonby_id, dependedonby_index_id
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
+53             test_kv          NULL      54               fk                 NULL                   NULL               NULL
+53             test_kv          NULL      55               fk                 NULL                   NULL               NULL
+53             test_kv          NULL      56               fk                 NULL                   NULL               NULL
 53             test_kv          NULL      59               view               0                      NULL               Columns: [1 2 3]
-53             test_kv          1         54               fk                 1                      ·                  SharedPrefixLen: 0
-53             test_kv          1         55               fk                 2                      ·                  SharedPrefixLen: 0
 53             test_kv          1         57               interleave         1                      NULL               SharedPrefixLen: 0
 53             test_kv          1         58               interleave         2                      NULL               SharedPrefixLen: 0
-53             test_kv          2         56               fk                 2                      ·                  SharedPrefixLen: 0
 59             test_v1          NULL      60               view               0                      NULL               Columns: [1]
 
 # Checks view dependencies (#17306)
@@ -139,18 +137,3 @@ SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'blo
 ----
 descriptor_id  descriptor_name    index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
 63             blog_posts_id_seq  NULL      64               sequence           0                      NULL               Columns: [0]
-
-# Verify that we report a dependency on a column that is being mutated.
-  #CREATE VIEW v AS WITH a AS (UPDATE kv SET v = 444 RETURNING k) SELECT k FROM a;
-statement ok
-CREATE TABLE kv (k INT PRIMARY KEY, v INT);
-BEGIN;
-  ALTER TABLE kv ADD COLUMN z INT DEFAULT 123;
-  CREATE VIEW v AS SELECT k FROM [UPDATE kv SET v = 444 WHERE k > 0 RETURNING k];
-COMMIT
-
-query ITIITITT colnames
-SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = 'kv'
-----
-descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-65             kv               NULL      66               view               0                      NULL               Columns: [1 2 3]

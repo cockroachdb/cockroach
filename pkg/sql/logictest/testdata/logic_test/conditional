@@ -1,5 +1,4 @@
-# LogicTest: local local-opt fakedist fakedist-metadata fakedist-opt
-
+# LogicTest: local local-vec fakedist fakedist-metadata fakedist-vec
 query II
 SELECT IF(1 = 2, NULL, 1), IF(2 = 2, NULL, 2)
 ----

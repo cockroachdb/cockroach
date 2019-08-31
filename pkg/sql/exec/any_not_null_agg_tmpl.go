@@ -21,12 +21,13 @@ package exec
 
 import (
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/pkg/errors"
 )
 
-func newAnyNotNullAgg(t types.T) (aggregateFunc, error) {
+func newAnyNotNullAgg(t coltypes.T) (aggregateFunc, error) {
 	switch t {
 	// {{range .}}
 	case _TYPES_T:
@@ -44,16 +45,19 @@ func newAnyNotNullAgg(t types.T) (aggregateFunc, error) {
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
 
-// _GOTYPE is the template Go type variable for this operator. It will be
-// replaced by the Go type equivalent for each type in types.T, for example
-// int64 for types.Int64.
-type _GOTYPE interface{}
+// _GOTYPESLICE is the template Go type slice variable for this operator. It
+// will be replaced by the Go slice representation for each type in coltypes.T, for
+// example []int64 for coltypes.Int64.
+type _GOTYPESLICE interface{}
 
-// _TYPES_T is the template type variable for types.T. It will be replaced by
-// types.Foo for each type Foo in the types.T type.
-const _TYPES_T = types.Unhandled
+// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
+// coltypes.Foo for each type Foo in the coltypes.T type.
+const _TYPES_T = coltypes.Unhandled
 
 // */}}
+
+// Use execgen package to remove unused import warning.
+var _ interface{} = execgen.UNSAFEGET
 
 // {{range .}}
 
@@ -62,7 +66,7 @@ const _TYPES_T = types.Unhandled
 type anyNotNull_TYPEAgg struct {
 	done                        bool
 	groups                      []bool
-	vec                         []_GOTYPE
+	vec                         _GOTYPESLICE
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	foundNonNullForCurrentGroup bool
@@ -76,7 +80,7 @@ func (a *anyNotNull_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 }
 
 func (a *anyNotNull_TYPEAgg) Reset() {
-	copy(a.vec, zero_TYPEColumn)
+	execgen.ZERO(a.vec)
 	a.curIdx = -1
 	a.done = false
 	a.foundNonNullForCurrentGroup = false
@@ -90,7 +94,9 @@ func (a *anyNotNull_TYPEAgg) CurrentOutputIndex() int {
 func (a *anyNotNull_TYPEAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
-		copy(a.vec[idx+1:], zero_TYPEColumn)
+		vecLen := execgen.LEN(a.vec)
+		target := execgen.SLICE(a.vec, idx+1, vecLen)
+		execgen.ZERO(target)
 		a.nulls.UnsetNullsAfter(uint16(idx + 1))
 	}
 }
@@ -102,9 +108,8 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	inputLen := b.Length()
 	if inputLen == 0 {
 		// If we haven't found any non-nulls for this group so far, the output for
-		// this group should be null. If a.curIdx is negative, it means the input
-		// has zero rows, and there should be no output at all.
-		if !a.foundNonNullForCurrentGroup && a.curIdx >= 0 {
+		// this group should be null.
+		if !a.foundNonNullForCurrentGroup {
 			a.nulls.SetNull(uint16(a.curIdx))
 		}
 		a.curIdx++
@@ -121,8 +126,8 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 				_FIND_ANY_NOT_NULL(a, nulls, i, true)
 			}
 		} else {
-			col = col[:inputLen]
-			for i := range col {
+			col = execgen.SLICE(col, 0, int(inputLen))
+			for execgen.RANGE(i, col) {
 				_FIND_ANY_NOT_NULL(a, nulls, i, true)
 			}
 		}
@@ -133,12 +138,16 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 				_FIND_ANY_NOT_NULL(a, nulls, i, false)
 			}
 		} else {
-			col = col[:inputLen]
-			for i := range col {
+			col = execgen.SLICE(col, 0, int(inputLen))
+			for execgen.RANGE(i, col) {
 				_FIND_ANY_NOT_NULL(a, nulls, i, false)
 			}
 		}
 	}
+}
+
+func (a *anyNotNull_TYPEAgg) HandleEmptyInputScalar() {
+	a.nulls.SetNull(0)
 }
 
 // {{end}}
@@ -171,7 +180,11 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 		// If we haven't seen any non-nulls for the current group yet, and the
 		// current value is non-null, then we can pick the current value to be the
 		// output.
-		a.vec[a.curIdx] = col[i]
+		// Explicit template language is used here because the type receiver differs
+		// from the rest of the template file.
+		// TODO(asubiotto): Figure out a way to alias this.
+		// v := {{ .Global.Get "unsafe" "col" "int(i)" }}
+		// {{ .Global.Set "a.vec" "a.curIdx" "v" }}
 		a.foundNonNullForCurrentGroup = true
 	}
 	// {{end}}

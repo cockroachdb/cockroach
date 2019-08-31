@@ -282,6 +282,16 @@ func (s *Store) processPreemptiveSnapshotRequest(
 		if err != nil {
 			return roachpb.NewError(err)
 		}
+		// We need to create a temporary RawNode to process the snapshot. Raft
+		// internally runs safety checks on the snapshot, among them one that
+		// verifies that the peer is actually part of the configuration encoded
+		// in the snapshot. Awkwardly, it isn't actually a peer (preemptive
+		// snapshot...). To get around this, pretend the RawNode has the ID of a
+		// peer we know exists, namely the one that sent us the snap. This won't
+		// be persisted anywhere, and since we're only using the RawNode for
+		// this one snapshot, everything is ok. However, we'll make sure that
+		// no messages are sent in the resulting Ready.
+		preemptiveSnapshotRaftGroupID := uint64(snapHeader.RaftMessageRequest.FromReplica.ReplicaID)
 		raftGroup, err := raft.NewRawNode(
 			newRaftConfig(
 				raft.Storage((*replicaRaftStorage)(r)),
@@ -293,7 +303,7 @@ func (s *Store) processPreemptiveSnapshotRequest(
 				appliedIndex,
 				r.store.cfg,
 				&raftLogger{ctx: ctx},
-			), nil)
+			))
 		if err != nil {
 			return roachpb.NewError(err)
 		}
@@ -308,6 +318,9 @@ func (s *Store) processPreemptiveSnapshotRequest(
 		var ready raft.Ready
 		if raftGroup.HasReady() {
 			ready = raftGroup.Ready()
+			// See the comment above - we don't want this temporary Raft group
+			// to contact the outside world. Apply the snapshot and that's it.
+			ready.Messages = nil
 		}
 
 		if needTombstone {

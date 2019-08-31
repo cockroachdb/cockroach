@@ -45,6 +45,10 @@ func (hs healthServer) Check(
 	return nil, errors.New("no one should see this")
 }
 
+func (hs healthServer) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
+	panic("not implemented")
+}
+
 func TestRequestDidNotStart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

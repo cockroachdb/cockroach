@@ -675,6 +675,18 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 			return nil, nil, errors.Errorf("unable to find store %d in range %+v", target, desc)
 		}
 
+		// For now, don't allow replicas of type LEARNER to be leaseholders, see
+		// comments in RequestLease and TransferLease for why.
+		//
+		// TODO(dan): We shouldn't need this, the checks in RequestLease and
+		// TransferLease are the canonical ones and should be sufficient. Sadly, the
+		// `r.mu.minLeaseProposedTS = status.Timestamp` line below will likely play
+		// badly with that. This would be an issue even without learners, but
+		// omitting this check would make it worse. Fixme.
+		if t := nextLeaseHolder.GetType(); t != roachpb.VOTER_FULL {
+			return nil, nil, errors.Errorf(`cannot transfer lease to replica of type %s`, t)
+		}
+
 		if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok &&
 			nextLease.Replica != nextLeaseHolder {
 			repDesc, err := r.getReplicaDescriptorRLocked()

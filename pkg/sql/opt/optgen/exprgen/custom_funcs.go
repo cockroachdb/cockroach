@@ -117,7 +117,7 @@ func (c *customFuncs) FindTable(name string) opt.TableID {
 
 	var res opt.TableID
 	for i := range tables {
-		if string(tables[i].Table.Name().TableName) == name {
+		if string(tables[i].Table.Name()) == name {
 			if res != 0 {
 				panic(errorf("ambiguous table %q", name))
 			}

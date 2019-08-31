@@ -11,10 +11,15 @@
 package execbuilder
 
 import (
+	"bytes"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
 func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
@@ -46,6 +51,24 @@ func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
 	return execPlan{root: root}, err
 }
 
+func (b *Builder) buildCreateView(cv *memo.CreateViewExpr) (execPlan, error) {
+	md := b.mem.Metadata()
+	schema := md.Schema(cv.Schema)
+	cols := make(sqlbase.ResultColumns, len(cv.Columns))
+	for i := range cols {
+		cols[i].Name = cv.Columns[i].Alias
+		cols[i].Typ = md.ColumnMeta(cv.Columns[i].ID).Type
+	}
+	root, err := b.factory.ConstructCreateView(
+		schema,
+		cv.ViewName,
+		cv.ViewQuery,
+		cols,
+		cv.Deps,
+	)
+	return execPlan{root: root}, err
+}
+
 func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 	var node exec.Node
 
@@ -60,9 +83,21 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 		}
 
 		// Format the plan here and pass it through to the exec factory.
-		f := memo.MakeExprFmtCtx(fmtFlags, b.mem)
+
+		// If catalog option was passed, show catalog object details for all tables.
+		var planText bytes.Buffer
+		if explain.Options.Flags.Contains(tree.ExplainFlagCatalog) {
+			for _, t := range b.mem.Metadata().AllTables() {
+				tp := treeprinter.New()
+				cat.FormatTable(b.catalog, t.Table, tp)
+				planText.WriteString(tp.String())
+			}
+			// TODO(radu): add views, sequences
+		}
+
+		f := memo.MakeExprFmtCtx(fmtFlags, b.mem, b.catalog)
 		f.FormatExpr(explain.Input)
-		planText := f.Buffer.String()
+		planText.WriteString(f.Buffer.String())
 
 		// If we're going to display the environment, there's a bunch of queries we
 		// need to run to get that information, and we can't run them from here, so
@@ -73,7 +108,7 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 		}
 
 		var err error
-		node, err = b.factory.ConstructExplainOpt(planText, envOpts)
+		node, err = b.factory.ConstructExplainOpt(planText.String(), envOpts)
 		if err != nil {
 			return execPlan{}, err
 		}
@@ -98,9 +133,10 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 	for i, c := range explain.ColList {
 		ep.outputCols.Set(int(c), i)
 	}
-	// The subqueries are now owned by the explain node; remove them so they don't
-	// also show up in the final plan.
+	// The sub- and postqueries are now owned by the explain node; remove them so
+	// they don't also show up in the final plan.
 	b.subqueries = b.subqueries[:0]
+	b.postqueries = b.postqueries[:0]
 	return ep, nil
 }
 
@@ -193,6 +229,86 @@ func (b *Builder) buildAlterTableRelocate(relocate *memo.AlterTableRelocateExpr)
 	}
 	ep := execPlan{root: node}
 	for i, c := range relocate.Columns {
+		ep.outputCols.Set(int(c), i)
+	}
+	return ep, nil
+}
+
+func (b *Builder) buildControlJobs(ctl *memo.ControlJobsExpr) (execPlan, error) {
+	input, err := b.buildRelational(ctl.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+	node, err := b.factory.ConstructControlJobs(
+		ctl.Command,
+		input.root,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+	// ControlJobs returns no columns.
+	return execPlan{root: node}, nil
+}
+
+func (b *Builder) buildCancelQueries(cancel *memo.CancelQueriesExpr) (execPlan, error) {
+	input, err := b.buildRelational(cancel.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+	node, err := b.factory.ConstructCancelQueries(input.root, cancel.IfExists)
+	if err != nil {
+		return execPlan{}, err
+	}
+	// CancelQueries returns no columns.
+	return execPlan{root: node}, nil
+}
+
+func (b *Builder) buildCancelSessions(cancel *memo.CancelSessionsExpr) (execPlan, error) {
+	input, err := b.buildRelational(cancel.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+	node, err := b.factory.ConstructCancelSessions(input.root, cancel.IfExists)
+	if err != nil {
+		return execPlan{}, err
+	}
+	// CancelSessions returns no columns.
+	return execPlan{root: node}, nil
+}
+
+func (b *Builder) buildExport(export *memo.ExportExpr) (execPlan, error) {
+	input, err := b.buildRelational(export.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	scalarCtx := buildScalarCtx{}
+	fileName, err := b.buildScalar(&scalarCtx, export.FileName)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	opts := make([]exec.KVOption, len(export.Options))
+	for i, o := range export.Options {
+		opts[i].Key = o.Key
+		var err error
+		opts[i].Value, err = b.buildScalar(&scalarCtx, o.Value)
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
+
+	node, err := b.factory.ConstructExport(
+		input.root,
+		fileName,
+		export.FileFormat,
+		opts,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+	ep := execPlan{root: node}
+	for i, c := range export.Columns {
 		ep.outputCols.Set(int(c), i)
 	}
 	return ep, nil

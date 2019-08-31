@@ -13,33 +13,55 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
 )
 
+// TODO(yuzefovich): reading the data through a pair of colBatchScan and
+// materializer turns out to be more efficient than through a table reader (at
+// the moment, the exception is the case of reading very small number of rows
+// because we still pre-allocate batches of 1024 size). Once we can control the
+// initial size of pre-allocated batches (probably via a batch allocator), we
+// should get rid off table readers entirely. We will have to be careful about
+// propagating the metadata though.
+
 // colBatchScan is the exec.Operator implementation of TableReader. It reads a table
 // from kv, presenting it as coldata.Batches via the exec.Operator interface.
 type colBatchScan struct {
+	exec.ZeroInputNode
 	spans     roachpb.Spans
 	flowCtx   *FlowCtx
 	rf        *row.CFetcher
 	limitHint int64
 	ctx       context.Context
+	// maxResults is non-zero if there is a limit on the total number of rows
+	// that the colBatchScan will read.
+	maxResults uint64
+	// init is true after Init() has been called.
+	init bool
 }
 
-var _ exec.Operator = &colBatchScan{}
+var _ exec.StaticMemoryOperator = &colBatchScan{}
+
+func (s *colBatchScan) EstimateStaticMemoryUsage() int {
+	return s.rf.EstimateStaticMemoryUsage()
+}
 
 func (s *colBatchScan) Init() {
 	s.ctx = context.Background()
+	s.init = true
+
+	limitBatches := scanShouldLimitBatches(s.maxResults, s.limitHint, s.flowCtx)
+
 	if err := s.rf.StartScan(
 		s.ctx, s.flowCtx.txn, s.spans,
-		true /* limit batches */, s.limitHint, s.flowCtx.traceKV,
+		limitBatches, s.limitHint, s.flowCtx.traceKV,
 	); err != nil {
 		panic(err)
 	}
@@ -56,9 +78,15 @@ func (s *colBatchScan) Next(ctx context.Context) coldata.Batch {
 
 // DrainMeta is part of the MetadataSource interface.
 func (s *colBatchScan) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+	if !s.init {
+		// In some pathological queries like `SELECT 1 FROM t HAVING true`, Init()
+		// and Next() may never get called. Return early to avoid using an
+		// uninitialized fetcher.
+		return nil
+	}
 	var trailingMeta []distsqlpb.ProducerMetadata
 	if !s.flowCtx.local {
-		ranges := misplannedRanges(ctx, s.rf.GetRangesInfo(), s.flowCtx.nodeID)
+		ranges := misplannedRanges(ctx, s.rf.GetRangesInfo(), s.flowCtx.NodeID)
 		if ranges != nil {
 			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: ranges})
 		}
@@ -73,7 +101,7 @@ func (s *colBatchScan) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetada
 func newColBatchScan(
 	flowCtx *FlowCtx, spec *distsqlpb.TableReaderSpec, post *distsqlpb.PostProcessSpec,
 ) (*colBatchScan, error) {
-	if flowCtx.nodeID == 0 {
+	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a colBatchScan with uninitialized NodeID")
 	}
 
@@ -108,10 +136,11 @@ func newColBatchScan(
 		spans[i] = spec.Spans[i].Span
 	}
 	return &colBatchScan{
-		spans:     spans,
-		flowCtx:   flowCtx,
-		rf:        &fetcher,
-		limitHint: limitHint,
+		spans:      spans,
+		flowCtx:    flowCtx,
+		rf:         &fetcher,
+		limitHint:  limitHint,
+		maxResults: spec.MaxResults,
 	}, nil
 }
 

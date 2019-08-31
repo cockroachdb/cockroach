@@ -153,8 +153,8 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		fqTableName = n.p.ResolvedName(t).FQString()
 
 	case *tree.TableRef:
-		flags := ObjectLookupFlags{CommonLookupFlags: CommonLookupFlags{
-			avoidCached: n.p.avoidCachedDescriptors,
+		flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
+			AvoidCached: n.p.avoidCachedDescriptors,
 		}}
 		tableDesc, err = n.p.Tables().getTableVersionByID(ctx, n.p.txn, sqlbase.ID(t.TableID), flags)
 		if err != nil {
@@ -183,9 +183,9 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	}
 
 	// Identify which columns we should create statistics for.
-	var createStatsColLists []jobspb.CreateStatsDetails_ColList
+	var colStats []jobspb.CreateStatsDetails_ColStat
 	if len(n.ColumnNames) == 0 {
-		if createStatsColLists, err = createStatsDefaultColumns(tableDesc); err != nil {
+		if colStats, err = createStatsDefaultColumns(tableDesc); err != nil {
 			return nil, err
 		}
 	} else {
@@ -202,7 +202,12 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			}
 			columnIDs[i] = columns[i].ID
 		}
-		createStatsColLists = []jobspb.CreateStatsDetails_ColList{{IDs: columnIDs}}
+		colStats = []jobspb.CreateStatsDetails_ColStat{{ColumnIDs: columnIDs, HasHistogram: false}}
+		if len(columnIDs) == 1 {
+			// By default, create histograms on all explicitly requested column stats
+			// with a single column.
+			colStats[0].HasHistogram = true
+		}
 	}
 
 	// Evaluate the AS OF time, if any.
@@ -235,7 +240,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			Name:            string(n.Name),
 			FQTableName:     fqTableName,
 			Table:           tableDesc.TableDescriptor,
-			ColumnLists:     createStatsColLists,
+			ColumnStats:     colStats,
 			Statement:       n.String(),
 			AsOf:            asOf,
 			MaxFractionIdle: n.Options.Throttling,
@@ -260,20 +265,23 @@ const maxNonIndexCols = 100
 // collect statistics on a, {a, b}, b, and {b, c}.
 //
 // In addition to the index columns, we collect stats on up to maxNonIndexCols
-// other columns from the table.
+// other columns from the table. We only collect histograms for index columns.
 //
 // TODO(rytaft): This currently only generates one single-column stat per
 // index. Add code to collect multi-column stats once they are supported.
 func createStatsDefaultColumns(
 	desc *ImmutableTableDescriptor,
-) ([]jobspb.CreateStatsDetails_ColList, error) {
-	columns := make([]jobspb.CreateStatsDetails_ColList, 0, len(desc.Indexes)+1)
+) ([]jobspb.CreateStatsDetails_ColStat, error) {
+	colStats := make([]jobspb.CreateStatsDetails_ColStat, 0, len(desc.Indexes)+1)
 
 	var requestedCols util.FastIntSet
 
 	// Add a column for the primary key.
 	pkCol := desc.PrimaryIndex.ColumnIDs[0]
-	columns = append(columns, jobspb.CreateStatsDetails_ColList{IDs: []sqlbase.ColumnID{pkCol}})
+	colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
+		ColumnIDs:    []sqlbase.ColumnID{pkCol},
+		HasHistogram: true,
+	})
 	requestedCols.Add(int(pkCol))
 
 	// Add columns for each secondary index.
@@ -284,9 +292,10 @@ func createStatsDefaultColumns(
 		}
 		idxCol := desc.Indexes[i].ColumnIDs[0]
 		if !requestedCols.Contains(int(idxCol)) {
-			columns = append(
-				columns, jobspb.CreateStatsDetails_ColList{IDs: []sqlbase.ColumnID{idxCol}},
-			)
+			colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
+				ColumnIDs:    []sqlbase.ColumnID{idxCol},
+				HasHistogram: true,
+			})
 			requestedCols.Add(int(idxCol))
 		}
 	}
@@ -296,14 +305,15 @@ func createStatsDefaultColumns(
 	for i := 0; i < len(desc.Columns) && nonIdxCols < maxNonIndexCols; i++ {
 		col := &desc.Columns[i]
 		if col.Type.Family() != types.JsonFamily && !requestedCols.Contains(int(col.ID)) {
-			columns = append(
-				columns, jobspb.CreateStatsDetails_ColList{IDs: []sqlbase.ColumnID{col.ID}},
-			)
+			colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
+				ColumnIDs:    []sqlbase.ColumnID{col.ID},
+				HasHistogram: false,
+			})
 			nonIdxCols++
 		}
 	}
 
-	return columns, nil
+	return colStats, nil
 }
 
 // makePlanForExplainDistSQL is part of the distSQLExplainable interface.

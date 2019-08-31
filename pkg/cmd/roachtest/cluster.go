@@ -217,9 +217,10 @@ func (r *clusterRegistry) registerCluster(c *cluster) error {
 func (r *clusterRegistry) unregisterCluster(c *cluster) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	_, exists := r.mu.clusters[c.name]
-	if !exists {
-		panic(fmt.Sprintf("trying to unregister cluster not in registry: %s", c))
+	if _, ok := r.mu.clusters[c.name]; !ok {
+		// If the cluster is not registered, no-op. This allows the
+		// method to be called defensively.
+		return false
 	}
 	delete(r.mu.clusters, c.name)
 	if c.tag != "" {
@@ -228,7 +229,7 @@ func (r *clusterRegistry) unregisterCluster(c *cluster) bool {
 		}
 		r.mu.tagCount[c.tag]--
 	}
-	return exists
+	return true
 }
 
 func (r *clusterRegistry) countForTag(tag string) int {
@@ -1384,6 +1385,15 @@ func (c *cluster) FetchCores(ctx context.Context) error {
 		return nil
 	}
 
+	if true {
+		// TeamCity does not handle giant artifacts well. We'd generally profit
+		// from having the cores, but we should push them straight into a temp
+		// bucket on S3 instead. OTOH, the ROI of this may be low; I don't know
+		// of a recent example where we've wanted the Core dumps.
+		c.l.Printf("skipped fetching cores\n")
+		return nil
+	}
+
 	c.l.Printf("fetching cores\n")
 	c.status("fetching cores")
 
@@ -1968,10 +1978,23 @@ func getDiskUsageInBytes(
 			return 0, errors.New("already failed")
 		}
 		var err error
-		out, err = c.RunWithBuffer(ctx, logger, c.Node(nodeIdx), fmt.Sprint("du -sk {store-dir} | grep -oE '^[0-9]+'"))
+		// `du` can warn if files get removed out from under it (which
+		// happens during RocksDB compactions, for example). Discard its
+		// stderr to avoid breaking Atoi later.
+		// TODO(bdarnell): Refactor this stack to not combine stdout and
+		// stderr so we don't need to do this (and the Warning check
+		// below).
+		out, err = c.RunWithBuffer(ctx, logger, c.Node(nodeIdx),
+			fmt.Sprint("du -sk {store-dir} 2>/dev/null | grep -oE '^[0-9]+'"))
 		if err != nil {
-			// `du` can fail if files get removed out from under it. RocksDB likes to do that
-			// during compactions and such. It's rare enough to just retry.
+			if ctx.Err() != nil {
+				return 0, ctx.Err()
+			}
+			// If `du` fails, retry.
+			// TODO(bdarnell): is this worth doing? It was originally added
+			// because of the "files removed out from under it" problem, but
+			// that doesn't result in a command failure, just a stderr
+			// message.
 			logger.Printf("retrying disk usage computation after spurious error: %s", err)
 			continue
 		}
@@ -2071,10 +2094,12 @@ func (m *monitor) Go(fn func(context.Context) error) {
 	})
 }
 
+var errTestAlreadyFailed = errors.New("already failed")
+
 func (m *monitor) WaitE() error {
 	if m.t.Failed() {
 		// If the test has failed, don't try to limp along.
-		return errors.New("already failed")
+		return errTestAlreadyFailed
 	}
 
 	return m.wait(roachprod, "monitor", m.nodes)
@@ -2085,7 +2110,7 @@ func (m *monitor) Wait() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
-	if err := m.WaitE(); err != nil {
+	if err := m.WaitE(); err != nil && err != errTestAlreadyFailed && !m.t.Failed() {
 		m.t.Fatal(err)
 	}
 }

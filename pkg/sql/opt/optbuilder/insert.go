@@ -154,9 +154,9 @@ func init() {
 // ON CONFLICT clause is present, since it joins a new set of rows to the input
 // and thereby scrambles the input ordering.
 func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope) {
+	var ctes []cteSource
 	if ins.With != nil {
-		inScope = b.buildCTE(ins.With.CTEList, inScope)
-		defer b.checkCTEUsage(inScope)
+		inScope, ctes = b.buildCTE(ins.With.CTEList, inScope)
 	}
 
 	// INSERT INTO xx AS yy - we want to know about xx (tn) because
@@ -173,20 +173,20 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	if ins.OnConflict != nil {
 		// UPSERT and INDEX ON CONFLICT will read from the table to check for
 		// duplicates.
-		b.checkPrivilege(tn, tab, privilege.SELECT)
+		b.checkPrivilege(opt.DepByName(tn), tab, privilege.SELECT)
 
 		if !ins.OnConflict.DoNothing {
 			// UPSERT and INDEX ON CONFLICT DO UPDATE may modify rows if the
 			// DO NOTHING clause is not present.
-			b.checkPrivilege(tn, tab, privilege.UPDATE)
+			b.checkPrivilege(opt.DepByName(tn), tab, privilege.UPDATE)
 		}
 	}
 
 	var mb mutationBuilder
 	if ins.OnConflict != nil && ins.OnConflict.IsUpsertAlias() {
-		mb.init(b, opt.UpsertOp, tab, *alias)
+		mb.init(b, "upsert", tab, *alias)
 	} else {
-		mb.init(b, opt.InsertOp, tab, *alias)
+		mb.init(b, "insert", tab, *alias)
 	}
 
 	// Compute target columns in two cases:
@@ -310,6 +310,8 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		// Build the final upsert statement, including any returned expressions.
 		mb.buildUpsert(returning)
 	}
+
+	mb.outScope.expr = b.wrapWithCTEs(mb.outScope.expr, ctes)
 
 	return mb.outScope
 }
@@ -571,9 +573,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 		// Type check the input column against the corresponding table column.
 		checkDatumTypeFitsColumnType(mb.tab.Column(ord), inCol.typ)
 
-		// Assign name of input column. Computed columns can refer to this column
-		// by its name.
-		inCol.table = *mb.tab.Name()
+		// Assign name of input column.
 		inCol.name = tree.Name(mb.md.ColumnMeta(mb.targetColList[i]).Alias)
 
 		// Record the ordinal position of the scope column that contains the
@@ -615,7 +615,7 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
-	mb.buildFKChecks()
+	mb.buildFKChecksForInsert()
 
 	private := mb.makeMutationPrivate(returning != nil)
 	mb.outScope.expr = mb.b.factory.ConstructInsert(mb.outScope.expr, mb.checks, private)
@@ -936,9 +936,7 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 		scopeCol := mb.b.synthesizeColumn(projectionsScope, alias, typ, nil /* expr */, caseExpr)
 		scopeColOrd := scopeOrdinal(len(projectionsScope.cols) - 1)
 
-		// Assign name to synthesized column. Check constraint columns may refer
-		// to columns in the table by name.
-		scopeCol.table = *mb.tab.Name()
+		// Assign name to synthesized column.
 		scopeCol.name = mb.tab.Column(i).ColName()
 
 		// Update the scope ordinals for the update columns that are involved in

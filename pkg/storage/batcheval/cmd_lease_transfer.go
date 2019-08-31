@@ -31,10 +31,25 @@ func init() {
 func TransferLease(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.TransferLeaseRequest)
-
 	// When returning an error from this method, must always return
 	// a newFailedLeaseTrigger() to satisfy stats.
+	args := cArgs.Args.(*roachpb.TransferLeaseRequest)
+
+	// For now, don't allow replicas of type LEARNER to be leaseholders. There's
+	// no reason this wouldn't work in principle, but it seems inadvisable. In
+	// particular, learners can't become raft leaders, so we wouldn't be able to
+	// co-locate the leaseholder + raft leader, which is going to affect tail
+	// latencies. Additionally, as of the time of writing, learner replicas are
+	// only used for a short time in replica addition, so it's not worth working
+	// out the edge cases. If we decide to start using long-lived learners at some
+	// point, that math may change.
+	//
+	// If this check is removed at some point, the filtering of learners on the
+	// sending side would have to be removed as well.
+	if err := checkCanReceiveLease(cArgs.EvalCtx); err != nil {
+		return newFailedLeaseTrigger(true /* isTransfer */), err
+	}
+
 	prevLease, _ := cArgs.EvalCtx.GetLease()
 	if log.V(2) {
 		log.Infof(ctx, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, args.Lease)

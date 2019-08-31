@@ -1,8 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
-query error unsupported multiple use of CTE clause "a"
-WITH a AS (SELECT 1) SELECT * FROM a CROSS JOIN a
-
 statement ok
 CREATE TABLE x(a) AS SELECT generate_series(1, 3)
 
@@ -144,41 +139,6 @@ WITH t AS (
 )
 SELECT * FROM t
 
-# Regression test for #24307 until CockroachDB learns how to execute
-# side effects no matter what.
-query error unimplemented: common table expression "t" with side effects was not used in query
-WITH t AS (
-   INSERT INTO x(a) VALUES(0) RETURNING a
-)
-SELECT 1
-
-query error unimplemented: common table expression "t" with side effects was not used in query
-WITH t AS (
-   SELECT * FROM (
-      WITH b AS (INSERT INTO x(a) VALUES(0) RETURNING a)
-	  TABLE b
-   )
-)
-SELECT 1
-
-query error unimplemented: common table expression "t" with side effects was not used in query
-WITH t AS (
-   DELETE FROM x RETURNING a
-)
-SELECT 1
-
-query error unimplemented: common table expression "t" with side effects was not used in query
-WITH t AS (
-   UPSERT INTO x(a) VALUES(0) RETURNING a
-)
-SELECT 1
-
-query error unimplemented: common table expression "t" with side effects was not used in query
-WITH t AS (
-   UPDATE x SET a = 0 RETURNING a
-)
-SELECT 1
-
 # however if there are no side effects, no errors are required.
 query I
 WITH t AS (SELECT 1) SELECT 2
@@ -237,3 +197,18 @@ query I
 ((WITH lim(x) AS (SELECT 1) SELECT 123) LIMIT (SELECT x FROM lim))
 ----
 123
+
+# CTE with an ORDER BY.
+
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT)
+
+statement ok
+INSERT INTO ab VALUES (1, 2), (3, 4), (5, 6)
+
+query I
+WITH a AS (SELECT a FROM ab ORDER BY b) SELECT * FROM a
+----
+1
+3
+5

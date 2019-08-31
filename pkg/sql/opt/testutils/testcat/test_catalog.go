@@ -42,6 +42,11 @@ type Catalog struct {
 	counter    int
 }
 
+type dataSource interface {
+	cat.DataSource
+	fqName() cat.DataSourceName
+}
+
 var _ cat.Catalog = &Catalog{}
 
 // New creates a new empty instance of the test catalog.
@@ -55,7 +60,7 @@ func New() *Catalog {
 				ExplicitSchema:  true,
 				ExplicitCatalog: true,
 			},
-			dataSources: make(map[string]cat.DataSource),
+			dataSources: make(map[string]dataSource),
 		},
 	}
 }
@@ -151,14 +156,14 @@ func (tc *Catalog) ResolveDataSource(
 
 // ResolveDataSourceByID is part of the cat.Catalog interface.
 func (tc *Catalog) ResolveDataSourceByID(
-	ctx context.Context, id cat.StableID,
-) (cat.DataSource, error) {
+	ctx context.Context, flags cat.Flags, id cat.StableID,
+) (_ cat.DataSource, isAdding bool, _ error) {
 	for _, ds := range tc.testSchema.dataSources {
-		if tab, ok := ds.(*Table); ok && tab.TabID == id {
-			return ds, nil
+		if ds.ID() == id {
+			return ds, false, nil
 		}
 	}
-	return nil, pgerror.Newf(pgcode.UndefinedTable,
+	return nil, false, pgerror.Newf(pgcode.UndefinedTable,
 		"relation [%d] does not exist", id)
 }
 
@@ -192,14 +197,21 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 	return nil
 }
 
-// IsSuperUser is part of the cat.Catalog interface.
-func (tc *Catalog) IsSuperUser(ctx context.Context, action string) (bool, error) {
+// HasAdminRole is part of the cat.Catalog interface.
+func (tc *Catalog) HasAdminRole(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// RequireSuperUser is part of the cat.Catalog interface.
-func (tc *Catalog) RequireSuperUser(ctx context.Context, action string) error {
+// RequireAdminRole is part of the cat.Catalog interface.
+func (tc *Catalog) RequireAdminRole(ctx context.Context, action string) error {
 	return nil
+}
+
+// FullyQualifiedName is part of the cat.Catalog interface.
+func (tc *Catalog) FullyQualifiedName(
+	ctx context.Context, ds cat.DataSource,
+) (cat.DataSourceName, error) {
+	return ds.(dataSource).fqName(), nil
 }
 
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
@@ -401,7 +413,7 @@ type Schema struct {
 	// If Revoked is true, then the user has had privileges on the schema revoked.
 	Revoked bool
 
-	dataSources map[string]cat.DataSource
+	dataSources map[string]dataSource
 }
 
 var _ cat.Schema = &Schema{}
@@ -431,7 +443,7 @@ func (s *Schema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceName, 
 	sort.Strings(keys)
 	var res []cat.DataSourceName
 	for _, k := range keys {
-		res = append(res, *s.dataSources[k].Name())
+		res = append(res, s.dataSources[k].fqName())
 	}
 	return res, nil
 }
@@ -471,8 +483,18 @@ func (tv *View) Equals(other cat.Object) bool {
 }
 
 // Name is part of the cat.DataSource interface.
-func (tv *View) Name() *cat.DataSourceName {
-	return &tv.ViewName
+func (tv *View) Name() tree.Name {
+	return tv.ViewName.TableName
+}
+
+// fqName is part of the dataSource interface.
+func (tv *View) fqName() cat.DataSourceName {
+	return tv.ViewName
+}
+
+// IsSystemView is part of the cat.View interface.
+func (tv *View) IsSystemView() bool {
+	return false
 }
 
 // Query is part of the cat.View interface.
@@ -542,8 +564,13 @@ func (tt *Table) Equals(other cat.Object) bool {
 }
 
 // Name is part of the cat.DataSource interface.
-func (tt *Table) Name() *cat.DataSourceName {
-	return &tt.TabName
+func (tt *Table) Name() tree.Name {
+	return tt.TabName.TableName
+}
+
+// fqName is part of the dataSource interface.
+func (tt *Table) fqName() cat.DataSourceName {
+	return tt.TabName
 }
 
 // IsVirtualTable is part of the cat.Table interface.
@@ -592,7 +619,7 @@ func (tt *Table) DeletableIndexCount() int {
 }
 
 // Index is part of the cat.Table interface.
-func (tt *Table) Index(i int) cat.Index {
+func (tt *Table) Index(i cat.IndexOrdinal) cat.Index {
 	return tt.Indexes[i]
 }
 
@@ -690,6 +717,10 @@ type Index struct {
 
 	// table is a back reference to the table this index is on.
 	table *Table
+
+	// partitionBy is the partitioning clause that corresponds to this index. Used
+	// to implement PartitionByListPrefixes.
+	partitionBy *tree.PartitionBy
 }
 
 // ID is part of the cat.Index interface.
@@ -750,6 +781,66 @@ func (ti *Index) Zone() cat.Zone {
 // Span is part of the cat.Index interface.
 func (ti *Index) Span() roachpb.Span {
 	panic("not implemented")
+}
+
+// PartitionByListPrefixes is part of the cat.Index interface.
+func (ti *Index) PartitionByListPrefixes() []tree.Datums {
+	p := ti.partitionBy
+	if p == nil {
+		return nil
+	}
+	if len(p.List) == 0 {
+		return nil
+	}
+	var res []tree.Datums
+	semaCtx := tree.MakeSemaContext()
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	for i := range p.Fields {
+		if i >= len(ti.Columns) || p.Fields[i] != ti.Columns[i].ColName() {
+			panic("partition by columns must be a prefix of the index columns")
+		}
+	}
+	for i := range p.List {
+		// Exprs contains a list of values.
+		for _, e := range p.List[i].Exprs {
+			var vals []tree.Expr
+			switch t := e.(type) {
+			case *tree.Tuple:
+				vals = t.Exprs
+			default:
+				vals = []tree.Expr{e}
+			}
+
+			// Cut off at DEFAULT, if present.
+			for i := range vals {
+				if _, ok := vals[i].(tree.DefaultVal); ok {
+					vals = vals[:i]
+				}
+			}
+			if len(vals) == 0 {
+				continue
+			}
+			d := make(tree.Datums, len(vals))
+			for i := range vals {
+				c := tree.CastExpr{Expr: vals[i], Type: ti.Columns[i].DatumType()}
+				cTyped, err := c.TypeCheck(&semaCtx, nil)
+				if err != nil {
+					panic(err)
+				}
+				d[i], err = cTyped.Eval(&evalCtx)
+				if err != nil {
+					panic(err)
+				}
+			}
+
+			// TODO(radu): split into multiple prefixes if Subpartition is also by list.
+			// Note that this functionality should be kept in sync with the real catalog
+			// implementation (opt_catalog.go).
+
+			res = append(res, d)
+		}
+	}
+	return res
 }
 
 // Column implements the cat.Column interface for testing purposes.
@@ -898,9 +989,10 @@ func (ts *TableStat) Histogram() []cat.HistogramBucket {
 			panic(err)
 		}
 		histogram[i] = cat.HistogramBucket{
-			NumEq:      uint64(bucket.NumEq),
-			NumRange:   uint64(bucket.NumRange),
-			UpperBound: datum,
+			NumEq:         float64(bucket.NumEq),
+			NumRange:      float64(bucket.NumRange),
+			DistinctRange: bucket.DistinctRange,
+			UpperBound:    datum,
 		}
 	}
 	return histogram
@@ -933,8 +1025,10 @@ type ForeignKeyConstraint struct {
 	originColumnOrdinals     []int
 	referencedColumnOrdinals []int
 
-	validated   bool
-	matchMethod tree.CompositeKeyMatchMethod
+	validated    bool
+	matchMethod  tree.CompositeKeyMatchMethod
+	deleteAction tree.ReferenceAction
+	updateAction tree.ReferenceAction
 }
 
 var _ cat.ForeignKeyConstraint = &ForeignKeyConstraint{}
@@ -992,6 +1086,16 @@ func (fk *ForeignKeyConstraint) MatchMethod() tree.CompositeKeyMatchMethod {
 	return fk.matchMethod
 }
 
+// DeleteReferenceAction is part of the cat.ForeignKeyConstraint interface.
+func (fk *ForeignKeyConstraint) DeleteReferenceAction() tree.ReferenceAction {
+	return fk.deleteAction
+}
+
+// UpdateReferenceAction is part of the cat.ForeignKeyConstraint interface.
+func (fk *ForeignKeyConstraint) UpdateReferenceAction() tree.ReferenceAction {
+	return fk.updateAction
+}
+
 // Sequence implements the cat.Sequence interface for testing purposes.
 type Sequence struct {
 	SeqID      cat.StableID
@@ -1020,14 +1124,17 @@ func (ts *Sequence) Equals(other cat.Object) bool {
 }
 
 // Name is part of the cat.DataSource interface.
-func (ts *Sequence) Name() *tree.TableName {
-	return &ts.SeqName
+func (ts *Sequence) Name() tree.Name {
+	return ts.SeqName.TableName
 }
 
-// SequenceName is part of the cat.Sequence interface.
-func (ts *Sequence) SequenceName() *tree.TableName {
-	return ts.Name()
+// fqName is part of the dataSource interface.
+func (ts *Sequence) fqName() cat.DataSourceName {
+	return ts.SeqName
 }
+
+// SequenceMarker is part of the cat.Sequence interface.
+func (ts *Sequence) SequenceMarker() {}
 
 func (ts *Sequence) String() string {
 	tp := treeprinter.New()

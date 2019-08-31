@@ -16,57 +16,94 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-func TestSelPrefixBytesBytesConstOp(t *testing.T) {
-	tups := tuples{{"abc"}, {"def"}, {"ghi"}}
-	runTests(t, []tuples{tups}, tuples{{"def"}}, orderedVerifier, []int{0}, func(input []Operator) (Operator, error) {
-		return &selPrefixBytesBytesConstOp{
-			input:    input[0],
-			colIdx:   0,
-			constArg: []byte("de"),
-		}, nil
-	})
-}
-
-func TestSelSuffixBytesBytesConstOp(t *testing.T) {
-	tups := tuples{{"abc"}, {"def"}, {"ghi"}}
-	runTests(t, []tuples{tups}, tuples{{"def"}}, orderedVerifier, []int{0}, func(input []Operator) (Operator, error) {
-		return &selSuffixBytesBytesConstOp{
-			input:    input[0],
-			colIdx:   0,
-			constArg: []byte("ef"),
-		}, nil
-	})
-}
-
-func TestSelRegexpBytesBytesConstOp(t *testing.T) {
-	tups := tuples{{"abc"}, {"def"}, {"ghi"}}
-	pattern, err := regexp.Compile(".e.")
-	if err != nil {
-		t.Fatal(err)
+func TestLikeOperators(t *testing.T) {
+	for _, tc := range []struct {
+		pattern  string
+		negate   bool
+		tups     tuples
+		expected tuples
+	}{
+		{
+			pattern:  "def",
+			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: tuples{{"def"}},
+		},
+		{
+			pattern:  "def",
+			negate:   true,
+			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: tuples{{"abc"}, {"ghi"}},
+		},
+		{
+			pattern:  "de%",
+			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: tuples{{"def"}},
+		},
+		{
+			pattern:  "de%",
+			negate:   true,
+			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: tuples{{"abc"}, {"ghi"}},
+		},
+		{
+			pattern:  "%ef",
+			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: tuples{{"def"}},
+		},
+		{
+			pattern:  "%ef",
+			negate:   true,
+			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: tuples{{"abc"}, {"ghi"}},
+		},
+		{
+			pattern:  "_e_",
+			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: tuples{{"def"}},
+		},
+		{
+			pattern:  "_e_",
+			negate:   true,
+			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: tuples{{"abc"}, {"ghi"}},
+		},
+		{
+			pattern:  "%e%",
+			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: tuples{{"def"}},
+		},
+		{
+			pattern:  "%e%",
+			negate:   true,
+			tups:     tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: tuples{{"abc"}, {"ghi"}},
+		},
+	} {
+		runTests(
+			t, []tuples{tc.tups}, tc.expected, orderedVerifier, []int{0},
+			func(input []Operator) (Operator, error) {
+				ctx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+				return GetLikeOperator(&ctx, input[0], 0, tc.pattern, tc.negate)
+			})
 	}
-	runTests(t, []tuples{tups}, tuples{{"def"}}, orderedVerifier, []int{0}, func(input []Operator) (Operator, error) {
-		return &selRegexpBytesBytesConstOp{
-			input:    input[0],
-			colIdx:   0,
-			constArg: pattern,
-		}, nil
-	})
 }
 
 func BenchmarkLikeOps(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]types.T{types.Bytes})
+	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Bytes})
 	col := batch.ColVec(0).Bytes()
 	width := 64
-	for i := int64(0); i < coldata.BatchSize; i++ {
-		col[i] = randutil.RandBytes(rng, width)
+	for i := 0; i < coldata.BatchSize; i++ {
+		col.Set(i, randutil.RandBytes(rng, width))
 	}
 
 	// Set a known prefix and suffix on half the batch so we're not filtering
@@ -74,8 +111,8 @@ func BenchmarkLikeOps(b *testing.B) {
 	prefix := "abc"
 	suffix := "xyz"
 	for i := 0; i < coldata.BatchSize/2; i++ {
-		copy(col[i][:3], prefix)
-		copy(col[i][width-3:], suffix)
+		copy(col.Get(i)[:3], prefix)
+		copy(col.Get(i)[width-3:], suffix)
 	}
 
 	batch.SetLength(coldata.BatchSize)
@@ -83,20 +120,20 @@ func BenchmarkLikeOps(b *testing.B) {
 	source.Init()
 
 	prefixOp := &selPrefixBytesBytesConstOp{
-		input:    source,
-		colIdx:   0,
-		constArg: []byte(prefix),
+		OneInputNode: NewOneInputNode(source),
+		colIdx:       0,
+		constArg:     []byte(prefix),
 	}
 	suffixOp := &selSuffixBytesBytesConstOp{
-		input:    source,
-		colIdx:   0,
-		constArg: []byte(suffix),
+		OneInputNode: NewOneInputNode(source),
+		colIdx:       0,
+		constArg:     []byte(suffix),
 	}
 	pattern := fmt.Sprintf("^%s.*%s$", prefix, suffix)
 	regexpOp := &selRegexpBytesBytesConstOp{
-		input:    source,
-		colIdx:   0,
-		constArg: regexp.MustCompile(pattern),
+		OneInputNode: NewOneInputNode(source),
+		colIdx:       0,
+		constArg:     regexp.MustCompile(pattern),
 	}
 
 	testCases := []struct {

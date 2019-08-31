@@ -12,9 +12,11 @@ package exec
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -72,7 +74,7 @@ type hashJoinerSourceSpec struct {
 
 	// sourceTypes specify the types of the input columns of the source table for
 	// the hash joiner.
-	sourceTypes []types.T
+	sourceTypes []coltypes.T
 
 	// source specifies the input operator to the hash join.
 	source Operator
@@ -190,6 +192,22 @@ type hashJoinEqOp struct {
 	}
 }
 
+func (hj *hashJoinEqOp) ChildCount() int {
+	return 2
+}
+
+func (hj *hashJoinEqOp) Child(nth int) OpNode {
+	switch nth {
+	case 0:
+		return hj.spec.left.source
+	case 1:
+		return hj.spec.right.source
+	}
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid idx %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
+}
+
 var _ Operator = &hashJoinEqOp{}
 
 func (hj *hashJoinEqOp) Init() {
@@ -212,6 +230,7 @@ func (hj *hashJoinEqOp) Init() {
 		build.sourceTypes,
 		build.eqCols,
 		build.outCols,
+		false, /* allowNullEquality */
 	)
 
 	hj.builder = makeHashJoinBuilder(
@@ -229,6 +248,7 @@ func (hj *hashJoinEqOp) Init() {
 }
 
 func (hj *hashJoinEqOp) Next(ctx context.Context) coldata.Batch {
+	hj.prober.batch.ResetInternalBatch()
 	switch hj.runningState {
 	case hjBuilding:
 		hj.build(ctx)
@@ -240,15 +260,14 @@ func (hj *hashJoinEqOp) Next(ctx context.Context) coldata.Batch {
 			hj.initEmitting()
 			return hj.Next(ctx)
 		}
-
-		hj.prober.batch.SetSelection(false)
 		return hj.prober.batch
 	case hjEmittingUnmatched:
 		hj.emitUnmatched()
-		hj.prober.batch.SetSelection(false)
 		return hj.prober.batch
 	default:
-		panic("hash joiner in unhandled state")
+		execerror.VectorizedInternalPanic("hash joiner in unhandled state")
+		// This code is unreachable, but the compiler cannot infer that.
+		return nil
 	}
 }
 
@@ -347,13 +366,13 @@ type hashTable struct {
 	// head and thereby should not be traversed.
 	head []bool
 
-	// vals stores the union of the equality and output columns of the left
+	// vals stores the union of the equality and output columns of the build
 	// table. A key tuple is defined as the elements in each row of vals that
 	// makes up the equality columns. The ID of a key at any index of vals is
 	// index + 1.
 	vals []coldata.Vec
 	// valTypes stores the corresponding types of the val columns.
-	valTypes []types.T
+	valTypes []coltypes.T
 	// valCols stores the union of the keyCols and outCols.
 	valCols []uint32
 	// keyCols stores the indices of vals which are key columns.
@@ -362,15 +381,15 @@ type hashTable struct {
 	// outCols stores the indices of vals which are output columns.
 	outCols []uint32
 	// outTypes stores the types of the output columns.
-	outTypes []types.T
+	outTypes []coltypes.T
 
-	// size returns the total number of keyCols the hashTable currently stores.
+	// size returns the total number of tuples the hashTable currently stores.
 	size uint64
 	// bucketSize returns the number of buckets the hashTable employs. This is
 	// equivalent to the size of first.
 	bucketSize uint64
 
-	// keyCols stores the equality columns on the probe table for a single batch.
+	// keys stores the equality columns on the probe table for a single batch.
 	keys []coldata.Vec
 	// buckets is used to store the computed hash value of each key in a single
 	// batch.
@@ -392,11 +411,19 @@ type hashTable struct {
 	// key.
 	differs []bool
 
+	// allowNullEquality determines if NULL keys should be treated as equal to
+	// each other.
+	allowNullEquality bool
+
 	cancelChecker CancelChecker
 }
 
 func makeHashTable(
-	bucketSize uint64, sourceTypes []types.T, eqCols []uint32, outCols []uint32,
+	bucketSize uint64,
+	sourceTypes []coltypes.T,
+	eqCols []uint32,
+	outCols []uint32,
+	allowNullEquality bool,
 ) *hashTable {
 	// Compute the union of eqCols and outCols and compress vals to only keep the
 	// important columns.
@@ -416,7 +443,7 @@ func makeHashTable(
 	cols := make([]coldata.Vec, 0, nCols)
 	nKeep := uint32(0)
 
-	keepTypes := make([]types.T, 0, nCols)
+	keepTypes := make([]coltypes.T, 0, nCols)
 	keepCols := make([]uint32, 0, nCols)
 
 	for i := 0; i < nCols; i++ {
@@ -432,7 +459,7 @@ func makeHashTable(
 
 	// Extract and types and indices of the	 eqCols and outCols.
 	nKeys := len(eqCols)
-	keyTypes := make([]types.T, nKeys)
+	keyTypes := make([]coltypes.T, nKeys)
 	keys := make([]uint32, nKeys)
 	for i, colIdx := range eqCols {
 		keyTypes[i] = sourceTypes[colIdx]
@@ -440,7 +467,7 @@ func makeHashTable(
 	}
 
 	nOutCols := len(outCols)
-	outTypes := make([]types.T, nOutCols)
+	outTypes := make([]coltypes.T, nOutCols)
 	outs := make([]uint32, nOutCols)
 	for i, colIdx := range outCols {
 		outTypes[i] = sourceTypes[colIdx]
@@ -467,6 +494,8 @@ func makeHashTable(
 
 		keys:    make([]coldata.Vec, len(eqCols)),
 		buckets: make([]uint64, coldata.BatchSize),
+
+		allowNullEquality: allowNullEquality,
 	}
 }
 
@@ -531,6 +560,11 @@ func (ht *hashTable) computeBuckets(
 ) {
 	ht.initHash(buckets, nKeys)
 
+	if nKeys == 0 {
+		// No work to do - avoid doing the loops below.
+		return
+	}
+
 	for i, k := range ht.keyCols {
 		ht.rehash(ctx, buckets, i, ht.valTypes[k], keys[i], nKeys, sel)
 	}
@@ -577,7 +611,8 @@ func makeHashJoinBuilder(ht *hashTable, spec hashJoinerSourceSpec) *hashJoinBuil
 }
 
 // exec executes distinctExec, and then eagerly populates the hashTable's same
-// array by probing the hashTable with every single input key.
+// array by probing the hashTable with every single input key. This is intended
+// for use by the hash aggregator.
 func (builder *hashJoinBuilder) exec(ctx context.Context) {
 	builder.distinctExec(ctx)
 
@@ -715,13 +750,24 @@ func makeHashJoinProber(
 	// Prepare the output batch by allocating with the correct column types.
 	nBuildCols := uint32(len(build.sourceTypes))
 
-	var outColTypes []types.T
+	var outColTypes []coltypes.T
 	var buildColOffset, probeColOffset uint32
 	if buildRightSide {
-		outColTypes = append(probe.sourceTypes, build.sourceTypes...)
+		if len(build.outCols) == 0 {
+			// We do not have output columns from the right side in case of LEFT SEMI
+			// and LEFT ANTI joins, and we should not have the corresponding columns
+			// in the output batch, so we only have the types from the left side in
+			// outColTypes.
+			outColTypes = probe.sourceTypes
+		} else {
+			outColTypes = append(probe.sourceTypes, build.sourceTypes...)
+		}
 		buildColOffset = uint32(len(probe.sourceTypes))
 		probeColOffset = 0
 	} else {
+		// Note that we don't need to check whether probe.outCols is non-empty
+		// before populating outColTypes because LEFT SEMI and LEFT ANTI joins will
+		// always build the right side.
 		outColTypes = append(build.sourceTypes, probe.sourceTypes...)
 		buildColOffset = 0
 		probeColOffset = nBuildCols
@@ -913,20 +959,23 @@ func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, b
 		valCol := prober.ht.vals[prober.ht.outCols[i]]
 		colType := prober.ht.valTypes[prober.ht.outCols[i]]
 
-		var nils []bool
-		if prober.spec.outer {
-			nils = prober.probeRowUnmatched
-		}
-
 		outCol.Copy(
 			coldata.CopyArgs{
 				ColType:   colType,
 				Src:       valCol,
 				Sel64:     prober.buildIdx,
 				SrcEndIdx: uint64(nResults),
-				Nils:      nils,
 			},
 		)
+		if prober.spec.outer {
+			// Add in the nulls we needed to set for the outer join.
+			nulls := outCol.Nulls()
+			for i, isNull := range prober.probeRowUnmatched {
+				if isNull {
+					nulls.SetNull(uint16(i))
+				}
+			}
+		}
 	}
 
 	for _, colIdx := range prober.spec.outCols {
@@ -995,8 +1044,8 @@ func NewEqHashJoinerOp(
 	rightEqCols []uint32,
 	leftOutCols []uint32,
 	rightOutCols []uint32,
-	leftTypes []types.T,
-	rightTypes []types.T,
+	leftTypes []coltypes.T,
+	rightTypes []coltypes.T,
 	buildRightSide bool,
 	buildDistinct bool,
 	joinType sqlbase.JoinType,

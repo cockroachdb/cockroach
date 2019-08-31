@@ -1,4 +1,4 @@
-# LogicTest: local local-opt
+# LogicTest: local
 
 query T colnames
 SHOW USERS
@@ -111,7 +111,23 @@ SELECT current_user, session_user, user
 ----
 testuser  testuser  testuser
 
+statement ok
+SET SESSION AUTHORIZATION DEFAULT
+
+query T
+SHOW session_user
+----
+testuser
+
 user root
 
 statement error pq: user root cannot use password authentication
 ALTER USER root WITH PASSWORD 'foo'
+
+statement ok
+SET SESSION AUTHORIZATION DEFAULT
+
+query T
+SHOW session_user
+----
+root

@@ -13,11 +13,13 @@ package exec
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -34,14 +36,14 @@ func TestUnorderedSynchronizer(t *testing.T) {
 
 	var (
 		rng, _     = randutil.NewPseudoRand()
-		typs       = []types.T{types.Int64}
+		typs       = []coltypes.T{coltypes.Int64}
 		numInputs  = rng.Intn(maxInputs) + 1
 		numBatches = rng.Intn(maxBatches) + 1
 	)
 
 	inputs := make([]Operator, numInputs)
 	for i := range inputs {
-		source := NewRepeatableBatchSource(RandomBatch(rng, typs, coldata.BatchSize, rng.Float64()))
+		source := NewRepeatableBatchSource(RandomBatch(rng, typs, coldata.BatchSize, 0 /* length */, rng.Float64()))
 		source.ResetBatchesToReturn(numBatches)
 		inputs[i] = source
 	}
@@ -70,7 +72,7 @@ func TestUnorderedSynchronizer(t *testing.T) {
 	batchesReturned := 0
 	for {
 		var b coldata.Batch
-		if err := CatchVectorizedRuntimeError(func() { b = s.Next(ctx) }); err != nil {
+		if err := execerror.CatchVectorizedRuntimeError(func() { b = s.Next(ctx) }); err != nil {
 			if cancel {
 				require.True(t, testutils.IsError(err, "context canceled"), err)
 				break
@@ -89,10 +91,43 @@ func TestUnorderedSynchronizer(t *testing.T) {
 	wg.Wait()
 }
 
+func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const expectedErr = "first input error"
+
+	inputs := make([]Operator, 6)
+	inputs[0] = &CallbackOperator{NextCb: func(context.Context) coldata.Batch {
+		execerror.VectorizedInternalPanic(expectedErr)
+		// This code is unreachable, but the compiler cannot infer that.
+		return nil
+	}}
+	for i := 1; i < len(inputs); i++ {
+		inputs[i] = &CallbackOperator{
+			NextCb: func(ctx context.Context) coldata.Batch {
+				<-ctx.Done()
+				execerror.VectorizedInternalPanic(ctx.Err())
+				// This code is unreachable, but the compiler cannot infer that.
+				return nil
+			},
+		}
+	}
+
+	var (
+		ctx = context.Background()
+		wg  sync.WaitGroup
+	)
+	s := NewUnorderedSynchronizer(inputs, []coltypes.T{coltypes.Int64}, &wg)
+	err := execerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) })
+	// This is the crux of the test: assert that all inputs have finished.
+	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
+	require.True(t, testutils.IsError(err, expectedErr), err)
+}
+
 func BenchmarkUnorderedSynchronizer(b *testing.B) {
 	const numInputs = 6
 
-	typs := []types.T{types.Int64}
+	typs := []coltypes.T{coltypes.Int64}
 	inputs := make([]Operator, numInputs)
 	for i := range inputs {
 		batch := coldata.NewMemBatchWithSize(typs, coldata.BatchSize)

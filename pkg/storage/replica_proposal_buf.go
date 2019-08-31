@@ -437,7 +437,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 			confChangeCtx := ConfChangeContext{
 				CommandID: string(p.idKey),
 				Payload:   p.encodedCommand,
-				Replica:   crt.Replica,
 			}
 			encodedCtx, err := protoutil.Marshal(&confChangeCtx)
 			if err != nil {
@@ -445,11 +444,15 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 				continue
 			}
 
-			if err := raftGroup.ProposeConfChange(raftpb.ConfChange{
-				Type:    changeTypeInternalToRaft[crt.ChangeType],
-				NodeID:  uint64(crt.Replica.ReplicaID),
-				Context: encodedCtx,
-			}); err != nil && err != raft.ErrProposalDropped {
+			cc, err := crt.ConfChange(encodedCtx)
+			if err != nil {
+				firstErr = err
+				continue
+			}
+
+			if err := raftGroup.ProposeConfChange(
+				cc,
+			); err != nil && err != raft.ErrProposalDropped {
 				// Silently ignore dropped proposals (they were always silently
 				// ignored prior to the introduction of ErrProposalDropped).
 				// TODO(bdarnell): Handle ErrProposalDropped better.

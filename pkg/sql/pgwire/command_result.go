@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -57,9 +57,6 @@ type commandResult struct {
 	// If typ == commandComplete, this is the tag to be written in the
 	// CommandComplete message.
 	cmdCompleteTag string
-	// If set, an error will be sent to the client if more rows are produced than
-	// this limit.
-	limit int
 
 	stmtType     tree.StatementType
 	descOpt      sql.RowDescOpt
@@ -80,37 +77,17 @@ type commandResult struct {
 	// bufferingDisabled is conditionally set during planning of certain
 	// statements.
 	bufferingDisabled bool
-}
 
-func (c *conn) makeCommandResult(
-	descOpt sql.RowDescOpt,
-	pos sql.CmdPos,
-	stmt tree.Statement,
-	formatCodes []pgwirebase.FormatCode,
-	conv sessiondata.DataConversionConfig,
-) commandResult {
-	return commandResult{
-		conn:           c,
-		pos:            pos,
-		descOpt:        descOpt,
-		stmtType:       stmt.StatementType(),
-		formatCodes:    formatCodes,
-		typ:            commandComplete,
-		cmdCompleteTag: stmt.StatementTag(),
-		conv:           conv,
-	}
-}
-
-func (c *conn) makeMiscResult(pos sql.CmdPos, typ completionMsgType) commandResult {
-	return commandResult{
-		conn: c,
-		pos:  pos,
-		typ:  typ,
-	}
+	// released is set when the command result has been released so that its
+	// memory can be reused. It is also used to assert against use-after-free
+	// errors.
+	released bool
 }
 
 // Close is part of the CommandResult interface.
 func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
+	r.assertNotReleased()
+	defer r.release()
 	if r.errExpected && r.err == nil {
 		panic("expected err to be set on result by Close, but wasn't")
 	}
@@ -119,18 +96,6 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 	if r.err != nil {
 		r.conn.bufferErr(r.err)
 		return
-	}
-
-	if r.err == nil &&
-		r.limit != 0 &&
-		r.rowsAffected > r.limit &&
-		r.typ == commandComplete &&
-		r.stmtType == tree.Rows {
-
-		r.err = unimplemented.NewWithIssuef(4035,
-			"execute row count limits not supported: %d of %d",
-			r.limit, r.rowsAffected)
-		r.conn.bufferErr(r.err)
 	}
 
 	// Send a completion message, specific to the type of result.
@@ -164,21 +129,25 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 
 // CloseWithErr is part of the CommandResult interface.
 func (r *commandResult) CloseWithErr(err error) {
+	r.assertNotReleased()
+	defer r.release()
 	if r.err != nil {
 		panic(fmt.Sprintf("can't overwrite err: %s with err: %s", r.err, err))
 	}
-	r.conn.writerState.fi.registerCmd(r.pos)
 
-	r.err = err
+	r.conn.writerState.fi.registerCmd(r.pos)
 	r.conn.bufferErr(err)
 }
 
 // Discard is part of the CommandResult interface.
 func (r *commandResult) Discard() {
+	r.assertNotReleased()
+	defer r.release()
 }
 
 // Err is part of the CommandResult interface.
 func (r *commandResult) Err() error {
+	r.assertNotReleased()
 	return r.err
 }
 
@@ -187,11 +156,13 @@ func (r *commandResult) Err() error {
 // We're not going to write any bytes to the buffer in order to support future
 // SetError() calls. The error will only be serialized at Close() time.
 func (r *commandResult) SetError(err error) {
+	r.assertNotReleased()
 	r.err = err
 }
 
 // AddRow is part of the CommandResult interface.
 func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
+	r.assertNotReleased()
 	if r.err != nil {
 		panic(fmt.Sprintf("can't call AddRow after having set error: %s",
 			r.err))
@@ -217,11 +188,13 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 
 // DisableBuffering is part of the CommandResult interface.
 func (r *commandResult) DisableBuffering() {
+	r.assertNotReleased()
 	r.bufferingDisabled = true
 }
 
 // SetColumns is part of the CommandResult interface.
 func (r *commandResult) SetColumns(ctx context.Context, cols sqlbase.ResultColumns) {
+	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if r.descOpt == sql.NeedRowDesc {
 		_ /* err */ = r.conn.writeRowDescription(ctx, cols, r.formatCodes, &r.conn.writerState.buf)
@@ -234,18 +207,21 @@ func (r *commandResult) SetColumns(ctx context.Context, cols sqlbase.ResultColum
 
 // SetInferredTypes is part of the DescribeResult interface.
 func (r *commandResult) SetInferredTypes(types []oid.Oid) {
+	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	r.conn.bufferParamDesc(types)
 }
 
 // SetNoDataRowDescription is part of the DescribeResult interface.
 func (r *commandResult) SetNoDataRowDescription() {
+	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	r.conn.bufferNoDataMsg()
 }
 
 // SetPrepStmtOutput is part of the DescribeResult interface.
 func (r *commandResult) SetPrepStmtOutput(ctx context.Context, cols sqlbase.ResultColumns) {
+	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	_ /* err */ = r.conn.writeRowDescription(ctx, cols, nil /* formatCodes */, &r.conn.writerState.buf)
 }
@@ -254,27 +230,218 @@ func (r *commandResult) SetPrepStmtOutput(ctx context.Context, cols sqlbase.Resu
 func (r *commandResult) SetPortalOutput(
 	ctx context.Context, cols sqlbase.ResultColumns, formatCodes []pgwirebase.FormatCode,
 ) {
+	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	_ /* err */ = r.conn.writeRowDescription(ctx, cols, formatCodes, &r.conn.writerState.buf)
 }
 
 // IncrementRowsAffected is part of the CommandResult interface.
 func (r *commandResult) IncrementRowsAffected(n int) {
+	r.assertNotReleased()
 	r.rowsAffected += n
 }
 
 // RowsAffected is part of the CommandResult interface.
 func (r *commandResult) RowsAffected() int {
+	r.assertNotReleased()
 	return r.rowsAffected
-}
-
-// SetLimit is part of the CommandResult interface.
-func (r *commandResult) SetLimit(n int) {
-	r.limit = n
 }
 
 // ResetStmtType is part of the CommandResult interface.
 func (r *commandResult) ResetStmtType(stmt tree.Statement) {
+	r.assertNotReleased()
 	r.stmtType = stmt.StatementType()
 	r.cmdCompleteTag = stmt.StatementTag()
+}
+
+// release frees the commandResult and allows its memory to be reused.
+func (r *commandResult) release() {
+	*r = commandResult{released: true}
+}
+
+// assertNotReleased asserts that the commandResult is not being used after
+// being freed by one of the methods in the CommandResultClose interface. The
+// assertion can have false negatives, where it fails to detect a use-after-free
+// condition, but will never result in a false positive.
+func (r *commandResult) assertNotReleased() {
+	if r.released {
+		panic("commandResult used after being released")
+	}
+}
+
+func (c *conn) allocCommandResult() *commandResult {
+	r := &c.res
+	if r.released {
+		r.released = false
+	} else {
+		// In practice, each conn only ever uses a single commandResult at a
+		// time, so we could make this panic. However, doing so would entail
+		// complicating the ClientComm interface, which doesn't seem worth it.
+		r = new(commandResult)
+	}
+	return r
+}
+
+func (c *conn) newCommandResult(
+	descOpt sql.RowDescOpt,
+	pos sql.CmdPos,
+	stmt tree.Statement,
+	formatCodes []pgwirebase.FormatCode,
+	conv sessiondata.DataConversionConfig,
+	limit int,
+	portalName string,
+	implicitTxn bool,
+) sql.CommandResult {
+	r := c.allocCommandResult()
+	*r = commandResult{
+		conn:           c,
+		conv:           conv,
+		pos:            pos,
+		typ:            commandComplete,
+		cmdCompleteTag: stmt.StatementTag(),
+		stmtType:       stmt.StatementType(),
+		descOpt:        descOpt,
+		formatCodes:    formatCodes,
+	}
+	if limit == 0 {
+		return r
+	}
+	return &limitedCommandResult{
+		limit:         limit,
+		portalName:    portalName,
+		implicitTxn:   implicitTxn,
+		commandResult: r,
+	}
+}
+
+func (c *conn) newMiscResult(pos sql.CmdPos, typ completionMsgType) *commandResult {
+	r := c.allocCommandResult()
+	*r = commandResult{
+		conn: c,
+		pos:  pos,
+		typ:  typ,
+	}
+	return r
+}
+
+// limitedCommandResult is a commandResult that has a limit, after which calls
+// to AddRow will block until the associated client connection asks for more
+// rows. It essentially implements the "execute portal with limit" part of the
+// Postgres protocol.
+//
+// This design is known to be flawed. It only supports a specific subset of the
+// protocol. We only allow a portal suspension in an explicit transaction where
+// the suspended portal is completely exhausted before any other pgwire command
+// is executed, otherwise an error is produced. You cannot, for example,
+// interleave portal executions (a portal must be executed to completion before
+// another can be executed). It also breaks the software layering by adding an
+// additional state machine here, instead of teaching the state machine in the
+// sql package about portals.
+//
+// This has been done because refactoring the executor to be able to correctly
+// suspend a portal will require a lot of work, and we wanted to move
+// forward. The work included is things like auditing all of the defers and
+// post-execution stuff (like stats collection) to have it only execute once
+// per statement instead of once per portal.
+type limitedCommandResult struct {
+	*commandResult
+	portalName  string
+	implicitTxn bool
+
+	seenTuples int
+	// If set, an error will be sent to the client if more rows are produced than
+	// this limit.
+	limit int
+}
+
+// AddRow is part of the CommandResult interface.
+func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
+	if err := r.commandResult.AddRow(ctx, row); err != nil {
+		return err
+	}
+	r.seenTuples++
+
+	if r.seenTuples == r.limit {
+		// If we've seen up to the limit of rows, send a "portal suspended" message
+		// and wait for another exec portal message.
+		r.conn.bufferPortalSuspended()
+		if err := r.conn.Flush(r.pos); err != nil {
+			return err
+		}
+		r.seenTuples = 0
+
+		return r.moreResultsNeeded(ctx)
+	}
+	if _ /* flushed */, err := r.conn.maybeFlush(r.pos); err != nil {
+		return err
+	}
+	return nil
+}
+
+// moreResultsNeeded is a restricted connection handler that waits for more
+// requests for rows from the active portal, during the "execute portal" flow
+// when a limit has been specified.
+func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
+	// In an implicit transaction, a portal suspension is immediately
+	// followed by closing the portal.
+	if r.implicitTxn {
+		r.typ = noCompletionMsg
+		return sql.ErrLimitedResultClosed
+	}
+
+	// Keep track of the previous CmdPos so we can rewind if needed.
+	prevPos := r.conn.stmtBuf.AdvanceOne()
+	for {
+		cmd, curPos, err := r.conn.stmtBuf.CurCmd()
+		if err != nil {
+			return err
+		}
+		switch c := cmd.(type) {
+		case sql.DeletePreparedStmt:
+			// The client wants to close a portal or statement. We
+			// support the case where it is exactly this
+			// portal. This is done by closing the portal in
+			// the same way implicit transactions do, but also
+			// rewinding the stmtBuf to still point to the portal
+			// close so that the state machine can do its part of
+			// the cleanup. We are in effect peeking to see if the
+			// next message is a delete portal.
+			if c.Type != pgwirebase.PreparePortal || c.Name != r.portalName {
+				return errors.WithDetail(sql.ErrLimitedResultNotSupported,
+					"cannot close a portal while a different one is open")
+			}
+			r.typ = noCompletionMsg
+			// Rewind to before the delete so the AdvanceOne in
+			// connExecutor.execCmd ends up back on it.
+			r.conn.stmtBuf.Rewind(ctx, prevPos)
+			return sql.ErrLimitedResultClosed
+		case sql.ExecPortal:
+			// The happy case: the client wants more rows from the portal.
+			if c.Name != r.portalName {
+				return errors.WithDetail(sql.ErrLimitedResultNotSupported,
+					"cannot execute a portal while a different one is open")
+			}
+			r.limit = c.Limit
+			// In order to get the correct command tag, we need to reset the seen rows.
+			r.rowsAffected = 0
+			return nil
+		case sql.Sync:
+			// The client wants to see a ready for query message
+			// back. Send it then run the for loop again.
+			r.conn.stmtBuf.AdvanceOne()
+			// We can hard code InTxnBlock here because we don't
+			// support implicit transactions, so we know we're in
+			// a transaction.
+			r.conn.bufferReadyForQuery(byte(sql.InTxnBlock))
+			if err := r.conn.Flush(r.pos); err != nil {
+				return err
+			}
+		default:
+			// We got some other message, but we only support executing to completion.
+			return errors.WithSafeDetails(sql.ErrLimitedResultNotSupported,
+				"cannot perform operation %T while a different portal is open",
+				errors.Safe(c))
+		}
+		prevPos = curPos
+	}
 }

@@ -240,6 +240,31 @@
     $passthrough
 )
 
+# PruneSemiAntiJoinRightCols discards columns on the right side of a
+# Semi or Anti join that are never used. This is similar to PruneJoinRightCols.
+# PruneJoinRightCols normally prunes the RHS of a join but it can't do that
+# in the case of Semi/Anti joins because the projection is eliminated after
+# the LHS is pruned. This rule doesn't require a projection over the Semi/Anti
+# join in order to prune the RHS.
+[PruneSemiAntiJoinRightCols, Normalize]
+(SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
+    $left:*
+    $right:*
+    $on:*
+    $private:* &
+        (CanPruneCols
+            $right
+            $needed:(FilterOuterCols $on)
+        )
+)
+=>
+((OpName)
+    $left
+    (PruneCols $right $needed)
+    $on
+    $private
+)
+
 # PruneAggCols discards aggregation columns in a GroupBy that are never used.
 [PruneAggCols, Normalize]
 (Project
@@ -462,3 +487,39 @@
     $checks
     $mutationPrivate
 )
+
+# PruneReturningCols removes columns from the mutation operator's ReturnCols
+# set if they are not used in the RETURNING clause of the mutation.
+# Removing ReturnCols will then allow the PruneMutationFetchCols to be more
+# conservative with the fetch columns.
+# TODO(ridwanmsharif): Mutations shouldn't need to return the primary key
+# columns. Make appropriate changes to SQL execution to accommodate this.
+[PruneMutationReturnCols, Normalize]
+(Project
+    $input:(Insert | Update | Upsert | Delete
+        $innerInput:*
+        $checks:*
+        $mutationPrivate:*
+    )
+    $projections:*
+    $passthrough:* &
+      (CanPruneMutationReturnCols
+        $mutationPrivate
+        $needed:(UnionCols3
+            (PrimaryKeyCols (MutationTable $mutationPrivate))
+            (ProjectionOuterCols $projections)
+            $passthrough
+        )
+      )
+)
+=>
+(Project
+    ((OpName $input)
+        $innerInput
+        $checks
+        (PruneMutationReturnCols $mutationPrivate $needed)
+    )
+    $projections
+    $passthrough
+)
+

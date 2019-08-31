@@ -13,12 +13,13 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 )
 
 // BatchBuffer exposes a buffer of coldata.Batches through an Operator
 // interface. If there are no batches to return, Next will panic.
 type BatchBuffer struct {
+	ZeroInputNode
 	buffer []coldata.Batch
 }
 
@@ -48,6 +49,7 @@ func (b *BatchBuffer) Next(context.Context) coldata.Batch {
 
 // RepeatableBatchSource is an Operator that returns the same batch forever.
 type RepeatableBatchSource struct {
+	ZeroInputNode
 	internalBatch coldata.Batch
 	batchLen      uint16
 	// sel specifies the desired selection vector for the batch.
@@ -99,4 +101,19 @@ func (s *RepeatableBatchSource) Init() {}
 func (s *RepeatableBatchSource) ResetBatchesToReturn(b int) {
 	s.batchesToReturn = b
 	s.batchesReturned = 0
+}
+
+// CallbackOperator is a testing utility struct that delegates Next calls to a
+// callback provided by the user.
+type CallbackOperator struct {
+	ZeroInputNode
+	NextCb func(ctx context.Context) coldata.Batch
+}
+
+// Init is part of the Operator interface.
+func (o *CallbackOperator) Init() {}
+
+// Next is part of the Operator interface.
+func (o *CallbackOperator) Next(ctx context.Context) coldata.Batch {
+	return o.NextCb(ctx)
 }

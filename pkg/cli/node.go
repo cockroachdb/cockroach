@@ -74,9 +74,11 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 var baseNodeColumnHeaders = []string{
 	"id",
 	"address",
+	"sql_address",
 	"build",
 	"started_at",
 	"updated_at",
+	"locality",
 	"is_available",
 	"is_live",
 }
@@ -125,7 +127,6 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 }
 
 func runStatusNodeInner(showDecommissioned bool, args []string) ([]string, [][]string, error) {
-
 	joinUsingID := func(queries []string) (query string) {
 		for i, q := range queries {
 			if i == 0 {
@@ -147,14 +148,16 @@ func runStatusNodeInner(showDecommissioned bool, args []string) ([]string, [][]s
 	baseQuery := maybeAddActiveNodesFilter(
 		`SELECT node_id AS id,
             address,
+            sql_address,
             build_tag AS build,
             started_at,
-            updated_at,
+			updated_at,
+			locality,
             CASE WHEN split_part(expiration,',',1)::decimal > now()::decimal
                  THEN true
                  ELSE false
                  END AS is_available,
-            ifnull(is_live, false)
+			ifnull(is_live, false)
      FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (node_id)`,
 	)
 
@@ -250,7 +253,7 @@ func getStatusNodeHeaders() []string {
 }
 
 func getStatusNodeAlignment() string {
-	align := "rllll"
+	align := "rlllll"
 	if nodeCtx.statusShowAll || nodeCtx.statusShowRanges {
 		align += "rrrrrr"
 	}

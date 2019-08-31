@@ -141,27 +141,30 @@ func evaluateBatch(
 	batch engine.ReadWriter,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
-	ba roachpb.BatchRequest,
+	ba *roachpb.BatchRequest,
 	readOnly bool,
 ) (*roachpb.BatchResponse, result.Result, *roachpb.Error) {
+	// NB: Don't mutate BatchRequest directly.
+	baReqs := ba.Requests
+	baHeader := ba.Header
 	br := ba.CreateReply()
 
 	maxKeys := int64(math.MaxInt64)
-	if ba.Header.MaxSpanRequestKeys != 0 {
+	if baHeader.MaxSpanRequestKeys != 0 {
 		// We have a batch of requests with a limit. We keep track of how many
 		// remaining keys we can touch.
-		maxKeys = ba.Header.MaxSpanRequestKeys
+		maxKeys = baHeader.MaxSpanRequestKeys
 	}
 
 	// Optimize any contiguous sequences of put and conditional put ops.
-	if len(ba.Requests) >= optimizePutThreshold && !readOnly {
-		ba.Requests = optimizePuts(batch, ba.Requests, ba.Header.DistinctSpans)
+	if len(baReqs) >= optimizePutThreshold && !readOnly {
+		baReqs = optimizePuts(batch, baReqs, baHeader.DistinctSpans)
 	}
 
 	// Create a clone of the transaction to store the new txn state produced on
 	// the return/error path.
-	if ba.Txn != nil {
-		ba.Txn = ba.Txn.Clone()
+	if baHeader.Txn != nil {
+		baHeader.Txn = baHeader.Txn.Clone()
 
 		// Check whether this transaction has been aborted, if applicable.
 		// This applies to writes that leave intents (the use of the
@@ -171,7 +174,7 @@ func evaluateBatch(
 		// on reads). Note that 1PC transactions have had their
 		// transaction field cleared by this point so we do not execute
 		// this check in that case.
-		if ba.IsTransactionWrite() || ba.Txn.IsWriting() {
+		if ba.IsTransactionWrite() || baHeader.Txn.IsWriting() {
 			// We don't check the abort span for a couple of special requests:
 			// - if the request is asking to abort the transaction, then don't check the
 			// AbortSpan; we don't want the request to be rejected if the transaction
@@ -181,9 +184,9 @@ func evaluateBatch(
 			// TODO(nvanbenschoten): Let's remove heartbeats from this whitelist when
 			// we rationalize the TODO in txnHeartbeater.heartbeat.
 			singleAbort := ba.IsSingleEndTransactionRequest() &&
-				!ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest).Commit
+				!baReqs[0].GetInner().(*roachpb.EndTransactionRequest).Commit
 			if !singleAbort && !ba.IsSingleHeartbeatTxnRequest() {
-				if pErr := checkIfTxnAborted(ctx, rec, batch, *ba.Txn); pErr != nil {
+				if pErr := checkIfTxnAborted(ctx, rec, batch, *baHeader.Txn); pErr != nil {
 					return nil, result.Result{}, pErr
 				}
 			}
@@ -218,7 +221,7 @@ func evaluateBatch(
 	// retry when it is available.
 	//
 	// TODO(bdarnell): Plumb the SQL CanAutoRetry field through to
-	// !ba.Header.DeferWriteTooOldError.
+	// !baHeader.DeferWriteTooOldError.
 	//
 	// A more subtle heuristic is also possible: If we get a
 	// WriteTooOldError while writing to a key that we have already read
@@ -236,10 +239,10 @@ func evaluateBatch(
 	var writeTooOldErr *roachpb.Error
 	mustReturnWriteTooOldErr := false
 
-	for index, union := range ba.Requests {
+	for index, union := range baReqs {
 		// Execute the command.
 		args := union.GetInner()
-		if ba.Txn != nil {
+		if baHeader.Txn != nil {
 			// Sequence numbers used to be set on each BatchRequest instead of
 			// on each individual Request. This meant that all Requests in a
 			// BatchRequest shared the same sequence number, so a BatchIndex was
@@ -250,13 +253,13 @@ func evaluateBatch(
 				// Set the Request's sequence number on the TxnMeta for this
 				// request. Each request will set their own sequence number on
 				// the TxnMeta, which is stored as part of an intent.
-				ba.Txn.Sequence = seqNum
+				baHeader.Txn.Sequence = seqNum
 			}
 		}
 		// Note that responses are populated even when an error is returned.
 		// TODO(tschottdorf): Change that. IIRC there is nontrivial use of it currently.
 		reply := br.Responses[index].GetInner()
-		curResult, pErr := evaluateCommand(ctx, idKey, index, batch, rec, ms, ba.Header, maxKeys, args, reply)
+		curResult, pErr := evaluateCommand(ctx, idKey, index, batch, rec, ms, baHeader, maxKeys, args, reply)
 
 		if err := result.MergeAndDestroy(curResult); err != nil {
 			// TODO(tschottdorf): see whether we really need to pass nontrivial
@@ -296,9 +299,9 @@ func evaluateBatch(
 					mustReturnWriteTooOldErr = true
 				}
 
-				if ba.Txn != nil {
-					ba.Txn.Timestamp.Forward(tErr.ActualTimestamp)
-					ba.Txn.WriteTooOld = true
+				if baHeader.Txn != nil {
+					baHeader.Txn.Timestamp.Forward(tErr.ActualTimestamp)
+					baHeader.Txn.WriteTooOld = true
 				}
 
 				// Clear pErr; we're done processing it by having moved the
@@ -325,18 +328,18 @@ func evaluateBatch(
 		// accumulate updates to it.
 		// TODO(spencer,tschottdorf): need copy-on-write behavior for the
 		//   updated batch transaction / timestamp.
-		if ba.Txn != nil {
+		if baHeader.Txn != nil {
 			if txn := reply.Header().Txn; txn != nil {
-				ba.Txn.Update(txn)
+				baHeader.Txn.Update(txn)
 			}
 		}
 	}
 
 	// If there was an EndTransaction in the batch that finalized the transaction,
 	// the WriteTooOld status has been fully processed and we can discard the error.
-	if ba.Txn != nil && ba.Txn.Status.IsFinalized() {
+	if baHeader.Txn != nil && baHeader.Txn.Status.IsFinalized() {
 		writeTooOldErr = nil
-	} else if ba.Txn == nil {
+	} else if baHeader.Txn == nil {
 		// Non-transactional requests are unable to defer WriteTooOldErrors
 		// because there is no where to defer them to.
 		mustReturnWriteTooOldErr = true
@@ -344,25 +347,25 @@ func evaluateBatch(
 
 	// If there's a write too old error, return now that we've found
 	// the high water timestamp for retries.
-	if writeTooOldErr != nil && (mustReturnWriteTooOldErr || !ba.Header.DeferWriteTooOldError) {
+	if writeTooOldErr != nil && (mustReturnWriteTooOldErr || !baHeader.DeferWriteTooOldError) {
 		return nil, result, writeTooOldErr
 	}
 
-	if ba.Txn != nil {
+	if baHeader.Txn != nil {
 		// If transactional, send out the final transaction entry with the reply.
-		br.Txn = ba.Txn
+		br.Txn = baHeader.Txn
 		// If the transaction committed, forward the response
 		// timestamp to the commit timestamp in case we were able to
 		// optimize and commit at a higher timestamp without higher-level
 		// retry (i.e. there were no refresh spans and the commit timestamp
 		// wasn't leaked).
-		if ba.Txn.Status == roachpb.COMMITTED {
-			br.Timestamp.Forward(ba.Txn.Timestamp)
+		if baHeader.Txn.Status == roachpb.COMMITTED {
+			br.Timestamp.Forward(baHeader.Txn.Timestamp)
 		}
 	}
 	// Always update the batch response timestamp field to the timestamp at
 	// which the batch executed.
-	br.Timestamp.Forward(ba.Timestamp)
+	br.Timestamp.Forward(baHeader.Timestamp)
 
 	return br, result, nil
 }

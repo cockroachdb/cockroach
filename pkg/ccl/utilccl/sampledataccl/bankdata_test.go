@@ -51,7 +51,7 @@ func TestToBackup(t *testing.T) {
 		for _, chunkBytes := range chunkBytesSizes {
 			t.Run(fmt.Sprintf("rows=%d/chunk=%d", rows, chunkBytes), func(t *testing.T) {
 				dir := fmt.Sprintf("%d-%d", rows, chunkBytes)
-				data := bank.FromConfig(rows, payloadBytes, ranges).Tables()[0]
+				data := bank.FromConfig(rows, rows, payloadBytes, ranges).Tables()[0]
 				backup, err := toBackup(t, data, filepath.Join(outerDir, dir), chunkBytes)
 				if err != nil {
 					t.Fatalf("%+v", err)

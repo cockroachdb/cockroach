@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 statement ok
 CREATE TABLE kv (
@@ -233,7 +233,7 @@ flow                                  CPut /Table/57/1/2/0 -> /TUPLE/2:2:Int/3
 flow                                  InitPut /Table/57/2/3/0 -> /BYTES/0x8a
 kv.DistSender: sending partial batch  r20: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 flow                                  fast path completed
-exec cmd: exec stmt                   rows affected: 1
+exec stmt                             rows affected: 1
 
 statement ok
 SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
@@ -247,7 +247,7 @@ flow                                  CPut /Table/57/1/1/0 -> /TUPLE/2:2:Int/2
 flow                                  InitPut /Table/57/2/2/0 -> /BYTES/0x89
 kv.DistSender: sending partial batch  r20: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 flow                                  fast path completed
-exec cmd: exec stmt                   rows affected: 1
+exec stmt                             rows affected: 1
 
 statement error duplicate key value
 SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
@@ -263,7 +263,7 @@ flow                                  Put /Table/57/1/2/0 -> /TUPLE/2:2:Int/2
 flow                                  Del /Table/57/2/3/0
 flow                                  CPut /Table/57/2/2/0 -> /BYTES/0x8a (expecting does not exist)
 kv.DistSender: sending partial batch  r20: sending batch 1 Put, 1 EndTxn to (n1,s1):1
-exec cmd: exec stmt                   execution failed after 0 rows: duplicate key value (v)=(2) violates unique constraint "woo"
+exec stmt                             execution failed after 0 rows: duplicate key value (v)=(2) violates unique constraint "woo"
 
 
 subtest regression_32473
@@ -327,8 +327,8 @@ EXPLAIN (VERBOSE) SELECT * FROM [UPSERT INTO xyz SELECT a, b, c FROM abc RETURNI
 ----
 render                         ·         ·                    (z)                          +z
  │                             render 0  z                    ·                            ·
- └── run                       ·         ·                    (x, y, z, rowid[hidden])     ·
-      └── upsert               ·         ·                    (x, y, z, rowid[hidden])     ·
+ └── run                       ·         ·                    (z, rowid[hidden])           ·
+      └── upsert               ·         ·                    (z, rowid[hidden])           ·
            │                   into      xyz(x, y, z, rowid)  ·                            ·
            │                   strategy  opt upserter         ·                            ·
            └── render          ·         ·                    (a, b, c, column9, a, b, c)  +c
@@ -378,3 +378,42 @@ INSERT INTO t35364 (x) VALUES (1.5) ON CONFLICT (x) DO UPDATE SET x=2.5 RETURNIN
 
 statement error pq: failed to satisfy CHECK constraint \(z >= 7\)
 UPSERT INTO t35364 (x) VALUES (0)
+
+# ------------------------------------------------------------------------------
+# Regression for #38627. Combined with the equivalent logic test, make sure that
+# UPSERT in the presence of column mutations uses a lookup join without a
+# problem.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE table38627 (a INT PRIMARY KEY, b INT); INSERT INTO table38627 VALUES(1,1)
+
+statement ok
+BEGIN; ALTER TABLE table38627 ADD COLUMN c INT NOT NULL DEFAULT 5
+
+query TTTTT
+EXPLAIN (VERBOSE) UPSERT INTO table38627 SELECT * FROM table38627 WHERE a=1
+----
+count                       ·                      ·                   ()                     ·
+ └── upsert                 ·                      ·                   ()                     ·
+      │                     into                   table38627(a, b)    ·                      ·
+      │                     strategy               opt upserter        ·                      ·
+      └── render            ·                      ·                   (a, b, a, b, c, b, a)  ·
+           │                render 0               a                   ·                      ·
+           │                render 1               b                   ·                      ·
+           │                render 2               a                   ·                      ·
+           │                render 3               b                   ·                      ·
+           │                render 4               c                   ·                      ·
+           │                render 5               b                   ·                      ·
+           │                render 6               a                   ·                      ·
+           └── lookup-join  ·                      ·                   (a, b, a, b, c)        ·
+                │           table                  table38627@primary  ·                      ·
+                │           type                   inner               ·                      ·
+                │           equality               (a) = (a)           ·                      ·
+                │           equality cols are key  ·                   ·                      ·
+                └── scan    ·                      ·                   (a, b)                 ·
+·                           table                  table38627@primary  ·                      ·
+·                           spans                  /1-/1/#             ·                      ·
+
+statement ok
+COMMIT

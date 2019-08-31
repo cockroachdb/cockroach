@@ -80,13 +80,13 @@ type Metadata struct {
 	// values is the highest id for a Values clause that has been assigned.
 	values ValuesID
 
-	// deps stores information about all catalog objects depended on by the query,
-	// as well as the privileges required to access those objects. The objects are
+	// deps stores information about all data source objects depended on by the
+	// query, as well as the privileges required to access them. The objects are
 	// deduplicated: any name/object pair shows up at most once.
-	// Note: the same object can appear multiple times if different names were
-	// used. For example, in the query `SELECT * from t, db.t` the two tables
-	// might resolve to the same object now but to different objects later; we
-	// want to verify the resolution of both names.
+	// Note: the same data source object can appear multiple times if different
+	// names were used. For example, in the query `SELECT * from t, db.t` the two
+	// tables might resolve to the same object now but to different objects later;
+	// we want to verify the resolution of both names.
 	deps []mdDep
 
 	// views stores the list of referenced views. This information is only
@@ -97,23 +97,28 @@ type Metadata struct {
 }
 
 type mdDep struct {
-	object cat.Object
+	ds cat.DataSource
 
-	// name is the unresolved name from the query that was used to resolve the
-	// object. It stores either a cat.DataSourceName, or cat.SchemaName in its
-	// TablePrefix portion, depending on the type of the object.
-	name tree.TableName
+	name MDDepName
 
 	// privileges is the union of all required privileges.
 	privileges privilegeBitmap
 }
 
-func (d *mdDep) dsName() *cat.DataSourceName {
-	return &d.name
+// MDDepName stores either the unresolved DataSourceName or the StableID from
+// the query that was used to resolve a data source.
+type MDDepName struct {
+	// byID is non-zero if and only if the data source was looked up using the
+	// StableID.
+	byID cat.StableID
+
+	// byName is non-zero if and only if the data source was looked up using a
+	// name.
+	byName cat.DataSourceName
 }
 
-func (d *mdDep) schemaName() *cat.SchemaName {
-	return &d.name.TableNamePrefix
+func (n *MDDepName) equals(other *MDDepName) bool {
+	return n.byID == other.byID && n.byName.Equals(&other.byName)
 }
 
 // Init prepares the metadata for use (or reuse).
@@ -161,51 +166,42 @@ func (md *Metadata) CopyFrom(from *Metadata) {
 	md.deps = append(md.deps, from.deps...)
 }
 
-// AddDataSourceDependency tracks one of the catalog data sources on which the
-// query depends, as well as the privilege required to access that data source.
-// If the Memo using this metadata is cached, then a call to CheckDependencies
-// can detect if the name resolves to a different data source now, or if changes
-// to schema or permissions on the data source has invalidated the cached metadata.
-func (md *Metadata) AddDataSourceDependency(
-	name *cat.DataSourceName, ds cat.DataSource, priv privilege.Kind,
-) {
+// DepByName is used with AddDependency when the data source was looked up using a
+// data source name.
+func DepByName(name *cat.DataSourceName) MDDepName {
+	return MDDepName{byName: *name}
+}
+
+// DepByID is used with AddDependency when the data source was looked up by ID.
+func DepByID(id cat.StableID) MDDepName {
+	return MDDepName{byID: id}
+}
+
+// AddDependency tracks one of the catalog data sources on which the query
+// depends, as well as the privilege required to access that data source. If
+// the Memo using this metadata is cached, then a call to CheckDependencies can
+// detect if the name resolves to a different data source now, or if changes to
+// schema or permissions on the data source has invalidated the cached metadata.
+func (md *Metadata) AddDependency(name MDDepName, ds cat.DataSource, priv privilege.Kind) {
 	// Search for the same name / object pair.
 	for i := range md.deps {
-		if md.deps[i].object == ds && md.deps[i].dsName().Equals(name) {
+		if md.deps[i].ds == ds && md.deps[i].name.equals(&name) {
 			md.deps[i].privileges |= (1 << priv)
 			return
 		}
 	}
 	md.deps = append(md.deps, mdDep{
-		object:     ds,
-		name:       *name,
+		ds:         ds,
+		name:       name,
 		privileges: (1 << priv),
 	})
 }
 
-// AddSchemaDependency tracks one of the catalog schemas on which the query depends,
-// as well as the privilege required to access that schema. If the Memo using
-// this metadata is cached, then a call to CheckDependencies can detect if
-// the name resolves to a different schema, or if the permissions on the schema
-// are no longer sufficient.
-func (md *Metadata) AddSchemaDependency(name *cat.SchemaName, s cat.Schema, priv privilege.Kind) {
-	// Search for the same name / object pair.
-	for i := range md.deps {
-		if md.deps[i].object == s && md.deps[i].schemaName().Equals(name) {
-			md.deps[i].privileges |= (1 << priv)
-			return
-		}
-	}
-	d := mdDep{object: s, privileges: (1 << priv)}
-	d.name.TableNamePrefix = *name
-	md.deps = append(md.deps, d)
-}
-
-// CheckDependencies resolves each data source and schema on which this metadata
-// depends, in order to check that the fully qualified object names still
-// resolve to the same version of the same objects, and that the user still has
-// sufficient privileges to access the objects. If the dependencies are no
-// longer up-to-date, then CheckDependencies returns false.
+// CheckDependencies resolves (again) each data source on which this metadata
+// depends, in order to check that all data source names resolve to the same
+// objects, and that the user still has sufficient privileges to access the
+// objects. If the dependencies are no longer up-to-date, then CheckDependencies
+// returns false.
 //
 // This function cannot swallow errors and return only a boolean, as it may
 // perform KV operations on behalf of the transaction associated with the
@@ -214,34 +210,22 @@ func (md *Metadata) CheckDependencies(
 	ctx context.Context, catalog cat.Catalog,
 ) (upToDate bool, err error) {
 	for i := range md.deps {
-		obj := md.deps[i].object
-		var toCheck cat.Object
-		switch obj.(type) {
-		case cat.DataSource:
-			name := *md.deps[i].dsName()
+		name := &md.deps[i].name
+		var toCheck cat.DataSource
+		var err error
+		if name.byID != 0 {
+			toCheck, _, err = catalog.ResolveDataSourceByID(ctx, cat.Flags{}, name.byID)
+		} else {
 			// Resolve data source object.
-			new, _, err := catalog.ResolveDataSource(ctx, cat.Flags{}, &name)
-			if err != nil {
-				return false, err
-			}
-			toCheck = new
-
-		case cat.Schema:
-			name := *md.deps[i].schemaName()
-			// Resolve schema object.
-			new, _, err := catalog.ResolveSchema(ctx, cat.Flags{}, &name)
-			if err != nil {
-				return false, err
-			}
-			toCheck = new
-
-		default:
-			return false, errors.AssertionFailedf("unknown dependency type: %v", obj)
+			toCheck, _, err = catalog.ResolveDataSource(ctx, cat.Flags{}, &name.byName)
+		}
+		if err != nil {
+			return false, err
 		}
 
 		// Ensure that it's the same object, and there were no schema or table
 		// statistics changes.
-		if !toCheck.Equals(obj) {
+		if !toCheck.Equals(md.deps[i].ds) {
 			return false, nil
 		}
 
@@ -276,19 +260,15 @@ func (md *Metadata) Schema(schID SchemaID) cat.Schema {
 	return md.schemas[schID-1]
 }
 
-// AddTable is a helper that calls AddTableWithAlias with tab.Name() as the
-// table's alias.
-func (md *Metadata) AddTable(tab cat.Table) TableID {
-	return md.AddTableWithAlias(tab, tab.Name())
-}
-
-// AddTableWithAlias indexes a new reference to a table within the query.
-// Separate references to the same table are assigned different table ids (e.g.
-// in a self-join query). All columns are added to the metadata. If mutation
-// columns are present, they are added after active columns. The table's alias
-// is passed separately so that its original formatting is preserved for error
-// messages, pretty-printing, etc.
-func (md *Metadata) AddTableWithAlias(tab cat.Table, alias *tree.TableName) TableID {
+// AddTable indexes a new reference to a table within the query. Separate
+// references to the same table are assigned different table ids (e.g.  in a
+// self-join query). All columns are added to the metadata. If mutation columns
+// are present, they are added after active columns.
+//
+// The ExplicitCatalog/ExplicitSchema fields of the table's alias are honored so
+// that its original formatting is preserved for error messages,
+// pretty-printing, etc.
+func (md *Metadata) AddTable(tab cat.Table, alias *tree.TableName) TableID {
 	tabID := makeTableID(len(md.tables), ColumnID(len(md.cols)+1))
 	if md.tables == nil {
 		md.tables = make([]TableMeta, 0, 4)
@@ -372,7 +352,7 @@ func (md *Metadata) ColumnMeta(colID ColumnID) *ColumnMeta {
 //      a different table name, then prefix the column alias with the table
 //      name: "tabName.columnAlias".
 //
-func (md *Metadata) QualifiedAlias(colID ColumnID, fullyQualify bool) string {
+func (md *Metadata) QualifiedAlias(colID ColumnID, fullyQualify bool, catalog cat.Catalog) string {
 	cm := md.ColumnMeta(colID)
 	if cm.Table == 0 {
 		// Column doesn't belong to a table, so no need to qualify it further.
@@ -413,8 +393,11 @@ func (md *Metadata) QualifiedAlias(colID ColumnID, fullyQualify bool) string {
 
 	var sb strings.Builder
 	if fullyQualify {
-		s := md.TableMeta(cm.Table).Table.Name().FQString()
-		sb.WriteString(s)
+		tn, err := catalog.FullyQualifiedName(context.TODO(), md.TableMeta(cm.Table).Table)
+		if err != nil {
+			panic(err)
+		}
+		sb.WriteString(tn.FQString())
 	} else {
 		sb.WriteString(tabAlias.String())
 	}
@@ -486,3 +469,8 @@ func (md *Metadata) AddView(v cat.View) {
 func (md *Metadata) AllViews() []cat.View {
 	return md.views
 }
+
+// WithID uniquely identifies a With expression within the scope of a query.
+// WithID=0 is reserved to mean "unknown expression".
+// See the comment for Metadata for more details on identifiers.
+type WithID uint64

@@ -15,6 +15,7 @@ import (
 	"flag"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -30,6 +31,7 @@ var (
 	flagNum         = flag.Int("num", 100, "number of statements to generate")
 	flagNoMutations = flag.Bool("no-mutations", false, "disables mutations during testing")
 	flagNoWiths     = flag.Bool("no-withs", false, "disables WITHs during testing")
+	flagVec         = flag.Bool("vec", false, "attempt to generate vectorized-friendly queries")
 )
 
 func init() {
@@ -49,28 +51,6 @@ func TestGenerateParse(t *testing.T) {
 	rnd, _ := randutil.NewPseudoRand()
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
-	db.Exec(t, `
-		CREATE TABLE t (
-			_bool bool,
-			_bytes bytes,
-			_date date,
-			_decimal decimal,
-			_float4 float4,
-			_float8 float8,
-			_inet inet,
-			_int4 int4,
-			_int8 int8,
-			_interval interval,
-			_jsonb jsonb,
-			_string string,
-			_time time,
-			_timestamp timestamp,
-			_timestamptz timestamptz,
-			_uuid uuid
-		);
-		INSERT INTO t DEFAULT VALUES;
-	`)
-
 	var opts []SmitherOption
 	if *flagNoMutations {
 		opts = append(opts, DisableMutations())
@@ -78,11 +58,23 @@ func TestGenerateParse(t *testing.T) {
 	if *flagNoWiths {
 		opts = append(opts, DisableWith())
 	}
+	if *flagVec {
+		opts = append(opts, Vectorizable())
+		db.Exec(t, VecSeedTable)
+	} else {
+		db.Exec(t, SeedTable)
+	}
 
-	smither, err := NewSmither(nil, rnd, opts...)
+	smither, err := NewSmither(sqlDB, rnd, opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	if *flagVec {
+		// After all introspection is done, turn vec on.
+		db.Exec(t, `SET vectorize = experimental_always`)
+	}
+
 	seen := map[string]bool{}
 	for i := 0; i < *flagNum; i++ {
 		stmt := smither.Generate()
@@ -96,11 +88,15 @@ func TestGenerateParse(t *testing.T) {
 		stmt = prettyCfg.Pretty(parsed.AST)
 		fmt.Print("STMT: ", i, "\n", stmt, ";\n\n")
 		if *flagExec {
+			db.Exec(t, `SET statement_timeout = '9s'`)
 			if _, err := sqlDB.Exec(stmt); err != nil {
 				es := err.Error()
 				if !seen[es] {
 					seen[es] = true
 					fmt.Printf("ERR (%d): %v\n", i, err)
+					if *flagVec && strings.Contains(es, "unable to vectorize execution plan") {
+						t.Fatal()
+					}
 				}
 			}
 		}

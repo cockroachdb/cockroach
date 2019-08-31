@@ -1,4 +1,8 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
+# LogicTest: local fakedist fakedist-metadata fakedist-disk
+# The local-mixed-19.1-19.2 configuration is excluded for this file because of
+# 1) remaining bugs that need to be fixed in the 19.1/19.2 mixed state, and 2)
+# different FK behavior between 19.1 and 19.2. Tests to be run in that
+# configuration are in schema_change_in_txn-local-mixed-19.1-19.2.
 
 # Disable automatic stats to avoid flakiness (sometimes causes retry errors).
 statement ok
@@ -1499,3 +1503,190 @@ COMMIT
 
 statement ok
 DROP TABLE t
+
+# Test that DROP INDEX on an index with dependent foreign keys is correctly
+# rolled back when there is an error
+subtest 38733
+
+statement ok
+CREATE TABLE x (a INT PRIMARY KEY, b INT, UNIQUE INDEX (b), c INT)
+
+statement ok
+CREATE TABLE y (a INT PRIMARY KEY, b INT, INDEX (b))
+
+statement ok
+INSERT INTO x VALUES (1, 1, 1), (2, 2, 1);
+
+statement ok
+INSERT INTO y VALUES (1, 1), (2, 1);
+
+# First, test dropping the index on the referencing side
+statement ok
+ALTER TABLE y ADD FOREIGN KEY (b) REFERENCES x (b)
+
+statement ok
+BEGIN
+
+# Drop the index that the FK reference depends on
+statement ok
+DROP INDEX y_b_idx CASCADE;
+
+# This will fail, causing the previous DROP INDEX to also be rolled back
+statement ok
+CREATE UNIQUE INDEX ON y (b);
+
+statement error pgcode XXA00 violates unique constraint
+COMMIT
+
+# Verify that table y is in a consistent state (otherwise, SHOW CONSTRAINTS
+# would fail with an error)
+query TTTTB
+SHOW CONSTRAINTS FROM y
+----
+y  primary  PRIMARY KEY  PRIMARY KEY (a ASC)  true
+
+# Also test dropping the index on the referenced side
+statement ok
+ALTER TABLE y ADD FOREIGN KEY (b) REFERENCES x (b)
+
+statement ok
+BEGIN
+
+# Drop the index that the FK reference depends on
+statement ok
+DROP INDEX x_b_key CASCADE;
+
+# This will fail, causing the previous DROP INDEX to also be rolled back
+statement ok
+CREATE UNIQUE INDEX ON x (c);
+
+statement error pgcode XXA00 violates unique constraint
+COMMIT
+
+# Verify that table x is in a consistent state (otherwise, SHOW CONSTRAINTS
+# would fail with an error).
+query TTTTB
+SHOW CONSTRAINTS FROM x
+----
+x  primary  PRIMARY KEY  PRIMARY KEY (a ASC)  true
+x  x_b_key  UNIQUE       UNIQUE (b ASC)       true
+
+statement ok
+DROP TABLE x, y
+
+subtest drop_constraint_in_txn
+
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT c CHECK (a > 0)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT c
+
+# Since the check constraint is dropped in the schema changer after the
+# transaction commits, it's still enforced during the rest of the transaction.
+statement error pq: failed to satisfy CHECK constraint \(a > 0\)
+INSERT INTO t VALUES (0)
+
+statement ok
+ROLLBACK
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT c
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT c_not_valid CHECK (a > 0) NOT VALID
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT c_not_valid
+
+# The constraint was unvalidated, so it doesn't need to go through the schema
+# changer and is dropped immediately.
+statement ok
+INSERT INTO t VALUES (0)
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE t
+
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+ALTER TABLE t ALTER COLUMN a SET NOT NULL
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ALTER COLUMN a DROP NOT NULL
+
+# Since the non-null constraint is dropped in the schema changer after the
+# transaction commits, it's still enforced during the rest of the transaction.
+# The error is about a check constraint because we generate a check constraint
+# when dropping not-null constraints in the schema changer.
+statement error failed to satisfy CHECK constraint \(a IS NOT NULL\)
+INSERT INTO t VALUES (NULL)
+
+statement ok
+ROLLBACK
+
+statement ok
+DROP TABLE t
+
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+CREATE TABLE t2 (b INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT fk FOREIGN KEY (a) REFERENCES t2
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT fk
+
+# Since the foreign key constraint is dropped in the schema changer after the
+# transaction commits, it's still enforced during the rest of the transaction.
+statement error pgcode 23503 foreign key
+INSERT INTO t VALUES (1)
+
+statement ok
+ROLLBACK
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT fk
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT fk_not_valid FOREIGN KEY (a) REFERENCES t2 NOT VALID
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT fk_not_valid
+
+# The constraint was unvalidated, so it doesn't need to go through the schema
+# changer and is dropped immediately.
+statement ok
+INSERT INTO t VALUES (1)
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE t, t2
+

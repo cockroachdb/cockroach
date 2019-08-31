@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 statement ok
 CREATE TABLE kv (
@@ -33,24 +33,27 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM kv; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM kv@foo; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM kv@bar; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 
 # Check that EXPLAIN does not destroy data (#6613)
@@ -146,14 +149,11 @@ count           ·         ·
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10 RETURNING id
 ----
-render                     ·         ·
- └── run                   ·         ·
-      └── delete           ·         ·
-           │               from      indexed
-           │               strategy  deleter
-           └── index-join  ·         ·
-                │          table     indexed@primary
-                └── scan   ·         ·
-·                          table     indexed@indexed_value_idx
-·                          spans     /5-/6
-·                          limit     10
+run             ·         ·
+ └── delete     ·         ·
+      │         from      indexed
+      │         strategy  deleter
+      └── scan  ·         ·
+·               table     indexed@indexed_value_idx
+·               spans     /5-/6
+·               limit     10

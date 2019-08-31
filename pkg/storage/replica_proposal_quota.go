@@ -18,8 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/tracker"
 )
 
 // MaxQuotaReplicaLivenessDuration is the maximum duration that a replica
@@ -27,7 +29,9 @@ import (
 // available proposal quota.
 const MaxQuotaReplicaLivenessDuration = 10 * time.Second
 
-func (r *Replica) maybeAcquireProposalQuota(ctx context.Context, quota int64) error {
+func (r *Replica) maybeAcquireProposalQuota(
+	ctx context.Context, quota uint64,
+) (*quotapool.IntAlloc, error) {
 	r.mu.RLock()
 	quotaPool := r.mu.proposalQuota
 	desc := *r.mu.state.Desc
@@ -45,22 +49,26 @@ func (r *Replica) maybeAcquireProposalQuota(ctx context.Context, quota int64) er
 	// through, for otherwise a follower could never request the lease.
 
 	if quotaPool == nil {
-		return nil
+		return nil, nil
 	}
 
 	if !quotaPoolEnabledForRange(desc) {
-		return nil
+		return nil, nil
 	}
 
 	// Trace if we're running low on available proposal quota; it might explain
 	// why we're taking so long.
 	if log.HasSpanOrEvent(ctx) {
-		if q := quotaPool.approximateQuota(); q < quotaPool.maxQuota()/10 {
+		if q := quotaPool.ApproximateQuota(); q < quotaPool.Capacity()/10 {
 			log.Eventf(ctx, "quota running low, currently available ~%d", q)
 		}
 	}
-
-	return quotaPool.acquire(ctx, quota)
+	alloc, err := quotaPool.Acquire(ctx, quota)
+	// Let quotapool errors due to being closed pass through.
+	if _, isClosed := err.(*quotapool.ErrClosed); isClosed {
+		err = nil
+	}
+	return alloc, err
 }
 
 func quotaPoolEnabledForRange(desc roachpb.RangeDescriptor) bool {
@@ -93,7 +101,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	// destroyed.
 	if r.mu.destroyStatus.Removed() {
 		if r.mu.proposalQuota != nil {
-			r.mu.proposalQuota.close()
+			r.mu.proposalQuota.Close("destroyed")
 		}
 		r.mu.proposalQuota = nil
 		r.mu.lastUpdateTimes = nil
@@ -101,11 +109,15 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		return
 	}
 
+	status := r.mu.internalRaftGroup.BasicStatus()
 	if r.mu.leaderID != lastLeaderID {
 		if r.mu.replicaID == r.mu.leaderID {
 			// We're becoming the leader.
-			r.mu.proposalQuotaBaseIndex = r.mu.lastIndex
-
+			// Initialize the proposalQuotaBaseIndex at the applied index.
+			// After the proposal quota is enabled all entries applied by this replica
+			// will be appended to the quotaReleaseQueue. The proposalQuotaBaseIndex
+			// and the quotaReleaseQueue together track status.Applied exactly.
+			r.mu.proposalQuotaBaseIndex = status.Applied
 			if r.mu.proposalQuota != nil {
 				log.Fatal(ctx, "proposalQuota was not nil before becoming the leader")
 			}
@@ -118,18 +130,18 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			// through the code paths where we acquire quota from the pool. To
 			// offset this we reset the quota pool whenever leadership changes
 			// hands.
-			r.mu.proposalQuota = newQuotaPool(r.store.cfg.RaftProposalQuota)
+			r.mu.proposalQuota = quotapool.NewIntPool(r.rangeStr.String(), uint64(r.store.cfg.RaftProposalQuota))
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
-			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().Unwrap(), timeutil.Now())
+			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().All(), timeutil.Now())
 		} else if r.mu.proposalQuota != nil {
 			// We're becoming a follower.
-
-			// We unblock all ongoing and subsequent quota acquisition
-			// goroutines (if any).
-			r.mu.proposalQuota.close()
+			// We unblock all ongoing and subsequent quota acquisition goroutines
+			// (if any) and release the quotaReleaseQueue so its allocs are pooled.
+			r.mu.proposalQuota.Close("leader change")
+			r.mu.proposalQuota.Release(r.mu.quotaReleaseQueue...)
+			r.mu.quotaReleaseQueue = nil
 			r.mu.proposalQuota = nil
 			r.mu.lastUpdateTimes = nil
-			r.mu.quotaReleaseQueue = nil
 		}
 		return
 	} else if r.mu.proposalQuota == nil {
@@ -144,9 +156,15 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 
 	// Find the minimum index that active followers have acknowledged.
 	now := timeutil.Now()
-	status := r.mu.internalRaftGroup.StatusWithoutProgress()
-	commitIndex, minIndex := status.Commit, status.Commit
-	r.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, progress raft.Progress) {
+	// commitIndex is used to determine whether a newly added replica has fully
+	// caught up.
+	commitIndex := status.Commit
+	// Initialize minIndex to the currently applied index. The below progress
+	// checks will only decrease the minIndex. Given that the quotaReleaseQueue
+	// cannot correspond to values beyond the applied index there's no reason
+	// to consider progress beyond it as meaningful.
+	minIndex := status.Applied
+	r.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, progress tracker.Progress) {
 		rep, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(id))
 		if !ok {
 			return
@@ -158,7 +176,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		}
 
 		// Only consider followers that that have "healthy" RPC connections.
-		if err := r.store.cfg.NodeDialer.ConnHealth(rep.NodeID); err != nil {
+		if err := r.store.cfg.NodeDialer.ConnHealth(rep.NodeID, r.connectionClass.get()); err != nil {
 			return
 		}
 
@@ -213,30 +231,29 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	})
 
 	if r.mu.proposalQuotaBaseIndex < minIndex {
-		// We've persisted minIndex - r.mu.proposalQuotaBaseIndex entries to
-		// the raft log on all 'active' replicas since last we checked,
-		// we 'should' be able to release the difference back to
-		// the quota pool. But consider the scenario where we have a single
-		// replica that we're writing to, we only construct the
-		// quotaReleaseQueue when entries 'come out' of Raft via
-		// raft.Ready.CommittedEntries. The minIndex computed above uses the
-		// replica's commit index which is independent of whether or we've
-		// iterated over the entirety of raft.Ready.CommittedEntries and
-		// therefore may not have all minIndex - r.mu.proposalQuotaBaseIndex
-		// command sizes in our quotaReleaseQueue.  Hence we only process
-		// min(minIndex - r.mu.proposalQuotaBaseIndex, len(r.mu.quotaReleaseQueue))
-		// quota releases.
+		// We've persisted at least minIndex-r.mu.proposalQuotaBaseIndex entries
+		// to the raft log on all 'active' replicas and applied at least minIndex
+		// entries locally since last we checked, so we are able to release the
+		// difference back to the quota pool.
 		numReleases := minIndex - r.mu.proposalQuotaBaseIndex
-		if qLen := uint64(len(r.mu.quotaReleaseQueue)); qLen < numReleases {
-			numReleases = qLen
-		}
-		sum := int64(0)
-		for _, rel := range r.mu.quotaReleaseQueue[:numReleases] {
-			sum += rel
-		}
-		r.mu.proposalQuotaBaseIndex += numReleases
-		r.mu.quotaReleaseQueue = r.mu.quotaReleaseQueue[numReleases:]
 
-		r.mu.proposalQuota.add(sum)
+		// NB: Release deals with cases where allocs being released do not originate
+		// from this incarnation of quotaReleaseQueue, which can happen if a
+		// proposal acquires quota while this replica is the raft leader in some
+		// term and then commits while at a different term.
+		r.mu.proposalQuota.Release(r.mu.quotaReleaseQueue[:numReleases]...)
+		r.mu.quotaReleaseQueue = r.mu.quotaReleaseQueue[numReleases:]
+		r.mu.proposalQuotaBaseIndex += numReleases
+	}
+	// Assert the sanity of the base index and the queue. Queue entries should
+	// correspond to applied entries. It should not be possible for the base
+	// index and the not yet released applied entries to not equal the applied
+	// index.
+	releasableIndex := r.mu.proposalQuotaBaseIndex + uint64(len(r.mu.quotaReleaseQueue))
+	if releasableIndex != status.Applied {
+		log.Fatalf(ctx, "proposalQuotaBaseIndex (%d) + quotaReleaseQueueLen (%d) = %d"+
+			" must equal the applied index (%d)",
+			r.mu.proposalQuotaBaseIndex, len(r.mu.quotaReleaseQueue), releasableIndex,
+			status.Applied)
 	}
 }

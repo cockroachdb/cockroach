@@ -65,7 +65,7 @@ func BenchmarkAddSSTable(b *testing.B) {
 					b.Fatalf("%+v", err)
 				}
 				for _, kv := range kvs {
-					if err := sst.Add(kv); err != nil {
+					if err := sst.Put(kv.Key, kv.Value); err != nil {
 						b.Fatalf("%+v", err)
 					}
 				}
@@ -77,7 +77,7 @@ func BenchmarkAddSSTable(b *testing.B) {
 				totalLen += int64(len(data))
 
 				b.StartTimer()
-				if err := kvDB.AddSSTable(ctx, span.Key, span.EndKey, data); err != nil {
+				if err := kvDB.AddSSTable(ctx, span.Key, span.EndKey, data, false /* disallowShadowing */, nil /* stats */); err != nil {
 					b.Fatalf("%+v", err)
 				}
 				b.StopTimer()

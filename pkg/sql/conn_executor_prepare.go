@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -153,6 +152,7 @@ func (ex *connExecutor) prepare(
 	// anything other than getting a timestamp.
 	txn := client.NewTxn(ctx, ex.server.cfg.DB, ex.server.cfg.NodeID.Get(), client.RootTxn)
 
+	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 	p := &ex.planner
 	ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */, stmt.NumAnnotations)
 	p.stmt = &stmt
@@ -182,8 +182,6 @@ func (ex *connExecutor) populatePrepared(
 	if err := p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints); err != nil {
 		return 0, err
 	}
-	prepared := stmt.Prepared
-
 	p.extendedEvalCtx.PrepareOnly = true
 
 	protoTS, err := p.isAsOf(stmt.AST)
@@ -203,60 +201,14 @@ func (ex *connExecutor) populatePrepared(
 	// As of right now, the optimizer only works on SELECT statements and will
 	// fallback for all others, so this should be safe for the foreseeable
 	// future.
-	var flags planFlags
-	var isCorrelated bool
-	if optMode := ex.sessionData.OptimizerMode; optMode != sessiondata.OptimizerOff {
-		log.VEvent(ctx, 2, "preparing using optimizer")
-		var err error
-		flags, isCorrelated, err = p.prepareUsingOptimizer(ctx)
-		if err == nil {
-			log.VEvent(ctx, 2, "optimizer prepare succeeded")
-			// stmt.Prepared fields have been populated.
-			return flags, nil
-		}
+	flags, err := p.prepareUsingOptimizer(ctx)
+	if err != nil {
 		log.VEventf(ctx, 1, "optimizer prepare failed: %v", err)
-		if !canFallbackFromOpt(err, optMode, stmt) {
-			return 0, err
-		}
-		flags.Set(planFlagOptFallback)
-		log.VEvent(ctx, 1, "prepare falls back on heuristic planner")
-	} else {
-		log.VEvent(ctx, 2, "optimizer disabled (prepare)")
-	}
-
-	// Fallback on the heuristic planner if the optimizer was not enabled or used:
-	// create a plan for the statement to figure out the typing, then close the
-	// plan.
-	prepared.AnonymizedStr = anonymizeStmt(stmt.AST)
-	if err := p.prepare(ctx, stmt.AST); err != nil {
-		err = enhanceErrWithCorrelation(err, isCorrelated)
 		return 0, err
 	}
-
-	if p.curPlan.plan == nil {
-		// Statement with no result columns and no support for placeholders.
-		//
-		// Note: we're combining `flags` which comes from
-		// `prepareUsingOptimizer`, with `p.curPlan.flags` which ensures
-		// the new flags combine with the existing flags (this is used
-		// e.g. to maintain the count of times the optimizer was used).
-		return flags | p.curPlan.flags, nil
-	}
-	defer p.curPlan.close(ctx)
-
-	prepared.Columns = p.curPlan.columns()
-	for _, c := range prepared.Columns {
-		if err := checkResultType(c.Typ); err != nil {
-			return 0, err
-		}
-	}
-	// Verify that all placeholder types have been set.
-	if err := p.semaCtx.Placeholders.Types.AssertAllSet(); err != nil {
-		return 0, err
-	}
-	prepared.Types = p.semaCtx.Placeholders.Types
-	// The flags are combined, see the comment above for why.
-	return flags | p.curPlan.flags, nil
+	log.VEvent(ctx, 2, "optimizer prepare succeeded")
+	// stmt.Prepared fields have been populated.
+	return flags, nil
 }
 
 func (ex *connExecutor) execBind(
@@ -309,14 +261,21 @@ func (ex *connExecutor) execBind(
 	} else {
 		qArgFormatCodes := bindCmd.ArgFormatCodes
 
-		// If a single code is specified, it is applied to all arguments.
+		// If there is only one format code, then that format code is used to decode all the
+		// arguments. But if the number of format codes provided does not match the number of
+		// arguments AND it's not a single format code then we cannot infer what format to use to
+		// decode all of the arguments.
 		if len(qArgFormatCodes) != 1 && len(qArgFormatCodes) != int(numQArgs) {
 			return retErr(pgwirebase.NewProtocolViolationErrorf(
 				"wrong number of format codes specified: %d for %d arguments",
 				len(qArgFormatCodes), numQArgs))
 		}
-		// If a single format code was specified, it applies to all the arguments.
-		if len(qArgFormatCodes) == 1 {
+
+		// If a single format code is provided and there is more than one argument to be decoded,
+		// then expand qArgFormatCodes to the number of arguments provided.
+		// If the number of format codes matches the number of arguments then nothing needs to be
+		// done.
+		if len(qArgFormatCodes) == 1 && numQArgs > 1 {
 			fmtCode := qArgFormatCodes[0]
 			qArgFormatCodes = make([]pgwirebase.FormatCode, numQArgs)
 			for i := range qArgFormatCodes {
@@ -358,7 +317,7 @@ func (ex *connExecutor) execBind(
 	}
 
 	columnFormatCodes := bindCmd.OutFormats
-	if len(bindCmd.OutFormats) == 1 {
+	if len(bindCmd.OutFormats) == 1 && numCols > 1 {
 		// Apply the format code to every column.
 		columnFormatCodes = make([]pgwirebase.FormatCode, numCols)
 		for i := 0; i < numCols; i++ {

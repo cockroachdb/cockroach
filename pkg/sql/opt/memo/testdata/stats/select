@@ -71,10 +71,12 @@ SELECT * FROM b WHERE x = 1 AND z = 2 AND rowid >= 5 AND rowid <= 8
 ----
 project
  ├── columns: x:1(int!null) z:2(int!null)
+ ├── cardinality: [0 - 4]
  ├── stats: [rows=8e-06]
  ├── fd: ()-->(1,2)
  └── select
       ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
+      ├── cardinality: [0 - 4]
       ├── stats: [rows=8e-06, distinct(1)=8e-06, null(1)=0, distinct(2)=8e-06, null(2)=0, distinct(3)=8e-06, null(3)=0]
       ├── key: (3)
       ├── fd: ()-->(1,2)
@@ -336,6 +338,7 @@ SELECT * FROM district WHERE d_id > 1 AND d_id < 10 AND d_w_id=10 AND d_name='bo
 ----
 select
  ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string!null)
+ ├── cardinality: [0 - 8]
  ├── stats: [rows=0.08, distinct(1)=0.08, null(1)=0, distinct(2)=0.08, null(2)=0, distinct(3)=0.08, null(3)=0]
  ├── key: (1)
  ├── fd: ()-->(2,3)
@@ -555,6 +558,7 @@ SELECT * FROM c WHERE x >= 0 AND x < 100
 ----
 select
  ├── columns: x:1(int!null) z:2(int!null)
+ ├── cardinality: [0 - 100]
  ├── stats: [rows=99.8990918, distinct(1)=99.8990918, null(1)=0, distinct(2)=65.4824076, null(2)=0]
  ├── key: (1)
  ├── fd: (1)-->(2)
@@ -966,10 +970,12 @@ SELECT * FROM b WHERE x = 1 AND z = 2 AND rowid >= 5 AND rowid <= 8
 ----
 project
  ├── columns: x:1(int!null) z:2(int!null)
+ ├── cardinality: [0 - 4]
  ├── stats: [rows=6.4e-06]
  ├── fd: ()-->(1,2)
  └── select
       ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
+      ├── cardinality: [0 - 4]
       ├── stats: [rows=6.4e-06, distinct(1)=6.4e-06, null(1)=0, distinct(2)=6.4e-06, null(2)=0, distinct(3)=6.4e-06, null(3)=0]
       ├── key: (3)
       ├── fd: ()-->(1,2)
@@ -1025,6 +1031,7 @@ SELECT * FROM c WHERE x >= 0 AND x < 100
 ----
 select
  ├── columns: x:1(int!null) z:2(int!null)
+ ├── cardinality: [0 - 100]
  ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=100, null(2)=0]
  ├── key: (1)
  ├── fd: (1)-->(2)
@@ -1367,27 +1374,37 @@ WITH t(x) AS (
 )
 SELECT x FROM t WHERE x
 ----
-select
- ├── columns: x:5(bool!null)
- ├── stats: [rows=4e+10, distinct(5)=1, null(5)=0]
- ├── fd: ()-->(5)
+with &1 (t)
+ ├── columns: x:6(bool!null)
+ ├── stats: [rows=1, distinct(6)=1, null(6)=0]
+ ├── fd: ()-->(6)
  ├── project
  │    ├── columns: x:5(bool)
- │    ├── stats: [rows=4e+20, distinct(5)=1, null(5)=4e+20]
+ │    ├── stats: [rows=4e+20]
  │    ├── left-join (hash)
  │    │    ├── columns: t1.x:1(bool) t2.x:3(bool)
- │    │    ├── stats: [rows=4e+20, distinct(1,3)=1, null(1,3)=4e+20]
+ │    │    ├── stats: [rows=4e+20]
  │    │    ├── scan t1
  │    │    │    ├── columns: t1.x:1(bool)
- │    │    │    └── stats: [rows=2e+10, distinct(1)=1, null(1)=2e+10]
+ │    │    │    └── stats: [rows=2e+10]
  │    │    ├── scan t2
  │    │    │    ├── columns: t2.x:3(bool)
- │    │    │    └── stats: [rows=2e+10, distinct(3)=1, null(3)=2e+10]
+ │    │    │    └── stats: [rows=2e+10]
  │    │    └── filters (true)
  │    └── projections
  │         └── (t1.x::INT8 << 5533)::BOOL OR t2.x [type=bool, outer=(1,3)]
- └── filters
-      └── variable: x [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
+ └── select
+      ├── columns: x:6(bool!null)
+      ├── stats: [rows=1, distinct(6)=1, null(6)=0]
+      ├── fd: ()-->(6)
+      ├── with-scan &1 (t)
+      │    ├── columns: x:6(bool)
+      │    ├── mapping:
+      │    │    └──  x:5(bool) => x:6(bool)
+      │    ├── stats: [rows=4e+20]
+      │    └── fd: (5)-->(6)
+      └── filters
+           └── variable: x [type=bool, outer=(6), constraints=(/6: [/true - /true]; tight), fd=()-->(6)]
 
 # Regression test for #38375. Avoid floating point precision errors.
 exec-ddl
@@ -1425,3 +1442,75 @@ select
  │    └── stats: [rows=2e+10, distinct(1)=2e+10, null(1)=2e+10, distinct(2)=10, null(2)=0]
  └── filters
       └── x = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+# Support OR constraints.
+exec-ddl
+CREATE TABLE nation
+(
+    n_nationkey int PRIMARY KEY,
+    n_name char(25) NOT NULL,
+    n_regionkey int NOT NULL,
+    neighbor char(25) NOT NULL,
+    INDEX n_rk (n_regionkey ASC)
+)
+----
+
+exec-ddl
+ALTER TABLE nation INJECT STATISTICS '[
+  {
+    "columns": ["n_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 2,
+    "null_count": 0
+  }
+]'
+----
+
+opt
+SELECT * FROM nation WHERE n_name = 'FRANCE' OR n_name = 'GERMANY'
+----
+select
+ ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
+ ├── stats: [rows=333333.333, distinct(1)=333333.333, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=98265.847, null(3)=0, distinct(4)=98265.847, null(4)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan nation
+ │    ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
+ │    ├── stats: [rows=1000000, distinct(1)=1000000, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=100000, null(3)=0, distinct(4)=100000, null(4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── (n_name = 'FRANCE') OR (n_name = 'GERMANY') [type=bool, outer=(2), constraints=(/2: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
+
+opt
+SELECT * FROM nation WHERE (n_name = 'FRANCE' AND neighbor = 'GERMANY') OR (n_name = 'GERMANY' AND neighbor = 'FRANCE')
+----
+select
+ ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
+ ├── stats: [rows=6.66666667, distinct(1)=6.66666667, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=6.66646667, null(3)=0, distinct(4)=2, null(4)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan nation
+ │    ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
+ │    ├── stats: [rows=1000000, distinct(1)=1000000, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=100000, null(3)=0, distinct(4)=100000, null(4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── ((n_name = 'FRANCE') AND (neighbor = 'GERMANY')) OR ((n_name = 'GERMANY') AND (neighbor = 'FRANCE')) [type=bool, outer=(2,4), constraints=(/2: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; /4: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
+
+opt
+SELECT * FROM nation WHERE (n_name, neighbor) in (('FRANCE', 'GERMANY'), ('GERMANY', 'FRANCE'))
+----
+select
+ ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
+ ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=19.9982001, null(3)=0, distinct(4)=2, null(4)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan nation
+ │    ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
+ │    ├── stats: [rows=1000000, distinct(1)=1000000, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=100000, null(3)=0, distinct(4)=100000, null(4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── (n_name, neighbor) IN (('FRANCE', 'GERMANY'), ('GERMANY', 'FRANCE')) [type=bool, outer=(2,4), constraints=(/2/4: [/'FRANCE'/'GERMANY' - /'FRANCE'/'GERMANY'] [/'GERMANY'/'FRANCE' - /'GERMANY'/'FRANCE']; /4: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; tight)]

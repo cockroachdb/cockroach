@@ -12,6 +12,7 @@ package execbuilder
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -21,24 +22,43 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
-func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
-	// Build the input query and ensure that the input columns that correspond to
-	// the table columns are projected.
-	input, err := b.buildRelational(ins.Input)
+func (b *Builder) buildMutationInput(
+	inputExpr memo.RelExpr, colList opt.ColList, p *memo.MutationPrivate,
+) (execPlan, error) {
+	input, err := b.buildRelational(inputExpr)
 	if err != nil {
 		return execPlan{}, err
 	}
 
+	input, err = b.ensureColumns(input, colList, nil, inputExpr.ProvidedPhysical().Ordering)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	if p.WithID != 0 {
+		label := fmt.Sprintf("buffer %d", p.WithID)
+		input.root, err = b.factory.ConstructBuffer(input.root, label)
+		if err != nil {
+			return execPlan{}, err
+		}
+
+		b.addBuiltWithExpr(p.WithID, input.outputCols, input.root)
+	}
+	return input, nil
+}
+
+func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	// Construct list of columns that only contains columns that need to be
 	// inserted (e.g. delete-only mutation columns don't need to be inserted).
 	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols))
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
 	colList = appendColsWhenPresent(colList, ins.CheckCols)
-	input, err = b.ensureColumns(input, colList, nil, ins.Input.ProvidedPhysical().Ordering)
+	input, err := b.buildMutationInput(ins.Input, colList, &ins.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -47,14 +67,15 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	tab := b.mem.Metadata().Table(ins.Table)
 	insertOrds := ordinalSetFromColList(ins.InsertCols)
 	checkOrds := ordinalSetFromColList(ins.CheckCols)
+	returnOrds := ordinalSetFromColList(ins.ReturnCols)
 	// If we planned FK checks, disable the execution code for FK checks.
 	disableExecFKs := len(ins.Checks) > 0
 	node, err := b.factory.ConstructInsert(
 		input.root,
 		tab,
 		insertOrds,
+		returnOrds,
 		checkOrds,
-		ins.NeedResults(),
 		disableExecFKs,
 	)
 	if err != nil {
@@ -74,13 +95,6 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 }
 
 func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
-	// Build the input query and ensure that the fetch and update columns are
-	// projected.
-	input, err := b.buildRelational(upd.Input)
-	if err != nil {
-		return execPlan{}, err
-	}
-
 	// Currently, the execution engine requires one input column for each fetch
 	// and update expression, so use ensureColumns to map and reorder colums so
 	// that they correspond to target table columns. For example:
@@ -92,11 +106,20 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(upd.FetchCols)+len(upd.UpdateCols)+len(upd.CheckCols))
+	colList := make(opt.ColList, 0, len(upd.FetchCols)+len(upd.UpdateCols)+len(upd.CheckCols)+len(upd.PassthroughCols))
 	colList = appendColsWhenPresent(colList, upd.FetchCols)
 	colList = appendColsWhenPresent(colList, upd.UpdateCols)
+
+	// The RETURNING clause of the Update can refer to the columns
+	// in any of the FROM tables. As a result, the Update may need
+	// to passthrough those columns so the projection above can use
+	// them.
+	if upd.NeedResults() {
+		colList = appendColsWhenPresent(colList, upd.PassthroughCols)
+	}
+
 	colList = appendColsWhenPresent(colList, upd.CheckCols)
-	input, err = b.ensureColumns(input, colList, nil, upd.Input.ProvidedPhysical().Ordering)
+	input, err := b.buildMutationInput(upd.Input, colList, &upd.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -106,16 +129,34 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	tab := md.Table(upd.Table)
 	fetchColOrds := ordinalSetFromColList(upd.FetchCols)
 	updateColOrds := ordinalSetFromColList(upd.UpdateCols)
+	returnColOrds := ordinalSetFromColList(upd.ReturnCols)
 	checkOrds := ordinalSetFromColList(upd.CheckCols)
+
+	// Construct the result columns for the passthrough set.
+	var passthroughCols sqlbase.ResultColumns
+	if upd.NeedResults() {
+		for _, passthroughCol := range upd.PassthroughCols {
+			colMeta := b.mem.Metadata().ColumnMeta(passthroughCol)
+			passthroughCols = append(passthroughCols, sqlbase.ResultColumn{Name: colMeta.Alias, Typ: colMeta.Type})
+		}
+	}
+
+	disableExecFKs := len(upd.Checks) > 0
 	node, err := b.factory.ConstructUpdate(
 		input.root,
 		tab,
 		fetchColOrds,
 		updateColOrds,
+		returnColOrds,
 		checkOrds,
-		upd.NeedResults(),
+		passthroughCols,
+		disableExecFKs,
 	)
 	if err != nil {
+		return execPlan{}, err
+	}
+
+	if err := b.buildFKChecks(upd.Checks); err != nil {
 		return execPlan{}, err
 	}
 
@@ -128,13 +169,6 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 }
 
 func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
-	// Build the input query and ensure that the insert, fetch, and update columns
-	// are projected.
-	input, err := b.buildRelational(ups.Input)
-	if err != nil {
-		return execPlan{}, err
-	}
-
 	// Currently, the execution engine requires one input column for each insert,
 	// fetch, and update expression, so use ensureColumns to map and reorder
 	// columns so that they correspond to target table columns. For example:
@@ -162,7 +196,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		colList = append(colList, ups.CanaryCol)
 	}
 	colList = appendColsWhenPresent(colList, ups.CheckCols)
-	input, err = b.ensureColumns(input, colList, nil, ups.Input.ProvidedPhysical().Ordering)
+	input, err := b.buildMutationInput(ups.Input, colList, &ups.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -177,6 +211,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	insertColOrds := ordinalSetFromColList(ups.InsertCols)
 	fetchColOrds := ordinalSetFromColList(ups.FetchCols)
 	updateColOrds := ordinalSetFromColList(ups.UpdateCols)
+	returnColOrds := ordinalSetFromColList(ups.ReturnCols)
 	checkOrds := ordinalSetFromColList(ups.CheckCols)
 	node, err := b.factory.ConstructUpsert(
 		input.root,
@@ -185,8 +220,8 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		insertColOrds,
 		fetchColOrds,
 		updateColOrds,
+		returnColOrds,
 		checkOrds,
-		ups.NeedResults(),
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -209,19 +244,13 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 		return b.buildDeleteRange(del)
 	}
 
-	// Build the input query and ensure that the fetch columns are projected.
-	input, err := b.buildRelational(del.Input)
-	if err != nil {
-		return execPlan{}, err
-	}
-
 	// Ensure that order of input columns matches order of target table columns.
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
 	colList := make(opt.ColList, 0, len(del.FetchCols))
 	colList = appendColsWhenPresent(colList, del.FetchCols)
-	input, err = b.ensureColumns(input, colList, nil, del.Input.ProvidedPhysical().Ordering)
+	input, err := b.buildMutationInput(del.Input, colList, &del.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -230,8 +259,20 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	md := b.mem.Metadata()
 	tab := md.Table(del.Table)
 	fetchColOrds := ordinalSetFromColList(del.FetchCols)
-	node, err := b.factory.ConstructDelete(input.root, tab, fetchColOrds, del.NeedResults())
+	returnColOrds := ordinalSetFromColList(del.ReturnCols)
+	disableExecFKs := len(del.Checks) > 0
+	node, err := b.factory.ConstructDelete(
+		input.root,
+		tab,
+		fetchColOrds,
+		returnColOrds,
+		disableExecFKs,
+	)
 	if err != nil {
+		return execPlan{}, err
+	}
+
+	if err := b.buildFKChecks(del.Checks); err != nil {
 		return execPlan{}, err
 	}
 
@@ -240,6 +281,7 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	if del.NeedResults() {
 		ep.outputCols = mutationOutputColMap(del)
 	}
+
 	return ep, nil
 }
 
@@ -310,6 +352,9 @@ func appendColsWhenPresent(dst, src opt.ColList) opt.ColList {
 // indicating columns that are not involved in the mutation.
 func ordinalSetFromColList(colList opt.ColList) exec.ColumnOrdinalSet {
 	var res util.FastIntSet
+	if colList == nil {
+		return res
+	}
 	for i, col := range colList {
 		if col != 0 {
 			res.Add(i)
@@ -335,6 +380,16 @@ func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 			ord++
 		}
 	}
+
+	// The output columns of the mutation will also include all
+	// columns it allowed to pass through.
+	for _, colID := range private.PassthroughCols {
+		if colID != 0 {
+			colMap.Set(int(colID), ord)
+			ord++
+		}
+	}
+
 	return colMap
 }
 
@@ -361,9 +416,9 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 			var msg, details bytes.Buffer
 			if c.FKOutbound {
 				// Generate an error of the form:
-				//   ERROR:  insert or update on table "child" violates foreign key constraint "foo"
+				//   ERROR:  insert on table "child" violates foreign key constraint "foo"
 				//   DETAIL: Key (child_p)=(2) is not present in table "parent".
-				msg.WriteString("insert or update on table ")
+				fmt.Fprintf(&msg, "%s on table ", c.OpName)
 				lex.EncodeEscapedSQLIdent(&msg, string(origin.Alias.TableName))
 				msg.WriteString(" violates foreign key constraint ")
 				lex.EncodeEscapedSQLIdent(&msg, fk.Name())
@@ -371,26 +426,45 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 				details.WriteString("Key (")
 				for i := 0; i < fk.ColumnCount(); i++ {
 					if i > 0 {
-						details.WriteString(" ,")
+						details.WriteString(", ")
 					}
 					col := origin.Table.Column(fk.OriginColumnOrdinal(origin.Table, i))
 					details.WriteString(string(col.ColName()))
 				}
 				details.WriteString(")=(")
+				sawNull := false
 				for i, col := range c.KeyCols {
 					if i > 0 {
 						details.WriteString(", ")
 					}
-					details.WriteString(row[query.getColumnOrdinal(col)].String())
+					d := row[query.getColumnOrdinal(col)]
+					if d == tree.DNull {
+						sawNull = true
+						break
+					}
+					details.WriteString(d.String())
 				}
-				details.WriteString(") is not present in table ")
-				lex.EncodeEscapedSQLIdent(&details, string(referenced.Alias.TableName))
-				details.WriteByte('.')
+				if sawNull {
+					details.Reset()
+					details.WriteString("MATCH FULL does not allow mixing of null and nonnull key values.")
+				} else {
+					details.WriteString(") is not present in table ")
+					lex.EncodeEscapedSQLIdent(&details, string(referenced.Alias.TableName))
+					details.WriteByte('.')
+				}
 			} else {
 				// Generate an error of the form:
-				//   ERROR:  update or delete on table "parent" violates foreign key constraint "child_child_p_fkey" on table "child"
+				//   ERROR:  delete on table "parent" violates foreign key constraint "child_child_p_fkey" on table "child"
 				//   DETAIL: Key (p)=(1) is still referenced from table "child".
-				panic(errors.AssertionFailedf("unimplemented"))
+				fmt.Fprintf(&msg, "%s on table ", c.OpName)
+				lex.EncodeEscapedSQLIdent(&msg, string(referenced.Alias.TableName))
+				msg.WriteString(" violates foreign key constraint")
+				// TODO(justin): get the name of the FK constraint (it's not populated
+				// on this descriptor.
+				msg.WriteString(" on table ")
+				lex.EncodeEscapedSQLIdent(&msg, string(origin.Alias.TableName))
+				// TODO(justin): get the details, the columns are not populated on this
+				// descriptor.
 			}
 
 			return errors.WithDetail(

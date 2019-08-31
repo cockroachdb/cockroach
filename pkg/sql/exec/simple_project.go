@@ -13,14 +13,15 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 )
 
 // simpleProjectOp is an operator that implements "simple projection" - removal of
 // columns that aren't needed by later operators.
 type simpleProjectOp struct {
-	input Operator
+	OneInputNode
 
 	batch *projectingBatch
 }
@@ -47,25 +48,40 @@ func (b *projectingBatch) ColVec(i int) coldata.Vec {
 }
 
 func (b *projectingBatch) ColVecs() []coldata.Vec {
-	panic("projectingBatch doesn't support ColVecs()")
+	execerror.VectorizedInternalPanic("projectingBatch doesn't support ColVecs()")
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 func (b *projectingBatch) Width() int {
 	return len(b.projection)
 }
 
-func (b *projectingBatch) AppendCol(t types.T) {
+func (b *projectingBatch) AppendCol(t coltypes.T) {
 	b.Batch.AppendCol(t)
 	b.projection = append(b.projection, uint32(b.Batch.Width())-1)
 }
 
 // NewSimpleProjectOp returns a new simpleProjectOp that applies a simple
-// projection on the columns in its input batch, returning a new batch with only
-// the columns in the projection slice, in order.
-func NewSimpleProjectOp(input Operator, projection []uint32) Operator {
+// projection on the columns in its input batch, returning a new batch with
+// only the columns in the projection slice, in order. In a degenerate case
+// when input already outputs batches that satisfy the projection, a
+// simpleProjectOp is not planned and input is returned.
+func NewSimpleProjectOp(input Operator, numInputCols int, projection []uint32) Operator {
+	if numInputCols == len(projection) {
+		projectionIsRedundant := true
+		for i := range projection {
+			if projection[i] != uint32(i) {
+				projectionIsRedundant = false
+			}
+		}
+		if projectionIsRedundant {
+			return input
+		}
+	}
 	return &simpleProjectOp{
-		input: input,
-		batch: newProjectionBatch(projection),
+		OneInputNode: NewOneInputNode(input),
+		batch:        newProjectionBatch(projection),
 	}
 }
 

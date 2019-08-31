@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 query TTT
 SELECT B'1000101'::BIT(4)::STRING,
        B'1000101'::BIT(4),

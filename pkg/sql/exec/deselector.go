@@ -13,8 +13,8 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 // deselectorOp consumes the input operator, and if resulting batches have a
@@ -22,8 +22,8 @@ import (
 // or omitted according to the selection vector). If the batches come with no
 // selection vector, it is a noop.
 type deselectorOp struct {
-	input      Operator
-	inputTypes []types.T
+	OneInputNode
+	inputTypes []coltypes.T
 
 	output coldata.Batch
 }
@@ -31,11 +31,11 @@ type deselectorOp struct {
 var _ Operator = &deselectorOp{}
 
 // NewDeselectorOp creates a new deselector operator on the given input
-// operator with the given column types.
-func NewDeselectorOp(input Operator, colTypes []types.T) Operator {
+// operator with the given column coltypes.
+func NewDeselectorOp(input Operator, colTypes []coltypes.T) Operator {
 	return &deselectorOp{
-		input:      input,
-		inputTypes: colTypes,
+		OneInputNode: NewOneInputNode(input),
+		inputTypes:   colTypes,
 	}
 }
 
@@ -51,7 +51,7 @@ func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
 	}
 
 	p.output.SetLength(batch.Length())
-	p.output.SetSelection(false)
+	p.output.ResetInternalBatch()
 	sel := batch.Selection()
 	for i, t := range p.inputTypes {
 		toCol := p.output.ColVec(i)

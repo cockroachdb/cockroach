@@ -1,4 +1,4 @@
-# LogicTest: 5node-dist-opt
+# LogicTest: 5node-dist
 
 # The following tables form the interleaved hierarchy:
 #   name:             primary key:                # rows:   'a' = id mod X :
@@ -103,8 +103,8 @@ ALTER TABLE grandchild2 EXPERIMENTAL_RELOCATE
   SELECT ARRAY[((i-1)/2)::INT%5+1], i, i+20, i, i FROM generate_series(1, 39, 2) AS g(i)
 
 # Verify data placement.
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE parent1]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE parent1]
 ----
 start_key                   end_key                     replicas  lease_holder
 NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
@@ -128,8 +128,8 @@ NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
 /36/#/55/1/76               /38/#/56/1/78/38/#/58/1/38  {4}       4
 /38/#/56/1/78/38/#/58/1/38  NULL                        {5}       5
 
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE child1]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE child1]
 ----
 start_key                   end_key                     replicas  lease_holder
 NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
@@ -153,8 +153,8 @@ NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
 /36/#/55/1/76               /38/#/56/1/78/38/#/58/1/38  {4}       4
 /38/#/56/1/78/38/#/58/1/38  NULL                        {5}       5
 
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE grandchild1]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE grandchild1]
 ----
 start_key                   end_key                     replicas  lease_holder
 NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
@@ -224,15 +224,17 @@ SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child2 USING(pid1)
 https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUE1LxDAUvPsrZE6KD9ws6iEg5LoirvQqPYTmbTfQTcrLqyhL_7u0OagHwVvmIzOZnJFy4Bd_4gL7BoOWMEruuJQsC1UNu_ABuyHENE660C2hy8KwZ2jUgWGxS8oysH_nhn1gecoxsdxuQAisPg5rwzMfFEtHPHn5dKMXTmpAaGJ__Kl0xziELQg1B4SBD3rlzM31oyze9QjCflJ76Qy5Lbk7cvfkHtDOhDzp92OL-p5hzUz_H9RwGXMq_GvAX8mbuSVw6Ll-WsmTdPwquVtrKtyv91YicNGqmgp2qUpzO198BQAA___Vk4P-
 
 # Parent-grandchild.
+# We add the pa1 > 0 condition so a lookup join is not considered to be a better plan.
 query T
 SELECT url FROM [EXPLAIN (DISTSQL)
   SELECT * FROM parent1 JOIN grandchild2 USING(pid1) WHERE
     pid1 >= 11 AND pid1 <= 13
     OR pid1 >= 19 AND pid1 <= 21
     OR pid1 >= 31 AND pid1 <= 33
+    OR pa1 > 0
 ]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzslE9r3DAQxe_9FGJOu3RKLDnpH8GCCqXgUrzF9Nb6IKyJI3AkI8mlJfi7F9sk8Yb0X3pIDnuz9ObHG_xGcwXOGyr1JUWQX4ADggCEM6gR-uAbitGHSVoKC_MdZIZgXT-k6bpGaHwgkFeQbOoIJBQuUehIf6OKtKHwwVtH4SQDBENJ2252-kjnCSYPe6nDD9XrQC5N9pPA3tsuUZBss1GcfR2yLG92jOdSyqL8_HrL9tVKoh3jb26kt-U7tqYEv5a2C7fC8hsNECrbXqxbaoN2prmwnRHX6qP0tfw_QOjoPG0Uf77dhamZ-RMQ9kOSTHFUAtUpqjNUL1G9gnpE8EO6zSkm3RJIPuIvsryNcHA-GApkDjKrx3vSLv0L35_kdwrvtxYH1vxBY8SPY_QEx0g8KEtxzPIJZvmH9V5R7L2L9FcvPptWBpmWlv0S_RAa-hR8M9ssx_3MzReGYlpUvhwKN0tzg2uY_xY-PYCzu7D4H-f8n-B6fPYzAAD__4MtKf0=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzslc-K2zAQh-99CjEnh05Zy3K2rSCgQimklKSE3lofjDWbFXglI8mlZcm7F9ndPwlJaRNIL7lFGn35yfoG5h6s07So7yiA_AocEApAEIBQAsIUKoTOu4ZCcD4dGYG5_gEyRzC262ParhAa5wnkPUQTWwIJcxvJt1R_pxXVmvxHZyz5qxwQNMXatEPiJ7qJkDLMXe1_qq72ZGO6RiqwD6aN5CXLsixTnH3r81zQjHEupZwvvryZsHeL9-yx1MwYFw-lCVuu2Db29iBWPP7jHk4cjhNih1PFb4zlDxVAWJn17fPPXPva6ubWtDq99vgygNDSTcwUfzmZ-QQMPwFh2UfJFEdVoCpRTVFdo3oN1QbB9fHJQIj1mkDyDR6w9CSnt85r8qS3bFSbPR4X7pXrrqY7B_dHF1vR_KgG4ZcGOWuDFEdZKi6WzmpJHGVJXCyd1VJ5lKXyYum_jcQ9llYUOmcD_dXEy9PIJL2mcb4G1_uGPnvXDDHjcjlww4amEMcqHxdzO5SGCz6H-R_h6y0434WLU5LFKXB5Cjz9J7javPgVAAD__z6yII8=
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL)
@@ -240,30 +242,31 @@ SELECT url FROM [EXPLAIN (DISTSQL)
     pid1 >= 11 AND pid1 <= 13
     OR pid1 >= 19 AND pid1 <= 21
     OR pid1 >= 31 AND pid1 <= 33
+    OR pa1 > 0
 ]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzslE-L2zAQxe_9FGJOCZ2ylr1LW0FAhVJwKU4xvbU-CGvWK_BKRpJLy-LvXmyzGyek_9JDc8jN0psfb_AbzQNYp6lQ9xRAfAYOCCkg3ECF0HlXUwjOj9JcmOtvIBIEY7s-jtcVQu08gXiAaGJLICC3kXxL6iuVpDT5985Y8lcJIGiKyrST0we6jTB6mHvlv8vGK6vrO9Pq0X4U2TvTRvKCrVaSsy99kmT1hvFMCJEXn16t2bZcSLRh_PWT9KZ4y5ZUyh-l9cwtsOxJA4TSNHfLtjrlyUb-qPyXnub_Bwgt3caV5M_XGz82M30CwraPgkmOMkWZobxGeYPyJVQDguvjLqcQVUMg-IA_yXIXYW-d1-RJ72VWDUfSLtwL111lB4XHrdM9a37SGPHLGJ3hGKUnZZlesjzDLH-z3ksKnbOB_ujFJ-PKIN3QvF-C631NH72rJ5v5uJ246UJTiLPK50NuJ2lqcAnzX8LXe3ByCKf_4pz9FVwNz34EAAD__zwZKfQ=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzslU2L2zAQhu_9FWJODp2yluX0QxBQoRRSSlJCb60PxprNCrySkeTSsuS_F9vNbhKS0iaQvfgW6dWTV8kjmAewTtOivKcA8htwQMgAQQBCDghTKBAa7yoKwfnuyADM9U-QKYKxTRu77QKhcp5APkA0sSaQMLeRfE3lD1pRqcl_csaSv0kBQVMsTd03fqbbCF2HuS_9L7X2pdXVnal1d42VWd_tpk3pyUa-TdhHU0fykiVJkijOvrdpKmjGOJdSzhdf307Y-8UH9hhVM8bFNpqw5YrtY-9OYtnjNx7hxOk6IQ44lf3BWLpNAGH4awChptuYKP5yMvPdD-w_AsKyjZIpjipDJVDlqKao3kCxQXBtfFIQYrkmkHyDJzQ92Wmt85o86T0dxeaIyIV75Zqb6cHB49XZXjU_64Xw8YVc94VkZ2nKRk3X1STO0iRGTdfVlJ-lKR81Pd9YPKJpRaFxNtA_Tb20G5uk1zTM2OBaX9EX76q-Zlgue67f0BTikPJhMbd91F9wF-Z_hV_vwekhnF3SLC6B80vg6X_BxebF7wAAAP__2ZQivw==
 
 query TTT
 EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
   pid1 >= 11 AND pid1 <= 13
   OR pid1 >= 19 AND pid1 <= 21
   OR pid1 >= 31 AND pid1 <= 33
+  OR pa1 > 0
 ----
-render           ·               ·
- └── merge-join  ·               ·
-      │          type            inner
-      │          equality        (pid1) = (pid1)
-      │          mergeJoinOrder  +"(pid1=pid1)"
-      ├── scan   ·               ·
-      │          table           grandchild2@primary
-      │          spans           /11/#/56/1-/13/#/56/2 /19/#/56/1-/21/#/56/2 /31/#/56/1-/33/#/56/2
-      │          filter          ((pid1 <= 13) OR ((pid1 >= 19) AND (pid1 <= 21))) OR (pid1 >= 31)
-      └── scan   ·               ·
-·                table           parent1@primary
-·                spans           /11-/13/# /19-/21/# /31-/33/#
-·                parallel        ·
-·                filter          ((pid1 <= 13) OR ((pid1 >= 19) AND (pid1 <= 21))) OR (pid1 >= 31)
+render           ·                   ·
+ └── merge-join  ·                   ·
+      │          type                inner
+      │          equality            (pid1) = (pid1)
+      │          right cols are key  ·
+      │          mergeJoinOrder      +"(pid1=pid1)"
+      ├── scan   ·                   ·
+      │          table               grandchild2@primary
+      │          spans               ALL
+      └── scan   ·                   ·
+·                table               parent1@primary
+·                spans               ALL
+·                filter              ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)
 
 # Join on multiple interleaved columns with an overarching ancestor (parent1).
 # Note there are 5 nodes because the filter cid2 >= 12 AND cid2 <= 14
@@ -293,17 +296,18 @@ EXPLAIN
     OR child2.cid2 >= 12 AND child2.cid2 <= 14
     OR gcid2 >= 49 AND gcid2 <= 51
 ----
-merge-join  ·               ·
- │          type            inner
- │          equality        (pid1, cid2, cid3) = (pid1, cid2, cid3)
- │          mergeJoinOrder  +"(pid1=pid1)",+"(cid2=cid2)",+"(cid3=cid3)"
- ├── scan   ·               ·
- │          table           child2@primary
- │          spans           ALL
- └── scan   ·               ·
-·           table           grandchild2@primary
-·           spans           ALL
-·           filter          (((pid1 >= 5) AND (pid1 <= 7)) OR ((cid2 >= 12) AND (cid2 <= 14))) OR ((gcid2 >= 49) AND (gcid2 <= 51))
+merge-join  ·                  ·
+ │          type               inner
+ │          equality           (pid1, cid2, cid3) = (pid1, cid2, cid3)
+ │          left cols are key  ·
+ │          mergeJoinOrder     +"(pid1=pid1)",+"(cid2=cid2)",+"(cid3=cid3)"
+ ├── scan   ·                  ·
+ │          table              child2@primary
+ │          spans              ALL
+ └── scan   ·                  ·
+·           table              grandchild2@primary
+·           spans              ALL
+·           filter             (((pid1 >= 5) AND (pid1 <= 7)) OR ((cid2 >= 12) AND (cid2 <= 14))) OR ((gcid2 >= 49) AND (gcid2 <= 51))
 
 # Aggregation over parent and child keys.
 query T
@@ -363,8 +367,8 @@ statement ok
 ALTER TABLE outer_p1 EXPERIMENTAL_RELOCATE
   SELECT ARRAY[(((i-3)/5)%4)::INT + 1], i FROM generate_series(3, 40, 5) AS g(i)
 
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE outer_p1]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE outer_p1]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /0       {5}       5

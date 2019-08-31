@@ -555,23 +555,6 @@ var builtins = map[string]builtinDefinition{
 		},
 	),
 
-	"inet_contains_or_contained_by": makeBuiltin(defProps(),
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"val", types.INet},
-				{"val", types.INet},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				ipAddr := tree.MustBeDIPAddr(args[0]).IPAddr
-				other := tree.MustBeDIPAddr(args[1]).IPAddr
-				return tree.MakeDBool(tree.DBool(ipAddr.ContainsOrContainedBy(&other))), nil
-			},
-			Info: "Test for subnet inclusion, using only the network parts of the addresses. " +
-				"The host part of the addresses is ignored.",
-		},
-	),
-
 	"inet_contains_or_equals": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -2243,6 +2226,35 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"row_to_json": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"row", types.AnyTuple}},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				tuple := args[0].(*tree.DTuple)
+				builder := json.NewObjectBuilder(len(tuple.D))
+				typ := tuple.ResolvedType()
+				labels := typ.TupleLabels()
+				for i, d := range tuple.D {
+					var label string
+					if labels != nil {
+						label = labels[i]
+					}
+					if label == "" {
+						label = fmt.Sprintf("f%d", i+1)
+					}
+					val, err := tree.AsJSON(d)
+					if err != nil {
+						return nil, err
+					}
+					builder.Add(label, val)
+				}
+				return tree.NewDJSON(builder.Build()), nil
+			},
+			Info: "Returns the row as a JSON object.",
+		},
+	),
+
 	"sin": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Sin(x))), nil
@@ -2308,6 +2320,46 @@ may increase either contention or retry errors, or both.`,
 		}, "Calculates the tangent of `val`."),
 	),
 
+	// https://www.postgresql.org/docs/9.6/functions-datetime.html
+	"timezone": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"timestamp", types.Timestamp},
+				{"timezone", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				ts := tree.MustBeDTimestamp(args[0])
+				tzStr := string(tree.MustBeDString(args[1]))
+				loc, err := timeutil.TimeZoneStringToLocation(tzStr)
+				if err != nil {
+					return nil, err
+				}
+				_, before := ts.Time.Zone()
+				_, after := ts.Time.In(loc).Zone()
+				return tree.MakeDTimestampTZ(ts.Time.Add(time.Duration(before-after)*time.Second), time.Microsecond), nil
+			},
+			Info: "Treat given time stamp without time zone as located in the specified time zone",
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"timestamptz", types.TimestampTZ},
+				{"timezone", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Timestamp),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				ts := tree.MustBeDTimestampTZ(args[0])
+				tzStr := string(tree.MustBeDString(args[1]))
+				loc, err := timeutil.TimeZoneStringToLocation(tzStr)
+				if err != nil {
+					return nil, err
+				}
+				return ts.EvalAtTimeZone(ctx, loc), nil
+			},
+			Info: "Convert given time stamp with time zone to the new time zone, with no time zone designation",
+		},
+	),
+
 	"trunc": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Trunc(x))), nil
@@ -2317,6 +2369,60 @@ may increase either contention or retry errors, or both.`,
 			x.Modf(&dd.Decimal, nil)
 			return dd, nil
 		}, "Truncates the decimal values of `val`."),
+	),
+
+	"width_bucket": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{{"operand", types.Decimal}, {"b1", types.Decimal},
+				{"b2", types.Decimal}, {"count", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				operand, _ := args[0].(*tree.DDecimal).Float64()
+				b1, _ := args[1].(*tree.DDecimal).Float64()
+				b2, _ := args[2].(*tree.DDecimal).Float64()
+				count := int(tree.MustBeDInt(args[3]))
+				return tree.NewDInt(tree.DInt(widthBucket(operand, b1, b2, count))), nil
+			},
+			Info: "return the bucket number to which operand would be assigned in a histogram having count " +
+				"equal-width buckets spanning the range b1 to b2.",
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{{"operand", types.Int}, {"b1", types.Int},
+				{"b2", types.Int}, {"count", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				operand := float64(tree.MustBeDInt(args[0]))
+				b1 := float64(tree.MustBeDInt(args[1]))
+				b2 := float64(tree.MustBeDInt(args[2]))
+				count := int(tree.MustBeDInt(args[3]))
+				return tree.NewDInt(tree.DInt(widthBucket(operand, b1, b2, count))), nil
+			},
+			Info: "return the bucket number to which operand would be assigned in a histogram having count " +
+				"equal-width buckets spanning the range b1 to b2.",
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"operand", types.Any}, {"thresholds", types.AnyArray}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				operand := args[0]
+				thresholds := tree.MustBeDArray(args[1])
+
+				if !operand.ResolvedType().Equivalent(thresholds.Array[0].ResolvedType()) {
+					return tree.NewDInt(0), errors.New("Operand and thresholds must be of the same type")
+				}
+
+				for i, v := range thresholds.Array {
+					if operand.Compare(ctx, v) < 0 {
+						return tree.NewDInt(tree.DInt(i)), nil
+					}
+				}
+
+				return tree.NewDInt(tree.DInt(thresholds.Len())), nil
+			},
+			Info: "return the bucket number to which operand would be assigned given an array listing the " +
+				"lower bounds of the buckets; returns 0 for an input less than the first lower bound; the " +
+				"thresholds array must be sorted, smallest first, or unexpected results will be obtained",
+		},
 	),
 
 	// Array functions.
@@ -2754,6 +2860,27 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	// https://www.postgresql.org/docs/10/functions-info.html#FUNCTIONS-INFO-CATALOG-TABLE
+	"pg_collation_for": makeBuiltin(
+		tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"str", types.Any}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				switch t := args[0].(type) {
+				case *tree.DString:
+					return tree.NewDString("default"), nil
+				case *tree.DCollatedString:
+					return tree.NewDString(t.Locale), nil
+				default:
+					return tree.DNull, pgerror.Newf(pgcode.DatatypeMismatch,
+						"collations are not supported by type: %s", t.ResolvedType())
+				}
+			},
+			Info: "Returns the collation of the argument",
+		},
+	),
+
 	"crdb_internal.locality_value": makeBuiltin(
 		tree.FunctionProperties{Category: categorySystemInfo},
 		tree.Overload{
@@ -2801,6 +2928,18 @@ may increase either contention or retry errors, or both.`,
 				return tree.NewDUuid(tree.DUuid{UUID: ctx.ClusterID}), nil
 			},
 			Info: "Returns the cluster ID.",
+		},
+	),
+
+	"crdb_internal.cluster_name": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDString(ctx.ClusterName), nil
+			},
+			Info: "Returns the cluster name.",
 		},
 	),
 
@@ -2893,9 +3032,6 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"val", types.Interval}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if err := checkPrivilegedUser(ctx); err != nil {
-					return nil, err
-				}
 				minDuration := args[0].(*tree.DInterval).Duration
 				elapsed := duration.MakeDuration(int64(ctx.StmtTimestamp.Sub(ctx.TxnTimestamp)), 0, 0)
 				if elapsed.Compare(minDuration) < 0 {
@@ -3093,7 +3229,7 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 	tree.Overload{
 		Types: tree.ArgTypes{
 			{"input", types.String},
-			{"substr_pos", types.Int},
+			{"start_pos", types.Int},
 		},
 		ReturnType: tree.FixedReturnType(types.String),
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -3109,15 +3245,16 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 
 			return tree.NewDString(string(runes[start:])), nil
 		},
-		Info: "Returns a substring of `input` starting at `substr_pos` (count starts at 1).",
+		Info: "Returns a substring of `input` starting at `start_pos` (count starts at 1).",
 	},
 	tree.Overload{
 		Types: tree.ArgTypes{
 			{"input", types.String},
 			{"start_pos", types.Int},
-			{"end_pos", types.Int},
+			{"length", types.Int},
 		},
-		ReturnType: tree.FixedReturnType(types.String),
+		SpecializedVecBuiltin: tree.SubstringStringIntInt,
+		ReturnType:            tree.FixedReturnType(types.String),
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			runes := []rune(string(tree.MustBeDString(args[0])))
 			// SQL strings are 1-indexed.
@@ -3147,7 +3284,8 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 
 			return tree.NewDString(string(runes[start:end])), nil
 		},
-		Info: "Returns a substring of `input` between `start_pos` and `end_pos` (count starts at 1).",
+		Info: "Returns a substring of `input` starting at `start_pos` (count starts at 1) and " +
+			"including up to `length` characters.",
 	},
 	tree.Overload{
 		Types: tree.ArgTypes{
@@ -4601,6 +4739,25 @@ func rpad(s string, length int, fill string) (string, error) {
 	}
 
 	return buf.String(), nil
+}
+
+// widthBucket returns the bucket number to which operand would be assigned in a histogram having count
+// equal-width buckets spanning the range b1 to b2
+func widthBucket(operand float64, b1 float64, b2 float64, count int) int {
+	bucket := 0
+	if (b1 < b2 && operand > b2) || (b1 > b2 && operand < b2) {
+		return count + 1
+	}
+
+	if (b1 < b2 && operand < b1) || (b1 > b2 && operand > b1) {
+		return 0
+	}
+
+	width := (b2 - b1) / float64(count)
+	difference := operand - b1
+	bucket = int(math.Floor(difference/width) + 1)
+
+	return bucket
 }
 
 // CleanEncodingName sanitizes the string meant to represent a

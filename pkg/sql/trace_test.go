@@ -57,6 +57,12 @@ func TestTrace(t *testing.T) {
 				if _, err := sqlDB.Exec("SET distsql = off"); err != nil {
 					t.Fatal(err)
 				}
+
+				// This test is specific to distsql execution.
+				if _, err := sqlDB.Exec("SET vectorize = off"); err != nil {
+					t.Fatal(err)
+				}
+
 				// Run some query with session tracing enabled.
 				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
 					t.Fatal(err)
@@ -67,7 +73,7 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
-				"exec cmd: exec stmt",
+				"exec stmt",
 				"flow",
 				"session recording",
 				"sql txn",
@@ -82,6 +88,11 @@ func TestTrace(t *testing.T) {
 			name: "SessionDistSQL",
 			getRows: func(t *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
 				if _, err := sqlDB.Exec("SET distsql = on"); err != nil {
+					t.Fatal(err)
+				}
+
+				// This test is specific to distsql execution.
+				if _, err := sqlDB.Exec("SET vectorize = off"); err != nil {
 					t.Fatal(err)
 				}
 
@@ -122,7 +133,7 @@ func TestTrace(t *testing.T) {
 			expSpans: []string{
 				"session recording",
 				"sql txn",
-				"exec cmd: exec stmt",
+				"exec stmt",
 				"flow",
 				"table reader",
 				"consuming rows",
@@ -143,12 +154,12 @@ func TestTrace(t *testing.T) {
 				if _, err := sqlDB.Exec("SET DISTSQL = OFF"); err != nil {
 					t.Fatal(err)
 				}
-				// TODO(justin): remove this and make sure the new results make sense.
-				// The optimizer elides some renders that the heuristic planner does
-				// not which makes the results different.
-				if _, err := sqlDB.Exec("SET OPTIMIZER = OFF"); err != nil {
+
+				// This test is specific to distsql execution.
+				if _, err := sqlDB.Exec("SET vectorize = off"); err != nil {
 					t.Fatal(err)
 				}
+
 				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
 					t.Fatal(err)
 				}
@@ -157,7 +168,7 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
-				"exec cmd: exec stmt",
+				"exec stmt",
 				"flow",
 				"session recording",
 				"sql txn",
@@ -174,12 +185,12 @@ func TestTrace(t *testing.T) {
 				if _, err := sqlDB.Exec("SET distsql = on"); err != nil {
 					t.Fatal(err)
 				}
-				// TODO(justin): remove this and make sure the new results make sense.
-				// The optimizer elides some renders that the heuristic planner does
-				// not which makes the results different.
-				if _, err := sqlDB.Exec("SET OPTIMIZER = off"); err != nil {
+
+				// This test is specific to distsql execution.
+				if _, err := sqlDB.Exec("SET vectorize = off"); err != nil {
 					t.Fatal(err)
 				}
+
 				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
 					t.Fatal(err)
 				}
@@ -190,7 +201,7 @@ func TestTrace(t *testing.T) {
 			expSpans: []string{
 				"session recording",
 				"sql txn",
-				"exec cmd: exec stmt",
+				"exec stmt",
 				"flow",
 				"table reader",
 				"consuming rows",
@@ -203,6 +214,35 @@ func TestTrace(t *testing.T) {
 			optionalSpans: []string{
 				"/cockroach.sql.distsqlrun.DistSQL/SetupFlow",
 				"noop",
+			},
+		},
+		{
+			name: "ShowTraceForVectorized",
+			getRows: func(_ *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
+				if _, err := sqlDB.Exec("SET distsql = off"); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := sqlDB.Exec("SET vectorize = experimental_on"); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
+					t.Fatal(err)
+				}
+				return sqlDB.Query(
+					"SELECT DISTINCT operation AS op FROM [SHOW TRACE FOR SESSION] " +
+						"WHERE operation IS NOT NULL ORDER BY op")
+			},
+			expSpans: []string{
+				"session recording",
+				"sql txn",
+				"exec stmt",
+				"flow",
+				"materializer",
+				"operator for processor 0",
+				"consuming rows",
+				"txn coordinator send",
+				"dist sender send",
+				"/cockroach.roachpb.Internal/Batch",
 			},
 		},
 	}
@@ -253,7 +293,7 @@ func TestTrace(t *testing.T) {
 							// TODO(andrei): Pull the check for an empty session_trace out of
 							// the sub-tests so we can use cluster.ServerConn(i) here.
 							pgURL, cleanup := sqlutils.PGUrl(
-								t, cluster.Server(i).ServingAddr(), "TestTrace", url.User(security.RootUser))
+								t, cluster.Server(i).ServingSQLAddr(), "TestTrace", url.User(security.RootUser))
 							defer cleanup()
 							sqlDB, err := gosql.Open("postgres", pgURL.String())
 							if err != nil {

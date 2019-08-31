@@ -26,6 +26,8 @@ enum ConstraintValidity {
   // The constraint was just added, but the validation for existing rows is not
   // yet complete. If validation fails, the constraint will be dropped.
   Validating = 2;
+  // The constraint is being dropped in the schema changer.
+  Dropping = 3;
 }
 
 message ForeignKeyReference {
@@ -58,6 +60,52 @@ message ForeignKeyReference {
   // This is only important for composite keys. For all prior matches before
   // the addition of this value, MATCH SIMPLE will be used.
   optional Match match = 8 [(gogoproto.nullable) = false];
+}
+
+// ForeignKeyConstraint is the new (as of 19.2 and VersionTopLevelForeignKeys)
+// representation for foreign keys. It's stored on the TableDescriptor and is
+// designed to be agnostic to which indexes are available on both the origin
+// and referenced tables, so that the optimizer can have full freedom to choose
+// the best possible index to satisfy constraint checks at runtime.
+message ForeignKeyConstraint {
+  optional uint32 origin_table_id = 1 [(gogoproto.nullable) = false,
+                                      (gogoproto.customname) = "OriginTableID",
+                                      (gogoproto.casttype) = "ID"];
+  repeated uint32 origin_column_ids = 2 [(gogoproto.customname) = "OriginColumnIDs",
+                                        (gogoproto.casttype) = "ColumnID"];
+  repeated uint32 referenced_column_ids = 3 [(gogoproto.customname) = "ReferencedColumnIDs",
+                                            (gogoproto.casttype) = "ColumnID"];
+  optional uint32 referenced_table_id = 4 [(gogoproto.nullable) = false,
+                                          (gogoproto.customname) = "ReferencedTableID",
+                                          (gogoproto.casttype) = "ID"];
+  optional string name = 5 [(gogoproto.nullable) = false];
+  optional ConstraintValidity validity = 6 [(gogoproto.nullable) = false];
+  optional ForeignKeyReference.Action on_delete = 7 [(gogoproto.nullable) = false];
+  optional ForeignKeyReference.Action on_update = 8 [(gogoproto.nullable) = false];
+  // This is only important for composite keys. For all prior matches before
+  // the addition of this value, MATCH SIMPLE will be used.
+  optional ForeignKeyReference.Match match = 9 [(gogoproto.nullable) = false];
+
+  // LegacyOriginIndex is the ID of the index used for the FK on the origin
+  // table. In versions 19.1 and earlier, foreign keys were represented by
+  // fields on the index that they use. In versions 19.2 and later, we preserve
+  // the semantics of the older FKs which were tied to indexes by specifying
+  // the index as a field on this proto, since the migration process to have
+  // top-level FK fields on the table descriptor requires two releases. In 20.1,
+  // when all 19.2 nodes will be correctly handling the new FK representation,
+  // we will perform a migration to upgrade all table descriptors.
+  optional uint32 legacy_origin_index = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  // LegacyReferencedIndex is the ID of the index used for the FK on the
+  // referenced side. See the comment for LegacyOriginIndex.
+  optional uint32 legacy_referenced_index = 11 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  // These fields are set when upgrading an old-style FK (stored on the index)
+  // into this kind. The purpose is to permit validation that downgrading this
+  // representation to the old representation (which happens when the cluster
+  // is in a mixed-version state containing VersionTopLevelForeignKeys) was done
+  // without creating any accidental changes to the foreign key references.
+  // They are only read and written in a mixed 19.1/19.2 cluster.
+  optional ForeignKeyReference legacy_upgraded_from_origin_reference = 12 [(gogoproto.nullable) = false, deprecated = true];
+  optional ForeignKeyReference legacy_upgraded_from_referenced_reference = 13 [(gogoproto.nullable) = false, deprecated = true];
 }
 
 message ColumnDescriptor {
@@ -302,8 +350,9 @@ message IndexDescriptor {
   repeated uint32 composite_column_ids = 13
       [(gogoproto.customname) = "CompositeColumnIDs", (gogoproto.casttype) = "ColumnID"];
 
-  optional ForeignKeyReference foreign_key = 9 [(gogoproto.nullable) = false];
-  repeated ForeignKeyReference referenced_by = 10 [(gogoproto.nullable) = false];
+  // ForeignKey and ReferencedBy are deprecated and not stored from 19.2 onward.
+  optional ForeignKeyReference foreign_key = 9 [(gogoproto.nullable) = false, deprecated = true];
+  repeated ForeignKeyReference referenced_by = 10 [(gogoproto.nullable) = false, deprecated = true];
 
   // Interleave, if it's not the zero value, describes how this index's data is
   // interleaved into another index's data.
@@ -347,8 +396,9 @@ message ConstraintToUpdate {
   required ConstraintType constraint_type = 1 [(gogoproto.nullable) = false];
   required string name = 2 [(gogoproto.nullable) = false];
   optional TableDescriptor.CheckConstraint check = 3 [(gogoproto.nullable) = false];
-  optional ForeignKeyReference foreign_key = 4 [(gogoproto.nullable) = false];
-  optional uint32 foreign_key_index = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  // All fields past 3 haven't been persisted before 19.2.
+  optional ForeignKeyConstraint foreign_key = 4 [(gogoproto.nullable) = false];
+  reserved 5;
   optional uint32 not_null_column = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
 }
 
@@ -512,10 +562,11 @@ message TableDescriptor {
     ADD = 1;
     // Descriptor is being dropped.
     DROP = 2;
-    // Descriptor is being ingested.
-    IMPORTING = 3;
+    // Descriptor is offline (e.g. for bulk-ingestion). See offline_reason.
+    OFFLINE = 3;
   }
   optional State state = 19 [(gogoproto.nullable) = false];
+  optional string offline_reason = 38 [(gogoproto.nullable) = false];
 
   message CheckConstraint {
     optional string expr = 1 [(gogoproto.nullable) = false];
@@ -740,6 +791,13 @@ message TableDescriptor {
 
   optional string create_query = 34 [(gogoproto.nullable) = false];
   optional util.hlc.Timestamp create_as_of_time = 35 [(gogoproto.nullable) = false];
+
+  // outbound_fks contains all foreign key constraints that have this table as
+  // the origin table.
+  repeated ForeignKeyConstraint outbound_fks = 36 [(gogoproto.nullable) = false, (gogoproto.customname) = "OutboundFKs"];
+  // inbound_fks contains all foreign key constraints that have this table as
+  // the referenced table.
+  repeated ForeignKeyConstraint inbound_fks = 37 [(gogoproto.nullable) = false, (gogoproto.customname) = "InboundFKs"];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

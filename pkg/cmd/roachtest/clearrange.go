@@ -26,7 +26,7 @@ func registerClearRange(r *testRegistry) {
 			// 5h for import, 90 for the test. The import should take closer
 			// to <3:30h but it varies.
 			Timeout:    5*time.Hour + 90*time.Minute,
-			MinVersion: `v2.2.0`,
+			MinVersion: "v19.1.0",
 			// This test reformats a drive to ZFS, so we don't want it reused.
 			// TODO(andrei): Can the test itself reuse the cluster (under --count=2)?
 			// In other words, would a OnlyTagged("clearrange") policy be good?

@@ -41,8 +41,7 @@ func singleKVSSTable(key engine.MVCCKey, value []byte) ([]byte, error) {
 		return nil, err
 	}
 	defer sst.Close()
-	kv := engine.MVCCKeyValue{Key: key, Value: value}
-	if err := sst.Add(kv); err != nil {
+	if err := sst.Put(key, value); err != nil {
 		return nil, err
 	}
 	return sst.Finish()
@@ -88,13 +87,13 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 
 		// Key is before the range in the request span.
 		if err := db.AddSSTable(
-			ctx, "d", "e", data,
+			ctx, "d", "e", data, false /* disallowShadowing */, nil, /* stats */
 		); !testutils.IsError(err, "not in request range") {
 			t.Fatalf("expected request range error got: %+v", err)
 		}
 		// Key is after the range in the request span.
 		if err := db.AddSSTable(
-			ctx, "a", "b", data,
+			ctx, "a", "b", data, false /* disallowShadowing */, nil, /* stats */
 		); !testutils.IsError(err, "not in request range") {
 			t.Fatalf("expected request range error got: %+v", err)
 		}
@@ -102,7 +101,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 		// Do an initial ingest.
 		ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
 		defer cancel()
-		if err := db.AddSSTable(ingestCtx, "b", "c", data); err != nil {
+		if err := db.AddSSTable(ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		formatted := tracing.FormatRecordedSpans(collect())
@@ -143,7 +142,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			t.Fatalf("%+v", err)
 		}
 
-		if err := db.AddSSTable(ctx, "b", "c", data); err != nil {
+		if err := db.AddSSTable(ctx, "b", "c", data, false /* disallowShadowing */, nil /* stats */); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		if r, err := db.Get(ctx, "bb"); err != nil {
@@ -178,7 +177,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
 			defer cancel()
 
-			if err := db.AddSSTable(ingestCtx, "b", "c", data); err != nil {
+			if err := db.AddSSTable(ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */); err != nil {
 				t.Fatalf("%+v", err)
 			}
 			if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()),
@@ -223,7 +222,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			t.Fatalf("%+v", err)
 		}
 
-		if err := db.AddSSTable(ctx, "b", "c", data); !testutils.IsError(err, "invalid checksum") {
+		if err := db.AddSSTable(ctx, "b", "c", data, false /* disallowShadowing */, nil /* stats */); !testutils.IsError(err, "invalid checksum") {
 			t.Fatalf("expected 'invalid checksum' error got: %+v", err)
 		}
 	}
@@ -325,14 +324,14 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		return beforeStats
 	}()
 
-	sstBytes := func() []byte {
+	mkSST := func(kvs []engine.MVCCKeyValue) []byte {
 		sst, err := engine.MakeRocksDBSstFileWriter()
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
 		defer sst.Close()
-		for _, kv := range sstKVs {
-			if err := sst.Add(kv); err != nil {
+		for _, kv := range kvs {
+			if err := sst.Put(kv.Key, kv.Value); err != nil {
 				t.Fatalf("%+v", err)
 			}
 		}
@@ -341,7 +340,9 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 			t.Fatalf("%+v", err)
 		}
 		return sstBytes
-	}()
+	}
+
+	sstBytes := mkSST(sstKVs)
 
 	cArgs := batcheval.CommandArgs{
 		Header: roachpb.Header{
@@ -353,8 +354,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		},
 		Stats: &enginepb.MVCCStats{},
 	}
-	_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
-	if err != nil {
+	if _, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil); err != nil {
 		t.Fatalf("%+v", err)
 	}
 
@@ -381,5 +381,480 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	evaledStats.ContainsEstimates = false
 	if !afterStats.Equal(evaledStats) {
 		t.Errorf("mvcc stats mismatch: diff(expected, actual): %s", pretty.Diff(afterStats, evaledStats))
+	}
+
+	cArgsWithStats := batcheval.CommandArgs{
+		Header: roachpb.Header{Timestamp: hlc.Timestamp{WallTime: 7}},
+		Args: &roachpb.AddSSTableRequest{
+			RequestHeader: roachpb.RequestHeader{Key: keys.MinKey, EndKey: keys.MaxKey},
+			Data: mkSST([]engine.MVCCKeyValue{{
+				Key:   engine.MVCCKey{Key: roachpb.Key("zzzzzzz"), Timestamp: ts},
+				Value: roachpb.MakeValueFromBytes([]byte("zzz")).RawBytes,
+			}}),
+			MVCCStats: &enginepb.MVCCStats{KeyCount: 10},
+		},
+		Stats: &enginepb.MVCCStats{},
+	}
+	if _, err := batcheval.EvalAddSSTable(ctx, e, cArgsWithStats, nil); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	expected := enginepb.MVCCStats{ContainsEstimates: true, KeyCount: 10}
+	if got := *cArgsWithStats.Stats; got != expected {
+		t.Fatalf("expected %v got %v", expected, got)
+	}
+
+}
+
+func TestAddSSTableDisallowShadowing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	defer e.Close()
+
+	for _, kv := range mvccKVsFromStrs([]strKv{
+		{"a", 2, "aa"},
+		{"b", 1, "bb"},
+		{"b", 6, ""},
+		{"g", 5, "gg"},
+		{"r", 1, "rr"},
+		{"y", 1, "yy"},
+		{"y", 2, ""},
+		{"y", 5, "yyy"},
+		{"z", 2, "zz"},
+	}) {
+		if err := e.Put(kv.Key, kv.Value); err != nil {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	getSSTBytes := func(sstKVs []engine.MVCCKeyValue) []byte {
+		sst, err := engine.MakeRocksDBSstFileWriter()
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		defer sst.Close()
+		for _, kv := range sstKVs {
+			if err := sst.Put(kv.Key, kv.Value); err != nil {
+				t.Fatalf("%+v", err)
+			}
+		}
+		sstBytes, err := sst.Finish()
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		return sstBytes
+	}
+
+	getStats := func(startKey, endKey engine.MVCCKey, data []byte) enginepb.MVCCStats {
+		dataIter, err := engine.NewMemSSTIterator(data, true)
+		if err != nil {
+			return enginepb.MVCCStats{}
+		}
+		defer dataIter.Close()
+
+		stats, err := engine.ComputeStatsGo(dataIter, startKey, endKey, 0)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		return stats
+	}
+
+	// Test key collision when ingesting a key in the start of existing data, and
+	// SST. The colliding key is also equal to the header start key.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"a", 7, "aa"}, // colliding key has a higher timestamp than existing version.
+		})
+
+		sstBytes := getSSTBytes(sstKVs)
+		stats := getStats(engine.MVCCKey{Key: roachpb.Key("a")}, engine.MVCCKey{Key: roachpb.Key("b")}, sstBytes)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+				MVCCStats:         &stats,
+			},
+			Stats: &stats,
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if !testutils.IsError(err, "ingested key collides with an existing one: \"a\"") {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Test key collision when ingesting a key in the middle of existing data, and
+	// start of the SST. The key is equal to the header start key.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"g", 4, "ggg"}, // colliding key has a lower timestamp than existing version.
+		})
+
+		sstBytes := getSSTBytes(sstKVs)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+			},
+			Stats: &enginepb.MVCCStats{},
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if !testutils.IsError(err, "ingested key collides with an existing one: \"g\"") {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Test key collision when ingesting a key at the end of the existing data and
+	// SST. The colliding key is not equal to header start key.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"f", 2, "f"},
+			{"h", 4, "h"},
+			{"s", 1, "s"},
+			{"z", 3, "z"}, // colliding key has a higher timestamp than existing version.
+		})
+
+		sstBytes := getSSTBytes(sstKVs)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("f"), EndKey: roachpb.Key("zz")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+			},
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if !testutils.IsError(err, "ingested key collides with an existing one: \"z\"") {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Test for no key collision where the key range being ingested into is
+	// non-empty. The header start and end keys are not existing keys.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"c", 2, "bb"},
+			{"h", 6, "hh"},
+		})
+
+		sstBytes := getSSTBytes(sstKVs)
+		stats := getStats(engine.MVCCKey{Key: roachpb.Key("c")}, engine.MVCCKey{Key: roachpb.Key("i")}, sstBytes)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("c"), EndKey: roachpb.Key("i")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+				MVCCStats:         &stats,
+			},
+			Stats: &stats,
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Test that a collision is not reported when ingesting a key for which we
+	// find a tombstone from an MVCC delete, and the sst key has a ts >= tombstone
+	// ts. Also test that iteration continues from the next key in the existing
+	// data after skipping over all the versions of the deleted key.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"b", 7, "bb"},  // colliding key has a higher timestamp than its deleted version.
+			{"b", 1, "bbb"}, // older version of deleted key (should be skipped over).
+			{"f", 3, "ff"},
+			{"y", 3, "yyyy"}, // colliding key.
+		})
+
+		sstBytes := getSSTBytes(sstKVs)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("b"), EndKey: roachpb.Key("z")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+			},
+			Stats: &enginepb.MVCCStats{},
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Test that a collision is  reported when ingesting a key for which we find a
+	// tombstone from an MVCC delete, but the sst key has a ts < tombstone ts.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"b", 4, "bb"}, // colliding key has a lower timestamp than its deleted version.
+			{"f", 3, "ff"},
+			{"y", 3, "yyyy"},
+		})
+
+		sstBytes := getSSTBytes(sstKVs)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("b"), EndKey: roachpb.Key("z")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+			},
+			Stats: &enginepb.MVCCStats{},
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if !testutils.IsError(err, "ingested key collides with an existing one: \"b\"") {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Test key collision when ingesting a key which has been deleted, and readded
+	// in the middle of the existing data. The colliding key is in the middle of
+	// the SST, and is the earlier of the two possible collisions.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"f", 2, "ff"},
+			{"y", 4, "yyy"}, // colliding key has a lower timestamp than the readded version.
+			{"z", 3, "zzz"},
+		})
+
+		sstBytes := getSSTBytes(sstKVs)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("f"), EndKey: roachpb.Key("zz")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+			},
+			Stats: &enginepb.MVCCStats{},
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Test key collision when ingesting a key which has a write intent in the
+	// existing data.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"f", 2, "ff"},
+			{"q", 4, "qq"},
+			{"t", 3, "ttt"}, // has a write intent in the existing data.
+		})
+
+		// Add in a write intent.
+		ts := hlc.Timestamp{WallTime: 7}
+		txn := roachpb.MakeTransaction(
+			"test",
+			nil, // baseKey
+			roachpb.NormalUserPriority,
+			ts,
+			base.DefaultMaxClockOffset.Nanoseconds(),
+		)
+		if err := engine.MVCCPut(
+			ctx, e, nil, []byte("t"), ts,
+			roachpb.MakeValueFromBytes([]byte("tt")),
+			&txn,
+		); err != nil {
+			if _, isWriteIntentErr := err.(*roachpb.WriteIntentError); !isWriteIntentErr {
+				t.Fatalf("%+v", err)
+			}
+		}
+
+		sstBytes := getSSTBytes(sstKVs)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("f"), EndKey: roachpb.Key("u")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+			},
+			Stats: &enginepb.MVCCStats{},
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if !testutils.IsError(err, "conflicting intents on \"t") {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Test key collision when ingesting a key which has an inline value in the
+	// existing data.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"f", 2, "ff"},
+			{"i", 4, "ii"}, // has an inline value in existing data.
+			{"j", 3, "jj"},
+		})
+
+		// Add in an inline value.
+		ts := hlc.Timestamp{}
+		if err := engine.MVCCPut(
+			ctx, e, nil, []byte("i"), ts,
+			roachpb.MakeValueFromBytes([]byte("i")),
+			nil,
+		); err != nil {
+			t.Fatalf("%+v", err)
+		}
+
+		sstBytes := getSSTBytes(sstKVs)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("f"), EndKey: roachpb.Key("k")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+			},
+			Stats: &enginepb.MVCCStats{},
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if !testutils.IsError(err, "inline values are unsupported when checking for key collisions") {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Test ingesting a key with the same timestamp and value. This should not
+	// trigger a collision error.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"e", 4, "ee"},
+			{"f", 2, "ff"},
+			{"y", 5, "yyy"}, // key has the same timestamp and value as the one present in the existing data.
+		})
+
+		sstBytes := getSSTBytes(sstKVs)
+		stats := getStats(engine.MVCCKey{Key: roachpb.Key("e")}, engine.MVCCKey{Key: roachpb.Key("zz")}, sstBytes)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("e"), EndKey: roachpb.Key("zz")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+				MVCCStats:         &stats,
+			},
+			Stats: &stats,
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Test ingesting a key with different timestamp but same value. This should
+	// trigger a collision error.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"f", 2, "ff"},
+			{"y", 6, "yyy"}, // key has a higher timestamp but same value as the one present in the existing data.
+			{"z", 3, "zzz"},
+		})
+
+		sstBytes := getSSTBytes(sstKVs)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("f"), EndKey: roachpb.Key("zz")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+			},
+			Stats: &enginepb.MVCCStats{},
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Test ingesting a key with the same timestamp but different value. This should
+	// trigger a collision error.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"f", 2, "ff"},
+			{"y", 5, "yyyy"}, // key has the same timestamp but different value as the one present in the existing data.
+			{"z", 3, "zzz"},
+		})
+
+		sstBytes := getSSTBytes(sstKVs)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("f"), EndKey: roachpb.Key("zz")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+			},
+			Stats: &enginepb.MVCCStats{},
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Test that a collision after a key with the same timestamp and value causes
+	// a collision error.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"f", 2, "ff"},
+			{"y", 5, "yyy"}, // key has the same timestamp and value as the one present in the existing data - not a collision.
+			{"z", 3, "zzz"}, // shadow key
+		})
+
+		sstBytes := getSSTBytes(sstKVs)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("e"), EndKey: roachpb.Key("zz")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+			},
+			Stats: &enginepb.MVCCStats{},
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if !testutils.IsError(err, "ingested key collides with an existing one: \"z\"") {
+			t.Fatalf("%+v", err)
+		}
 	}
 }

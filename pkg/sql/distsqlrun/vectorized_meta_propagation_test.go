@@ -28,7 +28,7 @@ import (
 // RowSource -> metadataTestSender -> columnarizer -> noopOperator ->
 // -> materializer -> metadataTestReceiver. Metadata propagation is hooked up
 // manually from the columnarizer into the materializer similar to how it is
-// done in setupVectorized.
+// done in setupVectorizedFlow.
 func TestVectorizedMetaPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -37,8 +37,8 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := FlowCtx{
-		EvalCtx:  &evalCtx,
-		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx: &evalCtx,
+		Cfg:     &ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 
 	nRows := 10
@@ -60,7 +60,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		t.Fatal("MetadataTestSender is not a RowSource")
 	}
 
-	col, err := newColumnarizer(&flowCtx, 1, mtsAsRowSource)
+	col, err := newColumnarizer(ctx, &flowCtx, 1, mtsAsRowSource)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,11 +71,11 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		2, /* processorID */
 		noop,
 		types,
-		[]int{0},
 		&distsqlpb.PostProcessSpec{},
 		nil, /* output */
 		[]distsqlpb.MetadataSource{col},
 		nil, /* outputStatsToTrace */
+		nil, /* cancelFlow */
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -94,6 +94,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 	if !ok {
 		t.Fatal("MetadataTestReceiver is not a RowSource")
 	}
+	mtrAsRowSource.Start(ctx)
 
 	rowCount, metaCount := 0, 0
 	for {

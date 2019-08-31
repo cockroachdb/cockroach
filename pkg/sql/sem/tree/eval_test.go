@@ -12,12 +12,14 @@ package tree_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -27,51 +29,131 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 )
 
 func TestEval(t *testing.T) {
-	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-	defer ctx.Stop(context.Background())
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
 
-	walk := func(t *testing.T, getExpr func(tree.TypedExpr) (tree.TypedExpr, error)) {
+	walk := func(t *testing.T, getExpr func(*datadriven.TestData) string) {
 		datadriven.Walk(t, filepath.Join("testdata", "eval"), func(t *testing.T, path string) {
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 				if d.Cmd != "eval" {
 					t.Fatalf("unsupported command %s", d.Cmd)
 				}
-				expr, err := parser.ParseExpr(d.Input)
-				if err != nil {
-					t.Fatalf("%s: %v", d.Input, err)
-				}
-				// expr.TypeCheck to avoid constant folding.
-				typedExpr, err := expr.TypeCheck(nil, types.Any)
-				if err != nil {
-					t.Fatalf("%s %s: %v", path, d.Input, err)
-				}
-
-				e, err := getExpr(typedExpr)
-				if err != nil {
-					t.Fatalf("%s: %v", typedExpr, err)
-				}
-				r, err := e.Eval(ctx)
-				if err != nil {
-					t.Fatalf("%s: %v", e, err)
-				}
-				return r.String() + "\n"
+				return getExpr(d) + "\n"
 			})
 		})
 	}
 
+	walkExpr := func(t *testing.T, getExpr func(tree.TypedExpr) (tree.TypedExpr, error)) {
+		walk(t, func(d *datadriven.TestData) string {
+			expr, err := parser.ParseExpr(d.Input)
+			if err != nil {
+				t.Fatalf("%s: %v", d.Input, err)
+			}
+			// expr.TypeCheck to avoid constant folding.
+			typedExpr, err := expr.TypeCheck(nil, types.Any)
+			if err != nil {
+				return fmt.Sprint(err)
+			}
+
+			e, err := getExpr(typedExpr)
+			if err != nil {
+				return fmt.Sprint(err)
+			}
+			r, err := e.Eval(evalCtx)
+			if err != nil {
+				return fmt.Sprint(err)
+			}
+			return r.String()
+		})
+	}
+
 	t.Run("opt", func(t *testing.T) {
-		walk(t, func(e tree.TypedExpr) (tree.TypedExpr, error) {
-			return optBuildScalar(ctx, e)
+		walkExpr(t, func(e tree.TypedExpr) (tree.TypedExpr, error) {
+			return optBuildScalar(evalCtx, e)
 		})
 	})
 
 	t.Run("no-opt", func(t *testing.T) {
-		walk(t, func(e tree.TypedExpr) (tree.TypedExpr, error) {
-			return ctx.NormalizeExpr(e)
+		walkExpr(t, func(e tree.TypedExpr) (tree.TypedExpr, error) {
+			return evalCtx.NormalizeExpr(e)
+		})
+	})
+
+	// The opt and no-opt tests don't do an end-to-end SQL test. Do that
+	// here by executing a SELECT. In order to make the output be the same
+	// we have to also figure out what the expected output type is so we
+	// can correctly format the datum.
+	t.Run("sql", func(t *testing.T) {
+		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer s.Stopper().Stop(ctx)
+
+		walk(t, func(d *datadriven.TestData) string {
+			var res gosql.NullString
+			if err := sqlDB.QueryRow(fmt.Sprintf("SELECT (%s)::STRING", d.Input)).Scan(&res); err != nil {
+				return strings.TrimPrefix(err.Error(), "pq: ")
+			}
+			if !res.Valid {
+				return "NULL"
+			}
+
+			// We have a non-null result. We can't just return
+			// res.String here because these strings don't
+			// match the datum.String() representations. For
+			// example, a bitarray has a res.String of something
+			// like `1001001` but the datum representation is
+			// `B'1001001'`. Thus we have to parse res.String (a
+			// SQL result) back into a datum and return that.
+
+			expr, err := parser.ParseExpr(d.Input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// expr.TypeCheck to avoid constant folding.
+			typedExpr, err := expr.TypeCheck(nil, types.Any)
+			if err != nil {
+				// An error here should have been found above by QueryRow.
+				t.Fatal(err)
+			}
+
+			switch typedExpr.ResolvedType().Family() {
+			case types.TupleFamily:
+				// ParseDatumStringAs doesn't handle tuples, so we have to convert them ourselves.
+				var datums tree.Datums
+				// Fetch the original expression's tuple values.
+				tuple := typedExpr.(*tree.Tuple)
+				for i, s := range strings.Split(res.String[1:len(res.String)-1], ",") {
+					if s == "" {
+						continue
+					}
+					// Figure out the type of the tuple value.
+					expr, err := tuple.Exprs[i].TypeCheck(nil, types.Any)
+					if err != nil {
+						t.Fatal(err)
+					}
+					// Now parse the new string as the expected type.
+					datum, err := tree.ParseDatumStringAs(expr.ResolvedType(), s, evalCtx)
+					if err != nil {
+						t.Errorf("%s: %s", err, s)
+						return err.Error()
+					}
+					datums = append(datums, datum)
+				}
+				return tree.NewDTuple(typedExpr.ResolvedType(), datums...).String()
+			}
+			datum, err := tree.ParseDatumStringAs(typedExpr.ResolvedType(), res.String, evalCtx)
+			if err != nil {
+				t.Errorf("%s: %s", err, res.String)
+				return err.Error()
+			}
+			return datum.String()
 		})
 	})
 }
@@ -85,7 +167,7 @@ func optBuildScalar(evalCtx *tree.EvalContext, e tree.TypedExpr) (tree.TypedExpr
 		return nil, err
 	}
 
-	bld := execbuilder.New(nil /* factory */, o.Memo(), o.Memo().RootExpr(), evalCtx)
+	bld := execbuilder.New(nil /* factory */, o.Memo(), nil /* catalog */, o.Memo().RootExpr(), evalCtx)
 	ivh := tree.MakeIndexedVarHelper(nil /* container */, 0)
 
 	expr, err := bld.BuildScalar(&ivh)
@@ -96,6 +178,7 @@ func optBuildScalar(evalCtx *tree.EvalContext, e tree.TypedExpr) (tree.TypedExpr
 }
 
 func TestTimeConversion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tests := []struct {
 		start     string
 		format    string
@@ -242,6 +325,7 @@ func TestTimeConversion(t *testing.T) {
 }
 
 func TestEvalError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testData := []struct {
 		expr     string
 		expected string

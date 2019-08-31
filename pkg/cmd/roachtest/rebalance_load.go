@@ -48,6 +48,7 @@ func registerRebalanceLoad(r *testRegistry) {
 	) {
 		roachNodes := c.Range(1, c.spec.NodeCount-1)
 		appNode := c.Node(c.spec.NodeCount)
+		splits := len(roachNodes) - 1 // n-1 splits => n ranges => 1 lease per node
 
 		c.Put(ctx, cockroach, "./cockroach", roachNodes)
 		args := startArgs(
@@ -55,7 +56,7 @@ func registerRebalanceLoad(r *testRegistry) {
 		c.Start(ctx, t, roachNodes, args)
 
 		c.Put(ctx, workload, "./workload", appNode)
-		c.Run(ctx, appNode, `./workload init kv --drop {pgurl:1}`)
+		c.Run(ctx, appNode, fmt.Sprintf("./workload init kv --drop --splits=%d {pgurl:1}", splits))
 
 		var m *errgroup.Group // see comment in version.go
 		m, ctx = errgroup.WithContext(ctx)
@@ -74,11 +75,10 @@ func registerRebalanceLoad(r *testRegistry) {
 			}
 			defer quietL.close()
 
-			splits := len(roachNodes) - 1 // n-1 splits => n ranges => 1 lease per node
 			err = c.RunL(ctx, quietL, appNode, fmt.Sprintf(
-				"./workload run kv --read-percent=95 --splits=%d --tolerate-errors --concurrency=%d "+
+				"./workload run kv --read-percent=95 --tolerate-errors --concurrency=%d "+
 					"--duration=%v {pgurl:1-%d}",
-				splits, concurrency, maxDuration, len(roachNodes)))
+				concurrency, maxDuration, len(roachNodes)))
 			if ctx.Err() == context.Canceled {
 				// We got canceled either because lease balance was achieved or the
 				// other worker hit an error. In either case, it's not this worker's
@@ -159,8 +159,18 @@ func registerRebalanceLoad(r *testRegistry) {
 func isLoadEvenlyDistributed(l *logger, db *gosql.DB, numNodes int) (bool, error) {
 	rows, err := db.Query(
 		`select lease_holder, count(*) ` +
-			`from [show experimental_ranges from table kv.kv] ` +
+			`from [show ranges from table kv.kv] ` +
 			`group by lease_holder;`)
+	if err != nil {
+		// TODO(rafi): Remove experimental_ranges query once we stop testing 19.1 or
+		// earlier.
+		if strings.Contains(err.Error(), "syntax error at or near \"ranges\"") {
+			rows, err = db.Query(
+				`select lease_holder, count(*) ` +
+					`from [show experimental_ranges from table kv.kv] ` +
+					`group by lease_holder;`)
+		}
+	}
 	if err != nil {
 		return false, err
 	}

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -93,10 +92,10 @@ func (ex *connExecutor) execStmt(
 				"stmt.anonymized", stmt.AnonymizedStr,
 			)
 			pprof.Do(ctx, labels, func(ctx context.Context) {
-				ev, payload, err = ex.execStmtInOpenState(ctx, stmt, pinfo, res)
+				ev, payload, err = ex.execStmtInOpenState(ctx, stmt, res, pinfo)
 			})
 		} else {
-			ev, payload, err = ex.execStmtInOpenState(ctx, stmt, pinfo, res)
+			ev, payload, err = ex.execStmtInOpenState(ctx, stmt, res, pinfo)
 		}
 		switch ev.(type) {
 		case eventNonRetriableErr:
@@ -131,7 +130,7 @@ func (ex *connExecutor) recordFailure() {
 //
 // The returned event can be nil if no state transition is required.
 func (ex *connExecutor) execStmtInOpenState(
-	ctx context.Context, stmt Statement, pinfo *tree.PlaceholderInfo, res RestrictedCommandResult,
+	ctx context.Context, stmt Statement, res RestrictedCommandResult, pinfo *tree.PlaceholderInfo,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
 	ex.incrementStartedStmtCounter(stmt)
 	defer func() {
@@ -363,6 +362,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
+	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS, stmt.NumAnnotations)
 
 	if os.ImplicitTxn.Get() {
@@ -597,35 +597,6 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 	return eventTxnFinish{}, eventTxnFinishPayload{commit: false}
 }
 
-func enhanceErrWithCorrelation(err error, isCorrelated bool) error {
-	if err == nil || !isCorrelated {
-		return err
-	}
-
-	// If the query was found to be correlated by the new-gen
-	// optimizer, but the optimizer decided to give up (e.g. because
-	// of some feature it does not support), in most cases the
-	// heuristic planner will choke on the correlation with an
-	// unhelpful "table/column not defined" error.
-	//
-	// ("In most cases" because the heuristic planner does support
-	// *some* correlation, specifically that of SRFs in projections.)
-	//
-	// To help the user understand what is going on, we enhance these
-	// error message here when correlation has been found.
-	//
-	// We cannot be more assertive/definite in the text of the hint
-	// (e.g. by replacing the error entirely by "correlated queries are
-	// not supported") because perhaps there was an actual mistake in
-	// the query in addition to the unsupported correlation, and we also
-	// want to give a chance to the user to fix mistakes.
-	if code := pgerror.GetPGCode(err); code == pgcode.UndefinedColumn || code == pgcode.UndefinedTable {
-		err = errors.WithHintf(err, "some correlated subqueries are not supported yet - see %s",
-			"https://github.com/cockroachdb/cockroach/issues/3288")
-	}
-	return err
-}
-
 // dispatchToExecutionEngine executes the statement, writes the result to res
 // and returns an event for the connection's state machine.
 //
@@ -638,7 +609,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 ) error {
 	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
-	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
+	ex.statsCollector.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
 
 	// Prepare the plan. Note, the error is processed below. Everything
 	// between here and there needs to happen even if there's an error.
@@ -665,10 +636,17 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	defer func() {
-		planner.maybeLogStatement(ctx, "exec", ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err())
+		planner.maybeLogStatement(
+			ctx,
+			"exec",
+			ex.extraTxnState.autoRetryCounter,
+			res.RowsAffected(),
+			res.Err(),
+			ex.statsCollector.phaseTimes[sessionQueryReceived],
+		)
 	}()
 
-	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
+	ex.statsCollector.phaseTimes[plannerEndLogicalPlan] = timeutil.Now()
 	ex.sessionTracing.TracePlanEnd(ctx, err)
 
 	// Finally, process the planning error from above.
@@ -688,20 +666,16 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
 	distributePlan := false
-	// If we use the optimizer and we are in "local" mode, don't try to
-	// distribute.
-	if ex.sessionData.OptimizerMode != sessiondata.OptimizerLocal {
-		planner.prepareForDistSQLSupportCheck()
-		distributePlan = shouldDistributePlan(
-			ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.plan)
-	}
+	planner.prepareForDistSQLSupportCheck()
+	distributePlan = shouldDistributePlan(
+		ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.plan)
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan)
 
 	if ex.server.cfg.TestingKnobs.BeforeExecute != nil {
 		ex.server.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String())
 	}
 
-	planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
+	ex.statsCollector.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 
 	ex.mu.Lock()
 	queryMeta, ok := ex.mu.ActiveQueries[stmt.queryID]
@@ -733,7 +707,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	bytesRead, rowsRead, err := ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
-	planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
+	ex.statsCollector.phaseTimes[plannerEndExecStmt] = timeutil.Now()
 
 	// Record the statement summary. This also closes the plan if the
 	// plan has not been closed earlier.
@@ -756,40 +730,12 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 	// in error cases.
 	planner.curPlan = planTop{AST: stmt.AST}
 
-	var isCorrelated bool
-	if optMode := ex.sessionData.OptimizerMode; optMode != sessiondata.OptimizerOff {
-		log.VEvent(ctx, 2, "generating optimizer plan")
-		var result *planTop
-		var err error
-		result, isCorrelated, err = planner.makeOptimizerPlan(ctx)
-		if err == nil {
-			planner.curPlan = *result
-			return nil
-		}
-		if isCorrelated {
-			// Note: we are setting isCorrelated here because
-			// makeOptimizerPlan() can determine isCorrelated but fail with
-			// a non-nil error and a nil result -- for example, when it runs
-			// into an unsupported SQL feature that the HP supports, after
-			// having processed a correlated subquery (which the heuristic
-			// planner won't support).
-			planner.curPlan.flags.Set(planFlagOptIsCorrelated)
-		}
-		log.VEventf(ctx, 1, "optimizer plan failed (isCorrelated=%t): %v", isCorrelated, err)
-		if !canFallbackFromOpt(err, optMode, stmt) {
-			return err
-		}
-		planner.curPlan.flags.Set(planFlagOptFallback)
-		log.VEvent(ctx, 1, "optimizer falls back on heuristic planner")
-	} else {
-		log.VEvent(ctx, 2, "optimizer disabled")
+	log.VEvent(ctx, 2, "generating optimizer plan")
+	if err := planner.makeOptimizerPlan(ctx); err != nil {
+		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
+		return err
 	}
-	// Use the heuristic planner.
-	optFlags := planner.curPlan.flags
-	err := planner.makePlan(ctx)
-	planner.curPlan.flags |= optFlags
-	err = enhanceErrWithCorrelation(err, isCorrelated)
-	return err
+	return nil
 }
 
 // saveLogicalPlanDescription returns whether we should save this as a sample logical plan
@@ -810,38 +756,6 @@ func (ex *connExecutor) saveLogicalPlanDescription(
 	defer stats.Unlock()
 	timeLastSampled := stats.data.SensitiveInfo.MostRecentPlanTimestamp
 	return now.Sub(timeLastSampled) >= period
-}
-
-// canFallbackFromOpt returns whether we can fallback on the heuristic planner
-// when the optimizer hits an error.
-func canFallbackFromOpt(err error, optMode sessiondata.OptimizerMode, stmt *Statement) bool {
-	if !errors.HasUnimplementedError(err) {
-		// We only fallback on "feature not supported" errors.
-		return false
-	}
-
-	if optMode == sessiondata.OptimizerAlways {
-		// In Always mode we never fallback, with one exception: SET commands (or
-		// else we can't switch to another mode).
-		_, isSetVar := stmt.AST.(*tree.SetVar)
-		return isSetVar
-	}
-
-	// If the statement is EXPLAIN (OPT), then don't fallback (we want to return
-	// the error, not show a plan from the heuristic planner).
-	// TODO(radu): this is hacky and doesn't handle an EXPLAIN (OPT) inside
-	// a larger query.
-	if e, ok := stmt.AST.(*tree.Explain); ok {
-		if opts, err := e.ParseOptions(); err == nil && opts.Mode == tree.ExplainOpt {
-			return false
-		}
-	}
-
-	// Never fall back on PREPARE AS OPT PLAN.
-	if _, ok := stmt.AST.(*tree.CannedOptPlan); ok {
-		return false
-	}
-	return true
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
@@ -899,9 +813,13 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	recv.discardRows = planner.discardRows
 	// We pass in whether or not we wanted to distribute this plan, which tells
 	// the planner whether or not to plan remote table readers.
-	ex.server.cfg.DistSQLPlanner.PlanAndRun(
-		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.plan, recv)
-	if recv.commErr != nil {
+	cleanup := ex.server.cfg.DistSQLPlanner.PlanAndRun(
+		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.plan, recv,
+	)
+	// Note that we're not cleaning up right away because postqueries might
+	// need to have access to the main query tree.
+	defer cleanup()
+	if recv.commErr != nil || res.Err() != nil {
 		return recv.bytesRead, recv.rowsRead, recv.commErr
 	}
 
@@ -936,6 +854,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 		rwMode = ex.readWriteModeWithSessionDefault(s.Modes.ReadWriteMode)
 		return rwMode, now.GoTime(), nil, nil
 	}
+	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 	p := &ex.planner
 	ex.resetPlanner(ctx, p, nil /* txn */, now.GoTime(), 0 /* numAnnotations */)
 	ts, err := p.EvalAsOfTimestamp(s.Modes.AsOf)
@@ -1357,4 +1276,30 @@ func (ex *connExecutor) validateSavepointName(savepoint tree.Name) error {
 				"with SET force_savepoint_restart=true")
 	}
 	return nil
+}
+
+// recordTransactionStart records the start of the transaction and returns a
+// closure to be called once the transaction finishes.
+func (ex *connExecutor) recordTransactionStart() func(txnEvent) {
+	// We don't need to write down the transaction start time into
+	// ex.statsCollector.phaseTimes because it will be overwritten in
+	// ex.statsCollector.reset() before executing the statements of the
+	// transaction.
+	ex.phaseTimes[transactionStart] = timeutil.Now()
+	implicit := ex.implicitTxn()
+	return func(ev txnEvent) { ex.recordTransaction(ev, implicit) }
+}
+
+func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool) {
+	phaseTimes := ex.statsCollector.phaseTimes
+	phaseTimes[transactionEnd] = timeutil.Now()
+	txnStart := phaseTimes[transactionStart]
+	txnEnd := phaseTimes[transactionEnd]
+	txnTime := txnEnd.Sub(txnStart)
+	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
+	ex.statsCollector.recordTransaction(
+		txnTime.Seconds(),
+		ev,
+		implicit,
+	)
 }

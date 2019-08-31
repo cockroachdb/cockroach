@@ -74,10 +74,6 @@ type virtualSchemaTable struct {
 	// virtualTableNode. This function returns a virtualTableGenerator function
 	// which generates the next row of the virtual table when called.
 	generator func(ctx context.Context, p *planner, db *DatabaseDescriptor) (virtualTableGenerator, error)
-
-	// delegate, if non-nil, uses delegateQuery to reroute a query on this virtual
-	// table into another more efficient query.
-	delegate func(ctx context.Context, p *planner, db *DatabaseDescriptor) (planNode, error)
 }
 
 // virtualSchemaView represents a view within a virtualSchema
@@ -149,15 +145,19 @@ func (v virtualSchemaView) initVirtualTableDesc(
 
 	create := stmt.AST.(*tree.CreateView)
 
-	mutDesc, err := MakeViewTableDesc(
-		create,
-		v.resultColumns,
-		0,
+	columns := v.resultColumns
+	if len(create.ColumnNames) != 0 {
+		columns = overrideColumnNames(columns, create.ColumnNames)
+	}
+	mutDesc, err := makeViewTableDesc(
+		create.Name.Table(),
+		tree.AsStringWithFlags(create.AsSource, tree.FmtParsable),
+		0, /* parentID */
 		id,
-		hlc.Timestamp{},
+		columns,
+		hlc.Timestamp{}, /* creationTime */
 		publicSelectPrivileges,
-		nil, // semaCtx
-		nil, // evalCtx
+		nil, /* semaCtx */
 	)
 	return mutDesc.TableDescriptor, err
 }
@@ -240,7 +240,7 @@ func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConst
 		if dbName != "" {
 			var err error
 			dbDesc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(ctx, p.txn, dbName,
-				DatabaseLookupFlags{required: true, avoidCached: p.avoidCachedDescriptors})
+				tree.DatabaseLookupFlags{Required: true, AvoidCached: p.avoidCachedDescriptors})
 			if err != nil {
 				return nil, err
 			}
@@ -252,10 +252,6 @@ func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConst
 
 		switch def := e.virtualDef.(type) {
 		case virtualSchemaTable:
-			if def.delegate != nil {
-				return def.delegate(ctx, p, dbDesc)
-			}
-
 			if def.generator != nil && def.populate != nil {
 				return nil, newInvalidVirtualSchemaError()
 			}

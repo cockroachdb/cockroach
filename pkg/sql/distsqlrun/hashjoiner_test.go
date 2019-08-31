@@ -82,10 +82,12 @@ func TestHashJoiner(t *testing.T) {
 				rightInput := NewRowBuffer(c.rightTypes, c.rightInput, RowBufferArgs{})
 				out := &RowBuffer{}
 				flowCtx := FlowCtx{
-					Settings:    st,
-					EvalCtx:     &evalCtx,
-					TempStorage: tempEngine,
-					diskMonitor: &diskMonitor,
+					EvalCtx: &evalCtx,
+					Cfg: &ServerConfig{
+						Settings:    st,
+						TempStorage: tempEngine,
+						DiskMonitor: &diskMonitor,
+					},
 				}
 				if flowCtxSetup != nil {
 					flowCtxSetup(&flowCtx)
@@ -138,7 +140,7 @@ func TestHashJoiner(t *testing.T) {
 		for _, memLimit := range []int64{1, 256, 512, 1024, 2048} {
 			t.Run(fmt.Sprintf("MemLimit=%d", memLimit), func(t *testing.T) {
 				if err := testFunc(t, func(f *FlowCtx) {
-					f.testingKnobs.MemoryLimitBytes = memLimit
+					f.Cfg.TestingKnobs.MemoryLimitBytes = memLimit
 				}, nil); err != nil {
 					t.Fatal(err)
 				}
@@ -187,10 +189,12 @@ func TestHashJoinerError(t *testing.T) {
 			rightInput := NewRowBuffer(c.rightTypes, c.rightInput, RowBufferArgs{})
 			out := &RowBuffer{}
 			flowCtx := FlowCtx{
-				Settings:    st,
-				EvalCtx:     &evalCtx,
-				TempStorage: tempEngine,
-				diskMonitor: &diskMonitor,
+				EvalCtx: &evalCtx,
+				Cfg: &ServerConfig{
+					Settings:    st,
+					TempStorage: tempEngine,
+					DiskMonitor: &diskMonitor,
+				},
 			}
 
 			post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: c.outCols}
@@ -326,8 +330,8 @@ func TestHashJoinerDrain(t *testing.T) {
 	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		Settings: settings,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: settings},
+		EvalCtx: &evalCtx,
 	}
 
 	post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: outCols}
@@ -448,8 +452,8 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		EvalCtx: &evalCtx,
 	}
 
 	// Disable external storage for this test to avoid initializing temp storage
@@ -502,16 +506,18 @@ func BenchmarkHashJoiner(b *testing.B) {
 	diskMonitor := makeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 	flowCtx := &FlowCtx{
-		Settings:    st,
-		EvalCtx:     &evalCtx,
-		diskMonitor: diskMonitor,
+		EvalCtx: &evalCtx,
+		Cfg: &ServerConfig{
+			Settings:    st,
+			DiskMonitor: diskMonitor,
+		},
 	}
 	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
 		b.Fatal(err)
 	}
 	defer tempEngine.Close()
-	flowCtx.TempStorage = tempEngine
+	flowCtx.Cfg.TempStorage = tempEngine
 
 	spec := &distsqlpb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
@@ -523,9 +529,9 @@ func BenchmarkHashJoiner(b *testing.B) {
 
 	const numCols = 1
 	for _, spill := range []bool{true, false} {
-		flowCtx.testingKnobs.MemoryLimitBytes = 0
+		flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 0
 		if spill {
-			flowCtx.testingKnobs.MemoryLimitBytes = 1
+			flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 1
 		}
 		b.Run(fmt.Sprintf("spill=%t", spill), func(b *testing.B) {
 			for _, numRows := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {

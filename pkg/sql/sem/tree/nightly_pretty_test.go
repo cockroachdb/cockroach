@@ -18,6 +18,7 @@ import (
 
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 // TestPrettyData reads in a single SQL statement from a file, formats it at
@@ -25,6 +26,7 @@ import (
 // is most useful when changing or implementing the doc interface for a node,
 // and should be used to compare and verify the changed output.
 func TestPrettyData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	matches, err := filepath.Glob(filepath.Join("testdata", "pretty", "*.sql"))
 	if err != nil {
 		t.Fatal(err)

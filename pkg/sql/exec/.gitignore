@@ -1,11 +1,16 @@
 any_not_null_agg.eg.go
 avg_agg.eg.go
-coldata/vec.eg.go
 const.eg.go
 distinct.eg.go
 hashjoiner.eg.go
 like_ops.eg.go
-mergejoiner.eg.go
+mergejoinbase.eg.go
+mergejoiner_fullouter.eg.go
+mergejoiner_inner.eg.go
+mergejoiner_leftanti.eg.go
+mergejoiner_leftouter.eg.go
+mergejoiner_leftsemi.eg.go
+mergejoiner_rightouter.eg.go
 min_max_agg.eg.go
 projection_ops.eg.go
 quicksort.eg.go
@@ -19,3 +24,4 @@ vec_comparators.eg.go
 vecbuiltins/rank.eg.go
 vecbuiltins/row_number.eg.go
 zerocolumns.eg.go
+overloads_test_utils.eg.go

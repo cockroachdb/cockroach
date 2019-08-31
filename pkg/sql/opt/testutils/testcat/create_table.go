@@ -133,13 +133,19 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	} else if !tab.IsVirtual {
 		tab.addPrimaryColumnIndex("rowid")
 	}
+	if stmt.PartitionBy != nil {
+		if len(tab.Indexes) == 0 {
+			panic("cannot partition virtual table")
+		}
+		tab.Indexes[0].partitionBy = stmt.PartitionBy
+	}
 
 	// Add check constraints.
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.CheckConstraintTableDef:
 			tab.Checks = append(tab.Checks, cat.CheckConstraint{
-				Constraint: tree.Serialize(def.Expr),
+				Constraint: serializeTableDefExpr(def.Expr),
 				Validated:  validatedCheckConstraint(def),
 			})
 		}
@@ -240,7 +246,12 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 		fromCols[i] = tab.FindOrdinal(string(c))
 	}
 
-	targetTable := tc.Table(&d.Table)
+	var targetTable *Table
+	if d.Table.TableName == tab.Name() {
+		targetTable = tab
+	} else {
+		targetTable = tc.Table(&d.Table)
+	}
 
 	toCols := make([]int, len(d.ToCols))
 	for i, c := range d.ToCols {
@@ -329,6 +340,8 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 		referencedColumnOrdinals: toCols,
 		validated:                true,
 		matchMethod:              d.Match,
+		deleteAction:             d.Actions.Delete,
+		updateAction:             d.Actions.Update,
 	}
 	tab.outboundFKs = append(tab.outboundFKs, fk)
 	targetTable.inboundFKs = append(targetTable.inboundFKs, fk)
@@ -354,12 +367,12 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	}
 
 	if def.DefaultExpr.Expr != nil {
-		s := tree.Serialize(def.DefaultExpr.Expr)
+		s := serializeTableDefExpr(def.DefaultExpr.Expr)
 		col.DefaultExpr = &s
 	}
 
 	if def.Computed.Expr != nil {
-		s := tree.Serialize(def.Computed.Expr)
+		s := serializeTableDefExpr(def.Computed.Expr)
 		col.ComputedExpr = &s
 	}
 
@@ -368,11 +381,12 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 
 func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	idx := &Index{
-		IdxName:  tt.makeIndexName(def.Name, typ),
-		Unique:   typ != nonUniqueIndex,
-		Inverted: def.Inverted,
-		IdxZone:  &config.ZoneConfig{},
-		table:    tt,
+		IdxName:     tt.makeIndexName(def.Name, typ),
+		Unique:      typ != nonUniqueIndex,
+		Inverted:    def.Inverted,
+		IdxZone:     &config.ZoneConfig{},
+		table:       tt,
+		partitionBy: def.PartitionBy,
 	}
 
 	// Look for name suffixes indicating this is a mutation index.
@@ -585,4 +599,29 @@ func extractDeleteOnlyIndex(def *tree.IndexTableDef) (name string, ok bool) {
 
 func validatedCheckConstraint(def *tree.CheckConstraintTableDef) bool {
 	return !strings.HasSuffix(string(def.Name), ":unvalidated")
+}
+
+func serializeTableDefExpr(expr tree.Expr) string {
+	// Disallow any column references that are qualified with the table. The
+	// production table creation code verifies them and strips them away, so the
+	// stored expressions contain only unqualified column references.
+	preFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if vBase, ok := expr.(tree.VarName); ok {
+			v, err := vBase.NormalizeVarName()
+			if err != nil {
+				return false, nil, err
+			}
+			if c, ok := v.(*tree.ColumnItem); ok && c.TableName != nil {
+				return false, nil, fmt.Errorf(
+					"expressions in table definitions must not contain qualified column references: %s", c,
+				)
+			}
+		}
+		return true, expr, nil
+	}
+	_, err := tree.SimpleVisit(expr, preFn)
+	if err != nil {
+		panic(err)
+	}
+	return tree.Serialize(expr)
 }

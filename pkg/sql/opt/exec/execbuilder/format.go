@@ -49,7 +49,7 @@ func fmtInterceptor(f *memo.ExprFmtCtx, tp treeprinter.Node, nd opt.Expr) bool {
 	}
 
 	// Build the scalar expression and format it as a single tree node.
-	bld := New(nil /* factory */, f.Memo, nd, nil /* evalCtx */)
+	bld := New(nil /* factory */, f.Memo, nil /* catalog */, nd, nil /* evalCtx */)
 	md := f.Memo.Metadata()
 	ivh := tree.MakeIndexedVarHelper(nil /* container */, md.NumColumns())
 	expr, err := bld.BuildScalar(&ivh)
@@ -60,7 +60,7 @@ func fmtInterceptor(f *memo.ExprFmtCtx, tp treeprinter.Node, nd opt.Expr) bool {
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
 	fmtCtx.SetIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
 		fullyQualify := !f.HasFlags(memo.ExprFmtHideQualifications)
-		alias := md.QualifiedAlias(opt.ColumnID(idx+1), fullyQualify)
+		alias := md.QualifiedAlias(opt.ColumnID(idx+1), fullyQualify, f.Catalog)
 		ctx.WriteString(alias)
 	})
 	expr.Format(fmtCtx)

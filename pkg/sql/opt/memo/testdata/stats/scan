@@ -91,7 +91,8 @@ SELECT s, x FROM a WHERE x > 0 AND x <= 100
 scan a
  ├── columns: s:3(string) x:1(int!null)
  ├── constraint: /1: [/1 - /100]
- ├── stats: [rows=150, distinct(1)=100, null(1)=0]
+ ├── cardinality: [0 - 100]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0]
  ├── key: (1)
  └── fd: (1)-->(3)
 
@@ -114,13 +115,15 @@ group-by
  ├── columns: count:6(int) y:2(int) x:1(int!null)
  ├── grouping columns: x:1(int!null)
  ├── internal-ordering: +1
+ ├── cardinality: [0 - 100]
  ├── stats: [rows=100, distinct(1)=100, null(1)=0]
  ├── key: (1)
  ├── fd: (1)-->(2,6)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── constraint: /1: [/1 - /100]
- │    ├── stats: [rows=150, distinct(1)=100, null(1)=0]
+ │    ├── cardinality: [0 - 100]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── ordering: +1
@@ -146,10 +149,10 @@ opt
 SELECT s, d, x FROM a WHERE (s <= 'aaa') OR (s >= 'bar' AND s <= 'foo')
 ----
 select
- ├── columns: s:3(string) d:4(decimal!null) x:1(int!null)
- ├── stats: [rows=1000, distinct(1)=911.337892, null(1)=0, distinct(4)=294.797541, null(4)=0]
+ ├── columns: s:3(string!null) d:4(decimal!null) x:1(int!null)
+ ├── stats: [rows=333.333333, distinct(1)=323.895037, null(1)=0, distinct(3)=0.666666667, null(3)=0, distinct(4)=207.616156, null(4)=0]
  ├── key: (1)
- ├── fd: (1)-->(3,4), (3,4)~~>(1)
+ ├── fd: (1)-->(3,4), (3,4)-->(1)
  ├── scan a@secondary
  │    ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
  │    ├── constraint: /-3/4: [/'foo' - /'bar'] [/'aaa' - /NULL)
@@ -157,14 +160,14 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(3,4), (3,4)-->(1)
  └── filters
-      └── (s <= 'aaa') OR (s >= 'bar') [type=bool, outer=(3)]
+      └── (s <= 'aaa') OR (s >= 'bar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'aaa'] [/'bar' - ])]
 
 opt
 SELECT s, d, x FROM a WHERE (s <= 'aaa') OR (s >= 'bar' AND s <= 'foo') OR s IS NULL
 ----
 select
  ├── columns: s:3(string) d:4(decimal!null) x:1(int!null)
- ├── stats: [rows=1000, distinct(1)=911.337892, null(1)=0, distinct(4)=294.797541, null(4)=0]
+ ├── stats: [rows=333.333333, distinct(1)=323.895037, null(1)=0, distinct(3)=0.666666667, null(3)=0, distinct(4)=207.616156, null(4)=0]
  ├── key: (1)
  ├── fd: (1)-->(3,4), (3,4)~~>(1)
  ├── scan a@secondary
@@ -174,7 +177,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(3,4), (3,4)~~>(1)
  └── filters
-      └── ((s <= 'aaa') OR ((s >= 'bar') AND (s <= 'foo'))) OR (s IS NULL) [type=bool, outer=(3)]
+      └── ((s <= 'aaa') OR ((s >= 'bar') AND (s <= 'foo'))) OR (s IS NULL) [type=bool, outer=(3), constraints=(/3: [/NULL - /'aaa'] [/'bar' - /'foo'])]
 
 opt
 SELECT s, d, x FROM a WHERE s IS NOT NULL
@@ -190,10 +193,10 @@ opt
 SELECT s, d, x FROM a WHERE (s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')
 ----
 select
- ├── columns: s:3(string) d:4(decimal!null) x:1(int!null)
- ├── stats: [rows=1000, distinct(1)=911.337892, null(1)=0, distinct(4)=294.797541, null(4)=0]
+ ├── columns: s:3(string!null) d:4(decimal!null) x:1(int!null)
+ ├── stats: [rows=333.333333, distinct(1)=323.895037, null(1)=0, distinct(3)=0.666666667, null(3)=0, distinct(4)=207.616156, null(4)=0]
  ├── key: (1)
- ├── fd: (1)-->(3,4), (3,4)~~>(1)
+ ├── fd: (1)-->(3,4), (3,4)-->(1)
  ├── scan a@secondary
  │    ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
  │    ├── constraint: /-3/4: [ - /'foobar'] [/'foo' - /'bar']
@@ -201,19 +204,19 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(3,4), (3,4)-->(1)
  └── filters
-      └── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3)]
+      └── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo'] [/'foobar' - ])]
 
 opt
 SELECT * FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND d > 5.0
 ----
 index-join a
- ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool)
- ├── stats: [rows=333.333333, distinct(1)=323.895037, null(1)=0, distinct(4)=100, null(4)=0]
+ ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool)
+ ├── stats: [rows=111.111111, distinct(1)=110.075864, null(1)=0, distinct(3)=0.666666667, null(3)=0, distinct(4)=100, null(4)=0]
  ├── key: (1)
- ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+ ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
  └── select
       ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
-      ├── stats: [rows=111.111111, distinct(1)=110.489355, null(1)=0, distinct(3)=0.666666667, null(3)=0, distinct(4)=100, null(4)=0]
+      ├── stats: [rows=37.037037, distinct(1)=36.9695531, null(1)=0, distinct(3)=0.222222222, null(3)=0, distinct(4)=37.037037, null(4)=0]
       ├── key: (1)
       ├── fd: (1)-->(3,4), (3,4)-->(1)
       ├── scan a@secondary
@@ -223,7 +226,7 @@ index-join a
       │    ├── key: (1)
       │    └── fd: (1)-->(3,4), (3,4)-->(1)
       └── filters
-           ├── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3)]
+           ├── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo'] [/'foobar' - ])]
            └── d > 5.0 [type=bool, outer=(4), constraints=(/4: (/5.0 - ]; tight)]
 
 opt
@@ -231,12 +234,12 @@ SELECT * FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND d <= 
 ----
 index-join a
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool)
- ├── stats: [rows=333.333333, distinct(1)=323.895037, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=100, null(4)=0]
+ ├── stats: [rows=111.111111, distinct(1)=110.075864, null(1)=0, distinct(3)=0.666666667, null(3)=0, distinct(4)=100, null(4)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
  └── select
       ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
-      ├── stats: [rows=37.037037, distinct(1)=36.9747958, null(1)=0, distinct(3)=0.666666667, null(3)=0, distinct(4)=33.3333333, null(4)=0]
+      ├── stats: [rows=12.345679, distinct(1)=12.3389356, null(1)=0, distinct(3)=0.222222222, null(3)=0, distinct(4)=12.345679, null(4)=0]
       ├── key: (1)
       ├── fd: (1)-->(3,4), (3,4)-->(1)
       ├── scan a@secondary
@@ -246,7 +249,7 @@ index-join a
       │    ├── key: (1)
       │    └── fd: (1)-->(3,4), (3,4)-->(1)
       └── filters
-           ├── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3)]
+           ├── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo'] [/'foobar' - ])]
            └── d <= 5.0 [type=bool, outer=(4), constraints=(/4: (/NULL - /5.0]; tight)]
 
 # Bump up null counts.
@@ -331,7 +334,7 @@ SELECT s, d, x FROM a WHERE ((s <= 'aaa') OR (s >= 'bar' AND s <= 'foo')) AND s 
 ----
 select
  ├── columns: s:3(string!null) d:4(decimal!null) x:1(int!null)
- ├── stats: [rows=666.666667, distinct(1)=666.666667, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=294.797541, null(4)=0]
+ ├── stats: [rows=222.222222, distinct(1)=222.222222, null(1)=0, distinct(3)=0.666666667, null(3)=0, distinct(4)=207.616156, null(4)=0]
  ├── key: (1)
  ├── fd: (1)-->(3,4), (3,4)-->(1)
  ├── scan a@secondary
@@ -341,14 +344,14 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(3,4), (3,4)-->(1)
  └── filters
-      └── (s <= 'aaa') OR (s >= 'bar') [type=bool, outer=(3)]
+      └── (s <= 'aaa') OR (s >= 'bar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'aaa'] [/'bar' - ])]
 
 opt
 SELECT s, d, x FROM a WHERE (s <= 'aaa') OR (s >= 'bar' AND s <= 'foo') OR s IS NULL
 ----
 select
  ├── columns: s:3(string) d:4(decimal!null) x:1(int!null)
- ├── stats: [rows=1000, distinct(1)=911.337892, null(1)=0, distinct(4)=294.797541, null(4)=0]
+ ├── stats: [rows=259.259259, distinct(1)=259.259259, null(1)=0, distinct(3)=0.666666667, null(3)=259.259259, distinct(4)=207.616156, null(4)=0]
  ├── key: (1)
  ├── fd: (1)-->(3,4), (3,4)~~>(1)
  ├── scan a@secondary
@@ -358,7 +361,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(3,4), (3,4)~~>(1)
  └── filters
-      └── ((s <= 'aaa') OR ((s >= 'bar') AND (s <= 'foo'))) OR (s IS NULL) [type=bool, outer=(3)]
+      └── ((s <= 'aaa') OR ((s >= 'bar') AND (s <= 'foo'))) OR (s IS NULL) [type=bool, outer=(3), constraints=(/3: [/NULL - /'aaa'] [/'bar' - /'foo'])]
 
 opt
 SELECT s, d, x FROM a WHERE s IS NOT NULL
@@ -375,7 +378,7 @@ SELECT s, d, x FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND
 ----
 select
  ├── columns: s:3(string!null) d:4(decimal!null) x:1(int!null)
- ├── stats: [rows=666.666667, distinct(1)=666.666667, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=294.797541, null(4)=0]
+ ├── stats: [rows=222.222222, distinct(1)=222.222222, null(1)=0, distinct(3)=0.666666667, null(3)=0, distinct(4)=207.616156, null(4)=0]
  ├── key: (1)
  ├── fd: (1)-->(3,4), (3,4)-->(1)
  ├── scan a@secondary
@@ -385,19 +388,19 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(3,4), (3,4)-->(1)
  └── filters
-      └── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3)]
+      └── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo'] [/'foobar' - ])]
 
 opt
 SELECT * FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND d <= 5.0 AND s IS NOT NULL
 ----
 index-join a
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool)
- ├── stats: [rows=222.222222, distinct(1)=222.222222, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=100, null(4)=0]
+ ├── stats: [rows=74.0740741, distinct(1)=74.0740741, null(1)=0, distinct(3)=0.666666667, null(3)=0, distinct(4)=74.0740741, null(4)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
  └── select
       ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
-      ├── stats: [rows=24.691358, distinct(1)=24.691358, null(1)=0, distinct(3)=0.666666667, null(3)=0, distinct(4)=24.691358, null(4)=0]
+      ├── stats: [rows=8.23045267, distinct(1)=8.23045267, null(1)=0, distinct(3)=0.222222222, null(3)=0, distinct(4)=8.23045267, null(4)=0]
       ├── key: (1)
       ├── fd: (1)-->(3,4), (3,4)-->(1)
       ├── scan a@secondary
@@ -407,7 +410,7 @@ index-join a
       │    ├── key: (1)
       │    └── fd: (1)-->(3,4), (3,4)-->(1)
       └── filters
-           ├── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3)]
+           ├── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo'] [/'foobar' - ])]
            └── d <= 5.0 [type=bool, outer=(4), constraints=(/4: (/NULL - /5.0]; tight)]
 
 exec-ddl
@@ -445,7 +448,7 @@ CREATE SEQUENCE seq
 opt
 SELECT * FROM seq
 ----
-sequence-select t.public.seq
+sequence-select seq
  ├── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
@@ -537,34 +540,45 @@ FROM
 WHERE
   subq.col1;
 ----
-project
- ├── columns: "?column?":24(int!null)
- ├── stats: [rows=0.95099005]
- ├── fd: ()-->(24)
- ├── select
- │    ├── columns: col1:23(bool!null)
- │    ├── stats: [rows=0.95099005, distinct(23)=0.95099005, null(23)=0]
- │    ├── fd: ()-->(23)
- │    ├── project
- │    │    ├── columns: col1:23(bool)
- │    │    ├── stats: [rows=333333.333, distinct(23)=333333.333, null(23)=16336.65]
- │    │    ├── inner-join (hash)
- │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null) tab1.e:16(varchar) tab1.f:17("char") tab1.j:21(float!null)
- │    │    │    ├── stats: [rows=333333.333, distinct(10)=100, null(10)=0, distinct(21)=100, null(21)=0, distinct(5,6,8,16,17)=333333.333, null(5,6,8,16,17)=16336.65]
- │    │    │    ├── scan tab0
- │    │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null)
- │    │    │    │    └── stats: [rows=1000, distinct(10)=100, null(10)=0, distinct(5,6,8)=1000, null(5,6,8)=29.701]
- │    │    │    ├── scan tab1
- │    │    │    │    ├── columns: tab1.e:16(varchar) tab1.f:17("char") tab1.j:21(float!null)
- │    │    │    │    └── stats: [rows=1000, distinct(21)=100, null(21)=0, distinct(16,17)=1000, null(16,17)=19.9]
- │    │    │    └── filters
- │    │    │         └── tab0.j IN (tab1.j,) [type=bool, outer=(10,21)]
- │    │    └── projections
- │    │         └── CASE WHEN ilike_escape(regexp_replace(tab0.h, tab1.e, tab0.f, tab0.e::STRING), tab1.f, '') THEN true ELSE false END [type=bool, outer=(5,6,8,16,17)]
- │    └── filters
- │         └── variable: col1 [type=bool, outer=(23), constraints=(/23: [/true - /true]; tight), fd=()-->(23)]
- └── projections
-      └── const: 1 [type=int]
+with &1 (subq)
+ ├── columns: "?column?":26(int!null)
+ ├── stats: [rows=1]
+ ├── fd: ()-->(26)
+ ├── project
+ │    ├── columns: col1:23(bool) tab1.g:18(int4!null)
+ │    ├── stats: [rows=333333.333]
+ │    ├── inner-join (hash)
+ │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null) tab1.e:16(varchar) tab1.f:17("char") tab1.g:18(int4!null) tab1.j:21(float!null)
+ │    │    ├── stats: [rows=333333.333, distinct(10)=100, null(10)=0, distinct(18)=100, null(18)=0, distinct(21)=100, null(21)=0]
+ │    │    ├── scan tab0
+ │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null)
+ │    │    │    └── stats: [rows=1000, distinct(10)=100, null(10)=0]
+ │    │    ├── scan tab1
+ │    │    │    ├── columns: tab1.e:16(varchar) tab1.f:17("char") tab1.g:18(int4!null) tab1.j:21(float!null)
+ │    │    │    └── stats: [rows=1000, distinct(18)=100, null(18)=0, distinct(21)=100, null(21)=0]
+ │    │    └── filters
+ │    │         └── tab0.j IN (tab1.j,) [type=bool, outer=(10,21)]
+ │    └── projections
+ │         └── CASE WHEN ilike_escape(regexp_replace(tab0.h, tab1.e, tab0.f, tab0.e::STRING), tab1.f, '') THEN true ELSE false END [type=bool, outer=(5,6,8,16,17)]
+ └── project
+      ├── columns: "?column?":26(int!null)
+      ├── stats: [rows=1]
+      ├── fd: ()-->(26)
+      ├── select
+      │    ├── columns: col0:24(int4!null) col1:25(bool!null)
+      │    ├── stats: [rows=1, distinct(24)=1, null(24)=0, distinct(25)=1, null(25)=0]
+      │    ├── fd: ()-->(25)
+      │    ├── with-scan &1 (subq)
+      │    │    ├── columns: col0:24(int4!null) col1:25(bool)
+      │    │    ├── mapping:
+      │    │    │    ├──  tab1.g:18(int4) => col0:24(int4)
+      │    │    │    └──  col1:23(bool) => col1:25(bool)
+      │    │    ├── stats: [rows=333333.333]
+      │    │    └── fd: (18)-->(24), (23)-->(25)
+      │    └── filters
+      │         └── variable: col1 [type=bool, outer=(25), constraints=(/25: [/true - /true]; tight), fd=()-->(25)]
+      └── projections
+           └── const: 1 [type=int]
 
 # ---------------------
 # Tests with Histograms
@@ -595,91 +609,98 @@ ALTER TABLE hist INJECT STATISTICS '[
     "columns": ["a"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 1000,
+    "distinct_count": 40,
     "histo_col_type": "int",
     "histo_buckets": [
-      {"num_eq": 0, "num_range": 0, "upper_bound": "0"},
-      {"num_eq": 10, "num_range": 90, "upper_bound": "10"},
-      {"num_eq": 20, "num_range": 180, "upper_bound": "20"},
-      {"num_eq": 30, "num_range": 270, "upper_bound": "30"},
-      {"num_eq": 40, "num_range": 360, "upper_bound": "40"}
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "10"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 9, "upper_bound": "20"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 9, "upper_bound": "30"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 9, "upper_bound": "40"}
     ]
   },
   {
     "columns": ["b"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 1000,
+    "distinct_count": 120,
     "histo_col_type": "date",
     "histo_buckets": [
-      {"num_eq": 0, "num_range": 0, "upper_bound": "2018-06-30"},
-      {"num_eq": 10, "num_range": 90, "upper_bound": "2018-07-31"},
-      {"num_eq": 20, "num_range": 180, "upper_bound": "2018-08-31"},
-      {"num_eq": 30, "num_range": 270, "upper_bound": "2018-09-30"},
-      {"num_eq": 40, "num_range": 360, "upper_bound": "2018-10-31"}
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "2018-06-30"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 29, "upper_bound": "2018-07-31"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 29, "upper_bound": "2018-08-31"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 29, "upper_bound": "2018-09-30"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 29, "upper_bound": "2018-10-31"}
     ]
   },
   {
     "columns": ["c"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 1000,
+    "distinct_count": 45,
     "histo_col_type": "decimal",
     "histo_buckets": [
-      {"num_eq": 0, "num_range": 0, "upper_bound": "0"},
-      {"num_eq": 10, "num_range": 90, "upper_bound": "10"},
-      {"num_eq": 20, "num_range": 180, "upper_bound": "20"},
-      {"num_eq": 30, "num_range": 270, "upper_bound": "30"},
-      {"num_eq": 40, "num_range": 360, "upper_bound": "40"}
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "10"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 10, "upper_bound": "20"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 11, "upper_bound": "30"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 11, "upper_bound": "40"}
     ]
   },
   {
     "columns": ["d"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 1000,
+    "distinct_count": 45,
     "histo_col_type": "float",
     "histo_buckets": [
-      {"num_eq": 0, "num_range": 0, "upper_bound": "0"},
-      {"num_eq": 10, "num_range": 90, "upper_bound": "10"},
-      {"num_eq": 20, "num_range": 180, "upper_bound": "20"},
-      {"num_eq": 30, "num_range": 270, "upper_bound": "30"},
-      {"num_eq": 40, "num_range": 360, "upper_bound": "40"}
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "10"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 10, "upper_bound": "20"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 11, "upper_bound": "30"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 11, "upper_bound": "40"}
     ]
   },
   {
     "columns": ["e"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 1000,
+    "distinct_count": 200,
     "histo_col_type": "timestamp",
     "histo_buckets": [
-      {"num_eq": 0, "num_range": 0, "upper_bound": "2018-06-30"},
-      {"num_eq": 10, "num_range": 90, "upper_bound": "2018-07-31"},
-      {"num_eq": 20, "num_range": 180, "upper_bound": "2018-08-31"},
-      {"num_eq": 30, "num_range": 270, "upper_bound": "2018-09-30"},
-      {"num_eq": 40, "num_range": 360, "upper_bound": "2018-10-31"}
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "2018-06-30"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 49, "upper_bound": "2018-07-31"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 49, "upper_bound": "2018-08-31"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 49, "upper_bound": "2018-09-30"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 49, "upper_bound": "2018-10-31"}
     ]
   },
   {
     "columns": ["f"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 1000,
+    "distinct_count": 200,
     "histo_col_type": "timestamptz",
     "histo_buckets": [
-      {"num_eq": 0, "num_range": 0, "upper_bound": "2018-06-30"},
-      {"num_eq": 10, "num_range": 90, "upper_bound": "2018-07-31"},
-      {"num_eq": 20, "num_range": 180, "upper_bound": "2018-08-31"},
-      {"num_eq": 30, "num_range": 270, "upper_bound": "2018-09-30"},
-      {"num_eq": 40, "num_range": 360, "upper_bound": "2018-10-31"}
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "2018-06-30"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 49, "upper_bound": "2018-07-31"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 49, "upper_bound": "2018-08-31"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 49, "upper_bound": "2018-09-30"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 49, "upper_bound": "2018-10-31"}
     ]
   },
   {
     "columns": ["g"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 1000,
+    "distinct_count": 40,
     "histo_col_type": "string",
     "histo_buckets": [
-      {"num_eq": 0, "num_range": 0, "upper_bound": "apple"},
-      {"num_eq": 10, "num_range": 90, "upper_bound": "banana"},
-      {"num_eq": 20, "num_range": 180, "upper_bound": "cherry"},
-      {"num_eq": 30, "num_range": 270, "upper_bound": "mango"},
-      {"num_eq": 40, "num_range": 360, "upper_bound": "pineapple"}
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "apple"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "banana"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 9, "upper_bound": "cherry"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 9, "upper_bound": "mango"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 9, "upper_bound": "pineapple"}
     ]
   }
 ]'
@@ -691,13 +712,13 @@ SELECT * FROM hist WHERE a < 10
 ----
 index-join hist
  ├── columns: a:1(int!null) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
- ├── stats: [rows=90, distinct(1)=0.333333333, null(1)=0]
+ ├── stats: [rows=90, distinct(1)=9, null(1)=0]
  │   histogram(1)=  0  0  80 10
  │                <--- 0 ---- 9
  └── scan hist@idx_a
       ├── columns: a:1(int!null) rowid:8(int!null)
       ├── constraint: /1/8: (/NULL - /9]
-      ├── stats: [rows=90, distinct(1)=0.333333333, null(1)=0, distinct(8)=90, null(8)=0]
+      ├── stats: [rows=90, distinct(1)=9, null(1)=0, distinct(8)=90, null(8)=0]
       │   histogram(1)=  0  0  80 10
       │                <--- 0 ---- 9
       ├── key: (8)
@@ -709,12 +730,12 @@ SELECT * FROM hist WHERE a > 30
 ----
 select
  ├── columns: a:1(int!null) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
- ├── stats: [rows=400, distinct(1)=0.333333333, null(1)=0]
+ ├── stats: [rows=400, distinct(1)=10, null(1)=0]
  │   histogram(1)=  0  0   360  40
  │                <--- 30 ----- 40
  ├── scan hist
  │    ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
- │    └── stats: [rows=1000, distinct(1)=1, null(1)=0]
+ │    └── stats: [rows=1000, distinct(1)=40, null(1)=0]
  │        histogram(1)=  0  0  90  10  180  20  270  30  360  40
  │                     <--- 0 ---- 10 ----- 20 ----- 30 ----- 40
  └── filters
@@ -725,13 +746,13 @@ SELECT * FROM hist WHERE b > '2018-07-31'::DATE AND b < '2018-08-05'::DATE
 ----
 index-join hist
  ├── columns: a:1(int) b:2(date!null) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
- ├── stats: [rows=24, distinct(2)=1, null(2)=0]
+ ├── stats: [rows=24, distinct(2)=3.9, null(2)=0]
  │   histogram(2)=  0       0        18       6
  │                <--- '2018-07-31' ---- '2018-08-04'
  └── scan hist@idx_b
       ├── columns: b:2(date!null) rowid:8(int!null)
       ├── constraint: /2/8: [/'2018-08-01' - /'2018-08-04']
-      ├── stats: [rows=24, distinct(2)=1, null(2)=0, distinct(8)=24, null(8)=0]
+      ├── stats: [rows=24, distinct(2)=3.9, null(2)=0, distinct(8)=24, null(8)=0]
       │   histogram(2)=  0       0        18       6
       │                <--- '2018-07-31' ---- '2018-08-04'
       ├── key: (8)
@@ -741,12 +762,12 @@ opt
 SELECT * FROM hist WHERE c = 20 OR (c < 10)
 ----
 index-join hist
- ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
- ├── stats: [rows=333.333333]
+ ├── columns: a:1(int) b:2(date) c:3(decimal!null) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
+ ├── stats: [rows=111.111111, distinct(3)=15, null(3)=0]
  └── scan hist@idx_c
       ├── columns: c:3(decimal!null) rowid:8(int!null)
       ├── constraint: /3/8: (/NULL - /10) [/20 - /20]
-      ├── stats: [rows=110, distinct(3)=0.333333333, null(3)=0, distinct(8)=110, null(8)=0]
+      ├── stats: [rows=110, distinct(3)=10, null(3)=0, distinct(8)=110, null(8)=0]
       │   histogram(3)=  0  0  90  0   0  20
       │                <--- 0 ---- 10 --- 20
       ├── key: (8)
@@ -756,12 +777,12 @@ opt
 SELECT * FROM hist WHERE c = 20 OR (c <= 10)
 ----
 index-join hist
- ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
- ├── stats: [rows=333.333333]
+ ├── columns: a:1(int) b:2(date) c:3(decimal!null) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
+ ├── stats: [rows=111.111111, distinct(3)=15, null(3)=0]
  └── scan hist@idx_c
       ├── columns: c:3(decimal!null) rowid:8(int!null)
       ├── constraint: /3/8: (/NULL - /10] [/20 - /20]
-      ├── stats: [rows=120, distinct(3)=0.333333333, null(3)=0, distinct(8)=120, null(8)=0]
+      ├── stats: [rows=120, distinct(3)=11, null(3)=0, distinct(8)=120, null(8)=0]
       │   histogram(3)=  0  0  90  10  0  20
       │                <--- 0 ---- 10 --- 20
       ├── key: (8)
@@ -771,38 +792,36 @@ opt
 SELECT * FROM hist WHERE (d >= 5 AND d < 15) OR d >= 40
 ----
 index-join hist
- ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
- ├── stats: [rows=333.333333]
+ ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float!null) e:5(timestamp) f:6(timestamptz) g:7(string)
+ ├── stats: [rows=111.111111, distinct(4)=15, null(4)=0]
  └── select
       ├── columns: d:4(float!null) rowid:8(int!null)
-      ├── stats: [rows=61.6666667, distinct(4)=0.333333333, null(4)=0, distinct(8)=61.6666667, null(8)=0]
-      │   histogram(4)=  0          0          15 3.3333 30          0           0 13.333
-      │                <--- 4.999999999999999 ---- 10.0 ---- 14.999999999999998 --- 40.0
+      ├── stats: [rows=20.5555556, distinct(4)=3.83333333, null(4)=0, distinct(8)=20.5555556, null(8)=0]
       ├── key: (8)
       ├── fd: (8)-->(4)
       ├── scan hist@idx_d
       │    ├── columns: d:4(float!null) rowid:8(int!null)
       │    ├── constraint: /4/8: [/5.0 - /14.999999999999998] [/40.0 - ]
-      │    ├── stats: [rows=185, distinct(4)=0.333333333, null(4)=0, distinct(8)=185, null(8)=0]
+      │    ├── stats: [rows=185, distinct(4)=11.5, null(4)=0, distinct(8)=185, null(8)=0]
       │    │   histogram(4)=  0          0          45   10   90          0           0   40
       │    │                <--- 4.999999999999999 ---- 10.0 ---- 14.999999999999998 --- 40.0
       │    ├── key: (8)
       │    └── fd: (8)-->(4)
       └── filters
-           └── (d < 15.0) OR (d >= 40.0) [type=bool, outer=(4)]
+           └── (d < 15.0) OR (d >= 40.0) [type=bool, outer=(4), constraints=(/4: (/NULL - /14.999999999999998] [/40.0 - ])]
 
 opt
 SELECT * FROM hist WHERE e < '2018-07-31 23:00:00'::TIMESTAMP
 ----
 index-join hist
  ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp!null) f:6(timestamptz) g:7(string)
- ├── stats: [rows=105.564516, distinct(5)=0.333333333, null(5)=0]
+ ├── stats: [rows=105.564516, distinct(5)=51.5147849, null(5)=0]
  │   histogram(5)=  0               0               90              10               5.5645                  0
  │                <--- '2018-06-30 00:00:00+00:00' ---- '2018-07-31 00:00:00+00:00' -------- '2018-07-31 22:59:59.999999+00:00'
  └── scan hist@idx_e
       ├── columns: e:5(timestamp!null) rowid:8(int!null)
       ├── constraint: /5/8: (/NULL - /'2018-07-31 22:59:59.999999+00:00']
-      ├── stats: [rows=105.564516, distinct(5)=0.333333333, null(5)=0, distinct(8)=105.564516, null(8)=0]
+      ├── stats: [rows=105.564516, distinct(5)=51.5147849, null(5)=0, distinct(8)=105.564516, null(8)=0]
       │   histogram(5)=  0               0               90              10               5.5645                  0
       │                <--- '2018-06-30 00:00:00+00:00' ---- '2018-07-31 00:00:00+00:00' -------- '2018-07-31 22:59:59.999999+00:00'
       ├── key: (8)
@@ -814,15 +833,13 @@ SELECT * FROM hist WHERE f = '2019-10-30 23:00:00'::TIMESTAMPTZ
 index-join hist
  ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz!null) g:7(string)
  ├── stats: [rows=1, distinct(6)=1, null(6)=0]
- │   histogram(6)=  0               0
- │                <--- '2018-10-31 00:00:00+00:00'
+ │   histogram(6)=
  ├── fd: ()-->(6)
  └── scan hist@idx_f
       ├── columns: f:6(timestamptz!null) rowid:8(int!null)
       ├── constraint: /6/8: [/'2019-10-30 23:00:00+00:00' - /'2019-10-30 23:00:00+00:00']
       ├── stats: [rows=1, distinct(6)=1, null(6)=0, distinct(8)=1, null(8)=0]
-      │   histogram(6)=  0               0
-      │                <--- '2018-10-31 00:00:00+00:00'
+      │   histogram(6)=
       ├── key: (8)
       └── fd: ()-->(6)
 
@@ -830,12 +847,12 @@ opt
 SELECT * FROM hist WHERE g = 'mango' OR g = 'foo'
 ----
 index-join hist
- ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
- ├── stats: [rows=333.333333]
+ ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string!null)
+ ├── stats: [rows=16.6666667, distinct(7)=2, null(7)=0]
  └── scan hist@idx_g
       ├── columns: g:7(string!null) rowid:8(int!null)
       ├── constraint: /7/8: [/'foo' - /'foo'] [/'mango' - /'mango']
-      ├── stats: [rows=165, distinct(7)=1, null(7)=0, distinct(8)=165, null(8)=0]
+      ├── stats: [rows=165, distinct(7)=2, null(7)=0, distinct(8)=165, null(8)=0]
       │   histogram(7)=  0   135   0    30
       │                <--- 'foo' --- 'mango'
       ├── key: (8)
@@ -843,53 +860,55 @@ index-join hist
 
 # Select the correct index depending on which predicate is more selective.
 opt
-SELECT * FROM hist WHERE a = 10 AND b = '2018-08-31'::DATE
+SELECT * FROM hist WHERE (a = 10 OR a = 20) AND (b = '2018-08-31'::DATE OR b = '2018-09-30'::DATE)
 ----
 select
  ├── columns: a:1(int!null) b:2(date!null) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
- ├── stats: [rows=0.2, distinct(1)=0.2, null(1)=0, distinct(2)=0.2, null(2)=0]
- │   histogram(1)=  0 0.2
- │                <--- 10
- │   histogram(2)=  0      0.2
- │                <--- '2018-08-31'
- ├── fd: ()-->(1,2)
+ ├── stats: [rows=0.0925925926, distinct(1)=0.0925925926, null(1)=0, distinct(2)=0.0925925926, null(2)=0]
  ├── index-join hist
  │    ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
  │    ├── stats: [rows=10]
- │    ├── fd: ()-->(1)
- │    └── scan hist@idx_a
+ │    └── select
  │         ├── columns: a:1(int!null) rowid:8(int!null)
- │         ├── constraint: /1/8: [/10 - /10]
- │         ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(8)=10, null(8)=0]
- │         │   histogram(1)=  0  10
- │         │                <--- 10
+ │         ├── stats: [rows=10, distinct(1)=2, null(1)=0, distinct(8)=10, null(8)=0]
  │         ├── key: (8)
- │         └── fd: ()-->(1)
+ │         ├── fd: (8)-->(1)
+ │         ├── scan hist@idx_a
+ │         │    ├── columns: a:1(int!null) rowid:8(int!null)
+ │         │    ├── constraint: /1/8: [/10 - /10] [/20 - /20]
+ │         │    ├── stats: [rows=30, distinct(1)=2, null(1)=0, distinct(8)=30, null(8)=0]
+ │         │    │   histogram(1)=  0  10  0  20
+ │         │    │                <--- 10 --- 20
+ │         │    ├── key: (8)
+ │         │    └── fd: (8)-->(1)
+ │         └── filters
+ │              └── (a = 10) OR (a = 20) [type=bool, outer=(1), constraints=(/1: [/10 - /10] [/20 - /20])]
  └── filters
-      └── b = '2018-08-31' [type=bool, outer=(2), constraints=(/2: [/'2018-08-31' - /'2018-08-31']; tight), fd=()-->(2)]
+      └── (b = '2018-08-31') OR (b = '2018-09-30') [type=bool, outer=(2), constraints=(/2: [/'2018-08-31' - /'2018-08-31'] [/'2018-09-30' - /'2018-09-30'])]
 
 opt
-SELECT * FROM hist WHERE a = 20 AND b = '2018-07-31'::DATE
+SELECT * FROM hist WHERE (a = 30 OR a = 40) AND (b = '2018-06-30'::DATE OR b = '2018-07-31'::DATE)
 ----
 select
  ├── columns: a:1(int!null) b:2(date!null) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
- ├── stats: [rows=0.2, distinct(1)=0.2, null(1)=0, distinct(2)=0.2, null(2)=0]
- │   histogram(1)=  0 0.2
- │                <--- 20
- │   histogram(2)=  0      0.2
- │                <--- '2018-07-31'
- ├── fd: ()-->(1,2)
+ ├── stats: [rows=0.0925925926, distinct(1)=0.0925925926, null(1)=0, distinct(2)=0.0925925926, null(2)=0]
  ├── index-join hist
  │    ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float) e:5(timestamp) f:6(timestamptz) g:7(string)
- │    ├── stats: [rows=10]
- │    ├── fd: ()-->(2)
- │    └── scan hist@idx_b
+ │    ├── stats: [rows=3.33333333]
+ │    └── select
  │         ├── columns: b:2(date!null) rowid:8(int!null)
- │         ├── constraint: /2/8: [/'2018-07-31' - /'2018-07-31']
- │         ├── stats: [rows=10, distinct(2)=1, null(2)=0, distinct(8)=10, null(8)=0]
- │         │   histogram(2)=  0       10
- │         │                <--- '2018-07-31'
+ │         ├── stats: [rows=3.33333333, distinct(2)=1, null(2)=0, distinct(8)=3.33333333, null(8)=0]
  │         ├── key: (8)
- │         └── fd: ()-->(2)
+ │         ├── fd: (8)-->(2)
+ │         ├── scan hist@idx_b
+ │         │    ├── columns: b:2(date!null) rowid:8(int!null)
+ │         │    ├── constraint: /2/8: [/'2018-06-30' - /'2018-06-30'] [/'2018-07-31' - /'2018-07-31']
+ │         │    ├── stats: [rows=10, distinct(2)=1, null(2)=0, distinct(8)=10, null(8)=0]
+ │         │    │   histogram(2)=  0       10
+ │         │    │                <--- '2018-07-31'
+ │         │    ├── key: (8)
+ │         │    └── fd: (8)-->(2)
+ │         └── filters
+ │              └── (b = '2018-06-30') OR (b = '2018-07-31') [type=bool, outer=(2), constraints=(/2: [/'2018-06-30' - /'2018-06-30'] [/'2018-07-31' - /'2018-07-31'])]
  └── filters
-      └── a = 20 [type=bool, outer=(1), constraints=(/1: [/20 - /20]; tight), fd=()-->(1)]
+      └── (a = 30) OR (a = 40) [type=bool, outer=(1), constraints=(/1: [/30 - /30] [/40 - /40])]

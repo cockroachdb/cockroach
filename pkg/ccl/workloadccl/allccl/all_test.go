@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -30,14 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-)
-
-const (
-	directIngestion  = true
-	oneFilePerNode   = 1
-	noInjectStats    = false
-	noSkipPostLoad   = false
-	skipCSVRoundtrip = ``
 )
 
 func bigInitialData(meta workload.Meta) bool {
@@ -51,6 +43,8 @@ func bigInitialData(meta workload.Meta) bool {
 
 func TestAllRegisteredImportFixture(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	sqlMemoryPoolSize := int64(1000 << 20) // 1GiB
 
 	for _, meta := range workload.Registered() {
 		meta := meta
@@ -89,16 +83,17 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-				UseDatabase: "d",
+				UseDatabase:       "d",
+				SQLMemoryPoolSize: sqlMemoryPoolSize,
 			})
 			defer s.Stopper().Stop(ctx)
 			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
 
-			if _, err := workloadccl.ImportFixture(
-				ctx, db, gen, `d`, directIngestion, oneFilePerNode, noInjectStats, noSkipPostLoad,
-				skipCSVRoundtrip,
-			); err != nil {
-				t.Fatal(err)
+			l := workloadccl.ImportDataLoader{
+				DirectIngestion: true,
+			}
+			if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
+				t.Fatalf(`%+v`, err)
 			}
 
 			// Run the consistency check if this workload has one.
@@ -152,8 +147,8 @@ func TestAllRegisteredSetup(t *testing.T) {
 			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
 			sqlutils.MakeSQLRunner(db).Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = false`)
 
-			const batchSize, concurrency = 0, 0
-			if _, err := workloadsql.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
+			var l workloadsql.InsertsDataLoader
+			if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
 				t.Fatalf(`%+v`, err)
 			}
 
@@ -200,7 +195,7 @@ func hashTableInitialData(
 		data.FillBatch(batchIdx, b, a)
 		for _, col := range b.ColVecs() {
 			switch col.Type() {
-			case types.Bool:
+			case coltypes.Bool:
 				for _, x := range col.Bool()[:b.Length()] {
 					if x {
 						scratch[0] = 1
@@ -209,20 +204,21 @@ func hashTableInitialData(
 					}
 					_, _ = h.Write(scratch[:1])
 				}
-			case types.Int64:
+			case coltypes.Int64:
 				for _, x := range col.Int64()[:b.Length()] {
 					binary.LittleEndian.PutUint64(scratch[:8], uint64(x))
 					_, _ = h.Write(scratch[:8])
 				}
-			case types.Float64:
+			case coltypes.Float64:
 				for _, x := range col.Float64()[:b.Length()] {
 					bits := math.Float64bits(x)
 					binary.LittleEndian.PutUint64(scratch[:8], bits)
 					_, _ = h.Write(scratch[:8])
 				}
-			case types.Bytes:
-				for _, x := range col.Bytes()[:b.Length()] {
-					_, _ = h.Write(x)
+			case coltypes.Bytes:
+				colBytes := col.Bytes()
+				for i := 0; i < int(b.Length()); i++ {
+					_, _ = h.Write(colBytes.Get(i))
 				}
 			default:
 				return errors.Errorf(`unhandled type %s`, col.Type())
@@ -249,7 +245,7 @@ func TestDeterministicInitialData(t *testing.T) {
 	// TODO(dan): We're starting to accumulate these various lists, bigInitialData
 	// is another. Consider moving them to be properties on the workload.Meta.
 	fingerprintGoldens := map[string]uint64{
-		`bank`:       0x1603d103c14d0364,
+		`bank`:       0x7b4d519ed8bd07ce,
 		`bulkingest`: 0xcf3e4028ac084aea,
 		`indexes`:    0xcbf29ce484222325,
 		`intro`:      0x81c6a8cfd9c3452a,

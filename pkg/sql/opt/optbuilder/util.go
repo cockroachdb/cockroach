@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,6 +54,9 @@ func getTypedExprs(exprs []tree.Expr) []tree.TypedExpr {
 func (b *Builder) expandStar(
 	expr tree.Expr, inScope *scope,
 ) (aliases []string, exprs []tree.TypedExpr) {
+	if b.insideViewDef {
+		panic(unimplemented.NewWithIssue(10028, "views do not currently support * expressions"))
+	}
 	switch t := expr.(type) {
 	case *tree.TupleStar:
 		texpr := inScope.resolveType(t.Expr, types.Any)
@@ -438,9 +442,6 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 		panic(err)
 	}
 
-	// Add dependency on this schema to the metadata, so that the metadata can be
-	// cached and later checked for freshness.
-	b.factory.Metadata().AddSchemaDependency(&name.TableNamePrefix, sch, privilege.CREATE)
 	return sch, resName
 }
 
@@ -461,14 +462,28 @@ func (b *Builder) resolveTable(
 // resolveDataSource returns the data source in the catalog with the given name.
 // If the name does not resolve to a table, or if the current user does not have
 // the given privilege, then resolveDataSource raises an error.
+//
+// If the b.qualifyDataSourceNamesInAST flag is set, tn is updated to contain
+// the fully qualified name.
 func (b *Builder) resolveDataSource(
 	tn *tree.TableName, priv privilege.Kind,
 ) (cat.DataSource, cat.DataSourceName) {
-	ds, resName, err := b.catalog.ResolveDataSource(b.ctx, cat.Flags{}, tn)
+	var flags cat.Flags
+	if b.insideViewDef {
+		// Avoid taking table leases when we're creating a view.
+		flags.AvoidDescriptorCaches = true
+	}
+	ds, resName, err := b.catalog.ResolveDataSource(b.ctx, flags, tn)
 	if err != nil {
 		panic(err)
 	}
-	b.checkPrivilege(tn, ds, priv)
+	b.checkPrivilege(opt.DepByName(tn), ds, priv)
+
+	if b.qualifyDataSourceNamesInAST {
+		*tn = resName
+		tn.ExplicitCatalog = true
+		tn.ExplicitSchema = true
+	}
 	return ds, resName
 }
 
@@ -477,11 +492,16 @@ func (b *Builder) resolveDataSource(
 // does not have the given privilege, then resolveDataSourceFromRef raises an
 // error.
 func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) cat.DataSource {
-	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, cat.StableID(ref.TableID))
+	var flags cat.Flags
+	if b.insideViewDef {
+		// Avoid taking table leases when we're creating a view.
+		flags.AvoidDescriptorCaches = true
+	}
+	ds, _, err := b.catalog.ResolveDataSourceByID(b.ctx, flags, cat.StableID(ref.TableID))
 	if err != nil {
 		panic(pgerror.Wrapf(err, pgcode.UndefinedObject, "%s", tree.ErrString(ref)))
 	}
-	b.checkPrivilege(ds.Name(), ds, priv)
+	b.checkPrivilege(opt.DepByID(cat.StableID(ref.TableID)), ds, priv)
 	return ds
 }
 
@@ -490,9 +510,7 @@ func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) 
 // error. It also adds the object and it's original unresolved name as a
 // dependency to the metadata, so that the privileges can be re-checked on reuse
 // of the memo.
-func (b *Builder) checkPrivilege(
-	origName *cat.DataSourceName, ds cat.DataSource, priv privilege.Kind,
-) {
+func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv privilege.Kind) {
 	if !(priv == privilege.SELECT && b.skipSelectPrivilegeChecks) {
 		err := b.catalog.CheckPrivilege(b.ctx, ds, priv)
 		if err != nil {
@@ -505,5 +523,5 @@ func (b *Builder) checkPrivilege(
 
 	// Add dependency on this object to the metadata, so that the metadata can be
 	// cached and later checked for freshness.
-	b.factory.Metadata().AddDataSourceDependency(origName, ds, priv)
+	b.factory.Metadata().AddDependency(name, ds, priv)
 }

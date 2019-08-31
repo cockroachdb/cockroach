@@ -12,24 +12,33 @@ package distsqlrun
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // TODO(radu): we currently create one batch at a time and run the KV operations
 // on this node. In the future we may want to build separate batches for the
 // nodes that "own" the respective ranges, and send out flows on those nodes.
 const joinReaderBatchSize = 100
+
+// partialJoinSentinel is used as the inputRowIdxToLookedUpRowIdx value for
+// semi- and anti-joins, where we only need to know about the existence of a
+// match.
+var partialJoinSentinel = []int{-1}
 
 // joinReaderState represents the state of the processor.
 type joinReaderState int
@@ -41,10 +50,6 @@ const (
 	// jrPerformingLookup means we are performing an index lookup for the current
 	// input row batch.
 	jrPerformingLookup
-	// jrCollectingOutputRows means we are collecting the result of the index
-	// lookup to be emitted, while preserving the order of the input, and
-	// optionally rendering rows for unmatched inputs for left outer joins.
-	jrCollectingOutputRows
 	// jrEmittingRows means we are emitting the results of the index lookup.
 	jrEmittingRows
 )
@@ -59,6 +64,8 @@ type joinReader struct {
 	// ProcessorBase.State - the runningState is only relevant when
 	// ProcessorBase.State == StateRunning.
 	runningState joinReaderState
+
+	diskMonitor *mon.BytesMonitor
 
 	desc      sqlbase.TableDescriptor
 	index     *sqlbase.IndexDescriptor
@@ -76,10 +83,6 @@ type joinReader struct {
 	// Column indexes in the input stream specifying the columns which match with
 	// the index columns. These are the equality columns of the join.
 	lookupCols columns
-	// indexFilter is the filter expression from the index's scanNode in a
-	// lookup join. It is applied to index rows before they are joined to the
-	// input rows.
-	indexFilter exprHelper
 	// indexTypes is an array of the types of the index we're looking up into,
 	// in the order of the columns in that index.
 	indexTypes []types.T
@@ -90,25 +93,37 @@ type joinReader struct {
 	batchSize int
 
 	// State variables for each batch of input rows.
-	inputRows               sqlbase.EncDatumRows
-	keyToInputRowIndices    map[string][]int
-	inputRowIdxToOutputRows []sqlbase.EncDatumRows
-	finalLookupBatch        bool
-	toEmit                  sqlbase.EncDatumRows
+	inputRows            sqlbase.EncDatumRows
+	lookedUpRows         rowcontainer.IndexedRowContainer
+	keyToInputRowIndices map[string][]int
+	// inputRowIdxToLookedUpRowIdx is a multimap from input row indices to
+	// corresponding looked up row indices. It's populated in the
+	// jrPerformingLookup state. For non partial joins (everything but semi/anti
+	// join), the looked up rows are the rows that came back from the lookup
+	// span for each input row, without checking for matches with respect to the
+	// on-condition. For semi/anti join, we store at most one sentinel value,
+	// indicating a matching lookup if it's present, since the right side of a
+	// semi/anti join is not used.
+	inputRowIdxToLookedUpRowIdx [][]int
+	// emitCursor contains information about where the next row to emit is within
+	// inputRowIdxToLookedUpRowIdx.
+	emitCursor struct {
+		// inputRowIdx contains the index into inputRowIdxToLookedUpRowIdx that
+		// we're about to emit.
+		inputRowIdx int
+		// outputRowIdx contains the index into the inputRowIdx'th row of
+		// inputRowIdxToLookedUpRowIdx that we're about to emit.
+		outputRowIdx int
+		// seenMatch is true if there was a match at the current inputRowIdx. A
+		// match means that there's no need to output an outer or anti join row.
+		seenMatch bool
+	}
 
 	// neededFamilies maintains what families we need to query from if our
 	// needed columns span multiple queries
 	neededFamilies []sqlbase.FamilyID
 
-	// A few scratch buffers, to avoid re-allocating.
-	lookupRows  []lookupRow
 	indexKeyRow sqlbase.EncDatumRow
-}
-
-// lookupRow represents an index key and the corresponding index row.
-type lookupRow struct {
-	key string
-	row sqlbase.EncDatumRow
 }
 
 var _ Processor = &joinReader{}
@@ -125,10 +140,6 @@ func newJoinReader(
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*joinReader, error) {
-	if spec.Visibility != distsqlpb.ScanVisibility_PUBLIC {
-		return nil, errors.AssertionFailedf("joinReader specified with visibility %+v", spec.Visibility)
-	}
-
 	jr := &joinReader{
 		desc:                 spec.Table,
 		input:                input,
@@ -144,13 +155,14 @@ func newJoinReader(
 	if err != nil {
 		return nil, err
 	}
-	jr.colIdxMap = jr.desc.ColumnIdxMap()
+	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	jr.colIdxMap = jr.desc.ColumnIdxMapWithMutations(returnMutations)
 
 	var columnIDs []sqlbase.ColumnID
 	columnIDs, jr.indexDirs = jr.index.FullColumnIDs()
 	indexCols := make([]uint32, len(columnIDs))
 	jr.indexTypes = make([]types.T, len(columnIDs))
-	columnTypes := jr.desc.ColumnTypesWithMutations(true)
+	columnTypes := jr.desc.ColumnTypesWithMutations(returnMutations)
 	for i, columnID := range columnIDs {
 		indexCols[i] = uint32(columnID)
 		jr.indexTypes[i] = columnTypes[jr.colIdxMap[columnID]]
@@ -172,14 +184,11 @@ func newJoinReader(
 		ProcStateOpts{
 			InputsToDrain: []RowSource{jr.input},
 			TrailingMetaCallback: func(ctx context.Context) []distsqlpb.ProducerMetadata {
-				jr.InternalClose()
+				jr.close()
 				return jr.generateMeta(ctx)
 			},
 		},
 	); err != nil {
-		return nil, err
-	}
-	if err := jr.indexFilter.init(spec.IndexFilterExpr, columnTypes, jr.evalCtx); err != nil {
 		return nil, err
 	}
 
@@ -188,15 +197,15 @@ func newJoinReader(
 		collectingStats = true
 	}
 
-	if isSecondary && !jr.neededRightCols().SubsetOf(getIndexColSet(jr.index, jr.colIdxMap)) {
+	neededRightCols := jr.neededRightCols()
+	if isSecondary && !neededRightCols.SubsetOf(getIndexColSet(jr.index, jr.colIdxMap)) {
 		return nil, errors.Errorf("joinreader index does not cover all columns")
 	}
 
 	var fetcher row.Fetcher
 	_, _, err = initRowFetcher(
 		&fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
-		jr.neededRightCols(), false /* isCheck */, &jr.alloc,
-		distsqlpb.ScanVisibility_PUBLIC,
+		neededRightCols, false /* isCheck */, &jr.alloc, spec.Visibility,
 	)
 	if err != nil {
 		return nil, err
@@ -216,6 +225,48 @@ func newJoinReader(
 		spec.Table.Families,
 		jr.neededRightCols(),
 	)
+
+	// Initialize memory monitors and row container for looked up rows.
+	st := flowCtx.Cfg.Settings
+	ctx := flowCtx.EvalCtx.Ctx()
+	if settingUseTempStorageJoins.Get(&st.SV) {
+		// Limit the memory use by creating a child monitor with a hard limit.
+		// joinReader will overflow to disk if this limit is not enough.
+		limit := flowCtx.Cfg.TestingKnobs.MemoryLimitBytes
+		if limit <= 0 {
+			limit = settingWorkMemBytes.Get(&st.SV)
+		}
+		limitedMon := mon.MakeMonitorInheritWithLimit("joinreader-limited", limit, flowCtx.EvalCtx.Mon)
+		limitedMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
+		jr.MemMonitor = &limitedMon
+		jr.diskMonitor = NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "joinreader-disk")
+		drc := rowcontainer.MakeDiskBackedIndexedRowContainer(
+			nil, /* ordering */
+			jr.desc.ColumnTypesWithMutations(returnMutations),
+			jr.evalCtx,
+			jr.flowCtx.Cfg.TempStorage,
+			jr.MemMonitor,
+			jr.diskMonitor,
+			0, /* rowCapacity */
+		)
+		if limit < mon.DefaultPoolAllocationSize {
+			// The memory limit is too low for caching, most likely to force disk
+			// spilling for testing.
+			drc.DisableCache = true
+		}
+		jr.lookedUpRows = drc
+	} else {
+		jr.MemMonitor = NewMonitor(ctx, flowCtx.EvalCtx.Mon, "joinreader-mem")
+		rc := rowcontainer.MemRowContainer{}
+		rc.InitWithMon(
+			nil, /* ordering */
+			jr.desc.ColumnTypesWithMutations(returnMutations),
+			jr.evalCtx,
+			jr.MemMonitor,
+			0, /* rowCapacity */
+		)
+		jr.lookedUpRows = &rc
+	}
 
 	// TODO(radu): verify the input types match the index key types
 	return jr, nil
@@ -258,11 +309,6 @@ func (jr *joinReader) neededRightCols() util.FastIntSet {
 		}
 	}
 
-	// Add columns needed by the index filter.
-	for _, v := range jr.indexFilter.vars.GetIndexedVars() {
-		neededRightCols.Add(v.Idx)
-	}
-
 	return neededRightCols
 }
 
@@ -290,11 +336,11 @@ func (jr *joinReader) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error
 func (jr *joinReader) maybeSplitSpanIntoSeparateFamilies(span roachpb.Span) roachpb.Spans {
 	// check the following:
 	// - we have more than one needed family
-	// - we are looking at a unique index
+	// - we are looking at the primary key
 	// - our table has more than the default family
 	// - we have all the columns of the index
 	if len(jr.neededFamilies) > 0 &&
-		jr.index.Unique &&
+		jr.index.ID == jr.desc.PrimaryIndex.ID &&
 		len(jr.lookupCols) == len(jr.index.ColumnIDs) &&
 		len(jr.neededFamilies) < len(jr.desc.Families) {
 		return sqlbase.SplitSpanIntoSeparateFamilies(span, jr.neededFamilies)
@@ -320,10 +366,8 @@ func (jr *joinReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) 
 			jr.runningState, meta = jr.readInput()
 		case jrPerformingLookup:
 			jr.runningState, meta = jr.performLookup()
-		case jrCollectingOutputRows:
-			jr.runningState = jr.collectOutputRows()
 		case jrEmittingRows:
-			jr.runningState, row = jr.emitRow()
+			jr.runningState, row, meta = jr.emitRow()
 		default:
 			log.Fatalf(jr.Ctx, "unsupported state: %d", jr.runningState)
 		}
@@ -368,13 +412,13 @@ func (jr *joinReader) readInput() (joinReaderState, *distsqlpb.ProducerMetadata)
 	// will allow us to preserve the order of the input in the face of multiple
 	// input rows having the same lookup keyspan, or if we're doing an outer join
 	// and we need to emit unmatched rows.
-	if len(jr.inputRowIdxToOutputRows) >= len(jr.inputRows) {
-		jr.inputRowIdxToOutputRows = jr.inputRowIdxToOutputRows[:len(jr.inputRows)]
-		for i := range jr.inputRowIdxToOutputRows {
-			jr.inputRowIdxToOutputRows[i] = nil
+	if cap(jr.inputRowIdxToLookedUpRowIdx) >= len(jr.inputRows) {
+		jr.inputRowIdxToLookedUpRowIdx = jr.inputRowIdxToLookedUpRowIdx[:len(jr.inputRows)]
+		for i := range jr.inputRowIdxToLookedUpRowIdx {
+			jr.inputRowIdxToLookedUpRowIdx[i] = jr.inputRowIdxToLookedUpRowIdx[i][:0]
 		}
 	} else {
-		jr.inputRowIdxToOutputRows = make([]sqlbase.EncDatumRows, len(jr.inputRows))
+		jr.inputRowIdxToLookedUpRowIdx = make([][]int, len(jr.inputRows))
 	}
 
 	// Start the index lookup. We maintain a map from index key to the
@@ -398,11 +442,15 @@ func (jr *joinReader) readInput() (joinReaderState, *distsqlpb.ProducerMetadata)
 	}
 	if len(spans) == 0 {
 		// All of the input rows were filtered out. Skip the index lookup.
-		jr.finalLookupBatch = true
-		return jrCollectingOutputRows, nil
+		return jrEmittingRows, nil
 	}
+	// Sort the spans so that we can rely upon the fetcher to limit the number of
+	// results per batch. It's safe to reorder the spans here because we already
+	// restore the original order of the output during the output collection
+	// phase.
+	sort.Sort(spans)
 	err := jr.fetcher.StartScan(
-		jr.Ctx, jr.flowCtx.txn, spans, false /* limitBatches */, 0, /* limitHint */
+		jr.Ctx, jr.flowCtx.txn, spans, true /* limitBatches */, 0, /* limitHint */
 		jr.flowCtx.traceKV)
 	if err != nil {
 		jr.MoveToDraining(err)
@@ -413,13 +461,14 @@ func (jr *joinReader) readInput() (joinReaderState, *distsqlpb.ProducerMetadata)
 }
 
 // performLookup reads the next batch of index rows, joins them to the
-// corresponding input rows, and adds the results to jr.inputRowIdxToOutputRows.
+// corresponding input rows, and adds the results to
+// jr.inputRowIdxToLookedUpRowIdx.
 func (jr *joinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetadata) {
-	jr.lookupRows = jr.lookupRows[:0]
 	nCols := len(jr.lookupCols)
 
-	// Read the next batch of index rows.
-	for len(jr.lookupRows) < jr.batchSize {
+	isJoinTypePartialJoin := jr.joinType == sqlbase.LeftSemiJoin || jr.joinType == sqlbase.LeftAntiJoin
+	// Read the entire set of rows looked up for the last input batch.
+	for lookedUpRowIdx := 0; ; lookedUpRowIdx++ {
 		// Construct a "partial key" of nCols, so we can match the key format that
 		// was stored in our keyToInputRowIndices map. This matches the format that
 		// is output in jr.generateSpan.
@@ -429,96 +478,131 @@ func (jr *joinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetad
 			return jrStateUnknown, jr.DrainHelper()
 		}
 
-		indexRow, meta := jr.fetcher.Next()
+		// Fetch the next row and copy it into the row container.
+		lookedUpRow, meta := jr.fetcher.Next()
 		if meta != nil {
 			jr.MoveToDraining(scrub.UnwrapScrubError(meta.Err))
 			return jrStateUnknown, jr.DrainHelper()
 		}
-		if indexRow == nil {
+		if lookedUpRow == nil {
 			// Done with this input batch.
-			jr.finalLookupBatch = true
 			break
 		}
-
-		jr.lookupRows = append(jr.lookupRows, lookupRow{key: string(key), row: jr.rowAlloc.CopyRow(indexRow)})
-	}
-
-	// Iterate over the lookup results, map them to the input rows, and emit the
-	// rendered rows.
-	isJoinTypeLeftSemiJoin := jr.joinType == sqlbase.LeftSemiJoin
-	for _, lookupRow := range jr.lookupRows {
-		if jr.indexFilter.expr != nil {
-			// Apply index filter.
-			res, err := jr.indexFilter.evalFilter(lookupRow.row)
-			if err != nil {
+		if !isJoinTypePartialJoin {
+			// Replace missing values with nulls to appease the row container.
+			for i := range lookedUpRow {
+				if lookedUpRow[i].IsUnset() {
+					lookedUpRow[i].Datum = tree.DNull
+				}
+			}
+			if err := jr.lookedUpRows.AddRow(jr.Ctx, lookedUpRow); err != nil {
 				jr.MoveToDraining(err)
 				return jrStateUnknown, jr.DrainHelper()
 			}
-			if !res {
-				continue
-			}
 		}
-		for _, inputRowIdx := range jr.keyToInputRowIndices[lookupRow.key] {
-			// Only add to output if joinType is not LeftSemiJoin or if we have not gotten the match
-			if !isJoinTypeLeftSemiJoin || len(jr.inputRowIdxToOutputRows[inputRowIdx]) == 0 {
-				renderedRow, err := jr.render(jr.inputRows[inputRowIdx], lookupRow.row)
-				if err != nil {
-					jr.MoveToDraining(err)
-					return jrStateUnknown, jr.DrainHelper()
-				}
-				if renderedRow != nil {
-					rowCopy := jr.out.rowAlloc.CopyRow(renderedRow)
-					jr.inputRowIdxToOutputRows[inputRowIdx] = append(
-						jr.inputRowIdxToOutputRows[inputRowIdx], rowCopy)
-				}
-			}
-		}
-	}
 
-	if jr.finalLookupBatch {
-		return jrCollectingOutputRows, nil
+		// Update our map from input rows to looked up rows.
+		for _, inputRowIdx := range jr.keyToInputRowIndices[string(key)] {
+			if isJoinTypePartialJoin {
+				// During a SemiJoin or AntiJoin, we only output if we've seen no match
+				// for this input row yet. Additionally, since we don't have to render
+				// anything to output a Semi or Anti join match, we can evaluate our
+				// on condition now and only buffer if we pass it.
+				if len(jr.inputRowIdxToLookedUpRowIdx[inputRowIdx]) == 0 {
+					renderedRow, err := jr.render(jr.inputRows[inputRowIdx], lookedUpRow)
+					if err != nil {
+						jr.MoveToDraining(err)
+						return jrStateUnknown, jr.DrainHelper()
+					}
+					if renderedRow == nil {
+						// We failed our on-condition - don't buffer anything.
+						continue
+					}
+					jr.inputRowIdxToLookedUpRowIdx[inputRowIdx] = partialJoinSentinel
+				}
+			} else {
+				jr.inputRowIdxToLookedUpRowIdx[inputRowIdx] = append(
+					jr.inputRowIdxToLookedUpRowIdx[inputRowIdx], lookedUpRowIdx)
+			}
+		}
 	}
 
 	return jrEmittingRows, nil
 }
 
-// collectOutputRows iterates over jr.inputRowIdxToOutputRows and adds output
-// rows to jr.Emit, rendering rows for unmatched inputs if the join is a left
-// outer join or left anti join, while preserving the input order.
-func (jr *joinReader) collectOutputRows() joinReaderState {
-	for i, outputRows := range jr.inputRowIdxToOutputRows {
-		if len(outputRows) == 0 {
-			if jr.joinType == sqlbase.LeftOuterJoin || jr.joinType == sqlbase.LeftAntiJoin {
-				if row := jr.renderUnmatchedRow(jr.inputRows[i], leftSide); row != nil {
-					jr.toEmit = append(jr.toEmit, jr.out.rowAlloc.CopyRow(row))
-				}
-			}
-		} else {
-			if jr.joinType != sqlbase.LeftAntiJoin {
-				jr.toEmit = append(jr.toEmit, outputRows...)
-			}
-		}
-	}
-	return jrEmittingRows
-}
-
 // emitRow returns the next row from jr.toEmit, if present. Otherwise it
 // prepares for another input batch.
-func (jr *joinReader) emitRow() (joinReaderState, sqlbase.EncDatumRow) {
-	if len(jr.toEmit) == 0 {
-		if jr.finalLookupBatch {
-			// Ready for another input batch. Reset state.
-			jr.inputRows = jr.inputRows[:0]
-			jr.keyToInputRowIndices = make(map[string][]int)
-			jr.finalLookupBatch = false
-			return jrReadingInput, nil
+func (jr *joinReader) emitRow() (
+	joinReaderState,
+	sqlbase.EncDatumRow,
+	*distsqlpb.ProducerMetadata,
+) {
+	// Loop until we find a valid row to emit, or the cursor runs off the end.
+	if jr.emitCursor.inputRowIdx >= len(jr.inputRowIdxToLookedUpRowIdx) {
+		// Ready for another input batch. Reset state.
+		jr.inputRows = jr.inputRows[:0]
+		jr.keyToInputRowIndices = make(map[string][]int)
+		jr.emitCursor.outputRowIdx = 0
+		jr.emitCursor.inputRowIdx = 0
+		jr.emitCursor.seenMatch = false
+		if err := jr.lookedUpRows.UnsafeReset(jr.Ctx); err != nil {
+			jr.MoveToDraining(err)
+			return jrStateUnknown, nil, jr.DrainHelper()
 		}
-		// Process the next index lookup batch.
-		return jrPerformingLookup, nil
+		return jrReadingInput, nil, nil
 	}
-	row := jr.toEmit[0]
-	jr.toEmit = jr.toEmit[1:]
-	return jrEmittingRows, row
+	inputRow := jr.inputRows[jr.emitCursor.inputRowIdx]
+	lookedUpRows := jr.inputRowIdxToLookedUpRowIdx[jr.emitCursor.inputRowIdx]
+	if jr.emitCursor.outputRowIdx >= len(lookedUpRows) {
+		// We have no more rows for the current input row. Emit an outer or anti
+		// row if we didn't see a match, and bump to the next input row.
+		jr.emitCursor.inputRowIdx++
+		jr.emitCursor.outputRowIdx = 0
+		seenMatch := jr.emitCursor.seenMatch
+		jr.emitCursor.seenMatch = false
+		if !seenMatch {
+			switch jr.joinType {
+			case sqlbase.LeftOuterJoin:
+				// An outer-join non-match means we emit the input row with NULLs for
+				// the right side (if it passes the ON-condition).
+				if renderedRow := jr.renderUnmatchedRow(inputRow, leftSide); renderedRow != nil {
+					return jrEmittingRows, renderedRow, nil
+				}
+			case sqlbase.LeftAntiJoin:
+				// An anti-join non-match means we emit the input row.
+				return jrEmittingRows, inputRow, nil
+			}
+		}
+		return jrEmittingRows, nil, nil
+	}
+
+	lookedUpRowIdx := lookedUpRows[jr.emitCursor.outputRowIdx]
+	jr.emitCursor.outputRowIdx++
+	switch jr.joinType {
+	case sqlbase.LeftSemiJoin:
+		// A semi-join match means we emit our input row.
+		jr.emitCursor.seenMatch = true
+		return jrEmittingRows, inputRow, nil
+	case sqlbase.LeftAntiJoin:
+		// An anti-join match means we emit nothing.
+		jr.emitCursor.seenMatch = true
+		return jrEmittingRows, nil, nil
+	}
+
+	lookedUpRow, err := jr.lookedUpRows.GetRow(jr.Ctx, lookedUpRowIdx)
+	if err != nil {
+		jr.MoveToDraining(err)
+		return jrStateUnknown, nil, jr.DrainHelper()
+	}
+	outputRow, err := jr.render(inputRow, lookedUpRow.(rowcontainer.IndexedRow).Row)
+	if err != nil {
+		jr.MoveToDraining(err)
+		return jrStateUnknown, nil, jr.DrainHelper()
+	}
+	if outputRow != nil {
+		jr.emitCursor.seenMatch = true
+	}
+	return jrEmittingRows, outputRow, nil
 }
 
 func (jr *joinReader) hasNullLookupColumn(row sqlbase.EncDatumRow) bool {
@@ -533,15 +617,28 @@ func (jr *joinReader) hasNullLookupColumn(row sqlbase.EncDatumRow) bool {
 // Start is part of the RowSource interface.
 func (jr *joinReader) Start(ctx context.Context) context.Context {
 	jr.input.Start(ctx)
+	ctx = jr.StartInternal(ctx, joinReaderProcName)
 	jr.fetcher.Start(ctx)
 	jr.runningState = jrReadingInput
-	return jr.StartInternal(ctx, joinReaderProcName)
+	return ctx
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (jr *joinReader) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	jr.InternalClose()
+	jr.close()
+}
+
+func (jr *joinReader) close() {
+	if jr.InternalClose() {
+		if jr.lookedUpRows != nil {
+			jr.lookedUpRows.Close(jr.Ctx)
+		}
+		jr.MemMonitor.Stop(jr.Ctx)
+		if jr.diskMonitor != nil {
+			jr.diskMonitor.Stop(jr.Ctx)
+		}
+	}
 }
 
 var _ distsqlpb.DistSQLSpanStats = &JoinReaderStats{}

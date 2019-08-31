@@ -13,16 +13,14 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
-	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
-	"github.com/lib/pq/oid"
 )
 
 // materializer converts an exec.Operator input into a RowSource.
@@ -32,13 +30,6 @@ type materializer struct {
 	input exec.Operator
 
 	da sqlbase.DatumAlloc
-
-	// outputToInputColIdx is a mapping from output row index to the operator's
-	// internal column schema. For example, if the input operator had 2 columns
-	// [a, b], and the desired output was just [b], outputToInputColIdx would be
-	// [1]: mapping the 0th column of the output row schema onto the 1st column
-	// of the operator's row schema.
-	outputToInputColIdx []int
 
 	// runtime fields --
 
@@ -50,23 +41,47 @@ type materializer struct {
 
 	// row is the memory used for the output row.
 	row sqlbase.EncDatumRow
+
+	// Fields to store the returned results of next() to be passed through an
+	// adapter.
+	outputRow      sqlbase.EncDatumRow
+	outputMetadata *distsqlpb.ProducerMetadata
+
+	// cancelFlow will return a function to cancel the context of the flow. It is
+	// a function in order to be lazily evaluated, since the context cancellation
+	// function is only available when Starting. This function differs from
+	// ctxCancel in that it will cancel all components of the materializer's flow,
+	// including those started asynchronously.
+	cancelFlow func() context.CancelFunc
 }
 
+const materializerProcName = "materializer"
+
+// newMaterializer creates a new materializer processor which processes the
+// columnar data coming from input to return it as rows.
+// Arguments:
+// - typs is the output types scheme.
+// - metadataSourcesQueue are all of the metadata sources that are planned on
+// the same node as the materializer and that need to be drained.
+// - outputStatsToTrace (when tracing is enabled) finishes the stats.
+// - cancelFlow should return the context cancellation function that cancels
+// the context of the flow (i.e. it is Flow.ctxCancel). It should only be
+// non-nil in case of a root materializer (i.e. not when we're wrapping a row
+// source).
 func newMaterializer(
 	flowCtx *FlowCtx,
 	processorID int32,
 	input exec.Operator,
 	typs []types.T,
-	outputToInputColIdx []int,
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
 	outputStatsToTrace func(),
+	cancelFlow func() context.CancelFunc,
 ) (*materializer, error) {
 	m := &materializer{
-		input:               input,
-		outputToInputColIdx: outputToInputColIdx,
-		row:                 make(sqlbase.EncDatumRow, len(outputToInputColIdx)),
+		input: input,
+		row:   make(sqlbase.EncDatumRow, len(typs)),
 	}
 
 	if err := m.ProcessorBase.Init(
@@ -83,6 +98,7 @@ func newMaterializer(
 				for _, src := range metadataSourcesQueue {
 					trailingMeta = append(trailingMeta, src.DrainMeta(ctx)...)
 				}
+				m.InternalClose()
 				return trailingMeta
 			},
 		},
@@ -90,30 +106,42 @@ func newMaterializer(
 		return nil, err
 	}
 	m.finishTrace = outputStatsToTrace
+	m.cancelFlow = cancelFlow
 	return m, nil
+}
+
+var _ exec.OpNode = &materializer{}
+
+func (m *materializer) ChildCount() int {
+	return 1
+}
+
+func (m *materializer) Child(nth int) exec.OpNode {
+	if nth == 0 {
+		return m.input
+	}
+	panic(fmt.Sprintf("invalid index %d", nth))
 }
 
 func (m *materializer) Start(ctx context.Context) context.Context {
 	m.input.Init()
-	m.Ctx = ctx
-	return ctx
+	return m.ProcessorBase.StartInternal(ctx, materializerProcName)
 }
 
-// nextBatch saves the next batch from input in m.batch. For internal use only.
-// The purpose of having this function is to not create an anonymous function
-// on every call to Next().
-func (m *materializer) nextBatch() {
-	m.batch = m.input.Next(m.Ctx)
+// nextAdapter calls next() and saves the returned results in m. For internal
+// use only. The purpose of having this function is to not create an anonymous
+// function on every call to Next().
+func (m *materializer) nextAdapter() {
+	m.outputRow, m.outputMetadata = m.next()
 }
 
-func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+// next is the logic of Next() extracted in a separate method to be used by an
+// adapter to be able to wrap the latter with a catcher.
+func (m *materializer) next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for m.State == StateRunning {
 		if m.batch == nil || m.curIdx >= m.batch.Length() {
 			// Get a fresh batch.
-			if err := exec.CatchVectorizedRuntimeError(m.nextBatch); err != nil {
-				m.MoveToDraining(err)
-				return nil, m.DrainHelper()
-			}
+			m.batch = m.input.Next(m.Ctx)
 
 			if m.batch.Length() == 0 {
 				m.MoveToDraining(nil /* err */)
@@ -130,60 +158,46 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 		m.curIdx++
 
 		typs := m.OutputTypes()
-		for outIdx, cIdx := range m.outputToInputColIdx {
-			col := m.batch.ColVec(cIdx)
+		for colIdx := 0; colIdx < len(typs); colIdx++ {
+			col := m.batch.ColVec(colIdx)
 			// TODO(asubiotto): we shouldn't have to do this check. Figure out who's
 			// not setting nulls.
 			if col.MaybeHasNulls() {
 				if col.Nulls().NullAt(rowIdx) {
-					m.row[outIdx].Datum = tree.DNull
+					m.row[colIdx].Datum = tree.DNull
 					continue
 				}
 			}
-
-			ct := typs[outIdx]
-			switch ct.Family() {
-			case types.BoolFamily:
-				if col.Bool()[rowIdx] {
-					m.row[outIdx].Datum = tree.DBoolTrue
-				} else {
-					m.row[outIdx].Datum = tree.DBoolFalse
-				}
-			case types.IntFamily:
-				switch ct.Width() {
-				case 8:
-					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int8()[rowIdx]))
-				case 16:
-					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int16()[rowIdx]))
-				case 32:
-					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int32()[rowIdx]))
-				default:
-					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int64()[rowIdx]))
-				}
-			case types.FloatFamily:
-				m.row[outIdx].Datum = m.da.NewDFloat(tree.DFloat(col.Float64()[rowIdx]))
-			case types.DecimalFamily:
-				m.row[outIdx].Datum = m.da.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]})
-			case types.DateFamily:
-				m.row[outIdx].Datum = tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(col.Int64()[rowIdx]))
-			case types.StringFamily:
-				b := col.Bytes()[rowIdx]
-				if ct.Oid() == oid.T_name {
-					m.row[outIdx].Datum = m.da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
-				} else {
-					m.row[outIdx].Datum = m.da.NewDName(tree.DString(*(*string)(unsafe.Pointer(&b))))
-				}
-			case types.BytesFamily:
-				m.row[outIdx].Datum = m.da.NewDBytes(tree.DBytes(col.Bytes()[rowIdx]))
-			case types.OidFamily:
-				m.row[outIdx].Datum = m.da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
-			default:
-				panic(fmt.Sprintf("Unsupported column type %s", ct.String()))
-			}
+			m.row[colIdx].Datum = exec.PhysicalTypeColElemToDatum(col, rowIdx, m.da, typs[colIdx])
 		}
 		return m.ProcessRowHelper(m.row), nil
 	}
 	return nil, m.DrainHelper()
+}
+
+func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+	if err := execerror.CatchVectorizedRuntimeError(m.nextAdapter); err != nil {
+		m.MoveToDraining(err)
+		return nil, m.DrainHelper()
+	}
+	return m.outputRow, m.outputMetadata
+}
+
+func (m *materializer) InternalClose() bool {
+	if m.ProcessorBase.InternalClose() {
+		if m.cancelFlow != nil {
+			m.cancelFlow()()
+		}
+		return true
+	}
+	return false
+}
+
+func (m *materializer) ConsumerDone() {
+	// Materializer will move into 'draining' state, and after all the metadata
+	// has been drained - as part of TrailingMetaCallback - InternalClose() will
+	// be called which will cancel the flow.
+	m.MoveToDraining(nil /* err */)
 }
 
 func (m *materializer) ConsumerClosed() {

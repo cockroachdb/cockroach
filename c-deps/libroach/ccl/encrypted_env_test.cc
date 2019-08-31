@@ -127,7 +127,7 @@ rocksdb::Status checkFileContents(rocksdb::Env* env, const std::string& filename
 
 };  // anonymous namespace
 
-TEST(EncryptedEnv, FileOps) {
+TEST(EncryptedEnv, BasicOps) {
   // Check various file operations against an encrypted env.
   // This exercises the env/file registry interaction.
   // We need to use a real underlying env as the MemEnv takes a **lot**
@@ -222,7 +222,113 @@ TEST(EncryptedEnv, FileOps) {
   EXPECT_OK(checkFileContents(encrypted_env.get(), file1, contents3));
   // Check with the plain env.
   EXPECT_OK(checkFileContents(env, file1, contents3));
-  // Try reading the still-encrypted file. We dropped the key on the floor.
-  EXPECT_ERR(checkFileContents(encrypted_env.get(), file2, contents),
-             "key_manager does not have a key with ID .*");
+  EXPECT_OK(checkFileContents(env, file2, contents3));
+}
+
+TEST(EncryptedEnv, ReuseWritableFileUnderlyingFailure) {
+  // Ensure all WALs are either empty or decryptable no matter when/whether
+  // `EncryptedEnv::ReuseWritableFile` fails. See comment above
+  // `EncryptedEnv::ReuseWritableFile`'s definition for details on why this
+  // guarantee is necessary for crash-safety.
+
+  // `ReuseWritableFileInjectionEnv` is used as the env underlying an
+  // `EncryptedEnv`. It injects faults in the operations used by
+  // `EncryptedEnv::ReuseWritableFile()`.
+  class ReuseWritableFileInjectionEnv : public rocksdb::EnvWrapper {
+   public:
+    enum class Mode {
+      kNone,
+      kFailCreation,
+      kFailDeletion,
+      kEnd,
+    };
+
+    explicit ReuseWritableFileInjectionEnv(Env* target) : EnvWrapper(target), mode_(Mode::kNone) {}
+
+    void set_mode(Mode mode) { mode_ = mode; }
+
+    rocksdb::Status NewWritableFile(const std::string& fname,
+                                    std::unique_ptr<rocksdb::WritableFile>* result,
+                                    const rocksdb::EnvOptions& options) override {
+      if (mode_ == Mode::kFailCreation) {
+        return rocksdb::Status::IOError("injected error");
+      }
+      return rocksdb::EnvWrapper::NewWritableFile(fname, result, options);
+    }
+
+    rocksdb::Status DeleteFile(const std::string& fname) override {
+      if (mode_ == Mode::kFailDeletion) {
+        return rocksdb::Status::IOError("injected error");
+      }
+      return rocksdb::EnvWrapper::DeleteFile(fname);
+    }
+
+   private:
+    Mode mode_;
+  };
+
+  for (int i = 0; i < static_cast<int>(ReuseWritableFileInjectionEnv::Mode::kEnd); ++i) {
+    auto mode = static_cast<ReuseWritableFileInjectionEnv::Mode>(i);
+    ReuseWritableFileInjectionEnv env(rocksdb::Env::Default());
+    auto key_manager = new MemKeyManager(MakeAES128Key(&env));
+    auto stream = new CTRCipherStreamCreator(key_manager, enginepb::Data);
+
+    auto tmpdir = std::unique_ptr<TempDirHandler>(new TempDirHandler());
+
+    auto file_registry = std::unique_ptr<FileRegistry>(
+        new FileRegistry(&env, tmpdir->Path(""), false /* read-only */));
+    EXPECT_OK(file_registry->Load());
+
+    std::unique_ptr<rocksdb::Env> encrypted_env(
+        rocksdb_utils::NewEncryptedEnv(&env, file_registry.get(), stream));
+
+    auto old_file = tmpdir->Path("foo1");
+    std::string contents("this is a file!");
+    ASSERT_OK(rocksdb::WriteStringToFile(encrypted_env.get(), contents, old_file, false));
+
+    auto new_file = tmpdir->Path("foo2");
+    env.set_mode(mode);
+    {
+      std::unique_ptr<rocksdb::WritableFile> res;
+      if (mode == ReuseWritableFileInjectionEnv::Mode::kNone) {
+        EXPECT_OK(
+            encrypted_env->ReuseWritableFile(new_file, old_file, &res, rocksdb::EnvOptions()));
+      } else {
+        EXPECT_TRUE(
+            encrypted_env->ReuseWritableFile(new_file, old_file, &res, rocksdb::EnvOptions())
+                .IsIOError());
+      }
+    }
+
+    switch (mode) {
+    case ReuseWritableFileInjectionEnv::Mode::kNone: {
+      // In success scenario, the new file should be empty and the old file should be deleted.
+      std::string new_file_contents;
+      EXPECT_OK(rocksdb::ReadFileToString(encrypted_env.get(), new_file, &new_file_contents));
+      EXPECT_STREQ("", new_file_contents.c_str());
+      EXPECT_TRUE(encrypted_env->FileExists(old_file).IsNotFound());
+      break;
+    }
+    case ReuseWritableFileInjectionEnv::Mode::kFailCreation:
+    case ReuseWritableFileInjectionEnv::Mode::kFailDeletion: {
+      // In failure scenarios, all existing files must be empty or readable.
+      for (const auto& file : {old_file, new_file}) {
+        auto exists_status = encrypted_env->FileExists(file);
+        if (exists_status.ok()) {
+          std::string file_contents;
+          rocksdb::ReadFileToString(encrypted_env.get(), file, &file_contents);
+          if (!file_contents.empty()) {
+            EXPECT_STREQ(contents.c_str(), file_contents.c_str());
+          }
+        } else {
+          EXPECT_TRUE(exists_status.IsNotFound());
+        }
+      }
+      break;
+    }
+    case ReuseWritableFileInjectionEnv::Mode::kEnd:
+      assert(false);
+      break;
+    }
+  }
 }

@@ -82,7 +82,9 @@ func TestAmbiguousCommit(t *testing.T) {
 		}
 
 		params.Knobs.KVClient = &kv.ClientTestingKnobs{
-			TransportFactory: func(opts kv.SendOptions, nodeDialer *nodedialer.Dialer, replicas kv.ReplicaSlice) (kv.Transport, error) {
+			TransportFactory: func(
+				opts kv.SendOptions, nodeDialer *nodedialer.Dialer, replicas kv.ReplicaSlice,
+			) (kv.Transport, error) {
 				transport, err := kv.GRPCTransportFactory(opts, nodeDialer, replicas)
 				return &interceptingTransport{
 					Transport: transport,
@@ -158,7 +160,7 @@ func TestAmbiguousCommit(t *testing.T) {
 		tableStartKey.Store(keys.MakeTablePrefix(tableID))
 
 		// Wait for new table to split & replication.
-		if err := tc.WaitForSplitAndReplication(tableStartKey.Load().([]byte)); err != nil {
+		if err := tc.WaitForSplitAndInitialization(tableStartKey.Load().([]byte)); err != nil {
 			t.Fatal(err)
 		}
 

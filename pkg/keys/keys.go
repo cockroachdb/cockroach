@@ -327,7 +327,7 @@ func RaftLastIndexKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RaftLastIndexKey()
 }
 
-// RaftLogPrefix returns the system-local prefix shared by all entries
+// RaftLogPrefix returns the system-local prefix shared by all Entries
 // in a Raft log.
 func RaftLogPrefix(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RaftLogPrefix()
@@ -401,6 +401,16 @@ func RangeDescriptorKey(key roachpb.RKey) roachpb.Key {
 	return MakeRangeKey(key, LocalRangeDescriptorSuffix, nil)
 }
 
+// RangeDescriptorJointKey returns a range-local key for the "joint descriptor"
+// for the range with specified key. This key is not versioned and it is set if
+// and only if the range is in a joint configuration that it yet has to transition
+// out of.
+func RangeDescriptorJointKey(key roachpb.RKey) roachpb.Key {
+	return MakeRangeKey(key, LocalRangeDescriptorJointSuffix, nil)
+}
+
+var _ = RangeDescriptorJointKey // silence unused check
+
 // TransactionKey returns a transaction key based on the provided
 // transaction key and ID. The base key is encoded in order to
 // guarantee that all transaction records for a range sort together.
@@ -447,7 +457,7 @@ func IsLocal(k roachpb.Key) bool {
 // However, not all local keys are addressable in the global map. Only range
 // local keys incorporating a range key (start key or transaction key) are
 // addressable (e.g. range metadata and txn records). Range local keys
-// incorporating the Range ID are not (e.g. AbortSpan entries, and range
+// incorporating the Range ID are not (e.g. AbortSpan Entries, and range
 // stats).
 //
 // See AddrUpperBound which is to be used when `k` is the EndKey of an interval.
@@ -804,12 +814,11 @@ func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 	return key[:idx], nil
 }
 
-// Range returns a key range encompassing the key ranges of all requests in the
-// Batch.
-func Range(ba roachpb.BatchRequest) (roachpb.RSpan, error) {
+// Range returns a key range encompassing the key ranges of all requests.
+func Range(reqs []roachpb.RequestUnion) (roachpb.RSpan, error) {
 	from := roachpb.RKeyMax
 	to := roachpb.RKeyMin
-	for _, arg := range ba.Requests {
+	for _, arg := range reqs {
 		req := arg.GetInner()
 		h := req.Header()
 		if !roachpb.IsRange(req) && len(h.EndKey) != 0 {
@@ -953,7 +962,7 @@ func (b RangeIDPrefixBuf) RaftLastIndexKey() roachpb.Key {
 	return append(b.unreplicatedPrefix(), LocalRaftLastIndexSuffix...)
 }
 
-// RaftLogPrefix returns the system-local prefix shared by all entries
+// RaftLogPrefix returns the system-local prefix shared by all Entries
 // in a Raft log.
 func (b RangeIDPrefixBuf) RaftLogPrefix() roachpb.Key {
 	return append(b.unreplicatedPrefix(), LocalRaftLogSuffix...)

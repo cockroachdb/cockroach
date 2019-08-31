@@ -105,9 +105,14 @@ type Catalog interface {
 	// locates a data source by its StableID. See the comment for StableID for
 	// more details.
 	//
+	// If the table is in the process of being added, returns an
+	// "undefined relation" error but also returns isAdding=true.
+	//
 	// NOTE: The returned data source must be immutable after construction, and
 	// so can be safely copied or used across goroutines.
-	ResolveDataSourceByID(ctx context.Context, id StableID) (DataSource, error)
+	ResolveDataSourceByID(
+		ctx context.Context, flags Flags, id StableID,
+	) (_ DataSource, isAdding bool, _ error)
 
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.
@@ -117,11 +122,19 @@ type Catalog interface {
 	// the given catalog object. If not, then CheckAnyPrivilege returns an error.
 	CheckAnyPrivilege(ctx context.Context, o Object) error
 
-	// IsSuperUser checks that the current user has admin privileges. If yes,
+	// HasAdminRole checks that the current user has admin privileges. If yes,
 	// returns true. Returns an error if query on the `system.users` table failed
-	IsSuperUser(ctx context.Context, action string) (bool, error)
+	HasAdminRole(ctx context.Context) (bool, error)
 
-	// RequireSuperUser checks that the current user has admin privileges. If not,
+	// RequireAdminRole checks that the current user has admin privileges. If not,
 	// returns an error.
-	RequireSuperUser(ctx context.Context, action string) error
+	RequireAdminRole(ctx context.Context, action string) error
+
+	// FullyQualifiedName retrieves the fully qualified name of a data source.
+	// Note that:
+	//  - this call may involve a database operation so it shouldn't be used in
+	//    performance sensitive paths;
+	//  - the fully qualified name of a data source object can change without the
+	//    object itself changing (e.g. when a database is renamed).
+	FullyQualifiedName(ctx context.Context, ds DataSource) (DataSourceName, error)
 }

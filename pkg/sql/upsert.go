@@ -133,7 +133,7 @@ func (p *planner) newUpsertNode(
 		// below.
 		updateExprs = newUpdateExprs
 
-		// We use ensureColumns = false in processColumns, because
+		// We use ensureColumns = false in ProcessTargetColumns, because
 		// updateCols may be legitimately empty (when there is no DO
 		// UPDATE clause).
 		//
@@ -142,7 +142,7 @@ func (p *planner) newUpsertNode(
 		// to include mutation columns being added. If the SET
 		// expressions were explicit (specified by the client),
 		// then we want to reject assignments to mutation columns.
-		updateCols, err := p.processColumns(desc, names,
+		updateCols, err := sqlbase.ProcessTargetColumns(desc, names,
 			false /* ensureColumns */, autoGenUpdates /* allowMutations */)
 		if err != nil {
 			return nil, err

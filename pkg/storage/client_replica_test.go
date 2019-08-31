@@ -50,6 +50,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func strToValue(s string) *roachpb.Value {
+	v := roachpb.MakeValueFromBytes([]byte(s))
+	return &v
+}
+
 // TestRangeCommandClockUpdate verifies that followers update their
 // clocks when executing a command, even if the lease holder's clock is far
 // in the future.
@@ -267,7 +272,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			}
 
 			updatedVal := []byte("updatedVal")
-			if err := txn.CPut(ctx, key, updatedVal, "initVal"); err != nil {
+			if err := txn.CPut(ctx, key, updatedVal, strToValue("initVal")); err != nil {
 				log.Errorf(context.TODO(), "failed put value: %+v", err)
 				return err
 			}
@@ -739,7 +744,7 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected %T, got %s", &roachpb.NotLeaseHolderError{}, pErr)
 		}
-		if *(nlhe.LeaseHolder) != l.replica1Desc {
+		if !nlhe.LeaseHolder.Equal(&l.replica1Desc) {
 			t.Fatalf("expected lease holder %+v, got %+v",
 				l.replica1Desc, nlhe.LeaseHolder)
 		}
@@ -829,7 +834,7 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected %T, got %s", &roachpb.NotLeaseHolderError{}, pErr)
 		}
-		if nlhe.LeaseHolder == nil || *nlhe.LeaseHolder != l.replica1Desc {
+		if nlhe.LeaseHolder == nil || !nlhe.LeaseHolder.Equal(&l.replica1Desc) {
 			t.Fatalf("expected lease holder %+v, got %+v",
 				l.replica1Desc, nlhe.LeaseHolder)
 		}
@@ -1326,7 +1331,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	// right answer immediately, since the old holder has definitely applied the
 	// transfer before TransferRangeLease returned.
 	leaseHolderReplica := LeaseInfo(t, kvDB0, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
-	if leaseHolderReplica != replicas[1] {
+	if !leaseHolderReplica.Equal(replicas[1]) {
 		t.Fatalf("lease holder should be replica %+v, but is: %+v",
 			replicas[1], leaseHolderReplica)
 	}
@@ -1339,7 +1344,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 		// unaware of the new lease and so the request might bounce around for a
 		// while (see #8816).
 		leaseHolderReplica = LeaseInfo(t, kvDB1, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
-		if leaseHolderReplica != replicas[1] {
+		if !leaseHolderReplica.Equal(replicas[1]) {
 			return errors.Errorf("lease holder should be replica %+v, but is: %+v",
 				replicas[1], leaseHolderReplica)
 		}
@@ -1378,7 +1383,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	resp := *(reply.(*roachpb.LeaseInfoResponse))
 	leaseHolderReplica = resp.Lease.Replica
 
-	if leaseHolderReplica != replicas[2] {
+	if !leaseHolderReplica.Equal(replicas[2]) {
 		t.Fatalf("lease holder should be replica %s, but is: %s", replicas[2], leaseHolderReplica)
 	}
 
@@ -1630,17 +1635,12 @@ func TestDrainRangeRejection(t *testing.T) {
 
 	drainingIdx := 1
 	mtc.stores[drainingIdx].SetDraining(true)
-	if _, err := repl.ChangeReplicas(
-		context.Background(),
-		roachpb.ADD_REPLICA,
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA,
 		roachpb.ReplicationTarget{
 			NodeID:  mtc.idents[drainingIdx].NodeID,
 			StoreID: mtc.idents[drainingIdx].StoreID,
-		},
-		repl.Desc(),
-		storagepb.ReasonRangeUnderReplicated,
-		"",
-	); !testutils.IsError(err, "store is draining") {
+		})
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
 		t.Fatalf("unexpected error: %+v", err)
 	}
 }
@@ -1657,36 +1657,23 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	}
 
 	oldGeneration := repl.Desc().GetGeneration()
-	if _, err := repl.ChangeReplicas(
-		context.Background(),
-		roachpb.ADD_REPLICA,
-		roachpb.ReplicationTarget{
-			NodeID:  mtc.idents[1].NodeID,
-			StoreID: mtc.idents[1].StoreID,
-		},
-		repl.Desc(),
-		storagepb.ReasonRangeUnderReplicated,
-		"",
-	); err != nil {
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+		NodeID:  mtc.idents[1].NodeID,
+		StoreID: mtc.idents[1].StoreID,
+	})
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+1)
+	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+2)
 
 	oldGeneration = repl.Desc().GetGeneration()
-	if _, err := repl.ChangeReplicas(
-		context.Background(),
-		roachpb.REMOVE_REPLICA,
-		roachpb.ReplicationTarget{
-			NodeID:  mtc.idents[1].NodeID,
-			StoreID: mtc.idents[1].StoreID,
-		},
-		repl.Desc(),
-		storagepb.ReasonRangeOverReplicated,
-		"",
-	); err != nil {
+	oldDesc := repl.Desc()
+	chgs[0].ChangeType = roachpb.REMOVE_REPLICA
+	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, storage.SnapshotRequest_REBALANCE, storagepb.ReasonRangeOverReplicated, "", chgs)
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+1)
+	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+1, "\nold: %+v\nnew: %+v", oldDesc, newDesc)
 }
 
 func TestSystemZoneConfigs(t *testing.T) {
@@ -1780,6 +1767,13 @@ func TestSystemZoneConfigs(t *testing.T) {
 	expectedReplicas -= 2
 	testutils.SucceedsSoon(t, waitForReplicas)
 	log.Info(ctx, "TestSystemZoneConfig: down-replication of timeseries ranges succeeded")
+
+	// Up-replicate the system.jobs table to demonstrate that it is configured
+	// independently from the system database.
+	sqlutils.SetZoneConfig(t, sqlDB, "TABLE system.jobs", "num_replicas: 7")
+	expectedReplicas += 2
+	testutils.SucceedsSoon(t, waitForReplicas)
+	log.Info(ctx, "TestSystemZoneConfig: up-replication of jobs table succeeded")
 
 	// Finally, verify the system ranges. Note that in a new cluster there are
 	// two system ranges, which we have to take into account here.
@@ -2038,12 +2032,12 @@ func TestConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		res1, err1 = db.AdminChangeReplicas(
-			ctx, key, roachpb.ADD_REPLICA, targets1, expects1)
+			ctx, key, expects1, roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, targets1...))
 		wg.Done()
 	}()
 	go func() {
 		res2, err2 = db.AdminChangeReplicas(
-			ctx, key, roachpb.ADD_REPLICA, targets2, expects2)
+			ctx, key, expects2, roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, targets2...))
 		wg.Done()
 	}()
 	wg.Wait()
@@ -2053,9 +2047,8 @@ func TestConcurrentAdminChangeReplicasRequests(t *testing.T) {
 
 	assert.Falsef(t, err1 == nil && err2 == nil,
 		"expected one of racing AdminChangeReplicasRequests to fail but neither did")
-	// It is possible that an error can occur due to a rejected preemptive
-	// snapshot from the target range. We don't want to fail the test if we got
-	// one of those.
+	// It is possible that an error can occur due to a rejected snapshot from the
+	// target range. We don't want to fail the test if we got one of those.
 	isSnapshotErr := func(err error) bool {
 		return testutils.IsError(err, "snapshot failed:")
 	}
@@ -2118,7 +2111,8 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	require.Nil(t, err)
 	addReplicas := func() error {
 		_, err := db.AdminChangeReplicas(
-			ctx, key, roachpb.ADD_REPLICA, pickTargets(), rangeInfo.Desc)
+			ctx, key, rangeInfo.Desc, roachpb.MakeReplicationChanges(
+				roachpb.ADD_REPLICA, pickTargets()...))
 		return err
 	}
 	wg.Add(actors)
@@ -2160,7 +2154,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	responseFilter := func(ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
 		if ba.IsSingleRequest() {
 			changeReplicas, ok := ba.Requests[0].GetInner().(*roachpb.AdminChangeReplicasRequest)
-			if ok && changeReplicas.ChangeType == roachpb.ADD_REPLICA && useSeenAdd.Load().(bool) {
+			if ok && changeReplicas.Changes()[0].ChangeType == roachpb.ADD_REPLICA && useSeenAdd.Load().(bool) {
 				seenAdd <- struct{}{}
 			}
 		}
@@ -2217,8 +2211,8 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	var changedDesc *roachpb.RangeDescriptor // only populated if changeErr == nil
 	change := func() {
 		<-seenAdd
-		changedDesc, changeErr = r1.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA,
-			makeReplicationTargets(2)[0], &expDescAfterAdd, "replicate", "testing")
+		chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, makeReplicationTargets(2)...)
+		changedDesc, changeErr = r1.ChangeReplicas(ctx, &expDescAfterAdd, storage.SnapshotRequest_REBALANCE, "replicate", "testing", chgs)
 	}
 	relocate := func() {
 		relocateErr = db.AdminRelocateRange(ctx, key, makeReplicationTargets(1, 2, 4))

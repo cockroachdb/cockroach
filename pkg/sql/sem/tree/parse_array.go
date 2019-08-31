@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 var enclosingError = pgerror.Newf(pgcode.InvalidTextRepresentation, "array must be enclosed in { and }")
@@ -71,10 +72,10 @@ func (p *parseState) gobbleString(isTerminatingChar func(ch byte) bool) (out str
 }
 
 type parseState struct {
-	s       string
-	evalCtx *EvalContext
-	result  *DArray
-	t       *types.T
+	s      string
+	ctx    ParseTimeContext
+	result *DArray
+	t      *types.T
 }
 
 func (p *parseState) advance() {
@@ -136,7 +137,10 @@ func (p *parseState) parseElement() error {
 		}
 	}
 
-	d, err := PerformCast(p.evalCtx, NewDString(next), p.t)
+	d, err := parseStringAs(p.t, next, p.ctx)
+	if d == nil && err == nil {
+		return errors.AssertionFailedf("unknown type %s (%T)", p.t, p.t)
+	}
 	if err != nil {
 		return err
 	}
@@ -144,13 +148,24 @@ func (p *parseState) parseElement() error {
 }
 
 // ParseDArrayFromString parses the string-form of constructing arrays, handling
-// cases such as `'{1,2,3}'::INT[]`.
-func ParseDArrayFromString(evalCtx *EvalContext, s string, t *types.T) (*DArray, error) {
+// cases such as `'{1,2,3}'::INT[]`. The input type t is the type of the
+// parameter of the array to parse.
+func ParseDArrayFromString(ctx ParseTimeContext, s string, t *types.T) (*DArray, error) {
+	ret, err := doParseDArrayFromString(ctx, s, t)
+	if err != nil {
+		return ret, makeParseError(s, types.MakeArray(t), err)
+	}
+	return ret, nil
+}
+
+// doParseDArraryFromString does most of the work of ParseDArrayFromString,
+// except the error it returns isn't prettified as a parsing error.
+func doParseDArrayFromString(ctx ParseTimeContext, s string, t *types.T) (*DArray, error) {
 	parser := parseState{
-		s:       s,
-		evalCtx: evalCtx,
-		result:  NewDArray(t),
-		t:       t,
+		s:      s,
+		ctx:    ctx,
+		result: NewDArray(t),
+		t:      t,
 	}
 
 	parser.eatWhitespace()

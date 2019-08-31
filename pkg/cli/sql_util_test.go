@@ -31,7 +31,7 @@ func TestConnRecover(t *testing.T) {
 	c := newCLITest(p)
 	defer c.cleanup()
 
-	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), t.Name(), url.User(security.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
@@ -95,7 +95,7 @@ func TestConnRecover(t *testing.T) {
 // number is selected randomly.
 func simulateServerRestart(c *cliTest, p cliTestParams, conn *sqlConn) func() {
 	c.restartServer(p)
-	url2, cleanup2 := sqlutils.PGUrl(c.t, c.ServingAddr(), c.t.Name(), url.User(security.RootUser))
+	url2, cleanup2 := sqlutils.PGUrl(c.t, c.ServingSQLAddr(), c.t.Name(), url.User(security.RootUser))
 	conn.url = url2.String()
 	return cleanup2
 }
@@ -106,7 +106,7 @@ func TestRunQuery(t *testing.T) {
 	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
 
-	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), t.Name(), url.User(security.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
@@ -227,7 +227,7 @@ func TestTransactionRetry(t *testing.T) {
 	c := newCLITest(p)
 	defer c.cleanup()
 
-	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), t.Name(), url.User(security.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())

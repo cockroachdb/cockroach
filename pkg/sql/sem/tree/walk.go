@@ -312,6 +312,16 @@ func (expr *FuncExpr) Walk(v Visitor) Expr {
 			ret.Filter = e
 		}
 	}
+
+	if expr.OrderBy != nil {
+		order, changed := walkOrderBy(v, expr.OrderBy)
+		if changed {
+			if ret == expr {
+				ret = expr.copyNode()
+			}
+			ret.OrderBy = order
+		}
+	}
 	return ret
 }
 
@@ -732,13 +742,13 @@ func (stmt *Backup) walkStmt(v Visitor) Statement {
 			ret.AsOf.Expr = e
 		}
 	}
-	{
-		e, changed := WalkExpr(v, stmt.To)
+	for i, expr := range stmt.To {
+		e, changed := WalkExpr(v, expr)
 		if changed {
 			if ret == stmt {
 				ret = stmt.copyNode()
 			}
-			ret.To = e
+			ret.To[i] = e
 		}
 	}
 	for i, expr := range stmt.IncrementalFrom {
@@ -957,7 +967,7 @@ func (stmt *ParenSelect) walkStmt(v Visitor) Statement {
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Restore) copyNode() *Restore {
 	stmtCopy := *stmt
-	stmtCopy.From = append(Exprs(nil), stmt.From...)
+	stmtCopy.From = append([]PartitionedBackup(nil), stmt.From...)
 	stmtCopy.Options = append(KVOptions(nil), stmt.Options...)
 	return &stmtCopy
 }
@@ -974,13 +984,15 @@ func (stmt *Restore) walkStmt(v Visitor) Statement {
 			ret.AsOf.Expr = e
 		}
 	}
-	for i, expr := range stmt.From {
-		e, changed := WalkExpr(v, expr)
-		if changed {
-			if ret == stmt {
-				ret = stmt.copyNode()
+	for i, backup := range stmt.From {
+		for j, expr := range backup {
+			e, changed := WalkExpr(v, expr)
+			if changed {
+				if ret == stmt {
+					ret = stmt.copyNode()
+				}
+				ret.From[i][j] = e
 			}
-			ret.From[i] = e
 		}
 	}
 	{
@@ -1073,7 +1085,7 @@ func (stmt *Select) walkStmt(v Visitor) Statement {
 func (stmt *SelectClause) copyNode() *SelectClause {
 	stmtCopy := *stmt
 	stmtCopy.Exprs = append(SelectExprs(nil), stmt.Exprs...)
-	stmtCopy.From = &From{
+	stmtCopy.From = From{
 		Tables: append(TableExprs(nil), stmt.From.Tables...),
 		AsOf:   stmt.From.AsOf,
 	}
@@ -1104,7 +1116,7 @@ func (stmt *SelectClause) walkStmt(v Visitor) Statement {
 		}
 	}
 
-	if stmt.From != nil && stmt.From.AsOf.Expr != nil {
+	if stmt.From.AsOf.Expr != nil {
 		e, changed := WalkExpr(v, stmt.From.AsOf.Expr)
 		if changed {
 			if ret == stmt {

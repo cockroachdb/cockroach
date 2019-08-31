@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 # This test verifies that we correctly perform an index join when the KV
 # batches span ranges. This is testing that SQL disables batch limits for index
 # join; otherwise it can get out of order results from KV that it can't handle.

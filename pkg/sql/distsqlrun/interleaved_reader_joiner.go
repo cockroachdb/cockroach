@@ -276,7 +276,7 @@ func newInterleavedReaderJoiner(
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*interleavedReaderJoiner, error) {
-	if flowCtx.nodeID == 0 {
+	if flowCtx.NodeID == 0 {
 		return nil, errors.AssertionFailedf("attempting to create an interleavedReaderJoiner with uninitialized NodeID")
 	}
 
@@ -430,7 +430,7 @@ func (irj *interleavedReaderJoiner) generateTrailingMeta(
 
 func (irj *interleavedReaderJoiner) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	var trailingMeta []distsqlpb.ProducerMetadata
-	ranges := misplannedRanges(ctx, irj.fetcher.GetRangesInfo(), irj.flowCtx.nodeID)
+	ranges := misplannedRanges(ctx, irj.fetcher.GetRangesInfo(), irj.flowCtx.NodeID)
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: ranges})
 	}

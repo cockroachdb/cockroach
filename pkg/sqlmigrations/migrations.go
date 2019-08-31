@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -205,6 +204,11 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// TODO(knz): bake this migration into v2.3.
 		name:   "propagate the ts purge interval to the new setting names",
 		workFn: retireOldTsPurgeIntervalSettings,
+	},
+	{
+		// Introduced in v19.2.
+		name:   "update system.locations with default location data",
+		workFn: updateSystemLocationData,
 	},
 }
 
@@ -550,8 +554,6 @@ func createCommentTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.CommentsTable)
 }
 
-var reportingOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
-
 func runStmtAsRootWithRetry(
 	ctx context.Context, r runner, opName string, stmt string, qargs ...interface{},
 ) error {
@@ -580,7 +582,7 @@ var SettingsDefaultOverrides = map[string]string{
 
 func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 	// We're opting-out of the automatic opt-in. See discussion in updates.go.
-	if reportingOptOut {
+	if cluster.TelemetryOptOut() {
 		return nil
 	}
 	return runStmtAsRootWithRetry(
@@ -745,7 +747,7 @@ func upgradeDescsWithFn(
 							// Use ValidateTable() instead of Validate()
 							// because of #26422. We still do not know why
 							// a table can reference a dropped database.
-							if err := table.ValidateTable(nil); err != nil {
+							if err := table.ValidateTable(); err != nil {
 								return err
 							}
 
@@ -916,5 +918,29 @@ ON CONFLICT (name) DO NOTHING`,
 		return err
 	}
 
+	return nil
+}
+
+func updateSystemLocationData(ctx context.Context, r runner) error {
+	// See if the system.locations table already has data in it.
+	// If so, we don't want to do anything.
+	row, err := r.sqlExecutor.QueryRow(ctx, "update-system-locations",
+		nil, `SELECT count(*) FROM system.locations`)
+	if err != nil {
+		return err
+	}
+	count := int(tree.MustBeDInt(row[0]))
+	if count != 0 {
+		return nil
+	}
+
+	for _, loc := range roachpb.DefaultLocationInformation {
+		stmt := `UPSERT INTO system.locations VALUES ($1, $2, $3, $4)`
+		tier := loc.Locality.Tiers[0]
+		if _, err := r.sqlExecutor.Exec(ctx, "update-system-locations", nil,
+			stmt, tier.Key, tier.Value, loc.Latitude, loc.Longitude); err != nil {
+			return err
+		}
+	}
 	return nil
 }

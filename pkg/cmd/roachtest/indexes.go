@@ -55,8 +55,8 @@ func registerNIndexes(r *testRegistry, secondaryIndexes int) {
 
 				payload := " --payload=256"
 				concurrency := ifLocal("", " --concurrency="+strconv.Itoa(nodes*32))
-				duration := " --duration=" + ifLocal("10s", "30m")
-				runCmd := fmt.Sprintf("./workload run indexes --histograms=logs/stats.json"+
+				duration := " --duration=" + ifLocal("10s", "10m")
+				runCmd := fmt.Sprintf("./workload run indexes --histograms="+perfArtifactsDir+"/stats.json"+
 					payload+concurrency+duration+" {pgurl%s}", gatewayNodes)
 				c.Run(ctx, loadNode, runCmd)
 				return nil

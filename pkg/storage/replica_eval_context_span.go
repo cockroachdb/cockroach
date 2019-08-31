@@ -83,6 +83,11 @@ func (rec *SpanSetReplicaEvalContext) NodeID() roachpb.NodeID {
 	return rec.i.NodeID()
 }
 
+// GetNodeLocality returns the node locality.
+func (rec *SpanSetReplicaEvalContext) GetNodeLocality() roachpb.Locality {
+	return rec.i.GetNodeLocality()
+}
+
 // Engine returns the engine.
 func (rec *SpanSetReplicaEvalContext) Engine() engine.Engine {
 	return rec.i.Engine()
@@ -159,15 +164,6 @@ func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {
 		roachpb.Span{Key: keys.RangeLastGCKey(rec.GetRangeID())},
 	)
 	return rec.i.GetGCThreshold()
-}
-
-// GetTxnSpanGCThreshold returns the time of the Replica's last
-// transaction span GC.
-func (rec SpanSetReplicaEvalContext) GetTxnSpanGCThreshold() hlc.Timestamp {
-	rec.ss.AssertAllowed(spanset.SpanReadOnly,
-		roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(rec.GetRangeID())},
-	)
-	return rec.i.GetTxnSpanGCThreshold()
 }
 
 // String implements Stringer.

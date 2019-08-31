@@ -85,7 +85,7 @@ func (p *planner) Delete(
 	}
 
 	// Find which table we're working on, check the permissions.
-	desc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, ResolveRequireTableDesc)
+	desc, err := ResolveExistingObject(ctx, p, tn, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +125,9 @@ func (p *planner) Delete(
 		requestedCols = desc.Columns
 	}
 
+	// Since all columns are being returned, use the 1:1 mapping. See todo above.
+	rowIdxToRetIdx := mutationRowIdxToReturnIdx(requestedCols, requestedCols)
+
 	// Create the table deleter, which does the bulk of the work.
 	rd, err := row.MakeDeleter(
 		p.txn, desc, fkTables, requestedCols, row.CheckFKs, p.EvalContext(), &p.alloc,
@@ -142,7 +145,7 @@ func (p *planner) Delete(
 	// being deleted. Also RETURNING will expose this.
 	rows, err := p.SelectClause(ctx, &tree.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(rd.FetchCols, true /* forUpdateOrDelete */),
-		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
+		From:  tree.From{Tables: []tree.TableExpr{n.Table}},
 		Where: n.Where,
 	}, n.OrderBy, n.Limit, nil /*with*/, nil /*desiredTypes*/, publicAndNonPublicColumns)
 	if err != nil {
@@ -175,6 +178,7 @@ func (p *planner) Delete(
 			td:                  tableDeleter{rd: rd, alloc: &p.alloc},
 			rowsNeeded:          rowsNeeded,
 			fastPathInterleaved: canDeleteFastInterleaved(desc, fkTables),
+			rowIdxToRetIdx:      rowIdxToRetIdx,
 		},
 	}
 
@@ -208,6 +212,13 @@ type deleteRun struct {
 
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
+
+	// rowIdxToRetIdx is the mapping from the columns returned by the deleter
+	// to the columns in the resultRowBuffer. A value of -1 is used to indicate
+	// that the column at that index is not part of the resultRowBuffer
+	// of the mutation. Otherwise, the value at the i-th index refers to the
+	// index of the resultRowBuffer where the i-th column is to be returned.
+	rowIdxToRetIdx []int
 }
 
 // maxDeleteBatchSize is the max number of entries in the KV batch for
@@ -331,9 +342,15 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		// contain additional columns for every newly dropped column not
 		// visible. We do not want them to be available for RETURNING.
 		//
-		// d.columns is guaranteed to only contain the requested
+		// d.run.rows.NumCols() is guaranteed to only contain the requested
 		// public columns.
-		resultValues := sourceVals[:len(d.columns)]
+		resultValues := make(tree.Datums, d.run.rows.NumCols())
+		for i, retIdx := range d.run.rowIdxToRetIdx {
+			if retIdx >= 0 {
+				resultValues[retIdx] = sourceVals[i]
+			}
+		}
+
 		if _, err := d.run.rows.AddRow(params.ctx, resultValues); err != nil {
 			return err
 		}
@@ -381,24 +398,26 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 	}
 
 	interleavedQueue := []sqlbase.ID{table.ID}
+	// interleavedIdxs will contain all of the table and index IDs of the indexes
+	// interleaved in any of the interleaved hierarchy of the input table.
+	interleavedIdxs := make(map[sqlbase.ID]map[sqlbase.IndexID]struct{})
 	for len(interleavedQueue) > 0 {
 		tableID := interleavedQueue[0]
 		interleavedQueue = interleavedQueue[1:]
 		if _, ok := fkTables[tableID]; !ok {
 			return false
 		}
-		if fkTables[tableID].Desc == nil {
+		tableDesc := fkTables[tableID].Desc
+		if tableDesc == nil {
 			return false
 		}
-		for _, idx := range fkTables[tableID].Desc.AllNonDropIndexes() {
+		for _, idx := range tableDesc.AllNonDropIndexes() {
 			// Don't allow any secondary indexes
 			// TODO(emmanuel): identify the cases where secondary indexes can still work with the fast path and allow them
-			if idx.ID != fkTables[tableID].Desc.PrimaryIndex.ID {
+			if idx.ID != tableDesc.PrimaryIndex.ID {
 				return false
 			}
 
-			// interleavedIdxs will contain all of the table and index IDs of the indexes interleaved in this one
-			interleavedIdxs := make(map[sqlbase.ID]map[sqlbase.IndexID]struct{})
 			for _, ref := range idx.InterleavedBy {
 				if _, ok := interleavedIdxs[ref.Table]; !ok {
 					interleavedIdxs[ref.Table] = make(map[sqlbase.IndexID]struct{})
@@ -406,30 +425,25 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 				interleavedIdxs[ref.Table][ref.Index] = struct{}{}
 
 			}
-			// The index can't be referenced by anything that's not the interleaved relationship
-			for _, ref := range idx.ReferencedBy {
-				if _, ok := interleavedIdxs[ref.Table]; !ok {
-					return false
-				}
-				if _, ok := interleavedIdxs[ref.Table][ref.Index]; !ok {
-					return false
-				}
-
-				referencingIdx, err := fkTables[ref.Table].Desc.FindIndexByID(ref.Index)
-				if err != nil {
-					return false
-				}
-
-				// All of these references MUST be ON DELETE CASCADE
-				if referencingIdx.ForeignKey.OnDelete != sqlbase.ForeignKeyReference_CASCADE {
-					return false
-				}
-			}
 
 			for _, ref := range idx.InterleavedBy {
 				interleavedQueue = append(interleavedQueue, ref.Table)
 			}
 
+		}
+
+		// The index can't be referenced by anything that's not the interleaved relationship.
+		for i := range tableDesc.InboundFKs {
+			fk := &tableDesc.InboundFKs[i]
+			if _, ok := interleavedIdxs[fk.OriginTableID]; !ok {
+				// This table is referenced by a foreign key that lives outside of the
+				// interleaved hierarchy, so we can't fast path delete.
+				return false
+			}
+			// All of these references MUST be ON DELETE CASCADE.
+			if fk.OnDelete != sqlbase.ForeignKeyReference_CASCADE {
+				return false
+			}
 		}
 	}
 	return true

@@ -41,34 +41,36 @@ func initializeNotifyQueue(q *notifyQueue) {
 
 var defaultNotifyQueueNodePool = newNotifyQueueNodePool()
 
-// enqueue adds c to the end of the queue.
-func (q *notifyQueue) enqueue(c chan struct{}) {
+// enqueue adds c to the end of the queue and returns the address of the added
+// notifyee.
+func (q *notifyQueue) enqueue(c chan struct{}) (n *notifyee) {
 	if q.head == nil {
 		q.head = q.pool.pool.Get().(*node)
 		q.head.prev = q.head
 		q.head.next = q.head
 	}
 	tail := q.head.prev
-	if !tail.enqueue(c) {
+	if n = tail.enqueue(c); n == nil {
 		newTail := q.pool.pool.Get().(*node)
 		tail.next = newTail
 		q.head.prev = newTail
 		newTail.prev = tail
 		newTail.next = q.head
-		if !newTail.enqueue(c) {
+		if n = newTail.enqueue(c); n == nil {
 			panic("failed to enqueue into a fresh buffer")
 		}
 	}
 	q.len++
+	return n
 }
 
-// dequeue removes and returns the head of the queue or nil if the queue is
-// empty.
-func (q *notifyQueue) dequeue() (c chan struct{}) {
+// dequeue removes the current head of the queue which can be accessed with
+// peek().
+func (q *notifyQueue) dequeue() {
 	if q.head == nil {
-		return nil
+		return
 	}
-	ret := q.head.dequeue()
+	q.head.dequeue()
 	if q.head.len == 0 {
 		oldHead := q.head
 		if oldHead.next == oldHead {
@@ -82,16 +84,16 @@ func (q *notifyQueue) dequeue() (c chan struct{}) {
 		q.pool.pool.Put(oldHead)
 	}
 	q.len--
-	return ret
 }
 
 // peek returns the current head of the queue or nil if the queue is empty.
-// It does not modify the queue.
-func (q *notifyQueue) peek() chan struct{} {
+// It does not modify the queue. It is illegal to use the returned pointer after
+// the next call to dequeue.
+func (q *notifyQueue) peek() *notifyee {
 	if q.head == nil {
 		return nil
 	}
-	return q.head.buf[q.head.head]
+	return &q.head.buf[q.head.head]
 }
 
 // notifyQueueNodePool constructs notifyQueue objects which internally pool
@@ -121,30 +123,33 @@ type node struct {
 	prev, next *node
 }
 
+type notifyee struct {
+	c chan struct{}
+}
+
 type ringBuf struct {
-	buf  [bufferSize]chan struct{}
+	buf  [bufferSize]notifyee
 	head int64
 	len  int64
 }
 
-func (rb *ringBuf) enqueue(c chan struct{}) (enqueued bool) {
+func (rb *ringBuf) enqueue(c chan struct{}) *notifyee {
 	if rb.len == bufferSize {
-		return false
+		return nil
 	}
-	rb.buf[(rb.head+rb.len)%bufferSize] = c
+	i := (rb.head + rb.len) % bufferSize
+	rb.buf[i] = notifyee{c: c}
 	rb.len++
-	return true
+	return &rb.buf[i]
 }
 
-func (rb *ringBuf) dequeue() chan struct{} {
+func (rb *ringBuf) dequeue() {
 	// NB: the notifyQueue never contains an empty ringBuf.
 	if rb.len == 0 {
 		panic("cannot dequeue from an empty buffer")
 	}
-	ret := rb.buf[rb.head]
-	rb.buf[rb.head] = nil
+	rb.buf[rb.head] = notifyee{}
 	rb.head++
 	rb.head %= bufferSize
 	rb.len--
-	return ret
 }

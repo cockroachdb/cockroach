@@ -74,6 +74,9 @@ type conn struct {
 	// stmtBuf is populated with commands queued for execution by this conn.
 	stmtBuf sql.StmtBuf
 
+	// res is used to avoid allocations in the conn's ClientComm implementation.
+	res commandResult
+
 	// err is an error, accessed atomically. It represents any error encountered
 	// while accessing the underlying network connection. This can read via
 	// GetErr() by anybody. If it is found to be != nil, the conn is no longer to
@@ -176,6 +179,7 @@ func newConn(
 		sv:          sv,
 	}
 	c.stmtBuf.Init()
+	c.res.released = true
 	c.writerState.fi.buf = &c.writerState.buf
 	c.writerState.fi.lastFlushed = -1
 	c.writerState.fi.cmdStarts = make(map[sql.CmdPos]int)
@@ -864,24 +868,24 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	lenCodes := numQArgFormatCodes
-	if lenCodes == 0 {
-		lenCodes = 1
-	}
-	qArgFormatCodes := make([]pgwirebase.FormatCode, lenCodes)
+	var qArgFormatCodes []pgwirebase.FormatCode
 	switch numQArgFormatCodes {
 	case 0:
 		// No format codes means all arguments are passed as text.
-		qArgFormatCodes[0] = pgwirebase.FormatText
+		qArgFormatCodes = []pgwirebase.FormatCode{
+			pgwirebase.FormatText,
+		}
 	case 1:
 		// `1` means read one code and apply it to every argument.
 		ch, err := buf.GetUint16()
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
-		fmtCode := pgwirebase.FormatCode(ch)
-		qArgFormatCodes[0] = fmtCode
+		qArgFormatCodes = []pgwirebase.FormatCode{
+			pgwirebase.FormatCode(ch),
+		}
 	default:
+		qArgFormatCodes = make([]pgwirebase.FormatCode, numQArgFormatCodes)
 		// Read one format code for each argument and apply it to that argument.
 		for i := range qArgFormatCodes {
 			code, err := buf.GetUint16()
@@ -929,17 +933,18 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 	switch numColumnFormatCodes {
 	case 0:
 		// All columns will use the text format.
-		columnFormatCodes = make([]pgwirebase.FormatCode, 1)
-		columnFormatCodes[0] = pgwirebase.FormatText
+		columnFormatCodes = []pgwirebase.FormatCode{
+			pgwirebase.FormatText,
+		}
 	case 1:
 		// All columns will use the one specficied format.
 		ch, err := buf.GetUint16()
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
-		fmtCode := pgwirebase.FormatCode(ch)
-		columnFormatCodes = make([]pgwirebase.FormatCode, 1)
-		columnFormatCodes[0] = fmtCode
+		columnFormatCodes = []pgwirebase.FormatCode{
+			pgwirebase.FormatCode(ch),
+		}
 	default:
 		columnFormatCodes = make([]pgwirebase.FormatCode, numColumnFormatCodes)
 		// Read one format code for each column and apply it to that column.
@@ -1132,6 +1137,13 @@ func (c *conn) bufferCommandComplete(tag []byte) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgCommandComplete)
 	c.msgBuilder.write(tag)
 	c.msgBuilder.nullTerminate()
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+	}
+}
+
+func (c *conn) bufferPortalSuspended() {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgPortalSuspended)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
 		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
 	}
@@ -1359,70 +1371,63 @@ func (c *conn) CreateStatementResult(
 	pos sql.CmdPos,
 	formatCodes []pgwirebase.FormatCode,
 	conv sessiondata.DataConversionConfig,
+	limit int,
+	portalName string,
+	implicitTxn bool,
 ) sql.CommandResult {
-	res := c.makeCommandResult(descOpt, pos, stmt, formatCodes, conv)
-	return &res
+	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv, limit, portalName, implicitTxn)
 }
 
 // CreateSyncResult is part of the sql.ClientComm interface.
 func (c *conn) CreateSyncResult(pos sql.CmdPos) sql.SyncResult {
-	res := c.makeMiscResult(pos, readyForQuery)
-	return &res
+	return c.newMiscResult(pos, readyForQuery)
 }
 
 // CreateFlushResult is part of the sql.ClientComm interface.
 func (c *conn) CreateFlushResult(pos sql.CmdPos) sql.FlushResult {
-	res := c.makeMiscResult(pos, flush)
-	return &res
+	return c.newMiscResult(pos, flush)
 }
 
 // CreateDrainResult is part of the sql.ClientComm interface.
 func (c *conn) CreateDrainResult(pos sql.CmdPos) sql.DrainResult {
-	res := c.makeMiscResult(pos, noCompletionMsg)
-	return &res
+	return c.newMiscResult(pos, noCompletionMsg)
 }
 
 // CreateBindResult is part of the sql.ClientComm interface.
 func (c *conn) CreateBindResult(pos sql.CmdPos) sql.BindResult {
-	res := c.makeMiscResult(pos, bindComplete)
-	return &res
+	return c.newMiscResult(pos, bindComplete)
 }
 
 // CreatePrepareResult is part of the sql.ClientComm interface.
 func (c *conn) CreatePrepareResult(pos sql.CmdPos) sql.ParseResult {
-	res := c.makeMiscResult(pos, parseComplete)
-	return &res
+	return c.newMiscResult(pos, parseComplete)
 }
 
 // CreateDescribeResult is part of the sql.ClientComm interface.
 func (c *conn) CreateDescribeResult(pos sql.CmdPos) sql.DescribeResult {
-	res := c.makeMiscResult(pos, noCompletionMsg)
-	return &res
+	return c.newMiscResult(pos, noCompletionMsg)
 }
 
 // CreateEmptyQueryResult is part of the sql.ClientComm interface.
 func (c *conn) CreateEmptyQueryResult(pos sql.CmdPos) sql.EmptyQueryResult {
-	res := c.makeMiscResult(pos, emptyQueryResponse)
-	return &res
+	return c.newMiscResult(pos, emptyQueryResponse)
 }
 
 // CreateDeleteResult is part of the sql.ClientComm interface.
 func (c *conn) CreateDeleteResult(pos sql.CmdPos) sql.DeleteResult {
-	res := c.makeMiscResult(pos, closeComplete)
-	return &res
+	return c.newMiscResult(pos, closeComplete)
 }
 
 // CreateErrorResult is part of the sql.ClientComm interface.
 func (c *conn) CreateErrorResult(pos sql.CmdPos) sql.ErrorResult {
-	res := c.makeMiscResult(pos, noCompletionMsg)
+	res := c.newMiscResult(pos, noCompletionMsg)
 	res.errExpected = true
-	return &res
+	return res
 }
 
 // CreateCopyInResult is part of the sql.ClientComm interface.
 func (c *conn) CreateCopyInResult(pos sql.CmdPos) sql.CopyInResult {
-	res := c.makeMiscResult(pos, noCompletionMsg)
-	return &res
+	return c.newMiscResult(pos, noCompletionMsg)
 }
 
 // pgwireReader is an io.Reader that wraps a conn, maintaining its metrics as

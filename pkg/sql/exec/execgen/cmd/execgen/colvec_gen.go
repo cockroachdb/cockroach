@@ -20,7 +20,7 @@ import (
 )
 
 func genColvec(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/sql/exec/coldata/vec_tmpl.go")
+	d, err := ioutil.ReadFile("pkg/col/coldata/vec_tmpl.go")
 	if err != nil {
 		return err
 	}
@@ -29,16 +29,20 @@ func genColvec(wr io.Writer) error {
 
 	// Replace the template variables.
 	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "types.{{.LTyp}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
+	s = replaceManipulationFuncs(".LTyp", s)
+
+	copyWithSel := makeFunctionRegex("_COPY_WITH_SEL", 6)
+	s = copyWithSel.ReplaceAllString(s, `{{template "copyWithSel" buildDict "LTyp" .LTyp "SelOnDest" $6}}`)
 
 	// Now, generate the op, from the template.
-	tmpl, err := template.New("vec_op").Parse(s)
+	tmpl, err := template.New("vec_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}
 
-	return tmpl.Execute(wr, comparisonOpToOverloads[tree.NE])
+	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.NE])
 }
 func init() {
 	registerGenerator(genColvec, "vec.eg.go")

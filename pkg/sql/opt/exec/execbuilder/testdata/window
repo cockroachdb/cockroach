@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 statement ok
 CREATE TABLE kv (
@@ -27,8 +27,9 @@ statement ok
 SET tracing = on,kv,results; SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k; SET tracing = off
 
 query T rowsort
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/primary/1/v -> /2
 fetched: /kv/primary/1/d -> 1
@@ -397,3 +398,31 @@ root                 ·             ·                                          
            └── scan  ·             ·                                                                          ()            ·
 ·                    table         kv@primary                                                                 ·             ·
 ·                    spans         ALL                                                                        ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE)
+    SELECT
+        avg(k) OVER (RANGE UNBOUNDED PRECEDING EXCLUDE CURRENT ROW),
+        avg(k) OVER (RANGE UNBOUNDED PRECEDING EXCLUDE GROUP),
+        avg(k) OVER (RANGE UNBOUNDED PRECEDING EXCLUDE TIES),
+        avg(k) OVER (RANGE UNBOUNDED PRECEDING EXCLUDE NO OTHERS)
+    FROM
+        kv
+----
+render          ·         ·                                                                                     (avg, avg, avg, avg)     ·
+ │              render 0  avg                                                                                   ·                        ·
+ │              render 1  avg                                                                                   ·                        ·
+ │              render 2  avg                                                                                   ·                        ·
+ │              render 3  avg                                                                                   ·                        ·
+ └── window     ·         ·                                                                                     (k, avg, avg, avg, avg)  ·
+      │         window 0  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE CURRENT ROW)  ·                        ·
+      │         window 1  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE GROUP)        ·                        ·
+      │         window 2  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE TIES)         ·                        ·
+      │         window 3  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)                      ·                        ·
+      │         render 1  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE CURRENT ROW)  ·                        ·
+      │         render 2  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE GROUP)        ·                        ·
+      │         render 3  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE TIES)         ·                        ·
+      │         render 4  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)                      ·                        ·
+      └── scan  ·         ·                                                                                     (k)                      ·
+·               table     kv@primary                                                                            ·                        ·
+·               spans     ALL                                                                                   ·                        ·

@@ -1,4 +1,4 @@
-# LogicTest: local local-opt
+# LogicTest: local
 
 statement ok
 CREATE DATABASE a
@@ -56,6 +56,7 @@ test           crdb_internal       node_queries                       public   S
 test           crdb_internal       node_runtime_info                  public   SELECT
 test           crdb_internal       node_sessions                      public   SELECT
 test           crdb_internal       node_statement_statistics          public   SELECT
+test           crdb_internal       node_txn_stats                     public   SELECT
 test           crdb_internal       partitions                         public   SELECT
 test           crdb_internal       predefined_comments                public   SELECT
 test           crdb_internal       ranges                             public   SELECT
@@ -96,10 +97,13 @@ test           pg_catalog          pg_am                              public   S
 test           pg_catalog          pg_attrdef                         public   SELECT
 test           pg_catalog          pg_attribute                       public   SELECT
 test           pg_catalog          pg_auth_members                    public   SELECT
+test           pg_catalog          pg_cast                            public   SELECT
 test           pg_catalog          pg_class                           public   SELECT
 test           pg_catalog          pg_collation                       public   SELECT
 test           pg_catalog          pg_constraint                      public   SELECT
+test           pg_catalog          pg_conversion                      public   SELECT
 test           pg_catalog          pg_database                        public   SELECT
+test           pg_catalog          pg_default_acl                     public   SELECT
 test           pg_catalog          pg_depend                          public   SELECT
 test           pg_catalog          pg_description                     public   SELECT
 test           pg_catalog          pg_enum                            public   SELECT
@@ -111,15 +115,20 @@ test           pg_catalog          pg_index                           public   S
 test           pg_catalog          pg_indexes                         public   SELECT
 test           pg_catalog          pg_inherits                        public   SELECT
 test           pg_catalog          pg_language                        public   SELECT
+test           pg_catalog          pg_locks                           public   SELECT
+test           pg_catalog          pg_matviews                        public   SELECT
 test           pg_catalog          pg_namespace                       public   SELECT
 test           pg_catalog          pg_operator                        public   SELECT
+test           pg_catalog          pg_prepared_xacts                  public   SELECT
 test           pg_catalog          pg_proc                            public   SELECT
 test           pg_catalog          pg_range                           public   SELECT
 test           pg_catalog          pg_rewrite                         public   SELECT
 test           pg_catalog          pg_roles                           public   SELECT
 test           pg_catalog          pg_seclabel                        public   SELECT
+test           pg_catalog          pg_seclabels                       public   SELECT
 test           pg_catalog          pg_sequence                        public   SELECT
 test           pg_catalog          pg_settings                        public   SELECT
+test           pg_catalog          pg_shdepend                        public   SELECT
 test           pg_catalog          pg_shdescription                   public   SELECT
 test           pg_catalog          pg_shseclabel                      public   SELECT
 test           pg_catalog          pg_stat_activity                   public   SELECT

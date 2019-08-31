@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 statement error pq: invalid locale bad_locale: language: subtag "locale" is well-formed but unknown
 SELECT 'a' COLLATE bad_locale
 
@@ -18,6 +16,21 @@ SELECT ('a' COLLATE en_u_ks_level1, 'a' COLLATE en) < ('A' COLLATE en, 'B' COLLA
 
 query T
 SELECT 'A' COLLATE en
+----
+A
+
+query T
+SELECT ('A' COLLATE de) COLLATE en
+----
+A
+
+query T
+SELECT NAME 'A' COLLATE en
+----
+A
+
+query T
+SELECT (NAME 'A' COLLATE de) COLLATE en
 ----
 A
 

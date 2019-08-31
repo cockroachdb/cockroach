@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,
@@ -613,3 +611,24 @@ SELECT * FROM abc WHERE (c IS NULL OR c=2) AND a>0
 1  1  NULL
 1  2  NULL
 2  2  2
+
+# Regression test for #38878 (incorrect span generation with OR and exclusive
+# string boundaries).
+statement ok
+CREATE TABLE t38878 (k1 STRING, k2 STRING, v INT, PRIMARY KEY (k1, k2))
+
+statement ok
+INSERT INTO t38878 VALUES ('a', 'u', 1), ('b', 'v', 2), ('c', 'w', 3), ('d', 'x', 4), ('d', 'x2', 5)
+
+query TTI rowsort
+SELECT * FROM t38878 WHERE k1 = 'b' OR (k1 > 'b' AND k1 < 'd')
+----
+b  v  2
+c  w  3
+
+query TTI rowsort
+SELECT * FROM t38878 WHERE (k1 = 'd' AND k2 = 'x') OR k1 = 'b' OR (k1 > 'b' AND k1 < 'd')
+----
+b  v  2
+c  w  3
+d  x  4

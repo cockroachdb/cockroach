@@ -16,9 +16,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 // TestLeaseTransferWithPipelinedWrite verifies that pipelined writes
@@ -103,4 +105,33 @@ func TestLeaseTransferWithPipelinedWrite(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestLeaseCommandLearnerReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	const voterStoreID, learnerStoreID roachpb.StoreID = 1, 2
+	replicas := []roachpb.ReplicaDescriptor{
+		{StoreID: voterStoreID, Type: roachpb.ReplicaTypeVoterFull()},
+		{StoreID: learnerStoreID, Type: roachpb.ReplicaTypeLearner()},
+	}
+	desc := roachpb.RangeDescriptor{}
+	desc.SetReplicas(roachpb.MakeReplicaDescriptors(replicas))
+	cArgs := CommandArgs{
+		EvalCtx: &mockEvalCtx{
+			storeID: learnerStoreID,
+			desc:    &desc,
+		},
+		Args: &roachpb.TransferLeaseRequest{},
+	}
+
+	// Learners are not allowed to become leaseholders for now, see the comments
+	// in TransferLease and RequestLease.
+	_, err := TransferLease(ctx, nil, cArgs, nil)
+	require.EqualError(t, err, `cannot transfer lease to replica of type LEARNER`)
+
+	cArgs.Args = &roachpb.RequestLeaseRequest{}
+	_, err = RequestLease(ctx, nil, cArgs, nil)
+	require.EqualError(t, err, `cannot transfer lease to replica of type LEARNER`)
 }

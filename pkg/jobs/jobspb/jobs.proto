@@ -33,7 +33,14 @@ message Lease {
 message BackupDetails {
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp end_time = 2 [(gogoproto.nullable) = false];
+  // URI is the URI for the main backup destination. For partitioned backups,
+  // the main BACKUP manifest and files with no other specified destination are
+  // written to this location. For regular backups, all files are written to
+  // this location.
   string uri = 3 [(gogoproto.customname) = "URI"];
+  // URIsByLocalityKV is a map of locality KVs to store URIs, used for
+  // partitioned backups.
+  map<string, string> uris_by_locality_kv = 5 [(gogoproto.customname) = "URIsByLocalityKV"];
   bytes backup_descriptor = 4;
 }
 
@@ -52,14 +59,22 @@ message RestoreDetails {
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
     ];
   }
+  message BackupLocalityInfo {
+    map<string, string> uris_by_original_locality_kv = 1 [(gogoproto.customname) = "URIsByOriginalLocalityKV"];
+  }
   reserved 1;
   util.hlc.Timestamp end_time = 4 [(gogoproto.nullable) = false];
   map<uint32, TableRewrite> table_rewrites = 2 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
   ];
+  // URIs contains one URI for each backup (full or incremental) corresponding
+  // to the location of the main BACKUP manifest. For partitioned backups, each
+  // backup may also have files in other stores.
   repeated string uris = 3 [(gogoproto.customname) = "URIs"];
+  repeated BackupLocalityInfo backup_locality_info = 7 [(gogoproto.nullable) = false];
   repeated sqlbase.TableDescriptor table_descs = 5;
   string override_db = 6 [(gogoproto.customname) = "OverrideDB"];
+  bool prepare_completed = 8;
 }
 
 message RestoreProgress {
@@ -72,6 +87,7 @@ message ImportDetails {
     string name = 18;
     int64 seq_val = 19;
     bool is_new = 20;
+    repeated string target_cols = 21;
     reserved 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17;
   }
   repeated Table tables = 1 [(gogoproto.nullable) = false];
@@ -81,6 +97,7 @@ message ImportDetails {
   int64 sst_size = 4 [(gogoproto.customname) = "SSTSize"];
   int64 oversample = 9;
   bool skip_fks = 10 [(gogoproto.customname) = "SkipFKs"];
+  bool prepare_complete = 12;
   int64 walltime = 5;
   uint32 parent_id = 6 [
     (gogoproto.customname) = "ParentID",
@@ -109,6 +126,11 @@ message ImportProgress {
   // This allows us to skip the shuffle stage for already-completed
   // spans when resuming an import job.
   repeated roachpb.Span span_progress = 4 [(gogoproto.nullable) = false];
+
+  // In direct-ingest import, once the KVs for i'th row of an input file have
+  // been flushed, we can advance the count here and then on resume skip over
+  // that many rows without needing to convert/process them at all.
+  repeated uint64 completed_row = 5; // Only set by direct import.
 }
 
 message ResumeSpanList {
@@ -200,15 +222,18 @@ message ChangefeedProgress {
 // collects table statistics, which contain info such as the number of rows in
 // the table or the number of distinct values in a column.
 message CreateStatsDetails {
-  message ColList {
-    repeated uint32 ids = 1 [
-      (gogoproto.customname) = "IDs",
+  message ColStat {
+    repeated uint32 column_ids = 1 [
+      (gogoproto.customname) = "ColumnIDs",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID"
     ];
+
+    // Indicates whether this column stat should include a histogram.
+    bool has_histogram = 2;
   }
   string name = 1;
   sqlbase.TableDescriptor table = 2 [(gogoproto.nullable) = false];
-  repeated ColList column_lists = 3 [(gogoproto.nullable) = false];
+  repeated ColStat column_stats = 3 [(gogoproto.nullable) = false];
   string statement = 4;
   util.hlc.Timestamp as_of = 5;
   double max_fraction_idle = 7;

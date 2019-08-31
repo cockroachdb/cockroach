@@ -10,7 +10,7 @@
 
 package exec
 
-import "github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+import "github.com/cockroachdb/cockroach/pkg/col/coldata"
 
 // newCountRowAgg creates a COUNT(*) aggregate, which counts every row in the
 // result unconditionally.
@@ -125,4 +125,8 @@ func (a *countAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			}
 		}
 	}
+}
+
+func (a *countAgg) HandleEmptyInputScalar() {
+	a.vec[0] = 0
 }

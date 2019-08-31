@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 statement ok
 CREATE TABLE kv2 (
@@ -16,36 +16,38 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM kv2; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv2/primary/'a' -> NULL
 fetched: /kv2/primary/'a'/v -> 'b'
-output row: ['a' 'b']
 fetched: /kv2/primary/'c' -> NULL
 fetched: /kv2/primary/'c'/v -> 'd'
-output row: ['c' 'd']
 fetched: /kv2/primary/'e' -> NULL
 fetched: /kv2/primary/'e'/v -> 'f'
-output row: ['e' 'f']
 fetched: /kv2/primary/'f' -> NULL
 fetched: /kv2/primary/'f'/v -> 'g'
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
 output row: ['f' 'g']
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM kv2@a; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv2/a/'b' -> /'a'
-output row: ['a' 'b']
 fetched: /kv2/a/'d' -> /'c'
-output row: ['c' 'd']
 fetched: /kv2/a/'f' -> /'e'
-output row: ['e' 'f']
 fetched: /kv2/a/'g' -> /'f'
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
 output row: ['f' 'g']
 
 statement error duplicate key value \(v\)=\('g'\) violates unique constraint "a"
@@ -55,36 +57,38 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM kv2; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv2/primary/'a' -> NULL
 fetched: /kv2/primary/'a'/v -> 'b'
-output row: ['a' 'b']
 fetched: /kv2/primary/'c' -> NULL
 fetched: /kv2/primary/'c'/v -> 'd'
-output row: ['c' 'd']
 fetched: /kv2/primary/'e' -> NULL
 fetched: /kv2/primary/'e'/v -> 'f'
-output row: ['e' 'f']
 fetched: /kv2/primary/'f' -> NULL
 fetched: /kv2/primary/'f'/v -> 'g'
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
 output row: ['f' 'g']
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM kv2@a; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv2/a/'b' -> /'a'
-output row: ['a' 'b']
 fetched: /kv2/a/'d' -> /'c'
-output row: ['c' 'd']
 fetched: /kv2/a/'f' -> /'e'
-output row: ['e' 'f']
 fetched: /kv2/a/'g' -> /'f'
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
 output row: ['f' 'g']
 
 statement ok
@@ -192,8 +196,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM pks WHERE k1 = 2; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /pks/primary/2/2 -> NULL
 fetched: /pks/primary/2/2/v -> 3
@@ -308,8 +313,8 @@ EXPLAIN (VERBOSE) SELECT * FROM [ UPDATE abc SET a=c RETURNING a ] ORDER BY a
 ----
 render                    ·         ·              (a)                       +a
  │                        render 0  a              ·                         ·
- └── run                  ·         ·              (a, b, c, rowid[hidden])  ·
-      └── update          ·         ·              (a, b, c, rowid[hidden])  ·
+ └── run                  ·         ·              (a, rowid[hidden])        ·
+      └── update          ·         ·              (a, rowid[hidden])        ·
            │              table     abc            ·                         ·
            │              set       a              ·                         ·
            │              strategy  updater        ·                         ·

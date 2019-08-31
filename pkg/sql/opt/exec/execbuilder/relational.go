@@ -11,10 +11,13 @@
 package execbuilder
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -66,7 +69,13 @@ type execPlan struct {
 // if the node outputs the same optimizer ColumnID multiple times.
 // TODO(justin): we should keep track of this instead of computing it each time.
 func (ep *execPlan) numOutputCols() int {
-	max, ok := ep.outputCols.MaxValue()
+	return numOutputColsInMap(ep.outputCols)
+}
+
+// numOutputColsInMap returns the number of slots required to fill in all of
+// the columns referred to by this ColMap.
+func numOutputColsInMap(m opt.ColMap) int {
+	max, ok := m.MaxValue()
 	if !ok {
 		return 0
 	}
@@ -146,11 +155,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	}
 
 	// Raise error if mutation op is part of a read-only transaction.
-	if opt.IsMutationOp(e) {
-		if b.evalCtx.TxnReadOnly {
-			return execPlan{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
-				"cannot execute %s in a read-only transaction", e.Op().SyntaxTag())
-		}
+	if opt.IsMutationOp(e) && b.evalCtx.TxnReadOnly {
+		return execPlan{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+			"cannot execute %s in a read-only transaction", b.statementTag(e))
 	}
 
 	// Collect usage telemetry for relational node, if appropriate.
@@ -162,8 +169,12 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 
 	var saveTableName string
 	if b.nameGen != nil {
-		// This function must be called in a pre-order traversal of the tree.
-		saveTableName = b.nameGen.GenerateName(e.Op())
+		// Don't save tables for operators that don't produce any columns (most
+		// importantly, for SET which is used to disable saving of tables).
+		if !e.Relational().OutputCols.Empty() {
+			// This function must be called in a pre-order traversal of the tree.
+			saveTableName = b.nameGen.GenerateName(e.Op())
+		}
 	}
 
 	// Handle read-only operators which never write data or modify schema.
@@ -237,14 +248,23 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.CreateTableExpr:
 		ep, err = b.buildCreateTable(t)
 
+	case *memo.CreateViewExpr:
+		ep, err = b.buildCreateView(t)
+
+	case *memo.WithExpr:
+		ep, err = b.buildWith(t)
+
+	case *memo.WithScanExpr:
+		ep, err = b.buildWithScan(t)
+
 	case *memo.ExplainExpr:
 		ep, err = b.buildExplain(t)
 
 	case *memo.ShowTraceForSessionExpr:
 		ep, err = b.buildShowTrace(t)
 
-	case *memo.OpaqueRelExpr:
-		ep, err = b.buildOpaque(t)
+	case *memo.OpaqueRelExpr, *memo.OpaqueMutationExpr, *memo.OpaqueDDLExpr:
+		ep, err = b.buildOpaque(t.Private().(*memo.OpaqueRelPrivate))
 
 	case *memo.AlterTableSplitExpr:
 		ep, err = b.buildAlterTableSplit(t)
@@ -257,6 +277,18 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 
 	case *memo.AlterTableRelocateExpr:
 		ep, err = b.buildAlterTableRelocate(t)
+
+	case *memo.ControlJobsExpr:
+		ep, err = b.buildControlJobs(t)
+
+	case *memo.CancelQueriesExpr:
+		ep, err = b.buildCancelQueries(t)
+
+	case *memo.CancelSessionsExpr:
+		ep, err = b.buildCancelSessions(t)
+
+	case *memo.ExportExpr:
+		ep, err = b.buildExport(t)
 
 	default:
 		if opt.IsSetOp(e) {
@@ -416,6 +448,13 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	needed, output := b.getColumns(scan.Cols, scan.Table)
 	res := execPlan{outputCols: output}
 
+	rowCount := scan.Relational().Stats.RowCount
+	if !scan.Relational().Stats.Available {
+		// When there are no statistics available, we construct a scan node with
+		// the estimated row count of zero rows.
+		rowCount = 0
+	}
+
 	root, err := b.factory.ConstructScan(
 		tab,
 		tab.Index(scan.Index),
@@ -426,6 +465,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		ordering.ScanIsReverse(scan, &scan.RequiredPhysical().Ordering),
 		b.indexConstraintMaxResults(scan),
 		res.reqOrdering(scan),
+		rowCount,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -496,6 +536,7 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
+
 	projections := prj.Projections
 	if len(projections) == 0 {
 		// We have only pass-through columns.
@@ -617,7 +658,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	allCols := joinOutputMap(left.outputCols, fakeRight.outputCols)
 
 	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, numOutputColsInMap(allCols)),
 		ivarMap: allCols,
 	}
 
@@ -727,8 +768,14 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 	rightOrd := right.sqlOrdering(join.RightEq)
 	ep := execPlan{outputCols: outputCols}
 	reqOrd := ep.reqOrdering(join)
+	leftEqColsAreKey := join.Left.Relational().FuncDeps.ColsAreStrictKey(join.LeftEq.ColSet())
+	rightEqColsAreKey := join.Right.Relational().FuncDeps.ColsAreStrictKey(join.RightEq.ColSet())
 	ep.root, err = b.factory.ConstructMergeJoin(
-		joinType, left.root, right.root, onExpr, leftOrd, rightOrd, reqOrd,
+		joinType,
+		left.root, right.root,
+		onExpr,
+		leftOrd, rightOrd, reqOrd,
+		leftEqColsAreKey, rightEqColsAreKey,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -755,7 +802,7 @@ func (b *Builder) initJoinBuild(
 	allCols := joinOutputMap(leftPlan.outputCols, rightPlan.outputCols)
 
 	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, numOutputColsInMap(allCols)),
 		ivarMap: allCols,
 	}
 
@@ -776,7 +823,8 @@ func (b *Builder) initJoinBuild(
 // joinOutputMap determines the outputCols map for a (non-semi/anti) join, given
 // the outputCols maps for its inputs.
 func joinOutputMap(left, right opt.ColMap) opt.ColMap {
-	numLeftCols := left.Len()
+	numLeftCols := numOutputColsInMap(left)
+
 	res := left.Copy()
 	right.ForEach(func(colIdx, rightIdx int) {
 		res.Set(colIdx, rightIdx+numLeftCols)
@@ -792,10 +840,10 @@ func joinOpToJoinType(op opt.Operator) sqlbase.JoinType {
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		return sqlbase.LeftOuterJoin
 
-	case opt.RightJoinOp, opt.RightJoinApplyOp:
+	case opt.RightJoinOp:
 		return sqlbase.RightOuterJoin
 
-	case opt.FullJoinOp, opt.FullJoinApplyOp:
+	case opt.FullJoinOp:
 		return sqlbase.FullOuterJoin
 
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
@@ -820,7 +868,7 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 	groupingColIdx := make([]exec.ColumnOrdinal, 0, groupingCols.Len())
 	for i, ok := groupingCols.Next(0); ok; i, ok = groupingCols.Next(i + 1) {
 		ep.outputCols.Set(int(i), len(groupingColIdx))
-		groupingColIdx = append(groupingColIdx, input.getColumnOrdinal(opt.ColumnID(i)))
+		groupingColIdx = append(groupingColIdx, input.getColumnOrdinal(i))
 	}
 
 	aggregations := *groupBy.Child(1).(*memo.AggregationsExpr)
@@ -1321,6 +1369,104 @@ func (b *Builder) buildMax1Row(max1Row *memo.Max1RowExpr) (execPlan, error) {
 
 }
 
+func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
+	value, err := b.buildRelational(with.Binding)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	var label bytes.Buffer
+	fmt.Fprintf(&label, "buffer %d", with.ID)
+	if with.Name != "" {
+		fmt.Fprintf(&label, " (%s)", with.Name)
+	}
+
+	buffer, err := b.factory.ConstructBuffer(value.root, label.String())
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// TODO(justin): if the binding here has a spoolNode at its root, we can
+	// remove it, since subquery execution also guarantees complete execution.
+
+	// Add the buffer as a subquery so it gets executed ahead of time, and is
+	// available to be referenced by other queries.
+	b.subqueries = append(b.subqueries, exec.Subquery{
+		ExprNode: &tree.Subquery{
+			Select: with.OriginalExpr.Select,
+		},
+		// TODO(justin): this is wasteful: both the subquery and the bufferNode
+		// will buffer up all the results.  This should be fixed by either making
+		// the buffer point directly to the subquery results or adding a new
+		// subquery mode that reads and discards all rows. This could possibly also
+		// be fixed by ensuring that bufferNode exhausts its input (and forcing it
+		// to behave like a spoolNode) and using the EXISTS mode.
+		Mode: exec.SubqueryAllRows,
+		Root: buffer,
+	})
+
+	b.addBuiltWithExpr(with.ID, value.outputCols, buffer)
+
+	return b.buildRelational(with.Input)
+}
+
+func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
+	id := withScan.ID
+	var e *builtWithExpr
+	for i := range b.withExprs {
+		if b.withExprs[i].id == id {
+			e = &b.withExprs[i]
+			break
+		}
+	}
+	if e == nil {
+		panic(errors.AssertionFailedf("couldn't find With expression with ID %d", id))
+	}
+
+	var label bytes.Buffer
+	fmt.Fprintf(&label, "buffer %d", withScan.ID)
+	if withScan.Name != "" {
+		fmt.Fprintf(&label, " (%s)", withScan.Name)
+	}
+
+	node, err := b.factory.ConstructScanBuffer(e.bufferNode, label.String())
+	if err != nil {
+		return execPlan{}, err
+	}
+	res := execPlan{root: node}
+
+	if maxVal, _ := e.outputCols.MaxValue(); len(withScan.InCols) == maxVal+1 {
+		// We are outputting all columns. Just set up the map.
+
+		// The ColumnIDs from the With expression need to get remapped according to
+		// the mapping in the withScan to get the actual colMap for this expression.
+		for i := range withScan.InCols {
+			idx, _ := e.outputCols.Get(int(withScan.InCols[i]))
+			res.outputCols.Set(int(withScan.OutCols[i]), idx)
+		}
+	} else {
+		// We need a projection.
+		cols := make([]exec.ColumnOrdinal, len(withScan.InCols))
+		for i := range withScan.InCols {
+			col, ok := e.outputCols.Get(int(withScan.InCols[i]))
+			if !ok {
+				panic(errors.AssertionFailedf("column %d not in input", log.Safe(withScan.InCols[i])))
+			}
+			cols[i] = exec.ColumnOrdinal(col)
+			res.outputCols.Set(int(withScan.OutCols[i]), i)
+		}
+		res.root, err = b.factory.ConstructSimpleProject(
+			res.root, cols, nil, /* colNames */
+			exec.OutputOrdering(res.sqlOrdering(withScan.ProvidedPhysical().Ordering)),
+		)
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
+	return res, nil
+
+}
+
 func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, error) {
 	input, err := b.buildRelational(projectSet.Input)
 	if err != nil {
@@ -1434,6 +1580,7 @@ func (b *Builder) buildFrame(input execPlan, w *memo.WindowsItem) (*tree.WindowF
 				BoundType: w.Frame.EndBoundType,
 			},
 		},
+		Exclusion: w.Frame.FrameExclusion,
 	}
 	if boundExpr, ok := b.extractFromOffset(w.Function); ok {
 		if !b.isOffsetMode(w.Frame.StartBoundType) {
@@ -1651,7 +1798,7 @@ func (b *Builder) applySaveTable(
 	return input, err
 }
 
-func (b *Builder) buildOpaque(opaque *memo.OpaqueRelExpr) (execPlan, error) {
+func (b *Builder) buildOpaque(opaque *memo.OpaqueRelPrivate) (execPlan, error) {
 	node, err := b.factory.ConstructOpaque(opaque.Metadata)
 	if err != nil {
 		return execPlan{}, err
@@ -1742,26 +1889,25 @@ func (b *Builder) getEnvData() exec.ExplainEnvData {
 	// Catalog objects can show up multiple times in these lists, so
 	// deduplicate them.
 	seen := make(map[tree.TableName]bool)
-	for _, t := range b.mem.Metadata().AllTables() {
-		tn := *t.Table.Name()
+	addDS := func(list []tree.TableName, ds cat.DataSource) []tree.TableName {
+		tn, err := b.catalog.FullyQualifiedName(context.TODO(), ds)
+		if err != nil {
+			panic(err)
+		}
 		if !seen[tn] {
 			seen[tn] = true
-			envOpts.Tables = append(envOpts.Tables, tn)
+			list = append(list, tn)
 		}
+		return list
+	}
+	for _, t := range b.mem.Metadata().AllTables() {
+		envOpts.Tables = addDS(envOpts.Tables, t.Table)
 	}
 	for _, s := range b.mem.Metadata().AllSequences() {
-		tn := *s.Name()
-		if !seen[tn] {
-			seen[tn] = true
-			envOpts.Sequences = append(envOpts.Sequences, tn)
-		}
+		envOpts.Sequences = addDS(envOpts.Sequences, s)
 	}
 	for _, v := range b.mem.Metadata().AllViews() {
-		tn := *v.Name()
-		if !seen[tn] {
-			seen[tn] = true
-			envOpts.Views = append(envOpts.Views, tn)
-		}
+		envOpts.Views = addDS(envOpts.Views, v)
 	}
 
 	return envOpts
@@ -1775,4 +1921,16 @@ func (b *Builder) buildSortedInput(input execPlan, ordering opt.Ordering) (execP
 		return execPlan{}, err
 	}
 	return execPlan{root: node, outputCols: input.outputCols}, nil
+}
+
+// statementTag returns a string that can be used in an error message regarding
+// the given expression.
+func (b *Builder) statementTag(expr memo.RelExpr) string {
+	switch expr.Op() {
+	case opt.OpaqueRelOp, opt.OpaqueMutationOp, opt.OpaqueDDLOp:
+		return expr.Private().(*memo.OpaqueRelPrivate).Metadata.String()
+
+	default:
+		return expr.Op().SyntaxTag()
+	}
 }

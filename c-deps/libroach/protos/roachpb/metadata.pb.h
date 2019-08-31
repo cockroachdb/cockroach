@@ -114,12 +114,14 @@ namespace cockroach {
 namespace roachpb {
 
 enum ReplicaType {
-  VOTER = 0,
+  VOTER_FULL = 0,
+  VOTER_INCOMING = 2,
+  VOTER_OUTGOING = 3,
   LEARNER = 1
 };
 bool ReplicaType_IsValid(int value);
-const ReplicaType ReplicaType_MIN = VOTER;
-const ReplicaType ReplicaType_MAX = LEARNER;
+const ReplicaType ReplicaType_MIN = VOTER_FULL;
+const ReplicaType ReplicaType_MAX = VOTER_OUTGOING;
 const int ReplicaType_ARRAYSIZE = ReplicaType_MAX + 1;
 
 // ===================================================================
@@ -1308,6 +1310,20 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::std::string* release_build_tag();
   void set_allocated_build_tag(::std::string* build_tag);
 
+  bool has_cluster_name() const;
+  void clear_cluster_name();
+  static const int kClusterNameFieldNumber = 9;
+  const ::std::string& cluster_name() const;
+  void set_cluster_name(const ::std::string& value);
+  #if LANG_CXX11
+  void set_cluster_name(::std::string&& value);
+  #endif
+  void set_cluster_name(const char* value);
+  void set_cluster_name(const char* value, size_t size);
+  ::std::string* mutable_cluster_name();
+  ::std::string* release_cluster_name();
+  void set_allocated_cluster_name(::std::string* cluster_name);
+
   bool has_address() const;
   void clear_address();
   static const int kAddressFieldNumber = 2;
@@ -1352,6 +1368,17 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::roachpb::Version* mutable_serverversion();
   void set_allocated_serverversion(::cockroach::roachpb::Version* serverversion);
 
+  bool has_sql_address() const;
+  void clear_sql_address();
+  static const int kSqlAddressFieldNumber = 10;
+  private:
+  const ::cockroach::util::UnresolvedAddr& _internal_sql_address() const;
+  public:
+  const ::cockroach::util::UnresolvedAddr& sql_address() const;
+  ::cockroach::util::UnresolvedAddr* release_sql_address();
+  ::cockroach::util::UnresolvedAddr* mutable_sql_address();
+  void set_allocated_sql_address(::cockroach::util::UnresolvedAddr* sql_address);
+
   bool has_started_at() const;
   void clear_started_at();
   static const int kStartedAtFieldNumber = 7;
@@ -1380,16 +1407,22 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   void clear_has_build_tag();
   void set_has_started_at();
   void clear_has_started_at();
+  void set_has_cluster_name();
+  void clear_has_cluster_name();
+  void set_has_sql_address();
+  void clear_has_sql_address();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::LocalityAddress > locality_address_;
   ::google::protobuf::internal::ArenaStringPtr build_tag_;
+  ::google::protobuf::internal::ArenaStringPtr cluster_name_;
   ::cockroach::util::UnresolvedAddr* address_;
   ::cockroach::roachpb::Attributes* attrs_;
   ::cockroach::roachpb::Locality* locality_;
   ::cockroach::roachpb::Version* serverversion_;
+  ::cockroach::util::UnresolvedAddr* sql_address_;
   ::google::protobuf::int64 started_at_;
   ::google::protobuf::int32 node_id_;
   friend struct ::protobuf_roachpb_2fmetadata_2eproto::TableStruct;
@@ -3259,13 +3292,13 @@ inline void StoreCapacity::set_allocated_writes_per_replica(::cockroach::roachpb
 // NodeDescriptor
 
 inline bool NodeDescriptor::has_node_id() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
+  return (_has_bits_[0] & 0x00000100u) != 0;
 }
 inline void NodeDescriptor::set_has_node_id() {
-  _has_bits_[0] |= 0x00000040u;
+  _has_bits_[0] |= 0x00000100u;
 }
 inline void NodeDescriptor::clear_has_node_id() {
-  _has_bits_[0] &= ~0x00000040u;
+  _has_bits_[0] &= ~0x00000100u;
 }
 inline void NodeDescriptor::clear_node_id() {
   node_id_ = 0;
@@ -3282,13 +3315,13 @@ inline void NodeDescriptor::set_node_id(::google::protobuf::int32 value) {
 }
 
 inline bool NodeDescriptor::has_address() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 inline void NodeDescriptor::set_has_address() {
-  _has_bits_[0] |= 0x00000002u;
+  _has_bits_[0] |= 0x00000004u;
 }
 inline void NodeDescriptor::clear_has_address() {
-  _has_bits_[0] &= ~0x00000002u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline const ::cockroach::util::UnresolvedAddr& NodeDescriptor::_internal_address() const {
   return *address_;
@@ -3335,13 +3368,13 @@ inline void NodeDescriptor::set_allocated_address(::cockroach::util::UnresolvedA
 }
 
 inline bool NodeDescriptor::has_attrs() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 inline void NodeDescriptor::set_has_attrs() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000008u;
 }
 inline void NodeDescriptor::clear_has_attrs() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void NodeDescriptor::clear_attrs() {
   if (attrs_ != NULL) attrs_->Clear();
@@ -3392,13 +3425,13 @@ inline void NodeDescriptor::set_allocated_attrs(::cockroach::roachpb::Attributes
 }
 
 inline bool NodeDescriptor::has_locality() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void NodeDescriptor::set_has_locality() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void NodeDescriptor::clear_has_locality() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void NodeDescriptor::clear_locality() {
   if (locality_ != NULL) locality_->Clear();
@@ -3449,13 +3482,13 @@ inline void NodeDescriptor::set_allocated_locality(::cockroach::roachpb::Localit
 }
 
 inline bool NodeDescriptor::has_serverversion() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
+  return (_has_bits_[0] & 0x00000020u) != 0;
 }
 inline void NodeDescriptor::set_has_serverversion() {
-  _has_bits_[0] |= 0x00000010u;
+  _has_bits_[0] |= 0x00000020u;
 }
 inline void NodeDescriptor::clear_has_serverversion() {
-  _has_bits_[0] &= ~0x00000010u;
+  _has_bits_[0] &= ~0x00000020u;
 }
 inline void NodeDescriptor::clear_serverversion() {
   if (serverversion_ != NULL) serverversion_->Clear();
@@ -3571,13 +3604,13 @@ inline void NodeDescriptor::set_allocated_build_tag(::std::string* build_tag) {
 }
 
 inline bool NodeDescriptor::has_started_at() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
+  return (_has_bits_[0] & 0x00000080u) != 0;
 }
 inline void NodeDescriptor::set_has_started_at() {
-  _has_bits_[0] |= 0x00000020u;
+  _has_bits_[0] |= 0x00000080u;
 }
 inline void NodeDescriptor::clear_has_started_at() {
-  _has_bits_[0] &= ~0x00000020u;
+  _has_bits_[0] &= ~0x00000080u;
 }
 inline void NodeDescriptor::clear_started_at() {
   started_at_ = GOOGLE_LONGLONG(0);
@@ -3620,6 +3653,124 @@ inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Localit
 NodeDescriptor::locality_address() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.NodeDescriptor.locality_address)
   return locality_address_;
+}
+
+inline bool NodeDescriptor::has_cluster_name() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void NodeDescriptor::set_has_cluster_name() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void NodeDescriptor::clear_has_cluster_name() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void NodeDescriptor::clear_cluster_name() {
+  cluster_name_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_cluster_name();
+}
+inline const ::std::string& NodeDescriptor::cluster_name() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.NodeDescriptor.cluster_name)
+  return cluster_name_.GetNoArena();
+}
+inline void NodeDescriptor::set_cluster_name(const ::std::string& value) {
+  set_has_cluster_name();
+  cluster_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.NodeDescriptor.cluster_name)
+}
+#if LANG_CXX11
+inline void NodeDescriptor::set_cluster_name(::std::string&& value) {
+  set_has_cluster_name();
+  cluster_name_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.NodeDescriptor.cluster_name)
+}
+#endif
+inline void NodeDescriptor::set_cluster_name(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  set_has_cluster_name();
+  cluster_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.NodeDescriptor.cluster_name)
+}
+inline void NodeDescriptor::set_cluster_name(const char* value, size_t size) {
+  set_has_cluster_name();
+  cluster_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.NodeDescriptor.cluster_name)
+}
+inline ::std::string* NodeDescriptor::mutable_cluster_name() {
+  set_has_cluster_name();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NodeDescriptor.cluster_name)
+  return cluster_name_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* NodeDescriptor::release_cluster_name() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.NodeDescriptor.cluster_name)
+  if (!has_cluster_name()) {
+    return NULL;
+  }
+  clear_has_cluster_name();
+  return cluster_name_.ReleaseNonDefaultNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void NodeDescriptor::set_allocated_cluster_name(::std::string* cluster_name) {
+  if (cluster_name != NULL) {
+    set_has_cluster_name();
+  } else {
+    clear_has_cluster_name();
+  }
+  cluster_name_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), cluster_name);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NodeDescriptor.cluster_name)
+}
+
+inline bool NodeDescriptor::has_sql_address() const {
+  return (_has_bits_[0] & 0x00000040u) != 0;
+}
+inline void NodeDescriptor::set_has_sql_address() {
+  _has_bits_[0] |= 0x00000040u;
+}
+inline void NodeDescriptor::clear_has_sql_address() {
+  _has_bits_[0] &= ~0x00000040u;
+}
+inline const ::cockroach::util::UnresolvedAddr& NodeDescriptor::_internal_sql_address() const {
+  return *sql_address_;
+}
+inline const ::cockroach::util::UnresolvedAddr& NodeDescriptor::sql_address() const {
+  const ::cockroach::util::UnresolvedAddr* p = sql_address_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.NodeDescriptor.sql_address)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::UnresolvedAddr*>(
+      &::cockroach::util::_UnresolvedAddr_default_instance_);
+}
+inline ::cockroach::util::UnresolvedAddr* NodeDescriptor::release_sql_address() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.NodeDescriptor.sql_address)
+  clear_has_sql_address();
+  ::cockroach::util::UnresolvedAddr* temp = sql_address_;
+  sql_address_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::UnresolvedAddr* NodeDescriptor::mutable_sql_address() {
+  set_has_sql_address();
+  if (sql_address_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::UnresolvedAddr>(GetArenaNoVirtual());
+    sql_address_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NodeDescriptor.sql_address)
+  return sql_address_;
+}
+inline void NodeDescriptor::set_allocated_sql_address(::cockroach::util::UnresolvedAddr* sql_address) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(sql_address_);
+  }
+  if (sql_address) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      sql_address = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, sql_address, submessage_arena);
+    }
+    set_has_sql_address();
+  } else {
+    clear_has_sql_address();
+  }
+  sql_address_ = sql_address;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NodeDescriptor.sql_address)
 }
 
 // -------------------------------------------------------------------

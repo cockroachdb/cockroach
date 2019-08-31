@@ -204,13 +204,12 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	planCtx *PlanningCtx, job *jobs.Job,
 ) (PhysicalPlan, error) {
 	details := job.Details().(jobspb.CreateStatsDetails)
-	reqStats := make([]requestedStat, len(details.ColumnLists))
+	reqStats := make([]requestedStat, len(details.ColumnStats))
+	histogramCollectionEnabled := stats.HistogramClusterMode.Get(&dsp.st.SV)
 	for i := 0; i < len(reqStats); i++ {
-		// Currently we do not use histograms, so don't bother creating one.
-		// When this changes, we can only use it for single-column stats.
-		histogram := false
+		histogram := details.ColumnStats[i].HasHistogram && histogramCollectionEnabled
 		reqStats[i] = requestedStat{
-			columns:             details.ColumnLists[i].IDs,
+			columns:             details.ColumnStats[i].ColumnIDs,
 			histogram:           histogram,
 			histogramMaxBuckets: histogramBuckets,
 			name:                details.Name,
@@ -252,6 +251,6 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	)
 	defer recv.Release()
 
-	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)()
 	return resultRows.Err()
 }

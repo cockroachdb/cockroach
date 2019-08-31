@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func BenchmarkTypeCheck(b *testing.B) {
@@ -45,6 +46,7 @@ func BenchmarkTypeCheck(b *testing.B) {
 }
 
 func TestTypeCheckNormalize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testData := []struct {
 		expr     string
 		expected string
@@ -107,12 +109,12 @@ func exprs(fns ...copyableExpr) []copyableExpr {
 }
 func intConst(s string) copyableExpr {
 	return func() tree.Expr {
-		return &tree.NumVal{Value: constant.MakeFromLiteral(s, token.INT, 0), OrigString: s}
+		return tree.NewNumVal(constant.MakeFromLiteral(s, token.INT, 0), s, false /* negative */)
 	}
 }
 func decConst(s string) copyableExpr {
 	return func() tree.Expr {
-		return &tree.NumVal{Value: constant.MakeFromLiteral(s, token.FLOAT, 0), OrigString: s}
+		return tree.NewNumVal(constant.MakeFromLiteral(s, token.FLOAT, 0), s, false /* negative */)
 	}
 }
 func dint(i tree.DInt) copyableExpr {
@@ -204,6 +206,7 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 }
 
 func TestTypeCheckSameTypedExprs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	for i, d := range []sameTypedExprsTestCase{
 		// Constants.
 		{nil, nil, exprs(intConst("1")), types.Int, nil},
@@ -265,6 +268,7 @@ func TestTypeCheckSameTypedExprs(t *testing.T) {
 }
 
 func TestTypeCheckSameTypedTupleExprs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	for i, d := range []sameTypedExprsTestCase{
 		// // Constants.
 		{nil, nil, exprs(tuple(intConst("1"))), ttuple(types.Int), nil},
@@ -298,6 +302,7 @@ func TestTypeCheckSameTypedTupleExprs(t *testing.T) {
 }
 
 func TestTypeCheckSameTypedExprsError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	decimalIntMismatchErr := `expected .* to be of type (decimal|int), found type (decimal|int)`
 	tupleFloatIntMismatchErr := `tuples .* are not the same type: ` + decimalIntMismatchErr
 	tupleIntMismatchErr := `expected .* to be of type (tuple|int), found type (tuple|int)`
@@ -348,6 +353,7 @@ func annot(p *tree.Placeholder, typ *types.T) tree.Expr {
 }
 
 func TestProcessPlaceholderAnnotations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	intType := types.Int
 	boolType := types.Bool
 
@@ -525,6 +531,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 }
 
 func TestProcessPlaceholderAnnotationsError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	intType := types.Int
 	floatType := types.Float
 

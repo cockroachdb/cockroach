@@ -90,7 +90,7 @@ func (p *planner) Update(
 	}
 
 	// Find which table we're working on, check the permissions.
-	desc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, ResolveRequireTableDesc)
+	desc, err := ResolveExistingObject(ctx, p, tn, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func (p *planner) Update(
 	// Extract the column descriptors for the column names listed
 	// in the LHS operands of SET expressions. This also checks
 	// that each column is assigned at most once.
-	updateCols, err := p.processColumns(desc, names,
+	updateCols, err := sqlbase.ProcessTargetColumns(desc, names,
 		true /* ensureColumns */, false /* allowMutations */)
 	if err != nil {
 		return nil, err
@@ -219,6 +219,7 @@ func (p *planner) Update(
 		updateCols,
 		requestedCols,
 		row.UpdaterDefault,
+		row.CheckFKs,
 		p.EvalContext(),
 		&p.alloc,
 	)
@@ -233,7 +234,7 @@ func (p *planner) Update(
 	// renderNode to ideally reuse some of the queries.
 	rows, err := p.SelectClause(ctx, &tree.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(ru.FetchCols, true /* forUpdateOrDelete */),
-		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
+		From:  tree.From{Tables: []tree.TableExpr{n.Table}},
 		Where: n.Where,
 	}, n.OrderBy, n.Limit, nil /* with */, nil /*desiredTypes*/, publicAndNonPublicColumns)
 	if err != nil {
@@ -382,6 +383,12 @@ func (p *planner) Update(
 		updateColsIdx[id] = i
 	}
 
+	// Since all columns are being returned, use the 1:1 mapping.
+	rowIdxToRetIdx := make([]int, len(desc.Columns))
+	for i := range rowIdxToRetIdx {
+		rowIdxToRetIdx[i] = i
+	}
+
 	un := updateNodePool.Get().(*updateNode)
 	*un = updateNode{
 		source:  rows,
@@ -397,9 +404,10 @@ func (p *planner) Update(
 				Cols:         desc.Columns,
 				Mapping:      ru.FetchColIDtoRowIndex,
 			},
-			sourceSlots:   sourceSlots,
-			updateValues:  make(tree.Datums, len(ru.UpdateCols)),
-			updateColsIdx: updateColsIdx,
+			sourceSlots:    sourceSlots,
+			updateValues:   make(tree.Datums, len(ru.UpdateCols)),
+			updateColsIdx:  updateColsIdx,
+			rowIdxToRetIdx: rowIdxToRetIdx,
 		},
 	}
 
@@ -480,6 +488,18 @@ type updateRun struct {
 	// This provides the inverse mapping of sourceSlots.
 	//
 	updateColsIdx map[sqlbase.ColumnID]int
+
+	// rowIdxToRetIdx is the mapping from the columns in ru.FetchCols to the
+	// columns in the resultRowBuffer. A value of -1 is used to indicate
+	// that the column at that index is not part of the resultRowBuffer
+	// of the mutation. Otherwise, the value at the i-th index refers to the
+	// index of the resultRowBuffer where the i-th column is to be returned.
+	rowIdxToRetIdx []int
+
+	// numPassthrough is the number of columns in addition to the set of
+	// columns of the target table being returned, that we must pass through
+	// from the input node.
+	numPassthrough int
 }
 
 // maxUpdateBatchSize is the max number of entries in the KV batch for
@@ -679,7 +699,7 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 				return err
 			}
 		} else {
-			checkVals := sourceVals[len(u.run.tu.ru.FetchCols)+len(u.run.tu.ru.UpdateCols):]
+			checkVals := sourceVals[len(u.run.tu.ru.FetchCols)+len(u.run.tu.ru.UpdateCols)+u.run.numPassthrough:]
 			if err := u.run.checkHelper.CheckInput(checkVals); err != nil {
 				return err
 			}
@@ -701,7 +721,32 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		//
 		// MakeUpdater guarantees that the first columns of the new values
 		// are those specified u.columns.
-		resultValues := newValues[:len(u.columns)]
+		resultValues := make([]tree.Datum, len(u.columns))
+		largestRetIdx := -1
+		for i := range u.run.rowIdxToRetIdx {
+			retIdx := u.run.rowIdxToRetIdx[i]
+			if retIdx >= 0 {
+				if retIdx >= largestRetIdx {
+					largestRetIdx = retIdx
+				}
+				resultValues[retIdx] = newValues[i]
+			}
+		}
+
+		// At this point we've extracted all the RETURNING values that are part
+		// of the target table. We must now extract the columns in the RETURNING
+		// clause that refer to other tables (from the FROM clause of the update).
+		if u.run.numPassthrough > 0 {
+			passthroughBegin := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols)
+			passthroughEnd := passthroughBegin + u.run.numPassthrough
+			passthroughValues := sourceVals[passthroughBegin:passthroughEnd]
+
+			for i := 0; i < u.run.numPassthrough; i++ {
+				largestRetIdx++
+				resultValues[largestRetIdx] = passthroughValues[i]
+			}
+		}
+
 		if _, err := u.run.rows.AddRow(params.ctx, resultValues); err != nil {
 			return err
 		}

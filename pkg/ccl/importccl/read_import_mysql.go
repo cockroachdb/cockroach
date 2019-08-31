@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -44,26 +45,26 @@ import (
 type mysqldumpReader struct {
 	evalCtx  *tree.EvalContext
 	tables   map[string]*row.DatumRowConverter
-	kvCh     chan []roachpb.KeyValue
+	kvCh     chan row.KVBatch
 	debugRow func(tree.Datums)
 }
 
 var _ inputConverter = &mysqldumpReader{}
 
 func newMysqldumpReader(
-	kvCh chan []roachpb.KeyValue,
-	tables map[string]*sqlbase.TableDescriptor,
+	kvCh chan row.KVBatch,
+	tables map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
 ) (*mysqldumpReader, error) {
 	res := &mysqldumpReader{evalCtx: evalCtx, kvCh: kvCh}
 
 	converters := make(map[string]*row.DatumRowConverter, len(tables))
 	for name, table := range tables {
-		if table == nil {
+		if table.Desc == nil {
 			converters[name] = nil
 			continue
 		}
-		conv, err := row.NewDatumRowConverter(table, evalCtx, kvCh)
+		conv, err := row.NewDatumRowConverter(table.Desc, nil /* targetColNames */, evalCtx, kvCh)
 		if err != nil {
 			return nil, err
 		}
@@ -91,12 +92,17 @@ func (m *mysqldumpReader) readFiles(
 }
 
 func (m *mysqldumpReader) readFile(
-	ctx context.Context, input io.Reader, inputIdx int32, inputName string, progressFn progressFn,
+	ctx context.Context, input *fileReader, inputIdx int32, inputName string, progressFn progressFn,
 ) error {
 	var inserts, count int64
 	r := bufio.NewReaderSize(input, 1024*64)
 	tokens := mysql.NewTokenizer(r)
 	tokens.SkipSpecialComments = true
+
+	for _, conv := range m.tables {
+		conv.KvBatch.Source = inputIdx
+		conv.FractionFn = input.ReadFraction
+	}
 
 	for {
 		stmt, err := mysql.ParseNextStrictDDL(tokens)
@@ -312,7 +318,7 @@ func readMysqlCreateTable(
 	if match != "" && !found {
 		return nil, errors.Errorf("table %q not found in file (found tables: %s)", match, strings.Join(names, ", "))
 	}
-	if err := addDelayedFKs(ctx, fkDefs, fks.resolver); err != nil {
+	if err := addDelayedFKs(ctx, fkDefs, fks.resolver, evalCtx.Settings); err != nil {
 		return nil, err
 	}
 	return ret, nil
@@ -491,10 +497,12 @@ type delayedFK struct {
 	def *tree.ForeignKeyConstraintTableDef
 }
 
-func addDelayedFKs(ctx context.Context, defs []delayedFK, resolver fkResolver) error {
+func addDelayedFKs(
+	ctx context.Context, defs []delayedFK, resolver fkResolver, settings *cluster.Settings,
+) error {
 	for _, def := range defs {
 		if err := sql.ResolveFK(
-			ctx, nil, resolver, def.tbl, def.def, map[sqlbase.ID]*sqlbase.MutableTableDescriptor{}, sql.NewTable, tree.ValidationDefault,
+			ctx, nil, resolver, def.tbl, def.def, map[sqlbase.ID]*sqlbase.MutableTableDescriptor{}, sql.NewTable, tree.ValidationDefault, settings,
 		); err != nil {
 			return err
 		}

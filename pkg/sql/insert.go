@@ -89,7 +89,7 @@ func (p *planner) Insert(
 	}
 
 	// Find which table we're working on, check the permissions.
-	desc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, ResolveRequireTableDesc)
+	desc, err := ResolveExistingObject(ctx, p, tn, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (p *planner) Insert(
 		insertCols = desc.WritableColumns()
 	} else {
 		var err error
-		if insertCols, err = p.processColumns(desc, n.Columns,
+		if insertCols, err = sqlbase.ProcessTargetColumns(desc, n.Columns,
 			true /* ensureColumns */, false /* allowMutations */); err != nil {
 			return nil, err
 		}
@@ -286,6 +286,12 @@ func (p *planner) Insert(
 		columns = sqlbase.ResultColumnsFromColDescs(desc.Columns)
 	}
 
+	// Since all columns are being returned, use the 1:1 mapping.
+	tabColIdxToRetIdx := make([]int, len(desc.Columns))
+	for i := range tabColIdxToRetIdx {
+		tabColIdxToRetIdx[i] = i
+	}
+
 	// At this point, everything is ready for either an insertNode or an upserNode.
 
 	var node batchedPlanNode
@@ -315,8 +321,9 @@ func (p *planner) Insert(
 					Cols:    desc.Columns,
 					Mapping: ri.InsertColIDtoRowIndex,
 				},
-				defaultExprs: defaultExprs,
-				insertCols:   ri.InsertCols,
+				defaultExprs:      defaultExprs,
+				insertCols:        ri.InsertCols,
+				tabColIdxToRetIdx: tabColIdxToRetIdx,
 			},
 		}
 		node = in
@@ -368,12 +375,21 @@ type insertRun struct {
 	// into the row container above, when rowsNeeded is set.
 	resultRowBuffer tree.Datums
 
-	// rowIdxToRetIdx is the mapping from the ordering of rows in
-	// insertCols to the ordering in the result rows, used when
+	// rowIdxToTabColIdx is the mapping from the ordering of rows in
+	// insertCols to the ordering in the rows in the table, used when
 	// rowsNeeded is set to populate resultRowBuffer and the row
 	// container. The return index is -1 if the column for the row
-	// index is not public.
-	rowIdxToRetIdx []int
+	// index is not public. This is used in conjunction with tabIdxToRetIdx
+	// to populate the resultRowBuffer.
+	rowIdxToTabColIdx []int
+
+	// tabColIdxToRetIdx is the mapping from the columns in the table to the
+	// columns in the resultRowBuffer. A value of -1 is used to indicate
+	// that the table column at that index is not part of the resultRowBuffer
+	// of the mutation. Otherwise, the value at the i-th index refers to the
+	// index of the resultRowBuffer where the i-th column of the table is
+	// to be returned.
+	tabColIdxToRetIdx []int
 
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
@@ -405,8 +421,8 @@ func (n *insertNode) startExec(params runParams) error {
 		// re-ordering the data into resultRowBuffer.
 		//
 		// Also we need to re-order the values in the source, ordered by
-		// insertCols, when writing them to resultRowBuffer, ordered by
-		// n.columns. This uses the rowIdxToRetIdx mapping.
+		// insertCols, when writing them to resultRowBuffer, according to
+		// the rowIdxToTabColIdx mapping.
 
 		n.run.resultRowBuffer = make(tree.Datums, len(n.columns))
 		for i := range n.run.resultRowBuffer {
@@ -419,13 +435,13 @@ func (n *insertNode) startExec(params runParams) error {
 			colIDToRetIndex[cols[i].ID] = i
 		}
 
-		n.run.rowIdxToRetIdx = make([]int, len(n.run.insertCols))
+		n.run.rowIdxToTabColIdx = make([]int, len(n.run.insertCols))
 		for i, col := range n.run.insertCols {
 			if idx, ok := colIDToRetIndex[col.ID]; !ok {
 				// Column must be write only and not public.
-				n.run.rowIdxToRetIdx[i] = -1
+				n.run.rowIdxToTabColIdx[i] = -1
 			} else {
-				n.run.rowIdxToRetIdx[i] = idx
+				n.run.rowIdxToTabColIdx[i] = idx
 			}
 		}
 	}
@@ -567,10 +583,13 @@ func (n *insertNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 			// The downstream consumer will want the rows in the order of
 			// the table descriptor, not that of insertCols. Reorder them
 			// and ignore non-public columns.
-			if idx := n.run.rowIdxToRetIdx[i]; idx >= 0 {
-				n.run.resultRowBuffer[idx] = val
+			if tabIdx := n.run.rowIdxToTabColIdx[i]; tabIdx >= 0 {
+				if retIdx := n.run.tabColIdxToRetIdx[tabIdx]; retIdx >= 0 {
+					n.run.resultRowBuffer[retIdx] = val
+				}
 			}
 		}
+
 		if _, err := n.run.rows.AddRow(params.ctx, n.run.resultRowBuffer); err != nil {
 			return err
 		}
@@ -598,53 +617,6 @@ func (n *insertNode) Close(ctx context.Context) {
 // enableAutoCommit is part of the autoCommitNode interface.
 func (n *insertNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()
-}
-
-// processColumns returns the column descriptors identified by the
-// given name list. It also checks that a given column name is only
-// listed once. If no column names are given (special case for INSERT)
-// and ensureColumns is set, the descriptors for all visible columns
-// are returned. If allowMutations is set, even columns undergoing
-// mutations are added.
-func (p *planner) processColumns(
-	tableDesc *sqlbase.ImmutableTableDescriptor,
-	nameList tree.NameList,
-	ensureColumns, allowMutations bool,
-) ([]sqlbase.ColumnDescriptor, error) {
-	if len(nameList) == 0 {
-		if ensureColumns {
-			// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
-			// (as opposed to INSERT INTO <table> (...) VALUES (...)) from writing
-			// hidden columns. At present, the only hidden column is the implicit rowid
-			// primary key column.
-			return tableDesc.VisibleColumns(), nil
-		}
-		return nil, nil
-	}
-
-	cols := make([]sqlbase.ColumnDescriptor, len(nameList))
-	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(nameList))
-	for i, colName := range nameList {
-		var col *sqlbase.ColumnDescriptor
-		var err error
-		if allowMutations {
-			col, _, err = tableDesc.FindColumnByName(colName)
-		} else {
-			col, err = tableDesc.FindActiveColumnByName(string(colName))
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		if _, ok := colIDSet[col.ID]; ok {
-			return nil, pgerror.Newf(pgcode.Syntax,
-				"multiple assignments to the same column %q", &nameList[i])
-		}
-		colIDSet[col.ID] = struct{}{}
-		cols[i] = *col
-	}
-
-	return cols, nil
 }
 
 // extractInsertSource removes the parentheses around the data source of an INSERT statement.

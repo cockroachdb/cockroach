@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -532,10 +533,7 @@ func runSchemaChangeWithOperations(
 		t.Fatal(err)
 	}
 	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
-		// TODO(dt,lucy-zhang): #35160. Fix scrub's plan assertions.
-		if !strings.Contains(err.Error(), "could not find MergeJoinerSpec in plan") {
-			t.Fatal(err)
-		}
+		t.Fatal(err)
 	}
 
 	// Delete the rows inserted.
@@ -630,11 +628,11 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	// Split the table into multiple ranges.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	// SplitTable moves the right range, so we split things back to front
-	// in order to move less data.
-	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	var sps []sql.SplitPoint
+	for i := 1; i <= numNodes-1; i++ {
+		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
 	}
+	sql.SplitTable(t, tc, tableDesc, sps)
 
 	ctx := context.TODO()
 
@@ -806,11 +804,11 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	// Split the table into multiple ranges.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	// SplitTable moves the right range, so we split things back to front
-	// in order to move less data.
-	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	var sps []sql.SplitPoint
+	for i := 1; i <= numNodes-1; i++ {
+		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
 	}
+	sql.SplitTable(t, tc, tableDesc, sps)
 
 	ctx := context.TODO()
 
@@ -918,11 +916,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Split the table into multiple ranges.
-	// SplitTable moves the right range, so we split things back to front
-	// in order to move less data.
-	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	var sps []sql.SplitPoint
+	for i := 1; i <= numNodes-1; i++ {
+		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
 	}
+	sql.SplitTable(t, tc, tableDesc, sps)
 
 	ctx := context.TODO()
 
@@ -2528,11 +2526,11 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 
 	// Split the table into multiple ranges.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	// SplitTable moves the right range, so we split things back to front
-	// in order to move less data.
-	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	var sps []sql.SplitPoint
+	for i := 1; i <= numNodes-1; i++ {
+		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
 	}
+	sql.SplitTable(t, tc, tableDesc, sps)
 
 	// Run some schema changes.
 	testCases := []struct {
@@ -2588,29 +2586,59 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		expectedErr string
 	}{
 		// DROP TABLE followed by CREATE TABLE case.
-		{`drop-create`, `DROP TABLE t.kv`, `CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR)`,
-			`relation "kv" already exists`},
+		{
+			name:        `drop-create`,
+			firstStmt:   `DROP TABLE t.kv`,
+			secondStmt:  `CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR)`,
+			expectedErr: `relation "kv" already exists`,
+		},
 		// schema change followed by another statement works.
-		{`createindex-insert`, `CREATE INDEX foo ON t.kv (v)`, `INSERT INTO t.kv VALUES ('c', 'd')`,
-			``},
+		{
+			name:        `createindex-insert`,
+			firstStmt:   `CREATE INDEX foo ON t.kv (v)`,
+			secondStmt:  `INSERT INTO t.kv VALUES ('c', 'd')`,
+			expectedErr: ``,
+		},
 		// CREATE TABLE followed by INSERT works.
-		{`createtable-insert`, `CREATE TABLE t.origin (k CHAR PRIMARY KEY, v CHAR);`,
-			`INSERT INTO t.origin VALUES ('c', 'd')`, ``},
+		{
+			name:        `createtable-insert`,
+			firstStmt:   `CREATE TABLE t.origin (k CHAR PRIMARY KEY, v CHAR);`,
+			secondStmt:  `INSERT INTO t.origin VALUES ('c', 'd')`,
+			expectedErr: ``},
 		// Support multiple schema changes for ORMs: #15269
 		// Support insert into another table after schema changes: #15297
-		{`multiple-schema-change`,
-			`CREATE TABLE t.orm1 (k CHAR PRIMARY KEY, v CHAR); CREATE TABLE t.orm2 (k CHAR PRIMARY KEY, v CHAR);`,
-			`CREATE INDEX foo ON t.orm1 (v); CREATE INDEX foo ON t.orm2 (v); INSERT INTO t.origin VALUES ('e', 'f')`,
-			``},
+		{
+			name:        `multiple-schema-change`,
+			firstStmt:   `CREATE TABLE t.orm1 (k CHAR PRIMARY KEY, v CHAR); CREATE TABLE t.orm2 (k CHAR PRIMARY KEY, v CHAR);`,
+			secondStmt:  `CREATE INDEX foo ON t.orm1 (v); CREATE INDEX foo ON t.orm2 (v); INSERT INTO t.origin VALUES ('e', 'f')`,
+			expectedErr: ``,
+		},
 		// schema change at the end of a transaction that has written.
-		{`insert-create`, `INSERT INTO t.kv VALUES ('e', 'f')`, `CREATE INDEX foo ON t.kv (v)`,
-			`schema change statement cannot follow a statement that has written in the same transaction`},
+		{
+			name:        `insert-create`,
+			firstStmt:   `INSERT INTO t.kv VALUES ('e', 'f')`,
+			secondStmt:  `CREATE INDEX foo2 ON t.kv (v)`,
+			expectedErr: `schema change statement cannot follow a statement that has written in the same transaction`,
+		},
 		// schema change at the end of a read only transaction.
-		{`select-create`, `SELECT * FROM t.kv`, `CREATE INDEX bar ON t.kv (v)`, ``},
-		{`index-on-add-col`, `ALTER TABLE t.kv ADD i INT`,
-			`CREATE INDEX foobar ON t.kv (i)`, ``},
-		{`check-on-add-col`, `ALTER TABLE t.kv ADD j INT`,
-			`ALTER TABLE t.kv ADD CONSTRAINT ck_j CHECK (j >= 0)`, ``},
+		{
+			name:        `select-create`,
+			firstStmt:   `SELECT * FROM t.kv`,
+			secondStmt:  `CREATE INDEX bar ON t.kv (v)`,
+			expectedErr: ``,
+		},
+		{
+			name:        `index-on-add-col`,
+			firstStmt:   `ALTER TABLE t.kv ADD i INT`,
+			secondStmt:  `CREATE INDEX foobar ON t.kv (i)`,
+			expectedErr: ``,
+		},
+		{
+			name:        `check-on-add-col`,
+			firstStmt:   `ALTER TABLE t.kv ADD j INT`,
+			secondStmt:  `ALTER TABLE t.kv ADD CONSTRAINT ck_j CHECK (j >= 0)`,
+			expectedErr: ``,
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -2803,11 +2831,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// Split the table into multiple ranges.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	// SplitTable moves the right range, so we split things back to front
-	// in order to move less data.
-	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	var sps []sql.SplitPoint
+	for i := 1; i <= numNodes-1; i++ {
+		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
 	}
+	sql.SplitTable(t, tc, tableDesc, sps)
 
 	testCases := []struct {
 		sql    string
@@ -3124,7 +3152,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	// Ensure that the FK property still holds.
 	if _, err := sqlDB.Exec(
 		`INSERT INTO t.test VALUES ($1 , $2, $3)`, maxValue+2, maxValue+2, 3.15,
-	); !testutils.IsError(err, "foreign key violation") {
+	); !testutils.IsError(err, "foreign key violation|violates foreign key") {
 		t.Fatalf("err = %v", err)
 	}
 
@@ -3360,7 +3388,7 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 			RequestHeader: roachpb.RequestHeaderFromSpan(sp),
 			Threshold:     tc.Server(0).Clock().Now(),
 		}
-		_, err := client.SendWrapped(ctx, tc.Server(0).DistSender(), &gcr)
+		_, err := client.SendWrapped(ctx, tc.Server(0).DistSenderI().(*kv.DistSender), &gcr)
 		if err != nil {
 			panic(err)
 		}
@@ -3628,12 +3656,12 @@ func TestCancelSchemaChange(t *testing.T) {
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	// Split the table into multiple ranges.
-	// SplitTable moves the right range, so we split things back to front
-	// in order to move less data.
+	var sps []sql.SplitPoint
 	const numSplits = numNodes * 2
-	for i := numSplits - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i%numNodes, maxValue/numSplits*i)
+	for i := 1; i <= numSplits-1; i++ {
+		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i % numNodes, Vals: []interface{}{maxValue / numSplits * i}})
 	}
+	sql.SplitTable(t, tc, tableDesc, sps)
 
 	ctx := context.TODO()
 	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
@@ -4747,9 +4775,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
-	for i := numNodes - 1; i > 0; i-- {
-		sql.SplitTable(t, tc, tableDesc, i, maxValue/2)
+	var sps []sql.SplitPoint
+	for i := 1; i < numNodes-1; i++ {
+		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / 2}})
 	}
+	sql.SplitTable(t, tc, tableDesc, sps)
 
 	bg := ctxgroup.WithContext(ctx)
 	bg.Go(func() error {

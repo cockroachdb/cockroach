@@ -1,0 +1,9 @@
+contains
+expected 'EOF', found blah
+----
+
+reduce
+123 + abc blah
+* 456
+----
+1 + a blah

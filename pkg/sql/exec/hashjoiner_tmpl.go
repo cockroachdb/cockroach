@@ -23,11 +23,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"reflect"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -45,40 +48,31 @@ var _ reflect.SliceHeader
 // Dummy import to pull in "bytes" package.
 var _ bytes.Buffer
 
+// Dummy import to pull in "math" package.
+var _ = math.MaxInt64
+
+// _GOTYPESLICE is a template Go type slice variable.
+type _GOTYPESLICE interface{}
+
 // _ASSIGN_HASH is the template equality function for assigning the first input
 // to the result of the hash value of the second input.
 func _ASSIGN_HASH(_, _ interface{}) uint64 {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the the second input != the third input.
 func _ASSIGN_NE(_, _, _ interface{}) uint64 {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
-// _TYPES_T is the template type variable for types.T. It will be replaced by
-// types.Foo for each type Foo in the types.T type.
-const _TYPES_T = types.Unhandled
+// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
+// coltypes.Foo for each type Foo in the coltypes.T type.
+const _TYPES_T = coltypes.Unhandled
 
 // _SEL_IND is the template type variable for the loop variable that's either
 // i or sel[i] depending on whether we're in a selection or not.
 const _SEL_IND = 0
-
-func _CHECK_COL_MAIN(ht *hashTable, buildKeys, probeKeys []interface{}, keyID uint64, i uint16) { // */}}
-	// {{define "checkColMain"}}
-	buildVal := buildKeys[keyID-1]
-	probeVal := probeKeys[_SEL_IND]
-	var unique bool
-	_ASSIGN_NE(unique, buildVal, probeVal)
-
-	if unique {
-		ht.differs[ht.toCheck[i]] = true
-	}
-	// {{end}}
-
-	// {{/*
-}
 
 func _CHECK_COL_BODY(
 	ht *hashTable,
@@ -87,23 +81,53 @@ func _CHECK_COL_BODY(
 	nToCheck uint16,
 	_PROBE_HAS_NULLS bool,
 	_BUILD_HAS_NULLS bool,
+	_ALLOW_NULL_EQUALITY bool,
 ) { // */}}
 	// {{define "checkColBody"}}
+	probeIsNull := false
+	buildIsNull := false
+	// Early bounds check.
+	_ = ht.toCheck[nToCheck-1]
 	for i := uint16(0); i < nToCheck; i++ {
 		// keyID of 0 is reserved to represent the end of the next chain.
 
-		if keyID := ht.groupID[ht.toCheck[i]]; keyID != 0 {
+		toCheck := ht.toCheck[i]
+		if keyID := ht.groupID[toCheck]; keyID != 0 {
 			// the build table key (calculated using keys[keyID - 1] = key) is
 			// compared to the corresponding probe table to determine if a match is
 			// found.
 
+			// {{if .UseSel}}
+			selIdx := sel[toCheck]
+			// {{else}}
+			selIdx := toCheck
+			// {{end}}
 			/* {{if .ProbeHasNulls }} */
-			if probeVec.Nulls().NullAt(_SEL_IND) {
-				ht.groupID[ht.toCheck[i]] = 0
-			} else /*{{end}} {{if .BuildHasNulls}} */ if buildVec.Nulls().NullAt64(keyID - 1) {
-				ht.differs[ht.toCheck[i]] = true
-			} else /*{{end}} */ {
-				_CHECK_COL_MAIN(ht, buildKeys, probeKeys, keyID, i)
+			probeIsNull = probeVec.Nulls().NullAt(selIdx)
+			/* {{end}} */
+
+			/* {{if .BuildHasNulls }} */
+			buildIsNull = buildVec.Nulls().NullAt64(keyID - 1)
+			/* {{end}} */
+
+			/* {{if .AllowNullEquality}} */
+			if probeIsNull && buildIsNull {
+				continue
+			}
+			/* {{end}} */
+			if probeIsNull {
+				ht.groupID[toCheck] = 0
+			} else if buildIsNull {
+				ht.differs[toCheck] = true
+			} else {
+				buildVal := execgen.UNSAFEGET(buildKeys, int(keyID-1))
+				probeVal := execgen.UNSAFEGET(probeKeys, int(selIdx))
+				var unique bool
+				_ASSIGN_NE(unique, buildVal, probeVal)
+
+				if unique {
+					ht.differs[toCheck] = true
+				}
 			}
 		}
 	}
@@ -116,20 +140,26 @@ func _CHECK_COL_WITH_NULLS(
 	probeVec, buildVec coldata.Vec,
 	buildKeys, probeKeys []interface{},
 	nToCheck uint16,
-	_SEL_STRING string,
+	_USE_SEL bool,
 ) { // */}}
 	// {{define "checkColWithNulls"}}
 	if probeVec.MaybeHasNulls() {
 		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, true)
+			if ht.allowNullEquality {
+				// The allowNullEquality flag only matters if both vectors have nulls.
+				// This lets us avoid writing all 2^3 conditional branches.
+				_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, true, true)
+			} else {
+				_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, true, false)
+			}
 		} else {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, false)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, false, false)
 		}
 	} else {
 		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, true)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, true, false)
 		} else {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, false)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, false, false)
 		}
 	}
 	// {{end}}
@@ -140,14 +170,34 @@ func _REHASH_BODY(
 	ctx context.Context,
 	ht *hashTable,
 	buckets []uint64,
-	keys []interface{},
+	keys _GOTYPESLICE,
+	nulls *coldata.Nulls,
 	nKeys uint64,
-	_SEL_STRING string,
+	sel []uint16,
+	_HAS_SEL bool,
+	_HAS_NULLS bool,
 ) { // */}}
 	// {{define "rehashBody"}}
+	// Early bounds checks.
+	_ = buckets[nKeys-1]
+	// {{ if .HasSel }}
+	_ = sel[nKeys-1]
+	// {{ else }}
+	_ = execgen.GET(keys, int(nKeys-1))
+	// {{ end }}
 	for i := uint64(0); i < nKeys; i++ {
 		ht.cancelChecker.check(ctx)
-		v := keys[_SEL_IND]
+		// {{ if .HasSel }}
+		selIdx := sel[i]
+		// {{ else }}
+		selIdx := i
+		// {{ end }}
+		// {{ if .HasNulls }}
+		if nulls.NullAt(uint16(selIdx)) {
+			continue
+		}
+		// {{ end }}
+		v := execgen.UNSAFEGET(keys, int(selIdx))
 		p := uintptr(buckets[i])
 		_ASSIGN_HASH(p, v)
 		buckets[i] = uint64(p)
@@ -158,13 +208,14 @@ func _REHASH_BODY(
 }
 
 func _COLLECT_RIGHT_OUTER(
-	prober *hashJoinProber,
-	batchSize uint16,
-	nResults uint16,
-	batch coldata.Batch,
-	_SEL_STRING string,
+	prober *hashJoinProber, batchSize uint16, nResults uint16, batch coldata.Batch, _USE_SEL bool,
 ) uint16 { // */}}
 	// {{define "collectRightOuter"}}
+	// Early bounds checks.
+	_ = prober.ht.headID[batchSize-1]
+	// {{if .UseSel}}
+	_ = sel[batchSize-1]
+	// {{end}}
 	for i := uint16(0); i < batchSize; i++ {
 		currentID := prober.ht.headID[i]
 
@@ -178,8 +229,17 @@ func _COLLECT_RIGHT_OUTER(
 				return nResults
 			}
 
-			prober.buildIdx[nResults] = currentID - 1
-			prober.probeIdx[nResults] = _SEL_IND
+			if currentID > 0 {
+				// If currentID == 0, nobody will look at this again since
+				// probeRowUnmatched will have been set - so don't populate this with
+				// a garbage value.
+				prober.buildIdx[nResults] = currentID - 1
+			}
+			// {{if .UseSel}}
+			prober.probeIdx[nResults] = sel[i]
+			// {{else}}
+			prober.probeIdx[nResults] = i
+			// {{end}}
 			currentID = prober.ht.same[currentID]
 			prober.ht.headID[i] = currentID
 			nResults++
@@ -196,13 +256,14 @@ func _COLLECT_RIGHT_OUTER(
 }
 
 func _COLLECT_NO_OUTER(
-	prober *hashJoinProber,
-	batchSize uint16,
-	nResults uint16,
-	batch coldata.Batch,
-	_SEL_STRING string,
+	prober *hashJoinProber, batchSize uint16, nResults uint16, batch coldata.Batch, _USE_SEL bool,
 ) uint16 { // */}}
 	// {{define "collectNoOuter"}}
+	// Early bounds checks.
+	_ = prober.ht.headID[batchSize-1]
+	// {{if .UseSel}}
+	_ = sel[batchSize-1]
+	// {{end}}
 	for i := uint16(0); i < batchSize; i++ {
 		currentID := prober.ht.headID[i]
 		for currentID != 0 {
@@ -212,7 +273,11 @@ func _COLLECT_NO_OUTER(
 			}
 
 			prober.buildIdx[nResults] = currentID - 1
-			prober.probeIdx[nResults] = _SEL_IND
+			// {{if .UseSel}}
+			prober.probeIdx[nResults] = sel[i]
+			// {{else}}
+			prober.probeIdx[nResults] = i
+			// {{end}}
 			currentID = prober.ht.same[currentID]
 			prober.ht.headID[i] = currentID
 			nResults++
@@ -224,28 +289,54 @@ func _COLLECT_NO_OUTER(
 	return 0
 }
 
-func _DISTINCT_COLLECT_RIGHT_OUTER(prober *hashJoinProber, batchSize uint16, _SEL_STRING string) { // */}}
+func _DISTINCT_COLLECT_RIGHT_OUTER(prober *hashJoinProber, batchSize uint16, _USE_SEL bool) { // */}}
 	// {{define "distinctCollectRightOuter"}}
+	// Early bounds checks.
+	_ = prober.ht.groupID[batchSize-1]
+	_ = prober.probeRowUnmatched[batchSize-1]
+	_ = prober.buildIdx[batchSize-1]
+	_ = prober.probeIdx[batchSize-1]
+	// {{if .UseSel}}
+	_ = sel[batchSize-1]
+	// {{end}}
 	for i := uint16(0); i < batchSize; i++ {
 		// Index of keys and outputs in the hash table is calculated as ID - 1.
-		prober.buildIdx[i] = prober.ht.groupID[i] - 1
-		prober.probeIdx[i] = _SEL_IND
-
-		prober.probeRowUnmatched[i] = prober.ht.groupID[i] == 0
+		id := prober.ht.groupID[i]
+		rowUnmatched := id == 0
+		prober.probeRowUnmatched[i] = rowUnmatched
+		if !rowUnmatched {
+			prober.buildIdx[i] = id - 1
+		}
+		// {{if .UseSel}}
+		prober.probeIdx[i] = sel[i]
+		// {{else}}
+		prober.probeIdx[i] = i
+		// {{end}}
 	}
 	// {{end}}
 	// {{/*
 }
 
 func _DISTINCT_COLLECT_NO_OUTER(
-	prober *hashJoinProber, batchSize uint16, nResults uint16, _ string,
+	prober *hashJoinProber, batchSize uint16, nResults uint16, _USE_SEL bool,
 ) { // */}}
 	// {{define "distinctCollectNoOuter"}}
+	// Early bounds checks.
+	_ = prober.ht.groupID[batchSize-1]
+	_ = prober.buildIdx[batchSize-1]
+	_ = prober.probeIdx[batchSize-1]
+	// {{if .UseSel}}
+	_ = sel[batchSize-1]
+	// {{end}}
 	for i := uint16(0); i < batchSize; i++ {
 		if prober.ht.groupID[i] != 0 {
 			// Index of keys and outputs in the hash table is calculated as ID - 1.
 			prober.buildIdx[nResults] = prober.ht.groupID[i] - 1
-			prober.probeIdx[nResults] = _SEL_IND
+			// {{if .UseSel}}
+			prober.probeIdx[nResults] = sel[i]
+			// {{else}}
+			prober.probeIdx[nResults] = i
+			// {{end}}
 			nResults++
 		}
 	}
@@ -255,6 +346,9 @@ func _DISTINCT_COLLECT_NO_OUTER(
 
 // */}}
 
+// Use execgen package to remove unused import warning.
+var _ interface{} = execgen.UNSAFEGET
+
 // rehash takes an element of a key (tuple representing a row of equality
 // column values) at a given column and computes a new hash by applying a
 // transformation to the existing hash.
@@ -262,7 +356,7 @@ func (ht *hashTable) rehash(
 	ctx context.Context,
 	buckets []uint64,
 	keyIdx int,
-	t types.T,
+	t coltypes.T,
 	col coldata.Vec,
 	nKeys uint64,
 	sel []uint16,
@@ -270,24 +364,33 @@ func (ht *hashTable) rehash(
 	switch t {
 	// {{range $hashType := .HashTemplate}}
 	case _TYPES_T:
-		keys := col._TemplateType()
-		if sel != nil {
-			_REHASH_BODY(ctx, ht, buckets, keys, nKeys, "sel[i]")
+		keys, nulls := col._TemplateType(), col.Nulls()
+		if col.MaybeHasNulls() {
+			if sel != nil {
+				_REHASH_BODY(ctx, ht, buckets, keys, nulls, nKeys, sel, true, true)
+			} else {
+				_REHASH_BODY(ctx, ht, buckets, keys, nulls, nKeys, sel, false, true)
+			}
 		} else {
-			_REHASH_BODY(ctx, ht, buckets, keys, nKeys, "i")
+			if sel != nil {
+				_REHASH_BODY(ctx, ht, buckets, keys, nulls, nKeys, sel, true, false)
+			} else {
+				_REHASH_BODY(ctx, ht, buckets, keys, nulls, nKeys, sel, false, false)
+			}
 		}
 
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", t))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", t))
 	}
 }
 
 // checkCol determines if the current key column in the groupID buckets matches
 // the specified equality column key. If there is a match, then the key is added
-// to differs. If the bucket has reached the end, the key is rejected. If any
-// element in the key is null, then there is no match.
-func (ht *hashTable) checkCol(t types.T, keyColIdx int, nToCheck uint16, sel []uint16) {
+// to differs. If the bucket has reached the end, the key is rejected. If the
+// hashTable disallows null equality, then if any element in the key is null,
+// there is no match.
+func (ht *hashTable) checkCol(t coltypes.T, keyColIdx int, nToCheck uint16, sel []uint16) {
 	switch t {
 	// {{range $neType := .NETemplate}}
 	case _TYPES_T:
@@ -303,18 +406,18 @@ func (ht *hashTable) checkCol(t types.T, keyColIdx int, nToCheck uint16, sel []u
 				probeVec, buildVec,
 				buildKeys, probeKeys,
 				nToCheck,
-				"sel[ht.toCheck[i]]")
+				true)
 		} else {
 			_CHECK_COL_WITH_NULLS(
 				ht,
 				probeVec, buildVec,
 				buildKeys, probeKeys,
 				nToCheck,
-				"ht.toCheck[i]")
+				false)
 		}
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", t))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", t))
 	}
 }
 
@@ -326,15 +429,15 @@ func (prober *hashJoinProber) collect(batch coldata.Batch, batchSize uint16, sel
 
 	if prober.spec.outer {
 		if sel != nil {
-			_COLLECT_RIGHT_OUTER(prober, batchSize, nResults, batch, "sel[i]")
+			_COLLECT_RIGHT_OUTER(prober, batchSize, nResults, batch, true)
 		} else {
-			_COLLECT_RIGHT_OUTER(prober, batchSize, nResults, batch, "i")
+			_COLLECT_RIGHT_OUTER(prober, batchSize, nResults, batch, false)
 		}
 	} else {
 		if sel != nil {
-			_COLLECT_NO_OUTER(prober, batchSize, nResults, batch, "sel[i]")
+			_COLLECT_NO_OUTER(prober, batchSize, nResults, batch, true)
 		} else {
-			_COLLECT_NO_OUTER(prober, batchSize, nResults, batch, "i")
+			_COLLECT_NO_OUTER(prober, batchSize, nResults, batch, false)
 		}
 	}
 
@@ -353,15 +456,15 @@ func (prober *hashJoinProber) distinctCollect(
 		nResults = batchSize
 
 		if sel != nil {
-			_DISTINCT_COLLECT_RIGHT_OUTER(prober, batchSize, "sel[i]")
+			_DISTINCT_COLLECT_RIGHT_OUTER(prober, batchSize, true)
 		} else {
-			_DISTINCT_COLLECT_RIGHT_OUTER(prober, batchSize, "i")
+			_DISTINCT_COLLECT_RIGHT_OUTER(prober, batchSize, false)
 		}
 	} else {
 		if sel != nil {
-			_DISTINCT_COLLECT_NO_OUTER(prober, batchSize, nResults, "sel[i]")
+			_DISTINCT_COLLECT_NO_OUTER(prober, batchSize, nResults, true)
 		} else {
-			_DISTINCT_COLLECT_NO_OUTER(prober, batchSize, nResults, "i")
+			_DISTINCT_COLLECT_NO_OUTER(prober, batchSize, nResults, false)
 		}
 	}
 

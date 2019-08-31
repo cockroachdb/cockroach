@@ -105,14 +105,14 @@ func canConstantBecome(c Constant, typ *types.T) bool {
 
 // NumVal represents a constant numeric value.
 type NumVal struct {
-	constant.Value
-	// Negative is the sign bit to add to any interpretation of the
-	// Value or OrigString fields.
-	Negative bool
-
-	// We preserve the "original" string representation (before
+	// value is the constant number, without any sign information.
+	value constant.Value
+	// negative is the sign bit to add to any interpretation of the
+	// value or origString fields.
+	negative bool
+	// origString is the "original" string representation (before
 	// folding). This should remain sign-less.
-	OrigString string
+	origString string
 
 	// The following fields are used to avoid allocating Datums on type resolution.
 	resInt     DInt
@@ -120,13 +120,48 @@ type NumVal struct {
 	resDecimal DDecimal
 }
 
+var _ Constant = &NumVal{}
+
+// NewNumVal constructs a new NumVal instance. This is used during parsing and
+// in tests.
+func NewNumVal(value constant.Value, origString string, negative bool) *NumVal {
+	return &NumVal{value: value, origString: origString, negative: negative}
+}
+
+// Kind implements the constant.Value interface.
+func (expr *NumVal) Kind() constant.Kind {
+	return expr.value.Kind()
+}
+
+// ExactString implements the constant.Value interface.
+func (expr *NumVal) ExactString() string {
+	return expr.value.ExactString()
+}
+
+// OrigString returns the origString field.
+func (expr *NumVal) OrigString() string {
+	return expr.origString
+}
+
+// SetNegative sets the negative field to true. The parser calls this when it
+// identifies a negative constant.
+func (expr *NumVal) SetNegative() {
+	expr.negative = true
+}
+
+// Negate sets the negative field to the opposite of its current value. The
+// parser calls this to simplify unary negation expressions.
+func (expr *NumVal) Negate() {
+	expr.negative = !expr.negative
+}
+
 // Format implements the NodeFormatter interface.
 func (expr *NumVal) Format(ctx *FmtCtx) {
-	s := expr.OrigString
+	s := expr.origString
 	if s == "" {
-		s = expr.Value.String()
+		s = expr.value.String()
 	}
-	if expr.Negative {
+	if expr.negative {
 		ctx.WriteByte('-')
 	}
 	ctx.WriteString(s)
@@ -161,7 +196,7 @@ var errConstOutOfRange32 = pgerror.New(pgcode.NumericValueOutOfRange, "numeric c
 // error if not possible. The method will set expr.resInt to the value of
 // this int64 if it is successful, avoiding the need to call the method again.
 func (expr *NumVal) AsInt64() (int64, error) {
-	intVal, ok := expr.asConstantInt()
+	intVal, ok := expr.AsConstantInt()
 	if !ok {
 		return 0, errConstNotInt
 	}
@@ -178,7 +213,7 @@ func (expr *NumVal) AsInt64() (int64, error) {
 // value of this int32 if it is successful, avoiding the need to call
 // the method again.
 func (expr *NumVal) AsInt32() (int32, error) {
-	intVal, ok := expr.asConstantInt()
+	intVal, ok := expr.AsConstantInt()
 	if !ok {
 		return 0, errConstNotInt
 	}
@@ -193,14 +228,21 @@ func (expr *NumVal) AsInt32() (int32, error) {
 	return int32(i), nil
 }
 
-// asConstantInt returns the value as an constant.Int if possible, along
-// with a flag indicating whether the conversion was possible.
-// The result contains the proper sign as per expr.Negative.
-func (expr *NumVal) asConstantInt() (constant.Value, bool) {
-	v := expr.Value
-	if expr.Negative {
+// AsConstantValue returns the value as a constant numerical value, with the proper sign
+// as given by expr.negative.
+func (expr *NumVal) AsConstantValue() constant.Value {
+	v := expr.value
+	if expr.negative {
 		v = constant.UnaryOp(token.SUB, v, 0)
 	}
+	return v
+}
+
+// AsConstantInt returns the value as an constant.Int if possible, along
+// with a flag indicating whether the conversion was possible.
+// The result contains the proper sign as per expr.negative.
+func (expr *NumVal) AsConstantInt() (constant.Value, bool) {
+	v := expr.AsConstantValue()
 	intVal := constant.ToInt(v)
 	if intVal.Kind() == constant.Int {
 		return intVal, true
@@ -253,15 +295,15 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 		}
 		return &expr.resInt, nil
 	case types.FloatFamily:
-		f, _ := constant.Float64Val(expr.Value)
-		if expr.Negative {
+		f, _ := constant.Float64Val(expr.value)
+		if expr.negative {
 			f = -f
 		}
 		expr.resFloat = DFloat(f)
 		return &expr.resFloat, nil
 	case types.DecimalFamily:
 		dd := &expr.resDecimal
-		s := expr.OrigString
+		s := expr.origString
 		if s == "" {
 			// TODO(nvanbenschoten): We should propagate width through constant folding so that we
 			// can control precision on folded values as well.
@@ -296,9 +338,11 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 			}
 		}
 		if !dd.IsZero() {
-			// Negative zero does not exist for DECIMAL, in that case we
-			// ignore the sign.
-			dd.Negative = expr.Negative
+			// Negative zero does not exist for DECIMAL, in that case we ignore the
+			// sign. Otherwise XOR the signs of the expr and the decimal value
+			// contained in the expr, since the negative may have been folded into the
+			// inner decimal.
+			dd.Negative = dd.Negative != expr.negative
 		}
 		return dd, nil
 	case types.OidFamily:
@@ -398,6 +442,9 @@ func (expr *StrVal) Format(ctx *FmtCtx) {
 var (
 	// StrValAvailAllParsable is the set of parsable string types.
 	StrValAvailAllParsable = []*types.T{
+		// Note: String is deliberately first, to make sure that "string" is the
+		// default type that raw strings get parsed into, without any casts or type
+		// assertions.
 		types.String,
 		types.Bytes,
 		types.Bool,
@@ -405,6 +452,7 @@ var (
 		types.Float,
 		types.Decimal,
 		types.Date,
+		types.StringArray,
 		types.Time,
 		types.Timestamp,
 		types.TimestampTZ,
@@ -552,20 +600,11 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 		switch cv := t.Expr.(type) {
 		case *NumVal:
 			if tok, ok := unaryOpToToken[t.Operator]; ok {
-				switch tok {
-				case token.ADD:
-					return cv
-				case token.SUB:
-					// We always coerce -0 to 0 everywhere else, so this can be a passthrough.
-					if cv.Value.Kind() == constant.Float && constant.Compare(cv.Value, token.EQL, constant.MakeFloat64(0)) {
-						return cv
-					}
-				}
-				return &NumVal{Value: constant.UnaryOp(tok, cv.Value, 0)}
+				return &NumVal{value: constant.UnaryOp(tok, cv.AsConstantValue(), 0)}
 			}
 			if token, ok := unaryOpToTokenIntOnly[t.Operator]; ok {
-				if intVal, ok := cv.asConstantInt(); ok {
-					return &NumVal{Value: constant.UnaryOp(token, intVal, 0)}
+				if intVal, ok := cv.AsConstantInt(); ok {
+					return &NumVal{value: constant.UnaryOp(token, intVal, 0)}
 				}
 			}
 		}
@@ -574,12 +613,12 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 		case *NumVal:
 			if r, ok := t.Right.(*NumVal); ok {
 				if token, ok := binaryOpToToken[t.Operator]; ok {
-					return &NumVal{Value: constant.BinaryOp(l.Value, token, r.Value)}
+					return &NumVal{value: constant.BinaryOp(l.AsConstantValue(), token, r.AsConstantValue())}
 				}
 				if token, ok := binaryOpToTokenIntOnly[t.Operator]; ok {
-					if lInt, ok := l.asConstantInt(); ok {
-						if rInt, ok := r.asConstantInt(); ok {
-							return &NumVal{Value: constant.BinaryOp(lInt, token, rInt)}
+					if lInt, ok := l.AsConstantInt(); ok {
+						if rInt, ok := r.AsConstantInt(); ok {
+							return &NumVal{value: constant.BinaryOp(lInt, token, rInt)}
 						}
 					}
 				}
@@ -603,7 +642,7 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 		case *NumVal:
 			if r, ok := t.Right.(*NumVal); ok {
 				if token, ok := comparisonOpToToken[t.Operator]; ok {
-					return MakeDBool(DBool(constant.Compare(l.Value, token, r.Value)))
+					return MakeDBool(DBool(constant.Compare(l.AsConstantValue(), token, r.AsConstantValue())))
 				}
 			}
 		case *StrVal:

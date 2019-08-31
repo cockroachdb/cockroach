@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt
-
 # The following tables form the interleaved hierarchy:
 #   name:             primary key:                # rows:   'a' = id mod X :
 #   parent1           (pid1)                      40        8

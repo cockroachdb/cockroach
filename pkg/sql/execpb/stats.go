@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -38,10 +38,14 @@ func (vs *VectorizedStats) Stats() map[string]string {
 	} else {
 		timeSuffix = executionTimeTagSuffix
 	}
+	selectivity := float64(0)
+	if vs.NumBatches > 0 {
+		selectivity = float64(vs.NumTuples) / float64(coldata.BatchSize*vs.NumBatches)
+	}
 	return map[string]string{
 		batchesOutputTagSuffix: fmt.Sprintf("%d", vs.NumBatches),
 		tuplesOutputTagSuffix:  fmt.Sprintf("%d", vs.NumTuples),
-		selectivityTagSuffix:   fmt.Sprintf("%.2f", float64(vs.NumTuples)/float64(coldata.BatchSize*vs.NumBatches)),
+		selectivityTagSuffix:   fmt.Sprintf("%.2f", selectivity),
 		timeSuffix:             fmt.Sprintf("%v", vs.Time.Round(time.Microsecond)),
 	}
 }
@@ -62,10 +66,14 @@ func (vs *VectorizedStats) StatsForQueryPlan() []string {
 	} else {
 		timeSuffix = executionTimeQueryPlanSuffix
 	}
+	selectivity := float64(0)
+	if vs.NumBatches > 0 {
+		selectivity = float64(vs.NumTuples) / float64(coldata.BatchSize*vs.NumBatches)
+	}
 	return []string{
 		fmt.Sprintf("%s: %d", batchesOutputQueryPlanSuffix, vs.NumBatches),
 		fmt.Sprintf("%s: %d", tuplesOutputQueryPlanSuffix, vs.NumTuples),
-		fmt.Sprintf("%s: %.2f", selectivityQueryPlanSuffix, float64(vs.NumTuples)/float64(coldata.BatchSize*vs.NumBatches)),
+		fmt.Sprintf("%s: %.2f", selectivityQueryPlanSuffix, selectivity),
 		fmt.Sprintf("%s: %v", timeSuffix, vs.Time.Round(time.Microsecond)),
 	}
 }

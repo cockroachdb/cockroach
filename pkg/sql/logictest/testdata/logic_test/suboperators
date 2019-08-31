@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 statement ok
 CREATE TABLE abc (a INT, b INT, C INT)
 
@@ -110,6 +108,12 @@ query error unsupported comparison operator: 1 = ANY ARRAY\['foo', 'bar'\]
 SELECT 1 = ANY(ARRAY['foo', 'bar'])
 
 query error unsupported comparison operator: <int> = ANY <string\[\]>
+SELECT 1 = ANY(ARRAY['foo'] || 'bar'::string)
+
+# Note that this relatively poor error message is caused by the fact that
+# strings are constant castable to string arrays. Postgres also makes this
+# same minor mistake in error generation.
+query error unsupported binary operator: <string\[\]> || <string> (desired <int\[\]>)
 SELECT 1 = ANY(ARRAY['foo'] || 'bar')
 
 # ANY/SOME with subqueries.
@@ -294,7 +298,7 @@ query error unsupported comparison operator: 1 = ALL ARRAY\['foo', 'bar'\]
 SELECT 1 = ALL(ARRAY['foo', 'bar'])
 
 query error unsupported comparison operator: <int> = ALL <string\[\]>
-SELECT 1 = ALL(ARRAY['foo'] || 'bar')
+SELECT 1 = ALL(ARRAY['foo'] || 'bar'::text)
 
 # ALL with subqueries.
 

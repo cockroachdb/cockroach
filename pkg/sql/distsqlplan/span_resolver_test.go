@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -52,12 +53,8 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	// Replicate the row ranges on all of the first 3 nodes. Save the 4th node in
 	// a pristine state, with empty caches.
 	for i := 0; i < 3; i++ {
-		var err error
-		rowRanges[i], err = tc.AddReplicas(
-			rowRanges[i].StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
-		if err != nil {
-			t.Fatal(err)
-		}
+		rowRanges[i] = tc.AddReplicasOrFatal(
+			t, rowRanges[i].StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
 	}
 
 	// Scatter the leases around; node i gets range i.
@@ -87,7 +84,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 
 	lr := distsqlplan.NewSpanResolver(
 		s3.Cfg.Settings,
-		s3.DistSender(), s3.Gossip(), s3.GetNode().Descriptor, nil,
+		s3.DistSenderI().(*kv.DistSender), s3.Gossip(), s3.GetNode().Descriptor, nil,
 		replicaoracle.BinPackingChoice)
 
 	var spans []spanWithDir
@@ -193,7 +190,7 @@ func TestSpanResolver(t *testing.T) {
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
 	lr := distsqlplan.NewSpanResolver(
 		s.(*server.TestServer).Cfg.Settings,
-		s.DistSender(), s.Gossip(),
+		s.DistSenderI().(*kv.DistSender), s.GossipI().(*gossip.Gossip),
 		s.(*server.TestServer).GetNode().Descriptor, nil,
 		replicaoracle.BinPackingChoice)
 
@@ -287,7 +284,7 @@ func TestMixedDirections(t *testing.T) {
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
 	lr := distsqlplan.NewSpanResolver(
 		s.(*server.TestServer).Cfg.Settings,
-		s.DistSender(), s.Gossip(),
+		s.DistSenderI().(*kv.DistSender), s.GossipI().(*gossip.Gossip),
 		s.(*server.TestServer).GetNode().Descriptor,
 		nil,
 		replicaoracle.BinPackingChoice)
@@ -422,7 +419,7 @@ func selectReplica(nodeID roachpb.NodeID, rng roachpb.RangeDescriptor) rngInfo {
 			return rngInfo{ReplicaDescriptor: rep, rngDesc: rng}
 		}
 	}
-	panic(fmt.Sprintf("no replica on node %d in: %s", nodeID, rng))
+	panic(fmt.Sprintf("no replica on node %d in: %s", nodeID, &rng))
 }
 
 func expectResolved(actual [][]rngInfo, expected ...[]rngInfo) error {

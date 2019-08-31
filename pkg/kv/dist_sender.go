@@ -417,6 +417,7 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 func (ds *DistSender) sendRPC(
 	ctx context.Context,
 	ba roachpb.BatchRequest,
+	class rpc.ConnectionClass,
 	rangeID roachpb.RangeID,
 	replicas ReplicaSlice,
 	cachedLeaseHolder roachpb.ReplicaDescriptor,
@@ -435,7 +436,10 @@ func (ds *DistSender) sendRPC(
 	return ds.sendToReplicas(
 		ctx,
 		ba,
-		SendOptions{metrics: &ds.metrics},
+		SendOptions{
+			class:   class,
+			metrics: &ds.metrics,
+		},
 		rangeID,
 		replicas,
 		ds.nodeDialer,
@@ -487,8 +491,10 @@ func (ds *DistSender) getDescriptor(
 func (ds *DistSender) sendSingleRange(
 	ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor, withCommit bool,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	// Try to send the call.
-	replicas := NewReplicaSlice(ds.gossip, desc)
+	// Try to send the call. Learner replicas won't serve reads/writes, so send
+	// only to the `Voters` replicas. This is just an optimization to save a
+	// network hop, everything would still work if we had `All` here.
+	replicas := NewReplicaSlice(ds.gossip, desc.Replicas().Voters())
 
 	// If this request needs to go to a lease holder and we know who that is, move
 	// it to the front.
@@ -508,8 +514,8 @@ func (ds *DistSender) sendSingleRange(
 		// request latency.
 		replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.rpcContext.RemoteClocks.Latency)
 	}
-
-	br, err := ds.sendRPC(ctx, ba, desc.RangeID, replicas, cachedLeaseHolder, withCommit)
+	class := rpc.ConnectionClassForKey(desc.RSpan().Key)
+	br, err := ds.sendRPC(ctx, ba, class, desc.RangeID, replicas, cachedLeaseHolder, withCommit)
 	if err != nil {
 		log.VErrEvent(ctx, 2, err.Error())
 		return nil, roachpb.NewError(err)
@@ -570,6 +576,8 @@ func (ds *DistSender) initAndVerifyBatch(
 			case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest, *roachpb.ReverseScanRequest:
 				continue
 
+			case *roachpb.RevertRangeRequest:
+				continue
 			default:
 				return roachpb.NewErrorf("batch with limit contains %T request", inner)
 			}
@@ -703,7 +711,7 @@ func (ds *DistSender) Send(
 		// Local addressing has already been resolved.
 		// TODO(tschottdorf): consider rudimentary validation of the batch here
 		// (for example, non-range requests with EndKey, or empty key ranges).
-		rs, err := keys.Range(ba)
+		rs, err := keys.Range(ba.Requests)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -840,7 +848,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	// over multiple ranges, so call into divideAndSendBatchToRanges.
 	qiBa := ba
 	qiBa.Requests = swappedReqs[swapIdx+1:]
-	qiRS, err := keys.Range(qiBa)
+	qiRS, err := keys.Range(qiBa.Requests)
 	if err != nil {
 		return br, roachpb.NewError(err)
 	}
@@ -882,7 +890,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	// QueryIntent requests. Make sure to determine the request's
 	// new key span.
 	ba.Requests = swappedReqs[:swapIdx+1]
-	rs, err = keys.Range(ba)
+	rs, err = keys.Range(ba.Requests)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}

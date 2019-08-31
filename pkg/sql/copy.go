@@ -107,14 +107,14 @@ func newCopyMachine(
 		retErr = cleanup(ctx, retErr)
 	}()
 
-	tableDesc, err := ResolveExistingObject(ctx, &c.p, &n.Table, true /*required*/, ResolveRequireTableDesc)
+	tableDesc, err := ResolveExistingObject(ctx, &c.p, &n.Table, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}
 	if err := c.p.CheckPrivilege(ctx, tableDesc, privilege.INSERT); err != nil {
 		return nil, err
 	}
-	cols, err := c.p.processColumns(tableDesc, n.Columns,
+	cols, err := sqlbase.ProcessTargetColumns(tableDesc, n.Columns,
 		true /* ensureColumns */, false /* allowMutations */)
 	if err != nil {
 		return nil, err

@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 statement ok
 CREATE TABLE t (
@@ -190,26 +190,28 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM abc ORDER BY a; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /abc/primary/1/2/3 -> NULL
 fetched: /abc/primary/1/2/3/d -> 'one'
-output row: [1 2 3 'one']
 fetched: /abc/primary/4/5/6 -> NULL
 fetched: /abc/primary/4/5/6/d -> 'Two'
+output row: [1 2 3 'one']
 output row: [4 5 6 'Two']
 
 statement ok
 SET tracing = on,kv,results; SELECT a, b FROM abc ORDER BY b, a; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /abc/ba/2/1/3 -> NULL
-output row: [1 2]
 fetched: /abc/ba/5/4/6 -> NULL
+output row: [1 2]
 output row: [4 5]
 
 # The non-unique index ba includes column c (required to make the keys unique)
@@ -306,38 +308,41 @@ statement ok
 SET tracing = on,kv,results; SELECT b, c FROM abc ORDER BY b, c; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /abc/bc/2/3 -> /1
-output row: [2 3]
 fetched: /abc/bc/5/6 -> /4
+output row: [2 3]
 output row: [5 6]
 
 statement ok
 SET tracing = on,kv,results; SELECT a, b, c FROM abc ORDER BY b; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /abc/bc/2/3 -> /1
-output row: [1 2 3]
 fetched: /abc/bc/5/6 -> /4
+output row: [1 2 3]
 output row: [4 5 6]
 
 statement ok
 SET tracing = on,kv,results; SELECT a FROM abc ORDER BY a DESC; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /abc/primary/4/5/6/d -> 'Two'
 fetched: /abc/primary/4/5/6 -> NULL
-output row: [4]
 fetched: /abc/primary/1/2/3/d -> 'one'
 fetched: /abc/primary/1/2/3 -> NULL
+output row: [4]
 output row: [1]
 
 query TTT
@@ -483,8 +488,8 @@ EXPLAIN (VERBOSE) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDE
 ----
 render                 ·              ·                   (b)              ·
  │                     render 0       b                   ·                ·
- └── run               ·              ·                   (a, b, c)        ·
-      └── insert       ·              ·                   (a, b, c)        ·
+ └── run               ·              ·                   (a, b)           ·
+      └── insert       ·              ·                   (a, b)           ·
            │           into           t(a, b, c)          ·                ·
            │           strategy       inserter            ·                ·
            └── values  ·              ·                   (x, y, column6)  ·
@@ -496,23 +501,23 @@ render                 ·              ·                   (b)              ·
 query TTTTT
 EXPLAIN (VERBOSE) DELETE FROM t WHERE a = 3 RETURNING b
 ----
-render               ·         ·          (b)        ·
- │                   render 0  b          ·          ·
- └── run             ·         ·          (a, b, c)  ·
-      └── delete     ·         ·          (a, b, c)  ·
-           │         from      t          ·          ·
-           │         strategy  deleter    ·          ·
-           └── scan  ·         ·          (a, b, c)  ·
-·                    table     t@primary  ·          ·
-·                    spans     /3-/3/#    ·          ·
+render               ·         ·          (b)     ·
+ │                   render 0  b          ·       ·
+ └── run             ·         ·          (a, b)  ·
+      └── delete     ·         ·          (a, b)  ·
+           │         from      t          ·       ·
+           │         strategy  deleter    ·       ·
+           └── scan  ·         ·          (a, b)  ·
+·                    table     t@primary  ·       ·
+·                    spans     /3-/3/#    ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 ----
 render                    ·         ·          (b)                 ·
  │                        render 0  b          ·                   ·
- └── run                  ·         ·          (a, b, c)           ·
-      └── update          ·         ·          (a, b, c)           ·
+ └── run                  ·         ·          (a, b)              ·
+      └── update          ·         ·          (a, b)              ·
            │              table     t          ·                   ·
            │              set       c          ·                   ·
            │              strategy  updater    ·                   ·
@@ -755,18 +760,20 @@ render                      ·                      ·                 (k)      
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 ----
-render           ·               ·                  (k)           ·
- │               render 0        k                  ·             ·
- └── merge-join  ·               ·                  (k, v, k, v)  -v,+k
-      │          type            inner              ·             ·
-      │          equality        (v, k) = (v, k)    ·             ·
-      │          mergeJoinOrder  -"(v=v)",+"(k=k)"  ·             ·
-      ├── scan   ·               ·                  (k, v)        -v,+k
-      │          table           kv@foo             ·             ·
-      │          spans           ALL                ·             ·
-      └── scan   ·               ·                  (k, v)        -v,+k
-·                table           kv@foo             ·             ·
-·                spans           ALL                ·             ·
+render           ·                   ·                  (k)           ·
+ │               render 0            k                  ·             ·
+ └── merge-join  ·                   ·                  (k, v, k, v)  -v,+k
+      │          type                inner              ·             ·
+      │          equality            (v, k) = (v, k)    ·             ·
+      │          left cols are key   ·                  ·             ·
+      │          right cols are key  ·                  ·             ·
+      │          mergeJoinOrder      -"(v=v)",+"(k=k)"  ·             ·
+      ├── scan   ·                   ·                  (k, v)        -v,+k
+      │          table               kv@foo             ·             ·
+      │          spans               ALL                ·             ·
+      └── scan   ·                   ·                  (k, v)        -v,+k
+·                table               kv@foo             ·             ·
+·                spans               ALL                ·             ·
 
 statement ok
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z,y))

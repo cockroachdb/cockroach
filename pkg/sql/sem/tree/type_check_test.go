@@ -19,12 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 // The following tests need both the type checking infrastructure and also
 // all the built-in function definitions to be active.
 
 func TestTypeCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testData := []struct {
 		expr string
 		// The expected serialized expression after type-checking. This tests both
@@ -189,6 +191,7 @@ func TestTypeCheck(t *testing.T) {
 }
 
 func TestTypeCheckError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testData := []struct {
 		expr     string
 		expected string

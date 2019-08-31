@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 statement ok
 CREATE USER bar
 
@@ -951,5 +949,38 @@ true
 
 query B
 SELECT has_type_privilege('bar', 'text'::REGTYPE::OID, 'USAGE')
+----
+true
+
+# Regression test for #39703.
+
+statement ok
+DROP TABLE IF EXISTS hcp_test; CREATE TABLE hcp_test (a INT8, b INT8, c INT8)
+
+statement ok
+ALTER TABLE hcp_test DROP COLUMN b
+
+query TI
+SELECT attname, attnum FROM pg_attribute WHERE attrelid = 'hcp_test'::REGCLASS
+----
+a     1
+c     3
+rowid 4
+
+query B
+SELECT has_column_privilege('hcp_test'::REGCLASS, 1, 'SELECT')
+----
+true
+
+statement error column 2 of relation hcp_test does not exist
+SELECT has_column_privilege('hcp_test'::REGCLASS, 2, 'SELECT')
+
+query B
+SELECT has_column_privilege('hcp_test'::REGCLASS, 3, 'SELECT')
+----
+true
+
+query B
+SELECT has_column_privilege('hcp_test'::REGCLASS, 4, 'SELECT')
 ----
 true

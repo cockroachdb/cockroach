@@ -310,7 +310,7 @@ func makeIndexAddTpccTest(spec clusterSpec, warehouses int, length time.Duration
 				Duration: length,
 			})
 		},
-		MinVersion: "v2.2.0",
+		MinVersion: "v19.1.0",
 	}
 }
 
@@ -323,7 +323,7 @@ func makeSchemaChangeBulkIngestTest(numNodes, numRows int, length time.Duration)
 		Name:    "schemachange/bulkingest",
 		Cluster: makeClusterSpec(numNodes),
 		Timeout: length * 2,
-		// `fixtures import` (with the experimental-workload paths) is not supported in 2.1
+		// `fixtures import` (with the workload paths) is not supported in 2.1
 		MinVersion: "v19.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			// Configure column a to have sequential ascending values, and columns b and c to be constant.
@@ -394,6 +394,47 @@ func makeSchemaChangeBulkIngestTest(numNodes, numRows int, length time.Duration)
 
 			m.Wait()
 		},
+	}
+}
+
+func registerMixedSchemaChangesTPCC1000(r *testRegistry) {
+	r.Add(makeMixedSchemaChanges(makeClusterSpec(5, cpu(16)), 1000, time.Hour*3))
+}
+
+func makeMixedSchemaChanges(spec clusterSpec, warehouses int, length time.Duration) testSpec {
+	return testSpec{
+		Name:    "schemachange/mixed/tpcc",
+		Cluster: spec,
+		Timeout: length * 3,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: warehouses,
+				Extra:      "--wait=false --tolerate-errors",
+				During: func(ctx context.Context) error {
+					return runAndLogStmts(ctx, t, c, "mixed-schema-changes", []string{
+						`CREATE INDEX ON tpcc.order (o_carrier_id);`,
+
+						`CREATE TABLE tpcc.customerpks (c_w_id INT, c_d_id INT, c_id INT, FOREIGN KEY (c_w_id, c_d_id, c_id) REFERENCES tpcc.customer (c_w_id, c_d_id, c_id));`,
+						`CREATE TABLE tpcc.orderpks (o_w_id, o_d_id, o_id, PRIMARY KEY(o_w_id, o_d_id, o_id)) AS select o_w_id, o_d_id, o_id from tpcc.order;`,
+
+						`ALTER TABLE tpcc.order ADD COLUMN orderdiscount INT DEFAULT 0;`,
+						`ALTER TABLE tpcc.order ADD CONSTRAINT nodiscount CHECK (orderdiscount = 0);`,
+
+						`ALTER TABLE tpcc.orderpks ADD CONSTRAINT warehouse_id FOREIGN KEY (o_w_id) REFERENCES tpcc.warehouse (w_id);`,
+
+						// The FK constraint on tpcc.district referencing tpcc.warehouse is
+						// unvalidated, thus this operation will not be a noop.
+						`ALTER TABLE tpcc.district VALIDATE CONSTRAINT fk_d_w_id_ref_warehouse;`,
+
+						`ALTER TABLE tpcc.orderpks RENAME TO tpcc.readytodrop;`,
+						`TRUNCATE TABLE tpcc.readytodrop CASCADE;`,
+						`DROP TABLE tpcc.readytodrop CASCADE;`,
+					})
+				},
+				Duration: length,
+			})
+		},
+		MinVersion: "v19.1.0",
 	}
 }
 

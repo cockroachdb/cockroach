@@ -325,6 +325,7 @@ const (
 	JSONExists
 	JSONSomeExists
 	JSONAllExists
+	Overlaps
 
 	// The following operators will always be used with an associated SubOperator.
 	// If Go had algebraic data types they would be defined in a self-contained
@@ -374,6 +375,7 @@ var comparisonOpName = [...]string{
 	JSONExists:        "?",
 	JSONSomeExists:    "?|",
 	JSONAllExists:     "?&",
+	Overlaps:          "&&",
 	Any:               "ANY",
 	Some:              "SOME",
 	All:               "ALL",
@@ -1322,6 +1324,11 @@ func (node *FuncExpr) IsImpure() bool {
 // IsDistSQLBlacklist returns whether the function is not supported by DistSQL.
 func (node *FuncExpr) IsDistSQLBlacklist() bool {
 	return node.fnProps != nil && node.fnProps.DistsqlBlacklist
+}
+
+// CanHandleNulls returns whether or not
+func (node *FuncExpr) CanHandleNulls() bool {
+	return node.fnProps != nil && node.fnProps.NullableArgs
 }
 
 type funcType int

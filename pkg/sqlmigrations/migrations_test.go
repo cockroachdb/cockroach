@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -601,7 +602,7 @@ func TestExpectedInitialRangeCount(t *testing.T) {
 			return errors.New("last migration has not completed")
 		}
 
-		sysCfg := s.Gossip().GetSystemConfig()
+		sysCfg := s.GossipI().(*gossip.Gossip).GetSystemConfig()
 		if sysCfg == nil {
 			return errors.New("gossipped system config not available")
 		}
@@ -637,4 +638,33 @@ func TestExpectedInitialRangeCount(t *testing.T) {
 
 		return nil
 	})
+}
+
+func TestUpdateSystemLocationData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "update system.locations with default location data")
+	mt.start(t, base.TestServerArgs{})
+
+	// Check that we don't have any data in the system.locations table without the migration.
+	var count int
+	mt.sqlDB.QueryRow(t, `SELECT count(*) FROM system.locations`).Scan(&count)
+	if count != 0 {
+		t.Fatalf("Exected to find 0 rows in system.locations. Found  %d instead", count)
+	}
+
+	// Run the migration to insert locations.
+	if err := mt.runMigration(ctx, migration); err != nil {
+		t.Errorf("expected success, got %q", err)
+	}
+
+	// Check that we have all of the expected locations.
+	mt.sqlDB.QueryRow(t, `SELECT count(*) FROM system.locations`).Scan(&count)
+	if count != len(roachpb.DefaultLocationInformation) {
+		t.Fatalf("Exected to find 0 rows in system.locations. Found  %d instead", count)
+	}
 }

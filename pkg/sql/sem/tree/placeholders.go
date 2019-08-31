@@ -14,13 +14,10 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"sort"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -146,10 +143,6 @@ type PlaceholderInfo struct {
 	PlaceholderTypesInfo
 
 	Values QueryArguments
-
-	// permitUnassigned controls whether AssertAllAssigned returns an error when
-	// there are unassigned placeholders. See PermitUnassigned().
-	permitUnassigned bool
 }
 
 // Init initializes a PlaceholderInfo structure appropriate for the given number
@@ -165,7 +158,6 @@ func (p *PlaceholderInfo) Init(numPlaceholders int, typeHints PlaceholderTypes) 
 		p.TypeHints = typeHints
 	}
 	p.Values = nil
-	p.permitUnassigned = false
 	return nil
 }
 
@@ -191,36 +183,6 @@ func checkPlaceholderArity(numTypes, numPlaceholders int) error {
 		return pgerror.Newf(pgcode.UndefinedParameter,
 			"could not find types for all placeholders: got %d, expected %d",
 			numTypes, numPlaceholders)
-	}
-	return nil
-}
-
-// PermitUnassigned permits unassigned placeholders during plan construction,
-// so that EXPLAIN can work on statements with placeholders.
-func (p *PlaceholderInfo) PermitUnassigned() {
-	p.permitUnassigned = true
-}
-
-// AssertAllAssigned ensures that all placeholders that are used also have a
-// value assigned, or that PermitUnassigned was called.
-func (p *PlaceholderInfo) AssertAllAssigned() error {
-	if p.permitUnassigned {
-		return nil
-	}
-	var missing []string
-	for i := range p.Types {
-		idx := PlaceholderIdx(i)
-		if _, ok := p.Value(idx); !ok {
-			missing = append(missing, idx.String())
-		}
-	}
-	if len(missing) > 0 {
-		sort.Strings(missing)
-		return pgerror.Newf(pgcode.UndefinedParameter,
-			"no value provided for placeholder%s: %s",
-			util.Pluralize(int64(len(missing))),
-			strings.Join(missing, ", "),
-		)
 	}
 	return nil
 }

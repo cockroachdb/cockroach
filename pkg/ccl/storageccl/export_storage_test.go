@@ -525,7 +525,7 @@ func TestWorkloadStorage(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 
 	rows, payloadBytes, ranges := 4, 12, 1
-	gen := bank.FromConfig(rows, payloadBytes, ranges)
+	gen := bank.FromConfig(rows, rows, payloadBytes, ranges)
 	bankTable := gen.Tables()[0]
 	bankURL := func(extraParams ...map[string]string) *url.URL {
 		params := url.Values{`version`: []string{gen.Meta().Version}}
@@ -542,7 +542,7 @@ func TestWorkloadStorage(t *testing.T) {
 			}
 		}
 		return &url.URL{
-			Scheme:   `experimental-workload`,
+			Scheme:   `workload`,
 			Path:     `/` + path.Join(`csv`, gen.Meta().Name, bankTable.Name),
 			RawQuery: params.Encode(),
 		}
@@ -559,14 +559,15 @@ func TestWorkloadStorage(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, strings.TrimSpace(`
 0,0,initial-dTqn
-1,0,initial-vOpi
-2,0,initial-qMvo
-3,0,initial-nKir
+1,0,initial-Pkyk
+2,0,initial-eJkM
+3,0,initial-TlNb
 		`), strings.TrimSpace(string(bytes)))
 	}
 
 	{
-		params := map[string]string{`row-start`: `1`, `row-end`: `3`, `payload-bytes`: `14`}
+		params := map[string]string{
+			`row-start`: `1`, `row-end`: `3`, `payload-bytes`: `14`, `batch-size`: `1`}
 		s, err := ExportStorageFromURI(ctx, bankURL(params).String(), settings)
 		require.NoError(t, err)
 		r, err := s.ReadFile(ctx, ``)
@@ -579,16 +580,16 @@ func TestWorkloadStorage(t *testing.T) {
 		`), strings.TrimSpace(string(bytes)))
 	}
 
-	_, err := ExportStorageFromURI(ctx, `experimental-workload:///nope`, settings)
+	_, err := ExportStorageFromURI(ctx, `workload:///nope`, settings)
 	require.EqualError(t, err, `path must be of the form /<format>/<generator>/<table>: /nope`)
-	_, err = ExportStorageFromURI(ctx, `experimental-workload:///fmt/bank/bank?version=`, settings)
+	_, err = ExportStorageFromURI(ctx, `workload:///fmt/bank/bank?version=`, settings)
 	require.EqualError(t, err, `unsupported format: fmt`)
-	_, err = ExportStorageFromURI(ctx, `experimental-workload:///csv/nope/nope?version=`, settings)
+	_, err = ExportStorageFromURI(ctx, `workload:///csv/nope/nope?version=`, settings)
 	require.EqualError(t, err, `unknown generator: nope`)
-	_, err = ExportStorageFromURI(ctx, `experimental-workload:///csv/bank/bank`, settings)
+	_, err = ExportStorageFromURI(ctx, `workload:///csv/bank/bank`, settings)
 	require.EqualError(t, err, `parameter version is required`)
-	_, err = ExportStorageFromURI(ctx, `experimental-workload:///csv/bank/bank?version=`, settings)
+	_, err = ExportStorageFromURI(ctx, `workload:///csv/bank/bank?version=`, settings)
 	require.EqualError(t, err, `expected bank version "" but got "1.0.0"`)
-	_, err = ExportStorageFromURI(ctx, `experimental-workload:///csv/bank/bank?version=nope`, settings)
+	_, err = ExportStorageFromURI(ctx, `workload:///csv/bank/bank?version=nope`, settings)
 	require.EqualError(t, err, `expected bank version "nope" but got "1.0.0"`)
 }

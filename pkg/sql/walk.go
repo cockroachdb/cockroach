@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -569,7 +568,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 	case *createViewNode:
 		if v.observer.attr != nil {
-			v.observer.attr(name, "query", tree.AsStringWithFlags(n.n.AsSource, tree.FmtParsable))
+			v.observer.attr(name, "query", n.viewQuery)
 		}
 
 	case *setVarNode:
@@ -595,6 +594,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *explainDistSQLNode:
 		n.plan = v.visit(n.plan)
 
+	case *explainVecNode:
+		n.plan = v.visit(n.plan)
+
 	case *ordinalityNode:
 		n.source = v.visit(n.source)
 
@@ -614,9 +616,6 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		n.plan = v.visit(n.plan)
 
 	case *explainPlanNode:
-		if v.observer.attr != nil {
-			v.observer.attr(name, "expanded", strconv.FormatBool(n.expanded))
-		}
 		n.plan = v.visit(n.plan)
 
 	case *cancelQueriesNode:
@@ -649,8 +648,22 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *errorIfRowsNode:
 		n.plan = v.visit(n.plan)
 
+	case *scanBufferNode:
+		if v.observer.attr != nil {
+			v.observer.attr(name, "label", n.label)
+		}
+
 	case *bufferNode:
+		if v.observer.attr != nil {
+			v.observer.attr(name, "label", n.label)
+		}
 		n.plan = v.visit(n.plan)
+
+	case *exportNode:
+		if v.observer.attr != nil {
+			v.observer.attr(name, "destination", n.fileName)
+		}
+		n.source = v.visit(n.source)
 	}
 }
 
@@ -743,11 +756,12 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterUserSetPasswordNode{}): "alter user",
 	reflect.TypeOf(&applyJoinNode{}):            "apply-join",
 	reflect.TypeOf(&bufferNode{}):               "buffer node",
+	reflect.TypeOf(&cancelQueriesNode{}):        "cancel queries",
+	reflect.TypeOf(&cancelSessionsNode{}):       "cancel sessions",
+	reflect.TypeOf(&changePrivilegesNode{}):     "change privileges",
 	reflect.TypeOf(&commentOnColumnNode{}):      "comment on column",
 	reflect.TypeOf(&commentOnDatabaseNode{}):    "comment on database",
 	reflect.TypeOf(&commentOnTableNode{}):       "comment on table",
-	reflect.TypeOf(&cancelQueriesNode{}):        "cancel queries",
-	reflect.TypeOf(&cancelSessionsNode{}):       "cancel sessions",
 	reflect.TypeOf(&controlJobsNode{}):          "control jobs",
 	reflect.TypeOf(&createDatabaseNode{}):       "create database",
 	reflect.TypeOf(&createIndexNode{}):          "create index",
@@ -766,9 +780,11 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&dropTableNode{}):            "drop table",
 	reflect.TypeOf(&DropUserNode{}):             "drop user/role",
 	reflect.TypeOf(&dropViewNode{}):             "drop view",
-	reflect.TypeOf(&errorIfRowsNode{}):          "errorIfRows",
+	reflect.TypeOf(&errorIfRowsNode{}):          "error if rows",
 	reflect.TypeOf(&explainDistSQLNode{}):       "explain distsql",
 	reflect.TypeOf(&explainPlanNode{}):          "explain plan",
+	reflect.TypeOf(&explainVecNode{}):           "explain vectorized",
+	reflect.TypeOf(&exportNode{}):               "export",
 	reflect.TypeOf(&filterNode{}):               "filter",
 	reflect.TypeOf(&groupNode{}):                "group",
 	reflect.TypeOf(&hookFnNode{}):               "plugin",

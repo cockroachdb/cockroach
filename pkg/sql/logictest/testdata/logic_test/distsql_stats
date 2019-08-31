@@ -1,8 +1,11 @@
-# LogicTest: 5node-dist 5node-dist-opt 5node-dist-metadata
+# LogicTest: 5node-dist 5node-dist-metadata
 
 # Disable automatic stats.
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false
 
 statement ok
 CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c, d), INDEX c_idx (c, d))
@@ -25,8 +28,8 @@ INSERT INTO data SELECT a, b, c::FLOAT, d::DECIMAL FROM
    generate_series(1, 10) AS d(d)
 
 # Verify data placement.
-query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
@@ -43,41 +46,68 @@ NULL       /1       {1}       1
 statement ok
 CREATE STATISTICS s1 ON a FROM data
 
-query TTIII colnames
-SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+query TTIIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count, histogram_id
+FROM [SHOW STATISTICS FOR TABLE data]
 ----
-statistics_name  column_names  row_count  distinct_count  null_count
-s1               {a}           10000      10              0
+statistics_name  column_names  row_count  distinct_count  null_count  histogram_id
+s1               {a}           10000      10              0           NULL
 
-# TODO(radu): reenable when we support histograms.
-#
-# let $hist_id_1
-# SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's1'
-# 
-# query TII colnames
-# SHOW HISTOGRAM $hist_id_1
-# ----
-# upper_bound  range_rows  equal_rows
-# 1            0           1000
-# 2            0           1000
-# 3            0           1000
-# 4            0           1000
-# 5            0           1000
-# 6            0           1000
-# 7            0           1000
-# 8            0           1000
-# 9            0           1000
-# 10           0           1000
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_collection.enabled = true
+
+statement ok
+CREATE STATISTICS s1 ON a FROM data
+
+query TTIIIB colnames
+SELECT
+	statistics_name,
+	column_names,
+	row_count,
+	distinct_count,
+	null_count,
+	histogram_id IS NOT NULL AS has_histogram
+FROM
+	[SHOW STATISTICS FOR TABLE data];
+----
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+s1               {a}           10000      10              0           true
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's1'
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+1            0           0                    1000
+2            0           0                    1000
+3            0           0                    1000
+4            0           0                    1000
+5            0           0                    1000
+6            0           0                    1000
+7            0           0                    1000
+8            0           0                    1000
+9            0           0                    1000
+10           0           0                    1000
 
 statement ok
 CREATE STATISTICS "" ON b FROM data
 
-query TTIII colnames
-SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+query TTIIIB colnames
+SELECT
+	statistics_name,
+	column_names,
+	row_count,
+	distinct_count,
+	null_count,
+	histogram_id IS NOT NULL AS has_histogram
+FROM
+	[SHOW STATISTICS FOR TABLE data];
 ----
-statistics_name  column_names  row_count  distinct_count  null_count
-s1               {a}           10000      10              0
-NULL             {b}           10000      10              0
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+s1               {a}           10000      10              0           true
+NULL             {b}           10000      10              0           true
 
 # Verify that we can package statistics into a json object and later restore them.
 let $json_stats
@@ -89,12 +119,20 @@ DELETE FROM system.table_statistics
 statement ok
 ALTER TABLE data INJECT STATISTICS '$json_stats'
 
-query TTIII colnames
-SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+query TTIIIB colnames
+SELECT
+	statistics_name,
+	column_names,
+	row_count,
+	distinct_count,
+	null_count,
+	histogram_id IS NOT NULL AS has_histogram
+FROM
+	[SHOW STATISTICS FOR TABLE data];
 ----
-statistics_name  column_names  row_count  distinct_count  null_count
-s1               {a}           10000      10              0
-NULL             {b}           10000      10              0
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+s1               {a}           10000      10              0           true
+NULL             {b}           10000      10              0           true
 
 # Verify that any other statistics are blown away when we INJECT.
 statement ok
@@ -140,16 +178,18 @@ s2               {a}           10000      10              0
 statement ok
 CREATE STATISTICS s3 FROM data
 
-query TIII colnames
-SELECT column_names, row_count, distinct_count, null_count
+# With default column statistics, only index columns have a histogram_id
+# (specifically the first column in each index).
+query TIIIB colnames
+SELECT column_names, row_count, distinct_count, null_count, histogram_id IS NOT NULL AS has_histogram
 FROM [SHOW STATISTICS FOR TABLE data]
 WHERE statistics_name = 's3'
 ----
-column_names  row_count  distinct_count  null_count
-{a}           10000      10              0
-{c}           10000      10              0
-{b}           10000      10              0
-{d}           10000      10              0
+column_names  row_count  distinct_count  null_count  has_histogram
+{a}           10000      10              0           true
+{c}           10000      10              0           true
+{b}           10000      10              0           false
+{d}           10000      10              0           false
 
 # Add indexes, including duplicate index on column c.
 statement ok

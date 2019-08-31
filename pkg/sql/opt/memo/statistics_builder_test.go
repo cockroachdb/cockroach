@@ -88,8 +88,9 @@ func TestGetStatsFromConstraint(t *testing.T) {
 
 	var mem Memo
 	mem.Init(&evalCtx)
-	tab := catalog.Table(tree.NewUnqualifiedTableName("sel"))
-	tabID := mem.Metadata().AddTable(tab)
+	tn := tree.NewUnqualifiedTableName("sel")
+	tab := catalog.Table(tn)
+	tabID := mem.Metadata().AddTable(tab, tn)
 
 	// Test that applyConstraintSet correctly updates the statistics from
 	// constraint set cs, and selectivity is calculated correctly.
@@ -116,7 +117,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		s.Init(relProps)
 
 		// Calculate distinct counts.
-		sb.applyConstraintSet(cs, sel, relProps)
+		sb.applyConstraintSet(cs, true /* tight */, sel, relProps)
 
 		// Calculate row count and selectivity.
 		s.RowCount = scan.Relational().Stats.RowCount

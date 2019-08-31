@@ -11,10 +11,10 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
@@ -45,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -84,6 +86,14 @@ var disableSyncRaftLog = settings.RegisterBoolSetting(
 	false,
 )
 
+// UseAtomicReplicationChanges determines whether to issue atomic replication changes.
+// This has no effect until the cluster version is 19.2 or higher.
+var UseAtomicReplicationChanges = settings.RegisterBoolSetting(
+	"kv.atomic_replication_changes.enabled",
+	"use atomic replication changes",
+	false,
+)
+
 // MaxCommandSizeFloor is the minimum allowed value for the MaxCommandSize
 // cluster setting.
 const MaxCommandSizeFloor = 4 << 20 // 4MB
@@ -116,7 +126,7 @@ type atomicDescString struct {
 
 // store atomically updates d.strPtr with the string representation of desc.
 func (d *atomicDescString) store(replicaID roachpb.ReplicaID, desc *roachpb.RangeDescriptor) {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	fmt.Fprintf(&buf, "%d/", desc.RangeID)
 	if replicaID == 0 {
 		fmt.Fprintf(&buf, "?:")
@@ -140,6 +150,19 @@ func (d *atomicDescString) store(replicaID roachpb.ReplicaID, desc *roachpb.Rang
 // using a lock, the copy might be inconsistent.
 func (d *atomicDescString) String() string {
 	return *(*string)(atomic.LoadPointer(&d.strPtr))
+}
+
+// atomicConnectionClass stores an rpc.ConnectionClass atomically.
+type atomicConnectionClass uint32
+
+// get reads the current value of the ConnectionClass.
+func (c *atomicConnectionClass) get() rpc.ConnectionClass {
+	return rpc.ConnectionClass(atomic.LoadUint32((*uint32)(c)))
+}
+
+// set updates the current value of the ConnectionClass.
+func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
+	atomic.StoreUint32((*uint32)(c), uint32(cc))
 }
 
 // A Replica is a contiguous keyspace with writes managed via an
@@ -185,6 +208,9 @@ type Replica struct {
 	// All updates to state.Desc should be duplicated here.
 	rangeStr atomicDescString
 
+	// connectionClass controls the ConnectionClass used to send raft messages.
+	connectionClass atomicConnectionClass
+
 	// raftMu protects Raft processing the replica.
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
@@ -196,6 +222,10 @@ type Replica struct {
 		stateLoader stateloader.StateLoader
 		// on-disk storage for sideloaded SSTables. nil when there's no ReplicaID.
 		sideloaded SideloadStorage
+		// stateMachine is used to apply committed raft entries.
+		stateMachine replicaStateMachine
+		// decoder is used to decode committed raft entries.
+		decoder replicaDecoder
 	}
 
 	// Contains the lease history when enabled.
@@ -291,8 +321,11 @@ type Replica struct {
 		// but which have not yet applied.
 		//
 		// The *ProposalData in the map are "owned" by it. Elements from the
-		// map must only be referenced while Replica.mu is held, except if the
-		// element is removed from the map first.
+		// map must only be referenced while the Replica.mu is held, except
+		// if the element is removed from the map first. Modifying the proposal
+		// itself may require holding the raftMu as fields can be accessed
+		// underneath raft. See comments on ProposalData fields for synchronization
+		// requirements.
 		//
 		// Due to Raft reproposals, multiple in-flight Raft entries can have
 		// the same CmdIDKey, all corresponding to the same KV request. However,
@@ -300,6 +333,9 @@ type Replica struct {
 		// to the *RaftCommand contained in its associated *ProposalData. This
 		// is because the *RaftCommand can be mutated during reproposals by
 		// Replica.tryReproposeWithNewLeaseIndex.
+		//
+		// TODO(ajwerner): move the proposal map and ProposalData entirely under
+		// the raftMu.
 		proposals         map[storagebase.CmdIDKey]*ProposalData
 		internalRaftGroup *raft.RawNode
 		// The ID of the replica within the Raft group. May be 0 if the replica has
@@ -394,15 +430,18 @@ type Replica struct {
 		// until quota is made available to the pool.
 		// Acquired quota for a given command is only released when all the
 		// replicas have persisted the corresponding entry into their logs.
-		proposalQuota *quotaPool
+		proposalQuota *quotapool.IntPool
 
+		// The base index is the index up to (including) which quota was already
+		// released. That is, the first element in quotaReleaseQueue below is
+		// released as the base index moves up by one, etc.
 		proposalQuotaBaseIndex uint64
 
 		// Once the leader observes a proposal come 'out of Raft', we add the
 		// size of the associated command to a queue of quotas we have yet to
 		// release back to the quota pool. We only do so when all replicas have
 		// persisted the corresponding entry into their logs.
-		quotaReleaseQueue []int64
+		quotaReleaseQueue []*quotapool.IntAlloc
 
 		// Counts calls to Replica.tick()
 		ticks int
@@ -519,7 +558,7 @@ func (r *Replica) sendWithRangeID(
 		useRaft = true
 	}
 
-	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {
+	if err := r.checkBatchRequest(&ba, isReadOnly); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -533,13 +572,13 @@ func (r *Replica) sendWithRangeID(
 	var pErr *roachpb.Error
 	if useRaft {
 		log.Event(ctx, "read-write path")
-		br, pErr = r.executeWriteBatch(ctx, ba)
+		br, pErr = r.executeWriteBatch(ctx, &ba)
 	} else if isReadOnly {
 		log.Event(ctx, "read-only path")
-		br, pErr = r.executeReadOnlyBatch(ctx, ba)
+		br, pErr = r.executeReadOnlyBatch(ctx, &ba)
 	} else if ba.IsAdmin() {
 		log.Event(ctx, "admin path")
-		br, pErr = r.executeAdminBatch(ctx, ba)
+		br, pErr = r.executeAdminBatch(ctx, &ba)
 	} else if len(ba.Requests) == 0 {
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
@@ -573,27 +612,12 @@ func (r *Replica) String() string {
 
 // cleanupFailedProposal cleans up after a proposal that has failed. It
 // clears any references to the proposal and releases associated quota.
-func (r *Replica) cleanupFailedProposal(p *ProposalData) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.cleanupFailedProposalLocked(p)
-}
-
-// cleanupFailedProposalLocked is like cleanupFailedProposal, but requires
-// the Replica mutex to be exclusively held.
+// It requires that both Replica.mu and Replica.raftMu are exclusively held.
 func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
-	// Clear the proposal from the proposals map. May be a no-op if the
-	// proposal has not yet been inserted into the map.
+	r.raftMu.AssertHeld()
+	r.mu.AssertHeld()
 	delete(r.mu.proposals, p.idKey)
-	// Release associated quota pool resources if we have been tracking
-	// this command.
-	//
-	// NB: We may be double free-ing here in cases where proposals are
-	// duplicated. To counter this our quota pool is capped at the initial
-	// quota size.
-	if r.mu.proposalQuota != nil {
-		r.mu.proposalQuota.add(p.quotaSize)
-	}
+	p.releaseQuota()
 }
 
 // GetMinBytes gets the replica's minimum byte threshold.
@@ -651,12 +675,18 @@ func (r *Replica) Desc() *roachpb.RangeDescriptor {
 }
 
 func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
+	r.mu.AssertRHeld()
 	return r.mu.state.Desc
 }
 
 // NodeID returns the ID of the node this replica belongs to.
 func (r *Replica) NodeID() roachpb.NodeID {
 	return r.store.nodeDesc.NodeID
+}
+
+// GetNodeLocality returns the locality of the node this replica belongs to.
+func (r *Replica) GetNodeLocality() roachpb.Locality {
+	return r.store.nodeDesc.Locality
 }
 
 // ClusterSettings returns the node's ClusterSettings.
@@ -727,20 +757,14 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 	return *r.mu.state.GCThreshold
 }
 
-// GetTxnSpanGCThreshold returns the time of the replica's last transaction span
-// GC.
-func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return *r.mu.state.TxnSpanGCThreshold
-}
-
-func maxReplicaID(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
+// maxReplicaIDOfAny returns the maximum ReplicaID of any replica, including
+// voters and learners.
+func maxReplicaIDOfAny(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
 	if desc == nil || !desc.IsInitialized() {
 		return 0
 	}
 	var maxID roachpb.ReplicaID
-	for _, repl := range desc.Replicas().Unwrap() {
+	for _, repl := range desc.Replicas().All() {
 		if repl.ReplicaID > maxID {
 			maxID = repl.ReplicaID
 		}
@@ -878,7 +902,8 @@ func (r *Replica) RaftStatus() *raft.Status {
 
 func (r *Replica) raftStatusRLocked() *raft.Status {
 	if rg := r.mu.internalRaftGroup; rg != nil {
-		return rg.Status()
+		s := rg.Status()
+		return &s
 	}
 	return nil
 }
@@ -907,11 +932,20 @@ func (r *Replica) State() storagepb.RangeInfo {
 	ri.RaftLogSizeTrusted = r.mu.raftLogSizeTrusted
 	ri.NumDropped = uint64(r.mu.droppedMessages)
 	if r.mu.proposalQuota != nil {
-		ri.ApproximateProposalQuota = r.mu.proposalQuota.approximateQuota()
+		ri.ApproximateProposalQuota = int64(r.mu.proposalQuota.ApproximateQuota())
+		ri.ProposalQuotaBaseIndex = int64(r.mu.proposalQuotaBaseIndex)
+		ri.ProposalQuotaReleaseQueue = make([]int64, len(r.mu.quotaReleaseQueue))
+		for i, a := range r.mu.quotaReleaseQueue {
+			if a != nil {
+				ri.ProposalQuotaReleaseQueue[i] = int64(a.Acquired())
+			}
+		}
 	}
 	ri.RangeMaxBytes = *r.mu.zone.RangeMaxBytes
 	if desc := ri.ReplicaState.Desc; desc != nil {
-		for _, replDesc := range desc.Replicas().Unwrap() {
+		// Learner replicas don't serve follower reads, but they still receive
+		// closed timestamp updates, so include them here.
+		for _, replDesc := range desc.Replicas().All() {
 			r.store.cfg.ClosedTimestamp.Storage.VisitDescending(replDesc.NodeID, func(e ctpb.Entry) (done bool) {
 				mlai, found := e.MLAI[r.RangeID]
 				if !found {
@@ -1008,7 +1042,7 @@ func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error
 //
 // TODO(tschottdorf): should check that request is contained in range
 // and that EndTransaction only occurs at the very end.
-func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest, isReadOnly bool) error {
+func (r *Replica) checkBatchRequest(ba *roachpb.BatchRequest, isReadOnly bool) error {
 	if ba.Timestamp == (hlc.Timestamp{}) {
 		// For transactional requests, Store.Send sets the timestamp. For non-
 		// transactional requests, the client sets the timestamp. Either way, we
@@ -1033,17 +1067,33 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest, isReadOnly bool) er
 type endCmds struct {
 	repl *Replica
 	lg   *spanlatch.Guard
-	ba   roachpb.BatchRequest
+}
+
+// move moves the endCmds into the return value, clearing and making
+// a call to done on the receiver a no-op.
+func (ec *endCmds) move() endCmds {
+	res := *ec
+	*ec = endCmds{}
+	return res
 }
 
 // done releases the latches acquired by the command and updates
 // the timestamp cache using the final timestamp of each command.
-func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error) {
+//
+// No-op if the receiver has been zeroed out by a call to move.
+// Idempotent and is safe to call more than once.
+func (ec *endCmds) done(ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	if ec.repl == nil {
+		// The endCmds were cleared.
+		return
+	}
+	defer ec.move() // clear
+
 	// Update the timestamp cache if the request is not being re-evaluated. Each
 	// request is considered in turn; only those marked as affecting the cache are
 	// processed. Inconsistent reads are excluded.
-	if ec.ba.ReadConsistency == roachpb.CONSISTENT {
-		ec.repl.updateTimestampCache(&ec.ba, br, pErr)
+	if ba.ReadConsistency == roachpb.CONSISTENT {
+		ec.repl.updateTimestampCache(ba, br, pErr)
 	}
 
 	// Release the latches acquired by the request back to the spanlatch
@@ -1111,14 +1161,14 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 // the supplied error.
 func (r *Replica) beginCmds(
 	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
-) (*endCmds, error) {
+) (endCmds, error) {
 	// Only acquire latches for consistent operations.
 	var lg *spanlatch.Guard
 	if ba.ReadConsistency == roachpb.CONSISTENT {
 		// Check for context cancellation before acquiring latches.
 		if err := ctx.Err(); err != nil {
 			log.VEventf(ctx, 2, "%s before acquiring latches: %s", err, ba.Summary())
-			return nil, errors.Wrap(err, "aborted before acquiring latches")
+			return endCmds{}, errors.Wrap(err, "aborted before acquiring latches")
 		}
 
 		var beforeLatch time.Time
@@ -1132,7 +1182,7 @@ func (r *Replica) beginCmds(
 		var err error
 		lg, err = r.latchMgr.Acquire(ctx, spans, ba.Timestamp)
 		if err != nil {
-			return nil, err
+			return endCmds{}, err
 		}
 
 		if !beforeLatch.IsZero() {
@@ -1143,7 +1193,7 @@ func (r *Replica) beginCmds(
 		if filter := r.store.cfg.TestingKnobs.TestingLatchFilter; filter != nil {
 			if pErr := filter(*ba); pErr != nil {
 				r.latchMgr.Release(lg)
-				return nil, pErr.GoError()
+				return endCmds{}, pErr.GoError()
 			}
 		}
 
@@ -1192,7 +1242,7 @@ func (r *Replica) beginCmds(
 			// mergeCompleteCh closes. See #27442 for the full context.
 			log.Event(ctx, "waiting on in-progress merge")
 			r.latchMgr.Release(lg)
-			return nil, &roachpb.MergeInProgressError{}
+			return endCmds{}, &roachpb.MergeInProgressError{}
 		}
 	} else {
 		log.Event(ctx, "operation accepts inconsistent results")
@@ -1208,10 +1258,9 @@ func (r *Replica) beginCmds(
 		}
 	}
 
-	ec := &endCmds{
+	ec := endCmds{
 		repl: r,
 		lg:   lg,
-		ba:   *ba,
 	}
 	return ec, nil
 }
@@ -1222,13 +1271,13 @@ func (r *Replica) beginCmds(
 // Admin commands must run on the lease holder replica. Batch support here is
 // limited to single-element batches; everything else catches an error.
 func (r *Replica) executeAdminBatch(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(ba.Requests) != 1 {
 		return nil, roachpb.NewErrorf("only single-element admin batches allowed")
 	}
 
-	rSpan, err := keys.Range(ba)
+	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -1271,26 +1320,14 @@ func (r *Replica) executeAdminBatch(
 		resp = &roachpb.AdminTransferLeaseResponse{}
 
 	case *roachpb.AdminChangeReplicasRequest:
-		var err error
-		expDesc := tArgs.ExpDesc
-		if expDesc == nil {
-			expDesc = r.Desc()
-		}
-		for _, target := range tArgs.Targets {
-			// Update expDesc to the outcome of the previous run to enable detection
-			// of concurrent updates while applying a series of changes.
-			expDesc, err = r.ChangeReplicas(
-				ctx, tArgs.ChangeType, target, expDesc, storagepb.ReasonAdminRequest, "")
-			if err != nil {
-				break
-			}
-		}
+		chgs := tArgs.Changes()
+		desc, err := r.ChangeReplicas(ctx, &tArgs.ExpDesc, SnapshotRequest_REBALANCE, storagepb.ReasonAdminRequest, "", chgs)
 		pErr = roachpb.NewError(err)
-		if err != nil {
+		if pErr != nil {
 			resp = &roachpb.AdminChangeReplicasResponse{}
 		} else {
 			resp = &roachpb.AdminChangeReplicasResponse{
-				Desc: expDesc,
+				Desc: *desc,
 			}
 		}
 

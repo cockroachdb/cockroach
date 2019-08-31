@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -222,10 +223,15 @@ func (ds *DistSender) singleRangeFeed(
 	if ds.rpcContext != nil {
 		latencyFn = ds.rpcContext.RemoteClocks.Latency
 	}
-	replicas := NewReplicaSlice(ds.gossip, desc)
+	// Learner replicas won't serve reads/writes, so send only to the `Voters`
+	// replicas. This is just an optimization to save a network hop, everything
+	// would still work if we had `All` here.
+	replicas := NewReplicaSlice(ds.gossip, desc.Replicas().Voters())
 	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), latencyFn)
-
-	transport, err := ds.transportFactory(SendOptions{}, ds.nodeDialer, replicas)
+	// The RangeFeed is not used for system critical traffic so use a DefaultClass
+	// connection regardless of the range.
+	opts := SendOptions{class: rpc.DefaultClass}
+	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas)
 	if err != nil {
 		return args.Timestamp, roachpb.NewError(err)
 	}

@@ -9,7 +9,7 @@ CREATE SEQUENCE y
 build
 SELECT * FROM x
 ----
-sequence-select t.public.x
+sequence-select x
  └── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
 
 build
@@ -17,7 +17,7 @@ SELECT z.last_value FROM x AS z
 ----
 project
  ├── columns: last_value:1(int!null)
- └── sequence-select t.public.x
+ └── sequence-select x
       └── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
 
 build
@@ -25,7 +25,7 @@ SELECT last_value FROM x
 ----
 project
  ├── columns: last_value:1(int!null)
- └── sequence-select t.public.x
+ └── sequence-select x
       └── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
 
 build
@@ -33,7 +33,7 @@ SELECT log_cnt FROM x
 ----
 project
  ├── columns: log_cnt:2(int!null)
- └── sequence-select t.public.x
+ └── sequence-select x
       └── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
 
 # Multiple sequences in a query.
@@ -44,9 +44,9 @@ union
  ├── columns: last_value:7(int!null) log_cnt:8(int!null) is_called:9(bool!null)
  ├── left columns: last_value:1(int) log_cnt:2(int) is_called:3(bool)
  ├── right columns: last_value:4(int) log_cnt:5(int) is_called:6(bool)
- ├── sequence-select t.public.x
+ ├── sequence-select x
  │    └── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
- └── sequence-select t.public.y
+ └── sequence-select y
       └── columns: last_value:4(int!null) log_cnt:5(int!null) is_called:6(bool!null)
 
 # Sequences occurring multiple times in a query.
@@ -73,28 +73,28 @@ except
  │    │    │    ├── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
  │    │    │    ├── left columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
  │    │    │    ├── right columns: last_value:4(int) log_cnt:5(int) is_called:6(bool)
- │    │    │    ├── sequence-select t.public.x
+ │    │    │    ├── sequence-select x
  │    │    │    │    └── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
- │    │    │    └── sequence-select t.public.x
+ │    │    │    └── sequence-select x
  │    │    │         └── columns: last_value:4(int!null) log_cnt:5(int!null) is_called:6(bool!null)
- │    │    └── sequence-select t.public.y
+ │    │    └── sequence-select y
  │    │         └── columns: last_value:7(int!null) log_cnt:8(int!null) is_called:9(bool!null)
- │    └── sequence-select t.public.x
+ │    └── sequence-select x
  │         └── columns: last_value:10(int!null) log_cnt:11(int!null) is_called:12(bool!null)
- └── sequence-select t.public.y
+ └── sequence-select y
       └── columns: last_value:13(int!null) log_cnt:14(int!null) is_called:15(bool!null)
 
 # Ensure index flags are ignored.
 build
 SELECT * FROM x@primary
 ----
-sequence-select t.public.x
+sequence-select x
  └── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
 
 build
 SELECT * FROM x@foobar
 ----
-sequence-select t.public.x
+sequence-select x
  └── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
 
 # Ordinal refs with a sequence.
@@ -103,7 +103,7 @@ SELECT @1 FROM x
 ----
 project
  ├── columns: "?column?":4(int)
- ├── sequence-select t.public.x
+ ├── sequence-select x
  │    └── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
  └── projections
       └── variable: last_value [type=int]
@@ -114,7 +114,7 @@ SELECT * FROM x WHERE last_value = 0
 ----
 select
  ├── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
- ├── sequence-select t.public.x
+ ├── sequence-select x
  │    └── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
  └── filters
       └── eq [type=bool]

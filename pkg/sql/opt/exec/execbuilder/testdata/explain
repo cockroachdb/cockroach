@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE
@@ -106,7 +106,7 @@ render                             ·       ·
       │                            order   -column17,-started
       └── render                   ·       ·
            └── filter              ·       ·
-                │                  filter  ((job_type != 'AUTO CREATE STATS') OR (job_type IS NULL)) AND ((finished IS NULL) OR (finished > (now() - '12:00:00')))
+                │                  filter  ((job_type IS NULL) OR (job_type != 'AUTO CREATE STATS')) AND ((finished IS NULL) OR (finished > (now() - '12:00:00')))
                 └── virtual table  ·       ·
 ·                                  source  ·
 
@@ -405,6 +405,7 @@ limit                 ·       ·
            └── scan   ·       ·
 ·                     table   t@primary
 ·                     spans   ALL
+·                     limit   2
 
 query TTT
 EXPLAIN SELECT DISTINCT v FROM t
@@ -703,6 +704,63 @@ sort
            ├── cost: 10.702
            ├── key: (3)
            └── fd: ()-->(1)
+
+query T
+EXPLAIN (OPT,CATALOG) SELECT * FROM tc WHERE a = 10 ORDER BY b
+----
+TABLE tc
+ ├── a int
+ ├── b int
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX primary
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ └── INDEX c
+      ├── a int
+      └── rowid int not null default (unique_rowid()) [hidden]
+sort
+ └── index-join tc
+      └── scan tc@c
+           └── constraint: /1/3: [/10 - /10]
+
+query T
+EXPLAIN (OPT,VERBOSE,CATALOG) SELECT * FROM tc JOIN t ON k=a
+----
+TABLE tc
+ ├── a int
+ ├── b int
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX primary
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ └── INDEX c
+      ├── a int
+      └── rowid int not null default (unique_rowid()) [hidden]
+TABLE t
+ ├── k int not null
+ ├── v int
+ └── INDEX primary
+      └── k int not null
+inner-join (hash)
+ ├── columns: a:1 b:2 k:4 v:5
+ ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(4)=100, null(4)=0]
+ ├── cost: 2220.05
+ ├── fd: (4)-->(5), (1)==(4), (4)==(1)
+ ├── prune: (2,5)
+ ├── scan tc
+ │    ├── columns: a:1 b:2
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ │    ├── cost: 1100.02
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1)
+ ├── scan t
+ │    ├── columns: k:4 v:5
+ │    ├── stats: [rows=1000, distinct(4)=1000, null(4)=0]
+ │    ├── cost: 1080.02
+ │    ├── key: (4)
+ │    ├── fd: (4)-->(5)
+ │    ├── prune: (4,5)
+ │    └── interesting orderings: (+4)
+ └── filters
+      └── k = a [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
 
 query T
 EXPLAIN (OPT) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b

@@ -44,14 +44,18 @@ type chanSender chan batchSend
 func (c chanSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	respChan := make(chan batchResp)
+	respChan := make(chan batchResp, 1)
 	select {
 	case c <- batchSend{ctx: ctx, ba: ba, respChan: respChan}:
 	case <-ctx.Done():
 		return nil, roachpb.NewError(ctx.Err())
 	}
-	resp := <-respChan
-	return resp.br, resp.pe
+	select {
+	case resp := <-respChan:
+		return resp.br, resp.pe
+	case <-ctx.Done():
+		return nil, roachpb.NewError(ctx.Err())
+	}
 }
 
 func TestBatcherSendOnSizeWithReset(t *testing.T) {
@@ -172,13 +176,13 @@ func TestBackpressure(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		bs := <-sc
 		go reply(bs)
-		// Shouldn't need to use atomics to read sent. A race would indicate a bug.
-		assert.Equal(t, int64(0), sent)
+		// We don't expect either of the calls to send to have finished yet.
+		assert.Equal(t, int64(0), atomic.LoadInt64(&sent))
 	}
 	// Allow one reply to fly which should not unblock the requests.
 	canReply <- struct{}{}
 	runtime.Gosched() // tickle the runtime in case there might be a timing bug
-	assert.Equal(t, int64(0), sent)
+	assert.Equal(t, int64(0), atomic.LoadInt64(&sent))
 	canReply <- struct{}{} // now the two requests should send
 	testutils.SucceedsSoon(t, func() error {
 		if numSent := atomic.LoadInt64(&sent); numSent != 2 {
@@ -261,25 +265,29 @@ func TestSendAfterCanceled(t *testing.T) {
 	assert.Equal(t, err, ctx.Err())
 }
 
+// TestStopDuringSend ensures that in-flight requests are canceled when the
+// RequestBatcher's stopper indicates that it should quiesce.
 func TestStopDuringSend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	sc := make(chanSender, 1)
 	b := New(Config{
-		Sender:  sc,
-		Stopper: stopper,
-		MaxWait: 10 * time.Millisecond,
-		MaxIdle: 10 * time.Millisecond,
+		Sender:          sc,
+		Stopper:         stopper,
+		MaxMsgsPerBatch: 1,
 	})
 	errChan := make(chan error)
 	go func() {
 		_, err := b.Send(context.Background(), 1, &roachpb.GetRequest{})
 		errChan <- err
 	}()
-	r := <-sc
-	go stopper.Stop(context.Background())
-	assert.Equal(t, <-errChan, stop.ErrUnavailable)
-	r.respChan <- batchResp{}
+	// Wait for the request to get sent.
+	<-sc
+	stopper.Stop(context.Background())
+	// Depending on the ordering of when channels close the sender might
+	// get one of two errors.
+	assert.True(t, testutils.IsError(<-errChan,
+		stop.ErrUnavailable.Error()+"|"+context.Canceled.Error()))
 }
 
 func TestPanicWithNilStopper(t *testing.T) {
@@ -354,15 +362,21 @@ func TestBatchTimeout(t *testing.T) {
 		var wg sync.WaitGroup
 		wg.Add(2)
 		var err1, err2 error
-		go func() { _, err1 = b.Send(ctx1, 1, &roachpb.GetRequest{}); wg.Done() }()
+		err1Chan := make(chan error, 1)
+		go func() {
+			_, err1 = b.Send(ctx1, 1, &roachpb.GetRequest{})
+			err1Chan <- err1
+			wg.Done()
+		}()
 		go func() { _, err2 = b.Send(ctx2, 1, &roachpb.GetRequest{}); wg.Done() }()
 		select {
 		case s := <-sc:
 			assert.Len(t, s.ba.Requests, 2)
 			s.respChan <- batchResp{}
-		case <-ctx1.Done():
+		case <-err1Chan:
 			// This case implies that the test did not exercise what was intended
 			// but that's okay, clean up the other request and return.
+			assert.Equal(t, context.DeadlineExceeded, err1)
 			t.Logf("canceled goroutine failed to send within %v, passing", timeout)
 			cancel2()
 			wg.Wait()

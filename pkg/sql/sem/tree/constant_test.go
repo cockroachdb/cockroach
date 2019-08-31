@@ -25,12 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 // TestNumericConstantVerifyAndResolveAvailableTypes verifies that test NumVals will
 // all return expected available type sets, and that attempting to resolve the NumVals
 // as each of these types will all succeed with an expected tree.Datum result.
 func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	wantInt := tree.NumValAvailInteger
 	wantDecButCanBeInt := tree.NumValAvailDecimalNoFraction
 	wantDec := tree.NumValAvailDecimalWithFraction
@@ -73,18 +75,18 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 		}
 
 		// Check available types.
-		c := &tree.NumVal{Value: val, OrigString: str, Negative: neg}
+		c := tree.NewNumVal(val, str, neg)
 		avail := c.AvailableTypes()
 		if !reflect.DeepEqual(avail, test.avail) {
 			t.Errorf("%d: expected the available type set %v for %v, found %v",
-				i, test.avail, c.Value.ExactString(), avail)
+				i, test.avail, c.ExactString(), avail)
 		}
 
 		// Make sure it can be resolved as each of those types.
 		for _, availType := range avail {
 			if res, err := c.ResolveAsType(&tree.SemaContext{}, availType); err != nil {
 				t.Errorf("%d: expected resolving %v as available type %s would succeed, found %v",
-					i, c.Value.ExactString(), availType, err)
+					i, c.ExactString(), availType, err)
 			} else {
 				resErr := func(parsed, resolved interface{}) {
 					t.Errorf("%d: expected resolving %v as available type %s would produce a tree.Datum"+
@@ -143,6 +145,7 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 // return expected available type sets, and that attempting to resolve the StrVals
 // as each of these types will either succeed or return a parse error.
 func TestStringConstantVerifyAvailableTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	wantStringButCanBeAll := tree.StrValAvailAllParsable
 	wantBytes := tree.StrValAvailBytes
 
@@ -236,6 +239,14 @@ func mustParseDJSON(t *testing.T, s string) tree.Datum {
 	}
 	return d
 }
+func mustParseDStringArray(t *testing.T, s string) tree.Datum {
+	evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	d, err := tree.ParseDArrayFromString(&evalContext, s, types.String)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
 
 var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.String:      func(t *testing.T, s string) tree.Datum { return tree.NewDString(s) },
@@ -247,6 +258,7 @@ var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.TimestampTZ: mustParseDTimestampTZ,
 	types.Interval:    mustParseDInterval,
 	types.Jsonb:       mustParseDJSON,
+	types.StringArray: mustParseDStringArray,
 }
 
 func typeSet(tys ...*types.T) map[*types.T]struct{} {
@@ -263,6 +275,7 @@ func typeSet(tys ...*types.T) map[*types.T]struct{} {
 // the expected results which come from running the string literal through a
 // corresponding parseFunc (above).
 func TestStringConstantResolveAvailableTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		c            *tree.StrVal
 		parseOptions map[*types.T]struct{}
@@ -314,6 +327,10 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		{
 			c:            tree.NewStrVal(`{"a": 1}`),
 			parseOptions: typeSet(types.String, types.Bytes, types.Jsonb),
+		},
+		{
+			c:            tree.NewStrVal(`{a,b}`),
+			parseOptions: typeSet(types.String, types.Bytes, types.StringArray),
 		},
 		{
 			c:            tree.NewBytesStrVal(string([]byte{0xff, 0xfe, 0xfd})),
@@ -397,6 +414,7 @@ func testConstantLiteralFolding(t *testing.T, testData []constantLiteralFoldingT
 }
 
 func TestFoldNumericConstants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testConstantLiteralFolding(t, []constantLiteralFoldingTestCase{
 		// Unary ops.
 		{`+1`, `1`},
@@ -495,6 +513,7 @@ func TestFoldNumericConstants(t *testing.T) {
 }
 
 func TestFoldStringConstants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testConstantLiteralFolding(t, []constantLiteralFoldingTestCase{
 		// Binary ops.
 		{`'string' || 'string'`, `'stringstring'`},

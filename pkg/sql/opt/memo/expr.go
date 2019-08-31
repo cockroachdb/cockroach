@@ -12,6 +12,7 @@ package memo
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -204,6 +205,35 @@ func (n FiltersExpr) OuterCols(mem *Memo) opt.ColSet {
 	return colSet
 }
 
+// Sort sorts the FilterItems in n by the IDs of the expression.
+func (n *FiltersExpr) Sort() {
+	sort.Slice(*n, func(i, j int) bool {
+		return (*n)[i].Condition.(opt.ScalarExpr).ID() < (*n)[j].Condition.(opt.ScalarExpr).ID()
+	})
+}
+
+// Deduplicate removes all the duplicate filters from n.
+func (n *FiltersExpr) Deduplicate() {
+	dedup := (*n)[:0]
+
+	// Only add it if it hasn't already been added.
+	for i, filter := range *n {
+		found := false
+		for j := i - 1; j >= 0; j-- {
+			previouslySeenFilter := (*n)[j]
+			if previouslySeenFilter.Condition == filter.Condition {
+				found = true
+				break
+			}
+		}
+		if !found {
+			dedup = append(dedup, filter)
+		}
+	}
+
+	*n = dedup
+}
+
 // RetainCommonFilters retains only the filters found in n and other.
 func (n *FiltersExpr) RetainCommonFilters(other FiltersExpr) {
 	// TODO(ridwanmsharif): Faster intersection using a map
@@ -373,12 +403,19 @@ type WindowFrame struct {
 	Mode           tree.WindowFrameMode
 	StartBoundType tree.WindowFrameBoundType
 	EndBoundType   tree.WindowFrameBoundType
+	FrameExclusion tree.WindowFrameExclusion
 }
 
 // NeedResults returns true if the mutation operator can return the rows that
 // were mutated.
 func (m *MutationPrivate) NeedResults() bool {
 	return m.ReturnCols != nil
+}
+
+// IsColumnOutput returns true if the i-th ordinal column should be part of the
+// mutation's output columns.
+func (m *MutationPrivate) IsColumnOutput(i int) bool {
+	return i < len(m.ReturnCols) && m.ReturnCols[i] != 0
 }
 
 // MapToInputID maps from the ID of a returned column to the ID of the

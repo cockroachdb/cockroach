@@ -106,15 +106,13 @@ func (n *renameTableNode) startExec(params runParams) error {
 	tableDesc.SetName(newTn.Table())
 	tableDesc.ParentID = targetDbDesc.ID
 
-	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	newTbKey := sqlbase.NewTableKey(targetDbDesc.ID, newTn.Table()).Key()
 
-	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
+	if err := tableDesc.Validate(ctx, p.txn); err != nil {
 		return err
 	}
 
 	descID := tableDesc.GetID()
-	descDesc := sqlbase.WrapDescriptor(tableDesc)
 
 	renameDetails := sqlbase.TableDescriptor_NameInfo{
 		ParentID: prevDbDesc.ID,
@@ -129,10 +127,11 @@ func (n *renameTableNode) startExec(params runParams) error {
 	// has made sure it's not in use any more.
 	b := &client.Batch{}
 	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descDesc)
 		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
 	}
-	b.Put(descKey, descDesc)
+	if err := writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), p.EvalContext().Settings, b, descID, tableDesc.TableDesc()); err != nil {
+		return err
+	}
 	b.CPut(newTbKey, descID, nil)
 
 	if err := p.txn.Run(ctx, b); err != nil {

@@ -332,8 +332,9 @@ func (n *Node) onClusterVersionChange(cv cluster.ClusterVersion) {
 // NodeDescriptor is available, to help bootstrapping.
 func (n *Node) start(
 	ctx context.Context,
-	addr net.Addr,
+	addr, sqlAddr net.Addr,
 	initializedEngines, emptyEngines []engine.Engine,
+	clusterName string,
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
 	cv cluster.ClusterVersion,
@@ -380,9 +381,11 @@ func (n *Node) start(
 	n.Descriptor = roachpb.NodeDescriptor{
 		NodeID:          nodeID,
 		Address:         util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+		SQLAddress:      util.MakeUnresolvedAddr(sqlAddr.Network(), sqlAddr.String()),
 		Attrs:           attrs,
 		Locality:        locality,
 		LocalityAddress: localityAddress,
+		ClusterName:     clusterName,
 		ServerVersion:   n.storeCfg.Settings.Version.ServerVersion,
 		BuildTag:        build.GetInfo().Tag,
 		StartedAt:       n.startedAt,
@@ -898,14 +901,12 @@ func (n *Node) batchInternal(
 	}
 
 	var br *roachpb.BatchResponse
-
 	if err := n.stopper.RunTaskWithErr(ctx, "node.Node: batch", func(ctx context.Context) error {
 		var finishSpan func(*roachpb.BatchResponse)
 		// Shadow ctx from the outer function. Written like this to pass the linter.
 		ctx, finishSpan = n.setupSpanForIncomingRPC(ctx, grpcutil.IsLocalRequestContext(ctx))
-		defer func(br **roachpb.BatchResponse) {
-			finishSpan(*br)
-		}(&br)
+		// NB: wrapped to delay br evaluation to its value when returning.
+		defer func() { finishSpan(br) }()
 		if log.HasSpanOrEvent(ctx) {
 			log.Event(ctx, args.Summary())
 		}

@@ -72,7 +72,7 @@ func (s *Store) TestSender() client.Sender {
 		// If the client hasn't set ba.Range, we do it a favor and figure out the
 		// range to which the request needs to go.
 		//
-		// NOTE: We don't use keys.Range(ba) here because that does some
+		// NOTE: We don't use keys.Range(ba.Requests) here because that does some
 		// validation on the batch, and some tests using this sender don't like
 		// that.
 		key, err := keys.Addr(ba.Requests[0].GetInner().Header().Key)
@@ -150,7 +150,7 @@ func (db *testSender) Send(
 		return nil, roachpb.NewErrorf("%s method not supported", et.Method())
 	}
 	// Lookup range and direct request.
-	rs, err := keys.Range(ba)
+	rs, err := keys.Range(ba.Requests)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -727,7 +727,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	}
 
 	if _, _, _, pErr := repl1.evalAndPropose(
-		context.Background(), lease, roachpb.BatchRequest{}, nil, &allSpans,
+		context.Background(), lease, &roachpb.BatchRequest{}, &allSpans, endCmds{},
 	); !pErr.Equal(expErr) {
 		t.Fatalf("expected error %s, but got %v", expErr, pErr)
 	}
@@ -1339,17 +1339,16 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 		t.Fatalf("couldn't lookup range for key %q", key)
 	}
 	desc, err := store.NewRangeDescriptor(
-		context.Background(), splitKey, repl.Desc().EndKey, repl.Desc().InternalReplicas)
+		context.Background(), splitKey, repl.Desc().EndKey, repl.Desc().Replicas())
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Minimal amount of work to keep this deprecated machinery working: Write
 	// some required Raft keys.
+	cv := store.ClusterSettings().Version.Version().Version
 	if _, err := stateloader.WriteInitialState(
-		context.Background(), store.engine, enginepb.MVCCStats{},
-		*desc, roachpb.Lease{}, hlc.Timestamp{}, hlc.Timestamp{},
-		store.ClusterSettings().Version.Version().Version,
-		stateloader.TruncatedStateUnreplicated,
+		context.Background(), store.engine, enginepb.MVCCStats{}, *desc, roachpb.Lease{},
+		hlc.Timestamp{}, cv, stateloader.TruncatedStateUnreplicated,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -1413,7 +1412,8 @@ func TestStoreRangeIDAllocation(t *testing.T) {
 	for i := 0; i < rangeIDAllocCount*3; i++ {
 		replicas := []roachpb.ReplicaDescriptor{{StoreID: store.StoreID()}}
 		desc, err := store.NewRangeDescriptor(context.Background(),
-			roachpb.RKey(fmt.Sprintf("%03d", i)), roachpb.RKey(fmt.Sprintf("%03d", i+1)), replicas)
+			roachpb.RKey(fmt.Sprintf("%03d", i)), roachpb.RKey(fmt.Sprintf("%03d", i+1)),
+			roachpb.MakeReplicaDescriptors(replicas))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2487,12 +2487,10 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	// in a single batch.
 	manual.Increment(txnwait.TxnLivenessThreshold.Nanoseconds() + 1)
 
-	// Query the range with a single INCONSISTENT scan, which should
-	// cause all intents to be resolved.
+	// Query the range with a single scan, which should cause all intents
+	// to be resolved.
 	sArgs := scanArgs(key1, key10.Next())
-	if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
-		ReadConsistency: roachpb.INCONSISTENT,
-	}, &sArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), store.TestSender(), &sArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -2811,9 +2809,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 	}
 
 	// Generate a minimal fake snapshot.
-	snapData := &roachpb.RaftSnapshotData{
-		RangeDescriptor: *repl1.Desc(),
-	}
+	snapData := &roachpb.RaftSnapshotData{}
 	data, err := protoutil.Marshal(snapData)
 	if err != nil {
 		t.Fatal(err)
@@ -2888,19 +2884,16 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	cv := s.ClusterSettings().Version.Version().Version
 	if _, err := stateloader.WriteInitialState(
-		ctx, s.Engine(), enginepb.MVCCStats{}, *repl1.Desc(),
-		roachpb.Lease{}, hlc.Timestamp{}, hlc.Timestamp{},
-		s.ClusterSettings().Version.Version().Version,
-		stateloader.TruncatedStateUnreplicated,
+		ctx, s.Engine(), enginepb.MVCCStats{}, *repl1.Desc(), roachpb.Lease{},
+		hlc.Timestamp{}, cv, stateloader.TruncatedStateUnreplicated,
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	// Generate a minimal fake snapshot.
-	snapData := &roachpb.RaftSnapshotData{
-		RangeDescriptor: *repl1.Desc(),
-	}
+	snapData := &roachpb.RaftSnapshotData{}
 	data, err := protoutil.Marshal(snapData)
 	if err != nil {
 		t.Fatal(err)

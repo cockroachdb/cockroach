@@ -117,8 +117,17 @@ func (u UUID) Variant() byte {
 	}
 }
 
-// Bytes returns a byte slice representation of the UUID.
+// bytes returns a byte slice representation of the UUID. It incurs an
+// allocation if the return value escapes.
 func (u UUID) bytes() []byte {
+	return u[:]
+}
+
+// bytesMut returns a mutable byte slice representation of the UUID. Unlike
+// bytes, it does not necessarily incur an allocation if the return value
+// escapes. Instead, the return value escaping will cause the method's receiver
+// (and any struct that it is a part of) to escape.
+func (u *UUID) bytesMut() []byte {
 	return u[:]
 }
 

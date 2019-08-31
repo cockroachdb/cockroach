@@ -12,10 +12,11 @@ package colencoding
 
 import (
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -63,7 +64,8 @@ func DecodeIndexKeyToCols(
 			}
 
 			length := int(ancestor.SharedPrefixLen)
-			key, err = DecodeKeyValsToCols(vecs, idx, indexColIdx[:length], types[:length], colDirs[:length], key)
+			key, err = DecodeKeyValsToCols(vecs, idx, indexColIdx[:length], types[:length], colDirs[:length],
+				nil /* unseen */, key)
 			if err != nil {
 				return nil, false, err
 			}
@@ -94,7 +96,7 @@ func DecodeIndexKeyToCols(
 		}
 	}
 
-	key, err = DecodeKeyValsToCols(vecs, idx, indexColIdx, types, colDirs, key)
+	key, err = DecodeKeyValsToCols(vecs, idx, indexColIdx, types, colDirs, nil /* unseen */, key)
 	if err != nil {
 		return nil, false, err
 	}
@@ -115,6 +117,9 @@ func DecodeIndexKeyToCols(
 // result to the idx'th slot of the input slice of exec.ColVecs. If the
 // directions slice is nil, the direction used will default to
 // encoding.Ascending.
+// If the unseen int set is non-nil, upon decoding the column with ordinal i,
+// i will be removed from the set to facilitate tracking whether or not columns
+// have been observed during decoding.
 // See the analog in sqlbase/index_encoding.go.
 func DecodeKeyValsToCols(
 	vecs []coldata.Vec,
@@ -122,6 +127,7 @@ func DecodeKeyValsToCols(
 	indexColIdx []int,
 	types []types.T,
 	directions []sqlbase.IndexDescriptor_Direction,
+	unseen *util.FastIntSet,
 	key []byte,
 ) ([]byte, error) {
 	for j := range types {
@@ -135,6 +141,9 @@ func DecodeKeyValsToCols(
 			// Don't need the coldata - skip it.
 			key, err = skipTableKey(&types[j], key, enc)
 		} else {
+			if unseen != nil {
+				unseen.Remove(i)
+			}
 			key, err = decodeTableKeyToCol(vecs[i], idx, &types[j], key, enc)
 		}
 		if err != nil {
@@ -146,7 +155,7 @@ func DecodeKeyValsToCols(
 
 // decodeTableKeyToCol decodes a value encoded by EncodeTableKey, writing the result
 // to the idx'th slot of the input exec.Vec.
-// See the analog, DecodeTableKey, in
+// See the analog, DecodeTableKey, in sqlbase/column_type_encoding.go.
 func decodeTableKeyToCol(
 	vec coldata.Vec, idx uint16, valType *types.T, key []byte, dir sqlbase.IndexDescriptor_Direction,
 ) ([]byte, error) {
@@ -209,7 +218,7 @@ func decodeTableKeyToCol(
 		} else {
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
 		}
-		vec.Bytes()[idx] = r
+		vec.Bytes().Set(int(idx), r)
 	case types.DateFamily, types.OidFamily:
 		var t int64
 		if dir == sqlbase.IndexDescriptor_ASC {
@@ -316,7 +325,7 @@ func UnmarshalColumnValueToCol(
 	case types.BytesFamily, types.StringFamily:
 		var v []byte
 		v, err = value.GetBytes()
-		vec.Bytes()[idx] = v
+		vec.Bytes().Set(int(idx), v)
 	case types.DateFamily:
 		var v int64
 		v, err = value.GetInt()

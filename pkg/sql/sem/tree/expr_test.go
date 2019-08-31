@@ -20,10 +20,12 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 // TestUnresolvedNameString tests the string representation of tree.UnresolvedName and thus tree.Name.
 func TestUnresolvedNameString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		in, out string
 	}{
@@ -55,6 +57,7 @@ func TestUnresolvedNameString(t *testing.T) {
 // TestExprString verifies that converting an expression to a string and back
 // doesn't change the (normalized) expression.
 func TestExprString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	defer tree.MockNameTypes(map[string]*types.T{
 		"a": types.Bool,
 		"b": types.Bool,
@@ -141,6 +144,7 @@ func TestExprString(t *testing.T) {
 }
 
 func TestStripParens(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testExprs := []struct {
 		in, out string
 	}{

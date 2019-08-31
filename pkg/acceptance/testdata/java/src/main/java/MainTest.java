@@ -1,6 +1,8 @@
 import org.junit.*;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+import static junit.framework.TestCase.fail;
+import org.postgresql.util.PSQLException;
 
 import java.math.BigDecimal;
 import java.sql.Array;
@@ -242,6 +244,22 @@ public class MainTest extends CockroachDBTest {
         rs = getNextVal.executeQuery();
         rs.next();
         Assert.assertEquals(rs.getInt(1), 2);
+    }
+
+    @Test
+    public void selectLimitExplicitTxn() throws Exception {
+        conn.setAutoCommit(false);
+        PreparedStatement stmt = conn.prepareStatement("SELECT * from generate_series(1, 10)");
+        stmt.setFetchSize(1);
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        Assert.assertEquals(1, rs.getInt(1));
+        rs.next();
+        Assert.assertEquals(2, rs.getInt(1));
+        rs.setFetchSize(0);
+        rs.next();
+        Assert.assertEquals(3, rs.getInt(1));
+        conn.setAutoCommit(true);
     }
 
     // Regression for 30538: SQL query with wrong parameter value crashes

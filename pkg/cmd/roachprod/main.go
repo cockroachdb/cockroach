@@ -69,6 +69,7 @@ var (
 	numRacks          int
 	username          string
 	dryrun            bool
+	destroyAllMine    bool
 	extendLifetime    time.Duration
 	wipePreserveCerts bool
 	listDetails       bool
@@ -459,67 +460,116 @@ func cleanupFailedCreate(clusterName string) error {
 }
 
 var destroyCmd = &cobra.Command{
-	Use:   "destroy <cluster 1> [<cluster 2> ...]",
+	Use:   "destroy [ --all-mine | <cluster 1> [<cluster 2> ...] ]",
 	Short: "destroy clusters",
 	Long: `Destroy one or more local or cloud-based clusters.
+
+The destroy command accepts the names of the clusters to destroy. Alternatively,
+the --all-mine flag can be provided to destroy all clusters that are owned by the
+current user.
 
 Destroying a cluster releases the resources for a cluster. For a cloud-based
 cluster the machine and associated disk resources are freed. For a local
 cluster, any processes started by roachprod are stopped, and the ${HOME}/local
 directory is removed.
 `,
-	Args: cobra.MinimumNArgs(1),
+	Args: cobra.ArbitraryArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		for _, arg := range args {
-			clusterName, err := verifyClusterName(arg)
+		switch len(args) {
+		case 0:
+			if !destroyAllMine {
+				return errors.New("no cluster name provided")
+			}
+
+			destroyPattern, err := userClusterNameRegexp()
 			if err != nil {
 				return err
 			}
 
-			if clusterName != config.Local {
-				cloud, err := cld.ListCloud()
-				if err != nil {
-					return err
-				}
+			cloud, err := cld.ListCloud()
+			if err != nil {
+				return err
+			}
 
-				c, ok := cloud.Clusters[clusterName]
-				if !ok {
-					return fmt.Errorf("cluster %s does not exist", clusterName)
+			var names []string
+			for name := range cloud.Clusters {
+				if destroyPattern.MatchString(name) {
+					names = append(names, name)
 				}
+			}
+			sort.Strings(names)
 
-				fmt.Printf("Destroying cluster %s with %d nodes\n", clusterName, len(c.VMs))
-				if err := cld.DestroyCluster(c); err != nil {
-					return err
-				}
-			} else {
-				if _, ok := install.Clusters[clusterName]; !ok {
-					return fmt.Errorf("cluster %s does not exist", clusterName)
-				}
-				c, err := newCluster(clusterName)
-				if err != nil {
-					return err
-				}
-				c.Wipe(false)
-				for _, i := range c.Nodes {
-					err := os.RemoveAll(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), i))
-					if err != nil {
-						return err
-					}
-				}
-				if err := os.Remove(filepath.Join(os.ExpandEnv(config.DefaultHostDir), c.Name)); err != nil {
+			for _, clusterName := range names {
+				if err := destroyCluster(cloud, clusterName); err != nil {
 					return err
 				}
 			}
-		}
+		default:
+			if destroyAllMine {
+				return errors.New("--all-mine cannot be combined with cluster names")
+			}
 
+			var cloud *cld.Cloud
+			for _, arg := range args {
+				clusterName, err := verifyClusterName(arg)
+				if err != nil {
+					return err
+				}
+
+				if clusterName != config.Local {
+					if cloud == nil {
+						cloud, err = cld.ListCloud()
+						if err != nil {
+							return err
+						}
+					}
+
+					if err := destroyCluster(cloud, clusterName); err != nil {
+						return err
+					}
+				} else {
+					if err := destroyLocalCluster(); err != nil {
+						return err
+					}
+				}
+			}
+		}
 		fmt.Println("OK")
 		return nil
 	}),
 }
 
+func destroyCluster(cloud *cld.Cloud, clusterName string) error {
+	c, ok := cloud.Clusters[clusterName]
+	if !ok {
+		return fmt.Errorf("cluster %s does not exist", clusterName)
+	}
+	fmt.Printf("Destroying cluster %s with %d nodes\n", clusterName, len(c.VMs))
+	return cld.DestroyCluster(c)
+}
+
+func destroyLocalCluster() error {
+	if _, ok := install.Clusters[config.Local]; !ok {
+		return fmt.Errorf("cluster %s does not exist", config.Local)
+	}
+	c, err := newCluster(config.Local)
+	if err != nil {
+		return err
+	}
+	c.Wipe(false)
+	for _, i := range c.Nodes {
+		err := os.RemoveAll(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), i))
+		if err != nil {
+			return err
+		}
+	}
+	return os.Remove(filepath.Join(os.ExpandEnv(config.DefaultHostDir), c.Name))
+}
+
 var cachedHostsCmd = &cobra.Command{
 	Use:   "cached-hosts",
 	Short: "list all clusters (and optionally their host numbers) from local cache",
+	Args:  cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		if err := loadClusters(); err != nil {
 			return err
@@ -595,31 +645,14 @@ The --json flag sets the format of the command output to json.
 Listing clusters has the side-effect of syncing ssh keys/configs and the local
 hosts file.
 `,
+	Args: cobra.RangeArgs(0, 1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		listPattern := regexp.MustCompile(".*")
 		switch len(args) {
 		case 0:
 			if listMine {
-				// In general, we expect that users will have the same
-				// account name across the services they're using,
-				// but we still want to function even if this is not
-				// the case.
-				seenAccounts := map[string]bool{}
-				accounts, err := vm.FindActiveAccounts()
-				if err != nil {
-					return err
-				}
-				pattern := ""
-				for _, account := range accounts {
-					if !seenAccounts[account] {
-						seenAccounts[account] = true
-						if len(pattern) > 0 {
-							pattern += "|"
-						}
-						pattern += fmt.Sprintf("(^%s-)", regexp.QuoteMeta(account))
-					}
-				}
-				listPattern, err = regexp.Compile(pattern)
+				var err error
+				listPattern, err = userClusterNameRegexp()
 				if err != nil {
 					return err
 				}
@@ -705,6 +738,31 @@ hosts file.
 	}),
 }
 
+// userClusterNameRegexp returns a regexp that matches all clusters owned by the
+// current user.
+func userClusterNameRegexp() (*regexp.Regexp, error) {
+	// In general, we expect that users will have the same
+	// account name across the services they're using,
+	// but we still want to function even if this is not
+	// the case.
+	seenAccounts := map[string]bool{}
+	accounts, err := vm.FindActiveAccounts()
+	if err != nil {
+		return nil, err
+	}
+	pattern := ""
+	for _, account := range accounts {
+		if !seenAccounts[account] {
+			seenAccounts[account] = true
+			if len(pattern) > 0 {
+				pattern += "|"
+			}
+			pattern += fmt.Sprintf("(^%s-)", regexp.QuoteMeta(account))
+		}
+	}
+	return regexp.Compile(pattern)
+}
+
 // TODO(peter): Do we need this command given that the "list" command syncs as
 // a side-effect. If you don't care about the list output, just "roachprod list
 // &>/dev/null".
@@ -712,6 +770,7 @@ var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "sync ssh keys/config and hosts files",
 	Long:  ``,
+	Args:  cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		_, err := syncCloud(quiet)
 		return err
@@ -817,6 +876,7 @@ var gcCmd = &cobra.Command{
 Destroys expired clusters, sending email if properly configured. Usually run
 hourly by a cronjob so it is not necessary to run manually.
 `,
+	Args: cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		cloud, err := cld.ListCloud()
 		if err != nil {
@@ -1525,6 +1585,9 @@ func main() {
 		// commands.
 		p.Flags().ConfigureClusterFlags(createCmd.Flags(), vm.SingleProject)
 	}
+
+	destroyCmd.Flags().BoolVarP(&destroyAllMine,
+		"all-mine", "m", false, "Destroy all clusters belonging to the current user")
 
 	extendCmd.Flags().DurationVarP(&extendLifetime,
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")

@@ -18,18 +18,16 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	sqltypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 )
@@ -37,13 +35,13 @@ import (
 type workloadReader struct {
 	evalCtx *tree.EvalContext
 	table   *sqlbase.TableDescriptor
-	kvCh    chan []roachpb.KeyValue
+	kvCh    chan row.KVBatch
 }
 
 var _ inputConverter = &workloadReader{}
 
 func newWorkloadReader(
-	kvCh chan []roachpb.KeyValue, table *sqlbase.TableDescriptor, evalCtx *tree.EvalContext,
+	kvCh chan row.KVBatch, table *sqlbase.TableDescriptor, evalCtx *tree.EvalContext,
 ) *workloadReader {
 	return &workloadReader{evalCtx: evalCtx, table: table, kvCh: kvCh}
 }
@@ -58,47 +56,43 @@ func (w *workloadReader) inputFinished(ctx context.Context) {
 // makeDatumFromColOffset tries to fast-path a few workload-generated types into
 // directly datums, to dodge making a string and then the parsing it.
 func makeDatumFromColOffset(
-	alloc *sqlbase.DatumAlloc,
-	hint *sqltypes.T,
-	evalCtx *tree.EvalContext,
-	col coldata.Vec,
-	rowIdx int,
+	alloc *sqlbase.DatumAlloc, hint *types.T, evalCtx *tree.EvalContext, col coldata.Vec, rowIdx int,
 ) (tree.Datum, error) {
 	if col.Nulls().NullAt64(uint64(rowIdx)) {
 		return tree.DNull, nil
 	}
 	switch col.Type() {
-	case types.Bool:
+	case coltypes.Bool:
 		return tree.MakeDBool(tree.DBool(col.Bool()[rowIdx])), nil
-	case types.Int64:
+	case coltypes.Int64:
 		switch hint.Family() {
-		case sqltypes.IntFamily:
+		case types.IntFamily:
 			return alloc.NewDInt(tree.DInt(col.Int64()[rowIdx])), nil
-		case sqltypes.DecimalFamily:
+		case types.DecimalFamily:
 			d := *apd.New(col.Int64()[rowIdx], 0)
 			return alloc.NewDDecimal(tree.DDecimal{Decimal: d}), nil
 		}
-	case types.Float64:
+	case coltypes.Float64:
 		switch hint.Family() {
-		case sqltypes.FloatFamily:
+		case types.FloatFamily:
 			return alloc.NewDFloat(tree.DFloat(col.Float64()[rowIdx])), nil
-		case sqltypes.DecimalFamily:
+		case types.DecimalFamily:
 			var d apd.Decimal
 			if _, err := d.SetFloat64(col.Float64()[rowIdx]); err != nil {
 				return nil, err
 			}
 			return alloc.NewDDecimal(tree.DDecimal{Decimal: d}), nil
 		}
-	case types.Bytes:
+	case coltypes.Bytes:
 		switch hint.Family() {
-		case sqltypes.BytesFamily:
-			return alloc.NewDBytes(tree.DBytes(col.Bytes()[rowIdx])), nil
-		case sqltypes.StringFamily:
-			data := col.Bytes()[rowIdx]
+		case types.BytesFamily:
+			return alloc.NewDBytes(tree.DBytes(col.Bytes().Get(rowIdx))), nil
+		case types.StringFamily:
+			data := col.Bytes().Get(rowIdx)
 			str := *(*string)(unsafe.Pointer(&data))
 			return alloc.NewDString(tree.DString(str)), nil
 		default:
-			data := col.Bytes()[rowIdx]
+			data := col.Bytes().Get(rowIdx)
 			str := *(*string)(unsafe.Pointer(&data))
 			return tree.ParseDatumStringAs(hint, str, evalCtx)
 		}
@@ -111,33 +105,12 @@ func (w *workloadReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
 	_ roachpb.IOFileFormat,
-	progressFn func(float32) error,
+	_ func(float32) error,
 	_ *cluster.Settings,
 ) error {
-	progress := jobs.ProgressUpdateBatcher{Report: func(ctx context.Context, pct float32) error {
-		return progressFn(pct)
-	}}
-
-	var numTotalBatches int64
-	var finishedBatchesAtomic int64
-	const batchesPerProgress = 1000
-	finishedBatchFn := func() {
-		finishedBatches := atomic.AddInt64(&finishedBatchesAtomic, 1)
-		if finishedBatches%batchesPerProgress == 0 {
-			progressDelta := float32(batchesPerProgress) / float32(numTotalBatches)
-			// TODO(dan): (*ProgressUpdateBatcher).Add also has logic to only report
-			// job progress periodically. See if we can unify them (potentially by
-			// making Add cheap enough to call every time inside `finishedBatchFn`, if
-			// it's not already). It also seems to me that it would be more natural
-			// for Add to take the overall progress than a delta.
-			if err := progress.Add(ctx, progressDelta); err != nil {
-				log.Warningf(ctx, "failed to update progress: %+v", err)
-			}
-		}
-	}
 
 	wcs := make([]*WorkloadKVConverter, 0, len(dataFiles))
-	for _, fileName := range dataFiles {
+	for fileID, fileName := range dataFiles {
 		file, err := url.Parse(fileName)
 		if err != nil {
 			return err
@@ -173,21 +146,18 @@ func (w *workloadReader) readFiles(
 			return errors.Wrapf(err, `unknown table %s for generator %s`, conf.Table, meta.Name)
 		}
 
-		numTotalBatches += conf.BatchEnd - conf.BatchBegin
 		wc := NewWorkloadKVConverter(
-			w.table, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh)
+			fileID, w.table, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh)
 		wcs = append(wcs, wc)
 	}
+
 	for _, wc := range wcs {
 		if err := ctxgroup.GroupWorkers(ctx, runtime.NumCPU(), func(ctx context.Context) error {
 			evalCtx := w.evalCtx.Copy()
-			return wc.Worker(ctx, evalCtx, finishedBatchFn)
+			return wc.Worker(ctx, evalCtx)
 		}); err != nil {
 			return err
 		}
-	}
-	if err := progress.Done(ctx); err != nil {
-		log.Warningf(ctx, "failed to update progress: %+v", err)
 	}
 	return nil
 }
@@ -198,16 +168,22 @@ type WorkloadKVConverter struct {
 	rows           workload.BatchedTuples
 	batchIdxAtomic int64
 	batchEnd       int
-	kvCh           chan []roachpb.KeyValue
+	kvCh           chan row.KVBatch
+
+	// For progress reporting
+	fileID                int32
+	totalBatches          float32
+	finishedBatchesAtomic int64
 }
 
 // NewWorkloadKVConverter returns a WorkloadKVConverter for the given table and
 // range of batches, emitted converted kvs to the given channel.
 func NewWorkloadKVConverter(
+	fileID int32,
 	tableDesc *sqlbase.TableDescriptor,
 	rows workload.BatchedTuples,
 	batchStart, batchEnd int,
-	kvCh chan []roachpb.KeyValue,
+	kvCh chan row.KVBatch,
 ) *WorkloadKVConverter {
 	return &WorkloadKVConverter{
 		tableDesc:      tableDesc,
@@ -215,6 +191,8 @@ func NewWorkloadKVConverter(
 		batchIdxAtomic: int64(batchStart) - 1,
 		batchEnd:       batchEnd,
 		kvCh:           kvCh,
+		totalBatches:   float32(batchEnd - batchStart),
+		fileID:         fileID,
 	}
 }
 
@@ -228,14 +206,15 @@ func NewWorkloadKVConverter(
 // minimzing the amount of overlapping SSTs ingested.
 //
 // This worker needs its own EvalContext and DatumAlloc.
-func (w *WorkloadKVConverter) Worker(
-	ctx context.Context, evalCtx *tree.EvalContext, finishedBatchFn func(),
-) error {
-	conv, err := row.NewDatumRowConverter(w.tableDesc, evalCtx, w.kvCh)
+func (w *WorkloadKVConverter) Worker(ctx context.Context, evalCtx *tree.EvalContext) error {
+	conv, err := row.NewDatumRowConverter(w.tableDesc, nil /* targetColNames */, evalCtx, w.kvCh)
 	if err != nil {
 		return err
 	}
-
+	conv.KvBatch.Source = w.fileID
+	conv.FractionFn = func() float32 {
+		return float32(atomic.LoadInt64(&w.finishedBatchesAtomic)) / w.totalBatches
+	}
 	var alloc sqlbase.DatumAlloc
 	var a bufalloc.ByteAllocator
 	cb := coldata.NewMemBatchWithSize(nil, 0)
@@ -271,7 +250,7 @@ func (w *WorkloadKVConverter) Worker(
 				return err
 			}
 		}
-		finishedBatchFn()
+		atomic.AddInt64(&w.finishedBatchesAtomic, 1)
 	}
 	return conv.SendBatch(ctx)
 }

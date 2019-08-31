@@ -103,15 +103,19 @@ func runTPCHBench(ctx context.Context, t *test, c *cluster, b tpchBenchSpec) {
 		// run b.numRunsPerQuery number of times.
 		maxOps := b.numRunsPerQuery * numQueries
 
+		vectorizeSetting := ""
+		if b.benchType == tpchVec {
+			vectorizeSetting = "experimental_on"
+		}
 		// Run with only one worker to get best-case single-query performance.
 		cmd := fmt.Sprintf(
 			"./workload run querybench --db=tpch --concurrency=1 --query-file=%s "+
-				"--num-runs=%d --max-ops=%d --vectorized=%t {pgurl%s} "+
-				"--histograms=logs/stats.json --histograms-max-latency=%s",
+				"--num-runs=%d --max-ops=%d --vectorize=%s {pgurl%s} "+
+				"--histograms="+perfArtifactsDir+"/stats.json --histograms-max-latency=%s",
 			filename,
 			b.numRunsPerQuery,
 			maxOps,
-			b.benchType == tpchVec,
+			vectorizeSetting,
 			roachNodes,
 			b.maxLatency.String(),
 		)

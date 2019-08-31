@@ -9,7 +9,7 @@ send "PS1='\\h:''/# '\r"
 eexpect ":/# "
 
 start_test "Check that the server shuts down upon receiving SIGTERM"
-send "$argv start --insecure --pid-file=server_pid --log-dir=logs \r"
+send "$argv start-single-node --insecure --pid-file=server_pid --log-dir=logs \r"
 eexpect "initialized"
 
 system "kill `cat server_pid`"
@@ -25,7 +25,7 @@ eexpect ":/# "
 end_test
 
 start_test "Check that the server shuts down upon receiving Ctrl+C."
-send "$argv start --insecure --pid-file=server_pid --log-dir=logs \r"
+send "$argv start-single-node --insecure --pid-file=server_pid --log-dir=logs \r"
 eexpect "restarted"
 
 interrupt
@@ -43,7 +43,7 @@ end_test
 start_test "Check that the server shuts down fast upon receiving Ctrl+C twice."
 
 # Start a server via the shell
-send "$argv start --insecure --pid-file=server_pid --log-dir=logs \r"
+send "$argv start-single-node --insecure --pid-file=server_pid --log-dir=logs \r"
 eexpect "restarted"
 
 # Make a client open a connection and keep using it with an open txn.

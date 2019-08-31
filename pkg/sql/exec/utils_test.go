@@ -13,13 +13,17 @@ package exec
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"sort"
 	"testing"
+	"testing/quick"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -145,22 +149,42 @@ func runTestsWithFixedSel(
 	}
 }
 
+// setColVal is a test helper function to set the given value at the equivalent
+// col[idx]. This function is slow due to reflection.
+func setColVal(vec coldata.Vec, idx int, val interface{}) {
+	if vec.Type() == coltypes.Bytes {
+		var (
+			bytesVal []byte
+			ok       bool
+		)
+		bytesVal, ok = val.([]byte)
+		if !ok {
+			bytesVal = []byte(val.(string))
+		}
+		vec.Bytes().Set(idx, bytesVal)
+		return
+	}
+	reflect.ValueOf(vec.Col()).Index(idx).Set(reflect.ValueOf(val).Convert(reflect.TypeOf(vec.Col()).Elem()))
+}
+
 // opTestInput is an Operator that columnarizes test input in the form of tuples
-// of arbitrary Go types. It's meant to be used in Operator unit tests in
+// of arbitrary Go coltypes. It's meant to be used in Operator unit tests in
 // conjunction with opTestOutput like the following:
 //
 // inputTuples := tuples{
 //   {1,2,3.3,true},
 //   {5,6,7.0,false},
 // }
-// tupleSource := newOpTestInput(inputTuples, types.Bool)
+// tupleSource := newOpTestInput(inputTuples, coltypes.Bool)
 // opUnderTest := newFooOp(tupleSource, ...)
 // output := newOpTestOutput(opUnderTest, expectedOutputTuples)
 // if err := output.Verify(); err != nil {
 //     t.Fatal(err)
 // }
 type opTestInput struct {
-	typs []types.T
+	ZeroInputNode
+
+	typs []coltypes.T
 
 	batchSize uint16
 	tuples    tuples
@@ -195,17 +219,17 @@ func newOpTestSelInput(rng *rand.Rand, batchSize uint16, tuples tuples) *opTestI
 
 func (s *opTestInput) Init() {
 	if len(s.tuples) == 0 {
-		panic("empty tuple source")
+		execerror.VectorizedInternalPanic("empty tuple source")
 	}
 
-	typs := make([]types.T, len(s.tuples[0]))
+	typs := make([]coltypes.T, len(s.tuples[0]))
 	for i := range typs {
 		// Default type for test cases is Int64 in case the entire column is null
 		// and the type is indeterminate.
-		typs[i] = types.Int64
+		typs[i] = coltypes.Int64
 		for _, tup := range s.tuples {
 			if tup[i] != nil {
-				typs[i] = types.FromGoType(tup[i])
+				typs[i] = coltypes.FromGoType(tup[i])
 				break
 			}
 		}
@@ -221,7 +245,7 @@ func (s *opTestInput) Init() {
 }
 
 func (s *opTestInput) Next(context.Context) coldata.Batch {
-	s.batch.SetSelection(false)
+	s.batch.ResetInternalBatch()
 	if len(s.tuples) == 0 {
 		s.batch.SetLength(0)
 		return s.batch
@@ -236,12 +260,15 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 	tupleLen := len(tups[0])
 	for i := range tups {
 		if len(tups[i]) != tupleLen {
-			panic(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
+			execerror.VectorizedInternalPanic(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
 				tups[i], tupleLen))
 		}
 	}
 
 	if s.useSel {
+		for i := range s.selection {
+			s.selection[i] = uint16(i)
+		}
 		// We have populated s.selection vector with possibly more indices than we
 		// have actual tuples for, so some "default" tuples will be introduced but
 		// will not be selected due to the length of the batch being equal to the
@@ -261,6 +288,12 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 		sort.Slice(s.selection[:batchSize], func(i, j int) bool {
 			return s.selection[i] < s.selection[j]
 		})
+		// Any unused elements in the selection vector are set to a value larger
+		// than the max batch size, so the test will panic if this part of the slice
+		// is accidentally accessed.
+		for i := range s.selection[batchSize:] {
+			s.selection[int(batchSize)+i] = coldata.BatchSize + 1
+		}
 
 		s.batch.SetSelection(true)
 		copy(s.batch.Selection(), s.selection)
@@ -271,18 +304,40 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 		s.batch.ColVec(i).Nulls().UnsetNulls()
 	}
 
+	rng := rand.New(rand.NewSource(123))
+
 	for i := range s.typs {
 		vec := s.batch.ColVec(i)
+		typ := vec.Type()
 		// Automatically convert the Go values into exec.Type slice elements using
 		// reflection. This is slow, but acceptable for tests.
 		col := reflect.ValueOf(vec.Col())
 		for j := uint16(0); j < batchSize; j++ {
+			// If useSel is false, then the selection vector will contain
+			// [0, ..., batchSize] in ascending order.
 			outputIdx := s.selection[j]
 			if tups[j][i] == nil {
+				// Set garbage data in the value to make sure NULL gets handled
+				// correctly.
 				vec.Nulls().SetNull(outputIdx)
+				if typ == coltypes.Decimal {
+					d := apd.Decimal{}
+					_, err := d.SetFloat64(rng.Float64())
+					if err != nil {
+						execerror.VectorizedInternalPanic(fmt.Sprintf("%v", err))
+					}
+					col.Index(int(outputIdx)).Set(reflect.ValueOf(d))
+				} else if typ == coltypes.Bytes {
+					newBytes := make([]byte, rng.Intn(16)+1)
+					rng.Read(newBytes)
+					setColVal(vec, int(outputIdx), newBytes)
+				} else if val, ok := quick.Value(reflect.TypeOf(vec.Col()).Elem(), rng); ok {
+					setColVal(vec, int(outputIdx), val.Interface())
+				} else {
+					execerror.VectorizedInternalPanic(fmt.Sprintf("could not generate a random value of type %T\n.", vec.Type()))
+				}
 			} else {
-				col.Index(int(outputIdx)).Set(
-					reflect.ValueOf(tups[j][i]).Convert(reflect.TypeOf(vec.Col()).Elem()))
+				setColVal(vec, int(outputIdx), tups[j][i])
 			}
 		}
 	}
@@ -292,7 +347,9 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 }
 
 type opFixedSelTestInput struct {
-	typs []types.T
+	ZeroInputNode
+
+	typs []coltypes.T
 
 	batchSize uint16
 	tuples    tuples
@@ -320,17 +377,17 @@ func newOpFixedSelTestInput(sel []uint16, batchSize uint16, tuples tuples) *opFi
 
 func (s *opFixedSelTestInput) Init() {
 	if len(s.tuples) == 0 {
-		panic("empty tuple source")
+		execerror.VectorizedInternalPanic("empty tuple source")
 	}
 
-	typs := make([]types.T, len(s.tuples[0]))
+	typs := make([]coltypes.T, len(s.tuples[0]))
 	for i := range typs {
 		// Default type for test cases is Int64 in case the entire column is null
 		// and the type is indeterminate.
-		typs[i] = types.Int64
+		typs[i] = coltypes.Int64
 		for _, tup := range s.tuples {
 			if tup[i] != nil {
-				typs[i] = types.FromGoType(tup[i])
+				typs[i] = coltypes.FromGoType(tup[i])
 				break
 			}
 		}
@@ -341,7 +398,7 @@ func (s *opFixedSelTestInput) Init() {
 	tupleLen := len(s.tuples[0])
 	for _, i := range s.sel {
 		if len(s.tuples[i]) != tupleLen {
-			panic(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
+			execerror.VectorizedInternalPanic(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
 				s.tuples[i], tupleLen))
 		}
 	}
@@ -360,13 +417,11 @@ func (s *opFixedSelTestInput) Init() {
 			vec := s.batch.ColVec(i)
 			// Automatically convert the Go values into exec.Type slice elements using
 			// reflection. This is slow, but acceptable for tests.
-			col := reflect.ValueOf(vec.Col())
 			for j := 0; j < len(s.tuples); j++ {
 				if s.tuples[j][i] == nil {
 					vec.Nulls().SetNull(uint16(j))
 				} else {
-					col.Index(j).Set(
-						reflect.ValueOf(s.tuples[j][i]).Convert(reflect.TypeOf(vec.Col()).Elem()))
+					setColVal(vec, j, s.tuples[j][i])
 				}
 			}
 		}
@@ -386,15 +441,13 @@ func (s *opFixedSelTestInput) Next(context.Context) coldata.Batch {
 		for i := range s.typs {
 			vec := s.batch.ColVec(i)
 			vec.Nulls().UnsetNulls()
-			// Automatically convert the Go values into exec.Type slice elements using
-			// reflection. This is slow, but acceptable for tests.
-			col := reflect.ValueOf(vec.Col())
 			for j := uint16(0); j < batchSize; j++ {
 				if s.tuples[s.idx+j][i] == nil {
 					vec.Nulls().SetNull(j)
 				} else {
-					col.Index(int(j)).Set(
-						reflect.ValueOf(s.tuples[s.idx+j][i]).Convert(reflect.TypeOf(vec.Col()).Elem()))
+					// Automatically convert the Go values into exec.Type slice elements using
+					// reflection. This is slow, but acceptable for tests.
+					setColVal(vec, int(j), s.tuples[s.idx+j][i])
 				}
 			}
 		}
@@ -419,7 +472,7 @@ func (s *opFixedSelTestInput) Next(context.Context) coldata.Batch {
 // opTestOutput is a test verification struct that ensures its input batches
 // match some expected output tuples.
 type opTestOutput struct {
-	input    Operator
+	OneInputNode
 	cols     []int
 	expected tuples
 
@@ -434,9 +487,9 @@ func newOpTestOutput(input Operator, cols []int, expected tuples) *opTestOutput 
 	input.Init()
 
 	return &opTestOutput{
-		input:    input,
-		cols:     cols,
-		expected: expected,
+		OneInputNode: NewOneInputNode(input),
+		cols:         cols,
+		expected:     expected,
 	}
 }
 
@@ -460,8 +513,13 @@ func (r *opTestOutput) next(ctx context.Context) tuple {
 		if vec.Nulls().NullAt(curIdx) {
 			ret[outIdx] = nil
 		} else {
-			col := reflect.ValueOf(vec.Col())
-			out.Index(outIdx).Set(col.Index(int(curIdx)))
+			var val reflect.Value
+			if colBytes, ok := vec.Col().(*coldata.Bytes); ok {
+				val = reflect.ValueOf(append([]byte(nil), colBytes.Get(int(curIdx))...))
+			} else {
+				val = reflect.ValueOf(vec.Col()).Index(int(curIdx))
+			}
+			out.Index(outIdx).Set(val)
 		}
 	}
 	r.curIdx++
@@ -516,6 +574,14 @@ func tupleEquals(expected tuple, actual tuple) bool {
 				return false
 			}
 		} else {
+			// Special case for NaN, since it does not equal itself.
+			if f1, ok := expected[i].(float64); ok {
+				if f2, ok := actual[i].(float64); ok {
+					if math.IsNaN(f1) && math.IsNaN(f2) {
+						continue
+					}
+				}
+			}
 			if !reflect.DeepEqual(reflect.ValueOf(actual[i]).Convert(reflect.TypeOf(expected[i])).Interface(), expected[i]) {
 				return false
 			}
@@ -565,6 +631,8 @@ func assertTuplesOrderedEqual(expected tuples, actual tuples) error {
 // finiteBatchSource is an Operator that returns the same batch a specified
 // number of times.
 type finiteBatchSource struct {
+	ZeroInputNode
+
 	repeatableBatch *RepeatableBatchSource
 
 	usableCount int
@@ -572,7 +640,7 @@ type finiteBatchSource struct {
 
 var _ Operator = &finiteBatchSource{}
 
-var emptyBatch = coldata.NewMemBatchWithSize([]types.T{}, 0)
+var emptyBatch = coldata.NewMemBatchWithSize([]coltypes.T{}, 0)
 
 // newFiniteBatchSource returns a new Operator initialized to return its input
 // batch a specified number of times.
@@ -598,6 +666,7 @@ func (f *finiteBatchSource) Next(ctx context.Context) coldata.Batch {
 // randomLengthBatchSource is an Operator that forever returns the same batch at
 // a different length each time.
 type randomLengthBatchSource struct {
+	ZeroInputNode
 	internalBatch coldata.Batch
 	rng           *rand.Rand
 }
@@ -626,6 +695,7 @@ func (r *randomLengthBatchSource) Next(context.Context) coldata.Batch {
 // (except for the first) the batch is returned to emulate source that is
 // already ordered on matchLen columns.
 type finiteChunksSource struct {
+	ZeroInputNode
 	repeatableBatch *RepeatableBatchSource
 
 	usableCount int
@@ -672,7 +742,7 @@ func (f *finiteChunksSource) Next(ctx context.Context) coldata.Batch {
 		}
 		return batch
 	}
-	return coldata.NewMemBatch([]types.T{})
+	return coldata.NewMemBatch([]coltypes.T{})
 }
 
 func TestOpTestInputOutput(t *testing.T) {
@@ -694,7 +764,7 @@ func TestOpTestInputOutput(t *testing.T) {
 }
 
 func TestRepeatableBatchSource(t *testing.T) {
-	batch := coldata.NewMemBatch([]types.T{types.Int64})
+	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
 	batchLen := uint16(10)
 	batch.SetLength(batchLen)
 	input := NewRepeatableBatchSource(batch)
@@ -713,7 +783,7 @@ func TestRepeatableBatchSource(t *testing.T) {
 }
 
 func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
-	batch := coldata.NewMemBatch([]types.T{types.Int64})
+	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
 	rng, _ := randutil.NewPseudoRand()
 	sel := randomSel(rng, 10 /* batchSize */, 0 /* probOfOmitting */)
 	batchLen := uint16(len(sel))
@@ -762,7 +832,8 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 // chunkingBatchSource is a batch source that takes unlimited-size columns and
 // chunks them into BatchSize-sized chunks when Nexted.
 type chunkingBatchSource struct {
-	typs []types.T
+	ZeroInputNode
+	typs []coltypes.T
 	cols []coldata.Vec
 	len  uint64
 
@@ -774,7 +845,9 @@ var _ Operator = &chunkingBatchSource{}
 
 // newChunkingBatchSource returns a new chunkingBatchSource with the given
 // column types, columns, and length.
-func newChunkingBatchSource(typs []types.T, cols []coldata.Vec, len uint64) *chunkingBatchSource {
+func newChunkingBatchSource(
+	typs []coltypes.T, cols []coldata.Vec, len uint64,
+) *chunkingBatchSource {
 	return &chunkingBatchSource{
 		typs: typs,
 		cols: cols,

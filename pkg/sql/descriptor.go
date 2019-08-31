@@ -107,21 +107,20 @@ func (p *planner) createDescriptorWithID(
 	// but not going through the normal INSERT logic and not performing a precise
 	// mimicry. In particular, we're only writing a single key per table, while
 	// perfect mimicry would involve writing a sentinel key for each row as well.
-	descKey := sqlbase.MakeDescMetadataKey(descriptor.GetID())
 
 	b := &client.Batch{}
 	descID := descriptor.GetID()
-	descDesc := sqlbase.WrapDescriptor(descriptor)
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
-		log.VEventf(ctx, 2, "CPut %s -> %s", descKey, descDesc)
 	}
 	b.CPut(idKey, descID, nil)
-	b.CPut(descKey, descDesc, nil)
+	if err := WriteNewDescToBatch(ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), st, b, descID, descriptor); err != nil {
+		return err
+	}
 
 	mutDesc, isTable := descriptor.(*sqlbase.MutableTableDescriptor)
 	if isTable {
-		if err := mutDesc.ValidateTable(st); err != nil {
+		if err := mutDesc.ValidateTable(); err != nil {
 			return err
 		}
 		if err := p.Tables().addUncommittedTable(*mutDesc); err != nil {
@@ -177,9 +176,11 @@ func getDescriptorByID(
 			return pgerror.Newf(pgcode.WrongObjectType,
 				"%q is not a table", desc.String())
 		}
-		table.MaybeFillInDescriptor()
+		if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
+			return nil
+		}
 
-		if err := table.Validate(ctx, txn, nil /* clusterVersion */); err != nil {
+		if err := table.Validate(ctx, txn); err != nil {
 			return err
 		}
 		*t = *table
@@ -207,20 +208,103 @@ func GetAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 		return nil, err
 	}
 
-	descs := make([]sqlbase.DescriptorProto, len(kvs))
-	for i, kv := range kvs {
+	descs := make([]sqlbase.DescriptorProto, 0, len(kvs))
+	for _, kv := range kvs {
 		desc := &sqlbase.Descriptor{}
 		if err := kv.ValueProto(desc); err != nil {
 			return nil, err
 		}
 		switch t := desc.Union.(type) {
 		case *sqlbase.Descriptor_Table:
-			descs[i] = desc.GetTable()
+			table := desc.GetTable()
+			if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
+				return nil, err
+			}
+			descs = append(descs, table)
 		case *sqlbase.Descriptor_Database:
-			descs[i] = desc.GetDatabase()
+			descs = append(descs, desc.GetDatabase())
 		default:
 			return nil, errors.AssertionFailedf("Descriptor.Union has unexpected type %T", t)
 		}
 	}
 	return descs, nil
+}
+
+// writeDescToBatch adds a Put command writing a descriptor proto to the
+// descriptors table. It writes the descriptor desc at the id descID. If kvTrace
+// is enabled, it will log an event explaining the put that was performed.
+func writeDescToBatch(
+	ctx context.Context,
+	kvTrace bool,
+	s *cluster.Settings,
+	b *client.Batch,
+	descID sqlbase.ID,
+	desc sqlbase.DescriptorProto,
+) (err error) {
+	var tableToDowngrade *TableDescriptor
+	switch d := desc.(type) {
+	case *TableDescriptor:
+		tableToDowngrade = d
+	case *MutableTableDescriptor:
+		tableToDowngrade = d.TableDesc()
+	case *DatabaseDescriptor:
+	default:
+		return errors.AssertionFailedf("unexpected proto type %T", desc)
+	}
+	if tableToDowngrade != nil {
+		didDowngrade, downgraded, err := tableToDowngrade.MaybeDowngradeForeignKeyRepresentation(ctx, s)
+		if err != nil {
+			return err
+		}
+		if didDowngrade {
+			desc = downgraded
+		}
+	}
+	descKey := sqlbase.MakeDescMetadataKey(descID)
+	descDesc := sqlbase.WrapDescriptor(desc)
+	if kvTrace {
+		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descDesc)
+	}
+	b.Put(descKey, descDesc)
+	return nil
+}
+
+// WriteNewDescToBatch adds a CPut command writing a descriptor proto to the
+// descriptors table. It writes the descriptor desc at the id descID, asserting
+// that there was no previous descriptor at that id present already. If kvTrace
+// is enabled, it will log an event explaining the CPut that was performed.
+func WriteNewDescToBatch(
+	ctx context.Context,
+	kvTrace bool,
+	s *cluster.Settings,
+	b *client.Batch,
+	tableID sqlbase.ID,
+	desc sqlbase.DescriptorProto,
+) (err error) {
+	var tableToDowngrade *TableDescriptor
+	switch d := desc.(type) {
+	case *TableDescriptor:
+		tableToDowngrade = d
+	case *MutableTableDescriptor:
+		tableToDowngrade = d.TableDesc()
+	case *DatabaseDescriptor:
+	default:
+		return errors.AssertionFailedf("unexpected proto type %T", desc)
+	}
+	if tableToDowngrade != nil {
+		didDowngrade, downgraded, err := tableToDowngrade.MaybeDowngradeForeignKeyRepresentation(ctx, s)
+		if err != nil {
+			return err
+		}
+		if didDowngrade {
+			desc = downgraded
+		}
+	}
+	descKey := sqlbase.MakeDescMetadataKey(tableID)
+	descDesc := sqlbase.WrapDescriptor(desc)
+	if kvTrace {
+		log.VEventf(ctx, 2, "CPut %s -> %s", descKey, descDesc)
+	}
+	b.CPut(descKey, descDesc, nil)
+	return nil
 }

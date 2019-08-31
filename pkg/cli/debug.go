@@ -707,7 +707,7 @@ func runDebugCheckStoreRaft(ctx context.Context, db *engine.RocksDB) error {
 	}
 
 	for rangeID, info := range replicaInfo {
-		if info.truncatedIndex != info.firstIndex-1 {
+		if info.truncatedIndex != 0 && info.truncatedIndex != info.firstIndex-1 {
 			hasError = true
 			fmt.Printf("range %s: truncated index %v should equal first index %v - 1\n",
 				rangeID, info.truncatedIndex, info.firstIndex)
@@ -1163,8 +1163,9 @@ func removeDeadReplicas(
 	err = storage.IterateRangeDescriptors(ctx, db, func(desc roachpb.RangeDescriptor) (bool, error) {
 		hasSelf := false
 		numDeadPeers := 0
-		numReplicas := len(desc.Replicas().Unwrap())
-		for _, rep := range desc.Replicas().Unwrap() {
+		allReplicas := desc.Replicas().All()
+		numReplicas := len(allReplicas)
+		for _, rep := range allReplicas {
 			if rep.StoreID == storeIdent.StoreID {
 				hasSelf = true
 			}
@@ -1177,13 +1178,14 @@ func removeDeadReplicas(
 			// Rewrite the replicas list. Bump the replica ID as an extra
 			// defense against one of the old replicas returning from the
 			// dead.
-			newDesc.SetReplicas(roachpb.MakeReplicaDescriptors([]roachpb.ReplicaDescriptor{{
+			replicas := []roachpb.ReplicaDescriptor{{
 				NodeID:    storeIdent.NodeID,
 				StoreID:   storeIdent.StoreID,
 				ReplicaID: desc.NextReplicaID,
-			}}))
+			}}
+			newDesc.SetReplicas(roachpb.MakeReplicaDescriptors(replicas))
 			newDesc.NextReplicaID++
-			fmt.Printf("Replica %s -> %s\n", desc, newDesc)
+			fmt.Printf("Replica %s -> %s\n", &desc, &newDesc)
 			newDescs = append(newDescs, newDesc)
 		}
 		return false, nil

@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/gogo/protobuf/types"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 func TestTableReader(t *testing.T) {
@@ -126,10 +126,10 @@ func TestTableReader(t *testing.T) {
 				evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 				defer evalCtx.Stop(ctx)
 				flowCtx := FlowCtx{
-					EvalCtx:  &evalCtx,
-					Settings: s.ClusterSettings(),
-					txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-					nodeID:   s.NodeID(),
+					EvalCtx: &evalCtx,
+					Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
+					txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+					NodeID:  s.NodeID(),
 				}
 
 				var out RowReceiver
@@ -211,10 +211,10 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 	defer evalCtx.Stop(ctx)
 	nodeID := tc.Server(0).NodeID()
 	flowCtx := FlowCtx{
-		EvalCtx:  &evalCtx,
-		Settings: st,
-		txn:      client.NewTxn(ctx, tc.Server(0).DB(), nodeID, client.RootTxn),
-		nodeID:   nodeID,
+		EvalCtx: &evalCtx,
+		Cfg:     &ServerConfig{Settings: st},
+		txn:     client.NewTxn(ctx, tc.Server(0).DB(), nodeID, client.RootTxn),
+		NodeID:  nodeID,
 	}
 	spec := distsqlpb.TableReaderSpec{
 		Spans: []distsqlpb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
@@ -316,10 +316,10 @@ func TestLimitScans(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		EvalCtx:  &evalCtx,
-		Settings: s.ClusterSettings(),
-		txn:      client.NewTxn(ctx, kvDB, s.NodeID(), client.RootTxn),
-		nodeID:   s.NodeID(),
+		EvalCtx: &evalCtx,
+		Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
+		txn:     client.NewTxn(ctx, kvDB, s.NodeID(), client.RootTxn),
+		NodeID:  s.NodeID(),
 	}
 	spec := distsqlpb.TableReaderSpec{
 		Table: *tableDesc,
@@ -420,10 +420,10 @@ func BenchmarkTableReader(b *testing.B) {
 		)
 		tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
 		flowCtx := FlowCtx{
-			EvalCtx:  &evalCtx,
-			Settings: s.ClusterSettings(),
-			txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-			nodeID:   s.NodeID(),
+			EvalCtx: &evalCtx,
+			Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
+			txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+			NodeID:  s.NodeID(),
 		}
 
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {

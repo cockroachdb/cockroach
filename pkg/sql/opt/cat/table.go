@@ -78,7 +78,7 @@ type Table interface {
 	// Public indexes are not currently being added or dropped from the table.
 	// This method should be used when mutation columns can be ignored (the common
 	// case). The returned indexes include the primary index, so the count is
-	// always >= 1.
+	// always >= 1 (except for virtual tables, which have no indexes).
 	IndexCount() int
 
 	// WritableIndexCount returns the number of public and write-only indexes
@@ -92,12 +92,13 @@ type Table interface {
 	// >= WritableIndexCount.
 	DeletableIndexCount() int
 
-	// Index returns the ith index, where i < IndexCount. The table's primary
-	// index is always the 0th index, and is always present (use cat.PrimaryIndex
-	// to select it). The primary index corresponds to the table's primary key.
-	// If a primary key was not explicitly specified, then the system implicitly
-	// creates one based on a hidden rowid column.
-	Index(i int) Index
+	// Index returns the ith index, where i < DeletableIndexCount. Except for
+	// virtual tables, the table's primary index is always the 0th index, and is
+	// always present (use cat.PrimaryIndex to select it). The primary index
+	// corresponds to the table's primary key. If a primary key was not
+	// explicitly specified, then the system implicitly creates one based on a
+	// hidden rowid column.
+	Index(i IndexOrdinal) Index
 
 	// StatisticCount returns the number of statistics available for the table.
 	StatisticCount() int
@@ -181,19 +182,22 @@ type TableStatistic interface {
 	Histogram() []HistogramBucket
 }
 
-// HistogramBucket contains the data for a single histogram bucket.
+// HistogramBucket contains the data for a single histogram bucket. Note
+// that NumEq, NumRange, and DistinctRange are floats so the statisticsBuilder
+// can apply filters to the histogram.
 type HistogramBucket struct {
 	// NumEq is the estimated number of values equal to UpperBound.
-	NumEq uint64
+	NumEq float64
 
-	// NumRange is the estimated number of values between the lower bound of the
-	// bucket and UpperBound (both boundaries are exclusive).
-	//
-	// The lower bound is inferred based on the location of this bucket in a
-	// slice of buckets. If it is the first bucket, the lower bound is the minimum
-	// possible value for the given data type. Otherwise, the lower bound is equal
-	// to the upper bound of the previous bucket.
-	NumRange uint64
+	// NumRange is the estimated number of values between the upper bound of the
+	// previous bucket and UpperBound (both boundaries are exclusive).
+	// The first bucket should always have NumRange=0.
+	NumRange float64
+
+	// DistinctRange is the estimated number of distinct values between the upper
+	// bound of the previous bucket and UpperBound (both boundaries are
+	// exclusive).
+	DistinctRange float64
 
 	// UpperBound is the upper bound of the bucket.
 	UpperBound tree.Datum
@@ -237,4 +241,12 @@ type ForeignKeyConstraint interface {
 
 	// MatchMethod returns the method used for comparing composite foreign keys.
 	MatchMethod() tree.CompositeKeyMatchMethod
+
+	// DeleteReferenceAction returns the action to be performed if the foreign key
+	// constraint would be violated by a delete.
+	DeleteReferenceAction() tree.ReferenceAction
+
+	// UpdateReferenceAction returns the action to be performed if the foreign key
+	// constraint would be violated by an update.
+	UpdateReferenceAction() tree.ReferenceAction
 }

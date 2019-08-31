@@ -75,8 +75,9 @@ const (
 
 // ShowBackup represents a SHOW BACKUP statement.
 type ShowBackup struct {
-	Path    Expr
-	Details BackupDetails
+	Path                 Expr
+	Details              BackupDetails
+	ShouldIncludeSchemas bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -86,6 +87,9 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 		ctx.WriteString("RANGES ")
 	} else if node.Details == BackupFileDetails {
 		ctx.WriteString("FILES ")
+	}
+	if node.ShouldIncludeSchemas {
+		ctx.WriteString("SCHEMAS ")
 	}
 	ctx.FormatNode(node.Path)
 }
@@ -189,10 +193,16 @@ func (node *ShowQueries) Format(ctx *FmtCtx) {
 
 // ShowJobs represents a SHOW JOBS statement
 type ShowJobs struct {
+	// If non-nil, a select statement that provides the job ids to be shown.
+	Jobs *Select
+
 	// If Automatic is true, show only automatically-generated jobs such
 	// as automatic CREATE STATISTICS jobs. If Automatic is false, show
 	// only non-automatically-generated jobs.
 	Automatic bool
+
+	// Whether to block and wait for completion of all running jobs to be displayed.
+	Block bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -202,6 +212,13 @@ func (node *ShowJobs) Format(ctx *FmtCtx) {
 		ctx.WriteString("AUTOMATIC ")
 	}
 	ctx.WriteString("JOBS")
+	if node.Jobs != nil {
+		ctx.WriteString(" ")
+		ctx.FormatNode(node.Jobs)
+	}
+	if node.Block {
+		ctx.WriteString(" WHEN COMPLETE")
+	}
 }
 
 // ShowSessions represents a SHOW SESSIONS statement
@@ -373,20 +390,25 @@ func (node *ShowRoles) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ROLES")
 }
 
-// ShowRanges represents a SHOW EXPERIMENTAL_RANGES statement.
+// ShowRanges represents a SHOW RANGES statement.
 type ShowRanges struct {
 	TableOrIndex TableIndexName
+	DatabaseName string
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowRanges) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW EXPERIMENTAL_RANGES FROM ")
-	if node.TableOrIndex.Index != "" {
+	ctx.WriteString("SHOW RANGES FROM ")
+	if node.DatabaseName != "" {
+		ctx.WriteString("DATABASE ")
+		ctx.WriteString(node.DatabaseName)
+	} else if node.TableOrIndex.Index != "" {
 		ctx.WriteString("INDEX ")
+		ctx.FormatNode(&node.TableOrIndex)
 	} else {
 		ctx.WriteString("TABLE ")
+		ctx.FormatNode(&node.TableOrIndex)
 	}
-	ctx.FormatNode(&node.TableOrIndex)
 }
 
 // ShowFingerprints represents a SHOW EXPERIMENTAL_FINGERPRINTS statement.
@@ -424,4 +446,28 @@ type ShowHistogram struct {
 // Format implements the NodeFormatter interface.
 func (node *ShowHistogram) Format(ctx *FmtCtx) {
 	ctx.Printf("SHOW HISTOGRAM %d", node.HistogramID)
+}
+
+// ShowPartitions represents a SHOW PARTITIONS statement.
+type ShowPartitions struct {
+	Object string
+
+	IsDB bool
+
+	IsIndex bool
+	Index   TableIndexName
+
+	IsTable bool
+	Table   *UnresolvedObjectName
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowPartitions) Format(ctx *FmtCtx) {
+	if node.IsDB {
+		ctx.Printf("SHOW PARTITIONS FROM DATABASE %s", node.Object)
+	} else if node.IsIndex {
+		ctx.Printf("SHOW PARTITIONS FROM INDEX %s", node.Object)
+	} else {
+		ctx.Printf("SHOW PARTITIONS FROM TABLE %s", node.Object)
+	}
 }

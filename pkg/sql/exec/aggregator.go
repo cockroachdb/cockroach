@@ -13,9 +13,9 @@ package exec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/pkg/errors"
 )
 
@@ -54,6 +54,13 @@ type aggregateFunc interface {
 	// Compute computes the aggregation on the input batch. A zero-length input
 	// batch tells the aggregate function that it should flush its results.
 	Compute(batch coldata.Batch, inputIdxs []uint32)
+
+	// HandleEmptyInputScalar populates the output for a case of an empty input
+	// when the aggregate function is in scalar context. The output must always
+	// be a single value (either null or zero, depending on the function).
+	// TODO(yuzefovich): we can pull scratch field of aggregates into a shared
+	// aggregator and implement this method once on the shared base.
+	HandleEmptyInputScalar()
 }
 
 // orderedAggregator is an aggregator that performs arbitrary aggregations on
@@ -77,14 +84,14 @@ type aggregateFunc interface {
 // output batch if a worst case input batch is encountered (one where every
 // value is part of a new group).
 type orderedAggregator struct {
-	input Operator
+	OneInputNode
 
 	done bool
 
 	aggCols  [][]uint32
-	aggTypes [][]types.T
+	aggTypes [][]coltypes.T
 
-	outputTypes []types.T
+	outputTypes []coltypes.T
 
 	// scratch is the Batch to output and variables related to it. Aggregate
 	// function operators write directly to this output batch.
@@ -103,9 +110,14 @@ type orderedAggregator struct {
 	groupCol []bool
 	// aggregateFuncs are the aggregator's aggregate function operators.
 	aggregateFuncs []aggregateFunc
+	// isScalar indicates whether an aggregator is in scalar context.
+	isScalar bool
+	// seenNonEmptyBatch indicates whether a non-empty input batch has been
+	// observed.
+	seenNonEmptyBatch bool
 }
 
-var _ Operator = &orderedAggregator{}
+var _ StaticMemoryOperator = &orderedAggregator{}
 
 // NewOrderedAggregator creates an ordered aggregator on the given grouping
 // columns. aggCols is a slice where each index represents a new aggregation
@@ -113,10 +125,11 @@ var _ Operator = &orderedAggregator{}
 // that the aggregate function should work on.
 func NewOrderedAggregator(
 	input Operator,
-	colTypes []types.T,
+	colTypes []coltypes.T,
 	aggFns []distsqlpb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
+	isScalar bool,
 ) (Operator, error) {
 	if len(aggFns) != len(aggCols) {
 		return nil,
@@ -140,7 +153,7 @@ func NewOrderedAggregator(
 		// mark the first row as distinct, so we have to do it ourselves. Set up a
 		// oneShotOp to set the first row to distinct.
 		op = &oneShotOp{
-			input: op,
+			OneInputNode: NewOneInputNode(op),
 			fn: func(batch coldata.Batch) {
 				if batch.Length() == 0 {
 					return
@@ -156,11 +169,12 @@ func NewOrderedAggregator(
 	}
 
 	*a = orderedAggregator{
-		input: op,
+		OneInputNode: NewOneInputNode(op),
 
 		aggCols:  aggCols,
 		aggTypes: aggTypes,
 		groupCol: groupCol,
+		isScalar: isScalar,
 	}
 
 	a.aggregateFuncs, a.outputTypes, err = makeAggregateFuncs(aggTypes, aggFns)
@@ -173,10 +187,10 @@ func NewOrderedAggregator(
 }
 
 func makeAggregateFuncs(
-	aggTyps [][]types.T, aggFns []distsqlpb.AggregatorSpec_Func,
-) ([]aggregateFunc, []types.T, error) {
+	aggTyps [][]coltypes.T, aggFns []distsqlpb.AggregatorSpec_Func,
+) ([]aggregateFunc, []coltypes.T, error) {
 	funcs := make([]aggregateFunc, len(aggFns))
-	outTyps := make([]types.T, len(aggFns))
+	outTyps := make([]coltypes.T, len(aggFns))
 
 	for i := range aggFns {
 		var err error
@@ -204,7 +218,7 @@ func makeAggregateFuncs(
 		case distsqlpb.AggregatorSpec_COUNT_ROWS, distsqlpb.AggregatorSpec_COUNT:
 			// TODO(jordan): this is a somewhat of a hack. The aggregate functions
 			// should come with their own output types, somehow.
-			outTyps[i] = types.Int64
+			outTyps[i] = coltypes.Int64
 		default:
 			// Output types are the input types for now.
 			outTyps[i] = aggTyps[i][0]
@@ -216,6 +230,10 @@ func makeAggregateFuncs(
 	}
 
 	return funcs, outTyps, nil
+}
+
+func (a *orderedAggregator) EstimateStaticMemoryUsage() int {
+	return EstimateBatchSizeBytes(a.outputTypes, coldata.BatchSize*2)
 }
 
 func (a *orderedAggregator) initWithBatchSize(inputSize, outputSize int) {
@@ -236,7 +254,7 @@ func (a *orderedAggregator) Init() {
 }
 
 func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
-	a.scratch.SetSelection(false)
+	a.scratch.ResetInternalBatch()
 	if a.done {
 		a.scratch.SetLength(0)
 		return a.scratch
@@ -268,10 +286,26 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 
 	for a.scratch.resumeIdx < a.scratch.outputSize {
 		batch := a.input.Next(ctx)
-		for i, fn := range a.aggregateFuncs {
-			fn.Compute(batch, a.aggCols[i])
+		a.seenNonEmptyBatch = a.seenNonEmptyBatch || batch.Length() > 0
+		if !a.seenNonEmptyBatch {
+			// The input has zero rows.
+			if a.isScalar {
+				for _, fn := range a.aggregateFuncs {
+					fn.HandleEmptyInputScalar()
+				}
+				// All aggregate functions will output a single value.
+				a.scratch.resumeIdx = 1
+			} else {
+				// There should be no output in non-scalar context for all aggregate
+				// functions.
+				a.scratch.resumeIdx = 0
+			}
+		} else {
+			for i, fn := range a.aggregateFuncs {
+				fn.Compute(batch, a.aggCols[i])
+			}
+			a.scratch.resumeIdx = a.aggregateFuncs[0].CurrentOutputIndex()
 		}
-		a.scratch.resumeIdx = a.aggregateFuncs[0].CurrentOutputIndex()
 		if batch.Length() == 0 {
 			a.done = true
 			break
@@ -298,6 +332,7 @@ func (a *orderedAggregator) reset() {
 		resetter.reset()
 	}
 	a.done = false
+	a.seenNonEmptyBatch = false
 	a.scratch.resumeIdx = 0
 	for _, fn := range a.aggregateFuncs {
 		fn.Reset()
@@ -306,11 +341,11 @@ func (a *orderedAggregator) reset() {
 
 // extractAggTypes returns a nested array representing the input types
 // corresponding to each aggregation function.
-func extractAggTypes(aggCols [][]uint32, colTypes []types.T) [][]types.T {
-	aggTyps := make([][]types.T, len(aggCols))
+func extractAggTypes(aggCols [][]uint32, colTypes []coltypes.T) [][]coltypes.T {
+	aggTyps := make([][]coltypes.T, len(aggCols))
 
 	for aggIdx := range aggCols {
-		aggTyps[aggIdx] = make([]types.T, len(aggCols[aggIdx]))
+		aggTyps[aggIdx] = make([]coltypes.T, len(aggCols[aggIdx]))
 		for i, colIdx := range aggCols[aggIdx] {
 			aggTyps[aggIdx][i] = colTypes[colIdx]
 		}

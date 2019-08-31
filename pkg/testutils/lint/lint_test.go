@@ -47,6 +47,39 @@ func dirCmd(
 	return cmd, stderr, stream.ReadLines(stdout), nil
 }
 
+// vetCmd executes commands like dirCmd, but stderr is used as the output
+// instead of stdout, as produced by programs like `go vet`.
+func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filter) {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	var b bytes.Buffer
+	cmd.Stdout = &b
+	cmd.Stderr = &b
+	switch err := cmd.Run(); err.(type) {
+	case nil:
+	case *exec.ExitError:
+		// Non-zero exit is expected.
+	default:
+		t.Fatal(err)
+	}
+	filters = append([]stream.Filter{
+		stream.FilterFunc(func(arg stream.Arg) error {
+			scanner := bufio.NewScanner(&b)
+			for scanner.Scan() {
+				if s := scanner.Text(); strings.TrimSpace(s) != "" {
+					arg.Out <- s
+				}
+			}
+			return scanner.Err()
+		})}, filters...)
+
+	if err := stream.ForEach(stream.Sequence(filters...), func(s string) {
+		t.Errorf("\n%s", s)
+	}); err != nil {
+		t.Error(err)
+	}
+}
+
 // TestLint runs a suite of linters on the codebase. This file is
 // organized into two sections. First are the global linters, which
 // run on the entire repo every time. Second are the package-scoped
@@ -1071,50 +1104,6 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	// TestLogicTestsLint verifies that all the logic test files start with
-	// a LogicTest directive.
-	t.Run("TestLogicTestsLint", func(t *testing.T) {
-		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(
-			pkgDir, "git", "ls-files",
-			"sql/logictest/testdata/logic_test/",
-			"sql/logictest/testdata/planner_test/",
-			"sql/opt/exec/execbuilder/testdata/",
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(filter, func(filename string) {
-			file, err := os.Open(filepath.Join(pkgDir, filename))
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			defer file.Close()
-			firstLine, err := bufio.NewReader(file).ReadString('\n')
-			if err != nil {
-				t.Errorf("reading first line of %s: %s", filename, err)
-				return
-			}
-			if !strings.HasPrefix(firstLine, "# LogicTest:") {
-				t.Errorf("%s must start with a directive, e.g. `# LogicTest: default`", filename)
-			}
-		}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
 	// Things that are packaged scoped are below here.
 	pkgScope := pkgVar
 	if !pkgSpecified {
@@ -1234,38 +1223,15 @@ func TestLint(t *testing.T) {
 		t.Parallel()
 		runVet := func(t *testing.T, args ...string) {
 			args = append(append([]string{"vet"}, args...), pkgScope)
-			cmd := exec.Command("go", args...)
-			cmd.Dir = crdb.Dir
-			var b bytes.Buffer
-			cmd.Stdout = &b
-			cmd.Stderr = &b
-			switch err := cmd.Run(); err.(type) {
-			case nil:
-			case *exec.ExitError:
-				// Non-zero exit is expected.
-			default:
-				t.Fatal(err)
-			}
-
-			if err := stream.ForEach(stream.Sequence(
-				stream.FilterFunc(func(arg stream.Arg) error {
-					scanner := bufio.NewScanner(&b)
-					for scanner.Scan() {
-						if s := scanner.Text(); strings.TrimSpace(s) != "" {
-							arg.Out <- s
-						}
-					}
-					return scanner.Err()
-				}),
+			vetCmd(t, crdb.Dir, "go", args, []stream.Filter{
 				stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
 				stream.GrepNot(`\.pb\.gw\.go:[0-9:]+: declaration of "?ctx"? shadows`),
 				stream.GrepNot(`\.[eo]g\.go:[0-9:]+: declaration of ".*" shadows`),
+				// This exception is for hash.go, which re-implements runtime.noescape
+				// for efficient hashing.
+				stream.GrepNot(`pkg/sql/exec/hash.go:[0-9:]+: possible misuse of unsafe.Pointer`),
 				stream.GrepNot(`^#`), // comment line
-			), func(s string) {
-				t.Errorf("\n%s", s)
-			}); err != nil {
-				t.Error(err)
-			}
+			})
 		}
 		printfuncs := strings.Join([]string{
 			"ErrEvent",
@@ -1457,6 +1423,60 @@ func TestLint(t *testing.T) {
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
+	t.Run("TestRoachLint", func(t *testing.T) {
+		t.Parallel()
+
+		vetCmd(t, crdb.Dir, "roachlint", []string{pkgScope}, []stream.Filter{
+			// Ignore generated files.
+			stream.GrepNot(`pkg/.*\.pb\.go:`),
+			stream.GrepNot(`pkg/col/coldata/.*\.eg\.go:`),
+			stream.GrepNot(`pkg/col/colserde/arrowserde/.*_generated\.go:`),
+			stream.GrepNot(`pkg/sql/exec/.*\.eg\.go:`),
+			stream.GrepNot(`pkg/sql/exec/.*_generated\.go:`),
+			stream.GrepNot(`pkg/sql/pgwire/hba/conf.go:`),
+
+			// Ignore types that can change by system.
+			stream.GrepNot(`pkg/util/sysutil/sysutil_unix.go:`),
+
+			// Ignore tests.
+			// TODO(mjibson): remove this ignore.
+			stream.GrepNot(`pkg/.*_test\.go:`),
+		})
+	})
+
+	t.Run("TestVectorizedPanics", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			fmt.Sprintf(`panic\(.*\)`),
+			"--",
+			"sql/exec",
+			":!sql/exec/execerror/error.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; use either execerror.VectorizedInternalPanic() or execerror.NonVectorizedPanic() instead", s)
+		}); err != nil {
 			t.Error(err)
 		}
 

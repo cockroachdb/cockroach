@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 statement ok
 CREATE TABLE kv (
@@ -27,56 +27,58 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM kv; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/primary/'A' -> NULL
-output row: ['A' NULL]
 fetched: /kv/primary/'a' -> NULL
 fetched: /kv/primary/'a'/v -> 'b'
-output row: ['a' 'b']
 fetched: /kv/primary/'c' -> NULL
 fetched: /kv/primary/'c'/v -> 'd'
-output row: ['c' 'd']
 fetched: /kv/primary/'e' -> NULL
 fetched: /kv/primary/'e'/v -> 'f'
-output row: ['e' 'f']
 fetched: /kv/primary/'g' -> NULL
 fetched: /kv/primary/'g'/v -> ''
-output row: ['g' '']
 fetched: /kv/primary/'nil1' -> NULL
-output row: ['nil1' NULL]
 fetched: /kv/primary/'nil2' -> NULL
-output row: ['nil2' NULL]
 fetched: /kv/primary/'nil3' -> NULL
-output row: ['nil3' NULL]
 fetched: /kv/primary/'nil4' -> NULL
+output row: ['A' NULL]
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['g' '']
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
 output row: ['nil4' NULL]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM kv@a; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/a/NULL -> /'A'
-output row: ['A' NULL]
 fetched: /kv/a/NULL -> /'nil1'
-output row: ['nil1' NULL]
 fetched: /kv/a/NULL -> /'nil2'
-output row: ['nil2' NULL]
 fetched: /kv/a/NULL -> /'nil3'
-output row: ['nil3' NULL]
 fetched: /kv/a/NULL -> /'nil4'
-output row: ['nil4' NULL]
 fetched: /kv/a/'' -> /'g'
-output row: ['g' '']
 fetched: /kv/a/'b' -> /'a'
-output row: ['a' 'b']
 fetched: /kv/a/'d' -> /'c'
-output row: ['c' 'd']
 fetched: /kv/a/'f' -> /'e'
+output row: ['A' NULL]
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
+output row: ['nil4' NULL]
+output row: ['g' '']
+output row: ['a' 'b']
+output row: ['c' 'd']
 output row: ['e' 'f']
 
 statement error pgcode 23505 duplicate key value \(v\)=\('f'\) violates unique constraint "a"
@@ -86,56 +88,58 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM kv; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/primary/'A' -> NULL
-output row: ['A' NULL]
 fetched: /kv/primary/'a' -> NULL
 fetched: /kv/primary/'a'/v -> 'b'
-output row: ['a' 'b']
 fetched: /kv/primary/'c' -> NULL
 fetched: /kv/primary/'c'/v -> 'd'
-output row: ['c' 'd']
 fetched: /kv/primary/'e' -> NULL
 fetched: /kv/primary/'e'/v -> 'f'
-output row: ['e' 'f']
 fetched: /kv/primary/'g' -> NULL
 fetched: /kv/primary/'g'/v -> ''
-output row: ['g' '']
 fetched: /kv/primary/'nil1' -> NULL
-output row: ['nil1' NULL]
 fetched: /kv/primary/'nil2' -> NULL
-output row: ['nil2' NULL]
 fetched: /kv/primary/'nil3' -> NULL
-output row: ['nil3' NULL]
 fetched: /kv/primary/'nil4' -> NULL
+output row: ['A' NULL]
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['g' '']
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
 output row: ['nil4' NULL]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM kv@a; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/a/NULL -> /'A'
-output row: ['A' NULL]
 fetched: /kv/a/NULL -> /'nil1'
-output row: ['nil1' NULL]
 fetched: /kv/a/NULL -> /'nil2'
-output row: ['nil2' NULL]
 fetched: /kv/a/NULL -> /'nil3'
-output row: ['nil3' NULL]
 fetched: /kv/a/NULL -> /'nil4'
-output row: ['nil4' NULL]
 fetched: /kv/a/'' -> /'g'
-output row: ['g' '']
 fetched: /kv/a/'b' -> /'a'
-output row: ['a' 'b']
 fetched: /kv/a/'d' -> /'c'
-output row: ['c' 'd']
 fetched: /kv/a/'f' -> /'e'
+output row: ['A' NULL]
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
+output row: ['nil4' NULL]
+output row: ['g' '']
+output row: ['a' 'b']
+output row: ['c' 'd']
 output row: ['e' 'f']
 
 statement ok
@@ -145,61 +149,63 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM kv; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/primary/'A' -> NULL
-output row: ['A' NULL]
 fetched: /kv/primary/'a' -> NULL
 fetched: /kv/primary/'a'/v -> 'b'
-output row: ['a' 'b']
 fetched: /kv/primary/'c' -> NULL
 fetched: /kv/primary/'c'/v -> 'd'
-output row: ['c' 'd']
 fetched: /kv/primary/'e' -> NULL
 fetched: /kv/primary/'e'/v -> 'f'
-output row: ['e' 'f']
 fetched: /kv/primary/'f' -> NULL
 fetched: /kv/primary/'f'/v -> 'g'
-output row: ['f' 'g']
 fetched: /kv/primary/'g' -> NULL
 fetched: /kv/primary/'g'/v -> ''
-output row: ['g' '']
 fetched: /kv/primary/'nil1' -> NULL
-output row: ['nil1' NULL]
 fetched: /kv/primary/'nil2' -> NULL
-output row: ['nil2' NULL]
 fetched: /kv/primary/'nil3' -> NULL
-output row: ['nil3' NULL]
 fetched: /kv/primary/'nil4' -> NULL
+output row: ['A' NULL]
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['f' 'g']
+output row: ['g' '']
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
 output row: ['nil4' NULL]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM kv@a; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/a/NULL -> /'A'
-output row: ['A' NULL]
 fetched: /kv/a/NULL -> /'nil1'
-output row: ['nil1' NULL]
 fetched: /kv/a/NULL -> /'nil2'
-output row: ['nil2' NULL]
 fetched: /kv/a/NULL -> /'nil3'
-output row: ['nil3' NULL]
 fetched: /kv/a/NULL -> /'nil4'
-output row: ['nil4' NULL]
 fetched: /kv/a/'' -> /'g'
-output row: ['g' '']
 fetched: /kv/a/'b' -> /'a'
-output row: ['a' 'b']
 fetched: /kv/a/'d' -> /'c'
-output row: ['c' 'd']
 fetched: /kv/a/'f' -> /'e'
-output row: ['e' 'f']
 fetched: /kv/a/'g' -> /'f'
+output row: ['A' NULL]
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
+output row: ['nil4' NULL]
+output row: ['g' '']
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
 output row: ['f' 'g']
 
 statement error duplicate key value \(v\)=\('g'\) violates unique constraint "a"
@@ -209,61 +215,63 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM kv; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/primary/'A' -> NULL
-output row: ['A' NULL]
 fetched: /kv/primary/'a' -> NULL
 fetched: /kv/primary/'a'/v -> 'b'
-output row: ['a' 'b']
 fetched: /kv/primary/'c' -> NULL
 fetched: /kv/primary/'c'/v -> 'd'
-output row: ['c' 'd']
 fetched: /kv/primary/'e' -> NULL
 fetched: /kv/primary/'e'/v -> 'f'
-output row: ['e' 'f']
 fetched: /kv/primary/'f' -> NULL
 fetched: /kv/primary/'f'/v -> 'g'
-output row: ['f' 'g']
 fetched: /kv/primary/'g' -> NULL
 fetched: /kv/primary/'g'/v -> ''
-output row: ['g' '']
 fetched: /kv/primary/'nil1' -> NULL
-output row: ['nil1' NULL]
 fetched: /kv/primary/'nil2' -> NULL
-output row: ['nil2' NULL]
 fetched: /kv/primary/'nil3' -> NULL
-output row: ['nil3' NULL]
 fetched: /kv/primary/'nil4' -> NULL
+output row: ['A' NULL]
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['f' 'g']
+output row: ['g' '']
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
 output row: ['nil4' NULL]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM kv@a; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv/a/NULL -> /'A'
-output row: ['A' NULL]
 fetched: /kv/a/NULL -> /'nil1'
-output row: ['nil1' NULL]
 fetched: /kv/a/NULL -> /'nil2'
-output row: ['nil2' NULL]
 fetched: /kv/a/NULL -> /'nil3'
-output row: ['nil3' NULL]
 fetched: /kv/a/NULL -> /'nil4'
-output row: ['nil4' NULL]
 fetched: /kv/a/'' -> /'g'
-output row: ['g' '']
 fetched: /kv/a/'b' -> /'a'
-output row: ['a' 'b']
 fetched: /kv/a/'d' -> /'c'
-output row: ['c' 'd']
 fetched: /kv/a/'f' -> /'e'
-output row: ['e' 'f']
 fetched: /kv/a/'g' -> /'f'
+output row: ['A' NULL]
+output row: ['nil1' NULL]
+output row: ['nil2' NULL]
+output row: ['nil3' NULL]
+output row: ['nil4' NULL]
+output row: ['g' '']
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
 output row: ['f' 'g']
 
 statement ok
@@ -280,8 +288,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM kv5@a; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /kv5/a/NULL/'a' -> NULL
 output row: ['a' NULL]
@@ -480,20 +489,20 @@ CREATE TABLE xyz (x INT, y INT, z INT)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
 ----
-render                    ·         ·                    (z)                       +z
- │                        render 0  z                    ·                         ·
- └── run                  ·         ·                    (x, y, z, rowid[hidden])  ·
-      └── insert          ·         ·                    (x, y, z, rowid[hidden])  ·
-           │              into      xyz(x, y, z, rowid)  ·                         ·
-           │              strategy  inserter             ·                         ·
-           └── render     ·         ·                    (a, b, c, column9)        +c
-                │         render 0  a                    ·                         ·
-                │         render 1  b                    ·                         ·
-                │         render 2  c                    ·                         ·
-                │         render 3  unique_rowid()       ·                         ·
-                └── scan  ·         ·                    (a, b, c)                 +c
-·                         table     abc@abc_c_idx        ·                         ·
-·                         spans     ALL                  ·                         ·
+render                    ·         ·                    (z)                 +z
+ │                        render 0  z                    ·                   ·
+ └── run                  ·         ·                    (z, rowid[hidden])  ·
+      └── insert          ·         ·                    (z, rowid[hidden])  ·
+           │              into      xyz(x, y, z, rowid)  ·                   ·
+           │              strategy  inserter             ·                   ·
+           └── render     ·         ·                    (a, b, c, column9)  +c
+                │         render 0  a                    ·                   ·
+                │         render 1  b                    ·                   ·
+                │         render 2  c                    ·                   ·
+                │         render 3  unique_rowid()       ·                   ·
+                └── scan  ·         ·                    (a, b, c)           +c
+·                         table     abc@abc_c_idx        ·                   ·
+·                         spans     ALL                  ·                   ·
 
 # ------------------------------------------------------------------------------
 # Regression for #35364. This tests behavior that is different between the CBO

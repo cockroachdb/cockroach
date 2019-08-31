@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 query OO
 SELECT 3::OID, '3'::OID
 ----
@@ -58,10 +56,12 @@ SELECT 'pg_constraint '::REGCLASS, '  pg_constraint '::REGCLASS
 ----
 pg_constraint  pg_constraint
 
+# This weird form is to avoid making the test depend on the concrete value of
+# the pg_constraint table id.
 query OO
-SELECT 'pg_constraint '::REGCLASS, '"pg_constraint"'::REGCLASS::OID
+SELECT 'pg_constraint '::REGCLASS, ('"pg_constraint"'::REGCLASS::OID::INT-'"pg_constraint"'::REGCLASS::OID::INT)::OID
 ----
-pg_constraint  4294967231
+pg_constraint  0
 
 query O
 SELECT 4061301040::REGCLASS
@@ -69,11 +69,11 @@ SELECT 4061301040::REGCLASS
 4061301040
 
 query OOIOT
-SELECT oid, oid::regclass, oid::regclass::int, oid::regclass::int::regclass, oid::regclass::text
+SELECT (oid::int-oid::int)::oid, oid::regclass, (oid::regclass::int-oid::regclass::int), oid::regclass::int::regclass, oid::regclass::text
 FROM pg_class
 WHERE relname = 'pg_constraint'
 ----
-4294967231  pg_constraint  4294967231  pg_constraint  pg_constraint
+0  pg_constraint  0  pg_constraint  pg_constraint
 
 query OOOO
 SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE, 'pg_catalog.upper'::REGPROCEDURE, 'upper'::REGPROC::OID
@@ -158,9 +158,9 @@ pg_constraint
 
 # This forces the b_expr form of the cast syntax.
 query OO
-SELECT ('pg_constraint')::REGCLASS, ('pg_constraint')::REGCLASS::OID
+SELECT ('pg_constraint')::REGCLASS, (('pg_constraint')::REGCLASS::OID::INT-('pg_constraint')::REGCLASS::OID::INT)::OID
 ----
-pg_constraint  4294967231
+pg_constraint  0
 
 ## Test visibility of pg_* via oid casts.
 

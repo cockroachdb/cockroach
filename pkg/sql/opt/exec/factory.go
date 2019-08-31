@@ -63,6 +63,7 @@ type Factory interface {
 		reverse bool,
 		maxResults uint64,
 		reqOrdering OutputOrdering,
+		rowCount float64,
 	) (Node, error)
 
 	// ConstructVirtualScan returns a node that represents the scan of a virtual
@@ -103,7 +104,8 @@ type Factory interface {
 	//
 	// memo, rightProps, and right are the memo, required physical properties, and
 	// RelExpr of the right side of the join that will be repeatedly modified,
-	// re-planned and executed for every row from the left side.
+	// re-planned and executed for every row from the left side. The rightProps
+	// always includes a presentation.
 	//
 	// fakeRight is a pre-planned node that is the right side of the join with
 	// all outer columns replaced by NULL. The physical properties of this node
@@ -151,6 +153,7 @@ type Factory interface {
 		onCond tree.TypedExpr,
 		leftOrdering, rightOrdering sqlbase.ColumnOrdering,
 		reqOrdering OutputOrdering,
+		leftEqColsAreKey, rightEqColsAreKey bool,
 	) (Node, error)
 
 	// ConstructGroupBy returns a node that runs an aggregation. A set of
@@ -304,8 +307,8 @@ type Factory interface {
 		input Node,
 		table cat.Table,
 		insertCols ColumnOrdinalSet,
+		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
-		rowsNeeded bool,
 		skipFKChecks bool,
 	) (Node, error)
 
@@ -321,13 +324,19 @@ type Factory interface {
 	// columns in the same order as they appear in the table schema, with the
 	// fetch columns first and the update columns second. The rowsNeeded parameter
 	// is true if a RETURNING clause needs the updated row(s) as output.
+	// The passthrough parameter contains all the result columns that are part
+	// of the input node that the update node needs to return (passing through
+	// from the input). The pass through columns are used to return any column
+	// from the FROM tables that are referenced in the RETURNING clause.
 	ConstructUpdate(
 		input Node,
 		table cat.Table,
 		fetchCols ColumnOrdinalSet,
 		updateCols ColumnOrdinalSet,
+		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
-		rowsNeeded bool,
+		passthrough sqlbase.ResultColumns,
+		skipFKChecks bool,
 	) (Node, error)
 
 	// ConstructUpsert creates a node that implements an INSERT..ON CONFLICT or
@@ -360,8 +369,8 @@ type Factory interface {
 		insertCols ColumnOrdinalSet,
 		fetchCols ColumnOrdinalSet,
 		updateCols ColumnOrdinalSet,
+		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
-		rowsNeeded bool,
 	) (Node, error)
 
 	// ConstructDelete creates a node that implements a DELETE statement. The
@@ -373,7 +382,11 @@ type Factory interface {
 	// as they appear in the table schema. The rowsNeeded parameter is true if a
 	// RETURNING clause needs the deleted row(s) as output.
 	ConstructDelete(
-		input Node, table cat.Table, fetchCols ColumnOrdinalSet, rowsNeeded bool,
+		input Node,
+		table cat.Table,
+		fetchCols ColumnOrdinalSet,
+		returnCols ColumnOrdinalSet,
+		skipFKChecks bool,
 	) (Node, error)
 
 	// ConstructDeleteRange creates a node that efficiently deletes contiguous
@@ -390,6 +403,16 @@ type Factory interface {
 	// ConstructCreateTable returns a node that implements a CREATE TABLE
 	// statement.
 	ConstructCreateTable(input Node, schema cat.Schema, ct *tree.CreateTable) (Node, error)
+
+	// ConstructCreateView returns a node that implements a CREATE VIEW
+	// statement.
+	ConstructCreateView(
+		schema cat.Schema,
+		viewName string,
+		viewQuery string,
+		columns sqlbase.ResultColumns,
+		deps opt.ViewDeps,
+	) (Node, error)
 
 	// ConstructSequenceSelect creates a node that implements a scan of a sequence
 	// as a data source.
@@ -422,6 +445,32 @@ type Factory interface {
 	// ConstructAlterTableRelocate creates a node that implements ALTER TABLE/INDEX
 	// UNSPLIT AT.
 	ConstructAlterTableRelocate(index cat.Index, input Node, relocateLease bool) (Node, error)
+
+	// ConstructBuffer constructs a node whose input can be referenced from
+	// elsewhere in the query.
+	ConstructBuffer(value Node, label string) (Node, error)
+
+	// ConstructScanBuffer constructs a node which refers to a node constructed by
+	// ConstructBuffer.
+	ConstructScanBuffer(ref Node, label string) (Node, error)
+
+	// ConstructControlJobs creates a node that implements PAUSE/CANCEL/RESUME
+	// JOBS.
+	ConstructControlJobs(command tree.JobCommand, input Node) (Node, error)
+
+	// ConstructCancelQueries creates a node that implements CANCEL QUERIES.
+	ConstructCancelQueries(input Node, ifExists bool) (Node, error)
+
+	// ConstructCancelSessions creates a node that implements CANCEL SESSIONS.
+	ConstructCancelSessions(input Node, ifExists bool) (Node, error)
+
+	// ConstructExport creates a node that implements EXPORT.
+	ConstructExport(
+		input Node,
+		fileName tree.TypedExpr,
+		fileFormat string,
+		options []KVOption,
+	) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being
@@ -530,4 +579,12 @@ type ExplainEnvData struct {
 	Tables    []tree.TableName
 	Sequences []tree.TableName
 	Views     []tree.TableName
+}
+
+// KVOption represents information about a statement option
+// (see tree.KVOptions).
+type KVOption struct {
+	Key string
+	// If there is no value, Value is DNull.
+	Value tree.TypedExpr
 }

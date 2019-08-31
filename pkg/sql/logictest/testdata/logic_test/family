@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 # a is the primary key so b gets optimized into a one column value. The c, d
 # family has two columns, so it's encoded as a tuple
 statement ok

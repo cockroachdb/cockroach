@@ -17,15 +17,17 @@ import (
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,10 +47,12 @@ type samplerProcessor struct {
 
 	flowCtx         *FlowCtx
 	input           RowSource
+	memAcc          mon.BoundAccount
 	sr              stats.SampleReservoir
 	sketches        []sketchInfo
 	outTypes        []types.T
 	maxFractionIdle float64
+
 	// Output column indices for special columns.
 	rankCol      int
 	sketchIdxCol int
@@ -99,9 +103,15 @@ func newSamplerProcessor(
 		}
 	}
 
+	ctx := flowCtx.EvalCtx.Ctx()
+	// Limit the memory use by creating a child monitor with a hard limit.
+	// The processor will disable histogram collection if this limit is not
+	// enough.
+	memMonitor := NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sampler-mem")
 	s := &samplerProcessor{
 		flowCtx:         flowCtx,
 		input:           input,
+		memAcc:          memMonitor.MakeBoundAccount(),
 		sketches:        make([]sketchInfo, len(spec.Sketches)),
 		maxFractionIdle: spec.MaxFractionIdle,
 	}
@@ -114,7 +124,7 @@ func newSamplerProcessor(
 		}
 	}
 
-	s.sr.Init(int(spec.SampleSize), input.OutputTypes())
+	s.sr.Init(int(spec.SampleSize), input.OutputTypes(), &s.memAcc)
 
 	inTypes := input.OutputTypes()
 	outTypes := make([]types.T, 0, len(inTypes)+5)
@@ -145,9 +155,13 @@ func newSamplerProcessor(
 	s.outTypes = outTypes
 
 	if err := s.Init(
-		nil, post, outTypes, flowCtx, processorID, output, nil, /* memMonitor */
-		// this proc doesn't implement RowSource and doesn't use ProcessorBase to drain
-		ProcStateOpts{},
+		nil, post, outTypes, flowCtx, processorID, output, memMonitor,
+		ProcStateOpts{
+			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+				s.close()
+				return nil
+			},
+		},
 	); err != nil {
 		return nil, err
 	}
@@ -162,7 +176,6 @@ func (s *samplerProcessor) pushTrailingMeta(ctx context.Context) {
 func (s *samplerProcessor) Run(ctx context.Context) {
 	s.input.Start(ctx)
 	s.StartInternal(ctx, samplerProcName)
-	defer tracing.FinishSpan(s.span)
 
 	earlyExit, err := s.mainLoop(s.Ctx)
 	if err != nil {
@@ -172,6 +185,7 @@ func (s *samplerProcessor) Run(ctx context.Context) {
 		s.input.ConsumerClosed()
 		s.out.Close()
 	}
+	s.MoveToDraining(nil /* err */)
 }
 
 // TestingSamplerSleep introduces a sleep inside the sampler, every
@@ -188,8 +202,8 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
-			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
-				// No cleanup required; emitHelper() took care of it.
+			if !EmitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+				// No cleanup required; EmitHelper() took care of it.
 				return true, nil
 			}
 			continue
@@ -205,7 +219,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 			meta := &distsqlpb.ProducerMetadata{SamplerProgress: &distsqlpb.RemoteProducerMetadata_SamplerProgress{
 				RowsProcessed: uint64(SamplerProgressInterval),
 			}}
-			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+			if !EmitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 				return true, nil
 			}
 
@@ -214,7 +228,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 				//  - if it is lower than cpuUsageMinThrottle, we do not throttle;
 				//  - if it is higher than cpuUsageMaxThrottle, we throttle all the way;
 				//  - in-between, we scale the idle time proportionally.
-				usage := s.flowCtx.RuntimeStats.GetCPUCombinedPercentNorm()
+				usage := s.flowCtx.Cfg.RuntimeStats.GetCPUCombinedPercentNorm()
 
 				if usage > cpuUsageMinThrottle {
 					fractionIdle := s.maxFractionIdle
@@ -299,8 +313,23 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 		// Use Int63 so we don't have headaches converting to DInt.
 		rank := uint64(rng.Int63())
-		if err := s.sr.SampleRow(row, rank); err != nil {
-			return false, err
+		if err := s.sr.SampleRow(ctx, s.evalCtx, row, rank); err != nil {
+			if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
+				return false, err
+			}
+			// We hit an out of memory error. Clear the sample reservoir and
+			// disable histogram sample collection.
+			s.sr.Disable()
+			log.Info(ctx, "disabling histogram collection due to excessive memory utilization")
+
+			// Send a metadata record so the sample aggregator will also disable
+			// histogram collection.
+			meta := &distsqlpb.ProducerMetadata{SamplerProgress: &distsqlpb.RemoteProducerMetadata_SamplerProgress{
+				HistogramDisabled: true,
+			}}
+			if !EmitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+				return true, nil
+			}
 		}
 	}
 
@@ -312,7 +341,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	for _, sample := range s.sr.Get() {
 		copy(outRow, sample.Row)
 		outRow[s.rankCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(sample.Rank))}
-		if !emitHelper(ctx, &s.out, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
+		if !EmitHelper(ctx, &s.out, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
 			return true, nil
 		}
 	}
@@ -333,7 +362,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 			return false, err
 		}
 		outRow[s.sketchCol] = sqlbase.EncDatum{Datum: tree.NewDBytes(tree.DBytes(data))}
-		if !emitHelper(ctx, &s.out, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
+		if !EmitHelper(ctx, &s.out, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
 			return true, nil
 		}
 	}
@@ -342,9 +371,16 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	meta := &distsqlpb.ProducerMetadata{SamplerProgress: &distsqlpb.RemoteProducerMetadata_SamplerProgress{
 		RowsProcessed: uint64(rowCount % SamplerProgressInterval),
 	}}
-	if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+	if !EmitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 		return true, nil
 	}
 
 	return false, nil
+}
+
+func (s *samplerProcessor) close() {
+	if s.InternalClose() {
+		s.memAcc.Close(s.Ctx)
+		s.MemMonitor.Stop(s.Ctx)
+	}
 }

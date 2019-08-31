@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 # ------------------------------------------------------------------------------
 # ALTER TABLE tests.
@@ -19,8 +19,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/primary/1/f -> /9
 output row: [1 9]
@@ -35,8 +36,9 @@ statement ok
 SET tracing = on,kv,results; SELECT b FROM t@foo; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/foo/NULL -> /1
 output row: [NULL]
@@ -57,14 +59,15 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/primary/1/f -> /9
-output row: [1 9 NULL NULL]
 fetched: /t/primary/2/f/b/c -> /9/1/1
-output row: [2 9 1 1]
 fetched: /t/primary/3/f/b/c -> /9/2/1
+output row: [1 9 NULL NULL]
+output row: [2 9 1 1]
 output row: [3 9 2 1]
 
 statement ok
@@ -74,14 +77,15 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/primary/1/f -> /9
-output row: [1 9]
 fetched: /t/primary/2/f -> /9
-output row: [2 9]
 fetched: /t/primary/3/f -> /9
+output row: [1 9]
+output row: [2 9]
 output row: [3 9]
 
 # Verify limits and orderings are propagated correctly to the select.
@@ -119,8 +123,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/primary/1 -> NULL
 fetched: /t/primary/1/b -> 1
@@ -144,8 +149,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t@foo; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/foo/1/1 -> NULL
 output row: [1 1]
@@ -157,12 +163,13 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t@foo; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/foo/1/1 -> NULL
-output row: [1 1]
 fetched: /t/foo/1/2 -> NULL
+output row: [1 1]
 output row: [2 1]
 
 # test for DESC index
@@ -191,14 +198,15 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t@b_desc; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/b_desc/2/2 -> NULL
 fetched: /t/b_desc/1/1 -> NULL
 fetched: /t/primary/2/b/c -> /2/2
-output row: [2 2 2]
 fetched: /t/primary/1/b/c -> /1/1
+output row: [2 2 2]
 output row: [1 1 1]
 
 statement ok
@@ -220,32 +228,3 @@ CREATE TABLE test_kv(k INT PRIMARY KEY, v INT, w DECIMAL);
   CREATE UNIQUE INDEX test_kvi2_idx ON test_kvi2(v) INTERLEAVE IN PARENT test_kv(v);
   CREATE VIEW test_v1 AS SELECT v FROM test_kv;
   CREATE VIEW test_v2 AS SELECT v FROM test_v1;
-
-# Verify that we report a dependency on a column that is being mutated.
-statement ok
-CREATE TABLE kv (k INT PRIMARY KEY, v INT);
-BEGIN;
-  ALTER TABLE kv ADD COLUMN z INT DEFAULT 123;
-  CREATE VIEW v AS SELECT k FROM [UPDATE kv SET v = 444 WHERE k > 0 RETURNING k];
-COMMIT
-
-# The view should contain column z.
-query TTTTT colnames
-EXPLAIN (VERBOSE) SELECT * FROM v
-----
-tree                      field     description  columns             ordering
-render                    ·         ·            (k)                 ·
- │                        render 0  k            ·                   ·
- └── run                  ·         ·            (k, v, z)           ·
-      └── update          ·         ·            (k, v, z)           ·
-           │              table     kv           ·                   ·
-           │              set       v            ·                   ·
-           │              strategy  updater      ·                   ·
-           └── render     ·         ·            (k, v, z, column7)  ·
-                │         render 0  k            ·                   ·
-                │         render 1  v            ·                   ·
-                │         render 2  z            ·                   ·
-                │         render 3  444          ·                   ·
-                └── scan  ·         ·            (k, v, z)           ·
-·                         table     kv@primary   ·                   ·
-·                         spans     /1-          ·                   ·

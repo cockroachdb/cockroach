@@ -14,9 +14,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -71,10 +74,6 @@ type Builder struct {
 	// These fields are set during the building process and can be used after
 	// Build is called.
 
-	// IsCorrelated is set to true during semantic analysis if a scalar variable was
-	// pulled from an outer scope, that is, if the query was found to be correlated.
-	IsCorrelated bool
-
 	// HadPlaceholders is set to true if we replaced any placeholders with their
 	// values.
 	HadPlaceholders bool
@@ -92,6 +91,7 @@ type Builder struct {
 	evalCtx    *tree.EvalContext
 	catalog    cat.Catalog
 	scopeAlloc []scope
+	ctes       []cteSource
 
 	// If set, the planner will skip checking for the SELECT privilege when
 	// resolving data sources (tables, views, etc). This is used when compiling
@@ -106,6 +106,30 @@ type Builder struct {
 	// subquery contains a pointer to the subquery which is currently being built
 	// (if any).
 	subquery *subquery
+
+	// If set, we are processing a view definition; in this case, catalog caches
+	// are disabled and certain statements (like mutations) are disallowed.
+	insideViewDef bool
+
+	// If set, we are collecting view dependencies in viewDeps. This can only
+	// happen inside view definitions.
+	//
+	// When a view depends on another view, we only want to track the dependency
+	// on the inner view itself, and not the transitive dependencies (so
+	// trackViewDeps would be false inside that inner view).
+	trackViewDeps bool
+	viewDeps      opt.ViewDeps
+
+	// If set, the data source names in the AST are rewritten to the fully
+	// qualified version (after resolution). Used to construct the strings for
+	// CREATE VIEW and CREATE TABLE AS queries.
+	// TODO(radu): modifying the AST in-place is hacky; we will need to switch to
+	// using AST annotations.
+	qualifyDataSourceNamesInAST bool
+
+	// isCorrelated is set to true if we already reported to telemetry that the
+	// query contains a correlated subquery.
+	isCorrelated bool
 }
 
 // New creates a new Builder structure initialized with the given
@@ -190,6 +214,18 @@ func unimplementedWithIssueDetailf(issue int, detail, format string, args ...int
 func (b *Builder) buildStmt(
 	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
+	if b.insideViewDef {
+		// A black list of statements that can't be used from inside a view.
+		switch stmt := stmt.(type) {
+		case *tree.Delete, *tree.Insert, *tree.Update, *tree.CreateTable, *tree.CreateView,
+			*tree.Split, *tree.Unsplit, *tree.Relocate,
+			*tree.ControlJobs, *tree.CancelQueries, *tree.CancelSessions:
+			panic(pgerror.Newf(
+				pgcode.Syntax, "%s cannot be used inside a view definition", stmt.StatementTag(),
+			))
+		}
+	}
+
 	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
 	case *tree.Delete:
@@ -210,6 +246,9 @@ func (b *Builder) buildStmt(
 	case *tree.CreateTable:
 		return b.buildCreateTable(stmt, inScope)
 
+	case *tree.CreateView:
+		return b.buildCreateView(stmt, inScope)
+
 	case *tree.Explain:
 		return b.buildExplain(stmt, inScope)
 
@@ -224,6 +263,18 @@ func (b *Builder) buildStmt(
 
 	case *tree.Relocate:
 		return b.buildAlterTableRelocate(stmt, inScope)
+
+	case *tree.ControlJobs:
+		return b.buildControlJobs(stmt, inScope)
+
+	case *tree.CancelQueries:
+		return b.buildCancelQueries(stmt, inScope)
+
+	case *tree.CancelSessions:
+		return b.buildCancelSessions(stmt, inScope)
+
+	case *tree.Export:
+		return b.buildExport(stmt, inScope)
 
 	default:
 		// See if this statement can be rewritten to another statement using the

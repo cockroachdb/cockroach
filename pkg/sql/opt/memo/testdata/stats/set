@@ -847,7 +847,7 @@ WHERE a IS NULL and b
 except
  ├── columns: a:5(int) b:2(bool!null)
  ├── left columns: column1:5(int) column2:2(bool!null)
- ├── right columns: column1:3(int) column2:6(bool)
+ ├── right columns: column1:3(int) column2:4(bool)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1, distinct(2,5)=1, null(2,5)=1]
  ├── key: (2,5)
@@ -859,11 +859,11 @@ except
  │    ├── fd: ()-->(2,5)
  │    └── (true, NULL) [type=tuple{bool, int}]
  └── values
-      ├── columns: column1:3(int!null) column2:6(bool!null)
+      ├── columns: column1:3(int!null) column2:4(bool!null)
       ├── cardinality: [0 - 0]
-      ├── stats: [rows=0, distinct(3,6)=0, null(3,6)=0]
+      ├── stats: [rows=0, distinct(3,4)=0, null(3,4)=0]
       ├── key: ()
-      └── fd: ()-->(3,6)
+      └── fd: ()-->(3,4)
 
 # Regression test for #36147.
 opt
@@ -920,7 +920,7 @@ sort
  └── intersect
       ├── columns: column1:1(int)
       ├── left columns: column1:1(int)
-      ├── right columns: column1:3(int)
+      ├── right columns: column1:2(int)
       ├── cardinality: [0 - 1]
       ├── stats: [rows=1, distinct(1)=1, null(1)=0]
       ├── key: (1)
@@ -932,9 +932,9 @@ sort
       │    ├── fd: ()-->(1)
       │    └── (1,) [type=tuple{int}]
       └── values
-           ├── columns: column1:3(int)
+           ├── columns: column1:2(int)
            ├── cardinality: [1 - 1]
-           ├── stats: [rows=1, distinct(3)=1, null(3)=1]
+           ├── stats: [rows=1, distinct(2)=1, null(2)=1]
            ├── key: ()
-           ├── fd: ()-->(3)
+           ├── fd: ()-->(2)
            └── (NULL,) [type=tuple{int}]

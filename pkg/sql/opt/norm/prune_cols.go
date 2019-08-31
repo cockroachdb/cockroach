@@ -59,6 +59,7 @@ func (c *CustomFuncs) NeededMutationCols(private *memo.MutationPrivate) opt.ColS
 	addCols(private.UpdateCols)
 	addCols(private.CheckCols)
 	addCols(private.ReturnCols)
+	addCols(private.PassthroughCols)
 	if private.CanaryCol != 0 {
 		cols.Add(private.CanaryCol)
 	}
@@ -73,9 +74,17 @@ func (c *CustomFuncs) NeededMutationCols(private *memo.MutationPrivate) opt.ColS
 func (c *CustomFuncs) NeededMutationFetchCols(
 	op opt.Operator, private *memo.MutationPrivate,
 ) opt.ColSet {
+	return neededMutationFetchCols(c.mem, op, private)
+}
+
+// neededMutationFetchCols returns the set of columns needed by the given
+// mutation operator.
+func neededMutationFetchCols(
+	mem *memo.Memo, op opt.Operator, private *memo.MutationPrivate,
+) opt.ColSet {
 
 	var cols opt.ColSet
-	tabMeta := c.mem.Metadata().TableMeta(private.Table)
+	tabMeta := mem.Metadata().TableMeta(private.Table)
 
 	// familyCols returns the columns in the given family.
 	familyCols := func(fam cat.Family) opt.ColSet {
@@ -428,7 +437,7 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
-		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
+		opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 		// Any pruneable columns from projected inputs can potentially be pruned, as
 		// long as they're not used by the right input (i.e. in Apply case) or by
 		// the join filter.
@@ -501,6 +510,17 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 			relProps.Rule.PruneCols.DifferenceWith(w.ScalarProps(e.Memo()).OuterCols)
 		}
 
+	case opt.UpdateOp, opt.UpsertOp, opt.DeleteOp:
+		// Find the columns that would need to be fetched, if no returning
+		// clause were present.
+		withoutReturningPrivate := *e.Private().(*memo.MutationPrivate)
+		withoutReturningPrivate.ReturnCols = opt.ColList{}
+		neededCols := neededMutationFetchCols(e.Memo(), e.Op(), &withoutReturningPrivate)
+
+		// Only the "free" RETURNING columns can be pruned away (i.e. the columns
+		// required by the mutation only because they're being returned).
+		relProps.Rule.PruneCols = relProps.OutputCols.Difference(neededCols)
+
 	default:
 		// Don't allow any columns to be pruned, since that would trigger the
 		// creation of a wrapper Project around an operator that does not have
@@ -508,4 +528,60 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 	}
 
 	return relProps.Rule.PruneCols
+}
+
+// CanPruneMutationReturnCols checks whether the mutation's return columns can
+// be pruned. This is the pre-condition for the PruneMutationReturnCols rule.
+func (c *CustomFuncs) CanPruneMutationReturnCols(
+	private *memo.MutationPrivate, needed opt.ColSet,
+) bool {
+	if private.ReturnCols == nil {
+		return false
+	}
+
+	tabID := c.mem.Metadata().TableMeta(private.Table).MetaID
+	for i := range private.ReturnCols {
+		if private.ReturnCols[i] != 0 && !needed.Contains(tabID.ColumnID(i)) {
+			return true
+		}
+	}
+
+	for _, passthroughCol := range private.PassthroughCols {
+		if passthroughCol != 0 && !needed.Contains(passthroughCol) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// PruneMutationReturnCols rewrites the given mutation private to no longer
+// keep ReturnCols that are not referenced by the RETURNING clause or are not
+// part of the primary key. The caller must have already done the analysis to
+// prove that such columns exist, by calling CanPruneMutationReturnCols.
+func (c *CustomFuncs) PruneMutationReturnCols(
+	private *memo.MutationPrivate, needed opt.ColSet,
+) *memo.MutationPrivate {
+	newPrivate := *private
+	newReturnCols := make(opt.ColList, len(private.ReturnCols))
+	newPassthroughCols := make(opt.ColList, 0, len(private.PassthroughCols))
+	tabID := c.mem.Metadata().TableMeta(private.Table).MetaID
+
+	// Prune away the ReturnCols that are unused.
+	for i := range private.ReturnCols {
+		if needed.Contains(tabID.ColumnID(i)) {
+			newReturnCols[i] = private.ReturnCols[i]
+		}
+	}
+
+	// Prune away the PassthroughCols that are unused.
+	for _, passthroughCol := range private.PassthroughCols {
+		if passthroughCol != 0 && needed.Contains(passthroughCol) {
+			newPassthroughCols = append(newPassthroughCols, passthroughCol)
+		}
+	}
+
+	newPrivate.ReturnCols = newReturnCols
+	newPrivate.PassthroughCols = newPassthroughCols
+	return &newPrivate
 }

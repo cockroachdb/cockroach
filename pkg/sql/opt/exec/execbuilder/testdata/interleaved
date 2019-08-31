@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 # ------------------------------------------------------------------------------
 # Test index selection for deeply interleaved tables.
@@ -128,16 +128,17 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM p1_0; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /p1_0/primary/2/'2'/s2 -> /'2.01'
 fetched: /p1_0/primary/2/'2'/d -> 2
-output row: [2 '2' '2.01' 2]
 fetched: /p1_0/primary/3/'3'/s2 -> /'3.01'
 fetched: /p1_0/primary/3/'3'/d -> 3
-output row: [3 '3' '3.01' 3]
 fetched: /p1_0/primary/5/'5' -> NULL
+output row: [2 '2' '2.01' 2]
+output row: [3 '3' '3.01' 3]
 output row: [5 '5' NULL NULL]
 
 # ------------------------------------------------------------------------------
@@ -241,7 +242,7 @@ SET TRACING = on,kv,results; DELETE FROM a where a_id <= 7 and a_id >= 5; SET tr
 # Only look at traces from SQL land.
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
-WHERE operation='flow' OR operation LIKE 'exec cmd:%'
+WHERE operation='flow' OR operation='exec stmt'
 ----
 DelRange /Table/61/1/5 - /Table/61/1/7/NULL
 fast path completed
@@ -282,7 +283,7 @@ SET TRACING = on,kv,results; DELETE FROM a; SET tracing = off
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
-WHERE operation='flow' OR operation LIKE 'exec cmd:%'
+WHERE operation='flow' OR operation='exec stmt'
 ----
 DelRange /Table/61/1 - /Table/61/3
 fast path completed
@@ -324,7 +325,7 @@ SET TRACING=off;
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
-WHERE operation IN ('flow', 'consuming rows') OR operation LIKE 'exec cmd:%'
+WHERE operation IN ('flow', 'consuming rows') OR operation='exec stmt'
 ----
 Del /Table/61/1/1/0
 cascading delete into table: 62 using index: 1

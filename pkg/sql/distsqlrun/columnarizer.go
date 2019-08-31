@@ -13,10 +13,11 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -25,6 +26,7 @@ import (
 // chunk into a coldata.Batch column by column.
 type columnarizer struct {
 	ProcessorBase
+	exec.ZeroInputNode
 
 	input RowSource
 	da    sqlbase.DatumAlloc
@@ -32,16 +34,22 @@ type columnarizer struct {
 	buffered        sqlbase.EncDatumRows
 	batch           coldata.Batch
 	accumulatedMeta []distsqlpb.ProducerMetadata
+	ctx             context.Context
+	typs            []coltypes.T
 }
 
-var _ exec.Operator = &columnarizer{}
+var _ exec.StaticMemoryOperator = &columnarizer{}
 
 // newColumnarizer returns a new columnarizer.
-func newColumnarizer(flowCtx *FlowCtx, processorID int32, input RowSource) (*columnarizer, error) {
+func newColumnarizer(
+	ctx context.Context, flowCtx *FlowCtx, processorID int32, input RowSource,
+) (*columnarizer, error) {
+	var err error
 	c := &columnarizer{
 		input: input,
+		ctx:   ctx,
 	}
-	if err := c.ProcessorBase.Init(
+	if err = c.ProcessorBase.Init(
 		nil,
 		&distsqlpb.PostProcessSpec{},
 		input.OutputTypes(),
@@ -53,22 +61,27 @@ func newColumnarizer(flowCtx *FlowCtx, processorID int32, input RowSource) (*col
 	); err != nil {
 		return nil, err
 	}
-	c.Init()
-	return c, nil
+	c.typs, err = typeconv.FromColumnTypes(c.OutputTypes())
+
+	return c, err
+}
+
+func (c *columnarizer) EstimateStaticMemoryUsage() int {
+	return exec.EstimateBatchSizeBytes(c.typs, coldata.BatchSize)
 }
 
 func (c *columnarizer) Init() {
-	typs := conv.FromColumnTypes(c.OutputTypes())
-	c.batch = coldata.NewMemBatch(typs)
+	c.batch = coldata.NewMemBatch(c.typs)
 	c.buffered = make(sqlbase.EncDatumRows, coldata.BatchSize)
 	for i := range c.buffered {
-		c.buffered[i] = make(sqlbase.EncDatumRow, len(typs))
+		c.buffered[i] = make(sqlbase.EncDatumRow, len(c.typs))
 	}
 	c.accumulatedMeta = make([]distsqlpb.ProducerMetadata, 0, 1)
-	c.input.Start(context.TODO())
+	c.input.Start(c.ctx)
 }
 
 func (c *columnarizer) Next(context.Context) coldata.Batch {
+	c.batch.ResetInternalBatch()
 	// Buffer up n rows.
 	nRows := uint16(0)
 	columnTypes := c.OutputTypes()

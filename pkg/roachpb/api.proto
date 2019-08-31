@@ -293,6 +293,27 @@ message ClearRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+
+// A RevertRangeRequest specifies a range of keys in which to clear all MVCC
+// revisions more recent than some TargetTime from the underlying engine, thus
+// reverting the range (from the perspective of an MVCC scan) to that time.
+message RevertRangeRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // TargetTime specifies a the time to which to "revert" the range by clearing
+  // any MVCC key with a strictly higher timestamp. TargetTime must be higher
+  // than the GC Threshold for the replica - so that it is assured that the keys
+  // for that time are still there — or the request will fail.
+  util.hlc.Timestamp target_time = 2 [(gogoproto.nullable) = false];
+}
+
+// A RevertRangeResponse is the return value from the RevertRange() method.
+message RevertRangeResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // ScanOptions is a collection of options for a batch of scans. The options
 // apply to all the scans in the batch.
 //
@@ -726,6 +747,14 @@ message AdminTransferLeaseResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// A ReplicationChange specifies the type and target of a replication change operation.
+message ReplicationChange {
+  option (gogoproto.equal) = true;
+
+  ReplicaChangeType change_type = 1;
+  ReplicationTarget target = 2 [(gogoproto.nullable) = false];
+}
+
 // An AdminChangeReplicasRequest is the argument to the AdminChangeReplicas()
 // method. A change replicas operation allows adding or removing a set of
 // replicas for a range.
@@ -733,11 +762,16 @@ message AdminChangeReplicasRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  ReplicaChangeType change_type = 2;
-  repeated ReplicationTarget targets = 3 [(gogoproto.nullable) = false];
-  // ExpDesc is the expected current range descriptor to modify. If ExpDesc is
-  // not nil and the value of the range descriptor is not identical to ExpDesc
-  // for the request will fail.
+  // Never access directly: use .Changes()
+  //
+  // TODO(tbg): remove in 20.1
+  ReplicaChangeType deprecated_change_type = 2;
+  // Never access directly: use .Changes()
+  //
+  // TODO(tbg): remove in 20.1
+  repeated ReplicationTarget deprecated_targets = 3 [(gogoproto.nullable) = false];
+  // ExpDesc is the expected current range descriptor to modify. If the range
+  // descriptor is not identical to ExpDesc for the request will fail.
   //
   // If there is more than one change specified in targets, this expectation
   // will be applied to the first change and subsequent changes will use the
@@ -745,18 +779,18 @@ message AdminChangeReplicasRequest {
   // If a change with more than one target occurs concurrently with another
   // it is possible that an error will occur after partial application of the
   // change. Changes are applied in the order they appear in the request.
+  RangeDescriptor exp_desc = 4 [(gogoproto.nullable) = false];
+
+  // The changes to apply to exp_desc. Never access directly: use .Changes().
   //
-  // This field was added for 19.1 release and must remain optional until 19.2.
-  // TODO(ajwerner): Make this non-nullable for 19.2.
-  RangeDescriptor exp_desc = 4;
+  // TODO(tbg): rename to 'changes' in 20.1 and remove Changes().
+  repeated ReplicationChange internal_changes = 5 [(gogoproto.nullable) = false];
 }
 
 message AdminChangeReplicasResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Desc is the value of the range descriptor upon success.
-  // This field was added for 19.1 release and must remain optional until 19.2.
-  // TODO(ajwerner): Make this non-nullable for 19.2.
-  RangeDescriptor desc = 2;
+  RangeDescriptor desc = 2 [(gogoproto.nullable) = false];
 }
 
 // An AdminRelocateRangeRequest is the argument to the AdminRelocateRange()
@@ -810,12 +844,8 @@ message GCRequest {
   repeated GCKey keys = 3 [(gogoproto.nullable) = false];
   // Threshold is the expiration timestamp.
   util.hlc.Timestamp threshold = 4 [(gogoproto.nullable) = false];
-  // TxnSpanGCThreshold is the timestamp below which inactive transactions were
-  // considered for GC (and thus might have been removed).
-  // TODO(nvanbenschoten): Remove this in 2.3, at which point we won't need to
-  // update it because no nodes in the cluster will ever consult it.
-  util.hlc.Timestamp txn_span_gc_threshold = 5 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "TxnSpanGCThreshold"];
+
+  reserved 5;
 }
 
 // A GCResponse is the return value from the GC() method.
@@ -1319,6 +1349,10 @@ message ExportRequest {
   // eliminate any need to investigate time-bound iterators when/if someone hits
   // a correctness bug.
   bool enable_time_bound_iterator_optimization = 7;
+  // StorageByLocalityKV is a map of locality KVs to storage configurations. If
+  // set, files will be written to the store that matches the most specific
+  // locality KV in the map.
+  map<string, ExportStorage> storage_by_locality_kv = 8 [(gogoproto.customname) = "StorageByLocalityKV"];
 }
 
 message BulkOpSummary {
@@ -1342,6 +1376,7 @@ message ExportResponse {
     BulkOpSummary exported = 6 [(gogoproto.nullable) = false];
 
     bytes sst = 7 [(gogoproto.customname) = "SST"];
+    string locality_kv = 8 [(gogoproto.customname) = "LocalityKV"];
   }
 
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -1425,6 +1460,15 @@ message AddSSTableRequest {
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bytes data = 2;
+  // If set, indicates that AddSSTable will not allow ingestion of keys which
+  // shadow already existing key entries. This disallows any key slice overlap
+  // regardless of the timestamps.
+  bool disallow_shadowing = 3;
+  // MVCCStats, if set, is the MVCCStats for the contents of this SSTable and is
+  // used as-is during evaluation of the AddSSTable command to update the range
+  // MVCCStats, instead of computing the stats for the SSTable by iterating it.
+  // Including these stats can make the evaluation of AddSSTable much cheaper.
+  storage.engine.enginepb.MVCCStats mvcc_stats = 4 [(gogoproto.customname) = "MVCCStats"];
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.
@@ -1559,6 +1603,7 @@ message RequestUnion {
     DeleteRequest delete = 5;
     DeleteRangeRequest delete_range = 6;
     ClearRangeRequest clear_range = 38;
+    RevertRangeRequest revert_range = 48;
     ScanRequest scan = 7;
     BeginTransactionRequest begin_transaction = 8;
     EndTransactionRequest end_transaction = 9;
@@ -1610,6 +1655,7 @@ message ResponseUnion {
     DeleteResponse delete = 5;
     DeleteRangeResponse delete_range = 6;
     ClearRangeResponse clear_range = 38;
+    RevertRangeResponse revert_range = 48;
     ScanResponse scan = 7;
     BeginTransactionResponse begin_transaction = 8;
     EndTransactionResponse end_transaction = 9;

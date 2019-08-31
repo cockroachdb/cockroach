@@ -14,8 +14,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -26,7 +27,7 @@ import (
 type OrderedSynchronizer struct {
 	inputs      []Operator
 	ordering    sqlbase.ColumnOrdering
-	columnTypes []types.T
+	columnTypes []coltypes.T
 
 	// inputBatches stores the current batch for each input.
 	inputBatches []coldata.Batch
@@ -37,15 +38,32 @@ type OrderedSynchronizer struct {
 	output      coldata.Batch
 }
 
+var _ StaticMemoryOperator = &OrderedSynchronizer{}
+
+// ChildCount implements the OpNode interface.
+func (o *OrderedSynchronizer) ChildCount() int {
+	return len(o.inputs)
+}
+
+// Child implements the OpNode interface.
+func (o *OrderedSynchronizer) Child(nth int) OpNode {
+	return o.inputs[nth]
+}
+
 // NewOrderedSynchronizer creates a new OrderedSynchronizer.
 func NewOrderedSynchronizer(
-	inputs []Operator, typs []types.T, ordering sqlbase.ColumnOrdering,
+	inputs []Operator, typs []coltypes.T, ordering sqlbase.ColumnOrdering,
 ) *OrderedSynchronizer {
 	return &OrderedSynchronizer{
 		inputs:      inputs,
 		ordering:    ordering,
 		columnTypes: typs,
 	}
+}
+
+// EstimateStaticMemoryUsage implements the StaticMemoryOperator interface.
+func (o *OrderedSynchronizer) EstimateStaticMemoryUsage() int {
+	return EstimateBatchSizeBytes(o.columnTypes, coldata.BatchSize)
 }
 
 // Next is part of the Operator interface.
@@ -57,6 +75,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			o.updateComparators(i)
 		}
 	}
+	o.output.ResetInternalBatch()
 	outputIdx := uint16(0)
 	for outputIdx < coldata.BatchSize {
 		// Determine the batch with the smallest row.
@@ -105,7 +124,6 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 
 		outputIdx++
 	}
-	o.output.SetSelection(false)
 	o.output.SetLength(outputIdx)
 	return o.output
 }
@@ -145,7 +163,7 @@ func (o *OrderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {
 			case encoding.Descending:
 				return -res
 			default:
-				panic(fmt.Sprintf("unexpected direction value %d", d))
+				execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected direction value %d", d))
 			}
 		}
 	}

@@ -73,13 +73,13 @@ func MakeStmtBufReader(buf *StmtBuf) StmtBufReader {
 
 // CurCmd returns the current command in the buffer.
 func (r StmtBufReader) CurCmd() (Command, error) {
-	cmd, _ /* pos */, err := r.buf.curCmd()
+	cmd, _ /* pos */, err := r.buf.CurCmd()
 	return cmd, err
 }
 
 // AdvanceOne moves the cursor one position over.
 func (r *StmtBufReader) AdvanceOne() {
-	r.buf.advanceOne()
+	r.buf.AdvanceOne()
 }
 
 // SeekToNextBatch skips to the beginning of the next batch of commands.
@@ -99,7 +99,7 @@ func (dsp *DistSQLPlanner) Exec(
 	}
 	p := localPlanner.(*planner)
 	p.stmt = &Statement{Statement: stmt}
-	if err := p.makePlan(ctx); err != nil {
+	if err := p.makeOptimizerPlan(ctx); err != nil {
 		return err
 	}
 	rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
@@ -126,6 +126,6 @@ func (dsp *DistSQLPlanner) Exec(
 	planCtx.planner = p
 	planCtx.stmtType = recv.stmtType
 
-	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.plan, recv)
+	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.plan, recv)()
 	return rw.Err()
 }

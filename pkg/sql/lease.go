@@ -194,7 +194,9 @@ func (s LeaseStore) acquire(
 		if err := filterTableState(tableDesc); err != nil {
 			return err
 		}
-		tableDesc.MaybeFillInDescriptor()
+		if err := tableDesc.MaybeFillInDescriptor(ctx, txn); err != nil {
+			return err
+		}
 		// Once the descriptor is set it is immutable and care must be taken
 		// to not modify it.
 		storedLease := &storedTableLease{
@@ -210,7 +212,7 @@ func (s LeaseStore) acquire(
 
 		// ValidateTable instead of Validate, even though we have a txn available,
 		// so we don't block reads waiting for this table version.
-		if err := table.ValidateTable(s.settings); err != nil {
+		if err := table.ValidateTable(); err != nil {
 			return err
 		}
 
@@ -405,7 +407,7 @@ func (s LeaseStore) PublishMultiple(
 				if err := descsToUpdate[id].MaybeIncrementVersion(ctx, txn); err != nil {
 					return err
 				}
-				if err := descsToUpdate[id].ValidateTable(s.settings); err != nil {
+				if err := descsToUpdate[id].ValidateTable(); err != nil {
 					return err
 				}
 
@@ -418,7 +420,9 @@ func (s LeaseStore) PublishMultiple(
 			}
 			b := txn.NewBatch()
 			for tableID, tableDesc := range tableDescs {
-				b.Put(sqlbase.MakeDescMetadataKey(tableID), sqlbase.WrapDescriptor(tableDesc))
+				if err := writeDescToBatch(ctx, false /* kvTrace */, s.settings, b, tableID, tableDesc.TableDesc()); err != nil {
+					return err
+				}
 			}
 			if logEvent != nil {
 				// If an event log is required for this update, ensure that the
@@ -558,6 +562,9 @@ func (s LeaseStore) getForExpiration(
 		}
 		if !tableDesc.ModificationTime.Less(prevTimestamp) {
 			return errors.AssertionFailedf("unable to read table= (%d, %s)", id, expiration)
+		}
+		if err := tableDesc.MaybeFillInDescriptor(ctx, txn); err != nil {
+			return err
 		}
 		// Create a tableVersionState with the table and without a lease.
 		table = &tableVersionState{
@@ -1080,7 +1087,7 @@ func releaseLease(lease *storedTableLease, m *LeaseManager) {
 
 // purgeOldVersions removes old unused table descriptor versions older than
 // minVersion and releases any associated leases.
-// If dropped is set, minVersion is ignored; no lease is acquired and all
+// If takenOffline is set, minVersion is ignored; no lease is acquired and all
 // existing unused versions are removed. The table is further marked dropped,
 // which will cause existing in-use leases to be eagerly released once
 // they're not in use any more.
@@ -1089,7 +1096,7 @@ func purgeOldVersions(
 	ctx context.Context,
 	db *client.DB,
 	id sqlbase.ID,
-	dropped bool,
+	takenOffline bool,
 	minVersion sqlbase.DescriptorVersion,
 	m *LeaseManager,
 ) error {
@@ -1116,8 +1123,8 @@ func purgeOldVersions(
 		}
 	}
 
-	if dropped {
-		removeInactives(dropped)
+	if takenOffline {
+		removeInactives(takenOffline)
 		return nil
 	}
 
@@ -1729,8 +1736,14 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.G
 					switch union := descriptor.Union.(type) {
 					case *sqlbase.Descriptor_Table:
 						table := union.Table
-						table.MaybeFillInDescriptor()
-						if err := table.ValidateTable(m.settings); err != nil {
+						// Note that we don't need to "fill in" the descriptor here. Nobody
+						// actually reads the table, but it's necessary for the call to
+						// ValidateTable().
+						if err := table.MaybeFillInDescriptor(ctx, nil); err != nil {
+							log.Warningf(ctx, "%s: unable to fill in table descriptor %v", kv.Key, table)
+							return
+						}
+						if err := table.ValidateTable(); err != nil {
 							log.Errorf(ctx, "%s: received invalid table descriptor: %s. Desc: %v",
 								kv.Key, err, table,
 							)
@@ -1742,7 +1755,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.G
 						}
 						// Try to refresh the table lease to one >= this version.
 						if err := purgeOldVersions(
-							ctx, db, table.ID, table.Dropped(), table.Version, m); err != nil {
+							ctx, db, table.ID, table.GoingOffline(), table.Version, m); err != nil {
 							log.Warningf(ctx, "error purging leases for table %d(%s): %s",
 								table.ID, table.Name, err)
 						}

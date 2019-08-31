@@ -1,0 +1,186 @@
+exec-ddl
+CREATE TABLE ab (a INT, b STRING)
+----
+
+build
+CANCEL JOBS SELECT 1
+----
+control-jobs (CANCEL)
+ └── project
+      ├── columns: "?column?":1(int!null)
+      ├── values
+      │    └── tuple [type=tuple]
+      └── projections
+           └── const: 1 [type=int]
+
+build
+RESUME JOBS VALUES (1), (2), (3)
+----
+control-jobs (RESUME)
+ └── values
+      ├── columns: column1:1(int!null)
+      ├── tuple [type=tuple{int}]
+      │    └── const: 1 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 2 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 3 [type=int]
+
+build
+PAUSE JOBS SELECT a FROM ab ORDER BY b
+----
+control-jobs (PAUSE)
+ └── sort
+      ├── columns: a:1(int)  [hidden: b:2(string)]
+      ├── ordering: +2
+      └── project
+           ├── columns: a:1(int) b:2(string)
+           └── scan ab
+                └── columns: a:1(int) b:2(string) rowid:3(int!null)
+
+build
+PAUSE JOB 1
+----
+control-jobs (PAUSE)
+ └── values
+      ├── columns: column1:1(int!null)
+      └── tuple [type=tuple{int}]
+           └── const: 1 [type=int]
+
+build
+PAUSE JOBS SELECT 1.1
+----
+error (42601): PAUSE JOBS data column 1 (job_id) must be of type int, not type decimal
+
+build
+CANCEL JOBS SELECT 1, 1
+----
+error (42601): too many columns in CANCEL JOBS data
+
+build
+CANCEL SESSION 'foo'
+----
+cancel-sessions
+ └── values
+      ├── columns: column1:1(string!null)
+      └── tuple [type=tuple{string}]
+           └── const: 'foo' [type=string]
+
+build
+CANCEL SESSIONS VALUES ('foo'), ('bar')
+----
+cancel-sessions
+ └── values
+      ├── columns: column1:1(string!null)
+      ├── tuple [type=tuple{string}]
+      │    └── const: 'foo' [type=string]
+      └── tuple [type=tuple{string}]
+           └── const: 'bar' [type=string]
+
+build
+CANCEL SESSIONS SELECT b FROM ab ORDER BY a
+----
+cancel-sessions
+ └── sort
+      ├── columns: b:2(string)  [hidden: a:1(int)]
+      ├── ordering: +1
+      └── project
+           ├── columns: a:1(int) b:2(string)
+           └── scan ab
+                └── columns: a:1(int) b:2(string) rowid:3(int!null)
+
+build
+CANCEL SESSION 1
+----
+error (42601): CANCEL SESSIONS data column 1 (session_id) must be of type string, not type int
+
+build
+CANCEL SESSIONS VALUES (1, 2)
+----
+error (42601): too many columns in CANCEL SESSIONS data
+
+build
+CANCEL QUERY 'foo'
+----
+cancel-queries
+ └── values
+      ├── columns: column1:1(string!null)
+      └── tuple [type=tuple{string}]
+           └── const: 'foo' [type=string]
+
+build
+CANCEL QUERIES VALUES ('foo'), ('bar')
+----
+cancel-queries
+ └── values
+      ├── columns: column1:1(string!null)
+      ├── tuple [type=tuple{string}]
+      │    └── const: 'foo' [type=string]
+      └── tuple [type=tuple{string}]
+           └── const: 'bar' [type=string]
+
+build
+CANCEL QUERIES SELECT b FROM ab ORDER BY a
+----
+cancel-queries
+ └── sort
+      ├── columns: b:2(string)  [hidden: a:1(int)]
+      ├── ordering: +1
+      └── project
+           ├── columns: a:1(int) b:2(string)
+           └── scan ab
+                └── columns: a:1(int) b:2(string) rowid:3(int!null)
+
+build
+CANCEL QUERY 1
+----
+error (42601): CANCEL QUERIES data column 1 (query_id) must be of type string, not type int
+
+build
+CANCEL QUERIES VALUES (1, 2)
+----
+error (42601): too many columns in CANCEL QUERIES data
+
+build
+EXPORT INTO CSV 'nodelocal://foo' FROM SELECT * FROM ab
+----
+export
+ ├── columns: filename:4(string) rows:5(int) bytes:6(int)
+ ├── format: CSV
+ ├── project
+ │    ├── columns: a:1(int) b:2(string)
+ │    └── scan ab
+ │         └── columns: a:1(int) b:2(string) rowid:3(int!null)
+ └── const: 'nodelocal://foo' [type=string]
+
+build
+EXPORT INTO CSV 'nodelocal://foo' WITH 'foo', 'bar'='baz' FROM SELECT * FROM ab
+----
+export
+ ├── columns: filename:4(string) rows:5(int) bytes:6(int)
+ ├── format: CSV
+ ├── project
+ │    ├── columns: a:1(int) b:2(string)
+ │    └── scan ab
+ │         └── columns: a:1(int) b:2(string) rowid:3(int!null)
+ ├── const: 'nodelocal://foo' [type=string]
+ └── k-v-options
+      ├── k-v-options-item foo
+      │    └── null [type=string]
+      └── k-v-options-item bar
+           └── const: 'baz' [type=string]
+
+build
+EXPORT INTO CSV 'nodelocal://foo' WITH 'foo' = $1 FROM SELECT * FROM ab
+----
+export
+ ├── columns: filename:4(string) rows:5(int) bytes:6(int)
+ ├── format: CSV
+ ├── project
+ │    ├── columns: a:1(int) b:2(string)
+ │    └── scan ab
+ │         └── columns: a:1(int) b:2(string) rowid:3(int!null)
+ ├── const: 'nodelocal://foo' [type=string]
+ └── k-v-options
+      └── k-v-options-item foo
+           └── placeholder: $1 [type=string]

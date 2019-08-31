@@ -128,6 +128,7 @@ var (
 	LocalRangeStatsLegacySuffix = []byte("stat")
 	// LocalTxnSpanGCThresholdSuffix is the suffix for the last txn span GC's
 	// threshold.
+	// No longer used; exists only to reserve the key so we don't use it.
 	LocalTxnSpanGCThresholdSuffix = []byte("tst-")
 
 	// localRangeIDUnreplicatedInfix is the post-Range ID specifier for all
@@ -163,6 +164,11 @@ var (
 	// LocalRangeDescriptorSuffix is the suffix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
 	LocalRangeDescriptorSuffix = roachpb.RKey("rdsc")
+	// LocalRangeDescriptorJointSuffix is the suffix for keys storing
+	// range descriptors. The value is a struct of type RangeDescriptor.
+	//
+	// TODO(tbg): decide what to actually store here. This is still unused.
+	LocalRangeDescriptorJointSuffix = roachpb.RKey("rdjt")
 	// LocalTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
 	// NOTE: if this value changes, it must be updated in C++
@@ -300,6 +306,7 @@ const (
 	// avoid introducing a dependency on sql/sqlbase throughout the codebase.
 	ZonesTablePrimaryIndexID = 1
 	ZonesTableConfigColumnID = 2
+	ZonesTableConfigColFamID = 2
 
 	// Reserved IDs for other system tables. Note that some of these IDs refer
 	// to "Ranges" instead of a Table - these IDs are needed to store custom

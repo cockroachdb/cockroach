@@ -8,6 +8,7 @@ system "mkdir -p logs"
 # developer's own history file when running out of Docker.
 set histfile "cockroach_sql_history"
 
+set ::env(COCKROACH_CONNECT_TIMEOUT) 15
 set ::env(COCKROACH_SQL_CLI_HISTORY) $histfile
 # Set client commands as insecure. The server uses --insecure.
 set ::env(COCKROACH_INSECURE) "true"
@@ -88,9 +89,8 @@ proc send_eof {} {
 # in `server_pid`.
 proc start_server {argv} {
     report "BEGIN START SERVER"
-    system "mkfifo url_fifo || true;
-            $argv start --insecure --pid-file=server_pid --listening-url-file=url_fifo --background -s=path=logs/db >>logs/expect-cmd.log 2>&1 &
-            cat url_fifo > server_url"
+    system "$argv start-single-node --insecure --pid-file=server_pid --background -s=path=logs/db >>logs/expect-cmd.log 2>&1;
+            $argv sql --insecure -e 'select 1'"
     report "START SERVER DONE"
 }
 proc stop_server {argv} {

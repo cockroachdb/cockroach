@@ -54,7 +54,8 @@ func TestSetup(t *testing.T) {
 			sqlDB.Exec(t, `DROP TABLE IF EXISTS bank`)
 
 			gen := bank.FromRows(test.rows)
-			if _, err := Setup(ctx, db, gen, test.batchSize, test.concurrency); err != nil {
+			l := InsertsDataLoader{BatchSize: test.batchSize, Concurrency: test.concurrency}
+			if _, err := Setup(ctx, db, gen, l); err != nil {
 				t.Fatalf("%+v", err)
 			}
 
@@ -135,7 +136,7 @@ func TestSplits(t *testing.T) {
 				}
 
 				countRangesQ := fmt.Sprintf(
-					`SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE test.%s]`, table.Name,
+					`SELECT count(*) FROM [SHOW RANGES FROM TABLE test.%s]`, table.Name,
 				)
 				var actual int
 				sqlDB.QueryRow(t, countRangesQ).Scan(&actual)

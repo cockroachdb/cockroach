@@ -244,6 +244,11 @@ func (c *RowContainer) Len() int {
 	return c.numRows
 }
 
+// NumCols reports the number of columns for each row in the container.
+func (c *RowContainer) NumCols() int {
+	return c.numCols
+}
+
 // At accesses a row at a specific index.
 func (c *RowContainer) At(i int) tree.Datums {
 	// This is a hot-path: do not add additional checks here.

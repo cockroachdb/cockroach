@@ -13,7 +13,7 @@ package main
 func registerTests(r *testRegistry) {
 	// Helpful shell pipeline to generate the list below:
 	//
-	// grep -h -E 'func register[^(]+\(.*registry\) {' *.go | grep -E -o 'register[^(]+' | grep -E -v '^register(Tests|Benchmarks)$' | grep -v '^\w*Bench$' | sort -f | awk '{printf "\t%s(r)\n", $0}'
+	// grep -h -E 'func register[^(]+\(.*testRegistry\) {' pkg/cmd/roachtest/*.go | grep -E -o 'register[^(]+' | grep -E -v '^register(Tests|Benchmarks)$' | grep -v '^\w*Bench$' | sort -f | awk '{printf "\t%s(r)\n", $0}'
 
 	registerAcceptance(r)
 	registerAllocator(r)
@@ -46,9 +46,11 @@ func registerTests(r *testRegistry) {
 	registerKVGracefulDraining(r)
 	registerKVScalability(r)
 	registerKVSplits(r)
+	registerKVRangeLookups(r)
 	registerLargeRange(r)
 	registerLedger(r)
 	registerNetwork(r)
+	registerPgjdbc(r)
 	registerPsycopg(r)
 	registerQueue(r)
 	registerRebalanceLoad(r)
@@ -61,6 +63,7 @@ func registerTests(r *testRegistry) {
 	registerSchemaChangeKV(r)
 	registerSchemaChangeIndexTPCC100(r)
 	registerSchemaChangeIndexTPCC1000(r)
+	registerMixedSchemaChangesTPCC1000(r)
 	registerSchemaChangeInvertedIndex(r)
 	registerScrubAllChecksTPCC(r)
 	registerScrubIndexOnlyTPCC(r)
@@ -73,6 +76,7 @@ func registerTests(r *testRegistry) {
 	registerVersion(r)
 	registerYCSB(r)
 	registerTPCHBench(r)
+	registerOverload(r)
 }
 
 func registerBenchmarks(r *testRegistry) {

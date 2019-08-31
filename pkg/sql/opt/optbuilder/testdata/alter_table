@@ -6,7 +6,7 @@ CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX b (b), UNIQUE INDEX 
 build
 ALTER TABLE abc SPLIT AT VALUES (1), (2)
 ----
-alter-table-split t.public.abc
+alter-table-split abc
  ├── columns: key:2(bytes) pretty:3(string) split_enforced_until:4(timestamp)
  ├── values
  │    ├── columns: column1:1(int!null)
@@ -19,7 +19,7 @@ alter-table-split t.public.abc
 build
 ALTER TABLE abc SPLIT AT VALUES (1), (2) WITH EXPIRATION '2200-01-01 00:00:00.0'
 ----
-alter-table-split t.public.abc
+alter-table-split abc
  ├── columns: key:2(bytes) pretty:3(string) split_enforced_until:4(timestamp)
  ├── values
  │    ├── columns: column1:1(int!null)
@@ -37,7 +37,7 @@ error (42601): too many columns in SPLIT AT data
 build
 ALTER INDEX abc@bc SPLIT AT VALUES (1), (2) WITH EXPIRATION '2200-01-01 00:00:00.0'
 ----
-alter-table-split t.public.abc@bc
+alter-table-split abc@bc
  ├── columns: key:2(bytes) pretty:3(string) split_enforced_until:4(timestamp)
  ├── values
  │    ├── columns: column1:1(int!null)
@@ -50,7 +50,7 @@ alter-table-split t.public.abc@bc
 build
 ALTER INDEX abc@bc SPLIT AT VALUES (1, 'foo'), (2, 'bar')
 ----
-alter-table-split t.public.abc@bc
+alter-table-split abc@bc
  ├── columns: key:3(bytes) pretty:4(string) split_enforced_until:5(timestamp)
  ├── values
  │    ├── columns: column1:1(int!null) column2:2(string!null)
@@ -70,13 +70,13 @@ error (42601): SPLIT AT data column 2 (c) must be of type string, not type int
 build
 ALTER INDEX abc@bc SPLIT AT SELECT b FROM abc ORDER BY a
 ----
-alter-table-split t.public.abc@bc
+alter-table-split abc@bc
  ├── columns: key:4(bytes) pretty:5(string) split_enforced_until:6(timestamp)
  ├── project
- │    ├── columns: b:2(int)  [hidden: abc.a:1(int!null)]
+ │    ├── columns: b:2(int)  [hidden: a:1(int!null)]
  │    ├── ordering: +1
  │    └── scan abc
- │         ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(string)
+ │         ├── columns: a:1(int!null) b:2(int) c:3(string)
  │         └── ordering: +1
  └── null [type=string]
 
@@ -84,7 +84,7 @@ alter-table-split t.public.abc@bc
 build
 ALTER TABLE abc UNSPLIT AT VALUES (1), (2)
 ----
-alter-table-unsplit t.public.abc
+alter-table-unsplit abc
  ├── columns: key:1(bytes) pretty:2(string)
  └── values
       ├── columns: column1:6(int!null)
@@ -96,7 +96,7 @@ alter-table-unsplit t.public.abc
 build
 ALTER TABLE abc UNSPLIT ALL
 ----
-alter-table-unsplit-all t.public.abc
+alter-table-unsplit-all abc
  └── columns: key:1(bytes) pretty:2(string)
 
 build
@@ -107,13 +107,13 @@ error (42601): too many columns in UNSPLIT AT data
 build
 ALTER INDEX abc@bc UNSPLIT ALL
 ----
-alter-table-unsplit-all t.public.abc@bc
+alter-table-unsplit-all abc@bc
  └── columns: key:1(bytes) pretty:2(string)
 
 build
 ALTER INDEX abc@bc UNSPLIT AT VALUES (1, 'foo'), (2, 'bar')
 ----
-alter-table-unsplit t.public.abc@bc
+alter-table-unsplit abc@bc
  ├── columns: key:1(bytes) pretty:2(string)
  └── values
       ├── columns: column1:6(int!null) column2:7(string!null)
@@ -132,20 +132,20 @@ error (42601): UNSPLIT AT data column 2 (c) must be of type string, not type int
 build
 ALTER INDEX abc@bc UNSPLIT AT SELECT b FROM abc ORDER BY a
 ----
-alter-table-unsplit t.public.abc@bc
+alter-table-unsplit abc@bc
  ├── columns: key:1(bytes) pretty:2(string)
  └── project
-      ├── columns: b:7(int)  [hidden: abc.a:6(int!null)]
+      ├── columns: b:7(int)  [hidden: a:6(int!null)]
       ├── ordering: +6
       └── scan abc
-           ├── columns: abc.a:6(int!null) abc.b:7(int) abc.c:8(string)
+           ├── columns: a:6(int!null) b:7(int) c:8(string)
            └── ordering: +6
 
 # Tests for ALTER TABLE EXPERIMENTAL_RELOCATE.
 build
 ALTER TABLE abc EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 1), (ARRAY[4], 2)
 ----
-alter-table-relocate t.public.abc
+alter-table-relocate abc
  ├── columns: key:1(bytes) pretty:2(string)
  └── values
       ├── columns: column1:3(int[]) column2:4(int!null)
@@ -173,7 +173,7 @@ error (42601): too many columns in EXPERIMENTAL_RELOCATE LEASE data
 build
 ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE VALUES (ARRAY[5], 1, 'foo'), (ARRAY[6,7,8], 2, 'bar')
 ----
-alter-table-relocate t.public.abc@bc
+alter-table-relocate abc@bc
  ├── columns: key:1(bytes) pretty:2(string)
  └── values
       ├── columns: column1:3(int[]) column2:4(int!null) column3:5(string!null)
@@ -213,7 +213,7 @@ error (42601): EXPERIMENTAL_RELOCATE data column 3 (c) must be of type string, n
 build
 ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE LEASE VALUES (10, 1, 'foo'), (11, 3, 'bar')
 ----
-alter-table-relocate t.public.abc@bc [lease]
+alter-table-relocate abc@bc [lease]
  ├── columns: key:1(bytes) pretty:2(string)
  └── values
       ├── columns: column1:3(int!null) column2:4(int!null) column3:5(string!null)

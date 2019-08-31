@@ -3,7 +3,7 @@ CREATE TABLE abcde (
     a INT NOT NULL,
     b INT,
     c INT DEFAULT (10),
-    d INT AS (abcde.b + c + 1) STORED,
+    d INT AS (b + c + 1) STORED,
     e INT AS (a) STORED
 )
 ----
@@ -40,7 +40,7 @@ CREATE TABLE checks (
     b INT,
     c INT,
     d INT AS (c + 1) STORED,
-    CHECK (checks.b < d)
+    CHECK (b < d)
 )
 ----
 
@@ -504,90 +504,168 @@ error (42703): statement source "INSERT INTO abcde VALUES (1)" does not return a
 build
 WITH a AS (SELECT y, y+1 FROM xyz) INSERT INTO abcde SELECT * FROM a
 ----
-insert abcde
- ├── columns: <none>
- ├── insert-mapping:
- │    ├──  y:2 => a:5
- │    ├──  "?column?":4 => b:6
- │    ├──  column11:11 => c:7
- │    ├──  column13:13 => d:8
- │    ├──  y:2 => e:9
- │    └──  column12:12 => rowid:10
- └── project
-      ├── columns: column13:13(int) y:2(int) "?column?":4(int) column11:11(int!null) column12:12(int)
-      ├── project
-      │    ├── columns: column11:11(int!null) column12:12(int) y:2(int) "?column?":4(int)
-      │    ├── project
-      │    │    ├── columns: "?column?":4(int) y:2(int)
-      │    │    ├── scan xyz
-      │    │    │    └── columns: x:1(string!null) y:2(int) z:3(float)
-      │    │    └── projections
-      │    │         └── plus [type=int]
-      │    │              ├── variable: y [type=int]
-      │    │              └── const: 1 [type=int]
-      │    └── projections
-      │         ├── const: 10 [type=int]
-      │         └── function: unique_rowid [type=int]
-      └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: ?column? [type=int]
-                │    └── variable: column11 [type=int]
-                └── const: 1 [type=int]
+with &1 (a)
+ ├── project
+ │    ├── columns: "?column?":4(int) xyz.y:2(int)
+ │    ├── scan xyz
+ │    │    └── columns: x:1(string!null) xyz.y:2(int) z:3(float)
+ │    └── projections
+ │         └── plus [type=int]
+ │              ├── variable: xyz.y [type=int]
+ │              └── const: 1 [type=int]
+ └── insert abcde
+      ├── columns: <none>
+      ├── insert-mapping:
+      │    ├──  y:11 => a:5
+      │    ├──  "?column?":12 => b:6
+      │    ├──  column13:13 => c:7
+      │    ├──  column15:15 => d:8
+      │    ├──  y:11 => e:9
+      │    └──  column14:14 => rowid:10
+      └── project
+           ├── columns: column15:15(int) y:11(int) "?column?":12(int) column13:13(int!null) column14:14(int)
+           ├── project
+           │    ├── columns: column13:13(int!null) column14:14(int) y:11(int) "?column?":12(int)
+           │    ├── with-scan &1 (a)
+           │    │    ├── columns: y:11(int) "?column?":12(int)
+           │    │    └── mapping:
+           │    │         ├──  xyz.y:2(int) => y:11(int)
+           │    │         └──  "?column?":4(int) => "?column?":12(int)
+           │    └── projections
+           │         ├── const: 10 [type=int]
+           │         └── function: unique_rowid [type=int]
+           └── projections
+                └── plus [type=int]
+                     ├── plus [type=int]
+                     │    ├── variable: ?column? [type=int]
+                     │    └── variable: column13 [type=int]
+                     └── const: 1 [type=int]
 
 # Use CTE with multiple variables.
 build
 WITH a AS (SELECT y, y+1 FROM xyz), b AS (SELECT y+1, y FROM xyz)
 INSERT INTO abcde TABLE a UNION TABLE b
 ----
-insert abcde
- ├── columns: <none>
- ├── insert-mapping:
- │    ├──  y:15 => a:9
- │    ├──  "?column?":16 => b:10
- │    ├──  column17:17 => c:11
- │    ├──  column19:19 => d:12
- │    ├──  y:15 => e:13
- │    └──  column18:18 => rowid:14
- └── project
-      ├── columns: column19:19(int) y:15(int) "?column?":16(int) column17:17(int!null) column18:18(int)
+with &1 (a)
+ ├── project
+ │    ├── columns: "?column?":4(int) xyz.y:2(int)
+ │    ├── scan xyz
+ │    │    └── columns: x:1(string!null) xyz.y:2(int) z:3(float)
+ │    └── projections
+ │         └── plus [type=int]
+ │              ├── variable: xyz.y [type=int]
+ │              └── const: 1 [type=int]
+ └── with &2 (b)
       ├── project
-      │    ├── columns: column17:17(int!null) column18:18(int) y:15(int) "?column?":16(int)
-      │    ├── union
-      │    │    ├── columns: y:15(int) "?column?":16(int)
-      │    │    ├── left columns: xyz.y:2(int) "?column?":4(int)
-      │    │    ├── right columns: "?column?":8(int) xyz.y:6(int)
-      │    │    ├── project
-      │    │    │    ├── columns: "?column?":4(int) xyz.y:2(int)
-      │    │    │    ├── scan xyz
-      │    │    │    │    └── columns: x:1(string!null) xyz.y:2(int) z:3(float)
-      │    │    │    └── projections
-      │    │    │         └── plus [type=int]
-      │    │    │              ├── variable: xyz.y [type=int]
-      │    │    │              └── const: 1 [type=int]
-      │    │    └── project
-      │    │         ├── columns: "?column?":8(int) xyz.y:6(int)
-      │    │         ├── scan xyz
-      │    │         │    └── columns: x:5(string!null) xyz.y:6(int) z:7(float)
-      │    │         └── projections
-      │    │              └── plus [type=int]
-      │    │                   ├── variable: xyz.y [type=int]
-      │    │                   └── const: 1 [type=int]
+      │    ├── columns: "?column?":8(int) xyz.y:6(int)
+      │    ├── scan xyz
+      │    │    └── columns: x:5(string!null) xyz.y:6(int) z:7(float)
       │    └── projections
-      │         ├── const: 10 [type=int]
-      │         └── function: unique_rowid [type=int]
-      └── projections
-           └── plus [type=int]
-                ├── plus [type=int]
-                │    ├── variable: ?column? [type=int]
-                │    └── variable: column17 [type=int]
-                └── const: 1 [type=int]
+      │         └── plus [type=int]
+      │              ├── variable: xyz.y [type=int]
+      │              └── const: 1 [type=int]
+      └── insert abcde
+           ├── columns: <none>
+           ├── insert-mapping:
+           │    ├──  y:19 => a:9
+           │    ├──  "?column?":20 => b:10
+           │    ├──  column21:21 => c:11
+           │    ├──  column23:23 => d:12
+           │    ├──  y:19 => e:13
+           │    └──  column22:22 => rowid:14
+           └── project
+                ├── columns: column23:23(int) y:19(int) "?column?":20(int) column21:21(int!null) column22:22(int)
+                ├── project
+                │    ├── columns: column21:21(int!null) column22:22(int) y:19(int) "?column?":20(int)
+                │    ├── union
+                │    │    ├── columns: y:19(int) "?column?":20(int)
+                │    │    ├── left columns: y:15(int) "?column?":16(int)
+                │    │    ├── right columns: "?column?":17(int) y:18(int)
+                │    │    ├── with-scan &1 (a)
+                │    │    │    ├── columns: y:15(int) "?column?":16(int)
+                │    │    │    └── mapping:
+                │    │    │         ├──  xyz.y:2(int) => y:15(int)
+                │    │    │         └──  "?column?":4(int) => "?column?":16(int)
+                │    │    └── with-scan &2 (b)
+                │    │         ├── columns: "?column?":17(int) y:18(int)
+                │    │         └── mapping:
+                │    │              ├──  "?column?":8(int) => "?column?":17(int)
+                │    │              └──  xyz.y:6(int) => y:18(int)
+                │    └── projections
+                │         ├── const: 10 [type=int]
+                │         └── function: unique_rowid [type=int]
+                └── projections
+                     └── plus [type=int]
+                          ├── plus [type=int]
+                          │    ├── variable: ?column? [type=int]
+                          │    └── variable: column21 [type=int]
+                          └── const: 1 [type=int]
 
 # Non-referenced CTE with mutation.
 build
 WITH cte AS (SELECT b FROM [INSERT INTO abcde VALUES (1) RETURNING *]) INSERT INTO abcde VALUES (1)
 ----
-error (0A000): unimplemented: common table expression "cte" with side effects was not used in query
+with &1 (cte)
+ ├── project
+ │    ├── columns: b:2(int)
+ │    └── project
+ │         ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null)
+ │         └── insert abcde
+ │              ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) rowid:6(int!null)
+ │              ├── insert-mapping:
+ │              │    ├──  column1:7 => a:1
+ │              │    ├──  column8:8 => b:2
+ │              │    ├──  column9:9 => c:3
+ │              │    ├──  column11:11 => d:4
+ │              │    ├──  column1:7 => e:5
+ │              │    └──  column10:10 => rowid:6
+ │              └── project
+ │                   ├── columns: column11:11(int) column1:7(int!null) column8:8(int) column9:9(int!null) column10:10(int)
+ │                   ├── project
+ │                   │    ├── columns: column8:8(int) column9:9(int!null) column10:10(int) column1:7(int!null)
+ │                   │    ├── values
+ │                   │    │    ├── columns: column1:7(int!null)
+ │                   │    │    └── tuple [type=tuple{int}]
+ │                   │    │         └── const: 1 [type=int]
+ │                   │    └── projections
+ │                   │         ├── cast: INT8 [type=int]
+ │                   │         │    └── null [type=unknown]
+ │                   │         ├── const: 10 [type=int]
+ │                   │         └── function: unique_rowid [type=int]
+ │                   └── projections
+ │                        └── plus [type=int]
+ │                             ├── plus [type=int]
+ │                             │    ├── variable: column8 [type=int]
+ │                             │    └── variable: column9 [type=int]
+ │                             └── const: 1 [type=int]
+ └── insert abcde
+      ├── columns: <none>
+      ├── insert-mapping:
+      │    ├──  column1:18 => a:12
+      │    ├──  column19:19 => b:13
+      │    ├──  column20:20 => c:14
+      │    ├──  column22:22 => d:15
+      │    ├──  column1:18 => e:16
+      │    └──  column21:21 => rowid:17
+      └── project
+           ├── columns: column22:22(int) column1:18(int!null) column19:19(int) column20:20(int!null) column21:21(int)
+           ├── project
+           │    ├── columns: column19:19(int) column20:20(int!null) column21:21(int) column1:18(int!null)
+           │    ├── values
+           │    │    ├── columns: column1:18(int!null)
+           │    │    └── tuple [type=tuple{int}]
+           │    │         └── const: 1 [type=int]
+           │    └── projections
+           │         ├── cast: INT8 [type=int]
+           │         │    └── null [type=unknown]
+           │         ├── const: 10 [type=int]
+           │         └── function: unique_rowid [type=int]
+           └── projections
+                └── plus [type=int]
+                     ├── plus [type=int]
+                     │    ├── variable: column19 [type=int]
+                     │    └── variable: column20 [type=int]
+                     └── const: 1 [type=int]
 
 # Insert CTE that returns no columns.
 build

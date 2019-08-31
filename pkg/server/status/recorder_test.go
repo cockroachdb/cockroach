@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -81,7 +80,6 @@ var _ sort.Interface = byStoreDescID{}
 // interact with stores.
 type fakeStore struct {
 	storeID  roachpb.StoreID
-	stats    enginepb.MVCCStats
 	desc     roachpb.StoreDescriptor
 	registry *metric.Registry
 }
@@ -92,10 +90,6 @@ func (fs fakeStore) StoreID() roachpb.StoreID {
 
 func (fs fakeStore) Descriptor(_ bool) (*roachpb.StoreDescriptor, error) {
 	return &fs.desc, nil
-}
-
-func (fs fakeStore) MVCCStats() enginepb.MVCCStats {
-	return fs.stats
 }
 
 func (fs fakeStore) Registry() *metric.Registry {
@@ -151,7 +145,7 @@ func TestMetricsRecorder(t *testing.T) {
 	recorder := NewMetricsRecorder(hlc.NewClock(manual.UnixNano, time.Nanosecond), nil, nil, nil, st)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
-	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258")
+	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	// Ensure the metric system's view of time does not advance during this test
 	// as the test expects time to not advance too far which would age the actual

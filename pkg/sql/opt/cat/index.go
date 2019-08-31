@@ -15,10 +15,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+// IndexOrdinal identifies an index (in the context of a Table).
+type IndexOrdinal = int
+
 // PrimaryIndex selects the primary index of a table when calling the
 // Table.Index method. Every table is guaranteed to have a unique primary
 // index, even if it meant adding a hidden unique rowid column.
-const PrimaryIndex = 0
+const PrimaryIndex IndexOrdinal = 0
 
 // Index is an interface to a database index, exposing only the information
 // needed by the query optimizer. Every index is treated as unique by the
@@ -128,6 +131,40 @@ type Index interface {
 
 	// Span returns the KV span associated with the index.
 	Span() roachpb.Span
+
+	// PartitionByListPrefixes returns values that correspond to PARTITION BY LIST
+	// values. Specifically, it returns a list of tuples where each tuple contains
+	// values for a prefix of index columns (indicating a region of the index).
+	// Each tuple corresponds to a configured partition or subpartition.
+	//
+	// Note: this function decodes and allocates datums; use sparingly.
+	//
+	// Example:
+	//
+	// CREATE INDEX idx ON t(region,subregion,val) PARTITION BY LIST (region,subregion) (
+	//     PARTITION westcoast VALUES IN (('us', 'seattle'), ('us', 'cali')),
+	//     PARTITION us VALUES IN (('us', DEFAULT)),
+	//     PARTITION eu VALUES IN (('eu', DEFAULT)),
+	//     PARTITION default VALUES IN (DEFAULT)
+	// );
+	//
+	// PartitionByListPrefixes() returns
+	//  ('us', 'seattle'),
+	//  ('us', 'cali'),
+	//  ('us'),
+	//  ('eu').
+	//
+	// The intended use of this function is for index skip scans. Each tuple
+	// corresponds to a region of the index that we can constrain further. In the
+	// example above: if we have a val=1 filter, instead of a full index scan we
+	// can skip most of the data under /us/cali and /us/seattle by scanning spans:
+	//   [                 - /us/cali      )
+	//   [ /us/cali/1      - /us/cali/1    ]
+	//   [ /us/cali\x00    - /us/seattle   )
+	//   [ /us/seattle/1   - /us/seattle/1 ]
+	//   [ /us/seattle\x00 -               ]
+	//
+	PartitionByListPrefixes() []tree.Datums
 }
 
 // IndexColumn describes a single column that is part of an index definition.
@@ -147,6 +184,6 @@ type IndexColumn struct {
 
 // IsMutationIndex is a convenience function that returns true if the index at
 // the given ordinal position is a mutation index.
-func IsMutationIndex(table Table, ord int) bool {
+func IsMutationIndex(table Table, ord IndexOrdinal) bool {
 	return ord >= table.IndexCount()
 }

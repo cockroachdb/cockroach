@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -61,6 +63,7 @@ const (
 	importOptionSkipFKs    = "skip_foreign_keys"
 
 	importOptionDirectIngest = "experimental_direct_ingestion"
+	importOptionSortedIngest = "experimental_sorted_ingestion"
 
 	pgCopyDelimiter = "delimiter"
 	pgCopyNull      = "nullif"
@@ -86,6 +89,7 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	importOptionSkipFKs: sql.KVStringOptRequireNoValue,
 
 	importOptionDirectIngest: sql.KVStringOptRequireNoValue,
+	importOptionSortedIngest: sql.KVStringOptRequireNoValue,
 
 	pgMaxRowSize: sql.KVStringOptRequireValue,
 }
@@ -157,7 +161,7 @@ func importPlanHook(
 
 		walltime := p.ExecCfg().Clock.Now().WallTime
 
-		if err := p.RequireSuperUser(ctx, "IMPORT"); err != nil {
+		if err := p.RequireAdminRole(ctx, "IMPORT"); err != nil {
 			return err
 		}
 
@@ -371,6 +375,11 @@ func importPlanHook(
 		}
 
 		_, ingestDirectly := opts[importOptionDirectIngest]
+		_, ingestSorted := opts[importOptionSortedIngest]
+		if ingestDirectly && ingestSorted {
+			return pgerror.Newf(pgcode.Syntax, "cannot use %q with %q", importOptionDirectIngest, importOptionSortedIngest)
+		}
+		ingestDirectly = !ingestSorted
 
 		var tableDetails []jobspb.ImportDetails_Table
 		jobDesc, err := importJobDescription(p, importStmt, nil, files, opts)
@@ -400,43 +409,33 @@ func importPlanHook(
 				return err
 			}
 
-			// The IMPORT INTO prototype currently breaks secondary indexes in the
-			// target table, as explained in issue #38044.
-			if len(found.AllNonDropIndexes()) != 0 {
-				return errors.Errorf("cannot IMPORT INTO a table with secondary indexes.")
+			// Validate target columns.
+			var intoCols []string
+			var isTargetCol = make(map[string]bool)
+			for _, name := range importStmt.IntoCols {
+				var err error
+				if _, err = found.FindActiveColumnByName(name.String()); err != nil {
+					return errors.Wrap(err, "verifying target columns")
+				}
+
+				isTargetCol[name.String()] = true
+				intoCols = append(intoCols, name.String())
 			}
 
-			if len(found.Mutations) > 0 {
-				return errors.Errorf("cannot IMPORT INTO a table with schema changes in progress -- try again later (pending mutation %s)", found.Mutations[0].String())
-			}
-			if err := p.CheckPrivilege(ctx, found, privilege.CREATE); err != nil {
-				return err
-			}
-			// TODO(dt): Ensure no other schema changes can start during ingest.
-			importing := found.TableDescriptor
-			importing.Version++
-			// Take the table offline for import.
-			// TODO(dt): audit everywhere we get table descs (leases or otherwise) to
-			// ensure that filtering by state handles IMPORTING correctly.
-			importing.State = sqlbase.TableDescriptor_IMPORTING
-			// TODO(dt): de-validate all the FKs.
+			// IMPORT INTO does not support columns with DEFAULT expressions. Ensure
+			// that all non-target columns are nullable until we support DEFAULT
+			// expressions.
+			for _, col := range found.VisibleColumns() {
+				if col.HasDefault() {
+					return errors.Errorf("cannot IMPORT INTO a table with a DEFAULT expression for any of its columns")
+				}
 
-			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-				return errors.Wrap(
-					txn.CPut(ctx, sqlbase.MakeDescMetadataKey(found.TableDescriptor.ID),
-						sqlbase.WrapDescriptor(&importing), sqlbase.WrapDescriptor(&found.TableDescriptor),
-					), "another operation is currently operating on the table")
-			}); err != nil {
-				return err
+				if len(isTargetCol) != 0 && !isTargetCol[col.Name] && !col.IsNullable() {
+					return errors.Errorf("all non-target columns in IMPORT INTO must be nullable")
+				}
 			}
-			// NB: we need to wait for the schema change to show up before it is safe
-			// to ingest, but rather than do that here, we'll wait for this schema
-			// change in the job's Resume hook, before running the ingest phase. That
-			// will hopefully let it get a head start on propagating, plus the more we
-			// do in the job, the more that has automatic cleanup on rollback.
 
-			// TODO(dt): configure target cols from ImportStmt.IntoCols
-			tableDetails = []jobspb.ImportDetails_Table{{Desc: &importing, IsNew: false}}
+			tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, IsNew: false, TargetCols: intoCols}}
 		} else {
 			var tableDescs []*sqlbase.TableDescriptor
 			seqVals := make(map[sqlbase.ID]int64)
@@ -522,72 +521,6 @@ func importPlanHook(
 				jobDesc = descStr
 			}
 
-			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-				for _, tableDesc := range tableDescs {
-					if err := backupccl.CheckTableExists(ctx, txn, parentID, tableDesc.Name); err != nil {
-						return err
-					}
-				}
-				// Verification steps have passed, generate a new table ID if we're
-				// restoring. We do this last because we want to avoid calling
-				// GenerateUniqueDescID if there's any kind of error above.
-				// Reserving a table ID now means we can avoid the rekey work during restore.
-				tableRewrites := make(backupccl.TableRewriteMap)
-				newSeqVals := make(map[sqlbase.ID]int64, len(seqVals))
-				for _, tableDesc := range tableDescs {
-					id, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
-					if err != nil {
-						return err
-					}
-					tableRewrites[tableDesc.ID] = &jobspb.RestoreDetails_TableRewrite{
-						TableID:  id,
-						ParentID: parentID,
-					}
-					if v, ok := seqVals[tableDesc.ID]; ok {
-						newSeqVals[id] = v
-					}
-				}
-				seqVals = newSeqVals
-				if err := backupccl.RewriteTableDescs(tableDescs, tableRewrites, ""); err != nil {
-					return err
-				}
-
-				for i := range tableDescs {
-					tableDescs[i].State = sqlbase.TableDescriptor_IMPORTING
-				}
-
-				seqValKVs := make([]roachpb.KeyValue, 0, len(seqVals))
-				for i := range tableDescs {
-					if v, ok := seqVals[tableDescs[i].ID]; ok && v != 0 {
-						key, val, err := sql.MakeSequenceKeyVal(tableDescs[i], v, false)
-						if err != nil {
-							return err
-						}
-						kv := roachpb.KeyValue{Key: key}
-						kv.Value.SetInt(val)
-						seqValKVs = append(seqValKVs, kv)
-					}
-				}
-
-				// Write the new TableDescriptors and flip the namespace entries over to
-				// them. After this call, any queries on a table will be served by the newly
-				// imported data.
-				if err := backupccl.WriteTableDescs(ctx, txn, nil, tableDescs, p.User(), p.ExecCfg().Settings, seqValKVs); err != nil {
-					return errors.Wrapf(err, "creating tables")
-				}
-
-				// TODO(dt): we should be creating the job with this txn too. Once a job
-				// is created, the contract is it does its own, explicit cleanup on
-				// failure (i.e. not just txn rollback) but everything up to and including
-				// the creation of the job *should* be a single atomic txn. As-is, if we
-				// fail to creat the job after committing this txn, we've leaving broken
-				// descs and namespace records.
-
-				return nil
-			}); err != nil {
-				return err
-			}
-
 			tableDetails = make([]jobspb.ImportDetails_Table, len(tableDescs))
 			for i := range tableDescs {
 				tableDetails[i] = jobspb.ImportDetails_Table{Desc: tableDescs[i], SeqVal: seqVals[tableDescs[i].ID], IsNew: true}
@@ -606,7 +539,6 @@ func importPlanHook(
 				Tables:         tableDetails,
 				SSTSize:        sstSize,
 				Oversample:     oversample,
-				Walltime:       walltime,
 				SkipFKs:        skipFKs,
 				IngestDirectly: ingestDirectly,
 			},
@@ -626,7 +558,7 @@ func doDistributedCSVTransform(
 	files []string,
 	p sql.PlanHookState,
 	parentID sqlbase.ID,
-	tables map[string]*sqlbase.TableDescriptor,
+	tables map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
 	format roachpb.IOFileFormat,
 	walltime int64,
 	sstSize int64,
@@ -709,6 +641,195 @@ type importResumer struct {
 	settings       *cluster.Settings
 	res            roachpb.BulkOpSummary
 	statsRefresher *stats.Refresher
+
+	testingKnobs struct {
+		afterImport func() error
+	}
+}
+
+// Prepares descriptors for newly created tables being imported into.
+func prepareNewTableDescsForIngestion(
+	ctx context.Context,
+	txn *client.Txn,
+	p sql.PlanHookState,
+	tables []jobspb.ImportDetails_Table,
+	parentID sqlbase.ID,
+) ([]*sqlbase.TableDescriptor, error) {
+	var tableDescs []*sqlbase.TableDescriptor
+	for _, i := range tables {
+		if err := backupccl.CheckTableExists(ctx, txn, parentID, i.Desc.Name); err != nil {
+			return nil, err
+		}
+		tableDescs = append(tableDescs, i.Desc)
+	}
+
+	// Verification steps have passed, generate a new table ID if we're
+	// restoring. We do this last because we want to avoid calling
+	// GenerateUniqueDescID if there's any kind of error above.
+	// Reserving a table ID now means we can avoid the rekey work during restore.
+	tableRewrites := make(backupccl.TableRewriteMap)
+	seqVals := make(map[sqlbase.ID]int64, len(tables))
+	for _, tableDesc := range tables {
+		id, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+		if err != nil {
+			return nil, err
+		}
+		tableRewrites[tableDesc.Desc.ID] = &jobspb.RestoreDetails_TableRewrite{
+			TableID:  id,
+			ParentID: parentID,
+		}
+		seqVals[id] = tableDesc.SeqVal
+	}
+
+	if err := backupccl.RewriteTableDescs(tableDescs, tableRewrites, ""); err != nil {
+		return nil, err
+	}
+
+	for i := range tableDescs {
+		tableDescs[i].State = sqlbase.TableDescriptor_OFFLINE
+		tableDescs[i].OfflineReason = "importing"
+
+	}
+
+	var seqValKVs []roachpb.KeyValue
+	for i := range tableDescs {
+		if v, ok := seqVals[tableDescs[i].ID]; ok && v != 0 {
+			key, val, err := sql.MakeSequenceKeyVal(tableDescs[i], v, false)
+			if err != nil {
+				return nil, err
+			}
+			kv := roachpb.KeyValue{Key: key}
+			kv.Value.SetInt(val)
+			seqValKVs = append(seqValKVs, kv)
+		}
+	}
+
+	// Write the new TableDescriptors and flip the namespace entries over to
+	// them. After this call, any queries on a table will be served by the newly
+	// imported data.
+	if err := backupccl.WriteTableDescs(ctx, txn, nil, tableDescs, p.User(), p.ExecCfg().Settings, seqValKVs); err != nil {
+		return nil, errors.Wrapf(err, "creating tables")
+	}
+
+	return tableDescs, nil
+}
+
+// Prepares descriptors for existing tables being imported into.
+func prepareExistingTableDescForIngestion(
+	ctx context.Context, txn *client.Txn, desc *sqlbase.TableDescriptor, p sql.PlanHookState,
+) (*sqlbase.TableDescriptor, error) {
+	if len(desc.Mutations) > 0 {
+		return nil, errors.Errorf("cannot IMPORT INTO a table with schema changes in progress -- try again later (pending mutation %s)", desc.Mutations[0].String())
+	}
+
+	if err := p.CheckPrivilege(ctx, desc, privilege.CREATE); err != nil {
+		return nil, err
+	}
+
+	// TODO(dt): Ensure no other schema changes can start during ingest.
+	importing := *desc
+	importing.Version++
+	// Take the table offline for import.
+	// TODO(dt): audit everywhere we get table descs (leases or otherwise) to
+	// ensure that filtering by state handles IMPORTING correctly.
+	importing.State = sqlbase.TableDescriptor_OFFLINE
+	importing.OfflineReason = "importing"
+	// TODO(dt): de-validate all the FKs.
+
+	if err := txn.SetSystemConfigTrigger(); err != nil {
+		return nil, err
+	}
+
+	// Note that this CPut is safe with respect to mixed-version descriptor
+	// upgrade and downgrade, because IMPORT does not operate in mixed-version
+	// states.
+	// TODO(jordan,lucy): remove this comment once 19.2 is released.
+	err := txn.CPutDeprecated(ctx, sqlbase.MakeDescMetadataKey(desc.ID),
+		sqlbase.WrapDescriptor(&importing), sqlbase.WrapDescriptor(desc))
+	if err != nil {
+		return nil, errors.Wrap(err, "another operation is currently operating on the table")
+	}
+
+	return &importing, nil
+	// NB: we need to wait for the schema change to show up before it is safe
+	// to ingest, but rather than do that here, we'll wait for this schema
+	// change in the job's Resume hook, before running the ingest phase. That
+	// will hopefully let it get a head start on propagating, plus the more we
+	// do in the job, the more that has automatic cleanup on rollback.
+}
+
+// prepareTableDescsForIngestion prepares table descriptors for the ingestion
+// step of import. The descriptors are in an IMPORTING state (offline) on
+// successful completion of this method.
+func (r *importResumer) prepareTableDescsForIngestion(
+	ctx context.Context, p sql.PlanHookState, details jobspb.ImportDetails,
+) error {
+	err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		importDetails := details
+		importDetails.Tables = make([]jobspb.ImportDetails_Table, len(details.Tables))
+
+		newTableDescToIdx := make(map[*sqlbase.TableDescriptor]int, len(importDetails.Tables))
+		var hasExistingTables bool
+		var err error
+		var newTableDescs []jobspb.ImportDetails_Table
+		var desc *sqlbase.TableDescriptor
+		for i, table := range details.Tables {
+			if !table.IsNew {
+				desc, err = prepareExistingTableDescForIngestion(ctx, txn, table.Desc, p)
+				if err != nil {
+					return err
+				}
+				importDetails.Tables[i] = jobspb.ImportDetails_Table{Desc: desc, Name: table.Name,
+					SeqVal:     table.SeqVal,
+					IsNew:      table.IsNew,
+					TargetCols: table.TargetCols}
+
+				hasExistingTables = true
+			} else {
+				newTableDescToIdx[table.Desc] = i
+				newTableDescs = append(newTableDescs, table)
+			}
+		}
+
+		// Prepare the table descriptors for newly created tables being imported
+		// into.
+		//
+		// TODO(adityamaru): This is still unnecessarily complicated. If we can get
+		// the new table desc preparation to work on a per desc basis, rather than
+		// requiring all the newly created descriptors, then this can look like the
+		// call to prepareExistingTableDescForIngestion. Currently, FK references
+		// misbehave when I tried to write the desc one at a time.
+		if len(newTableDescs) != 0 {
+			res, err := prepareNewTableDescsForIngestion(ctx, txn, p, newTableDescs, importDetails.ParentID)
+			if err != nil {
+				return err
+			}
+			for i, table := range res {
+				importDetails.Tables[i] = jobspb.ImportDetails_Table{Desc: table,
+					Name:       details.Tables[i].Name,
+					SeqVal:     details.Tables[i].SeqVal,
+					IsNew:      details.Tables[i].IsNew,
+					TargetCols: details.Tables[i].TargetCols}
+			}
+		}
+
+		importDetails.PrepareComplete = true
+
+		// If we do not have pending schema changes on existing descriptors we can
+		// choose our Walltime (to IMPORT from) immediately. Otherwise, we have to
+		// wait for all nodes to see the same descriptor version before doing so.
+		if !hasExistingTables {
+			importDetails.Walltime = p.ExecCfg().Clock.Now().WallTime
+		} else {
+			importDetails.Walltime = 0
+		}
+
+		// Update the job once all descs have been prepared for ingestion.
+		err = r.job.WithTxn(txn).SetDetails(ctx, importDetails)
+
+		return err
+	})
+	return err
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -722,13 +843,8 @@ func (r *importResumer) Resume(
 		return errors.Errorf("transform is no longer supported")
 	}
 
-	walltime := details.Walltime
-	files := details.URIs
 	parentID := details.ParentID
 	sstSize := details.SSTSize
-	format := details.Format
-	oversample := details.Oversample
-	ingestDirectly := details.IngestDirectly
 
 	if sstSize == 0 {
 		// The distributed importer will correctly chunk up large ranges into
@@ -742,29 +858,43 @@ func (r *importResumer) Resume(
 		sstSize = storageccl.MaxImportBatchSize(r.settings) * 5
 	}
 
-	tables := make(map[string]*sqlbase.TableDescriptor, len(details.Tables))
-	requiresSchemaChangeDelay := false
+	tables := make(map[string]*distsqlpb.ReadImportDataSpec_ImportTable, len(details.Tables))
 	if details.Tables != nil {
+		// Skip prepare stage on job resumption, if it has already been completed.
+		if !details.PrepareComplete {
+			if err := r.prepareTableDescsForIngestion(ctx, p, details); err != nil {
+				return err
+			}
+
+			// Re-initialize details after prepare step.
+			details = r.job.Details().(jobspb.ImportDetails)
+		}
+
 		for _, i := range details.Tables {
 			if i.Name != "" {
-				tables[i.Name] = i.Desc
+				tables[i.Name] = &distsqlpb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetCols: i.TargetCols}
 			} else if i.Desc != nil {
-				tables[i.Desc.Name] = i.Desc
+				tables[i.Desc.Name] = &distsqlpb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetCols: i.TargetCols}
 			} else {
 				return errors.Errorf("invalid table specification")
-			}
-			if !i.IsNew {
-				requiresSchemaChangeDelay = true
 			}
 		}
 	}
 
-	if requiresSchemaChangeDelay {
+	// In the case of importing into existing tables we must wait for all nodes
+	// to see the same version of the updated table descriptor, after which we
+	// shall chose a ts to import from.
+	if details.Walltime == 0 {
 		// TODO(dt): update job status to mention waiting for tables to go offline.
 		for _, i := range details.Tables {
 			if _, err := p.ExecCfg().LeaseManager.WaitForOneVersion(ctx, i.Desc.ID, retry.Options{}); err != nil {
 				return err
 			}
+		}
+
+		details.Walltime = p.ExecCfg().Clock.Now().WallTime
+		if err := r.job.WithTxn(nil).SetDetails(ctx, details); err != nil {
+			return err
 		}
 	}
 
@@ -777,12 +907,18 @@ func (r *importResumer) Resume(
 	if !stickyBitEnabled {
 		tableIDs := make([]uint32, 0, len(tables))
 		for _, t := range tables {
-			tableIDs = append(tableIDs, uint32(t.ID))
+			tableIDs = append(tableIDs, uint32(t.Desc.ID))
 		}
 		disableCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		p.ExecCfg().Gossip.DisableMerges(disableCtx, tableIDs)
 	}
+
+	walltime := details.Walltime
+	files := details.URIs
+	format := details.Format
+	oversample := details.Oversample
+	ingestDirectly := details.IngestDirectly
 
 	res, err := doDistributedCSVTransform(
 		ctx, r.job, files, p, parentID, tables, format, walltime, sstSize, oversample, ingestDirectly,
@@ -790,6 +926,12 @@ func (r *importResumer) Resume(
 	if err != nil {
 		return err
 	}
+	if r.testingKnobs.afterImport != nil {
+		if err := r.testingKnobs.afterImport(); err != nil {
+			return err
+		}
+	}
+
 	r.res = res
 	r.statsRefresher = p.ExecCfg().StatsRefresher
 	return nil
@@ -806,6 +948,40 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 	if err := txn.SetSystemConfigTrigger(); err != nil {
 		return err
 	}
+
+	// If the prepare step of the import job was not completed then the
+	// descriptors do not need to be rolled back as the txn updating them never
+	// completed.
+	if !details.PrepareComplete {
+		return nil
+	}
+
+	var revert []*sqlbase.TableDescriptor
+	for _, tbl := range details.Tables {
+		if !tbl.IsNew {
+			revert = append(revert, tbl.Desc)
+		}
+	}
+
+	// NB: if a revert fails it will abort the rest of this failure txn, which is
+	// also what brings tables back online. We _could_ change the error handling
+	// or just move the revert into Resume()'s error return path, however it isn't
+	// clear that just bringing a table back online with partially imported data
+	// that may or may not be partially reverted is actually a good idea. It seems
+	// better to do the revert here so that the table comes back if and only if,
+	// it was rolled back to its pre-IMPORT state, and instead provide a manual
+	// admin knob (e.g. ALTER TABLE REVERT TO SYSTEM TIME) if anything goes wrong.
+	if len(revert) > 0 {
+		// Sanity check Walltime so it doesn't become a TRUNCATE if there's a bug.
+		if details.Walltime == 0 {
+			return errors.Errorf("invalid pre-IMPORT time to rollback")
+		}
+		ts := hlc.Timestamp{WallTime: details.Walltime}.Prev()
+		if err := sql.RevertTables(ctx, txn.DB(), revert, ts, sql.RevertTableDefaultBatchSize); err != nil {
+			return errors.Wrap(err, "rolling back partially completed IMPORT")
+		}
+	}
+
 	b := txn.NewBatch()
 	for _, tbl := range details.Tables {
 		tableDesc := *tbl.Desc
@@ -819,18 +995,16 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 			// possible. This is safe since the table data was never visible to users,
 			// and so we don't need to preserve MVCC semantics.
 			tableDesc.DropTime = 1
-			b.CPut(sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.Name), nil, tableDesc.ID)
+			b.CPutDeprecated(sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.Name), nil, tableDesc.ID)
 		} else {
 			// IMPORT did not create this table, so we should not drop it.
-			// TODO(dt): consider trying to delete whatever was ingested before
-			// returning the table to public. Unfortunately the ingestion isn't
-			// transactional, so there is no clean way to just rollback our changes,
-			// but we could iterate by time to delete before returning to public.
-			// TODO(dt): re-validate any FKs?
-			tableDesc.Version++
 			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
 		}
-		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
+		// Note that this CPut is safe with respect to mixed-version descriptor
+		// upgrade and downgrade, because IMPORT does not operate in mixed-version
+		// states.
+		// TODO(jordan,lucy): remove this comment once 19.2 is released.
+		b.CPutDeprecated(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
 	}
 	return errors.Wrap(txn.Run(ctx, b), "rolling back tables")
 }
@@ -849,8 +1023,38 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 		tableDesc := *tbl.Desc
 		tableDesc.Version++
 		tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+
+		if !tbl.IsNew {
+			// NB: This is not using AllNonDropIndexes or directly mutating the
+			// constraints returned by the other usual helpers because we need to
+			// replace the `OutboundFKs` and `Checks` slices of tableDesc with copies
+			// that we can mutate. We need to do that because tableDesc is a shallow
+			// copy of tbl.Desc that we'll be asserting is the current version when we
+			// CPut below.
+			//
+			// Set FK constraints to unvalidated before publishing the table imported
+			// into.
+			tableDesc.OutboundFKs = make([]sqlbase.ForeignKeyConstraint, len(tableDesc.OutboundFKs))
+			copy(tableDesc.OutboundFKs, tbl.Desc.OutboundFKs)
+			for i := range tableDesc.OutboundFKs {
+				tableDesc.OutboundFKs[i].Validity = sqlbase.ConstraintValidity_Unvalidated
+			}
+
+			// Set CHECK constraints to unvalidated before publishing the table imported into.
+			tableDesc.Checks = make([]*sqlbase.TableDescriptor_CheckConstraint, len(tbl.Desc.Checks))
+			for i, c := range tbl.Desc.AllActiveAndInactiveChecks() {
+				ck := *c
+				ck.Validity = sqlbase.ConstraintValidity_Unvalidated
+				tableDesc.Checks[i] = &ck
+			}
+		}
+
 		// TODO(dt): re-validate any FKs?
-		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
+		// Note that this CPut is safe with respect to mixed-version descriptor
+		// upgrade and downgrade, because IMPORT does not operate in mixed-version
+		// states.
+		// TODO(jordan,lucy): remove this comment once 19.2 is released.
+		b.CPutDeprecated(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
 	}
 	if err := txn.Run(ctx, b); err != nil {
 		return errors.Wrap(err, "publishing tables")

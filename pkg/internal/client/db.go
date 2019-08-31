@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -357,9 +358,24 @@ func (db *DB) PutInline(ctx context.Context, key, value interface{}) error {
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
-func (db *DB) CPut(ctx context.Context, key, value, expValue interface{}) error {
+func (db *DB) CPut(ctx context.Context, key, value interface{}, expValue *roachpb.Value) error {
 	b := &Batch{}
 	b.CPut(key, value, expValue)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
+// CPutDeprecated conditionally sets the value for a key if the existing value is equal
+// to expValue. To conditionally set a value only if there is no existing entry
+// pass nil for expValue. Note that this must be an interface{}(nil), not a
+// typed nil value (e.g. []byte(nil)).
+//
+// Returns an error if the existing value is not equal to expValue.
+//
+// key can be either a byte slice or a string. value can be any key type, a
+// protoutil.Message or any Go primitive type (bool, int, etc).
+func (db *DB) CPutDeprecated(ctx context.Context, key, value, expValue interface{}) error {
+	b := &Batch{}
+	b.CPutDeprecated(key, value, expValue)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
@@ -451,10 +467,11 @@ func (db *DB) DelRange(ctx context.Context, begin, end interface{}) error {
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-// AdminMerge merges the range containing key and the subsequent
-// range. After the merge operation is complete, the range containing
-// key will contain all of the key/value pairs of the subsequent range
-// and the subsequent range will no longer exist.
+// AdminMerge merges the range containing key and the subsequent range. After
+// the merge operation is complete, the range containing key will contain all of
+// the key/value pairs of the subsequent range and the subsequent range will no
+// longer exist. Neither range may contain learner replicas, if one does, an
+// error is returned.
 //
 // key can be either a byte slice or a string.
 func (db *DB) AdminMerge(ctx context.Context, key interface{}) error {
@@ -486,6 +503,23 @@ func (db *DB) AdminSplit(
 	b := &Batch{}
 	b.adminSplit(spanKey, splitKey, expirationTime)
 	return getOneErr(db.Run(ctx, b), b)
+}
+
+// SplitAndScatter is a helper that wraps AdminSplit + AdminScatter.
+func (db *DB) SplitAndScatter(
+	ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp,
+) error {
+	if err := db.AdminSplit(ctx, key, key, expirationTime); err != nil {
+		return err
+	}
+	scatterReq := &roachpb.AdminScatterRequest{
+		RequestHeader:   roachpb.RequestHeaderFromSpan(roachpb.Span{Key: key, EndKey: key.Next()}),
+		RandomizeLeases: true,
+	}
+	if _, pErr := SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
+		return pErr.GoError()
+	}
+	return nil
 }
 
 // AdminUnsplit removes the sticky bit of the range specified by splitKey.
@@ -523,12 +557,28 @@ func (db *DB) AdminTransferLease(
 func (db *DB) AdminChangeReplicas(
 	ctx context.Context,
 	key interface{},
-	changeType roachpb.ReplicaChangeType,
-	targets []roachpb.ReplicationTarget,
 	expDesc roachpb.RangeDescriptor,
+	chgs []roachpb.ReplicationChange,
 ) (*roachpb.RangeDescriptor, error) {
+	if ctx.Value("testing") == nil {
+		// Disallow trying to add and remove replicas in the same set of
+		// changes. This will only work when the node receiving the request is
+		// running 19.2 (code, not cluster version).
+		//
+		// TODO(tbg): remove this when 19.2 is released.
+		var typ *roachpb.ReplicaChangeType
+		for i := range chgs {
+			chg := &chgs[i]
+			if typ == nil {
+				typ = &chg.ChangeType
+			} else if *typ != chg.ChangeType {
+				return nil, errors.Errorf("can not mix %s and %s", *typ, chg.ChangeType)
+			}
+		}
+	}
+
 	b := &Batch{}
-	b.adminChangeReplicas(key, changeType, targets, expDesc)
+	b.adminChangeReplicas(key, expDesc, chgs)
 	if err := getOneErr(db.Run(ctx, b), b); err != nil {
 		return nil, err
 	}
@@ -541,7 +591,8 @@ func (db *DB) AdminChangeReplicas(
 		return nil, errors.Errorf("unexpected response of type %T for AdminChangeReplicas",
 			responses[0].GetInner())
 	}
-	return resp.Desc, nil
+	desc := resp.Desc
+	return &desc, nil
 }
 
 // AdminRelocateRange relocates the replicas for a range onto the specified
@@ -565,9 +616,15 @@ func (db *DB) WriteBatch(ctx context.Context, begin, end interface{}, data []byt
 
 // AddSSTable links a file into the RocksDB log-structured merge-tree. Existing
 // data in the range is cleared.
-func (db *DB) AddSSTable(ctx context.Context, begin, end interface{}, data []byte) error {
+func (db *DB) AddSSTable(
+	ctx context.Context,
+	begin, end interface{},
+	data []byte,
+	disallowShadowing bool,
+	stats *enginepb.MVCCStats,
+) error {
 	b := &Batch{}
-	b.addSSTable(begin, end, data)
+	b.addSSTable(begin, end, data, disallowShadowing, stats)
 	return getOneErr(db.Run(ctx, b), b)
 }
 

@@ -142,6 +142,9 @@ type Memo struct {
 	// curID is the highest currently in-use scalar expression ID.
 	curID opt.ScalarID
 
+	// curWithID is the highest currently in-use WITH ID.
+	curWithID opt.WithID
+
 	// WARNING: if you add more members, add initialization code in Init.
 }
 
@@ -167,6 +170,7 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.saveTablesPrefix = evalCtx.SessionData.SaveTablesPrefix
 
 	m.curID = 0
+	m.curWithID = 0
 }
 
 // IsEmpty returns true if there are no expressions in the memo.
@@ -352,4 +356,10 @@ func (m *Memo) RequestColStat(
 		return m.logPropsBuilder.sb.colStat(cols, expr), true
 	}
 	return nil, false
+}
+
+// NextWithID returns a not-yet-assigned identifier for a WITH expression.
+func (m *Memo) NextWithID() opt.WithID {
+	m.curWithID++
+	return m.curWithID
 }

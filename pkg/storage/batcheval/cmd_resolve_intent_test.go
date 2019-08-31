@@ -34,6 +34,7 @@ import (
 type mockEvalCtx struct {
 	clusterSettings  *cluster.Settings
 	desc             *roachpb.RangeDescriptor
+	storeID          roachpb.StoreID
 	clock            *hlc.Clock
 	stats            enginepb.MVCCStats
 	qps              float64
@@ -73,8 +74,11 @@ func (m *mockEvalCtx) GetTxnWaitQueue() *txnwait.Queue {
 func (m *mockEvalCtx) NodeID() roachpb.NodeID {
 	panic("unimplemented")
 }
-func (m *mockEvalCtx) StoreID() roachpb.StoreID {
+func (m *mockEvalCtx) GetNodeLocality() roachpb.Locality {
 	panic("unimplemented")
+}
+func (m *mockEvalCtx) StoreID() roachpb.StoreID {
+	return m.storeID
 }
 func (m *mockEvalCtx) GetRangeID() roachpb.RangeID {
 	return m.desc.RangeID
@@ -110,9 +114,6 @@ func (m *mockEvalCtx) CanCreateTxnRecord(
 }
 func (m *mockEvalCtx) GetGCThreshold() hlc.Timestamp {
 	return m.gcThreshold
-}
-func (m *mockEvalCtx) GetTxnSpanGCThreshold() hlc.Timestamp {
-	panic("unimplemented")
 }
 func (m *mockEvalCtx) GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error) {
 	panic("unimplemented")

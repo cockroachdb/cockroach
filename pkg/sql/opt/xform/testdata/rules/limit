@@ -200,11 +200,13 @@ explain
       ├── ordering: -2
       ├── sort
       │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+      │    ├── cardinality: [0 - 11]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
       │    ├── ordering: -2
       │    └── select
       │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+      │         ├── cardinality: [0 - 11]
       │         ├── key: (1)
       │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
       │         ├── index-join abcd
@@ -243,11 +245,13 @@ Initial expression
              ├── fd: (1)-->(2-4), (2-4)~~>(1)
              ├── sort
              │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+             │    ├── cardinality: [0 - 11]
              │    ├── key: (1)
              │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
              │    ├── ordering: -2
              │    └── select
              │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+             │         ├── cardinality: [0 - 11]
              │         ├── key: (1)
              │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
              │         ├── scan abcd
@@ -278,11 +282,13 @@ SimplifySelectFilters
               ├── fd: (1)-->(2-4), (2-4)~~>(1)
               ├── sort
               │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+  -           │    ├── cardinality: [0 - 11]
               │    ├── key: (1)
               │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
               │    ├── ordering: -2
               │    └── select
               │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+  -           │         ├── cardinality: [0 - 11]
               │         ├── key: (1)
               │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
               │         ├── scan abcd
@@ -315,11 +321,13 @@ ConsolidateSelectFilters
               ├── fd: (1)-->(2-4), (2-4)~~>(1)
               ├── sort
               │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+  +           │    ├── cardinality: [0 - 11]
               │    ├── key: (1)
               │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
               │    ├── ordering: -2
               │    └── select
               │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+  +           │         ├── cardinality: [0 - 11]
               │         ├── key: (1)
               │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
               │         ├── scan abcd
@@ -354,11 +362,13 @@ GenerateIndexScans
   -           ├── fd: (1)-->(2-4), (2-4)~~>(1)
   -           ├── sort
   -           │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+  -           │    ├── cardinality: [0 - 11]
   -           │    ├── key: (1)
   -           │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
   -           │    ├── ordering: -2
   -           │    └── select
   -           │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+  -           │         ├── cardinality: [0 - 11]
   -           │         ├── key: (1)
   -           │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
   -           │         ├── scan abcd
@@ -371,11 +381,13 @@ GenerateIndexScans
   -           └── const: 5 [type=int]
   +      ├── sort
   +      │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+  +      │    ├── cardinality: [0 - 11]
   +      │    ├── key: (1)
   +      │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
   +      │    ├── ordering: -2
   +      │    └── select
   +      │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+  +      │         ├── cardinality: [0 - 11]
   +      │         ├── key: (1)
   +      │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
   +      │         ├── index-join abcd
@@ -411,11 +423,13 @@ Final best expression
         ├── ordering: -2
         ├── sort
         │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+        │    ├── cardinality: [0 - 11]
         │    ├── key: (1)
         │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
         │    ├── ordering: -2
         │    └── select
         │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+        │         ├── cardinality: [0 - 11]
         │         ├── key: (1)
         │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
         │         ├── index-join abcd

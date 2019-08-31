@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -98,14 +99,15 @@ func initCLIDefaults() {
 	debugCtx.inputFile = ""
 	debugCtx.printSystemConfig = false
 	debugCtx.maxResults = 1000
-	debugCtx.ballastSize = base.SizeSpec{}
-
-	zoneCtx.zoneConfig = ""
-	zoneCtx.zoneDisableReplication = false
+	debugCtx.ballastSize = base.SizeSpec{InBytes: 1000000000}
 
 	serverCfg.ReadyFn = nil
 	serverCfg.DelayedBootstrapFn = nil
 	serverCfg.SocketFile = ""
+	serverCfg.JoinList = nil
+	serverCfg.DefaultZoneConfig = config.DefaultZoneConfig()
+	serverCfg.DefaultSystemZoneConfig = config.DefaultSystemZoneConfig()
+
 	startCtx.serverInsecure = baseCfg.Insecure
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
 	startCtx.serverListenAddr = ""
@@ -140,6 +142,11 @@ func initCLIDefaults() {
 	networkBenchCtx.server = true
 	networkBenchCtx.port = 8081
 	networkBenchCtx.addresses = []string{"localhost:8081"}
+
+	demoCtx.nodes = 1
+	demoCtx.useEmptyDatabase = false
+	demoCtx.runWorkload = false
+	demoCtx.localities = nil
 
 	initPreFlagsDefaults()
 
@@ -227,7 +234,7 @@ var sqlCtx = struct {
 	debugMode bool
 }{cliContext: &cliCtx}
 
-// dumpCtx captures the command-line parameters of the `sql` command.
+// dumpCtx captures the command-line parameters of the `dump` command.
 // Defaults set by InitCLIDefaults() above.
 var dumpCtx struct {
 	// dumpMode determines which part of the database should be dumped.
@@ -250,13 +257,6 @@ var debugCtx struct {
 	maxResults        int64
 }
 
-// zoneCtx captures the command-line parameters of the `zone` command.
-// Defaults set by InitCLIDefaults() above.
-var zoneCtx struct {
-	zoneConfig             string
-	zoneDisableReplication bool
-}
-
 // startCtx captures the command-line arguments for the `start` command.
 // Defaults set by InitCLIDefaults() above.
 var startCtx struct {
@@ -267,6 +267,8 @@ var startCtx struct {
 
 	// temporary directory to use to spill computation results to disk.
 	tempDir string
+	// storage engine to use for temporary storage (eg. rocksdb, pebble)
+	tempEngine storageEngine
 	// directory to use for remotely-initiated operations that can
 	// specify node-local I/O paths, like BACKUP/RESTORE/IMPORT.
 	externalIODir string
@@ -284,8 +286,7 @@ var startCtx struct {
 	pidFile string
 
 	// logging settings specific to file logging.
-	logDir     log.DirName
-	logDirFlag *pflag.Flag
+	logDir log.DirName
 }
 
 // quitCtx captures the command-line parameters of the `quit` command.
@@ -330,4 +331,13 @@ var sqlfmtCtx struct {
 	noSimplify bool
 	align      bool
 	execStmts  statementsValue
+}
+
+// demoCtx captures the command-line parameters of the `demo` command.
+// Defaults set by InitCLIDefaults() above.
+var demoCtx struct {
+	nodes            int
+	useEmptyDatabase bool
+	runWorkload      bool
+	localities       demoLocalityList
 }

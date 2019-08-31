@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
@@ -65,15 +65,15 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		mjInputWatch := timeutil.NewTestStopWatch(timeSource.Now)
 
 		leftSource := &timeAdvancingOperator{
-			input:      makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize),
-			timeSource: timeSource,
+			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize)),
+			timeSource:   timeSource,
 		}
 		leftInput := NewVectorizedStatsCollector(leftSource, 0 /* id */, true /* isStall */, timeutil.NewTestStopWatch(timeSource.Now))
 		leftInput.SetOutputWatch(mjInputWatch)
 
 		rightSource := &timeAdvancingOperator{
-			input:      makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize),
-			timeSource: timeSource,
+			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize)),
+			timeSource:   timeSource,
 		}
 		rightInput := NewVectorizedStatsCollector(rightSource, 1 /* id */, true /* isStall */, timeutil.NewTestStopWatch(timeSource.Now))
 		rightInput.SetOutputWatch(mjInputWatch)
@@ -84,8 +84,8 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			rightInput,
 			[]uint32{0},
 			[]uint32{0},
-			[]types.T{types.Int64},
-			[]types.T{types.Int64},
+			[]coltypes.T{coltypes.Int64},
+			[]coltypes.T{coltypes.Int64},
 			[]distsqlpb.Ordering_Column{{ColIdx: 0}},
 			[]distsqlpb.Ordering_Column{{ColIdx: 0}},
 		)
@@ -93,8 +93,8 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			t.Fatal(err)
 		}
 		timeAdvancingMergeJoiner := &timeAdvancingOperator{
-			input:      mergeJoiner,
-			timeSource: timeSource,
+			OneInputNode: NewOneInputNode(mergeJoiner),
+			timeSource:   timeSource,
 		}
 		mjStatsCollector := NewVectorizedStatsCollector(timeAdvancingMergeJoiner, 2 /* id */, false /* isStall */, mjInputWatch)
 
@@ -124,7 +124,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 }
 
 func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) Operator {
-	batch := coldata.NewMemBatchWithSize([]types.T{types.Int64}, batchSize)
+	batch := coldata.NewMemBatchWithSize([]coltypes.T{coltypes.Int64}, batchSize)
 	vec := batch.ColVec(0).Int64()
 	for i := 0; i < batchSize; i++ {
 		vec[i] = int64(i)
@@ -136,7 +136,7 @@ func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) Operator {
 // timeAdvancingOperator is an Operator that advances the time source upon
 // receiving a non-empty batch from its input. It is used for testing only.
 type timeAdvancingOperator struct {
-	input Operator
+	OneInputNode
 
 	timeSource *timeutil.TestTimeSource
 }

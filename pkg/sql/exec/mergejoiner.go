@@ -12,10 +12,12 @@ package exec
 
 import (
 	"context"
+	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -137,7 +139,7 @@ type mergeJoinInput struct {
 
 	// sourceTypes specify the types of the input columns of the source table for
 	// the merge joiner.
-	sourceTypes []types.T
+	sourceTypes []coltypes.T
 
 	// The distincter is used in the finishGroup phase, and is used only to
 	// determine where the current group ends, in the case that the group ended
@@ -153,6 +155,7 @@ type mergeJoinInput struct {
 // feedOperator is used to feed the distincter with input by manually setting
 // the next batch.
 type feedOperator struct {
+	ZeroInputNode
 	batch coldata.Batch
 }
 
@@ -189,12 +192,12 @@ func NewMergeJoinOp(
 	right Operator,
 	leftOutCols []uint32,
 	rightOutCols []uint32,
-	leftTypes []types.T,
-	rightTypes []types.T,
+	leftTypes []coltypes.T,
+	rightTypes []coltypes.T,
 	leftOrdering []distsqlpb.Ordering_Column,
 	rightOrdering []distsqlpb.Ordering_Column,
 ) (Operator, error) {
-	base, err := newMergeJoinBase(joinType, left, right, leftOutCols, rightOutCols, leftTypes, rightTypes, leftOrdering, rightOrdering)
+	base, err := newMergeJoinBase(left, right, leftOutCols, rightOutCols, leftTypes, rightTypes, leftOrdering, rightOrdering)
 	switch joinType {
 	case sqlbase.JoinType_INNER:
 		return &mergeJoinInnerOp{base}, err
@@ -204,8 +207,14 @@ func NewMergeJoinOp(
 		return &mergeJoinRightOuterOp{base}, err
 	case sqlbase.JoinType_FULL_OUTER:
 		return &mergeJoinFullOuterOp{base}, err
+	case sqlbase.JoinType_LEFT_SEMI:
+		return &mergeJoinLeftSemiOp{base}, err
+	case sqlbase.JoinType_LEFT_ANTI:
+		return &mergeJoinLeftAntiOp{base}, err
 	default:
-		panic("unsupported join type")
+		execerror.VectorizedInternalPanic("unsupported join type")
+		// This code is unreachable, but the compiler cannot infer that.
+		return nil, nil
 	}
 }
 
@@ -240,13 +249,12 @@ func (s *mjBuilderCrossProductState) setBuilderColumnState(target mjBuilderCross
 }
 
 func newMergeJoinBase(
-	joinType sqlbase.JoinType,
 	left Operator,
 	right Operator,
 	leftOutCols []uint32,
 	rightOutCols []uint32,
-	leftTypes []types.T,
-	rightTypes []types.T,
+	leftTypes []coltypes.T,
+	rightTypes []coltypes.T,
 	leftOrdering []distsqlpb.Ordering_Column,
 	rightOrdering []distsqlpb.Ordering_Column,
 ) (mergeJoinBase, error) {
@@ -265,7 +273,7 @@ func newMergeJoinBase(
 	}
 
 	base := mergeJoinBase{
-		joinType: joinType,
+		twoInputNode: newTwoInputNode(left, right),
 		left: mergeJoinInput{
 			source:      left,
 			outCols:     leftOutCols,
@@ -296,9 +304,9 @@ func newMergeJoinBase(
 
 // mergeJoinBase extract the common logic between all merge join operators.
 type mergeJoinBase struct {
-	joinType sqlbase.JoinType
-	left     mergeJoinInput
-	right    mergeJoinInput
+	twoInputNode
+	left  mergeJoinInput
+	right mergeJoinInput
 
 	// Output buffer definition.
 	output            coldata.Batch
@@ -316,16 +324,40 @@ type mergeJoinBase struct {
 	builderState mjBuilderState
 }
 
+func (o *mergeJoinBase) getOutColTypes() []coltypes.T {
+	if len(o.right.outCols) == 0 {
+		// We do not have output columns from the right input in case of LEFT SEMI
+		// and LEFT ANTI joins, and we should not have the corresponding columns in
+		// the output batch, so we simply return the types of the left input.
+		return o.left.sourceTypes
+	}
+	return append(o.left.sourceTypes, o.right.sourceTypes...)
+}
+
+func (o *mergeJoinBase) EstimateStaticMemoryUsage() int {
+	const sizeOfGroup = int(unsafe.Sizeof(group{}))
+	leftDistincter := o.left.distincter.(StaticMemoryOperator)
+	rightDistincter := o.right.distincter.(StaticMemoryOperator)
+	return EstimateBatchSizeBytes(
+		o.getOutColTypes(), coldata.BatchSize,
+	) + // base.output
+		EstimateBatchSizeBytes(
+			o.left.sourceTypes, coldata.BatchSize,
+		) + // base.proberState.lBufferedGroup
+		EstimateBatchSizeBytes(
+			o.right.sourceTypes, coldata.BatchSize,
+		) + // base.proberState.rBufferedGroup
+		4*sizeOfGroup*coldata.BatchSize + // base.groups
+		leftDistincter.EstimateStaticMemoryUsage() + // base.left.distincter
+		rightDistincter.EstimateStaticMemoryUsage() // base.right.distincter
+}
+
 func (o *mergeJoinBase) Init() {
 	o.initWithBatchSize(coldata.BatchSize)
 }
 
 func (o *mergeJoinBase) initWithBatchSize(outBatchSize uint16) {
-	outColTypes := make([]types.T, len(o.left.sourceTypes)+len(o.right.sourceTypes))
-	copy(outColTypes, o.left.sourceTypes)
-	copy(outColTypes[len(o.left.sourceTypes):], o.right.sourceTypes)
-
-	o.output = coldata.NewMemBatchWithSize(outColTypes, int(outBatchSize))
+	o.output = coldata.NewMemBatchWithSize(o.getOutColTypes(), int(outBatchSize))
 	o.left.source.Init()
 	o.right.source.Init()
 	o.outputBatchSize = outBatchSize
@@ -350,26 +382,6 @@ func (o *mergeJoinBase) resetBuilderCrossProductState() {
 	o.builderState.right.reset()
 }
 
-// calculateOutputCount uses the toBuild field of each group and the output
-// batch size to determine the output count. Note that as soon as a group is
-// materialized partially or fully to output, its toBuild field is updated
-// accordingly.
-func (o *mergeJoinBase) calculateOutputCount(groups []group) uint16 {
-	count := int(o.builderState.outCount)
-
-	for i := 0; i < len(groups); i++ {
-		count += groups[i].toBuild
-		groups[i].toBuild = 0
-		if count > int(o.outputBatchSize) {
-			groups[i].toBuild = count - int(o.outputBatchSize)
-			count = int(o.outputBatchSize)
-			return uint16(count)
-		}
-	}
-	o.builderState.outFinished = true
-	return uint16(count)
-}
-
 // appendToBufferedGroup appends all the tuples from batch that are part of the
 // same group as the ones in the buffered group that corresponds to the input
 // source. This needs to happen when a group starts at the end of an input
@@ -389,7 +401,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 				ColType:     cType,
 				Src:         batch.ColVec(cIdx),
 				Sel:         sel,
-				DestIdx:     uint64(destStartIdx),
+				DestIdx:     destStartIdx,
 				SrcStartIdx: uint16(groupStartIdx),
 				SrcEndIdx:   uint16(groupEndIdx),
 			},
@@ -397,7 +409,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 		if sel != nil {
 			bufferedGroup.ColVec(cIdx).Nulls().ExtendWithSel(
 				batch.ColVec(cIdx).Nulls(),
-				uint64(destStartIdx),
+				destStartIdx,
 				uint16(groupStartIdx),
 				uint16(groupLength),
 				sel,
@@ -405,7 +417,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 		} else {
 			bufferedGroup.ColVec(cIdx).Nulls().Extend(
 				batch.ColVec(cIdx).Nulls(),
-				uint64(destStartIdx),
+				destStartIdx,
 				uint16(groupStartIdx),
 				uint16(groupLength),
 			)
@@ -425,48 +437,6 @@ func (o *mergeJoinBase) setBuilderSourceToBatch() {
 	o.builderState.lGroups, o.builderState.rGroups = o.groups.getGroups()
 	o.builderState.lBatch = o.proberState.lBatch
 	o.builderState.rBatch = o.proberState.rBatch
-}
-
-// setBuilderSourceToBufferedGroup sets up the builder state to use the
-// buffered group.
-func (o *mergeJoinBase) setBuilderSourceToBufferedGroup() {
-	lGroupEndIdx := int(o.proberState.lBufferedGroup.length)
-	rGroupEndIdx := int(o.proberState.rBufferedGroup.length)
-	// The capacity of builder state lGroups and rGroups is always at least 1
-	// given the init.
-	o.builderState.lGroups = o.builderState.lGroups[:1]
-	o.builderState.lGroups[0] = group{
-		rowStartIdx: 0,
-		rowEndIdx:   lGroupEndIdx,
-		numRepeats:  rGroupEndIdx,
-		toBuild:     lGroupEndIdx * rGroupEndIdx,
-	}
-	o.builderState.rGroups = o.builderState.rGroups[:1]
-	o.builderState.rGroups[0] = group{
-		rowStartIdx: 0,
-		rowEndIdx:   rGroupEndIdx,
-		numRepeats:  lGroupEndIdx,
-		toBuild:     rGroupEndIdx * lGroupEndIdx,
-	}
-
-	o.builderState.lBatch = o.proberState.lBufferedGroup
-	o.builderState.rBatch = o.proberState.rBufferedGroup
-
-	// We cannot yet reset the buffered groups because the builder will be taking
-	// input from them. The actual reset will take place on the next call to
-	// initProberState().
-	o.proberState.lBufferedGroup.needToReset = true
-	o.proberState.rBufferedGroup.needToReset = true
-}
-
-// build creates the cross product, and writes it to the output member.
-func (o *mergeJoinBase) build() {
-	if o.output.Width() != 0 {
-		outStartIdx := o.builderState.outCount
-		o.buildLeftGroups(o.builderState.lGroups, 0 /* colOffset */, &o.left, o.builderState.lBatch, outStartIdx)
-		o.buildRightGroups(o.builderState.rGroups, len(o.left.sourceTypes), &o.right, o.builderState.rBatch, outStartIdx)
-	}
-	o.builderState.outCount = o.calculateOutputCount(o.builderState.lGroups)
 }
 
 // initProberState sets the batches, lengths, and current indices to the right
@@ -498,7 +468,6 @@ func (o *mergeJoinBase) nonEmptyBufferedGroup() bool {
 
 // sourceFinished returns true if either of input sources has no more rows.
 func (o *mergeJoinBase) sourceFinished() bool {
-	// TODO (georgeutsin): update this logic to be able to support joins other than INNER.
 	return o.proberState.lLength == 0 || o.proberState.rLength == 0
 }
 

@@ -31,7 +31,7 @@ func TestInitInsecure(t *testing.T) {
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
 
-	f := StartCmd.Flags()
+	f := startCmd.Flags()
 
 	testCases := []struct {
 		args     []string
@@ -44,15 +44,15 @@ func TestInitInsecure(t *testing.T) {
 		{[]string{"--insecure=false"}, false, ""},
 		{[]string{"--listen-addr", "localhost"}, false, ""},
 		{[]string{"--listen-addr", "127.0.0.1"}, false, ""},
-		{[]string{"--listen-addr", "::1"}, false, ""},
+		{[]string{"--listen-addr", "[::1]"}, false, ""},
 		{[]string{"--listen-addr", "192.168.1.1"}, false,
 			`specify --insecure to listen on external address 192\.168\.1\.1`},
 		{[]string{"--insecure", "--listen-addr", "192.168.1.1"}, true, ""},
 		{[]string{"--listen-addr", "localhost", "--advertise-addr", "192.168.1.1"}, false, ""},
 		{[]string{"--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.1.1"}, false, ""},
 		{[]string{"--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.1.1", "--advertise-port", "36259"}, false, ""},
-		{[]string{"--listen-addr", "::1", "--advertise-addr", "192.168.1.1"}, false, ""},
-		{[]string{"--listen-addr", "::1", "--advertise-addr", "192.168.1.1", "--advertise-port", "36259"}, false, ""},
+		{[]string{"--listen-addr", "[::1]", "--advertise-addr", "192.168.1.1"}, false, ""},
+		{[]string{"--listen-addr", "[::1]", "--advertise-addr", "192.168.1.1", "--advertise-port", "36259"}, false, ""},
 		{[]string{"--insecure", "--listen-addr", "192.168.1.1", "--advertise-addr", "192.168.1.1"}, true, ""},
 		{[]string{"--insecure", "--listen-addr", "192.168.1.1", "--advertise-addr", "192.168.2.2"}, true, ""},
 		{[]string{"--insecure", "--listen-addr", "192.168.1.1", "--advertise-addr", "192.168.2.2", "--advertise-port", "36259"}, true, ""},
@@ -83,7 +83,7 @@ func TestStartArgChecking(t *testing.T) {
 	defer func(save server.Config) { serverCfg = save }(serverCfg)
 	defer initCLIDefaults()
 
-	f := StartCmd.Flags()
+	f := startCmd.Flags()
 
 	testCases := []struct {
 		args     []string

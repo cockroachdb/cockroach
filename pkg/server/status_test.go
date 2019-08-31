@@ -43,9 +43,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -94,6 +96,10 @@ func TestStatusJson(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	sqlAddr, err := ts.Gossip().GetNodeIDSQLAddress(nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var nodes serverpb.NodesResponse
 	testutils.SucceedsSoon(t, func() error {
@@ -120,6 +126,9 @@ func TestStatusJson(t *testing.T) {
 			t.Errorf("expected: %d, got: %d", e, a)
 		}
 		if a, e := details.Address, *addr; a != e {
+			t.Errorf("expected: %v, got: %v", e, a)
+		}
+		if a, e := details.SQLAddress, *sqlAddr; a != e {
 			t.Errorf("expected: %v, got: %v", e, a)
 		}
 		if a, e := details.BuildInfo, build.GetInfo(); a != e {
@@ -273,9 +282,9 @@ func TestStatusGetFiles(t *testing.T) {
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
 	rpcContext := newRPCTestContext(ts, rootConfig)
 
-	url := ts.ServingAddr()
+	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -629,6 +638,123 @@ func TestMetricsMetadata(t *testing.T) {
 	}
 }
 
+// TestChartCatalog ensures that the server successfully generates the chart catalog.
+func TestChartCatalogGen(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := startServer(t)
+	defer s.Stopper().Stop(context.TODO())
+
+	metricsMetadata := s.recorder.GetMetricsMetadata()
+
+	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure each of the 7 constant sections of the chart catalog exist.
+	if len(chartCatalog) != 7 {
+		t.Fatal("Chart catalog failed to generate.")
+	}
+
+	for _, section := range chartCatalog {
+		// Ensure that one of the chartSections has defined Subsections.
+		if len(section.Subsections) == 0 {
+			t.Fatalf(`Chart catalog has missing subsections in %v`, section)
+		}
+	}
+}
+
+// findUndefinedMetrics finds metrics listed in pkg/ts/catalog/chart_catalog.go
+// that are not defined. This is most likely caused by a metric being removed.
+func findUndefinedMetrics(c *catalog.ChartSection, metadata map[string]metric.Metadata) []string {
+	var undefinedMetrics []string
+	for _, ic := range c.Charts {
+		for _, metric := range ic.Metrics {
+			_, ok := metadata[metric.Name]
+			if !ok {
+				undefinedMetrics = append(undefinedMetrics, metric.Name)
+			}
+		}
+	}
+
+	for _, x := range c.Subsections {
+		undefinedMetrics = append(undefinedMetrics, findUndefinedMetrics(x, metadata)...)
+	}
+
+	return undefinedMetrics
+}
+
+// deleteSeenMetrics removes all metrics in a section from the metricMetadata map.
+func deleteSeenMetrics(c *catalog.ChartSection, metadata map[string]metric.Metadata, t *testing.T) {
+	// if c.Title == "SQL" {
+	// 	t.Log(c)
+	// }
+	for _, x := range c.Charts {
+		if x.Title == "Connections" || x.Title == "Byte I/O" {
+			t.Log(x)
+		}
+
+		for _, metric := range x.Metrics {
+			if metric.Name == "sql.new_conns" || metric.Name == "sql.bytesin" {
+				t.Logf("found %v\n", metric.Name)
+			}
+			_, ok := metadata[metric.Name]
+			if ok {
+				delete(metadata, metric.Name)
+			}
+		}
+	}
+
+	for _, x := range c.Subsections {
+		deleteSeenMetrics(x, metadata, t)
+	}
+}
+
+// TestChartCatalogMetric ensures that all metrics are included in at least one
+// chart, and that every metric included in a chart is still part of the metrics
+// registry.
+func TestChartCatalogMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := startServer(t)
+	defer s.Stopper().Stop(context.TODO())
+
+	metricsMetadata := s.recorder.GetMetricsMetadata()
+
+	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Each metric referenced in the chartCatalog must have a definition in metricsMetadata
+	var undefinedMetrics []string
+	for _, cs := range chartCatalog {
+		undefinedMetrics = append(undefinedMetrics, findUndefinedMetrics(&cs, metricsMetadata)...)
+	}
+
+	if len(undefinedMetrics) > 0 {
+		t.Fatalf(`The following metrics need are no longer present and  need to be removed
+			from the chart catalog (pkg/ts/chart_catalog.go):%v`, undefinedMetrics)
+	}
+
+	// Each metric in metricsMetadata should have at least one entry in
+	// chartCatalog, which we track by deleting the metric from metricsMetadata.
+	for _, v := range chartCatalog {
+		deleteSeenMetrics(&v, metricsMetadata, t)
+	}
+
+	if len(metricsMetadata) > 0 {
+		var metricNames []string
+		for metricName := range metricsMetadata {
+			metricNames = append(metricNames, metricName)
+		}
+		sort.Strings(metricNames)
+		t.Fatalf(`The following metrics need to be added to the chart catalog (pkg/ts/chart_catalog.go):
+		%v`, metricNames)
+	}
+}
+
 func TestHotRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := startServer(t)
@@ -668,6 +794,7 @@ func TestHotRangesResponse(t *testing.T) {
 				lastQPS = r.QueriesPerSecond
 			}
 		}
+
 	}
 }
 
@@ -823,9 +950,9 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 		EndKey:   []byte(roachpb.RKeyMax),
 	}
 
-	url := ts.ServingAddr()
+	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(ctx)
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -853,9 +980,9 @@ func TestNodesGRPCResponse(t *testing.T) {
 	rpcContext := newRPCTestContext(ts, rootConfig)
 	var request serverpb.NodesRequest
 
-	url := ts.ServingAddr()
+	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1054,9 +1181,9 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 	// interpreting said metadata).
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
 	rpcContext := newRPCTestContext(ts, rootConfig)
-	url := ts.ServingAddr()
+	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1254,9 +1381,9 @@ func TestListSessionsSecurity(t *testing.T) {
 	// gRPC requests behave as root and thus are always allowed.
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
 	rpcContext := newRPCTestContext(ts, rootConfig)
-	url := ts.ServingAddr()
+	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

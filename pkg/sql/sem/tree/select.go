@@ -41,10 +41,43 @@ func (*ValuesClause) selectStatement() {}
 
 // Select represents a SelectStatement with an ORDER and/or LIMIT.
 type Select struct {
-	With    *With
-	Select  SelectStatement
-	OrderBy OrderBy
-	Limit   *Limit
+	With      *With
+	Select    SelectStatement
+	OrderBy   OrderBy
+	Limit     *Limit
+	ForLocked ForLocked
+}
+
+// ForLocked represents the possible row-level lock modes for a SELECT
+// statement.
+type ForLocked byte
+
+const (
+	// ForNone represents the default - no for statement at all.
+	ForNone ForLocked = iota
+	// ForUpdate represents FOR UPDATE.
+	ForUpdate
+	// ForNoKeyUpdate represents FOR NO KEY UPDATE.
+	ForNoKeyUpdate
+	// ForShare represents FOR SHARE.
+	ForShare
+	// ForKeyShare represents FOR KEY SHARE.
+	ForKeyShare
+)
+
+// Format implements the NodeFormatter interface.
+func (f ForLocked) Format(ctx *FmtCtx) {
+	switch f {
+	case ForNone:
+	case ForUpdate:
+		ctx.WriteString(" FOR UPDATE")
+	case ForNoKeyUpdate:
+		ctx.WriteString(" FOR NO KEY UPDATE")
+	case ForShare:
+		ctx.WriteString(" FOR SHARE")
+	case ForKeyShare:
+		ctx.WriteString(" FOR KEY SHARE")
+	}
 }
 
 // Format implements the NodeFormatter interface.
@@ -59,6 +92,7 @@ func (node *Select) Format(ctx *FmtCtx) {
 		ctx.WriteByte(' ')
 		ctx.FormatNode(node.Limit)
 	}
+	ctx.FormatNode(node.ForLocked)
 }
 
 // ParenSelect represents a parenthesized SELECT/UNION/VALUES statement.
@@ -78,7 +112,7 @@ type SelectClause struct {
 	Distinct    bool
 	DistinctOn  DistinctOn
 	Exprs       SelectExprs
-	From        *From
+	From        From
 	Where       *Where
 	GroupBy     GroupBy
 	Having      *Where
@@ -104,7 +138,7 @@ func (node *SelectClause) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.Exprs)
 		if len(node.From.Tables) > 0 {
 			ctx.WriteByte(' ')
-			ctx.FormatNode(node.From)
+			ctx.FormatNode(&node.From)
 		}
 		if node.Where != nil {
 			ctx.WriteByte(' ')
@@ -826,10 +860,25 @@ func (node *WindowFrameBounds) HasOffset() bool {
 	return node.StartBound.HasOffset() || (node.EndBound != nil && node.EndBound.HasOffset())
 }
 
+// WindowFrameExclusion indicates which mode of exclusion is used.
+type WindowFrameExclusion int
+
+const (
+	// NoExclusion represents an omitted frame exclusion clause.
+	NoExclusion WindowFrameExclusion = iota
+	// ExcludeCurrentRow represents EXCLUDE CURRENT ROW mode of frame exclusion.
+	ExcludeCurrentRow
+	// ExcludeGroup represents EXCLUDE GROUP mode of frame exclusion.
+	ExcludeGroup
+	// ExcludeTies represents EXCLUDE TIES mode of frame exclusion.
+	ExcludeTies
+)
+
 // WindowFrame represents static state of window frame over which calculations are made.
 type WindowFrame struct {
-	Mode   WindowFrameMode   // the mode of framing being used
-	Bounds WindowFrameBounds // the bounds of the frame
+	Mode      WindowFrameMode      // the mode of framing being used
+	Bounds    WindowFrameBounds    // the bounds of the frame
+	Exclusion WindowFrameExclusion // optional frame exclusion
 }
 
 // Format implements the NodeFormatter interface.
@@ -853,6 +902,24 @@ func (node *WindowFrameBound) Format(ctx *FmtCtx) {
 }
 
 // Format implements the NodeFormatter interface.
+func (node WindowFrameExclusion) Format(ctx *FmtCtx) {
+	if node == NoExclusion {
+		return
+	}
+	ctx.WriteString("EXCLUDE ")
+	switch node {
+	case ExcludeCurrentRow:
+		ctx.WriteString("CURRENT ROW")
+	case ExcludeGroup:
+		ctx.WriteString("GROUP")
+	case ExcludeTies:
+		ctx.WriteString("TIES")
+	default:
+		panic(errors.AssertionFailedf("unhandled case: %d", log.Safe(node)))
+	}
+}
+
+// Format implements the NodeFormatter interface.
 func (node *WindowFrame) Format(ctx *FmtCtx) {
 	switch node.Mode {
 	case RANGE:
@@ -871,5 +938,9 @@ func (node *WindowFrame) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.Bounds.EndBound)
 	} else {
 		ctx.FormatNode(node.Bounds.StartBound)
+	}
+	if node.Exclusion != NoExclusion {
+		ctx.WriteByte(' ')
+		ctx.FormatNode(node.Exclusion)
 	}
 }

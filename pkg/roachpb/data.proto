@@ -157,14 +157,27 @@ enum ReplicaChangeType {
   REMOVE_REPLICA = 1;
 }
 
+// ChangeReplicasTrigger carries out a replication change. The Added() and Removed()
+// methods return the replicas being added and removed, respectively. If more than
+// one change is specified (i.e. len(Added())+len(Removed()) exceeds one), this
+// initiates an atomic replication change in which the "removed" replicas are
+// of type VOTER_OUTGOING. This joint configuration is left via another
+// ChangeReplicasTrigger which does not specify any additions nor removals.
 message ChangeReplicasTrigger {
   option (gogoproto.equal) = true;
 
   option (gogoproto.goproto_stringer) = false;
 
-  ReplicaChangeType change_type = 1;
+  // TODO(tbg): remove once we know that no trigger using this will ever be
+  // applied (this will require something like #39182).
+  //
+  // TODO(tbg): when removing this, also rename internal_x_replicas to just
+  // x_replicas and remove the getter.
+  ReplicaChangeType deprecated_change_type = 1;
   // The replica being modified.
-  ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
+  // TODO(tbg): remove once we know that no trigger using this will ever be
+  // applied (this will require something like #39182).
+  ReplicaDescriptor deprecated_replica = 2 [(gogoproto.nullable) = false];
   // The new replica list with this change applied.
   repeated ReplicaDescriptor deprecated_updated_replicas = 3 [(gogoproto.nullable) = false];
   // The next replica id to use with this change applied.
@@ -175,6 +188,16 @@ message ChangeReplicasTrigger {
   // TODO(jeffreyxiao): Remove deprecated_updated_replicas and
   // deprecated_next_replica_id in 20.1.
   RangeDescriptor desc = 5;
+  // The new replicas added to the range descriptor in this change, exactly as
+  // they appear in the updated range descriptor.
+  repeated ReplicaDescriptor internal_added_replicas = 6 [(gogoproto.nullable) = false];
+  // The replicas whose removal is being initiated in this change. If the
+  // replica is still present as an outgoing voter in the updated descriptor
+  // (i.e. if this is a full atomic replication change), then the replica here
+  // must match that in the descriptor; otherwise it must match the replica
+  // removed from the descriptor in the course of this change (which is itself
+  // not visible to this trigger).
+  repeated ReplicaDescriptor internal_removed_replicas = 7 [(gogoproto.nullable) = false];
 }
 
 // ModifiedSpanTrigger indicates that a specific span has been modified.
@@ -352,6 +375,8 @@ message Transaction {
   // this list is to avoid uncertainty related restarts which normally occur
   // when reading a value in the near future as per the max_timestamp field.
   //
+  // ### Meaning:
+  //
   // Morally speaking, having an entry for a node in this list means that this
   // node has been visited before, and that no more uncertainty restarts are
   // expected for operations served from it. However, this is not entirely
@@ -368,6 +393,8 @@ message Transaction {
   // with a timestamp that is at least high as our entry in the list for node A,
   // so no future operation on node A will be uncertain.
   //
+  // ### Correctness:
+  //
   // Thus, expressed properly, we can say that when a node has been read from
   // successfully before by a transaction, uncertainty for values written by a
   // leaseholder on that node is restricted to values with timestamps in the
@@ -375,12 +402,14 @@ message Transaction {
   // placed on the uncertainty window because we are guaranteed that at the time
   // that the transaction first visited the node, none of the Ranges that it was
   // a leaseholder for had served any writes at higher timestamps than the clock
-  // reading we observe. This implies that any writes that the transaction may
-  // later see written by leaseholders on this node at higher timestamps than
-  // the observed timestamp could not have taken place causally before this
-  // transaction and can be ignored for the purposes of uncertainty.
+  // reading we observe. This implies the following property:
   //
-  // There are two invariants necessary for this guarantee to hold:
+  //    Any writes that the transaction may later see written by leaseholders on
+  //    this node at higher timestamps than the observed timestamp could not have
+  //    taken place causally before this transaction and can be ignored for the
+  //    purposes of uncertainty.
+  //
+  // There are two invariants necessary for this property to hold:
   // 1. a leaseholder's clock must always be equal to or greater than the timestamp
   //    of all writes that it has served. This is trivial to enforce for
   //    non-transactional writes. It is more complicated for transactional writes
@@ -400,11 +429,24 @@ message Transaction {
   //    invariant holds for all leaseholders, given that a Range's initial
   //    leaseholder assumes responsibility for an empty range with no writes.
   //
+  // ### Usage:
   //
-  // When this list holds a corresponding entry for the node who owns that lease
-  // that the current request is executing under, we can run the command with
-  // the list's timestamp as the top boundary of our uncertainty interval,
-  // limiting (and often avoiding) uncertainty restarts.
+  // The property ensures that when this list holds a corresponding entry for
+  // the node who owns the lease that the current request is executing under, we
+  // can run the request with the list's timestamp as the upper bound for its
+  // uncertainty interval, limiting (and often avoiding) uncertainty restarts.
+  // We do this by lowering the request's max_timestamp down to the timestamp in
+  // the observed timestamp entry, which is done in Replica.limitTxnMaxTimestamp.
+  //
+  // However, as stated, the correctness property only holds for values at
+  // higher timestamps than the observed timestamp written *by leaseholders on
+  // this node*. This is critical, as the property tells us nothing about values
+  // written by leaseholders on different nodes, even if a lease for one of
+  // those Ranges has since moved to a node that we have an observed timestamp
+  // entry for. To accommodate this limitation, Replica.limitTxnMaxTimestamp
+  // first forwards the timestamp in the observed timestamp entry by the start
+  // timestamp of the lease that the request is executing under before using it
+  // to limit the request's uncertainty interval.
   //
   // When a transaction is first initialized on a node, it may use a timestamp
   // from the local hybrid logical clock to initialize the corresponding entry

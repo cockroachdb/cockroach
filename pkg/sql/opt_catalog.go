@@ -167,7 +167,7 @@ func (oc *optCatalog) ResolveDataSource(
 	}
 
 	oc.tn = *name
-	desc, err := ResolveExistingObject(ctx, oc.planner, &oc.tn, true /* required */, ResolveAnyDescType)
+	desc, err := ResolveExistingObject(ctx, oc.planner, &oc.tn, tree.ObjectLookupFlagsWithRequired(), ResolveAnyDescType)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
@@ -180,67 +180,110 @@ func (oc *optCatalog) ResolveDataSource(
 
 // ResolveDataSourceByID is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveDataSourceByID(
-	ctx context.Context, dataSourceID cat.StableID,
-) (cat.DataSource, error) {
+	ctx context.Context, flags cat.Flags, dataSourceID cat.StableID,
+) (_ cat.DataSource, isAdding bool, _ error) {
+	if flags.AvoidDescriptorCaches {
+		defer func(prev bool) {
+			oc.planner.avoidCachedDescriptors = prev
+		}(oc.planner.avoidCachedDescriptors)
+		oc.planner.avoidCachedDescriptors = true
+	}
+
 	tableLookup, err := oc.planner.LookupTableByID(ctx, sqlbase.ID(dataSourceID))
 
 	if err != nil || tableLookup.IsAdding {
 		if err == sqlbase.ErrDescriptorNotFound || tableLookup.IsAdding {
-			return nil, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
+			return nil, tableLookup.IsAdding, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
 		}
-		return nil, err
-	}
-	desc := tableLookup.Desc
-
-	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, oc.planner.Txn(), desc.ParentID)
-	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	name := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name))
-	return oc.dataSourceForDesc(ctx, cat.Flags{}, desc, &name)
+	// The name is only used for virtual tables, which can't be looked up by ID.
+	ds, err := oc.dataSourceForDesc(ctx, cat.Flags{}, tableLookup.Desc, &tree.TableName{})
+	return ds, false, err
+}
+
+func getDescForCatalogObject(o cat.Object) (sqlbase.DescriptorProto, error) {
+	switch t := o.(type) {
+	case *optSchema:
+		return t.desc, nil
+	case *optTable:
+		return t.desc, nil
+	case *optVirtualTable:
+		return t.desc, nil
+	case *optView:
+		return t.desc, nil
+	case *optSequence:
+		return t.desc, nil
+	default:
+		return nil, errors.AssertionFailedf("invalid object type: %T", o)
+	}
+}
+
+func getDescForDataSource(o cat.DataSource) (*sqlbase.ImmutableTableDescriptor, error) {
+	switch t := o.(type) {
+	case *optTable:
+		return t.desc, nil
+	case *optVirtualTable:
+		return t.desc, nil
+	case *optView:
+		return t.desc, nil
+	case *optSequence:
+		return t.desc, nil
+	default:
+		return nil, errors.AssertionFailedf("invalid object type: %T", o)
+	}
 }
 
 // CheckPrivilege is part of the cat.Catalog interface.
 func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
-	switch t := o.(type) {
-	case *optSchema:
-		return oc.planner.CheckPrivilege(ctx, t.desc, priv)
-	case *optTable:
-		return oc.planner.CheckPrivilege(ctx, t.desc, priv)
-	case *optView:
-		return oc.planner.CheckPrivilege(ctx, t.desc, priv)
-	case *optSequence:
-		return oc.planner.CheckPrivilege(ctx, t.desc, priv)
-	default:
-		return errors.AssertionFailedf("invalid object type: %T", o)
+	desc, err := getDescForCatalogObject(o)
+	if err != nil {
+		return err
 	}
+	return oc.planner.CheckPrivilege(ctx, desc, priv)
 }
 
 // CheckAnyPrivilege is part of the cat.Catalog interface.
 func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
-	switch t := o.(type) {
-	case *optSchema:
-		return oc.planner.CheckAnyPrivilege(ctx, t.desc)
-	case *optTable:
-		return oc.planner.CheckAnyPrivilege(ctx, t.desc)
-	case *optView:
-		return oc.planner.CheckAnyPrivilege(ctx, t.desc)
-	case *optSequence:
-		return oc.planner.CheckAnyPrivilege(ctx, t.desc)
-	default:
-		return errors.AssertionFailedf("invalid object type: %T", o)
+	desc, err := getDescForCatalogObject(o)
+	if err != nil {
+		return err
 	}
+	return oc.planner.CheckAnyPrivilege(ctx, desc)
 }
 
-// IsSuperUser is part of the cat.Catalog interface.
-func (oc *optCatalog) IsSuperUser(ctx context.Context, action string) (bool, error) {
-	return oc.planner.IsSuperUser(ctx, action)
+// HasAdminRole is part of the cat.Catalog interface.
+func (oc *optCatalog) HasAdminRole(ctx context.Context) (bool, error) {
+	return oc.planner.HasAdminRole(ctx)
 }
 
-// RequireSuperUser is part of the cat.Catalog interface.
-func (oc *optCatalog) RequireSuperUser(ctx context.Context, action string) error {
-	return oc.planner.RequireSuperUser(ctx, action)
+// RequireAdminRole is part of the cat.Catalog interface.
+func (oc *optCatalog) RequireAdminRole(ctx context.Context, action string) error {
+	return oc.planner.RequireAdminRole(ctx, action)
+}
+
+// FullyQualifiedName is part of the cat.Catalog interface.
+func (oc *optCatalog) FullyQualifiedName(
+	ctx context.Context, ds cat.DataSource,
+) (cat.DataSourceName, error) {
+	if vt, ok := ds.(*optVirtualTable); ok {
+		// Virtual tables require special handling, because they can have multiple
+		// effective instances that utilize the same descriptor.
+		return vt.name, nil
+	}
+
+	desc, err := getDescForDataSource(ds)
+	if err != nil {
+		return cat.DataSourceName{}, err
+	}
+
+	dbID := desc.ParentID
+	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, oc.planner.Txn(), dbID)
+	if err != nil {
+		return cat.DataSourceName{}, err
+	}
+	return tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name)), nil
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
@@ -263,10 +306,10 @@ func (oc *optCatalog) dataSourceForDesc(
 
 	switch {
 	case desc.IsView():
-		ds = newOptView(desc, name)
+		ds = newOptView(desc)
 
 	case desc.IsSequence():
-		ds = newOptSequence(desc, name)
+		ds = newOptSequence(desc)
 
 	default:
 		return nil, errors.AssertionFailedf("unexpected table descriptor: %+v", desc)
@@ -284,6 +327,13 @@ func (oc *optCatalog) dataSourceForTable(
 	desc *sqlbase.ImmutableTableDescriptor,
 	name *cat.DataSourceName,
 ) (cat.DataSource, error) {
+	if desc.IsVirtualTable() {
+		// Virtual tables can have multiple effective instances that utilize the
+		// same descriptor, so we can't cache them (see the comment for
+		// optVirtualTable.id for more information).
+		return newOptVirtualTable(ctx, oc, desc, name)
+	}
+
 	// Even if we have a cached data source, we still have to cross-check that
 	// statistics and the zone config haven't changed.
 	var tableStats []*stats.TableStatistic
@@ -309,52 +359,11 @@ func (oc *optCatalog) dataSourceForTable(
 		return ds, nil
 	}
 
-	id := cat.StableID(desc.ID)
-	if desc.IsVirtualTable() {
-		// A virtual table can effectively have multiple instances, with different
-		// contents. For example `db1.pg_catalog.pg_sequence` contains info about
-		// sequences in db1, whereas `db2.pg_catalog.pg_sequence` contains info
-		// about sequences in db2.
-		//
-		// These instances should have different stable IDs. To achieve this, we
-		// prepend the database ID.
-		//
-		// Note that some virtual tables have a special instance with empty catalog,
-		// for example "".information_schema.tables contains info about tables in
-		// all databases. We treat the empty catalog as having database ID 0.
-		if name.Catalog() != "" {
-			// TODO(radu): it's unfortunate that we have to lookup the schema again.
-			_, dbDesc, err := oc.planner.LookupSchema(ctx, name.Catalog(), name.Schema())
-			if err != nil {
-				return nil, err
-			}
-			if dbDesc == nil {
-				// The database was not found. This can happen e.g. when
-				// accessing a virtual schema over a non-existent
-				// database. This is a common scenario when the current db
-				// in the session points to a database that was not created
-				// yet.
-				//
-				// In that case we use an invalid database ID. We
-				// distinguish this from the empty database case because the
-				// virtual tables do not "contain" the same information in
-				// both cases.
-				id |= cat.StableID(math.MaxUint32) << 32
-			} else {
-				id |= cat.StableID(dbDesc.(*DatabaseDescriptor).ID) << 32
-			}
-		}
-	}
-
-	ds, err := newOptTable(desc, id, name, tableStats, zoneConfig)
+	ds, err := newOptTable(desc, tableStats, zoneConfig)
 	if err != nil {
 		return nil, err
 	}
-	if !desc.IsVirtualTable() {
-		// Virtual tables can have multiple effective instances that utilize the
-		// same descriptor (see above).
-		oc.dataSources[desc] = ds
-	}
+	oc.dataSources[desc] = ds
 	return ds, nil
 }
 
@@ -388,22 +397,12 @@ func (oc *optCatalog) getZoneConfig(
 // the cat.Object, cat.DataSource, and cat.View interfaces.
 type optView struct {
 	desc *sqlbase.ImmutableTableDescriptor
-
-	// name is the fully qualified, fully resolved, fully normalized name of
-	// the view.
-	name cat.DataSourceName
 }
 
 var _ cat.View = &optView{}
 
-func newOptView(desc *sqlbase.ImmutableTableDescriptor, name *cat.DataSourceName) *optView {
-	ov := &optView{desc: desc, name: *name}
-
-	// The cat.View interface requires that view names be fully qualified.
-	ov.name.ExplicitSchema = true
-	ov.name.ExplicitCatalog = true
-
-	return ov
+func newOptView(desc *sqlbase.ImmutableTableDescriptor) *optView {
+	return &optView{desc: desc}
 }
 
 // ID is part of the cat.Object interface.
@@ -421,8 +420,13 @@ func (ov *optView) Equals(other cat.Object) bool {
 }
 
 // Name is part of the cat.View interface.
-func (ov *optView) Name() *cat.DataSourceName {
-	return &ov.name
+func (ov *optView) Name() tree.Name {
+	return tree.Name(ov.desc.Name)
+}
+
+// IsSystemView is part of the cat.View interface.
+func (ov *optView) IsSystemView() bool {
+	return ov.desc.IsVirtualTable()
 }
 
 // Query is part of the cat.View interface.
@@ -444,23 +448,13 @@ func (ov *optView) ColumnName(i int) tree.Name {
 // implements the cat.Object and cat.DataSource interfaces.
 type optSequence struct {
 	desc *sqlbase.ImmutableTableDescriptor
-
-	// name is the fully qualified, fully resolved, fully normalized name of the
-	// sequence.
-	name cat.DataSourceName
 }
 
 var _ cat.DataSource = &optSequence{}
 var _ cat.Sequence = &optSequence{}
 
-func newOptSequence(desc *sqlbase.ImmutableTableDescriptor, name *cat.DataSourceName) *optSequence {
-	os := &optSequence{desc: desc, name: *name}
-
-	// The cat.Sequence interface requires that table names be fully qualified.
-	os.name.ExplicitSchema = true
-	os.name.ExplicitCatalog = true
-
-	return os
+func newOptSequence(desc *sqlbase.ImmutableTableDescriptor) *optSequence {
+	return &optSequence{desc: desc}
 }
 
 // ID is part of the cat.Object interface.
@@ -477,27 +471,18 @@ func (os *optSequence) Equals(other cat.Object) bool {
 	return os.desc.ID == otherSeq.desc.ID && os.desc.Version == otherSeq.desc.Version
 }
 
-// Name is part of the cat.DataSource interface.
-func (os *optSequence) Name() *cat.DataSourceName {
-	return &os.name
+// Name is part of the cat.Sequence interface.
+func (os *optSequence) Name() tree.Name {
+	return tree.Name(os.desc.Name)
 }
 
-// SequenceName is part of the cat.Sequence interface.
-func (os *optSequence) SequenceName() *tree.TableName {
-	return os.Name()
-}
+// SequenceMarker is part of the cat.Sequence interface.
+func (os *optSequence) SequenceMarker() {}
 
 // optTable is a wrapper around sqlbase.ImmutableTableDescriptor that caches
 // index wrappers and maintains a ColumnID => Column mapping for fast lookup.
 type optTable struct {
 	desc *sqlbase.ImmutableTableDescriptor
-
-	// This is the descriptor ID, except for virtual tables.
-	id cat.StableID
-
-	// name is the fully qualified, fully resolved, fully normalized name of the
-	// table.
-	name cat.DataSourceName
 
 	// indexes are the inlined wrappers for the table's primary and secondary
 	// indexes.
@@ -534,23 +519,13 @@ type optTable struct {
 var _ cat.Table = &optTable{}
 
 func newOptTable(
-	desc *sqlbase.ImmutableTableDescriptor,
-	id cat.StableID,
-	name *cat.DataSourceName,
-	stats []*stats.TableStatistic,
-	tblZone *config.ZoneConfig,
+	desc *sqlbase.ImmutableTableDescriptor, stats []*stats.TableStatistic, tblZone *config.ZoneConfig,
 ) (*optTable, error) {
 	ot := &optTable{
 		desc:     desc,
-		id:       id,
-		name:     *name,
 		rawStats: stats,
 		zone:     tblZone,
 	}
-
-	// The cat.Table interface requires that table names be fully qualified.
-	ot.name.ExplicitSchema = true
-	ot.name.ExplicitCatalog = true
 
 	// Create the table's column mapping from sqlbase.ColumnID to column ordinal.
 	ot.colMap = make(map[sqlbase.ColumnID]int, ot.DeletableColumnCount())
@@ -558,76 +533,66 @@ func newOptTable(
 		ot.colMap[sqlbase.ColumnID(ot.Column(i).ColID())] = i
 	}
 
-	if !ot.desc.IsVirtualTable() {
-		// Build the indexes (add 1 to account for lack of primary index in
-		// DeletableIndexes slice).
-		ot.indexes = make([]optIndex, 1+len(ot.desc.DeletableIndexes()))
+	// Build the indexes (add 1 to account for lack of primary index in
+	// DeletableIndexes slice).
+	ot.indexes = make([]optIndex, 1+len(ot.desc.DeletableIndexes()))
 
-		for i := range ot.indexes {
-			var idxDesc *sqlbase.IndexDescriptor
-			if i == 0 {
-				idxDesc = &desc.PrimaryIndex
-			} else {
-				idxDesc = &ot.desc.DeletableIndexes()[i-1]
-			}
+	for i := range ot.indexes {
+		var idxDesc *sqlbase.IndexDescriptor
+		if i == 0 {
+			idxDesc = &desc.PrimaryIndex
+		} else {
+			idxDesc = &ot.desc.DeletableIndexes()[i-1]
+		}
 
-			// If there is a subzone that applies to the entire index, use that,
-			// else use the table zone. Skip subzones that apply to partitions,
-			// since they apply only to a subset of the index.
-			idxZone := tblZone
-			for j := range tblZone.Subzones {
-				subzone := &tblZone.Subzones[j]
-				if subzone.IndexID == uint32(idxDesc.ID) && subzone.PartitionName == "" {
-					copyZone := subzone.Config
-					copyZone.InheritFromParent(tblZone)
-					idxZone = &copyZone
-				}
-			}
-
-			ot.indexes[i].init(ot, i, idxDesc, idxZone)
-			if fk := &idxDesc.ForeignKey; fk.IsSet() {
-				ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
-					name:            idxDesc.ForeignKey.Name,
-					originTable:     ot.id,
-					originIndex:     idxDesc.ID,
-					referencedTable: cat.StableID(fk.Table),
-					referencedIndex: fk.Index,
-					numCols:         int(fk.SharedPrefixLen),
-					validity:        fk.Validity,
-					match:           fk.Match,
-				})
-			}
-			for j := range idxDesc.ReferencedBy {
-				fk := &idxDesc.ReferencedBy[j]
-				ot.inboundFKs = append(ot.inboundFKs, optForeignKeyConstraint{
-					name:            idxDesc.ForeignKey.Name,
-					originTable:     cat.StableID(fk.Table),
-					originIndex:     fk.Index,
-					referencedTable: ot.id,
-					referencedIndex: idxDesc.ID,
-					numCols:         int(fk.SharedPrefixLen),
-					validity:        fk.Validity,
-					match:           fk.Match,
-				})
+		// If there is a subzone that applies to the entire index, use that,
+		// else use the table zone. Skip subzones that apply to partitions,
+		// since they apply only to a subset of the index.
+		idxZone := tblZone
+		for j := range tblZone.Subzones {
+			subzone := &tblZone.Subzones[j]
+			if subzone.IndexID == uint32(idxDesc.ID) && subzone.PartitionName == "" {
+				copyZone := subzone.Config
+				copyZone.InheritFromParent(tblZone)
+				idxZone = &copyZone
 			}
 		}
+		ot.indexes[i].init(ot, i, idxDesc, idxZone)
 	}
 
-	if len(desc.Families) == 0 {
-		// This must be a virtual table, so synthesize a primary family. Only
-		// column ids are needed by the family wrapper.
-		family := &sqlbase.ColumnFamilyDescriptor{Name: "primary", ID: 0}
-		family.ColumnIDs = make([]sqlbase.ColumnID, len(desc.Columns))
-		for i := range family.ColumnIDs {
-			family.ColumnIDs[i] = desc.Columns[i].ID
-		}
-		ot.primaryFamily.init(ot, family)
-	} else {
-		ot.primaryFamily.init(ot, &desc.Families[0])
-		ot.families = make([]optFamily, len(desc.Families)-1)
-		for i := range ot.families {
-			ot.families[i].init(ot, &desc.Families[i+1])
-		}
+	for i := range ot.desc.OutboundFKs {
+		fk := &ot.desc.OutboundFKs[i]
+		ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
+			name:              fk.Name,
+			originTable:       ot.ID(),
+			originColumns:     fk.OriginColumnIDs,
+			referencedTable:   cat.StableID(fk.ReferencedTableID),
+			referencedColumns: fk.ReferencedColumnIDs,
+			validity:          fk.Validity,
+			match:             fk.Match,
+			deleteAction:      fk.OnDelete,
+			updateAction:      fk.OnUpdate,
+		})
+	}
+	for i := range ot.desc.InboundFKs {
+		fk := &ot.desc.InboundFKs[i]
+		ot.inboundFKs = append(ot.inboundFKs, optForeignKeyConstraint{
+			name:              fk.Name,
+			originTable:       cat.StableID(fk.OriginTableID),
+			originColumns:     fk.OriginColumnIDs,
+			referencedTable:   ot.ID(),
+			referencedColumns: fk.ReferencedColumnIDs,
+			validity:          fk.Validity,
+			match:             fk.Match,
+			deleteAction:      fk.OnDelete,
+			updateAction:      fk.OnUpdate,
+		})
+	}
+
+	ot.primaryFamily.init(ot, &desc.Families[0])
+	ot.families = make([]optFamily, len(desc.Families)-1)
+	for i := range ot.families {
+		ot.families[i].init(ot, &desc.Families[i+1])
 	}
 
 	// Add stats last, now that other metadata is initialized.
@@ -650,7 +615,7 @@ func newOptTable(
 
 // ID is part of the cat.Object interface.
 func (ot *optTable) ID() cat.StableID {
-	return ot.id
+	return cat.StableID(ot.desc.ID)
 }
 
 // isStale checks if the optTable object needs to be refreshed because the stats
@@ -682,7 +647,7 @@ func (ot *optTable) Equals(other cat.Object) bool {
 		// Fast path when it is the same object.
 		return true
 	}
-	if ot.id != otherTable.id || ot.desc.Version != otherTable.desc.Version {
+	if ot.desc.ID != otherTable.desc.ID || ot.desc.Version != otherTable.desc.Version {
 		return false
 	}
 
@@ -715,14 +680,14 @@ func (ot *optTable) Equals(other cat.Object) bool {
 	return true
 }
 
-// Name is part of the cat.DataSource interface.
-func (ot *optTable) Name() *cat.DataSourceName {
-	return &ot.name
+// Name is part of the cat.Table interface.
+func (ot *optTable) Name() tree.Name {
+	return tree.Name(ot.desc.Name)
 }
 
 // IsVirtualTable is part of the cat.Table interface.
 func (ot *optTable) IsVirtualTable() bool {
-	return ot.desc.IsVirtualTable()
+	return false
 }
 
 // IsInterleaved is part of the cat.Table interface.
@@ -752,33 +717,24 @@ func (ot *optTable) Column(i int) cat.Column {
 
 // IndexCount is part of the cat.Table interface.
 func (ot *optTable) IndexCount() int {
-	if ot.desc.IsVirtualTable() {
-		return 0
-	}
 	// Primary index is always present, so count is always >= 1.
 	return 1 + len(ot.desc.Indexes)
 }
 
 // WritableIndexCount is part of the cat.Table interface.
 func (ot *optTable) WritableIndexCount() int {
-	if ot.desc.IsVirtualTable() {
-		return 0
-	}
 	// Primary index is always present, so count is always >= 1.
 	return 1 + len(ot.desc.WritableIndexes())
 }
 
 // DeletableIndexCount is part of the cat.Table interface.
 func (ot *optTable) DeletableIndexCount() int {
-	if ot.desc.IsVirtualTable() {
-		return 0
-	}
 	// Primary index is always present, so count is always >= 1.
 	return 1 + len(ot.desc.DeletableIndexes())
 }
 
 // Index is part of the cat.Table interface.
-func (ot *optTable) Index(i int) cat.Index {
+func (ot *optTable) Index(i cat.IndexOrdinal) cat.Index {
 	return &ot.indexes[i]
 }
 
@@ -1015,6 +971,35 @@ func (oi *optIndex) Ordinal() int {
 	return oi.indexOrdinal
 }
 
+// PartitionByListPrefixes is part of the cat.Index interface.
+func (oi *optIndex) PartitionByListPrefixes() []tree.Datums {
+	list := oi.desc.Partitioning.List
+	if len(list) == 0 {
+		return nil
+	}
+	res := make([]tree.Datums, 0, len(list))
+	var a sqlbase.DatumAlloc
+	for i := range list {
+		for _, valueEncBuf := range list[i].Values {
+			t, _, err := sqlbase.DecodePartitionTuple(
+				&a, &oi.tab.desc.TableDescriptor, oi.desc, &oi.desc.Partitioning,
+				valueEncBuf, nil, /* prefixDatums */
+			)
+			if err != nil {
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "while decoding partition tuple"))
+			}
+			// Ignore the DEFAULT case, where there is nothing to return.
+			if len(t.Datums) > 0 {
+				res = append(res, t.Datums)
+			}
+			// TODO(radu): split into multiple prefixes if Subpartition is also by list.
+			// Note that this functionality should be kept in sync with the test catalog
+			// implementation (test_catalog.go).
+		}
+	}
+	return res
+}
+
 type optTableStat struct {
 	createdAt      time.Time
 	columnOrdinals []int
@@ -1054,9 +1039,10 @@ func (os *optTableStat) init(tab *optTable, stat *stats.TableStatistic) (ok bool
 				return false, err
 			}
 			os.histogram[i] = cat.HistogramBucket{
-				NumEq:      uint64(bucket.NumEq),
-				NumRange:   uint64(bucket.NumRange),
-				UpperBound: datum,
+				NumEq:         float64(bucket.NumEq),
+				NumRange:      float64(bucket.NumRange),
+				DistinctRange: bucket.DistinctRange,
+				UpperBound:    datum,
 			}
 		}
 	}
@@ -1161,15 +1147,16 @@ func (oi *optFamily) Table() cat.Table {
 type optForeignKeyConstraint struct {
 	name string
 
-	originTable cat.StableID
-	originIndex sqlbase.IndexID
+	originTable   cat.StableID
+	originColumns []sqlbase.ColumnID
 
-	referencedTable cat.StableID
-	referencedIndex sqlbase.IndexID
+	referencedTable   cat.StableID
+	referencedColumns []sqlbase.ColumnID
 
-	numCols  int
-	validity sqlbase.ConstraintValidity
-	match    sqlbase.ForeignKeyReference_Match
+	validity     sqlbase.ConstraintValidity
+	match        sqlbase.ForeignKeyReference_Match
+	deleteAction sqlbase.ForeignKeyReference_Action
+	updateAction sqlbase.ForeignKeyReference_Action
 }
 
 var _ cat.ForeignKeyConstraint = &optForeignKeyConstraint{}
@@ -1191,7 +1178,7 @@ func (fk *optForeignKeyConstraint) ReferencedTableID() cat.StableID {
 
 // ColumnCount is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) ColumnCount() int {
-	return fk.numCols
+	return len(fk.originColumns)
 }
 
 // OriginColumnOrdinal is part of the cat.ForeignKeyConstraint interface.
@@ -1204,12 +1191,7 @@ func (fk *optForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i 
 	}
 
 	tab := originTable.(*optTable)
-	index, err := tab.desc.FindIndexByID(fk.originIndex)
-	if err != nil {
-		panic(errors.AssertionFailedf("%v", err))
-	}
-
-	ord, _ := tab.lookupColumnOrdinal(index.ColumnIDs[i])
+	ord, _ := tab.lookupColumnOrdinal(fk.originColumns[i])
 	return ord
 }
 
@@ -1222,12 +1204,7 @@ func (fk *optForeignKeyConstraint) ReferencedColumnOrdinal(referencedTable cat.T
 		))
 	}
 	tab := referencedTable.(*optTable)
-	index, err := tab.desc.FindIndexByID(fk.referencedIndex)
-	if err != nil {
-		panic(errors.AssertionFailedf("%v", err))
-	}
-
-	ord, _ := tab.lookupColumnOrdinal(index.ColumnIDs[i])
+	ord, _ := tab.lookupColumnOrdinal(fk.referencedColumns[i])
 	return ord
 }
 
@@ -1239,4 +1216,254 @@ func (fk *optForeignKeyConstraint) Validated() bool {
 // MatchMethod is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) MatchMethod() tree.CompositeKeyMatchMethod {
 	return sqlbase.ForeignKeyReferenceMatchValue[fk.match]
+}
+
+// DeleteReferenceAction is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) DeleteReferenceAction() tree.ReferenceAction {
+	return sqlbase.ForeignKeyReferenceActionType[fk.deleteAction]
+}
+
+// UpdateReferenceAction is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) UpdateReferenceAction() tree.ReferenceAction {
+	return sqlbase.ForeignKeyReferenceActionType[fk.updateAction]
+}
+
+// optVirtualTable is similar to optTable but is used with virtual tables.
+type optVirtualTable struct {
+	desc *sqlbase.ImmutableTableDescriptor
+
+	// A virtual table can effectively have multiple instances, with different
+	// contents. For example `db1.pg_catalog.pg_sequence` contains info about
+	// sequences in db1, whereas `db2.pg_catalog.pg_sequence` contains info about
+	// sequences in db2.
+	//
+	// These instances should have different stable IDs. To achieve this, the
+	// stable ID is the database ID concatenated with the descriptor ID.
+	//
+	// Note that some virtual tables have a special instance with empty catalog,
+	// for example "".information_schema.tables contains info about tables in
+	// all databases. We treat the empty catalog as having database ID 0.
+	id cat.StableID
+
+	// name is the fully qualified, fully resolved, fully normalized name of the
+	// virtual table.
+	name cat.DataSourceName
+
+	// family is a synthesized primary family.
+	family optVirtualFamily
+}
+
+var _ cat.Table = &optVirtualTable{}
+
+func newOptVirtualTable(
+	ctx context.Context,
+	oc *optCatalog,
+	desc *sqlbase.ImmutableTableDescriptor,
+	name *cat.DataSourceName,
+) (*optVirtualTable, error) {
+	// Calculate the stable ID (see the comment for optVirtualTable.id).
+	id := cat.StableID(desc.ID)
+	if name.Catalog() != "" {
+		// TODO(radu): it's unfortunate that we have to lookup the schema again.
+		_, dbDesc, err := oc.planner.LookupSchema(ctx, name.Catalog(), name.Schema())
+		if err != nil {
+			return nil, err
+		}
+		if dbDesc == nil {
+			// The database was not found. This can happen e.g. when
+			// accessing a virtual schema over a non-existent
+			// database. This is a common scenario when the current db
+			// in the session points to a database that was not created
+			// yet.
+			//
+			// In that case we use an invalid database ID. We
+			// distinguish this from the empty database case because the
+			// virtual tables do not "contain" the same information in
+			// both cases.
+			id |= cat.StableID(math.MaxUint32) << 32
+		} else {
+			id |= cat.StableID(dbDesc.(*DatabaseDescriptor).ID) << 32
+		}
+	}
+
+	ot := &optVirtualTable{
+		desc: desc,
+		id:   id,
+		name: *name,
+	}
+
+	ot.name.ExplicitSchema = true
+	ot.name.ExplicitCatalog = true
+
+	ot.family.init(ot)
+
+	return ot, nil
+}
+
+// ID is part of the cat.Object interface.
+func (ot *optVirtualTable) ID() cat.StableID {
+	return ot.id
+}
+
+// Equals is part of the cat.Object interface.
+func (ot *optVirtualTable) Equals(other cat.Object) bool {
+	otherTable, ok := other.(*optVirtualTable)
+	if !ok {
+		return false
+	}
+	if ot == otherTable {
+		// Fast path when it is the same object.
+		return true
+	}
+	if ot.id != otherTable.id || ot.desc.Version != otherTable.desc.Version {
+		return false
+	}
+
+	return true
+}
+
+// Name is part of the cat.Table interface.
+func (ot *optVirtualTable) Name() tree.Name {
+	return ot.name.TableName
+}
+
+// IsVirtualTable is part of the cat.Table interface.
+func (ot *optVirtualTable) IsVirtualTable() bool {
+	return true
+}
+
+// IsInterleaved is part of the cat.Table interface.
+func (ot *optVirtualTable) IsInterleaved() bool {
+	return ot.desc.IsInterleaved()
+}
+
+// ColumnCount is part of the cat.Table interface.
+func (ot *optVirtualTable) ColumnCount() int {
+	return len(ot.desc.Columns)
+}
+
+// WritableColumnCount is part of the cat.Table interface.
+func (ot *optVirtualTable) WritableColumnCount() int {
+	return len(ot.desc.WritableColumns())
+}
+
+// DeletableColumnCount is part of the cat.Table interface.
+func (ot *optVirtualTable) DeletableColumnCount() int {
+	return len(ot.desc.DeletableColumns())
+}
+
+// Column is part of the cat.Table interface.
+func (ot *optVirtualTable) Column(i int) cat.Column {
+	return &ot.desc.DeletableColumns()[i]
+}
+
+// IndexCount is part of the cat.Table interface.
+func (ot *optVirtualTable) IndexCount() int {
+	return 0
+}
+
+// WritableIndexCount is part of the cat.Table interface.
+func (ot *optVirtualTable) WritableIndexCount() int {
+	return 0
+}
+
+// DeletableIndexCount is part of the cat.Table interface.
+func (ot *optVirtualTable) DeletableIndexCount() int {
+	return 0
+}
+
+// Index is part of the cat.Table interface.
+func (ot *optVirtualTable) Index(i int) cat.Index {
+	panic("no indexes")
+}
+
+// StatisticCount is part of the cat.Table interface.
+func (ot *optVirtualTable) StatisticCount() int {
+	return 0
+}
+
+// Statistic is part of the cat.Table interface.
+func (ot *optVirtualTable) Statistic(i int) cat.TableStatistic {
+	panic("no stats")
+}
+
+// CheckCount is part of the cat.Table interface.
+func (ot *optVirtualTable) CheckCount() int {
+	return len(ot.desc.ActiveChecks())
+}
+
+// Check is part of the cat.Table interface.
+func (ot *optVirtualTable) Check(i int) cat.CheckConstraint {
+	check := ot.desc.ActiveChecks()[i]
+	return cat.CheckConstraint{
+		Constraint: check.Expr,
+		Validated:  check.Validity == sqlbase.ConstraintValidity_Validated,
+	}
+}
+
+// FamilyCount is part of the cat.Table interface.
+func (ot *optVirtualTable) FamilyCount() int {
+	return 1
+}
+
+// Family is part of the cat.Table interface.
+func (ot *optVirtualTable) Family(i int) cat.Family {
+	return &ot.family
+}
+
+// OutboundForeignKeyCount is part of the cat.Table interface.
+func (ot *optVirtualTable) OutboundForeignKeyCount() int {
+	return 0
+}
+
+// OutboundForeignKeyCount is part of the cat.Table interface.
+func (ot *optVirtualTable) OutboundForeignKey(i int) cat.ForeignKeyConstraint {
+	panic("no FKs")
+}
+
+// InboundForeignKeyCount is part of the cat.Table interface.
+func (ot *optVirtualTable) InboundForeignKeyCount() int {
+	return 0
+}
+
+// InboundForeignKey is part of the cat.Table interface.
+func (ot *optVirtualTable) InboundForeignKey(i int) cat.ForeignKeyConstraint {
+	panic("no FKs")
+}
+
+// optVirtualFamily is a dummy implementation of cat.Family for the only family
+// reported by a virtual table.
+type optVirtualFamily struct {
+	tab *optVirtualTable
+}
+
+var _ cat.Family = &optVirtualFamily{}
+
+func (oi *optVirtualFamily) init(tab *optVirtualTable) {
+	oi.tab = tab
+}
+
+// ID is part of the cat.Family interface.
+func (oi *optVirtualFamily) ID() cat.StableID {
+	return 0
+}
+
+// Name is part of the cat.Family interface.
+func (oi *optVirtualFamily) Name() tree.Name {
+	return "primary"
+}
+
+// ColumnCount is part of the cat.Family interface.
+func (oi *optVirtualFamily) ColumnCount() int {
+	return oi.tab.ColumnCount()
+}
+
+// Column is part of the cat.Family interface.
+func (oi *optVirtualFamily) Column(i int) cat.FamilyColumn {
+	return cat.FamilyColumn{Column: oi.tab.Column(i), Ordinal: i}
+}
+
+// Table is part of the cat.Family interface.
+func (oi *optVirtualFamily) Table() cat.Table {
+	return oi.tab
 }

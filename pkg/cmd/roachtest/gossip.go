@@ -73,7 +73,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 					}
 					for _, id := range strings.FieldsFunc(s, split) {
 						if id == deadNodeStr {
-							fmt.Printf("%d: gossip not ok (dead node %d present): %s (%.0fs)\n",
+							c.l.Printf("%d: gossip not ok (dead node %d present): %s (%.0fs)\n",
 								i, deadNode, s, timeutil.Since(start).Seconds())
 							return false
 						}
@@ -83,7 +83,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 					continue
 				}
 				if expected != s {
-					fmt.Printf("%d: gossip not ok: %s != %s (%.0fs)\n",
+					c.l.Printf("%d: gossip not ok: %s != %s (%.0fs)\n",
 						i, expected, s, timeutil.Since(start).Seconds())
 					return false
 				}
@@ -350,6 +350,7 @@ func runGossipRestartNodeOne(ctx context.Context, t *test, c *cluster) {
 	run(`ALTER DATABASE system %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 	run(`ALTER RANGE meta %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 	run(`ALTER RANGE liveness %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
+	run(`ALTER TABLE system.jobs %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 
 	var lastReplCount int
 	if err := retry.ForDuration(2*time.Minute, func() error {

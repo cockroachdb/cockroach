@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/gogo/protobuf/proto"
 	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/tracker"
 )
 
 var (
@@ -115,7 +116,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
-	storeList, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
+	storeList, _, _ := a.storePool.getStoreList(firstRangeID, storeFilterThrottled)
 	storeMap := storeListToMap(storeList)
 
 	const minQPS = 800
@@ -135,14 +136,14 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	// raft status with one that always returns all replicas as up to date.
 	sr.getRaftStatusFn = func(r *Replica) *raft.Status {
 		status := &raft.Status{
-			Progress: make(map[uint64]raft.Progress),
+			Progress: make(map[uint64]tracker.Progress),
 		}
 		status.Lead = uint64(r.ReplicaID())
 		status.Commit = 1
 		for _, replica := range r.Desc().InternalReplicas {
-			status.Progress[uint64(replica.ReplicaID)] = raft.Progress{
+			status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
 				Match: 1,
-				State: raft.ProgressStateReplicate,
+				State: tracker.StateReplicate,
 			}
 		}
 		return status
@@ -198,7 +199,7 @@ func TestChooseReplicaToRebalance(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
-	storeList, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
+	storeList, _, _ := a.storePool.getStoreList(firstRangeID, storeFilterThrottled)
 	storeMap := storeListToMap(storeList)
 
 	const minQPS = 800
@@ -218,14 +219,14 @@ func TestChooseReplicaToRebalance(t *testing.T) {
 	// raft status with one that always returns all replicas as up to date.
 	sr.getRaftStatusFn = func(r *Replica) *raft.Status {
 		status := &raft.Status{
-			Progress: make(map[uint64]raft.Progress),
+			Progress: make(map[uint64]tracker.Progress),
 		}
 		status.Lead = uint64(r.ReplicaID())
 		status.Commit = 1
 		for _, replica := range r.Desc().InternalReplicas {
-			status.Progress[uint64(replica.ReplicaID)] = raft.Progress{
+			status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
 				Match: 1,
-				State: raft.ProgressStateReplicate,
+				State: tracker.StateReplicate,
 			}
 		}
 		return status
@@ -306,7 +307,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
-	storeList, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
+	storeList, _, _ := a.storePool.getStoreList(firstRangeID, storeFilterThrottled)
 	storeMap := storeListToMap(storeList)
 
 	const minQPS = 800
@@ -331,7 +332,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	// are caught up). We thus shouldn't transfer a lease to s5.
 	sr.getRaftStatusFn = func(r *Replica) *raft.Status {
 		status := &raft.Status{
-			Progress: make(map[uint64]raft.Progress),
+			Progress: make(map[uint64]tracker.Progress),
 		}
 		status.Lead = uint64(r.ReplicaID())
 		status.Commit = 1
@@ -340,9 +341,9 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 			if replica.StoreID == roachpb.StoreID(5) {
 				match = 0
 			}
-			status.Progress[uint64(replica.ReplicaID)] = raft.Progress{
+			status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
 				Match: match,
-				State: raft.ProgressStateReplicate,
+				State: tracker.StateReplicate,
 			}
 		}
 		return status

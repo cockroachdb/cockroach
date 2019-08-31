@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"reflect"
 	"sort"
 	"strconv"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gogo/protobuf/proto"
@@ -521,7 +523,7 @@ func TestMVCCPutNewEpochLowerSequence(t *testing.T) {
 	aggMeta := &enginepb.MVCCMetadata{
 		Txn:           &txn.TxnMeta,
 		Timestamp:     hlc.LegacyTimestamp{WallTime: 1},
-		KeyBytes:      mvccVersionTimestampSize,
+		KeyBytes:      MVCCVersionTimestampSize,
 		ValBytes:      int64(len(value2.RawBytes)),
 		IntentHistory: nil,
 	}
@@ -2365,6 +2367,336 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 	}
 }
 
+func TestMVCCClearTimeRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	ts0 := hlc.Timestamp{WallTime: 0}
+	ts0Content := []roachpb.KeyValue{}
+	ts1 := hlc.Timestamp{WallTime: 10}
+	v1 := value1
+	v1.Timestamp = ts1
+	ts1Content := []roachpb.KeyValue{{Key: testKey2, Value: v1}}
+	ts2 := hlc.Timestamp{WallTime: 20}
+	v2 := value2
+	v2.Timestamp = ts2
+	ts2Content := []roachpb.KeyValue{{Key: testKey2, Value: v2}, {Key: testKey5, Value: v2}}
+	ts3 := hlc.Timestamp{WallTime: 30}
+	v3 := value3
+	v3.Timestamp = ts3
+	ts3Content := []roachpb.KeyValue{
+		{Key: testKey1, Value: v3}, {Key: testKey2, Value: v2}, {Key: testKey5, Value: v2},
+	}
+	ts4 := hlc.Timestamp{WallTime: 40}
+	v4 := value4
+	v4.Timestamp = ts4
+	ts4Content := []roachpb.KeyValue{
+		{Key: testKey1, Value: v3}, {Key: testKey2, Value: v4}, {Key: testKey5, Value: v4},
+	}
+	ts5 := hlc.Timestamp{WallTime: 50}
+
+	// setupKVs will generate an engine with the key-time space as follows:
+	//    50 -
+	//       |
+	//    40 -      v4          v4
+	//       |
+	//    30 -  v3
+	// time  |
+	//    20 -      v2          v2
+	//       |
+	//    10 -      v1
+	//       |
+	//     0 -----------------------
+	//          k1  k2  k3  k4  k5
+	//                 keys
+	// This returns a new, populated engine since we can't just setup one and use
+	// a new batch in each subtest, since batches don't reflect ClearRange results
+	// when read.
+	setupKVs := func(t *testing.T) Engine {
+		engine := createTestEngine()
+		require.NoError(t, MVCCPut(ctx, engine, nil, testKey2, ts1, value1, nil))
+		require.NoError(t, MVCCPut(ctx, engine, nil, testKey2, ts2, value2, nil))
+		require.NoError(t, MVCCPut(ctx, engine, nil, testKey5, ts2, value2, nil))
+		require.NoError(t, MVCCPut(ctx, engine, nil, testKey1, ts3, value3, nil))
+		require.NoError(t, MVCCPut(ctx, engine, nil, testKey5, ts4, value4, nil))
+		require.NoError(t, MVCCPut(ctx, engine, nil, testKey2, ts4, value4, nil))
+		return engine
+	}
+
+	assertKVs := func(t *testing.T, e Reader, at hlc.Timestamp, expected []roachpb.KeyValue) {
+		t.Helper()
+		actual, _, _, err := MVCCScan(ctx, e, keyMin, keyMax, 100, at, MVCCScanOptions{})
+		require.NoError(t, err)
+		require.Equal(t, expected, actual)
+	}
+
+	t.Run("clear > ts0", func(t *testing.T) {
+		e := setupKVs(t)
+		defer e.Close()
+		_, err := MVCCClearTimeRange(ctx, e, nil, keyMin, keyMax, ts0, ts5, 10)
+		require.NoError(t, err)
+		assertKVs(t, e, ts0, ts0Content)
+		assertKVs(t, e, ts1, ts0Content)
+		assertKVs(t, e, ts5, ts0Content)
+	})
+
+	t.Run("clear > ts1 ", func(t *testing.T) {
+		e := setupKVs(t)
+		defer e.Close()
+		_, err := MVCCClearTimeRange(ctx, e, nil, keyMin, keyMax, ts1, ts5, 10)
+		require.NoError(t, err)
+		assertKVs(t, e, ts1, ts1Content)
+		assertKVs(t, e, ts2, ts1Content)
+		assertKVs(t, e, ts5, ts1Content)
+	})
+
+	t.Run("clear > ts2", func(t *testing.T) {
+		e := setupKVs(t)
+		defer e.Close()
+		_, err := MVCCClearTimeRange(ctx, e, nil, keyMin, keyMax, ts2, ts5, 10)
+		require.NoError(t, err)
+		assertKVs(t, e, ts2, ts2Content)
+		assertKVs(t, e, ts5, ts2Content)
+	})
+
+	t.Run("clear > ts3", func(t *testing.T) {
+		e := setupKVs(t)
+		defer e.Close()
+		_, err := MVCCClearTimeRange(ctx, e, nil, keyMin, keyMax, ts3, ts5, 10)
+		require.NoError(t, err)
+		assertKVs(t, e, ts3, ts3Content)
+		assertKVs(t, e, ts5, ts3Content)
+	})
+
+	t.Run("clear > ts4 (nothing) ", func(t *testing.T) {
+		e := setupKVs(t)
+		defer e.Close()
+		_, err := MVCCClearTimeRange(ctx, e, nil, keyMin, keyMax, ts4, ts5, 10)
+		require.NoError(t, err)
+		assertKVs(t, e, ts4, ts4Content)
+		assertKVs(t, e, ts5, ts4Content)
+	})
+
+	t.Run("clear > ts5 (nothing)", func(t *testing.T) {
+		e := setupKVs(t)
+		defer e.Close()
+		_, err := MVCCClearTimeRange(ctx, e, nil, keyMin, keyMax, ts5, ts5, 10)
+		require.NoError(t, err)
+		assertKVs(t, e, ts4, ts4Content)
+		assertKVs(t, e, ts5, ts4Content)
+	})
+
+	t.Run("clear up to k5 to ts0", func(t *testing.T) {
+		e := setupKVs(t)
+		defer e.Close()
+		_, err := MVCCClearTimeRange(ctx, e, nil, testKey1, testKey5, ts0, ts5, 10)
+		require.NoError(t, err)
+		assertKVs(t, e, ts2, []roachpb.KeyValue{{Key: testKey5, Value: v2}})
+		assertKVs(t, e, ts5, []roachpb.KeyValue{{Key: testKey5, Value: v4}})
+	})
+
+	t.Run("clear > ts0 in empty span (nothing)", func(t *testing.T) {
+		e := setupKVs(t)
+		defer e.Close()
+		_, err := MVCCClearTimeRange(ctx, e, nil, testKey3, testKey5, ts0, ts5, 10)
+		require.NoError(t, err)
+		assertKVs(t, e, ts2, ts2Content)
+		assertKVs(t, e, ts5, ts4Content)
+	})
+
+	t.Run("clear > ts0 in empty span [k3,k5) (nothing)", func(t *testing.T) {
+		e := setupKVs(t)
+		defer e.Close()
+		_, err := MVCCClearTimeRange(ctx, e, nil, testKey3, testKey5, ts0, ts5, 10)
+		require.NoError(t, err)
+		assertKVs(t, e, ts2, ts2Content)
+		assertKVs(t, e, ts5, ts4Content)
+	})
+
+	t.Run("clear k3 and up in ts0 > x >= ts1 (nothing)", func(t *testing.T) {
+		e := setupKVs(t)
+		defer e.Close()
+		_, err := MVCCClearTimeRange(ctx, e, nil, testKey3, keyMax, ts0, ts1, 10)
+		require.NoError(t, err)
+		assertKVs(t, e, ts2, ts2Content)
+		assertKVs(t, e, ts5, ts4Content)
+	})
+
+	// Add an intent at k3@ts3.
+	txn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, ts3, 1)
+	setupKVsWithIntent := func(t *testing.T) Engine {
+		e := setupKVs(t)
+		require.NoError(t, MVCCPut(ctx, e, nil, testKey3, ts3, value3, &txn))
+		return e
+	}
+	t.Run("clear everything hitting intent fails", func(t *testing.T) {
+		e := setupKVsWithIntent(t)
+		defer e.Close()
+		_, err := MVCCClearTimeRange(ctx, e, nil, keyMin, keyMax, ts0, ts5, 10)
+		require.EqualError(t, err, "conflicting intents on \"/db3\"")
+	})
+
+	t.Run("clear exactly hitting intent fails", func(t *testing.T) {
+		e := setupKVsWithIntent(t)
+		defer e.Close()
+		_, err := MVCCClearTimeRange(ctx, e, nil, testKey3, testKey4, ts2, ts3, 10)
+		require.EqualError(t, err, "conflicting intents on \"/db3\"")
+	})
+
+	t.Run("clear everything above intent", func(t *testing.T) {
+		e := setupKVsWithIntent(t)
+		defer e.Close()
+		_, err := MVCCClearTimeRange(ctx, e, nil, keyMin, keyMax, ts3, ts5, 10)
+		require.NoError(t, err)
+		assertKVs(t, e, ts2, ts2Content)
+
+		// Scan (< k3 to avoid intent) to confirm that k2 was indeed reverted to
+		// value as of ts3 (i.e. v4 was cleared to expose v2).
+		actual, _, _, err := MVCCScan(ctx, e, keyMin, testKey3, 100, ts5, MVCCScanOptions{})
+		require.NoError(t, err)
+		require.Equal(t, ts3Content[:2], actual)
+
+		// Verify the intent was left alone.
+		_, _, _, err = MVCCScan(ctx, e, testKey3, testKey4, 100, ts5, MVCCScanOptions{})
+		require.Error(t, err)
+
+		// Scan (> k3 to avoid intent) to confirm that k5 was indeed reverted to
+		// value as of ts3 (i.e. v4 was cleared to expose v2).
+		actual, _, _, err = MVCCScan(ctx, e, testKey4, keyMax, 100, ts5, MVCCScanOptions{})
+		require.NoError(t, err)
+		require.Equal(t, ts3Content[2:], actual)
+	})
+
+	t.Run("clear below intent", func(t *testing.T) {
+		e := setupKVsWithIntent(t)
+		defer e.Close()
+		assertKVs(t, e, ts2, ts2Content)
+		_, err := MVCCClearTimeRange(ctx, e, nil, keyMin, keyMax, ts1, ts2, 10)
+		require.NoError(t, err)
+		assertKVs(t, e, ts2, ts1Content)
+	})
+}
+
+func computeStats(
+	t *testing.T, batch Reader, from, to roachpb.Key, nowNanos int64,
+) enginepb.MVCCStats {
+	t.Helper()
+	iter := batch.NewIterator(IterOptions{UpperBound: to})
+	defer iter.Close()
+	s, err := ComputeStatsGo(iter, MVCCKey{Key: from}, MVCCKey{Key: to}, nowNanos)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	return s
+}
+
+// TestMVCCClearTimeRangeOnRandomData sets up mostly random KVs and then picks
+// some random times to which to revert, ensuring that a MVCC-Scan at each of
+// those times before reverting matches the result of an MVCC-Scan done at a
+// later time post-revert.
+func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rng, _ := randutil.NewPseudoRand()
+
+	ctx := context.Background()
+
+	e := createTestEngine()
+	defer e.Close()
+
+	now := hlc.Timestamp{WallTime: 100000000}
+
+	var ms enginepb.MVCCStats
+
+	// Setup numKVs random kv by writing to random keys [0, keyRange) except for
+	// the span [swathStart, swathEnd). Then fill in that swath with kvs all
+	// having the same ts, to ensure they all revert at the same time, thus
+	// triggering the ClearRange optimization path.
+	const numKVs = 10000
+	const keyRange, swathStart, swathEnd = 5000, 3500, 4000
+	const swathSize = swathEnd - swathStart
+	const randTimeRange = 1000
+
+	wrote := make(map[int]int64, keyRange)
+	for i := 0; i < numKVs-swathSize; i++ {
+		k := rng.Intn(keyRange - swathSize)
+		if k >= swathStart {
+			k += swathSize
+		}
+
+		ts := int64(rng.Intn(randTimeRange))
+		// Ensure writes to a given key are increasing in time.
+		if ts <= wrote[k] {
+			ts = wrote[k] + 1
+		}
+		wrote[k] = ts
+
+		key := roachpb.Key(fmt.Sprintf("%05d", k))
+		if rand.Float64() > 0.8 {
+			require.NoError(t, MVCCDelete(ctx, e, &ms, key, hlc.Timestamp{WallTime: ts}, nil))
+		} else {
+			v := roachpb.MakeValueFromString(fmt.Sprintf("v-%d", i))
+			require.NoError(t, MVCCPut(ctx, e, &ms, key, hlc.Timestamp{WallTime: ts}, v, nil))
+		}
+	}
+	swathTime := rand.Intn(randTimeRange-100) + 100
+	for i := swathStart; i < swathEnd; i++ {
+		key := roachpb.Key(fmt.Sprintf("%05d", i))
+		v := roachpb.MakeValueFromString(fmt.Sprintf("v-%d", i))
+		require.NoError(t, MVCCPut(ctx, e, &ms, key, hlc.Timestamp{WallTime: int64(swathTime)}, v, nil))
+	}
+
+	// Add another swath of keys above to exercise an after-iteration range flush.
+	for i := keyRange; i < keyRange+200; i++ {
+		key := roachpb.Key(fmt.Sprintf("%05d", i))
+		v := roachpb.MakeValueFromString(fmt.Sprintf("v-%d", i))
+		require.NoError(t, MVCCPut(ctx, e, &ms, key, hlc.Timestamp{WallTime: int64(randTimeRange + 1)}, v, nil))
+	}
+
+	ms.AgeTo(2000)
+
+	// Sanity check starting stats.
+	require.Equal(t, computeStats(t, e, keyMin, keyMax, 2000), ms)
+
+	// Pick timestamps to which we'll revert, and sort them so we can go back
+	// though them in order. The largest will still be less than randTimeRange so
+	// the initial revert will be assured to use ClearRange.
+	reverts := make([]int, 5)
+	for i := range reverts {
+		reverts[i] = rand.Intn(randTimeRange)
+	}
+	reverts[0] = swathTime - 1
+	sort.Ints(reverts)
+
+	for i := len(reverts) - 1; i >= 0; i-- {
+		t.Run(fmt.Sprintf("revert-%d", i), func(t *testing.T) {
+			revertTo := hlc.Timestamp{WallTime: int64(reverts[i])}
+			// MVCC-Scan at the revert time.
+			scannedBefore, _, _, err := MVCCScan(ctx, e, keyMin, keyMax, numKVs, revertTo, MVCCScanOptions{})
+			require.NoError(t, err)
+
+			// Revert to the revert time.
+			startKey := keyMin
+			for {
+				resume, err := MVCCClearTimeRange(ctx, e, &ms, startKey, keyMax, revertTo, now, 100)
+				require.NoError(t, err)
+				if resume == nil {
+					break
+				}
+				startKey = resume.Key
+			}
+
+			require.Equal(t, computeStats(t, e, keyMin, keyMax, 2000), ms)
+			// Scanning at "now" post-revert should yield the same result as scanning
+			// at revert-time pre-revert.
+			scannedAfter, _, _, err := MVCCScan(ctx, e, keyMin, keyMax, numKVs, now, MVCCScanOptions{})
+			require.NoError(t, err)
+			require.Equal(t, scannedBefore, scannedAfter)
+		})
+	}
+}
+
 func TestMVCCConditionalPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -2969,6 +3301,62 @@ func TestMVCCReverseScanSeeksOverRepeatedKeys(t *testing.T) {
 		!bytes.Equal(kvs[0].Value.RawBytes, value2.RawBytes) {
 		t.Fatal("unexpected scan results")
 	}
+}
+
+// Exposes a bug where the reverse MVCC scan can get stuck in an infinite loop until we OOM.
+//
+// The bug happened in this scenario.
+// (1) reverse scan is positioned at the range's smallest key and calls `prevKey()`
+// (2) `prevKey()` peeks and sees newer versions of the same logical key
+//     `iters_before_seek_-1` times, moving the iterator backwards each time
+// (3) on the `iters_before_seek_`th peek, there are no previous keys found
+//
+// Then, the problem was `prevKey()` treated finding no previous key as if it had found a
+// new logical key with the empty string. It would use `backwardLatestVersion()` to find
+// the latest version of this empty string logical key. Due to condition (3),
+// `backwardLatestVersion()` would go directly to its seeking optimization rather than
+// trying to incrementally move backwards (if it had tried moving incrementally backwards,
+// it would've noticed it's out of bounds). The seek optimization would then seek to "\0",
+// which is the empty logical key with zero timestamp. Since we set RocksDB iterator lower
+// bound to be the lower bound of the range scan, this seek actually lands back at the
+// range's smallest key. It thinks it found a new key so it adds it to the result, and then
+// this whole process repeats ad infinitum.
+func TestMVCCReverseScanStopAtSmallestKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	run := func(numPuts int, ts int64) {
+		ctx := context.Background()
+		engine := createTestEngine()
+		defer engine.Close()
+
+		for i := 1; i <= numPuts; i++ {
+			if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: int64(i)}, value1, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		kvs, _, _, err := MVCCScan(ctx, engine, testKey1, testKey3, math.MaxInt64,
+			hlc.Timestamp{WallTime: ts}, MVCCScanOptions{Reverse: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(kvs) != 1 ||
+			!bytes.Equal(kvs[0].Key, testKey1) ||
+			!bytes.Equal(kvs[0].Value.RawBytes, value1.RawBytes) {
+			t.Fatal("unexpected scan results")
+		}
+	}
+	// Satisfying (2) and (3) is incredibly intricate because of how `iters_before_seek_`
+	// is incremented/decremented heuristically. For example, at the time of writing, the
+	// infinitely looping cases are `numPuts == 6 && ts == 2`, `numPuts == 7 && ts == 3`,
+	// `numPuts == 8 && ts == 4`, `numPuts == 9 && ts == 5`, and `numPuts == 10 && ts == 6`.
+	// Tying our test case to the `iters_before_seek_` setting logic seems brittle so let's
+	// just brute force test a wide range of cases.
+	for numPuts := 1; numPuts <= 10; numPuts++ {
+		for ts := 1; ts <= 10; ts++ {
+			run(numPuts, int64(ts))
+		}
+	}
+
 }
 
 func TestMVCCResolveTxn(t *testing.T) {
@@ -4885,7 +5273,7 @@ func TestMVCCIdempotentTransactions(t *testing.T) {
 	aggMeta := &enginepb.MVCCMetadata{
 		Txn:       &txn.TxnMeta,
 		Timestamp: hlc.LegacyTimestamp(ts1),
-		KeyBytes:  mvccVersionTimestampSize,
+		KeyBytes:  MVCCVersionTimestampSize,
 		ValBytes:  int64(len(newValue.RawBytes)),
 		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
 			{Sequence: 0, Value: value.RawBytes},
@@ -5014,7 +5402,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	aggMeta := &enginepb.MVCCMetadata{
 		Txn:       &txn.TxnMeta,
 		Timestamp: hlc.LegacyTimestamp(ts1),
-		KeyBytes:  mvccVersionTimestampSize,
+		KeyBytes:  MVCCVersionTimestampSize,
 		ValBytes:  int64(len(value.RawBytes)),
 	}
 	metaKey := mvccKey(key)
@@ -5041,7 +5429,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	aggMeta = &enginepb.MVCCMetadata{
 		Txn:       &txn.TxnMeta,
 		Timestamp: hlc.LegacyTimestamp(ts2),
-		KeyBytes:  mvccVersionTimestampSize,
+		KeyBytes:  MVCCVersionTimestampSize,
 		ValBytes:  int64(len(newValue.RawBytes)),
 		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
 			{Sequence: 1, Value: value.RawBytes},
@@ -5068,7 +5456,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	aggMeta = &enginepb.MVCCMetadata{
 		Txn:       &txn.TxnMeta,
 		Timestamp: hlc.LegacyTimestamp(ts2),
-		KeyBytes:  mvccVersionTimestampSize,
+		KeyBytes:  MVCCVersionTimestampSize,
 		ValBytes:  0,
 		Deleted:   true,
 		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
@@ -5097,7 +5485,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	aggMeta = &enginepb.MVCCMetadata{
 		Txn:       &txn.TxnMeta,
 		Timestamp: hlc.LegacyTimestamp(ts2),
-		KeyBytes:  mvccVersionTimestampSize,
+		KeyBytes:  MVCCVersionTimestampSize,
 		ValBytes:  int64(len(value.RawBytes)),
 		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
 			{Sequence: 1, Value: value.RawBytes},

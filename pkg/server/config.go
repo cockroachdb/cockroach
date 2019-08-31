@@ -141,8 +141,7 @@ type Config struct {
 	Attrs string
 
 	// JoinList is a list of node addresses that act as bootstrap hosts for
-	// connecting to the gossip network. Each item in the list can actually be
-	// multiple comma-separated addresses, kept for backward-compatibility.
+	// connecting to the gossip network.
 	JoinList base.JoinListType
 
 	// RetryOptions controls the retry behavior of the server.
@@ -355,7 +354,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 			Specs: []base.StoreSpec{storeSpec},
 		},
 		TempStorageConfig: base.TempStorageConfigFromEnv(
-			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes, 0),
+			ctx, st, storeSpec, "" /* parentDir */, base.EngineTypeRocksDB, base.DefaultTempStorageMaxSizeBytes, 0),
 	}
 	cfg.AmbientCtx.Tracer = st.Tracer
 
@@ -576,18 +575,12 @@ func (cfg *Config) readEnvironmentVariables() {
 // parseGossipBootstrapResolvers parses list of gossip bootstrap resolvers.
 func (cfg *Config) parseGossipBootstrapResolvers() ([]resolver.Resolver, error) {
 	var bootstrapResolvers []resolver.Resolver
-	for _, commaSeparatedAddresses := range cfg.JoinList {
-		addresses := strings.Split(commaSeparatedAddresses, ",")
-		for _, address := range addresses {
-			if len(address) == 0 {
-				continue
-			}
-			resolver, err := resolver.NewResolver(address)
-			if err != nil {
-				return nil, err
-			}
-			bootstrapResolvers = append(bootstrapResolvers, resolver)
+	for _, address := range cfg.JoinList {
+		resolver, err := resolver.NewResolver(address)
+		if err != nil {
+			return nil, err
 		}
+		bootstrapResolvers = append(bootstrapResolvers, resolver)
 	}
 
 	return bootstrapResolvers, nil

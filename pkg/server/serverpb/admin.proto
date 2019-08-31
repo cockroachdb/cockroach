@@ -18,6 +18,7 @@ import "server/serverpb/status.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/storagepb/liveness.proto";
 import "storage/storagepb/log.proto";
+import "ts/catalog/chart_catalog.proto";
 import "util/metric/metric.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
@@ -535,9 +536,9 @@ message DataDistributionRequest {
 
 message DataDistributionResponse {
   message ZoneConfig {
-    // zone_name is ".default" for the default zone config.
-    // Otherwise, it's of the form [database.]table[@index[.partition]]
-    string zone_name = 1;
+    // target is the object the zone config applies to, e.g. "DATABASE db" or
+    // "PARTITION north_america OF TABLE users".
+    string target = 1;
 
     config.ZoneConfig config = 2 [(gogoproto.nullable) = false];
 
@@ -603,6 +604,15 @@ message EnqueueRangeResponse {
     string error = 3;
   }
   repeated Details details = 1;
+}
+
+// ChartCatalogRequest requests returns a catalog of Admin UI charts.
+message ChartCatalogRequest {
+}
+
+// ChartCatalogResponse returns a catalog of Admin UI charts useful for debugging.
+message ChartCatalogResponse {
+  repeated cockroach.ts.catalog.ChartSection catalog = 1 [(gogoproto.nullable) = false];
 }
 
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
@@ -789,6 +799,13 @@ service Admin {
   rpc AllMetricMetadata(MetricMetadataRequest) returns (MetricMetadataResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/metricmetadata"
+    };
+  }
+
+  // URL: /_admin/v1/chartcatalog
+  rpc ChartCatalog(ChartCatalogRequest) returns (ChartCatalogResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/chartcatalog"
     };
   }
 

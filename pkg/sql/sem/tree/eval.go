@@ -48,7 +48,8 @@ import (
 )
 
 var (
-	errIntOutOfRange   = pgerror.New(pgcode.NumericValueOutOfRange, "integer out of range")
+	// ErrIntOutOfRange is reported when integer arithmetic overflows.
+	ErrIntOutOfRange   = pgerror.New(pgcode.NumericValueOutOfRange, "integer out of range")
 	errFloatOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
 	errDecOutOfRange   = pgerror.New(pgcode.NumericValueOutOfRange, "decimal out of range")
 
@@ -111,7 +112,7 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				i := MustBeDInt(d)
 				if i == math.MinInt64 {
-					return nil, errIntOutOfRange
+					return nil, ErrIntOutOfRange
 				}
 				return NewDInt(-i), nil
 			},
@@ -289,6 +290,30 @@ func ConcatArrays(typ *types.T, left Datum, right Datum) (Datum, error) {
 		}
 	}
 	return result, nil
+}
+
+// ArrayContains return true if the haystack contains all needles.
+func ArrayContains(ctx *EvalContext, haystack *DArray, needles *DArray) (*DBool, error) {
+	if !haystack.ParamTyp.Equivalent(needles.ParamTyp) {
+		return DBoolFalse, pgerror.New(pgcode.DatatypeMismatch, "cannot compare arrays with different element types")
+	}
+	for _, needle := range needles.Array {
+		// Nulls don't compare to each other in @> syntax.
+		if needle == DNull {
+			return DBoolFalse, nil
+		}
+		var found bool
+		for _, hay := range haystack.Array {
+			if needle.Compare(ctx, hay) == 0 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return DBoolFalse, nil
+		}
+	}
+	return DBoolTrue, nil
 }
 
 func initArrayToArrayConcatenation() {
@@ -472,7 +497,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				a, b := MustBeDInt(left), MustBeDInt(right)
 				r, ok := arith.AddWithOverflow(int64(a), int64(b))
 				if !ok {
-					return nil, errIntOutOfRange
+					return nil, ErrIntOutOfRange
 				}
 				return NewDInt(DInt(r)), nil
 			},
@@ -695,7 +720,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				a, b := MustBeDInt(left), MustBeDInt(right)
 				r, ok := arith.SubWithOverflow(int64(a), int64(b))
 				if !ok {
-					return nil, errIntOutOfRange
+					return nil, ErrIntOutOfRange
 				}
 				return NewDInt(DInt(r)), nil
 			},
@@ -972,9 +997,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					// ignore
 				} else if a == math.MinInt64 || b == math.MinInt64 {
 					// This test is required to detect math.MinInt64 * -1.
-					return nil, errIntOutOfRange
+					return nil, ErrIntOutOfRange
 				} else if c/b != a {
-					return nil, errIntOutOfRange
+					return nil, ErrIntOutOfRange
 				}
 				return NewDInt(c), nil
 			},
@@ -2062,6 +2087,15 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 	Contains: {
 		&CmpOp{
+			LeftType:  types.AnyArray,
+			RightType: types.AnyArray,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				haystack := MustBeDArray(left)
+				needles := MustBeDArray(right)
+				return ArrayContains(ctx, haystack, needles)
+			},
+		},
+		&CmpOp{
 			LeftType:  types.Jsonb,
 			RightType: types.Jsonb,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
@@ -2076,6 +2110,15 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 	ContainedBy: {
 		&CmpOp{
+			LeftType:  types.AnyArray,
+			RightType: types.AnyArray,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				needles := MustBeDArray(left)
+				haystack := MustBeDArray(right)
+				return ArrayContains(ctx, haystack, needles)
+			},
+		},
+		&CmpOp{
 			LeftType:  types.Jsonb,
 			RightType: types.Jsonb,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
@@ -2084,6 +2127,40 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 					return nil, err
 				}
 				return MakeDBool(DBool(c)), nil
+			},
+		},
+	},
+	Overlaps: {
+		&CmpOp{
+			LeftType:  types.AnyArray,
+			RightType: types.AnyArray,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				array := MustBeDArray(left)
+				other := MustBeDArray(right)
+				if !array.ParamTyp.Equivalent(other.ParamTyp) {
+					return nil, pgerror.New(pgcode.DatatypeMismatch, "cannot compare arrays with different element types")
+				}
+				for _, needle := range array.Array {
+					// Nulls don't compare to each other in && syntax.
+					if needle == DNull {
+						continue
+					}
+					for _, hay := range other.Array {
+						if needle.Compare(ctx, hay) == 0 {
+							return DBoolTrue, nil
+						}
+					}
+				}
+				return DBoolFalse, nil
+			},
+		},
+		&CmpOp{
+			LeftType:  types.INet,
+			RightType: types.INet,
+			Fn: func(_ *EvalContext, left, right Datum) (Datum, error) {
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				other := MustBeDIPAddr(right).IPAddr
+				return MakeDBool(DBool(ipAddr.ContainsOrContainedBy(&other))), nil
 			},
 		},
 	},
@@ -2556,9 +2633,10 @@ type EvalContext struct {
 	TxnReadOnly bool
 	TxnImplicit bool
 
-	Settings  *cluster.Settings
-	ClusterID uuid.UUID
-	NodeID    roachpb.NodeID
+	Settings    *cluster.Settings
+	ClusterID   uuid.UUID
+	NodeID      roachpb.NodeID
+	ClusterName string
 
 	// Locality contains the location of the current node as a set of user-defined
 	// key/value pairs, ordered from most inclusive to least inclusive. If there
@@ -3015,7 +3093,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // PerformCast performs a cast from the provided Datum to the specified
-// CastTargetType.
+// types.T.
 func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 	switch t.Family() {
 	case types.BitFamily:
@@ -3090,7 +3168,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			// is 9223372036854774784 (= float64(math.MaxInt64)-513), and both are
 			// convertible to int without overflow.
 			if math.IsNaN(f) || f <= float64(math.MinInt64) || f >= float64(math.MaxInt64) {
-				return nil, errIntOutOfRange
+				return nil, ErrIntOutOfRange
 			}
 			res = NewDInt(DInt(f))
 		case *DDecimal:
@@ -3101,7 +3179,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			}
 			i, err := d.Int64()
 			if err != nil {
-				return nil, errIntOutOfRange
+				return nil, ErrIntOutOfRange
 			}
 			res = NewDInt(DInt(i))
 		case *DString:
@@ -3121,13 +3199,13 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DDate:
 			// TODO(mjibson): This cast is unsupported by postgres. Should we remove ours?
 			if !v.IsFinite() {
-				return nil, errIntOutOfRange
+				return nil, ErrIntOutOfRange
 			}
 			res = NewDInt(DInt(v.UnixEpochDays()))
 		case *DInterval:
 			iv, ok := v.AsInt64()
 			if !ok {
-				return nil, errIntOutOfRange
+				return nil, ErrIntOutOfRange
 			}
 			res = NewDInt(DInt(iv))
 		case *DOid:
@@ -3474,6 +3552,15 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			switch t.Oid() {
 			case oid.T_oid:
 				return &DOid{semanticType: t, DInt: v.DInt}, nil
+			case oid.T_regtype:
+				// Mapping an oid to a regtype is easy: we have a hardcoded map.
+				typ, ok := types.OidToType[oid.Oid(v.DInt)]
+				ret := &DOid{semanticType: t, DInt: v.DInt}
+				if !ok {
+					return ret, nil
+				}
+				ret.name = typ.PGName()
+				return ret, nil
 			default:
 				oid, err := queryOid(ctx, t, v)
 				if err != nil {
@@ -5004,7 +5091,7 @@ func IntPow(x, y DInt) (*DInt, error) {
 	}
 	i, err := xd.Int64()
 	if err != nil {
-		return nil, errIntOutOfRange
+		return nil, ErrIntOutOfRange
 	}
 	return NewDInt(DInt(i)), nil
 }

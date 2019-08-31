@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -36,12 +37,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -95,18 +96,13 @@ func backupRestoreTestSetupWithParams(
 	if numAccounts == 0 {
 		splits = 0
 	}
-	bankData := bank.FromConfig(numAccounts, payloadSize, splits)
+	bankData := bank.FromConfig(numAccounts, numAccounts, payloadSize, splits)
 
 	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE data`)
-	const insertBatchSize = 1000
-	const concurrency = 4
-	if _, err := workloadsql.Setup(ctx, sqlDB.DB.(*gosql.DB), bankData, insertBatchSize, concurrency); err != nil {
+	l := workloadsql.InsertsDataLoader{BatchSize: 1000, Concurrency: 4}
+	if _, err := workloadsql.Setup(ctx, sqlDB.DB.(*gosql.DB), bankData, l); err != nil {
 		t.Fatalf("%+v", err)
-	}
-	if err := workloadsql.Split(ctx, sqlDB.DB.(*gosql.DB), bankData.Tables()[0], 1 /* concurrency */); err != nil {
-		// This occasionally flakes, so ignore errors.
-		t.Logf("failed to split: %+v", err)
 	}
 
 	if err := tc.WaitForFullReplication(); err != nil {
@@ -233,7 +229,79 @@ func TestBackupRestoreLocal(t *testing.T) {
 	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, localFoo, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+}
+
+func TestBackupRestorePartitioned(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1000
+	ctx, tc, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	// Ensure that each node has at least one leaseholder. (These splits were
+	// made in backupRestoreTestSetup.)
+	sqlDB.Exec(t, `ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0)`)
+	sqlDB.Exec(t, `ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 100)`)
+	sqlDB.Exec(t, `ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 200)`)
+
+	const localFoo1 = localFoo + "/1"
+	const localFoo2 = localFoo + "/2"
+	const localFoo3 = localFoo + "/3"
+	backupURIs := []string{
+		fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", localFoo1, url.QueryEscape("default")),
+		fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", localFoo2, url.QueryEscape("dc=dc1")),
+		fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", localFoo3, url.QueryEscape("dc=dc2")),
+	}
+	restoreURIs := []string{
+		localFoo1,
+		localFoo2,
+		localFoo3,
+	}
+	backupAndRestore(ctx, t, tc, backupURIs, restoreURIs, numAccounts)
+
+	// Verify that at least one SST exists in each backup destination.
+	sstMatcher := regexp.MustCompile(`\d+\.sst`)
+	for i := 1; i <= 3; i++ {
+		subDir := fmt.Sprintf("%s/foo/%d", dir, i)
+		files, err := ioutil.ReadDir(subDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, f := range files {
+			if sstMatcher.MatchString(f.Name()) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("no SSTs found in %s", subDir)
+		}
+	}
+}
+
+func TestBackupRestorePartitionedMergeDirectories(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1000
+	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	// TODO (lucy): This test writes a partitioned backup where all files are
+	// written to the same directory, which is similar to the case where a backup
+	// is created and then all files are consolidated into the same directory, but
+	// we should still have a separate test where the files are actually moved.
+	const localFoo1 = localFoo + "/1"
+	backupURIs := []string{
+		fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", localFoo1, url.QueryEscape("default")),
+		fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", localFoo1, url.QueryEscape("dc=dc1")),
+		fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", localFoo1, url.QueryEscape("dc=dc2")),
+	}
+	restoreURIs := []string{
+		localFoo1,
+	}
+	backupAndRestore(ctx, t, tc, backupURIs, restoreURIs, numAccounts)
 }
 
 func TestBackupRestoreEmpty(t *testing.T) {
@@ -243,7 +311,7 @@ func TestBackupRestoreEmpty(t *testing.T) {
 	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, localFoo, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
 }
 
 // Regression test for #16008. In short, the way RESTORE constructed split keys
@@ -265,12 +333,38 @@ func TestBackupRestoreNegativePrimaryKey(t *testing.T) {
 		-numAccounts/2, numAccounts/backupRestoreDefaultRanges/2,
 	)
 
-	backupAndRestore(ctx, t, tc, localFoo, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
 }
 
 func backupAndRestore(
-	ctx context.Context, t *testing.T, tc *testcluster.TestCluster, dest string, numAccounts int,
+	ctx context.Context,
+	t *testing.T,
+	tc *testcluster.TestCluster,
+	backupURIs []string,
+	restoreURIs []string,
+	numAccounts int,
 ) {
+	// uriFmtStringAndArgs returns format strings like "$1" or "($1, $2, $3)" and
+	// an []interface{} of URIs for the BACKUP/RESTORE queries.
+	uriFmtStringAndArgs := func(uris []string) (string, []interface{}) {
+		urisForFormat := make([]interface{}, len(uris))
+		var fmtString strings.Builder
+		if len(uris) > 1 {
+			fmtString.WriteString("(")
+		}
+		for i, uri := range uris {
+			if i > 0 {
+				fmtString.WriteString(", ")
+			}
+			fmtString.WriteString(fmt.Sprintf("$%d", i+1))
+			urisForFormat[i] = uri
+		}
+		if len(uris) > 1 {
+			fmtString.WriteString(")")
+		}
+		return fmtString.String(), urisForFormat
+	}
+
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	{
@@ -289,7 +383,10 @@ func backupAndRestore(
 		var exported struct {
 			rows, idx, sys, bytes int64
 		}
-		sqlDB.QueryRow(t, `BACKUP DATABASE data TO $1`, dest).Scan(
+
+		backupURIFmtString, backupURIArgs := uriFmtStringAndArgs(backupURIs)
+		backupQuery := fmt.Sprintf("BACKUP DATABASE data TO %s", backupURIFmtString)
+		sqlDB.QueryRow(t, backupQuery, backupURIArgs...).Scan(
 			&unused, &unused, &unused, &exported.rows, &exported.idx, &exported.sys, &exported.bytes,
 		)
 		// When numAccounts == 0, our approxBytes formula breaks down because
@@ -305,7 +402,7 @@ func backupAndRestore(
 			t.Fatalf("expected %d rows for %d accounts, got %d", expected, numAccounts, exported.rows)
 		}
 
-		sqlDB.ExpectErr(t, "already contains a BACKUP file", `BACKUP DATABASE data TO $1`, dest)
+		sqlDB.ExpectErr(t, "already contains a BACKUP file", backupQuery, backupURIArgs...)
 	}
 
 	// Start a new cluster to restore into.
@@ -325,7 +422,9 @@ func backupAndRestore(
 			rows, idx, sys, bytes int64
 		}
 
-		sqlDBRestore.QueryRow(t, `RESTORE DATABASE DATA FROM $1`, dest).Scan(
+		restoreURIFmtString, restoreURIArgs := uriFmtStringAndArgs(restoreURIs)
+		restoreQuery := fmt.Sprintf("RESTORE DATABASE DATA FROM %s", restoreURIFmtString)
+		sqlDBRestore.QueryRow(t, restoreQuery, restoreURIArgs...).Scan(
 			&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
 		)
 		approxBytes := int64(backupRestoreRowPayloadSize * numAccounts)
@@ -944,6 +1043,13 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			if !testutils.IsError(err, "job paused") {
 				t.Fatalf("%d: expected 'job paused' error, but got %+v", i, err)
 			}
+			if i > 0 {
+				sqlDB.CheckQueryResults(t,
+					`SELECT name FROM crdb_internal.tables WHERE database_name = 'pause' AND state = 'OFFLINE'`,
+					[][]string{{"bank"}},
+				)
+				sqlDB.Exec(t, `ALTER TABLE pause.bank CONFIGURE ZONE USING constraints='[+dc=dc1]'`)
+			}
 			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
 			jobutils.WaitForJob(t, sqlDB, jobID)
 		}
@@ -1474,14 +1580,20 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.Exec(t, `RESTORE DATABASE store from $1 WITH OPTIONS ('skip_missing_views')`, localFoo)
 		db.CheckQueryResults(t, `SELECT * FROM store.early_customers`, origEarlyCustomers)
 		db.CheckQueryResults(t, `SELECT * FROM store.referencing_early_customers`, origEarlyCustomers)
-		db.Exec(t, `DROP DATABASE store CASCADE`)
+		// TODO(lucy, jordan): DROP DATABASE CASCADE doesn't work in the mixed 19.1/
+		// 19.2 state, which is unrelated to backup/restore. See #39504 for a
+		// description of that problem, which is yet to be investigated.
+		// db.Exec(t, `DROP DATABASE store CASCADE`)
 
 		// Test when some tables (views) are skipped and others are restored
 
-		db.Exec(t, createStore)
+		// See above comment for why we can't delete store and have to create
+		// another database for now....
+		// db.Exec(t, createStore)
 		// storestats.ordercounts depends also on store.orders, so it can't be restored
-		db.Exec(t, `RESTORE storestats.ordercounts, store.customers from $1 WITH OPTIONS ('skip_missing_views')`, localFoo)
-		db.CheckQueryResults(t, `SHOW CONSTRAINTS FROM store.customers`, origCustomers)
+		db.Exec(t, `CREATE DATABASE store2`)
+		db.Exec(t, `RESTORE storestats.ordercounts, store.customers from $1 WITH OPTIONS ('skip_missing_views', 'into_db'='store2')`, localFoo)
+		db.CheckQueryResults(t, `SHOW CONSTRAINTS FROM store2.customers`, origCustomers)
 		db.ExpectErr(t, `relation "storestats.ordercounts" does not exist`, `SELECT * FROM storestats.ordercounts`)
 	})
 }
@@ -1588,15 +1700,96 @@ func TestBackupRestoreIncremental(t *testing.T) {
 			from := strings.Join(backupDirs[:i], `,`)
 			sqlDBRestore.Exec(t, fmt.Sprintf(`RESTORE data.bank FROM %s`, from))
 
-			testutils.SucceedsSoon(t, func() error {
-				checksum := checksumBankPayload(t, sqlDBRestore)
-				if checksum != checksums[i-1] {
-					return errors.Errorf("checksum mismatch at index %d: got %d expected %d",
-						i-1, checksum, checksums[i])
-				}
-				return nil
-			})
+			checksum := checksumBankPayload(t, sqlDBRestore)
+			if checksum != checksums[i-1] {
+				t.Fatalf("checksum mismatch at index %d: got %d expected %d",
+					i-1, checksum, checksums[i])
+			}
+		}
+	}
+}
 
+func TestBackupRestorePartitionedIncremental(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 10
+	const numBackups = 4
+	windowSize := int(numAccounts / 3)
+
+	_, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, multiNode, 0, initNone)
+	defer cleanupFn()
+	args := base.TestServerArgs{ExternalIODir: dir}
+	rng, _ := randutil.NewPseudoRand()
+
+	// Each incremental backup is written to two different subdirectories in
+	// defaultDir and dc1Dir, respectively.
+	const defaultDir = "nodelocal:///default"
+	const dc1Dir = "nodelocal:///dc=dc1"
+	var defaultBackupDirs []string
+	var checksums []uint32
+	{
+		for backupNum := 0; backupNum < numBackups; backupNum++ {
+			// In the following, windowSize is `w` and offset is `o`. The first
+			// mutation creates accounts with id [w,3w). Every mutation after
+			// that deletes everything less than o, leaves [o, o+w) unchanged,
+			// mutates [o+w,o+2w), and inserts [o+2w,o+3w).
+			offset := windowSize * backupNum
+			var buf bytes.Buffer
+			fmt.Fprintf(&buf, `DELETE FROM data.bank WHERE id < %d; `, offset)
+			buf.WriteString(`UPSERT INTO data.bank VALUES `)
+			for j := 0; j < windowSize*2; j++ {
+				if j != 0 {
+					buf.WriteRune(',')
+				}
+				id := offset + windowSize + j
+				payload := randutil.RandBytes(rng, backupRestoreRowPayloadSize)
+				fmt.Fprintf(&buf, `(%d, %d, '%s')`, id, backupNum, payload)
+			}
+			sqlDB.Exec(t, buf.String())
+
+			checksums = append(checksums, checksumBankPayload(t, sqlDB))
+
+			defaultBackupDir := fmt.Sprintf("%s/%d", defaultDir, backupNum)
+			dc1BackupDir := fmt.Sprintf("%s/%d", dc1Dir, backupNum)
+			var from string
+			if backupNum > 0 {
+				from = fmt.Sprintf(` INCREMENTAL FROM %s`, strings.Join(defaultBackupDirs, `,`))
+			}
+			sqlDB.Exec(
+				t,
+				fmt.Sprintf(`BACKUP TABLE data.bank TO ('%s?COCKROACH_LOCALITY=%s', '%s?COCKROACH_LOCALITY=%s') %s`,
+					defaultBackupDir, url.QueryEscape("default"),
+					dc1BackupDir, url.QueryEscape("dc=dc1"),
+					from),
+			)
+
+			defaultBackupDirs = append(defaultBackupDirs, fmt.Sprintf(`'%s'`, defaultBackupDir))
+		}
+	}
+
+	// Start a new cluster to restore into.
+	{
+		restoreTC := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
+		defer restoreTC.Stopper().Stop(context.TODO())
+		sqlDBRestore := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
+
+		sqlDBRestore.Exec(t, `CREATE DATABASE data`)
+		for i := len(defaultBackupDirs); i > 0; i-- {
+			sqlDBRestore.Exec(t, `DROP TABLE IF EXISTS data.bank`)
+			var from strings.Builder
+			for backupNum := range defaultBackupDirs[:i] {
+				if backupNum > 0 {
+					from.WriteString(", ")
+				}
+				from.WriteString(fmt.Sprintf("('%s/%d', '%s/%d')", defaultDir, backupNum, dc1Dir, backupNum))
+			}
+			sqlDBRestore.Exec(t, fmt.Sprintf(`RESTORE data.bank FROM %s`, from.String()))
+
+			checksum := checksumBankPayload(t, sqlDBRestore)
+			if checksum != checksums[i-1] {
+				t.Fatalf("checksum mismatch at index %d: got %d expected %d",
+					i-1, checksum, checksums[i])
+			}
 		}
 	}
 }
@@ -2011,7 +2204,9 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 		},
 		Threshold: tc.Server(0).Clock().Now(),
 	}
-	if _, err := client.SendWrapped(ctx, tc.Server(0).DistSender(), &gcr); err != nil {
+	if _, err := client.SendWrapped(
+		ctx, tc.Server(0).DistSenderI().(*kv.DistSender), &gcr,
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2286,7 +2481,7 @@ func TestBackupRestorePermissions(t *testing.T) {
 
 	sqlDB.Exec(t, `CREATE USER testuser`)
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, tc.Server(0).ServingAddr(), "TestBackupRestorePermissions-testuser", url.User("testuser"),
+		t, tc.Server(0).ServingSQLAddr(), "TestBackupRestorePermissions-testuser", url.User("testuser"),
 	)
 	defer cleanupFunc()
 	testuser, err := gosql.Open("postgres", pgURL.String())
@@ -2299,12 +2494,12 @@ func TestBackupRestorePermissions(t *testing.T) {
 
 	t.Run("root-only", func(t *testing.T) {
 		if _, err := testuser.Exec(backupStmt); !testutils.IsError(
-			err, "only superusers are allowed to BACKUP",
+			err, "only users with the admin role are allowed to BACKUP",
 		) {
 			t.Fatal(err)
 		}
 		if _, err := testuser.Exec(`RESTORE blah FROM 'blah'`); !testutils.IsError(
-			err, "only superusers are allowed to RESTORE",
+			err, "only users with the admin role are allowed to RESTORE",
 		) {
 			t.Fatal(err)
 		}
@@ -2842,34 +3037,110 @@ func TestBackupRestoreShowJob(t *testing.T) {
 	})
 }
 
-func TestCreateStatsAfterRestore(t *testing.T) {
+func TestBackupCreatedStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	defer func(oldRefreshInterval, oldAsOf time.Duration) {
-		stats.DefaultRefreshInterval = oldRefreshInterval
-		stats.DefaultAsOfTime = oldAsOf
-	}(stats.DefaultRefreshInterval, stats.DefaultAsOfTime)
-	stats.DefaultRefreshInterval = time.Millisecond
-	stats.DefaultAsOfTime = time.Microsecond
 
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=true`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
 
-	sqlDB.Exec(t, `BACKUP DATABASE data TO $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `CREATE TABLE data.foo (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE STATISTICS foo_stats FROM data.foo`)
+	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
+	sqlDB.Exec(t, `BACKUP data.bank, data.foo TO $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
+	sqlDB.Exec(t, `RESTORE data.bank, data.foo FROM $1 WITH skip_missing_foreign_keys, into_db = $2`,
+		localFoo, "data 2")
+
+	sqlDB.CheckQueryResults(t,
+		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
+	FROM [SHOW STATISTICS FOR TABLE "data 2".bank] WHERE statistics_name='bank_stats'`,
+		[][]string{
+			{"bank_stats", "{id}", "1", "1", "0"},
+			{"bank_stats", "{balance}", "1", "1", "0"},
+			{"bank_stats", "{payload}", "1", "1", "0"},
+		})
+	sqlDB.CheckQueryResults(t,
+		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
+	FROM [SHOW STATISTICS FOR TABLE "data 2".foo] WHERE statistics_name='foo_stats'`,
+		[][]string{
+			{"foo_stats", "{a}", "0", "0", "0"},
+		})
+}
+
+func TestBackupRestoreSubsetCreatedStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
+
+	sqlDB.Exec(t, `CREATE TABLE data.foo (a INT)`)
+	sqlDB.Exec(t, `CREATE STATISTICS foo_stats FROM data.foo`)
+	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
+
+	sqlDB.Exec(t, `BACKUP data.bank, data.foo TO $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `DELETE FROM system.table_statistics WHERE name = 'foo_stats' OR name = 'bank_stats'`)
 	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
 	sqlDB.Exec(t, `RESTORE data.bank FROM $1 WITH skip_missing_foreign_keys, into_db = $2`,
 		localFoo, "data 2")
 
-	// Verify that statistics have been created.
-	sqlDB.CheckQueryResultsRetry(t,
-		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
-	  FROM [SHOW STATISTICS FOR TABLE "data 2".bank]`,
+	// Ensure that the bank_stats have been restored, but foo_stats have not.
+	sqlDB.CheckQueryResults(t,
+		`SELECT name, "columnIDs", "rowCount", "distinctCount", "nullCount" FROM system.table_statistics`,
 		[][]string{
-			{"__auto__", "{id}", "1", "1", "0"},
-			{"__auto__", "{balance}", "1", "1", "0"},
-			{"__auto__", "{payload}", "1", "1", "0"},
+			{"bank_stats", "{1}", "1", "1", "0"}, // id column
+			{"bank_stats", "{2}", "1", "1", "0"}, // balance column
+			{"bank_stats", "{3}", "1", "1", "0"}, // payload column
+		})
+}
+
+// Ensure that statistics are restored from correct backup.
+func TestBackupCreatedStatsFromIncrementalBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const incremental1Foo = "nodelocal:///incremental1foo"
+	const incremental2Foo = "nodelocal:///incremental2foo"
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+	var beforeTs string
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
+
+	// Create the 1st backup, where data.bank has 1 account.
+	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
+	sqlDB.Exec(t, `BACKUP data.bank TO $1 WITH revision_history`, localFoo)
+
+	// Create the 2nd backup, where data.bank has 3 accounts.
+	sqlDB.Exec(t, `INSERT INTO data.bank VALUES (2, 2), (4, 4)`)
+	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&beforeTs) // Save time to restore to this point.
+	sqlDB.Exec(t, `BACKUP data.bank TO $1 INCREMENTAL FROM $2 WITH revision_history`, incremental1Foo, localFoo)
+
+	// Create the 3rd backup, where data.bank has 5 accounts.
+	sqlDB.Exec(t, `INSERT INTO data.bank VALUES (3, 3), (5, 2)`)
+	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
+	sqlDB.Exec(t, `BACKUP data.bank TO $1 INCREMENTAL FROM $2, $3 WITH revision_history`, incremental2Foo, localFoo, incremental1Foo)
+
+	// Restore the 2nd backup.
+	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
+	sqlDB.Exec(t, fmt.Sprintf(`RESTORE data.bank FROM "%s", "%s", "%s" AS OF SYSTEM TIME %s WITH skip_missing_foreign_keys, into_db = "%s"`,
+		localFoo, incremental1Foo, incremental2Foo, beforeTs, "data 2"))
+
+	// Expect the values in row_count and distinct_count to be 3. The values
+	// would be 1 if the stats from the full backup were restored and 5 if
+	// the stats from the latest incremental backup were restored.
+	sqlDB.CheckQueryResults(t,
+		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
+	FROM [SHOW STATISTICS FOR TABLE "data 2".bank] WHERE statistics_name='bank_stats'`,
+		[][]string{
+			{"bank_stats", "{id}", "3", "3", "0"},
+			{"bank_stats", "{balance}", "3", "3", "0"},
+			{"bank_stats", "{payload}", "3", "2", "2"},
 		})
 }

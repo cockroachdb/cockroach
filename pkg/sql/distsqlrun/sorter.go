@@ -57,21 +57,13 @@ func (s *sorterBase) init(
 		s.finishTrace = s.outputStatsToTrace
 	}
 
-	useTempStorage := settingUseTempStorageSorts.Get(&flowCtx.Settings.SV) ||
-		flowCtx.testingKnobs.MemoryLimitBytes > 0
+	useTempStorage := settingUseTempStorageSorts.Get(&flowCtx.Cfg.Settings.SV) ||
+		flowCtx.Cfg.TestingKnobs.MemoryLimitBytes > 0
 	var memMonitor *mon.BytesMonitor
 	if useTempStorage {
 		// Limit the memory use by creating a child monitor with a hard limit.
 		// The processor will overflow to disk if this limit is not enough.
-		limit := flowCtx.testingKnobs.MemoryLimitBytes
-		if limit <= 0 {
-			limit = settingWorkMemBytes.Get(&flowCtx.Settings.SV)
-		}
-		limitedMon := mon.MakeMonitorInheritWithLimit(
-			"sortall-limited", limit, flowCtx.EvalCtx.Mon,
-		)
-		limitedMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
-		memMonitor = &limitedMon
+		memMonitor = NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sortall-limited")
 	} else {
 		memMonitor = NewMonitor(ctx, flowCtx.EvalCtx.Mon, "sorter-mem")
 	}
@@ -84,13 +76,13 @@ func (s *sorterBase) init(
 	}
 
 	if useTempStorage {
-		s.diskMonitor = NewMonitor(ctx, flowCtx.diskMonitor, "sorter-disk")
+		s.diskMonitor = NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "sorter-disk")
 		rc := rowcontainer.DiskBackedRowContainer{}
 		rc.Init(
 			ordering,
 			input.OutputTypes(),
 			s.evalCtx,
-			flowCtx.TempStorage,
+			flowCtx.Cfg.TempStorage,
 			memMonitor,
 			s.diskMonitor,
 			0, /* rowCapacity */

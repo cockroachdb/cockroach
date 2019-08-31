@@ -478,7 +478,7 @@ func TestGCQueueProcess(t *testing.T) {
 	}
 
 	// The total size of the GC'able versions of the keys and values in GCInfo.
-	// Key size: len("a") + mvccVersionTimestampSize (13 bytes) = 14 bytes.
+	// Key size: len("a") + MVCCVersionTimestampSize (13 bytes) = 14 bytes.
 	// Value size: len("value") + headerSize (5 bytes) = 10 bytes.
 	// key1 at ts1  (14 bytes) => "value" (10 bytes)
 	// key2 at ts1  (14 bytes) => "value" (10 bytes)
@@ -590,9 +590,8 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	tsc := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	manual.Set(3 * 24 * time.Hour.Nanoseconds())
 
-	now := manual.UnixNano()
-
-	gcExpiration := now - storagebase.TxnCleanupThreshold.Nanoseconds()
+	testTime := manual.UnixNano() + 2*time.Hour.Nanoseconds()
+	gcExpiration := testTime - storagebase.TxnCleanupThreshold.Nanoseconds()
 
 	type spec struct {
 		status      roachpb.TransactionStatus
@@ -725,6 +724,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	tc.StartWithStoreConfig(t, stopper, tsc)
+	manual.Set(testTime)
 
 	outsideKey := tc.repl.Desc().EndKey.Next().AsRawKey()
 	testIntents := []roachpb.Span{{Key: roachpb.Key("intent")}}
@@ -776,6 +776,17 @@ func TestGCQueueTransactionTable(t *testing.T) {
 				if expGC != !ok {
 					return fmt.Errorf("%s: expected gc: %t, but found %s\n%s", strKey, expGC, txn, roachpb.Key(strKey))
 				}
+				// If the transaction record was GCed and didn't begin the test
+				// as finalized, verify that the write timestamp cache was
+				// updated (by the corresponding PushTxn that marked the record
+				// as ABORTED) to prevent it from being created again in the
+				// future.
+				if !sp.status.IsFinalized() {
+					wTS, _ := tc.store.tsCache.GetMaxWrite(key, nil /* end */)
+					if min := (hlc.Timestamp{WallTime: sp.orig}); wTS.Less(min) {
+						return fmt.Errorf("%s: expected write tscache entry for txn key to be >= %s, but found %s", strKey, min, wTS)
+					}
+				}
 			} else if sp.newStatus != txn.Status {
 				return fmt.Errorf("%s: expected status %s, but found %s", strKey, sp.newStatus, txn.Status)
 			}
@@ -825,16 +836,6 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	tc.repl.assertStateLocked(ctx, batch) // check that in-mem and on-disk state were updated
 	tc.repl.mu.Unlock()
 	tc.repl.raftMu.Unlock()
-
-	tc.repl.mu.Lock()
-	txnSpanThreshold := tc.repl.mu.state.TxnSpanGCThreshold
-	tc.repl.mu.Unlock()
-
-	// Verify that the new TxnSpanGCThreshold has reached the Replica.
-	if expWT := gcExpiration; txnSpanThreshold.WallTime != expWT {
-		t.Fatalf("expected TxnSpanGCThreshold.Walltime %d, got timestamp %s",
-			expWT, txnSpanThreshold)
-	}
 }
 
 // TestGCQueueIntentResolution verifies intent resolution with many
@@ -986,7 +987,7 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	if gcKeyVersionChunkBytes%keyCount != 0 {
 		t.Fatalf("expected gcKeyVersionChunkBytes to be a multiple of %d", keyCount)
 	}
-	// Reduce the key size by mvccVersionTimestampSize (13 bytes) to prevent batch overflow.
+	// Reduce the key size by MVCCVersionTimestampSize (13 bytes) to prevent batch overflow.
 	// This is due to MVCCKey.EncodedSize(), which returns the full size of the encoded key.
 	const keySize = (gcKeyVersionChunkBytes / keyCount) - 13
 	// Create a format string for creating version keys of exactly

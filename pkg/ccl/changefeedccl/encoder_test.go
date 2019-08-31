@@ -361,7 +361,8 @@ func TestAvroLedger(t *testing.T) {
 
 		ctx := context.Background()
 		gen := ledger.FromFlags(`--customers=1`)
-		_, err := workloadsql.Setup(ctx, db, gen, 0, 0)
+		var l workloadsql.InsertsDataLoader
+		_, err := workloadsql.Setup(ctx, db, gen, l)
 		require.NoError(t, err)
 
 		ledger := feed(t, f, `CREATE CHANGEFEED FOR customer, transaction, entry, session

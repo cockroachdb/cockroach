@@ -272,6 +272,17 @@ DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value);
 // merged with existing. This method is provided for invocation from Go code.
 DBStatus DBPartialMergeOne(DBSlice existing, DBSlice update, DBString* new_value);
 
+// DBCheckForKeyCollisions runs both iterators in lockstep and errors out at the
+// first key collision, where a collision refers to any two MVCC keys with the
+// same user key, and with a different timestamp or value.
+//
+// An exception is made when the latest version of the colliding key is a
+// tombstone from an MVCC delete in the existing data. If the timestamp of the
+// SST key is greater than or equal to the timestamp of the tombstone, then it
+// is not considered a collision and we continue iteration from the next key in
+// the existing data.
+DBIterState DBCheckForKeyCollisions(DBIterator* existingIter, DBIterator* sstIter, DBString* write_intent);
+
 // NB: The function (cStatsToGoStats) that converts these to the go
 // representation is unfortunately duplicated in engine and engineccl. If this
 // struct is changed, both places need to be updated.
@@ -460,6 +471,19 @@ DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val);
 
 // Adds a deletion tombstone to the sstable being built. See DBSstFileWriterAdd for more.
 DBStatus DBSstFileWriterDelete(DBSstFileWriter* fw, DBKey key);
+
+// Adds a range deletion tombstone to the sstable being built. This function
+// can be called at any time with respect to DBSstFileWriter{Put,Merge,Delete}
+// (I.E. does not have to be greater than any previously added entry). Range
+// deletion tombstones do not take precedence over other Puts in the same SST.
+// `Open` must have been called. `Close` cannot have been called.
+DBStatus DBSstFileWriterDeleteRange(DBSstFileWriter* fw, DBKey start, DBKey end);
+
+// Truncates the writer and stores the constructed file's contents in *data.
+// May be called multiple times. The returned data won't necessarily reflect
+// the latest writes, only the keys whose underlying RocksDB blocks have been
+// flushed. Close cannot have been called.
+DBStatus DBSstFileWriterTruncate(DBSstFileWriter *fw, DBString* data);
 
 // Finalizes the writer and stores the constructed file's contents in *data. At
 // least one kv entry must have been added. May only be called once.

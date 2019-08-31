@@ -21,8 +21,9 @@ package exec
 
 import (
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
 )
@@ -39,12 +40,12 @@ var _ tree.Datum
 // _ASSIGN_ADD is the template addition function for assigning the first input
 // to the result of the second input + the third input.
 func _ASSIGN_ADD(_, _, _ string) {
-	panic("")
+	execerror.VectorizedInternalPanic("")
 }
 
 // */}}
 
-func newSumAgg(t types.T) (aggregateFunc, error) {
+func newSumAgg(t coltypes.T) (aggregateFunc, error) {
 	switch t {
 	// {{range .}}
 	case _TYPES_T:
@@ -114,14 +115,11 @@ func (a *sum_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	if inputLen == 0 {
 		// The aggregation is finished. Flush the last value. If we haven't found
 		// any non-nulls for this group so far, the output for this group should be
-		// null. If a.scratch.curIdx is negative, it means the input has zero rows,
-		// and there should be no output at all.
-		if a.scratch.curIdx >= 0 {
-			if !a.scratch.foundNonNullForCurrentGroup {
-				a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
-			}
-			a.scratch.vec[a.scratch.curIdx] = a.scratch.curAgg
+		// null.
+		if !a.scratch.foundNonNullForCurrentGroup {
+			a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
 		}
+		a.scratch.vec[a.scratch.curIdx] = a.scratch.curAgg
 		a.scratch.curIdx++
 		a.done = true
 		return
@@ -153,6 +151,10 @@ func (a *sum_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			}
 		}
 	}
+}
+
+func (a *sum_TYPEAgg) HandleEmptyInputScalar() {
+	a.scratch.nulls.SetNull(0)
 }
 
 // {{end}}

@@ -253,6 +253,15 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION SELECT * FROM c`},
 		{`CREATE TABLE a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5`},
 		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5`},
+		{`CREATE TABLE a (z PRIMARY KEY) AS SELECT * FROM b`},
+		{`CREATE TABLE IF NOT EXISTS a (z PRIMARY KEY) AS SELECT * FROM b`},
+		{`CREATE TABLE a (x, y, z, PRIMARY KEY (x, y, z)) AS SELECT * FROM b`},
+		{`CREATE TABLE IF NOT EXISTS a (x, y, z, PRIMARY KEY (x, y, z)) AS SELECT * FROM b`},
+		{`CREATE TABLE a (x, FAMILY (x)) AS SELECT * FROM b`},
+		{`CREATE TABLE IF NOT EXISTS a (x, FAMILY (x)) AS SELECT * FROM b`},
+		{`CREATE TABLE a (x, y FAMILY f1) AS SELECT * FROM b`},
+		{`CREATE TABLE IF NOT EXISTS a (x, y FAMILY f1) AS SELECT * FROM b`},
+
 		{`CREATE TABLE a (b STRING COLLATE de)`},
 		{`CREATE TABLE a (b STRING(3) COLLATE de)`},
 		{`CREATE TABLE a (b STRING[] COLLATE de)`},
@@ -368,6 +377,8 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN RESUME JOBS SELECT a`},
 		{`PAUSE JOBS SELECT a`},
 		{`EXPLAIN PAUSE JOBS SELECT a`},
+		{`SHOW JOBS SELECT a`},
+		{`EXPLAIN SHOW JOBS SELECT a`},
 
 		{`EXPLAIN SELECT 1`},
 		{`EXPLAIN EXPLAIN SELECT 1`},
@@ -448,13 +459,13 @@ func TestParse(t *testing.T) {
 		{`SHOW STATISTICS FOR TABLE d.t`},
 		{`SHOW HISTOGRAM 123`},
 		{`EXPLAIN SHOW HISTOGRAM 123`},
-		{`SHOW EXPERIMENTAL_RANGES FROM TABLE d.t`},
-		{`EXPLAIN SHOW EXPERIMENTAL_RANGES FROM TABLE d.t`},
-		{`SHOW EXPERIMENTAL_RANGES FROM TABLE t`},
-		{`SHOW EXPERIMENTAL_RANGES FROM INDEX d.t@i`},
-		{`SHOW EXPERIMENTAL_RANGES FROM INDEX t@i`},
-		{`SHOW EXPERIMENTAL_RANGES FROM INDEX d.i`},
-		{`SHOW EXPERIMENTAL_RANGES FROM INDEX i`},
+		{`SHOW RANGES FROM TABLE d.t`},
+		{`EXPLAIN SHOW RANGES FROM TABLE d.t`},
+		{`SHOW RANGES FROM TABLE t`},
+		{`SHOW RANGES FROM INDEX d.t@i`},
+		{`SHOW RANGES FROM INDEX t@i`},
+		{`SHOW RANGES FROM INDEX d.i`},
+		{`SHOW RANGES FROM INDEX i`},
 		{`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`},
 		{`SHOW ZONE CONFIGURATIONS`},
 		{`EXPLAIN SHOW ZONE CONFIGURATIONS`},
@@ -646,6 +657,7 @@ func TestParse(t *testing.T) {
 		{`SELECT a#>>'{x}'`},
 		{`SELECT (a->'x')->'y'`},
 		{`SELECT (a->'x')->>'y'`},
+		{`SELECT b && c`},
 
 		{`SELECT 1 FROM t`},
 		{`SELECT 1, 2 FROM t`},
@@ -926,6 +938,10 @@ func TestParse(t *testing.T) {
 		{`SELECT avg(1) OVER (PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t`},
 		{`SELECT avg(1) OVER (w PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t`},
 
+		{`SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE CURRENT ROW) FROM t`},
+		{`SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE GROUP) FROM t`},
+		{`SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES) FROM t`},
+
 		{`SELECT avg(1) FILTER (WHERE a > b)`},
 		{`SELECT avg(1) FILTER (WHERE a > b) OVER (ORDER BY c)`},
 
@@ -1010,6 +1026,11 @@ func TestParse(t *testing.T) {
 		{`SELECT (i.keys).*`},
 		{`SELECT (ARRAY['a', 'b', 'c']).name`},
 
+		{`SELECT 1 FOR UPDATE`},
+		{`SELECT 1 FOR NO KEY UPDATE`},
+		{`SELECT 1 FOR SHARE`},
+		{`SELECT 1 FOR KEY SHARE`},
+
 		{`TABLE a`}, // Shorthand for: SELECT * FROM a; used e.g. in CREATE VIEW v AS TABLE t
 		{`EXPLAIN TABLE a`},
 		{`TABLE [123 AS a]`},
@@ -1024,6 +1045,9 @@ func TestParse(t *testing.T) {
 		{`UPDATE a.b SET b = 3`},
 		{`UPDATE a.b@c SET b = 3`},
 		{`UPDATE a SET b = 3, c = DEFAULT`},
+		{`UPDATE a SET b = 3, c = DEFAULT FROM b`},
+		{`UPDATE a SET b = 3, c = DEFAULT FROM a AS other`},
+		{`UPDATE a SET b = 3, c = DEFAULT FROM a AS other, b`},
 		{`UPDATE a SET b = 3 + 4`},
 		{`UPDATE a SET (b, c) = (3, DEFAULT)`},
 		{`UPDATE a SET (b, c) = (SELECT 3, 4)`},
@@ -1036,6 +1060,7 @@ func TestParse(t *testing.T) {
 		{`UPDATE a SET b = 3 WHERE a = b RETURNING a, a + b`},
 		{`UPDATE a SET b = 3 WHERE a = b RETURNING NOTHING`},
 		{`UPDATE a SET b = 3 WHERE a = b ORDER BY c LIMIT d RETURNING e`},
+		{`UPDATE a SET b = 3 FROM other WHERE a = b ORDER BY c LIMIT d RETURNING e`},
 
 		{`UPDATE t AS "0" SET k = ''`},                 // "0" lost its quotes
 		{`SELECT * FROM "0" JOIN "0" USING (id, "0")`}, // last "0" lost its quotes.
@@ -1263,6 +1288,9 @@ func TestParse(t *testing.T) {
 		{`BACKUP DATABASE foo, baz TO 'bar'`},
 		{`BACKUP DATABASE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'`},
 
+		{`BACKUP DATABASE foo TO ($1, $2)`},
+		{`BACKUP DATABASE foo TO ($1, $2) INCREMENTAL FROM 'baz'`},
+
 		{`RESTORE TABLE foo FROM 'bar'`},
 		{`EXPLAIN RESTORE TABLE foo FROM 'bar'`},
 		{`RESTORE TABLE foo FROM $1`},
@@ -1275,6 +1303,12 @@ func TestParse(t *testing.T) {
 		{`RESTORE DATABASE foo, baz FROM 'bar'`},
 		{`RESTORE DATABASE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
 
+		{`RESTORE DATABASE foo FROM ($1, $2)`},
+		{`RESTORE DATABASE foo FROM ($1, $2), $3`},
+		{`RESTORE DATABASE foo FROM $1, ($2, $3)`},
+		{`RESTORE DATABASE foo FROM ($1, $2), ($3, $4)`},
+		{`RESTORE DATABASE foo FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'`},
+
 		{`BACKUP TABLE foo TO 'bar' WITH key1, key2 = 'value'`},
 		{`RESTORE TABLE foo FROM 'bar' WITH key1, key2 = 'value'`},
 
@@ -1285,6 +1319,7 @@ func TestParse(t *testing.T) {
 		{`IMPORT TABLE foo (id INT8, email STRING, age INT8) CSV DATA ('path/to/some/file', $1) WITH comma = ',', "nullif" = 'n/a', temp = $2`},
 		{`IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
 		{`IMPORT INTO foo(id, email) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
+		{`IMPORT INTO foo CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 
 		{`IMPORT PGDUMP 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
 		{`EXPLAIN IMPORT PGDUMP 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
@@ -1422,7 +1457,6 @@ func TestParse2(t *testing.T) {
 
 		{`SELECT b <<= c`, `SELECT inet_contained_by_or_equals(b, c)`},
 		{`SELECT b >>= c`, `SELECT inet_contains_or_equals(b, c)`},
-		{`SELECT b && c`, `SELECT inet_contains_or_contained_by(b, c)`},
 
 		{`SELECT NUMERIC 'foo'`, `SELECT DECIMAL 'foo'`},
 		{`SELECT REAL 'foo'`, `SELECT FLOAT4 'foo'`},
@@ -1723,8 +1757,13 @@ func TestParse2(t *testing.T) {
 			`DEALLOCATE ALL`},
 
 		{`CANCEL JOB a`, `CANCEL JOBS VALUES (a)`},
+		{`EXPLAIN CANCEL JOB a`, `EXPLAIN CANCEL JOBS VALUES (a)`},
 		{`RESUME JOB a`, `RESUME JOBS VALUES (a)`},
+		{`EXPLAIN RESUME JOB a`, `EXPLAIN RESUME JOBS VALUES (a)`},
 		{`PAUSE JOB a`, `PAUSE JOBS VALUES (a)`},
+		{`EXPLAIN PAUSE JOB a`, `EXPLAIN PAUSE JOBS VALUES (a)`},
+		{`SHOW JOB a`, `SHOW JOBS VALUES (a)`},
+		{`EXPLAIN SHOW JOB a`, `EXPLAIN SHOW JOBS VALUES (a)`},
 		{`CANCEL QUERY a`, `CANCEL QUERIES VALUES (a)`},
 		{`CANCEL QUERY IF EXISTS a`, `CANCEL QUERIES IF EXISTS VALUES (a)`},
 		{`CANCEL SESSION a`, `CANCEL SESSIONS VALUES (a)`},
@@ -1736,6 +1775,11 @@ func TestParse2(t *testing.T) {
 			`BACKUP DATABASE foo TO 'bar.12' INCREMENTAL FROM 'baz.34'`},
 		{`RESTORE DATABASE foo FROM bar`,
 			`RESTORE DATABASE foo FROM 'bar'`},
+		{`BACKUP DATABASE foo TO ($1)`, `BACKUP DATABASE foo TO $1`},
+
+		{`RESTORE DATABASE foo FROM ($1)`, `RESTORE DATABASE foo FROM $1`},
+		{`RESTORE DATABASE foo FROM ($1), ($2)`, `RESTORE DATABASE foo FROM $1, $2`},
+		{`RESTORE DATABASE foo FROM ($1), ($2, $3)`, `RESTORE DATABASE foo FROM $1, ($2, $3)`},
 
 		{`CREATE CHANGEFEED FOR TABLE foo INTO sink`,
 			`CREATE CHANGEFEED FOR TABLE foo INTO 'sink'`},
@@ -2726,11 +2770,11 @@ func TestParsePrecedence(t *testing.T) {
 		return &tree.ComparisonExpr{Operator: tree.RegIMatch, Left: left, Right: right}
 	}
 
-	one := &tree.NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
-	minusone := &tree.NumVal{Value: constant.MakeInt64(1), OrigString: "1", Negative: true}
-	two := &tree.NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
-	minustwo := &tree.NumVal{Value: constant.MakeInt64(2), OrigString: "2", Negative: true}
-	three := &tree.NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
+	one := tree.NewNumVal(constant.MakeInt64(1), "1", false /* negative */)
+	minusone := tree.NewNumVal(constant.MakeInt64(1), "1", true /* negative */)
+	two := tree.NewNumVal(constant.MakeInt64(2), "2", false /* negative */)
+	minustwo := tree.NewNumVal(constant.MakeInt64(2), "2", true /* negative */)
+	three := tree.NewNumVal(constant.MakeInt64(3), "3", false /* negative */)
 	a := tree.NewStrVal("a")
 	b := tree.NewStrVal("b")
 	c := tree.NewStrVal("c")
@@ -2986,10 +3030,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``},
 		{`INSERT INTO foo VALUES (1,2) ON CONFLICT ON CONSTRAINT a DO NOTHING`, 28161, ``},
 
-		{`SELECT * FROM a FOR UPDATE`, 6583, ``},
 		{`SELECT * FROM ROWS FROM (a(b) AS (d))`, 0, `ROWS FROM with col_def_list`},
-
-		{`SELECT 123 AT TIME ZONE 'b'`, 32005, ``},
 
 		{`SELECT 'a'::INTERVAL SECOND`, 0, `interval with unit qualifier`},
 		{`SELECT 'a'::INTERVAL(123)`, 32564, ``},
@@ -3016,7 +3057,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT GROUPING (a,b,c)`, 0, `d_expr grouping`},
 		{`SELECT a(VARIADIC b)`, 0, `variadic`},
 		{`SELECT a(b, c, VARIADIC b)`, 0, `variadic`},
-		{`SELECT COLLATION FOR (a)`, 32563, ``},
 		{`SELECT CURRENT_TIME`, 26097, `current_time`},
 		{`SELECT CURRENT_TIME()`, 26097, `current_time`},
 		{`SELECT TREAT (a AS INT8)`, 0, `treat`},
@@ -3046,7 +3086,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`UPDATE foo SET (a, a.b) = (1, 2)`, 27792, ``},
 		{`UPDATE foo SET a.b = 1`, 27792, ``},
-		{`UPDATE foo SET x = y FROM a, b`, 7841, ``},
 		{`UPDATE Foo SET x.y = z`, 27792, ``},
 
 		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``},

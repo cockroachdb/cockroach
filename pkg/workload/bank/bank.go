@@ -16,8 +16,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -36,6 +36,7 @@ const (
 	)`
 
 	defaultRows         = 1000
+	defaultBatchSize    = 1000
 	defaultPayloadBytes = 100
 	defaultRanges       = 10
 	maxTransfer         = 999
@@ -45,8 +46,9 @@ type bank struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed                       uint64
-	rows, payloadBytes, ranges int
+	seed                 uint64
+	rows, batchSize      int
+	payloadBytes, ranges int
 }
 
 func init() {
@@ -61,8 +63,12 @@ var bankMeta = workload.Meta{
 	New: func() workload.Generator {
 		g := &bank{}
 		g.flags.FlagSet = pflag.NewFlagSet(`bank`, pflag.ContinueOnError)
+		g.flags.Meta = map[string]workload.FlagMeta{
+			`batch-size`: {RuntimeOnly: true},
+		}
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.IntVar(&g.rows, `rows`, defaultRows, `Initial number of accounts in bank table.`)
+		g.flags.IntVar(&g.batchSize, `batch-size`, defaultBatchSize, `Number of rows in each batch of initial data.`)
 		g.flags.IntVar(&g.payloadBytes, `payload-bytes`, defaultPayloadBytes, `Size of the payload field in each initial row.`)
 		g.flags.IntVar(&g.ranges, `ranges`, defaultRanges, `Initial number of ranges in bank table.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
@@ -73,18 +79,22 @@ var bankMeta = workload.Meta{
 // FromRows returns Bank testdata with the given number of rows and default
 // payload size and range count.
 func FromRows(rows int) workload.Generator {
-	return FromConfig(rows, defaultPayloadBytes, defaultRanges)
+	return FromConfig(rows, 1, defaultPayloadBytes, defaultRanges)
 }
 
 // FromConfig returns a one table testdata with three columns: an `id INT
 // PRIMARY KEY` representing an account number, a `balance` INT, and a `payload`
 // BYTES to pad the size of the rows for various tests.
-func FromConfig(rows int, payloadBytes int, ranges int) workload.Generator {
+func FromConfig(rows int, batchSize int, payloadBytes int, ranges int) workload.Generator {
 	if ranges > rows {
 		ranges = rows
 	}
+	if batchSize <= 0 {
+		batchSize = defaultBatchSize
+	}
 	return workload.FromFlags(bankMeta,
 		fmt.Sprintf(`--rows=%d`, rows),
+		fmt.Sprintf(`--batch-size=%d`, batchSize),
 		fmt.Sprintf(`--payload-bytes=%d`, payloadBytes),
 		fmt.Sprintf(`--ranges=%d`, ranges),
 	)
@@ -105,36 +115,53 @@ func (b *bank) Hooks() workload.Hooks {
 					"Value of 'rows' (%d) must be greater than or equal to value of 'ranges' (%d)",
 					b.rows, b.ranges)
 			}
+			if b.batchSize <= 0 {
+				return errors.Errorf(`Value of batch-size must be greater than zero; was %d`, b.batchSize)
+			}
 			return nil
 		},
 	}
 }
 
-var bankColTypes = []types.T{
-	types.Int64,
-	types.Int64,
-	types.Bytes,
+var bankColTypes = []coltypes.T{
+	coltypes.Int64,
+	coltypes.Int64,
+	coltypes.Bytes,
 }
 
 // Tables implements the Generator interface.
 func (b *bank) Tables() []workload.Table {
+	numBatches := (b.rows + b.batchSize - 1) / b.batchSize // ceil(b.rows/b.batchSize)
 	table := workload.Table{
 		Name:   `bank`,
 		Schema: bankSchema,
 		InitialRows: workload.BatchedTuples{
-			NumBatches: b.rows,
-			FillBatch: func(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
-				rng := rand.NewSource(b.seed + uint64(rowIdx))
-				var payload []byte
-				*a, payload = a.Alloc(b.payloadBytes, 0 /* extraCap */)
-				const initialPrefix = `initial-`
-				copy(payload[:len(initialPrefix)], []byte(initialPrefix))
-				randStringLetters(rng, payload[len(initialPrefix):])
+			NumBatches: numBatches,
+			FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
+				rng := rand.NewSource(b.seed + uint64(batchIdx))
 
-				cb.Reset(bankColTypes, 1)
-				cb.ColVec(0).Int64()[0] = int64(rowIdx) // id
-				cb.ColVec(1).Int64()[0] = 0             // balance
-				cb.ColVec(2).Bytes()[0] = payload       // payload
+				rowBegin, rowEnd := batchIdx*b.batchSize, (batchIdx+1)*b.batchSize
+				if rowEnd > b.rows {
+					rowEnd = b.rows
+				}
+				cb.Reset(bankColTypes, rowEnd-rowBegin)
+				idCol := cb.ColVec(0).Int64()
+				balanceCol := cb.ColVec(1).Int64()
+				payloadCol := cb.ColVec(2).Bytes()
+				// coldata.Bytes only allows appends so we have to reset it
+				payloadCol.Reset()
+				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
+					var payload []byte
+					*a, payload = a.Alloc(b.payloadBytes, 0 /* extraCap */)
+					const initialPrefix = `initial-`
+					copy(payload[:len(initialPrefix)], []byte(initialPrefix))
+					randStringLetters(rng, payload[len(initialPrefix):])
+
+					rowOffset := rowIdx - rowBegin
+					idCol[rowOffset] = int64(rowIdx)
+					balanceCol[rowOffset] = 0
+					payloadCol.Set(rowOffset, payload)
+				}
 			},
 		},
 		Splits: workload.Tuples(

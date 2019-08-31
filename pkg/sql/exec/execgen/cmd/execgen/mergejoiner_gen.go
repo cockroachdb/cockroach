@@ -11,6 +11,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"strings"
@@ -44,11 +45,13 @@ type joinTypeInfo struct {
 	IsInner      bool
 	IsLeftOuter  bool
 	IsRightOuter bool
+	IsLeftSemi   bool
+	IsLeftAnti   bool
 
 	String string
 }
 
-func genMergeJoinOps(wr io.Writer) error {
+func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 	d, err := ioutil.ReadFile("pkg/sql/exec/mergejoiner_tmpl.go")
 	if err != nil {
 		return err
@@ -58,18 +61,22 @@ func genMergeJoinOps(wr io.Writer) error {
 
 	// Replace the template variables.
 	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "types.{{.LTyp}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_L_SEL_IND", "{{$sel.LSelString}}", -1)
 	s = strings.Replace(s, "_R_SEL_IND", "{{$sel.RSelString}}", -1)
 	s = strings.Replace(s, "_IS_L_SEL", "{{$sel.IsLSel}}", -1)
 	s = strings.Replace(s, "_IS_R_SEL", "{{$sel.IsRSel}}", -1)
 	s = strings.Replace(s, "_SEL_ARG", "$sel", -1)
-	s = strings.Replace(s, "_JOIN_TYPE_STRING", "{{$joinType.String}}", -1)
-	s = strings.Replace(s, "_JOIN_TYPE", "$joinType", -1)
+	s = strings.Replace(s, "_JOIN_TYPE_STRING", "{{$.JoinType.String}}", -1)
+	s = strings.Replace(s, "_JOIN_TYPE", "$.JoinType", -1)
 	s = strings.Replace(s, "_MJ_OVERLOAD", "$mjOverload", -1)
 	s = strings.Replace(s, "_L_HAS_NULLS", "$.lHasNulls", -1)
 	s = strings.Replace(s, "_R_HAS_NULLS", "$.rHasNulls", -1)
+	s = strings.Replace(s, "_HAS_NULLS", "$.HasNulls", -1)
+	s = strings.Replace(s, "_HAS_SELECTION", "$.HasSelection", -1)
+	s = strings.Replace(s, "_SEL_PERMUTATION", "$.SelPermutation", -1)
+	s = strings.Replace(s, "_ASC_DIRECTION", "$.AscDirection", -1)
 
 	leftUnmatchedGroupSwitch := makeFunctionRegex("_LEFT_UNMATCHED_GROUP_SWITCH", 1)
 	s = leftUnmatchedGroupSwitch.ReplaceAllString(s, `{{template "leftUnmatchedGroupSwitch" buildDict "Global" $ "JoinType" $1}}`)
@@ -84,25 +91,25 @@ func genMergeJoinOps(wr io.Writer) error {
 	s = nullFromRightSwitch.ReplaceAllString(s, `{{template "nullFromRightSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
 	incrementLeftSwitch := makeFunctionRegex("_INCREMENT_LEFT_SWITCH", 4)
-	s = incrementLeftSwitch.ReplaceAllString(s, `{{template "incrementLeftSwitch" buildDict "Global" $ "JoinType" $1 "Sel" $2 "MJOverload" $3 "lHasNulls" $4}}`)
+	s = incrementLeftSwitch.ReplaceAllString(s, `{{template "incrementLeftSwitch" buildDict "Global" $ "LTyp" .LTyp "JoinType" $1 "SelPermutation" $2 "MJOverload" $3 "lHasNulls" $4}}`)
 
 	incrementRightSwitch := makeFunctionRegex("_INCREMENT_RIGHT_SWITCH", 4)
-	s = incrementRightSwitch.ReplaceAllString(s, `{{template "incrementRightSwitch" buildDict "Global" $ "JoinType" $1 "Sel" $2 "MJOverload" $3 "rHasNulls" $4}}`)
+	s = incrementRightSwitch.ReplaceAllString(s, `{{template "incrementRightSwitch" buildDict "Global" $ "LTyp" .LTyp "JoinType" $1 "SelPermutation" $2 "MJOverload" $3 "rHasNulls" $4}}`)
 
 	processNotLastGroupInColumnSwitch := makeFunctionRegex("_PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH", 1)
 	s = processNotLastGroupInColumnSwitch.ReplaceAllString(s, `{{template "processNotLastGroupInColumnSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
 	probeSwitch := makeFunctionRegex("_PROBE_SWITCH", 5)
-	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "JoinType" $1 "Sel" $2 "lHasNulls" $3 "rHasNulls" $4 "Asc" $5}}`)
+	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "JoinType" $1 "SelPermutation" $2 "lHasNulls" $3 "rHasNulls" $4 "AscDirection" $5}}`)
 
 	sourceFinishedSwitch := makeFunctionRegex("_SOURCE_FINISHED_SWITCH", 1)
 	s = sourceFinishedSwitch.ReplaceAllString(s, `{{template "sourceFinishedSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
-	leftSwitch := makeFunctionRegex("_LEFT_SWITCH", 2)
-	s = leftSwitch.ReplaceAllString(s, `{{template "leftSwitch" buildDict "Global" $ "IsSel" $1 "HasNulls" $2 }}`)
+	leftSwitch := makeFunctionRegex("_LEFT_SWITCH", 3)
+	s = leftSwitch.ReplaceAllString(s, `{{template "leftSwitch" buildDict "Global" $ "JoinType" $1 "HasSelection" $2 "HasNulls" $3 }}`)
 
-	rightSwitch := makeFunctionRegex("_RIGHT_SWITCH", 2)
-	s = rightSwitch.ReplaceAllString(s, `{{template "rightSwitch" buildDict "Global" $ "IsSel" $1  "HasNulls" $2 }}`)
+	rightSwitch := makeFunctionRegex("_RIGHT_SWITCH", 3)
+	s = rightSwitch.ReplaceAllString(s, `{{template "rightSwitch" buildDict "Global" $ "JoinType" $1 "HasSelection" $2  "HasNulls" $3 }}`)
 
 	assignEqRe := makeFunctionRegex("_ASSIGN_EQ", 3)
 	s = assignEqRe.ReplaceAllString(s, `{{.Eq.Assign $1 $2 $3}}`)
@@ -113,13 +120,15 @@ func genMergeJoinOps(wr io.Writer) error {
 	assignGtRe := makeFunctionRegex("_ASSIGN_GT", 3)
 	s = assignGtRe.ReplaceAllString(s, `{{.Gt.Assign $1 $2 $3}}`)
 
+	s = replaceManipulationFuncs(".LTyp", s)
+
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("mergejoin_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}
 
-	allOverloads := intersectOverloads(comparisonOpToOverloads[tree.EQ], comparisonOpToOverloads[tree.LT], comparisonOpToOverloads[tree.GT])
+	allOverloads := intersectOverloads(sameTypeComparisonOpToOverloads[tree.EQ], sameTypeComparisonOpToOverloads[tree.LT], sameTypeComparisonOpToOverloads[tree.GT])
 
 	// Create an mjOverload for each overload combining three overloads so that
 	// the template code can access all of EQ, LT, and GT in the same range loop.
@@ -161,6 +170,18 @@ func genMergeJoinOps(wr io.Writer) error {
 		},
 	}
 
+	return tmpl.Execute(wr, struct {
+		MJOverloads     interface{}
+		SelPermutations interface{}
+		JoinType        interface{}
+	}{
+		MJOverloads:     mjOverloads,
+		SelPermutations: selPermutations,
+		JoinType:        jti,
+	})
+}
+
+func init() {
 	joinTypeInfos := []joinTypeInfo{
 		{
 			IsInner: true,
@@ -179,19 +200,23 @@ func genMergeJoinOps(wr io.Writer) error {
 			IsRightOuter: true,
 			String:       "FullOuter",
 		},
+		{
+			IsLeftSemi: true,
+			String:     "LeftSemi",
+		},
+		{
+			IsLeftAnti: true,
+			String:     "LeftAnti",
+		},
 	}
 
-	return tmpl.Execute(wr, struct {
-		MJOverloads     interface{}
-		SelPermutations interface{}
-		JoinTypes       interface{}
-	}{
-		MJOverloads:     mjOverloads,
-		SelPermutations: selPermutations,
-		JoinTypes:       joinTypeInfos,
-	})
-}
+	mergeJoinGenerator := func(jti joinTypeInfo) generator {
+		return func(wr io.Writer) error {
+			return genMergeJoinOps(wr, jti)
+		}
+	}
 
-func init() {
-	registerGenerator(genMergeJoinOps, "mergejoiner.eg.go")
+	for _, join := range joinTypeInfos {
+		registerGenerator(mergeJoinGenerator(join), fmt.Sprintf("mergejoiner_%s.eg.go", strings.ToLower(join.String)))
+	}
 }

@@ -288,8 +288,8 @@
                 $input
                 [
                     (AggregationsItem
-                        (ArrayAgg (Variable (FirstCol $input)))
-                        (MakeArrayAggCol (ArrayType $input))
+                        (ArrayAgg (Variable $requestedCol:(SubqueryRequestedCol $subquery)))
+                        (MakeArrayAggCol (ArrayType $requestedCol))
                     )
                 ]
                 (MakeOrderedGrouping
@@ -299,6 +299,6 @@
             )
             (MakeUnorderedSubquery)
         )
-        (Array [] (ArrayType $input))
+        (Array [] (ArrayType $requestedCol))
     ]
 )

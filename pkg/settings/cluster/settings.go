@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -72,6 +73,11 @@ type Settings struct {
 	// Set to 1 if a profile is active (if the profile is being grabbed through
 	// the `pprofui` server as opposed to the raw endpoint).
 	cpuProfiling int32 // atomic
+}
+
+// TelemetryOptOut is a place for controlling whether to opt out of telemetry or not.
+func TelemetryOptOut() bool {
+	return envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
 }
 
 // IsCPUProfiling returns true if a pprofui CPU profile is being recorded. This can
@@ -190,7 +196,11 @@ func (ecv *ExposedClusterVersion) BootstrapVersion() ClusterVersion {
 }
 
 // IsActive returns true if the features of the supplied version key are active
-// at the running version.
+// at the running version. In other words, if a particular version returns true
+// from this method, it means that you're guaranteed that all of the nodes in
+// the cluster have running binaries that are at least as new as that version,
+// and that you're guaranteed that those nodes will never be downgraded to an
+// older version.
 //
 // If this returns true then all nodes in the cluster will eventually see this
 // version. However, this is not atomic because versions are gossiped. Because

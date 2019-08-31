@@ -407,6 +407,12 @@ template <bool reverse> class mvccScanner {
       if (!iterPeekPrev(&peeked_key)) {
         return false;
       }
+      if (peeked_key.empty()) {
+        // `iterPeekPrev()` may return true even when it did not find a key. This
+        // case is indicated by `peeked_key.empty()`. In that case there is not
+        // going to be any prev key, so we are done.
+        return false;
+      }
       if (peeked_key != key_buf_) {
         return backwardLatestVersion(peeked_key, i + 1);
       }

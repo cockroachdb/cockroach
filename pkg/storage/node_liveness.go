@@ -864,7 +864,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 		if oldLiveness == nil {
 			b.CPut(key, &update.Liveness, nil)
 		} else {
-			b.CPut(key, &update.Liveness, oldLiveness)
+			b.CPutDeprecated(key, &update.Liveness, oldLiveness)
 		}
 		// Use a trigger on EndTransaction to indicate that node liveness should
 		// be re-gossiped. Further, require that this transaction complete as a

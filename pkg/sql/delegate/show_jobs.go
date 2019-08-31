@@ -18,26 +18,44 @@ import (
 )
 
 func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
-	var typePredicate string
-	if n.Automatic {
-		typePredicate = fmt.Sprintf("job_type = '%s'", jobspb.TypeAutoCreateStats)
+	const (
+		selectClause = `SELECT job_id, job_type, description, statement, user_name, status,
+				       running_status, created, started, finished, modified,
+				       fraction_completed, error, coordinator_id
+				FROM crdb_internal.jobs`
+	)
+	var typePredicate, whereClause, orderbyClause string
+	if n.Jobs == nil {
+		// Display all [only automatic] jobs without selecting specific jobs.
+		if n.Automatic {
+			typePredicate = fmt.Sprintf("job_type = '%s'", jobspb.TypeAutoCreateStats)
+		} else {
+			typePredicate = fmt.Sprintf(
+				"(job_type IS NULL OR job_type != '%s')", jobspb.TypeAutoCreateStats,
+			)
+		}
+		// The query intends to present:
+		// - first all the running jobs sorted in order of start time,
+		// - then all completed jobs sorted in order of completion time.
+		whereClause = fmt.Sprintf(
+			`WHERE %s AND (finished IS NULL OR finished > now() - '12h':::interval)`, typePredicate)
+		// The "ORDER BY" clause below exploits the fact that all
+		// running jobs have finished = NULL.
+		orderbyClause = `ORDER BY COALESCE(finished, now()) DESC, started DESC`
 	} else {
-		typePredicate = fmt.Sprintf(
-			"(job_type != '%s' OR job_type IS NULL)", jobspb.TypeAutoCreateStats,
-		)
+		// Limit the jobs displayed to the select statement in n.Jobs.
+		whereClause = fmt.Sprintf(`WHERE job_id in (%s)`, n.Jobs.String())
 	}
 
-	// The query intends to present:
-	// - first all the running jobs sorted in order of start time,
-	// - then all completed jobs sorted in order of completion time.
-	// The "ORDER BY" clause below exploits the fact that all
-	// running jobs have finished = NULL.
-	return parse(fmt.Sprintf(
-		`SELECT job_id, job_type, description, statement, user_name, status, running_status, created,
-            started, finished, modified, fraction_completed, error, coordinator_id
-		FROM crdb_internal.jobs
-		WHERE %s
-		AND (finished IS NULL OR finished > now() - '12h':::interval)
-		ORDER BY COALESCE(finished, now()) DESC, started DESC`, typePredicate,
-	))
+	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)
+	if n.Block {
+		sqlStmt = fmt.Sprintf(
+			`SELECT * FROM [%s]
+			 WHERE
+			    IF(finished IS NULL,
+			      IF(pg_sleep(1), crdb_internal.force_retry('24h'), 0),
+			      0
+			    ) = 0`, sqlStmt)
+	}
+	return parse(sqlStmt)
 }

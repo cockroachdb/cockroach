@@ -150,6 +150,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"SchemaID":       {fullName: "opt.SchemaID", passByVal: true},
 		"SequenceID":     {fullName: "opt.SequenceID", passByVal: true},
 		"ValuesID":       {fullName: "opt.ValuesID", passByVal: true},
+		"WithID":         {fullName: "opt.WithID", passByVal: true},
 		"Ordering":       {fullName: "opt.Ordering", passByVal: true},
 		"OrderingChoice": {fullName: "physical.OrderingChoice", passByVal: true},
 		"TupleOrdinal":   {fullName: "memo.TupleOrdinal", passByVal: true},
@@ -177,6 +178,9 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"RelPropsPtr":    {fullName: "*props.Relational", isPointer: true, usePointerIntern: true},
 		"ScalarProps":    {fullName: "props.Scalar"},
 		"OpaqueMetadata": {fullName: "opt.OpaqueMetadata", isPointer: true},
+		"JobCommand":     {fullName: "tree.JobCommand", passByVal: true},
+		"IndexOrdinal":   {fullName: "cat.IndexOrdinal", passByVal: true},
+		"ViewDeps":       {fullName: "opt.ViewDeps", passByVal: true},
 	}
 
 	// Add types of generated op and private structs.

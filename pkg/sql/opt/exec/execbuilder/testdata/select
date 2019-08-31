@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 # Prepare a trace to be inspected below.
 
@@ -18,24 +18,24 @@ FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
 ----
 0   === SPAN START: session recording ===                session recording
-1   === SPAN START: exec cmd: exec stmt ===              exec cmd: exec stmt
-1   [NoTxn pos:?] executing ExecStmt: BEGIN TRANSACTION  exec cmd: exec stmt
+1   === SPAN START: exec stmt ===                        exec stmt
+1   [NoTxn pos:?] executing ExecStmt: BEGIN TRANSACTION  exec stmt
 2   === SPAN START: sql txn ===                          sql txn
-3   === SPAN START: exec cmd: exec stmt ===              exec cmd: exec stmt
-3   [Open pos:?] executing ExecStmt: SELECT 1            exec cmd: exec stmt
+3   === SPAN START: exec stmt ===                        exec stmt
+3   [Open pos:?] executing ExecStmt: SELECT 1            exec stmt
 4   === SPAN START: consuming rows ===                   consuming rows
 5   === SPAN START: flow ===                             flow
-6   === SPAN START: exec cmd: exec stmt ===              exec cmd: exec stmt
-6   [Open pos:?] executing ExecStmt: COMMIT TRANSACTION  exec cmd: exec stmt
-7   === SPAN START: exec cmd: exec stmt ===              exec cmd: exec stmt
-7   [NoTxn pos:?] executing ExecStmt: SELECT 2           exec cmd: exec stmt
+6   === SPAN START: exec stmt ===                        exec stmt
+6   [Open pos:?] executing ExecStmt: COMMIT TRANSACTION  exec stmt
+7   === SPAN START: exec stmt ===                        exec stmt
+7   [NoTxn pos:?] executing ExecStmt: SELECT 2           exec stmt
 8   === SPAN START: sql txn ===                          sql txn
-9   === SPAN START: exec cmd: exec stmt ===              exec cmd: exec stmt
-9   [Open pos:?] executing ExecStmt: SELECT 2            exec cmd: exec stmt
+9   === SPAN START: exec stmt ===                        exec stmt
+9   [Open pos:?] executing ExecStmt: SELECT 2            exec stmt
 10  === SPAN START: consuming rows ===                   consuming rows
 11  === SPAN START: flow ===                             flow
-12  === SPAN START: exec cmd: exec stmt ===              exec cmd: exec stmt
-12  [NoTxn pos:?] executing ExecStmt: SET TRACING = off  exec cmd: exec stmt
+12  === SPAN START: exec stmt ===                        exec stmt
+12  [NoTxn pos:?] executing ExecStmt: SET TRACING = off  exec stmt
 
 # ------------------------------------------------------------------------------
 # Numeric References Tests.
@@ -381,8 +381,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t@b_idx; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/b_idx/2/1/c/d -> /3/4
 output row: [1 2 3 4]
@@ -391,8 +392,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t@c_idx; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/c_idx/3/b/d -> /2/4
 output row: [1 2 3 4]
@@ -406,8 +408,9 @@ statement ok
 SET tracing = on,kv,results; SELECT a, b, d FROM t@d_idx; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/d_idx/4/1/b -> /2
 output row: [1 2 4]
@@ -419,8 +422,9 @@ statement ok
 SET tracing = on,kv,results; SELECT a, b FROM t@a_idx; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/a_idx/1/b -> /2
 output row: [1 2]
@@ -436,14 +440,15 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t@b_idx; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/b_idx/NULL/2 -> NULL
-output row: [2 NULL NULL NULL]
 fetched: /t/b_idx/NULL/3 -> NULL
-output row: [3 NULL NULL NULL]
 fetched: /t/b_idx/2/1/c/d -> /3/4
+output row: [2 NULL NULL NULL]
+output row: [3 NULL NULL NULL]
 output row: [1 2 3 4]
 
 # Regression test for #14601.
@@ -612,8 +617,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM dt WHERE a = '2015-08-25 04:45:45.53453+02:00'::timestamp; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00' -> NULL
 fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/b -> '2015-08-25'
@@ -624,8 +630,9 @@ statement ok
 SET tracing = on,kv,results; SELECT b FROM dt WHERE b < '2015-08-29'::date; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /dt/dt_b_key/'2015-08-25' -> /'2015-08-25 04:45:45.53453+00:00'
 output row: ['2015-08-25']
@@ -634,12 +641,13 @@ statement ok
 SET tracing = on,kv,results; SELECT c FROM dt WHERE c < '234h45m2s234ms'::interval; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /dt/dt_c_key/'02:45:02.234' -> /'2015-08-25 04:45:45.53453+00:00'
-output row: ['02:45:02.234']
 fetched: /dt/dt_c_key/'34:00:02' -> /'2015-08-30 03:34:45.34567+00:00'
+output row: ['02:45:02.234']
 output row: ['34:00:02']
 
 statement ok
@@ -698,14 +706,15 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM c@b_idx; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /c/b_idx/NULL/2 -> NULL
-output row: [2 NULL]
 fetched: /c/b_idx/NULL/3 -> NULL
-output row: [3 NULL]
 fetched: /c/b_idx/0.4/1/b -> /0.40
+output row: [2 NULL]
+output row: [3 NULL]
 output row: [1 0.40]
 
 # ------------------------------------------------------------------------------

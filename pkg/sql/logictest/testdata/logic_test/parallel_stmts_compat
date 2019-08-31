@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 # Parallel statement execution was removed in 19.2. See #34789.
 # The RETURNING NOTHING syntax was retained to ensure backward compatibility,
 # even though the runtime semantics of parallel statements were removed. This
@@ -44,7 +42,7 @@ DELETE FROM kv WHERE k = 1 RETURNING NOTHING
 statement ok
 INSERT INTO fk VALUES (2)
 
-statement error foreign key violation: values \[2\] in columns \[k\] referenced in table \"fk\"
+statement error foreign key violation: values \[2\] in columns \[k\] referenced in table \"fk\"|delete on table "kv" violates foreign key constraint on table "fk"
 DELETE FROM kv WHERE k = 2 RETURNING NOTHING
 
 statement ok
@@ -242,7 +240,7 @@ BEGIN
 statement ok
 DELETE FROM kv WHERE k = 1 RETURNING NOTHING
 
-statement error foreign key violation: values \[2\] in columns \[k\] referenced in table \"fk\"
+statement error foreign key violation: values \[2\] in columns \[k\] referenced in table \"fk\"|delete on table "kv" violates foreign key constraint on table "fk"
 DELETE FROM kv WHERE k = 2 RETURNING NOTHING
 
 statement error current transaction is aborted, commands ignored until end of transaction block

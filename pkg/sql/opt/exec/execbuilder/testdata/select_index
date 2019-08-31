@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 statement ok
 CREATE TABLE t (
@@ -25,8 +25,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE a = 2; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/primary/2/'two' -> NULL
 fetched: /t/primary/2/'two'/c -> 22
@@ -37,48 +38,52 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE a IN (1, 3); SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/primary/1/'one' -> NULL
 fetched: /t/primary/1/'one'/c -> 11
 fetched: /t/primary/1/'one'/d -> 'foo'
-output row: [1 'one' 11 'foo']
 fetched: /t/primary/3/'three' -> NULL
 fetched: /t/primary/3/'three'/c -> 33
 fetched: /t/primary/3/'three'/d -> 'blah'
+output row: [1 'one' 11 'foo']
 output row: [3 'three' 33 'blah']
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE d = 'foo' OR d = 'bar'; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/dc/'bar'/22/2/'two' -> NULL
-output row: [2 'two' 22 'bar']
 fetched: /t/dc/'foo'/11/1/'one' -> NULL
+output row: [2 'two' 22 'bar']
 output row: [1 'one' 11 'foo']
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE (d, c) IN (('foo', 11), ('bar', 22)); SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/dc/'bar'/22/2/'two' -> NULL
-output row: [2 'two' 22 'bar']
 fetched: /t/dc/'foo'/11/1/'one' -> NULL
+output row: [2 'two' 22 'bar']
 output row: [1 'one' 11 'foo']
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE (d, c) = ('foo', 11); SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/dc/'foo'/11/1/'one' -> NULL
 output row: [1 'one' 11 'foo']
@@ -87,8 +92,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE a < 2; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/primary/1/'one' -> NULL
 fetched: /t/primary/1/'one'/c -> 11
@@ -99,36 +105,39 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE a <= (1 + 1); SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/primary/1/'one' -> NULL
 fetched: /t/primary/1/'one'/c -> 11
 fetched: /t/primary/1/'one'/d -> 'foo'
-output row: [1 'one' 11 'foo']
 fetched: /t/primary/2/'two' -> NULL
 fetched: /t/primary/2/'two'/c -> 22
 fetched: /t/primary/2/'two'/d -> 'bar'
+output row: [1 'one' 11 'foo']
 output row: [2 'two' 22 'bar']
 
 statement ok
 SET tracing = on,kv,results; SELECT a, b FROM t WHERE b > 't'; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/bc/'three'/33/3 -> NULL
-output row: [3 'three']
 fetched: /t/bc/'two'/22/2 -> NULL
+output row: [3 'three']
 output row: [2 'two']
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE d < ('b' || 'l'); SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/dc/'bar'/22/2/'two' -> NULL
 output row: [2 'two' 22 'bar']
@@ -137,8 +146,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE c = 22; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/primary/1/'one' -> NULL
 fetched: /t/primary/1/'one'/c -> 11
@@ -146,24 +156,25 @@ fetched: /t/primary/1/'one'/d -> 'foo'
 fetched: /t/primary/2/'two' -> NULL
 fetched: /t/primary/2/'two'/c -> 22
 fetched: /t/primary/2/'two'/d -> 'bar'
-output row: [2 'two' 22 'bar']
 fetched: /t/primary/3/'three' -> NULL
 fetched: /t/primary/3/'three'/c -> 33
 fetched: /t/primary/3/'three'/d -> 'blah'
+output row: [2 'two' 22 'bar']
 
 # Use the descending index
 statement ok
 SET tracing = on,kv,results; SELECT a FROM t ORDER BY a DESC; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/a_desc/3/'three' -> NULL
-output row: [3]
 fetched: /t/a_desc/2/'two' -> NULL
-output row: [2]
 fetched: /t/a_desc/1/'one' -> NULL
+output row: [3]
+output row: [2]
 output row: [1]
 
 # Use the descending index with multiple spans.
@@ -171,12 +182,13 @@ statement ok
 SET tracing = on,kv,results; SELECT a FROM t WHERE a in (2, 3) ORDER BY a DESC; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/a_desc/3/'three' -> NULL
-output row: [3]
 fetched: /t/a_desc/2/'two' -> NULL
+output row: [3]
 output row: [2]
 
 # Index selection occurs in direct join operands too.
@@ -219,8 +231,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE a = 1 AND b > 'b'; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/primary/1/'c' -> NULL
 output row: [1 'c' NULL NULL]
@@ -229,8 +242,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE a > 0 AND b > 'b'; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/primary/1/'c' -> NULL
 output row: [1 'c' NULL NULL]
@@ -239,8 +253,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE a > 1 AND b > 'b'; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 
 query TTT
@@ -252,8 +267,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/primary/1/'b' -> NULL
 output row: [1 'b' NULL NULL]
@@ -275,8 +291,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a >= 3 AND a < 5; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
@@ -285,8 +302,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a BETWEEN 3 AND 4; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
@@ -295,104 +313,113 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a BETWEEN 3 AND 5; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/ab/3/4 -> NULL
-output row: [3 4]
 fetched: /t/ab/5/6 -> NULL
+output row: [3 4]
 output row: [5 6]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a < 2 OR a < 4; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/ab/1/2 -> NULL
-output row: [1 2]
 fetched: /t/ab/3/4 -> NULL
+output row: [1 2]
 output row: [3 4]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a < 3 OR a <= 3; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/ab/1/2 -> NULL
-output row: [1 2]
 fetched: /t/ab/3/4 -> NULL
+output row: [1 2]
 output row: [3 4]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a <= 3 OR a < 3; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/ab/1/2 -> NULL
-output row: [1 2]
 fetched: /t/ab/3/4 -> NULL
+output row: [1 2]
 output row: [3 4]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a > 3 OR a >= 3; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/ab/3/4 -> NULL
-output row: [3 4]
 fetched: /t/ab/5/6 -> NULL
+output row: [3 4]
 output row: [5 6]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a >= 3 OR a > 3; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/ab/3/4 -> NULL
-output row: [3 4]
 fetched: /t/ab/5/6 -> NULL
+output row: [3 4]
 output row: [5 6]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a = 3 OR a = 5; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/ab/3/4 -> NULL
-output row: [3 4]
 fetched: /t/ab/5/6 -> NULL
+output row: [3 4]
 output row: [5 6]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a < 3 OR a > 3; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/ab/1/2 -> NULL
-output row: [1 2]
 fetched: /t/ab/5/6 -> NULL
+output row: [1 2]
 output row: [5 6]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a + 1 = 4; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
@@ -658,60 +685,9 @@ index-join    ·      ·                        (id, k, v)  -k
 ·             spans  /!NULL-/"100"/PrefixEnd  ·           ·
 ·             limit  20                       ·           ·
 
-# Result check: The following query must not issue more than the
-# requested LIMIT K/V reads, even though an index join batches 100
-# rows at a time -- the limit should be enforced by the scan.  We are
-# reading from the end (ORDER BY k DESC) so we should see 20 values
-# from 030 to 011 (thus not 001-010).
+# The result output of this test requires that vectorized execution
+# is not used, so it has been moved to select_index_vectorize_off.
 
-statement ok
-SET tracing = on,kv,results; SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20; SET tracing = off
-
-query T
-SELECT regexp_replace(message, '\d\d\d\d\d+', '...PK...')
-  FROM [SHOW KV TRACE FOR SESSION]
- WHERE message LIKE 'fetched:%'
-----
-fetched: /test2/test2_k_key/'030' -> /...PK...
-fetched: /test2/test2_k_key/'029' -> /...PK...
-fetched: /test2/test2_k_key/'028' -> /...PK...
-fetched: /test2/test2_k_key/'027' -> /...PK...
-fetched: /test2/test2_k_key/'026' -> /...PK...
-fetched: /test2/test2_k_key/'025' -> /...PK...
-fetched: /test2/test2_k_key/'024' -> /...PK...
-fetched: /test2/test2_k_key/'023' -> /...PK...
-fetched: /test2/test2_k_key/'022' -> /...PK...
-fetched: /test2/test2_k_key/'021' -> /...PK...
-fetched: /test2/test2_k_key/'020' -> /...PK...
-fetched: /test2/test2_k_key/'019' -> /...PK...
-fetched: /test2/test2_k_key/'018' -> /...PK...
-fetched: /test2/test2_k_key/'017' -> /...PK...
-fetched: /test2/test2_k_key/'016' -> /...PK...
-fetched: /test2/test2_k_key/'015' -> /...PK...
-fetched: /test2/test2_k_key/'014' -> /...PK...
-fetched: /test2/test2_k_key/'013' -> /...PK...
-fetched: /test2/test2_k_key/'012' -> /...PK...
-fetched: /test2/test2_k_key/'011' -> /...PK...
-fetched: /test2/primary/...PK.../k/v -> /'030'/42
-fetched: /test2/primary/...PK.../k/v -> /'029'/42
-fetched: /test2/primary/...PK.../k/v -> /'028'/42
-fetched: /test2/primary/...PK.../k/v -> /'027'/42
-fetched: /test2/primary/...PK.../k/v -> /'026'/42
-fetched: /test2/primary/...PK.../k/v -> /'025'/42
-fetched: /test2/primary/...PK.../k/v -> /'024'/42
-fetched: /test2/primary/...PK.../k/v -> /'023'/42
-fetched: /test2/primary/...PK.../k/v -> /'022'/42
-fetched: /test2/primary/...PK.../k/v -> /'021'/42
-fetched: /test2/primary/...PK.../k/v -> /'020'/42
-fetched: /test2/primary/...PK.../k/v -> /'019'/42
-fetched: /test2/primary/...PK.../k/v -> /'018'/42
-fetched: /test2/primary/...PK.../k/v -> /'017'/42
-fetched: /test2/primary/...PK.../k/v -> /'016'/42
-fetched: /test2/primary/...PK.../k/v -> /'015'/42
-fetched: /test2/primary/...PK.../k/v -> /'014'/42
-fetched: /test2/primary/...PK.../k/v -> /'013'/42
-fetched: /test2/primary/...PK.../k/v -> /'012'/42
-fetched: /test2/primary/...PK.../k/v -> /'011'/42
 
 # Regression test for #20035.
 statement ok
@@ -999,8 +975,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM noncover WHERE b = 2; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /noncover/b/2/1 -> NULL
 fetched: /noncover/primary/1 -> NULL
@@ -1022,8 +999,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM noncover WHERE c = 7; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /noncover/c/7 -> /5
 fetched: /noncover/primary/5 -> NULL
@@ -1181,8 +1159,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t2/bc/2/1/4 -> NULL
 fetched: /t2/bc/2/2/5 -> NULL
@@ -1210,8 +1189,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t2 WHERE b = 2 AND c != b; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t2/bc/2/1/4 -> NULL
 fetched: /t2/bc/2/2/5 -> NULL
@@ -1220,11 +1200,11 @@ fetched: /t2/primary/4 -> NULL
 fetched: /t2/primary/4/b -> 2
 fetched: /t2/primary/4/c -> 1
 fetched: /t2/primary/4/s -> '21'
-output row: [4 2 1 '21']
 fetched: /t2/primary/6 -> NULL
 fetched: /t2/primary/6/b -> 2
 fetched: /t2/primary/6/c -> 3
 fetched: /t2/primary/6/s -> '23'
+output row: [4 2 1 '21']
 output row: [6 2 3 '23']
 
 # We do NOT look up the table row for '22'.
@@ -1232,8 +1212,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t2 WHERE b = 2 AND c != b AND s <> '21'; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t2/bc/2/1/4 -> NULL
 fetched: /t2/bc/2/2/5 -> NULL
@@ -1254,8 +1235,9 @@ statement ok
 SET tracing = on,kv,results; SELECT * FROM t2 WHERE b > 1 AND ((c = b+1 AND s != '23') OR (a > b+4 AND s != '32')); SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t2/primary/1 -> NULL
 fetched: /t2/primary/1/b -> 1
@@ -1360,8 +1342,9 @@ statement ok
 SET tracing = on,kv,results; SELECT c FROM t4 WHERE a = 10 and b = 20; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t4/primary/10/20 -> NULL
 fetched: /t4/primary/10/20/c -> 30
@@ -1381,8 +1364,9 @@ statement ok
 SET tracing = on,kv,results; SELECT d FROM t4 WHERE a = 10 and b = 20; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t4/primary/10/20 -> NULL
 fetched: /t4/primary/10/20/d -> 40

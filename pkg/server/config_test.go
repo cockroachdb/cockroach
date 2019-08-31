@@ -51,7 +51,7 @@ func TestParseInitNodeAttributes(t *testing.T) {
 func TestParseJoinUsingAddrs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cfg := MakeConfig(context.TODO(), cluster.MakeTestingClusterSettings())
-	cfg.JoinList = []string{"localhost:12345,,localhost:23456", "localhost:34567"}
+	cfg.JoinList = []string{"localhost:12345", "localhost:23456", "localhost:34567", "localhost"}
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, Size: base.SizeSpec{InBytes: base.MinimumStoreSize * 100}}}}
 	engines, err := cfg.CreateEngines(context.TODO())
 	if err != nil {
@@ -73,7 +73,11 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := []resolver.Resolver{r1, r2, r3}
+	r4, err := resolver.NewResolver("localhost:26257")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := []resolver.Resolver{r1, r2, r3, r4}
 	if !reflect.DeepEqual(cfg.GossipBootstrapResolvers, expected) {
 		t.Fatalf("Unexpected bootstrap addresses: %v, expected: %v", cfg.GossipBootstrapResolvers, expected)
 	}

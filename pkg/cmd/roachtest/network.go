@@ -136,7 +136,9 @@ func runNetworkTPCC(ctx context.Context, t *test, origC *cluster, nodes int) {
 		}
 
 		cmd := fmt.Sprintf(
-			"./workload run tpcc --warehouses=%d --wait=false --histograms=logs/stats.json --duration=%s {pgurl:2-%d}",
+			"./workload run tpcc --warehouses=%d --wait=false"+
+				" --histograms="+perfArtifactsDir+"/stats.json"+
+				" --duration=%s {pgurl:2-%d}",
 			warehouses, duration, c.spec.NodeCount-1)
 		return c.RunL(ctx, tpccL, workerNode, cmd)
 	})

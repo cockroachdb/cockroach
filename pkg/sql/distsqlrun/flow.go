@@ -14,37 +14,24 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // FlowCtx encompasses the contexts needed for various flow components.
 type FlowCtx struct {
 	log.AmbientContext
 
-	// TODO(radu): FlowCtx should store a pointer to the server's ServerConfig
-	// instead of having copies of most of its fields.
-	Settings     *cluster.Settings
-	RuntimeStats RuntimeStats
-
-	stopper *stop.Stopper
+	Cfg *ServerConfig
 
 	// id is a unique identifier for a remote flow. It is mainly used as a key
 	// into the flowRegistry. Since local flows do not need to exist in the flow
@@ -52,6 +39,7 @@ type FlowCtx struct {
 	// assigned ids. This is done for performance reasons, as local flows are
 	// more likely to be dominated by setup time.
 	id distsqlpb.FlowID
+
 	// EvalCtx is used by all the processors in the flow to evaluate expressions.
 	// Processors that intend to evaluate expressions with this EvalCtx should
 	// get a copy with NewEvalCtx instead of storing a pointer to this one
@@ -60,55 +48,24 @@ type FlowCtx struct {
 	// TODO(andrei): Get rid of this field and pass a non-shared EvalContext to
 	// cores of the processors that need it.
 	EvalCtx *tree.EvalContext
-	// nodeDialer is used by the Outboxes that may be present in the
-	// flow for connecting to other nodes.
-	nodeDialer *nodedialer.Dialer
-	// Gossip is used by the sample aggregator to notify nodes of a new statistic.
-	Gossip *gossip.Gossip
+
 	// The transaction in which kv operations performed by processors in the flow
 	// must be performed. Processors in the Flow will use this txn concurrently.
 	// This field is generally not nil, except for flows that don't run in a
 	// higher-level txn (like backfills).
 	txn *client.Txn
-	// ClientDB is a handle to the cluster. Used for performing requests outside
-	// of the transaction in which the flow's query is running.
-	ClientDB *client.DB
-
-	// Executor can be used to run "internal queries". Note that Flows also have
-	// access to an executor in the EvalContext. That one is "session bound"
-	// whereas this one isn't.
-	executor sqlutil.InternalExecutor
-
-	// LeaseManager is a *sql.LeaseManager. It's returned as an `interface{}`
-	// due to package dependency cycles.
-	LeaseManager interface{}
 
 	// nodeID is the ID of the node on which the processors using this FlowCtx
 	// run.
-	nodeID       roachpb.NodeID
-	testingKnobs TestingKnobs
-
-	// TempStorage is used by some DistSQL processors to store Rows when the
-	// working set is larger than can be stored in memory.
-	// This is not supposed to be used as a general engine.Engine and thus
-	// one should sparingly use the set of features offered by it.
-	TempStorage diskmap.Factory
-
-	// BulkAdder is used by backfill/bulk-ingestion processors to ingest large
-	// amounts of data in bulk as SSTs.
-	BulkAdder storagebase.BulkAdderFactory
-
-	// diskMonitor is used to monitor temporary storage disk usage.
-	diskMonitor *mon.BytesMonitor
-
-	// JobRegistry is used during backfill to load jobs which keep state.
-	JobRegistry *jobs.Registry
+	NodeID roachpb.NodeID
 
 	// traceKV is true if KV tracing was requested by the session.
 	traceKV bool
 
 	// local is true if this flow is being run as part of a local-only query.
 	local bool
+
+	vectorizedBoundAccount *mon.BoundAccount
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.
@@ -124,12 +81,12 @@ func (ctx *FlowCtx) NewEvalCtx() *tree.EvalContext {
 
 // TestingKnobs returns the distsql testing knobs for this flow context.
 func (ctx *FlowCtx) TestingKnobs() TestingKnobs {
-	return ctx.testingKnobs
+	return ctx.Cfg.TestingKnobs
 }
 
 // Stopper returns the stopper for this flowCtx.
 func (ctx *FlowCtx) Stopper() *stop.Stopper {
-	return ctx.stopper
+	return ctx.Cfg.Stopper
 }
 
 type flowStatus int
@@ -156,6 +113,8 @@ type Flow struct {
 	FlowCtx
 
 	flowRegistry *flowRegistry
+	// isVectorized indicates whether it is a vectorized flow.
+	isVectorized bool
 	// processors contains a subset of the processors in the flow - the ones that
 	// run in their own goroutines. Some processors that implement RowSource are
 	// scheduled to run in their consumer's goroutine; those are not present here.
@@ -205,10 +164,12 @@ func newFlow(
 	flowReg *flowRegistry,
 	syncFlowConsumer RowReceiver,
 	localProcessors []LocalProcessor,
+	isVectorized bool,
 ) *Flow {
 	f := &Flow{
 		FlowCtx:          flowCtx,
 		flowRegistry:     flowReg,
+		isVectorized:     isVectorized,
 		syncFlowConsumer: syncFlowConsumer,
 		localProcessors:  localProcessors,
 	}
@@ -495,51 +456,17 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 
 func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
-
-	if f.EvalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
-		err := f.setupVectorized(ctx)
+	if f.isVectorized {
+		log.VEventf(ctx, 1, "setting up vectorize flow %s", f.id.Short())
+		acc := f.EvalCtx.Mon.MakeBoundAccount()
+		f.vectorizedBoundAccount = &acc
+		err := f.setupVectorizedFlow(ctx, f.vectorizedBoundAccount)
 		if err == nil {
-			log.VEventf(ctx, 1, "vectorized flow.")
+			log.VEventf(ctx, 1, "vectorized flow setup succeeded")
 			return nil
 		}
-		// Vectorization attempt failed with an error.
-		if f.spec.Gateway != f.nodeID {
-			// If we are not the gateway node, do not attempt to plan this with the
-			// row execution branch since there is no way to tell whether vectorized
-			// planning will succeed on any other node. Notify the gateway by
-			// returning an error.
-			log.VEventf(
-				ctx,
-				1,
-				"flow vectorization failed on remote node, returning error to gateway for possible replanning: %s", err,
-			)
-			return &VectorizedSetupError{cause: err}
-		}
-		// Reset state to be used by the row execution branch.
-		f.processors = nil
-		f.inboundStreams = nil
-		f.startables = nil
-
-		if f.EvalCtx.SessionData.Vectorize == sessiondata.VectorizeAlways {
-			// Only return the error if we are running a local planNode that is an
-			// exception to the rule that failures to set up a vectorized flow when
-			// experimental_vectorize=always should return an error.
-			var isException bool
-			if len(spec.Processors) == 1 &&
-				spec.Processors[0].Core.LocalPlanNode != nil {
-				rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
-				if rsidx != nil {
-					lp := f.localProcessors[*rsidx]
-					if z, ok := lp.(vectorizeAlwaysException); ok {
-						isException = z.IsException()
-					}
-				}
-			}
-			if !isException {
-				return err
-			}
-		}
 		log.VEventf(ctx, 1, "failed to vectorize: %s", err)
+		return err
 	}
 
 	// First step: setup the input synchronizers for all processors.
@@ -554,8 +481,10 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 
 // startInternal starts the flow. All processors are started, each in their own
 // goroutine. The caller must forward any returned error to syncFlowConsumer if
-// set.
-func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
+// set. A new context is derived and returned, and it must be used when this
+// method returns so that all components running in their own goroutines could
+// listen for a cancellation on the same context.
+func (f *Flow) startInternal(ctx context.Context, doneFn func()) (context.Context, error) {
 	f.doneFn = doneFn
 	log.VEventf(
 		ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
@@ -574,9 +503,9 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 		f.waitGroup.Add(len(f.inboundStreams))
 
 		if err := f.flowRegistry.RegisterFlow(
-			ctx, f.id, f, f.inboundStreams, settingFlowStreamTimeout.Get(&f.FlowCtx.Settings.SV),
+			ctx, f.id, f, f.inboundStreams, settingFlowStreamTimeout.Get(&f.FlowCtx.Cfg.Settings.SV),
 		); err != nil {
-			return err
+			return ctx, err
 		}
 	}
 
@@ -596,7 +525,7 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 		}(i)
 	}
 	f.startedGoroutines = len(f.startables) > 0 || len(f.processors) > 0 || !f.isLocal()
-	return nil
+	return ctx, nil
 }
 
 // isLocal returns whether this flow does not have any remote execution.
@@ -613,7 +542,7 @@ func (f *Flow) isLocal() bool {
 // setup error is pushed to the syncFlowConsumer. In this case, a subsequent
 // call to f.Wait() will not block.
 func (f *Flow) Start(ctx context.Context, doneFn func()) error {
-	if err := f.startInternal(ctx, doneFn); err != nil {
+	if _, err := f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
 			f.syncFlowConsumer.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
@@ -642,7 +571,8 @@ func (f *Flow) Run(ctx context.Context, doneFn func()) error {
 	headProc = f.processors[len(f.processors)-1]
 	f.processors = f.processors[:len(f.processors)-1]
 
-	if err := f.startInternal(ctx, doneFn); err != nil {
+	var err error
+	if ctx, err = f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
 			f.syncFlowConsumer.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
@@ -691,6 +621,11 @@ func (f *Flow) Cleanup(ctx context.Context) {
 	if f.status == FlowFinished {
 		panic("flow cleanup called twice")
 	}
+
+	if f.vectorizedBoundAccount != nil {
+		f.vectorizedBoundAccount.Close(ctx)
+	}
+
 	// This closes the monitor opened in ServerImpl.setupFlow.
 	f.EvalCtx.Stop(ctx)
 	for _, p := range f.processors {

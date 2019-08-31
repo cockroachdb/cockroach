@@ -163,7 +163,7 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
-		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
+		opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 		// All join ops use hash join by default.
 		cost = c.computeHashJoinCost(candidate)
 
@@ -418,6 +418,9 @@ func (c *coster) computeLookupJoinCost(join *memo.LookupJoinExpr) memo.Cost {
 	// joins where we don't have the equality and leftover filters readily
 	// available.
 	perRowCost += cpuCostFactor * memo.Cost(len(join.On))
+	// We also add a constant "setup" cost per ON condition. Without this, the
+	// adjustment above can be inconsequential when the RowCount is too small.
+	cost += cpuCostFactor * memo.Cost(len(join.On))
 
 	cost += memo.Cost(join.Relational().Stats.RowCount) * perRowCost
 	return cost

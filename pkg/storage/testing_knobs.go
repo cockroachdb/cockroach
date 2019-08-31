@@ -56,6 +56,7 @@ type StoreTestingKnobs struct {
 
 	// TestingPostApplyFilter is called after a command is applied to
 	// rocksdb but before in-memory side effects have been processed.
+	// It is only called on the replica the proposed the command.
 	TestingPostApplyFilter storagebase.ReplicaApplyFilter
 
 	// TestingResponseFilter is called after the replica processes a
@@ -103,6 +104,8 @@ type StoreTestingKnobs struct {
 	DisableGCQueue bool
 	// DisableMergeQueue disables the merge queue.
 	DisableMergeQueue bool
+	// DisableReplicateQueue disables the raft log queue.
+	DisableRaftLogQueue bool
 	// DisableReplicaGCQueue disables the replica GC queue.
 	DisableReplicaGCQueue bool
 	// DisableReplicateQueue disables the replication queue.
@@ -181,6 +184,39 @@ type StoreTestingKnobs struct {
 	// TraceAllRaftEvents enables raft event tracing even when the current
 	// vmodule would not have enabled it.
 	TraceAllRaftEvents bool
+
+	// ReceiveSnapshot is run after receiving a snapshot header but before
+	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
+	// error is returned from the hook, it's sent as an ERROR SnapshotResponse.
+	ReceiveSnapshot func(*SnapshotRequest_Header) error
+	// ReplicaAddSkipRollback causes replica addition to skip the learner rollback
+	// that happens when promotion to a voter fails.
+	ReplicaAddSkipLearnerRollback func() bool
+	// ReplicaAddStopAfterLearnerSnapshot causes replica addition to return early
+	// if the func returns true. Specifically, after the learner txn is successful
+	// and after the LEARNER type snapshot, but before promoting it to a voter.
+	// This ensures the `*Replica` will be materialized on the Store when it
+	// returns.
+	ReplicaAddStopAfterLearnerSnapshot func() bool
+	// ReplicaAddStopAfterJointConfig causes replica addition to return early if
+	// the func returns true. This happens before transitioning out of a joint
+	// configuration, after the joint configuration has been entered by means
+	// of a first ChangeReplicas transaction. If the replication change does
+	// not use joint consensus, this early return is identical to the regular
+	// return path.
+	ReplicaAddStopAfterJointConfig func() bool
+	// ReplicationAlwaysUseJointConfig causes replica addition to always go
+	// through a joint configuration, even when this isn't necessary (because
+	// the replication change affects only one replica).
+	ReplicationAlwaysUseJointConfig func() bool
+	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
+	// applying a snapshot.
+	BeforeSnapshotSSTIngestion func(IncomingSnapshot, SnapshotRequest_Type, []string) error
+
+	// MaxApplicationBatchSize enforces a maximum size on application batches.
+	// This can be useful for testing conditions which require commands to be
+	// applied in separate batches.
+	MaxApplicationBatchSize int
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

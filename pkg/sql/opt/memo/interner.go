@@ -18,6 +18,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -460,6 +461,10 @@ func (h *hasher) HashValuesID(val opt.ValuesID) {
 	h.HashUint64(uint64(val))
 }
 
+func (h *hasher) HashWithID(val opt.WithID) {
+	h.HashUint64(uint64(val))
+}
+
 func (h *hasher) HashScanLimit(val ScanLimit) {
 	h.HashUint64(uint64(val))
 }
@@ -489,10 +494,27 @@ func (h *hasher) HashShowTraceType(val tree.ShowTraceType) {
 	h.HashString(string(val))
 }
 
+func (h *hasher) HashJobCommand(val tree.JobCommand) {
+	h.HashInt(int(val))
+}
+
+func (h *hasher) HashIndexOrdinal(val cat.IndexOrdinal) {
+	h.HashInt(val)
+}
+
+func (h *hasher) HashViewDeps(val opt.ViewDeps) {
+	// Hash the length and address of the first element.
+	h.HashInt(len(val))
+	if len(val) > 0 {
+		h.HashPointer(unsafe.Pointer(&val[0]))
+	}
+}
+
 func (h *hasher) HashWindowFrame(val WindowFrame) {
 	h.HashInt(int(val.StartBoundType))
 	h.HashInt(int(val.EndBoundType))
 	h.HashInt(int(val.Mode))
+	h.HashInt(int(val.FrameExclusion))
 }
 
 func (h *hasher) HashTupleOrdinal(val TupleOrdinal) {
@@ -500,10 +522,14 @@ func (h *hasher) HashTupleOrdinal(val TupleOrdinal) {
 }
 
 func (h *hasher) HashPhysProps(val *physical.Required) {
-	for i := range val.Presentation {
-		col := &val.Presentation[i]
-		h.HashString(col.Alias)
-		h.HashColumnID(col.ID)
+	// Note: the Any presentation is not the same as the 0-column presentation.
+	if !val.Presentation.Any() {
+		h.HashInt(len(val.Presentation))
+		for i := range val.Presentation {
+			col := &val.Presentation[i]
+			h.HashString(col.Alias)
+			h.HashColumnID(col.ID)
+		}
 	}
 	h.HashOrderingChoice(val.Ordering)
 }
@@ -564,6 +590,13 @@ func (h *hasher) HashZipExpr(val ZipExpr) {
 func (h *hasher) HashFKChecksExpr(val FKChecksExpr) {
 	for i := range val {
 		h.HashRelExpr(val[i].Check)
+	}
+}
+
+func (h *hasher) HashKVOptionsExpr(val KVOptionsExpr) {
+	for i := range val {
+		h.HashString(val[i].Key)
+		h.HashScalarExpr(val[i].Value)
 	}
 }
 
@@ -752,6 +785,10 @@ func (h *hasher) IsValuesIDEqual(l, r opt.ValuesID) bool {
 	return l == r
 }
 
+func (h *hasher) IsWithIDEqual(l, r opt.WithID) bool {
+	return l == r
+}
+
 func (h *hasher) IsScanLimitEqual(l, r ScanLimit) bool {
 	return l == r
 }
@@ -776,10 +813,26 @@ func (h *hasher) IsShowTraceTypeEqual(l, r tree.ShowTraceType) bool {
 	return l == r
 }
 
+func (h *hasher) IsJobCommandEqual(l, r tree.JobCommand) bool {
+	return l == r
+}
+
+func (h *hasher) IsIndexOrdinalEqual(l, r cat.IndexOrdinal) bool {
+	return l == r
+}
+
+func (h *hasher) IsViewDepsEqual(l, r opt.ViewDeps) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	return len(l) == 0 || &l[0] == &r[0]
+}
+
 func (h *hasher) IsWindowFrameEqual(l, r WindowFrame) bool {
 	return l.StartBoundType == r.StartBoundType &&
 		l.EndBoundType == r.EndBoundType &&
-		l.Mode == r.Mode
+		l.Mode == r.Mode &&
+		l.FrameExclusion == r.FrameExclusion
 }
 
 func (h *hasher) IsTupleOrdinalEqual(l, r TupleOrdinal) bool {
@@ -882,6 +935,18 @@ func (h *hasher) IsFKChecksExprEqual(l, r FKChecksExpr) bool {
 	}
 	for i := range l {
 		if l[i].Check != r[i].Check {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsKVOptionsExprEqual(l, r KVOptionsExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i].Key != r[i].Key || l[i].Value != r[i].Value {
 			return false
 		}
 	}

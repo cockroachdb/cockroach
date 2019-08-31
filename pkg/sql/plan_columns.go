@@ -99,6 +99,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.getColumns(mut, sqlbase.ScrubColumns)
 	case *explainDistSQLNode:
 		return n.getColumns(mut, sqlbase.ExplainDistSQLColumns)
+	case *explainVecNode:
+		return n.getColumns(mut, sqlbase.ExplainVecColumns)
 	case *relocateNode:
 		return n.getColumns(mut, sqlbase.AlterTableRelocateColumns)
 	case *scatterNode:
@@ -115,6 +117,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.getColumns(mut, sqlbase.ShowReplicaTraceColumns)
 	case *sequenceSelectNode:
 		return n.getColumns(mut, sqlbase.SequenceSelectColumns)
+	case *exportNode:
+		return n.getColumns(mut, sqlbase.ExportColumns)
 
 	// Nodes that have the same schema as their source or their
 	// valueNode helper.

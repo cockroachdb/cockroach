@@ -1,4 +1,4 @@
-# LogicTest: local local-opt
+# LogicTest: local
 
 statement error unrecognized configuration parameter "foo"
 RESET FOO

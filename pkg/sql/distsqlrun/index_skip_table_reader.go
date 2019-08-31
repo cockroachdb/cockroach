@@ -70,7 +70,7 @@ func newIndexSkipTableReader(
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*indexSkipTableReader, error) {
-	if flowCtx.nodeID == 0 {
+	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 
@@ -175,12 +175,15 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		// Range info resets once a scan begins, so we need to maintain
 		// the range info we get after each scan.
 		if !t.ignoreMisplannedRanges {
-			ranges := misplannedRanges(t.Ctx, t.fetcher.GetRangesInfo(), t.flowCtx.nodeID)
+			ranges := misplannedRanges(t.Ctx, t.fetcher.GetRangesInfo(), t.flowCtx.NodeID)
 			for _, r := range ranges {
 				t.misplannedRanges = roachpb.InsertRangeInfo(t.misplannedRanges, r)
 			}
 		}
 
+		// This key *must not* be modified, as this will cause the fetcher
+		// to begin acting incorrectly. This is because modifications
+		// will corrupt the row internal to the fetcher.
 		key, err := t.fetcher.PartialKey(t.keyPrefixLen)
 		if err != nil {
 			t.MoveToDraining(err)
@@ -199,14 +202,10 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		}
 
 		if !t.reverse {
-			// 0xff is the largest prefix marker for any encoded key. To ensure that
-			// our new key is larger than any value with the same prefix, we place
-			// 0xff at all other index column values, and one more to guard against
-			// 0xff present as a value in the table (0xff encodes a type of null).
-			for i := 0; i < (t.indexLen - t.keyPrefixLen + 1); i++ {
-				key = append(key, 0xff)
-			}
-			t.spans[t.currentSpan].Key = key
+			// We set the new key to be the largest key with the prefix that we have
+			// so that we skip all values with the same prefix, and "skip" to the
+			// next distinct value.
+			t.spans[t.currentSpan].Key = key.PrefixEnd()
 		} else {
 			// In the case of reverse, this is much easier. The reverse fetcher
 			// returns the key retrieved, in this case the first key smaller

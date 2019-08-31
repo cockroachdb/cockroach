@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/errors"
 )
 
 func declareKeysRequestLease(
@@ -39,6 +40,27 @@ func newFailedLeaseTrigger(isTransfer bool) result.Result {
 		trigger.Local.Metrics.LeaseRequestError = 1
 	}
 	return trigger
+}
+
+func checkCanReceiveLease(rec EvalContext) error {
+	repDesc, ok := rec.Desc().GetReplicaDescriptor(rec.StoreID())
+	if !ok {
+		return errors.AssertionFailedf(
+			`could not find replica for store %s in %s`, rec.StoreID(), rec.Desc())
+	} else if t := repDesc.GetType(); t != roachpb.VOTER_FULL {
+		// NB: there's no harm in transferring the lease to a VOTER_INCOMING,
+		// but we disallow it anyway. On the other hand, transferring to
+		// VOTER_OUTGOING would be a pretty bad idea since those voters are
+		// dropped when transitioning out of the joint config, which then
+		// amounts to removing the leaseholder without any safety precautions.
+		// This would either wedge the range or allow illegal reads to be
+		// served.
+		//
+		// Since the leaseholder can't remove itself and is a VOTER_FULL, we
+		// also know that in any configuration there's at least one VOTER_FULL.
+		return errors.Errorf(`cannot transfer lease to replica of type %s`, t)
+	}
+	return nil
 }
 
 // evalNewLease checks that the lease contains a valid interval and that

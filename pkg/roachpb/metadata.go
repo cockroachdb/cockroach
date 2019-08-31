@@ -101,31 +101,31 @@ func (a Attributes) String() string {
 }
 
 // RSpan returns the RangeDescriptor's resolved span.
-func (r RangeDescriptor) RSpan() RSpan {
+func (r *RangeDescriptor) RSpan() RSpan {
 	return RSpan{Key: r.StartKey, EndKey: r.EndKey}
 }
 
 // ContainsKey returns whether this RangeDescriptor contains the specified key.
-func (r RangeDescriptor) ContainsKey(key RKey) bool {
+func (r *RangeDescriptor) ContainsKey(key RKey) bool {
 	return r.RSpan().ContainsKey(key)
 }
 
 // ContainsKeyInverted returns whether this RangeDescriptor contains the
 // specified key using an inverted range. See RSpan.ContainsKeyInverted.
-func (r RangeDescriptor) ContainsKeyInverted(key RKey) bool {
+func (r *RangeDescriptor) ContainsKeyInverted(key RKey) bool {
 	return r.RSpan().ContainsKeyInverted(key)
 }
 
 // ContainsKeyRange returns whether this RangeDescriptor contains the specified
 // key range from start (inclusive) to end (exclusive).
 // If end is empty, returns ContainsKey(start).
-func (r RangeDescriptor) ContainsKeyRange(start, end RKey) bool {
+func (r *RangeDescriptor) ContainsKeyRange(start, end RKey) bool {
 	return r.RSpan().ContainsKeyRange(start, end)
 }
 
 // Replicas returns the set of nodes/stores on which replicas of this range are
 // stored.
-func (r RangeDescriptor) Replicas() ReplicaDescriptors {
+func (r *RangeDescriptor) Replicas() ReplicaDescriptors {
 	return MakeReplicaDescriptors(r.InternalReplicas)
 }
 
@@ -135,11 +135,39 @@ func (r *RangeDescriptor) SetReplicas(replicas ReplicaDescriptors) {
 	r.InternalReplicas = replicas.AsProto()
 }
 
-// AddReplica adds the given replica to this range's set.
-func (r *RangeDescriptor) AddReplica(toAdd ReplicaDescriptor) {
+// SetReplicaType changes the type of the replica with the given ID to the given
+// type. Returns zero values if the replica was not found and the updated
+// descriptor, the previous type, and true, otherwise.
+func (r *RangeDescriptor) SetReplicaType(
+	nodeID NodeID, storeID StoreID, typ ReplicaType,
+) (ReplicaDescriptor, ReplicaType, bool) {
+	for i := range r.InternalReplicas {
+		desc := &r.InternalReplicas[i]
+		if desc.StoreID == storeID && desc.NodeID == nodeID {
+			prevTyp := desc.GetType()
+			desc.Type = &typ
+			return *desc, prevTyp, true
+		}
+	}
+	return ReplicaDescriptor{}, 0, false
+}
+
+// AddReplica adds a replica on the given node and store with the supplied type.
+// It auto-assigns a ReplicaID and returns the inserted ReplicaDescriptor.
+func (r *RangeDescriptor) AddReplica(
+	nodeID NodeID, storeID StoreID, typ ReplicaType,
+) ReplicaDescriptor {
+	toAdd := ReplicaDescriptor{
+		NodeID:    nodeID,
+		StoreID:   storeID,
+		ReplicaID: r.NextReplicaID,
+		Type:      &typ,
+	}
 	rs := r.Replicas()
 	rs.AddReplica(toAdd)
 	r.SetReplicas(rs)
+	r.NextReplicaID++
+	return toAdd
 }
 
 // RemoveReplica removes the matching replica from this range's set and returns
@@ -155,8 +183,8 @@ func (r *RangeDescriptor) RemoveReplica(nodeID NodeID, storeID StoreID) (Replica
 
 // GetReplicaDescriptor returns the replica which matches the specified store
 // ID.
-func (r RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescriptor, bool) {
-	for _, repDesc := range r.Replicas().Unwrap() {
+func (r *RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescriptor, bool) {
+	for _, repDesc := range r.Replicas().All() {
 		if repDesc.StoreID == storeID {
 			return repDesc, true
 		}
@@ -166,8 +194,8 @@ func (r RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescripto
 
 // GetReplicaDescriptorByID returns the replica which matches the specified store
 // ID.
-func (r RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaDescriptor, bool) {
-	for _, repDesc := range r.Replicas().Unwrap() {
+func (r *RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaDescriptor, bool) {
+	for _, repDesc := range r.Replicas().All() {
 		if repDesc.ReplicaID == replicaID {
 			return repDesc, true
 		}
@@ -178,12 +206,12 @@ func (r RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaD
 // IsInitialized returns false if this descriptor represents an
 // uninitialized range.
 // TODO(bdarnell): unify this with Validate().
-func (r RangeDescriptor) IsInitialized() bool {
+func (r *RangeDescriptor) IsInitialized() bool {
 	return len(r.EndKey) != 0
 }
 
 // GetGeneration returns the generation of this RangeDescriptor.
-func (r RangeDescriptor) GetGeneration() int64 {
+func (r *RangeDescriptor) GetGeneration() int64 {
 	if r.Generation != nil {
 		return *r.Generation
 	}
@@ -199,7 +227,7 @@ func (r *RangeDescriptor) IncrementGeneration() {
 }
 
 // GetGenerationComparable returns if the generation of this RangeDescriptor is comparable.
-func (r RangeDescriptor) GetGenerationComparable() bool {
+func (r *RangeDescriptor) GetGenerationComparable() bool {
 	if r.GenerationComparable == nil {
 		return false
 	}
@@ -207,7 +235,7 @@ func (r RangeDescriptor) GetGenerationComparable() bool {
 }
 
 // GetStickyBit returns the sticky bit of this RangeDescriptor.
-func (r RangeDescriptor) GetStickyBit() hlc.Timestamp {
+func (r *RangeDescriptor) GetStickyBit() hlc.Timestamp {
 	if r.StickyBit == nil {
 		return hlc.Timestamp{}
 	}
@@ -215,28 +243,35 @@ func (r RangeDescriptor) GetStickyBit() hlc.Timestamp {
 }
 
 // Validate performs some basic validation of the contents of a range descriptor.
-func (r RangeDescriptor) Validate() error {
+func (r *RangeDescriptor) Validate() error {
 	if r.NextReplicaID == 0 {
 		return errors.Errorf("NextReplicaID must be non-zero")
 	}
 	seen := map[ReplicaID]struct{}{}
-	for i, rep := range r.Replicas().Unwrap() {
+	stores := map[StoreID]struct{}{}
+	for i, rep := range r.Replicas().All() {
 		if err := rep.Validate(); err != nil {
 			return errors.Errorf("replica %d is invalid: %s", i, err)
 		}
-		if _, ok := seen[rep.ReplicaID]; ok {
-			return errors.Errorf("ReplicaID %d was reused", rep.ReplicaID)
-		}
-		seen[rep.ReplicaID] = struct{}{}
 		if rep.ReplicaID >= r.NextReplicaID {
 			return errors.Errorf("ReplicaID %d must be less than NextReplicaID %d",
 				rep.ReplicaID, r.NextReplicaID)
 		}
+
+		if _, ok := seen[rep.ReplicaID]; ok {
+			return errors.Errorf("ReplicaID %d was reused", rep.ReplicaID)
+		}
+		seen[rep.ReplicaID] = struct{}{}
+
+		if _, ok := stores[rep.StoreID]; ok {
+			return errors.Errorf("StoreID %d was reused", rep.StoreID)
+		}
+		stores[rep.StoreID] = struct{}{}
 	}
 	return nil
 }
 
-func (r RangeDescriptor) String() string {
+func (r *RangeDescriptor) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "r%d:", r.RangeID)
 
@@ -247,8 +282,8 @@ func (r RangeDescriptor) String() string {
 	}
 	buf.WriteString(" [")
 
-	if len(r.Replicas().Unwrap()) > 0 {
-		for i, rep := range r.Replicas().Unwrap() {
+	if allReplicas := r.Replicas().All(); len(allReplicas) > 0 {
+		for i, rep := range allReplicas {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
@@ -278,8 +313,8 @@ func (r ReplicaDescriptor) String() string {
 	} else {
 		fmt.Fprintf(&buf, "%d", r.ReplicaID)
 	}
-	if r.GetType() == ReplicaType_LEARNER {
-		buf.WriteString("LEARNER")
+	if typ := r.GetType(); typ != VOTER_FULL {
+		buf.WriteString(typ.String())
 	}
 	return buf.String()
 }
@@ -301,7 +336,7 @@ func (r ReplicaDescriptor) Validate() error {
 // GetType returns the type of this ReplicaDescriptor.
 func (r ReplicaDescriptor) GetType() ReplicaType {
 	if r.Type == nil {
-		return ReplicaType_VOTER
+		return VOTER_FULL
 	}
 	return *r.Type
 }
@@ -479,4 +514,38 @@ func (l *Locality) Set(value string) error {
 	}
 	l.Tiers = tiers
 	return nil
+}
+
+// DefaultLocationInformation is used to populate the system.locations
+// table. The region values here are specific to GCP.
+var DefaultLocationInformation = []struct {
+	Locality  Locality
+	Latitude  string
+	Longitude string
+}{
+	{
+		Locality:  Locality{Tiers: []Tier{{Key: "region", Value: "us-east1"}}},
+		Latitude:  "33.836082",
+		Longitude: "-81.163727",
+	},
+	{
+		Locality:  Locality{Tiers: []Tier{{Key: "region", Value: "us-east4"}}},
+		Latitude:  "37.478397",
+		Longitude: "-76.453077",
+	},
+	{
+		Locality:  Locality{Tiers: []Tier{{Key: "region", Value: "us-central1"}}},
+		Latitude:  "42.032974",
+		Longitude: "-93.581543",
+	},
+	{
+		Locality:  Locality{Tiers: []Tier{{Key: "region", Value: "us-west1"}}},
+		Latitude:  "43.804133",
+		Longitude: "-120.554201",
+	},
+	{
+		Locality:  Locality{Tiers: []Tier{{Key: "region", Value: "europe-west1"}}},
+		Latitude:  "50.44816",
+		Longitude: "3.81886",
+	},
 }

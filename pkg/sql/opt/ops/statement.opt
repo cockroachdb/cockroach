@@ -24,8 +24,33 @@ define CreateTablePrivate {
     # defined when the AS clause was used in the CREATE TABLE statement.
     InputCols Presentation
 
-    # Syntax is the CREATE TABLE AST node.
+    # Syntax is the CREATE TABLE AST node. All data sources inside AsSource are
+    # fully qualified.
     Syntax CreateTable
+}
+
+[Relational, DDL, Mutation]
+define CreateView {
+    _ CreateViewPrivate
+}
+
+[Private]
+define CreateViewPrivate {
+    # Schema is the ID of the catalog schema into which the new table goes.
+    Schema SchemaID
+
+    ViewName string
+
+    # ViewQuery contains the query for the view; data sources are always fully
+    # qualified.
+    ViewQuery string
+
+    # Columns that correspond to the output of the view query, with the names
+    # they will have as part of the view.
+    Columns Presentation
+
+    # Deps contains the data source dependencies of the view.
+    Deps ViewDeps
 }
 
 # Explain returns information about the execution plan of the "input"
@@ -80,19 +105,33 @@ define ShowTracePrivate {
 #
 # OpaqueRel can produce data and can be used as a data source as part of a
 # larger enclosing query.
-[Relational, DDL, Mutation]
+[Relational]
 define OpaqueRel {
+    _ OpaqueRelPrivate
+}
+
+# OpaqueMutation is a variant of OpaqueRel for operators that can mutate data as
+# part of the transaction.
+[Relational, Mutation]
+define OpaqueMutation {
+    _ OpaqueRelPrivate
+}
+
+# OpaqueMutation is a variant of OpaqueRel for operators that cause a schema
+# change and cannot be executed following a mutation in the same transaction.
+[Relational, Mutation, DDL]
+define OpaqueDDL {
     _ OpaqueRelPrivate
 }
 
 [Private]
 define OpaqueRelPrivate {
     Columns ColList
-    Metadata OpaqueMetadata 
+    Metadata OpaqueMetadata
 }
 
 # AlterTableSplit represents an `ALTER TABLE/INDEX .. SPLIT AT ..` statement.
-[Relational, DDL]
+[Relational, Mutation]
 define AlterTableSplit {
     # The input expression provides values for the index columns (or a prefix of
     # them).
@@ -113,11 +152,11 @@ define AlterTableSplitPrivate {
     Table TableID
 
     # Index identifies the index to scan (whether primary or secondary). It
-    # can be passed to the cat.Table.Index(i int) method in order to fetch the
+    # can be passed to the cat.Table.Index() method in order to fetch the
     # cat.Index metadata.
-    Index int
+    Index IndexOrdinal
 
-    # Props stores the required physical properties for the enclosed expression.
+    # Props stores the required physical properties for the input expression.
     Props PhysProps
 
     # Columns stores the column IDs for the statement result columns.
@@ -126,7 +165,7 @@ define AlterTableSplitPrivate {
 
 # AlterTableUnsplit represents an `ALTER TABLE/INDEX .. UNSPLIT AT ..`
 # statement.
-[Relational, DDL]
+[Relational, Mutation]
 define AlterTableUnsplit {
     Input RelExpr
 
@@ -134,13 +173,13 @@ define AlterTableUnsplit {
 }
 
 # AlterTableUnsplit represents an `ALTER TABLE/INDEX .. UNSPLIT ALL` statement.
-[Relational, DDL]
+[Relational, Mutation]
 define AlterTableUnsplitAll {
     _ AlterTableSplitPrivate
 }
 
 # AlterTableRelocate represents an `ALTER TABLE/INDEX .. SPLIT AT ..` statement.
-[Relational, DDL]
+[Relational, Mutation]
 define AlterTableRelocate {
     # The input expression provides values for the index columns (or a prefix of
     # them).
@@ -154,4 +193,75 @@ define AlterTableRelocatePrivate {
     RelocateLease bool
 
     _ AlterTableSplitPrivate
+}
+
+# ControlJobs represents a `PAUSE/CANCEL/RESUME JOBS` statement.
+[Relational]
+define ControlJobs {
+    # The input expression returns job IDs (as integers).
+    Input RelExpr
+
+    _ ControlJobsPrivate
+}
+
+[Private]
+define ControlJobsPrivate {
+    # Props stores the required physical properties for the input
+    # expression.
+    Props    PhysProps
+    Command  JobCommand
+}
+
+# CancelQueries represents a `CANCEL QUERIES` statement.
+[Relational]
+define CancelQueries {
+    # The input expression returns query IDs (as strings).
+    Input RelExpr
+
+    _ CancelPrivate
+}
+
+[Private]
+define CancelPrivate {
+    # Props stores the required physical properties for the input
+    # expression.
+    Props PhysProps
+
+    # IfExists is set if we should tolerate IDs that don't exist.
+    IfExists bool
+}
+
+# CancelSessions represents a `CANCEL SESSIONS` statement.
+[Relational]
+define CancelSessions {
+    # The input expression returns session IDs (as strings).
+    Input RelExpr
+
+    _ CancelPrivate
+}
+
+# Export represents an `EXPORT` statement.
+[Relational]
+define Export {
+    # Input is the relational expression for the data we are exporting.
+    Input    RelExpr
+
+    # FileName is the string URI for the output file.
+    FileName ScalarExpr
+
+    Options  KVOptionsExpr
+
+    _ ExportPrivate
+}
+
+[Private]
+define ExportPrivate {
+    # FileFormat describes the requested format, e.g. "CSV".
+    FileFormat string
+
+    # Props stores the required physical properties for the input expression.
+    Props PhysProps
+
+    # Columns stores the column IDs for the statement result columns.
+    Columns ColList
 }

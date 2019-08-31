@@ -29,7 +29,7 @@ fi
 
 	r.Add(testSpec{
 		Name:       "synctest",
-		MinVersion: `v2.2.0`,
+		MinVersion: "v19.1.0",
 		// This test sets up a custom file system; we don't want the cluster reused.
 		Cluster: makeClusterSpec(1, reuseNone()),
 		Run: func(ctx context.Context, t *test, c *cluster) {

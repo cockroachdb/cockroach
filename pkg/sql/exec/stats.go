@@ -13,7 +13,8 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -48,7 +49,7 @@ func NewVectorizedStatsCollector(
 	op Operator, id int32, isStall bool, inputWatch *timeutil.StopWatch,
 ) *VectorizedStatsCollector {
 	if inputWatch == nil {
-		panic("input watch for VectorizedStatsCollector is nil")
+		execerror.VectorizedInternalPanic("input watch for VectorizedStatsCollector is nil")
 	}
 	return &VectorizedStatsCollector{
 		Operator:        op,

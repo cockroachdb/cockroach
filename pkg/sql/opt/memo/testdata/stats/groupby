@@ -465,42 +465,55 @@ WITH q (a, b) AS (SELECT * FROM (VALUES (true, NULL), (false, NULL), (true, 5)))
 GROUP BY q.b
   HAVING bool_or(q.a)
 ----
-project
- ├── columns: "?column?":4(int!null)
+with &1 (q)
+ ├── columns: "?column?":6(int!null)
  ├── cardinality: [0 - 3]
- ├── stats: [rows=0.22654092]
- ├── fd: ()-->(4)
- ├── select
- │    ├── columns: column2:2(int) bool_or:3(bool!null)
- │    ├── cardinality: [0 - 3]
- │    ├── stats: [rows=0.22654092, distinct(3)=0.22654092, null(3)=0]
- │    ├── key: (2)
- │    ├── fd: ()-->(3)
- │    ├── group-by
- │    │    ├── columns: column2:2(int) bool_or:3(bool)
- │    │    ├── grouping columns: column2:2(int)
- │    │    ├── cardinality: [0 - 3]
- │    │    ├── stats: [rows=1.29289322, distinct(2)=1.29289322, null(2)=1, distinct(3)=1.29289322, null(3)=1]
- │    │    ├── key: (2)
- │    │    ├── fd: (2)-->(3)
- │    │    ├── select
- │    │    │    ├── columns: column1:1(bool!null) column2:2(int)
- │    │    │    ├── cardinality: [0 - 3]
- │    │    │    ├── stats: [rows=1.5, distinct(1)=1, null(1)=0, distinct(2)=1.29289322, null(2)=1]
- │    │    │    ├── fd: ()-->(1)
- │    │    │    ├── values
- │    │    │    │    ├── columns: column1:1(bool!null) column2:2(int)
- │    │    │    │    ├── cardinality: [3 - 3]
- │    │    │    │    ├── stats: [rows=3, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=2]
- │    │    │    │    ├── (true, NULL) [type=tuple{bool, int}]
- │    │    │    │    ├── (false, NULL) [type=tuple{bool, int}]
- │    │    │    │    └── (true, 5) [type=tuple{bool, int}]
- │    │    │    └── filters
- │    │    │         └── variable: column1 [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
- │    │    └── aggregations
- │    │         └── bool-or [type=bool, outer=(1)]
- │    │              └── variable: column1 [type=bool]
- │    └── filters
- │         └── variable: bool_or [type=bool, outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
- └── projections
-      └── const: 1 [type=int]
+ ├── stats: [rows=1]
+ ├── fd: ()-->(6)
+ ├── values
+ │    ├── columns: column1:1(bool!null) column2:2(int)
+ │    ├── cardinality: [3 - 3]
+ │    ├── stats: [rows=3]
+ │    ├── (true, NULL) [type=tuple{bool, int}]
+ │    ├── (false, NULL) [type=tuple{bool, int}]
+ │    └── (true, 5) [type=tuple{bool, int}]
+ └── project
+      ├── columns: "?column?":6(int!null)
+      ├── cardinality: [0 - 3]
+      ├── stats: [rows=1]
+      ├── fd: ()-->(6)
+      ├── select
+      │    ├── columns: b:4(int) bool_or:5(bool!null)
+      │    ├── cardinality: [0 - 3]
+      │    ├── stats: [rows=1, distinct(5)=1, null(5)=0]
+      │    ├── key: (4)
+      │    ├── fd: ()-->(5)
+      │    ├── group-by
+      │    │    ├── columns: b:4(int) bool_or:5(bool)
+      │    │    ├── grouping columns: b:4(int)
+      │    │    ├── cardinality: [0 - 3]
+      │    │    ├── stats: [rows=1, distinct(4)=1, null(4)=0, distinct(5)=1, null(5)=0]
+      │    │    ├── key: (4)
+      │    │    ├── fd: (4)-->(5)
+      │    │    ├── select
+      │    │    │    ├── columns: a:3(bool!null) b:4(int)
+      │    │    │    ├── cardinality: [0 - 3]
+      │    │    │    ├── stats: [rows=1, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0]
+      │    │    │    ├── fd: ()-->(3)
+      │    │    │    ├── with-scan &1 (q)
+      │    │    │    │    ├── columns: a:3(bool!null) b:4(int)
+      │    │    │    │    ├── mapping:
+      │    │    │    │    │    ├──  column1:1(bool) => a:3(bool)
+      │    │    │    │    │    └──  column2:2(int) => b:4(int)
+      │    │    │    │    ├── cardinality: [3 - 3]
+      │    │    │    │    ├── stats: [rows=3]
+      │    │    │    │    └── fd: (1)-->(3), (2)-->(4)
+      │    │    │    └── filters
+      │    │    │         └── variable: a [type=bool, outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+      │    │    └── aggregations
+      │    │         └── bool-or [type=bool, outer=(3)]
+      │    │              └── variable: a [type=bool]
+      │    └── filters
+      │         └── variable: bool_or [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
+      └── projections
+           └── const: 1 [type=int]

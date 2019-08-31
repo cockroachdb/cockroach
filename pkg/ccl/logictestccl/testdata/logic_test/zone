@@ -1,4 +1,4 @@
-# LogicTest: 5node-dist-opt
+# LogicTest: 5node-dist
 
 # Ensure that cost-based-optimizer uses an index with zone constraints that most
 # closely matches the gateway's locality. Use "retry" option, since it can take
@@ -30,6 +30,28 @@ scan  ·      ·
 ·     table  t@secondary
 ·     spans  /10-/11
 
+query T retry
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── k int not null
+ ├── v string
+ ├── INDEX primary
+ │    ├── k int not null
+ │    └── ZONE
+ │         └── constraints: [+region=test,+dc=dc2]
+ ├── INDEX secondary
+ │    ├── k int not null
+ │    ├── v string (storing)
+ │    └── ZONE
+ │         └── constraints: [+region=test,+dc=dc1]
+ └── INDEX tertiary
+      ├── k int not null
+      ├── v string (storing)
+      └── ZONE
+           └── constraints: [+region=test,+dc=dc2]
+scan t@secondary
+
 # ------------------------------------------------------------------------------
 # Move secondary to dc3 and put tertiary in dc1 and ensure that gateway matches
 # tertiary instead of secondary. Regression for #35546.
@@ -47,6 +69,28 @@ EXPLAIN SELECT * FROM t WHERE k=10
 scan  ·      ·
 ·     table  t@tertiary
 ·     spans  /10-/11
+
+query T retry
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── k int not null
+ ├── v string
+ ├── INDEX primary
+ │    ├── k int not null
+ │    └── ZONE
+ │         └── constraints: [+region=test,+dc=dc2]
+ ├── INDEX secondary
+ │    ├── k int not null
+ │    ├── v string (storing)
+ │    └── ZONE
+ │         └── constraints: [+region=test,+dc=dc3]
+ └── INDEX tertiary
+      ├── k int not null
+      ├── v string (storing)
+      └── ZONE
+           └── constraints: [+region=test,+dc=dc1]
+scan t@tertiary
 
 # ------------------------------------------------------------------------------
 # Swap secondary and tertiary localities and ensure invalidation occurs.
@@ -83,6 +127,28 @@ EXPLAIN SELECT * FROM t WHERE k=10
 scan  ·      ·
 ·     table  t@primary
 ·     spans  /10-/10/#
+
+query T retry
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── k int not null
+ ├── v string
+ ├── INDEX primary
+ │    ├── k int not null
+ │    └── ZONE
+ │         └── constraints: [+region=test,+dc=dc1]
+ ├── INDEX secondary
+ │    ├── k int not null
+ │    ├── v string (storing)
+ │    └── ZONE
+ │         └── constraints: [+region=test,+dc=dc2]
+ └── INDEX tertiary
+      ├── k int not null
+      ├── v string (storing)
+      └── ZONE
+           └── constraints: [+region=test,+dc=dc3]
+scan t
 
 # ------------------------------------------------------------------------------
 # Use PREPARE to make sure that the prepared plan is invalidated when the
@@ -155,6 +221,31 @@ scan  ·      ·
 ·     table  t@tertiary
 ·     spans  /10-/11
 
+query T retry
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── k int not null
+ ├── v string
+ ├── INDEX primary
+ │    ├── k int not null
+ │    └── ZONE
+ │         ├── constraints: [+region=test]
+ │         └── lease preference: [+region=test,+dc=dc2]
+ ├── INDEX secondary
+ │    ├── k int not null
+ │    ├── v string (storing)
+ │    └── ZONE
+ │         ├── constraints: [+region=test]
+ │         └── lease preference: [+region=test,+dc=dc3]
+ └── INDEX tertiary
+      ├── k int not null
+      ├── v string (storing)
+      └── ZONE
+           ├── constraints: [+region=test]
+           └── lease preference: [+region=test,+dc=dc1]
+scan t@tertiary
+
 # ------------------------------------------------------------------------------
 # Ensure that an index constrained to a region is preferred over an index that
 # merely has a lease preference in that region (since lease preferences can
@@ -179,6 +270,31 @@ EXPLAIN SELECT * FROM t WHERE k=10
 scan  ·      ·
 ·     table  t@secondary
 ·     spans  /10-/11
+
+query T retry
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── k int not null
+ ├── v string
+ ├── INDEX primary
+ │    ├── k int not null
+ │    └── ZONE
+ │         ├── constraints: [+region=test]
+ │         └── lease preference: [+region=test,+dc=dc1]
+ ├── INDEX secondary
+ │    ├── k int not null
+ │    ├── v string (storing)
+ │    └── ZONE
+ │         ├── constraints: [+region=test,+dc=dc1]
+ │         └── lease preference: [+region=test,+dc=dc3]
+ └── INDEX tertiary
+      ├── k int not null
+      ├── v string (storing)
+      └── ZONE
+           ├── constraints: [+region=test]
+           └── lease preference: [+region=test,+dc=dc1]
+scan t@secondary
 
 # ------------------------------------------------------------------------------
 # Use PREPARE to make sure that the prepared plan is invalidated when the
@@ -246,6 +362,31 @@ scan  ·      ·
 ·     table  t36642@tertiary
 ·     spans  /10-/11
 
+query T retry
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── k int not null
+ ├── v string
+ ├── INDEX primary
+ │    ├── k int not null
+ │    └── ZONE
+ │         ├── constraints: [+region=test]
+ │         └── lease preference: [+region=test,+dc=dc1]
+ ├── INDEX secondary
+ │    ├── k int not null
+ │    ├── v string (storing)
+ │    └── ZONE
+ │         ├── constraints: [+region=test]
+ │         └── lease preference: [+region=test,+dc=dc2]
+ └── INDEX tertiary
+      ├── k int not null
+      ├── v string (storing)
+      └── ZONE
+           ├── constraints: [+region=test]
+           └── lease preference: [+region=test,+dc=dc1]
+scan t
+
 
 # ------------------------------------------------------------------------------
 # Regression for issue #36644. Allow matching constraints for leading locality
@@ -301,13 +442,13 @@ CREATE TABLE t35756 (x INT PRIMARY KEY)
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION x1 OF TABLE t35756
 ----
-.default  ALTER RANGE default CONFIGURE ZONE USING
-          range_min_bytes = 16777216,
-          range_max_bytes = 67108864,
-          gc.ttlseconds = 90000,
-          num_replicas = 3,
-          constraints = '[]',
-          lease_preferences = '[]'
+RANGE default  ALTER RANGE default CONFIGURE ZONE USING
+               range_min_bytes = 16777216,
+               range_max_bytes = 67108864,
+               gc.ttlseconds = 90000,
+               num_replicas = 3,
+               constraints = '[]',
+               lease_preferences = '[]'
 
 # Regression test for #38391: verify that altering an index's partition really
 # modifies the partition.
@@ -329,12 +470,126 @@ statement ok
 ALTER PARTITION x1_idx OF INDEX t38391@foo CONFIGURE ZONE USING gc.ttlseconds = 31337
 
 query TT
-SHOW ZONE CONFIGURATION FOR PARTITION x1_idx OF TABLE t38391
+SHOW ZONE CONFIGURATION FOR PARTITION x1_idx OF INDEX t38391@foo
 ----
-test.t38391.x1_idx  ALTER PARTITION x1_idx OF INDEX t38391@foo CONFIGURE ZONE USING
-                    range_min_bytes = 16777216,
-                    range_max_bytes = 67108864,
-                    gc.ttlseconds = 31337,
-                    num_replicas = 3,
-                    constraints = '[]',
-                    lease_preferences = '[]'
+PARTITION x1_idx OF INDEX t38391@foo  ALTER PARTITION x1_idx OF INDEX t38391@foo CONFIGURE ZONE USING
+                                      range_min_bytes = 16777216,
+                                      range_max_bytes = 67108864,
+                                      gc.ttlseconds = 31337,
+                                      num_replicas = 3,
+                                      constraints = '[]',
+                                      lease_preferences = '[]'
+
+statement ok
+CREATE TABLE dup_constraint (x INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE dup_constraint PARTITION BY LIST (x) (
+    PARTITION p1 VALUES IN (1),
+    PARTITION p2 VALUES IN (2)
+)
+
+statement error pq: incompatible zone constraints: "\+region=us-east1" and "\+region=us-west1"
+ALTER PARTITION p1 OF TABLE dup_constraint CONFIGURE ZONE USING
+CONSTRAINTS='[+region=us-east1, +region=us-west1]'
+
+statement error pq: incompatible zone constraints: "\+region=us-east1" and "\-region=us-east1"
+ALTER PARTITION p1 OF TABLE dup_constraint CONFIGURE ZONE USING
+CONSTRAINTS='[+region=us-east1, -region=us-east1]'
+
+# Create various identifiers with the space character to test quoting in target
+# names.
+statement ok
+CREATE DATABASE "my database";
+USE "my database";
+CREATE TABLE "my table" (x INT PRIMARY KEY) PARTITION BY LIST (x) (
+    PARTITION "my partition" VALUES IN (1)
+);
+CREATE INDEX "my index" ON "my table" (x) PARTITION BY LIST (x) (
+    PARTITION "my partition" VALUES IN (1)
+);
+ALTER DATABASE "my database" CONFIGURE ZONE USING num_replicas = 1;
+ALTER TABLE "my table" CONFIGURE ZONE USING num_replicas = 1;
+ALTER INDEX "my table"@"my index" CONFIGURE ZONE USING num_replicas = 1;
+ALTER PARTITION "my partition" OF TABLE "my table" CONFIGURE ZONE USING num_replicas = 1;
+ALTER PARTITION "my partition" OF INDEX "my table"@"my index" CONFIGURE ZONE USING num_replicas = 1
+
+query TTTTTT
+SELECT target, range_name, database_name, table_name, index_name, partition_name
+FROM crdb_internal.zones
+----
+RANGE default                                                                 default   NULL         NULL      NULL       NULL
+DATABASE system                                                               NULL      system       NULL      NULL       NULL
+TABLE system.public.jobs                                                      NULL      system       jobs      NULL       NULL
+RANGE meta                                                                    meta      NULL         NULL      NULL       NULL
+RANGE system                                                                  system    NULL         NULL      NULL       NULL
+RANGE liveness                                                                liveness  NULL         NULL      NULL       NULL
+TABLE test.public.t                                                           NULL      test         t         NULL       NULL
+INDEX test.public.t@secondary                                                 NULL      test         t         secondary  NULL
+INDEX test.public.t@tertiary                                                  NULL      test         t         tertiary   NULL
+INDEX test.public.t36642@secondary                                            NULL      test         t36642    secondary  NULL
+INDEX test.public.t36642@tertiary                                             NULL      test         t36642    tertiary   NULL
+INDEX test.public.t36644@secondary                                            NULL      test         t36644    secondary  NULL
+INDEX test.public.t36644@tertiary                                             NULL      test         t36644    tertiary   NULL
+PARTITION x1_idx OF INDEX test.public.t38391@foo                              NULL      test         t38391    foo        x1_idx
+DATABASE "my database"                                                        NULL      my database  NULL      NULL       NULL
+TABLE "my database".public."my table"                                         NULL      my database  my table  NULL       NULL
+INDEX "my database".public."my table"@"my index"                              NULL      my database  my table  my index   NULL
+PARTITION "my partition" OF INDEX "my database".public."my table"@primary     NULL      my database  my table  primary    my partition
+PARTITION "my partition" OF INDEX "my database".public."my table"@"my index"  NULL      my database  my table  my index   my partition
+
+# Test the zone information being displayed in SHOW CREATE
+statement ok
+CREATE TABLE show_test (x INT PRIMARY KEY) PARTITION BY LIST (x) (
+  PARTITION p1 VALUES IN (1),
+  PARTITION p2 VALUES IN (2)
+)
+
+statement ok
+ALTER PARTITION p1 OF TABLE show_test CONFIGURE ZONE USING CONSTRAINTS='[+dc=dc1]'
+
+statement ok
+ALTER PARTITION p2 OF TABLE show_test CONFIGURE ZONE USING CONSTRAINTS='[+dc=dc2]'
+
+query TT
+SHOW CREATE TABLE show_test
+----
+show_test  CREATE TABLE show_test (
+          x INT8 NOT NULL,
+          CONSTRAINT "primary" PRIMARY KEY (x ASC),
+          FAMILY "primary" (x)
+) PARTITION BY LIST (x) (
+   PARTITION p1 VALUES IN ((1)),
+   PARTITION p2 VALUES IN ((2))
+);
+ALTER PARTITION p1 OF INDEX "my database".public.show_test@primary CONFIGURE ZONE USING
+  constraints = '[+dc=dc1]';
+ALTER PARTITION p2 OF INDEX "my database".public.show_test@primary CONFIGURE ZONE USING
+  constraints = '[+dc=dc2]'
+
+subtest alter_partition_across_all_indexes
+
+statement ok
+CREATE TABLE t2 (x INT PRIMARY KEY) PARTITION BY LIST (x) (
+  PARTITION p1 VALUES IN (1),
+  PARTITION p2 VALUES IN (2)
+);
+CREATE INDEX x1 ON t2 (x) PARTITION BY LIST (x) (
+  PARTITION p1 VALUES IN (1),
+  PARTITION p2 VALUES IN (2)
+);
+CREATE INDEX x2 ON t2 (x) PARTITION BY LIST (x) (
+  PARTITION p1 VALUES IN (1),
+  PARTITION p2 VALUES IN (2)
+);
+ALTER PARTITION p1 OF INDEX t2@* CONFIGURE ZONE USING num_replicas = 1
+
+query TT
+SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE target LIKE '%t2@%'
+----
+PARTITION p1 OF INDEX "my database".public.t2@primary  ALTER PARTITION p1 OF INDEX "my database".public.t2@primary CONFIGURE ZONE USING
+                                                       num_replicas = 1
+PARTITION p1 OF INDEX "my database".public.t2@x1       ALTER PARTITION p1 OF INDEX "my database".public.t2@x1 CONFIGURE ZONE USING
+                                                       num_replicas = 1
+PARTITION p1 OF INDEX "my database".public.t2@x2       ALTER PARTITION p1 OF INDEX "my database".public.t2@x2 CONFIGURE ZONE USING
+                                                       num_replicas = 1

@@ -1022,7 +1022,11 @@ func (a *smallIntSumAggregate) Add(_ context.Context, datum tree.Datum, _ ...tre
 		return nil
 	}
 
-	a.sum += int64(tree.MustBeDInt(datum))
+	var ok bool
+	a.sum, ok = arith.AddWithOverflow(a.sum, int64(tree.MustBeDInt(datum)))
+	if !ok {
+		return tree.ErrIntOutOfRange
+	}
 	a.seenNonNull = true
 	return nil
 }

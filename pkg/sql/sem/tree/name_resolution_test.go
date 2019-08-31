@@ -21,9 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestClassifyTablePattern(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		in, out  string
 		expanded string
@@ -108,6 +110,7 @@ func TestClassifyTablePattern(t *testing.T) {
 }
 
 func TestClassifyColumnName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		in, out string
 		err     string
@@ -369,11 +372,13 @@ func (f *fakeSource) ResolveColumnItemTestResults(res tree.ColumnResolutionResul
 }
 
 func TestResolveQualifiedStar(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	f := &fakeSource{t: t}
 	sqlutils.RunResolveQualifiedStarTest(t, f)
 }
 
 func TestResolveColumnItem(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	f := &fakeSource{t: t}
 	sqlutils.RunResolveColumnItemTest(t, f)
 }
@@ -444,7 +449,7 @@ func (fakeResResult) NameResolutionResult() {}
 
 // LookupObject implements the TableNameResolver interface.
 func (f *fakeMetadata) LookupObject(
-	_ context.Context, requireMutable bool, dbName, scName, tbName string,
+	_ context.Context, lookupFlags tree.ObjectLookupFlags, dbName, scName, tbName string,
 ) (found bool, obMeta tree.NameResolutionResult, err error) {
 	defer func() {
 		f.t.Logf("LookupObject(%s, %s, %s) -> found %v meta %v err %v",
@@ -520,6 +525,7 @@ func newFakeMetadata() *fakeMetadata {
 }
 
 func TestResolveTablePatternOrName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	type spath = sessiondata.SearchPath
 
 	var mpath = func(args ...string) spath { return sessiondata.MakeSearchPath(args) }
@@ -715,7 +721,8 @@ func TestResolveTablePatternOrName(t *testing.T) {
 					ctPrefix = tpv.Catalog()
 				case *tree.TableName:
 					if tc.expected {
-						found, obMeta, err = tpv.ResolveExisting(ctx, fakeResolver, false /*requireMutable*/, tc.curDb, tc.searchPath)
+						flags := tree.ObjectLookupFlags{}
+						found, obMeta, err = tpv.ResolveExisting(ctx, fakeResolver, flags, tc.curDb, tc.searchPath)
 					} else {
 						found, scMeta, err = tpv.ResolveTarget(ctx, fakeResolver, tc.curDb, tc.searchPath)
 					}

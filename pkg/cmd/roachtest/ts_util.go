@@ -19,6 +19,76 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
 
+// tsQueryType represents the type of the time series query to retrieve. In
+// most cases, tests are verifying either the "total" or "rate" metrics, so
+// this enum type simplifies the API of tspb.Query.
+type tsQueryType int
+
+const (
+	// total indicates to query the total of the metric. Specifically,
+	// downsampler will be average, aggregator will be sum, and derivative will
+	// be none.
+	total tsQueryType = iota
+	// rate indicates to query the rate of change of the metric. Specifically,
+	// downsampler will be average, aggregator will be sum, and derivative will
+	// be non-negative derivative.
+	rate
+)
+
+type tsQuery struct {
+	name      string
+	queryType tsQueryType
+}
+
+func mustGetMetrics(
+	t *test, adminURL string, start, end time.Time, tsQueries []tsQuery,
+) tspb.TimeSeriesQueryResponse {
+	response, err := getMetrics(adminURL, start, end, tsQueries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return response
+}
+
+func getMetrics(
+	adminURL string, start, end time.Time, tsQueries []tsQuery,
+) (tspb.TimeSeriesQueryResponse, error) {
+	url := "http://" + adminURL + "/ts/query"
+	queries := make([]tspb.Query, len(tsQueries))
+	for i := 0; i < len(tsQueries); i++ {
+		switch tsQueries[i].queryType {
+		case total:
+			queries[i] = tspb.Query{
+				Name:             tsQueries[i].name,
+				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
+				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
+			}
+		case rate:
+			queries[i] = tspb.Query{
+				Name:             tsQueries[i].name,
+				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
+				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
+				Derivative:       tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
+			}
+		default:
+			panic("unexpected")
+		}
+	}
+	request := tspb.TimeSeriesQueryRequest{
+		StartNanos: start.UnixNano(),
+		EndNanos:   end.UnixNano(),
+		// Ask for one minute intervals. We can't just ask for the whole hour
+		// because the time series query system does not support downsampling
+		// offsets.
+		SampleNanos: (1 * time.Minute).Nanoseconds(),
+		Queries:     queries,
+	}
+	var response tspb.TimeSeriesQueryResponse
+	err := httputil.PostJSON(http.Client{Timeout: 500 * time.Millisecond}, url, &request, &response)
+	return response, err
+
+}
+
 func verifyTxnPerSecond(
 	ctx context.Context,
 	c *cluster,
@@ -28,35 +98,11 @@ func verifyTxnPerSecond(
 	txnTarget, maxPercentTimeUnderTarget float64,
 ) {
 	// Query needed information over the timespan of the query.
-	adminURLs := c.ExternalAdminUIAddr(ctx, adminNode)
-	url := "http://" + adminURLs[0] + "/ts/query"
-	request := tspb.TimeSeriesQueryRequest{
-		StartNanos: start.UnixNano(),
-		EndNanos:   end.UnixNano(),
-		// Ask for one minute intervals. We can't just ask for the whole hour
-		// because the time series query system does not support downsampling
-		// offsets.
-		SampleNanos: (1 * time.Minute).Nanoseconds(),
-		Queries: []tspb.Query{
-			{
-				Name:             "cr.node.txn.commits",
-				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
-				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
-				Derivative:       tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
-			},
-			// Query *without* the derivative applied so we can get a total count of
-			// txns over the time period.
-			{
-				Name:             "cr.node.txn.commits",
-				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
-				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
-			},
-		},
-	}
-	var response tspb.TimeSeriesQueryResponse
-	if err := httputil.PostJSON(http.Client{}, url, &request, &response); err != nil {
-		t.Fatal(err)
-	}
+	adminURL := c.ExternalAdminUIAddr(ctx, adminNode)[0]
+	response := mustGetMetrics(t, adminURL, start, end, []tsQuery{
+		{name: "cr.node.txn.commits", queryType: rate},
+		{name: "cr.node.txn.commits", queryType: total},
+	})
 
 	// Drop the first two minutes of datapoints as a "ramp-up" period.
 	perMinute := response.Results[0].Datapoints[2:]
@@ -87,5 +133,32 @@ func verifyTxnPerSecond(
 		)
 	} else {
 		t.l.Printf("spent %f%% of time below target of %f txn/s", perc*100, txnTarget)
+	}
+}
+
+func verifyLookupsPerSec(
+	ctx context.Context,
+	c *cluster,
+	t *test,
+	adminNode nodeListOption,
+	start, end time.Time,
+	rangeLookupsTarget float64,
+) {
+	// Query needed information over the timespan of the query.
+	adminURL := c.ExternalAdminUIAddr(ctx, adminNode)[0]
+	response := mustGetMetrics(t, adminURL, start, end, []tsQuery{
+		{name: "cr.node.distsender.rangelookups", queryType: rate},
+	})
+
+	// Drop the first two minutes of datapoints as a "ramp-up" period.
+	perMinute := response.Results[0].Datapoints[2:]
+
+	// Verify that each individual one minute periods were below the target.
+	for _, dp := range perMinute {
+		if dp.Value > rangeLookupsTarget {
+			t.Fatalf("Found minute interval with %f lookup/sec above target of %f lookup/sec\n", dp.Value, rangeLookupsTarget)
+		} else {
+			t.l.Printf("Found minute interval with %f lookup/sec\n", dp.Value)
+		}
 	}
 }

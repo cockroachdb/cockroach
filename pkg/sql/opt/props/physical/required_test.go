@@ -42,8 +42,16 @@ func TestRequiredProps(t *testing.T) {
 		t.Error("presentation should equal itself")
 	}
 
-	if presentation.Equals(physical.Presentation{}) {
+	if presentation.Equals(physical.Presentation(nil)) {
 		t.Error("presentation should not equal the empty presentation")
+	}
+
+	if presentation.Equals(physical.Presentation{}) {
+		t.Error("presentation should not equal the 0 column presentation")
+	}
+
+	if (physical.Presentation{}).Equals(physical.Presentation(nil)) {
+		t.Error("0 column presentation should not equal the empty presentation")
 	}
 
 	// Add ordering props.

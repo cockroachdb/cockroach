@@ -229,6 +229,7 @@ inner-join (hash)
  │         └── ((a.k = 5) AND (a.k > 1)) AND (a.k < 10) [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
  ├── select
  │    ├── columns: e.k:6(int!null) e.i:7(int) t:8(timestamp) tz:9(timestamptz) d:10(date)
+ │    ├── cardinality: [0 - 8]
  │    ├── key: (6)
  │    ├── fd: (6)-->(7-10)
  │    ├── scan e
@@ -430,7 +431,7 @@ select
  │    │    └── ordering: +6
  │    └── filters (true)
  └── filters
-      └── (x = 6) OR (x IS NULL) [type=bool, outer=(6)]
+      └── (x = 6) OR (x IS NULL) [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL] [/6 - /6])]
 
 opt expect=PushSelectCondLeftIntoJoinLeftAndRight
 SELECT * FROM a WHERE EXISTS (SELECT * FROM xy WHERE a.k=xy.x) AND a.k > 5
@@ -448,10 +449,9 @@ semi-join (merge)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── columns: x:6(int!null)
  │    ├── constraint: /6: [/6 - ]
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── filters (true)
 
@@ -471,10 +471,9 @@ anti-join (merge)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── columns: x:6(int!null)
  │    ├── constraint: /6: [/6 - ]
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
  │    └── ordering: +6
  └── filters (true)
 
@@ -540,16 +539,16 @@ SELECT * FROM a LEFT JOIN xy ON a.k=xy.x
 WHERE a.f=1.1 AND (a.i<xy.y OR xy.y IS NULL) AND (a.s='foo' OR a.s='bar')
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb) x:6(int) y:7(int)
  ├── key: (1,6)
  ├── fd: ()-->(3), (1)-->(2,4,5), (6)-->(7)
  ├── left-join (lookup xy)
- │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb) x:6(int) y:7(int)
  │    ├── key columns: [1] = [6]
  │    ├── key: (1,6)
  │    ├── fd: ()-->(3), (1)-->(2,4,5), (6)-->(7)
  │    ├── select
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    ├── fd: ()-->(3), (1)-->(2,4,5)
  │    │    ├── scan a
@@ -558,7 +557,7 @@ select
  │    │    │    └── fd: (1)-->(2-5)
  │    │    └── filters
  │    │         ├── f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight), fd=()-->(3)]
- │    │         └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(4)]
+ │    │         └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(4), constraints=(/4: [/'bar' - /'bar'] [/'foo' - /'foo'])]
  │    └── filters (true)
  └── filters
       └── (i < y) OR (y IS NULL) [type=bool, outer=(2,7)]
@@ -623,7 +622,7 @@ select
  │    │    └── ordering: +6
  │    └── filters (true)
  └── filters
-      └── (i = 100) OR (i IS NULL) [type=bool, outer=(2)]
+      └── (i = 100) OR (i IS NULL) [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL] [/100 - /100])]
 
 # Don't push down conditions in case of FULL JOIN.
 opt
@@ -651,7 +650,7 @@ select
  │    │    └── ordering: +6
  │    └── filters (true)
  └── filters
-      └── (i = 100) OR (i IS NULL) [type=bool, outer=(2)]
+      └── (i = 100) OR (i IS NULL) [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL] [/100 - /100])]
 
 # Push into semi-join.
 opt expect=PushSelectIntoJoinLeft
@@ -723,16 +722,16 @@ SELECT * FROM xy RIGHT JOIN a ON xy.x=a.k
 WHERE a.f=1.1 AND (a.i<xy.y OR xy.y IS NULL) AND (a.s='foo' OR a.s='bar')
 ----
 select
- ├── columns: x:1(int) y:2(int) k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
+ ├── columns: x:1(int) y:2(int) k:3(int!null) i:4(int) f:5(float!null) s:6(string!null) j:7(jsonb)
  ├── key: (1,3)
  ├── fd: ()-->(5), (1)-->(2), (3)-->(4,6,7)
  ├── left-join (lookup xy)
- │    ├── columns: x:1(int) y:2(int) k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
+ │    ├── columns: x:1(int) y:2(int) k:3(int!null) i:4(int) f:5(float!null) s:6(string!null) j:7(jsonb)
  │    ├── key columns: [3] = [1]
  │    ├── key: (1,3)
  │    ├── fd: ()-->(5), (1)-->(2), (3)-->(4,6,7)
  │    ├── select
- │    │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
+ │    │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string!null) j:7(jsonb)
  │    │    ├── key: (3)
  │    │    ├── fd: ()-->(5), (3)-->(4,6,7)
  │    │    ├── scan a
@@ -741,7 +740,7 @@ select
  │    │    │    └── fd: (3)-->(4-7)
  │    │    └── filters
  │    │         ├── f = 1.1 [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight), fd=()-->(5)]
- │    │         └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(6)]
+ │    │         └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(6), constraints=(/6: [/'bar' - /'bar'] [/'foo' - /'foo'])]
  │    └── filters (true)
  └── filters
       └── (i < y) OR (y IS NULL) [type=bool, outer=(2,4)]
@@ -772,7 +771,7 @@ select
  │    │    └── ordering: +3
  │    └── filters (true)
  └── filters
-      └── (i = 100) OR (i IS NULL) [type=bool, outer=(4)]
+      └── (i = 100) OR (i IS NULL) [type=bool, outer=(4), constraints=(/4: [/NULL - /NULL] [/100 - /100])]
 
 # Don't push down conditions in case of FULL JOIN.
 opt
@@ -800,7 +799,7 @@ select
  │    │    └── ordering: +3
  │    └── filters (true)
  └── filters
-      └── (i = 100) OR (i IS NULL) [type=bool, outer=(4)]
+      └── (i = 100) OR (i IS NULL) [type=bool, outer=(4), constraints=(/4: [/NULL - /NULL] [/100 - /100])]
 
 # --------------------------------------------------
 # MergeSelectInnerJoin

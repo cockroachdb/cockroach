@@ -262,10 +262,17 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 		}
 
 		execFactory := makeExecFactory(params.p)
-		eb := execbuilder.New(&execFactory, factory.Memo(), newRightSide, params.EvalContext())
+		eb := execbuilder.New(&execFactory, factory.Memo(), nil /* catalog */, newRightSide, params.EvalContext())
 		eb.DisableTelemetry()
 		p, err := eb.Build()
 		if err != nil {
+			if errors.IsAssertionFailure(err) {
+				// Enhance the error with the EXPLAIN (OPT, VERBOSE) of the inner
+				// expression.
+				fmtFlags := memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes
+				explainOpt := memo.FormatExpr(newRightSide, fmtFlags, nil /* catalog */)
+				err = errors.WithDetailf(err, "newRightSide:\n%s", explainOpt)
+			}
 			return false, err
 		}
 		plan := p.(*planTop)
@@ -326,7 +333,8 @@ func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planTop) error 
 	planCtx.stmtType = recv.stmtType
 
 	params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRun(
-		params.ctx, evalCtx, planCtx, params.p.Txn(), plan.plan, recv)
+		params.ctx, evalCtx, planCtx, params.p.Txn(), plan.plan, recv,
+	)()
 	if recv.commErr != nil {
 		return recv.commErr
 	}

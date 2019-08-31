@@ -1,4 +1,4 @@
-# LogicTest: local local-opt
+# LogicTest: local
 
 ## Tests for ensuring that prepared statements can't get overwritten and for
 ## deallocate and deallocate all.
@@ -1018,3 +1018,41 @@ SET database = ''
 
 query error  cannot access virtual schema in anonymous database
 EXECUTE display_appname
+
+statement ok
+SET database = 'test'
+
+# Lookup by ID: Rename column in table and ensure that the prepared statement
+# is updated to incorporate it.
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT); INSERT INTO ab(a, b) VALUES (1, 10)
+
+let $id
+SELECT id FROM system.namespace WHERE name='ab'
+
+statement ok
+PREPARE change_rename_2 AS SELECT * FROM [$id AS ab]
+
+query II colnames
+EXECUTE change_rename_2
+----
+a  b
+1  10
+
+statement ok
+ALTER TABLE ab RENAME COLUMN b TO c
+
+query II colnames
+EXECUTE change_rename_2
+----
+a  c
+1  10
+
+statement ok
+ALTER TABLE ab RENAME COLUMN c TO b
+
+query II colnames
+EXECUTE change_rename_2
+----
+a  b
+1  10

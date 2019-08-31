@@ -336,6 +336,11 @@ func (b *RequestBatcher) cleanup(err error) {
 }
 
 func (b *RequestBatcher) run(ctx context.Context) {
+	// Create a context to be used in sendBatch to cancel in-flight batches when
+	// this function exits. If we did not cancel in-flight requests then the
+	// Stopper might get stuck waiting for those requests to complete.
+	sendCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	var (
 		// inFlight tracks the number of batches currently being sent.
 		// true.
@@ -359,7 +364,7 @@ func (b *RequestBatcher) run(ctx context.Context) {
 			if inFlight >= b.cfg.InFlightBackpressureLimit {
 				inBackPressure = true
 			}
-			b.sendBatch(ctx, ba)
+			b.sendBatch(sendCtx, ba)
 		}
 		handleSendDone = func() {
 			inFlight--

@@ -65,11 +65,8 @@ const (
 	// execbuild time is captured.
 	ExecBuild
 
-	// ExecPlan executes the query end-to-end using the heuristic planner.
-	ExecPlan
-
-	// ExecOpt executes the query end-to-end using the cost-based optimizer.
-	ExecOpt
+	// EndToEnd executes the query end-to-end using the cost-based optimizer.
+	EndToEnd
 )
 
 var benchmarkTypeStrings = [...]string{
@@ -78,8 +75,7 @@ var benchmarkTypeStrings = [...]string{
 	Normalize: "Normalize",
 	Explore:   "Explore",
 	ExecBuild: "ExecBuild",
-	ExecPlan:  "ExecPlan",
-	ExecOpt:   "ExecOpt",
+	EndToEnd:  "EndToEnd",
 }
 
 type benchQuery struct {
@@ -266,7 +262,7 @@ func init() {
 }
 
 var profileTime = flag.Duration("profile-time", 10*time.Second, "duration of profiling run")
-var profileType = flag.String("profile-type", "ExecBuild", "Parse, OptBuild, Normalize, Explore, ExecBuild, ExecPlan, ExecOpt")
+var profileType = flag.String("profile-type", "ExecBuild", "Parse, OptBuild, Normalize, Explore, ExecBuild, EndToEnd")
 var profileQuery = flag.String("profile-query", "kv-read", "name of query to run")
 
 // TestCPUProfile executes the configured profileQuery in a loop in order to
@@ -320,15 +316,13 @@ func BenchmarkPhases(b *testing.B) {
 	}
 }
 
-// BenchmarkExec measures the time to execute a query end-to-end using both the
-// heuristic planner and the cost-based optimizer.
-func BenchmarkExec(b *testing.B) {
+// BenchmarkEndToEnd measures the time to execute a query end-to-end.
+func BenchmarkEndToEnd(b *testing.B) {
 	h := newHarness()
 	defer h.close()
 
 	for _, query := range queries {
-		h.runForBenchmark(b, ExecPlan, query)
-		h.runForBenchmark(b, ExecOpt, query)
+		h.runForBenchmark(b, EndToEnd, query)
 	}
 }
 
@@ -390,7 +384,7 @@ func (h *harness) runForProfiling(
 		// checking if done.
 		for i := 0; i < 1000; i++ {
 			switch bmType {
-			case ExecPlan, ExecOpt:
+			case EndToEnd:
 				h.runUsingServer(t)
 
 			default:
@@ -407,7 +401,7 @@ func (h *harness) runForBenchmark(b *testing.B, bmType BenchmarkType, query benc
 
 	b.Run(fmt.Sprintf("%s/%s", query.name, benchmarkTypeStrings[bmType]), func(b *testing.B) {
 		switch bmType {
-		case ExecPlan, ExecOpt:
+		case EndToEnd:
 			for i := 0; i < b.N; i++ {
 				h.runUsingServer(b)
 			}
@@ -422,7 +416,7 @@ func (h *harness) runForBenchmark(b *testing.B, bmType BenchmarkType, query benc
 
 func (h *harness) prepare(tb testing.TB) {
 	switch h.bmType {
-	case ExecPlan, ExecOpt:
+	case EndToEnd:
 		h.prepareUsingServer(tb)
 
 	default:
@@ -440,13 +434,6 @@ func (h *harness) prepareUsingServer(tb testing.TB) {
 			h.sr.Exec(tb, schema)
 		}
 		h.ready = true
-	}
-
-	// Set session state.
-	if h.bmType == ExecPlan {
-		h.sr.Exec(tb, `SET OPTIMIZER=OFF`)
-	} else {
-		h.sr.Exec(tb, `SET OPTIMIZER=ON`)
 	}
 
 	if h.query.prepare {
@@ -584,7 +571,8 @@ func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType, usePrepared b
 
 	root := execMemo.RootExpr()
 	execFactory := stubFactory{}
-	if _, err = execbuilder.New(&execFactory, execMemo, root, &h.evalCtx).Build(); err != nil {
+	eb := execbuilder.New(&execFactory, execMemo, nil /* catalog */, root, &h.evalCtx)
+	if _, err = eb.Build(); err != nil {
 		tb.Fatalf("%v", err)
 	}
 }

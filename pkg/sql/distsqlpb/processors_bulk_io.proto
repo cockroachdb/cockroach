@@ -85,10 +85,19 @@ message ReadImportDataSpec {
   optional int32 sample_size = 2 [(gogoproto.nullable) = false];
   reserved 3;
 
-  // tables is an alternative to table_desc for input formats that can read
-  // multiple tables. If it is non-empty, the keys specify the names of tables
-  // for which the processor should read and emit data (ignoring data for any
-  // other tables that is present in the input).
+  message ImportTable {
+    optional sqlbase.TableDescriptor desc = 1 [(gogoproto.nullable) = true];
+    // targetCols is used to store the target columns for each existing table
+    // being imported into. These are the columns for which the processor should
+    // read and emit data (ignoring data for any other tables or columns outside
+    // of the targetCols, that is present in the input).
+    repeated string targetCols = 2 [(gogoproto.nullable) = true];
+  }
+
+  // tables supports input formats that can read multiple tables. If it is
+  // non-empty, the keys specify the names of tables for which the processor
+  // should read and emit data (ignoring data for any other tables that is
+  // present in the input).
   //
   // TODO(dt): If a key has a nil value, the schema for that table should be
   // determined from the input on-the-fly (e.g. by parsing a CREATE TABLE in a
@@ -96,7 +105,7 @@ message ReadImportDataSpec {
   // TableDescriptor with the corresponding descriptor ID key. If tables is
   // empty (and table_desc above is not specified), the processor should read
   // all tables in the input, determining their schemas on the fly.
-  map<string, sqlbase.TableDescriptor> tables = 9 [(gogoproto.nullable) = true];
+  map<string, ImportTable> tables = 9 [(gogoproto.nullable) = true];
 
   // uri is a storageccl.ExportStorage URI pointing to the CSV files to be
   // read. The map key must be unique across the entire IMPORT job.

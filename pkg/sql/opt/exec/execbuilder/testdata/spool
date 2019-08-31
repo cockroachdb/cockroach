@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local
 
 statement ok
 CREATE TABLE t(x INT PRIMARY KEY)
@@ -11,67 +11,99 @@ query TTT
 EXPLAIN WITH a AS (INSERT INTO t SELECT * FROM t2 RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
-limit                     ·         ·
- │                        count     1
- └── spool                ·         ·
-      │                   limit     1
-      └── run             ·         ·
-           └── insert     ·         ·
-                │         into      t(x)
-                │         strategy  inserter
-                └── scan  ·         ·
-·                         table     t2@primary
-·                         spans     ALL
+root                                ·             ·
+ ├── limit                          ·             ·
+ │    │                             count         1
+ │    └── scan buffer node          ·             ·
+ │                                  label         buffer 1 (a)
+ └── subquery                       ·             ·
+      │                             id            @S1
+      │                             original sql  <unknown>
+      │                             exec mode     all rows
+      └── buffer node               ·             ·
+           │                        label         buffer 1 (a)
+           └── spool                ·             ·
+                └── run             ·             ·
+                     └── insert     ·             ·
+                          │         into          t(x)
+                          │         strategy      inserter
+                          └── scan  ·             ·
+·                                   table         t2@primary
+·                                   spans         ALL
 
 query TTT
 EXPLAIN WITH a AS (DELETE FROM t RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
-limit                     ·         ·
- │                        count     1
- └── spool                ·         ·
-      │                   limit     1
-      └── run             ·         ·
-           └── delete     ·         ·
-                │         from      t
-                │         strategy  deleter
-                └── scan  ·         ·
-·                         table     t@primary
-·                         spans     ALL
+root                                ·             ·
+ ├── limit                          ·             ·
+ │    │                             count         1
+ │    └── scan buffer node          ·             ·
+ │                                  label         buffer 1 (a)
+ └── subquery                       ·             ·
+      │                             id            @S1
+      │                             original sql  <unknown>
+      │                             exec mode     all rows
+      └── buffer node               ·             ·
+           │                        label         buffer 1 (a)
+           └── spool                ·             ·
+                └── run             ·             ·
+                     └── delete     ·             ·
+                          │         from          t
+                          │         strategy      deleter
+                          └── scan  ·             ·
+·                                   table         t@primary
+·                                   spans         ALL
 
 
 query TTT
 EXPLAIN WITH a AS (UPDATE t SET x = x + 1 RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
-limit                          ·         ·
- │                             count     1
- └── spool                     ·         ·
-      │                        limit     1
-      └── run                  ·         ·
-           └── update          ·         ·
-                │              table     t
-                │              set       x
-                │              strategy  updater
-                └── render     ·         ·
-                     └── scan  ·         ·
-·                              table     t@primary
-·                              spans     ALL
+root                                     ·             ·
+ ├── limit                               ·             ·
+ │    │                                  count         1
+ │    └── scan buffer node               ·             ·
+ │                                       label         buffer 1 (a)
+ └── subquery                            ·             ·
+      │                                  id            @S1
+      │                                  original sql  <unknown>
+      │                                  exec mode     all rows
+      └── buffer node                    ·             ·
+           │                             label         buffer 1 (a)
+           └── spool                     ·             ·
+                └── run                  ·             ·
+                     └── update          ·             ·
+                          │              table         t
+                          │              set           x
+                          │              strategy      updater
+                          └── render     ·             ·
+                               └── scan  ·             ·
+·                                        table         t@primary
+·                                        spans         ALL
 
 query TTT
 EXPLAIN WITH a AS (UPSERT INTO t VALUES (2), (3) RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
-limit                       ·         ·
- │                          count     1
- └── spool                  ·         ·
-      │                     limit     1
-      └── run               ·         ·
-           └── upsert       ·         ·
-                │           into      t(x)
-                │           strategy  opt upserter
-                └── values  ·         ·
-·                           size      1 column, 2 rows
+root                                  ·             ·
+ ├── limit                            ·             ·
+ │    │                               count         1
+ │    └── scan buffer node            ·             ·
+ │                                    label         buffer 1 (a)
+ └── subquery                         ·             ·
+      │                               id            @S1
+      │                               original sql  <unknown>
+      │                               exec mode     all rows
+      └── buffer node                 ·             ·
+           │                          label         buffer 1 (a)
+           └── spool                  ·             ·
+                └── run               ·             ·
+                     └── upsert       ·             ·
+                          │           into          t(x)
+                          │           strategy      opt upserter
+                          └── values  ·             ·
+·                                     size          1 column, 2 rows
 
 # Ditto all mutations, with the statement source syntax.
 query TTT
@@ -177,23 +209,39 @@ EXPLAIN WITH a AS (INSERT INTO t SELECT * FROM t2 RETURNING x),
              b AS (INSERT INTO t SELECT x+1 FROM a RETURNING x)
         SELECT * FROM b LIMIT 1
 ----
-limit                                         ·         ·
- │                                            count     1
- └── spool                                    ·         ·
-      │                                       limit     1
-      └── run                                 ·         ·
-           └── insert                         ·         ·
-                │                             into      t(x)
-                │                             strategy  inserter
-                └── spool                     ·         ·
-                     └── render               ·         ·
-                          └── run             ·         ·
-                               └── insert     ·         ·
-                                    │         into      t(x)
-                                    │         strategy  inserter
-                                    └── scan  ·         ·
-·                                             table     t2@primary
-·                                             spans     ALL
+root                                                 ·             ·
+ ├── limit                                           ·             ·
+ │    │                                              count         1
+ │    └── scan buffer node                           ·             ·
+ │                                                   label         buffer 2 (b)
+ ├── subquery                                        ·             ·
+ │    │                                              id            @S1
+ │    │                                              original sql  <unknown>
+ │    │                                              exec mode     all rows
+ │    └── buffer node                                ·             ·
+ │         │                                         label         buffer 1 (a)
+ │         └── spool                                 ·             ·
+ │              └── run                              ·             ·
+ │                   └── insert                      ·             ·
+ │                        │                          into          t(x)
+ │                        │                          strategy      inserter
+ │                        └── scan                   ·             ·
+ │                                                   table         t2@primary
+ │                                                   spans         ALL
+ └── subquery                                        ·             ·
+      │                                              id            @S2
+      │                                              original sql  <unknown>
+      │                                              exec mode     all rows
+      └── buffer node                                ·             ·
+           │                                         label         buffer 2 (b)
+           └── spool                                 ·             ·
+                └── run                              ·             ·
+                     └── insert                      ·             ·
+                          │                          into          t(x)
+                          │                          strategy      inserter
+                          └── render                 ·             ·
+                               └── scan buffer node  ·             ·
+·                                                    label         buffer 1 (a)
 
 # Check that no spool is inserted if a top-level render is elided.
 query TTT

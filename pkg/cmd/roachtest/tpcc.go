@@ -93,25 +93,24 @@ func tpccFixturesCmd(t *test, cloud string, warehouses int, extraArgs string) st
 		command, warehouses, extraArgs)
 }
 
-func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
-	crdbNodes := c.Range(1, c.spec.NodeCount-1)
-	workloadNode := c.Node(c.spec.NodeCount)
-	rampDuration := 5 * time.Minute
+func setupTPCC(
+	ctx context.Context, t *test, c *cluster, warehouses int, zfs bool, versions []string,
+) (crdbNodes, workloadNode nodeListOption) {
+	crdbNodes = c.Range(1, c.spec.NodeCount-1)
+	workloadNode = c.Node(c.spec.NodeCount)
 	if c.isLocal() {
-		opts.Warehouses = 1
-		opts.Duration = 1 * time.Minute
-		rampDuration = 30 * time.Second
+		warehouses = 1
 	}
 
-	if n := len(opts.Versions); n == 0 {
-		opts.Versions = make([]string, c.spec.NodeCount-1)
+	if n := len(versions); n == 0 {
+		versions = make([]string, c.spec.NodeCount-1)
 	} else if n != c.spec.NodeCount-1 {
-		t.Fatalf("must specify Versions for all %d nodes: %v", c.spec.NodeCount-1, opts.Versions)
+		t.Fatalf("must specify Versions for all %d nodes: %v", c.spec.NodeCount-1, versions)
 	}
 
 	{
 		var regularNodes []option
-		for i, v := range opts.Versions {
+		for i, v := range versions {
 			if v == "" {
 				regularNodes = append(regularNodes, c.Node(i+1))
 			} else {
@@ -139,7 +138,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 	func() {
 		db := c.Conn(ctx, 1)
 		defer db.Close()
-		if opts.ZFS {
+		if zfs {
 			if err := c.RunE(ctx, c.Node(1), "test -d /mnt/data1/.zfs/snapshot/pristine"); err != nil {
 				// Use ZFS so the initial store dumps can be instantly rolled back to their
 				// pristine state. Useful for iterating quickly on the test, especially when
@@ -148,8 +147,8 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 
 				t.Status("loading dataset")
 				c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
-
-				c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, opts.Warehouses, ""))
+				waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]))
+				c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, warehouses, ""))
 				c.Stop(ctx, crdbNodes)
 
 				c.Run(ctx, crdbNodes, "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
@@ -159,15 +158,27 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 			c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
 		} else {
 			c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
-			c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, opts.Warehouses, ""))
+			waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]))
+			c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, warehouses, ""))
 		}
 	}()
+	return crdbNodes, workloadNode
+}
+
+func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
+	rampDuration := 5 * time.Minute
+	if c.isLocal() {
+		opts.Warehouses = 1
+		opts.Duration = time.Minute
+		rampDuration = 30 * time.Second
+	}
+	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts.Warehouses, opts.ZFS, opts.Versions)
 	t.Status("waiting")
 	m := newMonitor(ctx, c, crdbNodes)
 	m.Go(func(ctx context.Context) error {
 		t.WorkerStatus("running tpcc")
 		cmd := fmt.Sprintf(
-			"./workload run tpcc --warehouses=%d --histograms=logs/stats.json "+
+			"./workload run tpcc --warehouses=%d --histograms="+perfArtifactsDir+"/stats.json "+
 				opts.Extra+" --ramp=%s --duration=%s {pgurl:1-%d}",
 			opts.Warehouses, rampDuration, opts.Duration, c.spec.NodeCount-1)
 		c.Run(ctx, workloadNode, cmd)
@@ -349,14 +360,14 @@ func registerTPCC(r *testRegistry) {
 		CPUs:  16,
 
 		LoadWarehouses: gceOrAws(cloud, 2000, 2500),
-		EstimatedMax:   gceOrAws(cloud, 1600, 2300),
+		EstimatedMax:   gceOrAws(cloud, 1600, 2350),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
 		CPUs:  16,
 
 		LoadWarehouses: gceOrAws(cloud, 8000, 10000),
-		EstimatedMax:   gceOrAws(cloud, 7000, 7000),
+		EstimatedMax:   gceOrAws(cloud, 7000, 8000),
 
 		Tags: []string{`weekly`},
 	})
@@ -367,6 +378,15 @@ func registerTPCC(r *testRegistry) {
 
 		LoadWarehouses: 5000,
 		EstimatedMax:   2500,
+	})
+	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes:        9,
+		CPUs:         4,
+		Distribution: multiRegion,
+		LoadConfig:   multiLoadgen,
+
+		LoadWarehouses: 2000,
+		EstimatedMax:   1000,
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes:      9,
@@ -404,7 +424,7 @@ func gceOrAws(cloud string, gce, aws int) int {
 }
 
 func maybeMinVersionForFixturesImport(cloud string) string {
-	const minVersionForFixturesImport = "v2.2.0"
+	const minVersionForFixturesImport = "v19.1.0"
 	if cloud == "aws" {
 		return minVersionForFixturesImport
 	}
@@ -606,31 +626,32 @@ func loadTPCCBench(
 	var rebalanceWait time.Duration
 	switch b.LoadConfig {
 	case singleLoadgen:
-		loadArgs = `--split --scatter --checks=false`
-		rebalanceWait = time.Duration(b.LoadWarehouses/100) * time.Minute
+		loadArgs = `--scatter --checks=false`
+		rebalanceWait = time.Duration(b.LoadWarehouses/250) * time.Minute
 	case singlePartitionedLoadgen:
-		loadArgs = fmt.Sprintf(`--split --scatter --checks=false --partitions=%d`, b.partitions())
-		rebalanceWait = time.Duration(b.LoadWarehouses/50) * time.Minute
+		loadArgs = fmt.Sprintf(`--scatter --checks=false --partitions=%d`, b.partitions())
+		rebalanceWait = time.Duration(b.LoadWarehouses/125) * time.Minute
 	case multiLoadgen:
-		loadArgs = fmt.Sprintf(`--split --scatter --checks=false --partitions=%d --zones="%s"`,
+		loadArgs = fmt.Sprintf(`--scatter --checks=false --partitions=%d --zones="%s"`,
 			b.partitions(), strings.Join(b.Distribution.zones(), ","))
-		rebalanceWait = time.Duration(b.LoadWarehouses/20) * time.Minute
+		rebalanceWait = time.Duration(b.LoadWarehouses/50) * time.Minute
 	default:
 		panic("unexpected")
 	}
 
 	// Load the corresponding fixture.
 	t.l.Printf("restoring tpcc fixture\n")
+	waitForFullReplication(t, db)
 	cmd := tpccFixturesCmd(t, cloud, b.LoadWarehouses, loadArgs)
 	if err := c.RunE(ctx, loadNode, cmd); err != nil {
 		return err
 	}
-	if rebalanceWait == 0 {
+	if rebalanceWait == 0 || len(roachNodes) <= 3 {
 		return nil
 	}
 
 	t.l.Printf("waiting %v for rebalancing\n", rebalanceWait)
-	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='64MiB'`)
+	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='128MiB'`)
 	if err != nil {
 		return err
 	}
@@ -638,9 +659,9 @@ func loadTPCCBench(
 	// Split and scatter the tables. Ramp up to the expected load in the desired
 	// distribution. This should allow for load-based rebalancing to help
 	// distribute load. Optionally pass some load configuration-specific flags.
-	cmd = fmt.Sprintf("./workload run tpcc --warehouses=%d --workers=%d "+
-		"--wait=false --duration=%s --tolerate-errors {pgurl%s}",
-		b.LoadWarehouses, b.LoadWarehouses, rebalanceWait, roachNodes)
+	cmd = fmt.Sprintf("./workload run tpcc --warehouses=%d --workers=%d --max-rate=%d "+
+		"--wait=false --duration=%s --scatter --tolerate-errors {pgurl%s}",
+		b.LoadWarehouses, b.LoadWarehouses, b.LoadWarehouses/2, rebalanceWait, roachNodes)
 	if out, err := c.RunWithBuffer(ctx, c.l, loadNode, cmd); err != nil {
 		return errors.Wrapf(err, "failed with output %q", string(out))
 	}
@@ -683,6 +704,11 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 	c.Put(ctx, workload, "./workload", loadNodes)
 	c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
 
+	// Wait after restarting nodes before applying load. This lets
+	// things settle down to avoid unexpected cluster states.
+	const restartWait = 15 * time.Second
+	time.Sleep(restartWait)
+
 	useHAProxy := b.Chaos
 	if useHAProxy {
 		if len(loadNodes) > 1 {
@@ -724,7 +750,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 			m.ExpectDeaths(int32(len(roachNodes)))
 			c.Stop(ctx, roachNodes)
 			c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
-			time.Sleep(10 * time.Second)
+			time.Sleep(restartWait)
 
 			// Set up the load generation configuration.
 			rampDur := 5 * time.Minute
@@ -781,9 +807,9 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 					}
 
 					t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
-					histogramsPath := fmt.Sprintf("logs/warehouses=%d/stats.json", activeWarehouses)
+					histogramsPath := fmt.Sprintf("%s/warehouses=%d/stats.json", perfArtifactsDir, activeWarehouses)
 					cmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --active-warehouses=%d "+
-						"--tolerate-errors --ramp=%s --duration=%s%s {pgurl%s} "+
+						"--tolerate-errors --scatter --ramp=%s --duration=%s%s {pgurl%s} "+
 						"--histograms=%s",
 						b.LoadWarehouses, activeWarehouses, rampDur,
 						loadDur, extraFlags, sqlGateways, histogramsPath)
