@@ -16,6 +16,7 @@ import "gogoproto/gogo.proto";
 
 // UserPrivileges describes the list of privileges available for a given user.
 message UserPrivileges {
+  option (gogoproto.equal) = true;
   optional string user = 1 [(gogoproto.nullable) = false];
   // privileges is a bitfield of 1<<Privilege values.
   optional uint32 privileges = 2 [(gogoproto.nullable) = false];
@@ -24,5 +25,6 @@ message UserPrivileges {
 // PrivilegeDescriptor describes a list of users and attached
 // privileges. The list should be sorted by user for fast access.
 message PrivilegeDescriptor {
+  option (gogoproto.equal) = true;
   repeated UserPrivileges users = 1 [(gogoproto.nullable) = false];
 }
