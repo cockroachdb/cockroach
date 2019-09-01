@@ -115,6 +115,10 @@ func (d *mysqloutfileReader) readFile(
 		return nil
 	}
 	addRow := func() error {
+		if len(row) != len(d.conv.VisibleCols) {
+			return makeRowErr(inputName, count, pgcode.Syntax,
+				"unexpected number of columns, expected %d got %d: %#v", len(d.conv.VisibleCols), len(row), row)
+		}
 		copy(d.conv.Datums, row)
 		if err := d.conv.Row(ctx, inputIdx, count); err != nil {
 			return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
@@ -148,9 +152,6 @@ func (d *mysqloutfileReader) readFile(
 					return err
 				}
 			}
-		}
-
-		if finished {
 			break
 		}
 
