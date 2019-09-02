@@ -145,7 +145,12 @@ func (r *RangeDescriptor) SetReplicaType(
 		desc := &r.InternalReplicas[i]
 		if desc.StoreID == storeID && desc.NodeID == nodeID {
 			prevTyp := desc.GetType()
-			desc.Type = &typ
+			if typ != VOTER_FULL {
+				desc.Type = &typ
+			} else {
+				// For 19.1 compatibility.
+				desc.Type = nil
+			}
 			return *desc, prevTyp, true
 		}
 	}
@@ -157,11 +162,16 @@ func (r *RangeDescriptor) SetReplicaType(
 func (r *RangeDescriptor) AddReplica(
 	nodeID NodeID, storeID StoreID, typ ReplicaType,
 ) ReplicaDescriptor {
+	var typPtr *ReplicaType
+	// For 19.1 compatibility, use nil instead of VOTER_FULL.
+	if typ != VOTER_FULL {
+		typPtr = &typ
+	}
 	toAdd := ReplicaDescriptor{
 		NodeID:    nodeID,
 		StoreID:   storeID,
 		ReplicaID: r.NextReplicaID,
-		Type:      &typ,
+		Type:      typPtr,
 	}
 	rs := r.Replicas()
 	rs.AddReplica(toAdd)

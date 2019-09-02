@@ -1266,9 +1266,12 @@ func (r *Replica) addReplicaLegacyPreemptiveSnapshot(
 	// complete. See #10409.
 	{
 		preemptiveRepDesc := roachpb.ReplicaDescriptor{
-			NodeID:    target.NodeID,
-			StoreID:   target.StoreID,
-			Type:      roachpb.ReplicaTypeVoterFull(),
+			NodeID:  target.NodeID,
+			StoreID: target.StoreID,
+			// NB: if we're still sending preemptive snapshot, the recipient is
+			// very likely a 19.1 node and does not understand this field. It
+			// won't matter to set it here, but don't anyway.
+			Type:      nil,
 			ReplicaID: 0, // intentional
 		}
 		if err := r.sendSnapshot(ctx, preemptiveRepDesc, SnapshotRequest_PREEMPTIVE, priority); err != nil {
