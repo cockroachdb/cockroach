@@ -1421,13 +1421,17 @@ func (c *cliState) runStatements(stmts []string) error {
 // checkInteractive sets the isInteractive parameter depending on the
 // execution environment and the presence of -e flags.
 func checkInteractive() {
-	// We don't consider sessions interactives unless we have a
-	// serious hunch they are. For now, only `cockroach sql` *without*
-	// `-e` has the ability to input from a (presumably) human user,
-	// and we'll also assume that there is no human if the standard
-	// input is not terminal-like -- likely redirected from a file,
-	// etc.
-	cliCtx.isInteractive = len(sqlCtx.execStmts) == 0 && isatty.IsTerminal(os.Stdin.Fd())
+	if envutil.EnvOrDefaultBool("COCKROACH_FORCE_INTERACTIVE", false) {
+		cliCtx.isInteractive = true
+	} else {
+		// We don't consider sessions interactives unless we have a
+		// serious hunch they are. For now, only `cockroach sql` *without*
+		// `-e` has the ability to input from a (presumably) human user,
+		// and we'll also assume that there is no human if the standard
+		// input is not terminal-like -- likely redirected from a file,
+		// etc.
+		cliCtx.isInteractive = len(sqlCtx.execStmts) == 0 && isatty.IsTerminal(os.Stdin.Fd())
+	}
 }
 
 func runTerm(cmd *cobra.Command, args []string) error {
