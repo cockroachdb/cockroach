@@ -937,10 +937,9 @@ WHERE
 ----
 project
  ├── columns: i:2(int)
- └── anti-join (merge)
+ └── anti-join (lookup xy)
       ├── columns: k:1(int!null) i:2(int)
-      ├── left ordering: +1
-      ├── right ordering: +5
+      ├── key columns: [1] = [5]
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── anti-join (merge)
@@ -949,7 +948,6 @@ project
       │    ├── right ordering: +7
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
-      │    ├── ordering: +1
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) i:2(int)
       │    │    ├── key: (1)
@@ -960,10 +958,6 @@ project
       │    │    ├── key: (7)
       │    │    └── ordering: +7
       │    └── filters (true)
-      ├── scan xy
-      │    ├── columns: x:5(int!null)
-      │    ├── key: (5)
-      │    └── ordering: +5
       └── filters (true)
 
 # --------------------------------------------------

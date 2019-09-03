@@ -1586,6 +1586,14 @@ func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *pr
 	if relational.OutputCols.Empty() {
 		md := join.Memo().Metadata()
 		relational.OutputCols = join.Cols.Difference(join.Input.Relational().OutputCols)
+
+		// Include the key columns in the output columns.
+		index := md.Table(join.Table).Index(join.Index)
+		for i := range join.KeyCols {
+			indexColID := join.Table.ColumnID(index.Column(i).Ordinal)
+			relational.OutputCols.Add(indexColID)
+		}
+
 		relational.NotNullCols = tableNotNullCols(md, join.Table)
 		relational.NotNullCols.IntersectionWith(relational.OutputCols)
 		relational.Cardinality = props.AnyCardinality
@@ -1679,6 +1687,8 @@ type joinPropsHelper struct {
 	filterNotNullCols opt.ColSet
 	filterIsTrue      bool
 	filterIsFalse     bool
+
+	selfJoinCols opt.ColSet
 }
 
 func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
@@ -1702,6 +1712,10 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 			h.filterNotNullCols.Add(colID)
 			h.filterNotNullCols.Add(indexColID)
 			h.filtersFD.AddEquivalency(colID, indexColID)
+			if colID == indexColID {
+				// This can happen if an index join was converted into a lookup join.
+				h.selfJoinCols.Add(colID)
+			}
 		}
 
 		// Lookup join has implicit equality conditions on KeyCols.

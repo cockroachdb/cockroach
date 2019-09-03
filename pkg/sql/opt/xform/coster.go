@@ -347,9 +347,16 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 	cost := memo.Cost(1.25*leftRowCount+1.75*rightRowCount) * cpuCostFactor
 
 	// Add the CPU cost of emitting the rows.
-	// TODO(radu): ideally we would have an estimate of how many rows we actually
-	// have to run the ON condition on.
-	cost += memo.Cost(join.Relational().Stats.RowCount) * cpuCostFactor
+	rowsProcessed, ok := c.mem.RowsProcessed(join)
+	if !ok {
+		// This can happen as part of testing. In this case just return the number
+		// of rows.
+		rowsProcessed = join.Relational().Stats.RowCount
+	}
+	cost += memo.Cost(rowsProcessed) * cpuCostFactor
+
+	// TODO(rytaft): Add a constant "setup" cost per extra ON condition similar
+	// to merge join and lookup join.
 	return cost
 }
 
@@ -360,9 +367,19 @@ func (c *coster) computeMergeJoinCost(join *memo.MergeJoinExpr) memo.Cost {
 	cost := memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor
 
 	// Add the CPU cost of emitting the rows.
-	// TODO(radu): ideally we would have an estimate of how many rows we actually
-	// have to run the ON condition on.
-	cost += memo.Cost(join.Relational().Stats.RowCount) * cpuCostFactor
+	rowsProcessed, ok := c.mem.RowsProcessed(join)
+	if !ok {
+		// We shouldn't ever get here. Since we don't allow the memo
+		// to be optimized twice, the coster should never be used after
+		// logPropsBuilder.clear() is called.
+		panic(errors.AssertionFailedf("could not get rows processed for merge join"))
+	}
+	cost += memo.Cost(rowsProcessed) * cpuCostFactor
+
+	// Add a constant "setup" cost per ON condition to account for the fact that
+	// the rowsProcessed estimate alone cannot effectively discriminate between
+	// plans when RowCount is too small.
+	cost += cpuCostFactor * memo.Cost(len(join.On))
 	return cost
 }
 
@@ -393,36 +410,28 @@ func (c *coster) computeLookupJoinCost(join *memo.LookupJoinExpr) memo.Cost {
 	perRowCost := lookupJoinRetrieveRowCost +
 		c.rowScanCost(join.Table, join.Index, numLookupCols)
 
-	// Add a cost if we have to evaluate an ON condition on every row. The more
-	// leftover conditions, the more expensive it should be. We want to
-	// differentiate between two lookup joins where one uses only a subset of the
-	// columns. For example:
-	//   abc JOIN xyz ON a=x AND b=y
-	// We could have a lookup join using an index on y (and left-over condition
-	// a=x), and another lookup join on an index on x,y. The latter is definitely
-	// preferable (the former could generate a lot of internal results that are
-	// then discarded).
-	//
-	// TODO(radu): we should take into account that the "internal" row count is
-	// higher, according to the selectivities of the conditions. Unfortunately
-	// this is very tricky, in particular because of left-over conditions that are
-	// not selective.
+	// Take into account that the "internal" row count is higher, according to
+	// the selectivities of the conditions. In particular, we need to ignore
+	// left-over conditions that are not selective.
 	// For example:
 	//   ab JOIN xy ON a=x AND x=10
 	// becomes (during normalization):
 	//   ab JOIN xy ON a=x AND a=10 AND x=10
 	// which can become a lookup join with left-over condition x=10 which doesn't
 	// actually filter anything.
-	//
-	// TODO(radu): this should be extended to all join types. It's tricky for hash
-	// joins where we don't have the equality and leftover filters readily
-	// available.
-	perRowCost += cpuCostFactor * memo.Cost(len(join.On))
-	// We also add a constant "setup" cost per ON condition. Without this, the
-	// adjustment above can be inconsequential when the RowCount is too small.
-	cost += cpuCostFactor * memo.Cost(len(join.On))
+	rowsProcessed, ok := c.mem.RowsProcessed(join)
+	if !ok {
+		// We shouldn't ever get here. Since we don't allow the memo
+		// to be optimized twice, the coster should never be used after
+		// logPropsBuilder.clear() is called.
+		panic(errors.AssertionFailedf("could not get rows processed for lookup join"))
+	}
+	cost += memo.Cost(rowsProcessed) * perRowCost
 
-	cost += memo.Cost(join.Relational().Stats.RowCount) * perRowCost
+	// Add a constant "setup" cost per ON condition to account for the fact that
+	// the rowsProcessed estimate alone cannot effectively discriminate between
+	// plans when RowCount is too small.
+	cost += cpuCostFactor * memo.Cost(len(join.On))
 	return cost
 }
 

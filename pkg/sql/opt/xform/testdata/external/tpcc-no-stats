@@ -173,7 +173,7 @@ insert "order"
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  ├── stats: [rows=0]
- ├── cost: 6.15
+ ├── cost: 4.05224
  ├── values
  │    ├── columns: column1:9(int!null) column2:10(int!null) column3:11(int!null) column4:12(int!null) column5:13(timestamp!null) column6:14(int!null) column7:15(int!null) column16:16(int)
  │    ├── cardinality: [1 - 1]
@@ -193,12 +193,12 @@ insert "order"
  │         └── null [type=int]
  └── f-k-checks
       └── f-k-checks-item: order(o_w_id,o_d_id,o_c_id) -> customer(c_w_id,c_d_id,c_id)
-           └── anti-join (lookup customer@customer_idx)
+           └── anti-join (lookup customer)
                 ├── columns: column3:38(int!null) column2:39(int!null) column4:40(int!null)
-                ├── key columns: [38 39] = [19 18]
+                ├── key columns: [38 39 40] = [19 18 17]
                 ├── cardinality: [0 - 1]
-                ├── stats: [rows=1]
-                ├── cost: 6.12
+                ├── stats: [rows=1e-10]
+                ├── cost: 4.02224
                 ├── key: ()
                 ├── fd: ()-->(9-16), (11)-->(38), (10)-->(39), (12)-->(40)
                 ├── with-scan &1
@@ -212,10 +212,7 @@ insert "order"
                 │    ├── cost: 0.01
                 │    ├── key: ()
                 │    └── fd: ()-->(9-16), (11)-->(38), (10)-->(39), (12)-->(40)
-                └── filters
-                     └── eq [type=bool, outer=(17,40), constraints=(/17: (/NULL - ]; /40: (/NULL - ]), fd=(17)==(40), (40)==(17)]
-                          ├── variable: column4 [type=int]
-                          └── variable: c_id [type=int]
+                └── filters (true)
 
 opt format=hide-qual
 INSERT INTO new_order (no_o_id, no_d_id, no_w_id) VALUES (2000, 100, 10)
@@ -230,7 +227,7 @@ insert new_order
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  ├── stats: [rows=0]
- ├── cost: 6.14
+ ├── cost: 4.05211
  ├── values
  │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
  │    ├── cardinality: [1 - 1]
@@ -245,12 +242,12 @@ insert new_order
  │         └── const: 10 [type=int]
  └── f-k-checks
       └── f-k-checks-item: new_order(no_w_id,no_d_id,no_o_id) -> order(o_w_id,o_d_id,o_id)
-           └── anti-join (lookup order@order_idx)
+           └── anti-join (lookup order)
                 ├── columns: column3:15(int!null) column2:16(int!null) column1:17(int!null)
-                ├── key columns: [15 16] = [9 8]
+                ├── key columns: [15 16 17] = [9 8 7]
                 ├── cardinality: [0 - 1]
-                ├── stats: [rows=1]
-                ├── cost: 6.11
+                ├── stats: [rows=1e-10]
+                ├── cost: 4.02211
                 ├── key: ()
                 ├── fd: ()-->(4-6), (6)-->(15), (5)-->(16), (4)-->(17)
                 ├── with-scan &1
@@ -264,10 +261,7 @@ insert new_order
                 │    ├── cost: 0.01
                 │    ├── key: ()
                 │    └── fd: ()-->(4-6), (6)-->(15), (5)-->(16), (4)-->(17)
-                └── filters
-                     └── eq [type=bool, outer=(7,17), constraints=(/7: (/NULL - ]; /17: (/NULL - ]), fd=(7)==(17), (17)==(7)]
-                          ├── variable: column1 [type=int]
-                          └── variable: o_id [type=int]
+                └── filters (true)
 
 opt format=hide-qual
 UPDATE
@@ -700,7 +694,7 @@ insert order_line
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  ├── stats: [rows=0]
- ├── cost: 73.04
+ ├── cost: 49.54666
  ├── project
  │    ├── columns: ol_amount:21(decimal) column20:20(timestamp) column1:11(int!null) column2:12(int!null) column3:13(int!null) column4:14(int!null) column5:15(int!null) column6:16(int!null) column7:17(int!null) column9:19(string!null)
  │    ├── cardinality: [6 - 6]
@@ -781,12 +775,12 @@ insert order_line
  │         └── null [type=timestamp]
  └── f-k-checks
       ├── f-k-checks-item: order_line(ol_w_id,ol_d_id,ol_o_id) -> order(o_w_id,o_d_id,o_id)
-      │    └── anti-join (lookup order@order_idx)
+      │    └── anti-join (lookup order)
       │         ├── columns: column3:30(int!null) column2:31(int!null) column1:32(int!null)
-      │         ├── key columns: [30 31] = [24 23]
+      │         ├── key columns: [30 31 32] = [24 23 22]
       │         ├── cardinality: [0 - 6]
-      │         ├── stats: [rows=6]
-      │         ├── cost: 36.51
+      │         ├── stats: [rows=1e-10]
+      │         ├── cost: 24.03266
       │         ├── fd: ()-->(20), (13)-->(30), (12)-->(31), (11)-->(32)
       │         ├── with-scan &1
       │         │    ├── columns: column3:30(int!null) column2:31(int!null) column1:32(int!null)
@@ -798,17 +792,14 @@ insert order_line
       │         │    ├── stats: [rows=6]
       │         │    ├── cost: 0.01
       │         │    └── fd: ()-->(20), (13)-->(30), (12)-->(31), (11)-->(32)
-      │         └── filters
-      │              └── eq [type=bool, outer=(22,32), constraints=(/22: (/NULL - ]; /32: (/NULL - ]), fd=(22)==(32), (32)==(22)]
-      │                   ├── variable: column1 [type=int]
-      │                   └── variable: o_id [type=int]
+      │         └── filters (true)
       └── f-k-checks-item: order_line(ol_supply_w_id,ol_i_id) -> stock(s_w_id,s_i_id)
            └── anti-join (lookup stock@stock_item_fk_idx)
                 ├── columns: column6:50(int!null) column5:51(int!null)
                 ├── key columns: [51 50] = [33 34]
                 ├── cardinality: [0 - 6]
-                ├── stats: [rows=6]
-                ├── cost: 36.26
+                ├── stats: [rows=1e-10]
+                ├── cost: 25.244
                 ├── fd: ()-->(20), (16)-->(50), (15)-->(51)
                 ├── with-scan &1
                 │    ├── columns: column6:50(int!null) column5:51(int!null)
@@ -1107,7 +1098,7 @@ insert history
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  ├── stats: [rows=0]
- ├── cost: 12.3
+ ├── cost: 8.28524
  ├── values
  │    ├── columns: column1:10(int!null) column2:11(int!null) column3:12(int!null) column4:13(int!null) column5:14(int!null) column7:16(timestamp!null) column8:17(string!null) column18:18(uuid) h_amount:19(decimal)
  │    ├── cardinality: [1 - 1]
@@ -1131,12 +1122,12 @@ insert history
  │              └── const: 2 [type=int]
  └── f-k-checks
       ├── f-k-checks-item: history(h_c_w_id,h_c_d_id,h_c_id) -> customer(c_w_id,c_d_id,c_id)
-      │    └── anti-join (lookup customer@customer_idx)
+      │    └── anti-join (lookup customer)
       │         ├── columns: column3:41(int!null) column2:42(int!null) column1:43(int!null)
-      │         ├── key columns: [41 42] = [22 21]
+      │         ├── key columns: [41 42 43] = [22 21 20]
       │         ├── cardinality: [0 - 1]
-      │         ├── stats: [rows=1]
-      │         ├── cost: 6.12
+      │         ├── stats: [rows=1e-10]
+      │         ├── cost: 4.02224
       │         ├── key: ()
       │         ├── fd: ()-->(10-14,16-19), (12)-->(41), (11)-->(42), (10)-->(43)
       │         ├── with-scan &1
@@ -1150,17 +1141,14 @@ insert history
       │         │    ├── cost: 0.01
       │         │    ├── key: ()
       │         │    └── fd: ()-->(10-14,16-19), (12)-->(41), (11)-->(42), (10)-->(43)
-      │         └── filters
-      │              └── eq [type=bool, outer=(20,43), constraints=(/20: (/NULL - ]; /43: (/NULL - ]), fd=(20)==(43), (43)==(20)]
-      │                   ├── variable: column1 [type=int]
-      │                   └── variable: c_id [type=int]
+      │         └── filters (true)
       └── f-k-checks-item: history(h_w_id,h_d_id) -> district(d_w_id,d_id)
            └── anti-join (lookup district)
                 ├── columns: column5:55(int!null) column4:56(int!null)
                 ├── key columns: [55 56] = [45 44]
                 ├── cardinality: [0 - 1]
-                ├── stats: [rows=1]
-                ├── cost: 6.15
+                ├── stats: [rows=1e-10]
+                ├── cost: 4.233
                 ├── key: ()
                 ├── fd: ()-->(10-14,16-19), (14)-->(55), (13)-->(56)
                 ├── with-scan &1
@@ -1645,7 +1633,7 @@ scalar-group-by
  ├── columns: count:28(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.30998
+ ├── cost: 0.27346
  ├── key: ()
  ├── fd: ()-->(28)
  ├── prune: (28)
@@ -1653,7 +1641,7 @@ scalar-group-by
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) s_i_id:11(int!null) s_w_id:12(int!null) s_quantity:13(int!null)
  │    ├── key columns: [3 5] = [12 11]
  │    ├── stats: [rows=0.066, distinct(1)=0.02, null(1)=0, distinct(2)=0.02, null(2)=0, distinct(3)=0.02, null(3)=0, distinct(5)=0.0199982001, null(5)=0, distinct(11)=0.0199982001, null(11)=0, distinct(12)=0.02, null(12)=0, distinct(13)=0.066, null(13)=0]
- │    ├── cost: 0.28932
+ │    ├── cost: 0.2528
  │    ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
  │    ├── interesting orderings: (+3,+2,-1)
  │    ├── scan order_line
@@ -1698,7 +1686,7 @@ scalar-group-by
  ├── columns: count:22(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 1621.36
+ ├── cost: 1762.4
  ├── key: ()
  ├── fd: ()-->(22)
  ├── prune: (22)
@@ -1706,7 +1694,7 @@ scalar-group-by
  │    ├── columns: w_id:1(int!null) w_ytd:9(decimal!null) d_w_id:11(int!null) sum:21(decimal!null)
  │    ├── key columns: [11] = [1]
  │    ├── stats: [rows=33, distinct(1)=33, null(1)=0, distinct(9)=33, null(9)=0, distinct(11)=33, null(11)=0, distinct(21)=33, null(21)=0]
- │    ├── cost: 1621.01
+ │    ├── cost: 1762.05
  │    ├── key: (11)
  │    ├── fd: (1)-->(9), (11)-->(21), (1)==(11), (11)==(1)
  │    ├── interesting orderings: (+11)
