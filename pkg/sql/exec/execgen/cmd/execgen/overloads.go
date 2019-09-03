@@ -155,6 +155,74 @@ func (o overload) UnaryAssign(target, v string) string {
 	return fmt.Sprintf("%s = %s(%s)", target, o.OpStr, v)
 }
 
+type castOverload struct {
+	FromTyp    coltypes.T
+	ToTyp      coltypes.T
+	ToGoTyp    string
+	AssignFunc castAssignFunc
+}
+
+func (o castOverload) Assign(to, from string) string {
+	return o.AssignFunc(to, from)
+}
+
+type castAssignFunc func(to, from string) string
+
+func castIdentity(to, from string) string {
+	return fmt.Sprintf("%s = %s", to, from)
+}
+
+func intToDecimal(to, from string) string {
+	convStr := `
+    %[1]s = *apd.New(int64(%[2]s), 0)
+  `
+	return fmt.Sprintf(convStr, to, from)
+}
+
+func intToFloat(floatSize int) func(string, string) string {
+	return func(to, from string) string {
+		convStr := `
+			%[1]s = float%[3]d(%[2]s)
+			`
+		return fmt.Sprintf(convStr, to, from, floatSize)
+	}
+}
+
+func floatToInt(intSize int, floatSize int) func(string, string) string {
+	return func(to, from string) string {
+		convStr := `
+			if math.IsNaN(float64(%[2]s)) || %[2]s <= float%[4]d(math.MinInt%[3]d) || %[2]s >= float%[4]d(math.MaxInt%[3]d) {
+				execerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
+			}
+			%[1]s = int%[3]d(%[2]s)
+		`
+		return fmt.Sprintf(convStr, to, from, intSize, floatSize)
+	}
+}
+
+func numToBool(to, from string) string {
+	convStr := `
+		%[1]s = %[2]s != 0
+	`
+	return fmt.Sprintf(convStr, to, from)
+}
+
+func floatToDecimal(to, from string) string {
+	convStr := `
+		{
+			var tmpDec apd.Decimal
+			_, tmpErr := tmpDec.SetFloat64(float64(%[2]s))
+    	if tmpErr != nil {
+    	  execerror.NonVectorizedPanic(tmpErr)
+    	}
+			%[1]s = tmpDec
+		}
+	`
+	return fmt.Sprintf(convStr, to, from)
+}
+
+var castOverloads map[coltypes.T][]castOverload
+
 func init() {
 	registerTypeCustomizers()
 	registerBinOpOutputTypes()
@@ -256,6 +324,171 @@ func init() {
 			}
 		}
 		hashOverloads = append(hashOverloads, ov)
+	}
+
+	// Build cast overloads. We omit cases of type casts that we do not support.
+	castOverloads = make(map[coltypes.T][]castOverload)
+	for _, from := range inputTypes {
+		switch from {
+		case coltypes.Bool:
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case coltypes.Bool:
+					ov.AssignFunc = castIdentity
+				case coltypes.Int8, coltypes.Int16, coltypes.Int32,
+					coltypes.Int64, coltypes.Float32, coltypes.Float64:
+					ov.AssignFunc = func(to, from string) string {
+						convStr := `
+							%[1]s = 0
+							if %[2]s {
+								%[1]s = 1
+							}
+						`
+						return fmt.Sprintf(convStr, to, from)
+					}
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		case coltypes.Bytes:
+			// TODO (rohany): It's unclear what to do here in the bytes case.
+			// There are different conversion rules for the multiple things
+			// that a bytes type can implemented, but we don't know each of the
+			// things is contained here. Additionally, we don't really know
+			// what to do even if it is a bytes to bytes operation here.
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		case coltypes.Decimal:
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case coltypes.Bool:
+					ov.AssignFunc = func(to, from string) string {
+						convStr := `
+							%[1]s = %[2]s.Sign() != 0
+						`
+						return fmt.Sprintf(convStr, to, from)
+					}
+				case coltypes.Decimal:
+					ov.AssignFunc = castIdentity
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		case coltypes.Int8:
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case coltypes.Bool:
+					ov.AssignFunc = numToBool
+				case coltypes.Decimal:
+					ov.AssignFunc = intToDecimal
+				case coltypes.Int8:
+					ov.AssignFunc = castIdentity
+				case coltypes.Float32:
+					ov.AssignFunc = intToFloat(32)
+				case coltypes.Float64:
+					ov.AssignFunc = intToFloat(64)
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		case coltypes.Int16:
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case coltypes.Bool:
+					ov.AssignFunc = numToBool
+				case coltypes.Decimal:
+					ov.AssignFunc = intToDecimal
+				case coltypes.Int16:
+					ov.AssignFunc = castIdentity
+				case coltypes.Float32:
+					ov.AssignFunc = intToFloat(32)
+				case coltypes.Float64:
+					ov.AssignFunc = intToFloat(64)
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		case coltypes.Int32:
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case coltypes.Bool:
+					ov.AssignFunc = numToBool
+				case coltypes.Decimal:
+					ov.AssignFunc = intToDecimal
+				case coltypes.Int32:
+					ov.AssignFunc = castIdentity
+				case coltypes.Float32:
+					ov.AssignFunc = intToFloat(32)
+				case coltypes.Float64:
+					ov.AssignFunc = intToFloat(64)
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		case coltypes.Int64:
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case coltypes.Bool:
+					ov.AssignFunc = numToBool
+				case coltypes.Decimal:
+					ov.AssignFunc = intToDecimal
+				case coltypes.Int64:
+					ov.AssignFunc = castIdentity
+				case coltypes.Float32:
+					ov.AssignFunc = intToFloat(32)
+				case coltypes.Float64:
+					ov.AssignFunc = intToFloat(64)
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		case coltypes.Float32:
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case coltypes.Bool:
+					ov.AssignFunc = numToBool
+				case coltypes.Decimal:
+					ov.AssignFunc = floatToDecimal
+				case coltypes.Int8:
+					ov.AssignFunc = floatToInt(8, 32)
+				case coltypes.Int16:
+					ov.AssignFunc = floatToInt(16, 32)
+				case coltypes.Int32:
+					ov.AssignFunc = floatToInt(32, 32)
+				case coltypes.Int64:
+					ov.AssignFunc = floatToInt(64, 32)
+				case coltypes.Float32:
+					ov.AssignFunc = castIdentity
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		case coltypes.Float64:
+			for _, to := range inputTypes {
+				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
+				switch to {
+				case coltypes.Bool:
+					ov.AssignFunc = numToBool
+				case coltypes.Decimal:
+					ov.AssignFunc = floatToDecimal
+				case coltypes.Int8:
+					ov.AssignFunc = floatToInt(8, 64)
+				case coltypes.Int16:
+					ov.AssignFunc = floatToInt(16, 64)
+				case coltypes.Int32:
+					ov.AssignFunc = floatToInt(32, 64)
+				case coltypes.Int64:
+					ov.AssignFunc = floatToInt(64, 64)
+				case coltypes.Float64:
+					ov.AssignFunc = castIdentity
+				}
+				castOverloads[from] = append(castOverloads[from], ov)
+			}
+		}
 	}
 }
 
@@ -895,6 +1128,7 @@ func registerBinOpOutputTypes() {
 var _ = overload{}.Assign
 var _ = overload{}.Compare
 var _ = overload{}.UnaryAssign
+var _ = castOverload{}.Assign
 
 // buildDict is a template function that builds a dictionary out of its
 // arguments. The argument to this function should be an alternating sequence of

@@ -733,6 +733,16 @@ func (d *DInt) Size() uintptr {
 // DFloat is the float Datum.
 type DFloat float64
 
+// MustBeDFloat attempts to retrieve a DFloat from an Expr, panicking if the
+// assertion fails.
+func MustBeDFloat(e Expr) DFloat {
+	switch t := e.(type) {
+	case *DFloat:
+		return *t
+	}
+	panic(errors.AssertionFailedf("expected *DFloat, found %T", e))
+}
+
 // NewDFloat is a helper routine to create a *DFloat initialized from its
 // argument.
 func NewDFloat(d DFloat) *DFloat {
@@ -886,6 +896,16 @@ type DDecimal struct {
 	apd.Decimal
 }
 
+// MustBeDDecimal attempts to retrieve a DDecimal from an Expr, panicking if the
+// assertion fails.
+func MustBeDDecimal(e Expr) DDecimal {
+	switch t := e.(type) {
+	case *DDecimal:
+		return *t
+	}
+	panic(errors.AssertionFailedf("expected *DDecimal, found %T", e))
+}
+
 // ParseDDecimal parses and returns the *DDecimal Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
 func ParseDDecimal(s string) (*DDecimal, error) {
@@ -897,10 +917,10 @@ func ParseDDecimal(s string) (*DDecimal, error) {
 // SetString sets d to s. Any non-standard NaN values are converted to a
 // normal NaN. Any negative zero is converted to positive.
 func (d *DDecimal) SetString(s string) error {
-	// Using HighPrecisionCtx here restricts the max and min exponents to 2000,
-	// and the precision to 2000 places. Any rounding or other inexact conversion
-	// will result in an error.
-	_, res, err := HighPrecisionCtx.SetString(&d.Decimal, s)
+	// ExactCtx should be able to handle any decimal, but if there is any rounding
+	// or other inexact conversion, it will result in an error.
+	//_, res, err := HighPrecisionCtx.SetString(&d.Decimal, s)
+	_, res, err := ExactCtx.SetString(&d.Decimal, s)
 	if res != 0 || err != nil {
 		return makeParseError(s, types.Decimal, nil)
 	}

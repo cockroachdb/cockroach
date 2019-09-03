@@ -762,6 +762,18 @@ func planProjectionOperators(
 		return planProjectionExpr(ctx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(), columnTypes, input)
 	case *tree.BinaryExpr:
 		return planProjectionExpr(ctx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(), columnTypes, input)
+	case *tree.CastExpr:
+		op, resultIdx, ct, memUsed, err = planProjectionOperators(ctx, t.Expr.(tree.TypedExpr), columnTypes, input)
+		if err != nil {
+			return nil, 0, nil, 0, err
+		}
+		outputIdx := len(ct)
+		op, err = exec.GetCastOperator(op, resultIdx, outputIdx, t.Expr.(tree.TypedExpr).ResolvedType(), t.Type)
+		ct = append(ct, *t.Type)
+		if sMem, ok := op.(exec.StaticMemoryOperator); ok {
+			memUsed += sMem.EstimateStaticMemoryUsage()
+		}
+		return op, outputIdx, ct, memUsed, err
 	case *tree.FuncExpr:
 		var (
 			inputCols     []int
