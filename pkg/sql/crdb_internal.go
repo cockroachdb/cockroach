@@ -1215,7 +1215,10 @@ CREATE TABLE crdb_internal.create_statements (
 				if err != nil {
 					return err
 				}
-				if len(zoneConfig.Constraints) > 0 {
+				// If all constraints are default, then don't show anything.
+				if zoneConfig.RangeMinBytes != nil || zoneConfig.RangeMaxBytes != nil ||
+					zoneConfig.NumReplicas != nil || len(zoneConfig.Constraints) != 0 ||
+					len(zoneConfig.LeasePreferences) != 0 {
 					sqlString := string(tree.MustBeDString(row[2]))
 					zoneConfigStmts[tableName] = append(zoneConfigStmts[tableName], sqlString)
 				}
