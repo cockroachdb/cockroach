@@ -342,9 +342,10 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) error {
 		fmt.Printf(`#
 # Your changes will not be saved!
 #
+# DB Address: %s
 # Web UI: %s
 #
-`, adminURL)
+`, connURL, adminURL)
 	}
 
 	checkTzDatabaseAvailability(context.Background())
