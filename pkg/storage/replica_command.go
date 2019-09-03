@@ -975,10 +975,11 @@ func (r *Replica) changeReplicasImpl(
 		}
 		// Don't leave a learner replica lying around if we didn't succeed in
 		// promoting it to a voter.
-		targets := chgs.Additions()
-		log.Infof(ctx, "could not promote %v to voter, rolling back: %v", targets, err)
-		for _, target := range targets {
-			r.tryRollBackLearnerReplica(ctx, r.Desc(), target, reason, details)
+		if targets := chgs.Additions(); len(targets) > 0 {
+			log.Infof(ctx, "could not promote %v to voter, rolling back: %v", targets, err)
+			for _, target := range targets {
+				r.tryRollBackLearnerReplica(ctx, r.Desc(), target, reason, details)
+			}
 		}
 		return nil, err
 	}
