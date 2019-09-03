@@ -2873,7 +2873,8 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	s := tc.store
 	ctx := context.Background()
 
-	// Clobber the existing range so we can test nonoverlapping placeholders.
+	// Clobber the existing range and recreated it with an uninitialized
+	// descriptor so we can test nonoverlapping placeholders.
 	repl1, err := s.GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
@@ -2884,11 +2885,19 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	uninitDesc := roachpb.RangeDescriptor{RangeID: repl1.Desc().RangeID}
 	cv := s.ClusterSettings().Version.Version().Version
 	if _, err := stateloader.WriteInitialState(
-		ctx, s.Engine(), enginepb.MVCCStats{}, *repl1.Desc(), roachpb.Lease{},
+		ctx, s.Engine(), enginepb.MVCCStats{}, uninitDesc, roachpb.Lease{},
 		hlc.Timestamp{}, cv, stateloader.TruncatedStateUnreplicated,
 	); err != nil {
+		t.Fatal(err)
+	}
+	uninitRepl1, err := NewReplica(&uninitDesc, s, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.addReplicaToRangeMapLocked(uninitRepl1); err != nil {
 		t.Fatal(err)
 	}
 

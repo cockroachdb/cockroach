@@ -4022,6 +4022,17 @@ func (s *Store) tryGetOrCreateReplica(
 	s.mu.uninitReplicas[repl.RangeID] = repl
 	s.mu.Unlock()
 
+	// An uninitiazlied replica should have an empty HardState.Commit at
+	// all times. Failure to maintain this invariant indicates corruption.
+	// And yet, we have observed this in the wild. See #40213.
+	if hs, err := repl.mu.stateLoader.LoadHardState(ctx, s.Engine()); err != nil {
+		repl.mu.Unlock()
+		repl.raftMu.Unlock()
+		return nil, false, err
+	} else if hs.Commit != 0 {
+		log.Fatalf(ctx, "found non-zero HardState.Commit on uninitialized replica %s. HS=%+v", repl, hs)
+	}
+
 	desc := &roachpb.RangeDescriptor{
 		RangeID: rangeID,
 		// TODO(bdarnell): other fields are unknown; need to populate them from
