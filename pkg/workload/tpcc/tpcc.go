@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -48,11 +49,11 @@ type tpcc struct {
 	// is the value of C for the item id generator. See 2.1.6.
 	cLoad, cCustomerID, cItemID int
 
-	mix        string
-	doWaits    bool
-	workers    int
-	fks        bool
-	dbOverride string
+	mix          string
+	waitFraction float64
+	workers      int
+	fks          bool
+	dbOverride   string
 
 	txInfos []txInfo
 	// deck contains indexes into the txInfos slice.
@@ -81,6 +82,45 @@ type tpcc struct {
 		values [][]int
 	}
 	localsPool *sync.Pool
+}
+
+type waitSetter struct {
+	val *float64
+}
+
+// Set implements the pflag.Value interface.
+func (w *waitSetter) Set(val string) error {
+	switch strings.ToLower(val) {
+	case "true", "on":
+		*w.val = 1.0
+	case "false", "off":
+		*w.val = 0.0
+	default:
+		f, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return err
+		}
+		if f < 0 {
+			return errors.New("cannot set --wait to a negative value")
+		}
+		*w.val = f
+	}
+	return nil
+}
+
+// Type implements the pflag.Value interface
+func (*waitSetter) Type() string { return "0.0/false - 1.0/true" }
+
+// String implements the pflag.Value interface.
+func (w *waitSetter) String() string {
+	switch *w.val {
+	case 0:
+		return "false"
+	case 1:
+		return "true"
+	default:
+		return fmt.Sprintf("%f", *w.val)
+	}
 }
 
 func init() {
@@ -127,7 +167,8 @@ var tpccMeta = workload.Meta{
 		g.flags.StringVar(&g.mix, `mix`,
 			`newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1`,
 			`Weights for the transaction mix. The default matches the TPCC spec.`)
-		g.flags.BoolVar(&g.doWaits, `wait`, true, `Run in wait mode (include think/keying sleeps)`)
+		g.waitFraction = 1.0
+		g.flags.Var(&waitSetter{&g.waitFraction}, `wait`, `Wait mode (include think/keying sleeps): 1/true for tpcc-standard wait, 0/false for no waits, other factors also allowed`)
 		g.flags.StringVar(&g.dbOverride, `db`, ``,
 			`Override for the SQL database to use. If empty, defaults to the generator name`)
 		g.flags.IntVar(&g.workers, `workers`, 0, fmt.Sprintf(
@@ -200,15 +241,15 @@ func (w *tpcc) Hooks() workload.Hooks {
 				// waiting, we only use up to a set number of connections per warehouse.
 				// This isn't mandated by the spec, but opening a connection per worker
 				// when they each spend most of their time waiting is wasteful.
-				if !w.doWaits {
+				if w.waitFraction == 0 {
 					w.numConns = w.workers
 				} else {
 					w.numConns = w.activeWarehouses * numConnsPerWarehouse
 				}
 			}
 
-			if w.doWaits && w.workers != w.activeWarehouses*numWorkersPerWarehouse {
-				return errors.Errorf(`--wait=true and --warehouses=%d requires --workers=%d`,
+			if w.waitFraction > 0 && w.workers != w.activeWarehouses*numWorkersPerWarehouse {
+				return errors.Errorf(`--wait > 0 and --warehouses=%d requires --workers=%d`,
 					w.activeWarehouses, w.warehouses*numWorkersPerWarehouse)
 			}
 

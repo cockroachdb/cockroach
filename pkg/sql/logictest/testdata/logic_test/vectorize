@@ -222,6 +222,39 @@ SELECT a/b, a/c, b/c, b/d, c/d FROM intdecfloat
 statement ok
 RESET vectorize
 
+# vectorized decimal arithmetic
+statement ok
+CREATE table decimals (a DECIMAL, b DECIMAL)
+
+statement ok
+INSERT INTO decimals VALUES(123.0E200, 12.3)
+
+statement ok
+SET vectorize = experimental_always
+
+query R
+SELECT a*b FROM decimals
+----
+1.51290E+203
+
+query R
+SELECT a/b FROM decimals
+----
+1.0E+201
+
+query R
+SELECT a+b FROM decimals
+----
+12300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000012.3
+
+query R
+SELECT a-b FROM decimals
+----
+12299999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999987.7
+
+statement ok
+RESET vectorize
+
 # AND expressions.
 query II
 SELECT a, b FROM a WHERE a < 2 AND b > 0 AND a * b != 3
@@ -645,14 +678,14 @@ SET tracing = on; SELECT * FROM tpar WHERE a = 0 OR a = 10; SET tracing = off
 # tpar, this query will need an adjustment.
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN 
-    ('querying next range at /Table/71/1/0',
-     'querying next range at /Table/71/1/10',
+    ('querying next range at /Table/72/1/0',
+     'querying next range at /Table/72/1/10',
      '=== SPAN START: kv.DistSender: sending partial batch ==='
     )
 ----
-querying next range at /Table/71/1/0
+querying next range at /Table/72/1/0
 === SPAN START: kv.DistSender: sending partial batch ===
-querying next range at /Table/71/1/10
+querying next range at /Table/72/1/10
 
 # Test for #38858 -- handle aggregates correctly on an empty table.
 statement ok
