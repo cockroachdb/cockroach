@@ -124,11 +124,21 @@ func declareKeysEndTransaction(
 					EndKey: abortspan.MaxKey(header.RangeID)})
 			}
 			if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {
-				// Merges copy over the RHS abort span to the LHS, and compute
-				// replicated range ID stats over the RHS in the merge trigger.
+				// Merges write to the left side's abort span and the right side's data
+				// and range-local spans. They also read from the right side's range ID
+				// span.
+				leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
 				spans.Add(spanset.SpanReadWrite, roachpb.Span{
-					Key:    abortspan.MinKey(mt.LeftDesc.RangeID),
-					EndKey: abortspan.MaxKey(mt.LeftDesc.RangeID).PrefixEnd(),
+					Key:    leftRangeIDPrefix,
+					EndKey: leftRangeIDPrefix.PrefixEnd(),
+				})
+				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+					Key:    mt.RightDesc.StartKey.AsRawKey(),
+					EndKey: mt.RightDesc.EndKey.AsRawKey(),
+				})
+				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+					Key:    keys.MakeRangeKeyPrefix(mt.RightDesc.StartKey),
+					EndKey: keys.MakeRangeKeyPrefix(mt.RightDesc.EndKey),
 				})
 				spans.Add(spanset.SpanReadOnly, roachpb.Span{
 					Key:    keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID),
@@ -1024,8 +1034,8 @@ func splitTriggerHelper(
 }
 
 // mergeTrigger is called on a successful commit of an AdminMerge transaction.
-// It calculates stats for the LHS by merging in RHS stats, and copies over the
-// abort span entries from the RHS.
+// It writes data from the right-hand range into the left-hand range and
+// recomputes stats for the left-hand range.
 func mergeTrigger(
 	ctx context.Context,
 	rec EvalContext,
