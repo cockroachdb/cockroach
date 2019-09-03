@@ -137,7 +137,6 @@ func matchFullUnacceptableKeyQuery(
 // WHERE
 //   t.a IS NULL
 // LIMIT 1  -- if limitResults is set
-// AS OF SYSTEM TIME .. -- if asOf is not hlc.MaxTimestamp
 //
 // TODO(radu): change this to a query which executes as an anti-join when we
 // remove the heuristic planner.

@@ -39,6 +39,7 @@ func TestScrubIndexMissingIndexEntry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
+	r := sqlutils.MakeSQLRunner(db)
 
 	// Create the table and the row entry.
 	// We use a table with mixed as a regression case for #38184.
@@ -78,33 +79,28 @@ INSERT INTO t."tEst" VALUES (10, 20);
 	}
 
 	// Run SCRUB and find the index errors we created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t."tEst" WITH OPTIONS INDEX ALL`)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
+	exp := expectedScrubResult{
+		ErrorType:    scrub.MissingIndexEntryError,
+		Database:     "t",
+		Table:        "tEst",
+		PrimaryKey:   "(10)",
+		Repaired:     false,
+		DetailsRegex: `"v": "20"`,
 	}
-	defer rows.Close()
-	results, err := sqlutils.GetScrubResultRows(rows)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
+	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t."tEst" WITH OPTIONS INDEX ALL`, exp)
+	// Run again with AS OF SYSTEM TIME.
+	time.Sleep(1 * time.Millisecond)
+	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t."tEst" AS OF SYSTEM TIME '-1ms' WITH OPTIONS INDEX ALL`, exp)
 
-	if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
-	}
-	if result := results[0]; result.ErrorType != scrub.MissingIndexEntryError {
-		t.Fatalf("expected %q error, instead got: %s",
-			scrub.MissingIndexEntryError, result.ErrorType)
-	} else if result.Database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.Database)
-	} else if result.Table != "tEst" {
-		t.Fatalf("expected table %q, got %q", "tEst", result.Table)
-	} else if result.PrimaryKey != "(10)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.PrimaryKey)
-	} else if result.Repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
-	} else if !strings.Contains(result.Details, `"v": "20"`) {
-		t.Fatalf("expected error details to contain `%s`, got %s", `"v": "20"`, result.Details)
-	}
+	// Verify that AS OF SYSTEM TIME actually operates in the past.
+	ts := r.QueryStr(t, `SELECT cluster_logical_timestamp()`)[0][0]
+	r.Exec(t, `DELETE FROM t."tEst"`)
+	runScrub(
+		t, db, fmt.Sprintf(
+			`EXPERIMENTAL SCRUB TABLE t."tEst" AS OF SYSTEM TIME '%s' WITH OPTIONS INDEX ALL`, ts,
+		),
+		exp,
+	)
 }
 
 // TestScrubIndexDanglingIndexReference tests that

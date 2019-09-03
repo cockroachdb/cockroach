@@ -119,8 +119,7 @@ func (o *indexCheckOperation) Start(params runParams) error {
 	}
 
 	checkQuery := createIndexCheckQuery(
-		colNames(pkColumns), colNames(otherColumns),
-		o.tableDesc.ID, o.indexDesc.ID, o.asOf,
+		colNames(pkColumns), colNames(otherColumns), o.tableDesc.ID, o.indexDesc.ID,
 	)
 
 	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
@@ -282,19 +281,8 @@ func (o *indexCheckOperation) Close(ctx context.Context) {
 //         side row from the primary key had no match in the secondary index.
 //
 func createIndexCheckQuery(
-	pkColumns []string,
-	otherColumns []string,
-	tableID sqlbase.ID,
-	indexID sqlbase.IndexID,
-	asOf hlc.Timestamp,
+	pkColumns []string, otherColumns []string, tableID sqlbase.ID, indexID sqlbase.IndexID,
 ) string {
-	var asOfClauseStr string
-	// If SCRUB is called with AS OF SYSTEM TIME <expr> the
-	// checkIndexQuery will also include the as of clause.
-	if asOf != hlc.MaxTimestamp {
-		asOfClauseStr = fmt.Sprintf(" AS OF SYSTEM TIME %d", asOf.WallTime)
-	}
-
 	allColumns := append(pkColumns, otherColumns...)
 	// We need to make sure we can handle the non-public column `rowid`
 	// that is created for implicit primary keys. In order to do so, the
@@ -302,9 +290,9 @@ func createIndexCheckQuery(
 	const checkIndexQuery = `
     SELECT %[1]s, %[2]s
     FROM
-      (SELECT %[8]s FROM [%[3]d AS table_pri]@{FORCE_INDEX=[1]}%[9]s) AS pri
+      (SELECT %[8]s FROM [%[3]d AS table_pri]@{FORCE_INDEX=[1]}) AS pri
     FULL OUTER JOIN
-      (SELECT %[8]s FROM [%[3]d AS table_sec]@{FORCE_INDEX=[%[4]d]}%[9]s) AS sec
+      (SELECT %[8]s FROM [%[3]d AS table_sec]@{FORCE_INDEX=[%[4]d]}) AS sec
     ON %[5]s
     WHERE %[6]s IS NULL OR %[7]s IS NULL`
 	return fmt.Sprintf(
@@ -341,8 +329,5 @@ func createIndexCheckQuery(
 
 		// 8: k, l, a, b
 		strings.Join(colRefs("", append(pkColumns, otherColumns...)), ", "),
-
-		// 9
-		asOfClauseStr,
 	)
 }
