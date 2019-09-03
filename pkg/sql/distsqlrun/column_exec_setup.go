@@ -704,11 +704,22 @@ func planSelectionOperators(
 	case *tree.IndexedVar:
 		return exec.NewBoolVecToSelOp(input, t.Idx), -1, columnTypes, memUsed, nil
 	case *tree.AndExpr:
-		leftOp, _, ct, memUsage, err := planSelectionOperators(ctx, t.TypedLeft(), columnTypes, input)
+		var leftOp, rightOp exec.Operator
+		var memUsedLeft, memUsedRight int
+		leftOp, _, ct, memUsedLeft, err = planSelectionOperators(ctx, t.TypedLeft(), columnTypes, input)
 		if err != nil {
-			return nil, resultIdx, ct, memUsage, err
+			return nil, resultIdx, ct, memUsed, err
 		}
-		return planSelectionOperators(ctx, t.TypedRight(), ct, leftOp)
+		rightOp, resultIdx, ct, memUsedRight, err = planSelectionOperators(
+			ctx, t.TypedRight(), ct, leftOp)
+		return rightOp, resultIdx, ct, memUsedLeft + memUsedRight, err
+	case *tree.OrExpr:
+		// OR expressions are handled by converting them to an equivalent CASE
+		// statement. Since CASE statements don't have a selection form, plan a
+		// projection and then convert the resulting boolean to a selection vector.
+		op, resultIdx, ct, memUsed, err = planProjectionOperators(ctx, expr, columnTypes, input)
+		op = exec.NewBoolVecToSelOp(op, resultIdx)
+		return op, resultIdx, ct, memUsed, err
 	case *tree.ComparisonExpr:
 		cmpOp := t.Operator
 		leftOp, leftIdx, ct, memUsageLeft, err := planProjectionOperators(ctx, t.TypedLeft(), columnTypes, input)
@@ -876,6 +887,23 @@ func planProjectionOperators(
 		op := exec.NewCaseOp(buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
 
 		return op, caseOutputIdx, ct, memUsed, nil
+	case *tree.OrExpr:
+		// Rewrite the OR expression as an equivalent CASE expression.
+		// "a OR b" becomes "CASE WHEN a THEN true WHEN b THEN true ELSE false END".
+		// This way we can take advantage of the short-circuiting logic built into
+		// the CASE operator. (b should not be evaluated if a is true.)
+		caseExpr, err := tree.NewTypedCaseExpr(
+			nil,
+			[]*tree.When{
+				{Cond: t.Left, Val: tree.DBoolTrue},
+				{Cond: t.Right, Val: tree.DBoolTrue},
+			},
+			tree.DBoolFalse,
+			types.Bool)
+		if err != nil {
+			return nil, resultIdx, ct, memUsed, err
+		}
+		return planProjectionOperators(ctx, caseExpr, columnTypes, input)
 	default:
 		return nil, resultIdx, nil, memUsed, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
 	}
