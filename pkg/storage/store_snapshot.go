@@ -599,6 +599,8 @@ func (s *Store) reserveSnapshot(
 // this store's replica (i.e. the snapshot is not from an older incarnation of
 // the replica) and a placeholder can be added to the replicasByKey map (if
 // necessary). If a placeholder is required, it is returned as the first value.
+// If a ReplicaTooOldError is returned then the existing replica should be
+// destroyed.
 //
 // Both the store mu (and the raft mu for an existing replica if there is one)
 // must be held.
@@ -628,14 +630,16 @@ func (s *Store) canApplySnapshotLocked(
 	existingRepl.raftMu.AssertHeld()
 
 	existingRepl.mu.RLock()
-	existingIsInitialized := existingRepl.isInitializedRLocked()
+	existingDesc := existingRepl.mu.state.Desc
+	existingIsInitialized := existingDesc.IsInitialized()
 	existingRepl.mu.RUnlock()
 
 	if existingIsInitialized {
-		// Regular Raft snapshots can't be refused at this point,
-		// even if they widen the existing replica. See the comments
-		// in Replica.maybeAcquireSnapshotMergeLock for how this is
-		// made safe.
+		// Regular Raft snapshots can't be refused at this point unless it's telling
+		// us we've since been removed and re-added.
+		// Otherwise we can't refuse this snapshot even if they widen the existing
+		// replica. See the comments in Replica.maybeAcquireSnapshotMergeLock for
+		// how this is made safe.
 		//
 		// NB: we expect the replica to know its replicaID at this point
 		// (i.e. !existingIsPreemptive), though perhaps it's possible
@@ -643,6 +647,19 @@ func (s *Store) canApplySnapshotLocked(
 		// (that would provide a range descriptor with this replica in
 		// it) but this node reboots (temporarily forgetting its
 		// replicaID) before the snapshot arrives.
+
+		// If the snapshot's replica ID differs from the existing replica's ID then
+		// this replica must been removed and re-added rapidly. Return a
+		// ReplicaTooOldError to imply that this replica's data needs to be
+		// destroyed.
+		existingReplicaDesc, storeHasReplica := existingDesc.GetReplicaDescriptor(s.Ident.StoreID)
+		snapReplicaDesc, snapHasReplica := desc.GetReplicaDescriptor(s.Ident.StoreID)
+		if storeHasReplica && snapHasReplica && snapReplicaDesc.ReplicaID != existingReplicaDesc.ReplicaID {
+			return nil, &roachpb.ReplicaTooOldError{
+				ReplicaID: existingReplicaDesc.ReplicaID,
+			}
+		}
+
 		return nil, nil
 	}
 
@@ -661,7 +678,7 @@ func (s *Store) canApplySnapshotLocked(
 
 // checkSnapshotOverlapLocked returns an error if the snapshot overlaps an
 // existing replica or placeholder. Any replicas that do overlap have a good
-// chance of being abandoned, so they're proactively handed to the GC queue .
+// chance of being abandoned, so they're proactively handed to the GC queue.
 func (s *Store) checkSnapshotOverlapLocked(
 	ctx context.Context, snapHeader *SnapshotRequest_Header,
 ) error {
