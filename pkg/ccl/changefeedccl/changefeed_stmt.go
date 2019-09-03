@@ -65,6 +65,8 @@ const (
 	optFormatAvro formatType = `experimental_avro`
 
 	sinkParamCACert           = `ca_cert`
+	sinkParamClientCert       = `client_cert`
+	sinkParamClientKey        = `client_key`
 	sinkParamFileSize         = `file_size`
 	sinkParamSchemaTopic      = `schema_topic`
 	sinkParamTLSEnabled       = `tls_enabled`
