@@ -20,6 +20,29 @@ SELECT a, CASE WHEN a = 0 THEN 0 WHEN a = 1 THEN 3 ELSE 5 END FROM a LIMIT 6
 2  5
 2  5
 
+# OR expression as projection.
+query IB
+SELECT b, b = 0 OR b = 2 FROM a WHERE b < 4
+----
+0  true
+1  false
+2  true
+3  false
+
+# OR expression as selection.
+query I
+SELECT b FROM a WHERE b = 0 OR b = 2
+----
+0
+2
+
+# Check that the right side of an OR isn't evaluated if the left side is true.
+query I
+SELECT b FROM a WHERE b = 0 OR 1/b = 1
+----
+0
+1
+
 statement ok
 CREATE TABLE bools (b BOOL, i INT, PRIMARY KEY (b, i)); INSERT INTO bools VALUES (true, 0), (false, 1), (true, 2), (false, 3);
 
