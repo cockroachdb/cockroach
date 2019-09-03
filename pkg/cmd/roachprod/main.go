@@ -90,6 +90,7 @@ var (
 	quiet             = false
 	sig               = 9
 	waitFlag          = false
+	stageOS           string
 	logsDir           string
 	logsFilter        string
 	logsFrom          time.Time
@@ -1262,7 +1263,9 @@ Some examples of usage:
 		}
 
 		os := "linux"
-		if c.IsLocal() {
+		if stageOS != "" {
+			os = stageOS
+		} else if c.IsLocal() {
 			os = runtime.GOOS
 		}
 		var debugArch, releaseArch string
@@ -1659,6 +1662,8 @@ func main() {
 	}
 
 	putCmd.Flags().BoolVar(&useTreeDist, "treedist", useTreeDist, "use treedist copy algorithm")
+
+	stageCmd.Flags().StringVar(&stageOS, "os", "", "operating system override for staged binaries")
 
 	logsCmd.Flags().StringVar(
 		&logsFilter, "filter", "", "re to filter log messages")
