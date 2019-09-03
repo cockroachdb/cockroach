@@ -1343,8 +1343,13 @@ type internalReplicationChange struct {
 	typ    internalChangeType
 }
 
+type internalReplicationChanges []internalReplicationChange
+
+func (c internalReplicationChanges) leaveJoint() bool { return len(c) == 0 }
+func (c internalReplicationChanges) useJoint() bool   { return len(c) > 1 }
+
 func prepareChangeReplicasTrigger(
-	store *Store, desc *roachpb.RangeDescriptor, chgs []internalReplicationChange,
+	store *Store, desc *roachpb.RangeDescriptor, chgs internalReplicationChanges,
 ) (*roachpb.ChangeReplicasTrigger, error) {
 	updatedDesc := *desc
 	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
@@ -1356,12 +1361,12 @@ func prepareChangeReplicasTrigger(
 	}
 
 	var added, removed []roachpb.ReplicaDescriptor
-	if len(chgs) > 0 {
+	if !chgs.leaveJoint() {
 		if desc.Replicas().InAtomicReplicationChange() {
 			return nil, errors.Errorf("must transition out of joint config first: %s", desc)
 		}
 
-		useJoint := len(chgs) > 1
+		useJoint := chgs.useJoint()
 		if fn := store.TestingKnobs().ReplicationAlwaysUseJointConfig; fn != nil && fn() {
 			useJoint = true
 		}
@@ -1471,14 +1476,14 @@ func execChangeReplicasTxn(
 	referenceDesc *roachpb.RangeDescriptor,
 	reason storagepb.RangeLogEventReason,
 	details string,
-	chgs []internalReplicationChange,
+	chgs internalReplicationChanges,
 ) (*roachpb.RangeDescriptor, error) {
 	var returnDesc *roachpb.RangeDescriptor
 
 	descKey := keys.RangeDescriptorKey(referenceDesc.StartKey)
 
 	check := func(kvDesc *roachpb.RangeDescriptor) bool {
-		if len(chgs) == 0 {
+		if chgs.leaveJoint() {
 			// If there are no changes, we're trying to leave a joint config,
 			// so that's all we care about. But since leaving a joint config
 			// is done opportunistically whenever one is encountered, this is
@@ -1502,7 +1507,7 @@ func execChangeReplicasTxn(
 		if err != nil {
 			return err
 		}
-		if len(chgs) == 0 && !desc.Replicas().InAtomicReplicationChange() {
+		if chgs.leaveJoint() && !desc.Replicas().InAtomicReplicationChange() {
 			// Nothing to do. See comment in 'check' above for details.
 			returnDesc = desc
 			return nil
