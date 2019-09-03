@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -63,6 +64,13 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 	var sourcePlan planNode
 	var synthRowID bool
 	if n.As() {
+		if containsWindowFunc(p.txCtx, n.AsSource) {
+			return nil, pgerror.NewError(
+				pgerror.CodeFeatureNotSupportedError,
+				"Window functions are not supported in CREATE TABLE AS in 19.1. Consider upgrading to 19.2.",
+			)
+		}
+
 		// The sourcePlan is needed to determine the set of columns to use
 		// to populate the new table descriptor in Start() below.
 		sourcePlan, err = p.Select(ctx, n.AsSource, []types.T{})
@@ -88,6 +96,24 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 	ct := &createTableNode{n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}
 	ct.run.synthRowID = synthRowID
 	return ct, nil
+}
+
+// containsWindowFunc returns whether 's' contains a window function.
+func containsWindowFunc(txCtx transform.ExprTransformContext, s *tree.Select) bool {
+	switch c := s.Select.(type) {
+	case *tree.ParenSelect:
+		return containsWindowFunc(txCtx, c.Select)
+	case *tree.SelectClause:
+		for _, expr := range c.Exprs {
+			if txCtx.WindowFuncInExpr(expr.Expr) {
+				return true
+			}
+		}
+		return false
+	case *tree.UnionClause:
+		return containsWindowFunc(txCtx, c.Left) || containsWindowFunc(txCtx, c.Right)
+	}
+	return false
 }
 
 // createTableRun contains the run-time state of createTableNode

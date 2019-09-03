@@ -3074,3 +3074,7 @@ SELECT a, b, avg(b) OVER (ROWS 0 PRECEDING) FROM t ORDER BY a
 1  1     1
 2  NULL  NULL
 3  3     3
+
+# Regression test for #40409.
+statement error Window functions are not supported in CREATE TABLE AS in 19.1. Consider upgrading to 19.2.
+CREATE TABLE ctas AS (SELECT row_number() OVER (), * FROM t)
