@@ -21,6 +21,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -89,6 +90,7 @@ var (
 	quiet             = false
 	sig               = 9
 	waitFlag          = false
+	stageOS           string
 	logsDir           string
 	logsFilter        string
 	logsFrom          time.Time
@@ -1260,6 +1262,24 @@ Some examples of usage:
 			return err
 		}
 
+		os := "linux"
+		if stageOS != "" {
+			os = stageOS
+		} else if c.IsLocal() {
+			os = runtime.GOOS
+		}
+		var debugArch, releaseArch string
+		switch os {
+		case "linux":
+			debugArch, releaseArch = "linux-gnu-amd64", "linux-amd64"
+		case "darwin":
+			debugArch, releaseArch = "darwin-amd64", "darwin-10.9-amd64"
+		case "windows":
+			debugArch, releaseArch = "windows-amd64", "windows-6.2-amd64"
+		default:
+			return errors.Errorf("cannot stage binary on %s", os)
+		}
+
 		applicationName := args[1]
 		versionArg := ""
 		if len(args) == 3 {
@@ -1268,14 +1288,14 @@ Some examples of usage:
 		switch applicationName {
 		case "cockroach":
 			return install.StageRemoteBinary(
-				c, applicationName, "cockroach/cockroach.linux-gnu-amd64", versionArg,
+				c, applicationName, "cockroach/cockroach", versionArg, debugArch,
 			)
 		case "workload":
 			return install.StageRemoteBinary(
-				c, applicationName, "cockroach/workload", versionArg,
+				c, applicationName, "cockroach/workload", versionArg, "", /* arch */
 			)
 		case "release":
-			return install.StageCockroachRelease(c, versionArg)
+			return install.StageCockroachRelease(c, versionArg, releaseArch)
 		default:
 			return fmt.Errorf("unknown application %s", applicationName)
 		}
@@ -1642,6 +1662,8 @@ func main() {
 	}
 
 	putCmd.Flags().BoolVar(&useTreeDist, "treedist", useTreeDist, "use treedist copy algorithm")
+
+	stageCmd.Flags().StringVar(&stageOS, "os", "", "operating system override for staged binaries")
 
 	logsCmd.Flags().StringVar(
 		&logsFilter, "filter", "", "re to filter log messages")
