@@ -211,6 +211,29 @@ d
 				`SELECT s, count(*) FROM t GROUP BY s`: {{"1", "2000"}},
 			},
 		},
+		{
+			name:   "quotes are accepted in a quoted string",
+			create: `s string`,
+			typ:    "CSV",
+			data:   `"abc""de"`,
+			query: map[string][][]string{
+				`SELECT s FROM t`: {{`abc"de`}},
+			},
+		},
+		{
+			name:   "bare quote in the middle of a field that is not quoted",
+			create: `s string`,
+			typ:    "CSV",
+			data:   `abc"de`,
+			err:    `row 1: reading CSV record: parse error on line 1, column 3: bare " in non-quoted-field`,
+		},
+		{
+			name:   "no matching quote in a quoted field",
+			create: `s string`,
+			typ:    "CSV",
+			data:   `"abc"de`,
+			err:    `row 1: reading CSV record: parse error on line 1, column 4: extraneous or missing " in quoted-field`,
+		},
 
 		// MySQL OUTFILE
 		{
@@ -1004,10 +1027,12 @@ func TestImportCSVStmt(t *testing.T) {
 			schema,
 			testFiles.gzipFiles,
 			` WITH decompress = 'none'`,
-			"expected 2 fields, got",
+			// This returns different errors for `make test` and `make testrace` but
+			// field is in both error messages.
+			`field`,
 		},
 		{
-			"schema-in-file-no-decompress-gzip",
+			"schema-in-file-decompress-gzip",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'gzip'`,
 			schema,
 			testFiles.files,
@@ -1405,7 +1430,9 @@ func TestImportIntoCSV(t *testing.T) {
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'none'`,
 			testFiles.gzipFiles,
 			` WITH decompress = 'none'`,
-			"expected 2 fields, got",
+			// This returns different errors for `make test` and `make testrace` but
+			// field is in both error messages.
+			"field",
 		},
 		{
 			"import-into-no-decompress-gzip",
