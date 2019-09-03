@@ -145,6 +145,18 @@ func (j *Job) CheckStatus(ctx context.Context) error {
 	})
 }
 
+// CheckTerminalStatus returns true if the job is in a terminal status.
+func (j *Job) CheckTerminalStatus(ctx context.Context) bool {
+	err := j.Update(ctx, func(_ *client.Txn, md JobMetadata, _ *JobUpdater) error {
+		if !md.Status.Terminal() {
+			return &InvalidStatusError{md.ID, md.Status, "checking that job status is success", md.Payload.Error}
+		}
+		return nil
+	})
+
+	return err == nil
+}
+
 // RunningStatus updates the detailed status of a job currently in progress.
 // It sets the job's RunningStatus field to the value returned by runningStatusFn
 // and persists runningStatusFn's modifications to the job's details, if any.
