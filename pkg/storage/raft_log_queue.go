@@ -174,7 +174,8 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	raftStatus := r.raftStatusRLocked()
 
 	firstIndex, err := r.raftFirstIndexLocked()
-	pendingSnapshotIndex := r.getAndGCSnapshotLogTruncationConstraintsLocked(now)
+	const anyRecipientStore roachpb.StoreID = 0
+	pendingSnapshotIndex := r.getAndGCSnapshotLogTruncationConstraintsLocked(now, anyRecipientStore)
 	lastIndex := r.mu.lastIndex
 	logSizeTrusted := r.mu.raftLogSizeTrusted
 	r.mu.Unlock()
