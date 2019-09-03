@@ -145,6 +145,17 @@ func (j *Job) CheckStatus(ctx context.Context) error {
 	})
 }
 
+// CheckSuccessStatus verifies the status of the job and returns an error if the job's
+// status isn't Succeeded.
+func (j *Job) CheckSuccessStatus(ctx context.Context) error {
+	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, _ *JobUpdater) error {
+		if md.Status != StatusSucceeded {
+			return &InvalidStatusError{md.ID, md.Status, "checking that job status is success", md.Payload.Error}
+		}
+		return nil
+	})
+}
+
 // RunningStatus updates the detailed status of a job currently in progress.
 // It sets the job's RunningStatus field to the value returned by runningStatusFn
 // and persists runningStatusFn's modifications to the job's details, if any.

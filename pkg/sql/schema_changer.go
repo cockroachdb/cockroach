@@ -1315,6 +1315,14 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 	}
 
 	descs, err := sc.leaseMgr.PublishMultiple(ctx, tableIDsToUpdate, update, func(txn *client.Txn) error {
+		if err := sc.job.WithTxn(txn).CheckSuccessStatus(ctx); err == nil {
+			// Job already has a successful status, so it should be considered as
+			// succeeded. This may happen if the job is no longer needed. For
+			// example, if an index was dropped and then the table that index
+			// was on was dropped in the same txn, we mark the index drop job
+			// as successful.
+			jobSucceeded = true
+		}
 		if jobSucceeded {
 			if err := sc.job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn); err != nil {
 				return errors.Wrapf(err,

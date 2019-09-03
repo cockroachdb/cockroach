@@ -1690,6 +1690,7 @@ COMMIT
 statement ok
 DROP TABLE t, t2
 
+
 subtest delete_index_in_other_table
 
 # Test setup
@@ -1717,6 +1718,27 @@ DROP TABLE a;
 
 statement ok
 DROP INDEX b_idx CASCADE;
+
+statement ok
+COMMIT;
+
+
+subtest delete_index_and_table_in_txn
+
+statement ok
+CREATE TABLE people (id INT PRIMARY KEY, name STRING);
+
+statement ok
+CREATE INDEX people_name_index ON people (name);
+
+statement ok
+BEGIN;
+
+statement ok
+DROP INDEX people@people_name_index;
+
+statement ok
+DROP TABLE people;
 
 statement ok
 COMMIT;
