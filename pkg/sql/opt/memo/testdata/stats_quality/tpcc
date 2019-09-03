@@ -614,7 +614,7 @@ scalar-group-by
  ├── columns: count:28(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1, distinct(28)=1, null(28)=0]
- ├── cost: 1436.73853
+ ├── cost: 1366.93732
  ├── key: ()
  ├── fd: ()-->(28)
  ├── prune: (28)
@@ -623,7 +623,7 @@ scalar-group-by
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) s_i_id:11(int!null) s_w_id:12(int!null) s_quantity:13(int!null)
  │    ├── key columns: [3 5] = [12 11]
  │    ├── stats: [rows=216.137889, distinct(1)=19.9995949, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=185.570315, null(5)=0, distinct(11)=185.570315, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=30.3089364, null(13)=0]
- │    ├── cost: 1434.55715
+ │    ├── cost: 1364.75594
  │    ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
  │    ├── interesting orderings: (+3,+2,-1)
  │    ├── scan order_line
@@ -714,7 +714,7 @@ scalar-group-by
  ├── columns: count:22(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1, distinct(22)=1, null(22)=0]
- ├── cost: 126.546667
+ ├── cost: 126.623333
  ├── key: ()
  ├── fd: ()-->(22)
  ├── prune: (22)
@@ -724,7 +724,7 @@ scalar-group-by
  │    ├── left ordering: +1
  │    ├── right ordering: +11
  │    ├── stats: [rows=3.33333333, distinct(1)=3.33333333, null(1)=0, distinct(9)=1, null(9)=0, distinct(11)=3.33333333, null(11)=0, distinct(21)=3.33333333, null(21)=0]
- │    ├── cost: 126.493333
+ │    ├── cost: 126.57
  │    ├── key: (11)
  │    ├── fd: (1)-->(9), (11)-->(21), (1)==(11), (11)==(1)
  │    ├── scan warehouse

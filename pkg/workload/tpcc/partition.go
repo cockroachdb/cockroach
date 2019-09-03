@@ -247,7 +247,7 @@ func (p *partitioner) randActive(rng *rand.Rand) int {
 // default it adds constraints/preferences in terms of racks, but if the zones
 // flag is passed into tpcc, it will set the constraints/preferences based on
 // the geographic zones provided.
-func configureZone(db *gosql.DB, cfg zoneConfig, table, partition string, partIdx int) error {
+func configureZone(db *gosql.DB, cfg zoneConfig, obj, name, partition string, partIdx int) error {
 	var kv string
 	if len(cfg.zones) > 0 {
 		kv = fmt.Sprintf("zone=%s", cfg.zones[partIdx])
@@ -267,8 +267,8 @@ func configureZone(db *gosql.DB, cfg zoneConfig, table, partition string, partId
 		panic("unexpected")
 	}
 
-	sql := fmt.Sprintf(`ALTER PARTITION %s OF TABLE %s CONFIGURE ZONE USING %s`,
-		partition, table, opts)
+	sql := fmt.Sprintf(`ALTER PARTITION %s OF %s %s CONFIGURE ZONE USING %s`,
+		partition, obj, name, opts)
 	if _, err := db.Exec(sql); err != nil {
 		return errors.Wrapf(err, "Couldn't exec %q", sql)
 	}
@@ -297,7 +297,7 @@ func partitionObject(
 	}
 
 	for i := 0; i < p.parts; i++ {
-		if err := configureZone(db, cfg, table, fmt.Sprintf("p%d_%d", idx, i), i); err != nil {
+		if err := configureZone(db, cfg, obj, name, fmt.Sprintf("p%d_%d", idx, i), i); err != nil {
 			return err
 		}
 	}
