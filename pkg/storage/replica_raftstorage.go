@@ -378,7 +378,7 @@ func (r *Replica) raftSnapshotLocked() (raftpb.Snapshot, error) {
 // replica. If this method returns without error, callers must eventually call
 // OutgoingSnapshot.Close.
 func (r *Replica) GetSnapshot(
-	ctx context.Context, snapType SnapshotRequest_Type,
+	ctx context.Context, snapType SnapshotRequest_Type, recipientStore roachpb.StoreID,
 ) (_ *OutgoingSnapshot, err error) {
 	snapUUID := uuid.MakeV4()
 	// Get a snapshot while holding raftMu to make sure we're not seeing "half
@@ -388,12 +388,14 @@ func (r *Replica) GetSnapshot(
 	snap := r.store.engine.NewSnapshot()
 	r.mu.Lock()
 	appliedIndex := r.mu.state.RaftAppliedIndex
-	r.addSnapshotLogTruncationConstraintLocked(ctx, snapUUID, appliedIndex) // cleared when OutgoingSnapshot closes
+	// cleared when OutgoingSnapshot closes
+	r.addSnapshotLogTruncationConstraintLocked(ctx, snapUUID, appliedIndex, recipientStore)
 	r.mu.Unlock()
 	r.raftMu.Unlock()
 
 	release := func() {
-		r.completeSnapshotLogTruncationConstraint(ctx, snapUUID, timeutil.Now())
+		now := timeutil.Now()
+		r.completeSnapshotLogTruncationConstraint(ctx, snapUUID, now)
 	}
 
 	defer func() {

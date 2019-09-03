@@ -1568,16 +1568,11 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 		replicaCount++
 		return true
 	})
-	// It's hard to make generalizations about exactly how many snapshots happen
-	// of each type. Almost all of them are learner snaps, but there is a race
-	// where the raft snapshot queue sometimes starts the snapshot first. Further,
-	// if the raft snapshot is at a higher index, we may even reject the learner
-	// snap. We definitely get at least one snapshot per replica and the race is
-	// rare enough that the majority of them should be learner snaps.
-	if expected := 2 * replicaCount; expected < learnerApplied+raftApplied {
-		t.Fatalf("expected at least %d snapshots, but found %d learner snaps and %d raft snaps",
-			expected, learnerApplied, raftApplied)
-	}
+	// We upreplicate each range (once each for n2 and n3), so there should be
+	// exactly 2 * replica learner snaps, one per upreplication.
+	require.Equal(t, 2*replicaCount, learnerApplied)
+	// Ideally there would be zero raft snaps, but etcd/raft is picky about
+	// getting a snapshot at exactly the index it asked for.
 	if raftApplied > learnerApplied {
 		t.Fatalf("expected more learner snaps %d than raft snaps %d", learnerApplied, raftApplied)
 	}
