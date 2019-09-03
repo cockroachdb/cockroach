@@ -584,11 +584,11 @@ func init() {
 	// We add this command as a persistent flag so you can do stuff like
 	// ./cockroach demo movr --nodes=3.
 	IntFlag(demoFlags, &demoCtx.nodes, cliflags.DemoNodes, 1)
+	BoolFlag(demoFlags, &demoCtx.runWorkload, cliflags.RunDemoWorkload, false)
+	VarFlag(demoFlags, &demoCtx.localities, cliflags.DemoNodeLocality)
 	// The --empty flag is only valid for the top level demo command,
 	// so we use the regular flag set.
 	BoolFlag(demoCmd.Flags(), &demoCtx.useEmptyDatabase, cliflags.UseEmptyDatabase, false)
-	BoolFlag(demoCmd.Flags(), &demoCtx.runWorkload, cliflags.RunDemoWorkload, false)
-	VarFlag(demoFlags, &demoCtx.localities, cliflags.DemoNodeLocality)
 
 	// sqlfmt command.
 	fmtFlags := sqlfmtCmd.Flags()
