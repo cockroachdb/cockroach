@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -492,18 +493,32 @@ func (r *testRunner) runWorker(
 			}
 		} else {
 			// Upon success fetch the perf artifacts from the remote hosts.
-			// If there's an error, oh well, don't do anything rash like fail the test
-			// which already passed.
-			//
-			// TODO(ajwerner): this Get on all nodes has the unfortunate side effect
-			// of logging an error in the test runner log for all of the nodes which
-			// do not have perf artifacts. Ideally we'd have the test tell us which
-			// nodes have the artifacts, or we'd go check explicitly, or we'd find a
-			// way for Get to not complain if a file does not exist.
-			if err := c.Get(ctx, l, perfArtifactsDir, t.artifactsDir+"/"+perfArtifactsDir); err != nil {
-				l.PrintfCtx(ctx, "failed to get perf artifacts: %v", err)
-			}
+			getPerfArtifacts(ctx, l, c, t)
 		}
+	}
+}
+
+// getPerfArtifacts retrieves the perf artifacts for the test.
+// If there's an error, oh well, don't do anything rash like fail a test
+// which already passed.
+func getPerfArtifacts(ctx context.Context, l *logger, c *cluster, t *test) {
+	g := ctxgroup.WithContext(ctx)
+	fetchNode := func(node int) func(context.Context) error {
+		return func(ctx context.Context) error {
+			// RunWithBuffer to toss the output.
+			if _, err := c.RunWithBuffer(ctx, l, c.Node(node), "ls", perfArtifactsDir); err != nil {
+				// perfArtifactsDir doesn't exist, nothing to fetch.
+				return nil
+			}
+			dst := fmt.Sprintf("%s/%d.%s", t.artifactsDir, node, perfArtifactsDir)
+			return c.Get(ctx, l, perfArtifactsDir, dst, c.Node(node))
+		}
+	}
+	for _, i := range c.All() {
+		g.GoCtx(fetchNode(i))
+	}
+	if err := g.Wait(); err != nil {
+		l.PrintfCtx(ctx, "failed to get perf artifacts: %v", err)
 	}
 }
 
