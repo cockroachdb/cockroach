@@ -574,7 +574,7 @@ func (rsl StateLoader) LoadHardState(
 
 // SetHardState overwrites the HardState.
 func (rsl StateLoader) SetHardState(
-	ctx context.Context, batch engine.Writer, st raftpb.HardState,
+	ctx context.Context, batch engine.Writer, hs raftpb.HardState,
 ) error {
 	// "Blind" because ms == nil and timestamp == hlc.Timestamp{}.
 	return engine.MVCCBlindPutProto(
@@ -583,7 +583,7 @@ func (rsl StateLoader) SetHardState(
 		nil, /* ms */
 		rsl.RaftHardStateKey(),
 		hlc.Timestamp{}, /* timestamp */
-		&st,
+		&hs,
 		nil, /* txn */
 	)
 }
