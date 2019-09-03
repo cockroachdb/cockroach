@@ -1405,6 +1405,30 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `ca_cert requires tls_enabled=true`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?&ca_cert=Zm9v`,
 	)
+	sqlDB.ExpectErr(
+		t, `param client_cert must be base 64 encoded`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?client_cert=!`,
+	)
+	sqlDB.ExpectErr(
+		t, `param client_key must be base 64 encoded`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?client_key=!`,
+	)
+	sqlDB.ExpectErr(
+		t, `client_cert requires tls_enabled=true`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?client_cert=Zm9v`,
+	)
+	sqlDB.ExpectErr(
+		t, `client_cert requires client_key to be set`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_enabled=true&client_cert=Zm9v`,
+	)
+	sqlDB.ExpectErr(
+		t, `client_key requires client_cert to be set`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_enabled=true&client_key=Zm9v`,
+	)
+	sqlDB.ExpectErr(
+		t, `invalid client certificate`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_enabled=true&client_cert=Zm9v&client_key=Zm9v`,
+	)
 
 	// Sanity check kafka sasl parameters.
 	sqlDB.ExpectErr(
