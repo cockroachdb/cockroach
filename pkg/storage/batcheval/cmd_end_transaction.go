@@ -1109,15 +1109,16 @@ func changeReplicasTrigger(
 
 	var desc roachpb.RangeDescriptor
 	if change.Desc != nil {
+		// Trigger proposed by a 19.2+ node (and we're a 19.2+ node as well).
 		desc = *change.Desc
 	} else {
+		// Trigger proposed by a 19.1 node. Reconstruct descriptor from deprecated
+		// fields.
 		desc = *rec.Desc()
 		desc.SetReplicas(roachpb.MakeReplicaDescriptors(change.DeprecatedUpdatedReplicas))
 		desc.NextReplicaID = change.DeprecatedNextReplicaID
 	}
 
-	// TODO(tschottdorf): duplication of Desc with the trigger below, should
-	// likely remove it from the trigger.
 	pd.Replicated.State = &storagepb.ReplicaState{
 		Desc: &desc,
 	}
