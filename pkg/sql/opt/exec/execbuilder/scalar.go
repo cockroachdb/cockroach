@@ -408,7 +408,7 @@ func (b *Builder) buildIndirection(
 		return nil, err
 	}
 
-	return tree.NewTypedIndirectionExpr(expr, index), nil
+	return tree.NewTypedIndirectionExpr(expr, index, scalar.DataType().ArrayContents()), nil
 }
 
 func (b *Builder) buildCollate(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
