@@ -1406,9 +1406,10 @@ func execChangeReplicasTxn(
 			deprecatedRepDesc = removed[0]
 		}
 		crt = &roachpb.ChangeReplicasTrigger{
-			DeprecatedChangeType: deprecatedChangeType,
-			DeprecatedReplica:    deprecatedRepDesc,
-			Desc:                 &updatedDesc,
+			DeprecatedChangeType:      deprecatedChangeType,
+			DeprecatedReplica:         deprecatedRepDesc,
+			DeprecatedUpdatedReplicas: updatedDesc.Replicas().All(),
+			DeprecatedNextReplicaID:   updatedDesc.NextReplicaID,
 		}
 	} else {
 		crt = &roachpb.ChangeReplicasTrigger{
