@@ -45,7 +45,7 @@ var maxRate = runFlags.Float64(
 	"max-rate", 0, "Maximum frequency of operations (reads/writes). If 0, no limit.")
 var maxOps = runFlags.Uint64("max-ops", 0, "Maximum number of operations to run")
 var duration = runFlags.Duration("duration", 0, "The duration to run. If 0, run forever.")
-var doInit = runFlags.Bool("init", false, "Automatically run init")
+var doInit = runFlags.Bool("init", false, "Automatically run init. DEPRECATED: Use workload init instead.")
 var ramp = runFlags.Duration("ramp", 0*time.Second, "The duration over which to ramp up load.")
 
 var initFlags = pflag.NewFlagSet(`init`, pflag.ContinueOnError)
@@ -326,6 +326,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		return err
 	}
 	if *doInit || *drop {
+		log.Info(ctx, `DEPRECATION: `+
+			`the --init flag on "workload run" will no longer be supported after 19.2`)
 		for {
 			err = runInitImpl(ctx, gen, initDB, dbName)
 			if err == nil {
