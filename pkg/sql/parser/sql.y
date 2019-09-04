@@ -3445,15 +3445,15 @@ show_columns_stmt:
 show_partitions_stmt:
   SHOW PARTITIONS FROM TABLE table_name
   {
-    $$.val = &tree.ShowPartitions{Object: $5.unresolvedObjectName().String(), IsTable: true, Table: $5.unresolvedObjectName()}
+    $$.val = &tree.ShowPartitions{IsTable: true, Table: $5.unresolvedObjectName()}
   }
 | SHOW PARTITIONS FROM DATABASE database_name
   {
-    $$.val = &tree.ShowPartitions{Object: $5, IsDB: true}
+    $$.val = &tree.ShowPartitions{IsDB: true, Database: tree.Name($5)}
   }
 | SHOW PARTITIONS FROM INDEX table_index_name
   {
-    $$.val = &tree.ShowPartitions{Object: $5.newTableIndexName().String(), IsIndex: true, Index: $5.tableIndexName()}
+    $$.val = &tree.ShowPartitions{IsIndex: true, Index: $5.tableIndexName()}
   }
 | SHOW PARTITIONS error // SHOW HELP: SHOW PARTITIONS
 
@@ -3854,7 +3854,7 @@ show_ranges_stmt:
   }
 | SHOW RANGES FROM DATABASE database_name 
   {
-    $$.val = &tree.ShowRanges{DatabaseName: $5}
+    $$.val = &tree.ShowRanges{DatabaseName: tree.Name($5)}
   }
 | SHOW RANGES error // SHOW HELP: SHOW RANGES
 
