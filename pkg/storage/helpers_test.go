@@ -259,10 +259,13 @@ func (r *Replica) InitQuotaPool(quota uint64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var appliedIndex uint64
-	err := r.withRaftGroupLocked(false, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, err error) {
+	isRemoved, err := r.withRaftGroupLocked(false, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, err error) {
 		appliedIndex = r.BasicStatus().Applied
 		return false, nil
 	})
+	if isRemoved {
+		_, err = r.IsDestroyed()
+	}
 	if err != nil {
 		return err
 	}

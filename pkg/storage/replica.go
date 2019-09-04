@@ -242,6 +242,7 @@ type Replica struct {
 		syncutil.RWMutex
 		// The destroyed status of a replica indicating if it's alive, corrupt,
 		// scheduled for destruction or has been GCed.
+		// destroyStatus should only be set while also holding the raftMu.
 		destroyStatus
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
@@ -346,6 +347,7 @@ type Replica struct {
 		// The minimum allowed ID for this replica. Initialized from
 		// RaftTombstone.NextReplicaID.
 		minReplicaID roachpb.ReplicaID
+
 		// The ID of the leader replica within the Raft group. Used to determine
 		// when the leadership changes.
 		leaderID roachpb.ReplicaID
@@ -610,7 +612,8 @@ func (r *Replica) String() string {
 	return fmt.Sprintf("[n%d,s%d,r%s]", r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeStr)
 }
 
-// ReplicaID returns the ID for the Replica.
+// ReplicaID returns the ID for the Replica. It may be zero if the replica does
+// not know its ID. Once a Replica has a non-zero ReplicaID it will never change.
 func (r *Replica) ReplicaID() roachpb.ReplicaID {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -1041,6 +1044,16 @@ func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error
 		}
 	}
 	return mismatchErr
+}
+
+// minReplicaID is the minimum ID that this Replica could ever have. If the
+// Replica knows its ID then it returns that value, otherwise it returns
+// r.mu.minReplicaID which was bootstrapped from the tombstone.
+func (r *Replica) minReplicaIDRLocked() roachpb.ReplicaID {
+	if r.mu.replicaID != 0 {
+		return r.mu.replicaID
+	}
+	return r.mu.minReplicaID
 }
 
 // checkBatchRequest verifies BatchRequest validity requirements. In particular,

@@ -382,7 +382,7 @@ func (r *Replica) hasPendingProposalsRLocked() bool {
 // stepRaftGroup calls Step on the replica's RawNode with the provided request's
 // message. Before doing so, it assures that the replica is unquiesced and ready
 // to handle the request.
-func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
+func (r *Replica) stepRaftGroup(req *RaftMessageRequest) (isRemoved bool, _ error) {
 	// We're processing an incoming raft message (from a batch that may
 	// include MsgVotes), so don't campaign if we wake up our raft
 	// group.
@@ -445,14 +445,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	var hasReady bool
 	var rd raft.Ready
 	r.mu.Lock()
-
 	lastIndex := r.mu.lastIndex // used for append below
 	lastTerm := r.mu.lastTerm
 	raftLogSize := r.mu.raftLogSize
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
-
-	err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
+	isRemoved, err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		if err := r.mu.proposalBuf.FlushLockedWithRaftGroup(raftGroup); err != nil {
 			return false, err
 		}
@@ -465,6 +463,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	if err != nil {
 		const expl = "while checking raft group for Ready"
 		return stats, expl, errors.Wrap(err, expl)
+	}
+	// If we've been removed then return.
+	if isRemoved {
+		return stats, "", nil
 	}
 
 	if !hasReady {
@@ -723,7 +725,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// Might have gone negative if node was recently restarted.
 			raftLogSize = 0
 		}
-
 	}
 
 	// Update protected state - last index, last term, raft log size, and raft
@@ -756,10 +757,18 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	applicationStart := timeutil.Now()
 	if len(rd.CommittedEntries) > 0 {
-		if err := appTask.ApplyCommittedEntries(ctx); err != nil {
+		err := appTask.ApplyCommittedEntries(ctx)
+		stats.applyCommittedEntriesStats = sm.moveStats()
+		switch err {
+		case nil:
+		case apply.ErrRemoved:
+			// We know that our replica has been removed. We also know that we've
+			// stepped the state machine up to the point where it's been removed.
+			// TODO(ajwerner): decide if there's more to be done here.
+			return stats, "", err
+		default:
 			return stats, err.(*nonDeterministicFailure).safeExpl, err
 		}
-		stats.applyCommittedEntriesStats = sm.moveStats()
 
 		// etcd raft occasionally adds a nil entry (our own commands are never
 		// empty). This happens in two situations: When a new leader is elected, and
@@ -789,11 +798,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		r.mu.Unlock()
 	}
 
-	// TODO(bdarnell): need to check replica id and not Advance if it
-	// has changed. Or do we need more locking to guarantee that replica
-	// ID cannot change during handleRaftReady?
+	// NB: if we just processed a command which removed this replica from the
+	// raft group we will early return before this point. This, combined with
+	// the fact that we'll refuse to process messages intended for a higher
+	// replica ID ensures that our replica ID could not have changed.
 	const expl = "during advance"
-	if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
+	isRemoved, err = r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.Advance(rd)
 
 		// If the Raft group still has more to process then we immediately
@@ -804,8 +814,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			r.store.enqueueRaftUpdateCheck(r.RangeID)
 		}
 		return true, nil
-	}); err != nil {
+	})
+	if err != nil {
 		return stats, expl, errors.Wrap(err, expl)
+	}
+	// If we removed ourselves during this call we would have early returned
+	// above with the apply.ErrRemoved.
+	if isRemoved {
+		return stats, expl, errors.Errorf("replica unexpectedly removed")
 	}
 
 	// NB: All early returns other than the one due to not having a ready
@@ -1153,11 +1169,11 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		Message:       msg,
 		RangeStartKey: startKey, // usually nil
 	}) {
-		if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
+		if isRemoved, err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 			r.mu.droppedMessages++
 			raftGroup.ReportUnreachable(msg.To)
 			return true, nil
-		}); err != nil {
+		}); !isRemoved && err != nil {
 			log.Fatal(ctx, err)
 		}
 	}
@@ -1197,10 +1213,10 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 		snapStatus = raft.SnapshotFailure
 	}
 
-	if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
+	if isRemoved, err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.ReportSnapshot(uint64(to), snapStatus)
 		return true, nil
-	}); err != nil {
+	}); !isRemoved && err != nil {
 		log.Fatal(ctx, err)
 	}
 }
@@ -1322,19 +1338,22 @@ func (s pendingCmdSlice) Less(i, j int) bool {
 // varies.
 //
 // Requires that Replica.mu is held.
+//
+// If this Replica is in the process of being removed this method will return
+// true and a nil error.
 func (r *Replica) withRaftGroupLocked(
 	mayCampaignOnWake bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
-) error {
-	if r.mu.destroyStatus.Removed() {
+) (isRemoved bool, _ error) {
+	if r.mu.destroyStatus.RemovalPending() {
 		// Silently ignore all operations on destroyed replicas. We can't return an
 		// error here as all errors returned from this method are considered fatal.
-		return nil
+		return true, nil
 	}
 
 	if r.mu.replicaID == 0 {
 		// The replica's raft group has not yet been configured (i.e. the replica
 		// was created from a preemptive snapshot).
-		return nil
+		return false, nil
 	}
 
 	if r.mu.internalRaftGroup == nil {
@@ -1347,7 +1366,7 @@ func (r *Replica) withRaftGroupLocked(
 			&raftLogger{ctx: ctx},
 		))
 		if err != nil {
-			return err
+			return false, err
 		}
 		r.mu.internalRaftGroup = raftGroup
 
@@ -1364,7 +1383,7 @@ func (r *Replica) withRaftGroupLocked(
 	if unquiesce {
 		r.unquiesceAndWakeLeaderLocked()
 	}
-	return err
+	return false, err
 }
 
 // withRaftGroup calls the supplied function with the (lazily initialized)
@@ -1378,9 +1397,12 @@ func (r *Replica) withRaftGroupLocked(
 // should not initiate an election while handling incoming raft
 // messages (which may include MsgVotes from an election in progress,
 // and this election would be disrupted if we started our own).
+//
+// If this Replica is in the process of being removed this method will return
+// true and a nil error.
 func (r *Replica) withRaftGroup(
 	mayCampaignOnWake bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
-) error {
+) (isRemoved bool, _ error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.withRaftGroupLocked(mayCampaignOnWake, f)
