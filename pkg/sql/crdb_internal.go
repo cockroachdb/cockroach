@@ -2511,6 +2511,9 @@ CREATE TABLE crdb_internal.gossip_network (
 }
 
 func addPartitioningRows(
+	ctx context.Context,
+	p *planner,
+	database string,
 	table *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	partitioning *sqlbase.PartitioningDescriptor,
@@ -2555,6 +2558,26 @@ func addPartitioningRows(
 			buf.WriteString(tuple.String())
 		}
 		name := tree.NewDString(l.Name)
+		_, zone, subzone, err := GetZoneConfigInTxn(ctx, p.txn, uint32(table.ID), index, l.Name, false)
+		if err != nil {
+			return err
+		}
+		zoneSpec := tree.ZoneSpecifier{
+			TableOrIndex: tree.TableIndexName{
+				Table: tree.MakeTableName(tree.Name(database), tree.Name(table.Name)),
+				Index: tree.UnrestrictedName(index.Name),
+			},
+			Partition: tree.Name(l.Name),
+		}
+		// TODO (rohany): is it correct to take zone if the subzone is nil?
+		conf := zone
+		if subzone != nil {
+			conf = &subzone.Config
+		}
+		zoneConfig, err := zoneConfigToSQL(&zoneSpec, conf)
+		if err != nil {
+			return err
+		}
 		if err := addRow(
 			tableID,
 			indexID,
@@ -2564,10 +2587,11 @@ func addPartitioningRows(
 			colNames,
 			tree.NewDString(buf.String()),
 			tree.DNull,
+			tree.NewDString(zoneConfig),
 		); err != nil {
 			return err
 		}
-		err := addPartitioningRows(table, index, &l.Subpartitioning, name,
+		err = addPartitioningRows(ctx, p, database, table, index, &l.Subpartitioning, name,
 			colOffset+int(partitioning.NumColumns), addRow)
 		if err != nil {
 			return err
@@ -2591,6 +2615,26 @@ func addPartitioningRows(
 			return err
 		}
 		buf.WriteString(toTuple.String())
+		_, zone, subzone, err := GetZoneConfigInTxn(ctx, p.txn, uint32(table.ID), index, r.Name, false)
+		if err != nil {
+			return err
+		}
+		zoneSpec := tree.ZoneSpecifier{
+			TableOrIndex: tree.TableIndexName{
+				Table: tree.MakeTableName(tree.Name(database), tree.Name(table.Name)),
+				Index: tree.UnrestrictedName(index.Name),
+			},
+			Partition: tree.Name(r.Name),
+		}
+		// TODO (rohany): is it correct to take zone if the subzone is nil?
+		conf := zone
+		if subzone != nil {
+			conf = &subzone.Config
+		}
+		zoneConfig, err := zoneConfigToSQL(&zoneSpec, conf)
+		if err != nil {
+			return err
+		}
 		if err := addRow(
 			tableID,
 			indexID,
@@ -2600,6 +2644,7 @@ func addPartitioningRows(
 			colNames,
 			tree.DNull,
 			tree.NewDString(buf.String()),
+			tree.NewDString(zoneConfig),
 		); err != nil {
 			return err
 		}
@@ -2623,14 +2668,19 @@ CREATE TABLE crdb_internal.partitions (
 	columns     INT NOT NULL,
 	column_names STRING,
 	list_value  STRING,
-	range_value STRING
+	range_value STRING,
+	zone_config STRING
 )
 	`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		dbName := ""
+		if dbContext != nil {
+			dbName = dbContext.Name
+		}
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
 			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
 				return table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
-					return addPartitioningRows(table, index, &index.Partitioning,
+					return addPartitioningRows(ctx, p, dbName, table, index, &index.Partitioning,
 						tree.DNull /* parentName */, 0 /* colOffset */, addRow)
 				})
 			})

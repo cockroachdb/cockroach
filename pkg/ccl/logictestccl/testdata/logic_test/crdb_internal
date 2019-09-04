@@ -1,9 +1,9 @@
 # LogicTest: local
 
-query IITTITTT colnames
+query IITTITTTT colnames
 SELECT * FROM crdb_internal.partitions
 ----
-table_id  index_id  parent_name  name  columns column_names list_value range_value
+table_id  index_id  parent_name  name  columns column_names list_value range_value zone_config
 
 statement ok
 CREATE TABLE t1 (
@@ -33,16 +33,76 @@ CREATE table t2 (a STRING PRIMARY KEY) PARTITION BY LIST (a) (
   PARTITION pfoo VALUES IN ('foo')
 )
 
-query IITTITTT
+query IITTITTTT
 SELECT * FROM crdb_internal.partitions ORDER BY table_id, index_id, name
 ----
-53  1  NULL   p12      1  a    (1), (2)   NULL
-53  1  p12    p12p3    1  b    (3)        NULL
-53  1  p12p3  p12p3p8  1  c    (8)        NULL
-53  1  NULL   p6       1  a    (6)        NULL
-53  1  p6     p6p7     1  b    NULL       (MINVALUE) TO (7)
-53  1  p6     p6p8     1  b    NULL       (7) TO (8)
-53  1  p6     p6px     1  b    NULL       (8) TO (MAXVALUE)
-53  1  p12    pd       1  b    (DEFAULT)  NULL
-53  2  NULL   p00      2  a, b (0, 0)     NULL
-54  1  NULL   pfoo     1  a    ('foo')    NULL
+53  1  NULL  p12  1  a  (1), (2)  NULL  ALTER PARTITION p12 OF INDEX test.public.t1@primary CONFIGURE ZONE USING
+    range_min_bytes = 16777216,
+    range_max_bytes = 67108864,
+    gc.ttlseconds = 90000,
+    num_replicas = 3,
+    constraints = '[]',
+    lease_preferences = '[]'
+53  1                         p12  p12p3  1  b  (3)  NULL  ALTER PARTITION p12p3 OF INDEX test.public.t1@primary CONFIGURE ZONE USING
+    range_min_bytes = 16777216,
+    range_max_bytes = 67108864,
+    gc.ttlseconds = 90000,
+    num_replicas = 3,
+    constraints = '[]',
+    lease_preferences = '[]'
+53  1                         p12p3  p12p3p8  1  c  (8)  NULL  ALTER PARTITION p12p3p8 OF INDEX test.public.t1@primary CONFIGURE ZONE USING
+    range_min_bytes = 16777216,
+    range_max_bytes = 67108864,
+    gc.ttlseconds = 90000,
+    num_replicas = 3,
+    constraints = '[]',
+    lease_preferences = '[]'
+53  1                         NULL  p6  1  a  (6)  NULL  ALTER PARTITION p6 OF INDEX test.public.t1@primary CONFIGURE ZONE USING
+    range_min_bytes = 16777216,
+    range_max_bytes = 67108864,
+    gc.ttlseconds = 90000,
+    num_replicas = 3,
+    constraints = '[]',
+    lease_preferences = '[]'
+53  1                         p6  p6p7  1  b  NULL  (MINVALUE) TO (7)  ALTER PARTITION p6p7 OF INDEX test.public.t1@primary CONFIGURE ZONE USING
+    range_min_bytes = 16777216,
+    range_max_bytes = 67108864,
+    gc.ttlseconds = 90000,
+    num_replicas = 3,
+    constraints = '[]',
+    lease_preferences = '[]'
+53  1                         p6  p6p8  1  b  NULL  (7) TO (8)  ALTER PARTITION p6p8 OF INDEX test.public.t1@primary CONFIGURE ZONE USING
+    range_min_bytes = 16777216,
+    range_max_bytes = 67108864,
+    gc.ttlseconds = 90000,
+    num_replicas = 3,
+    constraints = '[]',
+    lease_preferences = '[]'
+53  1                         p6  p6px  1  b  NULL  (8) TO (MAXVALUE)  ALTER PARTITION p6px OF INDEX test.public.t1@primary CONFIGURE ZONE USING
+    range_min_bytes = 16777216,
+    range_max_bytes = 67108864,
+    gc.ttlseconds = 90000,
+    num_replicas = 3,
+    constraints = '[]',
+    lease_preferences = '[]'
+53  1                         p12  pd  1  b  (DEFAULT)  NULL  ALTER PARTITION pd OF INDEX test.public.t1@primary CONFIGURE ZONE USING
+    range_min_bytes = 16777216,
+    range_max_bytes = 67108864,
+    gc.ttlseconds = 90000,
+    num_replicas = 3,
+    constraints = '[]',
+    lease_preferences = '[]'
+53  2                         NULL  p00  2  a, b  (0, 0)  NULL  ALTER PARTITION p00 OF INDEX test.public.t1@t1_a_b_idx CONFIGURE ZONE USING
+    range_min_bytes = 16777216,
+    range_max_bytes = 67108864,
+    gc.ttlseconds = 90000,
+    num_replicas = 3,
+    constraints = '[]',
+    lease_preferences = '[]'
+54  1                         NULL  pfoo  1  a  ('foo')  NULL  ALTER PARTITION pfoo OF INDEX test.public.t2@primary CONFIGURE ZONE USING
+    range_min_bytes = 16777216,
+    range_max_bytes = 67108864,
+    gc.ttlseconds = 90000,
+    num_replicas = 3,
+    constraints = '[]',
+    lease_preferences = '[]'
