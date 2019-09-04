@@ -213,15 +213,15 @@ SELECT * FROM crdb_internal.zones WHERE false
 ----
 zone_id  target  range_name  database_name  table_name  index_name  partition_name  config_yaml  config_sql  config_protobuf
 
-query ITTTTTTTTTTTI colnames
+query ITTTTTTTTTTTTI colnames
 SELECT * FROM crdb_internal.ranges WHERE range_id < 0
 ----
-range_id  start_key  start_pretty  end_key  end_pretty  database_name  table_name  index_name  replicas  learner_replicas  split_enforced_until  lease_holder range_size
+range_id  start_key  start_pretty  end_key  end_pretty  database_name  table_name  index_name  replicas  replica_localities learner_replicas  split_enforced_until  lease_holder range_size
 
-query ITTTTTTTTTT colnames
+query ITTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.ranges_no_leases WHERE range_id < 0
 ----
-range_id  start_key  start_pretty  end_key  end_pretty  database_name  table_name  index_name  replicas  learner_replicas  split_enforced_until
+range_id  start_key  start_pretty  end_key  end_pretty  database_name  table_name  index_name  replicas  replica_localities learner_replicas  split_enforced_until
 
 statement ok
 INSERT INTO system.zones (id, config) VALUES
