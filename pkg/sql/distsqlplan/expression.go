@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -36,21 +37,6 @@ type ExprContext interface {
 	EvaluateSubqueries() bool
 }
 
-type ivarRemapper struct {
-	indexVarMap []int
-}
-
-func (v *ivarRemapper) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
-	if ivar, ok := expr.(*tree.IndexedVar); ok {
-		newIvar := *ivar
-		newIvar.Idx = v.indexVarMap[ivar.Idx]
-		return false, &newIvar
-	}
-	return true, expr
-}
-
-func (*ivarRemapper) VisitPost(expr tree.Expr) tree.Expr { return expr }
-
 // MakeExpression creates a distsqlrun.Expression.
 //
 // The distsqlrun.Expression uses the placeholder syntax (@1, @2, @3..) to refer
@@ -68,10 +54,8 @@ func MakeExpression(
 
 	if ctx.IsLocal() {
 		if indexVarMap != nil {
-			// Remap our indexed vars
-			v := &ivarRemapper{indexVarMap: indexVarMap}
-			newExpr, _ := tree.WalkExpr(v, expr)
-			expr = newExpr.(tree.TypedExpr)
+			// Remap our indexed vars.
+			expr = sqlbase.RemapIVarsInTypedExpr(expr, indexVarMap)
 		}
 		return distsqlpb.Expression{LocalExpr: expr}, nil
 	}
