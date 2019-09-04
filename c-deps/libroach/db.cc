@@ -531,8 +531,10 @@ DBStatus DBEnvLinkFile(DBEngine* db, DBSlice oldname, DBSlice newname) {
 }
 
 DBIterState DBCheckForKeyCollisions(DBIterator* existingIter, DBIterator* sstIter,
-                                    DBString* write_intent) {
+                                    MVCCStatsResult* skippedKVStats, DBString* write_intent) {
   DBIterState state = {};
+  memset(skippedKVStats, 0, sizeof(*skippedKVStats));
+
   while (existingIter->rep->Valid() && sstIter->rep->Valid()) {
     rocksdb::Slice sstKey;
     rocksdb::Slice existingKey;
@@ -610,6 +612,29 @@ DBIterState DBCheckForKeyCollisions(DBIterator* existingIter, DBIterator* sstIte
       bool has_equal_value =
           kComparator.Compare(existingIter->rep->value(), sstIter->rep->value()) == 0;
       if (has_equal_timestamp && has_equal_value) {
+        // Even though we skip over the KVs described above, their stats have
+        // already been accounted for resulting in a problem of double-counting.
+        // To solve this we send back the stats of these skipped KVs so that we
+        // can subtract them later. This enables us to construct accurate
+        // MVCCStats and prevents expensive recomputation in the future.
+        const int64_t meta_key_size = sstKey.size() + 1;
+        const int64_t meta_val_size = 0;
+        int64_t total_bytes = meta_key_size + meta_val_size;
+
+        // Update the skipped stats to account fot the skipped meta key.
+        skippedKVStats->live_bytes += total_bytes;
+        skippedKVStats->live_count++;
+        skippedKVStats->key_bytes += meta_key_size;
+        skippedKVStats->val_bytes += meta_val_size;
+        skippedKVStats->key_count++;
+
+        // Update the stats to account for the skipped versioned key/value.
+        total_bytes = sstIter->rep->value().size() + kMVCCVersionTimestampSize;
+        skippedKVStats->live_bytes += total_bytes;
+        skippedKVStats->key_bytes += kMVCCVersionTimestampSize;
+        skippedKVStats->val_bytes += sstIter->rep->value().size();
+        skippedKVStats->val_count++;
+
         DBIterNext(existingIter, true /* skip_current_key_versions */);
         continue;
       }
@@ -960,7 +985,7 @@ DBStatus DBSstFileWriterDelete(DBSstFileWriter* fw, DBKey key) {
   return kSuccess;
 }
 
-DBStatus DBSstFileWriterDeleteRange(DBSstFileWriter *fw, DBKey start, DBKey end) {
+DBStatus DBSstFileWriterDeleteRange(DBSstFileWriter* fw, DBKey start, DBKey end) {
   rocksdb::Status status = fw->rep.DeleteRange(EncodeKey(start), EncodeKey(end));
   if (!status.ok()) {
     return ToDBStatus(status);
