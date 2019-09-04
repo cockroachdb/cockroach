@@ -242,6 +242,7 @@ type Replica struct {
 		syncutil.RWMutex
 		// The destroyed status of a replica indicating if it's alive, corrupt,
 		// scheduled for destruction or has been GCed.
+		// destroyStatus should only be set while also holding the raftMu.
 		destroyStatus
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
@@ -345,7 +346,8 @@ type Replica struct {
 		replicaID roachpb.ReplicaID
 		// The minimum allowed ID for this replica. Initialized from
 		// RaftTombstone.NextReplicaID.
-		minReplicaID roachpb.ReplicaID
+		tombstoneReplicaID roachpb.ReplicaID
+
 		// The ID of the leader replica within the Raft group. Used to determine
 		// when the leadership changes.
 		leaderID roachpb.ReplicaID
@@ -610,7 +612,8 @@ func (r *Replica) String() string {
 	return fmt.Sprintf("[n%d,s%d,r%s]", r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeStr)
 }
 
-// ReplicaID returns the ID for the Replica.
+// ReplicaID returns the ID for the Replica. It may be zero if the replica does
+// not know its ID. Once a Replica has a non-zero ReplicaID it will never change.
 func (r *Replica) ReplicaID() roachpb.ReplicaID {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -1041,6 +1044,31 @@ func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error
 		}
 	}
 	return mismatchErr
+}
+
+// isNewerThanSplit is a helper used in split(Pre|Post)Apply to
+// determine whether the Replica on the right hand side of the split must
+// have been removed from this store after the split.
+func (r *Replica) isNewerThanSplit(split *roachpb.SplitTrigger) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.isNewerThanSplitRLocked(split)
+}
+
+func (r *Replica) isNewerThanSplitRLocked(split *roachpb.SplitTrigger) bool {
+	rightDesc, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
+	// If we have written a tombstone for this range then we know that the RHS
+	// must have already been removed at the split replica ID.
+	return r.mu.tombstoneReplicaID != 0 ||
+		// If the first raft message we recieved for the RHS range was for a replica
+		// ID is above the replica ID of the split then we would not have written a
+		// tombstone but we will have a replica ID that will exceed the split
+		// replica ID.
+		(r.mu.replicaID > rightDesc.ReplicaID &&
+			// If we're catching up from a preemptive snapshot we won't be in the split.
+			// and we won't know whether our current replica ID indicates we've been
+			// removed.
+			hasRightDesc)
 }
 
 // checkBatchRequest verifies BatchRequest validity requirements. In particular,
