@@ -1314,7 +1314,7 @@ func TestParse(t *testing.T) {
 
 		{`IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`EXPLAIN IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
-		{`IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' MYSQLOUTFILE DATA ('path/to/some/file', $1)`},
+		{`IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' DELIMITED DATA ('path/to/some/file', $1)`},
 		{`IMPORT TABLE foo (id INT8 PRIMARY KEY, email STRING, age INT8) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`IMPORT TABLE foo (id INT8, email STRING, age INT8) CSV DATA ('path/to/some/file', $1) WITH comma = ',', "nullif" = 'n/a', temp = $2`},
 		{`IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
