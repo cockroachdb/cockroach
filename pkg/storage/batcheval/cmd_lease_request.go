@@ -36,6 +36,12 @@ func RequestLease(
 	// newFailedLeaseTrigger() to satisfy stats.
 	args := cArgs.Args.(*roachpb.RequestLeaseRequest)
 
+	prevLease, _ := cArgs.EvalCtx.GetLease()
+	rErr := &roachpb.LeaseRejectedError{
+		Existing:  prevLease,
+		Requested: args.Lease,
+	}
+
 	// For now, don't allow replicas of type LEARNER to be leaseholders. There's
 	// no reason this wouldn't work in principle, but it seems inadvisable. In
 	// particular, learners can't become raft leaders, so we wouldn't be able to
@@ -48,14 +54,8 @@ func RequestLease(
 	// If this check is removed at some point, the filtering of learners on the
 	// sending side would have to be removed as well.
 	if err := checkCanReceiveLease(cArgs.EvalCtx); err != nil {
-		return newFailedLeaseTrigger(false /* isTransfer */), err
-	}
-
-	prevLease, _ := cArgs.EvalCtx.GetLease()
-
-	rErr := &roachpb.LeaseRejectedError{
-		Existing:  prevLease,
-		Requested: args.Lease,
+		rErr.Message = err.Error()
+		return newFailedLeaseTrigger(false /* isTransfer */), rErr
 	}
 
 	// MIGRATION(tschottdorf): needed to apply Raft commands which got proposed
