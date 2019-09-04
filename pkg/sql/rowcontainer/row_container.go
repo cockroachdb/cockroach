@@ -16,8 +16,6 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -134,7 +132,7 @@ type MemRowContainer struct {
 }
 
 var _ heap.Interface = &MemRowContainer{}
-var _ SortableRowContainer = &MemRowContainer{}
+var _ IndexedRowContainer = &MemRowContainer{}
 
 // Init initializes the MemRowContainer. The MemRowContainer uses evalCtx.Mon
 // to track memory usage.
@@ -357,7 +355,7 @@ type DiskBackedRowContainer struct {
 	diskMonitor *mon.BytesMonitor
 }
 
-var _ SortableRowContainer = &DiskBackedRowContainer{}
+var _ ReorderableRowContainer = &DiskBackedRowContainer{}
 
 // Init initializes a DiskBackedRowContainer.
 // Arguments:
@@ -481,7 +479,7 @@ func (f *DiskBackedRowContainer) UsingDisk() bool {
 // memory error. Returns whether the DiskBackedRowContainer spilled to disk and
 // an error if one occurred while doing so.
 func (f *DiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (bool, error) {
-	if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
+	if !sqlbase.IsOutOfMemoryError(err) {
 		return false, nil
 	}
 	if spillErr := f.SpillToDisk(ctx); spillErr != nil {
@@ -561,7 +559,9 @@ type DiskBackedIndexedRowContainer struct {
 	DisableCache bool
 }
 
-// MakeDiskBackedIndexedRowContainer creates a DiskBackedIndexedRowContainer
+var _ IndexedRowContainer = &DiskBackedIndexedRowContainer{}
+
+// NewDiskBackedIndexedRowContainer creates a DiskBackedIndexedRowContainer
 // with the given engine as the underlying store that rows are stored on when
 // it spills to disk.
 // Arguments:
@@ -575,7 +575,7 @@ type DiskBackedIndexedRowContainer struct {
 //  - diskMonitor is used to monitor this container's disk usage.
 //  - rowCapacity (if not 0) specifies the number of rows in-memory container
 //    should be preallocated for.
-func MakeDiskBackedIndexedRowContainer(
+func NewDiskBackedIndexedRowContainer(
 	ordering sqlbase.ColumnOrdering,
 	typs []types.T,
 	evalCtx *tree.EvalContext,
