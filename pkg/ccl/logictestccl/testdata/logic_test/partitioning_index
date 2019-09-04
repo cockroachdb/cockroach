@@ -22,6 +22,7 @@ ok1  CREATE TABLE ok1 (
      ),
      FAMILY "primary" (a, b)
 )
+-- Warning: Partitioned table with no zone configurations.
 
 # Verify that secondary indexes with a partition for NULLs can actually store
 # NULLs.
@@ -48,6 +49,7 @@ ok2  CREATE TABLE ok2 (
      ),
      FAMILY "primary" (a, b)
 )
+-- Warning: Partitioned table with no zone configurations.
 
 statement ok
 CREATE TABLE ok3 (
@@ -80,6 +82,7 @@ ok3  CREATE TABLE ok3 (
      ),
      FAMILY "primary" (a, b)
 )
+-- Warning: Partitioned table with no zone configurations.
 
 statement ok
 CREATE TABLE indexes (a INT PRIMARY KEY, b INT)
@@ -143,3 +146,4 @@ indexes  CREATE TABLE indexes (
          ),
          FAMILY "primary" (a, b)
 )
+-- Warning: Partitioned table with no zone configurations.
