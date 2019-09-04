@@ -109,6 +109,166 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) strin
 	return s
 }
 
+// prepareSplitDescs returns the left and right descriptor of the split whose
+// right side is assigned rightRangeID and starts at splitKey. The supplied
+// expiration is the "sticky bit" stored on the right descriptor.
+func prepareSplitDescs(
+	st *cluster.Settings,
+	rightRangeID roachpb.RangeID,
+	splitKey roachpb.RKey,
+	expiration hlc.Timestamp,
+	leftDesc *roachpb.RangeDescriptor,
+) (*roachpb.RangeDescriptor, *roachpb.RangeDescriptor) {
+	// Create right hand side range descriptor.
+	rightDesc := roachpb.NewRangeDescriptor(rightRangeID, splitKey, leftDesc.EndKey, leftDesc.Replicas())
+
+	// Init updated version of existing range descriptor.
+	{
+		tmp := *leftDesc
+		leftDesc = &tmp
+	}
+
+	leftDesc.IncrementGeneration()
+	maybeMarkGenerationComparable(st, leftDesc)
+	leftDesc.EndKey = splitKey
+
+	// Set the generation of the right hand side descriptor to match that of the
+	// (updated) left hand side. See the comment on the field for an explanation
+	// of why generations are useful.
+	rightDesc.Generation = leftDesc.Generation
+	maybeMarkGenerationComparable(st, rightDesc)
+
+	// TODO(jeffreyxiao): Remove this check in 20.1.
+	// Note that the client API for splitting has expiration time as
+	// non-nullable, but the internal representation of a sticky bit is nullable
+	// for backwards compatibility. If expiration time is the zero timestamp, we
+	// must be sure not to set the sticky bit to the zero timestamp because the
+	// byte representation of setting the stickyBit to nil is different than
+	// setting it to hlc.Timestamp{}. This check ensures that CPuts would not
+	// fail on older versions.
+	if (expiration != hlc.Timestamp{}) {
+		rightDesc.StickyBit = &expiration
+	}
+
+	return leftDesc, rightDesc
+}
+
+func splitTxnAttempt(
+	ctx context.Context,
+	store *Store,
+	txn *client.Txn,
+	rightRangeID roachpb.RangeID,
+	splitKey roachpb.RKey,
+	expiration hlc.Timestamp,
+	oldDesc *roachpb.RangeDescriptor,
+) error {
+	txn.SetDebugName(splitTxnName)
+
+	_, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, oldDesc.StartKey, checkDescsEqual(oldDesc))
+	if err != nil {
+		return err
+	}
+	// TODO(tbg): return desc from conditionalGetDescValueFromDB and don't pass
+	// in oldDesc any more (just the start key).
+	desc := oldDesc
+	oldDesc = nil // prevent accidental use
+
+	leftDesc, rightDesc := prepareSplitDescs(store.ClusterSettings(), rightRangeID, splitKey, expiration, desc)
+
+	// Update existing range descriptor for left hand side of
+	// split. Note that we mutate the descriptor for the left hand
+	// side of the split first to locate the txn record there.
+	{
+		b := txn.NewBatch()
+		leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
+		if err := updateRangeDescriptor(b, leftDescKey, dbDescValue, leftDesc); err != nil {
+			return err
+		}
+		// Commit this batch first to ensure that the transaction record
+		// is created in the right place (split trigger relies on this),
+		// but also to ensure the transaction record is created _before_
+		// intents for the RHS range descriptor or addressing records.
+		// Keep in mind that the BeginTransaction request is injected
+		// to accompany the first write request, but if part of a batch
+		// which spans ranges, the dist sender does not guarantee the
+		// order which parts of the split batch arrive.
+		//
+		// Sending the batch containing only the first write guarantees
+		// the transaction record is written first, preventing cases
+		// where splits are aborted early due to conflicts with meta
+		// intents (see #9265).
+		log.Event(ctx, "updating LHS descriptor")
+		if err := txn.Run(ctx, b); err != nil {
+			return err
+		}
+	}
+
+	// Log the split into the range event log.
+	if err := store.logSplit(ctx, txn, *leftDesc, *rightDesc); err != nil {
+		return err
+	}
+
+	b := txn.NewBatch()
+
+	// Write range descriptor for right hand side of the split.
+	rightDescKey := keys.RangeDescriptorKey(rightDesc.StartKey)
+	if err := updateRangeDescriptor(b, rightDescKey, nil, rightDesc); err != nil {
+		return err
+	}
+
+	// Update range descriptor addressing record(s).
+	if err := splitRangeAddressing(b, rightDesc, leftDesc); err != nil {
+		return err
+	}
+
+	// End the transaction manually, instead of letting RunTransaction
+	// loop do it, in order to provide a split trigger.
+	b.AddRawRequest(&roachpb.EndTransactionRequest{
+		Commit: true,
+		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+			SplitTrigger: &roachpb.SplitTrigger{
+				LeftDesc:  *leftDesc,
+				RightDesc: *rightDesc,
+			},
+		},
+	})
+
+	// Commit txn with final batch (RHS descriptor and meta).
+	log.Event(ctx, "commit txn with batch containing RHS descriptor and meta records")
+	return txn.Run(ctx, b)
+}
+
+func splitTxnStickyUpdateAttempt(
+	ctx context.Context, txn *client.Txn, desc *roachpb.RangeDescriptor, expiration hlc.Timestamp,
+) error {
+	_, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc.StartKey, checkDescsEqual(desc))
+	if err != nil {
+		return err
+	}
+	newDesc := *desc
+	newDesc.StickyBit = &expiration
+
+	b := txn.NewBatch()
+	descKey := keys.RangeDescriptorKey(desc.StartKey)
+	if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
+		return err
+	}
+	if err := updateRangeAddressing(b, &newDesc); err != nil {
+		return err
+	}
+	// End the transaction manually, instead of letting RunTransaction loop
+	// do it, in order to provide a sticky bit trigger.
+	b.AddRawRequest(&roachpb.EndTransactionRequest{
+		Commit: true,
+		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+			StickyBitTrigger: &roachpb.StickyBitTrigger{
+				StickyBit: expiration,
+			},
+		},
+	})
+	return txn.Run(ctx, b)
+}
+
 // adminSplitWithDescriptor divides the range into into two ranges, using
 // either args.SplitKey (if provided) or an internally computed key that aims
 // to roughly equipartition the range by size. The split is done inside of a
@@ -202,33 +362,8 @@ func (r *Replica) adminSplitWithDescriptor(
 		// Even if the range is already split, we should still update the sticky
 		// bit if it has a later expiration time.
 		if desc.GetStickyBit().Less(args.ExpirationTime) {
-			newDesc := *desc
-			newDesc.StickyBit = &args.ExpirationTime
 			err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-				dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
-				if err != nil {
-					return err
-				}
-
-				b := txn.NewBatch()
-				descKey := keys.RangeDescriptorKey(desc.StartKey)
-				if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
-					return err
-				}
-				if err := updateRangeAddressing(b, &newDesc); err != nil {
-					return err
-				}
-				// End the transaction manually, instead of letting RunTransaction loop
-				// do it, in order to provide a sticky bit trigger.
-				b.AddRawRequest(&roachpb.EndTransactionRequest{
-					Commit: true,
-					InternalCommitTrigger: &roachpb.InternalCommitTrigger{
-						StickyBitTrigger: &roachpb.StickyBitTrigger{
-							StickyBit: args.ExpirationTime,
-						},
-					},
-				})
-				return txn.Run(ctx, b)
+				return splitTxnStickyUpdateAttempt(ctx, txn, desc, args.ExpirationTime)
 			})
 			// The ConditionFailedError can occur because the descriptors acting as
 			// expected values in the CPuts used to update the range descriptor are
@@ -246,34 +381,10 @@ func (r *Replica) adminSplitWithDescriptor(
 	log.Event(ctx, "found split key")
 
 	// Create right hand side range descriptor.
-	rightDesc, err := r.store.NewRangeDescriptor(ctx, splitKey, desc.EndKey, desc.Replicas())
+	rightRangeID, err := r.store.AllocateRangeID(ctx)
 	if err != nil {
-		return reply, errors.Errorf("unable to allocate right hand side range descriptor: %s", err)
+		return reply, errors.Wrap(err, "unable to allocate range id for right hand side")
 	}
-
-	// TODO(jeffreyxiao): Remove this check in 20.1.
-	// Note that the client API for splitting has expiration time as
-	// non-nullable, but the internal representation of a sticky bit is nullable
-	// for backwards compatibility. If expiration time is the zero timestamp, we
-	// must be sure not to set the sticky bit to the zero timestamp because the
-	// byte representation of setting the stickyBit to nil is different than
-	// setting it to hlc.Timestamp{}. This check ensures that CPuts would not
-	// fail on older versions.
-	if (args.ExpirationTime != hlc.Timestamp{}) {
-		rightDesc.StickyBit = &args.ExpirationTime
-	}
-
-	// Init updated version of existing range descriptor.
-	leftDesc := *desc
-	leftDesc.IncrementGeneration()
-	r.maybeMarkGenerationComparable(&leftDesc)
-	leftDesc.EndKey = splitKey
-
-	// Set the generation of the right hand side descriptor to match that of the
-	// (updated) left hand side. See the comment on the field for an explanation
-	// of why generations are useful.
-	rightDesc.Generation = leftDesc.Generation
-	r.maybeMarkGenerationComparable(rightDesc)
 
 	var extra string
 	if delayable {
@@ -282,82 +393,10 @@ func (r *Replica) adminSplitWithDescriptor(
 	extra += splitSnapshotWarningStr(r.RangeID, r.RaftStatus())
 
 	log.Infof(ctx, "initiating a split of this range at key %s [r%d] (%s)%s",
-		splitKey.StringWithDirs(nil /* valDirs */, 50 /* maxLen */), rightDesc.RangeID, reason, extra)
+		splitKey.StringWithDirs(nil /* valDirs */, 50 /* maxLen */), rightRangeID, reason, extra)
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		log.Event(ctx, "split closure begins")
-		defer log.Event(ctx, "split closure ends")
-		txn.SetDebugName(splitTxnName)
-		// Update existing range descriptor for left hand side of
-		// split. Note that we mutate the descriptor for the left hand
-		// side of the split first to locate the txn record there.
-		{
-			dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
-			if err != nil {
-				return err
-			}
-
-			b := txn.NewBatch()
-			leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
-			if err := updateRangeDescriptor(b, leftDescKey, dbDescValue, &leftDesc); err != nil {
-				return err
-			}
-			// Commit this batch first to ensure that the transaction record
-			// is created in the right place (split trigger relies on this),
-			// but also to ensure the transaction record is created _before_
-			// intents for the RHS range descriptor or addressing records.
-			// Keep in mind that the BeginTransaction request is injected
-			// to accompany the first write request, but if part of a batch
-			// which spans ranges, the dist sender does not guarantee the
-			// order which parts of the split batch arrive.
-			//
-			// Sending the batch containing only the first write guarantees
-			// the transaction record is written first, preventing cases
-			// where splits are aborted early due to conflicts with meta
-			// intents (see #9265).
-			log.Event(ctx, "updating LHS descriptor")
-			if err := txn.Run(ctx, b); err != nil {
-				return err
-			}
-		}
-
-		// Log the split into the range event log.
-		// TODO(spencer): event logging API should accept a batch
-		// instead of a transaction; there's no reason this logging
-		// shouldn't be done in parallel via the batch with the updated
-		// range addressing.
-		if err := r.store.logSplit(ctx, txn, leftDesc, *rightDesc); err != nil {
-			return err
-		}
-
-		b := txn.NewBatch()
-
-		// Create range descriptor for right hand side of the split.
-		rightDescKey := keys.RangeDescriptorKey(rightDesc.StartKey)
-		if err := updateRangeDescriptor(b, rightDescKey, nil, rightDesc); err != nil {
-			return err
-		}
-
-		// Update range descriptor addressing record(s).
-		if err := splitRangeAddressing(b, rightDesc, &leftDesc); err != nil {
-			return err
-		}
-
-		// End the transaction manually, instead of letting RunTransaction
-		// loop do it, in order to provide a split trigger.
-		b.AddRawRequest(&roachpb.EndTransactionRequest{
-			Commit: true,
-			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
-				SplitTrigger: &roachpb.SplitTrigger{
-					LeftDesc:  leftDesc,
-					RightDesc: *rightDesc,
-				},
-			},
-		})
-
-		// Commit txn with final batch (RHS descriptor and meta).
-		log.Event(ctx, "commit txn with batch containing RHS descriptor and meta records")
-		return txn.Run(ctx, b)
+		return splitTxnAttempt(ctx, r.store, txn, rightRangeID, splitKey, args.ExpirationTime, desc)
 	}); err != nil {
 		// The ConditionFailedError can occur because the descriptors acting
 		// as expected values in the CPuts used to update the left or right
@@ -409,15 +448,16 @@ func (r *Replica) adminUnsplitWithDescriptor(
 	}
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
+		_, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc.StartKey, checkDescsEqual(desc))
 		if err != nil {
 			return err
 		}
 
-		b := txn.NewBatch()
 		newDesc := *desc
 		newDesc.StickyBit = &hlc.Timestamp{}
 		descKey := keys.RangeDescriptorKey(newDesc.StartKey)
+
+		b := txn.NewBatch()
 		if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
 			return err
 		}
@@ -517,23 +557,6 @@ func (r *Replica) AdminMerge(
 ) (roachpb.AdminMergeResponse, *roachpb.Error) {
 	var reply roachpb.AdminMergeResponse
 
-	origLeftDesc := r.Desc()
-	if origLeftDesc.EndKey.Equal(roachpb.RKeyMax) {
-		// Merging the final range doesn't make sense.
-		return reply, roachpb.NewErrorf("cannot merge final range")
-	}
-
-	// Ensure that every current replica of the LHS has been initialized.
-	// Otherwise there is a rare race where the replica GC queue can GC a
-	// replica of the RHS too early. The comment on
-	// TestStoreRangeMergeUninitializedLHSFollower explains the situation in full.
-	if err := waitForReplicasInit(
-		ctx, r.store.cfg.NodeDialer, origLeftDesc.RangeID, origLeftDesc.Replicas().All(),
-	); err != nil {
-		return reply, roachpb.NewError(errors.Wrap(
-			err, "waiting for all left-hand replicas to initialize"))
-	}
-
 	runMergeTxn := func(txn *client.Txn) error {
 		log.Event(ctx, "merge txn begins")
 		txn.SetDebugName(mergeTxnName)
@@ -553,8 +576,30 @@ func (r *Replica) AdminMerge(
 			return err
 		}
 
+		// NB: reads do NOT impact transaction record placement.
+
+		origLeftDesc := r.Desc()
+		if origLeftDesc.EndKey.Equal(roachpb.RKeyMax) {
+			// Merging the final range doesn't make sense.
+			return errors.New("cannot merge final range")
+		}
+
+		_, dbOrigLeftDescValue, err := conditionalGetDescValueFromDB(ctx, txn, origLeftDesc.StartKey, checkDescsEqual(origLeftDesc))
+		if err != nil {
+			return err
+		}
+
+		// Ensure that every current replica of the LHS has been initialized.
+		// Otherwise there is a rare race where the replica GC queue can GC a
+		// replica of the RHS too early. The comment on
+		// TestStoreRangeMergeUninitializedLHSFollower explains the situation in full.
+		if err := waitForReplicasInit(
+			ctx, r.store.cfg.NodeDialer, origLeftDesc.RangeID, origLeftDesc.Replicas().All(),
+		); err != nil {
+			return errors.Wrap(err, "waiting for all left-hand replicas to initialize")
+		}
+
 		// Do a consistent read of the right hand side's range descriptor.
-		// NB: this read does NOT impact transaction record placement.
 		var rightDesc roachpb.RangeDescriptor
 		rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
 		dbRightDescKV, err := txn.Get(ctx, rightDescKey)
@@ -604,7 +649,7 @@ func (r *Replica) AdminMerge(
 			updatedLeftDesc.Generation = rightDesc.Generation
 		}
 		updatedLeftDesc.IncrementGeneration()
-		r.maybeMarkGenerationComparable(&updatedLeftDesc)
+		maybeMarkGenerationComparable(r.ClusterSettings(), &updatedLeftDesc)
 		updatedLeftDesc.EndKey = rightDesc.EndKey
 		log.Infof(ctx, "initiating a merge of %s into this range (%s)", &rightDesc, reason)
 
@@ -613,11 +658,6 @@ func (r *Replica) AdminMerge(
 		// transaction is this conditional put to change the left hand side's
 		// descriptor end key.
 		{
-			dbOrigLeftDescValue, err := conditionalGetDescValueFromDB(ctx, txn, origLeftDesc)
-			if err != nil {
-				return err
-			}
-
 			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(updatedLeftDesc.StartKey)
 			if err := updateRangeDescriptor(
@@ -725,8 +765,7 @@ func (r *Replica) AdminMerge(
 		}
 		if _, canRetry := errors.Cause(err).(*roachpb.TransactionRetryWithProtoRefreshError); !canRetry {
 			if err != nil {
-				return reply, roachpb.NewErrorf("merge of range into %d failed: %s",
-					origLeftDesc.RangeID, err)
+				return reply, roachpb.NewErrorf("merge failed: %s", err)
 			}
 			return reply, nil
 		}
@@ -1154,8 +1193,10 @@ func (r *Replica) atomicReplicationChange(
 		}
 	}
 
-	if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterLearnerSnapshot; fn != nil && fn() {
-		return desc, nil
+	if len(chgs.Additions()) > 0 {
+		if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterLearnerSnapshot; fn != nil && fn() {
+			return desc, nil
+		}
 	}
 
 	for _, target := range chgs.Removals() {
@@ -1302,14 +1343,14 @@ type internalReplicationChange struct {
 	typ    internalChangeType
 }
 
-func execChangeReplicasTxn(
-	ctx context.Context,
-	store *Store,
-	desc *roachpb.RangeDescriptor,
-	reason storagepb.RangeLogEventReason,
-	details string,
-	chgs []internalReplicationChange,
-) (*roachpb.RangeDescriptor, error) {
+type internalReplicationChanges []internalReplicationChange
+
+func (c internalReplicationChanges) leaveJoint() bool { return len(c) == 0 }
+func (c internalReplicationChanges) useJoint() bool   { return len(c) > 1 }
+
+func prepareChangeReplicasTrigger(
+	store *Store, desc *roachpb.RangeDescriptor, chgs internalReplicationChanges,
+) (*roachpb.ChangeReplicasTrigger, error) {
 	updatedDesc := *desc
 	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
 
@@ -1320,12 +1361,12 @@ func execChangeReplicasTxn(
 	}
 
 	var added, removed []roachpb.ReplicaDescriptor
-	if len(chgs) > 0 {
+	if !chgs.leaveJoint() {
 		if desc.Replicas().InAtomicReplicationChange() {
 			return nil, errors.Errorf("must transition out of joint config first: %s", desc)
 		}
 
-		useJoint := len(chgs) > 1
+		useJoint := chgs.useJoint()
 		if fn := store.TestingKnobs().ReplicationAlwaysUseJointConfig; fn != nil && fn() {
 			useJoint = true
 		}
@@ -1407,6 +1448,9 @@ func execChangeReplicasTxn(
 			deprecatedRepDesc = removed[0]
 		}
 		crt = &roachpb.ChangeReplicasTrigger{
+			// NB: populate Desc as well because locally we rely on it being
+			// set.
+			Desc:                      &updatedDesc,
 			DeprecatedChangeType:      deprecatedChangeType,
 			DeprecatedReplica:         deprecatedRepDesc,
 			DeprecatedUpdatedReplicas: updatedDesc.Replicas().All(),
@@ -1423,23 +1467,65 @@ func execChangeReplicasTxn(
 	if _, err := crt.ConfChange(nil); err != nil {
 		return nil, errors.Wrapf(err, "programming error: malformed trigger created from desc %s to %s", desc, &updatedDesc)
 	}
+	return crt, nil
+}
 
-	descKey := keys.RangeDescriptorKey(desc.StartKey)
+func execChangeReplicasTxn(
+	ctx context.Context,
+	store *Store,
+	referenceDesc *roachpb.RangeDescriptor,
+	reason storagepb.RangeLogEventReason,
+	details string,
+	chgs internalReplicationChanges,
+) (*roachpb.RangeDescriptor, error) {
+	var returnDesc *roachpb.RangeDescriptor
+
+	descKey := keys.RangeDescriptorKey(referenceDesc.StartKey)
+
+	check := func(kvDesc *roachpb.RangeDescriptor) bool {
+		if chgs.leaveJoint() {
+			// If there are no changes, we're trying to leave a joint config,
+			// so that's all we care about. But since leaving a joint config
+			// is done opportunistically whenever one is encountered, this is
+			// more likely to race than other operations. So we verify literally
+			// nothing about the descriptor, but once we get the descriptor out
+			// from conditionalGetDescValueFromDB, we'll check if it's in a
+			// joint config and if not, noop.
+			return true
+		}
+		// Otherwise, check that the descriptors are equal.
+		//
+		// TODO(tbg): check that the replica sets are equal only. I was going to
+		// do that but then discovered #40367. Try again in the 20.1 cycle.
+		return checkDescsEqual(referenceDesc)(kvDesc)
+	}
+
 	if err := store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "attempting txn")
 		txn.SetDebugName(replicaChangeTxnName)
-		dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
+		desc, dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, referenceDesc.StartKey, check)
 		if err != nil {
 			return err
 		}
-		log.Infof(ctx, "change replicas (add %v remove %v): existing descriptor %s", added, removed, desc)
+		if chgs.leaveJoint() && !desc.Replicas().InAtomicReplicationChange() {
+			// Nothing to do. See comment in 'check' above for details.
+			returnDesc = desc
+			return nil
+		}
+		// Note that we are now using the descriptor from KV, not the one passed
+		// into this method.
+		crt, err := prepareChangeReplicasTrigger(store, desc, chgs)
+		if err != nil {
+			return err
+		}
+		log.Infof(ctx, "change replicas (add %v remove %v): existing descriptor %s", crt.Added(), crt.Removed(), desc)
 
 		{
 			b := txn.NewBatch()
 
 			// Important: the range descriptor must be the first thing touched in the transaction
 			// so the transaction record is co-located with the range being modified.
-			if err := updateRangeDescriptor(b, descKey, dbDescValue, &updatedDesc); err != nil {
+			if err := updateRangeDescriptor(b, descKey, dbDescValue, crt.Desc); err != nil {
 				return err
 			}
 
@@ -1454,12 +1540,12 @@ func execChangeReplicasTxn(
 			typ      roachpb.ReplicaChangeType
 			repDescs []roachpb.ReplicaDescriptor
 		}{
-			{roachpb.ADD_REPLICA, added},
-			{roachpb.REMOVE_REPLICA, removed},
+			{roachpb.ADD_REPLICA, crt.Added()},
+			{roachpb.REMOVE_REPLICA, crt.Removed()},
 		} {
 			for _, repDesc := range tup.repDescs {
 				if err := store.logChange(
-					ctx, txn, tup.typ, repDesc, updatedDesc, reason, details,
+					ctx, txn, tup.typ, repDesc, *crt.Desc, reason, details,
 				); err != nil {
 					return err
 				}
@@ -1471,7 +1557,7 @@ func execChangeReplicasTxn(
 		b := txn.NewBatch()
 
 		// Update range descriptor addressing record(s).
-		if err := updateRangeAddressing(b, &updatedDesc); err != nil {
+		if err := updateRangeAddressing(b, crt.Desc); err != nil {
 			return err
 		}
 
@@ -1486,16 +1572,20 @@ func execChangeReplicasTxn(
 			return err
 		}
 
+		returnDesc = crt.Desc
 		return nil
 	}); err != nil {
 		log.Event(ctx, err.Error())
-		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
+		// NB: desc may not be the descriptor we actually compared against, but
+		// either way this gives a good idea of what happened which is all it's
+		// supposed to do.
+		if msg, ok := maybeDescriptorChangedError(referenceDesc, err); ok {
 			err = &benignError{errors.New(msg)}
 		}
-		return nil, errors.Wrapf(err, "change replicas of r%d failed", desc.RangeID)
+		return nil, errors.Wrapf(err, "change replicas of r%d failed", referenceDesc.RangeID)
 	}
 	log.Event(ctx, "txn complete")
-	return &updatedDesc, nil
+	return returnDesc, nil
 }
 
 // sendSnapshot sends a snapshot of the replica state to the specified replica.
@@ -1744,6 +1834,29 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 	return true
 }
 
+func checkDescsEqual(desc *roachpb.RangeDescriptor) func(*roachpb.RangeDescriptor) bool {
+	// TODO(jeffreyxiao): This hacky fix ensures that we don't fail the
+	// conditional get because of the ordering of InternalReplicas. Calling
+	// Replicas() will sort the list of InternalReplicas as a side-effect. The
+	// invariant of having InternalReplicas sorted is not maintained in 19.1.
+	// Additionally, in 19.2, it's possible for the in-memory copy of
+	// RangeDescriptor to become sorted from a call to Replicas() without
+	// updating the copy in kv. These two factors makes it possible for the
+	// in-memory copy to be out of sync from the copy in kv. The sorted invariant
+	// of InternalReplicas is used by ReplicaDescriptors.Voters() and
+	// ReplicaDescriptors.Learners().
+	if desc != nil {
+		desc.Replicas() // for sorting side-effect
+	}
+	return func(desc2 *roachpb.RangeDescriptor) bool {
+		if desc2 != nil {
+			desc2.Replicas() // for sorting side-effect
+		}
+
+		return desc.Equal(desc2)
+	}
+}
+
 // conditionalGetDescValueFromDB fetches an encoded RangeDescriptor from kv,
 // checks that it matches the given expectation using proto Equals, and returns
 // the raw fetched roachpb.Value. If the fetched value doesn't match the
@@ -1755,40 +1868,28 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 // then passing the returned *roachpb.Value as the expected value in a CPut does
 // the same thing, but also correctly handles proto equality. See #38308.
 func conditionalGetDescValueFromDB(
-	ctx context.Context, txn *client.Txn, expectation *roachpb.RangeDescriptor,
-) (*roachpb.Value, error) {
-	descKey := keys.RangeDescriptorKey(expectation.StartKey)
+	ctx context.Context,
+	txn *client.Txn,
+	startKey roachpb.RKey,
+	check func(*roachpb.RangeDescriptor) bool,
+) (*roachpb.RangeDescriptor, *roachpb.Value, error) {
+	descKey := keys.RangeDescriptorKey(startKey)
 	existingDescKV, err := txn.Get(ctx, descKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "fetching current range descriptor value")
+		return nil, nil, errors.Wrap(err, "fetching current range descriptor value")
 	}
 	var existingDesc *roachpb.RangeDescriptor
 	if existingDescKV.Value != nil {
 		existingDesc = &roachpb.RangeDescriptor{}
 		if err := existingDescKV.Value.GetProto(existingDesc); err != nil {
-			return nil, errors.Wrap(err, "decoding current range descriptor value")
+			return nil, nil, errors.Wrap(err, "decoding current range descriptor value")
 		}
 	}
-	// TODO(jeffreyxiao): This hacky fix ensures that we don't fail the
-	// conditional get because of the ordering of InternalReplicas. Calling
-	// Replicas() will sort the list of InternalReplicas as a side-effect. The
-	// invariant of having InternalReplicas sorted is not maintained in 19.1.
-	// Additionally, in 19.2, it's possible for the in-memory copy of
-	// RangeDescriptor to become sorted from a call to Replicas() without
-	// updating the copy in kv. These two factors makes it possible for the
-	// in-memory copy to be out of sync from the copy in kv. The sorted invariant
-	// of InternalReplicas is used by ReplicaDescriptors.Voters() and
-	// ReplicaDescriptors.Learners().
-	if existingDesc != nil {
-		existingDesc.Replicas() // for sorting side-effect
+
+	if !check(existingDesc) {
+		return nil, nil, &roachpb.ConditionFailedError{ActualValue: existingDescKV.Value}
 	}
-	if expectation != nil {
-		expectation.Replicas() // for sorting side-effect
-	}
-	if !existingDesc.Equal(expectation) {
-		return nil, &roachpb.ConditionFailedError{ActualValue: existingDescKV.Value}
-	}
-	return existingDescKV.Value, nil
+	return existingDesc, existingDescKV.Value, nil
 }
 
 // updateRangeDescriptor adds a ConditionalPut on the range descriptor. The
@@ -2083,6 +2184,7 @@ func removeTargetFromSlice(
 func removeLearners(
 	ctx context.Context, db *client.DB, desc *roachpb.RangeDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
+	origDesc := desc
 	learners := desc.Replicas().Learners()
 	if len(learners) == 0 {
 		return desc, nil
@@ -2092,13 +2194,20 @@ func removeLearners(
 		targets[i].NodeID = learners[i].NodeID
 		targets[i].StoreID = learners[i].StoreID
 	}
+	chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, targets...)
 	log.VEventf(ctx, 2, `removing learner replicas %v from %v`, targets, desc)
-	newDesc, err := db.AdminChangeReplicas(ctx, desc.StartKey, *desc,
-		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, targets...))
-	if err != nil {
-		return nil, errors.Wrapf(err, `removing learners from %s`, desc)
+	// NB: unroll the removals because at the time of writing, we can't atomically
+	// remove multiple learners. This will be fixed in:
+	//
+	// https://github.com/cockroachdb/cockroach/pull/40268
+	for i := range chgs {
+		var err error
+		desc, err = db.AdminChangeReplicas(ctx, desc.StartKey, *desc, chgs[i:i+1])
+		if err != nil {
+			return nil, errors.Wrapf(err, `removing learners from %s`, origDesc)
+		}
 	}
-	return newDesc, nil
+	return desc, nil
 }
 
 // adminScatter moves replicas and leaseholders for a selection of ranges.
@@ -2166,8 +2275,8 @@ func (r *Replica) adminScatter(
 
 // maybeMarkGenerationComparable sets GenerationComparable if the cluster is at
 // a high enough version such that GenerationComparable won't be lost.
-func (r *Replica) maybeMarkGenerationComparable(desc *roachpb.RangeDescriptor) {
-	if r.store.ClusterSettings().Version.IsActive(cluster.VersionGenerationComparable) {
+func maybeMarkGenerationComparable(st *cluster.Settings, desc *roachpb.RangeDescriptor) {
+	if st.Version.IsActive(cluster.VersionGenerationComparable) {
 		desc.GenerationComparable = proto.Bool(true)
 	}
 }
