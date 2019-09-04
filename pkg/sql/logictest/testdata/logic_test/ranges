@@ -186,7 +186,7 @@ CREATE INDEX idx on t1(v1,v2,v3) INTERLEAVE IN PARENT t(v1,v2)
 
 # We expect the splits for the index to be the same as the splits for t.
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t1@idx] 
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t1@idx]
 ----
 start_key      end_key        replicas  lease_holder
 NULL           /1             {1}       1
@@ -356,3 +356,45 @@ start_key                          start_pretty                   end_key       
 [196 137 246 123]                  /Table/60/1/123                Ċ                                  /Table/60/2                    d              c                 ·           {1}       1
 Ċ                                  /Table/60/2                    [196 138 136]                      /Table/60/2/0                  d              c                 c_i_idx     {1}       1
 [196 138 136]                      /Table/60/2/0                  [255 255]                          /Max                           d              c                 c_i_idx     {1}       1
+
+
+# Due to aynschronous splitting of ranges, we cannot gaurantee the output of the show ranges from database command.
+# The test below just ensure that the translation occurs correctly.
+# regression tests for #40450
+statement ok
+CREATE DATABASE "show ranges"
+
+statement ok
+CREATE TABLE "show ranges".t (x INT PRIMARY KEY)
+
+statement ok
+SHOW RANGES FROM DATABASE "show ranges"
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGES FROM TABLE "show ranges".t]
+----
+NULL NULL
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGES FROM INDEX "show ranges".t@primary]
+----
+NULL NULL
+
+statement ok
+CREATE DATABASE """"
+
+statement ok
+CREATE TABLE """".t (x INT PRIMARY KEY)
+
+statement ok
+SHOW RANGES FROM DATABASE """"
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGES FROM TABLE """".t]
+----
+NULL NULL
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGES FROM INDEX """".t@primary]
+----
+NULL NULL
