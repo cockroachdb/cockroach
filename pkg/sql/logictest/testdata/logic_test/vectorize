@@ -279,11 +279,11 @@ statement ok
 RESET vectorize
 
 # AND expressions.
-query II
-SELECT a, b FROM a WHERE a < 2 AND b > 0 AND a * b != 3
+query IIBB
+SELECT a, b, a < 2 AND b > 0 AND a * b != 3, a < 2 AND b < 2 FROM a WHERE a < 2 AND b > 0 AND a * b != 3
 ----
-0  1
-1  2
+0  1  true  true
+1  2  true  false
 
 statement ok
 CREATE TABLE b (a INT, b STRING, PRIMARY KEY (b,a))

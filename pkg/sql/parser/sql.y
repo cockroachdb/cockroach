@@ -1860,7 +1860,7 @@ import_format:
 //
 // Formats:
 //    CSV
-//    MYSQLOUTFILE
+//    DELIMITED
 //    MYSQLDUMP
 //    PGCOPY
 //    PGDUMP
