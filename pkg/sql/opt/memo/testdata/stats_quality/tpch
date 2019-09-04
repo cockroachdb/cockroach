@@ -5965,10 +5965,10 @@ sort
            │    │    ├── key: (12,13)
            │    │    └── project
            │    │         ├── save-table-name: q20_project_7
-           │    │         ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) p_partkey:17(int!null) p_name:18(varchar!null)
-           │    │         ├── stats: [rows=37007.6247, distinct(12)=22217.3354, null(12)=0, distinct(13)=9682.13834, null(13)=0, distinct(17)=22217.3354, null(17)=0, distinct(18)=17915.9531, null(18)=0]
+           │    │         ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) p_partkey:17(int!null)
+           │    │         ├── stats: [rows=37007.6247, distinct(12)=22217.3354, null(12)=0, distinct(13)=9682.13834, null(13)=0, distinct(17)=22217.3354, null(17)=0]
            │    │         ├── key: (13,17)
-           │    │         ├── fd: (17)-->(18), (12)==(17), (17)==(12)
+           │    │         ├── fd: (12)==(17), (17)==(12)
            │    │         └── inner-join (hash)
            │    │              ├── save-table-name: q20_inner_join_8
            │    │              ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int!null) p_partkey:17(int!null) p_name:18(varchar!null) sum:42(float)
@@ -6146,13 +6146,11 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 stats table=q20_project_7
 ----
 column_names  row_count  distinct_count  null_count
-{p_name}      5833       2106            0
 {p_partkey}   5833       2106            0
 {ps_partkey}  5833       2106            0
 {ps_suppkey}  5833       4434            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_name}      37008.00       6.34 <==       17916.00            8.51 <==            0.00            1.00
 {p_partkey}   37008.00       6.34 <==       22217.00            10.55 <==           0.00            1.00
 {ps_partkey}  37008.00       6.34 <==       22217.00            10.55 <==           0.00            1.00
 {ps_suppkey}  37008.00       6.34 <==       9682.00             2.18 <==            0.00            1.00

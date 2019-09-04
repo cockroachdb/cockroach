@@ -1054,6 +1054,18 @@ func (c *CustomFuncs) GroupingAndConstCols(
 	return result
 }
 
+// GroupingOutputCols returns the output columns of a GroupBy, ScalarGroupBy, or
+// DistinctOn expression.
+func (c *CustomFuncs) GroupingOutputCols(
+	grouping *memo.GroupingPrivate, aggs memo.AggregationsExpr,
+) opt.ColSet {
+	result := grouping.GroupingCols.Copy()
+	for i := range aggs {
+		result.Add(aggs[i].Col)
+	}
+	return result
+}
+
 // GroupingColsAreKey returns true if the input expression's grouping columns
 // form a strict key for its output rows. A strict key means that any two rows
 // will have unique key column values. Nulls are treated as equal to one another
