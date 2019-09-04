@@ -293,21 +293,25 @@ func (r *Replica) handleComputeChecksumResult(ctx context.Context, cc *storagepb
 	r.computeChecksumPostApply(ctx, *cc)
 }
 
-func (r *Replica) handleChangeReplicasResult(ctx context.Context, chng *storagepb.ChangeReplicas) {
-	storeID := r.store.StoreID()
-	var found bool
-	for _, rDesc := range chng.Replicas() {
-		if rDesc.StoreID == storeID {
-			found = true
-			break
-		}
+func (r *Replica) handleChangeReplicasResult(
+	ctx context.Context, removed bool, chng *storagepb.ChangeReplicas,
+) {
+	// If this command removes us then we need to go through the process of
+	// removing our replica from the store. After this method returns the code
+	// should roughly return all the way up to whoever called handleRaftReady
+	// and this Replica should never be heard from again.
+	if !removed {
+		return
 	}
-	if !found {
-		// This wants to run as late as possible, maximizing the chances
-		// that the other nodes have finished this command as well (since
-		// processing the removal from the queue looks up the Range at the
-		// lease holder, being too early here turns this into a no-op).
-		r.store.replicaGCQueue.AddAsync(ctx, r, replicaGCPriorityRemoved)
+	if log.V(1) {
+		log.Infof(ctx, "removing replica due to ChangeReplicasTrigger: %v", chng)
+	}
+	// TODO(ajwerner): the data should already be destroyed at this point.
+	// destroying the data again seems crazy.
+	if err := r.store.removeReplicaImpl(ctx, r, chng.Desc.NextReplicaID, RemoveOptions{
+		DestroyData: true, // We already destroyed the data when the batch committed.
+	}); err != nil {
+		log.Fatalf(ctx, "failed to remove replica: %v", err)
 	}
 }
 

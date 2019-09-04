@@ -3314,7 +3314,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	// different replicaID than the split trigger expects.
 	add := func() {
 		_, err := tc.AddReplicas(kRHS, tc.Target(1))
-		if !testutils.IsError(err, `snapshot intersects existing range`) {
+		if !testutils.IsError(err, `snapshot intersects existing range|was not found on`) {
 			t.Fatalf(`expected snapshot intersects existing range" error got: %+v`, err)
 		}
 	}
@@ -3361,7 +3361,8 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if desc := repl.Desc(); !descLHS.Equal(desc) {
+		if desc := repl.Desc(); desc.IsInitialized() && !descLHS.Equal(desc) {
+			require.NoError(t, store.ManualReplicaGC(repl))
 			return errors.Errorf("expected %s got %s", &descLHS, desc)
 		}
 		return nil

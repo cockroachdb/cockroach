@@ -429,13 +429,25 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 		require.Contains(t, tracing.FormatRecordedSpans(trace), msg)
 		return tc.LookupRangeOrFatal(t, scratchStartKey)
 	}
-
 	desc := checkNoGC()
 	// Make sure it didn't collect the learner.
 	require.NotEmpty(t, desc.Replicas().Learners())
 
 	// Now get the range into a joint config.
 	tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(1)) // remove learner
+	// We need to wait until the range has been GC'd on server 1 before
+	// we know that it can be safely added again.
+	testutils.SucceedsSoon(t, func() error {
+		s := tc.Server(1)
+		firstStore, err := s.GetStores().(*storage.Stores).GetStore(s.GetFirstStoreID())
+		require.NoError(t, err)
+		repl := firstStore.LookupReplica(roachpb.RKey(scratchStartKey))
+		if repl != nil {
+			return fmt.Errorf("replica has not yet been GC'd")
+		}
+		return nil
+	})
+
 	ltk.withStopAfterJointConfig(func() {
 		desc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 		require.Len(t, desc.Replicas().Filter(predIncoming), 1, desc)
@@ -549,7 +561,7 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 	// that the descriptor has changed since the AdminChangeReplicas command
 	// started.
 	close(blockSnapshotsCh)
-	if err := g.Wait(); !testutils.IsError(err, `descriptor changed`) {
+	if err := g.Wait(); !testutils.IsError(err, `descriptor changed|raft group deleted`) {
 		t.Fatalf(`expected "descriptor changed" error got: %+v`, err)
 	}
 	desc = tc.LookupRangeOrFatal(t, scratchStartKey)

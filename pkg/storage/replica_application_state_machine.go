@@ -375,6 +375,9 @@ type replicaAppBatch struct {
 	// triggered a migration to the replica applied state key. If so, this
 	// migration will be performed when the application batch is committed.
 	migrateToAppliedStateKey bool
+	// changeRemovesReplica tracks whether the command in the batch (there must
+	// be only one) removes this replica from the range.
+	changeRemovesReplica bool
 
 	// Statistics.
 	entries      int
@@ -514,10 +517,53 @@ func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCm
 	return nil
 }
 
+// changeRemovesStore returns true if any of the removals in this change have storeID.
+func changeRemovesStore(
+	desc *roachpb.RangeDescriptor, change *storagepb.ChangeReplicas, storeID roachpb.StoreID,
+) bool {
+	_, existsInDesc := desc.GetReplicaDescriptor(storeID)
+	// NB: if we're catching up from a preemptive snapshot then we won't
+	// exist in the current descriptor.
+	if !existsInDesc {
+		return false
+	}
+	_, existsInChange := change.Desc.GetReplicaDescriptor(storeID)
+	return !existsInChange
+}
+
 // runPreApplyTriggers runs any triggers that must fire before a command is
 // applied. It may modify the command's ReplicatedEvalResult.
 func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *replicatedCmd) error {
 	res := cmd.replicatedResult()
+
+	// changeReplicasPreApply detects if this command will remove us from the range.
+	// If so we delete stage the removal of all of our range data into this batch.
+	// we'll complete the removal when it commits.
+	if change := res.ChangeReplicas; change != nil &&
+		changeRemovesStore(b.state.Desc, change, b.r.store.StoreID()) {
+		// Delete all of the local data. We're going to delete this hard state too.
+		// In order for this to be safe	we need code above this to promise that we're
+		// never going to write hard state in response to a message for a later
+		// replica (with a different replica ID) to this range state.
+		// Furthermore we mark the replica as destroyed so that new commands are not
+		// accepted. The replica will be destroyed in handleChangeReplicas.
+		b.r.mu.Lock()
+		b.r.mu.destroyStatus.Set(
+			roachpb.NewRangeNotFoundError(b.r.RangeID, b.r.store.StoreID()),
+			destroyReasonRemovalPending)
+		b.r.mu.Unlock()
+		b.changeRemovesReplica = true
+		if err := b.r.preDestroyRaftMuLocked(
+			ctx,
+			b.r.Engine(),
+			b.batch,
+			change.Desc.NextReplicaID,
+			clearAll,
+			true, /* mustClearRange */
+		); err != nil {
+			return err
+		}
+	}
 
 	// AddSSTable ingestions run before the actual batch gets written to the
 	// storage engine. This makes sure that when the Raft command is applied,
@@ -560,14 +606,26 @@ func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *replicat
 	if merge := res.Merge; merge != nil {
 		// Merges require the subsumed range to be atomically deleted when the
 		// merge transaction commits.
+
+		// TODO(ajwerner): we know we're going to get something here for the right
+		// hand side because we've acquired the merge lock. The troubling case is
+		// if we got a preemptive snapshot and are catching up across a merge.
+		// In this case we have no guarantee that the right range will exist or
+		// have the right shape (it may itself split or merge before getting
+		// merged into this one).
+
+		// If our range currently has a non-zero replica ID then we know we're
+		// safe to commit this merge because of the invariants provided to us
+		// by the merge protocol. Namely if this committed we know that if the
+		// command committed then all of the replicas in the range descriptor
+		// are collocated when this command commits.
 		rhsRepl, err := b.r.store.GetReplica(merge.RightDesc.RangeID)
 		if err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to get replica for merge")
 		}
-		const rangeIDLocalOnly = true
 		const mustClearRange = false
 		if err := rhsRepl.preDestroyRaftMuLocked(
-			ctx, b.batch, b.batch, merge.RightDesc.NextReplicaID, rangeIDLocalOnly, mustClearRange,
+			ctx, b.batch, b.batch, merge.RightDesc.NextReplicaID, clearRangeIDLocalOnly, mustClearRange,
 		); err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to destroy range before merge")
 		}
@@ -862,9 +920,14 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		// Some tests (TestRangeStatsInit) assumes that once the store has started
 		// and the first range has a lease that there will not be a later hard-state.
 		if shouldAssert {
+			sm.r.mu.Lock()
+			// Ensure we haven't been removed, if we have then return immediately.
+			if sm.r.mu.destroyStatus.Removed() {
+				sm.r.mu.Unlock()
+				return nil, apply.ErrRemoved
+			}
 			// Assert that the on-disk state doesn't diverge from the in-memory
 			// state as a result of the side effects.
-			sm.r.mu.Lock()
 			sm.r.assertStateLocked(ctx, sm.r.store.Engine())
 			sm.r.mu.Unlock()
 			sm.stats.stateAssertions++
@@ -995,7 +1058,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	}
 
 	if rResult.ChangeReplicas != nil {
-		sm.r.handleChangeReplicasResult(ctx, rResult.ChangeReplicas)
+		sm.r.handleChangeReplicasResult(ctx, sm.batch.changeRemovesReplica, rResult.ChangeReplicas)
 		rResult.ChangeReplicas = nil
 	}
 

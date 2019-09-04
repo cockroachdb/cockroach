@@ -158,14 +158,6 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	return nil
 }
 
-func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.setReplicaIDRaftMuLockedMuLocked(replicaID)
-}
-
 func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) error {
 	if r.mu.replicaID == replicaID {
 		// The common case: the replica ID is unchanged.
@@ -183,11 +175,13 @@ func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) 
 	if r.mu.replicaID > replicaID {
 		return errors.Errorf("replicaID cannot move backwards from %d to %d", r.mu.replicaID, replicaID)
 	}
-
-	if r.mu.destroyStatus.reason == destroyReasonRemovalPending {
-		// An earlier incarnation of this replica was removed, but apparently it has been re-added
-		// now, so reset the status.
-		r.mu.destroyStatus.Reset()
+	ctx := r.AnnotateCtx(context.TODO())
+	if r.mu.replicaID != 0 && replicaID != 0 {
+		log.Fatalf(ctx, "cannot change replica ID: have %d, trying to set to %d", r.mu.replicaID, replicaID)
+	}
+	if r.mu.destroyStatus.RemovalPending() {
+		// This replica has been marked for removal and we're trying to resurrect it.
+		log.Fatalf(ctx, "cannot resurect replica %d", r.mu.replicaID)
 	}
 
 	// if r.mu.replicaID != 0 {
@@ -220,24 +214,12 @@ func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) 
 		return errors.Wrap(err, "while initializing sideloaded storage")
 	}
 
-	previousReplicaID := r.mu.replicaID
 	r.mu.replicaID = replicaID
+	r.mu.minReplicaID = replicaID + 1
 
-	if replicaID >= r.mu.minReplicaID {
-		r.mu.minReplicaID = replicaID + 1
-	}
 	// Reset the raft group to force its recreation on next usage.
-	r.mu.internalRaftGroup = nil
-
-	// If there was a previous replica, repropose its pending commands under
-	// this new incarnation.
-	if previousReplicaID != 0 {
-		if log.V(1) {
-			log.Infof(r.AnnotateCtx(context.TODO()), "changed replica ID from %d to %d",
-				previousReplicaID, replicaID)
-		}
-		// repropose all pending commands under new replicaID.
-		r.refreshProposalsLocked(0, reasonReplicaIDChanged)
+	if r.mu.internalRaftGroup != nil {
+		log.Fatalf(ctx, "somehow had an initialized raft group on a zero valued replica")
 	}
 
 	return nil
@@ -270,8 +252,9 @@ func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 	// If this replica hasn't initialized the Raft group, create it and
 	// unquiesce and wake the leader to ensure the replica comes up to date.
 	initialized := r.mu.internalRaftGroup != nil
+	removed := !r.mu.destroyStatus.IsAlive()
 	r.mu.RUnlock()
-	if initialized {
+	if initialized || removed {
 		return
 	}
 

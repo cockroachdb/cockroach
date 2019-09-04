@@ -59,8 +59,9 @@ type processCallback func(error)
 // A replicaItem holds a replica and metadata about its queue state and
 // processing state.
 type replicaItem struct {
-	value roachpb.RangeID
-	seq   int // enforce FIFO order for equal priorities
+	value     roachpb.RangeID
+	replicaID roachpb.ReplicaID
+	seq       int // enforce FIFO order for equal priorities
 
 	// fields used when a replicaItem is enqueued in a priority queue.
 	priority float64
@@ -180,6 +181,7 @@ func shouldQueueAgain(now, last hlc.Timestamp, minInterval time.Duration) (bool,
 // extraction. Establish a sane interface and use that.
 type replicaInQueue interface {
 	AnnotateCtx(context.Context) context.Context
+	ReplicaID() roachpb.ReplicaID
 	StoreID() roachpb.StoreID
 	GetRangeID() roachpb.RangeID
 	IsInitialized() bool
@@ -487,7 +489,7 @@ func (h baseQueueHelper) MaybeAdd(ctx context.Context, repl replicaInQueue, now 
 }
 
 func (h baseQueueHelper) Add(ctx context.Context, repl replicaInQueue, prio float64) {
-	_, err := h.bq.addInternal(ctx, repl.Desc(), prio)
+	_, err := h.bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), prio)
 	if err != nil && log.V(1) {
 		log.Infof(ctx, "during Add: %s", err)
 	}
@@ -595,7 +597,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	if !should {
 		return
 	}
-	if _, err := bq.addInternal(ctx, repl.Desc(), priority); !isExpectedQueueError(err) {
+	if _, err := bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority); !isExpectedQueueError(err) {
 		log.Errorf(ctx, "unable to add: %+v", err)
 	}
 }
@@ -612,7 +614,7 @@ func (bq *baseQueue) requiresSplit(cfg *config.SystemConfig, repl replicaInQueue
 // the replica is already queued at a lower priority, updates the existing
 // priority. Expects the queue lock to be held by caller.
 func (bq *baseQueue) addInternal(
-	ctx context.Context, desc *roachpb.RangeDescriptor, priority float64,
+	ctx context.Context, desc *roachpb.RangeDescriptor, replicaID roachpb.ReplicaID, priority float64,
 ) (bool, error) {
 	// NB: this is intentionally outside of bq.mu to avoid having to consider
 	// lock ordering constraints.
@@ -665,7 +667,7 @@ func (bq *baseQueue) addInternal(
 	if log.V(3) {
 		log.Infof(ctx, "adding: priority=%0.3f", priority)
 	}
-	item = &replicaItem{value: desc.RangeID, priority: priority}
+	item = &replicaItem{value: desc.RangeID, replicaID: replicaID, priority: priority}
 	bq.addLocked(item)
 
 	// If adding this replica has pushed the queue past its maximum size,
@@ -1169,7 +1171,9 @@ func (bq *baseQueue) pop() replicaInQueue {
 
 		repl, _ := bq.getReplica(item.value)
 		if repl != nil {
-			return repl
+			if item.replicaID == 0 || item.replicaID == repl.ReplicaID() {
+				return repl
+			}
 		}
 
 		// Replica not found, remove from set and try again.
