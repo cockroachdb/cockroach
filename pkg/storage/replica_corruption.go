@@ -24,6 +24,9 @@ import (
 // decide on an error-by-error basis whether the corruption is limited to the
 // range, store, node or cluster with corresponding actions taken.
 //
+// Despite the fatal log call below this message we still return for the
+// sake of testing.
+//
 // TODO(d4l3k): when marking a Replica corrupt, must subtract its stats from
 // r.store.metrics. Errors which happen between committing a batch and sending
 // a stats delta from the store are going to be particularly tricky and the
@@ -32,14 +35,34 @@ import (
 // to just recompute its stats in the background when one occurs.
 func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roachpb.Error {
 	if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-
-		log.Errorf(ctx, "stalling replica due to: %s", cErr.ErrorMsg)
-		cErr.Processed = true
-		r.mu.destroyStatus.Set(cErr, destroyReasonRemoved)
-		log.Fatalf(ctx, "replica is corrupted: %s", cErr)
-		return roachpb.NewError(cErr)
+		r.raftMu.Lock()
+		defer r.raftMu.Unlock()
+		return r.setCorruptRaftMuLocked(ctx, cErr)
 	}
 	return pErr
+}
+
+// maybeSetCorruptRaftMuLocked exists for the sake of testing to enable
+// injecting corruption errors underneath raft with a ReplicaCorruptionError
+// in a TestingApplyFilter
+func (r *Replica) maybeSetCorruptRaftMuLocked(
+	ctx context.Context, pErr *roachpb.Error,
+) (_ *roachpb.Error, setCorrupt bool) {
+	if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
+		return r.setCorruptRaftMuLocked(ctx, cErr), true
+	}
+	return pErr, false
+}
+
+func (r *Replica) setCorruptRaftMuLocked(
+	ctx context.Context, cErr *roachpb.ReplicaCorruptionError,
+) *roachpb.Error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	log.ErrorfDepth(ctx, 1, "stalling replica due to: %s", cErr.ErrorMsg)
+	cErr.Processed = true
+	r.mu.destroyStatus.Set(cErr, destroyReasonRemoved)
+	log.FatalfDepth(ctx, 1, "replica is corrupted: %s", cErr)
+	return roachpb.NewError(cErr)
 }

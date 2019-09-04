@@ -48,6 +48,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 func strToValue(s string) *roachpb.Value {
@@ -2132,6 +2133,417 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 			gotSuccess = true
 		}
 	}
+}
+
+// TestReplicaTombstone ensures that tombstones are written when we expect
+// them to be. Tombstones are laid down when replicas are removed.
+// Replicas are removed for several reasons:
+//
+//  (1)   In response to a ChangeReplicasTrigger which removes it.
+//  (2)   In response to a ReplicaTooOldError from a sent raft message.
+//  (3)   Due to the replica GC queue detecting a replica is not in the range.
+//  (3.1) When the replica detects the range has been merged away.
+//  (4)   Due to a raft message addressed to a newer replica ID.
+//  (4.1) When the older replica is not initialized.
+//  (5)   Due to a merge.
+//  (6)   Due to snapshot which subsumes a range.
+//
+// This test creates all of these scenarios and ensures that tombstones are
+// written at sane values.
+func TestReplicaTombstone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Run("(1) ChangeReplicasTrigger", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+					DisableReplicaGCQueue: true,
+				}},
+			},
+			ReplicationMode: base.ReplicationManual,
+		})
+		defer tc.Stopper().Stop(ctx)
+
+		key := tc.ScratchRange(t)
+		require.NoError(t, tc.WaitForSplitAndInitialization(key))
+		desc, err := tc.LookupRange(key)
+		require.NoError(t, err)
+		rangeID := desc.RangeID
+		tc.AddReplicasOrFatal(t, key, tc.Target(1))
+		// Partition node 2 from receiving responses but not requests.
+		// This will lead to it applying the ChangeReplicasTrigger which removes
+		// it rather than receiving a ReplicaTooOldError.
+		store, _ := getFirstStoreReplica(t, tc.Server(1), key)
+		funcs := noopRaftHandlerFuncs()
+		funcs.dropResp = func(*storage.RaftMessageResponse) bool {
+			return true
+		}
+		tc.Servers[1].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
+			rangeID:                    desc.RangeID,
+			RaftMessageHandler:         store,
+			unreliableRaftHandlerFuncs: funcs,
+		})
+		tc.RemoveReplicasOrFatal(t, key, tc.Target(1))
+		tombstone := waitForTombstone(t, store.Engine(), rangeID)
+		require.Equal(t, roachpb.ReplicaID(3), tombstone.NextReplicaID)
+	})
+	t.Run("(2) ReplicaTooOldError", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				RaftConfig: base.RaftConfig{
+					// Make the tick interval short so we don't need to wait too long for
+					// the partitioned node to time out but increase the lease timeout
+					// so expiration-based leases still work.
+					RaftTickInterval:                        time.Millisecond,
+					RangeLeaseRaftElectionTimeoutMultiplier: 10000,
+				},
+				Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+					DisableReplicaGCQueue: true,
+				}},
+			},
+			ReplicationMode: base.ReplicationManual,
+		})
+		defer tc.Stopper().Stop(ctx)
+
+		key := tc.ScratchRange(t)
+		require.NoError(t, tc.WaitForSplitAndInitialization(key))
+		desc, err := tc.LookupRange(key)
+		require.NoError(t, err)
+		rangeID := desc.RangeID
+		tc.AddReplicasOrFatal(t, key, tc.Target(1), tc.Target(2))
+		require.NoError(t,
+			tc.WaitForVoters(key, tc.Target(1), tc.Target(2)))
+		store, repl := getFirstStoreReplica(t, tc.Server(2), key)
+		// Partition the range such that it hears responses but does not hear
+		// requests. It should destroy the local replica due to a
+		// ReplicaTooOldError.
+		sawTooOld := make(chan struct{}, 1)
+		raftFuncs := noopRaftHandlerFuncs()
+		raftFuncs.dropResp = func(resp *storage.RaftMessageResponse) bool {
+			if pErr, ok := resp.Union.GetValue().(*roachpb.Error); ok {
+				if _, isTooOld := pErr.GetDetail().(*roachpb.ReplicaTooOldError); isTooOld {
+					select {
+					case sawTooOld <- struct{}{}:
+					default:
+					}
+				}
+			}
+			return false
+		}
+		raftFuncs.dropReq = func(req *storage.RaftMessageRequest) bool {
+			return req.ToReplica.StoreID == store.StoreID()
+		}
+		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
+			rangeID:                    desc.RangeID,
+			RaftMessageHandler:         store,
+			unreliableRaftHandlerFuncs: raftFuncs,
+		})
+		tc.RemoveReplicasOrFatal(t, key, tc.Target(2))
+		testutils.SucceedsSoon(t, func() error {
+			repl.UnquiesceAndWakeLeader()
+			if len(sawTooOld) == 0 {
+				return errors.New("still haven't seen ReplicaTooOldError")
+			}
+			return nil
+		})
+		// Wait until we're sure that the replica has seen ReplicaTooOld,
+		// then go look for the tombstone.
+		<-sawTooOld
+		tombstone := waitForTombstone(t, store.Engine(), rangeID)
+		require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
+	})
+	t.Run("(3) ReplicaGCQueue", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+					DisableReplicaGCQueue: true,
+				}},
+			},
+			ReplicationMode: base.ReplicationManual,
+		})
+		defer tc.Stopper().Stop(ctx)
+
+		key := tc.ScratchRange(t)
+		require.NoError(t, tc.WaitForSplitAndInitialization(key))
+		desc, err := tc.LookupRange(key)
+		require.NoError(t, err)
+		rangeID := desc.RangeID
+		tc.AddReplicasOrFatal(t, key, tc.Target(1), tc.Target(2))
+		// Partition node 2 from receiving any raft messages.
+		// It will never find out it has been removed. We'll remove it
+		// with a manual replica GC.
+		store, _ := getFirstStoreReplica(t, tc.Server(2), key)
+		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
+			rangeID:            desc.RangeID,
+			RaftMessageHandler: store,
+		})
+		tc.RemoveReplicasOrFatal(t, key, tc.Target(2))
+		repl, err := store.GetReplica(desc.RangeID)
+		require.NoError(t, err)
+		require.NoError(t, store.ManualReplicaGC(repl))
+		tombstone := waitForTombstone(t, store.Engine(), rangeID)
+		require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
+	})
+	// This case also detects the tombstone for nodes which processed the merge.
+	t.Run("(3.1) (5) replica GC queue and merge", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+					DisableReplicaGCQueue: true,
+				}},
+			},
+			ReplicationMode: base.ReplicationManual,
+		})
+		defer tc.Stopper().Stop(ctx)
+
+		key := tc.ScratchRange(t)
+		require.NoError(t, tc.WaitForSplitAndInitialization(key))
+		tc.AddReplicasOrFatal(t, key, tc.Target(1))
+		keyA := append(key[:len(key):len(key)], 'a')
+		_, desc, err := tc.SplitRange(keyA)
+		require.NoError(t, err)
+		require.NoError(t, tc.WaitForSplitAndInitialization(keyA))
+		tc.AddReplicasOrFatal(t, key, tc.Target(3))
+		tc.AddReplicasOrFatal(t, keyA, tc.Target(2))
+		rangeID := desc.RangeID
+		// Partition node 2 from all raft communication.
+		store, _ := getFirstStoreReplica(t, tc.Server(2), keyA)
+		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
+			rangeID:            desc.RangeID,
+			RaftMessageHandler: store,
+		})
+
+		// We'll move the range from server 2 to 3 and merge key and keyA.
+		// Server 2 won't hear about any of that.
+		tc.RemoveReplicasOrFatal(t, keyA, tc.Target(2))
+		tc.AddReplicasOrFatal(t, keyA, tc.Target(3))
+		require.NoError(t, tc.WaitForSplitAndInitialization(keyA))
+		require.NoError(t, tc.Server(0).DB().AdminMerge(ctx, key))
+		// Run replica GC on server 2.
+		repl, err := store.GetReplica(desc.RangeID)
+		require.NoError(t, err)
+		require.NoError(t, store.ManualReplicaGC(repl))
+		// Verify the tombstone generated from replica GC of a merged range.
+		tombstone := waitForTombstone(t, store.Engine(), rangeID)
+		require.Equal(t, roachpb.ReplicaID(math.MaxInt32), tombstone.NextReplicaID)
+		// Verify the tombstone generated from processing a merge trigger.
+		store3, _ := getFirstStoreReplica(t, tc.Server(0), key)
+		tombstone = waitForTombstone(t, store3.Engine(), rangeID)
+		require.Equal(t, roachpb.ReplicaID(math.MaxInt32), tombstone.NextReplicaID)
+	})
+	t.Run("(4) (4.1) raft messages to newer replicaID ", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				RaftConfig: base.RaftConfig{
+					// Make the tick interval short so we don't need to wait too long
+					// for a heartbeat to be sent. Increase the election timeout so
+					// expiration based leases still work.
+					RaftTickInterval:                        time.Millisecond,
+					RangeLeaseRaftElectionTimeoutMultiplier: 10000,
+				},
+				Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+					DisableReplicaGCQueue: true,
+				}},
+			},
+			ReplicationMode: base.ReplicationManual,
+		})
+		defer tc.Stopper().Stop(ctx)
+
+		key := tc.ScratchRange(t)
+		desc, err := tc.LookupRange(key)
+		require.NoError(t, err)
+		rangeID := desc.RangeID
+		tc.AddReplicasOrFatal(t, key, tc.Target(1), tc.Target(2))
+		require.NoError(t, tc.WaitForSplitAndInitialization(key))
+		store, repl := getFirstStoreReplica(t, tc.Server(2), key)
+		// Set up a partition for everything but heartbeats on store 2.
+		// Make ourselves a tool to block snapshots until we've heard a
+		// heartbeat above a certain replica ID.
+		var waiter struct {
+			syncutil.Mutex
+			sync.Cond
+			minHeartbeatReplicaID roachpb.ReplicaID
+			blockSnapshot         bool
+		}
+		waiter.L = &waiter.Mutex
+		waitForSnapshot := func() {
+			waiter.Lock()
+			defer waiter.Unlock()
+			for waiter.blockSnapshot {
+				waiter.Wait()
+			}
+		}
+		recordHeartbeat := func(replicaID roachpb.ReplicaID) {
+			waiter.Lock()
+			defer waiter.Unlock()
+			if waiter.blockSnapshot && replicaID >= waiter.minHeartbeatReplicaID {
+				waiter.blockSnapshot = false
+				waiter.Broadcast()
+			}
+		}
+		setMinHeartbeat := func(replicaID roachpb.ReplicaID) {
+			waiter.Lock()
+			defer waiter.Unlock()
+			waiter.minHeartbeatReplicaID = replicaID
+			waiter.blockSnapshot = true
+		}
+		setMinHeartbeat(repl.ReplicaID() + 1)
+		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
+			rangeID:            desc.RangeID,
+			RaftMessageHandler: store,
+			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
+				dropResp: func(*storage.RaftMessageResponse) bool {
+					return true
+				},
+				dropReq: func(*storage.RaftMessageRequest) bool {
+					return true
+				},
+				dropHB: func(hb *storage.RaftHeartbeat) bool {
+					recordHeartbeat(hb.ToReplicaID)
+					return false
+				},
+				snapErr: func(*storage.SnapshotRequest_Header) error {
+					waitForSnapshot()
+					return errors.New("boom")
+				},
+			},
+		})
+		// Remove the current replica from the node, it will not hear about this.
+		tc.RemoveReplicasOrFatal(t, key, tc.Target(2))
+		// Try to add it back as a learner. We'll wait until it's heard about
+		// this as a heartbeat. This demonstrates case (4) where a raft message
+		// to a newer replica ID (in this case a heartbeat) removes an initialized
+		// Replica.
+		_, err = tc.AddReplicas(key, tc.Target(2))
+		require.Regexp(t, "boom", err)
+		tombstone := waitForTombstone(t, store.Engine(), rangeID)
+		require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
+		// Try adding it again and again block the snapshot until a heartbeat
+		// at a higher ID has been sent. This is case (4.1) where a raft message
+		// removes an uninitialized Replica.
+		//
+		// Note that this case represents a potential memory leak. If we hear about
+		// a Replica and then either never receive a snapshot or for whatever reason
+		// fail to receive a snapshot and then we never hear from the range again we
+		// may leak in-memory state about this replica.
+		//
+		// We could replica GC these replicas without too much extra work but they
+		// also should be rare. Note this is not new with learner replicas.
+		setMinHeartbeat(5)
+		_, err = tc.AddReplicas(key, tc.Target(2))
+		require.Regexp(t, "boom", err)
+		// We will start out reading the old tombstone so keep retrying.
+		testutils.SucceedsSoon(t, func() error {
+			tombstone = waitForTombstone(t, store.Engine(), rangeID)
+			if tombstone.NextReplicaID != 5 {
+				return errors.Errorf("read tombstone with NextReplicaID %d, want %d",
+					tombstone.NextReplicaID, 5)
+			}
+			return nil
+		})
+	})
+	t.Run("(6) subsumption via snapshot", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+
+		ctx := context.Background()
+		var proposalFilter atomic.Value
+		noopProposalFilter := func(storagebase.ProposalFilterArgs) *roachpb.Error {
+			return nil
+		}
+		proposalFilter.Store(noopProposalFilter)
+		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+					DisableReplicaGCQueue: true,
+					TestingProposalFilter: storagebase.ReplicaProposalFilter(
+						func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+							return proposalFilter.
+								Load().(func(storagebase.ProposalFilterArgs) *roachpb.Error)(args)
+						},
+					),
+				}},
+			},
+			ReplicationMode: base.ReplicationManual,
+		})
+		defer tc.Stopper().Stop(ctx)
+
+		key := tc.ScratchRange(t)
+		require.NoError(t, tc.WaitForSplitAndInitialization(key))
+		tc.AddReplicasOrFatal(t, key, tc.Target(1), tc.Target(2))
+		keyA := append(key[:len(key):len(key)], 'a')
+		lhsDesc, rhsDesc, err := tc.SplitRange(keyA)
+		require.NoError(t, err)
+		require.NoError(t, tc.WaitForSplitAndInitialization(key))
+		require.NoError(t, tc.WaitForSplitAndInitialization(keyA))
+		require.NoError(t, tc.WaitForVoters(key, tc.Target(1), tc.Target(2)))
+		require.NoError(t, tc.WaitForVoters(keyA, tc.Target(1), tc.Target(2)))
+
+		// We're going to block the RHS and LHS of node 2 as soon as the merge
+		// attempts to propose the command to commit the merge. This should prevent
+		// the merge from being applied on node 2. Then we'll manually force a
+		// snapshots to be sent to the LHS of store 2 after the merge commits.
+		store, repl := getFirstStoreReplica(t, tc.Server(2), key)
+		var partActive atomic.Value
+		partActive.Store(false)
+		raftFuncs := noopRaftHandlerFuncs()
+		raftFuncs.dropReq = func(req *storage.RaftMessageRequest) bool {
+			return partActive.Load().(bool) && req.Message.Type == raftpb.MsgApp
+		}
+		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
+			rangeID:                    lhsDesc.RangeID,
+			unreliableRaftHandlerFuncs: raftFuncs,
+			RaftMessageHandler: &unreliableRaftHandler{
+				rangeID:                    rhsDesc.RangeID,
+				RaftMessageHandler:         store,
+				unreliableRaftHandlerFuncs: raftFuncs,
+			},
+		})
+		proposalFilter.Store(func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+			merge := args.Cmd.ReplicatedEvalResult.Merge
+			if merge != nil && merge.LeftDesc.RangeID == lhsDesc.RangeID {
+				partActive.Store(true)
+			}
+			return nil
+		})
+		require.NoError(t, tc.Server(0).DB().AdminMerge(ctx, key))
+		var tombstone roachpb.RaftTombstone
+		testutils.SucceedsSoon(t, func() (err error) {
+			// One of the two other stores better be the raft leader eventually.
+			// We keep trying to send snapshots until one takes.
+			for i := range []int{0, 1} {
+				s, r := getFirstStoreReplica(t, tc.Server(i), key)
+				err = s.ManualRaftSnapshot(r, repl.ReplicaID())
+				if err == nil {
+					break
+				}
+			}
+			if err != nil {
+				return err
+			}
+			tombstoneKey := keys.RaftTombstoneKey(rhsDesc.RangeID)
+			ok, err := engine.MVCCGetProto(
+				context.TODO(), store.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
+			)
+			require.NoError(t, err)
+			if !ok {
+				return errors.New("no tombstone found")
+			}
+			return nil
+		})
+		require.Equal(t, roachpb.ReplicaID(math.MaxInt32), tombstone.NextReplicaID)
+	})
 }
 
 // TestAdminRelocateRangeSafety exercises a situation where calls to
