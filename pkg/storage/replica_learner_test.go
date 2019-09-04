@@ -335,7 +335,17 @@ func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 	// split auto-transitions us out of the joint conf before doing work.
 	atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
 	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
-	right = tc.AddReplicasOrFatal(t, right.StartKey.AsRawKey(), tc.Target(1))
+	// Use SucceedsSoon to deal with the case where teh RHS has not yet been
+	// removed or the split has not yet been processed.
+	testutils.SucceedsSoon(t, func() error {
+		desc, err := tc.AddReplicas(right.StartKey.AsRawKey(), tc.Target(1))
+		if err == nil {
+			right = desc
+		} else if !testutils.IsError(err, "cannot apply snapshot: snapshot intersects existing range") {
+			t.Fatal(err)
+		}
+		return err
+	})
 	require.Len(t, right.Replicas().Filter(predIncoming), 1)
 	left, right, err = tc.SplitRange(right.StartKey.AsRawKey().Next())
 	require.NoError(t, err)
@@ -429,13 +439,13 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 		require.Contains(t, tracing.FormatRecordedSpans(trace), msg)
 		return tc.LookupRangeOrFatal(t, scratchStartKey)
 	}
-
 	desc := checkNoGC()
 	// Make sure it didn't collect the learner.
 	require.NotEmpty(t, desc.Replicas().Learners())
 
 	// Now get the range into a joint config.
 	tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(1)) // remove learner
+
 	ltk.withStopAfterJointConfig(func() {
 		desc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 		require.Len(t, desc.Replicas().Filter(predIncoming), 1, desc)
@@ -547,10 +557,14 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 
 	// Unblock the snapshot, and surprise AddReplicas. It should retry and error
 	// that the descriptor has changed since the AdminChangeReplicas command
-	// started.
+	// started. Alternatively it may fail in sending the snapshot because of a
+	// "raft group deleted" error if the newly added learner attempts to send
+	// a raft message to another node after it has been removed and then destroys
+	// itself in response to a ReplicaTooOldError.
 	close(blockSnapshotsCh)
-	if err := g.Wait(); !testutils.IsError(err, `descriptor changed`) {
-		t.Fatalf(`expected "descriptor changed" error got: %+v`, err)
+	const msgRE = `descriptor changed|raft group deleted`
+	if err := g.Wait(); !testutils.IsError(err, msgRE) {
+		t.Fatalf(`expected %q error got: %+v`, msgRE, err)
 	}
 	desc = tc.LookupRangeOrFatal(t, scratchStartKey)
 	require.Len(t, desc.Replicas().Voters(), 1)
@@ -567,6 +581,12 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 	blockUntilSnapshotCh := make(chan struct{}, 2)
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
+	// We must disable eager replica removal to make this test reliable.
+	// If we don't then it's possible that the removed replica on store 2 will
+	// notice it's removed before the snapshot is sent by the replicate queue.
+	// In this case we'll get a snapshot error from the replicate queue which
+	// will retry the up-replication with a new descriptor and succeed.
+	ltk.storeKnobs.DisableEagerReplicaRemoval = true
 	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
 		if atomic.LoadInt64(&skipReceiveSnapshotKnobAtomic) > 0 {
 			return nil
