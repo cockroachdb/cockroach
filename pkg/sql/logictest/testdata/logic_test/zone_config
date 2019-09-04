@@ -4,7 +4,7 @@ statement ok
 ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1
 
 query IT
-SELECT zone_id, config_sql FROM [SHOW ZONE CONFIGURATION FOR RANGE default]
+SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR RANGE default]
 ----
 0  ALTER RANGE default CONFIGURE ZONE USING
    range_min_bytes = 16777216,
@@ -20,7 +20,7 @@ statement ok
 ALTER RANGE default CONFIGURE ZONE USING DEFAULT
 
 query IT
-SELECT zone_id, config_sql FROM [SHOW ZONE CONFIGURATION FOR RANGE default]
+SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR RANGE default]
 ----
 0  ALTER RANGE default CONFIGURE ZONE USING
    range_min_bytes = 16777216,
@@ -41,7 +41,7 @@ CREATE TABLE a (id INT PRIMARY KEY)
 # Ensure that SHOW ZONE CONFIGURATION retrieves the default zone (ID 0) if
 # no zone was set.
 query IT
-SELECT zone_id, config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
+SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 0  ALTER RANGE default CONFIGURE ZONE USING
    range_min_bytes = 1234567,
@@ -58,7 +58,7 @@ statement ok
 ALTER TABLE a CONFIGURE ZONE USING DEFAULT
 
 query IT
-SELECT zone_id, config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
+SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 53  ALTER TABLE a CONFIGURE ZONE USING
     range_min_bytes = 1234567,
@@ -79,7 +79,7 @@ ALTER TABLE a CONFIGURE ZONE USING
   lease_preferences = '[[+region=test]]'
 
 query IT
-SELECT zone_id, config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
+SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 53  ALTER TABLE a CONFIGURE ZONE USING
     range_min_bytes = 200001,
@@ -94,7 +94,7 @@ statement ok
 ALTER TABLE a CONFIGURE ZONE USING range_max_bytes = 400000
 
 query IT
-SELECT zone_id, config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
+SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 53  ALTER TABLE a CONFIGURE ZONE USING
     range_min_bytes = 200001,
@@ -112,7 +112,7 @@ ALTER TABLE a CONFIGURE ZONE USING DEFAULT
 # Note: the range_min_bytes here should reflect the non-standard
 # default that was set initially.
 query IT
-SELECT zone_id, config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
+SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 53  ALTER TABLE a CONFIGURE ZONE USING
     range_min_bytes = 1234567,

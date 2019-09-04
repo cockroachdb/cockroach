@@ -35,9 +35,11 @@ var showZoneConfigColumns = sqlbase.ResultColumns{
 	{Name: "table_name", Typ: types.String, Hidden: true},
 	{Name: "index_name", Typ: types.String, Hidden: true},
 	{Name: "partition_name", Typ: types.String, Hidden: true},
-	{Name: "config_yaml", Typ: types.String, Hidden: true},
-	{Name: "config_sql", Typ: types.String},
-	{Name: "config_protobuf", Typ: types.Bytes, Hidden: true},
+	{Name: "raw_config_yaml", Typ: types.String, Hidden: true},
+	{Name: "raw_config_sql", Typ: types.String},
+	{Name: "raw_config_protobuf", Typ: types.Bytes, Hidden: true},
+	{Name: "full_config_yaml", Typ: types.String, Hidden: true},
+	{Name: "full_config_sql", Typ: types.String, Hidden: true},
 }
 
 // These must match showZoneConfigColumns.
@@ -50,9 +52,11 @@ const (
 	tableNameCol
 	indexNameCol
 	partitionNameCol
-	configYAMLCol
-	configSQLCol
-	configProtobufCol
+	rawConfigYAMLCol
+	rawConfigSQLCol
+	rawConfigProtobufCol
+	fullConfigYamlCol
+	fullConfigSQLCol
 )
 
 func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (planNode, error) {
@@ -144,11 +148,62 @@ func getShowZoneConfigRow(
 
 	vals := make(tree.Datums, len(showZoneConfigColumns))
 	if err := generateZoneConfigIntrospectionValues(
-		vals, tree.NewDInt(tree.DInt(zoneID)), tree.NewDInt(tree.DInt(subZoneIdx)), &zs, zone,
+		vals, tree.NewDInt(tree.DInt(zoneID)), tree.NewDInt(tree.DInt(subZoneIdx)), &zs, zone, nil,
 	); err != nil {
 		return nil, err
 	}
 	return vals, nil
+}
+
+// zoneConfigToSQL pretty prints a zone configuration as a SQL string.
+func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *config.ZoneConfig) (string, error) {
+	constraints, err := yamlMarshalFlow(config.ConstraintsList{
+		Constraints: zone.Constraints,
+		Inherited:   zone.InheritedConstraints})
+	if err != nil {
+		return "", err
+	}
+	constraints = strings.TrimSpace(constraints)
+	prefs, err := yamlMarshalFlow(zone.LeasePreferences)
+	if err != nil {
+		return "", err
+	}
+	prefs = strings.TrimSpace(prefs)
+
+	useComma := false
+	f := tree.NewFmtCtx(tree.FmtParsable)
+	f.WriteString("ALTER ")
+	f.FormatNode(zs)
+	f.WriteString(" CONFIGURE ZONE USING\n")
+	if zone.RangeMinBytes != nil {
+		f.Printf("\trange_min_bytes = %d", *zone.RangeMinBytes)
+		useComma = true
+	}
+	if zone.RangeMaxBytes != nil {
+		writeComma(f, useComma)
+		f.Printf("\trange_max_bytes = %d", *zone.RangeMaxBytes)
+		useComma = true
+	}
+	if zone.GC != nil {
+		writeComma(f, useComma)
+		f.Printf("\tgc.ttlseconds = %d", zone.GC.TTLSeconds)
+		useComma = true
+	}
+	if zone.NumReplicas != nil {
+		writeComma(f, useComma)
+		f.Printf("\tnum_replicas = %d", *zone.NumReplicas)
+		useComma = true
+	}
+	if !zone.InheritedConstraints {
+		writeComma(f, useComma)
+		f.Printf("\tconstraints = %s", lex.EscapeSQLString(constraints))
+		useComma = true
+	}
+	if !zone.InheritedLeasePreferences {
+		writeComma(f, useComma)
+		f.Printf("\tlease_preferences = %s", lex.EscapeSQLString(prefs))
+	}
+	return f.String(), nil
 }
 
 // generateZoneConfigIntrospectionValues creates a result row
@@ -157,12 +212,17 @@ func getShowZoneConfigRow(
 // The caller is responsible for creating the DInt for the ID and
 // provide it as 2nd argument. The function will compute
 // the remaining values based on the zone specifier and configuration.
+// The fullZoneConfig argument is a zone config populated with all
+// inherited zone configuration information. If this argument is nil,
+// then the zone argument is used to populate the full_config_sql and
+// full_config_yaml columns.
 func generateZoneConfigIntrospectionValues(
 	values tree.Datums,
 	zoneID tree.Datum,
 	subZoneID tree.Datum,
 	zs *tree.ZoneSpecifier,
 	zone *config.ZoneConfig,
+	fullZoneConfig *config.ZoneConfig,
 ) error {
 	// Populate the ID column.
 	values[zoneIDCol] = zoneID
@@ -200,59 +260,17 @@ func generateZoneConfigIntrospectionValues(
 	if err != nil {
 		return err
 	}
-	values[configYAMLCol] = tree.NewDString(string(yamlConfig))
+	values[rawConfigYAMLCol] = tree.NewDString(string(yamlConfig))
 
 	// Populate the SQL column.
 	if zs == nil {
-		values[configSQLCol] = tree.DNull
+		values[rawConfigSQLCol] = tree.DNull
 	} else {
-		constraints, err := yamlMarshalFlow(config.ConstraintsList{
-			Constraints: zone.Constraints,
-			Inherited:   zone.InheritedConstraints})
+		sqlStr, err := zoneConfigToSQL(zs, zone)
 		if err != nil {
 			return err
 		}
-		constraints = strings.TrimSpace(constraints)
-		prefs, err := yamlMarshalFlow(zone.LeasePreferences)
-		if err != nil {
-			return err
-		}
-		prefs = strings.TrimSpace(prefs)
-
-		useComma := false
-		f := tree.NewFmtCtx(tree.FmtParsable)
-		f.WriteString("ALTER ")
-		f.FormatNode(zs)
-		f.WriteString(" CONFIGURE ZONE USING\n")
-		if zone.RangeMinBytes != nil {
-			f.Printf("\trange_min_bytes = %d", *zone.RangeMinBytes)
-			useComma = true
-		}
-		if zone.RangeMaxBytes != nil {
-			writeComma(f, useComma)
-			f.Printf("\trange_max_bytes = %d", *zone.RangeMaxBytes)
-			useComma = true
-		}
-		if zone.GC != nil {
-			writeComma(f, useComma)
-			f.Printf("\tgc.ttlseconds = %d", zone.GC.TTLSeconds)
-			useComma = true
-		}
-		if zone.NumReplicas != nil {
-			writeComma(f, useComma)
-			f.Printf("\tnum_replicas = %d", *zone.NumReplicas)
-			useComma = true
-		}
-		if !zone.InheritedConstraints {
-			writeComma(f, useComma)
-			f.Printf("\tconstraints = %s", lex.EscapeSQLString(constraints))
-			useComma = true
-		}
-		if !zone.InheritedLeasePreferences {
-			writeComma(f, useComma)
-			f.Printf("\tlease_preferences = %s", lex.EscapeSQLString(prefs))
-		}
-		values[configSQLCol] = tree.NewDString(f.String())
+		values[rawConfigSQLCol] = tree.NewDString(sqlStr)
 	}
 
 	// Populate the protobuf column.
@@ -260,8 +278,29 @@ func generateZoneConfigIntrospectionValues(
 	if err != nil {
 		return err
 	}
-	values[configProtobufCol] = tree.NewDBytes(tree.DBytes(protoConfig))
+	values[rawConfigProtobufCol] = tree.NewDBytes(tree.DBytes(protoConfig))
 
+	// Populate the full_config_yaml and full_config_sql columns.
+	inheritedConfig := fullZoneConfig
+	if inheritedConfig == nil {
+		inheritedConfig = zone
+	}
+
+	yamlConfig, err = yaml.Marshal(inheritedConfig)
+	if err != nil {
+		return err
+	}
+	values[fullConfigYamlCol] = tree.NewDString(string(yamlConfig))
+
+	if zs == nil {
+		values[fullConfigSQLCol] = tree.DNull
+	} else {
+		sqlStr, err := zoneConfigToSQL(zs, inheritedConfig)
+		if err != nil {
+			return err
+		}
+		values[fullConfigSQLCol] = tree.NewDString(sqlStr)
+	}
 	return nil
 }
 

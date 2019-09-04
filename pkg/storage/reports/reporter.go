@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -320,7 +321,7 @@ func visitZones(
 		// Try subzones.
 		subzone, subzoneIdx := zone.GetSubzoneForKeySuffix(keySuffix)
 		if subzone != nil {
-			if visitor(ctx, &subzone.Config, MakeZoneKey(id, SubzoneIDFromIndex(int(subzoneIdx)))) {
+			if visitor(ctx, &subzone.Config, MakeZoneKey(id, base.SubzoneIDFromIndex(int(subzoneIdx)))) {
 				return true, nil
 			}
 		}

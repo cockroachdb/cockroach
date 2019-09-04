@@ -83,7 +83,7 @@ func VerifyZoneConfigForTarget(t testing.TB, sqlDB *SQLRunner, target string, ro
 		t.Fatal(err)
 	}
 	sqlDB.CheckQueryResults(t, fmt.Sprintf(`
-SELECT zone_id, config_protobuf
+SELECT zone_id, raw_config_protobuf
   FROM [SHOW ZONE CONFIGURATION FOR %s]`, target),
 		[][]string{sqlRow})
 }
@@ -100,7 +100,7 @@ func VerifyAllZoneConfigs(t testing.TB, sqlDB *SQLRunner, rows ...ZoneRow) {
 			t.Fatal(err)
 		}
 	}
-	sqlDB.CheckQueryResults(t, `SELECT zone_id, config_protobuf FROM crdb_internal.zones`, expected)
+	sqlDB.CheckQueryResults(t, `SELECT zone_id, raw_config_protobuf FROM crdb_internal.zones`, expected)
 }
 
 // ZoneConfigExists returns whether a zone config with the provided name exists.
