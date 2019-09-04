@@ -333,6 +333,18 @@ func newColOperator(
 			}
 		}
 
+		var (
+			onExpr         *distsqlpb.Expression
+			filterPlanning *filterPlanningState
+		)
+		if !core.HashJoiner.OnExpr.Empty() {
+			onExpr = &core.HashJoiner.OnExpr
+			filterPlanning = newFilterPlanningState(len(leftTypes), len(rightTypes))
+			leftOutCols, rightOutCols = filterPlanning.renderAllNeededCols(
+				*onExpr, leftOutCols, rightOutCols,
+			)
+		}
+
 		result.op, err = exec.NewEqHashJoinerOp(
 			inputs[0],
 			inputs[1],
@@ -359,11 +371,13 @@ func newColOperator(
 			result.columnTypes = result.columnTypes[:nLeftCols]
 		}
 
-		if !core.HashJoiner.OnExpr.Empty() {
+		if onExpr != nil {
 			if core.HashJoiner.Type != sqlbase.JoinType_INNER {
 				return result, errors.Newf("can't plan non-inner hash join with on expressions")
 			}
-			err = result.planFilterExpr(flowCtx.NewEvalCtx(), core.HashJoiner.OnExpr)
+			filterPlanning.remapIVars(onExpr)
+			err = result.planFilterExpr(flowCtx.NewEvalCtx(), *onExpr)
+			filterPlanning.projectOutExtraCols(&result, leftOutCols, rightOutCols)
 		}
 
 	case core.MergeJoiner != nil:
@@ -412,39 +426,35 @@ func newColOperator(
 			}
 		}
 
-		var filterConstructor func(exec.Operator) (exec.Operator, error)
-		filterOnlyOnLeft := true
-		onExprAlreadyHandled := false
-		if !core.MergeJoiner.OnExpr.Empty() && core.MergeJoiner.Type != sqlbase.JoinType_INNER {
-			if core.MergeJoiner.OnExpr.LocalExpr != nil {
-				// TODO(yuzefovich): figure out how to correctly populate
-				// filterOnlyOnLeft in this case.
-				return result, errors.Errorf("only INNER merge joins with ON expressions passed in LocalExpr are supported")
-			}
-			onExpr := core.MergeJoiner.OnExpr.Expr
-			if onExpr != "" {
-				rightColumnFound := false
-				colOffset := len(spec.Input[0].ColumnTypes) + 1
-				for rColIdx := range spec.Input[1].ColumnTypes {
-					rColOrdinal := fmt.Sprintf("@%d", rColIdx+colOffset)
-					if strings.Contains(onExpr, rColOrdinal) {
-						rightColumnFound = true
-						break
-					}
-				}
-				filterOnlyOnLeft = !rightColumnFound
-			}
-			if core.MergeJoiner.Type == sqlbase.JoinType_LEFT_SEMI ||
-				core.MergeJoiner.Type == sqlbase.JoinType_LEFT_ANTI {
-				onExprAlreadyHandled = true
+		var (
+			onExpr            *distsqlpb.Expression
+			filterPlanning    *filterPlanningState
+			filterOnlyOnLeft  bool
+			filterConstructor func(exec.Operator) (exec.Operator, error)
+		)
+		if !core.MergeJoiner.OnExpr.Empty() {
+			onExpr = &core.MergeJoiner.OnExpr
+			filterPlanning = newFilterPlanningState(len(leftTypes), len(rightTypes))
+			switch core.MergeJoiner.Type {
+			case sqlbase.JoinType_INNER:
+				leftOutCols, rightOutCols = filterPlanning.renderAllNeededCols(
+					*onExpr, leftOutCols, rightOutCols,
+				)
+			case sqlbase.JoinType_LEFT_SEMI, sqlbase.JoinType_LEFT_ANTI:
+				filterOnlyOnLeft = filterPlanning.isFilterOnlyOnLeft(*onExpr)
 				filterConstructor = func(op exec.Operator) (exec.Operator, error) {
 					r := newColOperatorResult{
 						op:          op,
 						columnTypes: append(spec.Input[0].ColumnTypes, spec.Input[1].ColumnTypes...),
 					}
-					err := r.planFilterExpr(flowCtx.NewEvalCtx(), core.MergeJoiner.OnExpr)
+					// We don't need to remap the indexed vars in onExpr because the
+					// filter will be run alongside the merge joiner, and it will have
+					// access to all of the columns from both sides.
+					err := r.planFilterExpr(flowCtx.NewEvalCtx(), *onExpr)
 					return r.op, err
 				}
+			default:
+				return result, errors.Errorf("can only plan INNER, LEFT SEMI, and LEFT ANTI merge joins with ON expressions")
 			}
 		}
 
@@ -474,11 +484,10 @@ func newColOperator(
 			result.columnTypes = result.columnTypes[:nLeftCols]
 		}
 
-		if !core.MergeJoiner.OnExpr.Empty() && !onExprAlreadyHandled {
-			if core.MergeJoiner.Type != sqlbase.JoinType_INNER {
-				return result, errors.Errorf("can only plan INNER, LEFT SEMI, and LEFT ANTI merge joins with ON expressions")
-			}
-			err = result.planFilterExpr(flowCtx.NewEvalCtx(), core.MergeJoiner.OnExpr)
+		if onExpr != nil && core.MergeJoiner.Type == sqlbase.JoinType_INNER {
+			filterPlanning.remapIVars(onExpr)
+			err = result.planFilterExpr(flowCtx.NewEvalCtx(), *onExpr)
+			filterPlanning.projectOutExtraCols(&result, leftOutCols, rightOutCols)
 		}
 
 		// Merge joiner is a streaming operator when equality columns form a key
@@ -688,6 +697,156 @@ func newColOperator(
 		result.op = exec.NewLimitOp(result.op, post.Limit)
 	}
 	return result, err
+}
+
+type filterPlanningState struct {
+	numLeftInputCols  int
+	numRightInputCols int
+	// indexVarMap will be populated when rendering all needed columns in case
+	// when at least one column from either side is used by the filter.
+	indexVarMap       []int
+	extraLeftOutCols  int
+	extraRightOutCols int
+}
+
+func newFilterPlanningState(numLeftInputCols, numRightInputCols int) *filterPlanningState {
+	return &filterPlanningState{
+		numLeftInputCols:  numLeftInputCols,
+		numRightInputCols: numRightInputCols,
+	}
+}
+
+// renderAllNeededCols makes sure that all columns used by filter expression
+// will be output. It does so by extracting the indices of all indexed vars
+// used in the expression and appending those that are missing from *OutCols
+// slices to the slices. Additionally, it populates p.indexVarMap to be used
+// later to correctly remap the indexed vars and stores information about how
+// many extra columns are added so that those extra columns could be projected
+// out after the filter has been run.
+// It returns updated leftOutCols and rightOutCols.
+func (p *filterPlanningState) renderAllNeededCols(
+	filter distsqlpb.Expression, leftOutCols []uint32, rightOutCols []uint32,
+) ([]uint32, []uint32) {
+	neededColumnsForFilter := findIVarsInRange(
+		filter,
+		0, /* start */
+		p.numLeftInputCols+p.numRightInputCols,
+	)
+	if len(neededColumnsForFilter) > 0 {
+		// At least one column is referenced by the filter expression.
+		p.indexVarMap = make([]int, p.numLeftInputCols+p.numRightInputCols)
+		for i := range p.indexVarMap {
+			p.indexVarMap[i] = -1
+		}
+		// First, we process only the left side.
+		for i, lCol := range leftOutCols {
+			p.indexVarMap[lCol] = i
+		}
+		for _, neededCol := range neededColumnsForFilter {
+			if int(neededCol) < p.numLeftInputCols {
+				if p.indexVarMap[neededCol] == -1 {
+					p.indexVarMap[neededCol] = len(leftOutCols)
+					leftOutCols = append(leftOutCols, neededCol)
+					p.extraLeftOutCols++
+				}
+			}
+		}
+		// Now that we know how many columns from the left will be output, we can
+		// process the right side.
+		//
+		// Here is the explanation of all the indices' dance below:
+		//   suppose we have two inputs with three columns in each, the filter
+		//   expression as @1 = @4 AND @3 = @5, and leftOutCols = {0} and
+		//   rightOutCols = {0} when this method was called. Note that only
+		//   ordinals in the expression are counting from 1, everything else is
+		//   zero-based.
+		// - After we processed the left side above, we have the following state:
+		//   neededColumnsForFilter = {0, 2, 3, 4}
+		//   leftOutCols = {0, 2}
+		//   p.indexVarMap = {0, -1, 1, -1, -1, -1}
+		// - We calculate rColOffset = 3 to know which columns for filter are from
+		//   the right side as well as to remap those for rightOutCols (the
+		//   remapping step is needed because rightOutCols "thinks" only in the
+		//   context of the right side).
+		// - Next, we add already present rightOutCols to the indexed var map:
+		//   rightOutCols = {0}
+		//   p.indexVarMap = {0, -1, 1, 2, -1, -1}
+		//   Note that we needed to remap the column index, and we could do so only
+		//   after the left side has been processed because we need to know how
+		//   many columns will be output from the left.
+		// - Then, we go through the needed columns for filter slice again, and add
+		//   any that are still missing to rightOutCols:
+		//   rightOutCols = {0, 1}
+		//   p.indexVarMap = {0, -1, 1, 2, 3, -1}
+		// - We also stored the fact that we appended 1 extra column for both
+		//   inputs, and we will project those out.
+		rColOffset := uint32(p.numLeftInputCols)
+		for i, rCol := range rightOutCols {
+			p.indexVarMap[rCol+rColOffset] = len(leftOutCols) + i
+		}
+		for _, neededCol := range neededColumnsForFilter {
+			if neededCol >= rColOffset {
+				if p.indexVarMap[neededCol] == -1 {
+					p.indexVarMap[neededCol] = len(rightOutCols) + len(leftOutCols)
+					rightOutCols = append(rightOutCols, neededCol-rColOffset)
+					p.extraRightOutCols++
+				}
+			}
+		}
+	}
+	return leftOutCols, rightOutCols
+}
+
+// isFilterOnlyOnLeft returns whether the filter expression doesn't use columns
+// from the right side.
+func (p *filterPlanningState) isFilterOnlyOnLeft(filter distsqlpb.Expression) bool {
+	// Find all needed columns for filter only from the right side.
+	neededColumnsForFilter := findIVarsInRange(
+		filter, p.numLeftInputCols, p.numLeftInputCols+p.numRightInputCols,
+	)
+	return len(neededColumnsForFilter) == 0
+}
+
+// remapIVars remaps tree.IndexedVars in expr using p.indexVarMap. Note that
+// expr is modified in-place.
+func (p *filterPlanningState) remapIVars(expr *distsqlpb.Expression) {
+	if p.indexVarMap == nil {
+		// If p.indexVarMap is nil, then there is no remapping to do.
+		return
+	}
+	if expr.LocalExpr != nil {
+		expr.LocalExpr = sqlbase.RemapIVarsInTypedExpr(expr.LocalExpr, p.indexVarMap)
+	} else {
+		// We iterate in the reverse order so that the multiple digit numbers are
+		// handled correctly (consider an expression like @1 AND @11).
+		for idx := len(p.indexVarMap) - 1; idx >= 0; idx-- {
+			if p.indexVarMap[idx] != -1 {
+				// We need +1 below because the ordinals are counting from 1.
+				expr.Expr = strings.ReplaceAll(
+					expr.Expr,
+					fmt.Sprintf("@%d", idx+1),
+					fmt.Sprintf("@%d", p.indexVarMap[idx]+1),
+				)
+			}
+		}
+	}
+}
+
+// projectOutExtraCols, possibly, adds a projection to remove all the extra
+// columns that were needed by the filter expression.
+func (p *filterPlanningState) projectOutExtraCols(
+	result *newColOperatorResult, leftOutCols, rightOutCols []uint32,
+) {
+	if p.extraLeftOutCols+p.extraRightOutCols > 0 {
+		projection := make([]uint32, 0, len(leftOutCols)+len(rightOutCols)-p.extraLeftOutCols-p.extraRightOutCols)
+		for i := 0; i < len(leftOutCols)-p.extraLeftOutCols; i++ {
+			projection = append(projection, uint32(i))
+		}
+		for i := 0; i < len(rightOutCols)-p.extraRightOutCols; i++ {
+			projection = append(projection, uint32(i+len(leftOutCols)))
+		}
+		result.op = exec.NewSimpleProjectOp(result.op, len(leftOutCols)+len(rightOutCols), projection)
+	}
 }
 
 func (r *newColOperatorResult) planFilterExpr(

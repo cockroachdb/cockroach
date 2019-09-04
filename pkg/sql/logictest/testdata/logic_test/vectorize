@@ -770,3 +770,39 @@ query R
 select (x/1) from t39417
 ----
 10
+
+# Regression test for #40372.
+statement ok
+CREATE TABLE t40372_1 (
+  a INT,
+  b INT,
+  c FLOAT,
+  d FLOAT
+)
+
+statement ok
+INSERT INTO t40372_1 VALUES
+  (1, 1, 1, 1),
+  (2, 2, 2, 2),
+  (3, 3, 3, 3)
+
+statement ok
+CREATE TABLE t40372_2 (
+  a INT,
+  b FLOAT,
+  c FLOAT,
+  d INT
+)
+
+statement ok
+INSERT INTO t40372_2 VALUES
+  (1, 1, 1, 1),
+  (2, 2, 2, 2),
+  (3, 3, 3, 3)
+
+query IIRR rowsort
+SELECT * FROM t40372_1 NATURAL JOIN t40372_2
+----
+1  1  1  1
+2  2  2  2
+3  3  3  3
