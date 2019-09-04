@@ -45,12 +45,12 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 			coalesce(partitions.list_value, partitions.range_value) as partition_value,
 		  replace(regexp_extract(config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as zone_config
 		FROM
-			crdb_internal.partitions
-			JOIN crdb_internal.tables ON partitions.table_id = tables.table_id
-			JOIN crdb_internal.table_indexes ON
+			%[3]s.crdb_internal.partitions
+			JOIN %[3]s.crdb_internal.tables ON partitions.table_id = tables.table_id
+			JOIN %[3]s.crdb_internal.table_indexes ON
 					table_indexes.descriptor_id = tables.table_id
 					AND table_indexes.index_id = partitions.index_id
-			LEFT JOIN crdb_internal.zones ON
+			LEFT JOIN %[3]s.crdb_internal.zones ON
 					zones.database_name = tables.database_name
 					AND zones.table_name = tables.name
 					AND zones.index_name = table_indexes.index_name
@@ -58,7 +58,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 		WHERE
 			tables.name = %[1]s AND tables.database_name = %[2]s;
 		`
-		return parse(fmt.Sprintf(showTablePartitionsQuery, lex.EscapeSQLString(resName.Table()), lex.EscapeSQLString(resName.Catalog())))
+		return parse(fmt.Sprintf(showTablePartitionsQuery, lex.EscapeSQLString(resName.Table()), lex.EscapeSQLString(resName.Catalog()), resName.Catalog()))
 	} else if n.IsDB {
 		const showDatabasePartitionsQuery = `
 		SELECT
@@ -112,7 +112,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 	// is a dirty hack that needs to be fixed.
 	const showIndexPartitionsQuery = `
 	WITH
-		dummy AS (SELECT * FROM %[3]s@%[4]s LIMIT 0)
+		dummy AS (SELECT * FROM %[5]s.%[3]s@%[4]s LIMIT 0)
 	SELECT
 		tables.database_name,
 		tables.name AS table_name,
@@ -123,12 +123,12 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 		coalesce(partitions.list_value, partitions.range_value) as partition_value,
 	  replace(regexp_extract(config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as zone_config
 	FROM
-		crdb_internal.partitions
-		JOIN crdb_internal.table_indexes ON
+		%[5]s.crdb_internal.partitions
+		JOIN %[5]s.crdb_internal.table_indexes ON
 				partitions.index_id = table_indexes.index_id
 				AND partitions.table_id = table_indexes.descriptor_id
-		JOIN crdb_internal.tables ON table_indexes.descriptor_id = tables.table_id
-		LEFT JOIN crdb_internal.zones ON
+		JOIN %[5]s.crdb_internal.tables ON table_indexes.descriptor_id = tables.table_id
+		LEFT JOIN %[5]s.crdb_internal.zones ON
 				zones.database_name = tables.database_name
 				AND zones.table_name = tables.name
 				AND zones.index_name = table_indexes.index_name
@@ -140,5 +140,6 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 		lex.EscapeSQLString(n.Index.Index.String()),
 		lex.EscapeSQLString(resName.Table()),
 		resName.Table(),
-		n.Index.Index.String()))
+		n.Index.Index.String(),
+		resName.Catalog()))
 }
