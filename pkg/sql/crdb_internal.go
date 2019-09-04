@@ -2102,7 +2102,9 @@ CREATE TABLE crdb_internal.zones (
   config_yaml      STRING NOT NULL,
   config_sql       STRING, -- this column can be NULL if there is no specifier syntax
                            -- possible (e.g. the object was deleted).
-  config_protobuf  BYTES NOT NULL
+  config_protobuf  BYTES NOT NULL,
+	inherited_config_yaml STRING NOT NULL,
+	inherited_config_sql STRING
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -2116,6 +2118,14 @@ CREATE TABLE crdb_internal.zones (
 			}
 			return 0, "", errors.AssertionFailedf(
 				"object with ID %d does not exist", errors.Safe(id))
+		}
+
+		getKey := func (key roachpb.Key) (*roachpb.Value, error) {
+			kv, err := p.txn.Get(ctx, key)
+			if err != nil {
+				return nil, err
+			}
+			return kv.Value, nil
 		}
 
 		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
@@ -2146,6 +2156,17 @@ CREATE TABLE crdb_internal.zones (
 			}
 			subzones := configProto.Subzones
 
+			// Inherit full information about this zone.
+			fullZone := configProto
+			// if fullZone is a SubzonePlaceholder, remove its SubzonePlaceholder marker so that
+			// we get the correct inheritance information.
+			if fullZone.IsSubzonePlaceholder() {
+				fullZone.NumReplicas = nil
+			}
+			if err := completeZoneConfig(&fullZone, uint32(tree.MustBeDInt(r[0])), getKey); err != nil {
+				return err
+			}
+
 			if !configProto.IsSubzonePlaceholder() {
 				// Ensure subzones don't infect the value of the config_proto column.
 				configProto.Subzones = nil
@@ -2154,6 +2175,24 @@ CREATE TABLE crdb_internal.zones (
 				if err := generateZoneConfigIntrospectionValues(values, r[0], tree.NewDInt(tree.DInt(0)), zoneSpecifier, &configProto); err != nil {
 					return err
 				}
+
+				// Write down information about the full / inherited config information.
+				yamlConfig, err := yaml.Marshal(&fullZone)
+				if err != nil {
+					return err
+				}
+				values[inheritedConfigYamlCol] = tree.NewDString(string(yamlConfig))
+
+				if zoneSpecifier == nil {
+					values[inheritedConfigSQLCol] = tree.DNull
+				} else {
+					sqlString, err := zoneConfigToSQL(zoneSpecifier, &fullZone)
+					if err != nil {
+						return err
+					}
+					values[inheritedConfigSQLCol] = tree.NewDString(sqlString)
+				}
+
 				if err := addRow(values...); err != nil {
 					return err
 				}
@@ -2182,6 +2221,42 @@ CREATE TABLE crdb_internal.zones (
 					if err := generateZoneConfigIntrospectionValues(values, r[0], tree.NewDInt(tree.DInt(i+1)), zoneSpecifier, &s.Config); err != nil {
 						return err
 					}
+
+					// Generate information about full / inherited constraints.
+					// There are two cases -- the subzone we are looking at refers
+					// to an index, or to a partition.
+					subZoneConfig := s.Config
+
+					// In this case, we have an index. Inherit from the parent zone.
+					if s.PartitionName == "" {
+						subZoneConfig.InheritFromParent(&fullZone)
+					} else {
+						// We have a partition. Get the parent index partition from the zone and
+						// have it inherit constraints.
+						if indexSubzone := fullZone.GetSubzone(uint32(index.ID), ""); indexSubzone != nil {
+							subZoneConfig.InheritFromParent(&indexSubzone.Config)
+						}
+						// Inherit remaining fields from the full parent zone.
+						subZoneConfig.InheritFromParent(&fullZone)
+					}
+
+					// Write down information about the full / inherited config information.
+					yamlConfig, err := yaml.Marshal(&subZoneConfig)
+					if err != nil {
+						return err
+					}
+					values[inheritedConfigYamlCol] = tree.NewDString(string(yamlConfig))
+
+					if zoneSpecifier == nil {
+						values[inheritedConfigSQLCol] = tree.DNull
+					} else {
+						sqlString, err := zoneConfigToSQL(zoneSpecifier, &subZoneConfig)
+						if err != nil {
+							return err
+						}
+						values[inheritedConfigSQLCol] = tree.NewDString(sqlString)
+					}
+
 					if err := addRow(values...); err != nil {
 						return err
 					}
@@ -2511,7 +2586,14 @@ CREATE TABLE crdb_internal.gossip_network (
 	},
 }
 
+// addPartitioningRows adds the rows in crdb_internal.partitions for each partition.
+// None of the arguments can be nil, and it is used recursively when a list partition
+// has subpartitions. In that case, the colOffset argument is incremented to represent
+// how many columns of the index have been partitioned already.
 func addPartitioningRows(
+	ctx context.Context,
+	p *planner,
+	database string,
 	table *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	partitioning *sqlbase.PartitioningDescriptor,
@@ -2532,7 +2614,7 @@ func addPartitioningRows(
 	}
 	colNames := tree.NewDString(buf.String())
 
-	var a sqlbase.DatumAlloc
+	var datumAlloc sqlbase.DatumAlloc
 
 	// We don't need real prefixes in the DecodePartitionTuple calls because we
 	// only use the tree.Datums part of the output.
@@ -2541,6 +2623,7 @@ func addPartitioningRows(
 		fakePrefixDatums[i] = tree.DNull
 	}
 
+	// This produces the list_value column.
 	for _, l := range partitioning.List {
 		var buf bytes.Buffer
 		for j, values := range l.Values {
@@ -2548,7 +2631,7 @@ func addPartitioningRows(
 				buf.WriteString(`, `)
 			}
 			tuple, _, err := sqlbase.DecodePartitionTuple(
-				&a, table, index, partitioning, values, fakePrefixDatums,
+				&datumAlloc, table, index, partitioning, values, fakePrefixDatums,
 			)
 			if err != nil {
 				return err
@@ -2556,6 +2639,23 @@ func addPartitioningRows(
 			buf.WriteString(tuple.String())
 		}
 		name := tree.NewDString(l.Name)
+
+		// Figure out which zone and subzone this partition should correspond to.
+		zoneID, zone, subzone, err := GetZoneConfigInTxn(ctx, p.txn, uint32(table.ID), index, l.Name, false /* getInheritedDefault */)
+		if err != nil {
+			return err
+		}
+		subzoneID := 0
+		if subzone != nil {
+			// TODO (rohany): Maybe extract this into a function in zone config land?
+			for i, subzone := range zone.Subzones {
+				if subzone.IndexID == uint32(index.ID) && subzone.PartitionName == l.Name {
+					// We have to do i+1 because 0 represents no subzone.
+					subzoneID = i+1
+				}
+			}
+		}
+
 		if err := addRow(
 			tableID,
 			indexID,
@@ -2565,20 +2665,23 @@ func addPartitioningRows(
 			colNames,
 			tree.NewDString(buf.String()),
 			tree.DNull,
+			tree.NewDInt(tree.DInt(zoneID)),
+			tree.NewDInt(tree.DInt(subzoneID)),
 		); err != nil {
 			return err
 		}
-		err := addPartitioningRows(table, index, &l.Subpartitioning, name,
+		err = addPartitioningRows(ctx, p, database, table, index, &l.Subpartitioning, name,
 			colOffset+int(partitioning.NumColumns), addRow)
 		if err != nil {
 			return err
 		}
 	}
 
+	// This produces the range_value column.
 	for _, r := range partitioning.Range {
 		var buf bytes.Buffer
 		fromTuple, _, err := sqlbase.DecodePartitionTuple(
-			&a, table, index, partitioning, r.FromInclusive, fakePrefixDatums,
+			&datumAlloc, table, index, partitioning, r.FromInclusive, fakePrefixDatums,
 		)
 		if err != nil {
 			return err
@@ -2586,12 +2689,28 @@ func addPartitioningRows(
 		buf.WriteString(fromTuple.String())
 		buf.WriteString(" TO ")
 		toTuple, _, err := sqlbase.DecodePartitionTuple(
-			&a, table, index, partitioning, r.ToExclusive, fakePrefixDatums,
+			&datumAlloc, table, index, partitioning, r.ToExclusive, fakePrefixDatums,
 		)
 		if err != nil {
 			return err
 		}
 		buf.WriteString(toTuple.String())
+
+		// Figure out which zone and subzone this partition should correspond to.
+		zoneID, zone, subzone, err := GetZoneConfigInTxn(ctx, p.txn, uint32(table.ID), index, r.Name, false /* getInheritedDefault */)
+		if err != nil {
+			return err
+		}
+		subzoneID := 0
+		if subzone != nil {
+			for i, subzone := range zone.Subzones {
+				if subzone.IndexID == uint32(index.ID) && subzone.PartitionName == r.Name {
+					// We have to do i+1 because 0 represents no subzone.
+					subzoneID = i+1
+				}
+			}
+		}
+
 		if err := addRow(
 			tableID,
 			indexID,
@@ -2601,6 +2720,8 @@ func addPartitioningRows(
 			colNames,
 			tree.DNull,
 			tree.NewDString(buf.String()),
+			tree.NewDInt(tree.DInt(zoneID)),
+			tree.NewDInt(tree.DInt(subzoneID)),
 		); err != nil {
 			return err
 		}
@@ -2624,14 +2745,20 @@ CREATE TABLE crdb_internal.partitions (
 	columns     INT NOT NULL,
 	column_names STRING,
 	list_value  STRING,
-	range_value STRING
+	range_value STRING,
+	zone_id INT,
+	subzone_id INT
 )
 	`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		dbName := ""
+		if dbContext != nil {
+			dbName = dbContext.Name
+		}
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
 			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
 				return table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
-					return addPartitioningRows(table, index, &index.Partitioning,
+					return addPartitioningRows(ctx, p, dbName, table, index, &index.Partitioning,
 						tree.DNull /* parentName */, 0 /* colOffset */, addRow)
 				})
 			})

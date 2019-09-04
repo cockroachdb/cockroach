@@ -43,7 +43,8 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 			partitions.column_names,
 			concat(tables.name, '@', table_indexes.index_name) AS index_name,
 			coalesce(partitions.list_value, partitions.range_value) as partition_value,
-		  replace(regexp_extract(config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as zone_config
+			replace(regexp_extract(partition_lookup.config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as zone_config,
+			replace(regexp_extract(zones.inherited_config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as inherited_zone_config
 		FROM
 			%[3]s.crdb_internal.partitions
 			JOIN %[3]s.crdb_internal.tables ON partitions.table_id = tables.table_id
@@ -51,10 +52,13 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 					table_indexes.descriptor_id = tables.table_id
 					AND table_indexes.index_id = partitions.index_id
 			LEFT JOIN %[3]s.crdb_internal.zones ON
-					zones.database_name = tables.database_name
-					AND zones.table_name = tables.name
-					AND zones.index_name = table_indexes.index_name
-					AND zones.partition_name = partitions.name
+					partitions.zone_id = zones.zone_id
+					AND partitions.subzone_id = zones.subzone_id
+			LEFT JOIN %[3]s.crdb_internal.zones AS partition_lookup ON
+				partition_lookup.database_name = tables.database_name
+				AND partition_lookup.table_name = tables.name
+				AND partition_lookup.index_name = table_indexes.index_name
+				AND partition_lookup.partition_name = partitions.name
 		WHERE
 			tables.name = %[1]s AND tables.database_name = %[2]s;
 		`
@@ -72,7 +76,8 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 			partitions.column_names,
 			concat(tables.name, '@', table_indexes.index_name) AS index_name,
 			coalesce(partitions.list_value, partitions.range_value) as partition_value,
-		  replace(regexp_extract(config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as zone_config
+			replace(regexp_extract(partition_lookup.config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as zone_config,
+			replace(regexp_extract(zones.inherited_config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as inherited_zone_config
 		FROM
 			%[1]s.crdb_internal.partitions
 			JOIN %[1]s.crdb_internal.tables ON partitions.table_id = tables.table_id
@@ -80,10 +85,13 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 					table_indexes.descriptor_id = tables.table_id
 					AND table_indexes.index_id = partitions.index_id
 			LEFT JOIN %[1]s.crdb_internal.zones ON
-					zones.database_name = tables.database_name
-					AND zones.table_name = tables.name
-					AND zones.index_name = table_indexes.index_name
-					AND zones.partition_name = partitions.name
+					partitions.zone_id = zones.zone_id
+					AND partitions.subzone_id = zones.subzone_id
+			LEFT JOIN %[1]s.crdb_internal.zones AS partition_lookup ON
+				partition_lookup.database_name = tables.database_name
+				AND partition_lookup.table_name = tables.name
+				AND partition_lookup.index_name = table_indexes.index_name
+				AND partition_lookup.partition_name = partitions.name
 		WHERE
 			tables.database_name = %[2]s
 		ORDER BY
@@ -125,7 +133,8 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 		partitions.column_names,
 		concat(tables.name, '@', table_indexes.index_name) AS index_name,
 		coalesce(partitions.list_value, partitions.range_value) as partition_value,
-	  replace(regexp_extract(config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as zone_config
+		replace(regexp_extract(partition_lookup.config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as zone_config,
+		replace(regexp_extract(zones.inherited_config_sql, 'CONFIGURE ZONE USING\n((?s:.)*)'), e'\t', '') as inherited_zone_config
 	FROM
 		%[5]s.crdb_internal.partitions
 		JOIN %[5]s.crdb_internal.table_indexes ON
@@ -133,10 +142,13 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 				AND partitions.table_id = table_indexes.descriptor_id
 		JOIN %[5]s.crdb_internal.tables ON table_indexes.descriptor_id = tables.table_id
 		LEFT JOIN %[5]s.crdb_internal.zones ON
-				zones.database_name = tables.database_name
-				AND zones.table_name = tables.name
-				AND zones.index_name = table_indexes.index_name
-				AND zones.partition_name = partitions.name
+			partitions.zone_id = zones.zone_id
+			AND partitions.subzone_id = zones.subzone_id
+		LEFT JOIN %[5]s.crdb_internal.zones AS partition_lookup ON
+			partition_lookup.database_name = tables.database_name
+			AND partition_lookup.table_name = tables.name
+			AND partition_lookup.index_name = table_indexes.index_name
+			AND partition_lookup.partition_name = partitions.name
 	WHERE
 		table_indexes.index_name = %[1]s AND tables.name = %[2]s;
 	`

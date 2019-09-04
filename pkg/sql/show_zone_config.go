@@ -38,6 +38,8 @@ var showZoneConfigColumns = sqlbase.ResultColumns{
 	{Name: "config_yaml", Typ: types.String, Hidden: true},
 	{Name: "config_sql", Typ: types.String},
 	{Name: "config_protobuf", Typ: types.Bytes, Hidden: true},
+	{Name: "inherited_config_yaml", Typ: types.String},
+	{Name: "inherited_config_sql", Typ: types.String},
 }
 
 // These must match showZoneConfigColumns.
@@ -53,6 +55,8 @@ const (
 	configYAMLCol
 	configSQLCol
 	configProtobufCol
+	inheritedConfigYamlCol
+	inheritedConfigSQLCol
 )
 
 func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (planNode, error) {
@@ -151,6 +155,57 @@ func getShowZoneConfigRow(
 	return vals, nil
 }
 
+// zoneConfigToSQL pretty prints a zone configuration as a SQL string.
+func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *config.ZoneConfig) (string, error) {
+	constraints, err := yamlMarshalFlow(config.ConstraintsList{
+		Constraints: zone.Constraints,
+		Inherited:   zone.InheritedConstraints})
+	if err != nil {
+		return "", err
+	}
+	constraints = strings.TrimSpace(constraints)
+	prefs, err := yamlMarshalFlow(zone.LeasePreferences)
+	if err != nil {
+		return "", err
+	}
+	prefs = strings.TrimSpace(prefs)
+
+	useComma := false
+	f := tree.NewFmtCtx(tree.FmtParsable)
+	f.WriteString("ALTER ")
+	f.FormatNode(zs)
+	f.WriteString(" CONFIGURE ZONE USING\n")
+	if zone.RangeMinBytes != nil {
+		f.Printf("\trange_min_bytes = %d", *zone.RangeMinBytes)
+		useComma = true
+	}
+	if zone.RangeMaxBytes != nil {
+		writeComma(f, useComma)
+		f.Printf("\trange_max_bytes = %d", *zone.RangeMaxBytes)
+		useComma = true
+	}
+	if zone.GC != nil {
+		writeComma(f, useComma)
+		f.Printf("\tgc.ttlseconds = %d", zone.GC.TTLSeconds)
+		useComma = true
+	}
+	if zone.NumReplicas != nil {
+		writeComma(f, useComma)
+		f.Printf("\tnum_replicas = %d", *zone.NumReplicas)
+		useComma = true
+	}
+	if !zone.InheritedConstraints {
+		writeComma(f, useComma)
+		f.Printf("\tconstraints = %s", lex.EscapeSQLString(constraints))
+		useComma = true
+	}
+	if !zone.InheritedLeasePreferences {
+		writeComma(f, useComma)
+		f.Printf("\tlease_preferences = %s", lex.EscapeSQLString(prefs))
+	}
+	return f.String(), nil
+}
+
 // generateZoneConfigIntrospectionValues creates a result row
 // suitable for populating crdb_internal.zones or SHOW ZONE CONFIG.
 // The values are populated into the `values` first argument.
@@ -206,53 +261,11 @@ func generateZoneConfigIntrospectionValues(
 	if zs == nil {
 		values[configSQLCol] = tree.DNull
 	} else {
-		constraints, err := yamlMarshalFlow(config.ConstraintsList{
-			Constraints: zone.Constraints,
-			Inherited:   zone.InheritedConstraints})
+		sqlStr, err := zoneConfigToSQL(zs, zone)
 		if err != nil {
 			return err
 		}
-		constraints = strings.TrimSpace(constraints)
-		prefs, err := yamlMarshalFlow(zone.LeasePreferences)
-		if err != nil {
-			return err
-		}
-		prefs = strings.TrimSpace(prefs)
-
-		useComma := false
-		f := tree.NewFmtCtx(tree.FmtParsable)
-		f.WriteString("ALTER ")
-		f.FormatNode(zs)
-		f.WriteString(" CONFIGURE ZONE USING\n")
-		if zone.RangeMinBytes != nil {
-			f.Printf("\trange_min_bytes = %d", *zone.RangeMinBytes)
-			useComma = true
-		}
-		if zone.RangeMaxBytes != nil {
-			writeComma(f, useComma)
-			f.Printf("\trange_max_bytes = %d", *zone.RangeMaxBytes)
-			useComma = true
-		}
-		if zone.GC != nil {
-			writeComma(f, useComma)
-			f.Printf("\tgc.ttlseconds = %d", zone.GC.TTLSeconds)
-			useComma = true
-		}
-		if zone.NumReplicas != nil {
-			writeComma(f, useComma)
-			f.Printf("\tnum_replicas = %d", *zone.NumReplicas)
-			useComma = true
-		}
-		if !zone.InheritedConstraints {
-			writeComma(f, useComma)
-			f.Printf("\tconstraints = %s", lex.EscapeSQLString(constraints))
-			useComma = true
-		}
-		if !zone.InheritedLeasePreferences {
-			writeComma(f, useComma)
-			f.Printf("\tlease_preferences = %s", lex.EscapeSQLString(prefs))
-		}
-		values[configSQLCol] = tree.NewDString(f.String())
+		values[configSQLCol] = tree.NewDString(sqlStr)
 	}
 
 	// Populate the protobuf column.
