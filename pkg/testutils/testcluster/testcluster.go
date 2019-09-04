@@ -423,7 +423,7 @@ func (tc *TestCluster) AddReplicas(
 		return roachpb.RangeDescriptor{}, err
 	}
 
-	if err := tc.waitForNewReplicas(startKey, targets...); err != nil {
+	if err := tc.waitForNewReplicas(startKey, false /* waitForVoter */, targets...); err != nil {
 		return roachpb.RangeDescriptor{}, err
 	}
 
@@ -451,7 +451,7 @@ func (tc *TestCluster) AddReplicasMulti(
 	}
 
 	for _, kt := range kts {
-		if err := tc.waitForNewReplicas(kt.StartKey, kt.Targets...); err != nil {
+		if err := tc.waitForNewReplicas(kt.StartKey, false, kt.Targets...); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -460,13 +460,25 @@ func (tc *TestCluster) AddReplicasMulti(
 	return descs, errs
 }
 
+// WaitForVoters waits for the targets to be voters in the range indicated by
+// startKey.
+func (tc *TestCluster) WaitForVoters(
+	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) error {
+	return tc.waitForNewReplicas(startKey, true /* waitForVoter */, targets...)
+}
+
 // waitForNewReplicas waits for each of the targets to have a fully initialized
 // replica of the range indicated by startKey.
 //
 // startKey is start key of range.
+//
+// waitForVoter indicates that the method should wait until the targets are full
+// voters in the rage.
+//
 // targets are replication target for change replica.
 func (tc *TestCluster) waitForNewReplicas(
-	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	startKey roachpb.Key, waitForVoter bool, targets ...roachpb.ReplicationTarget,
 ) error {
 	rKey := keys.MustAddr(startKey)
 	errRetry := errors.Errorf("target not found")
@@ -486,8 +498,10 @@ func (tc *TestCluster) waitForNewReplicas(
 				return errors.Wrapf(errRetry, "for target %s", target)
 			}
 			desc := repl.Desc()
-			if _, ok := desc.GetReplicaDescriptor(target.StoreID); !ok {
+			if replDesc, ok := desc.GetReplicaDescriptor(target.StoreID); !ok {
 				return errors.Errorf("target store %d not yet in range descriptor %v", target.StoreID, desc)
+			} else if waitForVoter && replDesc.GetType() != roachpb.VOTER_FULL {
+				return errors.Errorf("target store %d not yet voter in range descriptor %v", target.StoreID, desc)
 			}
 		}
 		return nil
