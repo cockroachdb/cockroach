@@ -481,6 +481,12 @@ func (b *Builder) buildCTE(ctes []*tree.CTE, inScope *scope) (outScope *scope) {
 				"WITH clause %q does not have a RETURNING clause", tree.ErrString(&name)))
 		}
 
+		projectionsScope := cteScope.replace()
+		projectionsScope.appendColumnsFromScope(cteScope)
+		b.constructProjectForScope(cteScope, projectionsScope)
+
+		cteScope = projectionsScope
+
 		outScope.ctes[ctes[i].Name.Alias.String()] = &cteSource{
 			name: ctes[i].Name,
 			cols: cols,
