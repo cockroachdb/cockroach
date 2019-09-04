@@ -278,7 +278,7 @@ WHERE
       CAST(
         CASE WHEN (
           EXISTS(
-            SELECT ref_1.config_yaml AS c0
+            SELECT ref_1.raw_config_yaml AS c0
             FROM crdb_internal.zones AS ref_1
             WHERE subq_0.c1 IS NOT NULL
           )
@@ -307,7 +307,7 @@ WHERE
         WHEN (
           '12'::STRING
           = ANY (
-              SELECT ref_1.config_yaml AS c0
+              SELECT ref_1.raw_config_yaml AS c0
               FROM crdb_internal.zones AS ref_1
               WHERE subq_0.c1 IS NOT NULL
             )

@@ -209,11 +209,11 @@ SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
 
-query IITTTTTTTTT colnames
+query IITTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.zones WHERE false
 ----
 zone_id  subzone_id  target  range_name  database_name  table_name  index_name  partition_name
-config_yaml  config_sql  config_protobuf
+raw_config_yaml  raw_config_sql  raw_config_protobuf full_config_yaml full_config_sql
 
 query ITTTTTTTTTTTTI colnames
 SELECT * FROM crdb_internal.ranges WHERE range_id < 0
@@ -227,9 +227,9 @@ range_id  start_key  start_pretty  end_key  end_pretty  database_name  table_nam
 
 statement ok
 INSERT INTO system.zones (id, config) VALUES
-  (18, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
-  (53, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
-  (54, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
+  (18, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
+  (53, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
+  (54, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
 
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
@@ -247,12 +247,12 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 54  TABLE testdb.public.foo
 
 query T
-SELECT quote_literal(config_yaml) FROM crdb_internal.zones WHERE zone_id = 0
+SELECT quote_literal(raw_config_yaml) FROM crdb_internal.zones WHERE zone_id = 0
 ----
 e'range_min_bytes: 16777216\nrange_max_bytes: 67108864\ngc:\n  ttlseconds: 90000\nnum_replicas: 3\nconstraints: []\nlease_preferences: []\n'
 
 query T
-SELECT config_sql FROM crdb_internal.zones WHERE zone_id = 0
+SELECT raw_config_sql FROM crdb_internal.zones WHERE zone_id = 0
 ----
 ALTER RANGE default CONFIGURE ZONE USING
   range_min_bytes = 16777216,
