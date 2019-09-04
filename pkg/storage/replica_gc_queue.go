@@ -12,7 +12,6 @@ package storage
 
 import (
 	"context"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -114,13 +113,13 @@ func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *repl
 // in the past.
 func (rgcq *replicaGCQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, _ *config.SystemConfig,
-) (bool, float64) {
+) (shouldQ bool, prio float64) {
+
 	lastCheck, err := repl.GetLastReplicaGCTimestamp(ctx)
 	if err != nil {
 		log.Errorf(ctx, "could not read last replica GC timestamp: %+v", err)
 		return false, 0
 	}
-
 	if _, currentMember := repl.Desc().GetReplicaDescriptor(repl.store.StoreID()); !currentMember {
 		return true, replicaGCPriorityRemoved
 	}
@@ -215,10 +214,16 @@ func (rgcq *replicaGCQueue) process(
 	}
 	replyDesc := rs[0]
 
+	repl.mu.RLock()
+	replicaID := repl.mu.replicaID
+	ticks := repl.mu.ticks
+	repl.mu.RUnlock()
+
 	// Now check whether the replica is meant to still exist.
 	// Maybe it was deleted "under us" by being moved.
 	currentDesc, currentMember := replyDesc.GetReplicaDescriptor(repl.store.StoreID())
-	if desc.RangeID == replyDesc.RangeID && currentMember {
+	sameRange := desc.RangeID == replyDesc.RangeID
+	if sameRange && currentMember {
 		// This replica is a current member of the raft group. Set the last replica
 		// GC check time to avoid re-processing for another check interval.
 		//
@@ -230,14 +235,9 @@ func (rgcq *replicaGCQueue) process(
 		if err := repl.setLastReplicaGCTimestamp(ctx, repl.store.Clock().Now()); err != nil {
 			return err
 		}
-	} else if desc.RangeID == replyDesc.RangeID {
+	} else if sameRange {
 		// We are no longer a member of this range, but the range still exists.
 		// Clean up our local data.
-
-		repl.mu.RLock()
-		replicaID := repl.mu.replicaID
-		ticks := repl.mu.ticks
-		repl.mu.RUnlock()
 
 		if replicaID == 0 {
 			// This is a preemptive replica. GC'ing a preemptive replica is a
@@ -284,13 +284,18 @@ func (rgcq *replicaGCQueue) process(
 
 		rgcq.metrics.RemoveReplicaCount.Inc(1)
 		log.VEventf(ctx, 1, "destroying local data")
+
+		nextReplicaID := replyDesc.NextReplicaID
 		// Note that this seems racy - we didn't hold any locks between reading
 		// the range descriptor above and deciding to remove the replica - but
 		// we pass in the NextReplicaID to detect situations in which the
 		// replica became "non-gc'able" in the meantime by checking (with raftMu
 		// held throughout) whether the replicaID is still smaller than the
-		// NextReplicaID.
-		if err := repl.store.RemoveReplica(ctx, repl, replyDesc.NextReplicaID, RemoveOptions{
+		// NextReplicaID. Given non-zero replica IDs don't change, this is only
+		// possible if we currently think we're processing a pre-emptive snapshot
+		// but discover in RemoveReplica that this range has since been added and
+		// knows that.
+		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
 			return err
@@ -328,10 +333,10 @@ func (rgcq *replicaGCQueue) process(
 			}
 		}
 
-		// A replica ID of MaxInt32 is written when we know a range to have been
-		// merged. See the Merge case of runPreApplyTriggers() for details.
-		const nextReplicaID = math.MaxInt32
-		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{
+		// A mergedTombstoneReplicaID as nextReplicaID because we know the
+		// range to have been merged. See the Merge case of
+		// runPreApplyTriggers() for details.
+		if err := repl.store.RemoveReplica(ctx, repl, mergedTombstoneReplicaID, RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
 			return err

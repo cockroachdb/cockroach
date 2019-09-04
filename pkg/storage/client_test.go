@@ -1061,8 +1061,8 @@ func (m *multiTestContext) restartStore(i int) {
 }
 
 func (m *multiTestContext) Store(i int) *storage.Store {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.stores[i]
 }
 
@@ -1241,6 +1241,23 @@ func (m *multiTestContext) unreplicateRangeNonFatal(rangeID roachpb.RangeID, des
 
 	_, err := m.changeReplicas(startKey, dest, roachpb.REMOVE_REPLICA)
 	return err
+}
+
+// waitForUnreplicated waits until no replica exists for the specified range
+// on the dest store.
+func (m *multiTestContext) waitForUnreplicated(rangeID roachpb.RangeID, dest int) error {
+	// Wait for the unreplications to complete on destination node.
+	return retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+		_, err := m.stores[dest].GetReplica(rangeID)
+		switch err.(type) {
+		case nil:
+			return fmt.Errorf("replica still exists on dest %d", dest)
+		case *roachpb.RangeNotFoundError:
+			return nil
+		default:
+			return err
+		}
+	})
 }
 
 // readIntFromEngines reads the current integer value at the given key

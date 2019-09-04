@@ -618,12 +618,18 @@ func (rp *replicaProposer) enqueueUpdateCheck() {
 
 func (rp *replicaProposer) withGroupLocked(fn func(*raft.RawNode) error) error {
 	// Pass true for mayCampaignOnWake because we're about to propose a command.
-	return (*Replica)(rp).withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
+	isRemoved, err := (*Replica)(rp).withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		// We're proposing a command here so there is no need to wake the leader
 		// if we were quiesced. However, we should make sure we are unquiesced.
 		(*Replica)(rp).unquiesceLocked()
 		return false /* unquiesceLocked */, fn(raftGroup)
 	})
+	if isRemoved {
+		_, destroyErr := (*Replica)(rp).IsDestroyed()
+		log.Fatalf(rp.AnnotateCtx(context.TODO()),
+			"replica unexpectedly removed: %v", destroyErr)
+	}
+	return err
 }
 
 func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
