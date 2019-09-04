@@ -100,8 +100,6 @@ var MaxTxnRefreshSpansBytes = settings.RegisterIntSetting(
 // the timestamp cache entries for these reads are updated and the transaction
 // is free to update its provisional commit timestamp without needing to
 // restart.
-//
-// TODO(nvanbenschoten): Unit test this file.
 type txnSpanRefresher struct {
 	st      *cluster.Settings
 	knobs   *ClientTestingKnobs
@@ -315,6 +313,7 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	}
 
 	// Refresh all spans (merge first).
+	// TODO(nvanbenschoten): actually merge spans.
 	refreshSpanBa := roachpb.BatchRequest{}
 	refreshSpanBa.Txn = refreshTxn
 	addRefreshes := func(refreshes []roachpb.Span, write bool) {

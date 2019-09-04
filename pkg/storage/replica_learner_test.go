@@ -616,7 +616,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 	// added.
 	<-blockUntilSnapshotCh
 
-	// Removes the learner on node 3 out from under the replicate queue. This
+	// Remove the learner on node 3 out from under the replicate queue. This
 	// simulates a second replicate queue running concurrently. The first thing
 	// this second replicate queue would do is remove any learners it sees,
 	// leaving the 2 voters.
