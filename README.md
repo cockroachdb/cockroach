@@ -34,11 +34,6 @@ Here’s a quick explainer video:
 <a href='https://www.youtube.com/watch?v=VgXiMcbGwzQ'> <img src='docs/media/explainer-video-preview.png' width='50%'> </a>
 
 
-## Status
-
-CockroachDB is production-ready. See our
-[Roadmap](https://github.com/cockroachdb/cockroach/wiki/Roadmap) for a list of features planned or in development.
-
 ## Docs
 
 For guidance on installation, development, deployment, and administration, see our [User Documentation](https://cockroachlabs.com/docs/stable/).
