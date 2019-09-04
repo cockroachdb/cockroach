@@ -1265,6 +1265,22 @@ CREATE TABLE crdb_internal.create_statements (
 							return err
 						}
 					}
+				} else {
+					// If there are partitions applied to this table and no zone configurations, display a warning.
+					hasPartitions := false
+					for i := range table.Indexes {
+						if table.Indexes[i].Partitioning.NumColumns != 0 {
+							hasPartitions = true
+							break
+						}
+					}
+					hasPartitions = hasPartitions || table.PrimaryIndex.Partitioning.NumColumns != 0
+					if hasPartitions {
+						const msg = `-- Warning: Partitioned table with no zone configurations.`
+						if err := zoneRows.Append(tree.NewDString(msg)); err != nil {
+							return err
+						}
+					}
 				}
 
 				descID := tree.NewDInt(tree.DInt(table.ID))
