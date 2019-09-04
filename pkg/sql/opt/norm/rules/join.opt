@@ -325,6 +325,16 @@
 =>
 $left
 
+# SimplifyZeroCardinalitySemiJoin converts a SemiJoin operator to an empty
+# Values when it's known that the right input never returns any rows.
+[SimplifyZeroCardinalitySemiJoin, Normalize]
+(SemiJoin | SemiJoinApply
+    $left:*
+    $right:* & (HasZeroRows $right)
+)
+=>
+(ConstructEmptyValues (OutputCols $left))
+
 # EliminateAntiJoin discards an AntiJoin operator when it's known that the right
 # input never returns any rows.
 [EliminateAntiJoin, Normalize]
@@ -334,6 +344,18 @@ $left
 )
 =>
 $left
+
+# SimplifyZeroCardinalityAntiJoin converts an AntiJoin operator to an empty
+# Values when it's known that the right input never returns zero rows, and
+# there is no join condition.
+[SimplifyZeroCardinalityAntiJoin, Normalize]
+(AntiJoin | AntiJoinApply
+    $left:*
+    $right:* & ^(CanHaveZeroRows $right)
+    []
+)
+=>
+(ConstructEmptyValues (OutputCols $left))
 
 # EliminateJoinNoColsLeft eliminates an InnerJoin with a one row, zero column
 # left input set. These can be produced when a Values, scalar GroupBy, or other

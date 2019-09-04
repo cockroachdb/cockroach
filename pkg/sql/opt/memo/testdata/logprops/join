@@ -1417,3 +1417,16 @@ project
  │    └── filters (true)
  └── projections
       └── variable: mn.m [type=int, outer=(13)]
+
+# Regression test #40456.
+opt
+SELECT NULL
+FROM uv
+WHERE NOT EXISTS(SELECT uv.u);
+----
+values
+ ├── columns: "?column?":5(unknown!null)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ ├── fd: ()-->(5)
+ └── prune: (5)

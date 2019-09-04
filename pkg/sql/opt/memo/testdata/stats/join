@@ -1380,3 +1380,65 @@ full-join (hash)
            │                   ├── fd: ()-->(7)
            │                   └── (NULL,) [type=tuple{unknown}]
            └── false [type=bool]
+
+expr
+(SemiJoin
+    (Values
+      [ (Tuple [ (Const 1) (Const 2) ] "tuple{int}" ) ]
+      [ (Cols [ (NewColumn "a" "int") (NewColumn "b" "int") ]) ]
+    )
+    (Scan [ (Table "uv") (Cols "u,v,rowid") ])
+    []
+    []
+)
+----
+semi-join (hash)
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── values
+ │    ├── columns: a:1(int!null) b:2(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2)
+ │    └── (1, 2) [type=tuple{int}]
+ ├── scan uv
+ │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
+ │    ├── stats: [rows=10000]
+ │    ├── key: (5)
+ │    └── fd: (5)-->(3,4)
+ └── filters (true)
+
+expr
+(AntiJoin
+    (Values
+      [ (Tuple [ (Const 1) (Const 2) ] "tuple{int}" ) ]
+      [ (Cols [ (NewColumn "a" "int") (NewColumn "b" "int") ]) ]
+    )
+    (Scan [ (Table "uv") (Cols "u,v,rowid") ])
+    []
+    []
+)
+----
+anti-join (hash)
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1e-10]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── values
+ │    ├── columns: a:1(int!null) b:2(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2)
+ │    └── (1, 2) [type=tuple{int}]
+ ├── scan uv
+ │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
+ │    ├── stats: [rows=10000]
+ │    ├── key: (5)
+ │    └── fd: (5)-->(3,4)
+ └── filters (true)
