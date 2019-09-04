@@ -432,7 +432,7 @@ func (ru *Updater) UpdateRow(
 			continue
 		}
 
-		var expValue interface{}
+		var expValue *roachpb.Value
 		if !bytes.Equal(newSecondaryIndexEntry.Key, oldSecondaryIndexEntry.Key) {
 			ru.Fks.addCheckForIndex(ru.Helper.Indexes[i].ID, ru.Helper.Indexes[i].Type)
 			if traceKV {
