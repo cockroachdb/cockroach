@@ -291,13 +291,11 @@ func (mq *mergeQueue) process(
 			log.VEventf(ctx, 2, `%v`, err)
 			return err
 		}
-
 		rhsDesc, err = maybeLeaveAtomicChangeReplicas(ctx, store, rhsDesc)
 		if err != nil {
 			log.VEventf(ctx, 2, `%v`, err)
 			return err
 		}
-
 		rhsDesc, err = removeLearners(ctx, db, rhsDesc)
 		if err != nil {
 			log.VEventf(ctx, 2, `%v`, err)
