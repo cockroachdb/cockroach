@@ -1118,6 +1118,10 @@ var specs = []stmtSpec{
 		unlink:  []string{"location"},
 	},
 	{
+		name: "show_jobs",
+		stmt: "show_jobs_stmt",
+	},
+	{
 		name:   "show_grants_stmt",
 		inline: []string{"name_list", "opt_on_targets_roles", "for_grantee_clause", "name_list"},
 		replace: map[string]string{
