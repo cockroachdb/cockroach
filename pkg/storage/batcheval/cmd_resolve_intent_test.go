@@ -42,6 +42,7 @@ type mockEvalCtx struct {
 	gcThreshold      hlc.Timestamp
 	term, firstIndex uint64
 	canCreateTxnFn   func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason)
+	lease            roachpb.Lease
 }
 
 func (m *mockEvalCtx) String() string {
@@ -119,7 +120,7 @@ func (m *mockEvalCtx) GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp,
 	panic("unimplemented")
 }
 func (m *mockEvalCtx) GetLease() (roachpb.Lease, roachpb.Lease) {
-	panic("unimplemented")
+	return m.lease, roachpb.Lease{}
 }
 
 func TestDeclareKeysResolveIntent(t *testing.T) {
