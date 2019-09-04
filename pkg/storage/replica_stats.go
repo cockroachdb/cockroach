@@ -102,6 +102,22 @@ func (rs *replicaStats) splitRequestCounts(other *replicaStats) {
 	}
 }
 
+// halve is called when a split occurs but the RHS has been removed already
+// and cannot be initialized with splitRequestCounts.
+func (rs *replicaStats) halve() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	for i := range rs.mu.requests {
+		if rs.mu.requests[i] == nil {
+			continue
+		}
+		for k := range rs.mu.requests[i] {
+			newVal := rs.mu.requests[i][k] / 2.0
+			rs.mu.requests[i][k] = newVal
+		}
+	}
+}
+
 func (rs *replicaStats) record(nodeID roachpb.NodeID) {
 	rs.recordCount(1, nodeID)
 }
