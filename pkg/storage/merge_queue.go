@@ -353,7 +353,9 @@ func (mq *mergeQueue) process(
 		humanizeutil.IBytes(mergedStats.Total()),
 		mergedQPS,
 	)
-	_, pErr := lhsRepl.AdminMerge(ctx, roachpb.AdminMergeRequest{}, reason)
+	_, pErr := lhsRepl.AdminMerge(ctx, roachpb.AdminMergeRequest{
+		RequestHeader: roachpb.RequestHeader{Key: lhsRepl.Desc().StartKey.AsRawKey()},
+	}, reason)
 	switch err := pErr.GoError(); err.(type) {
 	case nil:
 	case *roachpb.ConditionFailedError:

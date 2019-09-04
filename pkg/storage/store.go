@@ -2076,29 +2076,13 @@ func (s *Store) IsDraining() bool {
 	return s.draining.Load().(bool)
 }
 
-// NewRangeDescriptor creates a new descriptor based on start and end
-// keys and the supplied roachpb.Replicas slice. It allocates a new
-// range ID and returns a RangeDescriptor whose Replicas are a copy
-// of the supplied replicas slice, with appropriate ReplicaIDs assigned.
-func (s *Store) NewRangeDescriptor(
-	ctx context.Context, start, end roachpb.RKey, replicas roachpb.ReplicaDescriptors,
-) (*roachpb.RangeDescriptor, error) {
+// AllocateRangeID allocates a new RangeID from the cluster-wide RangeID allocator.
+func (s *Store) AllocateRangeID(ctx context.Context) (roachpb.RangeID, error) {
 	id, err := s.rangeIDAlloc.Allocate(ctx)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	repls := append([]roachpb.ReplicaDescriptor(nil), replicas.All()...)
-	for i := range repls {
-		repls[i].ReplicaID = roachpb.ReplicaID(i + 1)
-	}
-	desc := &roachpb.RangeDescriptor{
-		RangeID:       roachpb.RangeID(id),
-		StartKey:      start,
-		EndKey:        end,
-		NextReplicaID: roachpb.ReplicaID(len(repls) + 1),
-	}
-	desc.SetReplicas(roachpb.MakeReplicaDescriptors(repls))
-	return desc, nil
+	return roachpb.RangeID(id), nil
 }
 
 // splitPreApply is called when the raft command is applied. Any
