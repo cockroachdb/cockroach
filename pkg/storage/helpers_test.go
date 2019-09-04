@@ -167,6 +167,11 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 	return manualQueue(s, s.replicaGCQueue, repl)
 }
 
+// ManualRaftSnapshot will manually send a raft snapshot to the target replica.
+func (s *Store) ManualRaftSnapshot(repl *Replica, target roachpb.ReplicaID) error {
+	return s.raftSnapshotQueue.processRaftSnapshot(context.TODO(), repl, target)
+}
+
 func (s *Store) ReservationCount() int {
 	return len(s.snapshotApplySem)
 }
