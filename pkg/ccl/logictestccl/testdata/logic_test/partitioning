@@ -859,3 +859,67 @@ CREATE TABLE t (a INT PRIMARY KEY, b INT, INDEX (b)) PARTITION BY LIST (a) (
 
 statement ok
 RESET sql_safe_updates
+
+# regression tests for #40450
+statement ok
+CREATE DATABASE d_show_partitions
+
+statement ok
+CREATE TABLE d_show_partitions.t (x INT PRIMARY KEY) PARTITION BY LIST (x) ( PARTITION p1 VALUES IN (1))
+
+query TTTTTTTT
+SHOW PARTITIONS FROM DATABASE d_show_partitions
+----
+d_show_partitions t p1 NULL x t@primary (1) NULL
+
+query TTTTTTTT
+SHOW PARTITIONS FROM TABLE d_show_partitions.t
+----
+d_show_partitions t p1 NULL x t@primary (1) NULL
+
+query TTTTTTTT
+SHOW PARTITIONS FROM INDEX d_show_partitions.t@primary
+----
+d_show_partitions t p1 NULL x t@primary (1) NULL
+
+statement ok
+CREATE DATABASE "show partitions"
+
+statement ok
+CREATE TABLE "show partitions".t (x INT PRIMARY KEY) PARTITION BY LIST (x) ( PARTITION p1 VALUES IN (1))
+
+query TTTTTTTT
+SHOW PARTITIONS FROM DATABASE "show partitions"
+----
+show partitions t p1 NULL x t@primary (1) NULL
+
+query TTTTTTTT
+SHOW PARTITIONS FROM TABLE "show partitions".t
+----
+show partitions t p1 NULL x t@primary (1) NULL
+
+query TTTTTTTT
+SHOW PARTITIONS FROM INDEX "show partitions".t@primary
+----
+show partitions t p1 NULL x t@primary (1) NULL
+
+statement ok
+CREATE DATABASE """"
+
+statement ok
+CREATE TABLE """".t (x INT PRIMARY KEY) PARTITION BY LIST (x) ( PARTITION p1 VALUES IN (1))
+
+query TTTTTTTT
+SHOW PARTITIONS FROM DATABASE """"
+----
+" t p1 NULL x t@primary (1) NULL
+
+query TTTTTTTT
+SHOW PARTITIONS FROM TABLE """".t
+----
+" t p1 NULL x t@primary (1) NULL
+
+query TTTTTTTT
+SHOW PARTITIONS FROM INDEX """".t@primary
+----
+" t p1 NULL x t@primary (1) NULL
