@@ -698,7 +698,6 @@ func clearRangeData(
 	} else {
 		keyRanges = rditer.MakeAllKeyRanges(desc)
 	}
-
 	var clearRangeFn func(engine.Reader, engine.Writer, engine.MVCCKey, engine.MVCCKey) error
 	if mustClearRange {
 		clearRangeFn = func(eng engine.Reader, writer engine.Writer, start, end engine.MVCCKey) error {
@@ -894,8 +893,7 @@ func (r *Replica) applySnapshot(
 	// problematic, as it would prevent this store from ever having a new replica
 	// of the removed range. In this case, however, it's copacetic, as subsumed
 	// ranges _can't_ have new replicas.
-	const subsumedNextReplicaID = math.MaxInt32
-	if err := r.clearSubsumedReplicaDiskData(ctx, inSnap.SSSS, s.Desc, subsumedRepls, subsumedNextReplicaID); err != nil {
+	if err := r.clearSubsumedReplicaDiskData(ctx, inSnap.SSSS, s.Desc, subsumedRepls, mergedTombstoneReplicaID); err != nil {
 		return err
 	}
 	stats.subsumedReplicas = timeutil.Now()
@@ -915,7 +913,7 @@ func (r *Replica) applySnapshot(
 	// has not yet been updated. Any errors past this point must therefore be
 	// treated as fatal.
 
-	if err := r.clearSubsumedReplicaInMemoryData(ctx, subsumedRepls, subsumedNextReplicaID); err != nil {
+	if err := r.clearSubsumedReplicaInMemoryData(ctx, subsumedRepls, mergedTombstoneReplicaID); err != nil {
 		log.Fatalf(ctx, "failed to clear in-memory data of subsumed replicas while applying snapshot: %+v", err)
 	}
 
@@ -1013,7 +1011,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			r.store.Engine(),
 			&subsumedReplSST,
 			subsumedNextReplicaID,
-			true, /* rangeIDLocalOnly */
+			true, /* clearRangeIDLocalOnly */
 			true, /* mustClearRange */
 		); err != nil {
 			subsumedReplSST.Close()
@@ -1101,7 +1099,7 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 		// acquisition leaves the store in a consistent state, and access to the
 		// replicas themselves is protected by their raftMus, which are held from
 		// start to finish.
-		if err := r.store.removeReplicaImpl(ctx, sr, subsumedNextReplicaID, RemoveOptions{
+		if err := r.store.removeInitializedReplicaRaftMuLocked(ctx, sr, subsumedNextReplicaID, RemoveOptions{
 			DestroyData: false, // data is already destroyed
 		}); err != nil {
 			return err
