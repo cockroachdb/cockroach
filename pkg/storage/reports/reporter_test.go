@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 type zone struct {
@@ -699,7 +699,7 @@ func addIndexSubzones(
 			Config:        idx.zone.toZoneConfig(),
 		})
 		objects[fmt.Sprintf("%s.%s", tableDesc.Name, idx.name)] =
-			MakeZoneKey(uint32(tableDesc.ID), SubzoneID(len(res.Subzones)))
+			MakeZoneKey(uint32(tableDesc.ID), base.SubzoneID(len(res.Subzones)))
 	}
 
 	for _, p := range idx.partitions {
@@ -716,7 +716,7 @@ func addIndexSubzones(
 			} else {
 				objectName = fmt.Sprintf("%s.%s.%s", tableDesc.Name, idx.name, p.name)
 			}
-			objects[objectName] = MakeZoneKey(uint32(tableDesc.ID), SubzoneID(len(res.Subzones)))
+			objects[objectName] = MakeZoneKey(uint32(tableDesc.ID), base.SubzoneID(len(res.Subzones)))
 		}
 	}
 	return res

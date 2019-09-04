@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -131,7 +132,7 @@ func (r *replicationStatsReportSaver) loadPreviousVersion(
 	for _, row := range rows {
 		key := ZoneKey{}
 		key.ZoneID = (uint32)(*row[0].(*tree.DInt))
-		key.SubzoneID = SubzoneID(*row[1].(*tree.DInt))
+		key.SubzoneID = base.SubzoneID(*row[1].(*tree.DInt))
 		r.previousVersion[key] = zoneRangeStatus{
 			(int32)(*row[2].(*tree.DInt)),
 			(int32)(*row[3].(*tree.DInt)),

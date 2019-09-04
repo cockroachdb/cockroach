@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -311,7 +312,7 @@ func visitZones(
 		// Try subzones.
 		subzone, subzoneIdx := zone.GetSubzoneForKeySuffix(keySuffix)
 		if subzone != nil {
-			if visitor(ctx, &subzone.Config, MakeZoneKey(id, SubzoneIDFromIndex(int(subzoneIdx)))) {
+			if visitor(ctx, &subzone.Config, MakeZoneKey(id, base.SubzoneIDFromIndex(int(subzoneIdx)))) {
 				return true, nil
 			}
 		}
@@ -397,7 +398,9 @@ func getZoneByID(id uint32, cfg *config.SystemConfig) (*config.ZoneConfig, error
 // processRange returns the list of constraints violated by a range. The range
 // is represented by the descriptors of the replicas' stores.
 func processRange(
-	ctx context.Context, storeDescs []roachpb.StoreDescriptor, constraintGroups []config.Constraints,
+	ctx context.Context,
+	storeDescs []roachpb.StoreDescriptor,
+	constraintGroups []config.Constraints,
 ) []ConstraintRepr {
 	var res []ConstraintRepr
 	// Evaluate all zone constraints for the stores (i.e. replicas) of the given range.
@@ -459,7 +462,10 @@ type rangeVisitor interface {
 //
 // An error is returned if some descriptors could not be read.
 func visitRanges(
-	ctx context.Context, rangeStore RangeIterator, cfg *config.SystemConfig, visitor ...rangeVisitor,
+	ctx context.Context,
+	rangeStore RangeIterator,
+	cfg *config.SystemConfig,
+	visitor ...rangeVisitor,
 ) error {
 	// Iterate over all the ranges.
 	for {

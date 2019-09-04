@@ -85,7 +85,8 @@ func ZoneSpecifierFromID(
 // ResolveZoneSpecifier converts a zone specifier to the ID of most specific
 // zone whose config applies.
 func ResolveZoneSpecifier(
-	zs *tree.ZoneSpecifier, resolveName func(parentID uint32, name string) (id uint32, err error),
+	zs *tree.ZoneSpecifier,
+	resolveName func(parentID uint32, name string) (id uint32, err error),
 ) (uint32, error) {
 	// A zone specifier has one of 3 possible structures:
 	// - a predefined named zone;
@@ -364,7 +365,10 @@ func (z *ZoneConfig) Validate() error {
 
 // InheritFromParent hydrates a zones missing fields from its parent.
 func (z *ZoneConfig) InheritFromParent(parent *ZoneConfig) {
-	if z.NumReplicas == nil {
+	// TODO (rohany): I'm unsure if this is a *safe* change. Does anyone depend
+	//  on this behavior?
+	// Allow for subzonePlaceholders to inherit fields from parents if needed.
+	if z.NumReplicas == nil || (z.NumReplicas != nil && *z.NumReplicas == 0) {
 		if parent.NumReplicas != nil {
 			z.NumReplicas = proto.Int32(*parent.NumReplicas)
 		}
