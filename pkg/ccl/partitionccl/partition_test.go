@@ -1121,9 +1121,12 @@ func setupPartitioningTestCluster(
 	cfg.NumReplicas = proto.Int32(1)
 
 	tsArgs := func(attr string) base.TestServerArgs {
+		s := cluster.MakeTestingClusterSettingsWithVersion(cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
 		return base.TestServerArgs{
+			Settings: s,
 			Knobs: base.TestingKnobs{
 				Store: &storage.StoreTestingKnobs{
+					BootstrapVersion: &cluster.ClusterVersion{roachpb.Version{Major: 19, Minor: 1, Unstable: 0}},
 					// Disable LBS because when the scan is happening at the rate it's happening
 					// below, it's possible that one of the system ranges trigger a split.
 					DisableLoadBasedSplitting: true,
@@ -1139,6 +1142,7 @@ func setupPartitioningTestCluster(
 			UseDatabase: "data",
 		}
 	}
+
 	tcArgs := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{
 		0: tsArgs("n1"),
 		1: tsArgs("n2"),

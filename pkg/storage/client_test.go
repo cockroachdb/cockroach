@@ -1243,6 +1243,21 @@ func (m *multiTestContext) unreplicateRangeNonFatal(rangeID roachpb.RangeID, des
 	return err
 }
 
+func (m *multiTestContext) waitForUnreplicated(rangeID roachpb.RangeID, dest int) error {
+	// Wait for the unreplications to complete on destination node.
+	return retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+		_, err := m.stores[dest].GetReplica(rangeID)
+		switch err.(type) {
+		case nil:
+			return fmt.Errorf("replica still exists on dest %d", dest)
+		case *roachpb.RangeNotFoundError:
+			return nil
+		default:
+			return err
+		}
+	})
+}
+
 // readIntFromEngines reads the current integer value at the given key
 // from all configured engines, filling in zeros when the value is not
 // found. Returns a slice of the same length as mtc.engines.

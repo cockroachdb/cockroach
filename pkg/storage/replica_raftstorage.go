@@ -678,6 +678,14 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	return nil
 }
 
+type clearRangeOption int
+
+const (
+	clearRangeIDLocalOnly clearRangeOption = iota
+	clearReplicatedOnly
+	clearAll
+)
+
 // clearRangeData clears the data associated with a range descriptor. If
 // rangeIDLocalOnly is true, then only the range-id local keys are deleted.
 // Otherwise, the range-id local keys, range local keys, and user keys are all
@@ -689,16 +697,20 @@ func clearRangeData(
 	desc *roachpb.RangeDescriptor,
 	eng engine.Reader,
 	writer engine.Writer,
-	rangeIDLocalOnly bool,
+	opt clearRangeOption,
 	mustClearRange bool,
 ) error {
 	var keyRanges []rditer.KeyRange
-	if rangeIDLocalOnly {
-		keyRanges = []rditer.KeyRange{rditer.MakeRangeIDLocalKeyRange(desc.RangeID, false)}
-	} else {
+	switch opt {
+	case clearRangeIDLocalOnly:
+		keyRanges = []rditer.KeyRange{
+			rditer.MakeRangeIDLocalKeyRange(desc.RangeID, false),
+		}
+	case clearReplicatedOnly:
+		keyRanges = rditer.MakeReplicatedKeyRanges(desc)
+	case clearAll:
 		keyRanges = rditer.MakeAllKeyRanges(desc)
 	}
-
 	var clearRangeFn func(engine.Reader, engine.Writer, engine.MVCCKey, engine.MVCCKey) error
 	if mustClearRange {
 		clearRangeFn = func(eng engine.Reader, writer engine.Writer, start, end engine.MVCCKey) error {
@@ -1013,7 +1025,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			r.store.Engine(),
 			&subsumedReplSST,
 			subsumedNextReplicaID,
-			true, /* rangeIDLocalOnly */
+			clearRangeIDLocalOnly,
 			true, /* mustClearRange */
 		); err != nil {
 			subsumedReplSST.Close()

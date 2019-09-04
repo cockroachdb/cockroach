@@ -153,6 +153,7 @@ func (fr *fakeReplica) StoreID() roachpb.StoreID {
 	return 1
 }
 func (fr *fakeReplica) GetRangeID() roachpb.RangeID         { return fr.id }
+func (fr *fakeReplica) ReplicaID() roachpb.ReplicaID        { return 0 }
 func (fr *fakeReplica) IsInitialized() bool                 { return true }
 func (fr *fakeReplica) IsDestroyed() (DestroyReason, error) { return destroyReasonAlive, nil }
 func (fr *fakeReplica) Desc() *roachpb.RangeDescriptor {
