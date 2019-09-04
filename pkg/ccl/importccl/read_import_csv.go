@@ -114,7 +114,7 @@ func (c *csvInputReader) readFile(
 		cr.Comma = c.opts.Comma
 	}
 	cr.FieldsPerRecord = -1
-	cr.LazyQuotes = true
+	cr.LazyQuotes = false
 	cr.Comment = c.opts.Comment
 
 	c.batch = csvRecord{
