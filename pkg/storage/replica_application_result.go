@@ -111,9 +111,12 @@ func clearTrivialReplicatedEvalResultFields(r *storagepb.ReplicatedEvalResult) {
 // ReplicatedEvalResult because the process of handling the replicated eval
 // result will zero-out the struct to ensure that is has properly performed all
 // of the implied side-effects.
-func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
+//
+// The isRemoved bool will only be set to true if an injected error led to the
+// replica having been marked as corrupt.
+func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) (isRemoved bool) {
 	if !cmd.IsLocal() {
-		return
+		return false
 	}
 
 	var pErr *roachpb.Error
@@ -131,7 +134,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 		// calling maybeSetCorrupt here is mostly for tests and looks. The
 		// interesting errors originate in applyRaftCommandToBatch, and they are
 		// already handled above.
-		pErr = r.maybeSetCorrupt(ctx, pErr)
+		pErr, isRemoved = r.maybeSetCorruptRaftMuLocked(ctx, pErr)
 	}
 	if pErr == nil {
 		pErr = cmd.forcedErr
@@ -160,7 +163,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 				// in reproposing it and we don't want to acknowledge the client
 				// yet.
 				cmd.proposal = nil
-				return
+				return isRemoved
 			}
 		default:
 			panic("unexpected")
@@ -177,6 +180,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	} else if cmd.localResult != nil {
 		log.Fatalf(ctx, "shouldn't have a local result if command processing failed. pErr: %s", pErr)
 	}
+	return isRemoved
 }
 
 // tryReproposeWithNewLeaseIndex is used by prepareLocalResult to repropose
@@ -293,22 +297,43 @@ func (r *Replica) handleComputeChecksumResult(ctx context.Context, cc *storagepb
 	r.computeChecksumPostApply(ctx, *cc)
 }
 
-func (r *Replica) handleChangeReplicasResult(ctx context.Context, chng *storagepb.ChangeReplicas) {
-	storeID := r.store.StoreID()
-	var found bool
-	for _, rDesc := range chng.Replicas() {
-		if rDesc.StoreID == storeID {
-			found = true
-			break
-		}
+func (r *Replica) handleChangeReplicasResult(
+	ctx context.Context, chng *storagepb.ChangeReplicas,
+) (changeRemovedReplica bool) {
+	// If this command removes us then we would have set the destroy status
+	// to destroyReasonRemovalPending which we detect here.
+	// Note that a replica's destroy status is only ever updated under the
+	// raftMu and we validated that the replica was not RemovingOrRemoved
+	// before processing this raft ready.
+	if ds, _ := r.IsDestroyed(); ds != destroyReasonRemovalPending {
+		return false // changeRemovedReplica
 	}
-	if !found {
-		// This wants to run as late as possible, maximizing the chances
-		// that the other nodes have finished this command as well (since
-		// processing the removal from the queue looks up the Range at the
-		// lease holder, being too early here turns this into a no-op).
-		r.store.replicaGCQueue.AddAsync(ctx, r, replicaGCPriorityRemoved)
+
+	// If this command removes us then we need to go through the process of
+	// removing our replica from the store. After this method returns, the code
+	// should roughly return all the way up to whoever called handleRaftReady
+	// and this Replica should never be heard from again. We can detect if this
+	// change removed us by inspecting the replica's destroyStatus. We check the
+	// destroy status before processing a raft ready so if we find ourselves with
+	// removal pending at this point then we know that this command must be
+	// responsible.
+	if log.V(1) {
+		log.Infof(ctx, "removing replica due to ChangeReplicasTrigger: %v", chng)
 	}
+
+	// NB: postDestroyRaftMuLocked requires that the batch which removed the data
+	// be durably synced to disk, which we have.
+	// See replicaAppBatch.ApplyToStateMachine().
+	if err := r.postDestroyRaftMuLocked(ctx, r.GetMVCCStats()); err != nil {
+		log.Fatalf(ctx, "failed to run Replica postDestroy: %v", err)
+	}
+
+	if err := r.store.removeInitializedReplicaRaftMuLocked(ctx, r, chng.Desc.NextReplicaID, RemoveOptions{
+		DestroyData: false, // We already destroyed the data when the batch committed.
+	}); err != nil {
+		log.Fatalf(ctx, "failed to remove replica: %v", err)
+	}
+	return true
 }
 
 func (r *Replica) handleRaftLogDeltaResult(ctx context.Context, delta int64) {

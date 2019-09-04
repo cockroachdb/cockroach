@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func checkGauge(t *testing.T, id string, g *metric.Gauge, e int64) {
@@ -313,8 +314,9 @@ func TestStoreMetrics(t *testing.T) {
 		return mtc.unreplicateRangeNonFatal(replica.RangeID, 0)
 	})
 
-	// Force GC Scan on store 0 in order to fully remove range.
-	mtc.stores[1].MustForceReplicaGCScanAndProcess()
+	// Wait until we're sure that store 0 has successfully processed its removal.
+	require.NoError(t, mtc.waitForUnreplicated(replica.RangeID, 0))
+
 	mtc.waitForValues(roachpb.Key("z"), []int64{0, 5, 5})
 
 	// Verify range count is as expected.

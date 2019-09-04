@@ -12,6 +12,8 @@ package storage
 
 import (
 	"context"
+	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,7 +31,10 @@ type DestroyReason int
 const (
 	// The replica is alive.
 	destroyReasonAlive DestroyReason = iota
-	// The replica has been marked for GC, but hasn't been GCed yet.
+	// The replica is in the process of being removed but has not been removed
+	// yet. It exists to avoid races between two threads which may decide to
+	// destroy a replica (e.g. processing a ChangeReplicasTrigger removing the
+	// range and receiving a raft message with a higher replica ID).
 	destroyReasonRemovalPending
 	// The replica has been GCed.
 	destroyReasonRemoved
@@ -43,13 +48,13 @@ type destroyStatus struct {
 	err    error
 }
 
+func (s destroyStatus) String() string {
+	return fmt.Sprintf("{%v %d}", s.err, s.reason)
+}
+
 func (s *destroyStatus) Set(err error, reason DestroyReason) {
 	s.err = err
 	s.reason = reason
-}
-
-func (s *destroyStatus) Reset() {
-	s.Set(nil, destroyReasonAlive)
 }
 
 // IsAlive returns true when a replica is alive.
@@ -62,16 +67,30 @@ func (s destroyStatus) Removed() bool {
 	return s.reason == destroyReasonRemoved
 }
 
+// RemovingOrRemoved returns whether the replica is removed or in the process of
+// being removed.
+func (s destroyStatus) RemovingOrRemoved() bool {
+	return s.reason == destroyReasonRemovalPending || s.reason == destroyReasonRemoved
+}
+
+// mergedTombstoneReplicaID is the replica ID written into the tombstone
+// for replicas which are part of a range which is known to have been merged.
+// This value should prevent any messages from stale replicas of that range from
+// ever resurrecting merged replicas. Whenever merging or subsuming a replica we
+// know new replicas can never be created so this value is used even if we
+// don't know the current replica ID.
+const mergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
+
 func (r *Replica) preDestroyRaftMuLocked(
 	ctx context.Context,
 	reader engine.Reader,
 	writer engine.Writer,
 	nextReplicaID roachpb.ReplicaID,
-	rangeIDLocalOnly bool,
-	mustClearRange bool,
+	clearRangeIDLocalOnly bool,
+	mustUseClearRange bool,
 ) error {
 	desc := r.Desc()
-	err := clearRangeData(desc, reader, writer, rangeIDLocalOnly, mustClearRange)
+	err := clearRangeData(desc, reader, writer, clearRangeIDLocalOnly, mustUseClearRange)
 	if err != nil {
 		return err
 	}
@@ -89,15 +108,17 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 	//
 	// TODO(benesch): we would ideally atomically suggest the compaction with
 	// the deletion of the data itself.
-	desc := r.Desc()
-	r.store.compactor.Suggest(ctx, storagepb.SuggestedCompaction{
-		StartKey: roachpb.Key(desc.StartKey),
-		EndKey:   roachpb.Key(desc.EndKey),
-		Compaction: storagepb.Compaction{
-			Bytes:            ms.Total(),
-			SuggestedAtNanos: timeutil.Now().UnixNano(),
-		},
-	})
+	if ms != (enginepb.MVCCStats{}) {
+		desc := r.Desc()
+		r.store.compactor.Suggest(ctx, storagepb.SuggestedCompaction{
+			StartKey: roachpb.Key(desc.StartKey),
+			EndKey:   roachpb.Key(desc.EndKey),
+			Compaction: storagepb.Compaction{
+				Bytes:            ms.Total(),
+				SuggestedAtNanos: timeutil.Now().UnixNano(),
+			},
+		})
+	}
 
 	// NB: we need the nil check below because it's possible that we're GC'ing a
 	// Replica without a replicaID, in which case it does not have a sideloaded
@@ -115,21 +136,22 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 }
 
 // destroyRaftMuLocked deletes data associated with a replica, leaving a
-// tombstone.
+// tombstone. The Replica may not be initialized in which case only the
+// range ID local data is removed.
 func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb.ReplicaID) error {
 	startTime := timeutil.Now()
 
 	ms := r.GetMVCCStats()
-
 	batch := r.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
+	clearRangeIDLocalOnly := !r.IsInitialized()
 	if err := r.preDestroyRaftMuLocked(
 		ctx,
 		r.Engine(),
 		batch,
 		nextReplicaID,
-		false, /* rangeIDLocalOnly */
-		false, /* mustClearRange */
+		clearRangeIDLocalOnly,
+		false, /* mustUseClearRange */
 	); err != nil {
 		return err
 	}
@@ -148,12 +170,18 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	if err := r.postDestroyRaftMuLocked(ctx, ms); err != nil {
 		return err
 	}
-
-	log.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
-		ms.KeyCount+ms.SysCount, ms.KeyCount, ms.SysCount,
-		commitTime.Sub(startTime).Seconds()*1000,
-		preTime.Sub(startTime).Seconds()*1000,
-		commitTime.Sub(preTime).Seconds()*1000)
+	if r.IsInitialized() {
+		log.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
+			ms.KeyCount+ms.SysCount, ms.KeyCount, ms.SysCount,
+			commitTime.Sub(startTime).Seconds()*1000,
+			preTime.Sub(startTime).Seconds()*1000,
+			commitTime.Sub(preTime).Seconds()*1000)
+	} else {
+		log.Infof(ctx, "removed uninitialized range in %0.0fms [clear=%0.0fms commit=%0.0fms]",
+			commitTime.Sub(startTime).Seconds()*1000,
+			preTime.Sub(startTime).Seconds()*1000,
+			commitTime.Sub(preTime).Seconds()*1000)
+	}
 	return nil
 }
 
@@ -188,8 +216,8 @@ func (r *Replica) setTombstoneKey(
 	if nextReplicaID < externalNextReplicaID {
 		nextReplicaID = externalNextReplicaID
 	}
-	if nextReplicaID > r.mu.minReplicaID {
-		r.mu.minReplicaID = nextReplicaID
+	if nextReplicaID > r.mu.tombstoneMinReplicaID {
+		r.mu.tombstoneMinReplicaID = nextReplicaID
 	}
 	r.mu.Unlock()
 
