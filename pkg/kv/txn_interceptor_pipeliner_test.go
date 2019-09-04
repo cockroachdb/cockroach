@@ -49,6 +49,25 @@ func (m *mockLockedSender) MockSend(
 	m.mockFn = fn
 }
 
+func (m *mockLockedSender) Reset() {
+	m.mockFn = nil
+}
+
+func (m *mockLockedSender) ChainMockSend(
+	fns ...func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error),
+) {
+	for i := range fns {
+		i, fn := i, fns[i]
+		fns[i] = func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			if i < len(fns)-1 {
+				m.mockFn = fns[i+1]
+			}
+			return fn(ba)
+		}
+	}
+	m.mockFn = fns[0]
+}
+
 func makeMockTxnPipeliner() (txnPipeliner, *mockLockedSender) {
 	mockSender := &mockLockedSender{}
 	return txnPipeliner{
