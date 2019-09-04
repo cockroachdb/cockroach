@@ -57,7 +57,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -1641,6 +1640,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.TestingKnobs.DisableEagerReplicaRemoval = true
 	mtc := &multiTestContext{storeConfig: &storeCfg}
 	mtc.Start(t, 2)
 	defer mtc.Stop()
@@ -2043,8 +2043,20 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 	lhsRepl2.RaftUnlock()
 
 	// Ensure that the unblocked merge eventually applies and subsumes the RHS.
+	// In general this will happen due to receiving a ReplicaTooOldError but
+	// it may require the replica GC queue. In rare cases the LHS will never
+	// hear about the merge and may need to be GC'd on its own.
 	testutils.SucceedsSoon(t, func() error {
-		if _, err := store2.GetReplica(rhsDesc.RangeID); err == nil {
+		// Make the the LHS gets destroyed.
+		if lhsRepl, err := store2.GetReplica(lhsDesc.RangeID); err == nil {
+			if err := store2.ManualReplicaGC(lhsRepl); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if rhsRepl, err := store2.GetReplica(rhsDesc.RangeID); err == nil {
+			if err := store2.ManualReplicaGC(rhsRepl); err != nil {
+				t.Fatal(err)
+			}
 			return errors.New("rhs not yet destroyed")
 		}
 		return nil
@@ -2060,6 +2072,7 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.TestingKnobs.DisableEagerReplicaRemoval = true
 	mtc := &multiTestContext{storeConfig: &storeCfg}
 	mtc.Start(t, 3)
 	defer mtc.Stop()
@@ -2827,74 +2840,6 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 	}
 }
 
-// unreliableRaftHandler drops all Raft messages that are addressed to the
-// specified rangeID, but lets all other messages through.
-type unreliableRaftHandler struct {
-	rangeID roachpb.RangeID
-	storage.RaftMessageHandler
-	// If non-nil, can return false to avoid dropping a msg to rangeID
-	dropReq  func(*storage.RaftMessageRequest) bool
-	dropHB   func(*storage.RaftHeartbeat) bool
-	dropResp func(*storage.RaftMessageResponse) bool
-}
-
-func (h *unreliableRaftHandler) HandleRaftRequest(
-	ctx context.Context,
-	req *storage.RaftMessageRequest,
-	respStream storage.RaftMessageResponseStream,
-) *roachpb.Error {
-	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
-		reqCpy := *req
-		req = &reqCpy
-		req.Heartbeats = h.filterHeartbeats(req.Heartbeats)
-		req.HeartbeatResps = h.filterHeartbeats(req.HeartbeatResps)
-		if len(req.Heartbeats)+len(req.HeartbeatResps) == 0 {
-			// Entirely filtered.
-			return nil
-		}
-	} else if req.RangeID == h.rangeID {
-		if h.dropReq == nil || h.dropReq(req) {
-			log.Infof(
-				ctx,
-				"dropping Raft message %s",
-				raft.DescribeMessage(req.Message, func([]byte) string {
-					return "<omitted>"
-				}),
-			)
-
-			return nil
-		}
-	}
-	return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
-}
-
-func (h *unreliableRaftHandler) filterHeartbeats(
-	hbs []storage.RaftHeartbeat,
-) []storage.RaftHeartbeat {
-	if len(hbs) == 0 {
-		return hbs
-	}
-	var cpy []storage.RaftHeartbeat
-	for i := range hbs {
-		hb := &hbs[i]
-		if hb.RangeID != h.rangeID || (h.dropHB != nil && !h.dropHB(hb)) {
-			cpy = append(cpy, *hb)
-		}
-	}
-	return cpy
-}
-
-func (h *unreliableRaftHandler) HandleRaftResponse(
-	ctx context.Context, resp *storage.RaftMessageResponse,
-) error {
-	if resp.RangeID == h.rangeID {
-		if h.dropResp == nil || h.dropResp(resp) {
-			return nil
-		}
-	}
-	return h.RaftMessageHandler.HandleRaftResponse(ctx, resp)
-}
-
 func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -3082,20 +3027,22 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	mtc.transport.Listen(store2.Ident.StoreID, &unreliableRaftHandler{
 		rangeID:            aRepl0.RangeID,
 		RaftMessageHandler: store2,
-		dropReq: func(req *storage.RaftMessageRequest) bool {
-			// Make sure that even going forward no MsgApp for what we just
-			// truncated can make it through. The Raft transport is asynchronous
-			// so this is necessary to make the test pass reliably - otherwise
-			// the follower on store2 may catch up without needing a snapshot,
-			// tripping up the test.
-			//
-			// NB: the Index on the message is the log index that _precedes_ any of the
-			// entries in the MsgApp, so filter where msg.Index < index, not <= index.
-			return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
+		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
+			dropReq: func(req *storage.RaftMessageRequest) bool {
+				// Make sure that even going forward no MsgApp for what we just
+				// truncated can make it through. The Raft transport is asynchronous
+				// so this is necessary to make the test pass reliably - otherwise
+				// the follower on store2 may catch up without needing a snapshot,
+				// tripping up the test.
+				//
+				// NB: the Index on the message is the log index that _precedes_ any of the
+				// entries in the MsgApp, so filter where msg.Index < index, not <= index.
+				return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
+			},
+			// Don't drop heartbeats or responses.
+			dropHB:   func(*storage.RaftHeartbeat) bool { return false },
+			dropResp: func(*storage.RaftMessageResponse) bool { return false },
 		},
-		// Don't drop heartbeats or responses.
-		dropHB:   func(*storage.RaftHeartbeat) bool { return false },
-		dropResp: func(*storage.RaftMessageResponse) bool { return false },
 	})
 
 	// Wait for all replicas to catch up to the same point. Because we truncated
@@ -3372,9 +3319,12 @@ func TestMergeQueue(t *testing.T) {
 	t.Run("non-collocated", func(t *testing.T) {
 		reset(t)
 		verifyUnmerged(t)
-		mtc.replicateRange(rhs().RangeID, 1)
-		mtc.transferLease(ctx, rhs().RangeID, 0, 1)
-		mtc.unreplicateRange(rhs().RangeID, 0)
+		rhsRangeID := rhs().RangeID
+		mtc.replicateRange(rhsRangeID, 1)
+		mtc.transferLease(ctx, rhsRangeID, 0, 1)
+		mtc.unreplicateRange(rhsRangeID, 0)
+		require.NoError(t, mtc.waitForUnreplicated(rhsRangeID, 0))
+
 		clearRange(t, lhsStartKey, rhsEndKey)
 		store.MustForceMergeScanAndProcess()
 		verifyMerged(t)

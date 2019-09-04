@@ -12,6 +12,7 @@ package apply
 
 import (
 	"context"
+	"errors"
 
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -53,6 +54,10 @@ type StateMachine interface {
 	// to the same state that it would be in if the process restarted.
 	ApplySideEffects(CheckedCommand) (AppliedCommand, error)
 }
+
+// ErrRemoved can be returned from ApplySideEffects which will stop the
+// task from processing more commands and return immediately.
+var ErrRemoved = errors.New("replica removed")
 
 // Batch accumulates a series of updates from Commands and performs them
 // all at once to its StateMachine when applied. Groups of Commands will be
