@@ -887,6 +887,20 @@ func planProjectionOperators(
 		op := exec.NewCaseOp(buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
 
 		return op, caseOutputIdx, ct, memUsed, nil
+	case *tree.AndExpr:
+		leftOp, leftIdx, ct, lMemUsed, err := planProjectionOperators(ctx, t.TypedLeft(), columnTypes, input)
+		if err != nil {
+			return nil, resultIdx, ct, 0, err
+		}
+		rightOp, rightIdx, ct, rMemUsed, err := planProjectionOperators(ctx, t.TypedRight(), ct, leftOp)
+		if err != nil {
+			return nil, resultIdx, ct, 0, err
+		}
+		// Add a new boolean column that ands the two output columns.
+		resultIdx := len(ct)
+		ct = append(ct, *t.ResolvedType())
+		andOp := exec.NewAndOp(rightOp, leftIdx, rightIdx, resultIdx)
+		return andOp, resultIdx, ct, lMemUsed + rMemUsed, nil
 	case *tree.OrExpr:
 		// Rewrite the OR expression as an equivalent CASE expression.
 		// "a OR b" becomes "CASE WHEN a THEN true WHEN b THEN true ELSE false END".
