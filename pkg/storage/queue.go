@@ -59,8 +59,9 @@ type processCallback func(error)
 // A replicaItem holds a replica and metadata about its queue state and
 // processing state.
 type replicaItem struct {
-	value roachpb.RangeID
-	seq   int // enforce FIFO order for equal priorities
+	value     roachpb.RangeID
+	replicaID roachpb.ReplicaID
+	seq       int // enforce FIFO order for equal priorities
 
 	// fields used when a replicaItem is enqueued in a priority queue.
 	priority float64
@@ -87,6 +88,12 @@ func (i *replicaItem) setProcessing() {
 // finishes processing.
 func (i *replicaItem) registerCallback(cb processCallback) {
 	i.callbacks = append(i.callbacks, cb)
+}
+
+// sameReplica returns true if the passed replicaID matches the item's replica
+// ID or the item's replica ID is zero.
+func (i *replicaItem) sameReplica(replicaID roachpb.ReplicaID) bool {
+	return i.replicaID == 0 || i.replicaID == replicaID
 }
 
 // A priorityQueue implements heap.Interface and holds replicaItems.
@@ -180,6 +187,7 @@ func shouldQueueAgain(now, last hlc.Timestamp, minInterval time.Duration) (bool,
 // extraction. Establish a sane interface and use that.
 type replicaInQueue interface {
 	AnnotateCtx(context.Context) context.Context
+	ReplicaID() roachpb.ReplicaID
 	StoreID() roachpb.StoreID
 	GetRangeID() roachpb.RangeID
 	IsInitialized() bool
@@ -487,7 +495,7 @@ func (h baseQueueHelper) MaybeAdd(ctx context.Context, repl replicaInQueue, now 
 }
 
 func (h baseQueueHelper) Add(ctx context.Context, repl replicaInQueue, prio float64) {
-	_, err := h.bq.addInternal(ctx, repl.Desc(), prio)
+	_, err := h.bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), prio)
 	if err != nil && log.V(1) {
 		log.Infof(ctx, "during Add: %s", err)
 	}
@@ -595,7 +603,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	if !should {
 		return
 	}
-	if _, err := bq.addInternal(ctx, repl.Desc(), priority); !isExpectedQueueError(err) {
+	if _, err := bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority); !isExpectedQueueError(err) {
 		log.Errorf(ctx, "unable to add: %+v", err)
 	}
 }
@@ -612,7 +620,7 @@ func (bq *baseQueue) requiresSplit(cfg *config.SystemConfig, repl replicaInQueue
 // the replica is already queued at a lower priority, updates the existing
 // priority. Expects the queue lock to be held by caller.
 func (bq *baseQueue) addInternal(
-	ctx context.Context, desc *roachpb.RangeDescriptor, priority float64,
+	ctx context.Context, desc *roachpb.RangeDescriptor, replicaID roachpb.ReplicaID, priority float64,
 ) (bool, error) {
 	// NB: this is intentionally outside of bq.mu to avoid having to consider
 	// lock ordering constraints.
@@ -665,7 +673,7 @@ func (bq *baseQueue) addInternal(
 	if log.V(3) {
 		log.Infof(ctx, "adding: priority=%0.3f", priority)
 	}
-	item = &replicaItem{value: desc.RangeID, priority: priority}
+	item = &replicaItem{value: desc.RangeID, replicaID: replicaID, priority: priority}
 	bq.addLocked(item)
 
 	// If adding this replica has pushed the queue past its maximum size,
@@ -856,6 +864,9 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 			if !repl.IsInitialized() {
 				// We checked this when adding the replica, but we need to check it again
 				// in case this is a different replica with the same range ID (see #14193).
+				// This is possible in the case where the replica was enqueued while not
+				// having a replica ID, perhaps due to a pre-emptive snapshot, and has
+				// since been removed and re-added at a different replica ID.
 				return errors.New("cannot process uninitialized replica")
 			}
 
@@ -1092,21 +1103,21 @@ func (bq *baseQueue) addToPurgatoryLocked(
 
 					// Remove all items from purgatory into a copied slice.
 					bq.mu.Lock()
-					ranges := make([]roachpb.RangeID, 0, len(bq.mu.purgatory))
+					ranges := make([]*replicaItem, 0, len(bq.mu.purgatory))
 					for rangeID := range bq.mu.purgatory {
 						item := bq.mu.replicas[rangeID]
 						if item == nil {
 							log.Fatalf(ctx, "r%d is in purgatory but not in replicas", rangeID)
 						}
 						item.setProcessing()
-						ranges = append(ranges, item.value)
+						ranges = append(ranges, item)
 						bq.removeFromPurgatoryLocked(item)
 					}
 					bq.mu.Unlock()
 
-					for _, id := range ranges {
-						repl, err := bq.getReplica(id)
-						if err != nil {
+					for _, item := range ranges {
+						repl, err := bq.getReplica(item.value)
+						if err != nil || !item.sameReplica(repl.ReplicaID()) {
 							continue
 						}
 						annotatedCtx := repl.AnnotateCtx(ctx)
@@ -1168,11 +1179,12 @@ func (bq *baseQueue) pop() replicaInQueue {
 		bq.mu.Unlock()
 
 		repl, _ := bq.getReplica(item.value)
-		if repl != nil {
+		if repl != nil && item.sameReplica(repl.ReplicaID()) {
 			return repl
 		}
 
-		// Replica not found, remove from set and try again.
+		// Replica not found or was recreated with a new replica ID, remove from
+		// set and try again.
 		bq.mu.Lock()
 		bq.removeFromReplicaSetLocked(item.value)
 	}

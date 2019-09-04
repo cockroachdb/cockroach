@@ -57,7 +57,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -1638,6 +1637,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.TestingKnobs.DisableEagerReplicaRemoval = true
 	mtc := &multiTestContext{storeConfig: &storeCfg}
 	mtc.Start(t, 2)
 	defer mtc.Stop()
@@ -1662,10 +1662,10 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	for _, rangeID := range []roachpb.RangeID{lhsDesc.RangeID, rhsDesc.RangeID} {
 		repl, err := store1.GetReplica(rangeID)
 		if err != nil {
-			t.Fatal(err)
+			continue
 		}
 		if err := store1.ManualReplicaGC(repl); err != nil {
-			t.Fatal(err)
+			t.Logf("replica was already removed: %v", err)
 		}
 		if _, err := store1.GetReplica(rangeID); err == nil {
 			t.Fatalf("replica of r%d not gc'd from s1", rangeID)
@@ -2041,6 +2041,7 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.TestingKnobs.DisableEagerReplicaRemoval = true
 	mtc := &multiTestContext{storeConfig: &storeCfg}
 	mtc.Start(t, 3)
 	defer mtc.Stop()
@@ -2808,74 +2809,6 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 	}
 }
 
-// unreliableRaftHandler drops all Raft messages that are addressed to the
-// specified rangeID, but lets all other messages through.
-type unreliableRaftHandler struct {
-	rangeID roachpb.RangeID
-	storage.RaftMessageHandler
-	// If non-nil, can return false to avoid dropping a msg to rangeID
-	dropReq  func(*storage.RaftMessageRequest) bool
-	dropHB   func(*storage.RaftHeartbeat) bool
-	dropResp func(*storage.RaftMessageResponse) bool
-}
-
-func (h *unreliableRaftHandler) HandleRaftRequest(
-	ctx context.Context,
-	req *storage.RaftMessageRequest,
-	respStream storage.RaftMessageResponseStream,
-) *roachpb.Error {
-	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
-		reqCpy := *req
-		req = &reqCpy
-		req.Heartbeats = h.filterHeartbeats(req.Heartbeats)
-		req.HeartbeatResps = h.filterHeartbeats(req.HeartbeatResps)
-		if len(req.Heartbeats)+len(req.HeartbeatResps) == 0 {
-			// Entirely filtered.
-			return nil
-		}
-	} else if req.RangeID == h.rangeID {
-		if h.dropReq == nil || h.dropReq(req) {
-			log.Infof(
-				ctx,
-				"dropping Raft message %s",
-				raft.DescribeMessage(req.Message, func([]byte) string {
-					return "<omitted>"
-				}),
-			)
-
-			return nil
-		}
-	}
-	return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
-}
-
-func (h *unreliableRaftHandler) filterHeartbeats(
-	hbs []storage.RaftHeartbeat,
-) []storage.RaftHeartbeat {
-	if len(hbs) == 0 {
-		return hbs
-	}
-	var cpy []storage.RaftHeartbeat
-	for i := range hbs {
-		hb := &hbs[i]
-		if hb.RangeID != h.rangeID || (h.dropHB != nil && !h.dropHB(hb)) {
-			cpy = append(cpy, *hb)
-		}
-	}
-	return cpy
-}
-
-func (h *unreliableRaftHandler) HandleRaftResponse(
-	ctx context.Context, resp *storage.RaftMessageResponse,
-) error {
-	if resp.RangeID == h.rangeID {
-		if h.dropResp == nil || h.dropResp(resp) {
-			return nil
-		}
-	}
-	return h.RaftMessageHandler.HandleRaftResponse(ctx, resp)
-}
-
 func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -3353,9 +3286,12 @@ func TestMergeQueue(t *testing.T) {
 	t.Run("non-collocated", func(t *testing.T) {
 		reset(t)
 		verifyUnmerged(t)
-		mtc.replicateRange(rhs().RangeID, 1)
-		mtc.transferLease(ctx, rhs().RangeID, 0, 1)
-		mtc.unreplicateRange(rhs().RangeID, 0)
+		rhsRangeID := rhs().RangeID
+		mtc.replicateRange(rhsRangeID, 1)
+		mtc.transferLease(ctx, rhsRangeID, 0, 1)
+		mtc.unreplicateRange(rhsRangeID, 0)
+		require.NoError(t, mtc.waitForUnreplicated(rhsRangeID, 0))
+
 		clearRange(t, lhsStartKey, rhsEndKey)
 		store.MustForceMergeScanAndProcess()
 		verifyMerged(t)

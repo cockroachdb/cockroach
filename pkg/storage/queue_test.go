@@ -13,6 +13,7 @@ package storage
 import (
 	"container/heap"
 	"context"
+	"fmt"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // testQueueImpl implements queueImpl with a closure for shouldQueue.
@@ -1097,6 +1099,42 @@ func TestBaseQueueProcessConcurrently(t *testing.T) {
 
 	pQueue.processBlocker <- struct{}{}
 	assertProcessedAndProcessing(3, 0)
+}
+
+// TestBaseQueueReplicaChange ensures that if a replica is added to the queue
+// with a non-zero replica ID then it is only popped if the retrieved replica
+// from the getReplica() function has the same replica ID.
+func TestBaseQueueChangeReplicaID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// The testContext exists only to construct the baseQueue.
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
+	testQueue := &testQueueImpl{
+		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+			return true, 1.0
+		},
+	}
+	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{
+		maxSize:              defaultQueueMaxSize,
+		acceptsUnsplitRanges: true,
+	})
+	r := &fakeReplica{id: 1, replicaID: 1}
+	bq.mu.Lock()
+	bq.getReplica = func(rangeID roachpb.RangeID) (replicaInQueue, error) {
+		if rangeID != 1 {
+			panic(fmt.Errorf("expected range id 1, got %d", rangeID))
+		}
+		return r, nil
+	}
+	bq.mu.Unlock()
+	bq.maybeAdd(ctx, r, tc.store.Clock().Now())
+	require.Equal(t, r, bq.pop())
+	bq.maybeAdd(ctx, r, tc.store.Clock().Now())
+	r.replicaID = 2
+	require.Nil(t, bq.pop())
 }
 
 func TestBaseQueueRequeue(t *testing.T) {
