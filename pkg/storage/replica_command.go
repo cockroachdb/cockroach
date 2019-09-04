@@ -35,6 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	crdberrors "github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
@@ -989,12 +991,26 @@ func (r *Replica) changeReplicasImpl(
 	}
 
 	if adds := chgs.Additions(); len(adds) > 0 {
+		// Lock learner snapshots even before we run the ConfChange txn to add them
+		// to prevent a race with the raft snapshot queue trying to send it first.
+		// Note that this lock needs to cover sending the snapshots which happens in
+		_ = r.atomicReplicationChange
+		// which also has some more details on what's going on here.
+		//
+		// Also note that the lock only prevents the raft snapshot queue from
+		// sending snapshots to learner replicas, it will still send them to voters.
+		// There are more details about this locking in
+		_ = (*raftSnapshotQueue)(nil).processRaftSnapshot
+		// as well as a TODO about fixing all this to be less subtle and brittle.
+		releaseSnapshotLockFn := r.lockLearnerSnapshot(ctx, adds)
+		defer releaseSnapshotLockFn()
+
 		// For all newly added nodes, first add raft learner replicas. They accept raft traffic
 		// (so they can catch up) but don't get to vote (so they don't affect quorum and thus
 		// don't introduce fragility into the system). For details see:
 		_ = roachpb.ReplicaDescriptors.Learners
 		var err error
-		desc, err = addLearnerReplicas(ctx, r.store, desc, reason, details, chgs.Additions())
+		desc, err = addLearnerReplicas(ctx, r.store, desc, reason, details, adds)
 		if err != nil {
 			return nil, err
 		}
@@ -1131,6 +1147,32 @@ func addLearnerReplicas(
 	return desc, nil
 }
 
+// lockLearnerSnapshot stops the raft snapshot queue from sending snapshots to
+// the soon-to-be added learner replicas to prevent duplicate snapshots from
+// being sent. This lock is best effort because it times out and it is a node
+// local lock while the raft snapshot queue might be running on a different
+// node. An idempotent unlock function is returned.
+func (r *Replica) lockLearnerSnapshot(
+	ctx context.Context, additions []roachpb.ReplicationTarget,
+) (unlock func()) {
+	// TODO(dan): The way this works is hacky, but it was added at the last minute
+	// in 19.2 to work around a commit in etcd/raft that made this race more
+	// likely. It'd be nice if all learner snapshots could be sent from a single
+	// place.
+	var lockUUIDs []uuid.UUID
+	for _, addition := range additions {
+		lockUUID := uuid.MakeV4()
+		lockUUIDs = append(lockUUIDs, lockUUID)
+		r.addSnapshotLogTruncationConstraint(ctx, lockUUID, 1, addition.StoreID)
+	}
+	return func() {
+		now := timeutil.Now()
+		for _, lockUUID := range lockUUIDs {
+			r.completeSnapshotLogTruncationConstraint(ctx, lockUUID, now)
+		}
+	}
+}
+
 // atomicReplicationChange carries out the atomic membership change that
 // finalizes the addition and/or removal of replicas. Any voters in the process
 // of being added (as reflected by the replication changes) must have been added
@@ -1171,15 +1213,11 @@ func (r *Replica) atomicReplicationChange(
 
 		// Note that raft snapshot queue will refuse to send a snapshot to a learner
 		// replica if its store is already sending a snapshot to that replica. That
-		// races with this snapshot. Most of the time, this side will win the race,
-		// which avoids needlessly sending the snapshot twice. If the raft snapshot
-		// queue wins, it's wasteful, but doesn't impact correctness.
-		//
-		// Replicas are added to the raft snapshot queue by the raft leader. This
-		// code can be run anywhere (though it's usually run on the leaseholder,
-		// which is usually co-located with the raft leader). This means that
-		// they're usually on the same node, but not always, so that's about as good
-		// a guarantee as we can offer, anyway.
+		// would race with this snapshot, except that we've put a (best effort) lock
+		// on it before the conf change txn was run. This is best effort because the
+		// lock can time out and the lock is local to this node, while the raft
+		// leader could be on another node entirely (they're usually co-located but
+		// this is not guaranteed).
 		//
 		// We originally tried always refusing to send snapshots from the raft
 		// snapshot queue to learner replicas, but this turned out to be brittle.
@@ -1718,7 +1756,7 @@ func (r *Replica) sendSnapshot(
 		}
 	}()
 
-	snap, err := r.GetSnapshot(ctx, snapType)
+	snap, err := r.GetSnapshot(ctx, snapType, recipient.StoreID)
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
 	}

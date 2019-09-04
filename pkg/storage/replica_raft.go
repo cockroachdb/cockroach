@@ -1204,12 +1204,21 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 }
 
 type snapTruncationInfo struct {
-	index    uint64
-	deadline time.Time
+	index          uint64
+	recipientStore roachpb.StoreID
+	deadline       time.Time
+}
+
+func (r *Replica) addSnapshotLogTruncationConstraint(
+	ctx context.Context, snapUUID uuid.UUID, index uint64, recipientStore roachpb.StoreID,
+) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.addSnapshotLogTruncationConstraintLocked(ctx, snapUUID, index, recipientStore)
 }
 
 func (r *Replica) addSnapshotLogTruncationConstraintLocked(
-	ctx context.Context, snapUUID uuid.UUID, index uint64,
+	ctx context.Context, snapUUID uuid.UUID, index uint64, recipientStore roachpb.StoreID,
 ) {
 	if r.mu.snapshotLogTruncationConstraints == nil {
 		r.mu.snapshotLogTruncationConstraints = make(map[uuid.UUID]snapTruncationInfo)
@@ -1224,16 +1233,20 @@ func (r *Replica) addSnapshotLogTruncationConstraintLocked(
 		return
 	}
 
-	r.mu.snapshotLogTruncationConstraints[snapUUID] = snapTruncationInfo{index: index}
+	r.mu.snapshotLogTruncationConstraints[snapUUID] = snapTruncationInfo{
+		index:          index,
+		recipientStore: recipientStore,
+	}
 }
 
+// completeSnapshotLogTruncationConstraint marks the given snapshot as finished,
+// releasing the lock on raft log truncation after a grace period.
 func (r *Replica) completeSnapshotLogTruncationConstraint(
 	ctx context.Context, snapUUID uuid.UUID, now time.Time,
 ) {
-	deadline := now.Add(raftLogQueuePendingSnapshotGracePeriod)
-
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	item, ok := r.mu.snapshotLogTruncationConstraints[snapUUID]
 	if !ok {
 		// UUID collision while adding the snapshot in originally. Nothing
@@ -1241,24 +1254,34 @@ func (r *Replica) completeSnapshotLogTruncationConstraint(
 		return
 	}
 
+	deadline := now.Add(raftLogQueuePendingSnapshotGracePeriod)
 	item.deadline = deadline
 	r.mu.snapshotLogTruncationConstraints[snapUUID] = item
 }
 
-func (r *Replica) getAndGCSnapshotLogTruncationConstraints(now time.Time) (minSnapIndex uint64) {
+// getAndGCSnapshotLogTruncationConstraints returns the minimum index of any
+// currently outstanding snapshot being sent from this replica to the specified
+// recipient or 0 if there isn't one. Passing 0 for recipientStore means any
+// recipient.
+func (r *Replica) getAndGCSnapshotLogTruncationConstraints(
+	now time.Time, recipientStore roachpb.StoreID,
+) (minSnapIndex uint64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.getAndGCSnapshotLogTruncationConstraintsLocked(now)
+	return r.getAndGCSnapshotLogTruncationConstraintsLocked(now, recipientStore)
 }
 
 func (r *Replica) getAndGCSnapshotLogTruncationConstraintsLocked(
-	now time.Time,
+	now time.Time, recipientStore roachpb.StoreID,
 ) (minSnapIndex uint64) {
 	for snapUUID, item := range r.mu.snapshotLogTruncationConstraints {
 		if item.deadline != (time.Time{}) && item.deadline.Before(now) {
 			// The snapshot has finished and its grace period has passed.
 			// Ignore it when making truncation decisions.
 			delete(r.mu.snapshotLogTruncationConstraints, snapUUID)
+			continue
+		}
+		if recipientStore != 0 && item.recipientStore != recipientStore {
 			continue
 		}
 		if minSnapIndex == 0 || minSnapIndex > item.index {
