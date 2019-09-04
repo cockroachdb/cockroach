@@ -1192,15 +1192,12 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 		return err
 	}
 
-	if err := replicateRHS(); !testutils.IsError(err, storage.IntersectingSnapshotMsg) {
-		t.Fatalf("unexpected error %v", err)
-	}
-
-	// Enable the replica GC queue so that the next attempt to replicate the RHS
-	// to store 2 will cause the obsolete replica to be GC'd allowing a
-	// subsequent replication to succeed.
-	mtc.stores[2].SetReplicaGCQueueActive(true)
-
+	// This used to fail with IntersectingSnapshotMsg because we relied on replica
+	// GC to remove the LHS and that queue is disabled. Now we will detect that
+	// the LHS is not part of the range because of a ReplicaTooOldError and then
+	// we'll replicaGC the LHS in response.
+	// TODO(ajwerner): filter the reponses to node 2 or disable this eager
+	// replicaGC.
 	testutils.SucceedsSoon(t, replicateRHS)
 }
 
@@ -3000,6 +2997,52 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
+	// We're going to set up the cluster with partitioning so that we can
+	// partition node 0 from the others. We do this by installing
+	// unreliableRaftHandler listeners on all three Stores which we can enable
+	// and disable with an atomic. The handler on the partitioned store filters
+	// out all messages while the handler on the other two stores only filters
+	// out messages from the partitioned store. When activated the configuration
+	// looks like:
+	//
+	//           [0]
+	//          x  x
+	//         /    \
+	//        x      x
+	//      [1]<---->[2]
+	const partStore = 0
+	var partitioned atomic.Value
+	partitioned.Store(false)
+	partRepl, err := mtc.stores[partStore].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	partReplDesc, err := partRepl.GetReplicaDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []int{0, 1, 2} {
+		s := s
+		h := &unreliableRaftHandler{
+			rangeID: 1,
+			RaftMessageHandler: &mtcStoreRaftMessageHandler{
+				mtc:      mtc,
+				storeIdx: s,
+			},
+		}
+		// Only filter messages from the partitioned store on the other
+		// two stores.
+		h.dropReq = func(req *storage.RaftMessageRequest) bool {
+			return partitioned.Load().(bool) &&
+				(s == partStore || req.FromReplica.StoreID == partRepl.StoreID())
+		}
+		h.dropHB = func(hb *storage.RaftHeartbeat) bool {
+			return partitioned.Load().(bool) &&
+				(s == partStore || hb.FromReplicaID == partReplDesc.ReplicaID)
+		}
+		mtc.transport.Listen(mtc.stores[s].Ident.StoreID, h)
+	}
+
 	// First put the range on all three nodes.
 	raftID := roachpb.RangeID(1)
 	mtc.replicateRange(raftID, 1, 2)
@@ -3044,7 +3087,9 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 		}
 		return nil
 	})
-
+	// Partition nodes 1 and 2 from node 0. Otherwise they'd get a
+	// ReplicaTooOldError from node 0 and proceed to remove themselves.
+	partitioned.Store(true)
 	// Bring node 2 back up.
 	mtc.restartStore(2)
 
@@ -3547,6 +3592,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicaGCQueue = true
+	sc.TestingKnobs.DisableEagerReplicaRemoval = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
@@ -3563,18 +3609,19 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		desc := rep.Desc()
-		if len(desc.InternalReplicas) != 1 {
-			return errors.Errorf("range has %d replicas", len(desc.InternalReplicas))
+		if _, err := rep.IsDestroyed(); err == nil {
+			return errors.Errorf("range is still alive")
 		}
 		return nil
 	})
 
 	// The replica's data is still on disk.
+	// We use an inconsistent scan because there's going to be an intent on the
+	// range descriptor to remove this replica.
 	var desc roachpb.RangeDescriptor
 	descKey := keys.RangeDescriptorKey(roachpb.RKeyMin)
 	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), descKey,
-		mtc.stores[0].Clock().Now(), &desc, engine.MVCCGetOptions{}); err != nil {
+		mtc.stores[0].Clock().Now(), &desc, engine.MVCCGetOptions{Inconsistent: true}); err != nil {
 		t.Fatal(err)
 	} else if !ok {
 		t.Fatal("expected range descriptor to be present")

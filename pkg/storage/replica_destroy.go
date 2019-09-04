@@ -12,6 +12,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,7 +30,10 @@ type DestroyReason int
 const (
 	// The replica is alive.
 	destroyReasonAlive DestroyReason = iota
-	// The replica has been marked for GC, but hasn't been GCed yet.
+	// The replica is in the process of being removed but has not been removed
+	// yet. It exists to avoid races between two threads which may decide to
+	// destroy a replica (e.g. processing a ChangeRelicasTrigger removing the
+	// range and receiving a raft message with a higher replica ID).
 	destroyReasonRemovalPending
 	// The replica has been GCed.
 	destroyReasonRemoved
@@ -43,13 +47,13 @@ type destroyStatus struct {
 	err    error
 }
 
+func (s destroyStatus) String() string {
+	return fmt.Sprintf("{%v %d}", s.err, s.reason)
+}
+
 func (s *destroyStatus) Set(err error, reason DestroyReason) {
 	s.err = err
 	s.reason = reason
-}
-
-func (s *destroyStatus) Reset() {
-	s.Set(nil, destroyReasonAlive)
 }
 
 // IsAlive returns true when a replica is alive.
@@ -62,16 +66,22 @@ func (s destroyStatus) Removed() bool {
 	return s.reason == destroyReasonRemoved
 }
 
+// RemovalPending returns whether the replica is removed or in the process of
+// being removed.
+func (s destroyStatus) RemovalPending() bool {
+	return s.reason == destroyReasonRemovalPending || s.reason == destroyReasonRemoved
+}
+
 func (r *Replica) preDestroyRaftMuLocked(
 	ctx context.Context,
 	reader engine.Reader,
 	writer engine.Writer,
 	nextReplicaID roachpb.ReplicaID,
-	rangeIDLocalOnly bool,
+	clearOpt clearRangeOption,
 	mustClearRange bool,
 ) error {
 	desc := r.Desc()
-	err := clearRangeData(desc, reader, writer, rangeIDLocalOnly, mustClearRange)
+	err := clearRangeData(desc, reader, writer, clearOpt, mustClearRange)
 	if err != nil {
 		return err
 	}
@@ -114,6 +124,53 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 	return nil
 }
 
+// destroyUninitializedReplicaRaftMuLocked is called when we know that an
+// uninitialized replica (which knows its replica ID but not its key range) has
+// been removed and re-added as a different replica (with a new replica
+// ID). We're safe to GC its hard state because nobody cares about our votes
+// anymore. We can't GC the range's data because we don't know where it is.
+// Fortunately this isn't a problem because the range must not have data
+// because a replica must apply a snapshot before having data and if we had
+// applied a snapshot then we'd be initialized. This replica may have been
+// created in anticipation of a split in which case we'll clear its data when
+// the split trigger is applied.
+func (r *Replica) destroyUninitializedReplicaRaftMuLocked(
+	ctx context.Context, nextReplicaID roachpb.ReplicaID,
+) error {
+	batch := r.Engine().NewWriteOnlyBatch()
+	defer batch.Close()
+
+	// Clear the range ID local data including the hard state.
+	// We don't know about any user data so we can't clear any user data.
+	// See the comment on this method for why this is safe.
+	if err := r.preDestroyRaftMuLocked(
+		ctx,
+		r.Engine(),
+		batch,
+		nextReplicaID,
+		clearRangeIDLocalOnly,
+		false, /* mustClearRange */
+	); err != nil {
+		return err
+	}
+
+	// We need to sync here because we are potentially deleting sideloaded
+	// proposals from the file system next. We could write the tombstone only in
+	// a synchronous batch first and then delete the data alternatively, but
+	// then need to handle the case in which there is both the tombstone and
+	// leftover replica data.
+	if err := batch.Commit(true); err != nil {
+		return err
+	}
+
+	if r.raftMu.sideloaded != nil {
+		if err := r.raftMu.sideloaded.Clear(ctx); err != nil {
+			log.Warningf(ctx, "failed to remove sideload storage for %v: %v", r, err)
+		}
+	}
+	return nil
+}
+
 // destroyRaftMuLocked deletes data associated with a replica, leaving a
 // tombstone.
 func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb.ReplicaID) error {
@@ -128,7 +185,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 		r.Engine(),
 		batch,
 		nextReplicaID,
-		false, /* rangeIDLocalOnly */
+		clearAll,
 		false, /* mustClearRange */
 	); err != nil {
 		return err
