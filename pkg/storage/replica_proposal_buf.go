@@ -399,6 +399,11 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 	// stop trying to propose commands to raftGroup.
 	var firstErr error
 	for i, p := range buf {
+		if p == nil {
+			// If we run into an error during proposal insertion, we may have reserved
+			// an array index without actually inserting a proposal.
+			continue
+		}
 		buf[i] = nil // clear buffer
 
 		// Raft processing bookkeeping.
