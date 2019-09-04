@@ -1867,6 +1867,7 @@ CREATE VIEW crdb_internal.ranges AS SELECT
 	table_name,
 	index_name,
 	replicas,
+	replica_localities,
 	learner_replicas,
 	split_enforced_until,
 	crdb_internal.lease_holder(start_key) AS lease_holder,
@@ -1884,6 +1885,7 @@ FROM crdb_internal.ranges_no_leases
 		{Name: "table_name", Typ: types.String},
 		{Name: "index_name", Typ: types.String},
 		{Name: "replicas", Typ: types.Int2Vector},
+		{Name: "replica_localities", Typ: types.StringArray},
 		{Name: "learner_replicas", Typ: types.Int2Vector},
 		{Name: "split_enforced_until", Typ: types.Timestamp},
 		{Name: "lease_holder", Typ: types.Int},
@@ -1907,7 +1909,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
   database_name        STRING NOT NULL,
   table_name           STRING NOT NULL,
   index_name           STRING NOT NULL,
-	replicas             INT[] NOT NULL,
+  replicas             INT[] NOT NULL,	
+  replica_localities   STRING[] NOT NULL,
 	learner_replicas     INT[] NOT NULL,
 	split_enforced_until TIMESTAMP
 )
@@ -1946,6 +1949,17 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		if err != nil {
 			return nil, err
 		}
+
+		// Map node descriptors to localities
+		descriptors, err := getAllNodeDescriptors(p)
+		if err != nil {
+			return nil, err
+		}
+		nodeIDToLocality := make(map[roachpb.NodeID]roachpb.Locality)
+		for _, desc := range descriptors {
+			nodeIDToLocality[desc.NodeID] = desc.Locality
+		}
+
 		var desc roachpb.RangeDescriptor
 
 		i := 0
@@ -1984,6 +1998,14 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				}
 			}
 
+			replicaLocalityArr := tree.NewDArray(types.String)
+			for _, id := range voterReplicas {
+				replicaLocality := nodeIDToLocality[roachpb.NodeID(id)].String()
+				if err := replicaLocalityArr.Append(tree.NewDString(replicaLocality)); err != nil {
+					return nil, err
+				}
+			}
+
 			var dbName, tableName, indexName string
 			if _, id, err := keys.DecodeTablePrefix(desc.StartKey.AsRawKey()); err == nil {
 				parent := parents[id]
@@ -2013,6 +2035,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				tree.NewDString(tableName),
 				tree.NewDString(indexName),
 				votersArr,
+				replicaLocalityArr,
 				learnersArr,
 				splitEnforcedUntil,
 			}, nil
@@ -2154,6 +2177,34 @@ CREATE TABLE crdb_internal.zones (
 	},
 }
 
+func getAllNodeDescriptors(p *planner) ([]roachpb.NodeDescriptor, error) {
+	g := p.ExecCfg().Gossip
+	var descriptors []roachpb.NodeDescriptor
+	if err := g.IterateInfos(gossip.KeyNodeIDPrefix, func(key string, i gossip.Info) error {
+		bytes, err := i.Value.GetBytes()
+		if err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err,
+				"failed to extract bytes for key %q", key)
+		}
+
+		var d roachpb.NodeDescriptor
+		if err := protoutil.Unmarshal(bytes, &d); err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err,
+				"failed to parse value for key %q", key)
+		}
+
+		// Don't use node descriptors with NodeID 0, because that's meant to
+		// indicate that the node has been removed from the cluster.
+		if d.NodeID != 0 {
+			descriptors = append(descriptors, d)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return descriptors, nil
+}
+
 // crdbInternalGossipNodesTable exposes local information about the cluster nodes.
 var crdbInternalGossipNodesTable = virtualSchemaTable{
 	comment: "locally known gossiped node details (RAM; local node only)",
@@ -2183,28 +2234,9 @@ CREATE TABLE crdb_internal.gossip_nodes (
 		}
 
 		g := p.ExecCfg().Gossip
-		var descriptors []roachpb.NodeDescriptor
-		if err := g.IterateInfos(gossip.KeyNodeIDPrefix, func(key string, i gossip.Info) error {
-			bytes, err := i.Value.GetBytes()
-			if err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err,
-					"failed to extract bytes for key %q", key)
-			}
-
-			var d roachpb.NodeDescriptor
-			if err := protoutil.Unmarshal(bytes, &d); err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err,
-					"failed to parse value for key %q", key)
-			}
-
-			// Don't use node descriptors with NodeID 0, because that's meant to
-			// indicate that the node has been removed from the cluster.
-			if d.NodeID != 0 {
-				descriptors = append(descriptors, d)
-			}
+		descriptors, err := getAllNodeDescriptors(p)
+		if err != nil {
 			return nil
-		}); err != nil {
-			return err
 		}
 
 		alive := make(map[roachpb.NodeID]tree.DBool)
