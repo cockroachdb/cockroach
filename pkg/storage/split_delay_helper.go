@@ -46,7 +46,7 @@ func (sdh *splitDelayHelper) RaftStatus(ctx context.Context) (roachpb.RangeID, *
 func (sdh *splitDelayHelper) ProposeEmptyCommand(ctx context.Context) {
 	r := (*Replica)(sdh)
 	r.raftMu.Lock()
-	_ = r.withRaftGroup(true /* campaignOnWake */, func(rawNode *raft.RawNode) (bool, error) {
+	_, _ = r.withRaftGroup(true /* campaignOnWake */, func(rawNode *raft.RawNode) (bool, error) {
 		// NB: intentionally ignore the error (which can be ErrProposalDropped
 		// when there's an SST inflight).
 		data := encodeRaftCommand(raftVersionStandard, makeIDKey(), nil)

@@ -569,8 +569,8 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	// Try to remove range 1 again.
 	if err := store.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
 		DestroyData: true,
-	}); err == nil {
-		t.Fatal("expected error re-removing same range")
+	}); err != nil {
+		t.Fatalf("didn't expect error re-removing same range: %v", err)
 	}
 	// Try to add a range with previously-used (but now removed) ID.
 	repl2Dup := createReplica(store, 1, roachpb.RKey("a"), roachpb.RKey("b"))
@@ -712,11 +712,11 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 
 	// Verify that removal of a replica marks it as destroyed so that future raft
 	// commands on the Replica will silently be dropped.
-	if err := repl1.withRaftGroup(true, func(r *raft.RawNode) (bool, error) {
+	isRemoved, err := repl1.withRaftGroup(true, func(r *raft.RawNode) (bool, error) {
 		return true, errors.Errorf("unexpectedly created a raft group")
-	}); err != nil {
-		t.Fatal(err)
-	}
+	})
+	require.True(t, isRemoved)
+	require.NoError(t, err)
 
 	repl1.mu.Lock()
 	expErr := roachpb.NewError(repl1.mu.destroyStatus.err)
@@ -1354,7 +1354,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	require.NoError(t, err)
 	newLeftDesc := *repl.Desc()
 	newLeftDesc.EndKey = splitKey
-	err = store.SplitRange(repl.AnnotateCtx(context.TODO()), repl, newRng, newLeftDesc)
+	err = store.SplitRange(repl.AnnotateCtx(context.TODO()), repl, newRng, newLeftDesc, nil)
 	require.NoError(t, err)
 	return newRng
 }
@@ -2951,104 +2951,6 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		}
 		return nil
 	})
-}
-
-// Test that we set proper tombstones for removed replicas and use the
-// tombstone to reject attempts to create a replica with a lesser ID.
-func TestRemovedReplicaTombstone(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	const rangeID = 1
-	creatingReplica := roachpb.ReplicaDescriptor{
-		NodeID:    2,
-		StoreID:   2,
-		ReplicaID: 2,
-	}
-
-	// All test cases assume that the starting replica ID is 1. This assumption
-	// is enforced by a check within the test logic.
-	testCases := []struct {
-		setReplicaID      roachpb.ReplicaID // set the existing replica to this before removing it
-		descNextReplicaID roachpb.ReplicaID // the descriptor's NextReplicaID during replica removal
-		createReplicaID   roachpb.ReplicaID // try creating a replica at this ID
-		expectCreated     bool
-	}{
-		{1, 2, 2, true},
-		{1, 2, 1, false},
-		{1, 2, 1, false},
-		{1, 3, 1, false},
-		{1, 3, 2, false},
-		{1, 3, 3, true},
-		{1, 99, 98, false},
-		{1, 99, 99, true},
-		{2, 2, 2, false},
-		{2, 2, 3, true},
-		{2, 2, 99, true},
-		{98, 2, 98, false},
-		{98, 2, 99, true},
-	}
-	for _, c := range testCases {
-		t.Run("", func(t *testing.T) {
-			tc := testContext{}
-			stopper := stop.NewStopper()
-			ctx := context.TODO()
-			defer stopper.Stop(ctx)
-			tc.Start(t, stopper)
-			s := tc.store
-
-			repl1, err := s.GetReplica(rangeID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			repl1.mu.Lock()
-			if repl1.mu.replicaID != 1 {
-				repl1.mu.Unlock()
-				t.Fatalf("test precondition not met; expected ReplicaID=1, got %d", repl1.mu.replicaID)
-			}
-			repl1.mu.Unlock()
-
-			// Try to trigger a race where the replica ID gets increased during the GC
-			// process by taking the store lock and inserting a short sleep to cause
-			// the goroutine to start running the setReplicaID call.
-			errChan := make(chan error)
-
-			func() {
-				repl1.raftMu.Lock()
-				defer repl1.raftMu.Unlock()
-				s.mu.Lock()
-				defer s.mu.Unlock()
-				repl1.mu.Lock()
-				defer repl1.mu.Unlock()
-
-				go func() {
-					errChan <- s.RemoveReplica(ctx, repl1, c.descNextReplicaID, RemoveOptions{DestroyData: true})
-				}()
-
-				time.Sleep(1 * time.Millisecond)
-
-				if err := repl1.setReplicaIDRaftMuLockedMuLocked(c.setReplicaID); err != nil {
-					t.Fatal(err)
-				}
-			}()
-
-			if err := <-errChan; testutils.IsError(err, "replica ID has changed") {
-				// We didn't trigger the race, so just return success.
-				return
-			} else if err != nil {
-				t.Fatal(err)
-			}
-
-			_, created, err := s.getOrCreateReplica(ctx, rangeID, c.createReplicaID, &creatingReplica)
-			if created != c.expectCreated {
-				t.Errorf("expected s.getOrCreateReplica(%d, %d, %v).created=%v, got %v",
-					rangeID, c.createReplicaID, creatingReplica, c.expectCreated, created)
-			}
-			if !c.expectCreated && !testutils.IsError(err, "raft group deleted") {
-				t.Errorf("expected s.getOrCreateReplica(%d, %d, %v).err='raft group deleted', got %v",
-					rangeID, c.createReplicaID, creatingReplica, err)
-			}
-		})
-	}
 }
 
 type fakeSnapshotStream struct {

@@ -114,13 +114,13 @@ func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *repl
 // in the past.
 func (rgcq *replicaGCQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, _ *config.SystemConfig,
-) (bool, float64) {
+) (shouldQ bool, prio float64) {
+
 	lastCheck, err := repl.GetLastReplicaGCTimestamp(ctx)
 	if err != nil {
 		log.Errorf(ctx, "could not read last replica GC timestamp: %+v", err)
 		return false, 0
 	}
-
 	if _, currentMember := repl.Desc().GetReplicaDescriptor(repl.store.StoreID()); !currentMember {
 		return true, replicaGCPriorityRemoved
 	}
@@ -215,6 +215,11 @@ func (rgcq *replicaGCQueue) process(
 	}
 	replyDesc := rs[0]
 
+	repl.mu.RLock()
+	replicaID := repl.mu.replicaID
+	ticks := repl.mu.ticks
+	repl.mu.RUnlock()
+
 	// Now check whether the replica is meant to still exist.
 	// Maybe it was deleted "under us" by being moved.
 	currentDesc, currentMember := replyDesc.GetReplicaDescriptor(repl.store.StoreID())
@@ -233,11 +238,6 @@ func (rgcq *replicaGCQueue) process(
 	} else if desc.RangeID == replyDesc.RangeID {
 		// We are no longer a member of this range, but the range still exists.
 		// Clean up our local data.
-
-		repl.mu.RLock()
-		replicaID := repl.mu.replicaID
-		ticks := repl.mu.ticks
-		repl.mu.RUnlock()
 
 		if replicaID == 0 {
 			// This is a preemptive replica. GC'ing a preemptive replica is a
@@ -284,13 +284,24 @@ func (rgcq *replicaGCQueue) process(
 
 		rgcq.metrics.RemoveReplicaCount.Inc(1)
 		log.VEventf(ctx, 1, "destroying local data")
+
+		nextReplicaID := replyDesc.NextReplicaID
+		if currentMember {
+			// If we're a member of the current range descriptor then we must not put
+			// down a tombstone at replyDesc.NextReplicaID as that would prevent us
+			// from getting a snapshot and becoming a part of the rang.e
+			nextReplicaID = currentDesc.ReplicaID
+		}
 		// Note that this seems racy - we didn't hold any locks between reading
 		// the range descriptor above and deciding to remove the replica - but
 		// we pass in the NextReplicaID to detect situations in which the
 		// replica became "non-gc'able" in the meantime by checking (with raftMu
 		// held throughout) whether the replicaID is still smaller than the
-		// NextReplicaID.
-		if err := repl.store.RemoveReplica(ctx, repl, replyDesc.NextReplicaID, RemoveOptions{
+		// NextReplicaID. Given non-zero replica IDs don't change this is only
+		// possible if we currently think we're processing a pre-emptive snapshot
+		// but discover in RemoveReplica that this range has since been added and
+		// knows that.
+		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
 			return err
@@ -328,13 +339,6 @@ func (rgcq *replicaGCQueue) process(
 			}
 		}
 
-		// We don't have the last NextReplicaID for the subsumed range, nor can we
-		// obtain it, but that's OK: we can just be conservative and use the maximum
-		// possible replica ID. store.RemoveReplica will write a tombstone using
-		// this maximum possible replica ID, which would normally be problematic, as
-		// it would prevent this store from ever having a new replica of the removed
-		// range. In this case, however, it's copacetic, as subsumed ranges _can't_
-		// have new replicas.
 		const nextReplicaID = math.MaxInt32
 		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{
 			DestroyData: true,

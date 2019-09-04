@@ -628,7 +628,9 @@ func (s *Store) canApplySnapshotLocked(
 	existingRepl.raftMu.AssertHeld()
 
 	existingRepl.mu.RLock()
-	existingIsInitialized := existingRepl.isInitializedRLocked()
+	existingDesc := existingRepl.mu.state.Desc
+	existingIsInitialized := existingDesc.IsInitialized()
+	existingDestroyStatus := existingRepl.mu.destroyStatus
 	existingRepl.mu.RUnlock()
 
 	if existingIsInitialized {
@@ -637,13 +639,17 @@ func (s *Store) canApplySnapshotLocked(
 		// in Replica.maybeAcquireSnapshotMergeLock for how this is
 		// made safe.
 		//
-		// NB: we expect the replica to know its replicaID at this point
-		// (i.e. !existingIsPreemptive), though perhaps it's possible
-		// that this isn't true if the leader initiates a Raft snapshot
-		// (that would provide a range descriptor with this replica in
-		// it) but this node reboots (temporarily forgetting its
-		// replicaID) before the snapshot arrives.
+		// NB: The snapshot must be intended for this replica as
+		// withReplicaForRequest ensures that requests with a non-zero replica
+		// id are passed to a replica with a matching id. Given this is not a
+		// preemptive snapshot we know that its id must be non-zero.
 		return nil, nil
+	}
+
+	// If we are not alive then we should not apply a snapshot as our removal
+	// is imminent.
+	if existingDestroyStatus.RemovalPending() {
+		return nil, existingDestroyStatus.err
 	}
 
 	// We have a key range [desc.StartKey,desc.EndKey) which we want to apply a
@@ -670,7 +676,7 @@ func (s *Store) checkSnapshotOverlapLocked(
 	// NB: this check seems redundant since placeholders are also represented in
 	// replicasByKey (and thus returned in getOverlappingKeyRangeLocked).
 	if exRng, ok := s.mu.replicaPlaceholders[desc.RangeID]; ok {
-		return errors.Errorf("%s: canApplySnapshotLocked: cannot add placeholder, have an existing placeholder %s", s, exRng)
+		return errors.Errorf("%s: canApplySnapshotLocked: cannot add placeholder, have an existing placeholder %s %v", s, exRng, snapHeader.RaftMessageRequest.FromReplica)
 	}
 
 	// TODO(benesch): consider discovering and GC'ing *all* overlapping ranges,
@@ -732,47 +738,20 @@ func (s *Store) checkSnapshotOverlapLocked(
 // snapshot.
 func (s *Store) shouldAcceptSnapshotData(
 	ctx context.Context, snapHeader *SnapshotRequest_Header,
-) error {
+) (err error) {
 	if snapHeader.IsPreemptive() {
 		return crdberrors.AssertionFailedf(`expected a raft or learner snapshot`)
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// TODO(tbg): see the comment on desc.Generation for what seems to be a much
-	// saner way to handle overlap via generational semantics.
-	desc := *snapHeader.State.Desc
-
-	// First, check for an existing Replica.
-	if v, ok := s.mu.replicas.Load(
-		int64(desc.RangeID),
-	); ok {
-		existingRepl := (*Replica)(v)
-		existingRepl.mu.RLock()
-		existingIsInitialized := existingRepl.isInitializedRLocked()
-		existingRepl.mu.RUnlock()
-
-		if existingIsInitialized {
-			// Regular Raft snapshots can't be refused at this point,
-			// even if they widen the existing replica. See the comments
-			// in Replica.maybeAcquireSnapshotMergeLock for how this is
-			// made safe.
-			//
-			// NB: we expect the replica to know its replicaID at this point
-			// (i.e. !existingIsPreemptive), though perhaps it's possible
-			// that this isn't true if the leader initiates a Raft snapshot
-			// (that would provide a range descriptor with this replica in
-			// it) but this node reboots (temporarily forgetting its
-			// replicaID) before the snapshot arrives.
+	pErr := s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest,
+		func(ctx context.Context, r *Replica) *roachpb.Error {
+			if !r.IsInitialized() {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				return roachpb.NewError(s.checkSnapshotOverlapLocked(ctx, snapHeader))
+			}
 			return nil
-		}
-	}
-
-	// We have a key range [desc.StartKey,desc.EndKey) which we want to apply a
-	// snapshot for. Is there a conflicting existing placeholder or an
-	// overlapping range?
-	return s.checkSnapshotOverlapLocked(ctx, snapHeader)
+		})
+	return pErr.GoError()
 }
 
 // receiveSnapshot receives an incoming snapshot via a pre-opened GRPC stream.
