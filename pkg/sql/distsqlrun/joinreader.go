@@ -240,7 +240,7 @@ func newJoinReader(
 		limitedMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
 		jr.MemMonitor = &limitedMon
 		jr.diskMonitor = NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "joinreader-disk")
-		drc := rowcontainer.MakeDiskBackedIndexedRowContainer(
+		drc := rowcontainer.NewDiskBackedIndexedRowContainer(
 			nil, /* ordering */
 			jr.desc.ColumnTypesWithMutations(returnMutations),
 			jr.evalCtx,
