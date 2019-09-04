@@ -1407,6 +1407,9 @@ func execChangeReplicasTxn(
 			deprecatedRepDesc = removed[0]
 		}
 		crt = &roachpb.ChangeReplicasTrigger{
+			// NB: populate Desc as well because locally we rely on it being
+			// set.
+			Desc:                      &updatedDesc,
 			DeprecatedChangeType:      deprecatedChangeType,
 			DeprecatedReplica:         deprecatedRepDesc,
 			DeprecatedUpdatedReplicas: updatedDesc.Replicas().All(),
