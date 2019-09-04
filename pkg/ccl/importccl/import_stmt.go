@@ -243,7 +243,7 @@ func importPlanHook(
 				}
 				format.Csv.Skip = uint32(skip)
 			}
-		case "MYSQLOUTFILE":
+		case "DELIMITED":
 			telemetry.Count("import.format.mysqlout")
 			format.Format = roachpb.IOFileFormat_MysqlOutfile
 			format.MysqlOut = roachpb.MySQLOutfileOptions{
