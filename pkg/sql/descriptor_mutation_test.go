@@ -993,8 +993,8 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 		"SHOW COLUMNS FROM t.test",
 		[][]string{
 			{"a", "STRING", "false", "NULL", "", "{primary,ufo}", "false"},
-			{"d", "STRING", "true", "NULL", "", "{ufo}", "false"},
 			{"e", "STRING", "true", "NULL", "", "{}", "false"},
+			{"d", "STRING", "true", "NULL", "", "{ufo}", "false"},
 		},
 	)
 
