@@ -2134,6 +2134,192 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	}
 }
 
+// TestReplicaTombstone ensures that tombstones are written when we expect
+// them to be.
+//
+// Tombstones are laid down when replicas are removed.
+// Replicas are removed for several reasons:
+//
+//   1)   In response to a ChangeReplicasTrigger which removes it.
+//   2)   In response to a ReplicaTooOldError from a sent raft message.
+//   3)   Due to the replicaGCQueue.
+//   3.1) When this detects a merge.
+//   4)   Due to a raft message addressed to a newer replica ID.
+//   4.1) When the older replica is not initialized.
+//   5)   Due to a merge.
+//   6)   Due to snapshot which subsumes a range.
+//
+// This test creates all of these scenarios and ensures that tombstones are
+// written.
+func TestReplicaTombstone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	split := func(t *testing.T, db *client.DB, key roachpb.Key) {
+		b := &client.Batch{}
+		b.AddRawRequest(adminSplitArgs(key))
+		require.NoError(t, db.Run(context.TODO(), b))
+	}
+	t.Run("ChangeReplicasTrigger", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+
+		sc := storage.TestStoreConfig(nil)
+		// We'll control replication by hand.
+		sc.TestingKnobs.DisableReplicateQueue = true
+		// Avoid fighting with the merge queue while trying to reproduce this race.
+		sc.TestingKnobs.DisableMergeQueue = true
+		mtc := &multiTestContext{storeConfig: &sc}
+		defer mtc.Stop()
+		mtc.Start(t, 2)
+
+		keyA := roachpb.Key("a")
+
+		repl0 := mtc.stores[0].LookupReplica(roachpb.RKey(keyA))
+		rangeID := repl0.RangeID
+		// Partition node 2 from sending traffic but not from receiving it.
+		// Replicate the range onto nodes 1 and 2.
+		mtc.replicateRange(rangeID, 1)
+		// Partition the range such that it doesn't hear responses but it hears
+		// everything else.
+		part, err := setupPartitionedRange(mtc, rangeID, 0, 1, true, dropFuncs{
+			dropResp: func(*storage.RaftMessageResponse) bool {
+				return true
+			},
+			dropReq: func(*storage.RaftMessageRequest) bool {
+				return false
+			},
+			dropHB: func(*storage.RaftHeartbeat) bool {
+				return false
+			},
+		})
+		defer part.deactivate()
+		require.NoError(t, err)
+		mtc.unreplicateRange(rangeID, 1)
+		tombstone := waitForTombstone(t, mtc.Store(1).Engine(), rangeID)
+		require.Equal(t, roachpb.ReplicaID(3), tombstone.NextReplicaID)
+	})
+	t.Run("ReplicaTooOldError", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+
+		sc := storage.TestStoreConfig(nil)
+		// We'll control replication by hand.
+		sc.TestingKnobs.DisableReplicateQueue = true
+		// Avoid fighting with the merge queue while trying to reproduce this race.
+		sc.TestingKnobs.DisableMergeQueue = true
+		// Send lots of heartbeats.
+		sc.RaftTickInterval = 10 * time.Millisecond
+		sc.RangeLeaseRaftElectionTimeoutMultiplier = 1000
+
+		mtc := &multiTestContext{storeConfig: &sc}
+		defer mtc.Stop()
+		mtc.Start(t, 3)
+
+		keyA := roachpb.Key("a")
+
+		repl0 := mtc.stores[0].LookupReplica(roachpb.RKey(keyA))
+		rangeID := repl0.RangeID
+		// Partition node 2 from sending traffic but not from receiving it.
+		// Replicate the range onto nodes 1 and 2.
+		mtc.replicateRange(rangeID, 1, 2)
+		// Partition the range such that it hears responses but does not hear
+		// responses. It should destroy the local replica due to a
+		// ReplicaTooOldError.
+		part, err := setupPartitionedRange(mtc, rangeID, 0, 2, true, dropFuncs{
+			dropResp: func(*storage.RaftMessageResponse) bool {
+				return false
+			},
+			dropReq: func(req *storage.RaftMessageRequest) bool {
+				return req.ToReplica.StoreID == 3
+			},
+			dropHB: func(*storage.RaftHeartbeat) bool {
+				return false
+			},
+		})
+		defer part.deactivate()
+		require.NoError(t, err)
+		mtc.unreplicateRange(rangeID, 2)
+		tombstone := waitForTombstone(t, mtc.Store(2).Engine(), rangeID)
+		require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
+	})
+	t.Run("ReplicaGCQueue (moved)", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+
+		sc := storage.TestStoreConfig(nil)
+		// We'll control replication by hand.
+		sc.TestingKnobs.DisableReplicateQueue = true
+		// Avoid fighting with the merge queue while trying to reproduce this race.
+		sc.TestingKnobs.DisableMergeQueue = true
+
+		mtc := &multiTestContext{storeConfig: &sc}
+		defer mtc.Stop()
+		mtc.Start(t, 3)
+
+		keyA := roachpb.Key("a")
+
+		repl0 := mtc.stores[0].LookupReplica(roachpb.RKey(keyA))
+		rangeID := repl0.RangeID
+		// Partition node 2 from sending traffic but not from receiving it.
+		// Replicate the range onto nodes 1 and 2.
+		mtc.replicateRange(rangeID, 1, 2)
+		// Partition the range such that it doesn't hear anything.
+		// Use the replica GC queue to remove it.
+		part, err := setupPartitionedRange(mtc, rangeID, 0, 2, true, dropFuncs{})
+		require.NoError(t, err)
+		defer part.deactivate()
+		mtc.unreplicateRange(rangeID, 2)
+		repl, err := mtc.Store(2).GetReplica(rangeID)
+		require.NoError(t, err)
+		require.NoError(t, mtc.Store(2).ManualReplicaGC(repl))
+		tombstone := waitForTombstone(t, mtc.Store(2).Engine(), rangeID)
+		require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
+	})
+	// This case also detects the tombstone for nodes which processed the merge.
+	t.Run("ReplicaGCQueue (merged)", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+
+		sc := storage.TestStoreConfig(nil)
+		// We'll control replication by hand.
+		sc.TestingKnobs.DisableReplicateQueue = true
+		// Avoid fighting with the merge queue while trying to reproduce this race.
+		sc.TestingKnobs.DisableMergeQueue = true
+
+		mtc := &multiTestContext{storeConfig: &sc}
+		defer mtc.Stop()
+		mtc.Start(t, 4)
+
+		scratchTableKey := keys.MakeTablePrefix(math.MaxUint32)
+		keyA := append(append(roachpb.Key{}, scratchTableKey...), 'a')
+		keyB := append(append(roachpb.Key{}, scratchTableKey...), 'b')
+		split(t, mtc.Store(0).DB(), keyA)
+		split(t, mtc.Store(0).DB(), keyB)
+
+		lhsRepl0 := mtc.stores[0].LookupReplica(roachpb.RKey(keyA))
+		lhsID := lhsRepl0.RangeID
+		mtc.replicateRange(lhsID, 1, 3)
+
+		rhsRepl0 := mtc.stores[0].LookupReplica(roachpb.RKey(keyB))
+		rhsID := rhsRepl0.RangeID
+		mtc.replicateRange(rhsID, 1, 2)
+
+		// Partition the range such that it doesn't hear anything.
+		// Use the replica GC queue to remove it.
+		part, err := setupPartitionedRange(mtc, rhsID, 0, 2, true, dropFuncs{})
+		require.NoError(t, err)
+		defer part.deactivate()
+		mtc.unreplicateRange(rhsID, 2)
+		mtc.replicateRange(rhsID, 3)
+		require.NoError(t, mtc.Store(0).DB().AdminMerge(context.TODO(), keyA))
+		repl, err := mtc.Store(2).GetReplica(rhsID)
+		require.NoError(t, err)
+		require.NoError(t, mtc.Store(2).ManualReplicaGC(repl))
+		tombstone := waitForTombstone(t, mtc.Store(2).Engine(), rhsID)
+		require.Equal(t, roachpb.ReplicaID(math.MaxInt32), tombstone.NextReplicaID)
+		tombstone = waitForTombstone(t, mtc.Store(3).Engine(), rhsID)
+		require.Equal(t, roachpb.ReplicaID(math.MaxInt32), tombstone.NextReplicaID)
+	})
+	// TODO(ajwerner): test the subsumption case by blocking all messages after
+	// the merge has entered its critical phase and then wait the the LHS to
+	// get a snapshot.
+}
+
 // TestAdminRelocateRangeSafety exercises a situation where calls to
 // AdminRelocateRange can race with calls to ChangeReplicas and verifies
 // that such races do not leave the range in an under-replicated state.
