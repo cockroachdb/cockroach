@@ -30,11 +30,6 @@ func (i KVInserter) CPut(key, value interface{}, expValue *roachpb.Value) {
 	panic("unimplemented")
 }
 
-// CPutDeprecated is not implmented.
-func (i KVInserter) CPutDeprecated(key, value, expValue interface{}) {
-	panic("unimplemented")
-}
-
 // Del is not implemented.
 func (i KVInserter) Del(key ...interface{}) {
 	panic("unimplemented")

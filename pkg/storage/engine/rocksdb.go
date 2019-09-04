@@ -2213,8 +2213,8 @@ func (r *rocksDBIterator) destroy() {
 func (r *rocksDBIterator) Stats() IteratorStats {
 	stats := C.DBIterStats(r.iter)
 	return IteratorStats{
-		TimeBoundNumSSTs:           int(C.ulonglong(stats.timebound_num_ssts)),
-		InternalDeleteSkippedCount: int(C.ulonglong(stats.internal_delete_skipped_count)),
+		TimeBoundNumSSTs:           int(stats.timebound_num_ssts),
+		InternalDeleteSkippedCount: int(stats.internal_delete_skipped_count),
 	}
 }
 

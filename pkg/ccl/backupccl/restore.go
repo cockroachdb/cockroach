@@ -1800,15 +1800,21 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 		tableDesc := *tbl
 		tableDesc.Version++
 		tableDesc.State = sqlbase.TableDescriptor_DROP
-		b.CPutDeprecated(
+		var existingIDVal roachpb.Value
+		existingIDVal.SetInt(int64(tableDesc.ID))
+		b.CPut(
 			sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.Name),
 			nil,
-			tableDesc.ID,
+			&existingIDVal,
 		)
-		b.CPutDeprecated(
+		existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl)
+		if err != nil {
+			return errors.Wrap(err, "dropping tables")
+		}
+		b.CPut(
 			sqlbase.MakeDescMetadataKey(tableDesc.ID),
 			sqlbase.WrapDescriptor(&tableDesc),
-			sqlbase.WrapDescriptor(tbl),
+			existingDescVal,
 		)
 	}
 	if err := txn.Run(ctx, b); err != nil {
@@ -1833,10 +1839,14 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 		tableDesc := *tbl
 		tableDesc.Version++
 		tableDesc.State = sqlbase.TableDescriptor_PUBLIC
-		b.CPutDeprecated(
+		existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl)
+		if err != nil {
+			return errors.Wrap(err, "publishing tables")
+		}
+		b.CPut(
 			sqlbase.MakeDescMetadataKey(tableDesc.ID),
 			sqlbase.WrapDescriptor(&tableDesc),
-			sqlbase.WrapDescriptor(tbl),
+			existingDescVal,
 		)
 	}
 	if err := txn.Run(ctx, b); err != nil {
