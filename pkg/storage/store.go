@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/storage/apply"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
@@ -1142,7 +1143,7 @@ func (s *Store) IsStarted() bool {
 	return atomic.LoadInt32(&s.started) == 1
 }
 
-// IterateIDPrefixKeys helps visit system keys that use RangeID prefixing ( such as
+// IterateIDPrefixKeys helps visit system keys that use RangeID prefixing (such as
 // RaftHardStateKey, RaftTombstoneKey, and many others). Such keys could in principle exist at any
 // RangeID, and this helper efficiently discovers all the keys of the desired type (as specified by
 // the supplied `keyFn`) and, for each key-value pair discovered, unmarshals it into `msg` and then
@@ -2088,10 +2089,76 @@ func (s *Store) AllocateRangeID(ctx context.Context) (roachpb.RangeID, error) {
 // splitPreApply is called when the raft command is applied. Any
 // changes to the given ReadWriter will be written atomically with the
 // split commit.
-func splitPreApply(ctx context.Context, eng engine.ReadWriter, split roachpb.SplitTrigger) {
+func splitPreApply(
+	ctx context.Context, eng engine.ReadWriter, split roachpb.SplitTrigger, r *Replica,
+) {
+	// Check on the RHS, we need to ensure that it exists and has a minReplicaID
+	// less than or equal to the replica we're about to initialize.
+	//
+	// The right hand side of the split was already created (and its raftMu
+	// acquired) in Replica.acquireSplitLock. It must be present here.
+	rightRepl, err := r.store.GetReplica(split.RightDesc.RangeID)
+	if err != nil {
+		log.Fatalf(ctx, "unable to find RHS replica: %+v", err)
+	}
+
+	// If the RHS is not in the split, sanity check that the LHS is currently
+	// catching up from a preemptive snapshot.
+	_, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
+	if !hasRightDesc {
+		_, lhsExists := r.Desc().GetReplicaDescriptor(r.StoreID())
+		if lhsExists {
+			log.Fatalf(ctx, "cannot process split on s%s which exists in LHS and not in RHS: %+v",
+				r.StoreID(), split)
+		}
+	}
+
+	// Check to make sure we don't know that the RHS has already been removed
+	// from this store at the replica ID implied by this split.
+	// This is the common case.
+
+	// Check to see if we know that the RHS has already been removed from this
+	// store at the replica ID implied by the split.
+	if rightRepl.isNewerThanSplit(&split) {
+		// We're in the rare case where we know that the RHS has been removed
+		// and re-added with a higher replica ID. We know we've never processed a
+		// snapshot for the right range because up to this point it would overlap
+		// with the left and ranges cannot move rightwards.
+		//
+		// It is important to preserve the HardState because we might however have
+		// already voted at a higher term. In general this shouldn't happen because
+		// we add learners and then promote them only after we snapshot but we're
+		// going to be extra careful in case future versions of cockroach somehow
+		// promote replicas without ensuring that a snapshot has been received.
+		//
+		// Clear the user data the RHS would have inherited from the LHS due to the
+		// split and additionally clear all of the range ID local state that the
+		// split trigger writes into the RHS.
+		//
+		// Rather than specifically deleting around the data we want to preserve
+		// we read the HardState to preserve it, clear everything and write back
+		// the HardState and tombstone.
+		hs, err := rightRepl.raftMu.stateLoader.LoadHardState(ctx, eng)
+		if err != nil {
+			log.Fatalf(ctx, "failed to load hard state for removed rhs: %v", err)
+		}
+		const rangeIDLocalOnly = false
+		const mustUseClearRange = false
+		if err := clearRangeData(&split.RightDesc, eng, eng, rangeIDLocalOnly, mustUseClearRange); err != nil {
+			log.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
+		}
+		if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, eng, hs); err != nil {
+			log.Fatalf(ctx, "failed to set hard state with 0 commit index for removed rhs: %v", err)
+		}
+		if err := r.setTombstoneKey(ctx, eng, r.minReplicaID()); err != nil {
+			log.Fatalf(ctx, "failed to set tombstone for removed rhs: %v", err)
+		}
+		return
+	}
+
 	// Update the raft HardState with the new Commit value now that the
 	// replica is initialized (combining it with existing or default
-	// Term and Vote).
+	// Term and Vote). This is the common case.
 	rsl := stateloader.Make(split.RightDesc.RangeID)
 	if err := rsl.SynthesizeRaftState(ctx, eng); err != nil {
 		log.Fatal(ctx, err)
@@ -2115,89 +2182,18 @@ func splitPostApply(
 	{
 		// Already holding raftMu, see above.
 		rightRng.mu.Lock()
-		// The right hand side of the split may have been removed and re-added
-		// in the meantime, and the replicaID in RightDesc may be stale.
-		// Consequently the call below may fail with a RaftGroupDeletedError. In
-		// general, this protects earlier incarnations of the replica that were
-		// since replicaGC'ed from reneging on promises made earlier (for
-		// example, once the HardState is removed, a replica could cast a
-		// different vote for the same term).
-		//
-		// It is safe to circumvent that in this case because the RHS must have
-		// remained uninitialized (the LHS blocks all user data, and since our
-		// Raft logs start at a nonzero index a snapshot must go through before
-		// any log entries are appended). This means the data in that range is
-		// just a HardState which we "logically" snapshot by assigning it data
-		// formerly located within the LHS.
-		//
-		// Note that if we ever have a way to replicaGC uninitialized replicas,
-		// the RHS may have been gc'ed and so the HardState would be gone. In
-		// that case, the requirement that the HardState remains would have been
-		// violated if the bypass below were used, which is why we place an
-		// assertion.
-		//
-		// See:
-		// https://github.com/cockroachdb/cockroach/issues/21146#issuecomment-365757329
-		//
-		// TODO(tbg): this argument is flawed - it's possible for a tombstone
-		// to exist on the RHS:
-		// https://github.com/cockroachdb/cockroach/issues/40470
-		// Morally speaking, this means that we should throw away the data we
-		// moved from the LHS to the RHS (depending on the tombstone).
-		// Realistically speaking it will probably be easier to create the RHS
-		// anyway, even though there's a tombstone and it may just get gc'ed
-		// again. Note that for extra flavor, we may not even know whether the
-		// RHS is currently supposed to exist or not, lending more weight to the
-		// second approach.
-		tombstoneKey := keys.RaftTombstoneKey(rightRng.RangeID)
-		var tombstone roachpb.RaftTombstone
-		if ok, err := engine.MVCCGetProto(
-			ctx, r.store.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
-		); err != nil {
-			log.Fatalf(ctx, "unable to load tombstone for RHS: %+v", err)
-		} else if ok {
-			log.Fatalf(ctx, "split trigger found right-hand side with tombstone %+v: %v", tombstone, rightRng)
+
+		// If we know that the RHS has already been removed at this replica ID
+		// then we also know that its data has already been removed by the preApply
+		// so we continue to update the descriptor for the left hand side and
+		// return.
+		if rightRng.isNewerThanSplitRLocked(split) {
+			rightRng.mu.Unlock()
+			r.setDescAfterSplit(ctx, &split.LeftDesc)
+			r.writeStats.halve()
+			return
 		}
-		rightDesc, ok := split.RightDesc.GetReplicaDescriptor(r.StoreID())
-		if !ok {
-			// This is yet another special quirky case. The local store is not
-			// necessarily a member of the split; this can occur if this store
-			// wasn't a member at the time of the split, but is nevertheless
-			// catching up across the split. For example, add a learner, and
-			// while it is being caught up via a snapshot, remove the learner
-			// again, then execute a split, and re-add it. Upon being re-added
-			// the learner will likely catch up from where the snapshot left it,
-			// and it will see itself get removed, then we hit this branch when
-			// the split trigger is applied, and eventually there's a
-			// ChangeReplicas that re-adds the local store under a new
-			// replicaID.
-			//
-			// So our trigger will have a smaller replicaID for our RHS, which
-			// will blow up in initRaftMuLockedReplicaMuLocked. We still want
-			// to force the RHS to accept the descriptor, even though that
-			// rewinds the replicaID. To do that we want to change the existing
-			// replicaID, but we didn't find one -- zero is then the only reasonable
-			// choice. Note that this is also the replicaID a replica that is
-			// not reflected in its own descriptor will have, i.e. we're cooking
-			// up less of a special case here than you'd expect at first glance.
-			//
-			// Note that futzing with the replicaID is a high-risk operation as
-			// it is what the raft peer will believe itself to be identified by.
-			// Under no circumstances must we use a replicaID that belongs to
-			// someone else, or a byzantine situation will result. Zero is
-			// special-cased and will never init a raft group until the real
-			// ID is known from inbound raft traffic.
-			rightDesc.ReplicaID = 0 // for clarity only; it's already zero
-		}
-		if rightRng.mu.replicaID > rightDesc.ReplicaID {
-			rightRng.mu.replicaID = rightDesc.ReplicaID
-		}
-		// NB: the safety argument above implies that we don't have to worry
-		// about restoring the existing minReplicaID if it's nonzero. No
-		// promises have been made, so none need to be kept. So we clear this
-		// unconditionally, making sure that it doesn't block us from init'ing
-		// the RHS.
-		rightRng.mu.minReplicaID = 0
+
 		err := rightRng.initRaftMuLockedReplicaMuLocked(&split.RightDesc, r.store.Clock(), 0)
 		rightRng.mu.Unlock()
 		if err != nil {
@@ -2237,9 +2233,10 @@ func splitPostApply(
 	// until it receives a Raft message addressed to the right-hand range. But
 	// since new replicas start out quiesced, unless we explicitly awaken the
 	// Raft group, there might not be any Raft traffic for quite a while.
-	if err := rightRng.withRaftGroup(true, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
+	err = rightRng.withRaftGroup(true, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
 		return true, nil
-	}); err != nil {
+	})
+	if err != nil {
 		log.Fatalf(ctx, "unable to create raft group for right-hand range in split: %+v", err)
 	}
 
@@ -2315,27 +2312,7 @@ func (s *Store) SplitRange(
 		s.replicaQueues.Delete(int64(rightDesc.RangeID))
 	}
 
-	leftRepl.setDesc(ctx, &newLeftDesc)
-
-	// Clear the LHS txn wait queue, to redirect to the RHS if
-	// appropriate. We do this after setDescWithoutProcessUpdate
-	// to ensure that no pre-split commands are inserted into the
-	// txnWaitQueue after we clear it.
-	leftRepl.txnWaitQueue.Clear(false /* disable */)
-
-	// The rangefeed processor will no longer be provided logical ops for
-	// its entire range, so it needs to be shut down and all registrations
-	// need to retry.
-	// TODO(nvanbenschoten): It should be possible to only reject registrations
-	// that overlap with the new range of the split and keep registrations that
-	// are only interested in keys that are still on the original range running.
-	leftRepl.disconnectRangefeedWithReason(
-		roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
-	)
-
-	// Clear the original range's request stats, since they include requests for
-	// spans that are now owned by the new range.
-	leftRepl.leaseholderStats.resetRequestCounts()
+	leftRepl.setDescAfterSplit(ctx, &newLeftDesc)
 	leftRepl.writeStats.splitRequestCounts(rightRepl.writeStats)
 
 	if err := s.addReplicaInternalLocked(rightRepl); err != nil {
@@ -2348,7 +2325,6 @@ func (s *Store) SplitRange(
 	if err := rightRepl.updateRangeInfo(rightRepl.Desc()); err != nil {
 		return err
 	}
-
 	// Add the range to metrics and maybe gossip on capacity change.
 	s.metrics.ReplicaCount.Inc(1)
 	s.maybeGossipOnCapacityChange(ctx, rangeAddEvent)
@@ -2580,7 +2556,12 @@ func (s *Store) removeReplicaImpl(
 	// We check both rep.mu.ReplicaID and rep.mu.state.Desc's replica ID because
 	// they can differ in cases when a replica's ID is increased due to an
 	// incoming raft message (see #14231 for background).
+	// TODO(ajwerner): reconsider some of this sanity checking.
 	rep.mu.Lock()
+	if rep.mu.destroyStatus.Removed() {
+		rep.mu.Unlock()
+		return nil
+	}
 	replicaID := rep.mu.replicaID
 	if rep.mu.replicaID >= nextReplicaID {
 		rep.mu.Unlock()
@@ -2600,12 +2581,7 @@ func (s *Store) removeReplicaImpl(
 	}
 
 	if !rep.IsInitialized() {
-		// The split trigger relies on the fact that it can bypass the tombstone
-		// check for the RHS, but this is only true as long as we never delete
-		// its HardState.
-		//
-		// See the comment in splitPostApply for details.
-		log.Fatalf(ctx, "can not replicaGC uninitialized replicas")
+		log.Fatalf(ctx, "can not replicaGC uninitialized replicas in this method")
 	}
 
 	// During merges, the context might have the subsuming range, so we explicitly
@@ -2666,7 +2642,73 @@ func (s *Store) removeReplicaImpl(
 	// TODO(peter): Could release s.mu.Lock() here.
 	s.maybeGossipOnCapacityChange(ctx, rangeRemoveEvent)
 	s.scanner.RemoveReplica(rep)
+	return nil
+}
 
+func (s *Store) removeUninitializedReplicaRaftMuLocked(
+	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID,
+) error {
+	rep.raftMu.AssertHeld()
+
+	// Sanity check this removal.
+	rep.mu.RLock()
+	ds := rep.mu.destroyStatus
+	isInitialized := rep.isInitializedRLocked()
+	rep.mu.RUnlock()
+	// Somebody already removed this Replica.
+	if ds.Removed() {
+		return nil
+	}
+	if ds.reason != destroyReasonRemovalPending {
+		log.Fatalf(ctx, "cannot remove uninitialized replica which is not removal pending: %v", ds)
+	}
+
+	// When we're in this state we should have already had our destroy status set
+	// so it shouldn't have been possible to process any raft messages or apply
+	// any snapshots.
+	if isInitialized {
+		log.Fatalf(ctx, "previously uninitialized replica became initialized before removal")
+	}
+
+	// Proceed with the removal.
+	rep.readOnlyCmdMu.Lock()
+	rep.mu.Lock()
+	rep.cancelPendingCommandsLocked()
+	rep.mu.internalRaftGroup = nil
+	rep.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(rep.RangeID, rep.store.StoreID()), destroyReasonRemoved)
+	rep.mu.Unlock()
+	rep.readOnlyCmdMu.Unlock()
+
+	if err := rep.destroyRaftMuLocked(ctx, nextReplicaID); err != nil {
+		log.Fatalf(ctx, "failed to remove uninitialized replica %v: %v", rep, err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Sanity check, could be removed.
+	value, stillExists := s.mu.replicas.Load(int64(rep.RangeID))
+	if !stillExists {
+		log.Fatalf(ctx, "uninitialized replica was removed in the meantime")
+	}
+	existing := (*Replica)(value)
+	if existing == rep {
+		log.Infof(ctx, "removing uninitialized replica %v", rep)
+	} else {
+		log.Fatalf(ctx, "uninitialized replica %v was already removed", rep)
+	}
+
+	s.metrics.ReplicaCount.Dec(1)
+
+	// Only an uninitialized replica can have a placeholder since, by
+	// definition, an initialized replica will be present in the
+	// replicasByKey map. While the replica will usually consume the
+	// placeholder itself, that isn't guaranteed and so this invocation
+	// here is crucial (i.e. don't remove it).
+	if s.removePlaceholderLocked(ctx, rep.RangeID) {
+		atomic.AddInt32(&s.counts.droppedPlaceholders, 1)
+	}
+	s.unlinkReplicaByRangeIDLocked(rep.RangeID)
 	return nil
 }
 
@@ -3504,7 +3546,6 @@ func (s *Store) processRaftSnapshotRequest(
 		if err := r.stepRaftGroup(&snapHeader.RaftMessageRequest); err != nil {
 			return roachpb.NewError(err)
 		}
-
 		if _, expl, err := r.handleRaftReadyRaftMuLocked(ctx, inSnap); err != nil {
 			fatalOnRaftReadyErr(ctx, expl, err)
 		}
@@ -3543,33 +3584,43 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 				repl.raftMu.Lock()
 				defer repl.raftMu.Unlock()
 				repl.mu.Lock()
-				defer repl.mu.Unlock()
 
 				// If the replica ID in the error does not match then we know
 				// that the replica has been removed and re-added quickly. In
 				// that case, we don't want to add it to the replicaGCQueue.
-				if tErr.ReplicaID != repl.mu.replicaID {
-					log.Infof(ctx, "replica too old response with old replica ID: %s", tErr.ReplicaID)
+				// If the replica is not alive then we also should ignore this error.
+				if tErr.ReplicaID != repl.mu.replicaID ||
+					!repl.mu.destroyStatus.IsAlive() ||
+					// Ignore if we want to test the replicaGC queue.
+					s.TestingKnobs().DisableEagerReplicaRemoval {
+					repl.mu.Unlock()
 					return nil
 				}
-
-				// If the replica ID in the error does match, we know the replica
-				// will be removed and we can cancel any pending commands. This is
-				// sometimes necessary to unblock PushTxn operations that are
-				// necessary for the replica GC to succeed.
-				repl.cancelPendingCommandsLocked()
 
 				// The replica will be garbage collected soon (we are sure
 				// since our replicaID is definitely too old), but in the meantime we
 				// already want to bounce all traffic from it. Note that the replica
-				// could be re-added with a higher replicaID, in which this error is
-				// cleared in setReplicaIDRaftMuLockedMuLocked.
-				if repl.mu.destroyStatus.IsAlive() {
-					storeID := repl.store.StoreID()
-					repl.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(repl.RangeID, storeID), destroyReasonRemovalPending)
+				// could be re-added with a higher replicaID, but we want to clear the
+				// replica's data before that happens.
+				if log.V(1) {
+					log.Infof(ctx, "setting local replica to destroyed due to ReplicaTooOld error")
 				}
 
-				s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityRemoved)
+				storeID := repl.store.StoreID()
+				// NB: We know that there's a later copy of this range on this store but
+				// to introduce another more specific error in this case is overkill so
+				// we return RangeNotFoundError which the recipient will properly
+				// ignore.
+				repl.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(repl.RangeID, storeID),
+					destroyReasonRemovalPending)
+				repl.mu.Unlock()
+				nextReplicaID := tErr.ReplicaID + 1
+				if !repl.IsInitialized() {
+					return s.removeUninitializedReplicaRaftMuLocked(ctx, repl, nextReplicaID)
+				}
+				return s.removeReplicaImpl(ctx, repl, nextReplicaID, RemoveOptions{
+					DestroyData: true,
+				})
 			case *roachpb.RaftGroupDeletedError:
 				if replErr != nil {
 					// RangeNotFoundErrors are expected here; nothing else is.
@@ -3632,7 +3683,11 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 				// giving up the lock. Set lastRepl to nil, so we don't handle it
 				// down below as well.
 				lastRepl = nil
-				if _, expl, err := r.handleRaftReadyRaftMuLocked(ctx, noSnap); err != nil {
+				switch _, expl, err := r.handleRaftReadyRaftMuLocked(ctx, noSnap); err {
+				case nil:
+				case apply.ErrRemoved:
+					// return hopefully never to be heard from again.
+				default:
 					fatalOnRaftReadyErr(ctx, expl, err)
 				}
 			}
@@ -3677,7 +3732,11 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		// handleRaftReadyRaftMuLocked) since racing to handle Raft Ready won't
 		// have any undesirable results.
 		ctx = lastRepl.AnnotateCtx(ctx)
-		if _, expl, err := lastRepl.handleRaftReady(ctx, noSnap); err != nil {
+		switch _, expl, err := lastRepl.handleRaftReady(ctx, noSnap); err {
+		case nil:
+		case apply.ErrRemoved:
+			// return hopefully never to be heard from again.
+		default:
 			fatalOnRaftReadyErr(ctx, expl, err)
 		}
 	}
@@ -3693,8 +3752,12 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 	ctx = r.AnnotateCtx(ctx)
 	start := timeutil.Now()
 	stats, expl, err := r.handleRaftReady(ctx, noSnap)
-	if err != nil {
-		log.Fatalf(ctx, "%s: %+v", log.Safe(expl), err) // TODO(bdarnell)
+	switch err {
+	case nil:
+	case apply.ErrRemoved:
+		return
+	default:
+		fatalOnRaftReadyErr(ctx, expl, err)
 	}
 	elapsed := timeutil.Since(start)
 	s.metrics.RaftWorkingDurationNanos.Inc(elapsed.Nanoseconds())
@@ -3937,7 +4000,16 @@ func (s *Store) getOrCreateReplica(
 	replicaID roachpb.ReplicaID,
 	creatingReplica *roachpb.ReplicaDescriptor,
 ) (_ *Replica, created bool, _ error) {
+	// We need a retry loop as the replica we find in the map may be in the
+	// process of being removed or may need to be removed.
+	r := retry.Start(retry.Options{
+		InitialBackoff: time.Microsecond,
+		// Set the backoff up to only a small amount to wait for data that
+		// might need to be cleared.
+		MaxBackoff: 10 * time.Millisecond,
+	})
 	for {
+		r.Next()
 		r, created, err := s.tryGetOrCreateReplica(
 			ctx,
 			rangeID,
@@ -3965,33 +4037,80 @@ func (s *Store) tryGetOrCreateReplica(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	creatingReplica *roachpb.ReplicaDescriptor,
-) (_ *Replica, created bool, _ error) {
-	// The common case: look up an existing (initialized) replica.
-	if value, ok := s.mu.replicas.Load(int64(rangeID)); ok {
-		repl := (*Replica)(value)
-		repl.raftMu.Lock() // not unlocked
-		repl.mu.Lock()
-		defer repl.mu.Unlock()
-
-		var replTooOldErr error
-		if creatingReplica != nil {
+) (_ *Replica, created bool, err error) {
+	var (
+		handleFromReplicaTooOld = func(repl *Replica) error {
+			if creatingReplica == nil {
+				return nil
+			}
 			// Drop messages that come from a node that we believe was once a member of
 			// the group but has been removed.
 			desc := repl.mu.state.Desc
 			_, found := desc.GetReplicaDescriptorByID(creatingReplica.ReplicaID)
 			// It's not a current member of the group. Is it from the past?
 			if !found && creatingReplica.ReplicaID < desc.NextReplicaID {
-				replTooOldErr = roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
+				return roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
 			}
+			return nil
+		}
+		handleToReplicaTooOld = func(repl *Replica) error {
+			if replicaID == 0 || repl.mu.replicaID == 0 || repl.mu.replicaID >= replicaID {
+				return nil
+			}
+			if log.V(1) {
+				log.Infof(ctx, "found message for replica ID %d which is newer than %v", replicaID, repl)
+			}
+			repl.mu.destroyStatus.Set(err, destroyReasonRemovalPending)
+			isInitialized := repl.isInitializedRLocked()
+			repl.mu.Unlock()
+			defer repl.mu.Lock()
+			if !isInitialized {
+				if err := s.removeUninitializedReplicaRaftMuLocked(ctx, repl, replicaID); err != nil {
+					log.Fatalf(ctx, "failed to remove uninitialized replica: %v", err)
+				}
+			} else {
+				if err := s.removeReplicaImpl(ctx, repl, replicaID, RemoveOptions{
+					DestroyData: true,
+				}); err != nil {
+					log.Fatal(ctx, err)
+				}
+			}
+			return errRetry
+		}
+	)
+	// The common case: look up an existing (initialized) replica.
+	if value, ok := s.mu.replicas.Load(int64(rangeID)); ok {
+		repl := (*Replica)(value)
+		repl.raftMu.Lock() // not unlocked on success
+		repl.mu.Lock()
+		defer repl.mu.Unlock()
+		if err := handleFromReplicaTooOld(repl); err != nil {
+			repl.raftMu.Unlock()
+			return nil, false, err
+		}
+		if repl.mu.destroyStatus.RemovingOrRemoved() {
+			repl.raftMu.Unlock()
+			return nil, false, errRetry
+		}
+		if err := handleToReplicaTooOld(repl); err != nil {
+			repl.raftMu.Unlock()
+			return nil, false, err
 		}
 
 		var err error
-		if replTooOldErr != nil {
-			err = replTooOldErr
-		} else if ds := repl.mu.destroyStatus; ds.reason == destroyReasonRemoved {
-			err = errRetry
-		} else {
-			err = repl.setReplicaIDRaftMuLockedMuLocked(replicaID)
+		if repl.mu.replicaID == 0 {
+			// This message is telling us about our replica ID.
+			// This is a common case when dealing with preemptive snapshots.
+			err = repl.setReplicaIDRaftMuLockedMuLocked(repl.AnnotateCtx(ctx), replicaID)
+		} else if replicaID != 0 && repl.mu.replicaID > replicaID {
+			// The sender is behind and is sending to an old replica.
+			// We could silently drop this message but this way we'll inform the
+			// sender that they may no longer exist.
+			err = roachpb.NewRangeNotFoundError(rangeID, s.StoreID())
+		} else if replicaID != 0 && repl.mu.replicaID != replicaID {
+			// This case should have been caught by handleToReplicaTooOld.
+			log.Fatalf(ctx, "intended replica id %d unexpectedly does not match the current replica %v",
+				replicaID, repl)
 		}
 		if err != nil {
 			repl.raftMu.Unlock()
@@ -4028,7 +4147,7 @@ func (s *Store) tryGetOrCreateReplica(
 	// replica even outside of raft processing. Have to do this after grabbing
 	// Store.mu to maintain lock ordering invariant.
 	repl.mu.Lock()
-	repl.mu.minReplicaID = tombstone.NextReplicaID
+	repl.mu.tombstoneReplicaID = tombstone.NextReplicaID
 	// Add the range to range map, but not replicasByKey since the range's start
 	// key is unknown. The range will be added to replicasByKey later when a
 	// snapshot is applied. After unlocking Store.mu above, another goroutine

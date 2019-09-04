@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1192,15 +1193,12 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 		return err
 	}
 
-	if err := replicateRHS(); !testutils.IsError(err, storage.IntersectingSnapshotMsg) {
-		t.Fatalf("unexpected error %v", err)
-	}
-
-	// Enable the replica GC queue so that the next attempt to replicate the RHS
-	// to store 2 will cause the obsolete replica to be GC'd allowing a
-	// subsequent replication to succeed.
-	mtc.stores[2].SetReplicaGCQueueActive(true)
-
+	// This used to fail with IntersectingSnapshotMsg because we relied on replica
+	// GC to remove the LHS and that queue is disabled. Now we will detect that
+	// the LHS is not part of the range because of a ReplicaTooOldError and then
+	// we'll replicaGC the LHS in response.
+	// TODO(ajwerner): filter the reponses to node 2 or disable this eager
+	// replicaGC.
 	testutils.SucceedsSoon(t, replicateRHS)
 }
 
@@ -3000,6 +2998,10 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
+	// We're going to set up the cluster with partitioning so that we can
+	// partition node 0 from the others. The partition is not initially active.
+	partRange, err := setupPartitionedRange(mtc, 1, 0, false /* activated */)
+	require.NoError(t, err)
 	// First put the range on all three nodes.
 	raftID := roachpb.RangeID(1)
 	mtc.replicateRange(raftID, 1, 2)
@@ -3044,7 +3046,9 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 		}
 		return nil
 	})
-
+	// Partition nodes 1 and 2 from node 0. Otherwise they'd get a
+	// ReplicaTooOldError from node 0 and proceed to remove themselves.
+	partRange.activate()
 	// Bring node 2 back up.
 	mtc.restartStore(2)
 
@@ -3547,6 +3551,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicaGCQueue = true
+	sc.TestingKnobs.DisableEagerReplicaRemoval = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
@@ -3597,12 +3602,21 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 	mtc.advanceClock(context.TODO())
 	mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
 	mtc.stores[0].SetReplicaGCQueueActive(true)
-	mtc.stores[0].MustForceReplicaGCScanAndProcess()
+	// There's a fun flake where between when the queue detects that this replica
+	// needs to be removed and when it actually gets processed that an older
+	// replica will send this replica a raft message which will give it an ID.
+	// When our replica ID changes the queue will ignore the previous addition and
+	// we won't be removed.
+	testutils.SucceedsSoon(t, func() error {
+		mtc.stores[0].MustForceReplicaGCScanAndProcess()
 
-	// The Replica object should be removed.
-	if _, err := mtc.stores[0].GetReplica(rangeID); !testutils.IsError(err, "r[0-9]+ was not found") {
-		t.Fatalf("expected replica to be missing; got %v", err)
-	}
+		// The Replica object should be removed.
+		const msg = "r[0-9]+ was not found"
+		if _, err := mtc.stores[0].GetReplica(rangeID); !testutils.IsError(err, msg) {
+			return errors.Errorf("expected %s, got %v", msg, err)
+		}
+		return nil
+	})
 
 	// And the data should no longer be on disk.
 	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), descKey,
@@ -4594,4 +4608,197 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestProcessSplitAfterRightHandSideHasBeenRemoved tests cases where we have
+// a follower replica which has received information about the RHS of a split
+// before it has processed that split. The replica can't both have an
+// initialized RHS and process the split but it can have (1) an uninitialized
+// RHS with a higher replica ID than lives in the split and (2) a RHS with
+// an unknown replica ID and a tombstone at exactly the replica ID of the RHS.
+//
+// Starting in 19.2 if a replica discovers from a raft message that it is an
+// old replica then it knows that it has been removed and re-added to the range.
+// In this case the Replica eagerly destroys itself and its data.
+//
+// Given this behavior there are 2 troubling cases with regards to splits.
+//
+//   *  In all cases we begin with s1 processing a presplit snapshot for
+//      r20. After the split the store should have r21/3.
+//
+//   *  s1 receives a message for r21/3 prior to acquiring the split lock
+//      in r21. This will create an uninitialized r21/3 which may write
+//      HardState.
+//
+//   *  Before the r20 processes the split r21 is removed and re-added to
+//      s1 as r21/4. s1 receives a raft message destined for r21/4 and proceeds
+//      to destroy its uninitialized r21/3, laying down a tombstone at 4 in the
+//      process.
+//
+//  (1) s1 processes the split and finds the RHS to be an uninitialized replica
+//      with a higher replica ID.
+//
+//  (2) s1 crashes before processing the split, forgetting the replica ID of the
+//      RHS.
+//
+// In both cases we know that the RHS could not have committed anything because
+// it cannot have gotten a snapshot but we want to be sure to not synthesize a
+// HardState for the RHS that contains a non-zero commit index if we know that
+// the RHS will need another snapshot later.
+//
+func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := storage.TestStoreConfig(nil)
+	// Newly-started stores (including the "rogue" one) should not GC
+	// their replicas. We'll turn this back on when needed.
+	sc.TestingKnobs.DisableReplicaGCQueue = true
+	sc.RaftDelaySplitToSuppressSnapshotTicks = 0
+	// Make the tick interval short so we don't need to wait too long for the
+	// partitioned leader to time out. Also make the
+	// RangeLeaseRaftElectionTimeout multiplier high so that system ranges
+	// like node liveness can actually get leases.
+	sc.RaftTickInterval = 10 * time.Millisecond
+	sc.RangeLeaseRaftElectionTimeoutMultiplier = 1000
+
+	testutils.RunTrueAndFalse(t, "restart store",
+		func(t *testing.T, restartStore bool) {
+			mtc := &multiTestContext{
+				storeConfig: &sc,
+			}
+			defer mtc.Stop()
+			mtc.Start(t, 3)
+
+			ctx := context.Background()
+			db := mtc.Store(1).DB()
+
+			increment := func(key roachpb.Key, by int64) {
+				b := &client.Batch{}
+				b.AddRawRequest(incrementArgs(key, by))
+				require.NoError(t, db.Run(ctx, b))
+			}
+			changeReplicas := func(typ roachpb.ReplicaChangeType, key roachpb.Key, idx int) error {
+				ri, err := getRangeInfo(ctx, db, key)
+				require.NoError(t, err)
+				_, err = db.AdminChangeReplicas(ctx, ri.Desc.StartKey.AsRawKey(), ri.Desc,
+					roachpb.MakeReplicationChanges(typ, makeReplicationTargets(idx+1)...))
+				return err
+			}
+			split := func(key roachpb.Key) {
+				b := &client.Batch{}
+				b.AddRawRequest(adminSplitArgs(key))
+				require.NoError(t, db.Run(ctx, b))
+			}
+
+			// Split off a non-system range so we don't have to account for node liveness
+			// traffic.
+			scratchTableKey := keys.MakeTablePrefix(math.MaxUint32)
+			// Put some data in the range so we'll have something to test for.
+			keyA := append(append(roachpb.Key{}, scratchTableKey...), 'a')
+			keyB := append(append(roachpb.Key{}, scratchTableKey...), 'b')
+
+			split(scratchTableKey)
+			ri, err := getRangeInfo(ctx, db, scratchTableKey)
+			require.Nil(t, err)
+			rangeID := ri.Desc.RangeID
+			// First put the range on all three nodes.
+			mtc.replicateRange(rangeID, 1, 2)
+
+			// Set up a partition for the LHS range only. Initially it is not active.
+			partRange, err := setupPartitionedRange(mtc, rangeID, 0, false /* activated */)
+			require.NoError(t, err)
+
+			// Wait for all nodes to catch up.
+			increment(keyA, 5)
+			mtc.waitForValues(keyA, []int64{5, 5, 5})
+
+			// Transfer the lease off of node 0.
+			mtc.transferLease(ctx, rangeID, 0, 2)
+
+			// Make sure everybody knows about that transfer.
+			increment(keyA, 1)
+			mtc.waitForValues(keyA, []int64{6, 6, 6})
+
+			// Now we partition a replica's LHS, perform a split, remove the RHS, add it
+			// back and make sure after the LHS the RHS has not been initialized.
+			// Then we'll test both killing the store and not killing the store before
+			// clearing the partition and allowing the LHS to process the split.
+			partRange.activate()
+
+			increment(keyA, 1)
+			mtc.waitForValues(keyA, []int64{6, 7, 7})
+
+			split(keyB)
+
+			// Write a value which we can observe to know when the split has been
+			// applied by the LHS.
+			increment(keyA, 1)
+			mtc.waitForValues(keyA, []int64{6, 8, 8})
+
+			increment(keyB, 6)
+			// Wait for all non-partitioned nodes to catch up.
+			mtc.waitForValues(keyB, []int64{0, 6, 6})
+
+			rhsInfo, err := getRangeInfo(ctx, db, keyB)
+			require.NoError(t, err)
+			rhsID := rhsInfo.Desc.RangeID
+			_, store0Exists := rhsInfo.Desc.GetReplicaDescriptor(1)
+			require.True(t, store0Exists)
+
+			// Remove and re-add the RHS to create a new uninitialized replica at
+			// a higher replica ID. This will lead to a tombstone being written.
+			require.NoError(t, changeReplicas(roachpb.REMOVE_REPLICA, keyB, 0))
+			// Unsuccessfuly because the RHS will not accept the learner snapshot
+			// and will be rolled back. Nevertheless it will have learned that it
+			// has been removed at the old replica ID.
+			require.True(t,
+				testutils.IsError(changeReplicas(roachpb.ADD_REPLICA, keyB, 0),
+					"snapshot failed.*cannot apply snapshot: snapshot intersects"))
+
+			// Read the HardState of the RHS to ensure that we've written a tombstone
+			// with our old replica ID.
+			var tombstone roachpb.RaftTombstone
+			testutils.SucceedsSoon(t, func() error {
+				tombstoneKey := keys.RaftTombstoneKey(rhsID)
+				ok, err := engine.MVCCGetProto(
+					ctx, mtc.Store(0).Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
+				)
+				assert.NoError(t, err)
+				if !ok {
+					return fmt.Errorf("tombstone not found for range %d", rhsID)
+				}
+				return nil
+			})
+
+			if restartStore {
+				mtc.stopStore(0)
+				mtc.restartStore(0)
+			}
+
+			// Verify that the commit index on the RHS is zero because we haven't yet
+			// applied the split.
+			hs, err := stateloader.Make(rhsID).LoadHardState(ctx, mtc.Store(0).Engine())
+			require.NoError(t, err)
+			require.Equal(t, uint64(0), hs.Commit)
+
+			// Remove the partition and demonstrate that the LHS catches up
+			// past the split (8 was written after the split).
+			partRange.deactivate()
+			mtc.waitForValues(keyA, []int64{8, 8, 8})
+
+			// Verify that the commit index on the RHS is still zero (was not
+			// initialized by the split).
+			hs, err = stateloader.Make(rhsID).LoadHardState(ctx, mtc.Store(0).Engine())
+			require.NoError(t, err)
+			require.Equal(t, uint64(0), hs.Commit)
+
+			// The RHS should be able to be added successfully now.
+			// This needs a SucceedsSoon because of a rare race between sending a
+			// learner snapshot and sending a raft snapshot whereby the raft snapshot
+			// is sent first (we block raft snapshots from being sent while sending
+			// the learner snapshot but not the other way around).
+			testutils.SucceedsSoon(t, func() error {
+				return changeReplicas(roachpb.ADD_REPLICA, keyB, 0)
+			})
+			mtc.waitForValues(keyB, []int64{6, 6, 6})
+		})
 }
