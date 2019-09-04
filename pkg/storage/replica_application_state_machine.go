@@ -13,7 +13,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -376,6 +375,9 @@ type replicaAppBatch struct {
 	// triggered a migration to the replica applied state key. If so, this
 	// migration will be performed when the application batch is committed.
 	migrateToAppliedStateKey bool
+	// changeRemovesReplica tracks whether the command in the batch (there must
+	// be only one) removes this replica from the range.
+	changeRemovesReplica bool
 
 	// Statistics.
 	entries      int
@@ -515,6 +517,32 @@ func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCm
 	return nil
 }
 
+// changeRemovesStore returns true if any of the removals in this change have storeID.
+func changeRemovesStore(
+	desc *roachpb.RangeDescriptor, change *storagepb.ChangeReplicas, storeID roachpb.StoreID,
+) (removesStore bool) {
+	curReplica, existsInDesc := desc.GetReplicaDescriptor(storeID)
+	// NB: if we're catching up from a preemptive snapshot then we won't
+	// exist in the current descriptor and we can't be removed.
+	if !existsInDesc {
+		return false
+	}
+
+	// NB: We don't use change.Removed() because it will include replicas being
+	// transitioned to VOTER_OUTGOING.
+
+	// In 19.1 and before we used DeprecatedUpdatedReplicas instead of providing
+	// a new range descriptor. Check first if this is 19.1 or earlier command which
+	// uses DeprecatedChangeType and DeprecatedReplica
+	if change.Desc == nil {
+		return change.DeprecatedChangeType == roachpb.REMOVE_REPLICA && change.DeprecatedReplica.ReplicaID == curReplica.ReplicaID
+	}
+	// In 19.2 and beyond we supply the new range descriptor in the change.
+	// We know we're removed if we do not appear in the new descriptor.
+	_, existsInChange := change.Desc.GetReplicaDescriptor(storeID)
+	return !existsInChange
+}
+
 // runPreApplyTriggers runs any triggers that must fire before a command is
 // applied. It may modify the command's ReplicatedEvalResult.
 func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *replicatedCmd) error {
@@ -554,27 +582,40 @@ func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *replicat
 		// cannot be constructed at evaluation time because it differs
 		// on each replica (votes may have already been cast on the
 		// uninitialized replica). Write this new hardstate to the batch too.
-		// See https://github.com/cockroachdb/cockroach/issues/20629
-		splitPreApply(ctx, b.batch, res.Split.SplitTrigger)
+		// See https://github.com/cockroachdb/cockroach/issues/20629.
+		//
+		// Alternatively if we discover that the RHS has already been removed
+		// from this store, clean up its data.
+		splitPreApply(ctx, b.batch, res.Split.SplitTrigger, b.r)
 	}
 
 	if merge := res.Merge; merge != nil {
 		// Merges require the subsumed range to be atomically deleted when the
 		// merge transaction commits.
+
+		// If our range currently has a non-zero replica ID then we know we're
+		// safe to commit this merge because of the invariants provided to us
+		// by the merge protocol. Namely if this committed we know that if the
+		// command committed then all of the replicas in the range descriptor
+		// are collocated when this command commits. If we do not have a non-zero
+		// replica ID then the logic in Stage should detect that and destroy our
+		// preemptive snapshot so we shouldn't ever get here.
 		rhsRepl, err := b.r.store.GetReplica(merge.RightDesc.RangeID)
 		if err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to get replica for merge")
 		}
-		// Use math.MaxInt32 as the nextReplicaID as an extra safeguard against creating
-		// new replicas of the RHS. This isn't required for correctness, since the merge
-		// protocol should guarantee that no new replicas of the RHS can ever be
-		// created, but it doesn't hurt to be careful.
-		const rangeIDLocalOnly = true
+
+		// Use math.MaxInt32 (mergedTombstoneReplicaID) as the nextReplicaID as an
+		// extra safeguard against creating new replicas of the RHS. This isn't
+		// required for correctness, since the merge protocol should guarantee that
+		// no new replicas of the RHS can ever be created, but it doesn't hurt to
+		// be careful.
+		const clearRangeIDLocalOnly = true
 		const mustClearRange = false
 		if err := rhsRepl.preDestroyRaftMuLocked(
-			ctx, b.batch, b.batch, math.MaxInt32, rangeIDLocalOnly, mustClearRange,
+			ctx, b.batch, b.batch, mergedTombstoneReplicaID, clearRangeIDLocalOnly, mustClearRange,
 		); err != nil {
-			return wrapWithNonDeterministicFailure(err, "unable to destroy range before merge")
+			return wrapWithNonDeterministicFailure(err, "unable to destroy replica before merge")
 		}
 	}
 
@@ -602,6 +643,47 @@ func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *replicat
 		}
 	}
 
+	// Detect if this command will remove us from the range.
+	// If so we stage the removal of all of our range data into this batch.
+	// We'll complete the removal when it commits. Later logic detects the
+	// removal by inspecting the destroy status.
+	//
+	// NB: This is the last step in the preApply which durably writes to the
+	// replica state so that if it removes the replica it removes everything.
+	if change := res.ChangeReplicas; change != nil &&
+		changeRemovesStore(b.state.Desc, change, b.r.store.StoreID()) &&
+		// Don't remove the data if the testing knobs ask us not to.
+		!b.r.store.TestingKnobs().DisableEagerReplicaRemoval {
+
+		// We mark the replica as destroyed so that new commands are not
+		// accepted. This destroy status will be detected after the batch commits
+		// by Replica.handleChangeReplicasTrigger() to finish the removal.
+		//
+		// NB: we must be holding the raftMu here because we're in the
+		// midst of application.
+		b.r.mu.Lock()
+		b.r.mu.destroyStatus.Set(
+			roachpb.NewRangeNotFoundError(b.r.RangeID, b.r.store.StoreID()),
+			destroyReasonRemoved)
+		b.r.mu.Unlock()
+		b.changeRemovesReplica = true
+
+		// Delete all of the local data. We're going to delete the hard state too.
+		// In order for this to be safe we need code above this to promise that we're
+		// never going to write hard state in response to a message for a later
+		// replica (with a different replica ID) to this range state.
+		if err := b.r.preDestroyRaftMuLocked(
+			ctx,
+			b.batch,
+			b.batch,
+			change.Desc.NextReplicaID,
+			false, /* clearRangeIDLocalOnly */
+			false, /* mustUseClearRange */
+		); err != nil {
+			return wrapWithNonDeterministicFailure(err, "unable to destroy replica before removal")
+		}
+	}
+
 	// Provide the command's corresponding logical operations to the Replica's
 	// rangefeed. Only do so if the WriteBatch is non-nil, in which case the
 	// rangefeed requires there to be a corresponding logical operation log or
@@ -614,6 +696,7 @@ func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *replicat
 	} else if cmd.raftCmd.LogicalOpLog != nil {
 		log.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.raftCmd)
 	}
+
 	return nil
 }
 
@@ -671,17 +754,23 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	r := b.r
 	r.store.Clock().Update(b.maxTS)
 
-	// Add the replica applied state key to the write batch.
-	if err := b.addAppliedStateKeyToBatch(ctx); err != nil {
-		return err
+	// Add the replica applied state key to the write batch if this change
+	// doesn't remove us.
+	if !b.changeRemovesReplica {
+		if err := b.addAppliedStateKeyToBatch(ctx); err != nil {
+			return err
+		}
 	}
 
 	// Apply the write batch to RockDB. Entry application is done without
 	// syncing to disk. The atomicity guarantees of the batch and the fact that
 	// the applied state is stored in this batch, ensure that if the batch ends
 	// up not being durably committed then the entries in this batch will be
-	// applied again upon startup.
-	const sync = false
+	// applied again upon startup. However, if we're removing the replica's data
+	// then we sync this batch as it is not safe to call postDestroyRaftMuLocked
+	// before ensuring that the replica's data has been synchronously removed.
+	// See handleChangeReplicasResult().
+	sync := b.changeRemovesReplica
 	if err := b.batch.Commit(sync); err != nil {
 		return wrapWithNonDeterministicFailure(err, "unable to commit Raft entry batch")
 	}
@@ -849,7 +938,8 @@ func (sm *replicaStateMachine) ApplySideEffects(
 	}
 
 	// Set up the local result prior to handling the ReplicatedEvalResult to
-	// give testing knobs an opportunity to inspect it.
+	// give testing knobs an opportunity to inspect it. An injected corruption
+	// error will lead to replica removal.
 	sm.r.prepareLocalResult(ctx, cmd)
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEvent(ctx, 2, cmd.localResult.String())
@@ -862,7 +952,11 @@ func (sm *replicaStateMachine) ApplySideEffects(
 	// before notifying a potentially waiting client.
 	clearTrivialReplicatedEvalResultFields(cmd.replicatedResult())
 	if !cmd.IsTrivial() {
-		shouldAssert := sm.handleNonTrivialReplicatedEvalResult(ctx, *cmd.replicatedResult())
+		shouldAssert, isRemoved := sm.handleNonTrivialReplicatedEvalResult(ctx, *cmd.replicatedResult())
+
+		if isRemoved {
+			return nil, apply.ErrRemoved
+		}
 		// NB: Perform state assertion before acknowledging the client.
 		// Some tests (TestRangeStatsInit) assumes that once the store has started
 		// and the first range has a lease that there will not be a later hard-state.
@@ -928,7 +1022,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 // to pass a replicatedResult that does not imply any side-effects.
 func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	ctx context.Context, rResult storagepb.ReplicatedEvalResult,
-) (shouldAssert bool) {
+) (shouldAssert, isRemoved bool) {
 	// Assert that this replicatedResult implies at least one side-effect.
 	if rResult.Equal(storagepb.ReplicatedEvalResult{}) {
 		log.Fatalf(ctx, "zero-value ReplicatedEvalResult passed to handleNonTrivialReplicatedEvalResult")
@@ -960,7 +1054,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	// we want to assert that these two states do not diverge.
 	shouldAssert = !rResult.Equal(storagepb.ReplicatedEvalResult{})
 	if !shouldAssert {
-		return false
+		return false, false
 	}
 
 	if rResult.Split != nil {
@@ -1000,7 +1094,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	}
 
 	if rResult.ChangeReplicas != nil {
-		sm.r.handleChangeReplicasResult(ctx, rResult.ChangeReplicas)
+		isRemoved = sm.r.handleChangeReplicasResult(ctx, rResult.ChangeReplicas)
 		rResult.ChangeReplicas = nil
 	}
 
@@ -1012,7 +1106,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	if !rResult.Equal(storagepb.ReplicatedEvalResult{}) {
 		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, storagepb.ReplicatedEvalResult{}))
 	}
-	return true
+	return true, isRemoved
 }
 
 func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *replicatedCmd) error {
