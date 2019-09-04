@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // TODO(radu): we currently create one batch at a time and run the KV operations
@@ -403,10 +403,12 @@ func (jr *joinReader) readInput() (joinReaderState, *distsqlpb.ProducerMetadata)
 	}
 
 	if len(jr.inputRows) == 0 {
+		log.VEventf(jr.Ctx, 1, "no more input rows")
 		// We're done.
 		jr.MoveToDraining(nil)
 		return jrStateUnknown, jr.DrainHelper()
 	}
+	log.VEventf(jr.Ctx, 1, "read %d input rows", len(jr.inputRows))
 
 	// Maintain a map from input row index to the corresponding output rows. This
 	// will allow us to preserve the order of the input in the face of multiple
@@ -449,6 +451,7 @@ func (jr *joinReader) readInput() (joinReaderState, *distsqlpb.ProducerMetadata)
 	// restore the original order of the output during the output collection
 	// phase.
 	sort.Sort(spans)
+	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
 	err := jr.fetcher.StartScan(
 		jr.Ctx, jr.flowCtx.txn, spans, true /* limitBatches */, 0, /* limitHint */
 		jr.flowCtx.traceKV)
@@ -467,8 +470,10 @@ func (jr *joinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetad
 	nCols := len(jr.lookupCols)
 
 	isJoinTypePartialJoin := jr.joinType == sqlbase.LeftSemiJoin || jr.joinType == sqlbase.LeftAntiJoin
+	log.VEventf(jr.Ctx, 1, "joining rows")
 	// Read the entire set of rows looked up for the last input batch.
-	for lookedUpRowIdx := 0; ; lookedUpRowIdx++ {
+	lookedUpRowIdx := 0
+	for ; ; lookedUpRowIdx++ {
 		// Construct a "partial key" of nCols, so we can match the key format that
 		// was stored in our keyToInputRowIndices map. This matches the format that
 		// is output in jr.generateSpan.
@@ -526,6 +531,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetad
 			}
 		}
 	}
+	log.VEventf(jr.Ctx, 1, "done joining rows (%d loop iterations)", lookedUpRowIdx)
 
 	return jrEmittingRows, nil
 }
@@ -539,6 +545,7 @@ func (jr *joinReader) emitRow() (
 ) {
 	// Loop until we find a valid row to emit, or the cursor runs off the end.
 	if jr.emitCursor.inputRowIdx >= len(jr.inputRowIdxToLookedUpRowIdx) {
+		log.VEventf(jr.Ctx, 1, "done emitting rows")
 		// Ready for another input batch. Reset state.
 		jr.inputRows = jr.inputRows[:0]
 		jr.keyToInputRowIndices = make(map[string][]int)
