@@ -136,6 +136,45 @@ distinct-on
       ├── lax-key: (2,3)
       └── ordering: +3,+2
 
+# Regression test for #40295. Ensure that the DistinctOn is replaced with a
+# Project operator to keep the correct number of output columns.
+exec-ddl
+CREATE TABLE table0 (col0 REGTYPE);
+----
+
+exec-ddl
+CREATE TABLE table1 (col0 REGCLASS, col1 REGTYPE, col2 INT4);
+----
+
+opt expect=EliminateDistinct
+SELECT
+  (
+    SELECT
+      t1.col2
+    FROM
+      table1 AS t1
+    JOIN table0 AS t0 ON
+        t1.col1 = t0.col0
+        AND t1.col0 = t0.col0
+    GROUP BY
+      t1.col2
+    HAVING
+      NULL
+  );
+----
+values
+ ├── columns: col2:7(int4)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ └── tuple [type=tuple{int4}]
+      └── subquery [type=int4]
+           └── values
+                ├── columns: t1.col2:3(int4!null)
+                ├── cardinality: [0 - 0]
+                ├── key: ()
+                └── fd: ()-->(3)
+
 # --------------------------------------------------
 # EliminateGroupByProject
 # --------------------------------------------------

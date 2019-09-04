@@ -1884,32 +1884,37 @@ limit
  │         │    │    │    ├── key: (9)
  │         │    │    │    ├── fd: (9)-->(10,12,13)
  │         │    │    │    ├── ordering: +9
- │         │    │    │    └── inner-join (lookup orders)
- │         │    │    │         ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null) l_orderkey:34(int!null) sum:50(float!null)
- │         │    │    │         ├── key columns: [34] = [9]
+ │         │    │    │    └── project
+ │         │    │    │         ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null) l_orderkey:34(int!null)
  │         │    │    │         ├── key: (34)
- │         │    │    │         ├── fd: (9)-->(10,12,13), (34)-->(50), (9)==(34), (34)==(9)
+ │         │    │    │         ├── fd: (9)-->(10,12,13), (9)==(34), (34)==(9)
  │         │    │    │         ├── ordering: +(9|34) [actual: +34]
- │         │    │    │         ├── select
- │         │    │    │         │    ├── columns: l_orderkey:34(int!null) sum:50(float!null)
- │         │    │    │         │    ├── key: (34)
- │         │    │    │         │    ├── fd: (34)-->(50)
- │         │    │    │         │    ├── ordering: +34
- │         │    │    │         │    ├── group-by
- │         │    │    │         │    │    ├── columns: l_orderkey:34(int!null) sum:50(float)
- │         │    │    │         │    │    ├── grouping columns: l_orderkey:34(int!null)
- │         │    │    │         │    │    ├── key: (34)
- │         │    │    │         │    │    ├── fd: (34)-->(50)
- │         │    │    │         │    │    ├── ordering: +34
- │         │    │    │         │    │    ├── scan lineitem
- │         │    │    │         │    │    │    ├── columns: l_orderkey:34(int!null) l_quantity:38(float!null)
- │         │    │    │         │    │    │    └── ordering: +34
- │         │    │    │         │    │    └── aggregations
- │         │    │    │         │    │         └── sum [type=float, outer=(38)]
- │         │    │    │         │    │              └── variable: l_quantity [type=float]
- │         │    │    │         │    └── filters
- │         │    │    │         │         └── sum > 300.0 [type=bool, outer=(50), constraints=(/50: [/300.00000000000006 - ]; tight)]
- │         │    │    │         └── filters (true)
+ │         │    │    │         └── inner-join (lookup orders)
+ │         │    │    │              ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null) l_orderkey:34(int!null) sum:50(float!null)
+ │         │    │    │              ├── key columns: [34] = [9]
+ │         │    │    │              ├── key: (34)
+ │         │    │    │              ├── fd: (9)-->(10,12,13), (34)-->(50), (9)==(34), (34)==(9)
+ │         │    │    │              ├── ordering: +(9|34) [actual: +34]
+ │         │    │    │              ├── select
+ │         │    │    │              │    ├── columns: l_orderkey:34(int!null) sum:50(float!null)
+ │         │    │    │              │    ├── key: (34)
+ │         │    │    │              │    ├── fd: (34)-->(50)
+ │         │    │    │              │    ├── ordering: +34
+ │         │    │    │              │    ├── group-by
+ │         │    │    │              │    │    ├── columns: l_orderkey:34(int!null) sum:50(float)
+ │         │    │    │              │    │    ├── grouping columns: l_orderkey:34(int!null)
+ │         │    │    │              │    │    ├── key: (34)
+ │         │    │    │              │    │    ├── fd: (34)-->(50)
+ │         │    │    │              │    │    ├── ordering: +34
+ │         │    │    │              │    │    ├── scan lineitem
+ │         │    │    │              │    │    │    ├── columns: l_orderkey:34(int!null) l_quantity:38(float!null)
+ │         │    │    │              │    │    │    └── ordering: +34
+ │         │    │    │              │    │    └── aggregations
+ │         │    │    │              │    │         └── sum [type=float, outer=(38)]
+ │         │    │    │              │    │              └── variable: l_quantity [type=float]
+ │         │    │    │              │    └── filters
+ │         │    │    │              │         └── sum > 300.0 [type=bool, outer=(50), constraints=(/50: [/300.00000000000006 - ]; tight)]
+ │         │    │    │              └── filters (true)
  │         │    │    └── filters (true)
  │         │    └── filters (true)
  │         └── aggregations

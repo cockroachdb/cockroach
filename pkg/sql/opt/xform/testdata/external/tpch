@@ -2116,9 +2116,9 @@ sort
            │    │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null)
            │    │    ├── key: (12,13)
            │    │    └── project
-           │    │         ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) p_partkey:17(int!null) p_name:18(varchar!null)
+           │    │         ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) p_partkey:17(int!null)
            │    │         ├── key: (13,17)
-           │    │         ├── fd: (17)-->(18), (12)==(17), (17)==(12)
+           │    │         ├── fd: (12)==(17), (17)==(12)
            │    │         └── inner-join (hash)
            │    │              ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int!null) p_partkey:17(int!null) p_name:18(varchar!null) sum:42(float)
            │    │              ├── key: (13,17)
