@@ -849,11 +849,22 @@ func (sb *statisticsBuilder) buildJoin(
 			s.RowCount = max(s.RowCount, rightStats.RowCount)
 
 		case opt.SemiJoinOp, opt.SemiJoinApplyOp:
-			s.RowCount = leftStats.RowCount
+			if h.rightProps.Cardinality.IsZero() {
+				s.RowCount = 0
+				s.Selectivity = 0
+			} else {
+				s.RowCount = leftStats.RowCount
+			}
 
 		case opt.AntiJoinOp, opt.AntiJoinApplyOp:
-			s.RowCount = 0
-			s.Selectivity = 0
+			if h.rightProps.Cardinality.IsZero() {
+				s.RowCount = leftStats.RowCount
+			} else {
+				// Don't set the row count to 0 since we can't guarantee that the
+				// cardinality is 0.
+				s.RowCount = epsilon
+				s.Selectivity = epsilon
+			}
 		}
 		return
 	}

@@ -1909,16 +1909,28 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 
 func (h *joinPropsHelper) cardinality() props.Cardinality {
 	left := h.leftProps.Cardinality
+	right := h.rightProps.Cardinality
 
+	// Semi/Anti join cardinality never exceeds left input cardinality.
 	switch h.joinType {
-	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		// Semi/Anti join cardinality never exceeds left input cardinality, and
-		// allows zero rows.
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
+		if h.filterIsFalse || right.IsZero() {
+			return props.ZeroCardinality
+		} else if h.filterIsTrue && !right.CanBeZero() {
+			return left
+		}
+		return left.AsLowAs(0)
+
+	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		if h.filterIsFalse || right.IsZero() {
+			return left
+		} else if h.filterIsTrue && !right.CanBeZero() {
+			return props.ZeroCardinality
+		}
 		return left.AsLowAs(0)
 	}
 
 	// Other join types can return up to cross product of rows.
-	right := h.rightProps.Cardinality
 	innerJoinCard := left.Product(right)
 
 	// Apply filter to cardinality.
