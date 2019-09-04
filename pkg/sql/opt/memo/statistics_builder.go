@@ -924,7 +924,9 @@ func (sb *statisticsBuilder) buildJoin(
 		if h.rightProps.FuncDeps.ColsAreStrictKey(h.selfJoinCols) {
 			// This is like an index join, so apply a selectivity that will result
 			// in leftStats.RowCount rows.
-			s.ApplySelectivity(1 / rightStats.RowCount)
+			if rightStats.RowCount != 0 {
+				s.ApplySelectivity(1 / rightStats.RowCount)
+			}
 		} else {
 			// Add the self join columns to equivReps so they are included in the
 			// calculation for selectivityFromEquivalencies below.
