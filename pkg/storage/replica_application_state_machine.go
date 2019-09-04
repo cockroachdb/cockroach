@@ -439,7 +439,11 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 	// command was rejected with a below-Raft forced error then its replicated
 	// result was just cleared and this will be a no-op.
 	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.raftCmd); err != nil {
-		return nil, wrapWithNonDeterministicFailure(err, "unable to acquire split lock")
+		kind := "merge"
+		if cmd.raftCmd.ReplicatedEvalResult.Split != nil {
+			kind = "split"
+		}
+		return nil, wrapWithNonDeterministicFailure(err, "unable to acquire "+kind+" lock")
 	} else if splitMergeUnlock != nil {
 		// Set the splitMergeUnlock on the replicaAppBatch to be called
 		// after the batch has been applied (see replicaAppBatch.commit).
