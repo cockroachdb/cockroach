@@ -1,5 +1,6 @@
 limit_clause ::=
-	'LIMIT' count
+	'LIMIT' 'ALL'
+	| 'LIMIT' a_expr
 	| 'FETCH' 'FIRST' count 'ROW' 'ONLY'
 	| 'FETCH' 'FIRST' count 'ROWS' 'ONLY'
 	| 'FETCH' 'NEXT' count 'ROW' 'ONLY'

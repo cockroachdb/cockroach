@@ -496,6 +496,8 @@ func (node *Limit) docTable(p *PrettyCfg) []pretty.TableRow {
 			e = StripParens(e)
 		}
 		res = append(res, p.row("LIMIT", p.Doc(e)))
+	} else if node.LimitAll {
+		res = append(res, p.row("LIMIT", pretty.Keyword("ALL")))
 	}
 	if node.Offset != nil {
 		e := node.Offset

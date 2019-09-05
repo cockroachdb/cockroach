@@ -1036,7 +1036,8 @@ sort_clause ::=
 	'ORDER' 'BY' sortby_list
 
 limit_clause ::=
-	'LIMIT' select_limit_value
+	'LIMIT' 'ALL'
+	| 'LIMIT' a_expr
 	| 'FETCH' first_or_next opt_select_fetch_first_value row_or_rows 'ONLY'
 
 target_list ::=
@@ -1409,10 +1410,6 @@ opt_index_flags ::=
 
 sortby_list ::=
 	( sortby ) ( ( ',' sortby ) )*
-
-select_limit_value ::=
-	a_expr
-	| 'ALL'
 
 first_or_next ::=
 	'FIRST'
