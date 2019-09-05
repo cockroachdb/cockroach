@@ -40,11 +40,6 @@ var dataManipulationReplacementInfos = []dataManipulationReplacementInfo{
 		replaceWith:         "Set",
 	},
 	{
-		templatePlaceholder: "execgen.SWAP",
-		numArgs:             3,
-		replaceWith:         "Swap",
-	},
-	{
 		templatePlaceholder: "execgen.SLICE",
 		numArgs:             3,
 		replaceWith:         "Slice",

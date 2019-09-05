@@ -47,16 +47,14 @@ var _ apd.Decimal
 
 // */}}
 
-func (m *memColumn) Append(args AppendArgs) {
+func (m *memColumn) Append(args SliceArgs) {
 	switch args.ColType {
 	// {{range .}}
 	case _TYPES_T:
 		fromCol := args.Src._TemplateType()
 		toCol := m._TemplateType()
-		numToAppend := args.SrcEndIdx - args.SrcStartIdx
 		if args.Sel == nil {
 			execgen.APPENDSLICE(toCol, fromCol, int(args.DestIdx), int(args.SrcStartIdx), int(args.SrcEndIdx))
-			m.nulls.Extend(args.Src.Nulls(), args.DestIdx, args.SrcStartIdx, numToAppend)
 		} else {
 			sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
 			// TODO(asubiotto): We could be more efficient for fixed width types by
@@ -67,10 +65,8 @@ func (m *memColumn) Append(args AppendArgs) {
 				val := execgen.UNSAFEGET(fromCol, int(selIdx))
 				execgen.APPENDVAL(toCol, val)
 			}
-			// TODO(asubiotto): Change Extend* signatures to allow callers to pass in
-			// SrcEndIdx instead of numToAppend.
-			m.nulls.ExtendWithSel(args.Src.Nulls(), args.DestIdx, args.SrcStartIdx, numToAppend, args.Sel)
 		}
+		m.nulls.set(args)
 		m.col = toCol
 	// {{end}}
 	default:
@@ -80,37 +76,33 @@ func (m *memColumn) Append(args AppendArgs) {
 
 // {{/*
 func _COPY_WITH_SEL(
-	m *memColumn, args CopyArgs, fromCol, toCol _GOTYPESLICE, sel interface{}, _SEL_ON_DEST bool,
+	m *memColumn, args CopySliceArgs, fromCol, toCol _GOTYPESLICE, sel interface{}, _SEL_ON_DEST bool,
 ) { // */}}
 	// {{define "copyWithSel"}}
 	if args.Src.MaybeHasNulls() {
 		nulls := args.Src.Nulls()
-		n := execgen.LEN(toCol)
-		toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
 		for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 			if nulls.NullAt64(uint64(selIdx)) {
 				m.nulls.SetNull64(uint64(i) + args.DestIdx)
 			} else {
 				v := execgen.UNSAFEGET(fromCol, int(selIdx))
 				// {{if .SelOnDest}}
-				execgen.SET(toColSliced, int(selIdx), v)
+				execgen.SET(toCol, int(selIdx), v)
 				// {{else}}
-				execgen.SET(toColSliced, i, v)
+				execgen.SET(toCol, i+int(args.DestIdx), v)
 				// {{end}}
 			}
 		}
 		return
 	}
 	// No Nulls.
-	n := execgen.LEN(toCol)
-	toColSliced := execgen.SLICE(toCol, int(args.DestIdx), n)
 	for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 		selIdx := sel[int(args.SrcStartIdx)+i]
 		v := execgen.UNSAFEGET(fromCol, int(selIdx))
 		// {{if .SelOnDest}}
-		execgen.SET(toColSliced, int(selIdx), v)
+		execgen.SET(toCol, int(selIdx), v)
 		// {{else}}
-		execgen.SET(toColSliced, i, v)
+		execgen.SET(toCol, i+int(args.DestIdx), v)
 		// {{end}}
 	}
 	// {{end}}
@@ -119,7 +111,7 @@ func _COPY_WITH_SEL(
 
 // */}}
 
-func (m *memColumn) Copy(args CopyArgs) {
+func (m *memColumn) Copy(args CopySliceArgs) {
 	m.Nulls().UnsetNullRange(args.DestIdx, args.DestIdx+(args.SrcEndIdx-args.SrcStartIdx))
 
 	switch args.ColType {
@@ -146,16 +138,7 @@ func (m *memColumn) Copy(args CopyArgs) {
 		}
 		// No Sel or Sel64.
 		execgen.COPYSLICE(toCol, fromCol, int(args.DestIdx), int(args.SrcStartIdx), int(args.SrcEndIdx))
-		if args.Src.MaybeHasNulls() {
-			// TODO(asubiotto): This should use Extend but Extend only takes uint16
-			// arguments.
-			srcNulls := args.Src.Nulls()
-			for curDestIdx, curSrcIdx := args.DestIdx, args.SrcStartIdx; curSrcIdx < args.SrcEndIdx; curDestIdx, curSrcIdx = curDestIdx+1, curSrcIdx+1 {
-				if srcNulls.NullAt64(curSrcIdx) {
-					m.nulls.SetNull64(curDestIdx)
-				}
-			}
-		}
+		m.nulls.set(args.SliceArgs)
 	// {{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %s", args.ColType))
@@ -168,6 +151,7 @@ func (m *memColumn) Slice(colType coltypes.T, start uint64, end uint64) Vec {
 	case _TYPES_T:
 		col := m._TemplateType()
 		return &memColumn{
+			t:     colType,
 			col:   execgen.SLICE(col, int(start), int(end)),
 			nulls: m.nulls.Slice(start, end),
 		}
