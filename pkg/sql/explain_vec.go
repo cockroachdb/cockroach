@@ -30,7 +30,8 @@ import (
 type explainVecNode struct {
 	optColumnsSlot
 
-	plan planNode
+	options *tree.ExplainOptions
+	plan    planNode
 
 	stmtType tree.StatementType
 
@@ -120,6 +121,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	sort.Slice(sortedFlows, func(i, j int) bool { return sortedFlows[i].nodeID < sortedFlows[j].nodeID })
 	tp := treeprinter.New()
 	root := tp.Child("")
+	verbose := n.options.Flags.Contains(tree.ExplainFlagVerbose)
 	for _, flow := range sortedFlows {
 		node := root.Childf("Node %d", flow.nodeID)
 		opChains, err := distsqlrun.SupportsVectorized(params.ctx, flowCtx, flow.flow.Processors)
@@ -127,20 +129,33 @@ func (n *explainVecNode) startExec(params runParams) error {
 			return err
 		}
 		for _, op := range opChains {
-			formatOpChain(op, node)
+			formatOpChain(op, node, verbose)
 		}
 	}
 	n.run.lines = tp.FormattedRows()
 	return nil
 }
 
-func formatOpChain(operator exec.OpNode, node treeprinter.Node) {
-	doFormatOpChain(operator, node.Child(reflect.TypeOf(operator).String()))
+func shouldOutput(operator exec.OpNode, verbose bool) bool {
+	_, nonExplainable := operator.(exec.NonExplainable)
+	return !nonExplainable || verbose
 }
-func doFormatOpChain(operator exec.OpNode, node treeprinter.Node) {
+
+func formatOpChain(operator exec.OpNode, node treeprinter.Node, verbose bool) {
+	if shouldOutput(operator, verbose) {
+		doFormatOpChain(operator, node.Child(reflect.TypeOf(operator).String()), verbose)
+	} else {
+		doFormatOpChain(operator, node, verbose)
+	}
+}
+func doFormatOpChain(operator exec.OpNode, node treeprinter.Node, verbose bool) {
 	for i := 0; i < operator.ChildCount(); i++ {
 		child := operator.Child(i)
-		doFormatOpChain(child, node.Child(reflect.TypeOf(child).String()))
+		if shouldOutput(child, verbose) {
+			doFormatOpChain(child, node.Child(reflect.TypeOf(child).String()), verbose)
+		} else {
+			doFormatOpChain(child, node, verbose)
+		}
 	}
 }
 

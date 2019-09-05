@@ -21,6 +21,7 @@ import (
 // and makes it available to be read multiple times by downstream consumers.
 type bufferOp struct {
 	OneInputNode
+	NonExplainable
 
 	// read is true if someone has read the current batch already.
 	read     bool

@@ -81,6 +81,7 @@ type spooler interface {
 // by the general sorter over the whole input.
 type allSpooler struct {
 	OneInputNode
+	NonExplainable
 
 	// inputTypes contains the types of all of the columns from the input.
 	inputTypes []coltypes.T

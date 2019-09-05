@@ -20,6 +20,7 @@ import (
 // once per input batch, passing the input batch unmodified along.
 type fnOp struct {
 	OneInputNode
+	NonExplainable
 
 	fn func()
 }
