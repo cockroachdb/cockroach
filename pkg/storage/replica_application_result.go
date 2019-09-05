@@ -107,7 +107,7 @@ func clearTrivialReplicatedEvalResultFields(r *storagepb.ReplicatedEvalResult) {
 // engine but before its side-effects have been applied to the Replica's
 // in-memory state. This method gives the command an opportunity to interact
 // with testing knobs and to set up its local result if it was proposed
-// locally.  This is performed prior to handling the command's
+// locally. This is performed prior to handling the command's
 // ReplicatedEvalResult because the process of handling the replicated eval
 // result will zero-out the struct to ensure that is has properly performed all
 // of the implied side-effects.
