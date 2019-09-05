@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -37,6 +39,7 @@ type explainVecNode struct {
 		// The current row returned by the node.
 		values tree.Datums
 	}
+	subqueryPlans []subquery
 }
 
 type flowWithNode struct {
@@ -62,7 +65,17 @@ func (n *explainVecNode) startExec(params runParams) error {
 	planCtx.ignoreClose = true
 	planCtx.planner = params.p
 	planCtx.stmtType = n.stmtType
-	planCtx.noEvalSubqueries = true
+	outerSubqueries := planCtx.planner.curPlan.subqueryPlans
+	defer func() {
+		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
+	}()
+	planCtx.planner.curPlan.subqueryPlans = n.subqueryPlans
+	for i := range planCtx.planner.curPlan.subqueryPlans {
+		p := &planCtx.planner.curPlan.subqueryPlans[i]
+		// Fake subquery results - they're not important for our explain output.
+		p.started = true
+		p.result = tree.DNull
+	}
 
 	var plan PhysicalPlan
 	var err error
@@ -88,8 +101,16 @@ func (n *explainVecNode) startExec(params runParams) error {
 	flowCtx := &distsqlrun.FlowCtx{
 		NodeID:  planCtx.EvalContext().NodeID,
 		EvalCtx: planCtx.EvalContext(),
-		Cfg:     &distsqlrun.ServerConfig{},
+		Cfg: &distsqlrun.ServerConfig{
+			Settings:    params.p.execCfg.Settings,
+			DiskMonitor: &mon.BytesMonitor{},
+		},
 	}
+	// Temporarily set vectorize to on so that we can get the whole plan back even
+	// if we wouldn't support it due to lack of streaming.
+	origMode := flowCtx.EvalCtx.SessionData.VectorizeMode
+	flowCtx.EvalCtx.SessionData.VectorizeMode = sessiondata.VectorizeExperimentalOn
+	defer func() { flowCtx.EvalCtx.SessionData.VectorizeMode = origMode }()
 
 	sortedFlows := make([]flowWithNode, 0, len(flows))
 	for nodeID, flow := range flows {
