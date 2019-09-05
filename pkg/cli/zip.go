@@ -57,6 +57,9 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.cluster_settings",
 
 	"crdb_internal.jobs",
+	"system.jobs",       // get the raw, restorable jobs records too.
+	"system.descriptor", // descriptors also contain job-like mutation state.
+	"system.namespace",
 
 	"crdb_internal.kv_node_status",
 	"crdb_internal.kv_store_status",
