@@ -1831,17 +1831,6 @@ left-join (hash)
       └── y = k [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
 
 # --------------------------------------------------
-# EliminateSemiJoin
-# --------------------------------------------------
-opt expect=EliminateSemiJoin
-SELECT * FROM a WHERE EXISTS(SELECT count(*) FROM b WHERE x=k)
-----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
- ├── key: (1)
- └── fd: (1)-->(2-5)
-
-# --------------------------------------------------
 # EliminateAntiJoin
 # --------------------------------------------------
 # TODO(justin): figure out if there's a good way to make this still apply.
