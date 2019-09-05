@@ -2089,6 +2089,8 @@ ORDER BY name ASC`)
 		assert.NoError(t, rows.Scan(&table))
 		tables = append(tables, table)
 	}
+	tables = append(tables, "system.jobs", "system.descriptor", "system.namespace")
+	sort.Strings(tables)
 
 	var exp []string
 	exp = append(exp, debugZipTablesPerNode...)
@@ -2127,6 +2129,9 @@ writing ` + os.DevNull + `
   debug/crdb_internal.cluster_sessions.txt
   debug/crdb_internal.cluster_settings.txt
   debug/crdb_internal.jobs.txt
+  debug/system.jobs.txt
+  debug/system.descriptor.txt
+  debug/system.namespace.txt
   debug/crdb_internal.kv_node_status.txt
   debug/crdb_internal.kv_store_status.txt
   debug/crdb_internal.schema_changes.txt
