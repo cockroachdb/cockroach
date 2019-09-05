@@ -3565,7 +3565,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 		// in separate requests because there is no prior eviction token.
 		if _, ok := queriedMetaKeys.Load(string(rs.Key)); ok {
 			// Wait until we have two in-flight requests.
-			if err := testutils.SucceedsSoonError(t, func() error {
+			if err := testutils.SucceedsSoonError(func() error {
 				// Since the previously fetched RangeDescriptor was ["a", "d"), the request keys
 				// would be coalesced to "a".
 				numCalls := ds.rangeCache.lookupRequests.NumCalls(string(roachpb.RKey("a")) + ":false")
