@@ -521,23 +521,40 @@ func TestMaybeStripInFlightWrites(t *testing.T) {
 // transactional batch can be committed as an atomic write.
 func TestIsOnePhaseCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	noReqs := []roachpb.RequestUnion{}
-	getReq := make([]roachpb.RequestUnion, 1)
-	getReq[0].MustSetInner(&roachpb.GetRequest{})
-	putReq := make([]roachpb.RequestUnion, 1)
-	putReq[0].MustSetInner(&roachpb.PutRequest{})
-	txnReqs := make([]roachpb.RequestUnion, 3)
-	txnReqs[0].MustSetInner(&roachpb.BeginTransactionRequest{})
-	txnReqs[1].MustSetInner(&roachpb.PutRequest{})
-	txnReqs[2].MustSetInner(&roachpb.EndTransactionRequest{Commit: true})
-	txnReqsNoRefresh := make([]roachpb.RequestUnion, 3)
-	txnReqsNoRefresh[0].MustSetInner(&roachpb.BeginTransactionRequest{})
-	txnReqsNoRefresh[1].MustSetInner(&roachpb.PutRequest{})
-	txnReqsNoRefresh[2].MustSetInner(&roachpb.EndTransactionRequest{Commit: true, NoRefreshSpans: true})
-	txnReqsRequire1PC := make([]roachpb.RequestUnion, 3)
-	txnReqsRequire1PC[0].MustSetInner(&roachpb.BeginTransactionRequest{})
-	txnReqsRequire1PC[1].MustSetInner(&roachpb.PutRequest{})
-	txnReqsRequire1PC[2].MustSetInner(&roachpb.EndTransactionRequest{Commit: true, Require1PC: true})
+	withSeq := func(req roachpb.Request, seq enginepb.TxnSeq) roachpb.Request {
+		h := req.Header()
+		h.Sequence = seq
+		req.SetHeader(h)
+		return req
+	}
+	makeReqs := func(reqs ...roachpb.Request) []roachpb.RequestUnion {
+		ru := make([]roachpb.RequestUnion, len(reqs))
+		for i, r := range reqs {
+			ru[i].MustSetInner(r)
+		}
+		return ru
+	}
+
+	noReqs := makeReqs()
+	getReq := makeReqs(withSeq(&roachpb.GetRequest{}, 0))
+	putReq := makeReqs(withSeq(&roachpb.PutRequest{}, 1))
+	etReq := makeReqs(withSeq(&roachpb.EndTransactionRequest{Commit: true}, 1))
+	txnReqs := makeReqs(
+		withSeq(&roachpb.BeginTransactionRequest{}, 0),
+		withSeq(&roachpb.PutRequest{}, 1),
+		withSeq(&roachpb.EndTransactionRequest{Commit: true}, 2),
+	)
+	txnReqsNoRefresh := makeReqs(
+		withSeq(&roachpb.BeginTransactionRequest{}, 0),
+		withSeq(&roachpb.PutRequest{}, 1),
+		withSeq(&roachpb.EndTransactionRequest{Commit: true, NoRefreshSpans: true}, 2),
+	)
+	txnReqsRequire1PC := makeReqs(
+		withSeq(&roachpb.BeginTransactionRequest{}, 0),
+		withSeq(&roachpb.PutRequest{}, 1),
+		withSeq(&roachpb.EndTransactionRequest{Commit: true, Require1PC: true}, 2),
+	)
+
 	testCases := []struct {
 		ru          []roachpb.RequestUnion
 		isTxn       bool
@@ -550,8 +567,17 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		{ru: noReqs, isTxn: true, exp1PC: false},
 		{ru: getReq, isTxn: true, exp1PC: false},
 		{ru: putReq, isTxn: true, exp1PC: false},
-		{ru: txnReqs[0 : len(txnReqs)-1], isTxn: true, exp1PC: false},
-		{ru: txnReqs[1:], isTxn: true, exp1PC: false},
+		{ru: etReq, isTxn: true, exp1PC: true},
+		{ru: etReq, isTxn: true, isTSOff: true, exp1PC: false},
+		{ru: etReq, isTxn: true, isWTO: true, exp1PC: false},
+		{ru: etReq, isTxn: true, isWTO: true, isTSOff: true, exp1PC: false},
+		{ru: etReq, isTxn: true, isRestarted: true, exp1PC: false},
+		{ru: etReq, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: etReq, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
+		{ru: etReq, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqs[0:2], isTxn: true, exp1PC: false},
+		{ru: txnReqs[1:], isTxn: true, exp1PC: true},
+		{ru: txnReqs[2:], isTxn: true, exp1PC: false},
 		{ru: txnReqs, isTxn: true, exp1PC: true},
 		{ru: txnReqs, isTxn: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqs, isTxn: true, isWTO: true, exp1PC: false},
@@ -560,6 +586,9 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		{ru: txnReqs, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqs, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
 		{ru: txnReqs, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqsNoRefresh[0:2], isTxn: true, exp1PC: false},
+		{ru: txnReqsNoRefresh[1:], isTxn: true, exp1PC: true},
+		{ru: txnReqsNoRefresh[2:], isTxn: true, exp1PC: false},
 		{ru: txnReqsNoRefresh, isTxn: true, exp1PC: true},
 		{ru: txnReqsNoRefresh, isTxn: true, isTSOff: true, exp1PC: true},
 		{ru: txnReqsNoRefresh, isTxn: true, isWTO: true, exp1PC: true},
@@ -568,6 +597,9 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
 		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqsRequire1PC[0:2], isTxn: true, exp1PC: false},
+		{ru: txnReqsRequire1PC[1:], isTxn: true, exp1PC: true},
+		{ru: txnReqsRequire1PC[2:], isTxn: true, exp1PC: false},
 		{ru: txnReqsRequire1PC, isTxn: true, exp1PC: true},
 		{ru: txnReqsRequire1PC, isTxn: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqsRequire1PC, isTxn: true, isWTO: true, exp1PC: false},
