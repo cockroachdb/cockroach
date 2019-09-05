@@ -511,7 +511,7 @@ func (bq *baseQueue) Async(
 		log.InfofDepth(ctx, 2, opName)
 	}
 	opName += " (" + bq.name + ")"
-	if err := bq.store.stopper.RunLimitedAsyncTask(ctx, opName, bq.addOrMaybeAddSem, wait,
+	if err := bq.store.stopper.RunLimitedAsyncTask(context.Background(), opName, bq.addOrMaybeAddSem, wait,
 		func(ctx context.Context) {
 			fn(ctx, baseQueueHelper{bq})
 		}); err != nil && bq.addLogN.ShouldLog() {
