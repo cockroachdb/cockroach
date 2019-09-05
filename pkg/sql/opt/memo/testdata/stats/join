@@ -1334,3 +1334,49 @@ anti-join (lookup def)
  │    └── interesting orderings: (+1,+2)
  └── filters
       └── false [type=bool]
+
+# Regression test for #40460.
+opt
+SELECT
+    *
+FROM
+    abc
+    FULL JOIN (SELECT * FROM abc WHERE false) ON
+            false
+            IS NOT DISTINCT FROM not_like_escape(
+                    '',
+                    NULL::STRING,
+                    (SELECT NULL)::STRING
+                );
+----
+full-join (hash)
+ ├── columns: a:1(int) b:2(int) c:3(int) a:4(int) b:5(int) c:6(int)
+ ├── stats: [rows=100]
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3-6), ()~~>(4-6)
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ │    ├── stats: [rows=100]
+ │    ├── key: (1,2)
+ │    └── fd: (1,2)-->(3)
+ ├── values
+ │    ├── columns: a:4(int!null) b:5(int!null) c:6(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    └── fd: ()-->(4-6)
+ └── filters
+      └── is [type=bool, subquery]
+           ├── function: not_like_escape [type=bool]
+           │    ├── const: '' [type=string]
+           │    ├── null [type=string]
+           │    └── cast: STRING [type=string]
+           │         └── subquery [type=unknown]
+           │              └── values
+           │                   ├── columns: "?column?":7(unknown)
+           │                   ├── cardinality: [1 - 1]
+           │                   ├── stats: [rows=1]
+           │                   ├── key: ()
+           │                   ├── fd: ()-->(7)
+           │                   └── (NULL,) [type=tuple{unknown}]
+           └── false [type=bool]
