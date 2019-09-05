@@ -44,7 +44,7 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 			range_size / 1000000 as range_size_mb,
 			replicas,
 			lease_holder,
-			replica_localities,
+			replica_localities
 		FROM %[1]s.crdb_internal.ranges AS r
 		WHERE database_name=%[2]s
 		ORDER BY table_name, r.start_key

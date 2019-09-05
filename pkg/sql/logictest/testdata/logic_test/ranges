@@ -356,3 +356,8 @@ start_key                          start_pretty                   end_key       
 [196 137 246 123]                  /Table/60/1/123                Ċ                                  /Table/60/2                    d              c                 ·           {1}       1
 Ċ                                  /Table/60/2                    [196 138 136]                      /Table/60/2/0                  d              c                 c_i_idx     {1}       1
 [196 138 136]                      /Table/60/2/0                  [255 255]                          /Max                           d              c                 c_i_idx     {1}       1
+
+# Due to some asynchronous conditions under when ranges get split, just validate
+# that the show ranges from database command gets translated correctly.
+statement ok
+SHOW RANGES FROM DATABASE test
