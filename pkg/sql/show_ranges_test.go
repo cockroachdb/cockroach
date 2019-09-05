@@ -36,19 +36,29 @@ func TestShowRangesWithLocality(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE t (x INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `ALTER TABLE t SPLIT AT SELECT i FROM generate_series(0, 20) AS g(i)`)
 
-	const replicasColIdx = 4
-	const localitiesColIdx = 6
+	const leaseHolderIdx = 0
+	const leaseHolderLocalityIdx = 1
+	const replicasColIdx = 2
+	const localitiesColIdx = 3
 	replicas := make([]int, 3)
 
-	result := sqlDB.QueryStr(t, `SHOW RANGES FROM TABLE t`)
+	q := `SELECT lease_holder, lease_holder_locality, replicas, replica_localities from [SHOW RANGES FROM TABLE t]`
+	result := sqlDB.QueryStr(t, q)
+	// Because StartTestCluster changes the locality no matter what the
+	// arguments are, we expect whatever the test server sets up.
 	for _, row := range result {
+		// Verify the leaseholder localities.
+		leaseHolder := row[leaseHolderIdx]
+		leaseHolderLocalityExpected := fmt.Sprintf(`region=test,dc=dc%s`, leaseHolder)
+		if row[leaseHolderLocalityIdx] != leaseHolderLocalityExpected {
+			t.Fatalf("expected %s found %s", leaseHolderLocalityExpected, row[leaseHolderLocalityIdx])
+		}
+
+		// Verify the replica localities.
 		_, err := fmt.Sscanf(row[replicasColIdx], "{%d,%d,%d}", &replicas[0], &replicas[1], &replicas[2])
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		// Because StartTestCluster changes the locality no matter what the
-		// arguments are, we expect whatever the test server sets up.
 		var builder strings.Builder
 		builder.WriteString("{")
 		for i, replica := range replicas {
@@ -59,7 +69,6 @@ func TestShowRangesWithLocality(t *testing.T) {
 		}
 		builder.WriteString("}")
 		expected := builder.String()
-
 		if row[localitiesColIdx] != expected {
 			t.Fatalf("expected %s found %s", expected, row[localitiesColIdx])
 		}
