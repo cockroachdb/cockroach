@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 
 	"cloud.google.com/go/storage"
@@ -495,9 +496,17 @@ func injectStatistics(qualifiedTableName string, table *workload.Table, sqlDB *g
 	if err != nil {
 		return err
 	}
-	_, err = sqlDB.Exec(fmt.Sprintf(
-		`ALTER TABLE %s INJECT STATISTICS '%s'`, qualifiedTableName, encoded))
-	return err
+	if _, err := sqlDB.Exec(
+		fmt.Sprintf(`ALTER TABLE %s INJECT STATISTICS '%s'`, qualifiedTableName, encoded),
+	); err != nil {
+		if strings.Contains(err.Error(), "syntax error") {
+			// This syntax was added in v2.1, so ignore the syntax error
+			// if run against versions earlier than this.
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // makeQualifiedTableName constructs a qualified table name from the specified
