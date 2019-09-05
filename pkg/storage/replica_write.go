@@ -261,7 +261,7 @@ func (r *Replica) evaluateWriteBatch(
 	ms := enginepb.MVCCStats{}
 	// If not transactional or there are indications that the batch's txn will
 	// require restart or retry, execute as normal.
-	if isOnePhaseCommit(ba, r.store.TestingKnobs()) {
+	if isOnePhaseCommit(ba) {
 		_, hasBegin := ba.GetArg(roachpb.BeginTransaction)
 		arg, _ := ba.GetArg(roachpb.EndTransaction)
 		etArg := arg.(*roachpb.EndTransactionRequest)
@@ -431,14 +431,13 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 	return
 }
 
-// isOnePhaseCommit returns true iff the BatchRequest contains all commands in
-// the transaction, starting with BeginTransaction and ending with
-// EndTransaction. One phase commits are disallowed if (1) the transaction has
-// already been flagged with a write too old error, or (2) if isolation is
-// serializable and the commit timestamp has been forwarded, or (3) the
-// transaction exceeded its deadline, or (4) the testing knobs disallow optional
-// one phase commits and the BatchRequest does not require one phase commit.
-func isOnePhaseCommit(ba *roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
+// isOnePhaseCommit returns true iff the BatchRequest contains all writes in the
+// transaction and ends with an EndTransaction. One phase commits are disallowed
+// if any of the following conditions are true:
+// (1) the transaction has already been flagged with a write too old error
+// (2) the transaction's commit timestamp has been forwarded
+// (3) the transaction exceeded its deadline
+func isOnePhaseCommit(ba *roachpb.BatchRequest) bool {
 	if ba.Txn == nil {
 		return false
 	}
@@ -453,7 +452,7 @@ func isOnePhaseCommit(ba *roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 	if retry, _, _ := batcheval.IsEndTransactionTriggeringRetryError(ba.Txn, etArg); retry {
 		return false
 	}
-	return !knobs.DisableOptional1PC || etArg.Require1PC
+	return true
 }
 
 // maybeStripInFlightWrites attempts to remove all point writes and query

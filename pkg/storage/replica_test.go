@@ -564,7 +564,7 @@ func TestIsOnePhaseCommit(t *testing.T) {
 				ba.Txn.Timestamp = ba.Txn.OrigTimestamp.Add(1, 0)
 			}
 		}
-		if is1PC := isOnePhaseCommit(&ba, &StoreTestingKnobs{}); is1PC != c.exp1PC {
+		if is1PC := isOnePhaseCommit(&ba); is1PC != c.exp1PC {
 			t.Errorf("%d: expected 1pc=%t; got %t", i, c.exp1PC, is1PC)
 		}
 	}
