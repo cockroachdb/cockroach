@@ -14,7 +14,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -313,26 +313,26 @@ func getSpansToProcess(
 	type spanMarker struct{}
 	type rangeMarker struct{}
 
-	var spanCovering intervalccl.Covering
+	var spanCovering covering.Covering
 	for _, span := range targetSpans {
-		spanCovering = append(spanCovering, intervalccl.Range{
+		spanCovering = append(spanCovering, covering.Range{
 			Start:   []byte(span.Key),
 			End:     []byte(span.EndKey),
 			Payload: spanMarker{},
 		})
 	}
 
-	var rangeCovering intervalccl.Covering
+	var rangeCovering covering.Covering
 	for _, rangeDesc := range ranges {
-		rangeCovering = append(rangeCovering, intervalccl.Range{
+		rangeCovering = append(rangeCovering, covering.Range{
 			Start:   []byte(rangeDesc.StartKey),
 			End:     []byte(rangeDesc.EndKey),
 			Payload: rangeMarker{},
 		})
 	}
 
-	chunks := intervalccl.OverlapCoveringMerge(
-		[]intervalccl.Covering{spanCovering, rangeCovering},
+	chunks := covering.OverlapCoveringMerge(
+		[]covering.Covering{spanCovering, rangeCovering},
 	)
 
 	var requests []roachpb.Span
