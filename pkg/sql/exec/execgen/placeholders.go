@@ -17,7 +17,7 @@ const nonTemplatePanic = "do not call from non-template code"
 // Remove unused warnings.
 var (
 	_ = UNSAFEGET
-	_ = GET
+	_ = COPYVAL
 	_ = SET
 	_ = SWAP
 	_ = SLICE
@@ -36,12 +36,12 @@ func UNSAFEGET(target, i interface{}) interface{} {
 	return nil
 }
 
-// GET is a template function. The Bytes implementation of this function
-// performs a copy. Use this if you need to keep values around past the
-// lifecycle of a Batch.
-func GET(target, i interface{}) interface{} {
+// COPYVAL is a template function that can be used to set a scalar to the value
+// of another scalar in such a way that the destination won't be modified if the
+// source is. You must use this on the result of UNSAFEGET if you wish to store
+// that result past the lifetime of the batch you UNSAFEGET'd from.
+func COPYVAL(dest, src interface{}) {
 	execerror.VectorizedInternalPanic(nonTemplatePanic)
-	return nil
 }
 
 // SET is a template function.
