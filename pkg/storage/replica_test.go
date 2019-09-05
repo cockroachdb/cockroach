@@ -521,6 +521,11 @@ func TestMaybeStripInFlightWrites(t *testing.T) {
 // transactional batch can be committed as an atomic write.
 func TestIsOnePhaseCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	noReqs := []roachpb.RequestUnion{}
+	getReq := make([]roachpb.RequestUnion, 1)
+	getReq[0].MustSetInner(&roachpb.GetRequest{})
+	putReq := make([]roachpb.RequestUnion, 1)
+	putReq[0].MustSetInner(&roachpb.PutRequest{})
 	txnReqs := make([]roachpb.RequestUnion, 3)
 	txnReqs[0].MustSetInner(&roachpb.BeginTransactionRequest{})
 	txnReqs[1].MustSetInner(&roachpb.PutRequest{})
@@ -529,40 +534,68 @@ func TestIsOnePhaseCommit(t *testing.T) {
 	txnReqsNoRefresh[0].MustSetInner(&roachpb.BeginTransactionRequest{})
 	txnReqsNoRefresh[1].MustSetInner(&roachpb.PutRequest{})
 	txnReqsNoRefresh[2].MustSetInner(&roachpb.EndTransactionRequest{Commit: true, NoRefreshSpans: true})
+	txnReqsRequire1PC := make([]roachpb.RequestUnion, 3)
+	txnReqsRequire1PC[0].MustSetInner(&roachpb.BeginTransactionRequest{})
+	txnReqsRequire1PC[1].MustSetInner(&roachpb.PutRequest{})
+	txnReqsRequire1PC[2].MustSetInner(&roachpb.EndTransactionRequest{Commit: true, Require1PC: true})
 	testCases := []struct {
-		bu      []roachpb.RequestUnion
-		isTxn   bool
-		isWTO   bool
-		isTSOff bool
-		exp1PC  bool
+		ru          []roachpb.RequestUnion
+		isTxn       bool
+		isRestarted bool
+		isWTO       bool
+		isTSOff     bool
+		exp1PC      bool
 	}{
-		{[]roachpb.RequestUnion{}, false, false, false, false},
-		{[]roachpb.RequestUnion{}, true, false, false, false},
-		{[]roachpb.RequestUnion{{Value: &roachpb.RequestUnion_Get{Get: &roachpb.GetRequest{}}}}, true, false, false, false},
-		{[]roachpb.RequestUnion{{Value: &roachpb.RequestUnion_Put{Put: &roachpb.PutRequest{}}}}, true, false, false, false},
-		{txnReqs[0 : len(txnReqs)-1], true, false, false, false},
-		{txnReqs[1:], true, false, false, false},
-		{txnReqs, true, false, false, true},
-		{txnReqs, true, true, false, false},
-		{txnReqs, true, false, true, false},
-		{txnReqs, true, true, true, false},
-		{txnReqsNoRefresh, true, false, false, true},
-		{txnReqsNoRefresh, true, true, false, true},
-		{txnReqsNoRefresh, true, false, true, true},
-		{txnReqsNoRefresh, true, true, true, true},
+		{ru: noReqs, isTxn: false, exp1PC: false},
+		{ru: noReqs, isTxn: true, exp1PC: false},
+		{ru: getReq, isTxn: true, exp1PC: false},
+		{ru: putReq, isTxn: true, exp1PC: false},
+		{ru: txnReqs[0 : len(txnReqs)-1], isTxn: true, exp1PC: false},
+		{ru: txnReqs[1:], isTxn: true, exp1PC: false},
+		{ru: txnReqs, isTxn: true, exp1PC: true},
+		{ru: txnReqs, isTxn: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqs, isTxn: true, isWTO: true, exp1PC: false},
+		{ru: txnReqs, isTxn: true, isWTO: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqs, isTxn: true, isRestarted: true, exp1PC: false},
+		{ru: txnReqs, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqs, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
+		{ru: txnReqs, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqsNoRefresh, isTxn: true, exp1PC: true},
+		{ru: txnReqsNoRefresh, isTxn: true, isTSOff: true, exp1PC: true},
+		{ru: txnReqsNoRefresh, isTxn: true, isWTO: true, exp1PC: true},
+		{ru: txnReqsNoRefresh, isTxn: true, isWTO: true, isTSOff: true, exp1PC: true},
+		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, exp1PC: false},
+		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
+		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isTxn: true, exp1PC: true},
+		{ru: txnReqsRequire1PC, isTxn: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isTxn: true, isWTO: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isTxn: true, isWTO: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, exp1PC: true},
+		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	for i, c := range testCases {
-		ba := roachpb.BatchRequest{Requests: c.bu}
+		ba := roachpb.BatchRequest{Requests: c.ru}
 		if c.isTxn {
 			ba.Txn = newTransaction("txn", roachpb.Key("a"), 1, clock)
+			if c.isRestarted {
+				ba.Txn.Restart(-1, 0, clock.Now())
+			}
 			if c.isWTO {
 				ba.Txn.WriteTooOld = true
 			}
 			if c.isTSOff {
 				ba.Txn.Timestamp = ba.Txn.OrigTimestamp.Add(1, 0)
 			}
+		} else {
+			require.False(t, c.isRestarted)
+			require.False(t, c.isWTO)
+			require.False(t, c.isTSOff)
 		}
 		if is1PC := isOnePhaseCommit(&ba); is1PC != c.exp1PC {
 			t.Errorf("%d: expected 1pc=%t; got %t", i, c.exp1PC, is1PC)
