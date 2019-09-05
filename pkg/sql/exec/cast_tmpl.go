@@ -50,6 +50,21 @@ func _ASSIGN_CAST(to, from interface{}) {
 	execerror.VectorizedInternalPanic("")
 }
 
+// This will be replaced with execgen.GET.
+func _FROM_TYPE_GET(to, from interface{}) interface{} {
+	execerror.VectorizedInternalPanic("")
+}
+
+// This will be replaced with execgen.SET.
+func _TO_TYPE_SET(to, from interface{}) {
+	execerror.VectorizedInternalPanic("")
+}
+
+// This will be replaced with execgen.SLICE.
+func _FROM_TYPE_SLICE(col, i, j interface{}) interface{} {
+	execerror.VectorizedInternalPanic("")
+}
+
 // */}}
 
 // Use execgen package to remove unused import warning.
@@ -127,21 +142,22 @@ func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 				if vecNulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := execgen.GET(col, int(i))
+					v := _FROM_TYPE_GET(col, int(i))
 					var r _GOTYPE
 					_ASSIGN_CAST(r, v)
-					execgen.SET(projCol, int(i), r)
+					_TO_TYPE_SET(projCol, int(i), r)
 				}
 			}
 		} else {
+			col = _FROM_TYPE_SLICE(col, 0, int(n))
 			for execgen.RANGE(i, col) {
 				if vecNulls.NullAt(uint16(i)) {
 					projNulls.SetNull(uint16(i))
 				} else {
-					v := execgen.GET(col, i)
+					v := _FROM_TYPE_GET(col, int(i))
 					var r _GOTYPE
 					_ASSIGN_CAST(r, v)
-					execgen.SET(projCol, int(i), r)
+					_TO_TYPE_SET(projCol, int(i), r)
 				}
 			}
 		}
@@ -149,17 +165,18 @@ func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				v := execgen.GET(col, int(i))
+				v := _FROM_TYPE_GET(col, int(i))
 				var r _GOTYPE
 				_ASSIGN_CAST(r, v)
-				execgen.SET(projCol, int(i), r)
+				_TO_TYPE_SET(projCol, int(i), r)
 			}
 		} else {
+			col = _FROM_TYPE_SLICE(col, 0, int(n))
 			for execgen.RANGE(i, col) {
-				v := execgen.GET(col, i)
+				v := _FROM_TYPE_GET(col, int(i))
 				var r _GOTYPE
 				_ASSIGN_CAST(r, v)
-				execgen.SET(projCol, int(i), r)
+				_TO_TYPE_SET(projCol, int(i), r)
 			}
 		}
 	}
