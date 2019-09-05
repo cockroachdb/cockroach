@@ -884,19 +884,30 @@ func (sm *replicaStateMachine) ApplySideEffects(
 	}
 
 	// Mark the command as applied and return it as an apply.AppliedCommand.
+	// NB: Commands which were reproposed at a higher MaxLeaseIndex will not be
+	// considered local at this point as their proposal will have been detached
+	// in prepareLocalResult().
 	if cmd.IsLocal() {
-		if !cmd.Rejected() {
-			if cmd.raftCmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex {
-				log.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index")
-			}
-			if cmd.proposal.applied {
-				// If the command already applied then we shouldn't be "finishing" its
-				// application again because it should only be able to apply successfully
-				// once. We expect that when any reproposal for the same command attempts
-				// to apply it will be rejected by the below raft lease sequence or lease
-				// index check in checkForcedErr.
-				log.Fatalf(ctx, "command already applied: %+v; unexpected successful result", cmd)
-			}
+		rejected := cmd.Rejected()
+		higherReproposalsExist := cmd.raftCmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex
+		if !rejected && higherReproposalsExist {
+			log.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index")
+		}
+		if !rejected && cmd.proposal.applied {
+			// If the command already applied then we shouldn't be "finishing" its
+			// application again because it should only be able to apply successfully
+			// once. We expect that when any reproposal for the same command attempts
+			// to apply it will be rejected by the below raft lease sequence or lease
+			// index check in checkForcedErr.
+			log.Fatalf(ctx, "command already applied: %+v; unexpected successful result", cmd)
+		}
+		// If any reproposals at a higher MaxLeaseIndex exist we know that they will
+		// never successfully apply, remove them from the map to avoid future
+		// reproposals.
+		if higherReproposalsExist {
+			sm.r.mu.Lock()
+			delete(sm.r.mu.proposals, cmd.idKey)
+			sm.r.mu.Unlock()
 		}
 		cmd.proposal.applied = true
 	}

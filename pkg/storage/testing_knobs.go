@@ -184,6 +184,9 @@ type StoreTestingKnobs struct {
 	// TraceAllRaftEvents enables raft event tracing even when the current
 	// vmodule would not have enabled it.
 	TraceAllRaftEvents bool
+	// EnableUnconditionalRefreshesInRaftReady will always set the refresh reason
+	// in handleRaftReady to refreshReasonNewLeaderOrConfigChange.
+	EnableUnconditionalRefreshesInRaftReady bool
 
 	// ReceiveSnapshot is run after receiving a snapshot header but before
 	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
