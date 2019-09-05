@@ -1,23 +1,24 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2019 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
-package partitionccl
+package sql
 
 import (
 	"bytes"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -62,6 +63,8 @@ import (
 // the common prefix (the encoded table ID) and if `EndKey` is equal to
 // `Key.PrefixEnd()` it is omitted.
 //
+// This function has tests in the partitionccl package.
+//
 // TODO(benesch): remove the hasNewSubzones parameter when a statement to clear
 // all subzones at once is introduced.
 func GenerateSubzoneSpans(
@@ -73,8 +76,9 @@ func GenerateSubzoneSpans(
 ) ([]config.SubzoneSpan, error) {
 	// Removing zone configs does not require a valid license.
 	if hasNewSubzones {
-		org := sql.ClusterOrganization.Get(&st.SV)
-		if err := utilccl.CheckEnterpriseEnabled(st, clusterID, org, "replication zones on indexes or partitions"); err != nil {
+		org := ClusterOrganization.Get(&st.SV)
+		if err := base.CheckEnterpriseEnabled(st, clusterID, org,
+			"replication zones on indexes or partitions"); err != nil {
 			return nil, err
 		}
 	}
@@ -91,15 +95,15 @@ func GenerateSubzoneSpans(
 		}
 	}
 
-	var indexCovering intervalccl.Covering
-	var partitionCoverings []intervalccl.Covering
+	var indexCovering covering.Covering
+	var partitionCoverings []covering.Covering
 	if err := tableDesc.ForeachNonDropIndex(func(idxDesc *sqlbase.IndexDescriptor) error {
 		_, indexSubzoneExists := subzoneIndexByIndexID[idxDesc.ID]
 		if indexSubzoneExists {
 			idxSpan := tableDesc.IndexSpan(idxDesc.ID)
 			// Each index starts with a unique prefix, so (from a precedence
 			// perspective) it's safe to append them all together.
-			indexCovering = append(indexCovering, intervalccl.Range{
+			indexCovering = append(indexCovering, covering.Range{
 				Start: idxSpan.Key, End: idxSpan.EndKey,
 				Payload: config.Subzone{IndexID: uint32(idxDesc.ID)},
 			})
@@ -126,7 +130,7 @@ func GenerateSubzoneSpans(
 	// in the same order they were input. So, we require that they be ordered
 	// with highest precedence first, so the first payload of each range is the
 	// one we need.
-	ranges := intervalccl.OverlapCoveringMerge(append(partitionCoverings, indexCovering))
+	ranges := covering.OverlapCoveringMerge(append(partitionCoverings, indexCovering))
 
 	// NB: This assumes that none of the indexes are interleaved, which is
 	// checked in PartitionDescriptor validation.
@@ -161,7 +165,7 @@ func GenerateSubzoneSpans(
 
 // indexCoveringsForPartitioning returns span coverings representing the
 // partitions in partDesc (including subpartitions). They are sorted with
-// highest precedence first and the intervalccl.Range payloads are each a
+// highest precedence first and the interval.Range payloads are each a
 // `config.Subzone` with the PartitionName set.
 func indexCoveringsForPartitioning(
 	a *sqlbase.DatumAlloc,
@@ -170,13 +174,13 @@ func indexCoveringsForPartitioning(
 	partDesc *sqlbase.PartitioningDescriptor,
 	relevantPartitions map[string]int32,
 	prefixDatums []tree.Datum,
-) ([]intervalccl.Covering, error) {
+) ([]covering.Covering, error) {
 	if partDesc.NumColumns == 0 {
 		return nil, nil
 	}
 
-	var coverings []intervalccl.Covering
-	var descendentCoverings []intervalccl.Covering
+	var coverings []covering.Covering
+	var descendentCoverings []covering.Covering
 
 	if len(partDesc.List) > 0 {
 		// The returned spans are required to be ordered with highest precedence
@@ -184,9 +188,9 @@ func indexCoveringsForPartitioning(
 		// returned at a lower precedence. Luckily, because of the partitioning
 		// validation, we're guaranteed that all entries in a list partitioning
 		// with the same number of DEFAULTs are non-overlapping. So, bucket the
-		// `intervalccl.Range`s by the number of non-DEFAULT columns and return
+		// `interval.Range`s by the number of non-DEFAULT columns and return
 		// them ordered from least # of DEFAULTs to most.
-		listCoverings := make([]intervalccl.Covering, int(partDesc.NumColumns)+1)
+		listCoverings := make([]covering.Covering, int(partDesc.NumColumns)+1)
 		for _, p := range partDesc.List {
 			for _, valueEncBuf := range p.Values {
 				t, keyPrefix, err := sqlbase.DecodePartitionTuple(
@@ -195,7 +199,7 @@ func indexCoveringsForPartitioning(
 					return nil, err
 				}
 				if _, ok := relevantPartitions[p.Name]; ok {
-					listCoverings[len(t.Datums)] = append(listCoverings[len(t.Datums)], intervalccl.Range{
+					listCoverings[len(t.Datums)] = append(listCoverings[len(t.Datums)], covering.Range{
 						Start: keyPrefix, End: roachpb.Key(keyPrefix).PrefixEnd(),
 						Payload: config.Subzone{PartitionName: p.Name},
 					})
@@ -232,7 +236,7 @@ func indexCoveringsForPartitioning(
 				return nil, err
 			}
 			if _, ok := relevantPartitions[p.Name]; ok {
-				coverings = append(coverings, intervalccl.Covering{{
+				coverings = append(coverings, covering.Covering{{
 					Start: fromKey, End: toKey,
 					Payload: config.Subzone{PartitionName: p.Name},
 				}})
@@ -243,8 +247,4 @@ func indexCoveringsForPartitioning(
 	// descendentCoverings are from subpartitions and so get precedence; append
 	// them to the front.
 	return append(descendentCoverings, coverings...), nil
-}
-
-func init() {
-	sql.GenerateSubzoneSpans = GenerateSubzoneSpans
 }

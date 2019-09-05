@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -403,18 +403,18 @@ func spansForAllTableIndexes(
 	return spans
 }
 
-// coveringFromSpans creates an intervalccl.Covering with a fixed payload from a
+// coveringFromSpans creates an interval.Covering with a fixed payload from a
 // slice of roachpb.Spans.
-func coveringFromSpans(spans []roachpb.Span, payload interface{}) intervalccl.Covering {
-	var covering intervalccl.Covering
+func coveringFromSpans(spans []roachpb.Span, payload interface{}) covering.Covering {
+	var c covering.Covering
 	for _, span := range spans {
-		covering = append(covering, intervalccl.Range{
+		c = append(c, covering.Range{
 			Start:   []byte(span.Key),
 			End:     []byte(span.EndKey),
 			Payload: payload,
 		})
 	}
-	return covering
+	return c
 }
 
 // splitAndFilterSpans returns the spans that represent the set difference
@@ -429,16 +429,16 @@ func splitAndFilterSpans(
 	includeCovering := coveringFromSpans(includes, includeMarker{})
 	excludeCovering := coveringFromSpans(excludes, excludeMarker{})
 
-	var rangeCovering intervalccl.Covering
+	var rangeCovering covering.Covering
 	for _, rangeDesc := range ranges {
-		rangeCovering = append(rangeCovering, intervalccl.Range{
+		rangeCovering = append(rangeCovering, covering.Range{
 			Start: []byte(rangeDesc.StartKey),
 			End:   []byte(rangeDesc.EndKey),
 		})
 	}
 
-	splits := intervalccl.OverlapCoveringMerge(
-		[]intervalccl.Covering{includeCovering, excludeCovering, rangeCovering},
+	splits := covering.OverlapCoveringMerge(
+		[]covering.Covering{includeCovering, excludeCovering, rangeCovering},
 	)
 
 	var out []roachpb.Span
@@ -1134,7 +1134,7 @@ func backupPlanHook(
 				prevBackups,
 				nil, /*backupLocalityInfo*/
 				keys.MinKey,
-				func(span intervalccl.Range, start, end hlc.Timestamp) error {
+				func(span covering.Range, start, end hlc.Timestamp) error {
 					if (start == hlc.Timestamp{}) {
 						newSpans = append(newSpans, roachpb.Span{Key: span.Start, EndKey: span.End})
 						return nil
