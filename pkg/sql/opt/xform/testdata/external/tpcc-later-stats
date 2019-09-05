@@ -183,7 +183,7 @@ insert "order"
  ├── values
  │    ├── columns: column1:9(int!null) column2:10(int!null) column3:11(int!null) column4:12(int!null) column5:13(timestamp!null) column6:14(int!null) column7:15(int!null) column16:16(int)
  │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
+ │    ├── stats: [rows=1, distinct(10)=1, null(10)=0, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0]
  │    ├── cost: 0.02
  │    ├── key: ()
  │    ├── fd: ()-->(9-16)
@@ -206,7 +206,7 @@ insert "order"
                 ├── stats: [rows=1e-10]
                 ├── cost: 6.26
                 ├── key: ()
-                ├── fd: ()-->(9-16), (11)-->(38), (10)-->(39), (12)-->(40)
+                ├── fd: ()-->(38-40)
                 ├── with-scan &1
                 │    ├── columns: column3:38(int!null) column2:39(int!null) column4:40(int!null)
                 │    ├── mapping:
@@ -214,10 +214,10 @@ insert "order"
                 │    │    ├──  column2:10(int) => column2:39(int)
                 │    │    └──  column4:12(int) => column4:40(int)
                 │    ├── cardinality: [1 - 1]
-                │    ├── stats: [rows=1]
+                │    ├── stats: [rows=1, distinct(38)=1, null(38)=0, distinct(39)=1, null(39)=0, distinct(40)=1, null(40)=0]
                 │    ├── cost: 0.01
                 │    ├── key: ()
-                │    └── fd: ()-->(9-16), (11)-->(38), (10)-->(39), (12)-->(40)
+                │    └── fd: ()-->(38-40)
                 └── filters (true)
 
 opt format=hide-qual
@@ -237,7 +237,7 @@ insert new_order
  ├── values
  │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
  │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
+ │    ├── stats: [rows=1, distinct(4)=1, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0]
  │    ├── cost: 0.02
  │    ├── key: ()
  │    ├── fd: ()-->(4-6)
@@ -255,7 +255,7 @@ insert new_order
                 ├── stats: [rows=1e-10]
                 ├── cost: 6.11975196
                 ├── key: ()
-                ├── fd: ()-->(4-6), (6)-->(15), (5)-->(16), (4)-->(17)
+                ├── fd: ()-->(15-17)
                 ├── with-scan &1
                 │    ├── columns: column3:15(int!null) column2:16(int!null) column1:17(int!null)
                 │    ├── mapping:
@@ -263,10 +263,10 @@ insert new_order
                 │    │    ├──  column2:5(int) => column2:16(int)
                 │    │    └──  column1:4(int) => column1:17(int)
                 │    ├── cardinality: [1 - 1]
-                │    ├── stats: [rows=1]
+                │    ├── stats: [rows=1, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0, distinct(17)=1, null(17)=0]
                 │    ├── cost: 0.01
                 │    ├── key: ()
-                │    └── fd: ()-->(4-6), (6)-->(15), (5)-->(16), (4)-->(17)
+                │    └── fd: ()-->(15-17)
                 └── filters (true)
 
 opt format=hide-qual
@@ -704,7 +704,7 @@ insert order_line
  ├── project
  │    ├── columns: ol_amount:21(decimal) column20:20(timestamp) column1:11(int!null) column2:12(int!null) column3:13(int!null) column4:14(int!null) column5:15(int!null) column6:16(int!null) column7:17(int!null) column9:19(string!null)
  │    ├── cardinality: [6 - 6]
- │    ├── stats: [rows=6]
+ │    ├── stats: [rows=6, distinct(11)=0.6, null(11)=0, distinct(12)=0.6, null(12)=0, distinct(13)=0.6, null(13)=0, distinct(15)=0.6, null(15)=0, distinct(16)=0.6, null(16)=0]
  │    ├── cost: 0.26
  │    ├── fd: ()-->(20)
  │    ├── prune: (11-17,19-21)
@@ -787,7 +787,6 @@ insert order_line
       │         ├── cardinality: [0 - 6]
       │         ├── stats: [rows=1e-10]
       │         ├── cost: 36.6185118
-      │         ├── fd: ()-->(20), (13)-->(30), (12)-->(31), (11)-->(32)
       │         ├── with-scan &1
       │         │    ├── columns: column3:30(int!null) column2:31(int!null) column1:32(int!null)
       │         │    ├── mapping:
@@ -795,9 +794,8 @@ insert order_line
       │         │    │    ├──  column2:12(int) => column2:31(int)
       │         │    │    └──  column1:11(int) => column1:32(int)
       │         │    ├── cardinality: [6 - 6]
-      │         │    ├── stats: [rows=6]
-      │         │    ├── cost: 0.01
-      │         │    └── fd: ()-->(20), (13)-->(30), (12)-->(31), (11)-->(32)
+      │         │    ├── stats: [rows=6, distinct(30)=0.6, null(30)=0, distinct(31)=0.6, null(31)=0, distinct(32)=0.6, null(32)=0]
+      │         │    └── cost: 0.01
       │         └── filters (true)
       └── f-k-checks-item: order_line(ol_supply_w_id,ol_i_id) -> stock(s_w_id,s_i_id)
            └── anti-join (lookup stock@stock_item_fk_idx)
@@ -806,16 +804,14 @@ insert order_line
                 ├── cardinality: [0 - 6]
                 ├── stats: [rows=1e-10]
                 ├── cost: 36.1061434
-                ├── fd: ()-->(20), (16)-->(50), (15)-->(51)
                 ├── with-scan &1
                 │    ├── columns: column6:50(int!null) column5:51(int!null)
                 │    ├── mapping:
                 │    │    ├──  column6:16(int) => column6:50(int)
                 │    │    └──  column5:15(int) => column5:51(int)
                 │    ├── cardinality: [6 - 6]
-                │    ├── stats: [rows=6]
-                │    ├── cost: 0.01
-                │    └── fd: ()-->(20), (16)-->(50), (15)-->(51)
+                │    ├── stats: [rows=6, distinct(50)=0.6, null(50)=0, distinct(51)=0.6, null(51)=0]
+                │    └── cost: 0.01
                 └── filters (true)
 
 # --------------------------------------------------
@@ -1109,7 +1105,7 @@ insert history
  │    ├── columns: column1:10(int!null) column2:11(int!null) column3:12(int!null) column4:13(int!null) column5:14(int!null) column7:16(timestamp!null) column8:17(string!null) column18:18(uuid) h_amount:19(decimal)
  │    ├── cardinality: [1 - 1]
  │    ├── side-effects
- │    ├── stats: [rows=1]
+ │    ├── stats: [rows=1, distinct(10)=1, null(10)=0, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=1, null(13)=0, distinct(14)=1, null(14)=0]
  │    ├── cost: 0.02
  │    ├── key: ()
  │    ├── fd: ()-->(10-14,16-19)
@@ -1135,7 +1131,7 @@ insert history
       │         ├── stats: [rows=1e-10]
       │         ├── cost: 6.26
       │         ├── key: ()
-      │         ├── fd: ()-->(10-14,16-19), (12)-->(41), (11)-->(42), (10)-->(43)
+      │         ├── fd: ()-->(41-43)
       │         ├── with-scan &1
       │         │    ├── columns: column3:41(int!null) column2:42(int!null) column1:43(int!null)
       │         │    ├── mapping:
@@ -1143,10 +1139,10 @@ insert history
       │         │    │    ├──  column2:11(int) => column2:42(int)
       │         │    │    └──  column1:10(int) => column1:43(int)
       │         │    ├── cardinality: [1 - 1]
-      │         │    ├── stats: [rows=1]
+      │         │    ├── stats: [rows=1, distinct(41)=1, null(41)=0, distinct(42)=1, null(42)=0, distinct(43)=1, null(43)=0]
       │         │    ├── cost: 0.01
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(10-14,16-19), (12)-->(41), (11)-->(42), (10)-->(43)
+      │         │    └── fd: ()-->(41-43)
       │         └── filters (true)
       └── f-k-checks-item: history(h_w_id,h_d_id) -> district(d_w_id,d_id)
            └── anti-join (lookup district)
@@ -1156,17 +1152,17 @@ insert history
                 ├── stats: [rows=1e-10]
                 ├── cost: 6.15
                 ├── key: ()
-                ├── fd: ()-->(10-14,16-19), (14)-->(55), (13)-->(56)
+                ├── fd: ()-->(55,56)
                 ├── with-scan &1
                 │    ├── columns: column5:55(int!null) column4:56(int!null)
                 │    ├── mapping:
                 │    │    ├──  column5:14(int) => column5:55(int)
                 │    │    └──  column4:13(int) => column4:56(int)
                 │    ├── cardinality: [1 - 1]
-                │    ├── stats: [rows=1]
+                │    ├── stats: [rows=1, distinct(55)=1, null(55)=0, distinct(56)=1, null(56)=0]
                 │    ├── cost: 0.01
                 │    ├── key: ()
-                │    └── fd: ()-->(10-14,16-19), (14)-->(55), (13)-->(56)
+                │    └── fd: ()-->(55,56)
                 └── filters (true)
 
 # --------------------------------------------------
