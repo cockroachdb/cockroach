@@ -13,8 +13,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 )
@@ -157,15 +157,15 @@ func (s *spanFrontier) insert(span roachpb.Span, ts hlc.Timestamp) {
 
 	// TODO(dan): OverlapCoveringMerge is overkill, do this without it. See
 	// `tscache/treeImpl.Add` for inspiration.
-	entryCov := intervalccl.Covering{{Start: span.Key, End: span.EndKey, Payload: ts}}
-	overlapCov := make(intervalccl.Covering, len(overlapping))
+	entryCov := covering.Covering{{Start: span.Key, End: span.EndKey, Payload: ts}}
+	overlapCov := make(covering.Covering, len(overlapping))
 	for i, o := range overlapping {
 		spe := o.(*spanFrontierEntry)
-		overlapCov[i] = intervalccl.Range{
+		overlapCov[i] = covering.Range{
 			Start: spe.span.Key, End: spe.span.EndKey, Payload: spe,
 		}
 	}
-	merged := intervalccl.OverlapCoveringMerge([]intervalccl.Covering{entryCov, overlapCov})
+	merged := covering.OverlapCoveringMerge([]covering.Covering{entryCov, overlapCov})
 
 	toInsert := make([]spanFrontierEntry, 0, len(merged))
 	for _, m := range merged {

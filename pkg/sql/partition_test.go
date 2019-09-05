@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
+// Test the behavior of a binary that doesn't link in CCL when it comes to
+// dealing with partitions. Some things are expected to work, others aren't.
 func TestRemovePartitioningOSS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -108,16 +110,17 @@ func TestRemovePartitioningOSS(t *testing.T) {
 		}
 	}
 
-	// TODO(benesch): introduce a "STRIP CCL" command to make it possible to
-	// remove CCL features from a table using an OSS binary.
-	reqCCLErr := "requires a CCL binary"
-	sqlDB.ExpectErr(t, reqCCLErr, `ALTER TABLE t.kv PARTITION BY NOTHING`)
-	sqlDB.ExpectErr(t, reqCCLErr, `ALTER INDEX t.kv@foo PARTITION BY NOTHING`)
-	sqlDB.ExpectErr(t, reqCCLErr, `ALTER PARTITION p1 OF TABLE t.kv CONFIGURE ZONE USING DEFAULT`)
-	sqlDB.ExpectErr(t, reqCCLErr, `ALTER PARTITION p2 OF INDEX t.kv@foo CONFIGURE ZONE USING DEFAULT`)
+	// Some things don't work.
+	sqlDB.ExpectErr(t,
+		"OSS binaries do not include enterprise features",
+		`ALTER PARTITION p1 OF TABLE t.kv CONFIGURE ZONE USING DEFAULT`)
+	sqlDB.ExpectErr(t,
+		"OSS binaries do not include enterprise features",
+		`ALTER PARTITION p2 OF INDEX t.kv@foo CONFIGURE ZONE USING DEFAULT`)
 
-	// Odd exception: removing partitioning is, in fact, possible when there are
-	// no zone configs for the table's indices or partitions.
+	// But removing partitioning works.
+	sqlDB.Exec(t, `ALTER TABLE t.kv PARTITION BY NOTHING`)
+	sqlDB.Exec(t, `ALTER INDEX t.kv@foo PARTITION BY NOTHING`)
 	sqlDB.Exec(t, `DELETE FROM system.zones WHERE id = $1`, tableDesc.ID)
 	sqlDB.Exec(t, `ALTER TABLE t.kv PARTITION BY NOTHING`)
 	sqlDB.Exec(t, `ALTER INDEX t.kv@foo PARTITION BY NOTHING`)
