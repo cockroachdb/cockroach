@@ -32,12 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-const (
-	defaultInterval            = 5
-	defaultFraction            = .2
-	defaultMultiple            = 3
-	expectedFollowerReadOffset = -(defaultInterval * (1 + defaultFraction*defaultMultiple)) * time.Second
-)
+const expectedFollowerReadOffset = -1 * (30 * (1 + .2*3)) * time.Second
 
 func TestEvalFollowerReadOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
