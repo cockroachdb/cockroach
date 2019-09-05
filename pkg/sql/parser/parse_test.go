@@ -974,6 +974,9 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t1, t2 AS OF SYSTEM TIME '2016-01-01'`},
 		{`SELECT a FROM t1 AS OF SYSTEM TIME -('a' || 'b')::INTERVAL`},
 
+		{`SELECT * FROM t LIMIT ALL`},
+		{`SELECT EXISTS ((((TABLE error FOR KEY SHARE)) LIMIT ALL FOR KEY SHARE)) AS is FROM ident`},
+
 		{`SELECT a FROM t LIMIT a`},
 		{`SELECT a FROM t OFFSET b`},
 		{`SELECT a FROM t LIMIT a OFFSET b`},
@@ -1346,17 +1349,15 @@ func TestParse(t *testing.T) {
 	}
 	var p parser.Parser // Verify that the same parser can be reused.
 	for _, d := range testData {
-		t.Run(d.sql, func(t *testing.T) {
-			stmts, err := p.Parse(d.sql)
-			if err != nil {
-				t.Fatalf("%s: expected success, but found %s", d.sql, err)
-			}
-			s := stmts.String()
-			if d.sql != s {
-				t.Errorf("expected \n%q\n, but found \n%q", d.sql, s)
-			}
-			sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
-		})
+		stmts, err := p.Parse(d.sql)
+		if err != nil {
+			t.Fatalf("%s: expected success, but found %s", d.sql, err)
+		}
+		s := stmts.String()
+		if d.sql != s {
+			t.Errorf("expected \n%q\n, but found \n%q", d.sql, s)
+		}
+		sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
 	}
 }
 

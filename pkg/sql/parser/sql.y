@@ -878,7 +878,6 @@ func newNameFromStr(s string) *tree.Name {
 %type <bool> opt_using_gin_btree
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
-%type <tree.Expr> select_limit_value
 %type <tree.Expr> opt_select_fetch_first_value
 %type <empty> row_or_rows
 %type <empty> first_or_next
@@ -6092,6 +6091,7 @@ select_limit:
     $$.val = $1.limit()
     if $2.limit() != nil {
       $$.val.(*tree.Limit).Count = $2.limit().Count
+      $$.val.(*tree.Limit).LimitAll = $2.limit().LimitAll
     }
   }
 | limit_clause
@@ -6102,7 +6102,11 @@ opt_limit_clause:
 | /* EMPTY */ { $$.val = (*tree.Limit)(nil) }
 
 limit_clause:
-  LIMIT select_limit_value
+  LIMIT ALL
+  {
+    $$.val = &tree.Limit{LimitAll: true}
+  }
+| LIMIT a_expr
   {
     if $2.expr() == nil {
       $$.val = (*tree.Limit)(nil)
@@ -6127,13 +6131,6 @@ offset_clause:
 | OFFSET c_expr row_or_rows
   {
     $$.val = &tree.Limit{Offset: $2.expr()}
-  }
-
-select_limit_value:
-  a_expr
-| ALL
-  {
-    $$.val = tree.Expr(nil)
   }
 
 // Allowing full expressions without parentheses causes various parsing

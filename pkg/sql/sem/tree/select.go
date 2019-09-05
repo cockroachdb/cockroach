@@ -698,6 +698,7 @@ func (node *Order) Equal(other *Order) bool {
 // Limit represents a LIMIT clause.
 type Limit struct {
 	Offset, Count Expr
+	LimitAll      bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -706,6 +707,9 @@ func (node *Limit) Format(ctx *FmtCtx) {
 	if node.Count != nil {
 		ctx.WriteString("LIMIT ")
 		ctx.FormatNode(node.Count)
+		needSpace = true
+	} else if node.LimitAll {
+		ctx.WriteString("LIMIT ALL")
 		needSpace = true
 	}
 	if node.Offset != nil {
