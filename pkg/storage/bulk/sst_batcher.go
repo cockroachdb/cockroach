@@ -247,6 +247,9 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 			if splitAt, err := keys.EnsureSafeSplitKey(start); err != nil {
 				log.Warning(ctx, err)
 			} else {
+				// NB: Passing 'hour' here is technically illegal until 19.2 is
+				// active, but the value will be ignored before that, and we don't
+				// have access to the cluster version here.
 				if err := b.db.SplitAndScatter(ctx, splitAt, hour); err != nil {
 					log.Warning(ctx, err)
 				}
@@ -289,6 +292,9 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 				log.Warning(ctx, err)
 			} else {
 				log.VEventf(ctx, 2, "%s added since last split, splitting/scattering for next range at %v", sz(b.flushedToCurrentRange), end)
+				// NB: Passing 'hour' here is technically illegal until 19.2 is
+				// active, but the value will be ignored before that, and we don't
+				// have access to the cluster version here.
 				if err := b.db.SplitAndScatter(ctx, splitAt, hour); err != nil {
 					log.Warningf(ctx, "failed to split and scatter during ingest: %+v", err)
 				}
