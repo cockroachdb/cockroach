@@ -47,6 +47,14 @@ type OpNode interface {
 	Child(nth int) OpNode
 }
 
+// NonExplainable is a marker interface which identifies an Operator that
+// should be omitted from the output of EXPLAIN (VEC). Note that VERBOSE
+// explain option will override the omitting behavior.
+type NonExplainable interface {
+	// marker is just a marker method. It should never be called.
+	marker()
+}
+
 // NewOneInputNode returns an OpNode with a single Operator input.
 func NewOneInputNode(input Operator) OneInputNode {
 	return OneInputNode{input: input}
@@ -141,6 +149,7 @@ type resettableOperator interface {
 
 type noopOperator struct {
 	OneInputNode
+	NonExplainable
 }
 
 var _ Operator = &noopOperator{}
@@ -166,6 +175,7 @@ func (n *noopOperator) reset() {
 
 type zeroOperator struct {
 	OneInputNode
+	NonExplainable
 }
 
 var _ Operator = &zeroOperator{}
@@ -188,6 +198,7 @@ func (s *zeroOperator) Next(ctx context.Context) coldata.Batch {
 
 type singleTupleNoInputOperator struct {
 	ZeroInputNode
+	NonExplainable
 	batch  coldata.Batch
 	nexted bool
 }

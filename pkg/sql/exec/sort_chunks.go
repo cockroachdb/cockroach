@@ -151,6 +151,7 @@ const (
 // buffer when appropriate.
 type chunker struct {
 	OneInputNode
+	NonExplainable
 	// inputTypes contains the types of all of the columns from input.
 	inputTypes []coltypes.T
 	// inputDone indicates whether input has been fully consumed.

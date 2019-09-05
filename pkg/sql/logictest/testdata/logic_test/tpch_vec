@@ -133,23 +133,18 @@ EXPLAIN (VEC) SELECT l_returnflag, l_linestatus, sum(l_quantity) AS sum_qty, sum
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.orderedAggregator
-                └── *exec.distinctChainOps
-                     └── *exec.sortedDistinctBytesOp
-                          └── exec.fnOp
-                               └── *exec.sortOp
-                                    └── *exec.allSpooler
-                                         └── *exec.simpleProjectOp
+      └── *exec.orderedAggregator
+           └── *exec.distinctChainOps
+                └── *exec.sortedDistinctBytesOp
+                     └── *exec.sortOp
+                          └── *exec.projMultFloat64Float64Op
+                               └── *exec.projPlusFloat64Float64ConstOp
+                                    └── *exec.projMultFloat64Float64Op
+                                         └── *exec.projMinusFloat64ConstFloat64Op
                                               └── *exec.projMultFloat64Float64Op
-                                                   └── *exec.projPlusFloat64Float64ConstOp
-                                                        └── *exec.projMultFloat64Float64Op
-                                                             └── *exec.projMinusFloat64ConstFloat64Op
-                                                                  └── *exec.projMultFloat64Float64Op
-                                                                       └── *exec.projMinusFloat64ConstFloat64Op
-                                                                            └── *exec.selLEInt64Int64ConstOp
-                                                                                 └── *exec.CancelChecker
-                                                                                      └── *distsqlrun.colBatchScan
+                                                   └── *exec.projMinusFloat64ConstFloat64Op
+                                                        └── *exec.selLEInt64Int64ConstOp
+                                                             └── *distsqlrun.colBatchScan
 
 # Query 2
 query T
@@ -157,38 +152,24 @@ EXPLAIN (VEC) SELECT s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.limitOp
-                └── *exec.simpleProjectOp
-                     └── *exec.topKSorter
-                          └── *exec.selEQFloat64Float64Op
-                               └── *exec.orderedAggregator
-                                    └── *exec.hashGrouper
-                                         └── *exec.simpleProjectOp
-                                              └── *exec.hashJoinEqOp
-                                                   ├── *exec.hashJoinEqOp
-                                                   │    ├── *exec.simpleProjectOp
-                                                   │    │    └── *exec.CancelChecker
-                                                   │    │         └── *distsqlrun.colBatchScan
-                                                   │    └── *exec.hashJoinEqOp
-                                                   │         ├── *exec.simpleProjectOp
-                                                   │         │    └── *exec.CancelChecker
-                                                   │         │         └── *distsqlrun.colBatchScan
-                                                   │         └── *distsqlrun.columnarizer
-                                                   └── *exec.hashJoinEqOp
-                                                        ├── *exec.hashJoinEqOp
-                                                        │    ├── *exec.simpleProjectOp
-                                                        │    │    └── *exec.CancelChecker
-                                                        │    │         └── *distsqlrun.colBatchScan
-                                                        │    └── *exec.hashJoinEqOp
-                                                        │         ├── *exec.CancelChecker
-                                                        │         │    └── *distsqlrun.colBatchScan
-                                                        │         └── *distsqlrun.columnarizer
-                                                        └── *exec.simpleProjectOp
-                                                             └── *exec.selSuffixBytesBytesConstOp
-                                                                  └── *exec.selEQInt64Int64ConstOp
-                                                                       └── *exec.CancelChecker
-                                                                            └── *distsqlrun.colBatchScan
+      └── *exec.limitOp
+           └── *exec.topKSorter
+                └── *exec.selEQFloat64Float64Op
+                     └── *exec.orderedAggregator
+                          └── *exec.hashGrouper
+                               └── *exec.hashJoinEqOp
+                                    ├── *exec.hashJoinEqOp
+                                    │    ├── *distsqlrun.colBatchScan
+                                    │    └── *exec.hashJoinEqOp
+                                    │         └── *distsqlrun.colBatchScan
+                                    └── *exec.hashJoinEqOp
+                                         ├── *exec.hashJoinEqOp
+                                         │    ├── *distsqlrun.colBatchScan
+                                         │    └── *exec.hashJoinEqOp
+                                         │         └── *distsqlrun.colBatchScan
+                                         └── *exec.selSuffixBytesBytesConstOp
+                                              └── *exec.selEQInt64Int64ConstOp
+                                                   └── *distsqlrun.colBatchScan
 
 # Query 3
 query T
@@ -196,12 +177,10 @@ EXPLAIN (VEC) SELECT l_orderkey, sum(l_extendedprice * (1 - l_discount)) AS reve
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.limitOp
-                └── *exec.topKSorter
-                     └── *exec.orderedAggregator
-                          └── *exec.hashGrouper
-                               └── *distsqlrun.columnarizer
+      └── *exec.limitOp
+           └── *exec.topKSorter
+                └── *exec.orderedAggregator
+                     └── *exec.hashGrouper
 
 # Query 4
 query T
@@ -209,12 +188,9 @@ EXPLAIN (VEC) SELECT o_orderpriority, count(*) AS order_count FROM orders WHERE 
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.sortOp
-                └── *exec.allSpooler
-                     └── *exec.orderedAggregator
-                          └── *exec.hashGrouper
-                               └── *distsqlrun.columnarizer
+      └── *exec.sortOp
+           └── *exec.orderedAggregator
+                └── *exec.hashGrouper
 
 # Query 5
 query T
@@ -222,33 +198,21 @@ EXPLAIN (VEC) SELECT n_name, sum(l_extendedprice * (1 - l_discount)) AS revenue 
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.sortOp
-                └── *exec.allSpooler
-                     └── *exec.orderedAggregator
-                          └── *exec.hashGrouper
-                               └── *exec.simpleProjectOp
-                                    └── *exec.projMultFloat64Float64Op
-                                         └── *exec.projMinusFloat64ConstFloat64Op
-                                              └── *exec.hashJoinEqOp
-                                                   ├── *exec.hashJoinEqOp
-                                                   │    ├── *exec.hashJoinEqOp
-                                                   │    │    ├── *exec.simpleProjectOp
-                                                   │    │    │    └── *exec.CancelChecker
-                                                   │    │    │         └── *distsqlrun.colBatchScan
-                                                   │    │    └── *exec.hashJoinEqOp
-                                                   │    │         ├── *exec.simpleProjectOp
-                                                   │    │         │    └── *exec.CancelChecker
-                                                   │    │         │         └── *distsqlrun.colBatchScan
-                                                   │    │         └── *distsqlrun.columnarizer
-                                                   │    └── *exec.simpleProjectOp
-                                                   │         └── *exec.selLTInt64Int64ConstOp
-                                                   │              └── *exec.selGEInt64Int64ConstOp
-                                                   │                   └── *exec.CancelChecker
-                                                   │                        └── *distsqlrun.colBatchScan
-                                                   └── *exec.simpleProjectOp
-                                                        └── *exec.CancelChecker
-                                                             └── *distsqlrun.colBatchScan
+      └── *exec.sortOp
+           └── *exec.orderedAggregator
+                └── *exec.hashGrouper
+                     └── *exec.projMultFloat64Float64Op
+                          └── *exec.projMinusFloat64ConstFloat64Op
+                               └── *exec.hashJoinEqOp
+                                    ├── *exec.hashJoinEqOp
+                                    │    ├── *exec.hashJoinEqOp
+                                    │    │    ├── *distsqlrun.colBatchScan
+                                    │    │    └── *exec.hashJoinEqOp
+                                    │    │         └── *distsqlrun.colBatchScan
+                                    │    └── *exec.selLTInt64Int64ConstOp
+                                    │         └── *exec.selGEInt64Int64ConstOp
+                                    │              └── *distsqlrun.colBatchScan
+                                    └── *distsqlrun.colBatchScan
 
 # Query 6
 query T
@@ -256,19 +220,16 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice * l_discount) AS revenue FROM lineitem 
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.orderedAggregator
-                └── *exec.oneShotOp
-                     └── *exec.distinctChainOps
-                          └── *exec.simpleProjectOp
-                               └── *exec.projMultFloat64Float64Op
-                                    └── *exec.selLTFloat64Float64ConstOp
-                                         └── *exec.selLTInt64Int64ConstOp
-                                              └── *exec.selGEInt64Int64ConstOp
-                                                   └── *exec.selLEFloat64Float64ConstOp
-                                                        └── *exec.selGEFloat64Float64ConstOp
-                                                             └── *exec.CancelChecker
-                                                                  └── *distsqlrun.colBatchScan
+      └── *exec.orderedAggregator
+           └── *exec.oneShotOp
+                └── *exec.distinctChainOps
+                     └── *exec.projMultFloat64Float64Op
+                          └── *exec.selLTFloat64Float64ConstOp
+                               └── *exec.selLTInt64Int64ConstOp
+                                    └── *exec.selGEInt64Int64ConstOp
+                                         └── *exec.selLEFloat64Float64ConstOp
+                                              └── *exec.selGEFloat64Float64ConstOp
+                                                   └── *distsqlrun.colBatchScan
 
 # Query 7
 query T
@@ -276,49 +237,29 @@ EXPLAIN (VEC) SELECT supp_nation, cust_nation, l_year, sum(volume) AS revenue FR
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.orderedAggregator
-                └── *exec.distinctChainOps
+      └── *exec.orderedAggregator
+           └── *exec.distinctChainOps
+                └── *exec.sortedDistinctBytesOp
                      └── *exec.sortedDistinctBytesOp
-                          └── *exec.sortedDistinctBytesOp
-                               └── exec.fnOp
-                                    └── *exec.sortOp
-                                         └── *exec.allSpooler
-                                              └── *exec.simpleProjectOp
-                                                   └── *exec.projMultFloat64Float64Op
-                                                        └── *exec.projMinusFloat64ConstFloat64Op
-                                                             └── *exec.defaultBuiltinFuncOperator
-                                                                  └── *exec.constBytesOp
-                                                                       └── *exec.hashJoinEqOp
-                                                                            ├── *exec.hashJoinEqOp
-                                                                            │    ├── *exec.hashJoinEqOp
-                                                                            │    │    ├── *exec.hashJoinEqOp
-                                                                            │    │    │    ├── *exec.simpleProjectOp
-                                                                            │    │    │    │    └── *exec.CancelChecker
-                                                                            │    │    │    │         └── *distsqlrun.colBatchScan
-                                                                            │    │    │    └── *exec.simpleProjectOp
-                                                                            │    │    │         └── *exec.CancelChecker
-                                                                            │    │    │              └── *distsqlrun.colBatchScan
-                                                                            │    │    └── *exec.simpleProjectOp
-                                                                            │    │         └── *exec.boolVecToSelOp
-                                                                            │    │              └── *exec.selBoolOp
-                                                                            │    │                   └── *exec.caseOp
-                                                                            │    │                        └── *exec.bufferOp
-                                                                            │    │                             └── *exec.hashJoinEqOp
-                                                                            │    │                                  ├── *exec.simpleProjectOp
-                                                                            │    │                                  │    └── *exec.CancelChecker
-                                                                            │    │                                  │         └── *distsqlrun.colBatchScan
-                                                                            │    │                                  └── *exec.simpleProjectOp
-                                                                            │    │                                       └── *exec.CancelChecker
-                                                                            │    │                                            └── *distsqlrun.colBatchScan
-                                                                            │    └── *exec.simpleProjectOp
-                                                                            │         └── *exec.selLEInt64Int64ConstOp
-                                                                            │              └── *exec.selGEInt64Int64ConstOp
-                                                                            │                   └── *exec.CancelChecker
-                                                                            │                        └── *distsqlrun.colBatchScan
-                                                                            └── *exec.simpleProjectOp
-                                                                                 └── *exec.CancelChecker
-                                                                                      └── *distsqlrun.colBatchScan
+                          └── *exec.sortOp
+                               └── *exec.projMultFloat64Float64Op
+                                    └── *exec.projMinusFloat64ConstFloat64Op
+                                         └── *exec.defaultBuiltinFuncOperator
+                                              └── *exec.constBytesOp
+                                                   └── *exec.hashJoinEqOp
+                                                        ├── *exec.hashJoinEqOp
+                                                        │    ├── *exec.hashJoinEqOp
+                                                        │    │    ├── *exec.hashJoinEqOp
+                                                        │    │    │    ├── *distsqlrun.colBatchScan
+                                                        │    │    │    └── *distsqlrun.colBatchScan
+                                                        │    │    └── *exec.caseOp
+                                                        │    │         └── *exec.hashJoinEqOp
+                                                        │    │              ├── *distsqlrun.colBatchScan
+                                                        │    │              └── *distsqlrun.colBatchScan
+                                                        │    └── *exec.selLEInt64Int64ConstOp
+                                                        │         └── *exec.selGEInt64Int64ConstOp
+                                                        │              └── *distsqlrun.colBatchScan
+                                                        └── *distsqlrun.colBatchScan
 
 # Query 8
 query T
@@ -326,19 +267,11 @@ EXPLAIN (VEC) SELECT o_year, sum(CASE WHEN nation = 'BRAZIL' THEN volume ELSE 0 
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.simpleProjectOp
-                └── *exec.sortOp
-                     └── *exec.allSpooler
-                          └── *exec.simpleProjectOp
-                               └── *exec.projDivFloat64Float64Op
-                                    └── *exec.orderedAggregator
-                                         └── *exec.hashGrouper
-                                              └── *exec.simpleProjectOp
-                                                   └── *exec.caseOp
-                                                        └── *exec.bufferOp
-                                                             └── *exec.noopOperator
-                                                                  └── *distsqlrun.columnarizer
+      └── *exec.sortOp
+           └── *exec.projDivFloat64Float64Op
+                └── *exec.orderedAggregator
+                     └── *exec.hashGrouper
+                          └── *exec.caseOp
 
 # Query 9
 query T
@@ -346,12 +279,9 @@ EXPLAIN (VEC) SELECT nation, o_year, sum(amount) AS sum_profit FROM ( SELECT n_n
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.sortOp
-                └── *exec.allSpooler
-                     └── *exec.orderedAggregator
-                          └── *exec.hashGrouper
-                               └── *distsqlrun.columnarizer
+      └── *exec.sortOp
+           └── *exec.orderedAggregator
+                └── *exec.hashGrouper
 
 # Query 10
 query T
@@ -359,13 +289,10 @@ EXPLAIN (VEC) SELECT c_custkey, c_name, sum(l_extendedprice * (1 - l_discount)) 
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.limitOp
-                └── *exec.simpleProjectOp
-                     └── *exec.topKSorter
-                          └── *exec.orderedAggregator
-                               └── *exec.hashGrouper
-                                    └── *distsqlrun.columnarizer
+      └── *exec.limitOp
+           └── *exec.topKSorter
+                └── *exec.orderedAggregator
+                     └── *exec.hashGrouper
 
 # Query 11
 query T
@@ -373,23 +300,16 @@ EXPLAIN (VEC) SELECT ps_partkey, sum(ps_supplycost * ps_availqty::float) AS valu
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.sortOp
-                └── *exec.allSpooler
-                     └── *exec.simpleProjectOp
-                          └── *exec.selGTFloat64Float64Op
-                               └── *exec.castOpNullAny
-                                    └── *exec.constNullOp
-                                         └── *exec.orderedAggregator
-                                              └── *exec.hashGrouper
-                                                   └── *exec.simpleProjectOp
-                                                        └── *exec.projMultFloat64Float64Op
-                                                             └── *exec.castOpInt64Float64
-                                                                  └── *exec.hashJoinEqOp
-                                                                       ├── *exec.simpleProjectOp
-                                                                       │    └── *exec.CancelChecker
-                                                                       │         └── *distsqlrun.colBatchScan
-                                                                       └── *distsqlrun.columnarizer
+      └── *exec.sortOp
+           └── *exec.selGTFloat64Float64Op
+                └── *exec.castOpNullAny
+                     └── *exec.constNullOp
+                          └── *exec.orderedAggregator
+                               └── *exec.hashGrouper
+                                    └── *exec.projMultFloat64Float64Op
+                                         └── *exec.castOpInt64Float64
+                                              └── *exec.hashJoinEqOp
+                                                   └── *distsqlrun.colBatchScan
 
 # Query 12
 query error unable to vectorize execution plan: sum on int cols not supported
@@ -401,23 +321,15 @@ EXPLAIN (VEC) SELECT c_count, count(*) AS custdist FROM ( SELECT c_custkey, coun
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.sortOp
-                └── *exec.allSpooler
+      └── *exec.sortOp
+           └── *exec.orderedAggregator
+                └── *exec.hashGrouper
                      └── *exec.orderedAggregator
                           └── *exec.hashGrouper
-                               └── *exec.simpleProjectOp
-                                    └── *exec.orderedAggregator
-                                         └── *exec.hashGrouper
-                                              └── *exec.simpleProjectOp
-                                                   └── *exec.hashJoinEqOp
-                                                        ├── *exec.simpleProjectOp
-                                                        │    └── *exec.CancelChecker
-                                                        │         └── *distsqlrun.colBatchScan
-                                                        └── *exec.simpleProjectOp
-                                                             └── *exec.selNotRegexpBytesBytesConstOp
-                                                                  └── *exec.CancelChecker
-                                                                       └── *distsqlrun.colBatchScan
+                               └── *exec.hashJoinEqOp
+                                    ├── *distsqlrun.colBatchScan
+                                    └── *exec.selNotRegexpBytesBytesConstOp
+                                         └── *distsqlrun.colBatchScan
 
 # Query 14
 query T
@@ -425,27 +337,19 @@ EXPLAIN (VEC) SELECT 100.00 * sum(CASE WHEN p_type LIKE 'PROMO%' THEN l_extended
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.simpleProjectOp
-                └── *exec.projDivFloat64Float64Op
-                     └── *exec.projMultFloat64Float64ConstOp
-                          └── *exec.orderedAggregator
-                               └── *exec.oneShotOp
-                                    └── *exec.distinctChainOps
-                                         └── *exec.simpleProjectOp
-                                              └── *exec.projMultFloat64Float64Op
-                                                   └── *exec.projMinusFloat64ConstFloat64Op
-                                                        └── *exec.caseOp
-                                                             └── *exec.bufferOp
-                                                                  └── *exec.hashJoinEqOp
-                                                                       ├── *exec.simpleProjectOp
-                                                                       │    └── *exec.CancelChecker
-                                                                       │         └── *distsqlrun.colBatchScan
-                                                                       └── *exec.simpleProjectOp
-                                                                            └── *exec.selLTInt64Int64ConstOp
-                                                                                 └── *exec.selGEInt64Int64ConstOp
-                                                                                      └── *exec.CancelChecker
-                                                                                           └── *distsqlrun.colBatchScan
+      └── *exec.projDivFloat64Float64Op
+           └── *exec.projMultFloat64Float64ConstOp
+                └── *exec.orderedAggregator
+                     └── *exec.oneShotOp
+                          └── *exec.distinctChainOps
+                               └── *exec.projMultFloat64Float64Op
+                                    └── *exec.projMinusFloat64ConstFloat64Op
+                                         └── *exec.caseOp
+                                              └── *exec.hashJoinEqOp
+                                                   ├── *distsqlrun.colBatchScan
+                                                   └── *exec.selLTInt64Int64ConstOp
+                                                        └── *exec.selGEInt64Int64ConstOp
+                                                             └── *distsqlrun.colBatchScan
 
 # Query 15
 #-- TODO(yuzefovich): figure out how to execute this query consisting of three
@@ -462,13 +366,10 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice) / 7.0 AS avg_yearly FROM lineitem, par
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.simpleProjectOp
-                └── *exec.projDivFloat64Float64ConstOp
-                     └── *exec.orderedAggregator
-                          └── *exec.oneShotOp
-                               └── *exec.distinctChainOps
-                                    └── *distsqlrun.columnarizer
+      └── *exec.projDivFloat64Float64ConstOp
+           └── *exec.orderedAggregator
+                └── *exec.oneShotOp
+                     └── *exec.distinctChainOps
 
 # Query 18
 query T
@@ -476,14 +377,10 @@ EXPLAIN (VEC) SELECT c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, s
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.limitOp
-                └── *exec.simpleProjectOp
-                     └── *exec.topKSorter
-                          └── *exec.orderedAggregator
-                               └── *exec.distinctChainOps
-                                    └── exec.fnOp
-                                         └── *distsqlrun.columnarizer
+      └── *exec.limitOp
+           └── *exec.topKSorter
+                └── *exec.orderedAggregator
+                     └── *exec.distinctChainOps
 
 # Query 19
 query T
@@ -491,11 +388,9 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice* (1 - l_discount)) AS revenue FROM line
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.orderedAggregator
-                └── *exec.oneShotOp
-                     └── *exec.distinctChainOps
-                          └── *distsqlrun.columnarizer
+      └── *exec.orderedAggregator
+           └── *exec.oneShotOp
+                └── *exec.distinctChainOps
 
 # Query 20
 query error unsorted distinct not supported
@@ -511,28 +406,19 @@ EXPLAIN (VEC) SELECT cntrycode, count(*) AS numcust, sum(c_acctbal) AS totacctba
 ----
  │
  └── Node 1
-      └── *distsqlrun.materializer
-           └── *exec.orderedAggregator
-                └── *exec.distinctChainOps
-                     └── exec.fnOp
-                          └── *exec.sortOp
-                               └── *exec.allSpooler
-                                    └── *exec.simpleProjectOp
-                                         └── *exec.substringFunctionOperator
-                                              └── *exec.constInt64Op
-                                                   └── *exec.constInt64Op
-                                                        └── *exec.mergeJoinLeftAntiOp
-                                                             ├── *exec.simpleProjectOp
-                                                             │    └── *exec.simpleProjectOp
-                                                             │         └── *exec.selGTFloat64Float64Op
-                                                             │              └── *exec.castOpNullAny
-                                                             │                   └── *exec.constNullOp
-                                                             │                        └── *exec.selectInOpBytes
-                                                             │                             └── *exec.substringFunctionOperator
-                                                             │                                  └── *exec.constInt64Op
-                                                             │                                       └── *exec.constInt64Op
-                                                             │                                            └── *exec.CancelChecker
-                                                             │                                                 └── *distsqlrun.colBatchScan
-                                                             └── *exec.simpleProjectOp
-                                                                  └── *exec.CancelChecker
-                                                                       └── *distsqlrun.colBatchScan
+      └── *exec.orderedAggregator
+           └── *exec.distinctChainOps
+                └── *exec.sortOp
+                     └── *exec.substringFunctionOperator
+                          └── *exec.constInt64Op
+                               └── *exec.constInt64Op
+                                    └── *exec.mergeJoinLeftAntiOp
+                                         ├── *exec.selGTFloat64Float64Op
+                                         │    └── *exec.castOpNullAny
+                                         │         └── *exec.constNullOp
+                                         │              └── *exec.selectInOpBytes
+                                         │                   └── *exec.substringFunctionOperator
+                                         │                        └── *exec.constInt64Op
+                                         │                             └── *exec.constInt64Op
+                                         │                                  └── *distsqlrun.colBatchScan
+                                         └── *distsqlrun.colBatchScan

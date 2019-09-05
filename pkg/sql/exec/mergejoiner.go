@@ -156,6 +156,7 @@ type mergeJoinInput struct {
 // the next batch.
 type feedOperator struct {
 	ZeroInputNode
+	NonExplainable
 	batch coldata.Batch
 }
 
