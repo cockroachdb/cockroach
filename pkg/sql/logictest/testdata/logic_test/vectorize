@@ -770,3 +770,24 @@ query R
 select (x/1) from t39417
 ----
 10
+
+# Regression tests for #39540, an issue caused by shallow copying decimals.
+statement ok
+CREATE TABLE IF NOT EXISTS t_39540 AS
+	SELECT
+		g % 2 = 0 AS _bool, g::DECIMAL AS _decimal
+	FROM
+		generate_series(0, 5) AS g
+
+query R rowsort
+SELECT
+	tab_426212._decimal - tab_426216._decimal
+FROM
+	t_39540 AS tab_426212,
+	t_39540 AS tab_426214,
+	t_39540
+	RIGHT JOIN t_39540 AS tab_426216 ON true
+ORDER BY
+	tab_426214._bool ASC
+----
+1296 values hashing to cad02075a867c3c0564bf80fe665eed6

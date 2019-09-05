@@ -362,11 +362,11 @@ func _CHECK_DISTINCT(
 ) { // */}}
 
 	// {{define "checkDistinct"}}
-	v := execgen.GET(col, int(checkIdx))
+	v := execgen.UNSAFEGET(col, int(checkIdx))
 	var unique bool
 	_ASSIGN_NE(unique, v, lastVal)
 	outputCol[outputIdx] = outputCol[outputIdx] || unique
-	lastVal = v
+	execgen.COPYVAL(lastVal, v)
 	// {{end}}
 
 	// {{/*
@@ -388,7 +388,7 @@ func _CHECK_DISTINCT_WITH_NULLS(
 
 	// {{define "checkDistinctWithNulls"}}
 	null := nulls.NullAt(uint16(checkIdx))
-	v := execgen.GET(col, int(checkIdx))
+	v := execgen.UNSAFEGET(col, int(checkIdx))
 	if null != lastValNull {
 		// Either the current value is null and the previous was not or vice-versa.
 		outputCol[outputIdx] = true
@@ -398,7 +398,7 @@ func _CHECK_DISTINCT_WITH_NULLS(
 		_ASSIGN_NE(unique, v, lastVal)
 		outputCol[outputIdx] = outputCol[outputIdx] || unique
 	}
-	lastVal = v
+	execgen.COPYVAL(lastVal, v)
 	lastValNull = null
 	// {{end}}
 
