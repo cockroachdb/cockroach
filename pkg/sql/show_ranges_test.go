@@ -36,11 +36,12 @@ func TestShowRangesWithLocality(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE t (x INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `ALTER TABLE t SPLIT AT SELECT i FROM generate_series(0, 20) AS g(i)`)
 
-	const replicasColIdx = 4
-	const localitiesColIdx = 6
+	const replicasColIdx = 0
+	const localitiesColIdx = 1
 	replicas := make([]int, 3)
 
-	result := sqlDB.QueryStr(t, `SHOW RANGES FROM TABLE t`)
+	q := `SELECT replicas, replica_localities from [SHOW RANGES FROM TABLE t]`
+	result := sqlDB.QueryStr(t, q)
 	for _, row := range result {
 		_, err := fmt.Sscanf(row[replicasColIdx], "{%d,%d,%d}", &replicas[0], &replicas[1], &replicas[2])
 		if err != nil {
