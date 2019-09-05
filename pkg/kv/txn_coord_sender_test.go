@@ -608,6 +608,34 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	verifyCleanup(key, s.Eng, t, txn1.Sender().(*TxnCoordSender), txn2.Sender().(*TxnCoordSender))
 }
 
+// TestTxnCoordSenderCleanupOnCommitAfterRestart verifies that if a txn restarts
+// at a higher epoch and then commits before it has written anything in the new
+// epoch, the coordinator still cleans up the transaction. In #40466, we saw that
+// this case could be detected as a 1PC transaction and the cleanup during the
+// commit could be omitted.
+func TestTxnCoordSenderCleanupOnCommitAfterRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := createTestDB(t)
+	defer s.Stop()
+	ctx := context.Background()
+
+	// Create a transaction with intent at "a".
+	key := roachpb.Key("a")
+	txn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+	if err := txn.Put(ctx, key, []byte("value")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Restart the transaction with a new epoch.
+	txn.ManualRestart(ctx, s.Clock.Now())
+
+	// Now immediately commit.
+	if err := txn.CommitOrCleanup(ctx); err != nil {
+		t.Fatal(err)
+	}
+	verifyCleanup(key, s.Eng, t, txn.Sender().(*TxnCoordSender))
+}
+
 // TestTxnCoordSenderGCWithAmbiguousResultErr verifies that the coordinator
 // cleans up extant transactions and intents after an ambiguous result error is
 // observed, even if the error is on the first request.

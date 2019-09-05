@@ -437,6 +437,8 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 // (1) the transaction has already been flagged with a write too old error
 // (2) the transaction's commit timestamp has been forwarded
 // (3) the transaction exceeded its deadline
+// (4) the transaction is not in its first epoch and the EndTransaction request
+//     does not require one phase commit.
 func isOnePhaseCommit(ba *roachpb.BatchRequest) bool {
 	if ba.Txn == nil {
 		return false
@@ -452,7 +454,18 @@ func isOnePhaseCommit(ba *roachpb.BatchRequest) bool {
 	if retry, _, _ := batcheval.IsEndTransactionTriggeringRetryError(ba.Txn, etArg); retry {
 		return false
 	}
-	return true
+	// If the transaction has already restarted at least once then it may have
+	// left intents at prior epochs that need to be cleaned up during the
+	// process of committing the transaction. Even if the current epoch could
+	// perform a one phase commit, we don't allow it to because that could
+	// prevent it from properly resolving intents from prior epochs and cause
+	// it to abandon them instead.
+	//
+	// The exception to this rule is transactions that require a one phase
+	// commit. We know that if they also required a one phase commit in past
+	// epochs then they couldn't have left any intents that they now need to
+	// clean up.
+	return ba.Txn.Epoch == 0 || etArg.Require1PC
 }
 
 // maybeStripInFlightWrites attempts to remove all point writes and query
