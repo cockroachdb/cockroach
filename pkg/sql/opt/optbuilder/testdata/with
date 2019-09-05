@@ -386,3 +386,65 @@ project
       └── plus [type=int]
            ├── variable: ?column? [type=int]
            └── const: 2 [type=int]
+
+# Regression test for #40407.
+exec-ddl
+CREATE TABLE xy (x INT, y INT, z TIMESTAMP);
+----
+TABLE xy
+ ├── x int
+ ├── y int
+ ├── z timestamp
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE uv (u INT, v INT);
+----
+TABLE uv
+ ├── u int
+ ├── v int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+WITH
+    t AS (SELECT xy.x FROM xy INNER JOIN uv ON xy.x = uv.u ORDER BY uv.v DESC LIMIT 5)
+DELETE FROM
+    xy
+WHERE
+    x = ANY (SELECT * FROM t);
+----
+delete xy
+ ├── columns: <none>
+ ├── fetch columns: x:12(int) y:13(int) z:14(timestamp) xy.rowid:15(int)
+ └── select
+      ├── columns: x:12(int) y:13(int) z:14(timestamp) xy.rowid:15(int!null)
+      ├── scan xy
+      │    └── columns: x:12(int) y:13(int) z:14(timestamp) xy.rowid:15(int!null)
+      └── filters
+           └── any: eq [type=bool]
+                ├── project
+                │    ├── columns: x:1(int!null)
+                │    └── limit
+                │         ├── columns: x:1(int!null) v:6(int)
+                │         ├── internal-ordering: -6
+                │         ├── sort
+                │         │    ├── columns: x:1(int!null) v:6(int)
+                │         │    ├── ordering: -6
+                │         │    └── project
+                │         │         ├── columns: x:1(int!null) v:6(int)
+                │         │         └── inner-join
+                │         │              ├── columns: x:1(int!null) y:2(int) z:3(timestamp) xy.rowid:4(int!null) u:5(int!null) v:6(int) uv.rowid:7(int!null)
+                │         │              ├── scan xy
+                │         │              │    └── columns: x:1(int) y:2(int) z:3(timestamp) xy.rowid:4(int!null)
+                │         │              ├── scan uv
+                │         │              │    └── columns: u:5(int) v:6(int) uv.rowid:7(int!null)
+                │         │              └── filters
+                │         │                   └── eq [type=bool]
+                │         │                        ├── variable: x [type=int]
+                │         │                        └── variable: u [type=int]
+                │         └── const: 5 [type=int]
+                └── variable: x [type=int]
