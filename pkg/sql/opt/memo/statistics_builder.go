@@ -852,8 +852,10 @@ func (sb *statisticsBuilder) buildJoin(
 			s.RowCount = leftStats.RowCount
 
 		case opt.AntiJoinOp, opt.AntiJoinApplyOp:
-			s.RowCount = 0
-			s.Selectivity = 0
+			// Don't set the row count to 0 since we can't guarantee that the
+			// cardinality is 0.
+			s.RowCount = epsilon
+			s.Selectivity = epsilon
 		}
 		return
 	}
