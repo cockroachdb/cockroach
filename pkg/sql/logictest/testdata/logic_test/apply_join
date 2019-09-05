@@ -268,3 +268,14 @@ LIMIT
     89:::INT8;
 ----
 true
+
+# Regression test for #40404.
+
+query I
+SELECT
+    (SELECT i FROM (SELECT * FROM generate_series(1, 1) AS g (i)) WHERE x[i] = 3)
+FROM
+    (VALUES (ARRAY[1]), (NULL)) AS v (x)
+----
+NULL
+NULL
