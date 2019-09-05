@@ -1841,6 +1841,27 @@ scan a
  ├── key: (1)
  └── fd: (1)-->(2-5)
 
+opt expect=EliminateSemiJoin
+SELECT * FROM a WHERE EXISTS(VALUES (k))
+----
+scan a
+ ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+# --------------------------------------------------
+# SimplifyZeroCardinalitySemiJoin
+# --------------------------------------------------
+# TODO(justin): figure out if there's a good way to make this still apply.
+opt disable=SimplifyZeroCardinalityGroup expect=SimplifyZeroCardinalitySemiJoin
+SELECT * FROM a WHERE EXISTS(SELECT * FROM (VALUES (k)) OFFSET 1)
+----
+values
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
 # --------------------------------------------------
 # EliminateAntiJoin
 # --------------------------------------------------
@@ -1852,6 +1873,27 @@ scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  ├── key: (1)
  └── fd: (1)-->(2-5)
+
+# --------------------------------------------------
+# SimplifyZeroCardinalityAntiJoin
+# --------------------------------------------------
+opt expect=SimplifyZeroCardinalityAntiJoin
+SELECT * FROM a WHERE NOT EXISTS(SELECT count(*) FROM b WHERE x=k)
+----
+values
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+opt expect=SimplifyZeroCardinalityAntiJoin
+SELECT * FROM a WHERE NOT EXISTS(VALUES (k))
+----
+values
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
 
 # --------------------------------------------------
 # EliminateJoinNoColsLeft
