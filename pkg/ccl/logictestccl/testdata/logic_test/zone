@@ -567,6 +567,25 @@ ALTER PARTITION p1 OF INDEX "my database".public.show_test@primary CONFIGURE ZON
 ALTER PARTITION p2 OF INDEX "my database".public.show_test@primary CONFIGURE ZONE USING
   constraints = '[+dc=dc2]'
 
+# test warnings on table creation
+statement ok
+CREATE TABLE warning (x INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE warning PARTITION BY LIST (x) (PARTITION p1 VALUES IN (1))
+
+query TT
+SHOW CREATE warning
+----
+warning  CREATE TABLE warning (
+         x INT8 NOT NULL,
+         CONSTRAINT "primary" PRIMARY KEY (x ASC),
+         FAMILY "primary" (x)
+) PARTITION BY LIST (x) (
+  PARTITION p1 VALUES IN ((1))
+)
+-- Warning: Partitioned table with no zone configurations.
+
 subtest alter_partition_across_all_indexes
 
 statement ok
