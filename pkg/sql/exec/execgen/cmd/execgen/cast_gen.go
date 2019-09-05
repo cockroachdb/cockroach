@@ -33,7 +33,17 @@ func genCastOperators(wr io.Writer) error {
 	s = strings.Replace(s, "_TOTYPE", "{{.ToTyp}}", -1)
 	s = strings.Replace(s, "_GOTYPE", "{{.ToGoTyp}}", -1)
 
+	// replace _FROM_TYPE_SLICE's with execgen.SLICE's of the correct type.
+	s = strings.Replace(s, "_FROM_TYPE_SLICE", "execgen.SLICE", -1)
 	s = replaceManipulationFuncs(".FromTyp", s)
+
+	// replace the _FROM_TYPE_GET's with execgen.GET's of the correct type.
+	s = strings.Replace(s, "_FROM_TYPE_GET", "execgen.GET", -1)
+	s = replaceManipulationFuncs(".FromTyp", s)
+
+	// replace the _TO_TYPE_GET's with execgen.SET's of the correct type
+	s = strings.Replace(s, "_TO_TYPE_SET", "execgen.SET", -1)
+	s = replaceManipulationFuncs(".ToTyp", s)
 
 	isCastFuncSet := func(ov castOverload) bool {
 		return ov.AssignFunc != nil
