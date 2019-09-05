@@ -1690,3 +1690,33 @@ COMMIT
 statement ok
 DROP TABLE t, t2
 
+subtest delete_index_in_other_table
+
+# Test setup
+statement ok
+BEGIN;
+
+statement ok
+CREATE TABLE a ();
+
+statement ok
+CREATE TABLE b ( key INT );
+
+statement ok
+CREATE INDEX b_idx ON b (key);
+
+statement ok
+COMMIT;
+
+# Try to delete an index in the same transaction
+statement ok
+BEGIN;
+
+statement ok
+DROP TABLE a;
+
+statement ok
+DROP INDEX b_idx CASCADE;
+
+statement ok
+COMMIT;
