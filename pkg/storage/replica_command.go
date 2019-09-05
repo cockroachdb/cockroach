@@ -71,7 +71,7 @@ func maybeDescriptorChangedError(desc *roachpb.RangeDescriptor, err error) (stri
 			return fmt.Sprintf("descriptor changed: expected %s != [actual] nil (range subsumed)", desc), true
 		} else if err := detail.ActualValue.GetProto(&actualDesc); err == nil &&
 			desc.RangeID == actualDesc.RangeID && !desc.Equal(actualDesc) {
-			return fmt.Sprintf("descriptor changed: [expected] %s != [actual] %s", desc, &actualDesc), true
+			return fmt.Sprintf("descriptor changed: [expected] %+#v != [actual] %+#v", desc, &actualDesc), true
 		}
 	}
 	return "", false
@@ -140,6 +140,11 @@ func prepareSplitDescs(
 	rightDesc.Generation = leftDesc.Generation
 	maybeMarkGenerationComparable(st, rightDesc)
 
+	setStickyBit(rightDesc, expiration)
+	return leftDesc, rightDesc
+}
+
+func setStickyBit(desc *roachpb.RangeDescriptor, expiration hlc.Timestamp) {
 	// TODO(jeffreyxiao): Remove this check in 20.1.
 	// Note that the client API for splitting has expiration time as
 	// non-nullable, but the internal representation of a sticky bit is nullable
@@ -149,10 +154,8 @@ func prepareSplitDescs(
 	// setting it to hlc.Timestamp{}. This check ensures that CPuts would not
 	// fail on older versions.
 	if (expiration != hlc.Timestamp{}) {
-		rightDesc.StickyBit = &expiration
+		desc.StickyBit = &expiration
 	}
-
-	return leftDesc, rightDesc
 }
 
 func splitTxnAttempt(
@@ -248,7 +251,7 @@ func splitTxnStickyUpdateAttempt(
 		return err
 	}
 	newDesc := *desc
-	newDesc.StickyBit = &expiration
+	setStickyBit(&newDesc, expiration)
 
 	b := txn.NewBatch()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
@@ -264,7 +267,7 @@ func splitTxnStickyUpdateAttempt(
 		Commit: true,
 		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 			StickyBitTrigger: &roachpb.StickyBitTrigger{
-				StickyBit: expiration,
+				StickyBit: newDesc.GetStickyBit(),
 			},
 		},
 	})
@@ -296,6 +299,16 @@ func (r *Replica) adminSplitWithDescriptor(
 	delayable bool,
 	reason string,
 ) (roachpb.AdminSplitResponse, error) {
+	if !r.store.ClusterSettings().Version.IsActive(cluster.VersionStickyBit) {
+		// If sticky bits aren't supported yet but we receive one anyway, ignore
+		// it. The callers are supposed to only pass hlc.Timestamp{} in that
+		// case, but this is violated in at least one case (and there are lots of
+		// callers that aren't easy to audit and maintain audited). Take the
+		// small risk that the cluster version is actually active (but we don't
+		// know it yet) instead of risking broken descriptors.
+		args.ExpirationTime = hlc.Timestamp{}
+	}
+
 	var err error
 	// The split queue doesn't care about the set of replicas, so if we somehow
 	// are being handed one that's in a joint state, finalize that before
@@ -456,7 +469,11 @@ func (r *Replica) adminUnsplitWithDescriptor(
 		}
 
 		newDesc := *desc
-		newDesc.StickyBit = &hlc.Timestamp{}
+		// Use nil instead of &zero until 20.1; this field is new in 19.2. We
+		// could use &zero here because the sticky bit will never be populated
+		// before the cluster version reaches 19.2 and the early return above
+		// already handles that case, but nothing is won in doing so.
+		newDesc.StickyBit = nil
 		descKey := keys.RangeDescriptorKey(newDesc.StartKey)
 
 		b := txn.NewBatch()

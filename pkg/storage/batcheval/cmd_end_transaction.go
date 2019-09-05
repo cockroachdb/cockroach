@@ -643,7 +643,11 @@ func RunCommitTrigger(
 	}
 	if sbt := ct.GetStickyBitTrigger(); sbt != nil {
 		newDesc := *rec.Desc()
-		newDesc.StickyBit = &sbt.StickyBit
+		if sbt.StickyBit != (hlc.Timestamp{}) {
+			newDesc.StickyBit = &sbt.StickyBit
+		} else {
+			newDesc.StickyBit = nil
+		}
 		var res result.Result
 		res.Replicated.State = &storagepb.ReplicaState{
 			Desc: &newDesc,
