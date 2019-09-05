@@ -708,3 +708,57 @@ build
 SELECT (WITH foo AS (SELECT (SELECT y.a) FROM x) SELECT a FROM foo) FROM y
 ----
 error (0A000): CTEs may not be correlated
+
+# Regression test for #40407.
+exec-ddl
+CREATE TABLE xy (x INT, y INT, z TIMESTAMP);
+----
+
+exec-ddl
+CREATE TABLE uv (u INT, v INT);
+----
+
+build
+WITH
+    t AS (SELECT xy.x FROM xy INNER JOIN uv ON xy.x = uv.u ORDER BY uv.v DESC LIMIT 5)
+DELETE FROM
+    xy
+WHERE
+    x = ANY (SELECT * FROM t);
+----
+with &1 (t)
+ ├── project
+ │    ├── columns: xy.x:1(int!null)
+ │    └── limit
+ │         ├── columns: xy.x:1(int!null) v:6(int)
+ │         ├── internal-ordering: -6
+ │         ├── sort
+ │         │    ├── columns: xy.x:1(int!null) v:6(int)
+ │         │    ├── ordering: -6
+ │         │    └── project
+ │         │         ├── columns: xy.x:1(int!null) v:6(int)
+ │         │         └── inner-join (hash)
+ │         │              ├── columns: xy.x:1(int!null) y:2(int) z:3(timestamp) xy.rowid:4(int!null) u:5(int!null) v:6(int) uv.rowid:7(int!null)
+ │         │              ├── scan xy
+ │         │              │    └── columns: xy.x:1(int) y:2(int) z:3(timestamp) xy.rowid:4(int!null)
+ │         │              ├── scan uv
+ │         │              │    └── columns: u:5(int) v:6(int) uv.rowid:7(int!null)
+ │         │              └── filters
+ │         │                   └── eq [type=bool]
+ │         │                        ├── variable: xy.x [type=int]
+ │         │                        └── variable: u [type=int]
+ │         └── const: 5 [type=int]
+ └── delete xy
+      ├── columns: <none>
+      ├── fetch columns: xy.x:12(int) y:13(int) z:14(timestamp) xy.rowid:15(int)
+      └── select
+           ├── columns: xy.x:12(int) y:13(int) z:14(timestamp) xy.rowid:15(int!null)
+           ├── scan xy
+           │    └── columns: xy.x:12(int) y:13(int) z:14(timestamp) xy.rowid:15(int!null)
+           └── filters
+                └── any: eq [type=bool]
+                     ├── with-scan &1 (t)
+                     │    ├── columns: x:16(int!null)
+                     │    └── mapping:
+                     │         └──  xy.x:1(int) => x:16(int)
+                     └── variable: xy.x [type=int]
