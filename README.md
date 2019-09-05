@@ -37,7 +37,7 @@ Here’s a quick explainer video:
 ## Status
 
 CockroachDB is production-ready. See our
-[Roadmap](https://github.com/cockroachdb/cockroach/wiki/Roadmap) for a list of features planned or in development.
+[Roadmap](https://wiki.crdb.io/wiki/spaces/CRDB/overview) for a list of features planned or in development.
 
 ## Docs
 
