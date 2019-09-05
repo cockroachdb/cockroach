@@ -2199,7 +2199,8 @@ SET database = test
 statement ok
 DROP DATABASE dfk CASCADE
 
-# Verify information_schema.ordinal_position matches pg_attribute.attnum when a leading column is dropped.
+# Regression test for #39787. Verify information_schema.ordinal_position
+# matches pg_attribute.attnum when a leading column is dropped.
 
 statement ok
 CREATE TABLE ab(a INT, b INT)
@@ -2210,10 +2211,17 @@ ALTER TABLE ab DROP COLUMN a
 let $attnum
 SELECT attnum FROM pg_attribute WHERE attrelid = 'ab'::regclass AND attname = 'b'
 
-statement count 1
-SELECT ordinal_position
-FROM information_schema.columns
-WHERE table_name = 'ab' AND column_name = 'b' AND ordinal_position = $attnum
+query I
+SELECT
+	ordinal_position
+FROM
+	information_schema.columns
+WHERE
+	table_name = 'ab'
+	AND column_name = 'b'
+	AND ordinal_position = $attnum;
+----
+2
 
 statement ok
 DROP TABLE ab
