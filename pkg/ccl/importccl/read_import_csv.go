@@ -179,8 +179,9 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 		panic("uninitialized session data")
 	}
 
+	epoch := time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano()
 	const precision = uint64(10 * time.Microsecond)
-	timestamp := uint64(c.walltime) / precision
+	timestamp := uint64(c.walltime-epoch) / precision
 
 	for batch := range c.recordCh {
 		if conv.KvBatch.Source != batch.fileIndex {
