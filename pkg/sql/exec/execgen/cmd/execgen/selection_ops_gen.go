@@ -100,9 +100,7 @@ if sel := batch.Selection(); sel != nil {
 
 {{define "selConstOp"}}
 type {{template "opConstName" .}} struct {
-	OneInputNode
-
-	colIdx   int
+  selConstOpBase
 	constArg {{.RGoType}}
 }
 
@@ -137,10 +135,7 @@ func (p {{template "opConstName" .}}) Init() {
 
 {{define "selOp"}}
 type {{template "opName" .}} struct {
-	OneInputNode
-
-	col1Idx int
-	col2Idx int
+  selOpBase
 }
 
 func (p *{{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
@@ -201,29 +196,29 @@ func GetSelectionConstOperator(
 	if err != nil {
 		return nil, err
 	}
+  selConstOpBase := selConstOpBase {
+		OneInputNode: NewOneInputNode(input),
+		colIdx: colIdx,
+  }
 	switch leftType := typeconv.FromColumnType(leftColType); leftType {
-	{{range $lTyp, $rTypToOverloads := .}}
+	{{range $lTyp, $rTypToOverloads := . -}}
 	case coltypes.{{$lTyp}}:
 		switch rightType := typeconv.FromColumnType(constColType); rightType {
 		{{range $rTyp, $overloads := $rTypToOverloads}}
 		case coltypes.{{$rTyp}}:
 			switch cmpOp {
-			{{range $overloads}}
+			{{range $overloads -}}
 			case tree.{{.Name}}:
-				return &{{template "opConstName" .}}{
-					OneInputNode: NewOneInputNode(input),
-					colIdx:   colIdx,
-					constArg: c.({{.RGoType}}),
-				}, nil
-			{{end}}
+				return &{{template "opConstName" .}}{selConstOpBase: selConstOpBase, constArg: c.({{.RGoType}})}, nil
+			{{end -}}
 			default:
 				return nil, errors.Errorf("unhandled comparison operator: %s", cmpOp)
 			}
-		{{end}}
+		{{end -}}
 		default:
 			return nil, errors.Errorf("unhandled right type: %s", rightType)
 		}
-	{{end}}
+	{{end -}}
 	default:
 		return nil, errors.Errorf("unhandled left type: %s", leftType)
 	}
@@ -239,29 +234,30 @@ func GetSelectionOperator(
 	col1Idx int,
 	col2Idx int,
 ) (Operator, error) {
+  selOpBase := selOpBase {
+		OneInputNode: NewOneInputNode(input),
+		col1Idx: col1Idx,
+		col2Idx: col2Idx,
+  }
 	switch leftType := typeconv.FromColumnType(leftColType); leftType {
-	{{range $lTyp, $rTypToOverloads := .}}
+	{{range $lTyp, $rTypToOverloads := . -}}
 	case coltypes.{{$lTyp}}:
 		switch rightType := typeconv.FromColumnType(rightColType); rightType {
 		{{range $rTyp, $overloads := $rTypToOverloads}}
 		case coltypes.{{$rTyp}}:
 			switch cmpOp {
-			{{range $overloads}}
+			{{range $overloads -}}
 			case tree.{{.Name}}:
-				return &{{template "opName" .}}{
-					OneInputNode: NewOneInputNode(input),
-					col1Idx: col1Idx,
-					col2Idx: col2Idx,
-				}, nil
-			{{end}}
+				return &{{template "opName" .}}{selOpBase: selOpBase}, nil
+			{{end -}}
 			default:
 				return nil, errors.Errorf("unhandled comparison operator: %s", cmpOp)
 			}
-		{{end}}
+		{{end -}}
 		default:
 			return nil, errors.Errorf("unhandled right type: %s", rightType)
 		}
-	{{end}}
+	{{end -}}
 	default:
 		return nil, errors.Errorf("unhandled left type: %s", leftType)
 	}
