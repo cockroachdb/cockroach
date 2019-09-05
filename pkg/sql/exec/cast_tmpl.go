@@ -134,6 +134,7 @@ func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
+			col = col[:n]
 			for execgen.RANGE(i, col) {
 				if vecNulls.NullAt(uint16(i)) {
 					projNulls.SetNull(uint16(i))
@@ -155,6 +156,7 @@ func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 				execgen.SET(projCol, int(i), r)
 			}
 		} else {
+			col = col[:n]
 			for execgen.RANGE(i, col) {
 				v := execgen.GET(col, i)
 				var r _GOTYPE
