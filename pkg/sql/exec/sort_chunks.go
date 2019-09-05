@@ -360,12 +360,12 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 func (s *chunker) buffer(start uint16, end uint16) {
 	for i := 0; i < len(s.bufferedColumns); i++ {
 		s.bufferedColumns[i].Append(
-			coldata.AppendArgs{
+			coldata.SliceArgs{
 				ColType:     s.inputTypes[i],
 				Src:         s.batch.ColVec(i),
 				DestIdx:     s.buffered,
-				SrcStartIdx: start,
-				SrcEndIdx:   end,
+				SrcStartIdx: uint64(start),
+				SrcEndIdx:   uint64(end),
 			},
 		)
 	}

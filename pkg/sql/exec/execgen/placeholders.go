@@ -19,7 +19,6 @@ var (
 	_ = UNSAFEGET
 	_ = COPYVAL
 	_ = SET
-	_ = SWAP
 	_ = SLICE
 	_ = COPYSLICE
 	_ = APPENDSLICE
@@ -46,11 +45,6 @@ func COPYVAL(dest, src interface{}) {
 
 // SET is a template function.
 func SET(target, i, new interface{}) {
-	execerror.VectorizedInternalPanic(nonTemplatePanic)
-}
-
-// SWAP is a template function.
-func SWAP(target, i, j interface{}) {
 	execerror.VectorizedInternalPanic(nonTemplatePanic)
 }
 
