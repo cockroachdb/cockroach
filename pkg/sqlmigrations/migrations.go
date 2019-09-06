@@ -478,8 +478,10 @@ func (m *Manager) EnsureMigrations(ctx context.Context, filter MigrationFilter) 
 		sqlExecutor: m.sqlExecutor,
 	}
 	for _, migration := range backwardCompatibleMigrations {
-		if migration.workFn == nil {
-			// Migration has been baked in. Ignore it.
+		if migration.workFn == nil || // has the migration been baked in?
+			// is the migration unnecessary?
+			(migration.includedInBootstrap &&
+				filter == ExcludeMigrationsIncludedInBootstrap) {
 			continue
 		}
 
