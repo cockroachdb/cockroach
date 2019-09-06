@@ -12,6 +12,7 @@ package exec
 
 import (
 	"context"
+	"fmt"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -196,8 +197,35 @@ func NewMergeJoinOp(
 	rightTypes []coltypes.T,
 	leftOrdering []distsqlpb.Ordering_Column,
 	rightOrdering []distsqlpb.Ordering_Column,
+	filterConstructor func(Operator) (Operator, error),
+	filterOnlyOnLeft bool,
 ) (Operator, error) {
-	base, err := newMergeJoinBase(left, right, leftOutCols, rightOutCols, leftTypes, rightTypes, leftOrdering, rightOrdering)
+	base, err := newMergeJoinBase(
+		left,
+		right,
+		leftOutCols,
+		rightOutCols,
+		leftTypes,
+		rightTypes,
+		leftOrdering,
+		rightOrdering,
+		filterConstructor,
+		filterOnlyOnLeft,
+	)
+	if filterConstructor != nil {
+		switch joinType {
+		case sqlbase.JoinType_INNER:
+			execerror.VectorizedInternalPanic("INNER JOIN with ON expression is handled differently")
+		case sqlbase.JoinType_LEFT_SEMI:
+			return &mergeJoinLeftSemiWithOnExprOp{base}, err
+		case sqlbase.JoinType_LEFT_ANTI:
+			return &mergeJoinLeftAntiWithOnExprOp{base}, err
+		default:
+			execerror.VectorizedInternalPanic(
+				fmt.Sprintf("unsupported join type %s with ON expression", joinType.String()),
+			)
+		}
+	}
 	switch joinType {
 	case sqlbase.JoinType_INNER:
 		return &mergeJoinInnerOp{base}, err
@@ -213,9 +241,9 @@ func NewMergeJoinOp(
 		return &mergeJoinLeftAntiOp{base}, err
 	default:
 		execerror.VectorizedInternalPanic("unsupported join type")
-		// This code is unreachable, but the compiler cannot infer that.
-		return nil, nil
 	}
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil, nil
 }
 
 // Const declarations for the merge joiner cross product (MJCP) zero state.
@@ -257,6 +285,8 @@ func newMergeJoinBase(
 	rightTypes []coltypes.T,
 	leftOrdering []distsqlpb.Ordering_Column,
 	rightOrdering []distsqlpb.Ordering_Column,
+	filterConstructor func(Operator) (Operator, error),
+	filterOnlyOnLeft bool,
 ) (mergeJoinBase, error) {
 	lEqCols := make([]uint32, len(leftOrdering))
 	lDirections := make([]distsqlpb.Ordering_Column_Direction, len(leftOrdering))
@@ -299,10 +329,21 @@ func newMergeJoinBase(
 	base.right.distincterInput = &feedOperator{}
 	base.right.distincter, base.right.distinctOutput, err = OrderedDistinctColsToOperators(
 		base.right.distincterInput, rEqCols, rightTypes)
+	if err != nil {
+		return base, err
+	}
+	if filterConstructor != nil {
+		base.filter, err = newJoinerFilter(
+			leftTypes,
+			rightTypes,
+			filterConstructor,
+			filterOnlyOnLeft,
+		)
+	}
 	return base, err
 }
 
-// mergeJoinBase extract the common logic between all merge join operators.
+// mergeJoinBase extracts the common logic between all merge join operators.
 type mergeJoinBase struct {
 	twoInputNode
 	left  mergeJoinInput
@@ -322,6 +363,8 @@ type mergeJoinBase struct {
 	state        mjState
 	proberState  mjProberState
 	builderState mjBuilderState
+
+	filter *joinerFilter
 }
 
 func (o *mergeJoinBase) getOutColTypes() []coltypes.T {
@@ -338,6 +381,10 @@ func (o *mergeJoinBase) EstimateStaticMemoryUsage() int {
 	const sizeOfGroup = int(unsafe.Sizeof(group{}))
 	leftDistincter := o.left.distincter.(StaticMemoryOperator)
 	rightDistincter := o.right.distincter.(StaticMemoryOperator)
+	filterMemUsage := 0
+	if o.filter != nil {
+		filterMemUsage = o.filter.EstimateStaticMemoryUsage()
+	}
 	return EstimateBatchSizeBytes(
 		o.getOutColTypes(), coldata.BatchSize,
 	) + // base.output
@@ -349,7 +396,8 @@ func (o *mergeJoinBase) EstimateStaticMemoryUsage() int {
 		) + // base.proberState.rBufferedGroup
 		4*sizeOfGroup*coldata.BatchSize + // base.groups
 		leftDistincter.EstimateStaticMemoryUsage() + // base.left.distincter
-		rightDistincter.EstimateStaticMemoryUsage() // base.right.distincter
+		rightDistincter.EstimateStaticMemoryUsage() + // base.right.distincter
+		filterMemUsage
 }
 
 func (o *mergeJoinBase) Init() {
@@ -375,6 +423,10 @@ func (o *mergeJoinBase) initWithBatchSize(outBatchSize uint16) {
 
 	o.groups = makeGroupsBuffer(coldata.BatchSize)
 	o.resetBuilderCrossProductState()
+
+	if o.filter != nil {
+		o.filter.Init()
+	}
 }
 
 func (o *mergeJoinBase) resetBuilderCrossProductState() {

@@ -113,13 +113,13 @@ func (s *substringFunctionOperator) Init() {
 
 func (s *substringFunctionOperator) Next(ctx context.Context) coldata.Batch {
 	batch := s.input.Next(ctx)
+	if s.outputIdx == batch.Width() {
+		batch.AppendCol(coltypes.Bytes)
+	}
+
 	n := batch.Length()
 	if n == 0 {
 		return batch
-	}
-
-	if s.outputIdx == batch.Width() {
-		batch.AppendCol(coltypes.Bytes)
 	}
 
 	sel := batch.Selection()

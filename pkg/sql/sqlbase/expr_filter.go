@@ -25,3 +25,28 @@ func RunFilter(filter tree.TypedExpr, evalCtx *tree.EvalContext) (bool, error) {
 
 	return d == tree.DBoolTrue, nil
 }
+
+type ivarRemapper struct {
+	indexVarMap []int
+}
+
+var _ tree.Visitor = &ivarRemapper{}
+
+func (v *ivarRemapper) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if ivar, ok := expr.(*tree.IndexedVar); ok {
+		newIvar := *ivar
+		newIvar.Idx = v.indexVarMap[ivar.Idx]
+		return false, &newIvar
+	}
+	return true, expr
+}
+
+func (*ivarRemapper) VisitPost(expr tree.Expr) tree.Expr { return expr }
+
+// RemapIVarsInTypedExpr remaps tree.IndexedVars in expr using indexVarMap.
+// Note that a new expression is returned.
+func RemapIVarsInTypedExpr(expr tree.TypedExpr, indexVarMap []int) tree.TypedExpr {
+	v := &ivarRemapper{indexVarMap: indexVarMap}
+	newExpr, _ := tree.WalkExpr(v, expr)
+	return newExpr.(tree.TypedExpr)
+}

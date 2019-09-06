@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -93,7 +94,7 @@ func wrapRowSource(
 
 type newColOperatorResult struct {
 	op              exec.Operator
-	outputTypes     []coltypes.T
+	columnTypes     []types.T
 	memUsage        int
 	metadataSources []distsqlpb.MetadataSource
 	isStreaming     bool
@@ -108,13 +109,6 @@ func newColOperator(
 	core := &spec.Core
 	post := &spec.Post
 
-	// Planning additional operators for the PostProcessSpec (filters and render
-	// expressions) requires knowing the operator's output column types. Currently
-	// this must be set for any core spec which might require post-processing. In
-	// the future we may want to make these column types part of the Operator
-	// interface.
-	var columnTypes []types.T
-
 	// By default, we safely assume that an operator is not streaming. Note that
 	// projections, renders, filters, limits, offsets as well as all internal
 	// operators (like stats collectors and cancel checkers) are streaming, so in
@@ -127,7 +121,7 @@ func newColOperator(
 			return result, err
 		}
 		result.op, result.isStreaming = exec.NewNoop(inputs[0]), true
-		columnTypes = spec.Input[0].ColumnTypes
+		result.columnTypes = spec.Input[0].ColumnTypes
 	case core.TableReader != nil:
 		if err := checkNumIn(inputs, 0); err != nil {
 			return result, err
@@ -156,7 +150,7 @@ func newColOperator(
 		// performing long operations.
 		result.op = exec.NewCancelChecker(result.op)
 		returnMutations := core.TableReader.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
-		columnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
+		result.columnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
 	case core.Aggregator != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
 			return result, err
@@ -174,7 +168,7 @@ func newColOperator(
 			// Ideally the optimizer would not plan a scan in this unusual case.
 			result.op, result.isStreaming, err = exec.NewSingleTupleNoInputOp(), true, nil
 			// We make columnTypes non-nil so that sanity check doesn't panic.
-			columnTypes = make([]types.T, 0)
+			result.columnTypes = make([]types.T, 0)
 			break
 		}
 		if len(aggSpec.GroupCols) == 0 &&
@@ -183,7 +177,7 @@ func newColOperator(
 			aggSpec.Aggregations[0].Func == distsqlpb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
 			result.op, result.isStreaming, err = exec.NewCountOp(inputs[0]), true, nil
-			columnTypes = []types.T{*types.Int}
+			result.columnTypes = []types.T{*types.Int}
 			break
 		}
 
@@ -207,7 +201,7 @@ func newColOperator(
 		aggTyps := make([][]types.T, len(aggSpec.Aggregations))
 		aggCols := make([][]uint32, len(aggSpec.Aggregations))
 		aggFns := make([]distsqlpb.AggregatorSpec_Func, len(aggSpec.Aggregations))
-		columnTypes = make([]types.T, len(aggSpec.Aggregations))
+		result.columnTypes = make([]types.T, len(aggSpec.Aggregations))
 		for i, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
 				return result, errors.Newf("distinct aggregation not supported")
@@ -243,7 +237,7 @@ func newColOperator(
 			if err != nil {
 				return result, err
 			}
-			columnTypes[i] = *retType
+			result.columnTypes[i] = *retType
 		}
 		var typs []coltypes.T
 		typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
@@ -281,9 +275,9 @@ func newColOperator(
 			return result, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
 		}
 
-		columnTypes = spec.Input[0].ColumnTypes
+		result.columnTypes = spec.Input[0].ColumnTypes
 		var typs []coltypes.T
-		typs, err = typeconv.FromColumnTypes(columnTypes)
+		typs, err = typeconv.FromColumnTypes(result.columnTypes)
 		if err != nil {
 			return result, err
 		}
@@ -294,7 +288,7 @@ func newColOperator(
 		if err := checkNumIn(inputs, 1); err != nil {
 			return result, err
 		}
-		columnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
+		result.columnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
 		result.op, result.isStreaming = exec.NewOrdinalityOp(inputs[0]), true
 
 	case core.HashJoiner != nil:
@@ -339,6 +333,21 @@ func newColOperator(
 			}
 		}
 
+		var (
+			onExpr         *distsqlpb.Expression
+			filterPlanning *filterPlanningState
+		)
+		if !core.HashJoiner.OnExpr.Empty() {
+			if core.HashJoiner.Type != sqlbase.JoinType_INNER {
+				return result, errors.Newf("can't plan non-inner hash join with on expressions")
+			}
+			onExpr = &core.HashJoiner.OnExpr
+			filterPlanning = newFilterPlanningState(len(leftTypes), len(rightTypes))
+			leftOutCols, rightOutCols = filterPlanning.renderAllNeededCols(
+				*onExpr, leftOutCols, rightOutCols,
+			)
+		}
+
 		result.op, err = exec.NewEqHashJoinerOp(
 			inputs[0],
 			inputs[1],
@@ -356,20 +365,19 @@ func newColOperator(
 			return result, err
 		}
 
-		columnTypes = make([]types.T, nLeftCols+nRightCols)
-		copy(columnTypes, spec.Input[0].ColumnTypes)
+		result.columnTypes = make([]types.T, nLeftCols+nRightCols)
+		copy(result.columnTypes, spec.Input[0].ColumnTypes)
 		if core.HashJoiner.Type != sqlbase.JoinType_LEFT_SEMI {
 			// TODO(yuzefovich): update this conditional once LEFT ANTI is supported.
-			copy(columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
+			copy(result.columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
 		} else {
-			columnTypes = columnTypes[:nLeftCols]
+			result.columnTypes = result.columnTypes[:nLeftCols]
 		}
 
-		if !core.HashJoiner.OnExpr.Empty() {
-			if core.HashJoiner.Type != sqlbase.JoinType_INNER {
-				return result, errors.Newf("can't plan non-inner hash join with on expressions")
-			}
-			columnTypes, err = result.planFilterExpr(flowCtx, core.HashJoiner.OnExpr, columnTypes)
+		if onExpr != nil {
+			filterPlanning.remapIVars(onExpr)
+			err = result.planFilterExpr(flowCtx.NewEvalCtx(), *onExpr)
+			filterPlanning.projectOutExtraCols(&result, leftOutCols, rightOutCols)
 		}
 
 	case core.MergeJoiner != nil:
@@ -418,6 +426,38 @@ func newColOperator(
 			}
 		}
 
+		var (
+			onExpr            *distsqlpb.Expression
+			filterPlanning    *filterPlanningState
+			filterOnlyOnLeft  bool
+			filterConstructor func(exec.Operator) (exec.Operator, error)
+		)
+		if !core.MergeJoiner.OnExpr.Empty() {
+			onExpr = &core.MergeJoiner.OnExpr
+			filterPlanning = newFilterPlanningState(len(leftTypes), len(rightTypes))
+			switch core.MergeJoiner.Type {
+			case sqlbase.JoinType_INNER:
+				leftOutCols, rightOutCols = filterPlanning.renderAllNeededCols(
+					*onExpr, leftOutCols, rightOutCols,
+				)
+			case sqlbase.JoinType_LEFT_SEMI, sqlbase.JoinType_LEFT_ANTI:
+				filterOnlyOnLeft = filterPlanning.isFilterOnlyOnLeft(*onExpr)
+				filterConstructor = func(op exec.Operator) (exec.Operator, error) {
+					r := newColOperatorResult{
+						op:          op,
+						columnTypes: append(spec.Input[0].ColumnTypes, spec.Input[1].ColumnTypes...),
+					}
+					// We don't need to remap the indexed vars in onExpr because the
+					// filter will be run alongside the merge joiner, and it will have
+					// access to all of the columns from both sides.
+					err := r.planFilterExpr(flowCtx.NewEvalCtx(), *onExpr)
+					return r.op, err
+				}
+			default:
+				return result, errors.Errorf("can only plan INNER, LEFT SEMI, and LEFT ANTI merge joins with ON expressions")
+			}
+		}
+
 		result.op, err = exec.NewMergeJoinOp(
 			core.MergeJoiner.Type,
 			inputs[0],
@@ -428,25 +468,26 @@ func newColOperator(
 			rightTypes,
 			core.MergeJoiner.LeftOrdering.Columns,
 			core.MergeJoiner.RightOrdering.Columns,
+			filterConstructor,
+			filterOnlyOnLeft,
 		)
 		if err != nil {
 			return result, err
 		}
 
-		columnTypes = make([]types.T, nLeftCols+nRightCols)
-		copy(columnTypes, spec.Input[0].ColumnTypes)
+		result.columnTypes = make([]types.T, nLeftCols+nRightCols)
+		copy(result.columnTypes, spec.Input[0].ColumnTypes)
 		if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI &&
 			core.MergeJoiner.Type != sqlbase.JoinType_LEFT_ANTI {
-			copy(columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
+			copy(result.columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
 		} else {
-			columnTypes = columnTypes[:nLeftCols]
+			result.columnTypes = result.columnTypes[:nLeftCols]
 		}
 
-		if !core.MergeJoiner.OnExpr.Empty() {
-			if core.MergeJoiner.Type != sqlbase.JoinType_INNER {
-				return result, errors.Errorf("can't plan non-inner merge joins with on expressions")
-			}
-			columnTypes, err = result.planFilterExpr(flowCtx, core.MergeJoiner.OnExpr, columnTypes)
+		if onExpr != nil && core.MergeJoiner.Type == sqlbase.JoinType_INNER {
+			filterPlanning.remapIVars(onExpr)
+			err = result.planFilterExpr(flowCtx.NewEvalCtx(), *onExpr)
+			filterPlanning.projectOutExtraCols(&result, leftOutCols, rightOutCols)
 		}
 
 		// Merge joiner is a streaming operator when equality columns form a key
@@ -481,7 +522,7 @@ func newColOperator(
 			if err != nil {
 				return nil, err
 			}
-			columnTypes = jr.OutputTypes()
+			result.columnTypes = jr.OutputTypes()
 			return jr, nil
 		})
 		result.op, result.isStreaming = c, true
@@ -513,7 +554,7 @@ func newColOperator(
 			// No optimizations possible. Default to the standard sort operator.
 			result.op, err = exec.NewSorter(input, inputTypes, orderingCols)
 		}
-		columnTypes = spec.Input[0].ColumnTypes
+		result.columnTypes = spec.Input[0].ColumnTypes
 
 	case core.Windower != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
@@ -583,7 +624,7 @@ func newColOperator(
 			result.op = exec.NewSimpleProjectOp(result.op, int(wf.OutputColIdx+1), projection)
 		}
 
-		columnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
+		result.columnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
 
 	default:
 		return result, errors.Newf("unsupported processor core %q", core)
@@ -601,23 +642,23 @@ func newColOperator(
 
 	log.VEventf(ctx, 1, "made op %T\n", result.op)
 
-	if columnTypes == nil {
+	if result.columnTypes == nil {
 		return result, errors.AssertionFailedf("output columnTypes unset after planning %T", result.op)
 	}
 
 	if !post.Filter.Empty() {
-		if columnTypes, err = result.planFilterExpr(flowCtx, post.Filter, columnTypes); err != nil {
+		if err = result.planFilterExpr(flowCtx.NewEvalCtx(), post.Filter); err != nil {
 			return result, err
 		}
 	}
 	if post.Projection {
-		result.op = exec.NewSimpleProjectOp(result.op, len(columnTypes), post.OutputColumns)
+		result.op = exec.NewSimpleProjectOp(result.op, len(result.columnTypes), post.OutputColumns)
 		// Update output columnTypes.
 		newTypes := make([]types.T, 0, len(post.OutputColumns))
 		for _, j := range post.OutputColumns {
-			newTypes = append(newTypes, columnTypes[j])
+			newTypes = append(newTypes, result.columnTypes[j])
 		}
-		columnTypes = newTypes
+		result.columnTypes = newTypes
 	} else if post.RenderExprs != nil {
 		log.VEventf(ctx, 2, "planning render expressions %+v", post.RenderExprs)
 		var renderedCols []uint32
@@ -626,13 +667,13 @@ func newColOperator(
 				helper    exprHelper
 				renderMem int
 			)
-			err := helper.init(expr, columnTypes, flowCtx.EvalCtx)
+			err := helper.init(expr, result.columnTypes, flowCtx.EvalCtx)
 			if err != nil {
 				return result, err
 			}
 			var outputIdx int
-			result.op, outputIdx, columnTypes, renderMem, err = planProjectionOperators(
-				flowCtx.NewEvalCtx(), helper.expr, columnTypes, result.op)
+			result.op, outputIdx, result.columnTypes, renderMem, err = planProjectionOperators(
+				flowCtx.NewEvalCtx(), helper.expr, result.columnTypes, result.op)
 			if err != nil {
 				return result, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
 			}
@@ -642,12 +683,12 @@ func newColOperator(
 			result.memUsage += renderMem
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}
-		result.op = exec.NewSimpleProjectOp(result.op, len(columnTypes), renderedCols)
+		result.op = exec.NewSimpleProjectOp(result.op, len(result.columnTypes), renderedCols)
 		newTypes := make([]types.T, 0, len(renderedCols))
 		for _, j := range renderedCols {
-			newTypes = append(newTypes, columnTypes[j])
+			newTypes = append(newTypes, result.columnTypes[j])
 		}
-		columnTypes = newTypes
+		result.columnTypes = newTypes
 	}
 	if post.Offset != 0 {
 		result.op = exec.NewOffsetOp(result.op, post.Offset)
@@ -655,46 +696,192 @@ func newColOperator(
 	if post.Limit != 0 {
 		result.op = exec.NewLimitOp(result.op, post.Limit)
 	}
-	if err != nil {
-		return result, err
-	}
-	result.outputTypes, err = typeconv.FromColumnTypes(columnTypes)
 	return result, err
 }
 
+type filterPlanningState struct {
+	numLeftInputCols  int
+	numRightInputCols int
+	// indexVarMap will be populated when rendering all needed columns in case
+	// when at least one column from either side is used by the filter.
+	indexVarMap       []int
+	extraLeftOutCols  int
+	extraRightOutCols int
+}
+
+func newFilterPlanningState(numLeftInputCols, numRightInputCols int) *filterPlanningState {
+	return &filterPlanningState{
+		numLeftInputCols:  numLeftInputCols,
+		numRightInputCols: numRightInputCols,
+	}
+}
+
+// renderAllNeededCols makes sure that all columns used by filter expression
+// will be output. It does so by extracting the indices of all indexed vars
+// used in the expression and appending those that are missing from *OutCols
+// slices to the slices. Additionally, it populates p.indexVarMap to be used
+// later to correctly remap the indexed vars and stores information about how
+// many extra columns are added so that those extra columns could be projected
+// out after the filter has been run.
+// It returns updated leftOutCols and rightOutCols.
+func (p *filterPlanningState) renderAllNeededCols(
+	filter distsqlpb.Expression, leftOutCols []uint32, rightOutCols []uint32,
+) ([]uint32, []uint32) {
+	neededColumnsForFilter := findIVarsInRange(
+		filter,
+		0, /* start */
+		p.numLeftInputCols+p.numRightInputCols,
+	)
+	if len(neededColumnsForFilter) > 0 {
+		// At least one column is referenced by the filter expression.
+		p.indexVarMap = make([]int, p.numLeftInputCols+p.numRightInputCols)
+		for i := range p.indexVarMap {
+			p.indexVarMap[i] = -1
+		}
+		// First, we process only the left side.
+		for i, lCol := range leftOutCols {
+			p.indexVarMap[lCol] = i
+		}
+		for _, neededCol := range neededColumnsForFilter {
+			if int(neededCol) < p.numLeftInputCols {
+				if p.indexVarMap[neededCol] == -1 {
+					p.indexVarMap[neededCol] = len(leftOutCols)
+					leftOutCols = append(leftOutCols, neededCol)
+					p.extraLeftOutCols++
+				}
+			}
+		}
+		// Now that we know how many columns from the left will be output, we can
+		// process the right side.
+		//
+		// Here is the explanation of all the indices' dance below:
+		//   suppose we have two inputs with three columns in each, the filter
+		//   expression as @1 = @4 AND @3 = @5, and leftOutCols = {0} and
+		//   rightOutCols = {0} when this method was called. Note that only
+		//   ordinals in the expression are counting from 1, everything else is
+		//   zero-based.
+		// - After we processed the left side above, we have the following state:
+		//   neededColumnsForFilter = {0, 2, 3, 4}
+		//   leftOutCols = {0, 2}
+		//   p.indexVarMap = {0, -1, 1, -1, -1, -1}
+		// - We calculate rColOffset = 3 to know which columns for filter are from
+		//   the right side as well as to remap those for rightOutCols (the
+		//   remapping step is needed because rightOutCols "thinks" only in the
+		//   context of the right side).
+		// - Next, we add already present rightOutCols to the indexed var map:
+		//   rightOutCols = {0}
+		//   p.indexVarMap = {0, -1, 1, 2, -1, -1}
+		//   Note that we needed to remap the column index, and we could do so only
+		//   after the left side has been processed because we need to know how
+		//   many columns will be output from the left.
+		// - Then, we go through the needed columns for filter slice again, and add
+		//   any that are still missing to rightOutCols:
+		//   rightOutCols = {0, 1}
+		//   p.indexVarMap = {0, -1, 1, 2, 3, -1}
+		// - We also stored the fact that we appended 1 extra column for both
+		//   inputs, and we will project those out.
+		rColOffset := uint32(p.numLeftInputCols)
+		for i, rCol := range rightOutCols {
+			p.indexVarMap[rCol+rColOffset] = len(leftOutCols) + i
+		}
+		for _, neededCol := range neededColumnsForFilter {
+			if neededCol >= rColOffset {
+				if p.indexVarMap[neededCol] == -1 {
+					p.indexVarMap[neededCol] = len(rightOutCols) + len(leftOutCols)
+					rightOutCols = append(rightOutCols, neededCol-rColOffset)
+					p.extraRightOutCols++
+				}
+			}
+		}
+	}
+	return leftOutCols, rightOutCols
+}
+
+// isFilterOnlyOnLeft returns whether the filter expression doesn't use columns
+// from the right side.
+func (p *filterPlanningState) isFilterOnlyOnLeft(filter distsqlpb.Expression) bool {
+	// Find all needed columns for filter only from the right side.
+	neededColumnsForFilter := findIVarsInRange(
+		filter, p.numLeftInputCols, p.numLeftInputCols+p.numRightInputCols,
+	)
+	return len(neededColumnsForFilter) == 0
+}
+
+// remapIVars remaps tree.IndexedVars in expr using p.indexVarMap. Note that
+// expr is modified in-place.
+func (p *filterPlanningState) remapIVars(expr *distsqlpb.Expression) {
+	if p.indexVarMap == nil {
+		// If p.indexVarMap is nil, then there is no remapping to do.
+		return
+	}
+	if expr.LocalExpr != nil {
+		expr.LocalExpr = sqlbase.RemapIVarsInTypedExpr(expr.LocalExpr, p.indexVarMap)
+	} else {
+		// We iterate in the reverse order so that the multiple digit numbers are
+		// handled correctly (consider an expression like @1 AND @11).
+		for idx := len(p.indexVarMap) - 1; idx >= 0; idx-- {
+			if p.indexVarMap[idx] != -1 {
+				// We need +1 below because the ordinals are counting from 1.
+				expr.Expr = strings.ReplaceAll(
+					expr.Expr,
+					fmt.Sprintf("@%d", idx+1),
+					fmt.Sprintf("@%d", p.indexVarMap[idx]+1),
+				)
+			}
+		}
+	}
+}
+
+// projectOutExtraCols, possibly, adds a projection to remove all the extra
+// columns that were needed by the filter expression.
+func (p *filterPlanningState) projectOutExtraCols(
+	result *newColOperatorResult, leftOutCols, rightOutCols []uint32,
+) {
+	if p.extraLeftOutCols+p.extraRightOutCols > 0 {
+		projection := make([]uint32, 0, len(leftOutCols)+len(rightOutCols)-p.extraLeftOutCols-p.extraRightOutCols)
+		for i := 0; i < len(leftOutCols)-p.extraLeftOutCols; i++ {
+			projection = append(projection, uint32(i))
+		}
+		for i := 0; i < len(rightOutCols)-p.extraRightOutCols; i++ {
+			projection = append(projection, uint32(i+len(leftOutCols)))
+		}
+		result.op = exec.NewSimpleProjectOp(result.op, len(leftOutCols)+len(rightOutCols), projection)
+	}
+}
+
 func (r *newColOperatorResult) planFilterExpr(
-	flowCtx *FlowCtx, filter distsqlpb.Expression, columnTypes []types.T,
-) ([]types.T, error) {
+	evalCtx *tree.EvalContext, filter distsqlpb.Expression,
+) error {
 	var (
 		helper       exprHelper
 		selectionMem int
 	)
-	err := helper.init(filter, columnTypes, flowCtx.EvalCtx)
+	err := helper.init(filter, r.columnTypes, evalCtx)
 	if err != nil {
-		return columnTypes, err
+		return err
 	}
 	if helper.expr == tree.DNull {
 		// The filter expression is tree.DNull meaning that it is always false, so
 		// we put a zero operator.
 		r.op = exec.NewZeroOp(r.op)
-		return columnTypes, nil
+		return nil
 	}
 	var filterColumnTypes []types.T
-	r.op, _, filterColumnTypes, selectionMem, err = planSelectionOperators(flowCtx.NewEvalCtx(), helper.expr, columnTypes, r.op)
+	r.op, _, filterColumnTypes, selectionMem, err = planSelectionOperators(evalCtx, helper.expr, r.columnTypes, r.op)
 	if err != nil {
-		return columnTypes, errors.Wrapf(err, "unable to columnarize filter expression %q", filter.Expr)
+		return errors.Wrapf(err, "unable to columnarize filter expression %q", filter.Expr)
 	}
 	r.memUsage += selectionMem
-	if len(filterColumnTypes) > len(columnTypes) {
+	if len(filterColumnTypes) > len(r.columnTypes) {
 		// Additional columns were appended to store projections while evaluating
 		// the filter. Project them away.
 		var outputColumns []uint32
-		for i := range columnTypes {
+		for i := range r.columnTypes {
 			outputColumns = append(outputColumns, uint32(i))
 		}
 		r.op = exec.NewSimpleProjectOp(r.op, len(filterColumnTypes), outputColumns)
 	}
-	return columnTypes, nil
+	return nil
 }
 
 func planSelectionOperators(
@@ -1539,8 +1726,12 @@ func (s *vectorizedFlowCreator) setupFlow(
 			// when vectorize=auto.
 			return nil, errors.Errorf("hash router encountered when vectorize=auto")
 		}
+		opOutputTypes, err := typeconv.FromColumnTypes(result.columnTypes)
+		if err != nil {
+			return nil, err
+		}
 		if err = s.setupOutput(
-			ctx, flowCtx, pspec, op, result.outputTypes, metadataSourcesQueue,
+			ctx, flowCtx, pspec, op, opOutputTypes, metadataSourcesQueue,
 		); err != nil {
 			return nil, err
 		}

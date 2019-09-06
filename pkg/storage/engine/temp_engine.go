@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/petermattis/pebble"
-	"github.com/petermattis/pebble/cache"
-	"github.com/petermattis/pebble/vfs"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/cache"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
 type rocksDBTempEngine struct {
