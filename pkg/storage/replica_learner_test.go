@@ -68,7 +68,7 @@ func (rtl *replicationTestKnobs) withStopAfterJointConfig(f func()) {
 
 func makeReplicationTestKnobs() (base.TestingKnobs, *replicationTestKnobs) {
 	var k replicationTestKnobs
-	k.storeKnobs.ReplicaAddStopAfterLearnerSnapshot = func() bool {
+	k.storeKnobs.ReplicaAddStopAfterLearnerSnapshot = func(_ []roachpb.ReplicationTarget) bool {
 		return atomic.LoadInt64(&k.replicaAddStopAfterLearnerAtomic) > 0
 	}
 	k.storeKnobs.ReplicaAddStopAfterJointConfig = func() bool {
