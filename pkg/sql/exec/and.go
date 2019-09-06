@@ -42,12 +42,12 @@ func (a *andOp) Init() {
 
 func (a *andOp) Next(ctx context.Context) coldata.Batch {
 	batch := a.input.Next(ctx)
+	if a.outputIdx == batch.Width() {
+		batch.AppendCol(coltypes.Bool)
+	}
 	n := batch.Length()
 	if n == 0 {
 		return batch
-	}
-	if a.outputIdx == batch.Width() {
-		batch.AppendCol(coltypes.Bool)
 	}
 	leftCol := batch.ColVec(a.leftIdx).Bool()
 	rightCol := batch.ColVec(a.rightIdx).Bool()
