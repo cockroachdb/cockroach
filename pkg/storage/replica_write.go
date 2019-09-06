@@ -448,9 +448,6 @@ func isOnePhaseCommit(ba *roachpb.BatchRequest) bool {
 	}
 	arg, _ := ba.GetArg(roachpb.EndTransaction)
 	etArg := arg.(*roachpb.EndTransactionRequest)
-	if batcheval.IsEndTransactionExceedingDeadline(ba.Txn.Timestamp, etArg) {
-		return false
-	}
 	if retry, _, _ := batcheval.IsEndTransactionTriggeringRetryError(ba.Txn, etArg); retry {
 		return false
 	}
