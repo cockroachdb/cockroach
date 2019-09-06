@@ -792,6 +792,7 @@ EXECGEN_TARGETS = \
   pkg/sql/exec/const.eg.go \
   pkg/sql/exec/distinct.eg.go \
   pkg/sql/exec/hashjoiner.eg.go \
+  pkg/sql/exec/joiner_util.eg.go \
   pkg/sql/exec/like_ops.eg.go \
   pkg/sql/exec/mergejoinbase.eg.go \
   pkg/sql/exec/mergejoiner_fullouter.eg.go \
@@ -1471,6 +1472,7 @@ pkg/sql/exec/cast.eg.go: pkg/sql/exec/cast_tmpl.go
 pkg/sql/exec/const.eg.go: pkg/sql/exec/const_tmpl.go
 pkg/sql/exec/distinct.eg.go: pkg/sql/exec/distinct_tmpl.go
 pkg/sql/exec/hashjoiner.eg.go: pkg/sql/exec/hashjoiner_tmpl.go
+pkg/sql/exec/joiner_util.eg.go: pkg/sql/exec/joiner_util_tmpl.go
 pkg/sql/exec/mergejoinbase.eg.go: pkg/sql/exec/mergejoinbase_tmpl.go
 pkg/sql/exec/mergejoiner_fullouter.eg.go: pkg/sql/exec/mergejoiner_tmpl.go
 pkg/sql/exec/mergejoiner_inner.eg.go: pkg/sql/exec/mergejoiner_tmpl.go
