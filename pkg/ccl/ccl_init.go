@@ -24,5 +24,4 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/roleccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 )
