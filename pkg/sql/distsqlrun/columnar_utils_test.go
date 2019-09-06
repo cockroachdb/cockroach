@@ -107,7 +107,7 @@ func verifyColOperator(
 	defer outProc.ConsumerClosed()
 	defer outColOp.ConsumerClosed()
 
-	var procRows, colOpRows sqlbase.EncDatumRows
+	var procRows, colOpRows []string
 	rowCount := 0
 	for {
 		rowProc, meta := outProc.Next()
@@ -129,15 +129,15 @@ func verifyColOperator(
 			break
 		}
 
+		expStr := rowProc.String(outputTypes)
+		retStr := rowColOp.String(outputTypes)
 		if anyOrder {
 			// We accumulate all the rows to be matched using set comparison when
 			// both "producers" are done.
-			procRows = append(procRows, rowProc.Copy())
-			colOpRows = append(colOpRows, rowColOp.Copy())
+			procRows = append(procRows, expStr)
+			colOpRows = append(colOpRows, retStr)
 		} else {
 			// anyOrder is false, so the result rows must match in the same order.
-			expStr := rowProc.String(outputTypes)
-			retStr := rowColOp.String(outputTypes)
 			if expStr != retStr {
 				return errors.Errorf("different results on row %d;\nexpected:\n   %s\ngot:\n   %s", rowCount, expStr, retStr)
 			}
@@ -147,14 +147,12 @@ func verifyColOperator(
 
 	if anyOrder {
 		used := make([]bool, len(colOpRows))
-		for i, procRow := range procRows {
+		for i, expStr := range procRows {
 			rowMatched := false
-			for j, colOpRow := range colOpRows {
+			for j, retStr := range colOpRows {
 				if used[j] {
 					continue
 				}
-				expStr := procRow.String(outputTypes)
-				retStr := colOpRow.String(outputTypes)
 				if expStr == retStr {
 					rowMatched = true
 					used[j] = true
@@ -163,7 +161,7 @@ func verifyColOperator(
 			}
 			if !rowMatched {
 				return errors.Errorf("different results: no match found for row %d of processor output\n"+
-					"processor output:\n		%s\ncolumnar operator output:\n		%s", i, procRows.String(outputTypes), colOpRows.String(outputTypes))
+					"processor output:\n		%v\ncolumnar operator output:\n		%v", i, procRows, colOpRows)
 			}
 		}
 		// Note: we do not check whether used is all true here because procRows and
