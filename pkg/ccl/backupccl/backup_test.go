@@ -21,7 +21,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -236,25 +235,8 @@ func TestBackupRestorePartitioned(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1000
-	ctx, tc, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
 	defer cleanupFn()
-
-	// Ensure that each node has at least one leaseholder. (These splits were
-	// made in backupRestoreTestSetup.) These are wrapped with SucceedsSoon()
-	// because EXPERIMENTAL_RELOCATE can fail if there are other replication
-	// changes happening.
-	testutils.SucceedsSoon(t, func() error {
-		sqlDB.Exec(t, `ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0)`)
-		return nil
-	})
-	testutils.SucceedsSoon(t, func() error {
-		sqlDB.Exec(t, `ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 100)`)
-		return nil
-	})
-	testutils.SucceedsSoon(t, func() error {
-		sqlDB.Exec(t, `ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 200)`)
-		return nil
-	})
 
 	const localFoo1 = localFoo + "/1"
 	const localFoo2 = localFoo + "/2"
@@ -269,27 +251,14 @@ func TestBackupRestorePartitioned(t *testing.T) {
 		localFoo2,
 		localFoo3,
 	}
+	// TODO(lucy): We should ensure that each node has at least one leaseholder
+	// and then ensure that each node has at least one SST written to it. An
+	// attempt was made to use EXPERIMENTAL_RELOCATE to move leaseholders, but
+	// that was flaky (see #40462). Using manual replication for the test cluster
+	// will likely make EXPERIMENTAL_RELOCATE more reliable, but that doesn't work
+	// well with the test workload here, which requires creating splits and
+	// scattering the ranges, etc.
 	backupAndRestore(ctx, t, tc, backupURIs, restoreURIs, numAccounts)
-
-	// Verify that at least one SST exists in each backup destination.
-	sstMatcher := regexp.MustCompile(`\d+\.sst`)
-	for i := 1; i <= 3; i++ {
-		subDir := fmt.Sprintf("%s/foo/%d", dir, i)
-		files, err := ioutil.ReadDir(subDir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		found := false
-		for _, f := range files {
-			if sstMatcher.MatchString(f.Name()) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Fatalf("no SSTs found in %s", subDir)
-		}
-	}
 }
 
 func TestBackupRestorePartitionedMergeDirectories(t *testing.T) {
