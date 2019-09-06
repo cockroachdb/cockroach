@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 var configID = sqlbase.ID(1)
@@ -88,8 +89,9 @@ func TestGetZoneConfig(t *testing.T) {
 	defaultZoneConfig := config.DefaultSystemZoneConfig()
 	defaultZoneConfig.NumReplicas = proto.Int32(1)
 	defaultZoneConfig.RangeMinBytes = proto.Int64(1 << 20)
-	defaultZoneConfig.RangeMaxBytes = proto.Int64(1 << 20)
+	defaultZoneConfig.RangeMaxBytes = proto.Int64(1 << 21)
 	defaultZoneConfig.GC = &config.GCPolicy{TTLSeconds: 60}
+	require.NoError(t, defaultZoneConfig.Validate())
 	params.Knobs.Server = &server.TestingKnobs{
 		DefaultZoneConfigOverride:       &defaultZoneConfig,
 		DefaultSystemZoneConfigOverride: &defaultZoneConfig,
@@ -323,8 +325,9 @@ func TestCascadingZoneConfig(t *testing.T) {
 	defaultZoneConfig := config.DefaultZoneConfig()
 	defaultZoneConfig.NumReplicas = proto.Int32(1)
 	defaultZoneConfig.RangeMinBytes = proto.Int64(1 << 20)
-	defaultZoneConfig.RangeMaxBytes = proto.Int64(1 << 20)
+	defaultZoneConfig.RangeMaxBytes = proto.Int64(1 << 21)
 	defaultZoneConfig.GC = &config.GCPolicy{TTLSeconds: 60}
+	require.NoError(t, defaultZoneConfig.Validate())
 	params.Knobs.Server = &server.TestingKnobs{
 		DefaultZoneConfigOverride:       &defaultZoneConfig,
 		DefaultSystemZoneConfigOverride: &defaultZoneConfig,
