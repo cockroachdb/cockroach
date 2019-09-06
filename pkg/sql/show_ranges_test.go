@@ -27,9 +27,7 @@ func TestShowRangesWithLocality(t *testing.T) {
 
 	const numNodes = 3
 	ctx := context.Background()
-	tcArgs := base.TestClusterArgs{}
-
-	tc := testcluster.StartTestCluster(t, numNodes, tcArgs)
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
@@ -42,10 +40,9 @@ func TestShowRangesWithLocality(t *testing.T) {
 	const localitiesColIdx = 3
 	replicas := make([]int, 3)
 
+	// TestClusters get some localities by default.
 	q := `SELECT lease_holder, lease_holder_locality, replicas, replica_localities from [SHOW RANGES FROM TABLE t]`
 	result := sqlDB.QueryStr(t, q)
-	// Because StartTestCluster changes the locality no matter what the
-	// arguments are, we expect whatever the test server sets up.
 	for _, row := range result {
 		// Verify the leaseholder localities.
 		leaseHolder := row[leaseHolderIdx]
