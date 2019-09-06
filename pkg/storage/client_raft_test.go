@@ -4362,6 +4362,9 @@ func (cs *disablingClientStream) SendMsg(m interface{}) error {
 // traffic on the SystemClass connection.
 func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/40496")
+
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
 	ctx := context.Background()
