@@ -406,18 +406,16 @@ func IsEndTransactionTriggeringRetryError(
 		retry, reason = false, 0
 	}
 
-	if !retry {
-		if IsEndTransactionExceedingDeadline(txn.Timestamp, args) {
-			exceededBy := txn.Timestamp.GoTime().Sub(args.Deadline.GoTime())
-			fromStart := txn.Timestamp.GoTime().Sub(txn.OrigTimestamp.GoTime())
-			extraMsg = fmt.Sprintf(
-				"txn timestamp pushed too much; deadline exceeded by %s (%s > %s), "+
-					"original timestamp %s ago (%s)",
-				exceededBy, txn.Timestamp, args.Deadline, fromStart, txn.OrigTimestamp)
-			retry, reason = true, roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED
-		}
+	// However, a transaction must obey its deadline, if set.
+	if !retry && IsEndTransactionExceedingDeadline(txn.Timestamp, args) {
+		exceededBy := txn.Timestamp.GoTime().Sub(args.Deadline.GoTime())
+		fromStart := txn.Timestamp.GoTime().Sub(txn.OrigTimestamp.GoTime())
+		extraMsg = fmt.Sprintf(
+			"txn timestamp pushed too much; deadline exceeded by %s (%s > %s), "+
+				"original timestamp %s ago (%s)",
+			exceededBy, txn.Timestamp, args.Deadline, fromStart, txn.OrigTimestamp)
+		retry, reason = true, roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED
 	}
-
 	return retry, reason, extraMsg
 }
 
