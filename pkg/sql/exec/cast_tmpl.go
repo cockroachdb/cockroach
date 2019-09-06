@@ -126,12 +126,12 @@ func (c *castOpNullAny) Init() {
 
 func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
+	if c.outputIdx == batch.Width() {
+		batch.AppendCol(c.toType)
+	}
 	n := batch.Length()
 	if n == 0 {
 		return batch
-	}
-	if c.outputIdx == batch.Width() {
-		batch.AppendCol(c.toType)
 	}
 	vec := batch.ColVec(c.colIdx)
 	projVec := batch.ColVec(c.outputIdx)
