@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // TableRewriteMap maps old table IDs to new table and parent IDs.
@@ -680,7 +680,7 @@ type importEntry struct {
 	progressIdx int
 }
 
-func errOnMissingRange(span intervalccl.Range, start, end hlc.Timestamp) error {
+func errOnMissingRange(span covering.Range, start, end hlc.Timestamp) error {
 	return errors.Errorf(
 		"no backup covers time [%s,%s) for range [%s,%s) (or backups out of order)",
 		start, end, roachpb.Key(span.Start), roachpb.Key(span.End),
@@ -721,14 +721,14 @@ func makeImportSpans(
 	backups []BackupDescriptor,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	lowWaterMark roachpb.Key,
-	onMissing func(span intervalccl.Range, start, end hlc.Timestamp) error,
+	onMissing func(span covering.Range, start, end hlc.Timestamp) error,
 ) ([]importEntry, hlc.Timestamp, error) {
 	// Put the covering for the already-completed spans into the
 	// OverlapCoveringMerge input first. Payloads are returned in the same order
 	// that they appear in the input; putting the completedSpan first means we'll
 	// see it first when iterating over the output of OverlapCoveringMerge and
 	// avoid doing unnecessary work.
-	completedCovering := intervalccl.Covering{
+	completedCovering := covering.Covering{
 		{
 			Start:   []byte(keys.MinKey),
 			End:     []byte(lowWaterMark),
@@ -738,9 +738,9 @@ func makeImportSpans(
 
 	// Put the merged table data covering into the OverlapCoveringMerge input
 	// next.
-	var tableSpanCovering intervalccl.Covering
+	var tableSpanCovering covering.Covering
 	for _, span := range tableSpans {
-		tableSpanCovering = append(tableSpanCovering, intervalccl.Range{
+		tableSpanCovering = append(tableSpanCovering, covering.Range{
 			Start: span.Key,
 			End:   span.EndKey,
 			Payload: importEntry{
@@ -750,7 +750,7 @@ func makeImportSpans(
 		})
 	}
 
-	backupCoverings := []intervalccl.Covering{completedCovering, tableSpanCovering}
+	backupCoverings := []covering.Covering{completedCovering, tableSpanCovering}
 
 	// Iterate over backups creating two coverings for each. First the spans
 	// that were backed up, then the files in the backup. The latter is a subset
@@ -764,9 +764,9 @@ func makeImportSpans(
 			maxEndTime = b.EndTime
 		}
 
-		var backupNewSpanCovering intervalccl.Covering
+		var backupNewSpanCovering covering.Covering
 		for _, s := range b.IntroducedSpans {
-			backupNewSpanCovering = append(backupNewSpanCovering, intervalccl.Range{
+			backupNewSpanCovering = append(backupNewSpanCovering, covering.Range{
 				Start:   s.Key,
 				End:     s.EndKey,
 				Payload: importEntry{Span: s, entryType: backupSpan, start: hlc.Timestamp{}, end: b.StartTime},
@@ -774,16 +774,16 @@ func makeImportSpans(
 		}
 		backupCoverings = append(backupCoverings, backupNewSpanCovering)
 
-		var backupSpanCovering intervalccl.Covering
+		var backupSpanCovering covering.Covering
 		for _, s := range b.Spans {
-			backupSpanCovering = append(backupSpanCovering, intervalccl.Range{
+			backupSpanCovering = append(backupSpanCovering, covering.Range{
 				Start:   s.Key,
 				End:     s.EndKey,
 				Payload: importEntry{Span: s, entryType: backupSpan, start: b.StartTime, end: b.EndTime},
 			})
 		}
 		backupCoverings = append(backupCoverings, backupSpanCovering)
-		var backupFileCovering intervalccl.Covering
+		var backupFileCovering covering.Covering
 
 		var storesByLocalityKV map[string]roachpb.ExportStorage
 		if backupLocalityInfo != nil && backupLocalityInfo[i].URIsByOriginalLocalityKV != nil {
@@ -803,7 +803,7 @@ func makeImportSpans(
 					dir = newDir
 				}
 			}
-			backupFileCovering = append(backupFileCovering, intervalccl.Range{
+			backupFileCovering = append(backupFileCovering, covering.Range{
 				Start: f.Span.Key,
 				End:   f.Span.EndKey,
 				Payload: importEntry{
@@ -820,7 +820,7 @@ func makeImportSpans(
 	// Group ranges covered by backups with ones needed to restore the selected
 	// tables. Note that this breaks intervals up as necessary to align them.
 	// See the function godoc for details.
-	importRanges := intervalccl.OverlapCoveringMerge(backupCoverings)
+	importRanges := covering.OverlapCoveringMerge(backupCoverings)
 
 	// Translate the output of OverlapCoveringMerge into requests.
 	var requestEntries []importEntry
