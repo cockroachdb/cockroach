@@ -12,6 +12,7 @@ package distsqlrun
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -26,7 +27,6 @@ import (
 // chunk into a coldata.Batch column by column.
 type columnarizer struct {
 	ProcessorBase
-	exec.ZeroInputNode
 	exec.NonExplainable
 
 	input RowSource
@@ -129,4 +129,23 @@ func (c *columnarizer) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetada
 		c.accumulatedMeta = append(c.accumulatedMeta, src.DrainMeta(ctx)...)
 	}
 	return c.accumulatedMeta
+}
+
+// ChildCount is part of the exec.Operator interface.
+func (c *columnarizer) ChildCount() int {
+	if _, ok := c.input.(exec.OpNode); ok {
+		return 1
+	}
+	return 0
+}
+
+// ChildCount is part of the exec.Operator interface.
+func (c *columnarizer) Child(nth int) exec.OpNode {
+	if nth == 0 {
+		if n, ok := c.input.(exec.OpNode); ok {
+			return n
+		}
+		panic("input to columnarizer is not an exec.OpNode")
+	}
+	panic(fmt.Sprintf("invalid index %d", nth))
 }

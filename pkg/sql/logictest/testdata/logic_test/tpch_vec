@@ -557,7 +557,11 @@ EXPLAIN (VEC) SELECT s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_
                           └── *exec.hashGrouper
                                └── *exec.hashJoinEqOp
                                     ├── *exec.hashJoinEqOp
-                                    │    └── *distsqlrun.colBatchScan
+                                    │    ├── *distsqlrun.colBatchScan
+                                    │    └── *distsqlrun.joinReader
+                                    │         └── *distsqlrun.joinReader
+                                    │              └── *exec.selEQBytesBytesConstOp
+                                    │                   └── *distsqlrun.colBatchScan
                                     └── *exec.hashJoinEqOp
                                          ├── *exec.hashJoinEqOp
                                          │    ├── *distsqlrun.colBatchScan
@@ -581,6 +585,12 @@ EXPLAIN (VEC) SELECT l_orderkey, sum(l_extendedprice * (1 - l_discount)) AS reve
            └── *exec.topKSorter
                 └── *exec.orderedAggregator
                      └── *exec.hashGrouper
+                          └── *distsqlrun.joinReader
+                               └── *exec.hashJoinEqOp
+                                    ├── *exec.selLTInt64Int64ConstOp
+                                    │    └── *distsqlrun.colBatchScan
+                                    └── *exec.selEQBytesBytesConstOp
+                                         └── *distsqlrun.colBatchScan
 
 # Query 4
 query T
@@ -592,6 +602,8 @@ EXPLAIN (VEC) SELECT o_orderpriority, count(*) AS order_count FROM orders WHERE 
            └── *exec.orderedAggregator
                 └── *exec.hashGrouper
                      └── *exec.hashJoinEqOp
+                          ├── *distsqlrun.indexJoiner
+                          │    └── *distsqlrun.colBatchScan
                           └── *exec.selLTInt64Int64Op
                                └── *distsqlrun.colBatchScan
 
@@ -608,7 +620,14 @@ EXPLAIN (VEC) SELECT n_name, sum(l_extendedprice * (1 - l_discount)) AS revenue 
                           └── *exec.projMinusFloat64ConstFloat64Op
                                └── *exec.hashJoinEqOp
                                     ├── *exec.hashJoinEqOp
-                                    │    └── *exec.hashJoinEqOp
+                                    │    ├── *exec.hashJoinEqOp
+                                    │    │    ├── *distsqlrun.colBatchScan
+                                    │    │    └── *distsqlrun.joinReader
+                                    │    │         └── *exec.hashJoinEqOp
+                                    │    │              ├── *distsqlrun.colBatchScan
+                                    │    │              └── *exec.selEQBytesBytesConstOp
+                                    │    │                   └── *distsqlrun.colBatchScan
+                                    │    └── *distsqlrun.indexJoiner
                                     │         └── *distsqlrun.colBatchScan
                                     └── *distsqlrun.colBatchScan
 
@@ -621,6 +640,8 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice * l_discount) AS revenue FROM lineitem 
       └── *exec.orderedAggregator
            └── *exec.oneShotOp
                 └── *exec.distinctChainOps
+                     └── *distsqlrun.indexJoiner
+                          └── *distsqlrun.colBatchScan
 
 # Query 7
 query T
@@ -636,6 +657,13 @@ EXPLAIN (VEC) SELECT supp_nation, cust_nation, l_year, sum(volume) AS revenue FR
                                └── *exec.defaultBuiltinFuncOperator
                                     └── *exec.constBytesOp
                                          └── *exec.hashJoinEqOp
+                                              ├── *distsqlrun.joinReader
+                                              │    └── *distsqlrun.joinReader
+                                              │         └── *distsqlrun.joinReader
+                                              │              └── *exec.caseOp
+                                              │                   └── *exec.hashJoinEqOp
+                                              │                        ├── *distsqlrun.colBatchScan
+                                              │                        └── *distsqlrun.colBatchScan
                                               └── *distsqlrun.colBatchScan
 
 # Query 8
@@ -659,6 +687,10 @@ EXPLAIN (VEC) SELECT o_year, sum(CASE WHEN nation = 'BRAZIL' THEN volume ELSE 0 
                                                         │    │    ├── *distsqlrun.colBatchScan
                                                         │    │    └── *exec.hashJoinEqOp
                                                         │    │         ├── *exec.hashJoinEqOp
+                                                        │    │         │    ├── *distsqlrun.joinReader
+                                                        │    │         │    │    └── *distsqlrun.joinReader
+                                                        │    │         │    │         └── *exec.selEQBytesBytesConstOp
+                                                        │    │         │    │              └── *distsqlrun.colBatchScan
                                                         │    │         │    └── *distsqlrun.colBatchScan
                                                         │    │         └── *exec.selLEInt64Int64ConstOp
                                                         │    │              └── *exec.selGEInt64Int64ConstOp
@@ -676,6 +708,15 @@ EXPLAIN (VEC) SELECT nation, o_year, sum(amount) AS sum_profit FROM ( SELECT n_n
       └── *exec.sortOp
            └── *exec.orderedAggregator
                 └── *exec.hashGrouper
+                     └── *distsqlrun.joinReader
+                          └── *exec.hashJoinEqOp
+                               ├── *exec.hashJoinEqOp
+                               │    ├── *distsqlrun.joinReader
+                               │    │    └── *distsqlrun.joinReader
+                               │    │         └── *distsqlrun.joinReader
+                               │    │              └── *distsqlrun.colBatchScan
+                               │    └── *distsqlrun.colBatchScan
+                               └── *distsqlrun.colBatchScan
 
 # Query 10
 query T
@@ -687,6 +728,13 @@ EXPLAIN (VEC) SELECT c_custkey, c_name, sum(l_extendedprice * (1 - l_discount)) 
            └── *exec.topKSorter
                 └── *exec.orderedAggregator
                      └── *exec.hashGrouper
+                          └── *distsqlrun.joinReader
+                               └── *exec.hashJoinEqOp
+                                    ├── *exec.hashJoinEqOp
+                                    │    ├── *distsqlrun.colBatchScan
+                                    │    └── *distsqlrun.indexJoiner
+                                    │         └── *distsqlrun.colBatchScan
+                                    └── *distsqlrun.colBatchScan
 
 # Query 11
 query T
@@ -700,6 +748,11 @@ EXPLAIN (VEC) SELECT ps_partkey, sum(ps_supplycost * ps_availqty::float) AS valu
                      └── *exec.constNullOp
                           └── *exec.orderedAggregator
                                └── *exec.hashGrouper
+                                    └── *distsqlrun.joinReader
+                                         └── *distsqlrun.joinReader
+                                              └── *distsqlrun.joinReader
+                                                   └── *exec.selEQBytesBytesConstOp
+                                                        └── *distsqlrun.colBatchScan
 
 # Query 12
 query error unable to vectorize execution plan: sum on int cols not supported
@@ -736,7 +789,9 @@ EXPLAIN (VEC) SELECT 100.00 * sum(CASE WHEN p_type LIKE 'PROMO%' THEN l_extended
                                     └── *exec.projMinusFloat64ConstFloat64Op
                                          └── *exec.caseOp
                                               └── *exec.hashJoinEqOp
-                                                   └── *distsqlrun.colBatchScan
+                                                   ├── *distsqlrun.colBatchScan
+                                                   └── *distsqlrun.indexJoiner
+                                                        └── *distsqlrun.colBatchScan
 
 # Query 15
 #-- TODO(yuzefovich): figure out how to execute this query consisting of three
@@ -757,6 +812,16 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice) / 7.0 AS avg_yearly FROM lineitem, par
            └── *exec.orderedAggregator
                 └── *exec.oneShotOp
                      └── *exec.distinctChainOps
+                          └── *distsqlrun.joinReader
+                               └── *distsqlrun.joinReader
+                                    └── *exec.projMultFloat64Float64ConstOp
+                                         └── *exec.orderedAggregator
+                                              └── *exec.distinctChainOps
+                                                   └── *distsqlrun.joinReader
+                                                        └── *distsqlrun.joinReader
+                                                             └── *exec.selEQBytesBytesConstOp
+                                                                  └── *exec.selEQBytesBytesConstOp
+                                                                       └── *distsqlrun.colBatchScan
 
 # Query 18
 query T
@@ -768,6 +833,15 @@ EXPLAIN (VEC) SELECT c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, s
            └── *exec.topKSorter
                 └── *exec.orderedAggregator
                      └── *exec.hashGrouper
+                          └── *distsqlrun.joinReader
+                               └── *exec.hashJoinEqOp
+                                    ├── *exec.mergeJoinLeftSemiOp
+                                    │    ├── *distsqlrun.colBatchScan
+                                    │    └── *exec.selGTFloat64Float64ConstOp
+                                    │         └── *exec.orderedAggregator
+                                    │              └── *exec.distinctChainOps
+                                    │                   └── *distsqlrun.colBatchScan
+                                    └── *distsqlrun.colBatchScan
 
 # Query 19
 query T
@@ -804,6 +878,8 @@ EXPLAIN (VEC) SELECT s_name, s_address FROM supplier, nation WHERE s_suppkey IN 
                 │         │         └── *exec.orderedAggregator
                 │         │              └── *exec.hashGrouper
                 │         │                   └── *exec.hashJoinEqOp
+                │         │                        ├── *distsqlrun.indexJoiner
+                │         │                        │    └── *distsqlrun.colBatchScan
                 │         │                        └── *distsqlrun.colBatchScan
                 │         └── *exec.selPrefixBytesBytesConstOp
                 │              └── *distsqlrun.colBatchScan
@@ -823,3 +899,12 @@ EXPLAIN (VEC) SELECT cntrycode, count(*) AS numcust, sum(c_acctbal) AS totacctba
       └── *exec.sortOp
            └── *exec.orderedAggregator
                 └── *exec.hashGrouper
+                     └── *distsqlrun.joinReader
+                          └── *exec.selGTFloat64Float64Op
+                               └── *exec.castOpNullAny
+                                    └── *exec.constNullOp
+                                         └── *exec.selectInOpBytes
+                                              └── *exec.substringFunctionOperator
+                                                   └── *exec.constInt64Op
+                                                        └── *exec.constInt64Op
+                                                             └── *distsqlrun.colBatchScan
