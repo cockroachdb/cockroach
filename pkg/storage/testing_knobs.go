@@ -195,7 +195,12 @@ type StoreTestingKnobs struct {
 	// and after the LEARNER type snapshot, but before promoting it to a voter.
 	// This ensures the `*Replica` will be materialized on the Store when it
 	// returns.
-	ReplicaAddStopAfterLearnerSnapshot func() bool
+	ReplicaAddStopAfterLearnerSnapshot func([]roachpb.ReplicationTarget) bool
+	// ReplicaSkipLearnerSnapshot causes snapshots to never be sent to learners
+	// if the func returns true. Adding replicas proceeds as usual, though if
+	// the added replica has no prior state which can be caught up from the raft
+	// log, the result will be an voter that is unable to participate in quorum.
+	ReplicaSkipLearnerSnapshot func() bool
 	// ReplicaAddStopAfterJointConfig causes replica addition to return early if
 	// the func returns true. This happens before transitioning out of a joint
 	// configuration, after the joint configuration has been entered by means
