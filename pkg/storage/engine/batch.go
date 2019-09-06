@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/petermattis/pebble"
+	"github.com/cockroachdb/pebble"
 	"github.com/pkg/errors"
 )
 

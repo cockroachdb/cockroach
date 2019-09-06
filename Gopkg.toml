@@ -119,7 +119,7 @@ ignored = [
   branch = "master"
 
 [[constraint]]
-  name = "github.com/petermattis/pebble"
+  name = "github.com/cockroachdb/pebble"
   branch = "master"
 
 # github.com/openzipkin-contrib/zipkin-go-opentracing requires a newer

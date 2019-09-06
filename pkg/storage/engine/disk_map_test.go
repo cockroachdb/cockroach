@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
-	"github.com/petermattis/pebble"
+	"github.com/cockroachdb/pebble"
 )
 
 // put gives a quick interface for writing a KV pair to a rocksDBMap in tests.
