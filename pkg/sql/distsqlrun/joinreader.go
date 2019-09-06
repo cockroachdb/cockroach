@@ -12,10 +12,12 @@ package distsqlrun
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -129,6 +131,7 @@ type joinReader struct {
 var _ Processor = &joinReader{}
 var _ RowSource = &joinReader{}
 var _ distsqlpb.MetadataSource = &joinReader{}
+var _ exec.OpNode = &joinReader{}
 
 const joinReaderProcName = "join reader"
 
@@ -702,4 +705,20 @@ func (jr *joinReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMeta
 // DrainMeta is part of the MetadataSource interface.
 func (jr *joinReader) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	return jr.generateMeta(ctx)
+}
+
+// ChildCount is part of the exec.OpNode interface.
+func (jr *joinReader) ChildCount() int {
+	return 1
+}
+
+// Child is part of the exec.OpNode interface.
+func (jr *joinReader) Child(nth int) exec.OpNode {
+	if nth == 0 {
+		if n, ok := jr.input.(exec.OpNode); ok {
+			return n
+		}
+		panic("input to joinReader is not an exec.OpNode")
+	}
+	panic(fmt.Sprintf("invalid index %d", nth))
 }

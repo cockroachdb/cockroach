@@ -12,9 +12,11 @@ package distsqlrun
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -58,6 +60,7 @@ type indexJoiner struct {
 var _ Processor = &indexJoiner{}
 var _ RowSource = &indexJoiner{}
 var _ distsqlpb.MetadataSource = &indexJoiner{}
+var _ exec.OpNode = &indexJoiner{}
 
 const indexJoinerProcName = "index joiner"
 
@@ -253,4 +256,20 @@ func (ij *indexJoiner) generateMeta(ctx context.Context) []distsqlpb.ProducerMet
 // DrainMeta is part of the MetadataSource interface.
 func (ij *indexJoiner) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	return ij.generateMeta(ctx)
+}
+
+// ChildCount is part of the exec.OpNode interface.
+func (ij *indexJoiner) ChildCount() int {
+	return 1
+}
+
+// Child is part of the exec.OpNode interface.
+func (ij *indexJoiner) Child(nth int) exec.OpNode {
+	if nth == 0 {
+		if n, ok := ij.input.(exec.OpNode); ok {
+			return n
+		}
+		panic("input to indexJoiner is not an exec.OpNode")
+	}
+	panic(fmt.Sprintf("invalid index %d", nth))
 }
