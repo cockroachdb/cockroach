@@ -1211,6 +1211,10 @@ func (r *Replica) atomicReplicationChange(
 			return nil, errors.Errorf("programming error: cannot promote replica of type %s", rDesc.Type)
 		}
 
+		if fn := r.store.cfg.TestingKnobs.ReplicaSkipLearnerSnapshot; fn != nil && fn() {
+			continue
+		}
+
 		// Note that raft snapshot queue will refuse to send a snapshot to a learner
 		// replica if its store is already sending a snapshot to that replica. That
 		// would race with this snapshot, except that we've put a (best effort) lock
@@ -1231,8 +1235,8 @@ func (r *Replica) atomicReplicationChange(
 		}
 	}
 
-	if len(chgs.Additions()) > 0 {
-		if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterLearnerSnapshot; fn != nil && fn() {
+	if adds := chgs.Additions(); len(adds) > 0 {
+		if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterLearnerSnapshot; fn != nil && fn(adds) {
 			return desc, nil
 		}
 	}
