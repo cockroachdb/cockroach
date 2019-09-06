@@ -17,9 +17,9 @@ import (
 )
 
 var (
-	edgeLink = []rune(" │")
-	edgeMid  = []rune(" ├── ")
-	edgeLast = []rune(" └── ")
+	edgeLinkChr = rune('│')
+	edgeMidChr  = rune('├')
+	edgeLastChr = rune('└')
 )
 
 // Node is a handle associated with a specific depth in a tree. See below for
@@ -52,8 +52,37 @@ type Node struct {
 // Note that the Child calls can't be rearranged arbitrarily; they have
 // to be in the order they need to be displayed (depth-first pre-order).
 func New() Node {
+	return NewWithIndent(true, true, 2)
+}
+
+// NewWithPadding creates a tree printer like New, permitting customization of
+// the width of the outputted tree.
+// leftPad controls whether the tree lines are padded from the first character
+// of their parent.
+// rightPad controls whether children are separated from their edges by a space.
+// edgeLength controls how many characters wide each edge is.
+func NewWithIndent(leftPad, rightPad bool, edgeLength int) Node {
+	var leftPadStr, rightPadStr string
+	var edgeBuilder strings.Builder
+	for i := 0; i < edgeLength; i++ {
+		edgeBuilder.WriteRune('─')
+	}
+	edgeStr := edgeBuilder.String()
+	if leftPad {
+		leftPadStr = " "
+	}
+	if rightPad {
+		rightPadStr = " "
+	}
+	edgeLink := fmt.Sprintf("%s%c", leftPadStr, edgeLinkChr)
+	edgeMid := fmt.Sprintf("%s%c%s%s", leftPadStr, edgeMidChr, edgeStr, rightPadStr)
+	edgeLast := fmt.Sprintf("%s%c%s%s", leftPadStr, edgeLastChr, edgeStr, rightPadStr)
 	return Node{
-		tree:  &tree{},
+		tree: &tree{
+			edgeLink: []rune(edgeLink),
+			edgeMid:  []rune(edgeMid),
+			edgeLast: []rune(edgeLast),
+		},
 		level: 0,
 	}
 }
@@ -67,6 +96,10 @@ type tree struct {
 
 	// row index of the last row for a given level. Grows as needed.
 	lastNode []int
+
+	edgeLink []rune
+	edgeMid  []rune
+	edgeLast []rune
 }
 
 // Childf adds a node as a child of the given node.
@@ -91,7 +124,7 @@ func (n Node) Child(text string) Node {
 // AddLine adds a new line to a child node without an edge.
 func (n Node) AddLine(v string) {
 	// Each level indents by this much.
-	k := len(edgeLast)
+	k := len(n.tree.edgeLast)
 	indent := n.level * k
 	row := make([]rune, indent+len(v))
 	for i := 0; i < indent; i++ {
@@ -108,7 +141,7 @@ func (n Node) childLine(text string) Node {
 	runes := []rune(text)
 
 	// Each level indents by this much.
-	k := len(edgeLast)
+	k := len(n.tree.edgeLast)
 	indent := n.level * k
 	row := make([]rune, indent+len(runes))
 	for i := 0; i < indent-k; i++ {
@@ -117,13 +150,13 @@ func (n Node) childLine(text string) Node {
 	if indent >= k {
 		// Connect through any empty lines.
 		for i := len(n.tree.rows) - 1; i >= 0 && len(n.tree.rows[i]) == 0; i-- {
-			n.tree.rows[i] = make([]rune, indent-k+len(edgeLink))
-			for j := 0; j < indent-k+len(edgeLink); j++ {
+			n.tree.rows[i] = make([]rune, indent-k+len(n.tree.edgeLink))
+			for j := 0; j < indent-k+len(n.tree.edgeLink); j++ {
 				n.tree.rows[i][j] = ' '
 			}
-			copy(n.tree.rows[i][indent-k:], edgeLink)
+			copy(n.tree.rows[i][indent-k:], n.tree.edgeLink)
 		}
-		copy(row[indent-k:], edgeLast)
+		copy(row[indent-k:], n.tree.edgeLast)
 	}
 	copy(row[indent:], runes)
 
@@ -137,13 +170,13 @@ func (n Node) childLine(text string) Node {
 			panic("multiple root nodes")
 		}
 		// Connect to the previous sibling.
-		copy(n.tree.rows[last][indent-k:], edgeMid)
+		copy(n.tree.rows[last][indent-k:], n.tree.edgeMid)
 		for i := last + 1; i < len(n.tree.rows); i++ {
 			// Add spaces if necessary.
-			for len(n.tree.rows[i]) < indent-k+len(edgeLink) {
+			for len(n.tree.rows[i]) < indent-k+len(n.tree.edgeLink) {
 				n.tree.rows[i] = append(n.tree.rows[i], ' ')
 			}
-			copy(n.tree.rows[i][indent-k:], edgeLink)
+			copy(n.tree.rows[i][indent-k:], n.tree.edgeLink)
 		}
 	}
 
