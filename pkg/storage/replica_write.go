@@ -277,18 +277,18 @@ func (r *Replica) evaluateWriteBatch(
 			strippedBa.Requests = ba.Requests[:len(ba.Requests)-1] // strip end txn req
 		}
 
-		// If there were no refreshable spans earlier in the txn
-		// (e.g. earlier gets or scans), then the batch can be retried
-		// locally in the event of write too old errors.
-		retryLocally := etArg.NoRefreshSpans && !ba.Txn.OrigTimestampWasObserved
+		// Is the transaction allowed to retry locally in the event of
+		// write too old errors? This is only allowed if it is able to
+		// forward its commit timestamp without a read refresh.
+		canForwardTimestamp := batcheval.CanForwardCommitTimestampWithoutRefresh(ba.Txn, etArg)
 
 		// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
 		rec := NewReplicaEvalContext(r, spans)
 		batch, br, res, pErr := r.evaluateWriteBatchWithLocalRetries(
-			ctx, idKey, rec, &ms, &strippedBa, spans, retryLocally,
+			ctx, idKey, rec, &ms, &strippedBa, spans, canForwardTimestamp,
 		)
 		if pErr == nil && (ba.Timestamp == br.Timestamp ||
-			(retryLocally && !batcheval.IsEndTransactionExceedingDeadline(br.Timestamp, etArg))) {
+			(canForwardTimestamp && !batcheval.IsEndTransactionExceedingDeadline(br.Timestamp, etArg))) {
 			clonedTxn := ba.Txn.Clone()
 			clonedTxn.Status = roachpb.COMMITTED
 			// Make sure the returned txn has the actual commit

@@ -402,7 +402,7 @@ func IsEndTransactionTriggeringRetryError(
 	}
 
 	// A transaction can still avoid a retry under certain conditions.
-	if retry && canForwardSerializableTimestamp(txn, args.NoRefreshSpans) {
+	if retry && CanForwardCommitTimestampWithoutRefresh(txn, args) {
 		retry, reason = false, 0
 	}
 
@@ -419,14 +419,17 @@ func IsEndTransactionTriggeringRetryError(
 	return retry, reason, extraMsg
 }
 
-// canForwardSerializableTimestamp returns whether a serializable txn can
-// be safely committed with a forwarded timestamp. This requires that
+// CanForwardCommitTimestampWithoutRefresh returns whether a txn can be
+// safely committed with a timestamp above its read timestamp without
+// requiring a read refresh (see txnSpanRefresher). This requires that
 // the transaction's timestamp has not leaked and that the transaction
 // has encountered no spans which require refreshing at the forwarded
 // timestamp. If either of those conditions are true, a client-side
 // retry is required.
-func canForwardSerializableTimestamp(txn *roachpb.Transaction, noRefreshSpans bool) bool {
-	return !txn.OrigTimestampWasObserved && noRefreshSpans
+func CanForwardCommitTimestampWithoutRefresh(
+	txn *roachpb.Transaction, args *roachpb.EndTransactionRequest,
+) bool {
+	return !txn.OrigTimestampWasObserved && args.NoRefreshSpans
 }
 
 const intentResolutionBatchSize = 500
