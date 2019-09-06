@@ -71,7 +71,7 @@ func maybeDescriptorChangedError(desc *roachpb.RangeDescriptor, err error) (stri
 			return fmt.Sprintf("descriptor changed: expected %s != [actual] nil (range subsumed)", desc), true
 		} else if err := detail.ActualValue.GetProto(&actualDesc); err == nil &&
 			desc.RangeID == actualDesc.RangeID && !desc.Equal(actualDesc) {
-			return fmt.Sprintf("descriptor changed: [expected] %+#v != [actual] %+#v", desc, &actualDesc), true
+			return fmt.Sprintf("descriptor changed: [expected] %s != [actual] %s", desc, &actualDesc), true
 		}
 	}
 	return "", false

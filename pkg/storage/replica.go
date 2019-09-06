@@ -91,7 +91,7 @@ var disableSyncRaftLog = settings.RegisterBoolSetting(
 var UseAtomicReplicationChanges = settings.RegisterBoolSetting(
 	"kv.atomic_replication_changes.enabled",
 	"use atomic replication changes",
-	false,
+	true,
 )
 
 // MaxCommandSizeFloor is the minimum allowed value for the MaxCommandSize
