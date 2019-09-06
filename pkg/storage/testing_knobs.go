@@ -64,11 +64,6 @@ type StoreTestingKnobs struct {
 	// error returned to the client, or to simulate network failures.
 	TestingResponseFilter storagebase.ReplicaResponseFilter
 
-	// Disables the use of optional one phase commits. Even when enabled, requests
-	// that set the Require1PC flag are permitted to use one phase commits. This
-	// prevents wedging node liveness, which requires one phase commits during
-	// liveness updates.
-	DisableOptional1PC bool
 	// A hack to manipulate the clock before sending a batch request to a replica.
 	// TODO(kaneda): This hook is not encouraged to use. Get rid of it once
 	// we make TestServer take a ManualClock.

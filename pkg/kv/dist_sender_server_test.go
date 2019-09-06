@@ -2464,9 +2464,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b)
 			},
-			// Parallel commits do not support the canForwardSerializableTimestamp
-			// optimization. That's ok because we need to removed that optimization
-			// anyway. See #36431.
 			txnCoordRetry: true,
 		},
 		{
@@ -2549,9 +2546,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
 			},
-			// Parallel commits do not support the canForwardSerializableTimestamp
-			// optimization. That's ok because we need to removed that optimization
-			// anyway. See #36431.
 			txnCoordRetry: true,
 		},
 		{

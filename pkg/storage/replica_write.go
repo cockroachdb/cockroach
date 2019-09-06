@@ -261,7 +261,7 @@ func (r *Replica) evaluateWriteBatch(
 	ms := enginepb.MVCCStats{}
 	// If not transactional or there are indications that the batch's txn will
 	// require restart or retry, execute as normal.
-	if isOnePhaseCommit(ba, r.store.TestingKnobs()) {
+	if isOnePhaseCommit(ba) {
 		_, hasBegin := ba.GetArg(roachpb.BeginTransaction)
 		arg, _ := ba.GetArg(roachpb.EndTransaction)
 		etArg := arg.(*roachpb.EndTransactionRequest)
@@ -277,18 +277,18 @@ func (r *Replica) evaluateWriteBatch(
 			strippedBa.Requests = ba.Requests[:len(ba.Requests)-1] // strip end txn req
 		}
 
-		// If there were no refreshable spans earlier in the txn
-		// (e.g. earlier gets or scans), then the batch can be retried
-		// locally in the event of write too old errors.
-		retryLocally := etArg.NoRefreshSpans && !ba.Txn.OrigTimestampWasObserved
+		// Is the transaction allowed to retry locally in the event of
+		// write too old errors? This is only allowed if it is able to
+		// forward its commit timestamp without a read refresh.
+		canForwardTimestamp := batcheval.CanForwardCommitTimestampWithoutRefresh(ba.Txn, etArg)
 
 		// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
 		rec := NewReplicaEvalContext(r, spans)
 		batch, br, res, pErr := r.evaluateWriteBatchWithLocalRetries(
-			ctx, idKey, rec, &ms, &strippedBa, spans, retryLocally,
+			ctx, idKey, rec, &ms, &strippedBa, spans, canForwardTimestamp,
 		)
 		if pErr == nil && (ba.Timestamp == br.Timestamp ||
-			(retryLocally && !batcheval.IsEndTransactionExceedingDeadline(br.Timestamp, etArg))) {
+			(canForwardTimestamp && !batcheval.IsEndTransactionExceedingDeadline(br.Timestamp, etArg))) {
 			clonedTxn := ba.Txn.Clone()
 			clonedTxn.Status = roachpb.COMMITTED
 			// Make sure the returned txn has the actual commit
@@ -431,14 +431,15 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 	return
 }
 
-// isOnePhaseCommit returns true iff the BatchRequest contains all commands in
-// the transaction, starting with BeginTransaction and ending with
-// EndTransaction. One phase commits are disallowed if (1) the transaction has
-// already been flagged with a write too old error, or (2) if isolation is
-// serializable and the commit timestamp has been forwarded, or (3) the
-// transaction exceeded its deadline, or (4) the testing knobs disallow optional
-// one phase commits and the BatchRequest does not require one phase commit.
-func isOnePhaseCommit(ba *roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
+// isOnePhaseCommit returns true iff the BatchRequest contains all writes in the
+// transaction and ends with an EndTransaction. One phase commits are disallowed
+// if any of the following conditions are true:
+// (1) the transaction has already been flagged with a write too old error
+// (2) the transaction's commit timestamp has been forwarded
+// (3) the transaction exceeded its deadline
+// (4) the transaction is not in its first epoch and the EndTransaction request
+//     does not require one phase commit.
+func isOnePhaseCommit(ba *roachpb.BatchRequest) bool {
 	if ba.Txn == nil {
 		return false
 	}
@@ -447,13 +448,21 @@ func isOnePhaseCommit(ba *roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 	}
 	arg, _ := ba.GetArg(roachpb.EndTransaction)
 	etArg := arg.(*roachpb.EndTransactionRequest)
-	if batcheval.IsEndTransactionExceedingDeadline(ba.Txn.Timestamp, etArg) {
-		return false
-	}
 	if retry, _, _ := batcheval.IsEndTransactionTriggeringRetryError(ba.Txn, etArg); retry {
 		return false
 	}
-	return !knobs.DisableOptional1PC || etArg.Require1PC
+	// If the transaction has already restarted at least once then it may have
+	// left intents at prior epochs that need to be cleaned up during the
+	// process of committing the transaction. Even if the current epoch could
+	// perform a one phase commit, we don't allow it to because that could
+	// prevent it from properly resolving intents from prior epochs and cause
+	// it to abandon them instead.
+	//
+	// The exception to this rule is transactions that require a one phase
+	// commit. We know that if they also required a one phase commit in past
+	// epochs then they couldn't have left any intents that they now need to
+	// clean up.
+	return ba.Txn.Epoch == 0 || etArg.Require1PC
 }
 
 // maybeStripInFlightWrites attempts to remove all point writes and query
