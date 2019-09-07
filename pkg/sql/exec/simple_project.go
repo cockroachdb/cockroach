@@ -22,6 +22,7 @@ import (
 // columns that aren't needed by later operators.
 type simpleProjectOp struct {
 	OneInputNode
+	NonExplainable
 
 	batch *projectingBatch
 }

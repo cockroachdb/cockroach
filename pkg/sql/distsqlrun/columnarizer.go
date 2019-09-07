@@ -27,6 +27,7 @@ import (
 type columnarizer struct {
 	ProcessorBase
 	exec.ZeroInputNode
+	exec.NonExplainable
 
 	input RowSource
 	da    sqlbase.DatumAlloc

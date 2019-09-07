@@ -26,6 +26,7 @@ import (
 // StopWatch.
 type VectorizedStatsCollector struct {
 	Operator
+	NonExplainable
 	execpb.VectorizedStats
 
 	// inputWatch is a single stop watch that is shared with all the input
