@@ -524,8 +524,8 @@ func TestWorkloadStorage(t *testing.T) {
 
 	settings := cluster.MakeTestingClusterSettings()
 
-	rows, payloadBytes, ranges := 4, 12, 1
-	gen := bank.FromConfig(rows, rows, payloadBytes, ranges)
+	rows, batchSize, payloadBytes, ranges := 4, 2, 12, 1
+	gen := bank.FromConfig(rows, batchSize, payloadBytes, ranges)
 	bankTable := gen.Tables()[0]
 	bankURL := func(extraParams ...map[string]string) *url.URL {
 		params := url.Values{`version`: []string{gen.Meta().Version}}
@@ -560,8 +560,23 @@ func TestWorkloadStorage(t *testing.T) {
 		require.Equal(t, strings.TrimSpace(`
 0,0,initial-dTqn
 1,0,initial-Pkyk
-2,0,initial-eJkM
-3,0,initial-TlNb
+2,0,initial-vOpi
+3,0,initial-Mqnk
+		`), strings.TrimSpace(string(bytes)))
+	}
+
+	{
+		params := map[string]string{
+			`batch-start`: `1`, `batch-end`: `2`, `payload-bytes`: `14`}
+		s, err := ExportStorageFromURI(ctx, bankURL(params).String(), settings)
+		require.NoError(t, err)
+		r, err := s.ReadFile(ctx, ``)
+		require.NoError(t, err)
+		bytes, err := ioutil.ReadAll(r)
+		require.NoError(t, err)
+		require.Equal(t, strings.TrimSpace(`
+2,0,initial-vOpikz
+3,0,initial-Mqnkpf
 		`), strings.TrimSpace(string(bytes)))
 	}
 

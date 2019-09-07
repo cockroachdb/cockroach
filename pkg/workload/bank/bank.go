@@ -64,7 +64,7 @@ var bankMeta = workload.Meta{
 		g := &bank{}
 		g.flags.FlagSet = pflag.NewFlagSet(`bank`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`batch-size`: {RuntimeOnly: true},
+			`batch-size`: {IgnoreForPersistance: true},
 		}
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.IntVar(&g.rows, `rows`, defaultRows, `Initial number of accounts in bank table.`)

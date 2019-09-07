@@ -944,17 +944,27 @@ func ParseWorkloadConfig(uri *url.URL) (*roachpb.ExportStorage_Workload, error) 
 	}
 	c.Version = q.Get(`version`)
 	q.Del(`version`)
-	if s := q.Get(`row-start`); len(s) > 0 {
-		q.Del(`row-start`)
-		var err error
-		if c.BatchBegin, err = strconv.ParseInt(s, 10, 64); err != nil {
+	parseIntParam := func(p string) (int64, error) {
+		if x := q.Get(p); len(x) > 0 {
+			q.Del(p)
+			return strconv.ParseInt(x, 10, 64)
+		}
+		return 0, nil
+	}
+	var err error
+	if c.BatchBegin, err = parseIntParam(`batch-start`); err != nil {
+		return nil, err
+	} else if c.BatchBegin == 0 {
+		// Fall back to the old name. TODO(dan): Get rid of this after 19.2.
+		if c.BatchBegin, err = parseIntParam(`row-start`); err != nil {
 			return nil, err
 		}
 	}
-	if e := q.Get(`row-end`); len(e) > 0 {
-		q.Del(`row-end`)
-		var err error
-		if c.BatchEnd, err = strconv.ParseInt(e, 10, 64); err != nil {
+	if c.BatchEnd, err = parseIntParam(`batch-end`); err != nil {
+		return nil, err
+	} else if c.BatchEnd == 0 {
+		// Fall back to the old name. TODO(dan): Get rid of this after 19.2.
+		if c.BatchEnd, err = parseIntParam(`row-end`); err != nil {
 			return nil, err
 		}
 	}
