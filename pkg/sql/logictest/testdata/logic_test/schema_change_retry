@@ -32,7 +32,7 @@ SHOW TABLES
 user root
 
 # In the original bug, we'd deadlock inside RELEASE SAVEPOINT
-query error TransactionRetryError
+statement ok
 RELEASE SAVEPOINT cockroach_restart
 
 # After restarting, everything's back to normal.

@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -140,8 +141,11 @@ func TestKeyRewriter(t *testing.T) {
 	})
 }
 
-func mustMarshalDesc(t *testing.T, desc *sqlbase.TableDescriptor) []byte {
-	bytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(desc))
+func mustMarshalDesc(t *testing.T, tableDesc *sqlbase.TableDescriptor) []byte {
+	desc := sqlbase.WrapDescriptor(tableDesc)
+	// Set the timestamp to a non-zero value.
+	desc.Table(hlc.Timestamp{WallTime: 1})
+	bytes, err := protoutil.Marshal(desc)
 	if err != nil {
 		t.Fatal(err)
 	}

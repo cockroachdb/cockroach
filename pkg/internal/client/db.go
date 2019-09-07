@@ -28,10 +28,15 @@ import (
 )
 
 // KeyValue represents a single key/value pair. This is similar to
-// roachpb.KeyValue except that the value may be nil.
+// roachpb.KeyValue except that the value may be nil. The timestamp
+// in the value will be populated with the MVCC timestamp at which this
+// value was read if this struct was produced by a GetRequest or
+// ScanRequest which uses the KEY_VALUES ScanFormat. Values created from
+// a ScanRequest which uses the BATCH_RESPONSE ScanFormat will contain a
+// zero Timestamp.
 type KeyValue struct {
 	Key   roachpb.Key
-	Value *roachpb.Value // Timestamp will always be zero
+	Value *roachpb.Value
 }
 
 func (kv *KeyValue) String() string {
@@ -319,11 +324,26 @@ func (db *DB) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 //
 // key can be either a byte slice or a string.
 func (db *DB) GetProto(ctx context.Context, key interface{}, msg protoutil.Message) error {
+	_, err := db.GetProtoTs(ctx, key, msg)
+	return err
+}
+
+// GetProtoTs retrieves the value for a key and decodes the result as a proto
+// message. It additionally returns the timestamp at which the key was read.
+// If the key doesn't exist, the proto will simply be reset.
+//
+// key can be either a byte slice or a string.
+func (db *DB) GetProtoTs(
+	ctx context.Context, key interface{}, msg protoutil.Message,
+) (ts hlc.Timestamp, err error) {
 	r, err := db.Get(ctx, key)
 	if err != nil {
-		return err
+		return ts, err
 	}
-	return r.ValueProto(msg)
+	if r.Value != nil {
+		ts = r.Value.Timestamp
+	}
+	return ts, r.ValueProto(msg)
 }
 
 // Put sets the value for a key.

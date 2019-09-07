@@ -575,7 +575,7 @@ func isDeleted(tableID sqlbase.ID, cfg *config.SystemConfig) bool {
 	if err := val.GetProto(&descriptor); err != nil {
 		panic("unable to unmarshal table descriptor")
 	}
-	table := descriptor.GetTable()
+	table := descriptor.Table(val.Timestamp)
 	return table.Dropped()
 }
 
@@ -1646,11 +1646,12 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 			// Look up the descriptor.
 			descKey := sqlbase.MakeDescMetadataKey(descID)
 			dbDesc := &sqlbase.Descriptor{}
-			if err := txn.GetProto(ctx, descKey, dbDesc); err != nil {
+			ts, err := txn.GetProtoTs(ctx, descKey, dbDesc)
+			if err != nil {
 				t.Fatalf("error while reading proto: %v", err)
 			}
 			// Look at the descriptor that comes back from the database.
-			dbTable := dbDesc.GetTable()
+			dbTable := dbDesc.Table(ts)
 
 			if dbTable.Version != table.Version || dbTable.ModificationTime != table.ModificationTime {
 				t.Fatalf("db has version %d at ts %s, expected version %d at ts %s",
