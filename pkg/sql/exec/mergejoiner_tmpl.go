@@ -103,12 +103,14 @@ const _FILTER_INFO = 0
 var _ interface{} = execgen.UNSAFEGET
 
 // {{ range $filterInfo := $.FilterInfos }}
+// {{ if or (not $filterInfo.HasFilter) $.JoinType.FilterSupported }}
 type mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp struct {
 	mergeJoinBase
 }
 
 var _ StaticMemoryOperator = &mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp{}
 
+// {{ end }}
 // {{ end }}
 
 // {{/*
@@ -573,6 +575,7 @@ func _PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 
 // {{ range $sel := $.SelPermutations }}
 // {{ range $filterInfo := $.FilterInfos }}
+// {{ if or (not $filterInfo.HasFilter) $.JoinType.FilterSupported }}
 func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) probeBodyLSel_IS_L_SELRSel_IS_R_SEL(
 	ctx context.Context,
 ) {
@@ -618,6 +621,7 @@ EqLoop:
 	}
 }
 
+// {{ end }}
 // {{ end }}
 // {{ end }}
 
@@ -723,6 +727,7 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 // */}}
 
 // {{ range $filterInfo := $.FilterInfos }}
+// {{ if or (not $filterInfo.HasFilter) $.JoinType.FilterSupported }}
 
 // buildLeftGroups takes a []group and expands each group into the output by
 // repeating each row in the group numRepeats times. For example, given an
@@ -781,6 +786,7 @@ LeftColLoop:
 	o.builderState.left.reset()
 }
 
+// {{ end }}
 // {{ end }}
 
 // {{/*
@@ -888,6 +894,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 // */}}
 
 // {{ range $filterInfo := $.FilterInfos }}
+// {{ if or (not $filterInfo.HasFilter) $.JoinType.FilterSupported }}
 
 // buildRightGroups takes a []group and repeats each group numRepeats times.
 // For example, given an input table:
@@ -948,8 +955,10 @@ RightColLoop:
 }
 
 // {{ end }}
+// {{ end }}
 
 // {{ range $filterInfo := $.FilterInfos }}
+// {{ if or (not $filterInfo.HasFilter) $.JoinType.FilterSupported }}
 
 // probe is where we generate the groups slices that are used in the build
 // phase. We do this by first assuming that every row in both batches
@@ -1158,6 +1167,7 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) build() {
 }
 
 // {{ end }}
+// {{ end }}
 
 // {{/*
 // This code snippet is executed when at least one of the input sources has
@@ -1215,6 +1225,7 @@ func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 // */}}
 
 // {{ range $filterInfo := $.FilterInfos }}
+// {{ if or (not $filterInfo.HasFilter) $.JoinType.FilterSupported }}
 
 // calculateOutputCount uses the toBuild field of each group and the output
 // batch size to determine the output count. Note that as soon as a group is
@@ -1304,4 +1315,5 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) Next(ctx context.Conte
 	}
 }
 
+// {{ end }}
 // {{ end }}
