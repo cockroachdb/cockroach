@@ -165,13 +165,13 @@ func getDescriptorByID(
 	log.Eventf(ctx, "fetching descriptor with ID %d", id)
 	descKey := sqlbase.MakeDescMetadataKey(id)
 	desc := &sqlbase.Descriptor{}
-	if err := txn.GetProto(ctx, descKey, desc); err != nil {
+	ts, err := txn.GetProtoTs(ctx, descKey, desc)
+	if err != nil {
 		return err
 	}
-
 	switch t := descriptor.(type) {
 	case *sqlbase.TableDescriptor:
-		table := desc.GetTable()
+		table := desc.Table(ts)
 		if table == nil {
 			return pgerror.Newf(pgcode.WrongObjectType,
 				"%q is not a table", desc.String())
@@ -216,7 +216,7 @@ func GetAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 		}
 		switch t := desc.Union.(type) {
 		case *sqlbase.Descriptor_Table:
-			table := desc.GetTable()
+			table := desc.Table(kv.Value.Timestamp)
 			if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
 				return nil, err
 			}

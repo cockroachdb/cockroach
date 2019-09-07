@@ -44,6 +44,7 @@ const (
 	VersionTopLevelForeignKeys
 	VersionAtomicChangeReplicasTrigger
 	VersionAtomicChangeReplicas
+	VersionTableDescModificationTimeFromMVCC
 
 	// Add new versions here (step one of two).
 
@@ -531,6 +532,18 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// 'false').
 		Key:     VersionAtomicChangeReplicas,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 9},
+	},
+	{
+		// VersionTableDescModificationTimeFromMVCC is https://github.com/cockroachdb/cockroach/pull/40581
+		//
+		// It represents an upgrade to the table descriptor format in which
+		// CreateAsOfTime and ModifiedTime are set to zero when new versions of
+		// table descriptors are written. This removes the need to fix the commit
+		// timestamp for transactions which update table descriptors. The value
+		// is then populated by the reading client with the MVCC timestamp of the
+		// row which contained the serialized table descriptor.
+		Key:     VersionTableDescModificationTimeFromMVCC,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 10},
 	},
 
 	// Add new versions here (step two of two).

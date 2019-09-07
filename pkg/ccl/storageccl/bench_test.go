@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 )
@@ -173,7 +174,7 @@ func BenchmarkImport(b *testing.B) {
 				{
 					// TODO(dan): The following should probably make it into
 					// dataccl.Backup somehow.
-					tableDesc := backup.Desc.Descriptors[len(backup.Desc.Descriptors)-1].GetTable()
+					tableDesc := backup.Desc.Descriptors[len(backup.Desc.Descriptors)-1].Table(hlc.Timestamp{})
 					if tableDesc == nil || tableDesc.ParentID == keys.SystemDatabaseID {
 						b.Fatalf("bad table descriptor: %+v", tableDesc)
 					}

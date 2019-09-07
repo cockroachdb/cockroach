@@ -44,7 +44,7 @@ func SplitAtIDHook(id uint32, cfg *config.SystemConfig) bool {
 	if dbDesc := desc.GetDatabase(); dbDesc != nil {
 		return false
 	}
-	if tableDesc := desc.GetTable(); tableDesc != nil {
+	if tableDesc := desc.Table(descVal.Timestamp); tableDesc != nil {
 		if viewStr := tableDesc.GetViewQuery(); viewStr != "" {
 			return false
 		}

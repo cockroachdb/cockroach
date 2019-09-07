@@ -164,7 +164,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	var asCols sqlbase.ResultColumns
 	var desc sqlbase.MutableTableDescriptor
 	var affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor
-	creationTime := params.p.txn.CommitTimestamp()
+	creationTime := params.creationTimeForNewTableDescriptor()
 	if n.n.As() {
 		asCols = planColumns(n.sourcePlan)
 		if !n.run.fromHeuristicPlanner && !n.n.AsHasUserSpecifiedPrimaryKey() {
@@ -1078,7 +1078,6 @@ func MakeTableDesc(
 	evalCtx *tree.EvalContext,
 ) (sqlbase.MutableTableDescriptor, error) {
 	desc := InitTableDescriptor(id, parentID, n.Table.Table(), creationTime, privileges)
-
 	for _, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
 			if !desc.IsVirtualTable() {

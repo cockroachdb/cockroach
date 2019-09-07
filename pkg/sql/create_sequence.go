@@ -77,7 +77,7 @@ func doCreateSequence(
 	privs := dbDesc.GetPrivileges()
 
 	desc, err := MakeSequenceTableDesc(name.Table(), opts,
-		dbDesc.ID, id, params.p.txn.CommitTimestamp(), privs, params.EvalContext().Settings)
+		dbDesc.ID, id, params.creationTimeForNewTableDescriptor(), privs, params.EvalContext().Settings)
 	if err != nil {
 		return err
 	}
