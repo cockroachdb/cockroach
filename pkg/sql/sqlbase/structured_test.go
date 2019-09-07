@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
@@ -1356,7 +1357,8 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 		cluster.BinaryMinimumSupportedVersion,
 		cluster.VersionByKey(cluster.VersionTopLevelForeignKeys),
 	)
-
+	// Use a non-zero ts for CreateAsOfTime and ModificationTime
+	ts := hlc.Timestamp{WallTime: 1}
 	testCases := []struct {
 		name       string
 		origin     oldFormatUpgradedPair
@@ -1366,8 +1368,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 			name: "simple",
 			origin: oldFormatUpgradedPair{
 				oldFormat: TableDescriptor{
-					ID:      1,
-					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					ID:               1,
+					CreateAsOfTime:   ts,
+					ModificationTime: ts,
+					Columns:          []ColumnDescriptor{{ID: 1}, {ID: 2}},
 					Indexes: []IndexDescriptor{
 						{
 							ID:        1,
@@ -1386,8 +1390,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 					},
 				},
 				expectedUpgraded: TableDescriptor{
-					ID:      1,
-					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					ID:               1,
+					CreateAsOfTime:   ts,
+					ModificationTime: ts,
+					Columns:          []ColumnDescriptor{{ID: 1}, {ID: 2}},
 					Indexes: []IndexDescriptor{
 						{
 							ID:        1,
@@ -1411,8 +1417,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 			},
 			referenced: oldFormatUpgradedPair{
 				oldFormat: TableDescriptor{
-					ID:      2,
-					Columns: []ColumnDescriptor{{ID: 2}},
+					ID:               2,
+					CreateAsOfTime:   ts,
+					ModificationTime: ts,
+					Columns:          []ColumnDescriptor{{ID: 2}},
 					Indexes: []IndexDescriptor{
 						{
 							ColumnIDs: ColumnIDs{2},
@@ -1427,8 +1435,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 					},
 				},
 				expectedUpgraded: TableDescriptor{
-					ID:      2,
-					Columns: []ColumnDescriptor{{ID: 2}},
+					ID:               2,
+					CreateAsOfTime:   ts,
+					ModificationTime: ts,
+					Columns:          []ColumnDescriptor{{ID: 2}},
 					Indexes: []IndexDescriptor{
 						{
 							ColumnIDs: ColumnIDs{2},
@@ -1455,8 +1465,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 			name: "primaryKey",
 			origin: oldFormatUpgradedPair{
 				oldFormat: TableDescriptor{
-					ID:      1,
-					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					ID:               1,
+					CreateAsOfTime:   ts,
+					ModificationTime: ts,
+					Columns:          []ColumnDescriptor{{ID: 1}, {ID: 2}},
 					PrimaryIndex: IndexDescriptor{
 						ID:        1,
 						ColumnIDs: ColumnIDs{1},
@@ -1473,8 +1485,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 					},
 				},
 				expectedUpgraded: TableDescriptor{
-					ID:      1,
-					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					ID:               1,
+					CreateAsOfTime:   ts,
+					ModificationTime: ts,
+					Columns:          []ColumnDescriptor{{ID: 1}, {ID: 2}},
 					PrimaryIndex: IndexDescriptor{
 						ID:        1,
 						ColumnIDs: ColumnIDs{1},
@@ -1496,8 +1510,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 			},
 			referenced: oldFormatUpgradedPair{
 				oldFormat: TableDescriptor{
-					ID:      2,
-					Columns: []ColumnDescriptor{{ID: 2}},
+					ID:               2,
+					CreateAsOfTime:   ts,
+					ModificationTime: ts,
+					Columns:          []ColumnDescriptor{{ID: 2}},
 					PrimaryIndex: IndexDescriptor{
 						ColumnIDs: ColumnIDs{2},
 						ID:        2,
@@ -1510,8 +1526,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 					},
 				},
 				expectedUpgraded: TableDescriptor{
-					ID:      2,
-					Columns: []ColumnDescriptor{{ID: 2}},
+					ID:               2,
+					CreateAsOfTime:   ts,
+					ModificationTime: ts,
+					Columns:          []ColumnDescriptor{{ID: 2}},
 					PrimaryIndex: IndexDescriptor{
 						ColumnIDs: ColumnIDs{2},
 						ID:        2,
@@ -1536,8 +1554,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 			name: "self-reference-cycle",
 			origin: oldFormatUpgradedPair{
 				oldFormat: TableDescriptor{
-					ID:      1,
-					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					ID:               1,
+					CreateAsOfTime:   ts,
+					ModificationTime: ts,
+					Columns:          []ColumnDescriptor{{ID: 1}, {ID: 2}},
 					Indexes: []IndexDescriptor{
 						{
 							ID:        1,
@@ -1582,8 +1602,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 					},
 				},
 				expectedUpgraded: TableDescriptor{
-					ID:      1,
-					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					ID:               1,
+					CreateAsOfTime:   ts,
+					ModificationTime: ts,
+					Columns:          []ColumnDescriptor{{ID: 1}, {ID: 2}},
 					Indexes: []IndexDescriptor{
 						{
 							ID:        1,
@@ -1656,8 +1678,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 			origin: oldFormatUpgradedPair{
 				oldFormatWasAlreadyUpgraded: true,
 				oldFormat: TableDescriptor{
-					ID:      1,
-					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					ID:               1,
+					CreateAsOfTime:   ts,
+					ModificationTime: ts,
+					Columns:          []ColumnDescriptor{{ID: 1}, {ID: 2}},
 					Indexes: []IndexDescriptor{
 						{
 							ID:        1,
@@ -1687,8 +1711,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 			// Our referenced table is *not* upgraded.
 			referenced: oldFormatUpgradedPair{
 				oldFormat: TableDescriptor{
-					ID:      2,
-					Columns: []ColumnDescriptor{{ID: 2}},
+					ID:               2,
+					CreateAsOfTime:   ts,
+					ModificationTime: ts,
+					Columns:          []ColumnDescriptor{{ID: 2}},
 					PrimaryIndex: IndexDescriptor{
 						ColumnIDs: ColumnIDs{2},
 						ID:        2,
@@ -1701,8 +1727,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 					},
 				},
 				expectedUpgraded: TableDescriptor{
-					ID:      2,
-					Columns: []ColumnDescriptor{{ID: 2}},
+					ID:               2,
+					CreateAsOfTime:   ts,
+					ModificationTime: ts,
+					Columns:          []ColumnDescriptor{{ID: 2}},
 					PrimaryIndex: IndexDescriptor{
 						ColumnIDs: ColumnIDs{2},
 						ID:        2,
@@ -1729,8 +1757,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 			// Origin table has *not* been upgraded.
 			origin: oldFormatUpgradedPair{
 				oldFormat: TableDescriptor{
-					ID:      1,
-					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					ID:               1,
+					CreateAsOfTime:   ts,
+					ModificationTime: ts,
+					Columns:          []ColumnDescriptor{{ID: 1}, {ID: 2}},
 					Indexes: []IndexDescriptor{
 						{
 							ID:        1,
@@ -1749,8 +1779,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 					},
 				},
 				expectedUpgraded: TableDescriptor{
-					ID:      1,
-					Columns: []ColumnDescriptor{{ID: 1}, {ID: 2}},
+					ID:               1,
+					CreateAsOfTime:   ts,
+					ModificationTime: ts,
+					Columns:          []ColumnDescriptor{{ID: 1}, {ID: 2}},
 					Indexes: []IndexDescriptor{
 						{
 							ID:        1,
@@ -1776,8 +1808,10 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 			referenced: oldFormatUpgradedPair{
 				oldFormatWasAlreadyUpgraded: true,
 				oldFormat: TableDescriptor{
-					ID:      2,
-					Columns: []ColumnDescriptor{{ID: 2}},
+					ID:               2,
+					CreateAsOfTime:   ts,
+					ModificationTime: ts,
+					Columns:          []ColumnDescriptor{{ID: 2}},
 					PrimaryIndex: IndexDescriptor{
 						ColumnIDs: ColumnIDs{2},
 						ID:        2,
@@ -1815,9 +1849,16 @@ func TestUpgradeDowngradeFKRepr(t *testing.T) {
 		tc.origin.oldFormat.Privileges = NewDefaultPrivilegeDescriptor()
 		tc.referenced.expectedUpgraded.Privileges = NewDefaultPrivilegeDescriptor()
 		tc.referenced.oldFormat.Privileges = NewDefaultPrivilegeDescriptor()
+		// Make sure that the table descriptors have initialized timestamps.
+		// They always will when being used in a schema change.
+		toDesc := func(tableDesc *TableDescriptor) *Descriptor {
+			desc := WrapDescriptor(tableDesc)
+			desc.Table(hlc.Timestamp{WallTime: 1})
+			return desc
+		}
 		txn := MapProtoGetter{Protos: map[interface{}]protoutil.Message{
-			string(MakeDescMetadataKey(tc.origin.oldFormat.ID)):     WrapDescriptor(&tc.origin.oldFormat),
-			string(MakeDescMetadataKey(tc.referenced.oldFormat.ID)): WrapDescriptor(&tc.referenced.oldFormat),
+			string(MakeDescMetadataKey(tc.origin.oldFormat.ID)):     toDesc(&tc.origin.oldFormat),
+			string(MakeDescMetadataKey(tc.referenced.oldFormat.ID)): toDesc(&tc.referenced.oldFormat),
 		}}
 
 		tables := []oldFormatUpgradedPair{tc.origin, tc.referenced}
