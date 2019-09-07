@@ -66,13 +66,15 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 
 	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
 	desc := &Descriptor{}
-	if err := kvDB.GetProto(ctx, descKey, desc); err != nil || (*desc == Descriptor{}) {
+	ts, err := kvDB.GetProtoTs(ctx, descKey, desc)
+	if err != nil || (*desc == Descriptor{}) {
 		log.Fatalf(ctx, "proto with id %d missing. err: %v", gr.ValueInt(), err)
 	}
 	tableDesc := desc.GetTable()
 	if tableDesc == nil {
 		return nil
 	}
+	tableDesc.MaybeSetModificationTimeFromMVCCTimestamp(ctx, ts)
 	err = tableDesc.MaybeFillInDescriptor(ctx, kvDB)
 	if err != nil {
 		log.Fatalf(ctx, "failure to fill in descriptor. err: %v", err)
