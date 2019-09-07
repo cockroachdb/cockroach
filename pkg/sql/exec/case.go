@@ -36,12 +36,16 @@ type caseOp struct {
 }
 
 func (c *caseOp) ChildCount() int {
-	return 1
+	return 1 + len(c.caseOps) + 1
 }
 
 func (c *caseOp) Child(nth int) OpNode {
 	if nth == 0 {
-		return c.buffer
+		return c.buffer.input
+	} else if nth < len(c.caseOps)+1 {
+		return c.caseOps[nth-1]
+	} else if nth == 1+len(c.caseOps) {
+		return c.elseOp
 	}
 	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid idx %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
