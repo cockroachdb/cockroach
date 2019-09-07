@@ -8,11 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package distsql
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -64,7 +63,7 @@ func processExpression(
 		return nil, err
 	}
 
-	// Bind IndexedVars to our eh.vars.
+	// Bind IndexedVars to our eh.Vars.
 	v := ivarBinder{h: h, err: nil}
 	expr, _ = tree.WalkExpr(&v, expr)
 	if v.err != nil {
@@ -93,150 +92,104 @@ func processExpression(
 	return expr.(tree.TypedExpr), nil
 }
 
-// exprHelper implements the common logic around evaluating an expression that
+// ExprHelper implements the common logic around evaluating an expression that
 // depends on a set of values.
-type exprHelper struct {
+type ExprHelper struct {
 	_ util.NoCopy
 
-	expr tree.TypedExpr
-	// vars is used to generate IndexedVars that are "backed" by the values in
+	Expr tree.TypedExpr
+	// Vars is used to generate IndexedVars that are "backed" by the values in
 	// `row`.
-	vars tree.IndexedVarHelper
+	Vars tree.IndexedVarHelper
 
 	evalCtx *tree.EvalContext
 
-	types      []types.T
-	row        sqlbase.EncDatumRow
+	Types      []types.T
+	Row        sqlbase.EncDatumRow
 	datumAlloc sqlbase.DatumAlloc
 }
 
-func (eh *exprHelper) String() string {
-	if eh.expr == nil {
+func (eh *ExprHelper) String() string {
+	if eh.Expr == nil {
 		return "none"
 	}
-	return eh.expr.String()
+	return eh.Expr.String()
 }
 
-// exprHelper implements tree.IndexedVarContainer.
-var _ tree.IndexedVarContainer = &exprHelper{}
+// ExprHelper implements tree.IndexedVarContainer.
+var _ tree.IndexedVarContainer = &ExprHelper{}
 
 // IndexedVarResolvedType is part of the tree.IndexedVarContainer interface.
-func (eh *exprHelper) IndexedVarResolvedType(idx int) *types.T {
-	return &eh.types[idx]
+func (eh *ExprHelper) IndexedVarResolvedType(idx int) *types.T {
+	return &eh.Types[idx]
 }
 
 // IndexedVarEval is part of the tree.IndexedVarContainer interface.
-func (eh *exprHelper) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	err := eh.row[idx].EnsureDecoded(&eh.types[idx], &eh.datumAlloc)
+func (eh *ExprHelper) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+	err := eh.Row[idx].EnsureDecoded(&eh.Types[idx], &eh.datumAlloc)
 	if err != nil {
 		return nil, err
 	}
-	return eh.row[idx].Datum.Eval(ctx)
+	return eh.Row[idx].Datum.Eval(ctx)
 }
 
 // IndexedVarNodeFormatter is part of the parser.IndexedVarContainer interface.
-func (eh *exprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+func (eh *ExprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	n := tree.Name(fmt.Sprintf("$%d", idx))
 	return &n
 }
 
-func (eh *exprHelper) init(
+// Init initializes the ExprHelper.
+func (eh *ExprHelper) Init(
 	expr distsqlpb.Expression, types []types.T, evalCtx *tree.EvalContext,
 ) error {
 	if expr.Empty() {
 		return nil
 	}
 	eh.evalCtx = evalCtx
-	eh.types = types
-	eh.vars = tree.MakeIndexedVarHelper(eh, len(types))
+	eh.Types = types
+	eh.Vars = tree.MakeIndexedVarHelper(eh, len(types))
 
 	if expr.LocalExpr != nil {
-		eh.expr = expr.LocalExpr
-		// Bind IndexedVars to our eh.vars.
-		eh.vars.Rebind(eh.expr, true /* alsoReset */, false /* normalizeToNonNil */)
+		eh.Expr = expr.LocalExpr
+		// Bind IndexedVars to our eh.Vars.
+		eh.Vars.Rebind(eh.Expr, true /* alsoReset */, false /* normalizeToNonNil */)
 		return nil
 	}
 	var err error
 	semaContext := tree.MakeSemaContext()
-	eh.expr, err = processExpression(expr, evalCtx, &semaContext, &eh.vars)
+	eh.Expr, err = processExpression(expr, evalCtx, &semaContext, &eh.Vars)
 	if err != nil {
 		return err
 	}
 	var t transform.ExprTransformContext
-	if t.AggregateInExpr(eh.expr, evalCtx.SessionData.SearchPath) {
-		return errors.Errorf("expression '%s' has aggregate", eh.expr)
+	if t.AggregateInExpr(eh.Expr, evalCtx.SessionData.SearchPath) {
+		return errors.Errorf("expression '%s' has aggregate", eh.Expr)
 	}
 	return nil
 }
 
-// evalFilter is used for filter expressions; it evaluates the expression and
+// EvalFilter is used for filter expressions; it evaluates the expression and
 // returns whether the filter passes.
-func (eh *exprHelper) evalFilter(row sqlbase.EncDatumRow) (bool, error) {
-	eh.row = row
+func (eh *ExprHelper) EvalFilter(row sqlbase.EncDatumRow) (bool, error) {
+	eh.Row = row
 	eh.evalCtx.PushIVarContainer(eh)
-	pass, err := sqlbase.RunFilter(eh.expr, eh.evalCtx)
+	pass, err := sqlbase.RunFilter(eh.Expr, eh.evalCtx)
 	eh.evalCtx.PopIVarContainer()
 	return pass, err
 }
 
-// Given a row, eval evaluates the wrapped expression and returns the
+// Eval - given a row - evaluates the wrapped expression and returns the
 // resulting datum. For example, given a row (1, 2, 3, 4, 5):
 //  '@2' would return '2'
 //  '@2 + @5' would return '7'
 //  '@1' would return '1'
 //  '@2 + 10' would return '12'
-func (eh *exprHelper) eval(row sqlbase.EncDatumRow) (tree.Datum, error) {
-	eh.row = row
+func (eh *ExprHelper) Eval(row sqlbase.EncDatumRow) (tree.Datum, error) {
+	eh.Row = row
 
 	eh.evalCtx.PushIVarContainer(eh)
-	d, err := eh.expr.Eval(eh.evalCtx)
+	d, err := eh.Expr.Eval(eh.evalCtx)
 	eh.evalCtx.PopIVarContainer()
 	return d, err
 }
-
-// findIVarsInRange searches expr for presence of tree.IndexedVars with indices
-// in range [start, end). It returns a slice containing all such indices.
-func findIVarsInRange(expr distsqlpb.Expression, start int, end int) []uint32 {
-	res := make([]uint32, 0)
-	if start >= end {
-		return res
-	}
-	if expr.LocalExpr != nil {
-		visitor := ivarExpressionVisitor{ivarSeen: make([]bool, end)}
-		_, _ = tree.WalkExpr(visitor, expr.LocalExpr)
-		for i := start; i < end; i++ {
-			if visitor.ivarSeen[i] {
-				res = append(res, uint32(i))
-			}
-		}
-	} else {
-		for i := start; i < end; i++ {
-			if strings.Contains(expr.Expr, fmt.Sprintf("@%d", i+1)) {
-				res = append(res, uint32(i))
-			}
-		}
-	}
-	return res
-}
-
-type ivarExpressionVisitor struct {
-	ivarSeen []bool
-}
-
-var _ tree.Visitor = &ivarExpressionVisitor{}
-
-// VisitPre is a part of tree.Visitor interface.
-func (i ivarExpressionVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
-	switch e := expr.(type) {
-	case *tree.IndexedVar:
-		if e.Idx < len(i.ivarSeen) {
-			i.ivarSeen[e.Idx] = true
-		}
-		return false, expr
-	default:
-		return true, expr
-	}
-}
-
-// VisitPost is a part of tree.Visitor interface.
-func (i ivarExpressionVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }

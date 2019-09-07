@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -28,7 +29,7 @@ import (
 // of the index is distinct. It uses the index to seek to distinct values
 // of the prefix instead of doing a full table scan.
 type indexSkipTableReader struct {
-	ProcessorBase
+	distsql.ProcessorBase
 
 	spans roachpb.Spans
 
@@ -59,16 +60,16 @@ var istrPool = sync.Pool{
 	},
 }
 
-var _ Processor = &indexSkipTableReader{}
-var _ RowSource = &indexSkipTableReader{}
+var _ distsql.Processor = &indexSkipTableReader{}
+var _ distsql.RowSource = &indexSkipTableReader{}
 var _ distsqlpb.MetadataSource = &indexSkipTableReader{}
 
 func newIndexSkipTableReader(
-	flowCtx *FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec *distsqlpb.IndexSkipTableReaderSpec,
 	post *distsqlpb.PostProcessSpec,
-	output RowReceiver,
+	output distsql.RowReceiver,
 ) (*indexSkipTableReader, error) {
 	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
@@ -78,7 +79,7 @@ func newIndexSkipTableReader(
 
 	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
-	t.ignoreMisplannedRanges = flowCtx.local
+	t.ignoreMisplannedRanges = flowCtx.Local
 	t.reverse = spec.Reverse
 
 	if err := t.Init(
@@ -89,7 +90,7 @@ func newIndexSkipTableReader(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		ProcStateOpts{
+		distsql.ProcStateOpts{
 			InputsToDrain:        nil,
 			TrailingMetaCallback: t.generateTrailingMeta,
 		},
@@ -97,7 +98,7 @@ func newIndexSkipTableReader(
 		return nil, err
 	}
 
-	neededColumns := t.out.neededColumns()
+	neededColumns := t.Out.NeededColumns()
 	t.keyPrefixLen = neededColumns.Len()
 
 	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
@@ -156,7 +157,7 @@ func (t *indexSkipTableReader) Start(ctx context.Context) context.Context {
 }
 
 func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	for t.State == StateRunning {
+	for t.State == distsql.StateRunning {
 		if t.currentSpan >= len(t.spans) {
 			t.MoveToDraining(nil)
 			return nil, t.DrainHelper()
@@ -164,8 +165,8 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 
 		// Start a scan to get the smallest value within this span.
 		err := t.fetcher.StartScan(
-			t.Ctx, t.flowCtx.txn, t.spans[t.currentSpan:t.currentSpan+1],
-			true, 1 /* batch size limit */, t.flowCtx.traceKV,
+			t.Ctx, t.FlowCtx.Txn, t.spans[t.currentSpan:t.currentSpan+1],
+			true, 1 /* batch size limit */, t.FlowCtx.TraceKV,
 		)
 		if err != nil {
 			t.MoveToDraining(err)
@@ -175,7 +176,7 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		// Range info resets once a scan begins, so we need to maintain
 		// the range info we get after each scan.
 		if !t.ignoreMisplannedRanges {
-			ranges := misplannedRanges(t.Ctx, t.fetcher.GetRangesInfo(), t.flowCtx.NodeID)
+			ranges := distsql.MisplannedRanges(t.Ctx, t.fetcher.GetRangesInfo(), t.FlowCtx.NodeID)
 			for _, r := range ranges {
 				t.misplannedRanges = roachpb.InsertRangeInfo(t.misplannedRanges, r)
 			}
@@ -259,7 +260,7 @@ func (t *indexSkipTableReader) generateMeta(ctx context.Context) []distsqlpb.Pro
 			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: t.misplannedRanges})
 		}
 	}
-	if meta := getTxnCoordMeta(ctx, t.flowCtx.txn); meta != nil {
+	if meta := distsql.GetTxnCoordMeta(ctx, t.FlowCtx.Txn); meta != nil {
 		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 	return trailingMeta

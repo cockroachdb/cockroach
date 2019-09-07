@@ -13,6 +13,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -24,25 +25,25 @@ import (
 // ordinalityProcessor is the processor of the WITH ORDINALITY operator, which
 // adds an additional ordinal column to the result.
 type ordinalityProcessor struct {
-	ProcessorBase
+	distsql.ProcessorBase
 
-	input  RowSource
+	input  distsql.RowSource
 	curCnt int64
 }
 
-var _ Processor = &ordinalityProcessor{}
-var _ RowSource = &ordinalityProcessor{}
+var _ distsql.Processor = &ordinalityProcessor{}
+var _ distsql.RowSource = &ordinalityProcessor{}
 
 const ordinalityProcName = "ordinality"
 
 func newOrdinalityProcessor(
-	flowCtx *FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec *distsqlpb.OrdinalitySpec,
-	input RowSource,
+	input distsql.RowSource,
 	post *distsqlpb.PostProcessSpec,
-	output RowReceiver,
-) (RowSourcedProcessor, error) {
+	output distsql.RowReceiver,
+) (distsql.RowSourcedProcessor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
 	o := &ordinalityProcessor{input: input, curCnt: 1}
 
@@ -57,8 +58,8 @@ func newOrdinalityProcessor(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		ProcStateOpts{
-			InputsToDrain: []RowSource{o.input},
+		distsql.ProcStateOpts{
+			InputsToDrain: []distsql.RowSource{o.input},
 			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
 				o.ConsumerClosed()
 				return nil
@@ -68,8 +69,8 @@ func newOrdinalityProcessor(
 	}
 
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		o.input = NewInputStatCollector(o.input)
-		o.finishTrace = o.outputStatsToTrace
+		o.input = distsql.NewInputStatCollector(o.input)
+		o.FinishTrace = o.outputStatsToTrace
 	}
 
 	return o, nil
@@ -83,7 +84,7 @@ func (o *ordinalityProcessor) Start(ctx context.Context) context.Context {
 
 // Next is part of the RowSource interface.
 func (o *ordinalityProcessor) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	for o.State == StateRunning {
+	for o.State == distsql.StateRunning {
 		row, meta := o.input.Next()
 
 		if meta != nil {
@@ -129,7 +130,7 @@ func (os *OrdinalityStats) StatsForQueryPlan() []string {
 // outputStatsToTrace outputs the collected distinct stats to the trace. Will
 // fail silently if the Distinct processor is not collecting stats.
 func (o *ordinalityProcessor) outputStatsToTrace() {
-	is, ok := getInputStats(o.flowCtx, o.input)
+	is, ok := distsql.GetInputStats(o.FlowCtx, o.input)
 	if !ok {
 		return
 	}

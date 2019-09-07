@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -559,7 +560,7 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 	}
 
 	types := make([]types.T, 0)
-	rb := NewRowBuffer(types, nil /* rows */, RowBufferArgs{})
+	rb := newRowBuffer(types, nil /* rows */, rowBufferArgs{})
 	ctx, flow, err := distSQLSrv.SetupSyncFlow(ctx, &distSQLSrv.memMonitor, &req, rb)
 	if err != nil {
 		t.Fatal(err)
@@ -587,8 +588,8 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 
 	fr := makeFlowRegistry(0)
 	wg := sync.WaitGroup{}
-	rc := &RowChannel{}
-	rc.initWithBufSizeAndNumSenders(sqlbase.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
+	rc := &distsql.RowChannel{}
+	rc.InitWithBufSizeAndNumSenders(sqlbase.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
 	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
 		0: {
 			receiver:  rowInboundStreamHandler{rc},
@@ -619,10 +620,10 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	// pushChan is used to be able to tell when a Push on the RowBuffer has
 	// occurred.
 	pushChan := make(chan *distsqlpb.ProducerMetadata)
-	rc := NewRowBuffer(
+	rc := newRowBuffer(
 		sqlbase.OneIntCol,
 		nil, /* rows */
-		RowBufferArgs{
+		rowBufferArgs{
 			OnPush: func(_ sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata) {
 				pushChan <- meta
 				<-pushChan
@@ -671,10 +672,10 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 
 	ctx := context.Background()
 	fr := makeFlowRegistry(0)
-	left := &RowChannel{}
-	left.initWithBufSizeAndNumSenders(nil /* types */, 1, 1)
-	right := &RowChannel{}
-	right.initWithBufSizeAndNumSenders(nil /* types */, 1, 1)
+	left := &distsql.RowChannel{}
+	left.InitWithBufSizeAndNumSenders(nil /* types */, 1, 1)
+	right := &distsql.RowChannel{}
+	right.InitWithBufSizeAndNumSenders(nil /* types */, 1, 1)
 
 	wgLeft := sync.WaitGroup{}
 	wgLeft.Add(1)
@@ -696,14 +697,14 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 
 	// RegisterFlow with an immediate timeout.
 	flow := &Flow{
-		FlowCtx: FlowCtx{
-			id: distsqlpb.FlowID{UUID: uuid.FastMakeV4()},
+		FlowCtx: distsql.FlowCtx{
+			ID: distsqlpb.FlowID{UUID: uuid.FastMakeV4()},
 		},
 		inboundStreams: inboundStreams,
 		flowRegistry:   fr,
 	}
 	if err := fr.RegisterFlow(
-		ctx, flow.id, flow, inboundStreams, 10*time.Second, /* timeout */
+		ctx, flow.ID, flow, inboundStreams, 10*time.Second, /* timeout */
 	); err != nil {
 		t.Fatal(err)
 	}

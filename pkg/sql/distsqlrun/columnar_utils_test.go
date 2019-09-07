@@ -15,8 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/execplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -46,51 +48,51 @@ func verifyColOperator(
 
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := makeTestDiskMonitor(ctx, st)
+	diskMonitor := distsql.MakeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
-	flowCtx := &FlowCtx{
+	flowCtx := &distsql.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &ServerConfig{
+		Cfg: &distsql.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
 			DiskMonitor: diskMonitor,
 		},
 	}
 
-	inputsProc := make([]RowSource, len(inputs))
-	inputsColOp := make([]RowSource, len(inputs))
+	inputsProc := make([]distsql.RowSource, len(inputs))
+	inputsColOp := make([]distsql.RowSource, len(inputs))
 	for i, input := range inputs {
-		inputsProc[i] = NewRepeatableRowSource(inputTypes[i], input)
-		inputsColOp[i] = NewRepeatableRowSource(inputTypes[i], input)
+		inputsProc[i] = distsql.NewRepeatableRowSource(inputTypes[i], input)
+		inputsColOp[i] = distsql.NewRepeatableRowSource(inputTypes[i], input)
 	}
 
-	proc, err := newProcessor(ctx, flowCtx, 0, &pspec.Core, &pspec.Post, inputsProc, []RowReceiver{nil}, nil)
+	proc, err := newProcessor(ctx, flowCtx, 0, &pspec.Core, &pspec.Post, inputsProc, []distsql.RowReceiver{nil}, nil)
 	if err != nil {
 		return err
 	}
-	outProc, ok := proc.(RowSource)
+	outProc, ok := proc.(distsql.RowSource)
 	if !ok {
 		return errors.New("processor is unexpectedly not a RowSource")
 	}
 
 	columnarizers := make([]exec.Operator, len(inputs))
 	for i, input := range inputsColOp {
-		c, err := newColumnarizer(ctx, flowCtx, int32(i)+1, input)
+		c, err := execplan.NewColumnarizer(ctx, flowCtx, int32(i)+1, input)
 		if err != nil {
 			return err
 		}
 		columnarizers[i] = c
 	}
 
-	result, err := newColOperator(ctx, flowCtx, pspec, columnarizers)
+	result, err := execplan.NewColOperator(ctx, flowCtx, pspec, columnarizers)
 	if err != nil {
 		return err
 	}
 
-	outColOp, err := newMaterializer(
+	outColOp, err := distsql.NewMaterializer(
 		flowCtx,
 		int32(len(inputs))+2,
-		result.op,
+		result.Op,
 		outputTypes,
 		&distsqlpb.PostProcessSpec{},
 		nil, /* output */

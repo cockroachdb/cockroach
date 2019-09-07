@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -33,25 +34,25 @@ var CTASPlanResultTypes = []types.T{
 }
 
 type bulkRowWriter struct {
-	flowCtx        *FlowCtx
+	flowCtx        *distsql.FlowCtx
 	processorID    int32
 	batchIdxAtomic int64
 	spec           distsqlpb.BulkRowWriterSpec
-	input          RowSource
-	out            ProcOutputHelper
-	output         RowReceiver
+	input          distsql.RowSource
+	out            distsql.ProcOutputHelper
+	output         distsql.RowReceiver
 	summary        roachpb.BulkOpSummary
 }
 
-var _ Processor = &bulkRowWriter{}
+var _ distsql.Processor = &bulkRowWriter{}
 
 func newBulkRowWriterProcessor(
-	flowCtx *FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec distsqlpb.BulkRowWriterSpec,
-	input RowSource,
-	output RowReceiver,
-) (Processor, error) {
+	input distsql.RowSource,
+	output distsql.RowReceiver,
+) (distsql.Processor, error) {
 	c := &bulkRowWriter{
 		flowCtx:        flowCtx,
 		processorID:    processorID,
@@ -121,7 +122,7 @@ func (sp *bulkRowWriter) convertLoop(
 
 	done := false
 	alloc := &sqlbase.DatumAlloc{}
-	input := MakeNoMetadataRowSource(sp.input, sp.output)
+	input := distsql.MakeNoMetadataRowSource(sp.input, sp.output)
 	typs := sp.input.OutputTypes()
 
 	for {
@@ -191,7 +192,7 @@ func (sp *bulkRowWriter) Run(ctx context.Context) {
 
 	conv, err := row.NewDatumRowConverter(&sp.spec.Table, nil /* targetColNames */, evalCtx, kvCh)
 	if err != nil {
-		DrainAndClose(
+		distsql.DrainAndClose(
 			ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
 		return
 	}
@@ -217,11 +218,11 @@ func (sp *bulkRowWriter) Run(ctx context.Context) {
 			sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
 		}); emitErr != nil {
 			err = emitErr
-		} else if cs != NeedMoreRows {
+		} else if cs != distsql.NeedMoreRows {
 			err = errors.New("unexpected closure of consumer")
 		}
 	}
 
-	DrainAndClose(
+	distsql.DrainAndClose(
 		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -63,9 +64,9 @@ func TestOutbox(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 
 	clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
-	flowCtx := FlowCtx{
+	flowCtx := distsql.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &ServerConfig{
+		Cfg: &distsql.ServerConfig{
 			Settings:   st,
 			Stopper:    stopper,
 			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
@@ -90,8 +91,8 @@ func TestOutbox(t *testing.T) {
 			row := sqlbase.EncDatumRow{
 				sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(0))),
 			}
-			if consumerStatus := outbox.Push(row, nil /* meta */); consumerStatus != NeedMoreRows {
-				return errors.Errorf("expected status: %d, got: %d", NeedMoreRows, consumerStatus)
+			if consumerStatus := outbox.Push(row, nil /* meta */); consumerStatus != distsql.NeedMoreRows {
+				return errors.Errorf("expected status: %d, got: %d", distsql.NeedMoreRows, consumerStatus)
 			}
 
 			// Send rows until the drain request is observed.
@@ -100,18 +101,18 @@ func TestOutbox(t *testing.T) {
 					sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(-1))),
 				}
 				consumerStatus := outbox.Push(row, nil /* meta */)
-				if consumerStatus == DrainRequested {
+				if consumerStatus == distsql.DrainRequested {
 					break
 				}
-				if consumerStatus == ConsumerClosed {
+				if consumerStatus == distsql.ConsumerClosed {
 					return errors.Errorf("consumer closed prematurely")
 				}
 			}
 
 			// Now send another row that the outbox will discard.
 			row = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(2)))}
-			if consumerStatus := outbox.Push(row, nil /* meta */); consumerStatus != DrainRequested {
-				return errors.Errorf("expected status: %d, got: %d", NeedMoreRows, consumerStatus)
+			if consumerStatus := outbox.Push(row, nil /* meta */); consumerStatus != distsql.DrainRequested {
+				return errors.Errorf("expected status: %d, got: %d", distsql.NeedMoreRows, consumerStatus)
 			}
 
 			// Send some metadata.
@@ -219,9 +220,9 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 
 	clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
-	flowCtx := FlowCtx{
+	flowCtx := distsql.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &ServerConfig{
+		Cfg: &distsql.ServerConfig{
 			Settings:   st,
 			Stopper:    stopper,
 			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
@@ -293,9 +294,9 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			defer evalCtx.Stop(context.Background())
 
 			clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
-			flowCtx := FlowCtx{
+			flowCtx := distsql.FlowCtx{
 				EvalCtx: &evalCtx,
-				Cfg: &ServerConfig{
+				Cfg: &distsql.ServerConfig{
 					Settings:   st,
 					Stopper:    stopper,
 					NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
@@ -371,8 +372,8 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				// Wait for the consumer to connect.
 				call := <-mockServer.RunSyncFlowCalls
 				outbox = newOutboxSyncFlowStream(call.Stream)
-				outbox.setFlowCtx(&FlowCtx{
-					Cfg: &ServerConfig{
+				outbox.setFlowCtx(&distsql.FlowCtx{
+					Cfg: &distsql.ServerConfig{
 						Settings: cluster.MakeTestingClusterSettings(),
 						Stopper:  stopper,
 					},
@@ -429,9 +430,9 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 
 	clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
-	flowCtx := FlowCtx{
+	flowCtx := distsql.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &ServerConfig{
+		Cfg: &distsql.ServerConfig{
 			Settings:   st,
 			Stopper:    stopper,
 			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
@@ -481,9 +482,9 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	flowCtx := FlowCtx{
+	flowCtx := distsql.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &ServerConfig{
+		Cfg: &distsql.ServerConfig{
 			Settings: st,
 			Stopper:  stopper,
 			// a nil nodeDialer will always fail to connect.
@@ -522,7 +523,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 	// Also, make sure that pushing to the outbox after its failed shows that
 	// it's been correctly ConsumerClosed.
 	status := outbox.RowChannel.Push(nil, &distsqlpb.ProducerMetadata{})
-	if status != ConsumerClosed {
+	if status != distsql.ConsumerClosed {
 		t.Fatalf("expected status=ConsumerClosed, got %s", status)
 	}
 
@@ -553,9 +554,9 @@ func BenchmarkOutbox(b *testing.B) {
 			defer evalCtx.Stop(context.Background())
 
 			clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
-			flowCtx := FlowCtx{
+			flowCtx := distsql.FlowCtx{
 				EvalCtx: &evalCtx,
-				Cfg: &ServerConfig{
+				Cfg: &distsql.ServerConfig{
 					Settings:   st,
 					Stopper:    stopper,
 					NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),

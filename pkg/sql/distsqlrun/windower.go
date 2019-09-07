@@ -16,6 +16,7 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -30,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // GetWindowFunctionInfo returns windowFunc constructor and the return type
@@ -112,13 +113,13 @@ const memRequiredByWindower = 100 * 1024
 // columns and puts the output of a window function windowFn at
 // windowFn.outputColIdx.
 type windower struct {
-	ProcessorBase
+	distsql.ProcessorBase
 
 	// runningState represents the state of the windower. This is in addition to
 	// ProcessorBase.State - the runningState is only relevant when
 	// ProcessorBase.State == StateRunning.
 	runningState windowerState
-	input        RowSource
+	input        distsql.RowSource
 	inputDone    bool
 	inputTypes   []types.T
 	outputTypes  []types.T
@@ -145,18 +146,18 @@ type windower struct {
 	outputRow           sqlbase.EncDatumRow
 }
 
-var _ Processor = &windower{}
-var _ RowSource = &windower{}
+var _ distsql.Processor = &windower{}
+var _ distsql.RowSource = &windower{}
 
 const windowerProcName = "windower"
 
 func newWindower(
-	flowCtx *FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec *distsqlpb.WindowerSpec,
-	input RowSource,
+	input distsql.RowSource,
 	post *distsqlpb.PostProcessSpec,
-	output RowReceiver,
+	output distsql.RowReceiver,
 ) (*windower, error) {
 	w := &windower{
 		input: input,
@@ -203,7 +204,7 @@ func newWindower(
 	// windower will overflow to disk if this limit is not enough.
 	limit := flowCtx.Cfg.TestingKnobs.MemoryLimitBytes
 	if limit <= 0 {
-		limit = settingWorkMemBytes.Get(&st.SV)
+		limit = distsql.SettingWorkMemBytes.Get(&st.SV)
 		if limit < memRequiredByWindower {
 			return nil, errors.Errorf(
 				"window functions require %d bytes of RAM but only %d are in the budget. "+
@@ -229,7 +230,7 @@ func newWindower(
 		processorID,
 		output,
 		&limitedMon,
-		ProcStateOpts{InputsToDrain: []RowSource{w.input},
+		distsql.ProcStateOpts{InputsToDrain: []distsql.RowSource{w.input},
 			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
 				w.close()
 				return nil
@@ -238,7 +239,7 @@ func newWindower(
 		return nil, err
 	}
 
-	w.diskMonitor = NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "windower-disk")
+	w.diskMonitor = distsql.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "windower-disk")
 	w.allRowsPartitioned = rowcontainer.NewHashDiskBackedRowContainer(
 		nil, /* memRowContainer */
 		evalCtx,
@@ -259,8 +260,8 @@ func newWindower(
 	w.acc = w.MemMonitor.MakeBoundAccount()
 
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		w.input = NewInputStatCollector(w.input)
-		w.finishTrace = w.outputStatsToTrace
+		w.input = distsql.NewInputStatCollector(w.input)
+		w.FinishTrace = w.outputStatsToTrace
 	}
 
 	return w, nil
@@ -277,7 +278,7 @@ func (w *windower) Start(ctx context.Context) context.Context {
 
 // Next is part of the RowSource interface.
 func (w *windower) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	for w.State == StateRunning {
+	for w.State == distsql.StateRunning {
 		var row sqlbase.EncDatumRow
 		var meta *distsqlpb.ProducerMetadata
 		switch w.runningState {
@@ -313,7 +314,7 @@ func (w *windower) close() {
 			w.partition.Close(w.Ctx)
 		}
 		for _, builtin := range w.builtins {
-			builtin.Close(w.Ctx, w.evalCtx)
+			builtin.Close(w.Ctx, w.EvalCtx)
 		}
 		w.acc.Close(w.Ctx)
 		w.MemMonitor.Stop(w.Ctx)
@@ -374,7 +375,7 @@ func (w *windower) emitRow() (windowerState, sqlbase.EncDatumRow, *distsqlpb.Pro
 				return windowerStateUnknown, nil, w.DrainHelper()
 			}
 
-			if err := w.computeWindowFunctions(w.Ctx, w.evalCtx); err != nil {
+			if err := w.computeWindowFunctions(w.Ctx, w.EvalCtx); err != nil {
 				w.MoveToDraining(err)
 				return windowerStateUnknown, nil, w.DrainHelper()
 			}
@@ -695,8 +696,8 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 	w.partition = rowcontainer.NewDiskBackedIndexedRowContainer(
 		ordering,
 		w.inputTypes,
-		w.evalCtx,
-		w.flowCtx.Cfg.TempStorage,
+		w.EvalCtx,
+		w.FlowCtx.Cfg.TempStorage,
 		w.MemMonitor,
 		w.diskMonitor,
 		0, /* rowCapacity */
@@ -911,7 +912,7 @@ func (ws *WindowerStats) StatsForQueryPlan() []string {
 	)
 }
 func (w *windower) outputStatsToTrace() {
-	is, ok := getInputStats(w.flowCtx, w.input)
+	is, ok := distsql.GetInputStats(w.FlowCtx, w.input)
 	if !ok {
 		return
 	}

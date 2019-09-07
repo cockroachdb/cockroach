@@ -13,6 +13,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -24,7 +25,7 @@ import (
 // streamGroupAccumulator groups input rows coming from src into groups dictated
 // by equality according to the ordering columns.
 type streamGroupAccumulator struct {
-	src   RowSource
+	src   distsql.RowSource
 	types []types.T
 
 	// srcConsumed is set once src has been exhausted.
@@ -46,7 +47,7 @@ type streamGroupAccumulator struct {
 }
 
 func makeStreamGroupAccumulator(
-	src RowSource, ordering sqlbase.ColumnOrdering, memMonitor *mon.BytesMonitor,
+	src distsql.RowSource, ordering sqlbase.ColumnOrdering, memMonitor *mon.BytesMonitor,
 ) streamGroupAccumulator {
 	return streamGroupAccumulator{
 		src:      src,

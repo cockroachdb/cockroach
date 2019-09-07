@@ -14,6 +14,7 @@ import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -56,7 +57,7 @@ func (s vectorizedInboundStreamHandler) timeout(err error) {
 }
 
 type rowInboundStreamHandler struct {
-	RowReceiver
+	distsql.RowReceiver
 }
 
 var _ inboundStreamHandler = rowInboundStreamHandler{}
@@ -86,7 +87,7 @@ func ProcessInboundStream(
 	ctx context.Context,
 	stream distsqlpb.DistSQL_FlowStreamServer,
 	firstMsg *distsqlpb.ProducerMessage,
-	dst RowReceiver,
+	dst distsql.RowReceiver,
 	f *Flow,
 ) error {
 
@@ -108,7 +109,7 @@ func processInboundStreamHelper(
 	ctx context.Context,
 	stream distsqlpb.DistSQL_FlowStreamServer,
 	firstMsg *distsqlpb.ProducerMessage,
-	dst RowReceiver,
+	dst distsql.RowReceiver,
 	f *Flow,
 ) error {
 	draining := false
@@ -199,7 +200,7 @@ func sendDrainSignalToStreamProducer(
 func processProducerMessage(
 	ctx context.Context,
 	stream distsqlpb.DistSQL_FlowStreamServer,
-	dst RowReceiver,
+	dst distsql.RowReceiver,
 	sd *StreamDecoder,
 	draining *bool,
 	msg *distsqlpb.ProducerMessage,
@@ -234,9 +235,9 @@ func processProducerMessage(
 			continue
 		}
 		switch dst.Push(row, meta) {
-		case NeedMoreRows:
+		case distsql.NeedMoreRows:
 			continue
-		case DrainRequested:
+		case distsql.DrainRequested:
 			// The rest of rows are not needed by the consumer. We'll send a drain
 			// signal to the producer and expect it to quickly send trailing
 			// metadata and close its side of the stream, at which point we also
@@ -247,7 +248,7 @@ func processProducerMessage(
 					log.Errorf(ctx, "draining error: %s", err)
 				}
 			}
-		case ConsumerClosed:
+		case distsql.ConsumerClosed:
 			return processMessageResult{err: nil, consumerClosed: true}
 		}
 	}

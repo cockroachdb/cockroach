@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan/replicaoracle"
@@ -78,7 +79,7 @@ type DistSQLPlanner struct {
 
 	// metadataTestTolerance is the minimum level required to plan metadata test
 	// processors.
-	metadataTestTolerance distsqlrun.MetadataTestLevel
+	metadataTestTolerance distsql.MetadataTestLevel
 
 	// runnerChan is used to send out requests (for running SetupFlow RPCs) to a
 	// pool of workers.
@@ -167,7 +168,7 @@ func NewDistSQLPlanner(
 		},
 		distSender:            distSender,
 		rpcCtx:                rpcCtx,
-		metadataTestTolerance: distsqlrun.NoExplain,
+		metadataTestTolerance: distsql.NoExplain,
 	}
 	dsp.nodeHealth.isLive = liveness.IsLive
 
@@ -1543,7 +1544,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 					for j, c := range e.ColIdx {
 						argTypes[j] = inputTypes[c]
 					}
-					_, outputType, err := distsqlrun.GetAggregateInfo(localFunc, argTypes...)
+					_, outputType, err := distsqlpb.GetAggregateInfo(localFunc, argTypes...)
 					if err != nil {
 						return err
 					}
@@ -1595,7 +1596,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 							// the current aggregation e.
 							argTypes[i] = intermediateTypes[argIdxs[i]]
 						}
-						_, outputType, err := distsqlrun.GetAggregateInfo(
+						_, outputType, err := distsqlpb.GetAggregateInfo(
 							finalInfo.Fn, argTypes...,
 						)
 						if err != nil {
@@ -1759,7 +1760,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 			argTypes[len(agg.ColIdx)+j] = argumentColumnType
 		}
 		var err error
-		_, returnTyp, err := distsqlrun.GetAggregateInfo(agg.Func, argTypes...)
+		_, returnTyp, err := distsqlpb.GetAggregateInfo(agg.Func, argTypes...)
 		if err != nil {
 			return err
 		}

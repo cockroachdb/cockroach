@@ -17,6 +17,7 @@ import (
 	"container/heap"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -26,7 +27,7 @@ import (
 )
 
 type srcInfo struct {
-	src RowSource
+	src distsql.RowSource
 	// row is the last row received from src.
 	row sqlbase.EncDatumRow
 }
@@ -92,7 +93,7 @@ type orderedSynchronizer struct {
 	metadata []*distsqlpb.ProducerMetadata
 }
 
-var _ RowSource = &orderedSynchronizer{}
+var _ distsql.RowSource = &orderedSynchronizer{}
 
 // OutputTypes is part of the RowSource interface.
 func (s *orderedSynchronizer) OutputTypes() []types.T {
@@ -321,7 +322,7 @@ func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMe
 func (s *orderedSynchronizer) ConsumerDone() {
 	// We're entering draining mode. Only metadata will be forwarded from now on.
 	if s.state != draining {
-		s.consumerStatusChanged(draining, RowSource.ConsumerDone)
+		s.consumerStatusChanged(draining, distsql.RowSource.ConsumerDone)
 	}
 }
 
@@ -329,13 +330,13 @@ func (s *orderedSynchronizer) ConsumerDone() {
 func (s *orderedSynchronizer) ConsumerClosed() {
 	// The state shouldn't matter, as no further methods should be called, but
 	// we'll set it to something other than the default.
-	s.consumerStatusChanged(drainBuffered, RowSource.ConsumerClosed)
+	s.consumerStatusChanged(drainBuffered, distsql.RowSource.ConsumerClosed)
 }
 
 // consumerStatusChanged calls a RowSource method on all the non-exhausted
 // sources.
 func (s *orderedSynchronizer) consumerStatusChanged(
-	newState orderedSynchronizerState, f func(RowSource),
+	newState orderedSynchronizerState, f func(distsql.RowSource),
 ) {
 	if s.state == notInitialized {
 		for i := range s.sources {
@@ -354,8 +355,8 @@ func (s *orderedSynchronizer) consumerStatusChanged(
 }
 
 func makeOrderedSync(
-	ordering sqlbase.ColumnOrdering, evalCtx *tree.EvalContext, sources []RowSource,
-) (RowSource, error) {
+	ordering sqlbase.ColumnOrdering, evalCtx *tree.EvalContext, sources []distsql.RowSource,
+) (distsql.RowSource, error) {
 	if len(sources) < 2 {
 		return nil, errors.Errorf("only %d sources for ordered synchronizer", len(sources))
 	}

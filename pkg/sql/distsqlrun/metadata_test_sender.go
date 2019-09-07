@@ -13,14 +13,15 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // metadataTestSender intersperses a metadata record after every row.
 type metadataTestSender struct {
-	ProcessorBase
-	input RowSource
+	distsql.ProcessorBase
+	input distsql.RowSource
 	id    string
 
 	// sendRowNumMeta is set to true when the next call to Next() must return
@@ -29,17 +30,17 @@ type metadataTestSender struct {
 	rowNumCnt      int32
 }
 
-var _ Processor = &metadataTestSender{}
-var _ RowSource = &metadataTestSender{}
+var _ distsql.Processor = &metadataTestSender{}
+var _ distsql.RowSource = &metadataTestSender{}
 
 const metadataTestSenderProcName = "meta sender"
 
 func newMetadataTestSender(
-	flowCtx *FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	input RowSource,
+	input distsql.RowSource,
 	post *distsqlpb.PostProcessSpec,
-	output RowReceiver,
+	output distsql.RowReceiver,
 	id string,
 ) (*metadataTestSender, error) {
 	mts := &metadataTestSender{input: input, id: id}
@@ -51,8 +52,8 @@ func newMetadataTestSender(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		ProcStateOpts{
-			InputsToDrain: []RowSource{mts.input},
+		distsql.ProcStateOpts{
+			InputsToDrain: []distsql.RowSource{mts.input},
 			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
 				mts.InternalClose()
 				// Send a final record with LastMsg set.
@@ -93,7 +94,7 @@ func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		}
 	}
 
-	for mts.State == StateRunning {
+	for mts.State == distsql.StateRunning {
 		row, meta := mts.input.Next()
 		if meta != nil {
 			// Other processors will start draining when they get an error meta from

@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
@@ -99,10 +100,10 @@ func (n *explainVecNode) startExec(params runParams) error {
 		localState.IsLocal = true
 		localState.LocalProcs = plan.LocalProcessors
 	}
-	flowCtx := &distsqlrun.FlowCtx{
+	flowCtx := &distsql.FlowCtx{
 		NodeID:  planCtx.EvalContext().NodeID,
 		EvalCtx: planCtx.EvalContext(),
-		Cfg: &distsqlrun.ServerConfig{
+		Cfg: &distsql.ServerConfig{
 			Settings:    params.p.execCfg.Settings,
 			DiskMonitor: &mon.BytesMonitor{},
 		},

@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -26,18 +27,18 @@ import (
 
 type ProcessorTestConfig struct {
 	// ProcessorTest takes ownership of the evalCtx passed through this FlowCtx.
-	FlowCtx *FlowCtx
+	FlowCtx *distsql.FlowCtx
 
-	BeforeTestCase func(p Processor, inputs []RowSource, output RowReceiver)
-	AfterTestCase  func(p Processor, inputs []RowSource, output RowReceiver)
+	BeforeTestCase func(p distsql.Processor, inputs []distsql.RowSource, output distsql.RowReceiver)
+	AfterTestCase  func(p distsql.Processor, inputs []distsql.RowSource, output distsql.RowReceiver)
 }
 
 func DefaultProcessorTestConfig() ProcessorTestConfig {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	return ProcessorTestConfig{
-		FlowCtx: &FlowCtx{
-			Cfg:     &ServerConfig{Settings: st},
+		FlowCtx: &distsql.FlowCtx{
+			Cfg:     &distsql.ServerConfig{Settings: st},
 			EvalCtx: &evalCtx,
 		},
 	}
@@ -127,17 +128,17 @@ func (p *ProcessorTest) RunTestCases(
 ) {
 	var processorID int32
 	for _, tc := range testCases {
-		inputs := make([]RowSource, 1, 2)
-		inputs[0] = NewRowBuffer(
-			tc.Input.Types, tc.Input.toEncDatumRows(), RowBufferArgs{},
+		inputs := make([]distsql.RowSource, 1, 2)
+		inputs[0] = newRowBuffer(
+			tc.Input.Types, tc.Input.toEncDatumRows(), rowBufferArgs{},
 		)
 		if tc.SecondInput != nil {
-			inputs[1] = NewRowBuffer(
-				tc.SecondInput.Types, tc.SecondInput.toEncDatumRows(), RowBufferArgs{},
+			inputs[1] = newRowBuffer(
+				tc.SecondInput.Types, tc.SecondInput.toEncDatumRows(), rowBufferArgs{},
 			)
 		}
-		output := NewRowBuffer(
-			tc.Output.Types, nil, RowBufferArgs{},
+		output := newRowBuffer(
+			tc.Output.Types, nil, rowBufferArgs{},
 		)
 
 		processor, err := newProcessor(
@@ -147,7 +148,7 @@ func (p *ProcessorTest) RunTestCases(
 			&tc.ProcessorCore,
 			&tc.Post,
 			inputs,
-			[]RowReceiver{output},
+			[]distsql.RowReceiver{output},
 			nil, /* localProcessors */
 		)
 		if err != nil {

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package execplan
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -58,10 +59,10 @@ func BenchmarkColBatchScan(b *testing.B) {
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(ctx)
 
-			flowCtx := FlowCtx{
+			flowCtx := distsql.FlowCtx{
 				EvalCtx: &evalCtx,
-				Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
-				txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				Cfg:     &distsql.ServerConfig{Settings: s.ClusterSettings()},
+				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				NodeID:  s.NodeID(),
 			}
 

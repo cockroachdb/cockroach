@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package execplan
 
 import (
 	"context"
@@ -16,20 +16,21 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// columnarizer turns a RowSource input into an exec.Operator output, by
+// Columnarizer turns a RowSource input into an exec.Operator output, by
 // reading the input in chunks of size coldata.BatchSize and converting each
 // chunk into a coldata.Batch column by column.
-type columnarizer struct {
-	ProcessorBase
+type Columnarizer struct {
+	distsql.ProcessorBase
 	exec.NonExplainable
 
-	input RowSource
+	input distsql.RowSource
 	da    sqlbase.DatumAlloc
 
 	buffered        sqlbase.EncDatumRows
@@ -39,14 +40,14 @@ type columnarizer struct {
 	typs            []coltypes.T
 }
 
-var _ exec.StaticMemoryOperator = &columnarizer{}
+var _ exec.StaticMemoryOperator = &Columnarizer{}
 
-// newColumnarizer returns a new columnarizer.
-func newColumnarizer(
-	ctx context.Context, flowCtx *FlowCtx, processorID int32, input RowSource,
-) (*columnarizer, error) {
+// NewColumnarizer returns a new Columnarizer.
+func NewColumnarizer(
+	ctx context.Context, flowCtx *distsql.FlowCtx, processorID int32, input distsql.RowSource,
+) (*Columnarizer, error) {
 	var err error
-	c := &columnarizer{
+	c := &Columnarizer{
 		input: input,
 		ctx:   ctx,
 	}
@@ -58,7 +59,7 @@ func newColumnarizer(
 		processorID,
 		nil, /* output */
 		nil, /* memMonitor */
-		ProcStateOpts{InputsToDrain: []RowSource{input}},
+		distsql.ProcStateOpts{InputsToDrain: []distsql.RowSource{input}},
 	); err != nil {
 		return nil, err
 	}
@@ -67,11 +68,14 @@ func newColumnarizer(
 	return c, err
 }
 
-func (c *columnarizer) EstimateStaticMemoryUsage() int {
+// EstimateStaticMemoryUsage is part of the exec.StaticMemoryOperator
+// interface.
+func (c *Columnarizer) EstimateStaticMemoryUsage() int {
 	return exec.EstimateBatchSizeBytes(c.typs, coldata.BatchSize)
 }
 
-func (c *columnarizer) Init() {
+// Init is part of the exec.Operator interface.
+func (c *Columnarizer) Init() {
 	c.batch = coldata.NewMemBatch(c.typs)
 	c.buffered = make(sqlbase.EncDatumRows, coldata.BatchSize)
 	for i := range c.buffered {
@@ -81,7 +85,8 @@ func (c *columnarizer) Init() {
 	c.input.Start(c.ctx)
 }
 
-func (c *columnarizer) Next(context.Context) coldata.Batch {
+// Next is part of the exec.Operator interface.
+func (c *Columnarizer) Next(context.Context) coldata.Batch {
 	c.batch.ResetInternalBatch()
 	// Buffer up n rows.
 	nRows := uint16(0)
@@ -116,15 +121,15 @@ func (c *columnarizer) Next(context.Context) coldata.Batch {
 //
 // columnarizers are not expected to be Run, so we prohibit calling this method
 // on them.
-func (c *columnarizer) Run(context.Context) {
-	panic("columnarizer should not be Run")
+func (c *Columnarizer) Run(context.Context) {
+	panic("Columnarizer should not be Run")
 }
 
-var _ exec.Operator = &columnarizer{}
-var _ distsqlpb.MetadataSource = &columnarizer{}
+var _ exec.Operator = &Columnarizer{}
+var _ distsqlpb.MetadataSource = &Columnarizer{}
 
 // DrainMeta is part of the MetadataSource interface.
-func (c *columnarizer) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (c *Columnarizer) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	if src, ok := c.input.(distsqlpb.MetadataSource); ok {
 		c.accumulatedMeta = append(c.accumulatedMeta, src.DrainMeta(ctx)...)
 	}
@@ -132,20 +137,20 @@ func (c *columnarizer) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetada
 }
 
 // ChildCount is part of the exec.Operator interface.
-func (c *columnarizer) ChildCount() int {
+func (c *Columnarizer) ChildCount() int {
 	if _, ok := c.input.(exec.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
-// ChildCount is part of the exec.Operator interface.
-func (c *columnarizer) Child(nth int) exec.OpNode {
+// Child is part of the exec.Operator interface.
+func (c *Columnarizer) Child(nth int) exec.OpNode {
 	if nth == 0 {
 		if n, ok := c.input.(exec.OpNode); ok {
 			return n
 		}
-		panic("input to columnarizer is not an exec.OpNode")
+		panic("input to Columnarizer is not an exec.OpNode")
 	}
 	panic(fmt.Sprintf("invalid index %d", nth))
 }

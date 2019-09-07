@@ -13,6 +13,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -22,16 +23,16 @@ import (
 // projectSetProcessor is the physical processor implementation of
 // projectSetNode.
 type projectSetProcessor struct {
-	ProcessorBase
+	distsql.ProcessorBase
 
-	input RowSource
+	input distsql.RowSource
 	spec  *distsqlpb.ProjectSetSpec
 
 	// exprHelpers are the constant-folded, type checked expressions specified
 	// in the ROWS FROM syntax. This can contain many kinds of expressions
 	// (anything that is "function-like" including COALESCE, NULLIF) not just
 	// SRFs.
-	exprHelpers []*exprHelper
+	exprHelpers []*distsql.ExprHelper
 
 	// funcs contains a valid pointer to a SRF FuncExpr for every entry
 	// in `exprHelpers` that is actually a SRF function application.
@@ -42,14 +43,14 @@ type projectSetProcessor struct {
 	// from the source.
 	inputRowReady bool
 
-	// rowBuffer will contain the current row of results.
+	// RowBuffer will contain the current row of results.
 	rowBuffer sqlbase.EncDatumRow
 
 	// gens contains the current "active" ValueGenerators for each entry
 	// in `funcs`. They are initialized anew for every new row in the source.
 	gens []tree.ValueGenerator
 
-	// done indicates for each `expr` whether the values produced by
+	// done indicates for each `Expr` whether the values produced by
 	// either the SRF or the scalar expressions are fully consumed and
 	// thus also whether NULLs should be emitted instead.
 	done []bool
@@ -59,24 +60,24 @@ type projectSetProcessor struct {
 	emitCount int64
 }
 
-var _ Processor = &projectSetProcessor{}
-var _ RowSource = &projectSetProcessor{}
+var _ distsql.Processor = &projectSetProcessor{}
+var _ distsql.RowSource = &projectSetProcessor{}
 
 const projectSetProcName = "projectSet"
 
 func newProjectSetProcessor(
-	flowCtx *FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec *distsqlpb.ProjectSetSpec,
-	input RowSource,
+	input distsql.RowSource,
 	post *distsqlpb.PostProcessSpec,
-	output RowReceiver,
+	output distsql.RowReceiver,
 ) (*projectSetProcessor, error) {
 	outputTypes := append(input.OutputTypes(), spec.GeneratedColumns...)
 	ps := &projectSetProcessor{
 		input:       input,
 		spec:        spec,
-		exprHelpers: make([]*exprHelper, len(spec.Exprs)),
+		exprHelpers: make([]*distsql.ExprHelper, len(spec.Exprs)),
 		funcs:       make([]*tree.FuncExpr, len(spec.Exprs)),
 		rowBuffer:   make(sqlbase.EncDatumRow, len(outputTypes)),
 		gens:        make([]tree.ValueGenerator, len(spec.Exprs)),
@@ -90,7 +91,7 @@ func newProjectSetProcessor(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		ProcStateOpts{InputsToDrain: []RowSource{ps.input}},
+		distsql.ProcStateOpts{InputsToDrain: []distsql.RowSource{ps.input}},
 	); err != nil {
 		return nil, err
 	}
@@ -104,14 +105,14 @@ func (ps *projectSetProcessor) Start(ctx context.Context) context.Context {
 
 	// Initialize exprHelpers.
 	for i, expr := range ps.spec.Exprs {
-		var helper exprHelper
-		err := helper.init(expr, ps.input.OutputTypes(), ps.evalCtx)
+		var helper distsql.ExprHelper
+		err := helper.Init(expr, ps.input.OutputTypes(), ps.EvalCtx)
 		if err != nil {
 			ps.MoveToDraining(err)
 			return ctx
 		}
-		if tFunc, ok := helper.expr.(*tree.FuncExpr); ok && tFunc.IsGeneratorApplication() {
-			// expr is a set-generating function.
+		if tFunc, ok := helper.Expr.(*tree.FuncExpr); ok && tFunc.IsGeneratorApplication() {
+			// Expr is a set-generating function.
 			ps.funcs[i] = tFunc
 		}
 		ps.exprHelpers[i] = &helper
@@ -136,11 +137,11 @@ func (ps *projectSetProcessor) nextInputRow() (
 		if fn := ps.funcs[i]; fn != nil {
 			// A set-generating function. Prepare its ValueGenerator.
 
-			// Set exprHelper.row so that we can use it as an IndexedVarContainer.
-			ps.exprHelpers[i].row = row
+			// Set ExprHelper.row so that we can use it as an IndexedVarContainer.
+			ps.exprHelpers[i].Row = row
 
-			ps.evalCtx.IVarContainer = ps.exprHelpers[i]
-			gen, err := fn.EvalArgsAndGetGenerator(ps.evalCtx)
+			ps.EvalCtx.IVarContainer = ps.exprHelpers[i]
+			gen, err := fn.EvalArgsAndGetGenerator(ps.EvalCtx)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -197,7 +198,7 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 			// Do we still need to produce the scalar value? (first row)
 			if !ps.done[i] {
 				// Yes. Produce it once, then indicate it's "done".
-				value, err := ps.exprHelpers[i].eval(ps.rowBuffer)
+				value, err := ps.exprHelpers[i].Eval(ps.rowBuffer)
 				if err != nil {
 					return false, err
 				}
@@ -219,7 +220,7 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 func (ps *projectSetProcessor) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	const cancelCheckCount = 10000
 
-	for ps.State == StateRunning {
+	for ps.State == distsql.StateRunning {
 
 		// Occasionally check for cancellation.
 		ps.emitCount++

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -423,10 +424,10 @@ func TestIndexSkipTableReader(t *testing.T) {
 
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(ctx)
-			flowCtx := FlowCtx{
+			flowCtx := distsql.FlowCtx{
 				EvalCtx: &evalCtx,
-				Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
-				txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				Cfg:     &distsql.ServerConfig{Settings: s.ClusterSettings()},
+				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				NodeID:  s.NodeID(),
 			}
 
@@ -436,7 +437,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			var results RowSource
+			var results distsql.RowSource
 			tr.Start(ctx)
 			results = tr
 
@@ -494,10 +495,10 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	nodeID := tc.Server(0).NodeID()
-	flowCtx := FlowCtx{
+	flowCtx := distsql.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg:     &ServerConfig{Settings: st},
-		txn:     client.NewTxn(ctx, tc.Server(0).DB(), nodeID, client.RootTxn),
+		Cfg:     &distsql.ServerConfig{Settings: st},
+		Txn:     client.NewTxn(ctx, tc.Server(0).DB(), nodeID, client.RootTxn),
 		NodeID:  nodeID,
 	}
 	spec := distsqlpb.IndexSkipTableReaderSpec{
@@ -600,7 +601,7 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 
 			tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
 
-			runner := func(reader RowSource, b *testing.B) {
+			runner := func(reader distsql.RowSource, b *testing.B) {
 				reader.Start(ctx)
 				count := 0
 				for {
@@ -618,10 +619,10 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 				}
 			}
 
-			flowCtxTableReader := FlowCtx{
+			flowCtxTableReader := distsql.FlowCtx{
 				EvalCtx: &evalCtx,
-				Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
-				txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				Cfg:     &distsql.ServerConfig{Settings: s.ClusterSettings()},
+				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				NodeID:  s.NodeID(),
 			}
 
@@ -655,10 +656,10 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 				}
 			})
 
-			flowCtxIndexSkipTableReader := FlowCtx{
+			flowCtxIndexSkipTableReader := distsql.FlowCtx{
 				EvalCtx: &evalCtx,
-				Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
-				txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				Cfg:     &distsql.ServerConfig{Settings: s.ClusterSettings()},
+				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				NodeID:  s.NodeID(),
 			}
 

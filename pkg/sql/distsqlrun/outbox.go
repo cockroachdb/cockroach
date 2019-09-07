@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -26,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 )
 
@@ -48,9 +49,9 @@ type flowStream interface {
 // first).
 type outbox struct {
 	// RowChannel implements the RowReceiver interface.
-	RowChannel
+	distsql.RowChannel
 
-	flowCtx  *FlowCtx
+	flowCtx  *distsql.FlowCtx
 	streamID distsqlpb.StreamID
 	nodeID   roachpb.NodeID
 	// The rows received from the RowChannel will be forwarded on this stream once
@@ -73,11 +74,14 @@ type outbox struct {
 	stats                  OutboxStats
 }
 
-var _ RowReceiver = &outbox{}
+var _ distsql.RowReceiver = &outbox{}
 var _ startable = &outbox{}
 
 func newOutbox(
-	flowCtx *FlowCtx, nodeID roachpb.NodeID, flowID distsqlpb.FlowID, streamID distsqlpb.StreamID,
+	flowCtx *distsql.FlowCtx,
+	nodeID roachpb.NodeID,
+	flowID distsqlpb.FlowID,
+	streamID distsqlpb.StreamID,
 ) *outbox {
 	m := &outbox{flowCtx: flowCtx, nodeID: nodeID}
 	m.encoder.setHeaderFields(flowID, streamID)
@@ -92,7 +96,7 @@ func newOutboxSyncFlowStream(stream distsqlpb.DistSQL_RunSyncFlowServer) *outbox
 	return &outbox{stream: stream}
 }
 
-func (m *outbox) setFlowCtx(flowCtx *FlowCtx) {
+func (m *outbox) setFlowCtx(flowCtx *distsql.FlowCtx) {
 	m.flowCtx = flowCtx
 }
 
@@ -200,7 +204,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 	defer m.RowChannel.ConsumerClosed()
 
 	var span opentracing.Span
-	ctx, span = processorSpan(ctx, "outbox")
+	ctx, span = distsql.ProcessorSpan(ctx, "outbox")
 	if span != nil && tracing.IsRecording(span) {
 		m.statsCollectionEnabled = true
 		span.SetTag(distsqlpb.StreamIDTagKey, m.streamID)
@@ -291,7 +295,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 					tracing.SetSpanStats(span, &m.stats)
 					tracing.FinishSpan(span)
 					spanFinished = true
-					if trace := getTraceData(ctx); trace != nil {
+					if trace := distsql.GetTraceData(ctx); trace != nil {
 						err := m.addRow(ctx, nil, &distsqlpb.ProducerMetadata{TraceData: trace})
 						if err != nil {
 							return err
@@ -442,7 +446,7 @@ func (m *outbox) run(ctx context.Context, wg *sync.WaitGroup) {
 
 // Starts the outbox.
 func (m *outbox) start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc) {
-	if m.types == nil {
+	if m.Types() == nil {
 		panic("outbox not initialized")
 	}
 	if wg != nil {

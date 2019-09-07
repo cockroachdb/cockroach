@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -43,9 +44,9 @@ func TestSampleAggregator(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 
 	runTest := func(memLimitBytes int64, expectOutOfMemory bool) {
-		flowCtx := FlowCtx{
+		flowCtx := distsql.FlowCtx{
 			EvalCtx: &evalCtx,
-			Cfg: &ServerConfig{
+			Cfg: &distsql.ServerConfig{
 				Settings: st,
 				DB:       kvDB,
 				Executor: server.InternalExecutor().(sqlutil.InternalExecutor),
@@ -109,8 +110,8 @@ func TestSampleAggregator(t *testing.T) {
 		outputs := make([]*RowBuffer, numSamplers)
 		for i := 0; i < numSamplers; i++ {
 			rows := sqlbase.GenEncDatumRowsInt(rowPartitions[i])
-			in := NewRowBuffer(sqlbase.TwoIntCols, rows, RowBufferArgs{})
-			outputs[i] = NewRowBuffer(samplerOutTypes, nil /* rows */, RowBufferArgs{})
+			in := newRowBuffer(sqlbase.TwoIntCols, rows, rowBufferArgs{})
+			outputs[i] = newRowBuffer(samplerOutTypes, nil /* rows */, rowBufferArgs{})
 
 			spec := &distsqlpb.SamplerSpec{SampleSize: 100, Sketches: sketchSpecs}
 			p, err := newSamplerProcessor(
@@ -122,7 +123,7 @@ func TestSampleAggregator(t *testing.T) {
 			p.Run(context.Background())
 		}
 		// Randomly interleave the output rows from the samplers into a single buffer.
-		samplerResults := NewRowBuffer(samplerOutTypes, nil /* rows */, RowBufferArgs{})
+		samplerResults := newRowBuffer(samplerOutTypes, nil /* rows */, rowBufferArgs{})
 		for len(outputs) > 0 {
 			i := rng.Intn(len(outputs))
 			row, meta := outputs[i].Next()
@@ -138,7 +139,7 @@ func TestSampleAggregator(t *testing.T) {
 		}
 
 		// Now run the sample aggregator.
-		finalOut := NewRowBuffer([]types.T{}, nil /* rows*/, RowBufferArgs{})
+		finalOut := newRowBuffer([]types.T{}, nil /* rows*/, rowBufferArgs{})
 		spec := &distsqlpb.SampleAggregatorSpec{
 			SampleSize:       100,
 			Sketches:         sketchSpecs,

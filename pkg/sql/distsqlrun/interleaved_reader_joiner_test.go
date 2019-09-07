@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -395,11 +396,11 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(ctx)
-			flowCtx := FlowCtx{
+			flowCtx := distsql.FlowCtx{
 				EvalCtx: &evalCtx,
-				Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
+				Cfg:     &distsql.ServerConfig{Settings: s.ClusterSettings()},
 				// Run in a RootTxn so that there's no txn metadata produced.
-				txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				Txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				NodeID: s.NodeID(),
 			}
 
@@ -525,11 +526,11 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(ctx)
-			flowCtx := FlowCtx{
+			flowCtx := distsql.FlowCtx{
 				EvalCtx: &evalCtx,
-				Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
+				Cfg:     &distsql.ServerConfig{Settings: s.ClusterSettings()},
 				// Run in a RootTxn so that there's no txn metadata produced.
-				txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				Txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				NodeID: s.NodeID(),
 			}
 
@@ -583,11 +584,11 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	}
 	defer sp.Finish()
 
-	flowCtx := FlowCtx{
+	flowCtx := distsql.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
+		Cfg:     &distsql.ServerConfig{Settings: s.ClusterSettings()},
 		// Run in a LeafTxn so that txn metadata is produced.
-		txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn),
+		Txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn),
 		NodeID: s.NodeID(),
 	}
 

@@ -13,6 +13,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -21,7 +22,7 @@ import (
 // valuesProcessor is a processor that has no inputs and generates "pre-canned"
 // rows.
 type valuesProcessor struct {
-	ProcessorBase
+	distsql.ProcessorBase
 
 	columns []distsqlpb.DatumInfo
 	data    [][]byte
@@ -34,17 +35,17 @@ type valuesProcessor struct {
 	rowBuf sqlbase.EncDatumRow
 }
 
-var _ Processor = &valuesProcessor{}
-var _ RowSource = &valuesProcessor{}
+var _ distsql.Processor = &valuesProcessor{}
+var _ distsql.RowSource = &valuesProcessor{}
 
 const valuesProcName = "values"
 
 func newValuesProcessor(
-	flowCtx *FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec *distsqlpb.ValuesCoreSpec,
 	post *distsqlpb.PostProcessSpec,
-	output RowReceiver,
+	output distsql.RowReceiver,
 ) (*valuesProcessor, error) {
 	v := &valuesProcessor{
 		columns: spec.Columns,
@@ -56,7 +57,7 @@ func newValuesProcessor(
 		types[i] = v.columns[i].Type
 	}
 	if err := v.Init(
-		v, post, types, flowCtx, processorID, output, nil /* memMonitor */, ProcStateOpts{},
+		v, post, types, flowCtx, processorID, output, nil /* memMonitor */, distsql.ProcStateOpts{},
 	); err != nil {
 		return nil, err
 	}
@@ -84,7 +85,7 @@ func (v *valuesProcessor) Start(ctx context.Context) context.Context {
 
 // Next is part of the RowSource interface.
 func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	for v.State == StateRunning {
+	for v.State == distsql.StateRunning {
 		row, meta, err := v.sd.GetRow(v.rowBuf)
 		if err != nil {
 			v.MoveToDraining(err)

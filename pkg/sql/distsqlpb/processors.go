@@ -11,13 +11,70 @@
 package distsqlpb
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
 )
+
+// GetAggregateInfo returns the aggregate constructor and the return type for
+// the given aggregate function when applied on the given type.
+func GetAggregateInfo(
+	fn AggregatorSpec_Func, inputTypes ...types.T,
+) (
+	aggregateConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	returnType *types.T,
+	err error,
+) {
+	if fn == AggregatorSpec_ANY_NOT_NULL {
+		// The ANY_NOT_NULL builtin does not have a fixed return type;
+		// handle it separately.
+		if len(inputTypes) != 1 {
+			return nil, nil, errors.Errorf("any_not_null aggregate needs 1 input")
+		}
+		return builtins.NewAnyNotNullAggregate, &inputTypes[0], nil
+	}
+	datumTypes := make([]*types.T, len(inputTypes))
+	for i := range inputTypes {
+		datumTypes[i] = &inputTypes[i]
+	}
+
+	props, builtins := builtins.GetBuiltinProperties(strings.ToLower(fn.String()))
+	for _, b := range builtins {
+		typs := b.Types.Types()
+		if len(typs) != len(inputTypes) {
+			continue
+		}
+		match := true
+		for i, t := range typs {
+			if !datumTypes[i].Equivalent(t) {
+				if props.NullableArgs && datumTypes[i].IsAmbiguous() {
+					continue
+				}
+				match = false
+				break
+			}
+		}
+		if match {
+			// Found!
+			constructAgg := func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
+				return b.AggregateFunc(datumTypes, evalCtx, arguments)
+			}
+
+			colTyp := b.FixedReturnType()
+			return constructAgg, colTyp, nil
+		}
+	}
+	return nil, nil, errors.Errorf(
+		"no builtin aggregate for %s on %+v", fn, inputTypes,
+	)
+}
 
 // Equals returns true if two aggregation specifiers are identical (and thus
 // will always yield the same result).
@@ -43,6 +100,20 @@ func (a AggregatorSpec_Aggregation) Equals(b AggregatorSpec_Aggregation) bool {
 		}
 	}
 	return true
+}
+
+// IsScalarAggregate returns whether the aggregate function is in scalar
+// context.
+func IsScalarAggregate(spec *AggregatorSpec) bool {
+	switch spec.Type {
+	case AggregatorSpec_SCALAR:
+		return true
+	case AggregatorSpec_NON_SCALAR:
+		return false
+	default:
+		// This case exists for backward compatibility.
+		return (len(spec.GroupCols) == 0)
+	}
 }
 
 func (spec *WindowerSpec_Frame_Mode) initFromAST(w tree.WindowFrameMode) error {

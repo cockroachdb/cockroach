@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -154,18 +155,17 @@ func BenchmarkProjectSet(b *testing.B) {
 	for _, c := range benchCases {
 		b.Run(c.description, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				flowCtx := FlowCtx{
-					Cfg:     &ServerConfig{Settings: st},
+				flowCtx := distsql.FlowCtx{
+					Cfg:     &distsql.ServerConfig{Settings: st},
 					EvalCtx: &evalCtx,
-					txn:     nil,
 				}
 
-				in := NewRowBuffer(c.inputTypes, c.input, RowBufferArgs{})
+				in := newRowBuffer(c.inputTypes, c.input, rowBufferArgs{})
 				out := &RowBuffer{}
 				p, err := newProcessor(
 					context.Background(), &flowCtx, 0, /* processorID */
 					&distsqlpb.ProcessorCoreUnion{ProjectSet: &c.spec}, &distsqlpb.PostProcessSpec{},
-					[]RowSource{in}, []RowReceiver{out}, []LocalProcessor{})
+					[]distsql.RowSource{in}, []distsql.RowReceiver{out}, []distsql.LocalProcessor{})
 				if err != nil {
 					b.Fatal(err)
 				}

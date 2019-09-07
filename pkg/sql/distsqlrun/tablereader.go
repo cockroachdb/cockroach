@@ -17,43 +17,23 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
-
-// ParallelScanResultThreshold is the number of results up to which, if the
-// maximum number of results returned by a scan is known, the table reader
-// disables batch limits in the dist sender. This results in the parallelization
-// of these scans.
-const ParallelScanResultThreshold = 10000
-
-func scanShouldLimitBatches(maxResults uint64, limitHint int64, flowCtx *FlowCtx) bool {
-	// We don't limit batches if the scan doesn't have a limit, and if the
-	// spans scanned will return less than the ParallelScanResultThreshold.
-	// This enables distsender parallelism - if we limit batches, distsender
-	// does *not* parallelize multi-range scan requests.
-	if maxResults != 0 &&
-		maxResults < ParallelScanResultThreshold &&
-		limitHint == 0 &&
-		sqlbase.ParallelScans.Get(&flowCtx.Cfg.Settings.SV) {
-		return false
-	}
-	return true
-}
 
 // tableReader is the start of a computation flow; it performs KV operations to
 // retrieve rows for a table, runs a filter expression, and passes rows with the
 // desired column values to an output RowReceiver.
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
-	ProcessorBase
+	distsql.ProcessorBase
 
 	spans     roachpb.Spans
 	limitHint int64
@@ -69,15 +49,15 @@ type tableReader struct {
 
 	// fetcher wraps a row.Fetcher, allowing the tableReader to add a stat
 	// collection layer.
-	fetcher rowFetcher
+	fetcher distsql.RowFetcher
 	alloc   sqlbase.DatumAlloc
 
 	// rowsRead is the number of rows read and is tracked unconditionally.
 	rowsRead int64
 }
 
-var _ Processor = &tableReader{}
-var _ RowSource = &tableReader{}
+var _ distsql.Processor = &tableReader{}
+var _ distsql.RowSource = &tableReader{}
 var _ distsqlpb.MetadataSource = &tableReader{}
 
 const tableReaderProcName = "table reader"
@@ -90,11 +70,11 @@ var trPool = sync.Pool{
 
 // newTableReader creates a tableReader.
 func newTableReader(
-	flowCtx *FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec *distsqlpb.TableReaderSpec,
 	post *distsqlpb.PostProcessSpec,
-	output RowReceiver,
+	output distsql.RowReceiver,
 ) (*tableReader, error) {
 	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
@@ -102,13 +82,13 @@ func newTableReader(
 
 	tr := trPool.Get().(*tableReader)
 
-	tr.limitHint = limitHint(spec.LimitHint, post)
+	tr.limitHint = distsql.LimitHint(spec.LimitHint, post)
 	tr.maxResults = spec.MaxResults
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
-	tr.ignoreMisplannedRanges = flowCtx.local
+	tr.ignoreMisplannedRanges = flowCtx.Local
 	if err := tr.Init(
 		tr,
 		post,
@@ -117,7 +97,7 @@ func newTableReader(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		ProcStateOpts{
+		distsql.ProcStateOpts{
 			// We don't pass tr.input as an inputToDrain; tr.input is just an adapter
 			// on top of a Fetcher; draining doesn't apply to it. Moreover, Andrei
 			// doesn't trust that the adapter will do the right thing on a Next() call
@@ -129,11 +109,11 @@ func newTableReader(
 		return nil, err
 	}
 
-	neededColumns := tr.out.neededColumns()
+	neededColumns := tr.Out.NeededColumns()
 
 	var fetcher row.Fetcher
 	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
-	if _, _, err := initRowFetcher(
+	if _, _, err := distsql.InitRowFetcher(
 		&fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
 		neededColumns, spec.IsCheck, &tr.alloc, spec.Visibility,
 	); err != nil {
@@ -151,51 +131,13 @@ func newTableReader(
 	}
 
 	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
-		tr.fetcher = newRowFetcherStatCollector(&fetcher)
-		tr.finishTrace = tr.outputStatsToTrace
+		tr.fetcher = distsql.NewRowFetcherStatCollector(&fetcher)
+		tr.FinishTrace = tr.outputStatsToTrace
 	} else {
-		tr.fetcher = &rowFetcherWrapper{Fetcher: &fetcher}
+		tr.fetcher = &distsql.RowFetcherWrapper{Fetcher: &fetcher}
 	}
 
 	return tr, nil
-}
-
-func initRowFetcher(
-	fetcher *row.Fetcher,
-	desc *sqlbase.TableDescriptor,
-	indexIdx int,
-	colIdxMap map[sqlbase.ColumnID]int,
-	reverseScan bool,
-	valNeededForCol util.FastIntSet,
-	isCheck bool,
-	alloc *sqlbase.DatumAlloc,
-	scanVisibility distsqlpb.ScanVisibility,
-) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
-	immutDesc := sqlbase.NewImmutableTableDescriptor(*desc)
-	index, isSecondaryIndex, err = immutDesc.FindIndexByIndexIdx(indexIdx)
-	if err != nil {
-		return nil, false, err
-	}
-
-	cols := immutDesc.Columns
-	if scanVisibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
-		cols = immutDesc.ReadableColumns
-	}
-	tableArgs := row.FetcherTableArgs{
-		Desc:             immutDesc,
-		Index:            index,
-		ColIdxMap:        colIdxMap,
-		IsSecondaryIndex: isSecondaryIndex,
-		Cols:             cols,
-		ValNeededForCol:  valNeededForCol,
-	}
-	if err := fetcher.Init(
-		reverseScan, true /* returnRangeInfo */, isCheck, alloc, tableArgs,
-	); err != nil {
-		return nil, false, err
-	}
-
-	return index, isSecondaryIndex, nil
 }
 
 func (tr *tableReader) generateTrailingMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
@@ -206,7 +148,7 @@ func (tr *tableReader) generateTrailingMeta(ctx context.Context) []distsqlpb.Pro
 
 // Start is part of the RowSource interface.
 func (tr *tableReader) Start(ctx context.Context) context.Context {
-	if tr.flowCtx.txn == nil {
+	if tr.FlowCtx.Txn == nil {
 		log.Fatalf(ctx, "tableReader outside of txn")
 	}
 
@@ -221,20 +163,20 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 
 	// This call doesn't do much; the real "starting" is below.
 	tr.fetcher.Start(fetcherCtx)
-	limitBatches := scanShouldLimitBatches(tr.maxResults, tr.limitHint, tr.flowCtx)
+	limitBatches := distsql.ScanShouldLimitBatches(tr.maxResults, tr.limitHint, tr.FlowCtx)
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
 	if tr.maxTimestampAge == 0 {
 		err = tr.fetcher.StartScan(
-			fetcherCtx, tr.flowCtx.txn, tr.spans,
-			limitBatches, tr.limitHint, tr.flowCtx.traceKV,
+			fetcherCtx, tr.FlowCtx.Txn, tr.spans,
+			limitBatches, tr.limitHint, tr.FlowCtx.TraceKV,
 		)
 	} else {
-		initialTS := tr.flowCtx.txn.GetTxnCoordMeta(ctx).Txn.OrigTimestamp
+		initialTS := tr.FlowCtx.Txn.GetTxnCoordMeta(ctx).Txn.OrigTimestamp
 		err = tr.fetcher.StartInconsistentScan(
-			fetcherCtx, tr.flowCtx.Cfg.DB, initialTS,
+			fetcherCtx, tr.FlowCtx.Cfg.DB, initialTS,
 			tr.maxTimestampAge, tr.spans,
-			limitBatches, tr.limitHint, tr.flowCtx.traceKV,
+			limitBatches, tr.limitHint, tr.FlowCtx.TraceKV,
 		)
 	}
 
@@ -259,7 +201,7 @@ func (tr *tableReader) Release() {
 
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	for tr.State == StateRunning {
+	for tr.State == distsql.StateRunning {
 		row, meta := tr.fetcher.Next()
 
 		if meta != nil {
@@ -313,7 +255,7 @@ func (trs *TableReaderStats) StatsForQueryPlan() []string {
 // outputStatsToTrace outputs the collected tableReader stats to the trace. Will
 // fail silently if the tableReader is not collecting stats.
 func (tr *tableReader) outputStatsToTrace() {
-	is, ok := getFetcherInputStats(tr.flowCtx, tr.fetcher)
+	is, ok := distsql.GetFetcherInputStats(tr.FlowCtx, tr.fetcher)
 	if !ok {
 		return
 	}
@@ -328,12 +270,12 @@ func (tr *tableReader) outputStatsToTrace() {
 func (tr *tableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	var trailingMeta []distsqlpb.ProducerMetadata
 	if !tr.ignoreMisplannedRanges {
-		ranges := misplannedRanges(ctx, tr.fetcher.GetRangesInfo(), tr.flowCtx.NodeID)
+		ranges := distsql.MisplannedRanges(ctx, tr.fetcher.GetRangesInfo(), tr.FlowCtx.NodeID)
 		if ranges != nil {
 			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: ranges})
 		}
 	}
-	if meta := getTxnCoordMeta(ctx, tr.flowCtx.txn); meta != nil {
+	if meta := distsql.GetTxnCoordMeta(ctx, tr.FlowCtx.Txn); meta != nil {
 		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 

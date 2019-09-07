@@ -16,33 +16,25 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // Version identifies the distsqlrun protocol version.
@@ -89,97 +81,11 @@ var settingUseTempStorageSorts = settings.RegisterBoolSetting(
 	true,
 )
 
-var settingUseTempStorageJoins = settings.RegisterBoolSetting(
-	"sql.distsql.temp_storage.joins",
-	"set to true to enable use of disk for distributed sql joins",
-	true,
-)
-
-var settingWorkMemBytes = settings.RegisterByteSizeSetting(
-	"sql.distsql.temp_storage.workmem",
-	"maximum amount of memory in bytes a processor can use before falling back to temp storage",
-	64*1024*1024, /* 64MB */
-)
-
 var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 1024*1024 /* 1MB */)
-
-// ServerConfig encompasses the configuration required to create a
-// DistSQLServer.
-type ServerConfig struct {
-	log.AmbientContext
-
-	Settings     *cluster.Settings
-	RuntimeStats RuntimeStats
-
-	// DB is a handle to the cluster.
-	DB *client.DB
-	// Executor can be used to run "internal queries". Note that Flows also have
-	// access to an executor in the EvalContext. That one is "session bound"
-	// whereas this one isn't.
-	Executor sqlutil.InternalExecutor
-
-	// FlowDB is the DB that flows should use for interacting with the database.
-	// This DB has to be set such that it bypasses the local TxnCoordSender. We
-	// want only the TxnCoordSender on the gateway to be involved with requests
-	// performed by DistSQL.
-	FlowDB       *client.DB
-	RPCContext   *rpc.Context
-	Stopper      *stop.Stopper
-	TestingKnobs TestingKnobs
-
-	// ParentMemoryMonitor is normally the root SQL monitor. It should only be
-	// used when setting up a server, or in tests.
-	ParentMemoryMonitor *mon.BytesMonitor
-
-	// TempStorage is used by some DistSQL processors to store rows when the
-	// working set is larger than can be stored in memory.
-	TempStorage diskmap.Factory
-
-	// BulkAdder is used by some processors to bulk-ingest data as SSTs.
-	BulkAdder storagebase.BulkAdderFactory
-
-	// DiskMonitor is used to monitor temporary storage disk usage. Actual disk
-	// space used will be a small multiple (~1.1) of this because of RocksDB
-	// space amplification.
-	DiskMonitor *mon.BytesMonitor
-
-	Metrics *DistSQLMetrics
-
-	// NodeID is the id of the node on which this Server is running.
-	NodeID      *base.NodeIDContainer
-	ClusterID   *base.ClusterIDContainer
-	ClusterName string
-
-	// JobRegistry manages jobs being used by this Server.
-	JobRegistry *jobs.Registry
-
-	// LeaseManager is a *sql.LeaseManager. It's stored as an `interface{}` due
-	// to package dependency cycles
-	LeaseManager interface{}
-
-	// A handle to gossip used to broadcast the node's DistSQL version and
-	// draining state.
-	Gossip *gossip.Gossip
-
-	NodeDialer *nodedialer.Dialer
-
-	// SessionBoundInternalExecutorFactory is used to construct session-bound
-	// executors. The idea is that a higher-layer binds some of the arguments
-	// required, so that users of ServerConfig don't have to care about them.
-	SessionBoundInternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
-}
-
-// RuntimeStats is an interface through which the distsqlrun layer can get
-// information about runtime statistics.
-type RuntimeStats interface {
-	// GetCPUCombinedPercentNorm returns the recent user+system cpu usage,
-	// normalized to 0-1 by number of cores.
-	GetCPUCombinedPercentNorm() float64
-}
 
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
-	ServerConfig
+	distsql.ServerConfig
 	flowRegistry  *flowRegistry
 	flowScheduler *flowScheduler
 	memMonitor    mon.BytesMonitor
@@ -189,7 +95,7 @@ type ServerImpl struct {
 var _ distsqlpb.DistSQLServer = &ServerImpl{}
 
 // NewServer instantiates a DistSQLServer.
-func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
+func NewServer(ctx context.Context, cfg distsql.ServerConfig) *ServerImpl {
 	ds := &ServerImpl{
 		ServerConfig:  cfg,
 		regexpCache:   tree.NewRegexpCache(512),
@@ -291,7 +197,7 @@ func (ds *ServerImpl) setupFlow(
 	parentSpan opentracing.Span,
 	parentMonitor *mon.BytesMonitor,
 	req *distsqlpb.SetupFlowRequest,
-	syncFlowConsumer RowReceiver,
+	syncFlowConsumer distsql.RowReceiver,
 	localState LocalState,
 ) (context.Context, *Flow, error) {
 	if !FlowVerIsCompatible(req.Version, MinAcceptedVersion, Version) {
@@ -438,15 +344,15 @@ func (ds *ServerImpl) setupFlow(
 		}
 	}
 	// TODO(radu): we should sanity check some of these fields.
-	flowCtx := FlowCtx{
+	flowCtx := distsql.FlowCtx{
 		AmbientContext: ds.AmbientContext,
 		Cfg:            &ds.ServerConfig,
-		id:             req.Flow.FlowID,
+		ID:             req.Flow.FlowID,
 		EvalCtx:        evalCtx,
-		txn:            txn,
+		Txn:            txn,
 		NodeID:         nodeID,
-		traceKV:        req.TraceKV,
-		local:          localState.IsLocal,
+		TraceKV:        req.TraceKV,
+		Local:          localState.IsLocal,
 	}
 	// req always contains the desired vectorize mode, regardless of whether we
 	// have non-nil localState.EvalContext. We don't want to update EvalContext
@@ -461,7 +367,7 @@ func (ds *ServerImpl) setupFlow(
 		return ctx, nil, err
 	}
 	if !f.isLocal() {
-		flowCtx.AddLogTag("f", f.id.Short())
+		flowCtx.AddLogTag("f", f.ID.Short())
 		flowCtx.AnnotateCtx(ctx)
 	}
 	return ctx, f, nil
@@ -476,7 +382,7 @@ func (ds *ServerImpl) SetupSyncFlow(
 	ctx context.Context,
 	parentMonitor *mon.BytesMonitor,
 	req *distsqlpb.SetupFlowRequest,
-	output RowReceiver,
+	output distsql.RowReceiver,
 ) (context.Context, *Flow, error) {
 	return ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{})
 }
@@ -495,7 +401,7 @@ type LocalState struct {
 
 	// LocalProcs is an array of planNodeToRowSource processors. It's in order and
 	// will be indexed into by the RowSourceIdx field in LocalPlanNodeSpec.
-	LocalProcs []LocalProcessor
+	LocalProcs []distsql.LocalProcessor
 	Txn        *client.Txn
 }
 
@@ -506,7 +412,7 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	ctx context.Context,
 	parentMonitor *mon.BytesMonitor,
 	req *distsqlpb.SetupFlowRequest,
-	output RowReceiver,
+	output distsql.RowReceiver,
 	localState LocalState,
 ) (context.Context, *Flow, error) {
 	return ds.setupFlow(ctx, opentracing.SpanFromContext(ctx), parentMonitor, req, output, localState)
@@ -610,63 +516,6 @@ func (ds *ServerImpl) FlowStream(stream distsqlpb.DistSQL_FlowStreamServer) erro
 	}
 	return err
 }
-
-// TestingKnobs are the testing knobs.
-type TestingKnobs struct {
-	// RunBeforeBackfillChunk is called before executing each chunk of a
-	// backfill during a schema change operation. It is called with the
-	// current span and returns an error which eventually is returned to the
-	// caller of SchemaChanger.exec(). It is called at the start of the
-	// backfill function passed into the transaction executing the chunk.
-	RunBeforeBackfillChunk func(sp roachpb.Span) error
-
-	// RunAfterBackfillChunk is called after executing each chunk of a
-	// backfill during a schema change operation. It is called just before
-	// returning from the backfill function passed into the transaction
-	// executing the chunk. It is always called even when the backfill
-	// function returns an error, or if the table has already been dropped.
-	RunAfterBackfillChunk func()
-
-	// MemoryLimitBytes specifies a maximum amount of working memory that a
-	// processor that supports falling back to disk can use. Must be >= 1 to
-	// enable. Once this limit is hit, processors employ their on-disk
-	// implementation regardless of applicable cluster settings.
-	MemoryLimitBytes int64
-
-	// DrainFast, if enabled, causes the server to not wait for any currently
-	// running flows to complete or give a grace period of minFlowDrainWait
-	// to incoming flows to register.
-	DrainFast bool
-
-	// MetadataTestLevel controls whether or not additional metadata test
-	// processors are planned, which send additional "RowNum" metadata that is
-	// checked by a test receiver on the gateway.
-	MetadataTestLevel MetadataTestLevel
-
-	// DeterministicStats overrides stats which don't have reliable values, like
-	// stall time and bytes sent. It replaces them with a zero value.
-	DeterministicStats bool
-
-	// Changefeed contains testing knobs specific to the changefeed system.
-	Changefeed base.ModuleTestingKnobs
-}
-
-// MetadataTestLevel represents the types of queries where metadata test
-// processors are planned.
-type MetadataTestLevel int
-
-const (
-	// Off represents that no metadata test processors are planned.
-	Off MetadataTestLevel = iota
-	// NoExplain represents that metadata test processors are planned for all
-	// queries except EXPLAIN (DISTSQL) statements.
-	NoExplain
-	// On represents that metadata test processors are planned for all queries.
-	On
-)
-
-// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
-func (*TestingKnobs) ModuleTestingKnobs() {}
 
 // lazyInternalExecutor is a tree.SessionBoundInternalExecutor that initializes
 // itself only on the first call to QueryRow.

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -46,7 +47,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 	)
 	evalCtx := tree.MakeTestingEvalContextWithMon(st, &monitor)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := makeTestDiskMonitor(ctx, st)
+	diskMonitor := distsql.MakeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
@@ -54,9 +55,9 @@ func TestWindowerAccountingForResults(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	flowCtx := &FlowCtx{
+	flowCtx := &distsql.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &ServerConfig{
+		Cfg: &distsql.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
 			DiskMonitor: diskMonitor,
@@ -64,7 +65,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 	}
 
 	post := &distsqlpb.PostProcessSpec{}
-	input := NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(1000, 1))
+	input := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(1000, 1))
 	aggSpec := distsqlpb.AggregatorSpec_Func(distsqlpb.AggregatorSpec_ARRAY_AGG)
 	spec := distsqlpb.WindowerSpec{
 		PartitionBy: []uint32{},
@@ -85,8 +86,8 @@ func TestWindowerAccountingForResults(t *testing.T) {
 			},
 		}},
 	}
-	output := NewRowBuffer(
-		sqlbase.OneIntCol, nil, RowBufferArgs{},
+	output := newRowBuffer(
+		sqlbase.OneIntCol, nil, rowBufferArgs{},
 	)
 
 	d, err := newWindower(flowCtx, 0 /* processorID */, &spec, input, post, output)
@@ -197,12 +198,12 @@ func BenchmarkWindower(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := makeTestDiskMonitor(ctx, st)
+	diskMonitor := distsql.MakeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
-	flowCtx := &FlowCtx{
+	flowCtx := &distsql.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &ServerConfig{
+		Cfg: &distsql.ServerConfig{
 			Settings:    st,
 			DiskMonitor: diskMonitor,
 		},
@@ -240,8 +241,8 @@ func BenchmarkWindower(b *testing.B) {
 
 			b.Run(runName, func(b *testing.B) {
 				post := &distsqlpb.PostProcessSpec{}
-				disposer := &RowDisposer{}
-				input := NewRepeatableRowSource(sqlbase.ThreeIntCols, rowsGenerator(numRows, numCols))
+				disposer := &rowDisposer{}
+				input := distsql.NewRepeatableRowSource(sqlbase.ThreeIntCols, rowsGenerator(numRows, numCols))
 
 				b.SetBytes(int64(8 * numRows * numCols))
 				b.ResetTimer()

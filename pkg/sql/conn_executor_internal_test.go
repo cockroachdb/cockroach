@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -253,7 +254,7 @@ func startConnExecutor(
 	st := cluster.MakeTestingClusterSettings()
 	nodeID := &base.NodeIDContainer{}
 	nodeID.Set(ctx, 1)
-	distSQLMetrics := distsqlrun.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
+	distSQLMetrics := distsql.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
 	cfg := &ExecutorConfig{
 		AmbientCtx:      testutils.MakeAmbientCtx(),
 		Settings:        st,
@@ -267,7 +268,7 @@ func startConnExecutor(
 		DistSQLPlanner: NewDistSQLPlanner(
 			ctx, distsqlrun.Version, st, roachpb.NodeDescriptor{NodeID: 1},
 			nil, /* rpcCtx */
-			distsqlrun.NewServer(ctx, distsqlrun.ServerConfig{
+			distsqlrun.NewServer(ctx, distsql.ServerConfig{
 				AmbientContext: testutils.MakeAmbientCtx(),
 				Settings:       st,
 				Stopper:        stopper,

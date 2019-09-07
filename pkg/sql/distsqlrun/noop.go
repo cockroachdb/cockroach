@@ -13,6 +13,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -22,21 +23,21 @@ import (
 // post-processing or in the last stage of a computation, where we may only
 // need the synchronizer to join streams.
 type noopProcessor struct {
-	ProcessorBase
-	input RowSource
+	distsql.ProcessorBase
+	input distsql.RowSource
 }
 
-var _ Processor = &noopProcessor{}
-var _ RowSource = &noopProcessor{}
+var _ distsql.Processor = &noopProcessor{}
+var _ distsql.RowSource = &noopProcessor{}
 
 const noopProcName = "noop"
 
 func newNoopProcessor(
-	flowCtx *FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	input RowSource,
+	input distsql.RowSource,
 	post *distsqlpb.PostProcessSpec,
-	output RowReceiver,
+	output distsql.RowReceiver,
 ) (*noopProcessor, error) {
 	n := &noopProcessor{input: input}
 	if err := n.Init(
@@ -47,7 +48,7 @@ func newNoopProcessor(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		ProcStateOpts{InputsToDrain: []RowSource{n.input}},
+		distsql.ProcStateOpts{InputsToDrain: []distsql.RowSource{n.input}},
 	); err != nil {
 		return nil, err
 	}
@@ -62,7 +63,7 @@ func (n *noopProcessor) Start(ctx context.Context) context.Context {
 
 // Next is part of the RowSource interface.
 func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	for n.State == StateRunning {
+	for n.State == distsql.StateRunning {
 		row, meta := n.input.Next()
 
 		if meta != nil {

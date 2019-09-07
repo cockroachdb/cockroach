@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -152,7 +153,8 @@ func BenchmarkStreamEncoder(b *testing.B) {
 		b.Run(fmt.Sprintf("rows=%d,cols=%d", numRows, numCols), func(b *testing.B) {
 			b.SetBytes(int64(numRows * numCols * 8))
 			cols := sqlbase.MakeIntCols(numCols)
-			input := NewRepeatableRowSource(cols, sqlbase.MakeIntRows(numRows, numCols))
+			rows := sqlbase.MakeIntRows(numRows, numCols)
+			input := distsql.NewRepeatableRowSource(cols, rows)
 
 			b.ResetTimer()
 			ctx := context.Background()
@@ -161,7 +163,7 @@ func BenchmarkStreamEncoder(b *testing.B) {
 				b.StopTimer()
 				input.Reset()
 				// Reset the EncDatums' encoded bytes cache.
-				for _, row := range input.rows {
+				for _, row := range rows {
 					for j := range row {
 						row[j] = sqlbase.EncDatum{
 							Datum: row[j].Datum,

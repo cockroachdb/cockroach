@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -497,10 +498,10 @@ func TestZigzagJoiner(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(ctx)
-			flowCtx := FlowCtx{
+			flowCtx := distsql.FlowCtx{
 				EvalCtx: &evalCtx,
-				Cfg:     &ServerConfig{Settings: st},
-				txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				Cfg:     &distsql.ServerConfig{Settings: st},
+				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 			}
 
 			out := &RowBuffer{}
@@ -560,10 +561,10 @@ func TestZigzagJoinerDrain(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)
-	flowCtx := FlowCtx{
+	flowCtx := distsql.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg:     &ServerConfig{Settings: s.ClusterSettings()},
-		txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+		Cfg:     &distsql.ServerConfig{Settings: s.ClusterSettings()},
+		Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)

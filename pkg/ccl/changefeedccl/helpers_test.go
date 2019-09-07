@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -206,7 +206,7 @@ func expectResolvedTimestampAvro(
 func sinklessTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) func(*testing.T) {
 	return func(t *testing.T) {
 		ctx := context.Background()
-		knobs := base.TestingKnobs{DistSQL: &distsqlrun.TestingKnobs{Changefeed: &TestingKnobs{}}}
+		knobs := base.TestingKnobs{DistSQL: &distsql.TestingKnobs{Changefeed: &TestingKnobs{}}}
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 			Knobs:       knobs,
 			UseDatabase: `d`,
@@ -239,7 +239,7 @@ func enterpriseTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory))
 
 		flushCh := make(chan struct{}, 1)
 		defer close(flushCh)
-		knobs := base.TestingKnobs{DistSQL: &distsqlrun.TestingKnobs{Changefeed: &TestingKnobs{
+		knobs := base.TestingKnobs{DistSQL: &distsql.TestingKnobs{Changefeed: &TestingKnobs{
 			AfterSinkFlush: func() error {
 				select {
 				case flushCh <- struct{}{}:
@@ -278,7 +278,7 @@ func cloudStorageTest(
 
 		flushCh := make(chan struct{}, 1)
 		defer close(flushCh)
-		knobs := base.TestingKnobs{DistSQL: &distsqlrun.TestingKnobs{Changefeed: &TestingKnobs{
+		knobs := base.TestingKnobs{DistSQL: &distsql.TestingKnobs{Changefeed: &TestingKnobs{
 			AfterSinkFlush: func() error {
 				select {
 				case flushCh <- struct{}{}:

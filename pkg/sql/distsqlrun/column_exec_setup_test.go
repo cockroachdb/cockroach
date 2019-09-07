@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/colrpc"
@@ -185,14 +186,14 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
-	f := &Flow{FlowCtx: FlowCtx{EvalCtx: &evalCtx, NodeID: roachpb.NodeID(1)}}
+	f := &Flow{FlowCtx: distsql.FlowCtx{EvalCtx: &evalCtx, NodeID: roachpb.NodeID(1)}}
 	var wg sync.WaitGroup
 	vfc := newVectorizedFlowCreator(
 		&vectorizedFlowCreatorHelper{f: f},
 		componentCreator,
 		false, /* recordingStats */
 		&wg,
-		&RowBuffer{types: intCols(1)},
+		newRowBuffer(intCols(1 /* numCols */), nil /* rows */, rowBufferArgs{}),
 		nil, /* nodeDialer */
 		distsqlpb.FlowID{},
 	)

@@ -13,6 +13,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -165,9 +166,9 @@ func (sm *streamMerger) close(ctx context.Context) {
 //
 // All metadata from the sources is forwarded to metadataSink.
 func makeStreamMerger(
-	leftSource RowSource,
+	leftSource distsql.RowSource,
 	leftOrdering sqlbase.ColumnOrdering,
-	rightSource RowSource,
+	rightSource distsql.RowSource,
 	rightOrdering sqlbase.ColumnOrdering,
 	nullEquality bool,
 	memMonitor *mon.BytesMonitor,

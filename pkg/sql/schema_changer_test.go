@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -594,7 +594,7 @@ func TestRaceWithBackfill(t *testing.T) {
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 			BackfillChunkSize:     chunkSize,
 		},
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &distsql.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				notifyBackfill()
 				return nil
@@ -762,7 +762,7 @@ func TestDropWhileBackfill(t *testing.T) {
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 			BackfillChunkSize:     chunkSize,
 		},
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &distsql.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				if partialBackfillDone.Load().(bool) {
 					notifyBackfill()
@@ -987,7 +987,7 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 			AsyncExecQuickly:  true,
 			BackfillChunkSize: maxValue,
 		},
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &distsql.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				switch atomic.LoadInt64(&backfillCount) {
 				case 0:
@@ -1342,7 +1342,7 @@ func TestSchemaChangeRetry(t *testing.T) {
 			AsyncExecNotification:   asyncSchemaChangerDisabled,
 			WriteCheckpointInterval: time.Nanosecond,
 		},
-		DistSQL: &distsqlrun.TestingKnobs{RunBeforeBackfillChunk: checkSpan},
+		DistSQL: &distsql.TestingKnobs{RunBeforeBackfillChunk: checkSpan},
 		// Disable backfill migrations, we still need the jobs table migration.
 		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
@@ -1402,7 +1402,7 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 			WriteCheckpointInterval: time.Nanosecond,
 			BackfillChunkSize:       maxValue / 10,
 		},
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &distsql.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				currChunk++
 				// Fail somewhere in the middle.
@@ -1509,7 +1509,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 			AsyncExecQuickly:  true,
 			BackfillChunkSize: chunkSize,
 		},
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &distsql.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				// Return a deadline exceeded error during the third attempt
 				// which attempts to clean up the schema change.
@@ -1650,7 +1650,7 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 			// failure happens after a checkpoint has been written.
 			WriteCheckpointInterval: time.Nanosecond,
 		},
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &distsql.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				attempts++
 				// Return a deadline exceeded error during the third attempt
@@ -2180,7 +2180,7 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 			// failure happens after a checkpoint has been written.
 			WriteCheckpointInterval: time.Nanosecond,
 		},
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &distsql.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				attempts++
 				// Return a deadline exceeded error while dropping
@@ -2252,7 +2252,7 @@ func TestCRUDWhileColumnBackfill(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &distsql.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				if backfillNotification != nil {
 					// Close channel to notify that the schema change has
@@ -3229,7 +3229,7 @@ func TestTruncateWhileColumnBackfill(t *testing.T) {
 			},
 			AsyncExecQuickly: true,
 		},
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &distsql.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				switch atomic.LoadInt64(&backfillCount) {
 				case 3:
@@ -3397,7 +3397,7 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &distsql.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				if fn := runGC; fn != nil {
 					runGC = nil
@@ -3435,7 +3435,7 @@ func TestAddComputedColumn(t *testing.T) {
 	done := false
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &distsql.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				if db == nil || done {
 					return nil
@@ -3616,7 +3616,7 @@ func TestCancelSchemaChange(t *testing.T) {
 			AsyncExecQuickly:  true,
 			BackfillChunkSize: 10,
 		},
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &distsql.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				if !doCancel {
 					return nil
@@ -4063,7 +4063,7 @@ func TestIndexBackfillValidation(t *testing.T) {
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: maxValue / 5,
 		},
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &distsql.TestingKnobs{
 			RunAfterBackfillChunk: func() {
 				count := atomic.AddInt64(&backfillCount, 1)
 				if count == 2 {
@@ -4133,7 +4133,7 @@ func TestInvertedIndexBackfillValidation(t *testing.T) {
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: maxValue / 5,
 		},
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &distsql.TestingKnobs{
 			RunAfterBackfillChunk: func() {
 				count := atomic.AddInt64(&backfillCount, 1)
 				if count == 2 {
@@ -4617,7 +4617,7 @@ func TestSchemaChangeJobRunningStatus(t *testing.T) {
 				return runBeforeIndexValidation()
 			},
 		},
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &distsql.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				return runBeforeBackfillChunk()
 			},
@@ -4737,7 +4737,7 @@ func TestIntentRaceWithIndexBackfill(t *testing.T) {
 				return nil
 			},
 		},
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &distsql.TestingKnobs{
 			RunAfterBackfillChunk: func() {
 				select {
 				case <-backfillProgressing:

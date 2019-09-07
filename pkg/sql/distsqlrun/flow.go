@@ -14,80 +14,14 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/opentracing/opentracing-go"
 )
-
-// FlowCtx encompasses the contexts needed for various flow components.
-type FlowCtx struct {
-	log.AmbientContext
-
-	Cfg *ServerConfig
-
-	// id is a unique identifier for a remote flow. It is mainly used as a key
-	// into the flowRegistry. Since local flows do not need to exist in the flow
-	// registry (no inbound stream connections need to be performed), they are not
-	// assigned ids. This is done for performance reasons, as local flows are
-	// more likely to be dominated by setup time.
-	id distsqlpb.FlowID
-
-	// EvalCtx is used by all the processors in the flow to evaluate expressions.
-	// Processors that intend to evaluate expressions with this EvalCtx should
-	// get a copy with NewEvalCtx instead of storing a pointer to this one
-	// directly (since some processor mutate the EvalContext they use).
-	//
-	// TODO(andrei): Get rid of this field and pass a non-shared EvalContext to
-	// cores of the processors that need it.
-	EvalCtx *tree.EvalContext
-
-	// The transaction in which kv operations performed by processors in the flow
-	// must be performed. Processors in the Flow will use this txn concurrently.
-	// This field is generally not nil, except for flows that don't run in a
-	// higher-level txn (like backfills).
-	txn *client.Txn
-
-	// nodeID is the ID of the node on which the processors using this FlowCtx
-	// run.
-	NodeID roachpb.NodeID
-
-	// traceKV is true if KV tracing was requested by the session.
-	traceKV bool
-
-	// local is true if this flow is being run as part of a local-only query.
-	local bool
-
-	vectorizedBoundAccount *mon.BoundAccount
-}
-
-// NewEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.
-// Processors should use this method any time they need to store a pointer to
-// the EvalContext, since processors may mutate the EvalContext. Specifically,
-// every processor that runs ProcOutputHelper.Init must pass in a modifiable
-// EvalContext, since it stores that EvalContext in its exprHelpers and mutates
-// them at runtime to ensure expressions are evaluated with the correct indexed
-// var context.
-func (ctx *FlowCtx) NewEvalCtx() *tree.EvalContext {
-	return ctx.EvalCtx.Copy()
-}
-
-// TestingKnobs returns the distsql testing knobs for this flow context.
-func (ctx *FlowCtx) TestingKnobs() TestingKnobs {
-	return ctx.Cfg.TestingKnobs
-}
-
-// Stopper returns the stopper for this flowCtx.
-func (ctx *FlowCtx) Stopper() *stop.Stopper {
-	return ctx.Cfg.Stopper
-}
 
 type flowStatus int
 
@@ -110,7 +44,7 @@ func (f startableFn) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel co
 
 // Flow represents a flow which consists of processors and streams.
 type Flow struct {
-	FlowCtx
+	distsql.FlowCtx
 
 	flowRegistry *flowRegistry
 	// isVectorized indicates whether it is a vectorized flow.
@@ -118,23 +52,23 @@ type Flow struct {
 	// processors contains a subset of the processors in the flow - the ones that
 	// run in their own goroutines. Some processors that implement RowSource are
 	// scheduled to run in their consumer's goroutine; those are not present here.
-	processors []Processor
+	processors []distsql.Processor
 	// startables are entities that must be started when the flow starts;
 	// currently these are outboxes and routers.
 	startables []startable
 	// syncFlowConsumer is a special outbox which instead of sending rows to
 	// another host, returns them directly (as a result to a SetupSyncFlow RPC,
 	// or to the local host).
-	syncFlowConsumer RowReceiver
+	syncFlowConsumer distsql.RowReceiver
 
-	localProcessors []LocalProcessor
+	localProcessors []distsql.LocalProcessor
 
 	// startedGoroutines specifies whether this flow started any goroutines. This
 	// is used in Wait() to avoid the overhead of waiting for non-existent
 	// goroutines.
 	startedGoroutines bool
 
-	localStreams map[distsqlpb.StreamID]RowReceiver
+	localStreams map[distsqlpb.StreamID]distsql.RowReceiver
 
 	// inboundStreams are streams that receive data from other hosts; this map
 	// is to be passed to flowRegistry.RegisterFlow.
@@ -160,10 +94,10 @@ type Flow struct {
 }
 
 func newFlow(
-	flowCtx FlowCtx,
+	flowCtx distsql.FlowCtx,
 	flowReg *flowRegistry,
-	syncFlowConsumer RowReceiver,
-	localProcessors []LocalProcessor,
+	syncFlowConsumer distsql.RowReceiver,
+	localProcessors []distsql.LocalProcessor,
 	isVectorized bool,
 ) *Flow {
 	f := &Flow{
@@ -193,7 +127,7 @@ func (f *Flow) checkInboundStreamID(sid distsqlpb.StreamID) error {
 // setupInboundStream adds a stream to the stream map (inboundStreams or
 // localStreams).
 func (f *Flow) setupInboundStream(
-	ctx context.Context, spec distsqlpb.StreamEndpointSpec, receiver RowReceiver,
+	ctx context.Context, spec distsqlpb.StreamEndpointSpec, receiver distsql.RowReceiver,
 ) error {
 	sid := spec.StreamID
 	switch spec.Type {
@@ -214,7 +148,7 @@ func (f *Flow) setupInboundStream(
 			return errors.Errorf("local stream %d has multiple consumers", sid)
 		}
 		if f.localStreams == nil {
-			f.localStreams = make(map[distsqlpb.StreamID]RowReceiver)
+			f.localStreams = make(map[distsqlpb.StreamID]distsql.RowReceiver)
 		}
 		f.localStreams[sid] = receiver
 
@@ -228,14 +162,14 @@ func (f *Flow) setupInboundStream(
 // setupOutboundStream sets up an output stream; if the stream is local, the
 // RowChannel is looked up in the localStreams map; otherwise an outgoing
 // mailbox is created.
-func (f *Flow) setupOutboundStream(spec distsqlpb.StreamEndpointSpec) (RowReceiver, error) {
+func (f *Flow) setupOutboundStream(spec distsqlpb.StreamEndpointSpec) (distsql.RowReceiver, error) {
 	sid := spec.StreamID
 	switch spec.Type {
 	case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
 		return f.syncFlowConsumer, nil
 
 	case distsqlpb.StreamEndpointSpec_REMOTE:
-		outbox := newOutbox(&f.FlowCtx, spec.TargetNodeID, f.id, sid)
+		outbox := newOutbox(&f.FlowCtx, spec.TargetNodeID, f.ID, sid)
 		f.startables = append(f.startables, outbox)
 		return outbox, nil
 
@@ -259,7 +193,7 @@ func (f *Flow) setupOutboundStream(spec distsqlpb.StreamEndpointSpec) (RowReceiv
 //
 // Pass-through routers are not supported; they should be handled separately.
 func (f *Flow) setupRouter(spec *distsqlpb.OutputRouterSpec) (router, error) {
-	streams := make([]RowReceiver, len(spec.Streams))
+	streams := make([]distsql.RowReceiver, len(spec.Streams))
 	for i := range spec.Streams {
 		var err error
 		streams[i], err = f.setupOutboundStream(spec.Streams[i])
@@ -270,7 +204,9 @@ func (f *Flow) setupRouter(spec *distsqlpb.OutputRouterSpec) (router, error) {
 	return makeRouter(spec, streams)
 }
 
-func checkNumInOut(inputs []RowSource, outputs []RowReceiver, numIn, numOut int) error {
+func checkNumInOut(
+	inputs []distsql.RowSource, outputs []distsql.RowReceiver, numIn, numOut int,
+) error {
 	if len(inputs) != numIn {
 		return errors.Errorf("expected %d input(s), got %d", numIn, len(inputs))
 	}
@@ -280,13 +216,27 @@ func checkNumInOut(inputs []RowSource, outputs []RowReceiver, numIn, numOut int)
 	return nil
 }
 
+type copyingRowReceiver struct {
+	distsql.RowReceiver
+	alloc sqlbase.EncDatumRowAlloc
+}
+
+func (r *copyingRowReceiver) Push(
+	row sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata,
+) distsql.ConsumerStatus {
+	if row != nil {
+		row = r.alloc.CopyRow(row)
+	}
+	return r.RowReceiver.Push(row, meta)
+}
+
 func (f *Flow) makeProcessor(
-	ctx context.Context, ps *distsqlpb.ProcessorSpec, inputs []RowSource,
-) (Processor, error) {
+	ctx context.Context, ps *distsqlpb.ProcessorSpec, inputs []distsql.RowSource,
+) (distsql.Processor, error) {
 	if len(ps.Output) != 1 {
 		return nil, errors.Errorf("only single-output processors supported")
 	}
-	var output RowReceiver
+	var output distsql.RowReceiver
 	spec := &ps.Output[0]
 	if spec.Type == distsqlpb.OutputRouterSpec_PASS_THROUGH {
 		// There is no entity that corresponds to a pass-through router - we just
@@ -317,7 +267,7 @@ func (f *Flow) makeProcessor(
 
 	output = &copyingRowReceiver{RowReceiver: output}
 
-	outputs := []RowReceiver{output}
+	outputs := []distsql.RowReceiver{output}
 	proc, err := newProcessor(ctx, &f.FlowCtx, ps.ProcessorID, &ps.Core, &ps.Post, inputs, outputs, f.localProcessors)
 	if err != nil {
 		return nil, err
@@ -337,17 +287,17 @@ func (f *Flow) makeProcessor(
 
 // setupInputSyncs populates a slice of input syncs, one for each Processor in
 // f.Spec, each containing one RowSource for each input to that Processor.
-func (f *Flow) setupInputSyncs(ctx context.Context) ([][]RowSource, error) {
-	inputSyncs := make([][]RowSource, len(f.spec.Processors))
+func (f *Flow) setupInputSyncs(ctx context.Context) ([][]distsql.RowSource, error) {
+	inputSyncs := make([][]distsql.RowSource, len(f.spec.Processors))
 	for pIdx, ps := range f.spec.Processors {
 		for _, is := range ps.Input {
 			if len(is.Streams) == 0 {
 				return nil, errors.Errorf("input sync with no streams")
 			}
-			var sync RowSource
+			var sync distsql.RowSource
 			switch is.Type {
 			case distsqlpb.InputSyncSpec_UNORDERED:
-				mrc := &RowChannel{}
+				mrc := &distsql.RowChannel{}
 				mrc.InitWithNumSenders(is.ColumnTypes, len(is.Streams))
 				for _, s := range is.Streams {
 					if err := f.setupInboundStream(ctx, s, mrc); err != nil {
@@ -357,9 +307,9 @@ func (f *Flow) setupInputSyncs(ctx context.Context) ([][]RowSource, error) {
 				sync = mrc
 			case distsqlpb.InputSyncSpec_ORDERED:
 				// Ordered synchronizer: create a RowChannel for each input.
-				streams := make([]RowSource, len(is.Streams))
+				streams := make([]distsql.RowSource, len(is.Streams))
 				for i, s := range is.Streams {
-					rowChan := &RowChannel{}
+					rowChan := &distsql.RowChannel{}
 					rowChan.InitWithNumSenders(is.ColumnTypes, 1 /* numSenders */)
 					if err := f.setupInboundStream(ctx, s, rowChan); err != nil {
 						return nil, err
@@ -386,8 +336,8 @@ func (f *Flow) setupInputSyncs(ctx context.Context) ([][]RowSource, error) {
 // has one output, and that output is a simple PASS_THROUGH output), and
 // populates f.processors with all created processors that weren't fused to and
 // thus need their own goroutine.
-func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) error {
-	f.processors = make([]Processor, 0, len(f.spec.Processors))
+func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]distsql.RowSource) error {
+	f.processors = make([]distsql.Processor, 0, len(f.spec.Processors))
 
 	// Populate f.processors: see which processors need their own goroutine and
 	// which are fused with their consumer.
@@ -402,7 +352,7 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 		fuse := func() bool {
 			// If the processor implements RowSource try to hook it up directly to the
 			// input of a later processor.
-			source, ok := p.(RowSource)
+			source, ok := p.(distsql.RowSource)
 			if !ok {
 				return false
 			}
@@ -457,10 +407,10 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
 	if f.isVectorized {
-		log.VEventf(ctx, 1, "setting up vectorize flow %s", f.id.Short())
+		log.VEventf(ctx, 1, "setting up vectorize flow %s", f.ID.Short())
 		acc := f.EvalCtx.Mon.MakeBoundAccount()
-		f.vectorizedBoundAccount = &acc
-		err := f.setupVectorizedFlow(ctx, f.vectorizedBoundAccount)
+		f.VectorizedBoundAccount = &acc
+		err := f.setupVectorizedFlow(ctx, f.VectorizedBoundAccount)
 		if err == nil {
 			log.VEventf(ctx, 1, "vectorized flow setup succeeded")
 			return nil
@@ -503,7 +453,7 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) (context.Contex
 		f.waitGroup.Add(len(f.inboundStreams))
 
 		if err := f.flowRegistry.RegisterFlow(
-			ctx, f.id, f, f.inboundStreams, settingFlowStreamTimeout.Get(&f.FlowCtx.Cfg.Settings.SV),
+			ctx, f.ID, f, f.inboundStreams, settingFlowStreamTimeout.Get(&f.FlowCtx.Cfg.Settings.SV),
 		); err != nil {
 			return ctx, err
 		}
@@ -512,7 +462,7 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) (context.Contex
 	f.status = FlowRunning
 
 	if log.V(1) {
-		log.Infof(ctx, "registered flow %s", f.id.Short())
+		log.Infof(ctx, "registered flow %s", f.ID.Short())
 	}
 	for _, s := range f.startables {
 		s.start(ctx, &f.waitGroup, f.ctxCancel)
@@ -564,7 +514,7 @@ func (f *Flow) Run(ctx context.Context, doneFn func()) error {
 	defer f.Wait()
 
 	// We'll take care of the last processor in particular.
-	var headProc Processor
+	var headProc distsql.Processor
 	if len(f.processors) == 0 {
 		return errors.AssertionFailedf("no processors in flow")
 	}
@@ -633,8 +583,8 @@ func (f *Flow) Cleanup(ctx context.Context) {
 		panic("flow cleanup called twice")
 	}
 
-	if f.vectorizedBoundAccount != nil {
-		f.vectorizedBoundAccount.Close(ctx)
+	if f.VectorizedBoundAccount != nil {
+		f.VectorizedBoundAccount.Close(ctx)
 	}
 
 	// This closes the monitor opened in ServerImpl.setupFlow.
@@ -650,7 +600,7 @@ func (f *Flow) Cleanup(ctx context.Context) {
 	sp := opentracing.SpanFromContext(ctx)
 	// Local flows do not get registered.
 	if !f.isLocal() && f.status != FlowNotStarted {
-		f.flowRegistry.UnregisterFlow(f.id)
+		f.flowRegistry.UnregisterFlow(f.ID)
 	}
 	f.status = FlowFinished
 	f.ctxCancel()
@@ -671,7 +621,7 @@ func (f *Flow) cancel() {
 		return
 	}
 	f.flowRegistry.Lock()
-	timedOutReceivers := f.flowRegistry.cancelPendingStreamsLocked(f.id)
+	timedOutReceivers := f.flowRegistry.cancelPendingStreamsLocked(f.ID)
 	f.flowRegistry.Unlock()
 
 	for _, receiver := range timedOutReceivers {

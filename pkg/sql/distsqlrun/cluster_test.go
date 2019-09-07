@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -34,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 func TestClusterFlow(t *testing.T) {
@@ -380,7 +381,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	// groups of rows go to the same hash bucket).
 	rightRows := make(sqlbase.EncDatumRows, 0)
 	for i := 1; i <= 20; i++ {
-		for j := 1; j <= 4*rowChannelBufSize; j++ {
+		for j := 1; j <= 4*distsql.RowChannelBufSize; j++ {
 			rightRows = append(rightRows, sqlbase.EncDatumRow{
 				sqlbase.DatumToEncDatum(&typs[0], tree.NewDInt(tree.DInt(i))),
 			})

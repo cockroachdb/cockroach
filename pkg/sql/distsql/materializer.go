@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package distsql
 
 import (
 	"context"
@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// materializer converts an exec.Operator input into a RowSource.
-type materializer struct {
+// Materializer converts an exec.Operator input into a RowSource.
+type Materializer struct {
 	ProcessorBase
 	exec.NonExplainable
 
@@ -34,9 +34,9 @@ type materializer struct {
 	// runtime fields --
 
 	// curIdx represents the current index into the column batch: the next row the
-	// materializer will emit.
+	// Materializer will emit.
 	curIdx uint16
-	// batch is the current Batch the materializer is processing.
+	// batch is the current Batch the Materializer is processing.
 	batch coldata.Batch
 
 	// row is the memory used for the output row.
@@ -50,25 +50,25 @@ type materializer struct {
 	// cancelFlow will return a function to cancel the context of the flow. It is
 	// a function in order to be lazily evaluated, since the context cancellation
 	// function is only available when Starting. This function differs from
-	// ctxCancel in that it will cancel all components of the materializer's flow,
+	// ctxCancel in that it will cancel all components of the Materializer's flow,
 	// including those started asynchronously.
 	cancelFlow func() context.CancelFunc
 }
 
 const materializerProcName = "materializer"
 
-// newMaterializer creates a new materializer processor which processes the
+// NewMaterializer creates a new Materializer processor which processes the
 // columnar data coming from input to return it as rows.
 // Arguments:
 // - typs is the output types scheme.
 // - metadataSourcesQueue are all of the metadata sources that are planned on
-// the same node as the materializer and that need to be drained.
+// the same node as the Materializer and that need to be drained.
 // - outputStatsToTrace (when tracing is enabled) finishes the stats.
 // - cancelFlow should return the context cancellation function that cancels
 // the context of the flow (i.e. it is Flow.ctxCancel). It should only be
-// non-nil in case of a root materializer (i.e. not when we're wrapping a row
+// non-nil in case of a root Materializer (i.e. not when we're wrapping a row
 // source).
-func newMaterializer(
+func NewMaterializer(
 	flowCtx *FlowCtx,
 	processorID int32,
 	input exec.Operator,
@@ -78,8 +78,8 @@ func newMaterializer(
 	metadataSourcesQueue []distsqlpb.MetadataSource,
 	outputStatsToTrace func(),
 	cancelFlow func() context.CancelFunc,
-) (*materializer, error) {
-	m := &materializer{
+) (*Materializer, error) {
+	m := &Materializer{
 		input: input,
 		row:   make(sqlbase.EncDatumRow, len(typs)),
 	}
@@ -105,25 +105,28 @@ func newMaterializer(
 	); err != nil {
 		return nil, err
 	}
-	m.finishTrace = outputStatsToTrace
+	m.FinishTrace = outputStatsToTrace
 	m.cancelFlow = cancelFlow
 	return m, nil
 }
 
-var _ exec.OpNode = &materializer{}
+var _ exec.OpNode = &Materializer{}
 
-func (m *materializer) ChildCount() int {
+// ChildCount is part of the exec.OpNode interface.
+func (m *Materializer) ChildCount() int {
 	return 1
 }
 
-func (m *materializer) Child(nth int) exec.OpNode {
+// Child is part of the exec.OpNode interface.
+func (m *Materializer) Child(nth int) exec.OpNode {
 	if nth == 0 {
 		return m.input
 	}
 	panic(fmt.Sprintf("invalid index %d", nth))
 }
 
-func (m *materializer) Start(ctx context.Context) context.Context {
+// Start is part of the RowSource interface.
+func (m *Materializer) Start(ctx context.Context) context.Context {
 	m.input.Init()
 	return m.ProcessorBase.StartInternal(ctx, materializerProcName)
 }
@@ -131,13 +134,13 @@ func (m *materializer) Start(ctx context.Context) context.Context {
 // nextAdapter calls next() and saves the returned results in m. For internal
 // use only. The purpose of having this function is to not create an anonymous
 // function on every call to Next().
-func (m *materializer) nextAdapter() {
+func (m *Materializer) nextAdapter() {
 	m.outputRow, m.outputMetadata = m.next()
 }
 
 // next is the logic of Next() extracted in a separate method to be used by an
 // adapter to be able to wrap the latter with a catcher.
-func (m *materializer) next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (m *Materializer) next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	if m.State == StateRunning {
 		if m.batch == nil || m.curIdx >= m.batch.Length() {
 			// Get a fresh batch.
@@ -167,7 +170,8 @@ func (m *materializer) next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 	return nil, m.DrainHelper()
 }
 
-func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+// Next is part of the RowSource interface.
+func (m *Materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	if err := execerror.CatchVectorizedRuntimeError(m.nextAdapter); err != nil {
 		m.MoveToDraining(err)
 		return nil, m.DrainHelper()
@@ -175,7 +179,8 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 	return m.outputRow, m.outputMetadata
 }
 
-func (m *materializer) InternalClose() bool {
+// InternalClose helps implement the RowSource interface.
+func (m *Materializer) InternalClose() bool {
 	if m.ProcessorBase.InternalClose() {
 		if m.cancelFlow != nil {
 			m.cancelFlow()()
@@ -185,13 +190,15 @@ func (m *materializer) InternalClose() bool {
 	return false
 }
 
-func (m *materializer) ConsumerDone() {
+// ConsumerDone is part of the RowSource interface.
+func (m *Materializer) ConsumerDone() {
 	// Materializer will move into 'draining' state, and after all the metadata
 	// has been drained - as part of TrailingMetaCallback - InternalClose() will
 	// be called which will cancel the flow.
 	m.MoveToDraining(nil /* err */)
 }
 
-func (m *materializer) ConsumerClosed() {
+// ConsumerClosed is part of the RowSource interface.
+func (m *Materializer) ConsumerClosed() {
 	m.InternalClose()
 }

@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -693,14 +694,14 @@ func TestMergeJoiner(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			ms := c.spec
-			leftInput := NewRowBuffer(c.leftTypes, c.leftInput, RowBufferArgs{})
-			rightInput := NewRowBuffer(c.rightTypes, c.rightInput, RowBufferArgs{})
+			leftInput := newRowBuffer(c.leftTypes, c.leftInput, rowBufferArgs{})
+			rightInput := newRowBuffer(c.rightTypes, c.rightInput, rowBufferArgs{})
 			out := &RowBuffer{}
 			st := cluster.MakeTestingClusterSettings()
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
-			flowCtx := FlowCtx{
-				Cfg:     &ServerConfig{Settings: st},
+			flowCtx := distsql.FlowCtx{
+				Cfg:     &distsql.ServerConfig{Settings: st},
 				EvalCtx: &evalCtx,
 			}
 
@@ -794,8 +795,8 @@ func TestConsumerClosed(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.typ.String() /* name */, func(t *testing.T) {
-			leftInput := NewRowBuffer(leftTypes, tc.leftRows, RowBufferArgs{})
-			rightInput := NewRowBuffer(rightTypes, tc.rightRows, RowBufferArgs{})
+			leftInput := newRowBuffer(leftTypes, tc.leftRows, rowBufferArgs{})
+			rightInput := newRowBuffer(rightTypes, tc.rightRows, rowBufferArgs{})
 
 			// Create a consumer and close it immediately. The mergeJoiner should find out
 			// about this closer the first time it attempts to push a row.
@@ -805,8 +806,8 @@ func TestConsumerClosed(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
-			flowCtx := FlowCtx{
-				Cfg:     &ServerConfig{Settings: st},
+			flowCtx := distsql.FlowCtx{
+				Cfg:     &distsql.ServerConfig{Settings: st},
 				EvalCtx: &evalCtx,
 			}
 			post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: outCols}
@@ -829,8 +830,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	flowCtx := &FlowCtx{
-		Cfg:     &ServerConfig{Settings: st},
+	flowCtx := &distsql.FlowCtx{
+		Cfg:     &distsql.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 
@@ -847,14 +848,14 @@ func BenchmarkMergeJoiner(b *testing.B) {
 		// Implicit @1 = @2 constraint.
 	}
 	post := &distsqlpb.PostProcessSpec{}
-	disposer := &RowDisposer{}
+	disposer := &rowDisposer{}
 
 	const numCols = 1
 	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("InputSize=%d", inputSize), func(b *testing.B) {
 			rows := sqlbase.MakeIntRows(inputSize, numCols)
-			leftInput := NewRepeatableRowSource(sqlbase.OneIntCol, rows)
-			rightInput := NewRepeatableRowSource(sqlbase.OneIntCol, rows)
+			leftInput := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, rows)
+			rightInput := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, rows)
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -872,8 +873,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		numRepeats := inputSize
 		b.Run(fmt.Sprintf("OneSideRepeatInputSize=%d", inputSize), func(b *testing.B) {
-			leftInput := NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(inputSize, numCols))
-			rightInput := NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeRepeatedIntRows(numRepeats, inputSize, numCols))
+			leftInput := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(inputSize, numCols))
+			rightInput := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeRepeatedIntRows(numRepeats, inputSize, numCols))
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -892,8 +893,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 		numRepeats := int(math.Sqrt(float64(inputSize)))
 		b.Run(fmt.Sprintf("BothSidesRepeatInputSize=%d", inputSize), func(b *testing.B) {
 			row := sqlbase.MakeRepeatedIntRows(numRepeats, inputSize, numCols)
-			leftInput := NewRepeatableRowSource(sqlbase.OneIntCol, row)
-			rightInput := NewRepeatableRowSource(sqlbase.OneIntCol, row)
+			leftInput := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, row)
+			rightInput := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, row)
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {

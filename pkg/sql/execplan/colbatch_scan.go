@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package execplan
 
 import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -36,7 +37,7 @@ import (
 type colBatchScan struct {
 	exec.ZeroInputNode
 	spans     roachpb.Spans
-	flowCtx   *FlowCtx
+	flowCtx   *distsql.FlowCtx
 	rf        *row.CFetcher
 	limitHint int64
 	ctx       context.Context
@@ -57,11 +58,11 @@ func (s *colBatchScan) Init() {
 	s.ctx = context.Background()
 	s.init = true
 
-	limitBatches := scanShouldLimitBatches(s.maxResults, s.limitHint, s.flowCtx)
+	limitBatches := distsql.ScanShouldLimitBatches(s.maxResults, s.limitHint, s.flowCtx)
 
 	if err := s.rf.StartScan(
-		s.ctx, s.flowCtx.txn, s.spans,
-		limitBatches, s.limitHint, s.flowCtx.traceKV,
+		s.ctx, s.flowCtx.Txn, s.spans,
+		limitBatches, s.limitHint, s.flowCtx.TraceKV,
 	); err != nil {
 		panic(err)
 	}
@@ -85,13 +86,13 @@ func (s *colBatchScan) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetada
 		return nil
 	}
 	var trailingMeta []distsqlpb.ProducerMetadata
-	if !s.flowCtx.local {
-		ranges := misplannedRanges(ctx, s.rf.GetRangesInfo(), s.flowCtx.NodeID)
+	if !s.flowCtx.Local {
+		ranges := distsql.MisplannedRanges(ctx, s.rf.GetRangesInfo(), s.flowCtx.NodeID)
 		if ranges != nil {
 			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: ranges})
 		}
 	}
-	if meta := getTxnCoordMeta(ctx, s.flowCtx.txn); meta != nil {
+	if meta := distsql.GetTxnCoordMeta(ctx, s.flowCtx.Txn); meta != nil {
 		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 	return trailingMeta
@@ -99,17 +100,17 @@ func (s *colBatchScan) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetada
 
 // newColBatchScan creates a new colBatchScan operator.
 func newColBatchScan(
-	flowCtx *FlowCtx, spec *distsqlpb.TableReaderSpec, post *distsqlpb.PostProcessSpec,
+	flowCtx *distsql.FlowCtx, spec *distsqlpb.TableReaderSpec, post *distsqlpb.PostProcessSpec,
 ) (*colBatchScan, error) {
 	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a colBatchScan with uninitialized NodeID")
 	}
 
-	limitHint := limitHint(spec.LimitHint, post)
+	limitHint := distsql.LimitHint(spec.LimitHint, post)
 
 	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	typs := spec.Table.ColumnTypesWithMutations(returnMutations)
-	helper := ProcOutputHelper{}
+	helper := distsql.ProcOutputHelper{}
 	if err := helper.Init(
 		post,
 		typs,
@@ -119,7 +120,7 @@ func newColBatchScan(
 		return nil, err
 	}
 
-	neededColumns := helper.neededColumns()
+	neededColumns := helper.NeededColumns()
 
 	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
 	fetcher := row.CFetcher{}

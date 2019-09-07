@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package distsql
 
 import (
 	"context"
@@ -23,9 +23,9 @@ import (
 // overflows. See limitHint for how this bound is used.
 const readerOverflowProtection = 1000000000000000 /* 10^15 */
 
-// limitHint returns the limit hint to set for a KVFetcher based on
+// LimitHint returns the limit hint to set for a KVFetcher based on
 // the spec's limit hint and the PostProcessSpec.
-func limitHint(specLimitHint int64, post *distsqlpb.PostProcessSpec) (limitHint int64) {
+func LimitHint(specLimitHint int64, post *distsqlpb.PostProcessSpec) (limitHint int64) {
 	// We prioritize the post process's limit since ProcOutputHelper
 	// will tell us to stop once we emit enough rows.
 	if post.Limit != 0 && post.Limit <= readerOverflowProtection {
@@ -48,7 +48,7 @@ func limitHint(specLimitHint int64, post *distsqlpb.PostProcessSpec) (limitHint 
 		// reasoning goes out the door.
 		//
 		// TODO(radu, andrei): work on a real mechanism for limits.
-		limitHint = specLimitHint + rowChannelBufSize + 1
+		limitHint = specLimitHint + RowChannelBufSize + 1
 	}
 
 	if !post.Filter.Empty() {
@@ -59,9 +59,9 @@ func limitHint(specLimitHint int64, post *distsqlpb.PostProcessSpec) (limitHint 
 	return limitHint
 }
 
-// misplannedRanges filters out the misplanned ranges and their RangeInfo for a
+// MisplannedRanges filters out the misplanned ranges and their RangeInfo for a
 // given node.
-func misplannedRanges(
+func MisplannedRanges(
 	ctx context.Context, rangeInfos []roachpb.RangeInfo, nodeID roachpb.NodeID,
 ) (misplannedRanges []roachpb.RangeInfo) {
 	for _, ri := range rangeInfos {

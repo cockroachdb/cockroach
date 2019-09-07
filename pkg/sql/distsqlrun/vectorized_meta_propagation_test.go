@@ -15,8 +15,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/execplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -36,37 +38,37 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := FlowCtx{
+	flowCtx := distsql.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg:     &ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
+		Cfg:     &distsql.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 
 	nRows := 10
 	nCols := 1
 	types := sqlbase.OneIntCol
 
-	input := NewRowBuffer(types, sqlbase.MakeIntRows(nRows, nCols), RowBufferArgs{})
+	input := newRowBuffer(types, sqlbase.MakeIntRows(nRows, nCols), rowBufferArgs{})
 	mtsSpec := distsqlpb.ProcessorCoreUnion{
 		MetadataTestSender: &distsqlpb.MetadataTestSenderSpec{
 			ID: uuid.MakeV4().String(),
 		},
 	}
-	mts, err := newProcessor(ctx, &flowCtx, 0, &mtsSpec, &distsqlpb.PostProcessSpec{}, []RowSource{input}, []RowReceiver{nil}, nil)
+	mts, err := newProcessor(ctx, &flowCtx, 0, &mtsSpec, &distsqlpb.PostProcessSpec{}, []distsql.RowSource{input}, []distsql.RowReceiver{nil}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mtsAsRowSource, ok := mts.(RowSource)
+	mtsAsRowSource, ok := mts.(distsql.RowSource)
 	if !ok {
 		t.Fatal("MetadataTestSender is not a RowSource")
 	}
 
-	col, err := newColumnarizer(ctx, &flowCtx, 1, mtsAsRowSource)
+	col, err := execplan.NewColumnarizer(ctx, &flowCtx, 1, mtsAsRowSource)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	noop := exec.NewNoop(col)
-	mat, err := newMaterializer(
+	mat, err := distsql.NewMaterializer(
 		&flowCtx,
 		2, /* processorID */
 		noop,
@@ -86,11 +88,11 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 			SenderIDs: []string{mtsSpec.MetadataTestSender.ID},
 		},
 	}
-	mtr, err := newProcessor(ctx, &flowCtx, 3, &mtrSpec, &distsqlpb.PostProcessSpec{}, []RowSource{RowSource(mat)}, []RowReceiver{nil}, nil)
+	mtr, err := newProcessor(ctx, &flowCtx, 3, &mtrSpec, &distsqlpb.PostProcessSpec{}, []distsql.RowSource{distsql.RowSource(mat)}, []distsql.RowReceiver{nil}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mtrAsRowSource, ok := mtr.(RowSource)
+	mtrAsRowSource, ok := mtr.(distsql.RowSource)
 	if !ok {
 		t.Fatal("MetadataTestReceiver is not a RowSource")
 	}

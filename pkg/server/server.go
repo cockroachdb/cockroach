@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
@@ -77,9 +78,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/logtags"
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
@@ -511,7 +512,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	s.registry.AddMetricStruct(s.jobRegistry.MetricsStruct())
 
-	distSQLMetrics := distsqlrun.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
+	distSQLMetrics := distsql.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(distSQLMetrics)
 
 	// Set up Lease Manager
@@ -532,7 +533,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 
 	// Set up the DistSQL server.
-	distSQLCfg := distsqlrun.ServerConfig{
+	distSQLCfg := distsql.ServerConfig{
 		AmbientContext: s.cfg.AmbientCtx,
 		Settings:       st,
 		RuntimeStats:   s.runtime,
@@ -554,7 +555,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		) (storagebase.BulkAdder, error) {
 			// Attach a child memory monitor to enable control over the BulkAdder's
 			// memory usage.
-			bulkMon := distsqlrun.NewMonitor(ctx, &bulkMemoryMonitor, fmt.Sprintf("bulk-adder-monitor"))
+			bulkMon := distsql.NewMonitor(ctx, &bulkMemoryMonitor, fmt.Sprintf("bulk-adder-monitor"))
 			return bulk.MakeBulkAdder(ctx, db, s.distSender.RangeDescriptorCache(), ts, opts, bulkMon)
 		},
 
@@ -566,7 +567,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		LeaseManager: s.leaseMgr,
 	}
 	if distSQLTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
-		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*distsqlrun.TestingKnobs)
+		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*distsql.TestingKnobs)
 	}
 
 	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
@@ -687,9 +688,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		execCfg.SchemaChangerTestingKnobs = new(sql.SchemaChangerTestingKnobs)
 	}
 	if distSQLRunTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLRunTestingKnobs != nil {
-		execCfg.DistSQLRunTestingKnobs = distSQLRunTestingKnobs.(*distsqlrun.TestingKnobs)
+		execCfg.DistSQLRunTestingKnobs = distSQLRunTestingKnobs.(*distsql.TestingKnobs)
 	} else {
-		execCfg.DistSQLRunTestingKnobs = new(distsqlrun.TestingKnobs)
+		execCfg.DistSQLRunTestingKnobs = new(distsql.TestingKnobs)
 	}
 	if sqlEvalContext := s.cfg.TestingKnobs.SQLEvalContext; sqlEvalContext != nil {
 		execCfg.EvalContextTestingKnobs = *sqlEvalContext.(*tree.EvalContextTestingKnobs)

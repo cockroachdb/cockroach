@@ -37,6 +37,24 @@ type ExprContext interface {
 	EvaluateSubqueries() bool
 }
 
+// fakeExprContext is a fake implementation of ExprContext that always behaves
+// as if it were part of a non-local query.
+type fakeExprContext struct{}
+
+var _ ExprContext = fakeExprContext{}
+
+func (fakeExprContext) EvalContext() *tree.EvalContext {
+	return &tree.EvalContext{}
+}
+
+func (fakeExprContext) IsLocal() bool {
+	return false
+}
+
+func (fakeExprContext) EvaluateSubqueries() bool {
+	return true
+}
+
 // MakeExpression creates a distsqlrun.Expression.
 //
 // The distsqlrun.Expression uses the placeholder syntax (@1, @2, @3..) to refer
@@ -45,11 +63,16 @@ type ExprContext interface {
 // The expr uses IndexedVars to refer to columns. The caller can optionally
 // remap these columns by passing an indexVarMap: an IndexedVar with index i
 // becomes column indexVarMap[i].
+//
+// ctx can be nil in which case a fakeExprCtx will be used.
 func MakeExpression(
 	expr tree.TypedExpr, ctx ExprContext, indexVarMap []int,
 ) (distsqlpb.Expression, error) {
 	if expr == nil {
 		return distsqlpb.Expression{}, nil
+	}
+	if ctx == nil {
+		ctx = &fakeExprContext{}
 	}
 
 	if ctx.IsLocal() {

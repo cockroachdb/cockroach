@@ -15,6 +15,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -54,23 +55,23 @@ type scrubTableReader struct {
 	indexIdx int
 }
 
-var _ Processor = &scrubTableReader{}
-var _ RowSource = &scrubTableReader{}
+var _ distsql.Processor = &scrubTableReader{}
+var _ distsql.RowSource = &scrubTableReader{}
 
 var scrubTableReaderProcName = "scrub"
 
 // newScrubTableReader creates a scrubTableReader.
 func newScrubTableReader(
-	flowCtx *FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec *distsqlpb.TableReaderSpec,
 	post *distsqlpb.PostProcessSpec,
-	output RowReceiver,
+	output distsql.RowReceiver,
 ) (*scrubTableReader, error) {
 	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
-	if flowCtx.txn == nil {
+	if flowCtx.Txn == nil {
 		return nil, errors.Errorf("scrubTableReader outside of txn")
 	}
 
@@ -79,7 +80,7 @@ func newScrubTableReader(
 	}
 
 	tr.tableDesc = spec.Table
-	tr.limitHint = limitHint(spec.LimitHint, post)
+	tr.limitHint = distsql.LimitHint(spec.LimitHint, post)
 
 	if err := tr.Init(
 		tr,
@@ -89,7 +90,7 @@ func newScrubTableReader(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		ProcStateOpts{
+		distsql.ProcStateOpts{
 			// We don't pass tr.input as an inputToDrain; tr.input is just an adapter
 			// on top of a Fetcher; draining doesn't apply to it. Moreover, Andrei
 			// doesn't trust that the adapter will do the right thing on a Next() call
@@ -102,9 +103,9 @@ func newScrubTableReader(
 	}
 
 	var neededColumns util.FastIntSet
-	// If we are doing a scrub physical check, neededColumns needs to be
+	// If we are doing a scrub physical check, NeededColumns needs to be
 	// changed to be all columns available in the index we are scanning.
-	// This is because the emitted schema is ScrubTypes so neededColumns
+	// This is because the emitted schema is ScrubTypes so NeededColumns
 	// does not correctly represent the data being scanned.
 	if spec.IndexIdx == 0 {
 		neededColumns.AddRange(0, len(spec.Table.Columns)-1)
@@ -123,14 +124,14 @@ func newScrubTableReader(
 	}
 
 	var fetcher row.Fetcher
-	if _, _, err := initRowFetcher(
+	if _, _, err := distsql.InitRowFetcher(
 		&fetcher, &tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(), spec.Reverse,
 		neededColumns, true /* isCheck */, &tr.alloc,
 		distsqlpb.ScanVisibility_PUBLIC,
 	); err != nil {
 		return nil, err
 	}
-	tr.fetcher = &rowFetcherWrapper{Fetcher: &fetcher}
+	tr.fetcher = &distsql.RowFetcherWrapper{Fetcher: &fetcher}
 
 	tr.spans = make(roachpb.Spans, len(spec.Spans))
 	for i, s := range spec.Spans {
@@ -218,8 +219,8 @@ func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
 	log.VEventf(ctx, 1, "starting")
 
 	if err := tr.fetcher.StartScan(
-		ctx, tr.flowCtx.txn, tr.spans,
-		true /* limit batches */, tr.limitHint, tr.flowCtx.traceKV,
+		ctx, tr.FlowCtx.Txn, tr.spans,
+		true /* limit batches */, tr.limitHint, tr.FlowCtx.TraceKV,
 	); err != nil {
 		tr.MoveToDraining(err)
 	}
@@ -229,7 +230,7 @@ func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
 
 // Next is part of the RowSource interface.
 func (tr *scrubTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	for tr.State == StateRunning {
+	for tr.State == distsql.StateRunning {
 		var row sqlbase.EncDatumRow
 		var err error
 		// If we are running a scrub physical check, we use a specialized

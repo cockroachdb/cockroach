@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package distsql
 
 import (
 	"time"
@@ -16,9 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
-// DistSQLMetrics contains pointers to the metrics for
-// monitoring DistSQL processing.
-type DistSQLMetrics struct {
+// Metrics contains pointers to the metrics for monitoring DistSQL processing.
+type Metrics struct {
 	QueriesActive *metric.Gauge
 	QueriesTotal  *metric.Counter
 	FlowsActive   *metric.Gauge
@@ -30,9 +29,9 @@ type DistSQLMetrics struct {
 }
 
 // MetricStruct implements the metrics.Struct interface.
-func (DistSQLMetrics) MetricStruct() {}
+func (Metrics) MetricStruct() {}
 
-var _ metric.Struct = DistSQLMetrics{}
+var _ metric.Struct = Metrics{}
 
 var (
 	metaQueriesActive = metric.Metadata{
@@ -90,8 +89,8 @@ var (
 const log10int64times1000 = 19 * 1000
 
 // MakeDistSQLMetrics instantiates the metrics holder for DistSQL monitoring.
-func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
-	return DistSQLMetrics{
+func MakeDistSQLMetrics(histogramWindow time.Duration) Metrics {
+	return Metrics{
 		QueriesActive: metric.NewGauge(metaQueriesActive),
 		QueriesTotal:  metric.NewCounter(metaQueriesTotal),
 		FlowsActive:   metric.NewGauge(metaFlowsActive),
@@ -104,23 +103,23 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 }
 
 // QueryStart registers the start of a new DistSQL query.
-func (m *DistSQLMetrics) QueryStart() {
+func (m *Metrics) QueryStart() {
 	m.QueriesActive.Inc(1)
 	m.QueriesTotal.Inc(1)
 }
 
 // QueryStop registers the end of a DistSQL query.
-func (m *DistSQLMetrics) QueryStop() {
+func (m *Metrics) QueryStop() {
 	m.QueriesActive.Dec(1)
 }
 
 // FlowStart registers the start of a new DistSQL flow.
-func (m *DistSQLMetrics) FlowStart() {
+func (m *Metrics) FlowStart() {
 	m.FlowsActive.Inc(1)
 	m.FlowsTotal.Inc(1)
 }
 
 // FlowStop registers the end of a DistSQL flow.
-func (m *DistSQLMetrics) FlowStop() {
+func (m *Metrics) FlowStop() {
 	m.FlowsActive.Dec(1)
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,12 +48,12 @@ var sstOutputTypes = []types.T{
 }
 
 func newSSTWriterProcessor(
-	flowCtx *distsqlrun.FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec distsqlpb.SSTWriterSpec,
-	input distsqlrun.RowSource,
-	output distsqlrun.RowReceiver,
-) (distsqlrun.Processor, error) {
+	input distsql.RowSource,
+	output distsql.RowReceiver,
+) (distsql.Processor, error) {
 	sp := &sstWriter{
 		flowCtx:     flowCtx,
 		processorID: processorID,
@@ -76,12 +77,12 @@ func newSSTWriterProcessor(
 }
 
 type sstWriter struct {
-	flowCtx     *distsqlrun.FlowCtx
+	flowCtx     *distsql.FlowCtx
 	processorID int32
 	spec        distsqlpb.SSTWriterSpec
-	input       distsqlrun.RowSource
-	out         distsqlrun.ProcOutputHelper
-	output      distsqlrun.RowReceiver
+	input       distsql.RowSource
+	out         distsql.ProcOutputHelper
+	output      distsql.RowReceiver
 	tempStorage diskmap.Factory
 	settings    *cluster.Settings
 	registry    *jobs.Registry
@@ -89,7 +90,7 @@ type sstWriter struct {
 	db          *client.DB
 }
 
-var _ distsqlrun.Processor = &sstWriter{}
+var _ distsql.Processor = &sstWriter{}
 
 func (sp *sstWriter) OutputTypes() []types.T {
 	return sstOutputTypes
@@ -111,7 +112,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 		// Sort incoming KVs, which will be from multiple spans, into a single
 		// RocksDB instance.
 		typs := sp.input.OutputTypes()
-		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
+		input := distsql.MakeNoMetadataRowSource(sp.input, sp.output)
 		alloc := &sqlbase.DatumAlloc{}
 		store := sp.tempStorage.NewSortedDiskMultiMap()
 		defer store.Close(ctx)
@@ -256,7 +257,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 					if err != nil {
 						return err
 					}
-					if cs != distsqlrun.NeedMoreRows {
+					if cs != distsql.NeedMoreRows {
 						return errors.New("unexpected closure of consumer")
 					}
 				}
@@ -320,7 +321,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 		}
 		return nil
 	}()
-	distsqlrun.DrainAndClose(
+	distsql.DrainAndClose(
 		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
 }
 

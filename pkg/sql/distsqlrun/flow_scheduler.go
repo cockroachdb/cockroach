@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -38,7 +39,7 @@ type flowScheduler struct {
 	log.AmbientContext
 	stopper    *stop.Stopper
 	flowDoneCh chan *Flow
-	metrics    *DistSQLMetrics
+	metrics    *distsql.Metrics
 
 	mu struct {
 		syncutil.Mutex
@@ -61,7 +62,7 @@ func newFlowScheduler(
 	ambient log.AmbientContext,
 	stopper *stop.Stopper,
 	settings *cluster.Settings,
-	metrics *DistSQLMetrics,
+	metrics *distsql.Metrics,
 ) *flowScheduler {
 	fs := &flowScheduler{
 		AmbientContext: ambient,
@@ -88,7 +89,7 @@ func (fs *flowScheduler) canRunFlow(_ *Flow) bool {
 // runFlowNow starts the given flow; does not wait for the flow to complete.
 func (fs *flowScheduler) runFlowNow(ctx context.Context, f *Flow) error {
 	log.VEventf(
-		ctx, 1, "flow scheduler running flow %s, currently running %d", f.id, fs.mu.numRunning,
+		ctx, 1, "flow scheduler running flow %s, currently running %d", f.ID, fs.mu.numRunning,
 	)
 	fs.mu.numRunning++
 	fs.metrics.FlowStart()
@@ -118,7 +119,7 @@ func (fs *flowScheduler) ScheduleFlow(ctx context.Context, f *Flow) error {
 			if fs.canRunFlow(f) {
 				return fs.runFlowNow(ctx, f)
 			}
-			log.VEventf(ctx, 1, "flow scheduler enqueuing flow %s to be run later", f.id)
+			log.VEventf(ctx, 1, "flow scheduler enqueuing flow %s to be run later", f.ID)
 			fs.metrics.FlowsQueued.Inc(1)
 			fs.mu.queue.PushBack(&flowWithCtx{
 				ctx:         ctx,
@@ -155,7 +156,7 @@ func (fs *flowScheduler) Start() {
 						fs.mu.queue.Remove(frElem)
 						wait := timeutil.Since(n.enqueueTime)
 						log.VEventf(
-							n.ctx, 1, "flow scheduler dequeued flow %s, spent %s in queue", n.flow.id, wait,
+							n.ctx, 1, "flow scheduler dequeued flow %s, spent %s in queue", n.flow.ID, wait,
 						)
 						fs.metrics.FlowsQueued.Dec(1)
 						fs.metrics.QueueWaitHist.RecordValue(int64(wait))

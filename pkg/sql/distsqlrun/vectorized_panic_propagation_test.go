@@ -17,9 +17,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -37,22 +39,22 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := FlowCtx{
+	flowCtx := distsql.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg:     &ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
+		Cfg:     &distsql.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 
 	nRows, nCols := 1, 1
 	types := sqlbase.OneIntCol
-	input := NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
+	input := distsql.NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
 
-	col, err := newColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
+	col, err := execplan.NewColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	vee := newTestVectorizedPanicEmitter(col, execerror.VectorizedInternalPanic)
-	mat, err := newMaterializer(
+	mat, err := distsql.NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
 		vee,
@@ -84,22 +86,22 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := FlowCtx{
+	flowCtx := distsql.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg:     &ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
+		Cfg:     &distsql.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 
 	nRows, nCols := 1, 1
 	types := sqlbase.OneIntCol
-	input := NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
+	input := distsql.NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
 
-	col, err := newColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
+	col, err := execplan.NewColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	nvee := newTestVectorizedPanicEmitter(col, nil /* panicFn */)
-	mat, err := newMaterializer(
+	mat, err := distsql.NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
 		nvee,

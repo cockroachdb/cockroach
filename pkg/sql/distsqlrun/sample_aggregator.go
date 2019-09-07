@@ -17,6 +17,7 @@ import (
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -30,16 +31,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // A sample aggregator processor aggregates results from multiple sampler
 // processors. See SampleAggregatorSpec for more details.
 type sampleAggregator struct {
-	ProcessorBase
+	distsql.ProcessorBase
 
 	spec    *distsqlpb.SampleAggregatorSpec
-	input   RowSource
+	input   distsql.RowSource
 	memAcc  mon.BoundAccount
 	inTypes []types.T
 	sr      stats.SampleReservoir
@@ -56,7 +57,7 @@ type sampleAggregator struct {
 	sketchCol    int
 }
 
-var _ Processor = &sampleAggregator{}
+var _ distsql.Processor = &sampleAggregator{}
 
 const sampleAggregatorProcName = "sample aggregator"
 
@@ -65,12 +66,12 @@ const sampleAggregatorProcName = "sample aggregator"
 var SampleAggregatorProgressInterval = 5 * time.Second
 
 func newSampleAggregator(
-	flowCtx *FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec *distsqlpb.SampleAggregatorSpec,
-	input RowSource,
+	input distsql.RowSource,
 	post *distsqlpb.PostProcessSpec,
-	output RowReceiver,
+	output distsql.RowReceiver,
 ) (*sampleAggregator, error) {
 	for _, s := range spec.Sketches {
 		if len(s.Columns) == 0 {
@@ -91,7 +92,7 @@ func newSampleAggregator(
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// The processor will disable histogram collection if this limit is not
 	// enough.
-	memMonitor := NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sample-aggregator-mem")
+	memMonitor := distsql.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sample-aggregator-mem")
 	rankCol := len(input.OutputTypes()) - 5
 	s := &sampleAggregator{
 		spec:         spec,
@@ -121,7 +122,7 @@ func newSampleAggregator(
 
 	if err := s.Init(
 		nil, post, []types.T{}, flowCtx, processorID, output, memMonitor,
-		ProcStateOpts{
+		distsql.ProcStateOpts{
 			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
 				s.close()
 				return nil
@@ -134,7 +135,7 @@ func newSampleAggregator(
 }
 
 func (s *sampleAggregator) pushTrailingMeta(ctx context.Context) {
-	sendTraceData(ctx, s.out.output)
+	distsql.SendTraceData(ctx, s.Out.Output())
 }
 
 // Run is part of the Processor interface.
@@ -144,11 +145,11 @@ func (s *sampleAggregator) Run(ctx context.Context) {
 
 	earlyExit, err := s.mainLoop(s.Ctx)
 	if err != nil {
-		DrainAndClose(s.Ctx, s.out.output, err, s.pushTrailingMeta, s.input)
+		distsql.DrainAndClose(s.Ctx, s.Out.Output(), err, s.pushTrailingMeta, s.input)
 	} else if !earlyExit {
 		s.pushTrailingMeta(s.Ctx)
 		s.input.ConsumerClosed()
-		s.out.Close()
+		s.Out.Close()
 	}
 	s.MoveToDraining(nil /* err */)
 }
@@ -165,7 +166,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 	jobID := s.spec.JobID
 	// Some tests run this code without a job, so check if the jobID is 0.
 	if jobID != 0 {
-		job, err = s.flowCtx.Cfg.JobRegistry.LoadJob(ctx, s.spec.JobID)
+		job, err = s.FlowCtx.Cfg.JobRegistry.LoadJob(ctx, s.spec.JobID)
 		if err != nil {
 			return false, err
 		}
@@ -219,7 +220,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 					// don't create a biased histogram.
 					s.sr.Disable()
 				}
-			} else if !EmitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+			} else if !EmitHelper(ctx, &s.Out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 				// No cleanup required; EmitHelper() took care of it.
 				return true, nil
 			}
@@ -240,7 +241,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 				return false, errors.NewAssertionErrorWithWrappedErrf(err, "decoding rank column")
 			}
 			// Retain the rows with the top ranks.
-			if err := s.sr.SampleRow(ctx, s.evalCtx, row[:s.rankCol], uint64(rank)); err != nil {
+			if err := s.sr.SampleRow(ctx, s.EvalCtx, row[:s.rankCol], uint64(rank)); err != nil {
 				if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
 					return false, err
 				}
@@ -309,7 +310,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// internal executor instead of doing this weird thing where it uses the
 	// internal executor to execute one statement at a time inside a db.Txn()
 	// closure.
-	if err := s.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for _, si := range s.sketches {
 			distinctCount := int64(si.sketch.Estimate())
 			var histogram *stats.HistogramData
@@ -318,7 +319,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				typ := &s.inTypes[colIdx]
 
 				h, err := generateHistogram(
-					s.evalCtx,
+					s.EvalCtx,
 					s.sr.Get(),
 					colIdx,
 					typ,
@@ -340,7 +341,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			// Delete old stats that have been superseded.
 			if err := stats.DeleteOldStatsForColumns(
 				ctx,
-				s.flowCtx.Cfg.Executor,
+				s.FlowCtx.Cfg.Executor,
 				txn,
 				s.tableID,
 				columnIDs,
@@ -351,7 +352,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			// Insert the new stat.
 			if err := stats.InsertNewStat(
 				ctx,
-				s.flowCtx.Cfg.Executor,
+				s.FlowCtx.Cfg.Executor,
 				txn,
 				s.tableID,
 				si.spec.StatName,
@@ -371,7 +372,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	}
 
 	// Gossip invalidation of the stat caches for this table.
-	return stats.GossipTableStatAdded(s.flowCtx.Cfg.Gossip, s.tableID)
+	return stats.GossipTableStatAdded(s.FlowCtx.Cfg.Gossip, s.tableID)
 }
 
 // generateHistogram returns a histogram (on a given column) from a set of

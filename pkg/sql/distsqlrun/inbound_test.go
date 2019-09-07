@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -44,10 +45,10 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	ni := base.NodeIDContainer{}
 	ni.Set(ctx, 1)
 	st := cluster.MakeTestingClusterSettings()
-	mt := MakeDistSQLMetrics(time.Hour /* histogramWindow */)
+	mt := distsql.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
 	srv := NewServer(
 		ctx,
-		ServerConfig{
+		distsql.ServerConfig{
 			Settings: st,
 			Stopper:  stopper,
 			Metrics:  &mt,
@@ -72,8 +73,8 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 
 	// The outbox uses this stopper to run a goroutine.
 	outboxStopper := stop.NewStopper()
-	flowCtx := FlowCtx{
-		Cfg: &ServerConfig{
+	flowCtx := distsql.FlowCtx{
+		Cfg: &distsql.ServerConfig{
 			Settings:   st,
 			NodeDialer: nodedialer.New(rpcContext, staticAddressResolver(ln.Addr())),
 			Stopper:    outboxStopper,
@@ -89,7 +90,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	f := &Flow{}
 
 	// Use RegisterFlow to register our consumer, which we will control.
-	consumer := NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, RowBufferArgs{})
+	consumer := newRowBuffer(sqlbase.OneIntCol, nil /* rows */, rowBufferArgs{})
 	connectionInfo := map[distsqlpb.StreamID]*inboundStreamInfo{
 		streamID: {
 			receiver:  rowInboundStreamHandler{consumer},
@@ -117,7 +118,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	// the write to the row channel is asynchronous wrt the outbox sending the
 	// row and getting back the updated consumer status.
 	testutils.SucceedsSoon(t, func() error {
-		if cs := outbox.Push(row, nil /* meta */); cs != DrainRequested {
+		if cs := outbox.Push(row, nil /* meta */); cs != distsql.DrainRequested {
 			return errors.Errorf("unexpected consumer status %s", cs)
 		}
 		return nil

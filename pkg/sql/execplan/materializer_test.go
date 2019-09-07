@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package execplan
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -33,22 +34,22 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	nRows := 10000
 	nCols := 2
 	rows := sqlbase.MakeIntRows(nRows, nCols)
-	input := NewRepeatableRowSource(typs, rows)
+	input := distsql.NewRepeatableRowSource(typs, rows)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	flowCtx := &FlowCtx{
-		Cfg:     &ServerConfig{Settings: st},
+	flowCtx := &distsql.FlowCtx{
+		Cfg:     &distsql.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
-	c, err := newColumnarizer(ctx, flowCtx, 0, input)
+	c, err := NewColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	m, err := newMaterializer(
+	m, err := distsql.NewMaterializer(
 		flowCtx,
 		1, /* processorID */
 		c,
@@ -73,8 +74,8 @@ func TestColumnarizeMaterialize(t *testing.T) {
 			t.Fatal("unexpected nil row")
 		}
 		for j := 0; j < nCols; j++ {
-			if row[j].Datum.Compare(&evalCtx, input.rows[i][j].Datum) != 0 {
-				t.Fatal("unequal rows", row, input.rows[i])
+			if row[j].Datum.Compare(&evalCtx, rows[i][j].Datum) != 0 {
+				t.Fatal("unequal rows", row, rows[i])
 			}
 		}
 	}
@@ -114,17 +115,17 @@ func TestMaterializeTypes(t *testing.T) {
 		sqlbase.EncDatum{Datum: tree.NewDName("aloha")},
 		sqlbase.EncDatum{Datum: tree.NewDOid(59)},
 	}
-	input := NewRepeatableRowSource(types, sqlbase.EncDatumRows{inputRow})
+	input := distsql.NewRepeatableRowSource(types, sqlbase.EncDatumRows{inputRow})
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	flowCtx := &FlowCtx{
-		Cfg:     &ServerConfig{Settings: st},
+	flowCtx := &distsql.FlowCtx{
+		Cfg:     &distsql.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
-	c, err := newColumnarizer(ctx, flowCtx, 0, input)
+	c, err := NewColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +134,7 @@ func TestMaterializeTypes(t *testing.T) {
 	for i := range outputToInputColIdx {
 		outputToInputColIdx[i] = i
 	}
-	m, err := newMaterializer(
+	m, err := distsql.NewMaterializer(
 		flowCtx,
 		1, /* processorID */
 		c,
@@ -170,24 +171,24 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 	nRows := 10000
 	nCols := 2
 	rows := sqlbase.MakeIntRows(nRows, nCols)
-	input := NewRepeatableRowSource(types, rows)
+	input := distsql.NewRepeatableRowSource(types, rows)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	flowCtx := &FlowCtx{
-		Cfg:     &ServerConfig{Settings: st},
+	flowCtx := &distsql.FlowCtx{
+		Cfg:     &distsql.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
-	c, err := newColumnarizer(ctx, flowCtx, 0, input)
+	c, err := NewColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 	for i := 0; i < b.N; i++ {
-		m, err := newMaterializer(
+		m, err := distsql.NewMaterializer(
 			flowCtx,
 			1, /* processorID */
 			c,

@@ -13,11 +13,10 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
-	"strings"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -27,61 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
-
-// GetAggregateInfo returns the aggregate constructor and the return type for
-// the given aggregate function when applied on the given type.
-func GetAggregateInfo(
-	fn distsqlpb.AggregatorSpec_Func, inputTypes ...types.T,
-) (
-	aggregateConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
-	returnType *types.T,
-	err error,
-) {
-	if fn == distsqlpb.AggregatorSpec_ANY_NOT_NULL {
-		// The ANY_NOT_NULL builtin does not have a fixed return type;
-		// handle it separately.
-		if len(inputTypes) != 1 {
-			return nil, nil, errors.Errorf("any_not_null aggregate needs 1 input")
-		}
-		return builtins.NewAnyNotNullAggregate, &inputTypes[0], nil
-	}
-	datumTypes := make([]*types.T, len(inputTypes))
-	for i := range inputTypes {
-		datumTypes[i] = &inputTypes[i]
-	}
-
-	props, builtins := builtins.GetBuiltinProperties(strings.ToLower(fn.String()))
-	for _, b := range builtins {
-		typs := b.Types.Types()
-		if len(typs) != len(inputTypes) {
-			continue
-		}
-		match := true
-		for i, t := range typs {
-			if !datumTypes[i].Equivalent(t) {
-				if props.NullableArgs && datumTypes[i].IsAmbiguous() {
-					continue
-				}
-				match = false
-				break
-			}
-		}
-		if match {
-			// Found!
-			constructAgg := func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
-				return b.AggregateFunc(datumTypes, evalCtx, arguments)
-			}
-
-			colTyp := b.FixedReturnType()
-			return constructAgg, colTyp, nil
-		}
-	}
-	return nil, nil, errors.Errorf(
-		"no builtin aggregate for %s on %+v", fn, inputTypes,
-	)
-}
 
 type aggregateFuncs []tree.AggregateFunc
 
@@ -100,13 +46,13 @@ func (af aggregateFuncs) close(ctx context.Context) {
 // aggregatorBase's output schema is comprised of what is specified by the
 // accompanying SELECT expressions.
 type aggregatorBase struct {
-	ProcessorBase
+	distsql.ProcessorBase
 
 	// runningState represents the state of the aggregator. This is in addition to
 	// ProcessorBase.State - the runningState is only relevant when
 	// ProcessorBase.State == StateRunning.
 	runningState aggregatorState
-	input        RowSource
+	input        distsql.RowSource
 	inputDone    bool
 	inputTypes   []types.T
 	funcs        []*aggregateFuncHolder
@@ -120,8 +66,8 @@ type aggregatorBase struct {
 	// will generate a result row even if there are no input rows. Used for
 	// queries like SELECT MAX(n) FROM t.
 	isScalar         bool
-	groupCols        columns
-	orderedGroupCols columns
+	groupCols        []uint32
+	orderedGroupCols []uint32
 	aggregations     []distsqlpb.AggregatorSpec_Aggregation
 
 	lastOrdGroupCols sqlbase.EncDatumRow
@@ -132,40 +78,28 @@ type aggregatorBase struct {
 	cancelChecker *sqlbase.CancelChecker
 }
 
-func isScalarAggregate(spec *distsqlpb.AggregatorSpec) bool {
-	switch spec.Type {
-	case distsqlpb.AggregatorSpec_SCALAR:
-		return true
-	case distsqlpb.AggregatorSpec_NON_SCALAR:
-		return false
-	default:
-		// This case exists for backward compatibility.
-		return (len(spec.GroupCols) == 0)
-	}
-}
-
 // init initializes the aggregatorBase.
 //
 // trailingMetaCallback is passed as part of ProcStateOpts; the inputs to drain
 // are in aggregatorBase.
 func (ag *aggregatorBase) init(
-	self RowSource,
-	flowCtx *FlowCtx,
+	self distsql.RowSource,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec *distsqlpb.AggregatorSpec,
-	input RowSource,
+	input distsql.RowSource,
 	post *distsqlpb.PostProcessSpec,
-	output RowReceiver,
+	output distsql.RowReceiver,
 	trailingMetaCallback func(context.Context) []distsqlpb.ProducerMetadata,
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
+	memMonitor := distsql.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		input = NewInputStatCollector(input)
-		ag.finishTrace = ag.outputStatsToTrace
+		input = distsql.NewInputStatCollector(input)
+		ag.FinishTrace = ag.outputStatsToTrace
 	}
 	ag.input = input
-	ag.isScalar = isScalarAggregate(spec)
+	ag.isScalar = distsqlpb.IsScalarAggregate(spec)
 	ag.groupCols = spec.GroupCols
 	ag.orderedGroupCols = spec.OrderedGroupCols
 	ag.aggregations = spec.Aggregations
@@ -204,12 +138,12 @@ func (ag *aggregatorBase) init(
 
 		arguments := make(tree.Datums, len(aggInfo.Arguments))
 		for j, argument := range aggInfo.Arguments {
-			h := exprHelper{}
+			h := distsql.ExprHelper{}
 			// Pass nil types and row - there are no variables in these expressions.
-			if err := h.init(argument, nil /* types */, flowCtx.EvalCtx); err != nil {
+			if err := h.Init(argument, nil /* types */, flowCtx.EvalCtx); err != nil {
 				return errors.Wrapf(err, "%s", argument)
 			}
-			d, err := h.eval(nil /* row */)
+			d, err := h.Eval(nil /* row */)
 			if err != nil {
 				return errors.Wrapf(err, "%s", argument)
 			}
@@ -220,7 +154,7 @@ func (ag *aggregatorBase) init(
 			arguments[j] = d
 		}
 
-		aggConstructor, retType, err := GetAggregateInfo(aggInfo.Func, argTypes...)
+		aggConstructor, retType, err := distsqlpb.GetAggregateInfo(aggInfo.Func, argTypes...)
 		if err != nil {
 			return err
 		}
@@ -235,8 +169,8 @@ func (ag *aggregatorBase) init(
 
 	return ag.ProcessorBase.Init(
 		self, post, ag.outputTypes, flowCtx, processorID, output, memMonitor,
-		ProcStateOpts{
-			InputsToDrain:        []RowSource{ag.input},
+		distsql.ProcStateOpts{
+			InputsToDrain:        []distsql.RowSource{ag.input},
 			TrailingMetaCallback: trailingMetaCallback,
 		},
 	)
@@ -262,7 +196,7 @@ func (as *AggregatorStats) StatsForQueryPlan() []string {
 }
 
 func (ag *aggregatorBase) outputStatsToTrace() {
-	is, ok := getInputStats(ag.flowCtx, ag.input)
+	is, ok := distsql.GetInputStats(ag.FlowCtx, ag.input)
 	if !ok {
 		return
 	}
@@ -298,13 +232,13 @@ type orderedAggregator struct {
 	bucket aggregateFuncs
 }
 
-var _ Processor = &hashAggregator{}
-var _ RowSource = &hashAggregator{}
+var _ distsql.Processor = &hashAggregator{}
+var _ distsql.RowSource = &hashAggregator{}
 
 const hashAggregatorProcName = "hash aggregator"
 
-var _ Processor = &orderedAggregator{}
-var _ RowSource = &orderedAggregator{}
+var _ distsql.Processor = &orderedAggregator{}
+var _ distsql.RowSource = &orderedAggregator{}
 
 const orderedAggregatorProcName = "ordered aggregator"
 
@@ -322,13 +256,13 @@ const (
 )
 
 func newAggregator(
-	flowCtx *FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec *distsqlpb.AggregatorSpec,
-	input RowSource,
+	input distsql.RowSource,
 	post *distsqlpb.PostProcessSpec,
-	output RowReceiver,
-) (Processor, error) {
+	output distsql.RowReceiver,
+) (distsql.Processor, error) {
 	if len(spec.GroupCols) == 0 &&
 		len(spec.Aggregations) == 1 &&
 		spec.Aggregations[0].FilterColIdx == nil &&
@@ -362,12 +296,12 @@ func newAggregator(
 }
 
 func newOrderedAggregator(
-	flowCtx *FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec *distsqlpb.AggregatorSpec,
-	input RowSource,
+	input distsql.RowSource,
 	post *distsqlpb.PostProcessSpec,
-	output RowReceiver,
+	output distsql.RowReceiver,
 ) (*orderedAggregator, error) {
 	ag := &orderedAggregator{}
 
@@ -445,7 +379,7 @@ func (ag *orderedAggregator) close() {
 func (ag *aggregatorBase) matchLastOrdGroupCols(row sqlbase.EncDatumRow) (bool, error) {
 	for _, colIdx := range ag.orderedGroupCols {
 		res, err := ag.lastOrdGroupCols[colIdx].Compare(
-			&ag.inputTypes[colIdx], &ag.datumAlloc, ag.flowCtx.EvalCtx, &row[colIdx],
+			&ag.inputTypes[colIdx], &ag.datumAlloc, ag.FlowCtx.EvalCtx, &row[colIdx],
 		)
 		if res != 0 || err != nil {
 			return false, err
@@ -696,7 +630,7 @@ func (ag *orderedAggregator) emitRow() (
 
 // Next is part of the RowSource interface.
 func (ag *hashAggregator) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	for ag.State == StateRunning {
+	for ag.State == distsql.StateRunning {
 		var row sqlbase.EncDatumRow
 		var meta *distsqlpb.ProducerMetadata
 		switch ag.runningState {
@@ -718,7 +652,7 @@ func (ag *hashAggregator) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetada
 
 // Next is part of the RowSource interface.
 func (ag *orderedAggregator) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	for ag.State == StateRunning {
+	for ag.State == distsql.StateRunning {
 		var row sqlbase.EncDatumRow
 		var meta *distsqlpb.ProducerMetadata
 		switch ag.runningState {
@@ -927,7 +861,7 @@ func (ag *aggregatorBase) createAggregateFuncs() (aggregateFuncs, error) {
 	}
 	bucket := make(aggregateFuncs, len(ag.funcs))
 	for i, f := range ag.funcs {
-		agg := f.create(ag.flowCtx.EvalCtx, f.arguments)
+		agg := f.create(ag.FlowCtx.EvalCtx, f.arguments)
 		if err := ag.bucketsAcc.Grow(ag.Ctx, agg.Size()); err != nil {
 			return nil, err
 		}

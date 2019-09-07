@@ -17,6 +17,7 @@ import (
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -32,7 +33,7 @@ func runSampler(
 	for i := range rows {
 		rows[i] = sqlbase.EncDatumRow{sqlbase.IntEncDatum(i)}
 	}
-	in := NewRowBuffer(sqlbase.OneIntCol, rows, RowBufferArgs{})
+	in := newRowBuffer(sqlbase.OneIntCol, rows, rowBufferArgs{})
 	outTypes := []types.T{
 		*types.Int, // original column
 		*types.Int, // rank
@@ -42,13 +43,13 @@ func runSampler(
 		*types.Bytes,
 	}
 
-	out := NewRowBuffer(outTypes, nil /* rows */, RowBufferArgs{})
+	out := newRowBuffer(outTypes, nil /* rows */, rowBufferArgs{})
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	flowCtx := FlowCtx{
-		Cfg:     &ServerConfig{Settings: st},
+	flowCtx := distsql.FlowCtx{
+		Cfg:     &distsql.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 	// Override the default memory limit. If memLimitBytes is small but
@@ -179,7 +180,7 @@ func TestSamplerSketch(t *testing.T) {
 	numNulls := []int{2, 1}
 
 	rows := sqlbase.GenEncDatumRowsInt(inputRows)
-	in := NewRowBuffer(sqlbase.TwoIntCols, rows, RowBufferArgs{})
+	in := newRowBuffer(sqlbase.TwoIntCols, rows, rowBufferArgs{})
 	outTypes := []types.T{
 		*types.Int,   // original column
 		*types.Int,   // original column
@@ -190,13 +191,13 @@ func TestSamplerSketch(t *testing.T) {
 		*types.Bytes, // sketch data
 	}
 
-	out := NewRowBuffer(outTypes, nil /* rows */, RowBufferArgs{})
+	out := newRowBuffer(outTypes, nil /* rows */, rowBufferArgs{})
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	flowCtx := FlowCtx{
-		Cfg:     &ServerConfig{Settings: st},
+	flowCtx := distsql.FlowCtx{
+		Cfg:     &distsql.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 

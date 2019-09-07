@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package distsql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -18,19 +18,20 @@ import (
 	"github.com/pkg/errors"
 )
 
-type joinerBase struct {
+// JoinerBase is the common core of all joiners.
+type JoinerBase struct {
 	ProcessorBase
 
-	joinType    sqlbase.JoinType
-	onCond      exprHelper
+	JoinType    sqlbase.JoinType
+	onCond      ExprHelper
 	emptyLeft   sqlbase.EncDatumRow
 	emptyRight  sqlbase.EncDatumRow
 	combinedRow sqlbase.EncDatumRow
 
-	// eqCols contains the indices of the columns that are constrained to be
-	// equal. Specifically column eqCols[0][i] on the left side must match the
-	// column eqCols[1][i] on the right side.
-	eqCols [2][]uint32
+	// EqCols contains the indices of the columns that are constrained to be
+	// equal. Specifically column EqCols[0][i] on the left side must match the
+	// column EqCols[1][i] on the right side.
+	EqCols [2][]uint32
 
 	// numMergedEqualityColumns specifies how many of the equality
 	// columns must be merged at the beginning of each result row. This
@@ -38,11 +39,11 @@ type joinerBase struct {
 	numMergedEqualityColumns int
 }
 
-// init initializes the joinerBase.
+// Init initializes the JoinerBase.
 //
 // opts is passed along to the underlying ProcessorBase. The zero value is used
-// if the processor using the joinerBase is not implementing RowSource.
-func (jb *joinerBase) init(
+// if the processor using the JoinerBase is not implementing RowSource.
+func (jb *JoinerBase) Init(
 	self RowSource,
 	flowCtx *FlowCtx,
 	processorID int32,
@@ -57,9 +58,9 @@ func (jb *joinerBase) init(
 	output RowReceiver,
 	opts ProcStateOpts,
 ) error {
-	jb.joinType = jType
+	jb.JoinType = jType
 
-	if jb.joinType.IsSetOpJoin() {
+	if jb.JoinType.IsSetOpJoin() {
 		if !onExpr.Empty() {
 			return errors.Errorf("expected empty onExpr, got %v", onExpr.Expr)
 		}
@@ -74,8 +75,8 @@ func (jb *joinerBase) init(
 		jb.emptyRight[i] = sqlbase.DatumToEncDatum(&rightTypes[i], tree.DNull)
 	}
 
-	jb.eqCols[leftSide] = columns(leftEqColumns)
-	jb.eqCols[rightSide] = columns(rightEqColumns)
+	jb.EqCols[LeftSide] = leftEqColumns
+	jb.EqCols[RightSide] = rightEqColumns
 	jb.numMergedEqualityColumns = int(numMergedColumns)
 
 	size := len(leftTypes) + jb.numMergedEqualityColumns + len(rightTypes)
@@ -83,8 +84,8 @@ func (jb *joinerBase) init(
 
 	condTypes := make([]types.T, 0, size)
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
-		ltype := leftTypes[jb.eqCols[leftSide][idx]]
-		rtype := rightTypes[jb.eqCols[rightSide][idx]]
+		ltype := leftTypes[jb.EqCols[LeftSide][idx]]
+		rtype := rightTypes[jb.EqCols[RightSide][idx]]
 		var ctype types.T
 		if ltype.Family() != types.UnknownFamily {
 			ctype = ltype
@@ -97,7 +98,7 @@ func (jb *joinerBase) init(
 	condTypes = append(condTypes, rightTypes...)
 
 	outputSize := len(leftTypes) + jb.numMergedEqualityColumns
-	if shouldIncludeRightColsInOutput(jb.joinType) {
+	if shouldIncludeRightColsInOutput(jb.JoinType) {
 		outputSize += len(rightTypes)
 	}
 	outputTypes := condTypes[:outputSize]
@@ -107,34 +108,38 @@ func (jb *joinerBase) init(
 	); err != nil {
 		return err
 	}
-	return jb.onCond.init(onExpr, condTypes, jb.evalCtx)
+	return jb.onCond.Init(onExpr, condTypes, jb.EvalCtx)
 }
 
-type joinSide uint8
+// JoinSide is the utility type to dinstinguish between two sides of the join.
+type JoinSide uint8
 
 const (
-	leftSide  joinSide = 0
-	rightSide joinSide = 1
+	// LeftSide indicates the left side of the join.
+	LeftSide JoinSide = 0
+	// RightSide indicates the right side of the join.
+	RightSide JoinSide = 1
 )
 
-func otherSide(s joinSide) joinSide {
-	return joinSide(1 - uint8(s))
+// OtherSide returns the opposite to s side.
+func OtherSide(s JoinSide) JoinSide {
+	return JoinSide(1 - uint8(s))
 }
 
-func (j joinSide) String() string {
-	if j == leftSide {
+func (j JoinSide) String() string {
+	if j == LeftSide {
 		return "left"
 	}
 	return "right"
 }
 
-// renderUnmatchedRow creates a result row given an unmatched row on either
+// RenderUnmatchedRow creates a result row given an unmatched row on either
 // side. Only used for outer joins.
-func (jb *joinerBase) renderUnmatchedRow(
-	row sqlbase.EncDatumRow, side joinSide,
+func (jb *JoinerBase) RenderUnmatchedRow(
+	row sqlbase.EncDatumRow, side JoinSide,
 ) sqlbase.EncDatumRow {
 	lrow, rrow := jb.emptyLeft, jb.emptyRight
-	if side == leftSide {
+	if side == LeftSide {
 		lrow = row
 	} else {
 		rrow = row
@@ -144,7 +149,7 @@ func (jb *joinerBase) renderUnmatchedRow(
 	// Values are taken from non-empty row
 	jb.combinedRow = jb.combinedRow[:0]
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
-		jb.combinedRow = append(jb.combinedRow, row[jb.eqCols[side][idx]])
+		jb.combinedRow = append(jb.combinedRow, row[jb.EqCols[side][idx]])
 	}
 	jb.combinedRow = append(jb.combinedRow, lrow...)
 	jb.combinedRow = append(jb.combinedRow, rrow...)
@@ -160,22 +165,22 @@ func shouldIncludeRightColsInOutput(joinType sqlbase.JoinType) bool {
 	}
 }
 
-// shouldEmitUnmatchedRow determines if we should emit am ummatched row (with
+// ShouldEmitUnmatchedRow determines if we should emit am ummatched row (with
 // NULLs for the columns of the other stream). This happens in FULL OUTER joins
 // and LEFT or RIGHT OUTER joins and ANTI joins (depending on which stream is
 // stored).
-func shouldEmitUnmatchedRow(side joinSide, joinType sqlbase.JoinType) bool {
+func ShouldEmitUnmatchedRow(side JoinSide, joinType sqlbase.JoinType) bool {
 	switch joinType {
 	case sqlbase.LeftSemiJoin, sqlbase.InnerJoin, sqlbase.IntersectAllJoin:
 		return false
 	case sqlbase.RightOuterJoin:
-		return side == rightSide
+		return side == RightSide
 	case sqlbase.LeftOuterJoin:
-		return side == leftSide
+		return side == LeftSide
 	case sqlbase.LeftAntiJoin:
-		return side == leftSide
+		return side == LeftSide
 	case sqlbase.ExceptAllJoin:
-		return side == leftSide
+		return side == LeftSide
 	case sqlbase.FullOuterJoin:
 		return true
 	default:
@@ -183,25 +188,25 @@ func shouldEmitUnmatchedRow(side joinSide, joinType sqlbase.JoinType) bool {
 	}
 }
 
-// render constructs a row with columns from both sides. The ON condition is
+// Render constructs a row with columns from both sides. The ON condition is
 // evaluated; if it fails, returns nil.
 // Note the left and right merged equality columns (i.e. from a USING clause
 // or after simplifying ON left.x = right.x) are NOT checked for equality.
 // See CompareEncDatumRowForMerge.
-func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
+func (jb *JoinerBase) Render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
 	n := jb.numMergedEqualityColumns
 	jb.combinedRow = jb.combinedRow[:n+len(lrow)+len(rrow)]
 	for i := 0; i < n; i++ {
 		// This function is called only when lrow and rrow match on the equality
 		// columns which can never happen if there are any NULLs in these
 		// columns. So we know for sure the lrow value is not null
-		jb.combinedRow[i] = lrow[jb.eqCols[leftSide][i]]
+		jb.combinedRow[i] = lrow[jb.EqCols[LeftSide][i]]
 	}
 	copy(jb.combinedRow[n:], lrow)
 	copy(jb.combinedRow[n+len(lrow):], rrow)
 
-	if jb.onCond.expr != nil {
-		res, err := jb.onCond.evalFilter(jb.combinedRow)
+	if jb.onCond.Expr != nil {
+		res, err := jb.onCond.EvalFilter(jb.combinedRow)
 		if !res || err != nil {
 			return nil, err
 		}

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package distsql
 
 import (
 	"fmt"
@@ -84,6 +84,6 @@ func TestProcessExpressionConstantEval(t *testing.T) {
 		HasNonNulls: true,
 	}
 	if !reflect.DeepEqual(expr, expected) {
-		t.Errorf("invalid expr '%v', expected '%v'", expr, expected)
+		t.Errorf("invalid Expr '%v', expected '%v'", expr, expected)
 	}
 }

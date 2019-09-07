@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -262,19 +263,19 @@ func TestPostProcess(t *testing.T) {
 
 	for tcIdx, tc := range testCases {
 		t.Run(strconv.Itoa(tcIdx), func(t *testing.T) {
-			inBuf := NewRowBuffer(sqlbase.ThreeIntCols, input, RowBufferArgs{})
+			inBuf := newRowBuffer(sqlbase.ThreeIntCols, input, rowBufferArgs{})
 			outBuf := &RowBuffer{}
 
-			var out ProcOutputHelper
+			var out distsql.ProcOutputHelper
 			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
 			if err := out.Init(&tc.post, inBuf.OutputTypes(), evalCtx, outBuf); err != nil {
 				t.Fatal(err)
 			}
 
-			// Verify neededColumns().
+			// Verify NeededColumns().
 			count := 0
-			neededCols := out.neededColumns()
+			neededCols := out.NeededColumns()
 			neededCols.ForEach(func(_ int) {
 				count++
 			})
@@ -292,7 +293,7 @@ func TestPostProcess(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if status != NeedMoreRows {
+				if status != distsql.NeedMoreRows {
 					out.Close()
 					break
 				}
@@ -411,14 +412,14 @@ func TestProcessorBaseContext(t *testing.T) {
 
 	runTest := func(t *testing.T, f func(noop *noopProcessor)) {
 		evalCtx := tree.MakeTestingEvalContext(st)
-		flowCtx := &FlowCtx{
-			Cfg:     &ServerConfig{Settings: st},
+		flowCtx := &distsql.FlowCtx{
+			Cfg:     &distsql.ServerConfig{Settings: st},
 			EvalCtx: &evalCtx,
 		}
 		defer flowCtx.EvalCtx.Stop(ctx)
 
-		input := NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(10, 1))
-		noop, err := newNoopProcessor(flowCtx, 0 /* processorID */, input, &distsqlpb.PostProcessSpec{}, &RowDisposer{})
+		input := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(10, 1))
+		noop, err := newNoopProcessor(flowCtx, 0 /* processorID */, input, &distsqlpb.PostProcessSpec{}, &rowDisposer{})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -13,6 +13,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -24,32 +25,32 @@ import (
 // countAggregator is a simple processor that counts the number of rows it
 // receives. It's a specialized aggregator that can be used for COUNT(*).
 type countAggregator struct {
-	ProcessorBase
+	distsql.ProcessorBase
 
-	input RowSource
+	input distsql.RowSource
 	count int
 }
 
-var _ Processor = &countAggregator{}
-var _ RowSource = &countAggregator{}
+var _ distsql.Processor = &countAggregator{}
+var _ distsql.RowSource = &countAggregator{}
 
 const countRowsProcName = "count rows"
 
 var outputTypes = []types.T{*types.Int}
 
 func newCountAggregator(
-	flowCtx *FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	input RowSource,
+	input distsql.RowSource,
 	post *distsqlpb.PostProcessSpec,
-	output RowReceiver,
+	output distsql.RowReceiver,
 ) (*countAggregator, error) {
 	ag := &countAggregator{}
 	ag.input = input
 
 	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
-		ag.input = NewInputStatCollector(input)
-		ag.finishTrace = ag.outputStatsToTrace
+		ag.input = distsql.NewInputStatCollector(input)
+		ag.FinishTrace = ag.outputStatsToTrace
 	}
 
 	if err := ag.Init(
@@ -60,8 +61,8 @@ func newCountAggregator(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		ProcStateOpts{
-			InputsToDrain: []RowSource{ag.input},
+		distsql.ProcStateOpts{
+			InputsToDrain: []distsql.RowSource{ag.input},
 		},
 	); err != nil {
 		return nil, err
@@ -76,7 +77,7 @@ func (ag *countAggregator) Start(ctx context.Context) context.Context {
 }
 
 func (ag *countAggregator) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	for ag.State == StateRunning {
+	for ag.State == distsql.StateRunning {
 		row, meta := ag.input.Next()
 		if meta != nil {
 			if meta.Err != nil {
@@ -88,7 +89,7 @@ func (ag *countAggregator) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetad
 		if row == nil {
 			ret := make(sqlbase.EncDatumRow, 1)
 			ret[0] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(ag.count))}
-			rendered, _, err := ag.out.ProcessRow(ag.Ctx, ret)
+			rendered, _, err := ag.Out.ProcessRow(ag.Ctx, ret)
 			// We're done as soon as we process our one output row.
 			ag.MoveToDraining(err)
 			return rendered, nil
@@ -109,7 +110,7 @@ func (ag *countAggregator) ConsumerClosed() {
 // outputStatsToTrace outputs the collected distinct stats to the trace. Will
 // fail silently if the Distinct processor is not collecting stats.
 func (ag *countAggregator) outputStatsToTrace() {
-	is, ok := getInputStats(ag.flowCtx, ag.input)
+	is, ok := distsql.GetInputStats(ag.FlowCtx, ag.input)
 	if !ok {
 		return
 	}

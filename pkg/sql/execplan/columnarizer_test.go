@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package execplan
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -32,18 +33,18 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 	nRows := coldata.BatchSize * 2
 	nCols := len(typs)
 	rows := sqlbase.MakeIntRows(nRows, nCols)
-	input := NewRepeatableRowSource(typs, rows)
+	input := distsql.NewRepeatableRowSource(typs, rows)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	flowCtx := &FlowCtx{
-		Cfg:     &ServerConfig{Settings: st},
+	flowCtx := &distsql.FlowCtx{
+		Cfg:     &distsql.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 
-	c, err := newColumnarizer(ctx, flowCtx, 0, input)
+	c, err := NewColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,12 +52,12 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 	foundRows := 0
 	for {
 		batch := c.Next(ctx)
-		require.Nil(t, batch.Selection(), "columnarizer didn't reset the internal batch")
+		require.Nil(t, batch.Selection(), "Columnarizer didn't reset the internal batch")
 		if batch.Length() == 0 {
 			break
 		}
 		foundRows += int(batch.Length())
-		// The "meat" of the test - we're updating the batch that the columnarizer
+		// The "meat" of the test - we're updating the batch that the Columnarizer
 		// owns.
 		batch.SetSelection(true)
 	}
@@ -68,20 +69,20 @@ func BenchmarkColumnarize(b *testing.B) {
 	nRows := 10000
 	nCols := 2
 	rows := sqlbase.MakeIntRows(nRows, nCols)
-	input := NewRepeatableRowSource(types, rows)
+	input := distsql.NewRepeatableRowSource(types, rows)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	flowCtx := &FlowCtx{
-		Cfg:     &ServerConfig{Settings: st},
+	flowCtx := &distsql.FlowCtx{
+		Cfg:     &distsql.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 
 	b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 
-	c, err := newColumnarizer(ctx, flowCtx, 0, input)
+	c, err := NewColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
 		b.Fatal(err)
 	}

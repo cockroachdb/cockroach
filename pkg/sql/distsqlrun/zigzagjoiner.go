@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -219,7 +220,7 @@ import (
 // - Implicit columns (a)
 // - Index columns: (d, b, a)
 type zigzagJoiner struct {
-	joinerBase
+	distsql.JoinerBase
 
 	evalCtx       *tree.EvalContext
 	cancelChecker *sqlbase.CancelChecker
@@ -254,8 +255,8 @@ type zigzagJoiner struct {
 // too many rows and therefore skipping less rows.
 const zigzagJoinerBatchSize = 5
 
-var _ Processor = &zigzagJoiner{}
-var _ RowSource = &zigzagJoiner{}
+var _ distsql.Processor = &zigzagJoiner{}
+var _ distsql.RowSource = &zigzagJoiner{}
 var _ distsqlpb.MetadataSource = &zigzagJoiner{}
 
 const zigzagJoinerProcName = "zigzagJoiner"
@@ -263,12 +264,12 @@ const zigzagJoinerProcName = "zigzagJoiner"
 // newZigzagJoiner creates a new zigzag joiner given a spec and an EncDatumRow
 // holding the values of the prefix columns of the index specified in the spec.
 func newZigzagJoiner(
-	flowCtx *FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec *distsqlpb.ZigzagJoinerSpec,
 	fixedValues []sqlbase.EncDatumRow,
 	post *distsqlpb.PostProcessSpec,
-	output RowReceiver,
+	output distsql.RowReceiver,
 ) (*zigzagJoiner, error) {
 	z := &zigzagJoiner{}
 
@@ -276,7 +277,7 @@ func newZigzagJoiner(
 	rightColumnTypes := spec.Tables[1].ColumnTypes()
 	leftEqCols := make([]uint32, 0, len(spec.EqColumns[0].Columns))
 	rightEqCols := make([]uint32, 0, len(spec.EqColumns[1].Columns))
-	err := z.joinerBase.init(
+	err := z.JoinerBase.Init(
 		z, /* self */
 		flowCtx,
 		processorID,
@@ -289,7 +290,7 @@ func newZigzagJoiner(
 		0, /* numMerged */
 		post,
 		output,
-		ProcStateOpts{}, // zigzagJoiner doesn't have any inputs to drain.
+		distsql.ProcStateOpts{}, // zigzagJoiner doesn't have any inputs to drain.
 	)
 	if err != nil {
 		return nil, err
@@ -345,7 +346,7 @@ func valuesSpecToEncDatum(
 // Start is part of the RowSource interface.
 func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
 	ctx = z.StartInternal(ctx, zigzagJoinerProcName)
-	z.evalCtx = z.flowCtx.NewEvalCtx()
+	z.evalCtx = z.FlowCtx.NewEvalCtx()
 	z.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	log.VEventf(ctx, 2, "starting zigzag joiner run")
 	return ctx
@@ -366,7 +367,7 @@ type zigzagJoinerInfo struct {
 	container sqlbase.EncDatumRowContainer
 
 	// eqColumns is the ordinal positions of the equality columns.
-	eqColumns columns
+	eqColumns []uint32
 
 	// Prefix of the index key that has fixed values.
 	fixedValues sqlbase.EncDatumRow
@@ -411,7 +412,7 @@ func (z *zigzagJoiner) setupInfo(spec *distsqlpb.ZigzagJoinerSpec, side int, col
 
 	// Add the outputted columns.
 	neededCols := util.MakeFastIntSet()
-	outCols := z.out.neededColumns()
+	outCols := z.Out.NeededColumns()
 	maxCol := colOffset + len(info.table.Columns)
 	for i, ok := outCols.Next(colOffset); ok && i < maxCol; i, ok = outCols.Next(i + 1) {
 		neededCols.Add(i - colOffset)
@@ -431,7 +432,7 @@ func (z *zigzagJoiner) setupInfo(spec *distsqlpb.ZigzagJoinerSpec, side int, col
 	info.container.Reset()
 
 	// Setup the Fetcher.
-	_, _, err := initRowFetcher(
+	_, _, err := distsql.InitRowFetcher(
 		&(info.fetcher),
 		info.table,
 		int(info.index.ID)-1,
@@ -469,10 +470,10 @@ func (z *zigzagJoiner) close() {
 // nil indicating that we're done producing rows even though no error occurred.
 func (z *zigzagJoiner) producerMeta(err error) *distsqlpb.ProducerMetadata {
 	var meta *distsqlpb.ProducerMetadata
-	if !z.closed {
+	if !z.Closed {
 		if err != nil {
 			meta = &distsqlpb.ProducerMetadata{Err: err}
-		} else if trace := getTraceData(z.Ctx); trace != nil {
+		} else if trace := distsql.GetTraceData(z.Ctx); trace != nil {
 			meta = &distsqlpb.ProducerMetadata{TraceData: trace}
 		}
 		// We need to close as soon as we send producer metadata as we're done
@@ -675,7 +676,7 @@ func (z *zigzagJoiner) matchBase(curRow sqlbase.EncDatumRow, side int) (bool, er
 
 	// Compare the equality columns of the baseRow to that of the curRow.
 	da := &sqlbase.DatumAlloc{}
-	cmp, err := prevEqDatums.Compare(eqColTypes, da, ordering, z.flowCtx.EvalCtx, curEqDatums)
+	cmp, err := prevEqDatums.Compare(eqColTypes, da, ordering, z.FlowCtx.EvalCtx, curEqDatums)
 	if err != nil {
 		return false, err
 	}
@@ -695,10 +696,10 @@ func (z *zigzagJoiner) emitFromContainers() (sqlbase.EncDatumRow, error) {
 		rightRow := z.infos[right].container.Peek()
 
 		// TODO(pbardea): Extend this logic to support multi-way joins.
-		if left == int(rightSide) {
+		if left == int(distsql.RightSide) {
 			leftRow, rightRow = rightRow, leftRow
 		}
-		renderedRow, err := z.render(leftRow, rightRow)
+		renderedRow, err := z.Render(leftRow, rightRow)
 		if err != nil {
 			return nil, err
 		}
@@ -761,7 +762,7 @@ func (z *zigzagJoiner) nextRow(
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
-			z.flowCtx.traceKV,
+			z.FlowCtx.TraceKV,
 		)
 		if err != nil {
 			return nil, z.producerMeta(err)
@@ -824,7 +825,7 @@ func (z *zigzagJoiner) nextRow(
 				return nil, z.producerMeta(err)
 			}
 			da := &sqlbase.DatumAlloc{}
-			cmp, err := prevEqCols.Compare(eqColTypes, da, ordering, z.flowCtx.EvalCtx, currentEqCols)
+			cmp, err := prevEqCols.Compare(eqColTypes, da, ordering, z.FlowCtx.EvalCtx, currentEqCols)
 			if err != nil {
 				return nil, z.producerMeta(err)
 			}
@@ -894,7 +895,7 @@ func (z *zigzagJoiner) collectAllMatches(
 
 // Next is part of the RowSource interface.
 func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	txn := z.flowCtx.txn
+	txn := z.FlowCtx.Txn
 
 	if !z.started {
 		z.started = true
@@ -907,7 +908,7 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
-			z.flowCtx.traceKV,
+			z.FlowCtx.TraceKV,
 		)
 		if err != nil {
 			log.Errorf(z.Ctx, "scan error: %s", err)
@@ -923,13 +924,13 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 		z.side = z.nextSide()
 	}
 
-	if z.closed {
+	if z.Closed {
 		return nil, z.producerMeta(nil /* err */)
 	}
 
 	for {
 		row, meta := z.nextRow(z.Ctx, txn)
-		if z.closed || meta != nil {
+		if z.Closed || meta != nil {
 			if meta != nil {
 				z.returnedMeta = append(z.returnedMeta, *meta)
 			}

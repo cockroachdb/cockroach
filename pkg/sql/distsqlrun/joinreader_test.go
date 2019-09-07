@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -95,7 +95,7 @@ func TestJoinReader(t *testing.T) {
 		post        distsqlpb.PostProcessSpec
 		onExpr      string
 		input       [][]tree.Datum
-		lookupCols  columns
+		lookupCols  []uint32
 		joinType    sqlbase.JoinType
 		inputTypes  []types.T
 		outputTypes []types.T
@@ -402,14 +402,14 @@ func TestJoinReader(t *testing.T) {
 			t.Run(fmt.Sprintf("%d/%s", i, c.description), func(t *testing.T) {
 				evalCtx := tree.MakeTestingEvalContext(st)
 				defer evalCtx.Stop(ctx)
-				flowCtx := FlowCtx{
+				flowCtx := distsql.FlowCtx{
 					EvalCtx: &evalCtx,
-					Cfg: &ServerConfig{
+					Cfg: &distsql.ServerConfig{
 						Settings:    st,
 						TempStorage: tempEngine,
 						DiskMonitor: &diskMonitor,
 					},
-					txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+					Txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				}
 				encRows := make(sqlbase.EncDatumRows, len(c.input))
 				for rowIdx, row := range c.input {
@@ -419,10 +419,10 @@ func TestJoinReader(t *testing.T) {
 					}
 					encRows[rowIdx] = encRow
 				}
-				in := NewRowBuffer(c.inputTypes, encRows, RowBufferArgs{})
+				in := newRowBuffer(c.inputTypes, encRows, rowBufferArgs{})
 
 				out := &RowBuffer{}
-				jr, err := newJoinReader(
+				jr, err := distsql.NewJoinReader(
 					&flowCtx,
 					0, /* processorID */
 					&distsqlpb.JoinReaderSpec{
@@ -441,7 +441,7 @@ func TestJoinReader(t *testing.T) {
 				}
 
 				// Set a lower batch size to force multiple batches.
-				jr.batchSize = 3
+				jr.(*distsql.JoinReader).SetBatchSize(3 /* batchSize */)
 
 				jr.Run(ctx)
 
@@ -513,14 +513,14 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 	)
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
-	flowCtx := FlowCtx{
+	flowCtx := distsql.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &ServerConfig{
+		Cfg: &distsql.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
 			DiskMonitor: &diskMonitor,
 		},
-		txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+		Txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 	}
 	// Set the memory limit to the minimum allocation size so that the row
 	// container can buffer some rows in memory before spilling to disk. This
@@ -534,7 +534,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 	}
 
 	out := &RowBuffer{}
-	jr, err := newJoinReader(
+	jr, err := distsql.NewJoinReader(
 		&flowCtx,
 		0, /* processorID */
 		&distsqlpb.JoinReaderSpec{
@@ -543,7 +543,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 			LookupColumns: []uint32{0},
 			Type:          sqlbase.InnerJoin,
 		},
-		NewRowBuffer(sqlbase.OneIntCol, inputRows, RowBufferArgs{}),
+		newRowBuffer(sqlbase.OneIntCol, inputRows, rowBufferArgs{}),
 		&distsqlpb.PostProcessSpec{
 			Projection:    true,
 			OutputColumns: []uint32{2},
@@ -567,7 +567,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 		count++
 	}
 	require.Equal(t, numRows, count)
-	require.True(t, jr.lookedUpRows.(*rowcontainer.DiskBackedIndexedRowContainer).Spilled())
+	require.True(t, jr.(*distsql.JoinReader).Spilled())
 }
 
 // TestJoinReaderDrain tests various scenarios in which a joinReader's consumer
@@ -616,14 +616,14 @@ func TestJoinReaderDrain(t *testing.T) {
 	)
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
-	flowCtx := FlowCtx{
+	flowCtx := distsql.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &ServerConfig{
+		Cfg: &distsql.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
 			DiskMonitor: &diskMonitor,
 		},
-		txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn),
+		Txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn),
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
@@ -632,11 +632,11 @@ func TestJoinReaderDrain(t *testing.T) {
 	// ConsumerClosed verifies that when a joinReader's consumer is closed, the
 	// joinReader finishes gracefully.
 	t.Run("ConsumerClosed", func(t *testing.T) {
-		in := NewRowBuffer(sqlbase.OneIntCol, sqlbase.EncDatumRows{encRow}, RowBufferArgs{})
+		in := newRowBuffer(sqlbase.OneIntCol, sqlbase.EncDatumRows{encRow}, rowBufferArgs{})
 
 		out := &RowBuffer{}
 		out.ConsumerClosed()
-		jr, err := newJoinReader(
+		jr, err := distsql.NewJoinReader(
 			&flowCtx, 0 /* processorID */, &distsqlpb.JoinReaderSpec{Table: *td}, in, &distsqlpb.PostProcessSpec{}, out,
 		)
 		if err != nil {
@@ -650,14 +650,14 @@ func TestJoinReaderDrain(t *testing.T) {
 	// called on the consumer.
 	t.Run("ConsumerDone", func(t *testing.T) {
 		expectedMetaErr := errors.New("dummy")
-		in := NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, RowBufferArgs{})
-		if status := in.Push(encRow, &distsqlpb.ProducerMetadata{Err: expectedMetaErr}); status != NeedMoreRows {
+		in := newRowBuffer(sqlbase.OneIntCol, nil /* rows */, rowBufferArgs{})
+		if status := in.Push(encRow, &distsqlpb.ProducerMetadata{Err: expectedMetaErr}); status != distsql.NeedMoreRows {
 			t.Fatalf("unexpected response: %d", status)
 		}
 
 		out := &RowBuffer{}
 		out.ConsumerDone()
-		jr, err := newJoinReader(
+		jr, err := distsql.NewJoinReader(
 			&flowCtx, 0 /* processorID */, &distsqlpb.JoinReaderSpec{Table: *td}, in, &distsqlpb.PostProcessSpec{}, out,
 		)
 		if err != nil {
@@ -711,16 +711,16 @@ func BenchmarkJoinReader(b *testing.B) {
 	st := s.ClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := makeTestDiskMonitor(ctx, st)
+	diskMonitor := distsql.MakeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
-	flowCtx := FlowCtx{
+	flowCtx := distsql.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &ServerConfig{
+		Cfg: &distsql.ServerConfig{
 			DiskMonitor: diskMonitor,
 			Settings:    st,
 		},
-		txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+		Txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 	}
 
 	const numCols = 2
@@ -734,14 +734,14 @@ func BenchmarkJoinReader(b *testing.B) {
 		tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
 
 		spec := distsqlpb.JoinReaderSpec{Table: *tableDesc}
-		input := NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numInputCols))
+		input := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numInputCols))
 		post := distsqlpb.PostProcessSpec{}
-		output := RowDisposer{}
+		output := rowDisposer{}
 
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			b.SetBytes(int64(numRows * (numCols + numInputCols) * 8))
 			for i := 0; i < b.N; i++ {
-				jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output)
+				jr, err := distsql.NewJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output)
 				if err != nil {
 					b.Fatal(err)
 				}

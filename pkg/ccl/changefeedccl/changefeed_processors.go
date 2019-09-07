@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -33,9 +33,9 @@ import (
 )
 
 type changeAggregator struct {
-	distsqlrun.ProcessorBase
+	distsql.ProcessorBase
 
-	flowCtx *distsqlrun.FlowCtx
+	flowCtx *distsql.FlowCtx
 	spec    distsqlpb.ChangeAggregatorSpec
 	memAcc  mon.BoundAccount
 
@@ -68,17 +68,17 @@ type changeAggregator struct {
 	resolvedSpanBuf encDatumRowBuffer
 }
 
-var _ distsqlrun.Processor = &changeAggregator{}
-var _ distsqlrun.RowSource = &changeAggregator{}
+var _ distsql.Processor = &changeAggregator{}
+var _ distsql.RowSource = &changeAggregator{}
 
 func newChangeAggregatorProcessor(
-	flowCtx *distsqlrun.FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec distsqlpb.ChangeAggregatorSpec,
-	output distsqlrun.RowReceiver,
-) (distsqlrun.Processor, error) {
+	output distsql.RowReceiver,
+) (distsql.Processor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := distsqlrun.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changeagg-mem")
+	memMonitor := distsql.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changeagg-mem")
 	ca := &changeAggregator{
 		flowCtx: flowCtx,
 		spec:    spec,
@@ -92,7 +92,7 @@ func newChangeAggregatorProcessor(
 		processorID,
 		output,
 		memMonitor,
-		distsqlrun.ProcStateOpts{
+		distsql.ProcStateOpts{
 			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
 				ca.close()
 				return nil
@@ -238,7 +238,7 @@ func (ca *changeAggregator) close() {
 
 // Next is part of the RowSource interface.
 func (ca *changeAggregator) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	for ca.State == distsqlrun.StateRunning {
+	for ca.State == distsql.StateRunning {
 		if !ca.changedRowBuf.IsEmpty() {
 			return ca.changedRowBuf.Pop(), nil
 		} else if !ca.resolvedSpanBuf.IsEmpty() {
@@ -303,15 +303,15 @@ const (
 )
 
 type changeFrontier struct {
-	distsqlrun.ProcessorBase
+	distsql.ProcessorBase
 
-	flowCtx *distsqlrun.FlowCtx
+	flowCtx *distsql.FlowCtx
 	spec    distsqlpb.ChangeFrontierSpec
 	memAcc  mon.BoundAccount
 	a       sqlbase.DatumAlloc
 
 	// input returns rows from one or more changeAggregator processors
-	input distsqlrun.RowSource
+	input distsql.RowSource
 
 	// sf contains the current resolved timestamp high-water for the tracked
 	// span set.
@@ -350,18 +350,18 @@ type changeFrontier struct {
 	metricsID int
 }
 
-var _ distsqlrun.Processor = &changeFrontier{}
-var _ distsqlrun.RowSource = &changeFrontier{}
+var _ distsql.Processor = &changeFrontier{}
+var _ distsql.RowSource = &changeFrontier{}
 
 func newChangeFrontierProcessor(
-	flowCtx *distsqlrun.FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec distsqlpb.ChangeFrontierSpec,
-	input distsqlrun.RowSource,
-	output distsqlrun.RowReceiver,
-) (distsqlrun.Processor, error) {
+	input distsql.RowSource,
+	output distsql.RowReceiver,
+) (distsql.Processor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := distsqlrun.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changefntr-mem")
+	memMonitor := distsql.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changefntr-mem")
 	cf := &changeFrontier{
 		flowCtx: flowCtx,
 		spec:    spec,
@@ -376,12 +376,12 @@ func newChangeFrontierProcessor(
 		processorID,
 		output,
 		memMonitor,
-		distsqlrun.ProcStateOpts{
+		distsql.ProcStateOpts{
 			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
 				cf.close()
 				return nil
 			},
-			InputsToDrain: []distsqlrun.RowSource{cf.input},
+			InputsToDrain: []distsql.RowSource{cf.input},
 		},
 	); err != nil {
 		return nil, err
@@ -502,7 +502,7 @@ func (cf *changeFrontier) closeMetrics() {
 
 // Next is part of the RowSource interface.
 func (cf *changeFrontier) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	for cf.State == distsqlrun.StateRunning {
+	for cf.State == distsql.StateRunning {
 		if !cf.passthroughBuf.IsEmpty() {
 			return cf.passthroughBuf.Pop(), nil
 		} else if !cf.resolvedBuf.IsEmpty() {

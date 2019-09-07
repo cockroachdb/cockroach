@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -108,14 +109,14 @@ func TestDistinct(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			ds := c.spec
 
-			in := NewRowBuffer(sqlbase.TwoIntCols, c.input, RowBufferArgs{})
+			in := newRowBuffer(sqlbase.TwoIntCols, c.input, rowBufferArgs{})
 			out := &RowBuffer{}
 
 			st := cluster.MakeTestingClusterSettings()
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
-			flowCtx := FlowCtx{
-				Cfg:     &ServerConfig{Settings: st},
+			flowCtx := distsql.FlowCtx{
+				Cfg:     &distsql.ServerConfig{Settings: st},
 				EvalCtx: &evalCtx,
 			}
 
@@ -152,8 +153,8 @@ func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := &FlowCtx{
-		Cfg:     &ServerConfig{Settings: st},
+	flowCtx := &distsql.FlowCtx{
+		Cfg:     &distsql.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 	spec := &distsqlpb.DistinctSpec{
@@ -164,12 +165,12 @@ func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
 	post := &distsqlpb.PostProcessSpec{}
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			input := NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeIntRows(numRows, numCols))
+			input := distsql.NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeIntRows(numRows, numCols))
 
 			b.SetBytes(int64(8 * numRows * numCols))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				d, err := NewDistinct(flowCtx, 0 /* processorID */, spec, input, post, &RowDisposer{})
+				d, err := NewDistinct(flowCtx, 0 /* processorID */, spec, input, post, &rowDisposer{})
 				if err != nil {
 					b.Fatal(err)
 				}

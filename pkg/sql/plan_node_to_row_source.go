@@ -13,8 +13,8 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -26,7 +26,7 @@ type metadataForwarder interface {
 }
 
 type planNodeToRowSource struct {
-	distsqlrun.ProcessorBase
+	distsql.ProcessorBase
 
 	started bool
 
@@ -62,11 +62,11 @@ func makePlanNodeToRowSource(
 	}, nil
 }
 
-var _ distsqlrun.LocalProcessor = &planNodeToRowSource{}
+var _ distsql.LocalProcessor = &planNodeToRowSource{}
 
 // InitWithOutput implements the LocalProcessor interface.
 func (p *planNodeToRowSource) InitWithOutput(
-	post *distsqlpb.PostProcessSpec, output distsqlrun.RowReceiver,
+	post *distsqlpb.PostProcessSpec, output distsql.RowReceiver,
 ) error {
 	return p.InitWithEvalCtx(
 		p,
@@ -77,7 +77,7 @@ func (p *planNodeToRowSource) InitWithOutput(
 		0, /* processorID */
 		output,
 		nil, /* memMonitor */
-		distsqlrun.ProcStateOpts{},
+		distsql.ProcStateOpts{},
 	)
 }
 
@@ -86,7 +86,7 @@ func (p *planNodeToRowSource) InitWithOutput(
 // drain this row source of its metadata in case the planNode tree we're
 // wrapping returned an error, since planNodes don't know how to drain trailing
 // metadata.
-func (p *planNodeToRowSource) SetInput(ctx context.Context, input distsqlrun.RowSource) error {
+func (p *planNodeToRowSource) SetInput(ctx context.Context, input distsql.RowSource) error {
 	if p.firstNotWrapped == nil {
 		// Short-circuit if we never set firstNotWrapped - indicating this planNode
 		// tree had no DistSQL-plannable subtrees.
@@ -129,7 +129,7 @@ func (p *planNodeToRowSource) InternalClose() {
 }
 
 func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	if p.State == distsqlrun.StateRunning && p.fastPath {
+	if p.State == distsql.StateRunning && p.fastPath {
 		var count int
 		// If our node is a "fast path node", it means that we're set up to just
 		// return a row count. So trigger the fast path and return the row count as
@@ -167,7 +167,7 @@ func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMe
 		return sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(count))}}, nil
 	}
 
-	for p.State == distsqlrun.StateRunning {
+	for p.State == distsql.StateRunning {
 		valid, err := p.node.Next(p.params)
 		if err != nil || !valid {
 			p.MoveToDraining(err)

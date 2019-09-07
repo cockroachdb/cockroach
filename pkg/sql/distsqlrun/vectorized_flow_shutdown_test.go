@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/colrpc"
@@ -146,9 +147,9 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				st := cluster.MakeTestingClusterSettings()
 				evalCtx := tree.MakeTestingEvalContext(st)
 				defer evalCtx.Stop(ctxLocal)
-				flowCtx := &FlowCtx{
+				flowCtx := &distsql.FlowCtx{
 					EvalCtx: &evalCtx,
-					Cfg:     &ServerConfig{Settings: st},
+					Cfg:     &distsql.ServerConfig{Settings: st},
 				}
 
 				rng, _ := randutil.NewPseudoRand()
@@ -273,7 +274,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				}
 
 				ctxLocal, cancelLocal := context.WithCancel(ctxLocal)
-				materializer, err := newMaterializer(
+				materializer, err := distsql.NewMaterializer(
 					flowCtx,
 					1, /* processorID */
 					materializerInput,

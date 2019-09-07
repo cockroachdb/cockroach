@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlplan
+package distsqlrun
 
 import (
 	"context"
@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -54,12 +54,12 @@ func runTestFlow(
 	txn *client.Txn,
 	procs ...distsqlpb.ProcessorSpec,
 ) sqlbase.EncDatumRows {
-	distSQLSrv := srv.DistSQLServer().(*distsqlrun.ServerImpl)
+	distSQLSrv := srv.DistSQLServer().(*ServerImpl)
 
 	txnCoordMeta := txn.GetTxnCoordMeta(context.TODO())
 	txnCoordMeta.StripRootToLeaf()
 	req := distsqlpb.SetupFlowRequest{
-		Version:      distsqlrun.Version,
+		Version:      Version,
 		TxnCoordMeta: &txnCoordMeta,
 		Flow: distsqlpb.FlowSpec{
 			FlowID:     distsqlpb.FlowID{UUID: uuid.MakeV4()},
@@ -67,7 +67,7 @@ func runTestFlow(
 		},
 	}
 
-	var rowBuf distsqlrun.RowBuffer
+	var rowBuf RowBuffer
 
 	ctx, flow, err := distSQLSrv.SetupSyncFlow(context.TODO(), distSQLSrv.ParentMemoryMonitor, &req, &rowBuf)
 	if err != nil {
@@ -116,7 +116,7 @@ func checkDistAggregationInfo(
 	colIdx int,
 	numRows int,
 	fn distsqlpb.AggregatorSpec_Func,
-	info DistAggregationInfo,
+	info distsqlplan.DistAggregationInfo,
 ) {
 	colType := tableDesc.Columns[colIdx].Type
 
@@ -201,7 +201,7 @@ func checkDistAggregationInfo(
 	intermediaryTypes := make([]types.T, numIntermediary)
 	for i, fn := range info.LocalStage {
 		var err error
-		_, returnTyp, err := distsqlrun.GetAggregateInfo(fn, colType)
+		_, returnTyp, err := distsqlpb.GetAggregateInfo(fn, colType)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -253,7 +253,7 @@ func checkDistAggregationInfo(
 			inputTypes[i] = intermediaryTypes[localIdx]
 		}
 		var err error
-		_, finalOutputTypes[i], err = distsqlrun.GetAggregateInfo(finalInfo.Fn, inputTypes...)
+		_, finalOutputTypes[i], err = distsqlpb.GetAggregateInfo(finalInfo.Fn, inputTypes...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -295,7 +295,7 @@ func checkDistAggregationInfo(
 			t.Fatal(err)
 		}
 		var expr distsqlpb.Expression
-		expr, err = MakeExpression(renderExpr, fakeExprContext{}, nil)
+		expr, err = distsqlplan.MakeExpression(renderExpr, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -437,7 +437,7 @@ func TestDistAggregationTable(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 	desc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
-	for fn, info := range DistAggregationTable {
+	for fn, info := range distsqlplan.DistAggregationTable {
 		if fn == distsqlpb.AggregatorSpec_ANY_NOT_NULL {
 			// ANY_NOT_NULL only has a definite result if all rows have the same value
 			// on the relevant column; skip testing this trivial case.
@@ -452,7 +452,7 @@ func TestDistAggregationTable(t *testing.T) {
 		foundCol := false
 		for colIdx := 1; colIdx < len(desc.Columns); colIdx++ {
 			// See if this column works with this function.
-			_, _, err := distsqlrun.GetAggregateInfo(fn, desc.Columns[colIdx].Type)
+			_, _, err := distsqlpb.GetAggregateInfo(fn, desc.Columns[colIdx].Type)
 			if err != nil {
 				continue
 			}

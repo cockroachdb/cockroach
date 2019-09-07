@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
@@ -278,7 +279,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 					NodeID: 2, StoreID: 2, ReplicaID: 2}},
 			},
 		}})
-	if status != distsqlrun.NeedMoreRows {
+	if status != distsql.NeedMoreRows {
 		t.Fatalf("expected status NeedMoreRows, got: %d", status)
 	}
 	status = r.Push(nil /* row */, &distsqlpb.ProducerMetadata{
@@ -289,7 +290,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 					NodeID: 3, StoreID: 3, ReplicaID: 3}},
 			},
 		}})
-	if status != distsqlrun.NeedMoreRows {
+	if status != distsql.NeedMoreRows {
 		t.Fatalf("expected status NeedMoreRows, got: %d", status)
 	}
 
@@ -518,7 +519,7 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 		numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
-			ServerArgs:      base.TestServerArgs{Knobs: base.TestingKnobs{DistSQL: &distsqlrun.TestingKnobs{DrainFast: true}}, UseDatabase: "test"},
+			ServerArgs:      base.TestServerArgs{Knobs: base.TestingKnobs{DistSQL: &distsql.TestingKnobs{DrainFast: true}}, UseDatabase: "test"},
 		},
 	)
 	ctx := context.TODO()

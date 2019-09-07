@@ -17,8 +17,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/execplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -32,8 +34,8 @@ func TestVectorizeSpaceError(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := &FlowCtx{
-		Cfg:     &ServerConfig{Settings: st},
+	flowCtx := &distsql.FlowCtx{
+		Cfg:     &distsql.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 
@@ -126,11 +128,11 @@ func TestVectorizeSpaceError(t *testing.T) {
 					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(1))
 				}
 				acc := memMon.MakeBoundAccount()
-				result, err := newColOperator(ctx, flowCtx, tc.spec, inputs)
+				result, err := execplan.NewColOperator(ctx, flowCtx, tc.spec, inputs)
 				if err != nil {
 					t.Fatal(err)
 				}
-				err = acc.Grow(ctx, int64(result.memUsage))
+				err = acc.Grow(ctx, int64(result.MemUsage))
 				if succ && err != nil {
 					t.Fatal("Expected success, found:", err)
 				}

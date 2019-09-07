@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -28,11 +29,11 @@ import (
 //
 // It is guaranteed that the results preserve this ordering.
 type mergeJoiner struct {
-	joinerBase
+	distsql.JoinerBase
 
 	cancelChecker *sqlbase.CancelChecker
 
-	leftSource, rightSource RowSource
+	leftSource, rightSource distsql.RowSource
 	leftRows, rightRows     []sqlbase.EncDatumRow
 	leftIdx, rightIdx       int
 	emitUnmatchedRight      bool
@@ -42,19 +43,19 @@ type mergeJoiner struct {
 	streamMerger streamMerger
 }
 
-var _ Processor = &mergeJoiner{}
-var _ RowSource = &mergeJoiner{}
+var _ distsql.Processor = &mergeJoiner{}
+var _ distsql.RowSource = &mergeJoiner{}
 
 const mergeJoinerProcName = "merge joiner"
 
 func newMergeJoiner(
-	flowCtx *FlowCtx,
+	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	spec *distsqlpb.MergeJoinerSpec,
-	leftSource RowSource,
-	rightSource RowSource,
+	leftSource distsql.RowSource,
+	rightSource distsql.RowSource,
 	post *distsqlpb.PostProcessSpec,
-	output RowReceiver,
+	output distsql.RowReceiver,
 ) (*mergeJoiner, error) {
 	leftEqCols := make([]uint32, 0, len(spec.LeftOrdering.Columns))
 	rightEqCols := make([]uint32, 0, len(spec.RightOrdering.Columns))
@@ -72,16 +73,16 @@ func newMergeJoiner(
 	}
 
 	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
-		m.leftSource = NewInputStatCollector(m.leftSource)
-		m.rightSource = NewInputStatCollector(m.rightSource)
-		m.finishTrace = m.outputStatsToTrace
+		m.leftSource = distsql.NewInputStatCollector(m.leftSource)
+		m.rightSource = distsql.NewInputStatCollector(m.rightSource)
+		m.FinishTrace = m.outputStatsToTrace
 	}
 
-	if err := m.joinerBase.init(
+	if err := m.JoinerBase.Init(
 		m /* self */, flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
 		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output,
-		ProcStateOpts{
-			InputsToDrain: []RowSource{leftSource, rightSource},
+		distsql.ProcStateOpts{
+			InputsToDrain: []distsql.RowSource{leftSource, rightSource},
 			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
 				m.close()
 				return nil
@@ -91,7 +92,7 @@ func newMergeJoiner(
 		return nil, err
 	}
 
-	m.MemMonitor = NewMonitor(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, "mergejoiner-mem")
+	m.MemMonitor = distsql.NewMonitor(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, "mergejoiner-mem")
 
 	var err error
 	m.streamMerger, err = makeStreamMerger(
@@ -119,7 +120,7 @@ func (m *mergeJoiner) Start(ctx context.Context) context.Context {
 
 // Next is part of the Processor interface.
 func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	for m.State == StateRunning {
+	for m.State == distsql.StateRunning {
 		row, meta := m.nextRow()
 		if meta != nil {
 			if meta.Err != nil {
@@ -152,19 +153,19 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadat
 				// We have unprocessed rows from the right-side batch.
 				ridx := m.rightIdx
 				m.rightIdx++
-				renderedRow, err := m.render(lrow, m.rightRows[ridx])
+				renderedRow, err := m.Render(lrow, m.rightRows[ridx])
 				if err != nil {
 					return nil, &distsqlpb.ProducerMetadata{Err: err}
 				}
 				if renderedRow != nil {
 					m.matchedRightCount++
-					if m.joinType == sqlbase.LeftAntiJoin || m.joinType == sqlbase.ExceptAllJoin {
+					if m.JoinType == sqlbase.LeftAntiJoin || m.JoinType == sqlbase.ExceptAllJoin {
 						break
 					}
 					if m.emitUnmatchedRight {
 						m.matchedRight.Add(ridx)
 					}
-					if m.joinType == sqlbase.LeftSemiJoin || m.joinType == sqlbase.IntersectAllJoin {
+					if m.JoinType == sqlbase.LeftSemiJoin || m.JoinType == sqlbase.IntersectAllJoin {
 						// Semi-joins and INTERSECT ALL only need to know if there is at
 						// least one match, so can skip the rest of the right rows.
 						m.rightIdx = len(m.rightRows)
@@ -187,15 +188,15 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadat
 			// For INTERSECT ALL and EXCEPT ALL, adjust rightIdx to skip all
 			// previously matched rows on the next right-side iteration, since we
 			// don't want to match them again.
-			if m.joinType.IsSetOpJoin() {
+			if m.JoinType.IsSetOpJoin() {
 				m.rightIdx = m.leftIdx
 			}
 
 			// If we didn't match any rows on the right-side of the batch and this is
 			// a left outer join, full outer join, anti join, or EXCEPT ALL, emit an
 			// unmatched left-side row.
-			if m.matchedRightCount == 0 && shouldEmitUnmatchedRow(leftSide, m.joinType) {
-				return m.renderUnmatchedRow(lrow, leftSide), nil
+			if m.matchedRightCount == 0 && distsql.ShouldEmitUnmatchedRow(distsql.LeftSide, m.JoinType) {
+				return m.RenderUnmatchedRow(lrow, distsql.LeftSide), nil
 			}
 
 			m.matchedRightCount = 0
@@ -210,7 +211,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadat
 				if m.matchedRight.Contains(ridx) {
 					continue
 				}
-				return m.renderUnmatchedRow(m.rightRows[ridx], rightSide), nil
+				return m.RenderUnmatchedRow(m.rightRows[ridx], distsql.RightSide), nil
 			}
 
 			m.matchedRight = util.FastIntSet{}
@@ -222,7 +223,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadat
 		// TODO(paul): Investigate (with benchmarks) whether or not it's
 		// worthwhile to only buffer one row from the right stream per batch
 		// for semi-joins.
-		m.leftRows, m.rightRows, meta = m.streamMerger.NextBatch(m.Ctx, m.evalCtx)
+		m.leftRows, m.rightRows, meta = m.streamMerger.NextBatch(m.Ctx, m.EvalCtx)
 		if meta != nil {
 			return nil, meta
 		}
@@ -231,7 +232,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadat
 		}
 
 		// Prepare for processing the next batch.
-		m.emitUnmatchedRight = shouldEmitUnmatchedRow(rightSide, m.joinType)
+		m.emitUnmatchedRight = distsql.ShouldEmitUnmatchedRow(distsql.RightSide, m.JoinType)
 		m.leftIdx, m.rightIdx = 0, 0
 	}
 }
@@ -279,11 +280,11 @@ func (mjs *MergeJoinerStats) StatsForQueryPlan() []string {
 // outputStatsToTrace outputs the collected mergeJoiner stats to the trace. Will
 // fail silently if the mergeJoiner is not collecting stats.
 func (m *mergeJoiner) outputStatsToTrace() {
-	lis, ok := getInputStats(m.flowCtx, m.leftSource)
+	lis, ok := distsql.GetInputStats(m.FlowCtx, m.leftSource)
 	if !ok {
 		return
 	}
-	ris, ok := getInputStats(m.flowCtx, m.rightSource)
+	ris, ok := distsql.GetInputStats(m.FlowCtx, m.rightSource)
 	if !ok {
 		return
 	}
