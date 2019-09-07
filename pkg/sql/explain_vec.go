@@ -16,9 +16,11 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colflowsetup"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -45,7 +47,7 @@ type explainVecNode struct {
 
 type flowWithNode struct {
 	nodeID roachpb.NodeID
-	flow   *distsqlpb.FlowSpec
+	flow   *execinfrapb.FlowSpec
 }
 
 func (n *explainVecNode) startExec(params runParams) error {
@@ -93,16 +95,16 @@ func (n *explainVecNode) startExec(params runParams) error {
 
 	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
 
-	var localState distsqlrun.LocalState
+	var localState distsql.LocalState
 	localState.EvalContext = planCtx.EvalContext()
 	if planCtx.isLocal {
 		localState.IsLocal = true
 		localState.LocalProcs = plan.LocalProcessors
 	}
-	flowCtx := &distsqlrun.FlowCtx{
+	flowCtx := &execinfra.FlowCtx{
 		NodeID:  planCtx.EvalContext().NodeID,
 		EvalCtx: planCtx.EvalContext(),
-		Cfg: &distsqlrun.ServerConfig{
+		Cfg: &execinfra.ServerConfig{
 			Settings:    params.p.execCfg.Settings,
 			DiskMonitor: &mon.BytesMonitor{},
 		},
@@ -124,7 +126,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	verbose := n.options.Flags.Contains(tree.ExplainFlagVerbose)
 	for _, flow := range sortedFlows {
 		node := root.Childf("Node %d", flow.nodeID)
-		opChains, err := distsqlrun.SupportsVectorized(params.ctx, flowCtx, flow.flow.Processors)
+		opChains, err := colflowsetup.SupportsVectorized(params.ctx, flowCtx, flow.flow.Processors)
 		if err != nil {
 			return err
 		}
@@ -136,19 +138,19 @@ func (n *explainVecNode) startExec(params runParams) error {
 	return nil
 }
 
-func shouldOutput(operator exec.OpNode, verbose bool) bool {
-	_, nonExplainable := operator.(exec.NonExplainable)
+func shouldOutput(operator execinfrapb.OpNode, verbose bool) bool {
+	_, nonExplainable := operator.(colexec.NonExplainable)
 	return !nonExplainable || verbose
 }
 
-func formatOpChain(operator exec.OpNode, node treeprinter.Node, verbose bool) {
+func formatOpChain(operator execinfrapb.OpNode, node treeprinter.Node, verbose bool) {
 	if shouldOutput(operator, verbose) {
 		doFormatOpChain(operator, node.Child(reflect.TypeOf(operator).String()), verbose)
 	} else {
 		doFormatOpChain(operator, node, verbose)
 	}
 }
-func doFormatOpChain(operator exec.OpNode, node treeprinter.Node, verbose bool) {
+func doFormatOpChain(operator execinfrapb.OpNode, node treeprinter.Node, verbose bool) {
 	for i := 0; i < operator.ChildCount(); i++ {
 		child := operator.Child(i)
 		if shouldOutput(child, verbose) {

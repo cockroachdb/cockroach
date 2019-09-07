@@ -13,11 +13,11 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // explainDistSQLNode is a planNode that wraps a plan and returns
@@ -138,7 +138,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	distSQLPlanner.FinalizePlan(planCtx, &plan)
 
 	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
-	diagram, err := distsqlpb.GeneratePlanDiagram(flows)
+	diagram, err := execinfrapb.GeneratePlanDiagram(flows)
 	if err != nil {
 		return err
 	}

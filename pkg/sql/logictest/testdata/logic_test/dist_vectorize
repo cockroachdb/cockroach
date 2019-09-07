@@ -91,75 +91,75 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 ----
 │
 ├ Node 1
-│ └ *distsqlrun.materializer
-│   └ *exec.orderedAggregator
-│     └ *exec.oneShotOp
-│       └ *exec.distinctChainOps
-│         └ *exec.UnorderedSynchronizer
-│           ├ *exec.countOp
-│           │ └ *exec.simpleProjectOp
-│           │   └ *exec.CancelChecker
-│           │     └ *distsqlrun.colBatchScan
+│ └ *colflowsetup.Materializer
+│   └ *colexec.orderedAggregator
+│     └ *colexec.oneShotOp
+│       └ *colexec.distinctChainOps
+│         └ *colexec.UnorderedSynchronizer
+│           ├ *colexec.countOp
+│           │ └ *colexec.simpleProjectOp
+│           │   └ *colexec.CancelChecker
+│           │     └ *colflowsetup.colBatchScan
 │           ├ *colrpc.Inbox
 │           ├ *colrpc.Inbox
 │           ├ *colrpc.Inbox
 │           └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
-│   └ *exec.deselectorOp
-│     └ *exec.countOp
-│       └ *exec.simpleProjectOp
-│         └ *exec.CancelChecker
-│           └ *distsqlrun.colBatchScan
+│   └ *colexec.deselectorOp
+│     └ *colexec.countOp
+│       └ *colexec.simpleProjectOp
+│         └ *colexec.CancelChecker
+│           └ *colflowsetup.colBatchScan
 ├ Node 3
 │ └ *colrpc.Outbox
-│   └ *exec.deselectorOp
-│     └ *exec.countOp
-│       └ *exec.simpleProjectOp
-│         └ *exec.CancelChecker
-│           └ *distsqlrun.colBatchScan
+│   └ *colexec.deselectorOp
+│     └ *colexec.countOp
+│       └ *colexec.simpleProjectOp
+│         └ *colexec.CancelChecker
+│           └ *colflowsetup.colBatchScan
 ├ Node 4
 │ └ *colrpc.Outbox
-│   └ *exec.deselectorOp
-│     └ *exec.countOp
-│       └ *exec.simpleProjectOp
-│         └ *exec.CancelChecker
-│           └ *distsqlrun.colBatchScan
+│   └ *colexec.deselectorOp
+│     └ *colexec.countOp
+│       └ *colexec.simpleProjectOp
+│         └ *colexec.CancelChecker
+│           └ *colflowsetup.colBatchScan
 └ Node 5
   └ *colrpc.Outbox
-    └ *exec.deselectorOp
-      └ *exec.countOp
-        └ *exec.simpleProjectOp
-          └ *exec.CancelChecker
-            └ *distsqlrun.colBatchScan
+    └ *colexec.deselectorOp
+      └ *colexec.countOp
+        └ *colexec.simpleProjectOp
+          └ *colexec.CancelChecker
+            └ *colflowsetup.colBatchScan
 
 query T
 EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 ----
 │
 ├ Node 1
-│ └ *distsqlrun.materializer
-│   └ *exec.orderedAggregator
-│     └ *exec.oneShotOp
-│       └ *exec.distinctChainOps
-│         └ *exec.UnorderedSynchronizer
-│           ├ *exec.countOp
-│           │ └ *exec.simpleProjectOp
-│           │   └ *exec.hashJoinEqOp
-│           │     ├ *exec.UnorderedSynchronizer
-│           │     │ ├ *exec.routerOutputOp
-│           │     │ │ └ *exec.HashRouter
-│           │     │ │   └ *exec.CancelChecker
-│           │     │ │     └ *distsqlrun.colBatchScan
+│ └ *colflowsetup.Materializer
+│   └ *colexec.orderedAggregator
+│     └ *colexec.oneShotOp
+│       └ *colexec.distinctChainOps
+│         └ *colexec.UnorderedSynchronizer
+│           ├ *colexec.countOp
+│           │ └ *colexec.simpleProjectOp
+│           │   └ *colexec.hashJoinEqOp
+│           │     ├ *colexec.UnorderedSynchronizer
+│           │     │ ├ *colexec.routerOutputOp
+│           │     │ │ └ *colexec.HashRouter
+│           │     │ │   └ *colexec.CancelChecker
+│           │     │ │     └ *colflowsetup.colBatchScan
 │           │     │ ├ *colrpc.Inbox
 │           │     │ ├ *colrpc.Inbox
 │           │     │ ├ *colrpc.Inbox
 │           │     │ └ *colrpc.Inbox
-│           │     └ *exec.UnorderedSynchronizer
-│           │       ├ *exec.routerOutputOp
-│           │       │ └ *exec.HashRouter
-│           │       │   └ *exec.CancelChecker
-│           │       │     └ *distsqlrun.colBatchScan
+│           │     └ *colexec.UnorderedSynchronizer
+│           │       ├ *colexec.routerOutputOp
+│           │       │ └ *colexec.HashRouter
+│           │       │   └ *colexec.CancelChecker
+│           │       │     └ *colflowsetup.colBatchScan
 │           │       ├ *colrpc.Inbox
 │           │       ├ *colrpc.Inbox
 │           │       ├ *colrpc.Inbox
@@ -170,100 +170,100 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │           └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
-│   └ *exec.deselectorOp
-│     └ *exec.countOp
-│       └ *exec.simpleProjectOp
-│         └ *exec.hashJoinEqOp
-│           ├ *exec.UnorderedSynchronizer
+│   └ *colexec.deselectorOp
+│     └ *colexec.countOp
+│       └ *colexec.simpleProjectOp
+│         └ *colexec.hashJoinEqOp
+│           ├ *colexec.UnorderedSynchronizer
 │           │ ├ *colrpc.Inbox
-│           │ ├ *exec.routerOutputOp
-│           │ │ └ *exec.HashRouter
-│           │ │   └ *exec.CancelChecker
-│           │ │     └ *distsqlrun.colBatchScan
+│           │ ├ *colexec.routerOutputOp
+│           │ │ └ *colexec.HashRouter
+│           │ │   └ *colexec.CancelChecker
+│           │ │     └ *colflowsetup.colBatchScan
 │           │ ├ *colrpc.Inbox
 │           │ ├ *colrpc.Inbox
 │           │ └ *colrpc.Inbox
-│           └ *exec.UnorderedSynchronizer
+│           └ *colexec.UnorderedSynchronizer
 │             ├ *colrpc.Inbox
-│             ├ *exec.routerOutputOp
-│             │ └ *exec.HashRouter
-│             │   └ *exec.CancelChecker
-│             │     └ *distsqlrun.colBatchScan
+│             ├ *colexec.routerOutputOp
+│             │ └ *colexec.HashRouter
+│             │   └ *colexec.CancelChecker
+│             │     └ *colflowsetup.colBatchScan
 │             ├ *colrpc.Inbox
 │             ├ *colrpc.Inbox
 │             └ *colrpc.Inbox
 ├ Node 3
 │ └ *colrpc.Outbox
-│   └ *exec.deselectorOp
-│     └ *exec.countOp
-│       └ *exec.simpleProjectOp
-│         └ *exec.hashJoinEqOp
-│           ├ *exec.UnorderedSynchronizer
+│   └ *colexec.deselectorOp
+│     └ *colexec.countOp
+│       └ *colexec.simpleProjectOp
+│         └ *colexec.hashJoinEqOp
+│           ├ *colexec.UnorderedSynchronizer
 │           │ ├ *colrpc.Inbox
 │           │ ├ *colrpc.Inbox
-│           │ ├ *exec.routerOutputOp
-│           │ │ └ *exec.HashRouter
-│           │ │   └ *exec.CancelChecker
-│           │ │     └ *distsqlrun.colBatchScan
+│           │ ├ *colexec.routerOutputOp
+│           │ │ └ *colexec.HashRouter
+│           │ │   └ *colexec.CancelChecker
+│           │ │     └ *colflowsetup.colBatchScan
 │           │ ├ *colrpc.Inbox
 │           │ └ *colrpc.Inbox
-│           └ *exec.UnorderedSynchronizer
+│           └ *colexec.UnorderedSynchronizer
 │             ├ *colrpc.Inbox
 │             ├ *colrpc.Inbox
-│             ├ *exec.routerOutputOp
-│             │ └ *exec.HashRouter
-│             │   └ *exec.CancelChecker
-│             │     └ *distsqlrun.colBatchScan
+│             ├ *colexec.routerOutputOp
+│             │ └ *colexec.HashRouter
+│             │   └ *colexec.CancelChecker
+│             │     └ *colflowsetup.colBatchScan
 │             ├ *colrpc.Inbox
 │             └ *colrpc.Inbox
 ├ Node 4
 │ └ *colrpc.Outbox
-│   └ *exec.deselectorOp
-│     └ *exec.countOp
-│       └ *exec.simpleProjectOp
-│         └ *exec.hashJoinEqOp
-│           ├ *exec.UnorderedSynchronizer
+│   └ *colexec.deselectorOp
+│     └ *colexec.countOp
+│       └ *colexec.simpleProjectOp
+│         └ *colexec.hashJoinEqOp
+│           ├ *colexec.UnorderedSynchronizer
 │           │ ├ *colrpc.Inbox
 │           │ ├ *colrpc.Inbox
 │           │ ├ *colrpc.Inbox
-│           │ ├ *exec.routerOutputOp
-│           │ │ └ *exec.HashRouter
-│           │ │   └ *exec.CancelChecker
-│           │ │     └ *distsqlrun.colBatchScan
+│           │ ├ *colexec.routerOutputOp
+│           │ │ └ *colexec.HashRouter
+│           │ │   └ *colexec.CancelChecker
+│           │ │     └ *colflowsetup.colBatchScan
 │           │ └ *colrpc.Inbox
-│           └ *exec.UnorderedSynchronizer
+│           └ *colexec.UnorderedSynchronizer
 │             ├ *colrpc.Inbox
 │             ├ *colrpc.Inbox
 │             ├ *colrpc.Inbox
-│             ├ *exec.routerOutputOp
-│             │ └ *exec.HashRouter
-│             │   └ *exec.CancelChecker
-│             │     └ *distsqlrun.colBatchScan
+│             ├ *colexec.routerOutputOp
+│             │ └ *colexec.HashRouter
+│             │   └ *colexec.CancelChecker
+│             │     └ *colflowsetup.colBatchScan
 │             └ *colrpc.Inbox
 └ Node 5
   └ *colrpc.Outbox
-    └ *exec.deselectorOp
-      └ *exec.countOp
-        └ *exec.simpleProjectOp
-          └ *exec.hashJoinEqOp
-            ├ *exec.UnorderedSynchronizer
+    └ *colexec.deselectorOp
+      └ *colexec.countOp
+        └ *colexec.simpleProjectOp
+          └ *colexec.hashJoinEqOp
+            ├ *colexec.UnorderedSynchronizer
             │ ├ *colrpc.Inbox
             │ ├ *colrpc.Inbox
             │ ├ *colrpc.Inbox
             │ ├ *colrpc.Inbox
-            │ └ *exec.routerOutputOp
-            │   └ *exec.HashRouter
-            │     └ *exec.CancelChecker
-            │       └ *distsqlrun.colBatchScan
-            └ *exec.UnorderedSynchronizer
+            │ └ *colexec.routerOutputOp
+            │   └ *colexec.HashRouter
+            │     └ *colexec.CancelChecker
+            │       └ *colflowsetup.colBatchScan
+            └ *colexec.UnorderedSynchronizer
               ├ *colrpc.Inbox
               ├ *colrpc.Inbox
               ├ *colrpc.Inbox
               ├ *colrpc.Inbox
-              └ *exec.routerOutputOp
-                └ *exec.HashRouter
-                  └ *exec.CancelChecker
-                    └ *distsqlrun.colBatchScan
+              └ *colexec.routerOutputOp
+                └ *colexec.HashRouter
+                  └ *colexec.CancelChecker
+                    └ *colflowsetup.colBatchScan
 
 # Test that SelOnDest flag of coldata.SliceArgs is respected when setting
 # nulls.

@@ -37,8 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -61,7 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // ClusterOrganization is the organization name.
@@ -159,7 +160,7 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 var VectorizeRowCountThresholdClusterValue = settings.RegisterValidatedIntSetting(
 	"sql.defaults.vectorize_row_count_threshold",
 	"default vectorize row count threshold",
-	exec.DefaultVectorizeRowCountThreshold,
+	colexec.DefaultVectorizeRowCountThreshold,
 	func(v int64) error {
 		if v < 0 {
 			return pgerror.Newf(pgcode.InvalidParameterValue,
@@ -488,7 +489,7 @@ type ExecutorConfig struct {
 	RPCContext        *rpc.Context
 	LeaseManager      *LeaseManager
 	Clock             *hlc.Clock
-	DistSQLSrv        *distsqlrun.ServerImpl
+	DistSQLSrv        *distsql.ServerImpl
 	StatusServer      serverpb.StatusServer
 	MetricsRecorder   nodeStatusGenerator
 	SessionRegistry   *SessionRegistry
@@ -505,7 +506,7 @@ type ExecutorConfig struct {
 	TestingKnobs              ExecutorTestingKnobs
 	PGWireTestingKnobs        *PGWireTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
-	DistSQLRunTestingKnobs    *distsqlrun.TestingKnobs
+	DistSQLRunTestingKnobs    *execinfra.TestingKnobs
 	EvalContextTestingKnobs   tree.EvalContextTestingKnobs
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
