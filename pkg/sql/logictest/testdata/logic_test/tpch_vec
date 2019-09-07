@@ -623,49 +623,12 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice * l_discount) AS revenue FROM lineitem 
                 └── *exec.distinctChainOps
 
 # Query 7
-query T
+query error OR expressions unsupported
 EXPLAIN (VEC) SELECT supp_nation, cust_nation, l_year, sum(volume) AS revenue FROM ( SELECT n1.n_name AS supp_nation, n2.n_name AS cust_nation, EXTRACT(year FROM l_shipdate) AS l_year, l_extendedprice * (1 - l_discount) AS volume FROM supplier, lineitem, orders, customer, nation n1, nation n2 WHERE s_suppkey = l_suppkey AND o_orderkey = l_orderkey AND c_custkey = o_custkey AND s_nationkey = n1.n_nationkey AND c_nationkey = n2.n_nationkey AND ( (n1.n_name = 'FRANCE' AND n2.n_name = 'GERMANY') or (n1.n_name = 'GERMANY' AND n2.n_name = 'FRANCE')) AND l_shipdate BETWEEN DATE '1995-01-01' AND DATE '1996-12-31') AS shipping GROUP BY supp_nation, cust_nation, l_year ORDER BY supp_nation, cust_nation, l_year
-----
- │
- └── Node 1
-      └── *exec.sortOp
-           └── *exec.orderedAggregator
-                └── *exec.hashGrouper
-                     └── *exec.projMultFloat64Float64Op
-                          └── *exec.projMinusFloat64ConstFloat64Op
-                               └── *exec.defaultBuiltinFuncOperator
-                                    └── *exec.constBytesOp
-                                         └── *exec.hashJoinEqOp
-                                              └── *distsqlrun.colBatchScan
 
 # Query 8
-query T
+query error CASE expressions unsupported
 EXPLAIN (VEC) SELECT o_year, sum(CASE WHEN nation = 'BRAZIL' THEN volume ELSE 0 END) / sum(volume) AS mkt_share FROM ( SELECT EXTRACT(year FROM o_orderdate) AS o_year, l_extendedprice * (1 - l_discount) AS volume, n2.n_name AS nation FROM part, supplier, lineitem, orders, customer, nation n1, nation n2, region WHERE p_partkey = l_partkey AND s_suppkey = l_suppkey AND l_orderkey = o_orderkey AND o_custkey = c_custkey AND c_nationkey = n1.n_nationkey AND n1.n_regionkey = r_regionkey AND r_name = 'AMERICA' AND s_nationkey = n2.n_nationkey AND o_orderdate BETWEEN DATE '1995-01-01' AND DATE '1996-12-31' AND p_type = 'ECONOMY ANODIZED STEEL') AS all_nations GROUP BY o_year ORDER BY o_year
-----
- │
- └── Node 1
-      └── *exec.sortOp
-           └── *exec.projDivFloat64Float64Op
-                └── *exec.orderedAggregator
-                     └── *exec.hashGrouper
-                          └── *exec.caseOp
-                               └── *exec.projMultFloat64Float64Op
-                                    └── *exec.projMinusFloat64ConstFloat64Op
-                                         └── *exec.defaultBuiltinFuncOperator
-                                              └── *exec.constBytesOp
-                                                   └── *exec.hashJoinEqOp
-                                                        ├── *exec.hashJoinEqOp
-                                                        │    ├── *exec.hashJoinEqOp
-                                                        │    │    ├── *distsqlrun.colBatchScan
-                                                        │    │    └── *exec.hashJoinEqOp
-                                                        │    │         ├── *exec.hashJoinEqOp
-                                                        │    │         │    └── *distsqlrun.colBatchScan
-                                                        │    │         └── *exec.selLEInt64Int64ConstOp
-                                                        │    │              └── *exec.selGEInt64Int64ConstOp
-                                                        │    │                   └── *distsqlrun.colBatchScan
-                                                        │    └── *distsqlrun.colBatchScan
-                                                        └── *exec.selEQBytesBytesConstOp
-                                                             └── *distsqlrun.colBatchScan
 
 # Query 9
 query T
@@ -722,21 +685,8 @@ EXPLAIN (VEC) SELECT c_count, count(*) AS custdist FROM ( SELECT c_custkey, coun
                                     └── *distsqlrun.colBatchScan
 
 # Query 14
-query T
+query error CASE expressions unsupported
 EXPLAIN (VEC) SELECT 100.00 * sum(CASE WHEN p_type LIKE 'PROMO%' THEN l_extendedprice * (1 - l_discount) ELSE 0 END) / sum(l_extendedprice * (1 - l_discount)) AS promo_revenue FROM lineitem, part WHERE l_partkey = p_partkey AND l_shipdate >= DATE '1995-09-01' AND l_shipdate < DATE '1995-09-01' + INTERVAL '1' MONTH
-----
- │
- └── Node 1
-      └── *exec.projDivFloat64Float64Op
-           └── *exec.projMultFloat64Float64ConstOp
-                └── *exec.orderedAggregator
-                     └── *exec.oneShotOp
-                          └── *exec.distinctChainOps
-                               └── *exec.projMultFloat64Float64Op
-                                    └── *exec.projMinusFloat64ConstFloat64Op
-                                         └── *exec.caseOp
-                                              └── *exec.hashJoinEqOp
-                                                   └── *distsqlrun.colBatchScan
 
 # Query 15
 #-- TODO(yuzefovich): figure out how to execute this query consisting of three
@@ -770,23 +720,8 @@ EXPLAIN (VEC) SELECT c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, s
                      └── *exec.hashGrouper
 
 # Query 19
-query T
+query error OR expressions unsupported
 EXPLAIN (VEC) SELECT sum(l_extendedprice* (1 - l_discount)) AS revenue FROM lineitem, part WHERE ( p_partkey = l_partkey AND p_brand = 'Brand#12' AND p_container IN ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG') AND l_quantity >= 1 AND l_quantity <= 1 + 10 AND p_size BETWEEN 1 AND 5 AND l_shipmode IN ('AIR', 'AIR REG') AND l_shipinstruct = 'DELIVER IN PERSON') OR ( p_partkey = l_partkey AND p_brand = 'Brand#23' AND p_container IN ('MED BAG', 'MED BOX', 'MED PKG', 'MED PACK') AND l_quantity >= 10 AND l_quantity <= 10 + 10 AND p_size BETWEEN 1 AND 10 AND l_shipmode IN ('AIR', 'AIR REG') AND l_shipinstruct = 'DELIVER IN PERSON') OR ( p_partkey = l_partkey AND p_brand = 'Brand#34' AND p_container IN ('LG CASE', 'LG BOX', 'LG PACK', 'LG PKG') AND l_quantity >= 20 AND l_quantity <= 20 + 10 AND p_size BETWEEN 1 AND 15 AND l_shipmode IN ('AIR', 'AIR REG') AND l_shipinstruct = 'DELIVER IN PERSON')
-----
- │
- └── Node 1
-      └── *exec.orderedAggregator
-           └── *exec.oneShotOp
-                └── *exec.distinctChainOps
-                     └── *exec.projMultFloat64Float64Op
-                          └── *exec.projMinusFloat64ConstFloat64Op
-                               └── *exec.caseOp
-                                    └── *exec.hashJoinEqOp
-                                         ├── *exec.selEQBytesBytesConstOp
-                                         │    └── *exec.selectInOpBytes
-                                         │         └── *distsqlrun.colBatchScan
-                                         └── *exec.selGEInt64Int64ConstOp
-                                              └── *distsqlrun.colBatchScan
 
 # Query 20
 query T

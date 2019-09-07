@@ -906,7 +906,8 @@ func planSelectionOperators(
 		// projection and then convert the resulting boolean to a selection vector.
 		op, resultIdx, ct, memUsed, err = planProjectionOperators(ctx, expr, columnTypes, input)
 		op = exec.NewBoolVecToSelOp(op, resultIdx)
-		return op, resultIdx, ct, memUsed, err
+		return nil, resultIdx, ct, 0, errors.New("OR expressions unsupported")
+		//return op, resultIdx, ct, memUsed, err
 	case *tree.ComparisonExpr:
 		cmpOp := t.Operator
 		leftOp, leftIdx, ct, memUsageLeft, err := planProjectionOperators(ctx, t.TypedLeft(), columnTypes, input)
@@ -1074,7 +1075,8 @@ func planProjectionOperators(
 
 		op := exec.NewCaseOp(buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
 
-		return op, caseOutputIdx, ct, memUsed, nil
+		return op, resultIdx, ct, 0, errors.New("CASE expressions unsupported")
+		//return op, caseOutputIdx, ct, memUsed, nil
 	case *tree.AndExpr:
 		var leftOp, rightOp exec.Operator
 		var leftIdx, rightIdx, lMemUsed, rMemUsed int
@@ -1107,7 +1109,8 @@ func planProjectionOperators(
 		if err != nil {
 			return nil, resultIdx, ct, memUsed, err
 		}
-		return planProjectionOperators(ctx, caseExpr, columnTypes, input)
+		op, _, _, _, _ := planProjectionOperators(ctx, caseExpr, columnTypes, input)
+		return op, resultIdx, ct, 0, errors.New("OR expressions unsupported")
 	default:
 		return nil, resultIdx, nil, memUsed, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
 	}
