@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"runtime/pprof"
+	"sort"
 	"strings"
 	"time"
 
@@ -468,6 +469,10 @@ func (ex *connExecutor) execStmtInOpenState(
 // leases will only go down over time: no new conflicting leases can be
 // created as of the time of this call because v-2 can't be leased once
 // v-1 exists.
+//
+// If this method succeeds it is the caller's responsibility to release the
+// executor's table leases after the txn commits so that schema changes can
+// proceed.
 func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error {
 	tables := ex.extraTxnState.tables.getTablesWithNewVersion()
 	if tables == nil {
@@ -477,40 +482,83 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	if txn.IsCommitted() {
 		panic("transaction has already committed")
 	}
-	if !txn.CommitTimestampFixed() {
-		panic("commit timestamp was not fixed")
+
+	// We are potentially holding two type of leases that need to be dealt
+	// with:
+	//
+	//  1. Leases at version V-2 for a descriptor being modified to version V.
+	//  These leases must be dropped immediately because we're going to assert
+	//  that there are none of these leases before we can commit this
+	//  transaction. Furthermore we're going to spin waiting for all of these
+	//  leases to expire before we return from this function and so we'd hang
+	//  forever.
+	//
+	//  2. Leases on V-1 or V for a descriptor being modified.
+	//  Once this transaction commits, the schema changers run and
+	//  increment the version of the modified descriptors. If one of the
+	//  descriptors being modified has a lease being held the schema
+	//  changers will stall until the leases expire.
+	//
+	// The above two cases are be satified by releasing leases for both
+	// cases explicitly. We must release the 1. leases above before we attempt
+	// to check the invariant, otherwise it's doomed to fail.
+	// the other leases we need to wait until we commit to release.
+	// If the invariant check fails then we'll release all of the leases
+	// explicitly before we start our retry loop.
+	{
+		// If there are existing leases at V-2 for a descriptor being modified at
+		// version V being held, the wait loop below that waits on a cluster wide
+		// release of old version leases will hang until these leases expire so
+		// we need to drop these leases right now. It is not safe to release leases
+		// on verions V-1 until this transaction commits.
+		sort.Slice(tables, func(i, j int) bool {
+			if tables[i].id == tables[j].id {
+				return tables[i].version < tables[j].version
+			}
+			return tables[i].id < tables[j].id
+		})
+		leasedTables := ex.extraTxnState.tables.leasedTables
+		sort.Slice(leasedTables, func(i, j int) bool {
+			if leasedTables[i].ID == leasedTables[j].ID {
+				return leasedTables[i].Version < leasedTables[j].Version
+			}
+			return leasedTables[i].ID < leasedTables[j].ID
+		})
+		filteredLeases := leasedTables[:0]
+		tablesToExplore := tables
+		advanceTablesToExploreTo := func(id sqlbase.ID) (found bool) {
+			for len(tablesToExplore) > 0 && tablesToExplore[0].id < id {
+				tablesToExplore = tablesToExplore[1:]
+			}
+			return len(tablesToExplore) > 0 && tablesToExplore[0].id == id
+		}
+		for _, l := range leasedTables {
+			if !advanceTablesToExploreTo(l.ID) || l.Version+1 >= tablesToExplore[0].version {
+				filteredLeases = append(filteredLeases, l)
+			} else if err := ex.planner.LeaseMgr().Release(l); err != nil {
+				log.Warning(ctx, err)
+			}
+		}
+		ex.extraTxnState.tables.leasedTables = filteredLeases
 	}
 
-	// Release leases here for two reasons:
-	// 1. If there are existing leases at version V-2 for a descriptor
-	// being modified to version V being held the wait loop below that
-	// waits on a cluster wide release of old version leases will hang
-	// until these leases expire.
-	// 2. Once this transaction commits, the schema changers run and
-	// increment the version of the modified descriptors. If one of the
-	// descriptors being modified has a lease being held the schema
-	// changers will stall until the leases expire.
-	//
-	// The above two cases can be satified by releasing leases for both
-	// cases explicitly, but we prefer to call it here and kill two birds
-	// with one stone.
-	//
-	// It is safe to release leases even though the transaction hasn't yet
-	// committed only because the transaction timestamp has been fixed using
-	// CommitTimestamp().
-	//
-	// releaseLeases can fail to release a lease if the server is shutting
-	// down. This is okay because it will result in the two cases mentioned
-	// above simply hanging until the expiration time for the leases.
-	ex.extraTxnState.tables.releaseLeases(ctx)
-
-	count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.OrigTimestamp())
+	// We know that so long as there are no leases on the updated tables as of
+	// the current provisional commit timestamp for this transaction then if this
+	// transaction ends up
+	// committing then there won't have been any created in the meantime as any
+	// read on the descriptor will be blocked.
+	count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.Serialize().Timestamp)
 	if err != nil {
 		return err
 	}
 	if count == 0 {
 		return nil
 	}
+
+	// If we need to retry then we better release all of our leases so we don't
+	// block other schema changes.
+	ex.extraTxnState.tables.releaseLeases(ctx)
+
 	// Restart the transaction so that it is able to replay itself at a newer timestamp
 	// with the hope that the next time around there will be leases only at the current
 	// version.
@@ -578,6 +626,13 @@ func (ex *connExecutor) commitSQLTransaction(
 
 	if err := ex.state.mu.txn.Commit(ctx); err != nil {
 		return ex.makeErrEvent(err, stmt)
+	}
+
+	// Now that we've committed, if we modified any table we need to make sure
+	// to release the leases for them so that the schema change can proceed and
+	// we don't block the client.
+	if tables := ex.extraTxnState.tables.getTablesWithNewVersion(); tables != nil {
+		ex.extraTxnState.tables.releaseLeases(ctx)
 	}
 
 	if !isRelease {

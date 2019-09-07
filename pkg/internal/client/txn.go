@@ -263,14 +263,6 @@ func (txn *Txn) CommitTimestamp() hlc.Timestamp {
 	return txn.mu.sender.CommitTimestamp()
 }
 
-// CommitTimestampFixed returns true if the commit timestamp has
-// been fixed to the start timestamp and cannot be pushed forward.
-func (txn *Txn) CommitTimestampFixed() bool {
-	txn.mu.Lock()
-	defer txn.mu.Unlock()
-	return txn.mu.sender.CommitTimestampFixed()
-}
-
 // SetSystemConfigTrigger sets the system db trigger to true on this transaction.
 // This will impact the EndTransactionRequest.
 func (txn *Txn) SetSystemConfigTrigger() error {
@@ -319,11 +311,26 @@ func (txn *Txn) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) GetProto(ctx context.Context, key interface{}, msg protoutil.Message) error {
+	_, err := txn.GetProtoTs(ctx, key, msg)
+	return err
+}
+
+// GetProtoTs retrieves the value for a key and decodes the result as a proto
+// message. It additionally returns the timestamp at which the key was read.
+// If the key doesn't exist, the proto will simply be reset.
+//
+// key can be either a byte slice or a string.
+func (txn *Txn) GetProtoTs(
+	ctx context.Context, key interface{}, msg protoutil.Message,
+) (ts hlc.Timestamp, err error) {
 	r, err := txn.Get(ctx, key)
 	if err != nil {
-		return err
+		return ts, err
 	}
-	return r.ValueProto(msg)
+	if r.Value != nil {
+		ts = r.Value.Timestamp
+	}
+	return ts, r.ValueProto(msg)
 }
 
 // Put sets the value for a key
