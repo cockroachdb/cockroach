@@ -661,9 +661,18 @@ EXPLAIN (VEC) SELECT supp_nation, cust_nation, l_year, sum(volume) AS revenue FR
                   │ └ *distsqlrun.joinReader
                   │   └ *distsqlrun.joinReader
                   │     └ *exec.caseOp
-                  │       └ *exec.hashJoinEqOp
-                  │         ├ *distsqlrun.colBatchScan
-                  │         └ *distsqlrun.colBatchScan
+                  │       ├ *exec.hashJoinEqOp
+                  │       │ ├ *distsqlrun.colBatchScan
+                  │       │ └ *distsqlrun.colBatchScan
+                  │       ├ *exec.constBoolOp
+                  │       │ └ *exec.andOp
+                  │       │   └ *exec.projEQBytesBytesConstOp
+                  │       │     └ *exec.projEQBytesBytesConstOp
+                  │       ├ *exec.constBoolOp
+                  │       │ └ *exec.andOp
+                  │       │   └ *exec.projEQBytesBytesConstOp
+                  │       │     └ *exec.projEQBytesBytesConstOp
+                  │       └ *exec.constBoolOp
                   └ *distsqlrun.colBatchScan
 
 # Query 8
@@ -677,27 +686,29 @@ EXPLAIN (VEC) SELECT o_year, sum(CASE WHEN nation = 'BRAZIL' THEN volume ELSE 0 
       └ *exec.orderedAggregator
         └ *exec.hashGrouper
           └ *exec.caseOp
-            └ *exec.projMultFloat64Float64Op
-              └ *exec.projMinusFloat64ConstFloat64Op
-                └ *exec.defaultBuiltinFuncOperator
-                  └ *exec.constBytesOp
-                    └ *exec.hashJoinEqOp
-                      ├ *exec.hashJoinEqOp
-                      │ ├ *exec.hashJoinEqOp
-                      │ │ ├ *distsqlrun.colBatchScan
-                      │ │ └ *exec.hashJoinEqOp
-                      │ │   ├ *exec.hashJoinEqOp
-                      │ │   │ ├ *distsqlrun.joinReader
-                      │ │   │ │ └ *distsqlrun.joinReader
-                      │ │   │ │   └ *exec.selEQBytesBytesConstOp
-                      │ │   │ │     └ *distsqlrun.colBatchScan
-                      │ │   │ └ *distsqlrun.colBatchScan
-                      │ │   └ *exec.selLEInt64Int64ConstOp
-                      │ │     └ *exec.selGEInt64Int64ConstOp
-                      │ │       └ *distsqlrun.colBatchScan
-                      │ └ *distsqlrun.colBatchScan
-                      └ *exec.selEQBytesBytesConstOp
-                        └ *distsqlrun.colBatchScan
+            ├ *exec.projMultFloat64Float64Op
+            │ └ *exec.projMinusFloat64ConstFloat64Op
+            │   └ *exec.defaultBuiltinFuncOperator
+            │     └ *exec.constBytesOp
+            │       └ *exec.hashJoinEqOp
+            │         ├ *exec.hashJoinEqOp
+            │         │ ├ *exec.hashJoinEqOp
+            │         │ │ ├ *distsqlrun.colBatchScan
+            │         │ │ └ *exec.hashJoinEqOp
+            │         │ │   ├ *exec.hashJoinEqOp
+            │         │ │   │ ├ *distsqlrun.joinReader
+            │         │ │   │ │ └ *distsqlrun.joinReader
+            │         │ │   │ │   └ *exec.selEQBytesBytesConstOp
+            │         │ │   │ │     └ *distsqlrun.colBatchScan
+            │         │ │   │ └ *distsqlrun.colBatchScan
+            │         │ │   └ *exec.selLEInt64Int64ConstOp
+            │         │ │     └ *exec.selGEInt64Int64ConstOp
+            │         │ │       └ *distsqlrun.colBatchScan
+            │         │ └ *distsqlrun.colBatchScan
+            │         └ *exec.selEQBytesBytesConstOp
+            │           └ *distsqlrun.colBatchScan
+            ├ *exec.projEQBytesBytesConstOp
+            └ *exec.constFloat64Op
 
 # Query 9
 query T
@@ -788,10 +799,14 @@ EXPLAIN (VEC) SELECT 100.00 * sum(CASE WHEN p_type LIKE 'PROMO%' THEN l_extended
             └ *exec.projMultFloat64Float64Op
               └ *exec.projMinusFloat64ConstFloat64Op
                 └ *exec.caseOp
-                  └ *exec.hashJoinEqOp
-                    ├ *distsqlrun.colBatchScan
-                    └ *distsqlrun.indexJoiner
-                      └ *distsqlrun.colBatchScan
+                  ├ *exec.hashJoinEqOp
+                  │ ├ *distsqlrun.colBatchScan
+                  │ └ *distsqlrun.indexJoiner
+                  │   └ *distsqlrun.colBatchScan
+                  ├ *exec.projMultFloat64Float64Op
+                  │ └ *exec.projMinusFloat64ConstFloat64Op
+                  │   └ *exec.projPrefixBytesBytesConstOp
+                  └ *exec.constFloat64Op
 
 # Query 15
 #-- TODO(yuzefovich): figure out how to execute this query consisting of three
@@ -855,12 +870,46 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice* (1 - l_discount)) AS revenue FROM line
         └ *exec.projMultFloat64Float64Op
           └ *exec.projMinusFloat64ConstFloat64Op
             └ *exec.caseOp
-              └ *exec.hashJoinEqOp
-                ├ *exec.selEQBytesBytesConstOp
-                │ └ *exec.selectInOpBytes
-                │   └ *distsqlrun.colBatchScan
-                └ *exec.selGEInt64Int64ConstOp
-                  └ *distsqlrun.colBatchScan
+              ├ *exec.hashJoinEqOp
+              │ ├ *exec.selEQBytesBytesConstOp
+              │ │ └ *exec.selectInOpBytes
+              │ │   └ *distsqlrun.colBatchScan
+              │ └ *exec.selGEInt64Int64ConstOp
+              │   └ *distsqlrun.colBatchScan
+              ├ *exec.constBoolOp
+              │ └ *exec.caseOp
+              │   ├ *exec.constBoolOp
+              │   │ └ *exec.andOp
+              │   │   └ *exec.projLEInt64Int64ConstOp
+              │   │     └ *exec.andOp
+              │   │       └ *exec.projLEFloat64Float64ConstOp
+              │   │         └ *exec.andOp
+              │   │           └ *exec.projGEFloat64Float64ConstOp
+              │   │             └ *exec.andOp
+              │   │               └ *exec.projectInOpBytes
+              │   │                 └ *exec.projEQBytesBytesConstOp
+              │   ├ *exec.constBoolOp
+              │   │ └ *exec.andOp
+              │   │   └ *exec.projLEInt64Int64ConstOp
+              │   │     └ *exec.andOp
+              │   │       └ *exec.projLEFloat64Float64ConstOp
+              │   │         └ *exec.andOp
+              │   │           └ *exec.projGEFloat64Float64ConstOp
+              │   │             └ *exec.andOp
+              │   │               └ *exec.projectInOpBytes
+              │   │                 └ *exec.projEQBytesBytesConstOp
+              │   └ *exec.constBoolOp
+              ├ *exec.constBoolOp
+              │ └ *exec.andOp
+              │   └ *exec.projLEInt64Int64ConstOp
+              │     └ *exec.andOp
+              │       └ *exec.projLEFloat64Float64ConstOp
+              │         └ *exec.andOp
+              │           └ *exec.projGEFloat64Float64ConstOp
+              │             └ *exec.andOp
+              │               └ *exec.projectInOpBytes
+              │                 └ *exec.projEQBytesBytesConstOp
+              └ *exec.constBoolOp
 
 # Query 20
 query T

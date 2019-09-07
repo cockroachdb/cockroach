@@ -20,8 +20,9 @@ import (
 // bufferOp is an operator that buffers a single batch at a time from an input,
 // and makes it available to be read multiple times by downstream consumers.
 type bufferOp struct {
-	OneInputNode
+	ZeroInputNode
 	NonExplainable
+	input Operator
 
 	// read is true if someone has read the current batch already.
 	read     bool
@@ -35,7 +36,7 @@ var _ StaticMemoryOperator = &bufferOp{}
 // supplied input.
 func NewBufferOp(input Operator) Operator {
 	return &bufferOp{
-		OneInputNode: NewOneInputNode(input),
+		input: input,
 		batch: &selectionBatch{
 			sel: make([]uint16, coldata.BatchSize),
 		},
