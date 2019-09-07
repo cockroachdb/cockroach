@@ -388,6 +388,9 @@ func newColOperator(
 		if core.MergeJoiner.Type.IsSetOpJoin() {
 			return result, errors.AssertionFailedf("unexpectedly %s merge join was planned", core.MergeJoiner.Type.String())
 		}
+		// Merge joiner is a streaming operator when equality columns form a key
+		// for both of the inputs.
+		result.isStreaming = core.MergeJoiner.LeftEqColumnsAreKey && core.MergeJoiner.RightEqColumnsAreKey
 
 		var leftTypes, rightTypes []coltypes.T
 		leftTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
@@ -433,6 +436,14 @@ func newColOperator(
 			filterConstructor func(exec.Operator) (exec.Operator, error)
 		)
 		if !core.MergeJoiner.OnExpr.Empty() {
+			// At the moment, we want to be on the conservative side and not run
+			// queries with ON expressions when vectorize=auto, so we say that the
+			// merge join is not streaming which will reject running such a query
+			// through vectorized engine with 'auto' setting.
+			// TODO(yuzefovich): remove this when we're confident in ON expression
+			// support.
+			result.isStreaming = false
+
 			onExpr = &core.MergeJoiner.OnExpr
 			filterPlanning = newFilterPlanningState(len(leftTypes), len(rightTypes))
 			switch core.MergeJoiner.Type {
@@ -489,10 +500,6 @@ func newColOperator(
 			err = result.planFilterExpr(flowCtx.NewEvalCtx(), *onExpr)
 			filterPlanning.projectOutExtraCols(&result, leftOutCols, rightOutCols)
 		}
-
-		// Merge joiner is a streaming operator when equality columns form a key
-		// for both of the inputs.
-		result.isStreaming = core.MergeJoiner.LeftEqColumnsAreKey && core.MergeJoiner.RightEqColumnsAreKey
 
 	case core.JoinReader != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
