@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -107,8 +107,8 @@ func TestStatsWithLowTTL(t *testing.T) {
 
 	// Sleep 500ms after every 10k scanned rows, to simulate a long-running
 	// operation.
-	distsqlrun.TestingSamplerSleep = 500 * time.Millisecond
-	defer func() { distsqlrun.TestingSamplerSleep = 0 }()
+	rowexec.TestingSamplerSleep = 500 * time.Millisecond
+	defer func() { rowexec.TestingSamplerSleep = 0 }()
 
 	// Sleep enough to ensure the table descriptor existed at AOST.
 	time.Sleep(100 * time.Millisecond)

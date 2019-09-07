@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -558,7 +558,7 @@ func doDistributedCSVTransform(
 	files []string,
 	p sql.PlanHookState,
 	parentID sqlbase.ID,
-	tables map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
+	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 	format roachpb.IOFileFormat,
 	walltime int64,
 	sstSize int64,
@@ -864,7 +864,7 @@ func (r *importResumer) Resume(
 		sstSize = storageccl.MaxImportBatchSize(r.settings) * 5
 	}
 
-	tables := make(map[string]*distsqlpb.ReadImportDataSpec_ImportTable, len(details.Tables))
+	tables := make(map[string]*execinfrapb.ReadImportDataSpec_ImportTable, len(details.Tables))
 	if details.Tables != nil {
 		// Skip prepare stage on job resumption, if it has already been completed.
 		if !details.PrepareComplete {
@@ -878,9 +878,9 @@ func (r *importResumer) Resume(
 
 		for _, i := range details.Tables {
 			if i.Name != "" {
-				tables[i.Name] = &distsqlpb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetCols: i.TargetCols}
+				tables[i.Name] = &execinfrapb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetCols: i.TargetCols}
 			} else if i.Desc != nil {
-				tables[i.Desc.Name] = &distsqlpb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetCols: i.TargetCols}
+				tables[i.Desc.Name] = &execinfrapb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetCols: i.TargetCols}
 			} else {
 				return errors.Errorf("invalid table specification")
 			}
