@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -46,15 +46,15 @@ func TestCreateStatsControlJob(t *testing.T) {
 	}(jobs.DefaultAdoptInterval)
 	jobs.DefaultAdoptInterval = 100 * time.Millisecond
 
-	// Test with 3 nodes and distsqlrun.SamplerProgressInterval=100 to ensure
+	// Test with 3 nodes and rowexec.SamplerProgressInterval=100 to ensure
 	// that progress metadata is sent correctly after every 100 input rows.
 	const nodes = 3
 	defer func(oldSamplerInterval int, oldSampleAgggregatorInterval time.Duration) {
-		distsqlrun.SamplerProgressInterval = oldSamplerInterval
-		distsqlrun.SampleAggregatorProgressInterval = oldSampleAgggregatorInterval
-	}(distsqlrun.SamplerProgressInterval, distsqlrun.SampleAggregatorProgressInterval)
-	distsqlrun.SamplerProgressInterval = 100
-	distsqlrun.SampleAggregatorProgressInterval = time.Millisecond
+		rowexec.SamplerProgressInterval = oldSamplerInterval
+		rowexec.SampleAggregatorProgressInterval = oldSampleAgggregatorInterval
+	}(rowexec.SamplerProgressInterval, rowexec.SampleAggregatorProgressInterval)
+	rowexec.SamplerProgressInterval = 100
+	rowexec.SampleAggregatorProgressInterval = time.Millisecond
 
 	var allowRequest chan struct{}
 
@@ -458,14 +458,14 @@ func TestCreateStatsProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	defer func(oldProgressInterval time.Duration) {
-		distsqlrun.SampleAggregatorProgressInterval = oldProgressInterval
-	}(distsqlrun.SampleAggregatorProgressInterval)
-	distsqlrun.SampleAggregatorProgressInterval = time.Nanosecond
+		rowexec.SampleAggregatorProgressInterval = oldProgressInterval
+	}(rowexec.SampleAggregatorProgressInterval)
+	rowexec.SampleAggregatorProgressInterval = time.Nanosecond
 
 	defer func(oldProgressInterval int) {
-		distsqlrun.SamplerProgressInterval = oldProgressInterval
-	}(distsqlrun.SamplerProgressInterval)
-	distsqlrun.SamplerProgressInterval = 10
+		rowexec.SamplerProgressInterval = oldProgressInterval
+	}(rowexec.SamplerProgressInterval)
+	rowexec.SamplerProgressInterval = 10
 
 	resetKVBatchSize := row.SetKVBatchSize(10)
 	defer resetKVBatchSize()

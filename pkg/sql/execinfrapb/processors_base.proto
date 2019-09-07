@@ -1,0 +1,71 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+//
+// Processor definitions for distributed SQL APIs. See
+// docs/RFCS/distributed_sql.md.
+// All the concepts here are "physical plan" concepts.
+
+syntax = "proto2";
+// Beware! This package name must not be changed, even though it doesn't match
+// the Go package name, because it defines the Protobuf message names which
+// can't be changed without breaking backward compatibility.
+package cockroach.sql.distsqlrun;
+option go_package = "execinfrapb";
+
+import "sql/execinfrapb/data.proto";
+import "roachpb/data.proto";
+import "gogoproto/gogo.proto";
+
+// PostProcessSpec describes the processing required to obtain the output
+// (filtering, projection). It operates on the internal schema of the processor
+// (see ProcessorSpec).
+message PostProcessSpec {
+  // A filtering expression which references the internal columns of the
+  // processor via ordinal references (@1, @2, etc).
+  optional Expression filter = 1 [(gogoproto.nullable) = false];
+
+  // If true, output_columns describes a projection. Used to differentiate
+  // between an empty projection and no projection.
+  //
+  // Cannot be set at the same time with render expressions.
+  optional bool projection = 2 [(gogoproto.nullable) = false];
+
+  // The output columns describe a projection on the internal set of columns;
+  // only the columns in this list will be emitted.
+  //
+  // Can only be set if projection is true. Cannot be set at the same time with
+  // render expressions.
+  repeated uint32 output_columns = 3 [packed = true];
+
+  // If set, the output is the result of rendering these expressions. The
+  // expressions reference the internal columns of the processor.
+  //
+  // Cannot be set at the same time with output columns.
+  repeated Expression render_exprs = 4 [(gogoproto.nullable) = false];
+
+  // If nonzero, the first <offset> rows will be suppressed.
+  optional uint64 offset = 5 [(gogoproto.nullable) = false];
+
+  // If nonzero, the processor will stop after emitting this many rows. The rows
+  // suppressed by <offset>, if any, do not count towards this limit.
+  optional uint64 limit = 6 [(gogoproto.nullable) = false];
+}
+
+message Columns {
+  repeated uint32 columns = 1 [packed = true];
+}
+
+message TableReaderSpan {
+  // TODO(radu): the dist_sql APIs should be agnostic to how we map tables to
+  // KVs. The span should be described as starting and ending lists of values
+  // for a prefix of the index columns, along with inclusive/exclusive flags.
+  optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
+}
+

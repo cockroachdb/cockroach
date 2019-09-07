@@ -30,9 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -265,7 +266,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	}
 
 	// Push some metadata and check that the caches are updated with it.
-	status := r.Push(nil /* row */, &distsqlpb.ProducerMetadata{
+	status := r.Push(nil /* row */, &execinfrapb.ProducerMetadata{
 		Ranges: []roachpb.RangeInfo{
 			{
 				Desc: descs[0],
@@ -278,10 +279,10 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 					NodeID: 2, StoreID: 2, ReplicaID: 2}},
 			},
 		}})
-	if status != distsqlrun.NeedMoreRows {
+	if status != execinfra.NeedMoreRows {
 		t.Fatalf("expected status NeedMoreRows, got: %d", status)
 	}
-	status = r.Push(nil /* row */, &distsqlpb.ProducerMetadata{
+	status = r.Push(nil /* row */, &execinfrapb.ProducerMetadata{
 		Ranges: []roachpb.RangeInfo{
 			{
 				Desc: descs[2],
@@ -289,7 +290,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 					NodeID: 3, StoreID: 3, ReplicaID: 3}},
 			},
 		}})
-	if status != distsqlrun.NeedMoreRows {
+	if status != execinfra.NeedMoreRows {
 		t.Fatalf("expected status NeedMoreRows, got: %d", status)
 	}
 
@@ -518,7 +519,7 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 		numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
-			ServerArgs:      base.TestServerArgs{Knobs: base.TestingKnobs{DistSQL: &distsqlrun.TestingKnobs{DrainFast: true}}, UseDatabase: "test"},
+			ServerArgs:      base.TestServerArgs{Knobs: base.TestingKnobs{DistSQL: &execinfra.TestingKnobs{DrainFast: true}}, UseDatabase: "test"},
 		},
 	)
 	ctx := context.TODO()
@@ -574,7 +575,7 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 
 	// Drain the second node and expect the query to be planned on only the
 	// first node.
-	distServer := tc.Server(1).DistSQLServer().(*distsqlrun.ServerImpl)
+	distServer := tc.Server(1).DistSQLServer().(*distsql.ServerImpl)
 	distServer.Drain(ctx, 0 /* flowDrainWait */)
 
 	expectPlan([][]string{{"https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkDFLxEAUhHt_xTGVwsolV26lWF2TSO7EQoKs2UcIJPvCextQjvx3SbbQE060fDM78w17QmBPhRtIYV-QozYYhRtSZVmk9GDv32Ezgy6MU1zk2qBhIdgTYhd7gsXRvfVUkfMk2wwGnqLr-rV2lG5w8nEXpkFhcBhdULu5hUE5RbspOBDq2YCn-NWv0bUEm8_m7xvu21aodZFlm59PeCifiuNrVT4frm8usnb_YVWkIwelM86l5myuDci3lP5UeZKGHoWbFZPOcs2tgieNyc3TsQ_JWgZ-D-e_hnc_wvV89RkAAP__weakAA=="}})
@@ -606,7 +607,7 @@ type testSpanResolver struct {
 // NewSpanResolverIterator is part of the SpanResolver interface.
 func (tsr *testSpanResolver) NewSpanResolverIterator(
 	_ *client.Txn,
-) distsqlplan.SpanResolverIterator {
+) physicalplan.SpanResolverIterator {
 	return &testSpanResolverIterator{tsr: tsr}
 }
 
@@ -616,7 +617,7 @@ type testSpanResolverIterator struct {
 	endKey      string
 }
 
-var _ distsqlplan.SpanResolverIterator = &testSpanResolverIterator{}
+var _ physicalplan.SpanResolverIterator = &testSpanResolverIterator{}
 
 // Seek is part of the SpanResolverIterator interface.
 func (it *testSpanResolverIterator) Seek(
@@ -794,9 +795,9 @@ func TestPartitionSpans(t *testing.T) {
 		}
 		if err := mockGossip.AddInfoProto(
 			gossip.MakeDistSQLNodeVersionKey(nodeID),
-			&distsqlpb.DistSQLVersionGossipInfo{
-				MinAcceptedVersion: distsqlrun.MinAcceptedVersion,
-				Version:            distsqlrun.Version,
+			&execinfrapb.DistSQLVersionGossipInfo{
+				MinAcceptedVersion: execinfra.MinAcceptedVersion,
+				Version:            execinfra.Version,
 			},
 			0, // ttl - no expiration
 		); err != nil {
@@ -817,7 +818,7 @@ func TestPartitionSpans(t *testing.T) {
 			}
 
 			dsp := DistSQLPlanner{
-				planVersion:  distsqlrun.Version,
+				planVersion:  execinfra.Version,
 				st:           cluster.MakeTestingClusterSettings(),
 				nodeDesc:     *tsp.nodes[tc.gatewayNode-1],
 				stopper:      stopper,
@@ -887,10 +888,10 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 		// planVersion is the DistSQL version that this plan is targeting.
 		// We'll play with this version and expect nodes to be skipped because of
 		// this.
-		planVersion distsqlpb.DistSQLVersion
+		planVersion execinfrapb.DistSQLVersion
 
 		// The versions accepted by each node.
-		nodeVersions map[roachpb.NodeID]distsqlpb.DistSQLVersionGossipInfo
+		nodeVersions map[roachpb.NodeID]execinfrapb.DistSQLVersionGossipInfo
 
 		// nodesNotAdvertisingDistSQLVersion is the set of nodes for which gossip is
 		// not going to have information about the supported DistSQL version. This
@@ -904,7 +905,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			// In the first test, all nodes are compatible.
 			name:        "current_version",
 			planVersion: 2,
-			nodeVersions: map[roachpb.NodeID]distsqlpb.DistSQLVersionGossipInfo{
+			nodeVersions: map[roachpb.NodeID]execinfrapb.DistSQLVersionGossipInfo{
 				1: {
 					MinAcceptedVersion: 1,
 					Version:            2,
@@ -925,7 +926,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			// Remember that the gateway is node 2.
 			name:        "next_version",
 			planVersion: 3,
-			nodeVersions: map[roachpb.NodeID]distsqlpb.DistSQLVersionGossipInfo{
+			nodeVersions: map[roachpb.NodeID]execinfrapb.DistSQLVersionGossipInfo{
 				1: {
 					MinAcceptedVersion: 1,
 					Version:            2,
@@ -944,7 +945,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			// a crdb 1.0 node).
 			name:        "crdb_1.0",
 			planVersion: 3,
-			nodeVersions: map[roachpb.NodeID]distsqlpb.DistSQLVersionGossipInfo{
+			nodeVersions: map[roachpb.NodeID]execinfrapb.DistSQLVersionGossipInfo{
 				2: {
 					MinAcceptedVersion: 3,
 					Version:            3,
@@ -1079,9 +1080,9 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		// the gossip data, but other datums it advertised are left in place.
 		if err := mockGossip.AddInfoProto(
 			gossip.MakeDistSQLNodeVersionKey(nodeID),
-			&distsqlpb.DistSQLVersionGossipInfo{
-				MinAcceptedVersion: distsqlrun.MinAcceptedVersion,
-				Version:            distsqlrun.Version,
+			&execinfrapb.DistSQLVersionGossipInfo{
+				MinAcceptedVersion: execinfra.MinAcceptedVersion,
+				Version:            execinfra.Version,
 			},
 			0, // ttl - no expiration
 		); err != nil {
@@ -1096,7 +1097,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	}
 
 	dsp := DistSQLPlanner{
-		planVersion:  distsqlrun.Version,
+		planVersion:  execinfra.Version,
 		st:           cluster.MakeTestingClusterSettings(),
 		nodeDesc:     *tsp.nodes[gatewayNode-1],
 		stopper:      stopper,
@@ -1161,9 +1162,9 @@ func TestCheckNodeHealth(t *testing.T) {
 	}
 	if err := mockGossip.AddInfoProto(
 		gossip.MakeDistSQLNodeVersionKey(nodeID),
-		&distsqlpb.DistSQLVersionGossipInfo{
-			MinAcceptedVersion: distsqlrun.MinAcceptedVersion,
-			Version:            distsqlrun.Version,
+		&execinfrapb.DistSQLVersionGossipInfo{
+			MinAcceptedVersion: execinfra.MinAcceptedVersion,
+			Version:            execinfra.Version,
 		},
 		0, // ttl - no expiration
 	); err != nil {

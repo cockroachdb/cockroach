@@ -16,8 +16,8 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -137,12 +137,12 @@ const (
 	publicAndNonPublicColumns scanVisibility = 1
 )
 
-func (s scanVisibility) toDistSQLScanVisibility() distsqlpb.ScanVisibility {
+func (s scanVisibility) toDistSQLScanVisibility() execinfrapb.ScanVisibility {
 	switch s {
 	case publicColumns:
-		return distsqlpb.ScanVisibility_PUBLIC
+		return execinfrapb.ScanVisibility_PUBLIC
 	case publicAndNonPublicColumns:
-		return distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+		return execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	default:
 		panic(fmt.Sprintf("Unknown visibility %+v", s))
 	}
@@ -228,7 +228,7 @@ func (n *scanNode) canParallelize() bool {
 	// We can't parallelize if we have a non-zero limit hint, since DistSender
 	// is limited to running limited batches serially.
 	return n.maxResults != 0 &&
-		n.maxResults < distsqlrun.ParallelScanResultThreshold &&
+		n.maxResults < execinfra.ParallelScanResultThreshold &&
 		n.limitHint() == 0 &&
 		n.parallelScansEnabled
 }

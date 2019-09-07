@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -744,7 +744,7 @@ func (ef *execFactory) ConstructZigzagJoin(
 	n.columns = append(n.columns, rightScan.resultColumns...)
 
 	// Fixed values are the values fixed for a prefix of each side's index columns.
-	// See the comment in pkg/sql/distsqlrun/zigzagjoiner.go for how they are used.
+	// See the comment in pkg/sql/rowexec/zigzagjoiner.go for how they are used.
 	for i := range fixedVals {
 		valNode, ok := fixedVals[i].(*valuesNode)
 		if !ok {
@@ -907,13 +907,13 @@ func (ef *execFactory) ConstructPlan(
 			out.subquery = in.ExprNode
 			switch in.Mode {
 			case exec.SubqueryExists:
-				out.execMode = distsqlrun.SubqueryExecModeExists
+				out.execMode = rowexec.SubqueryExecModeExists
 			case exec.SubqueryOneRow:
-				out.execMode = distsqlrun.SubqueryExecModeOneRow
+				out.execMode = rowexec.SubqueryExecModeOneRow
 			case exec.SubqueryAnyRows:
-				out.execMode = distsqlrun.SubqueryExecModeAllRowsNormalized
+				out.execMode = rowexec.SubqueryExecModeAllRowsNormalized
 			case exec.SubqueryAllRows:
-				out.execMode = distsqlrun.SubqueryExecModeAllRows
+				out.execMode = rowexec.SubqueryExecModeAllRows
 			default:
 				return nil, errors.Errorf("invalid SubqueryMode %d", in.Mode)
 			}

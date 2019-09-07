@@ -1,0 +1,144 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+//
+// Processor definitions for distributed SQL APIs. See
+// docs/RFCS/distributed_sql.md.
+// All the concepts here are "physical plan" concepts.
+
+syntax = "proto2";
+// Beware! This package name must not be changed, even though it doesn't match
+// the Go package name, because it defines the Protobuf message names which
+// can't be changed without breaking backward compatibility.
+package cockroach.sql.distsqlrun;
+option go_package = "execinfrapb";
+
+import "sql/sqlbase/structured.proto";
+import "gogoproto/gogo.proto";
+
+enum SketchType {
+  // This is the github.com/axiomhq/hyperloglog binary format (as of commit
+  // 730eea1) for a sketch with precision 14. Values are encoded using their key
+  // encoding, except integers which are encoded in 8 bytes (little-endian).
+  HLL_PLUS_PLUS_V1 = 0;
+}
+
+// SketchSpec contains the specification for a generated statistic.
+message SketchSpec {
+  optional SketchType sketch_type = 1 [(gogoproto.nullable) = false];
+
+  // Each value is an index identifying a column in the input stream.
+  // TODO(radu): currently only one column is supported.
+  repeated uint32 columns = 2;
+
+  // If set, we generate a histogram for the first column in the sketch.
+  // Only used by the SampleAggregator.
+  optional bool generate_histogram = 3 [(gogoproto.nullable) = false];
+  // Controls the maximum number of buckets in the histogram.
+  // Only used by the SampleAggregator.
+  optional uint32 histogram_max_buckets = 4 [(gogoproto.nullable) = false];
+
+  // Only used by the SampleAggregator.
+  optional string stat_name = 5 [(gogoproto.nullable) = false];
+}
+
+// SamplerSpec is the specification of a "sampler" processor which
+// returns a sample (random subset) of the input columns and computes
+// cardinality estimation sketches on sets of columns.
+//
+// The sampler is configured with a sample size and sets of columns
+// for the sketches. It produces one row with global statistics, one
+// row with sketch information for each sketch plus at most
+// sample_size sampled rows.
+//
+// The following method is used to do reservoir sampling: we generate a
+// "rank" for each row, which is just a random, uniformly distributed
+// 64-bit value. The rows with the smallest <sample_size> ranks are selected.
+// This method is chosen because it allows to combine sample sets very easily.
+//
+// The internal schema of the processor is formed of two column
+// groups:
+//   1. sampled row columns:
+//       - columns that map 1-1 to the columns in the input (same
+//         schema as the input).
+//       - an INT column with the "rank" of the row; this is a random value
+//         associated with the row (necessary for combining sample sets).
+//   2. sketch columns:
+//       - an INT column indicating the sketch index
+//         (0 to len(sketches) - 1).
+//       - an INT column indicating the number of rows processed
+//       - an INT column indicating the number of NULL values
+//         on the first column of the sketch.
+//       - a BYTES column with the binary sketch data (format
+//         dependent on the sketch type).
+// Rows have NULLs on either all the sampled row columns or on all the
+// sketch columns.
+message SamplerSpec {
+  repeated SketchSpec sketches = 1 [(gogoproto.nullable) = false];
+  optional uint32 sample_size = 2 [(gogoproto.nullable) = false];
+
+  // Setting this value enables throttling; this is the fraction of time that
+  // the sampler processors will be idle when the recent CPU usage is high. The
+  // throttling is adaptive so the actual idle fraction will depend on CPU
+  // usage; this value is a ceiling.
+  //
+  // Currently, this field is set only for automatic statistics based on the
+  // value of the cluster setting
+  // sql.stats.automatic_collection.max_fraction_idle.
+  optional double max_fraction_idle = 3 [(gogoproto.nullable) = false];
+}
+
+// SampleAggregatorSpec is the specification of a processor that aggregates the
+// results from multiple sampler processors and writes out the statistics to
+// system.table_statistics.
+//
+// The input schema it expects matches the output schema of a sampler spec (see
+// the comment for SamplerSpec for all the details):
+//  1. sampled row columns:
+//    - sampled columns
+//    - row rank
+//  2. sketch columns:
+//    - sketch index
+//    - number of rows processed
+//    - number of NULL values encountered on the first column of the sketch
+//    - binary sketch data
+message SampleAggregatorSpec {
+  repeated SketchSpec sketches = 1 [(gogoproto.nullable) = false];
+
+  // The processor merges reservoir sample sets into a single
+  // sample set of this size. This must match the sample size
+  // used for each Sampler.
+  optional uint32 sample_size = 2 [(gogoproto.nullable) = false];
+
+  // The i-th value indicates the ColumnID of the i-th sampled row column.
+  // These are necessary for writing out the statistic data.
+  repeated uint32 sampled_column_ids = 3 [
+    (gogoproto.customname) = "SampledColumnIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID"
+  ];
+
+  optional uint32 table_id = 4 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "TableID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+  ];
+
+  reserved 5;
+
+  // JobID is the id of the CREATE STATISTICS job.
+  optional int64 job_id = 6 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "JobID"
+  ];
+
+  // The total number of rows expected in the table based on previous runs of
+  // CREATE STATISTICS. Used for progress reporting. If rows expected is 0,
+  // reported progress is 0 until the very end.
+  optional uint64 rows_expected = 7 [(gogoproto.nullable) = false];
+}

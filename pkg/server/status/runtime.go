@@ -528,7 +528,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, ms GoMemSt
 	rsr.Uptime.Update((now - rsr.startTimeNanos) / 1e9)
 }
 
-// GetCPUCombinedPercentNorm is part of the distsqlrun.RuntimeStats interface.
+// GetCPUCombinedPercentNorm is part of the rowexec.RuntimeStats interface.
 func (rsr *RuntimeStatSampler) GetCPUCombinedPercentNorm() float64 {
 	return rsr.CPUCombinedPercentNorm.Value()
 }

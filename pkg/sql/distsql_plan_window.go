@@ -13,8 +13,8 @@ package sql
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
@@ -96,48 +96,48 @@ func (s *windowPlanState) findUnprocessedWindowFnsWithSamePartition() (
 
 func (s *windowPlanState) createWindowFnSpec(
 	funcInProgress *windowFuncHolder,
-) (distsqlpb.WindowerSpec_WindowFn, *types.T, error) {
+) (execinfrapb.WindowerSpec_WindowFn, *types.T, error) {
 	for _, argIdx := range funcInProgress.argsIdxs {
 		if argIdx >= uint32(len(s.plan.ResultTypes)) {
-			return distsqlpb.WindowerSpec_WindowFn{}, nil, errors.Errorf("ColIdx out of range (%d)", argIdx)
+			return execinfrapb.WindowerSpec_WindowFn{}, nil, errors.Errorf("ColIdx out of range (%d)", argIdx)
 		}
 	}
 	// Figure out which built-in to compute.
 	funcStr := strings.ToUpper(funcInProgress.expr.Func.String())
-	funcSpec, err := distsqlrun.CreateWindowerSpecFunc(funcStr)
+	funcSpec, err := rowexec.CreateWindowerSpecFunc(funcStr)
 	if err != nil {
-		return distsqlpb.WindowerSpec_WindowFn{}, nil, err
+		return execinfrapb.WindowerSpec_WindowFn{}, nil, err
 	}
 	argTypes := make([]types.T, len(funcInProgress.argsIdxs))
 	for i, argIdx := range funcInProgress.argsIdxs {
 		argTypes[i] = s.plan.ResultTypes[argIdx]
 	}
-	_, outputType, err := distsqlrun.GetWindowFunctionInfo(funcSpec, argTypes...)
+	_, outputType, err := rowexec.GetWindowFunctionInfo(funcSpec, argTypes...)
 	if err != nil {
-		return distsqlpb.WindowerSpec_WindowFn{}, outputType, err
+		return execinfrapb.WindowerSpec_WindowFn{}, outputType, err
 	}
 	// Populating column ordering from ORDER BY clause of funcInProgress.
-	ordCols := make([]distsqlpb.Ordering_Column, 0, len(funcInProgress.columnOrdering))
+	ordCols := make([]execinfrapb.Ordering_Column, 0, len(funcInProgress.columnOrdering))
 	for _, column := range funcInProgress.columnOrdering {
-		ordCols = append(ordCols, distsqlpb.Ordering_Column{
+		ordCols = append(ordCols, execinfrapb.Ordering_Column{
 			ColIdx: uint32(column.ColIdx),
 			// We need this -1 because encoding.Direction has extra value "_"
 			// as zeroth "entry" which its proto equivalent doesn't have.
-			Direction: distsqlpb.Ordering_Column_Direction(column.Direction - 1),
+			Direction: execinfrapb.Ordering_Column_Direction(column.Direction - 1),
 		})
 	}
-	funcInProgressSpec := distsqlpb.WindowerSpec_WindowFn{
+	funcInProgressSpec := execinfrapb.WindowerSpec_WindowFn{
 		Func:         funcSpec,
 		ArgsIdxs:     funcInProgress.argsIdxs,
-		Ordering:     distsqlpb.Ordering{Columns: ordCols},
+		Ordering:     execinfrapb.Ordering{Columns: ordCols},
 		FilterColIdx: int32(funcInProgress.filterColIdx),
 		OutputColIdx: uint32(funcInProgress.outputColIdx),
 	}
 	if funcInProgress.frame != nil {
 		// funcInProgress has a custom window frame.
-		frameSpec := distsqlpb.WindowerSpec_Frame{}
+		frameSpec := execinfrapb.WindowerSpec_Frame{}
 		if err := frameSpec.InitFromAST(funcInProgress.frame, s.planCtx.EvalContext()); err != nil {
-			return distsqlpb.WindowerSpec_WindowFn{}, outputType, err
+			return execinfrapb.WindowerSpec_WindowFn{}, outputType, err
 		}
 		funcInProgressSpec.Frame = &frameSpec
 	}

@@ -16,7 +16,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -227,7 +228,7 @@ func (p *planner) populateExplain(
 			isVec = false
 		} else {
 			for _, flow := range flows {
-				_, err := distsqlrun.SupportsVectorized(params.ctx, flowCtx, flow.Processors)
+				_, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.Processors)
 				isVec = isVec && (err == nil)
 			}
 		}
@@ -382,7 +383,7 @@ func populateEntriesForObserver(
 			"original sql",
 			tree.AsStringWithFlags(subqueryPlans[i].subquery, subqueryFmtFlags),
 		)
-		observer.attr("subquery", "exec mode", distsqlrun.SubqueryExecModeNames[subqueryPlans[i].execMode])
+		observer.attr("subquery", "exec mode", rowexec.SubqueryExecModeNames[subqueryPlans[i].execMode])
 		if subqueryPlans[i].plan != nil {
 			if err := walkPlan(ctx, subqueryPlans[i].plan, observer); err != nil && returnError {
 				return err

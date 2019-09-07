@@ -21,8 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -47,12 +48,12 @@ var sstOutputTypes = []types.T{
 }
 
 func newSSTWriterProcessor(
-	flowCtx *distsqlrun.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	spec distsqlpb.SSTWriterSpec,
-	input distsqlrun.RowSource,
-	output distsqlrun.RowReceiver,
-) (distsqlrun.Processor, error) {
+	spec execinfrapb.SSTWriterSpec,
+	input execinfra.RowSource,
+	output execinfra.RowReceiver,
+) (execinfra.Processor, error) {
 	sp := &sstWriter{
 		flowCtx:     flowCtx,
 		processorID: processorID,
@@ -65,7 +66,7 @@ func newSSTWriterProcessor(
 		progress:    spec.Progress,
 		db:          flowCtx.EvalCtx.Txn.DB(),
 	}
-	if err := sp.out.Init(&distsqlpb.PostProcessSpec{}, sstOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
+	if err := sp.out.Init(&execinfrapb.PostProcessSpec{}, sstOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}
 	if sp.spec.Destination != "" {
@@ -76,20 +77,20 @@ func newSSTWriterProcessor(
 }
 
 type sstWriter struct {
-	flowCtx     *distsqlrun.FlowCtx
+	flowCtx     *execinfra.FlowCtx
 	processorID int32
-	spec        distsqlpb.SSTWriterSpec
-	input       distsqlrun.RowSource
-	out         distsqlrun.ProcOutputHelper
-	output      distsqlrun.RowReceiver
+	spec        execinfrapb.SSTWriterSpec
+	input       execinfra.RowSource
+	out         execinfra.ProcOutputHelper
+	output      execinfra.RowReceiver
 	tempStorage diskmap.Factory
 	settings    *cluster.Settings
 	registry    *jobs.Registry
-	progress    distsqlpb.JobProgress
+	progress    execinfrapb.JobProgress
 	db          *client.DB
 }
 
-var _ distsqlrun.Processor = &sstWriter{}
+var _ execinfra.Processor = &sstWriter{}
 
 func (sp *sstWriter) OutputTypes() []types.T {
 	return sstOutputTypes
@@ -111,7 +112,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 		// Sort incoming KVs, which will be from multiple spans, into a single
 		// RocksDB instance.
 		typs := sp.input.OutputTypes()
-		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
+		input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
 		alloc := &sqlbase.DatumAlloc{}
 		store := sp.tempStorage.NewSortedDiskMultiMap()
 		defer store.Close(ctx)
@@ -256,7 +257,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 					if err != nil {
 						return err
 					}
-					if cs != distsqlrun.NeedMoreRows {
+					if cs != execinfra.NeedMoreRows {
 						return errors.New("unexpected closure of consumer")
 					}
 				}
@@ -320,7 +321,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 		}
 		return nil
 	}()
-	distsqlrun.DrainAndClose(
+	execinfra.DrainAndClose(
 		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
 }
 
@@ -479,5 +480,5 @@ func makeSSTs(
 }
 
 func init() {
-	distsqlrun.NewSSTWriterProcessor = newSSTWriterProcessor
+	rowexec.NewSSTWriterProcessor = newSSTWriterProcessor
 }

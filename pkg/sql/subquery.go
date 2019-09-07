@@ -14,9 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -29,7 +29,7 @@ import (
 // planTop.subqueryPlans.
 type subquery struct {
 	subquery *tree.Subquery
-	execMode distsqlrun.SubqueryExecMode
+	execMode rowexec.SubqueryExecMode
 	expanded bool
 	started  bool
 	plan     planNode
@@ -107,7 +107,7 @@ func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.E
 				v.err = err
 				return false, expr
 			}
-			result.execMode = distsqlrun.SubqueryExecModeAllRows
+			result.execMode = rowexec.SubqueryExecModeAllRows
 			// Multi-row types are always wrapped in a tuple-type, but the ARRAY
 			// flatten operator wants the unwrapped type.
 			sub.SetType(&sub.ResolvedType().TupleContents()[0])
@@ -132,14 +132,14 @@ func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.E
 		}
 		if t.Exists {
 			result.plan = &limitNode{plan: result.plan, countExpr: tree.NewDInt(1)}
-			result.execMode = distsqlrun.SubqueryExecModeExists
+			result.execMode = rowexec.SubqueryExecModeExists
 			t.SetType(types.Bool)
 		} else {
 			result.plan = &max1RowNode{
 				plan: &limitNode{
 					plan:      result.plan,
 					countExpr: tree.NewDInt(2)}}
-			result.execMode = distsqlrun.SubqueryExecModeOneRow
+			result.execMode = rowexec.SubqueryExecModeOneRow
 		}
 
 	case *tree.ComparisonExpr:
@@ -156,7 +156,7 @@ func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.E
 					v.err = err
 					return false, expr
 				}
-				result.execMode = distsqlrun.SubqueryExecModeAllRowsNormalized
+				result.execMode = rowexec.SubqueryExecModeAllRowsNormalized
 			}
 
 			// Note that we recurse into the comparison expression and a subquery in
