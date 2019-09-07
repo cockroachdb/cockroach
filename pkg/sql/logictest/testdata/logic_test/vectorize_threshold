@@ -10,6 +10,9 @@ SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
 statement ok
 CREATE TABLE small (a INT PRIMARY KEY)
 
+statement ok
+SET vectorize_row_count_threshold = 1000
+
 # There are no stats available, so this should run through the row execution
 # engine.
 query T
@@ -28,7 +31,7 @@ SELECT url FROM [EXPLAIN ANALYZE SELECT count(*) FROM small]
 https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkT1PwzAQhnd-RXQTSIbGHT2BmLo0qC1iQBFynVOw5NiW74JaVfnvKDEDLZSP8Z7L--Y5-QA-NLjUHRKoZ5BQC4gpGCQKaUT5g0WzA1UKsD72POJagAkJQR2ALTsEBRu9dbhC3WCalSCgQdbWTbUx2U6n_S112jkQsI7akyquQUDVsyqWwSMI2Go2r0hF6DmOeGzhProTROjQsH2zvFdFeVNOjLVzBdsOVVES1IOAHPmQJdYtgpKD-PtBd22bsNUc0kwe33NfPS43L6vqaX159Y23_Ootz3jjDk3PNvjf3ef_cV8hxeAJj7zPNZdDLQCbFvODU-iTwYcUzPSbPFZTbgINEuetzMPC59Uo-DksfwzPT8L1cPEeAAD__yeM11g=
 
 statement ok
-RESET vectorize_row_count_threshold
+SET vectorize_row_count_threshold = 1000
 
 statement ok
 ALTER TABLE small INJECT STATISTICS '[
@@ -57,7 +60,7 @@ SELECT url FROM [EXPLAIN ANALYZE SELECT count(*) FROM small]
 https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkT1PwzAQhnd-RXQTSIbGHT2BmLo0qC1iQBFynVOw5NiW74JaVfnvKDEDLZSP8Z7L--Y5-QA-NLjUHRKoZ5BQC4gpGCQKaUT5g0WzA1UKsD72POJagAkJQR2ALTsEBRu9dbhC3WCalSCgQdbWTbUx2U6n_S112jkQsI7akyquQUDVsyqWwSMI2Go2r0hF6DmOeGzhProTROjQsH2zvFdFeVNOjLVzBdsOVVES1IOAHPmQJdYtgpKD-PtBd22bsNUc0kwe33NfPS43L6vqaX159Y23_Ootz3jjDk3PNvjf3ef_cV8hxeAJj7zPNZdDLQCbFvODU-iTwYcUzPSbPFZTbgINEuetzMPC59Uo-DksfwzPT8L1cPEeAAD__yeM11g=
 
 statement ok
-RESET vectorize_row_count_threshold
+SET vectorize_row_count_threshold = 1000
 
 statement ok
 CREATE TABLE large (a INT PRIMARY KEY)
@@ -87,6 +90,3 @@ query T
 SELECT url FROM [EXPLAIN ANALYZE SELECT count(*) FROM large]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkU9L80AQxu_vp1ie0yusNOlxT_459dJIW_EgQbbZIQSSbJiZYEvJd5ckoFZQ63Gemd-zP9gT2hho7RsSuGekyC06jgWJRB6j-WAVDnCJRdV2vY5xblFEJrgTtNKa4LDz-5o25APxIoFFIPVVPdV2XDWejze155Jgse18K85cwyLr1Zl1bMeY46sYJh-cGQtEfV0brRpyJhFY7I9K7wfmDvlgEXv9UBL1JcGlg71c-7YsmUqvkRfpufV99rjevWyyp-3_qwvsGn8wDTWRj6YX-kVx-RfFDUkXW6Ezve-akyG3oFDS_HsSey7ogWMxPTOP2cRNQSDReZvOw6qdV6PgZzj9EV5-gfPh31sAAAD__wIExG0=
-
-statement ok
-RESET vectorize_row_count_threshold
