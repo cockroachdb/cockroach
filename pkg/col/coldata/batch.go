@@ -143,21 +143,29 @@ func (m *MemBatch) Reset(types []coltypes.T, length int) {
 	// shorter than the capacity). We could be more defensive and type switch
 	// every column to verify its capacity, but that doesn't seem necessary yet.
 	hasColCapacity := len(m.sel) >= length
-	if m == nil || !hasColCapacity || m.Width() != len(types) {
+	if m == nil || !hasColCapacity || m.Width() < len(types) {
 		*m = *NewMemBatchWithSize(types, length).(*MemBatch)
 		m.SetLength(uint16(length))
 		return
 	}
-	for i, col := range m.ColVecs() {
-		if col.Type() != types[i] {
+	for i := range types {
+		if m.ColVec(i).Type() != types[i] {
 			*m = *NewMemBatchWithSize(types, length).(*MemBatch)
 			m.SetLength(uint16(length))
 			return
 		}
 	}
+	// Yay! We can reuse m. NB It's not specified in the Reset contract, but
+	// probably a good idea to keep all modifications below this line.
 	m.SetLength(uint16(length))
+	m.SetSelection(false)
+	m.sel = m.sel[:length]
+	m.b = m.b[:len(types)]
 	for _, col := range m.ColVecs() {
 		col.Nulls().UnsetNulls()
+		if col.Type() == coltypes.Bytes {
+			col.Bytes().Reset()
+		}
 	}
 }
 
