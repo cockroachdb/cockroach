@@ -167,6 +167,7 @@ func registerImportTPCH(r *testRegistry) {
 					t.WorkerStatus(`running import`)
 					defer t.WorkerStatus()
 					_, err := conn.Exec(`
+					SET CLUSTER SETTING kv.bulk_ingest.max_index_buffer_size = '2gb';
 				IMPORT TABLE csv.lineitem
 				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/lineitem.sql'
 				CSV DATA (
