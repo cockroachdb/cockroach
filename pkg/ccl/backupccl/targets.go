@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
 
@@ -121,7 +122,7 @@ func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, err
 	}
 	// Now on to the tables.
 	for _, desc := range descs {
-		if tbDesc := desc.GetTable(); tbDesc != nil {
+		if tbDesc := desc.Table(hlc.Timestamp{}); tbDesc != nil {
 			if tbDesc.Dropped() {
 				continue
 			}
@@ -214,7 +215,7 @@ func descriptorsMatchingTargets(
 			desc := descI.(sqlbase.Descriptor)
 
 			// If the parent database is not requested already, request it now
-			parentID := desc.GetTable().GetParentID()
+			parentID := desc.Table(hlc.Timestamp{}).GetParentID()
 			if _, ok := alreadyRequestedDBs[parentID]; !ok {
 				parentDesc := resolver.descByID[parentID]
 				ret.descs = append(ret.descs, parentDesc)
