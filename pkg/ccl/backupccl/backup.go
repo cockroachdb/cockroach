@@ -279,8 +279,12 @@ func getAllDescChanges(
 					return nil, err
 				}
 				r.Desc = &desc
-				if t := desc.GetTable(); t != nil && t.ReplacementOf.ID != sqlbase.InvalidID {
-					priorIDs[t.ID] = t.ReplacementOf.ID
+				t := desc.GetTable()
+				if t != nil {
+					if t.ReplacementOf.ID != sqlbase.InvalidID {
+						priorIDs[t.ID] = t.ReplacementOf.ID
+					}
+					t.MaybeSetModificationTimeFromMVCCTimestamp(ctx, rev.Timestamp)
 				}
 			}
 			res = append(res, r)
@@ -302,6 +306,9 @@ func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 		if err := row.ValueProto(&sqlDescs[i]); err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"%s: unable to unmarshal SQL descriptor", row.Key)
+		}
+		if t := sqlDescs[i].GetTable(); t != nil {
+			t.MaybeSetModificationTimeFromMVCCTimestamp(ctx, row.Value.Timestamp)
 		}
 	}
 	return sqlDescs, nil

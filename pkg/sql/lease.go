@@ -404,7 +404,7 @@ func (s LeaseStore) PublishMultiple(
 						descsToUpdate[id].Version, versions[id])
 				}
 
-				if err := descsToUpdate[id].MaybeIncrementVersion(ctx, txn); err != nil {
+				if err := descsToUpdate[id].MaybeIncrementVersion(ctx, txn, s.settings); err != nil {
 					return err
 				}
 				if err := descsToUpdate[id].ValidateTable(); err != nil {
@@ -553,13 +553,15 @@ func (s LeaseStore) getForExpiration(
 		prevTimestamp := expiration.Prev()
 		txn.SetFixedTimestamp(ctx, prevTimestamp)
 		var desc sqlbase.Descriptor
-		if err := txn.GetProto(ctx, descKey, &desc); err != nil {
+		ts, err := txn.GetProtoTs(ctx, descKey, &desc)
+		if err != nil {
 			return err
 		}
 		tableDesc := desc.GetTable()
 		if tableDesc == nil {
 			return sqlbase.ErrDescriptorNotFound
 		}
+		tableDesc.MaybeSetModificationTimeFromMVCCTimestamp(ctx, ts)
 		if !tableDesc.ModificationTime.Less(prevTimestamp) {
 			return errors.AssertionFailedf("unable to read table= (%d, %s)", id, expiration)
 		}

@@ -283,6 +283,7 @@ func fetchTableDescriptorVersions(
 					return err
 				}
 				if tableDesc := desc.GetTable(); tableDesc != nil {
+					tableDesc.MaybeSetModificationTimeFromMVCCTimestamp(ctx, it.UnsafeKey().Timestamp)
 					tableDescs = append(tableDescs, tableDesc)
 				}
 			}

@@ -30,7 +30,9 @@ import (
 // KeyValue represents a single key/value pair. This is similar to
 // roachpb.KeyValue except that the value may be nil.
 type KeyValue struct {
-	Key   roachpb.Key
+	Key roachpb.Key
+	// TODO(ajwerner): figure out why the comment says that the timestamp will
+	// always be zero.
 	Value *roachpb.Value // Timestamp will always be zero
 }
 
@@ -319,11 +321,26 @@ func (db *DB) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 //
 // key can be either a byte slice or a string.
 func (db *DB) GetProto(ctx context.Context, key interface{}, msg protoutil.Message) error {
+	_, err := db.GetProtoTs(ctx, key, msg)
+	return err
+}
+
+// GetProtoTs retrieves the value for a key and decodes the result as a proto
+// message. It additionally returns the timestamp at which the key was read.
+// If the key doesn't exist, the proto will simply be reset.
+//
+// key can be either a byte slice or a string.
+func (db *DB) GetProtoTs(
+	ctx context.Context, key interface{}, msg protoutil.Message,
+) (ts hlc.Timestamp, err error) {
 	r, err := db.Get(ctx, key)
 	if err != nil {
-		return err
+		return ts, err
 	}
-	return r.ValueProto(msg)
+	if r.Value != nil {
+		ts = r.Value.Timestamp
+	}
+	return ts, r.ValueProto(msg)
 }
 
 // Put sets the value for a key.
