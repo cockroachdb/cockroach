@@ -44,6 +44,7 @@ const (
 	VersionTopLevelForeignKeys
 	VersionAtomicChangeReplicasTrigger
 	VersionAtomicChangeReplicas
+	VersionTableDescModificationTimeFromMVCC
 
 	// Add new versions here (step one of two).
 
@@ -531,6 +532,15 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// 'false').
 		Key:     VersionAtomicChangeReplicas,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 9},
+	},
+	{
+		// VersionTableDescModificationTimeFromMVCC is TODO
+		//
+		// It represents an upgrade to the table descriptor format in which
+		// ModifiedTime is not written but instead is read from the MVCC
+		// timestamp.
+		Key:     VersionTableDescModificationTimeFromMVCC,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 10},
 	},
 
 	// Add new versions here (step two of two).
