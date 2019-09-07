@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -145,7 +146,7 @@ func backupShowerDefault(ctx context.Context, showSchemas bool) backupShower {
 			var rows []tree.Datums
 			var row tree.Datums
 			for _, descriptor := range desc.Descriptors {
-				if table := descriptor.GetTable(); table != nil {
+				if table := descriptor.Table(hlc.Timestamp{}); table != nil {
 					dbName := descs[table.ParentID]
 					row = tree.Datums{
 						tree.NewDString(dbName),
