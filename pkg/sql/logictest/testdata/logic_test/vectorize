@@ -20,6 +20,14 @@ SELECT a, CASE WHEN a = 0 THEN 0 WHEN a = 1 THEN 3 ELSE 5 END FROM a LIMIT 6
 2  5
 2  5
 
+# Regression test for 40574.
+statement ok
+CREATE TABLE t40574(pk INTEGER PRIMARY KEY, col0 INTEGER, col1 FLOAT, col2 TEXT, col3 INTEGER, col4 FLOAT, col5 TEXT)
+
+query I
+SELECT pk FROM t40574 WHERE (col0 > 9 AND (col1 <= 6.38 OR col0 =5) AND (col0 = 7 OR col4 = 7))
+----
+
 # OR expression as projection.
 query IB
 SELECT b, b = 0 OR b = 2 FROM a WHERE b < 4
@@ -701,14 +709,14 @@ SET tracing = on; SELECT * FROM tpar WHERE a = 0 OR a = 10; SET tracing = off
 # tpar, this query will need an adjustment.
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN 
-    ('querying next range at /Table/72/1/0',
-     'querying next range at /Table/72/1/10',
+    ('querying next range at /Table/73/1/0',
+     'querying next range at /Table/73/1/10',
      '=== SPAN START: kv.DistSender: sending partial batch ==='
     )
 ----
-querying next range at /Table/72/1/0
+querying next range at /Table/73/1/0
 === SPAN START: kv.DistSender: sending partial batch ===
-querying next range at /Table/72/1/10
+querying next range at /Table/73/1/10
 
 # Test for #38858 -- handle aggregates correctly on an empty table.
 statement ok
