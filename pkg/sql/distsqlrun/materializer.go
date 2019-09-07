@@ -26,6 +26,7 @@ import (
 // materializer converts an exec.Operator input into a RowSource.
 type materializer struct {
 	ProcessorBase
+	exec.NonExplainable
 
 	input exec.Operator
 

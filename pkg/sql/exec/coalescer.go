@@ -21,6 +21,7 @@ import (
 // to return full batches of coldata.BatchSize.
 type coalescerOp struct {
 	OneInputNode
+	NonExplainable
 
 	inputTypes []coltypes.T
 

@@ -23,6 +23,7 @@ import (
 // selection vector, it is a noop.
 type deselectorOp struct {
 	OneInputNode
+	NonExplainable
 	inputTypes []coltypes.T
 
 	output coldata.Batch

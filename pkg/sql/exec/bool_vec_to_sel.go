@@ -20,6 +20,7 @@ import (
 // an index to the selection for each true value in the boolean column.
 type boolVecToSelOp struct {
 	OneInputNode
+	NonExplainable
 
 	// outputCol is the boolean output column. It should be shared by other
 	// operators that write to it.
@@ -111,6 +112,7 @@ func NewBoolVecToSelOp(input Operator, colIdx int) Operator {
 // an operator that can see the inside of its input batch for NewBoolVecToSelOp.
 type selBoolOp struct {
 	OneInputNode
+	NonExplainable
 	boolVecToSelOp *boolVecToSelOp
 	colIdx         int
 }

@@ -87,7 +87,7 @@ statement ok
 RESET optimizer
 
 query T
-EXPLAIN (VEC) SELECT count(*) FROM kv
+EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 ----
  │
  ├── Node 1
@@ -134,7 +134,7 @@ EXPLAIN (VEC) SELECT count(*) FROM kv
                                └── *distsqlrun.colBatchScan
 
 query T
-EXPLAIN (VEC) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
+EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 ----
  │
  ├── Node 1
