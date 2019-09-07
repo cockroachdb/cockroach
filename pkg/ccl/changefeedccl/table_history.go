@@ -282,7 +282,7 @@ func fetchTableDescriptorVersions(
 				if err := value.GetProto(&desc); err != nil {
 					return err
 				}
-				if tableDesc := desc.GetTable(); tableDesc != nil {
+				if tableDesc := desc.Table(value.Timestamp); tableDesc != nil {
 					tableDescs = append(tableDescs, tableDesc)
 				}
 			}

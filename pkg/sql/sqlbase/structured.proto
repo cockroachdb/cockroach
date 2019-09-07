@@ -521,6 +521,14 @@ message TableDescriptor {
   reserved 6;
 
   // Last modification time of the table descriptor.
+  // Starting in 19.2 this field's value may sometime be zero-valued in which
+  // case the MVCC timestamp of the row containing the value should be used to
+  // populate it. This dance allows us to avoid observing the commit timestamp
+  // for transactions which increment the descriptor version.
+  // Encoded TableDescriptor structs should not be stored directly but rather
+  // should live inside of a Descriptor. The Descriptor.Table() method takes an
+  // hlc timestamp to ensure that this field is set properly when extracted from
+  // a Descriptor.
   optional util.hlc.Timestamp modification_time = 7 [(gogoproto.nullable) = false];
   repeated ColumnDescriptor columns = 8 [(gogoproto.nullable) = false];
   // next_column_id is used to ensure that deleted column ids are not reused.
