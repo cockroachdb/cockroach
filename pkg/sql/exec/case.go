@@ -99,9 +99,9 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 	if c.buffer.batch.Width() == c.outputIdx {
 		c.buffer.batch.AppendCol(c.typ)
 	}
-	if origLen == 0 {
-		return c.buffer.batch.Batch
-	}
+	// NB: we don't short-circuit if the batch is length 0 here, because we have
+	// to make sure to run all of our case arms. This is unfortunate.
+	// TODO(jordan): add this back in once batches are right-sized by planning.
 	var origHasSel bool
 	if sel := c.buffer.batch.Batch.Selection(); sel != nil {
 		origHasSel = true
