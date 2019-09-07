@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -33,6 +34,10 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		*sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{ID: 4, Name: "baz", ParentID: 3}),
 		*sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{ID: 3, Name: "data"}),
 		*sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{ID: 5, Name: "empty"}),
+	}
+	// Set the timestamp on the table descriptors.
+	for _, d := range descriptors {
+		d.Table(hlc.Timestamp{WallTime: 1})
 	}
 
 	tests := []struct {

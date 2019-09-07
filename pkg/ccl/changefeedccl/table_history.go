@@ -260,7 +260,8 @@ func fetchTableDescriptorVersions(
 				} else if !ok {
 					return nil
 				}
-				remaining, _, _, err := sqlbase.DecodeTableIDIndexID(it.UnsafeKey().Key)
+				k := it.UnsafeKey()
+				remaining, _, _, err := sqlbase.DecodeTableIDIndexID(k.Key)
 				if err != nil {
 					return err
 				}
@@ -282,7 +283,7 @@ func fetchTableDescriptorVersions(
 				if err := value.GetProto(&desc); err != nil {
 					return err
 				}
-				if tableDesc := desc.GetTable(); tableDesc != nil {
+				if tableDesc := desc.Table(k.Timestamp); tableDesc != nil {
 					tableDescs = append(tableDescs, tableDesc)
 				}
 			}

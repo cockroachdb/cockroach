@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -280,10 +281,10 @@ func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor 
 // protoGetter is a sub-interface of client.Txn that can fetch protobufs in a
 // transaction.
 type protoGetter interface {
-	// GetProto retrieves a protoutil.Message that's stored at key, storing it
+	// GetProtoTs retrieves a protoutil.Message that's stored at key, storing it
 	// into the input msg parameter. If the key doesn't exist, the input proto
 	// will be reset.
-	GetProto(ctx context.Context, key interface{}, msg protoutil.Message) error
+	GetProtoTs(ctx context.Context, key interface{}, msg protoutil.Message) (hlc.Timestamp, error)
 }
 
 // GetDatabaseDescFromID retrieves the database descriptor for the database
@@ -294,8 +295,8 @@ func GetDatabaseDescFromID(
 ) (*DatabaseDescriptor, error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
-
-	if err := protoGetter.GetProto(ctx, descKey, desc); err != nil {
+	_, err := protoGetter.GetProtoTs(ctx, descKey, desc)
+	if err != nil {
 		return nil, err
 	}
 	db := desc.GetDatabase()
@@ -334,15 +335,14 @@ func getTableDescFromIDRaw(
 ) (*TableDescriptor, error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
-
-	if err := protoGetter.GetProto(ctx, descKey, desc); err != nil {
+	ts, err := protoGetter.GetProtoTs(ctx, descKey, desc)
+	if err != nil {
 		return nil, err
 	}
-	table := desc.GetTable()
+	table := desc.Table(ts)
 	if table == nil {
 		return nil, ErrDescriptorNotFound
 	}
-
 	return table, nil
 }
 
@@ -773,8 +773,8 @@ type MapProtoGetter struct {
 	Protos map[interface{}]protoutil.Message
 }
 
-// GetProto implements the protoGetter interface.
-func (m MapProtoGetter) GetProto(
+// getProto implements the protoGetter interface.
+func (m MapProtoGetter) getProto(
 	ctx context.Context, key interface{}, msg protoutil.Message,
 ) error {
 	msg.Reset()
@@ -788,6 +788,13 @@ func (m MapProtoGetter) GetProto(
 		}
 	}
 	return nil
+}
+
+// GetProtoTs implements the protoGetter interface.
+func (m MapProtoGetter) GetProtoTs(
+	ctx context.Context, key interface{}, msg protoutil.Message,
+) (hlc.Timestamp, error) {
+	return hlc.Timestamp{}, m.getProto(ctx, key, msg)
 }
 
 // MaybeUpgradeForeignKeyRepresentation destructively modifies the input table
@@ -1486,27 +1493,25 @@ func (desc *MutableTableDescriptor) allocateColumnFamilyIDs(columnNames map[stri
 
 // MaybeIncrementVersion increments the version of a descriptor if necessary.
 func (desc *MutableTableDescriptor) MaybeIncrementVersion(
-	ctx context.Context, txn *client.Txn,
+	ctx context.Context, txn *client.Txn, settings *cluster.Settings,
 ) error {
 	// Already incremented, no-op.
 	if desc.Version == desc.ClusterVersion.Version+1 {
 		return nil
 	}
 	desc.Version++
-	// We need to set ModificationTime to the transaction's commit
-	// timestamp. Using CommitTimestamp() guarantees that the
-	// transaction will commit at the CommitTimestamp().
+
+	// Before 19.2 we needed to observe the transaction CommitTimestamp to ensure
+	// that ModificationTime reflected the timestamp at which the transaction
+	// committed. Starting in 19.2 we use a zero-valued ModificationTime when
+	// incrementing the version and then upon reading use the MVCC timestamp to
+	// populate the ModificationTime.
 	//
-	// TODO(vivek): Stop needing to do this by deprecating the
-	// ModificationTime. A Descriptor modification time can be
-	// the mvcc timestamp of the descriptor. This requires moving the
-	// schema change lease out of the descriptor making the
-	// descriptor truly immutable at a version.
-	// Also recognize that the leases are released before the transaction
-	// is committed through a call to TableCollection.releaseLeases(),
-	// so updating this policy will also need to consider not doing
-	// that.
-	modTime := txn.CommitTimestamp()
+	// TODO(ajwerner): remove this check in 20.1.
+	var modTime hlc.Timestamp
+	if !settings.Version.IsActive(cluster.VersionTableDescModificationTimeFromMVCC) {
+		modTime = txn.CommitTimestamp()
+	}
 	desc.ModificationTime = modTime
 	log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
 		desc.ID, desc.Name, desc.Version, modTime.GoTime())
@@ -3263,6 +3268,68 @@ func (desc *Descriptor) GetName() string {
 		return t.Database.Name
 	default:
 		return ""
+	}
+}
+
+// Table is a replacement for GetTable() which seeks to ensure that clients
+// which unmarshal Descriptor structs properly set the ModificationTime on
+// tables based on the MVCC timestamp at which the descriptor was read.
+//
+// A linter should ensure that GetTable() is not called.
+func (desc *Descriptor) Table(ts hlc.Timestamp) *TableDescriptor {
+	t := desc.GetTable()
+	if t != nil {
+		t.maybeSetTimeFromMVCCTimestamp(ts)
+	}
+	return t
+}
+
+// maybeSetTimeFromMVCCTimestamp will update ModificationTime
+// with the provided timestamp. If desc.ModificationTime is non-zero it must
+// be the case that it is not after the provided timestamp.
+//
+// When table descriptor versions are incremented they are written with a
+// zero-valued ModificationTime. This is done to avoid the need to observe
+// the commit timestamp for the writing transaction which would prevent
+// pushes. This method is used in the read path to set the modification time
+// based on the MVCC timestamp of row which contained this descriptor. If
+// the ModificationTime is non-zero then we know that either this table
+// descriptor was written by older version of cockroach which included the
+// exact commit timestamp or it was re-written in which case it will include
+// a timestamp which was set by this method.
+//
+// It is vital that users which read table descriptor values from the KV store
+// call this method.
+func (desc *TableDescriptor) maybeSetTimeFromMVCCTimestamp(ts hlc.Timestamp) {
+	// Table descriptors can be updated in place after their version has been
+	// incremented (e.g. to include a schema change lease).
+	// When this happens we permit the ModificationTime to be written explicitly
+	// with the value that lives on the in-memory copy. That value should contain
+	// a timestamp set by this method. Thus if the ModificationTime is set it
+	// must not be after the MVCC timestamp we just read it at.
+	setIfShould := func(name string, cur *hlc.Timestamp, ts hlc.Timestamp) (set bool) {
+		if cur.IsEmpty() && ts.IsEmpty() {
+			log.Fatalf(context.TODO(), "read table descriptor without %s"+
+				"with zero MVCC timestamp", name)
+		}
+		if cur.IsEmpty() {
+			*cur = ts
+			return true
+		}
+		if !ts.IsEmpty() && ts.Less(*cur) {
+			log.Fatalf(context.TODO(), "read table descriptor which has a %s "+
+				"after its MVCC timestamp: has %v, expected %v",
+				name, cur, ts)
+		}
+		return false
+	}
+	setIfShould("ModificationTime", &desc.ModificationTime, ts)
+	if setIfShould("CreationTime", &desc.CreateAsOfTime, ts) && desc.Version != 1 {
+		// This means we never set the creation time and that we're updating a
+		// descriptor which wasn't read using this method. This is pretty bad but
+		// a fatal here seems extreme.
+		log.Errorf(context.TODO(), "set a creation time from MVCC timestamp for version %d",
+			desc.Version)
 	}
 }
 
