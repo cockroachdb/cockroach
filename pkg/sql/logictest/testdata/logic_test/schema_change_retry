@@ -1,7 +1,17 @@
+# LogicTest: local fakedist fakedist-metadata fakedist-disk
+# The local-mixed-19.1-19.2 configuration is excluded for this file because of
+# 1) remaining bugs that need to be fixed in the 19.1/19.2 mixed state, and 2)
+# different FK behavior between 19.1 and 19.2.
 # This test reproduces https://github.com/cockroachdb/cockroach/issues/23979
 
 # Schema changes that experienced retriable errors in RELEASE
 # SAVEPOINT would previously deadlock.
+
+# Prevent transaction refreshes so we encounter the necessary
+# TransactionRetryError below.
+
+statement ok
+SET CLUSTER SETTING kv.transaction.max_refresh_spans_bytes = 0;
 
 statement ok
 BEGIN
