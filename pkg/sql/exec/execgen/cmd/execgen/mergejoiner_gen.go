@@ -49,6 +49,11 @@ type joinTypeInfo struct {
 	IsLeftAnti   bool
 
 	String string
+
+	// FilterSupported indicates whether ON expression is supported for this
+	// join type. If it is not supported, then we will not be generating the
+	// corresponding to such a case code.
+	FilterSupported bool
 }
 
 type filterInfo struct {
@@ -206,6 +211,8 @@ func init() {
 		{
 			IsInner: true,
 			String:  "Inner",
+			// Note that filter is supported with INNER join, but it is handled
+			// differently.
 		},
 		{
 			IsLeftOuter: true,
@@ -221,12 +228,14 @@ func init() {
 			String:       "FullOuter",
 		},
 		{
-			IsLeftSemi: true,
-			String:     "LeftSemi",
+			IsLeftSemi:      true,
+			String:          "LeftSemi",
+			FilterSupported: true,
 		},
 		{
-			IsLeftAnti: true,
-			String:     "LeftAnti",
+			IsLeftAnti:      true,
+			String:          "LeftAnti",
+			FilterSupported: true,
 		},
 	}
 
