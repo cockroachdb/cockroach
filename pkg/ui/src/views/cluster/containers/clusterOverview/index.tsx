@@ -25,6 +25,35 @@ import spinner from "assets/spinner.gif";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import "./cluster.styl";
 
+interface ClusterNameProps {
+  clusterName: string;
+}
+
+function renderTitleAndHeader(props: ClusterNameProps) {
+  const { clusterName } = props;
+  const title = clusterName ?  "Cluster Overview | " + clusterName : "Cluster Overview";
+  return <React.Fragment>
+    <Helmet><title>{ title }</title></Helmet>
+    <h1>{ title }</h1>
+  </React.Fragment>;
+}
+
+const mapStateToClusterNameProps = createSelector(
+  (state: AdminUIState) => {
+    if (state.cachedData.cluster.data) {
+      return {clusterName: state.cachedData.cluster.data.cluster_name}
+    } else {
+      return {clusterName: ""}
+    }
+  },
+  function (clusterInfo: ClusterNameProps) {
+    const { clusterName } = clusterInfo;
+    return {
+      clusterName: clusterName
+    };
+  }
+);
+
 // tslint:disable-next-line:variable-name
 const CapacityChart = createChartComponent("svg", capacityChart());
 
@@ -203,6 +232,8 @@ const actions = {
   refreshNodes: refreshNodes,
 };
 
+const TitleHeaderConnected = connect(mapStateToClusterNameProps)(renderTitleAndHeader);
+
 // tslint:disable-next-line:variable-name
 const ClusterSummaryConnected = connect(mapStateToClusterSummaryProps, actions)(ClusterSummary);
 
@@ -213,10 +244,9 @@ class ClusterOverview extends React.Component<RouterState, {}> {
   render() {
     return (
       <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-        <Helmet>
-          <title>Cluster Overview</title>
-        </Helmet>
-        <section className="section"><h1>Cluster Overview</h1></section>
+        <section className="section">
+          <TitleHeaderConnected />
+        </section>
         <section className="cluster-overview">
           <ClusterSummaryConnected />
         </section>

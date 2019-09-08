@@ -327,6 +327,8 @@ message ClusterResponse {
   bool reporting_enabled = 2;
   // True if enterprise features are enabled for the cluster.
   bool enterprise_enabled = 3;
+  // The user-specified name for this cluster.
+  string cluster_name = 4;
 }
 
 enum DrainMode {
