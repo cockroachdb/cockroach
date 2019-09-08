@@ -14,6 +14,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -22,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -30,11 +32,28 @@ import (
 )
 
 var (
+	// Some quick benchmarks show that somewhere around 1/3 of NumCPUs
+	// performs best. This can probably be tweaked with benchmarks from
+	// other machines, but is probably a good place to start.
+	goroutines = func() int {
+		// Round up by adding 2.
+		// Num CPUs -> n:
+		// 1-3: 1
+		// 4-6: 2
+		// 7-9: 3
+		// etc.
+		n := (runtime.NumCPU() + 2) / 3
+		if n < 1 {
+			n = 1
+		}
+		return n
+	}()
 	flags    = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	path     = flags.String("path", "./cockroach", "path to cockroach binary")
 	verbose  = flags.Bool("v", false, "log progress")
 	contains = flags.String("contains", "", "error regex to search for")
 	unknown  = flags.Bool("unknown", false, "print unknown types during walk")
+	workers  = flags.Int("goroutines", goroutines, "number of worker goroutines (defaults to NumCPU/3")
 )
 
 func usage() {
@@ -52,14 +71,14 @@ func main() {
 		usage()
 	}
 	reducesql.LogUnknown = *unknown
-	out, err := reduceSQL(*path, *contains, *verbose)
+	out, err := reduceSQL(*path, *contains, *workers, *verbose)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println(out)
 }
 
-func reduceSQL(path, contains string, verbose bool) (string, error) {
+func reduceSQL(path, contains string, workers int, verbose bool) (string, error) {
 	containsRE, err := regexp.Compile(contains)
 	if err != nil {
 		return "", err
@@ -93,8 +112,8 @@ func reduceSQL(path, contains string, verbose bool) (string, error) {
 		fmt.Fprintf(logger, "input SQL pretty printed, %d bytes -> %d bytes\n", len(input), len(inputSQL))
 	}
 
-	interesting := func(f reduce.File) bool {
-		cmd := exec.Command(path, "demo", "--empty")
+	interesting := func(ctx context.Context, f reduce.File) bool {
+		cmd := exec.CommandContext(ctx, path, "demo", "--empty")
 		sql := string(f)
 		if !strings.HasSuffix(sql, ";") {
 			sql += ";"
@@ -112,6 +131,6 @@ func reduceSQL(path, contains string, verbose bool) (string, error) {
 		return containsRE.Match(out)
 	}
 
-	out, err := reduce.Reduce(logger, reduce.File(inputSQL), interesting, reducesql.SQLPasses...)
+	out, err := reduce.Reduce(logger, reduce.File(inputSQL), interesting, workers, reduce.ModeInteresting, reducesql.SQLPasses...)
 	return string(out), err
 }
