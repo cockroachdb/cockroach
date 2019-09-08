@@ -119,7 +119,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	}
 	// Sort backward, since the first thing you add to a treeprinter will come last.
 	sort.Slice(sortedFlows, func(i, j int) bool { return sortedFlows[i].nodeID < sortedFlows[j].nodeID })
-	tp := treeprinter.New()
+	tp := treeprinter.NewWithIndent(false /* leftPad */, true /* rightPad */, 0 /* edgeLength */)
 	root := tp.Child("")
 	verbose := n.options.Flags.Contains(tree.ExplainFlagVerbose)
 	for _, flow := range sortedFlows {
