@@ -19,11 +19,27 @@ import { createSelector } from "reselect";
 import { AdminUIState } from "src/redux/state";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { Bytes as formatBytes } from "src/util/format";
+import { ClusterNameProps, clusterNameSelector } from "src/redux/cluster";
 import createChartComponent from "src/views/shared/util/d3-react";
 import capacityChart from "./capacity";
 import spinner from "assets/spinner.gif";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import "./cluster.styl";
+
+const renderClusterNameH1: React.SFC<ClusterNameProps> = (props) => {
+  const { clusterName, shortClusterName } = props;
+  let truncatedDisplay = <React.Fragment></React.Fragment>;
+  if (clusterName) {
+    truncatedDisplay = <React.Fragment>
+      { " | " }
+      <span title={ clusterName }>{ shortClusterName }</span>
+    </React.Fragment>;
+  }
+  return (<h1>
+    { props.children }
+    { truncatedDisplay }
+  </h1>);
+};
 
 // tslint:disable-next-line:variable-name
 const CapacityChart = createChartComponent("svg", capacityChart());
@@ -204,6 +220,9 @@ const actions = {
 };
 
 // tslint:disable-next-line:variable-name
+const ClusterNameH1 = connect(clusterNameSelector)(renderClusterNameH1);
+
+// tslint:disable-next-line:variable-name
 const ClusterSummaryConnected = connect(mapStateToClusterSummaryProps, actions)(ClusterSummary);
 
 /**
@@ -213,10 +232,10 @@ class ClusterOverview extends React.Component<RouterState, {}> {
   render() {
     return (
       <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-        <Helmet>
-          <title>Cluster Overview</title>
-        </Helmet>
-        <section className="section"><h1>Cluster Overview</h1></section>
+        <Helmet><title>Cluster Overview</title></Helmet>
+        <section className="section">
+          <ClusterNameH1>Cluster Overview</ClusterNameH1>
+        </section>
         <section className="cluster-overview">
           <ClusterSummaryConnected />
         </section>
