@@ -1149,6 +1149,7 @@ func (s *adminServer) Cluster(
 		ClusterID:         clusterID.String(),
 		ReportingEnabled:  log.DiagnosticsReportingEnabled.Get(&s.server.st.SV),
 		EnterpriseEnabled: enterpriseEnabled,
+		ClusterName:       s.server.cfg.ClusterName,
 	}, nil
 }
 

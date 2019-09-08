@@ -14,7 +14,8 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { RouterState } from "react-router";
 import { connect } from "react-redux";
-import { createSelector } from "reselect";
+import { createSelector, createStructuredSelector } from "reselect";
+import { identity, truncate } from "lodash";
 
 import { AdminUIState } from "src/redux/state";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
@@ -24,6 +25,50 @@ import capacityChart from "./capacity";
 import spinner from "assets/spinner.gif";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import "./cluster.styl";
+
+interface ClusterNameProps {
+  clusterName: string;
+  shortClusterName: string;
+}
+
+function renderTitleAndHeader(props: ClusterNameProps) {
+  const { clusterName, shortClusterName } = props;
+  const pageName = `Cluster Overview`;
+  const title = `${pageName}${(shortClusterName) ? " | " + shortClusterName : ""}`;
+  let truncatedDisplay = <React.Fragment></React.Fragment>;
+  if (clusterName) {
+    truncatedDisplay = <React.Fragment>
+      { " | " }
+      <span title={ clusterName }>{ shortClusterName }</span>
+    </React.Fragment>;
+  }
+  return <React.Fragment>
+    <Helmet><title>{ title }</title></Helmet>
+    <h1>{ pageName }{ truncatedDisplay }</h1>
+  </React.Fragment>;
+}
+
+const getCachedData = createSelector(
+  identity,
+  (state: AdminUIState) => state.cachedData,
+);
+const getClusterData = createSelector(
+  getCachedData,
+  cachedData => cachedData.cluster.data,
+);
+const getClusterName = createSelector(
+  getClusterData,
+  clusterData => (clusterData) ? clusterData.cluster_name : "",
+);
+const getShortClusterName = createSelector(
+  getClusterName,
+  clusterName => truncate(clusterName),
+);
+
+const mapStateToClusterNameProps = createStructuredSelector({
+  clusterName: getClusterName,
+  shortClusterName: getShortClusterName,
+});
 
 // tslint:disable-next-line:variable-name
 const CapacityChart = createChartComponent("svg", capacityChart());
@@ -204,6 +249,9 @@ const actions = {
 };
 
 // tslint:disable-next-line:variable-name
+const TitleHeaderConnected = connect(mapStateToClusterNameProps)(renderTitleAndHeader);
+
+// tslint:disable-next-line:variable-name
 const ClusterSummaryConnected = connect(mapStateToClusterSummaryProps, actions)(ClusterSummary);
 
 /**
@@ -213,10 +261,9 @@ class ClusterOverview extends React.Component<RouterState, {}> {
   render() {
     return (
       <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-        <Helmet>
-          <title>Cluster Overview</title>
-        </Helmet>
-        <section className="section"><h1>Cluster Overview</h1></section>
+        <section className="section">
+          <TitleHeaderConnected />
+        </section>
         <section className="cluster-overview">
           <ClusterSummaryConnected />
         </section>

@@ -508,6 +508,7 @@ describe("rest api", function() {
   describe("cluster request", function() {
     const clusterUrl = `${api.API_PREFIX}/cluster`;
     const clusterID = "12345abcde";
+    const clusterName = "example-cluster";
 
     afterEach(fetchMock.restore);
 
@@ -518,7 +519,7 @@ describe("rest api", function() {
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
-          const encodedResponse = protos.cockroach.server.serverpb.ClusterResponse.encode({ cluster_id: clusterID }).finish();
+          const encodedResponse = protos.cockroach.server.serverpb.ClusterResponse.encode({ cluster_id: clusterID, cluster_name: clusterName }).finish();
           return {
             body: api.toArrayBuffer(encodedResponse),
           };
@@ -528,6 +529,7 @@ describe("rest api", function() {
       return api.getCluster(new protos.cockroach.server.serverpb.ClusterRequest()).then((result) => {
         assert.lengthOf(fetchMock.calls(clusterUrl), 1);
         assert.deepEqual(result.cluster_id, clusterID);
+        assert.deepEqual(result.cluster_name, clusterName);
       });
     });
 
