@@ -15,10 +15,13 @@
 package reduce
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -59,13 +62,33 @@ func (f File) Size() int {
 	return len(f)
 }
 
-// InterestingFn returns true if File triggers the target test failure.
-type InterestingFn func(File) bool
+// InterestingFn returns true if File triggers the target test failure. It
+// should be context-aware and stop work if the context is canceled.
+type InterestingFn func(context.Context, File) bool
+
+// Mode is an enum specifying how to determine if forward progress was made.
+type Mode int
+
+const (
+	// ModeSize instructs Reduce to use filesize as the progress indicator.
+	ModeSize Mode = iota
+	// ModeInteresting instructs Reduce to use the interestingness as the
+	// progress indicator. That is, if any pass generates an interesting
+	// result (even if the file size increases), that is considered
+	// progress.
+	ModeInteresting
+)
 
 // Reduce executes the test case reduction algorithm. logger, if not nil, will
-// log progress output.
+// log progress output. numGoroutines is the number of parallel workers, or 0
+// for runtime.NumCPU().
 func Reduce(
-	logger io.Writer, originalTestCase File, isInteresting InterestingFn, passList ...Pass,
+	logger io.Writer,
+	originalTestCase File,
+	isInteresting InterestingFn,
+	numGoroutines int,
+	mode Mode,
+	passList ...Pass,
 ) (File, error) {
 	log := func(format string, args ...interface{}) {
 		if logger == nil {
@@ -73,94 +96,184 @@ func Reduce(
 		}
 		fmt.Fprintf(logger, format, args...)
 	}
-	if !isInteresting(originalTestCase) {
+	if numGoroutines < 1 {
+		numGoroutines = runtime.NumCPU()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if !isInteresting(ctx, originalTestCase) {
 		return "", errors.New("original test case not interesting")
 	}
-	current := originalTestCase
-	start := timeutil.Now()
-	log("size: %d\n", current.Size())
-	for {
-		sizeAtStart := current.Size()
-		for pi, p := range passList {
-			log("\tpass %d of %d: %s...", pi+1, len(passList), p.Name())
-			state := p.New(current)
-			found, interesting := 0, 0
-			for {
-				variant, result, err := p.Transform(current, state)
-				if err != nil {
-					return "", err
+
+	// findNextInteresting finds the next interesting result. It does this
+	// by starting some worker goroutines and running the interestingness
+	// test on different variants of each of them. To preserve determinism,
+	// if an interesting variant is found, it is only reported if all tests
+	// before it were uninteresting. This is tracked by giving each worker
+	// a done chan from the previous worker.
+	// See https://blog.regehr.org/archives/1679.
+	findNextInteresting := func(vs varState) (*varState, error) {
+		ctx := context.Background()
+		g := ctxgroup.WithContext(ctx)
+		variants := make(chan varState)
+		g.GoCtx(func(ctx context.Context) error {
+			// This goroutine generates all variants from passes
+			// and sends them on a chan for testing. It closes
+			// the variants chan when there are no more. Since
+			// numGoroutines are working at one time, this
+			// goroutine will block until one is available. If an
+			// interesting variant is found, ctx will close and
+			// this goroutine will shut down.
+			defer close(variants)
+			current := vs.f
+			state := vs.s
+			var done, prev chan struct{}
+			// Pre-populate the first prev.
+			prev = make(chan struct{}, 1)
+			prev <- struct{}{}
+			for pi := vs.pi; pi < len(passList); pi++ {
+				p := passList[pi]
+				if state == nil {
+					state = p.New(current)
 				}
-				if result == OK {
-					found++
-					if isInteresting(variant) {
-						interesting++
-						current = variant
-					} else {
-						state = p.Advance(current, state)
+				for {
+					variant, result, err := p.Transform(current, state)
+					if err != nil {
+						return err
 					}
-				} else {
-					break
+					if result != OK {
+						state = nil
+						break
+					}
+					// Done must be buffered because it
+					// will only be received from if the
+					// following variant was interesting,
+					// and in other cases the send must
+					// not block.
+					done = make(chan struct{}, 1)
+					select {
+					case variants <- varState{
+						pi:   pi,
+						f:    variant,
+						s:    state,
+						done: done,
+						prev: prev,
+					}:
+						prev = done
+					case <-ctx.Done():
+						return nil
+					}
+					state = p.Advance(current, state)
 				}
 			}
-			log(" %d found, %d interesting\n", found, interesting)
-			if interesting > 0 {
-				log("size: %d\n", current.Size())
-			}
+			return nil
+		})
+		// Start the workers.
+		for i := 0; i < numGoroutines; i++ {
+			g.GoCtx(func(ctx context.Context) error {
+				for vs := range variants {
+					if isInteresting(ctx, vs.f) {
+						// Wait for the previous test to finish.
+						select {
+						case <-ctx.Done():
+							return nil
+						case <-vs.prev:
+							// Since the send on vs.done is below this next return,
+							// vs.prev will only send if the previous (and thus all previous)
+							// interestingness tests failed, so we know if we got here
+							// we're the first interesting variant.
+
+							// Return a non-nil error to shut down all the other go routines.
+							return errInteresting(vs)
+						}
+					}
+					vs.done <- struct{}{}
+				}
+				return nil
+			})
 		}
-		if current.Size() >= sizeAtStart {
+		// Wait for the errgroup to shut down. If an error is produced,
+		// it could be a normal error in which case return it. An error
+		// could also be the sentinel errInteresting type (i.e., a
+		// varState), which means an interesting variant was found and
+		// we should return that varState. If no error is returned it
+		// means there were no more interesting variants found starting
+		// from the passed varState.
+		if err := g.Wait(); err != nil {
+			if err, ok := err.(errInteresting); ok {
+				vs := varState(err)
+				log("\tpass %d of %d (%s): %d bytes\n", vs.pi+1, len(passList), passList[vs.pi].Name(), vs.f.Size())
+				return &vs, nil
+			}
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	start := timeutil.Now()
+	vs := varState{
+		f: originalTestCase,
+	}
+	log("size: %d\n", vs.f.Size())
+	for {
+		sizeAtStart := vs.f.Size()
+		foundInteresting := false
+		for {
+			next, err := findNextInteresting(vs)
+			if err != nil {
+				return "", nil
+			}
+			if next == nil {
+				break
+			}
+			foundInteresting = true
+			vs = *next
+		}
+		done := false
+		switch mode {
+		case ModeSize:
+			if vs.f.Size() >= sizeAtStart {
+				done = true
+			}
+		case ModeInteresting:
+			done = !foundInteresting
+		default:
+			panic("unknown mode")
+		}
+		if done {
 			break
+		}
+		// Need to do another round. Clear pi and state.
+		vs = varState{
+			f: vs.f,
 		}
 	}
 	log("total time: %v\n", timeutil.Since(start))
 	log("original size: %v\n", originalTestCase.Size())
-	log("final size: %v\n", current.Size())
-	log("reduction: %v%%\n", 100-int(100*float64(current.Size())/float64(originalTestCase.Size())))
-	return current, nil
+	log("final size: %v\n", vs.f.Size())
+	log("reduction: %v%%\n", 100-int(100*float64(vs.f.Size())/float64(originalTestCase.Size())))
+	return vs.f, nil
 }
 
-type intPass struct {
-	name string
-	fn   func(string, int) (string, bool, error)
+// errInteresting is an error version of varState that is a special sentinel
+// error. It is used to shutdown the other goroutines in the errgroup while
+// also transmitting the new varState to resume from.
+type errInteresting varState
+
+func (e errInteresting) Error() string {
+	return "interesting"
 }
 
-// MakeIntPass returns a Pass with a state that starts at 0 and increments by
-// 1 each Advance. f is a transformation function that takes the input and an
-// index (zero-based) determining which occurrence to transform. It returns the
-// possibly transformed output and a boolean that is false if a transformation
-// could not be done because i was exhausted.
-//
-// For example, if f is a func that replaces spaces with underscores, invoking
-// that function with an i value of 2 should return the input string with only
-// the 3rd occurrence of a space replaced with an underscore.
-//
-// This is a convenience wrapper since a large number of Pass implementations
-// just need their state to increment a counter and don't have to keep track of
-// other things like byte offsets.
-func MakeIntPass(name string, f func(s string, i int) (out string, ok bool, err error)) Pass {
-	return intPass{
-		name: name,
-		fn:   f,
-	}
-}
+// varState tracks the current variant state, which is a tuple of the current
+// pass, file, and state.
+type varState struct {
+	pi int
+	f  File
+	s  State
 
-func (p intPass) Name() string {
-	return p.name
-}
-
-func (p intPass) New(File) State {
-	return 0
-}
-
-func (p intPass) Transform(f File, s State) (File, Result, error) {
-	i := s.(int)
-	data, ok, err := p.fn(string(f), i)
-	res := OK
-	if !ok {
-		res = STOP
-	}
-	return File(data), res, err
-}
-
-func (p intPass) Advance(f File, s State) State {
-	return s.(int) + 1
+	// done and prev are used to synchronize work between variant
+	// testing. A variant sends on done when it has verified its test is
+	// uninteresting. If its test was interesting, it receives on prev,
+	// which thus guarantees that it was the first interesting variant.
+	done, prev chan struct{}
 }

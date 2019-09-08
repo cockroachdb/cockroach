@@ -52,6 +52,7 @@ var SQLPasses = []reduce.Pass{
 	removeAliases,
 	removeDBSchema,
 	removeFroms,
+	removeJoins,
 	removeWhere,
 	removeHaving,
 	removeDistinct,
@@ -61,6 +62,7 @@ var SQLPasses = []reduce.Pass{
 }
 
 type sqlWalker struct {
+	topOnly bool
 	match   func(int, interface{}) int
 	replace func(int, interface{}) (int, tree.NodeFormatter)
 }
@@ -92,6 +94,19 @@ func replaceStatement(
 	return reduce.MakeIntPass(name, w.Transform)
 }
 
+// replaceTopStatement is like replaceStatement but only applies to top-level
+// statements.
+func replaceTopStatement(
+	name string,
+	replace func(transform int, node interface{}) (matched int, replacement tree.NodeFormatter),
+) reduce.Pass {
+	w := sqlWalker{
+		replace: replace,
+		topOnly: true,
+	}
+	return reduce.MakeIntPass(name, w.Transform)
+}
+
 var (
 	// LogUnknown determines whether unknown types encountered during
 	// statement walking.
@@ -111,9 +126,17 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 	}
 
 	var replacement tree.NodeFormatter
+	// nodeCount is incremented on each visited node per statement. It is
+	// currently used to determine if walk is at the top-level statement
+	// or not.
+	var nodeCount int
 	var walk func(...interface{})
 	walk = func(nodes ...interface{}) {
 		for _, node := range nodes {
+			nodeCount++
+			if w.topOnly && nodeCount > 1 {
+				return
+			}
 			if i < 0 {
 				return
 			}
@@ -272,6 +295,7 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 
 	for i, ast := range asts {
 		replacement = nil
+		nodeCount = 0
 		walk(ast)
 		if replacement != nil {
 			asts[i] = replacement
@@ -712,6 +736,30 @@ var (
 		}
 		return 0
 	})
+	removeJoins = walkSQL("remove JOINs", func(xfi int, node interface{}) int {
+		// Remove JOINs. Replace them with either the left or right
+		// side based on if xfi is even or odd.
+		switch node := node.(type) {
+		case *tree.SelectClause:
+			idx := xfi / 2
+			n := 0
+			for i, t := range node.From.Tables {
+				switch t := t.(type) {
+				case *tree.JoinTableExpr:
+					if n == idx {
+						if xfi%2 == 0 {
+							node.From.Tables[i] = t.Left
+						} else {
+							node.From.Tables[i] = t.Right
+						}
+					}
+					n += 2
+				}
+			}
+			return n
+		}
+		return 0
+	})
 	simplifyVal = walkSQL("simplify vals", func(xfi int, node interface{}) int {
 		xf := xfi == 0
 		switch node := node.(type) {
@@ -819,7 +867,7 @@ var (
 
 	// Replacements.
 
-	removeStatement = replaceStatement("remove statements", func(xfi int, node interface{}) (int, tree.NodeFormatter) {
+	removeStatement = replaceTopStatement("remove statements", func(xfi int, node interface{}) (int, tree.NodeFormatter) {
 		xf := xfi == 0
 		if _, ok := node.(tree.Statement); ok {
 			if xf {

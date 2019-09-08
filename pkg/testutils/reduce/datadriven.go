@@ -24,10 +24,11 @@ func Walk(
 	path string,
 	filter func([]byte) ([]byte, error),
 	interesting func(contains string) InterestingFn,
+	mode Mode,
 	passes []Pass,
 ) {
 	datadriven.Walk(t, path, func(t *testing.T, path string) {
-		RunTest(t, path, filter, interesting, passes)
+		RunTest(t, path, filter, interesting, mode, passes)
 	})
 }
 
@@ -46,6 +47,7 @@ func RunTest(
 	path string,
 	filter func([]byte) ([]byte, error),
 	interesting func(contains string) InterestingFn,
+	mode Mode,
 	passes []Pass,
 ) {
 	var contains string
@@ -67,7 +69,7 @@ func RunTest(
 					t.Fatal(err)
 				}
 			}
-			output, err := Reduce(log, File(input), interesting(contains), passes...)
+			output, err := Reduce(log, File(input), interesting(contains), 0, mode, passes...)
 			if err != nil {
 				t.Fatal(err)
 			}
