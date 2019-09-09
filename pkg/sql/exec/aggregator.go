@@ -97,12 +97,22 @@ type orderedAggregator struct {
 	// function operators write directly to this output batch.
 	scratch struct {
 		coldata.Batch
+		// shouldResetInternalBatch keeps track of whether the scratch.Batch should
+		// be reset. It is false in cases where we have overflow results still to
+		// return and therefore do not want to modify the batch.
+		shouldResetInternalBatch bool
 		// resumeIdx is the index at which the aggregation functions should start
 		// writing to on the next iteration of Next().
 		resumeIdx int
 		// outputSize is col.BatchSize by default.
 		outputSize int
 	}
+
+	// unsafeBatch is a coldata.Batch returned when only a subset of the
+	// scratch.Batch results is returned (i.e. work needs to be resumed on the
+	// next Next call). The values to return are copied into this batch to protect
+	// against downstream modification of the internal batch.
+	unsafeBatch coldata.Batch
 
 	// groupCol is the slice that aggregateFuncs use to determine whether a value
 	// is part of the current aggregation group. See aggregateFunc.Init for more
@@ -246,6 +256,7 @@ func (a *orderedAggregator) initWithBatchSize(inputSize, outputSize int) {
 		vec := a.scratch.ColVec(i)
 		a.aggregateFuncs[i].Init(a.groupCol, vec)
 	}
+	a.unsafeBatch = coldata.NewMemBatchWithSize(a.outputTypes, outputSize)
 	a.scratch.outputSize = outputSize
 }
 
@@ -254,7 +265,10 @@ func (a *orderedAggregator) Init() {
 }
 
 func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
-	a.scratch.ResetInternalBatch()
+	if a.scratch.shouldResetInternalBatch {
+		a.scratch.ResetInternalBatch()
+		a.scratch.shouldResetInternalBatch = false
+	}
 	if a.done {
 		a.scratch.SetLength(0)
 		return a.scratch
@@ -282,7 +296,21 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 		if a.scratch.resumeIdx >= a.scratch.outputSize {
 			// We still have overflow output values.
 			a.scratch.SetLength(uint16(a.scratch.outputSize))
-			return a.scratch
+			for i := 0; i < len(a.outputTypes); i++ {
+				a.unsafeBatch.ColVec(i).Copy(
+					coldata.CopySliceArgs{
+						SliceArgs: coldata.SliceArgs{
+							Src:         a.scratch.ColVec(i),
+							ColType:     a.outputTypes[i],
+							SrcStartIdx: 0,
+							SrcEndIdx:   uint64(a.scratch.Length()),
+						},
+					},
+				)
+			}
+			a.unsafeBatch.SetLength(a.scratch.Length())
+			a.scratch.shouldResetInternalBatch = false
+			return a.unsafeBatch
 		}
 	}
 
@@ -318,13 +346,30 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 		copy(a.groupCol, zeroBoolColumn)
 	}
 
+	batchToReturn := a.scratch.Batch
 	if a.scratch.resumeIdx > a.scratch.outputSize {
 		a.scratch.SetLength(uint16(a.scratch.outputSize))
+		for i := 0; i < len(a.outputTypes); i++ {
+			a.unsafeBatch.ColVec(i).Copy(
+				coldata.CopySliceArgs{
+					SliceArgs: coldata.SliceArgs{
+						Src:         a.scratch.ColVec(i),
+						ColType:     a.outputTypes[i],
+						SrcStartIdx: 0,
+						SrcEndIdx:   uint64(a.scratch.Length()),
+					},
+				},
+			)
+		}
+		a.unsafeBatch.SetLength(a.scratch.Length())
+		batchToReturn = a.unsafeBatch
+		a.scratch.shouldResetInternalBatch = false
 	} else {
 		a.scratch.SetLength(uint16(a.scratch.resumeIdx))
+		a.scratch.shouldResetInternalBatch = true
 	}
 
-	return a.scratch
+	return batchToReturn
 }
 
 // reset resets the orderedAggregator for another run. Primarily used for
