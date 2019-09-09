@@ -973,7 +973,7 @@ stress stressrace:
 roachprod-stress roachprod-stressrace: bin/roachprod-stress
 	# The bootstrap target creates, among other things, ./bin/stress.
 	build/builder.sh make bin/.bootstrap
-	build/builder.sh make test GOFLAGS="$(GOFLAGS) -v -c -o $(notdir $(patsubst %/,%,$(PKG))).test" PKG=$(PKG)
+	build/builder.sh make test GOFLAGS="$(GOFLAGS)" TESTFLAGS="-v -c -o $(notdir $(patsubst %/,%,$(PKG))).test" PKG=$(PKG)
 	@if [ -z "$(CLUSTER)" ]; then \
 	  echo "ERROR: missing or empty CLUSTER"; \
 	else \
