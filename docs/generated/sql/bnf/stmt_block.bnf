@@ -190,7 +190,7 @@ show_stmt ::=
 	| show_zone_stmt
 
 truncate_stmt ::=
-	'TRUNCATE' opt_table relation_expr_list opt_drop_behavior
+	'TRUNCATE' opt_table relation_expr_list opt_sequence_restart_behavior opt_drop_behavior
 
 update_stmt ::=
 	opt_with_clause 'UPDATE' table_name_expr_opt_alias_idx 'SET' set_clause_list opt_from_list opt_where_clause opt_sort_clause opt_limit_clause returning_clause
@@ -562,6 +562,11 @@ opt_table ::=
 relation_expr_list ::=
 	( relation_expr ) ( ( ',' relation_expr ) )*
 
+opt_sequence_restart_behavior ::=
+	'RESTART' 'identifierITY'
+	| 'CONTINUE' 'identifierITY'
+	| 
+
 opt_drop_behavior ::=
 	'CASCADE'
 	| 'RESTRICT'
@@ -620,6 +625,7 @@ unreserved_keyword ::=
 	| 'CONFIGURATIONS'
 	| 'CONFIGURE'
 	| 'CONSTRAINTS'
+	| 'CONTINUE'
 	| 'CONVERSION'
 	| 'COPY'
 	| 'COVERING'
@@ -667,6 +673,7 @@ unreserved_keyword ::=
 	| 'HIGH'
 	| 'HISTOGRAM'
 	| 'HOUR'
+	| 'identifierITY'
 	| 'IMMEDIATE'
 	| 'IMPORT'
 	| 'INCREMENT'
@@ -758,6 +765,7 @@ unreserved_keyword ::=
 	| 'REPEATABLE'
 	| 'REPLACE'
 	| 'RESET'
+	| 'RESTART'
 	| 'RESTORE'
 	| 'RESTRICT'
 	| 'RESUME'

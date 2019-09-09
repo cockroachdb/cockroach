@@ -146,8 +146,9 @@ func (t *truncateNode) startExec(params runParams) error {
 	}
 
 	traceKV := p.extendedEvalCtx.Tracing.KVTracingEnabled()
+	restartSequence := n.SequenceRestartBehavior == tree.RestartIdentity
 	for id, name := range toTruncate {
-		if err := p.truncateTable(ctx, id, dropJobID, traceKV); err != nil {
+		if err := p.truncateTable(ctx, id, dropJobID, traceKV, restartSequence); err != nil {
 			return err
 		}
 
@@ -179,7 +180,7 @@ func (t *truncateNode) Close(context.Context)        {}
 // drops the table and recreates it with a new ID. The dropped table is
 // GC-ed later through an asynchronous schema change.
 func (p *planner) truncateTable(
-	ctx context.Context, id sqlbase.ID, dropJobID int64, traceKV bool,
+	ctx context.Context, id sqlbase.ID, dropJobID int64, traceKV bool, restartSequence bool,
 ) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
@@ -219,6 +220,23 @@ func (p *planner) truncateTable(
 	b.CPut(nameKey, nil, &existingIDVal)
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
+	}
+
+	// Restart sequences if required.
+	if restartSequence {
+		for _, columnDesc := range tableDesc.Columns {
+			for _, sequenceID := range columnDesc.UsesSequenceIds {
+				seqDesc, err := p.Tables().getTableVersionByID(ctx, p.txn, sequenceID, tree.ObjectLookupFlags{})
+				if err != nil {
+					return err
+				}
+				seqName := tree.MakeUnqualifiedTableName(tree.Name(seqDesc.Name))
+				startValue := seqDesc.SequenceOpts.Start
+				if err := p.SetSequenceValue(ctx, &seqName, startValue, false); err != nil {
+					return err
+				}
+			}
+		}
 	}
 
 	// Drop table.

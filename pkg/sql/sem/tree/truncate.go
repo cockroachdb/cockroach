@@ -21,8 +21,29 @@ package tree
 
 // Truncate represents a TRUNCATE statement.
 type Truncate struct {
-	Tables       TableNames
-	DropBehavior DropBehavior
+	Tables                  TableNames
+	DropBehavior            DropBehavior
+	SequenceRestartBehavior SequenceRestartBehavior
+}
+
+// SequenceRestartBehavior represents options for restarting sequences.
+type SequenceRestartBehavior int
+
+// SequenceRestartBehavior values.
+const (
+	RestoreDefault SequenceRestartBehavior = iota
+	RestartIdentity
+	ContinueIdentity
+)
+
+// Format implements the NodeFormatter interface.
+func (srb *SequenceRestartBehavior) Format(ctx *FmtCtx) {
+	switch *srb {
+	case RestartIdentity:
+		ctx.WriteString("RESTART IDENTITY")
+	case ContinueIdentity:
+		ctx.WriteString("CONTINUE IDENTITY")
+	}
 }
 
 // Format implements the NodeFormatter interface.
@@ -33,6 +54,10 @@ func (node *Truncate) Format(ctx *FmtCtx) {
 		ctx.WriteString(sep)
 		ctx.FormatNode(&node.Tables[i])
 		sep = ", "
+	}
+	if node.SequenceRestartBehavior != RestoreDefault {
+		ctx.WriteByte(' ')
+		ctx.FormatNode(&node.SequenceRestartBehavior)
 	}
 	if node.DropBehavior != DropDefault {
 		ctx.WriteByte(' ')

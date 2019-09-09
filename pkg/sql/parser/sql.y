@@ -377,6 +377,9 @@ func (u *sqlSymUnion) idxElems() tree.IndexElemList {
 func (u *sqlSymUnion) dropBehavior() tree.DropBehavior {
     return u.val.(tree.DropBehavior)
 }
+func (u *sqlSymUnion) sequenceRestartBehavior() tree.SequenceRestartBehavior {
+  return u.val.(tree.SequenceRestartBehavior)
+}
 func (u *sqlSymUnion) validationBehavior() tree.ValidationBehavior {
     return u.val.(tree.ValidationBehavior)
 }
@@ -497,7 +500,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> CHARACTER CHARACTERISTICS CHECK
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMIT
 %token <str> COMMITTED COMPACT COMPLETE CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
-%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONVERSION COPY COVERING CREATE
+%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONTINUE CONVERSION COPY COVERING CREATE
 %token <str> CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CYCLE
@@ -520,8 +523,8 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
 
-%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCREMENT INCREMENTAL
-%token <str> INET INET_CONTAINED_BY_OR_EQUALS
+%token <str> IDENTITY IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCREMENT
+%token <str> INCREMENTAL INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
 %token <str> INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
 %token <str> INTERSECT INTERVAL INTO INVERTED IS ISERROR ISNULL ISOLATION
@@ -551,7 +554,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> RANGE RANGES READ REAL RECURSIVE REF REFERENCES
 %token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE
-%token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
+%token <str> RELEASE RESET RESTART RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
 %token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE
 
 %token <str> SAVEPOINT SCATTER SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
@@ -789,6 +792,8 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <tree.DropBehavior> opt_drop_behavior
 %type <tree.DropBehavior> opt_interleave_drop_behavior
+
+%type <tree.SequenceRestartBehavior> opt_sequence_restart_behavior
 
 %type <tree.ValidationBehavior> opt_validate_behavior
 
@@ -4877,14 +4882,28 @@ sequence_option_elem:
 
 // %Help: TRUNCATE - empty one or more tables
 // %Category: DML
-// %Text: TRUNCATE [TABLE] <tablename> [, ...] [CASCADE | RESTRICT]
+// %Text: TRUNCATE [TABLE] <tablename> [, ...] [ RESTART IDENTITY | CONTINUE IDENTITY ] [CASCADE | RESTRICT]
 // %SeeAlso: WEBDOCS/truncate.html
 truncate_stmt:
-  TRUNCATE opt_table relation_expr_list opt_drop_behavior
+  TRUNCATE opt_table relation_expr_list opt_sequence_restart_behavior opt_drop_behavior
   {
-    $$.val = &tree.Truncate{Tables: $3.tableNames(), DropBehavior: $4.dropBehavior()}
+    $$.val = &tree.Truncate{Tables: $3.tableNames(), SequenceRestartBehavior: $4.sequenceRestartBehavior(), DropBehavior: $5.dropBehavior()}
   }
 | TRUNCATE error // SHOW HELP: TRUNCATE
+
+opt_sequence_restart_behavior:
+  RESTART IDENTITY
+  {
+    $$.val = tree.RestartIdentity
+  }
+| CONTINUE IDENTITY
+  {
+    $$.val = tree.ContinueIdentity
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.RestoreDefault
+  }
 
 // %Help: CREATE USER - define a new user
 // %Category: Priv
@@ -9196,6 +9215,7 @@ unreserved_keyword:
 | CONFIGURATIONS
 | CONFIGURE
 | CONSTRAINTS
+| CONTINUE
 | CONVERSION
 | COPY
 | COVERING
@@ -9243,6 +9263,7 @@ unreserved_keyword:
 | HIGH
 | HISTOGRAM
 | HOUR
+| IDENTITY
 | IMMEDIATE
 | IMPORT
 | INCREMENT
@@ -9334,6 +9355,7 @@ unreserved_keyword:
 | REPEATABLE
 | REPLACE
 | RESET
+| RESTART
 | RESTORE
 | RESTRICT
 | RESUME
