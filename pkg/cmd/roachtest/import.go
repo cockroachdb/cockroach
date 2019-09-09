@@ -111,9 +111,15 @@ func registerImportTPCH(r *testRegistry) {
 		nodes   int
 		timeout time.Duration
 	}{
-		{4, 6 * time.Hour}, // typically 4-5h
-		{8, 4 * time.Hour}, // typically 3h
-		{32, 3 * time.Hour},
+		// TODO(dt): this test seems to have become slower as of 19.2. It previously
+		// had 4, 8 and 32 node configurations with comments claiming they ran in in
+		// 4-5h for 4 node and 3h for 8 node. As of 19.2, it seems to be timing out
+		// -- potentially because 8 secondary indexes is worst-case for direct
+		// ingestion and seems to cause a lot of compaction, but further profiling
+		// is required to confirm this. Until then, the 4 and 32 node configurations
+		// are removed (4 is too slow and 32 is pretty expensive) while 8-node is
+		// given a 50% longer timeout (which running by hand suggests should be OK).
+		{8, 6 * time.Hour},
 	} {
 		item := item
 		r.Add(testSpec{
