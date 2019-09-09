@@ -835,3 +835,14 @@ SELECT * FROM t40372_1 NATURAL JOIN t40372_2
 1  1  1  1
 2  2  2  2
 3  3  3  3
+
+# Test that comparison against a null value selects the value out.
+statement ok
+CREATE TABLE tnull(a INT, b INT)
+
+statement ok
+INSERT INTO tnull VALUES(NULL, 238)
+
+query I rowsort
+SELECT a FROM tnull WHERE (a<=b OR a>=b)
+----
