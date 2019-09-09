@@ -83,7 +83,13 @@ func _COPY_WITH_SEL(
 		nulls := args.Src.Nulls()
 		for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 			if nulls.NullAt64(uint64(selIdx)) {
+				// {{if .SelOnDest}}
+				// Remove an unused warning in some cases.
+				_ = i
+				m.nulls.SetNull64(uint64(selIdx))
+				// {{else}}
 				m.nulls.SetNull64(uint64(i) + args.DestIdx)
+				// {{end}}
 			} else {
 				v := execgen.UNSAFEGET(fromCol, int(selIdx))
 				// {{if .SelOnDest}}
