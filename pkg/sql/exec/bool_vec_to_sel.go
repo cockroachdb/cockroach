@@ -123,6 +123,33 @@ func (d selBoolOp) Init() {
 
 func (d selBoolOp) Next(ctx context.Context) coldata.Batch {
 	batch := d.input.Next(ctx)
-	d.boolVecToSelOp.outputCol = batch.ColVec(d.colIdx).Bool()
+	inputCol := batch.ColVec(d.colIdx)
+	d.boolVecToSelOp.outputCol = inputCol.Bool()
+	if inputCol.MaybeHasNulls() {
+		// If the input columns has null values, we need to explicitly set the
+		// values of the output column that correspond to those null values to
+		// false. For example, doing the comparison 'NULL < 0' will put 0 into the
+		// ColVec but will also set the null. In the code above, we only copied the
+		// values' vector, so we need to adjust it.
+		// TODO(yuzefovich): think through this case more, possibly clean this up
+		// or optimize.
+		n := batch.Length()
+		sel := batch.Selection()
+		nulls := inputCol.Nulls()
+		if sel != nil {
+			sel = sel[:n]
+			for _, i := range sel {
+				if nulls.NullAt(i) {
+					d.boolVecToSelOp.outputCol[i] = false
+				}
+			}
+		} else {
+			for i := uint16(0); i < n; i++ {
+				if nulls.NullAt(i) {
+					d.boolVecToSelOp.outputCol[i] = false
+				}
+			}
+		}
+	}
 	return batch
 }
