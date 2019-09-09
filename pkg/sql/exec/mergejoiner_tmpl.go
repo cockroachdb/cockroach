@@ -121,7 +121,6 @@ func _PROBE_SWITCH(
 	_SEL_PERMUTATION selPermutation,
 	_L_HAS_NULLS bool,
 	_R_HAS_NULLS bool,
-	_ASC_DIRECTION bool,
 ) { // */}}
 	// {{define "probeSwitch"}}
 	// {{ $sel := $.SelPermutation }}
@@ -270,11 +269,9 @@ func _PROBE_SWITCH(
 					}
 				} else { // mismatch
 					var incrementLeft bool
-					// {{ if _ASC_DIRECTION }}
 					_ASSIGN_LT("incrementLeft", "lVal", "rVal")
-					// {{ else }}
-					_ASSIGN_GT("incrementLeft", "lVal", "rVal")
-					// {{ end }}
+					// Switch the direction of increment if we're sorted descendingly.
+					incrementLeft = incrementLeft == (o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC)
 					if incrementLeft {
 						curLIdx++
 						// {{ if _L_HAS_NULLS }}
@@ -588,31 +585,15 @@ EqLoop:
 		colType := o.left.sourceTypes[int(o.left.eqCols[eqColIdx])]
 		if lVec.MaybeHasNulls() {
 			if rVec.MaybeHasNulls() {
-				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
-					_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, true, true, true)
-				} else {
-					_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, true, true, false)
-				}
+				_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, true, true)
 			} else {
-				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
-					_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, true, false, true)
-				} else {
-					_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, true, false, false)
-				}
+				_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, true, false)
 			}
 		} else {
 			if rVec.MaybeHasNulls() {
-				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
-					_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, false, true, true)
-				} else {
-					_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, false, true, false)
-				}
+				_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, false, true)
 			} else {
-				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
-					_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, false, false, true)
-				} else {
-					_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, false, false, false)
-				}
+				_PROBE_SWITCH(_JOIN_TYPE, _FILTER_INFO, _SEL_ARG, false, false)
 			}
 		}
 		// Look at the groups associated with the next equality column by moving
