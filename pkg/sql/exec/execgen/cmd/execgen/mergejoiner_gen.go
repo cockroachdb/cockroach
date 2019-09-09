@@ -88,7 +88,6 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 	s = strings.Replace(s, "_HAS_NULLS", "$.HasNulls", -1)
 	s = strings.Replace(s, "_HAS_SELECTION", "$.HasSelection", -1)
 	s = strings.Replace(s, "_SEL_PERMUTATION", "$.SelPermutation", -1)
-	s = strings.Replace(s, "_ASC_DIRECTION", "$.AscDirection", -1)
 
 	leftUnmatchedGroupSwitch := makeFunctionRegex("_LEFT_UNMATCHED_GROUP_SWITCH", 1)
 	s = leftUnmatchedGroupSwitch.ReplaceAllString(s, `{{template "leftUnmatchedGroupSwitch" buildDict "Global" $ "JoinType" $1}}`)
@@ -111,8 +110,8 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 	processNotLastGroupInColumnSwitch := makeFunctionRegex("_PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH", 1)
 	s = processNotLastGroupInColumnSwitch.ReplaceAllString(s, `{{template "processNotLastGroupInColumnSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
-	probeSwitch := makeFunctionRegex("_PROBE_SWITCH", 6)
-	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "JoinType" $1 "FilterInfo" $2 "SelPermutation" $3 "lHasNulls" $4 "rHasNulls" $5 "AscDirection" $6}}`)
+	probeSwitch := makeFunctionRegex("_PROBE_SWITCH", 5)
+	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "JoinType" $1 "FilterInfo" $2 "SelPermutation" $3 "lHasNulls" $4 "rHasNulls" $5}}`)
 
 	sourceFinishedSwitch := makeFunctionRegex("_SOURCE_FINISHED_SWITCH", 1)
 	s = sourceFinishedSwitch.ReplaceAllString(s, `{{template "sourceFinishedSwitch" buildDict "Global" $ "JoinType" $1}}`)
