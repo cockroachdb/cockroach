@@ -110,6 +110,8 @@ func AddWrappedPlanHook(f wrappedPlanHookFn) {
 // provided function during Start and serves the results it returns over the
 // channel.
 type hookFnNode struct {
+	optColumnsSlot
+
 	f        PlanHookRowFn
 	header   sqlbase.ResultColumns
 	subplans []planNode
