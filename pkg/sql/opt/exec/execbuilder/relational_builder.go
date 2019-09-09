@@ -593,7 +593,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	if len(*filters) != 0 {
 		onExpr, err = b.buildScalar(&ctx, filters)
 		if err != nil {
-			return execPlan{}, nil
+			return execPlan{}, err
 		}
 	}
 
