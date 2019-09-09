@@ -64,6 +64,17 @@ var orderedVerifier verifier = (*opTestOutput).Verify
 // error if they aren't equal by set comparison (irrespective of order).
 var unorderedVerifier verifier = (*opTestOutput).VerifyAnyOrder
 
+// maybeHasNulls is a helper function that returns whether any of the columns in b
+// (maybe) have nulls.
+func maybeHasNulls(b coldata.Batch) bool {
+	for i := 0; i < b.Width(); i++ {
+		if b.ColVec(i).MaybeHasNulls() {
+			return true
+		}
+	}
+	return false
+}
+
 // runTests is a helper that automatically runs your tests with varied batch
 // sizes and with and without a random selection vector.
 // tups is the set of input tuples.
@@ -89,34 +100,60 @@ func runTests(
 		}
 	})
 
-	t.Run("verifySelResets", func(t *testing.T) {
-		// Verify that all operators have an unset selection vector even if an
-		// operator later in the chain sets one. This test ensures that operators
-		// that "own their own batches", such as any operator that has to reshape
-		// its output, always reset their selection vectors before returning a fresh
-		// batch.
-		inputSources := make([]Operator, len(tups))
-		for i, tup := range tups {
-			inputSources[i] = newOpTestInput(1 /* batchSize */, tup)
+	t.Run("verifySelAndNullResets", func(t *testing.T) {
+		// This test ensures that operators that "own their own batches", such as
+		// any operator that has to reshape its output, are not affected by
+		// downstream modification of batches.
+		// We run the main loop twice: once to determine what the operator would
+		// output on its second Next call (we need the first call to Next to get a
+		// reference to a batch to modify), and a second time to modify the batch
+		// and verify that this does not change the operator output.
+		var secondBatchHasSelection, secondBatchHasNulls bool
+		for round := 0; round < 2; round++ {
+			inputSources := make([]Operator, len(tups))
+			for i, tup := range tups {
+				inputSources[i] = newOpTestInput(1 /* batchSize */, tup)
+			}
+			op, err := constructor(inputSources)
+			if err != nil {
+				t.Fatal(err)
+			}
+			op.Init()
+			ctx := context.Background()
+			b := op.Next(ctx)
+			if round == 1 {
+				if secondBatchHasSelection {
+					b.SetSelection(false)
+				} else {
+					b.SetSelection(true)
+				}
+				if secondBatchHasNulls {
+					// ResetInternalBatch will throw away the null information.
+					b.ResetInternalBatch()
+				} else {
+					for i := 0; i < b.Width(); i++ {
+						b.ColVec(i).Nulls().SetNulls()
+					}
+				}
+			}
+			b = op.Next(ctx)
+			if round == 0 {
+				secondBatchHasSelection = b.Selection() != nil
+				secondBatchHasNulls = maybeHasNulls(b)
+			}
+			if round == 1 {
+				if secondBatchHasSelection {
+					assert.NotNil(t, b.Selection())
+				} else {
+					assert.Nil(t, b.Selection())
+				}
+				if secondBatchHasNulls {
+					assert.True(t, maybeHasNulls(b))
+				} else {
+					assert.False(t, maybeHasNulls(b))
+				}
+			}
 		}
-		op, err := constructor(inputSources)
-		if err != nil {
-			t.Fatal(err)
-		}
-		op.Init()
-		ctx := context.Background()
-		b := op.Next(ctx)
-		if b.Selection() != nil {
-			// We're testing an operator that needs to set a selection vector for some
-			// reason already, so we can't test the condition we're looking for.
-			return
-		}
-		// Set the selection vector by hand.
-		b.SetSelection(true)
-		b = op.Next(ctx)
-		// Make sure that the next time we call the operator, it has an empty
-		// selection vector.
-		assert.Nil(t, b.Selection())
 	})
 }
 
