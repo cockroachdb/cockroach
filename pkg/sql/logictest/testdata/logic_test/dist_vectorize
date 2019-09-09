@@ -264,3 +264,17 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
                 └ *exec.HashRouter
                   └ *exec.CancelChecker
                     └ *distsqlrun.colBatchScan
+
+# Test that SelOnDest flag of coldata.SliceArgs is respected when setting
+# nulls.
+statement ok
+CREATE TABLE t1(a INT PRIMARY KEY, b INT)
+
+statement ok
+INSERT INTO t1 VALUES (1, NULL), (2, NULL)
+
+query I rowsort
+SELECT CASE WHEN a>1 THEN b*2 ELSE b*10 END FROM t1
+----
+NULL
+NULL
