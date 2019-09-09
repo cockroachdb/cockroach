@@ -129,7 +129,7 @@ func registerHibernate(r *testRegistry) {
 		// Also note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
 		_ = c.RunE(ctx, node,
-			`cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroach --info`,
+			`cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroach`,
 		)
 
 		t.Status("collecting the test results")
