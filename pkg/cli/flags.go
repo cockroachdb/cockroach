@@ -527,6 +527,7 @@ func init() {
 		f := cmd.Flags()
 		VarFlag(f, &sqlCtx.setStmts, cliflags.Set)
 		VarFlag(f, &sqlCtx.execStmts, cliflags.Execute)
+		DurationFlag(f, &sqlCtx.repeatDelay, cliflags.Watch, sqlCtx.repeatDelay)
 		BoolFlag(f, &sqlCtx.safeUpdates, cliflags.SafeUpdates, sqlCtx.safeUpdates)
 		BoolFlag(f, &sqlCtx.debugMode, cliflags.CliDebugMode, sqlCtx.debugMode)
 	}

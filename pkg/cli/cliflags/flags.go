@@ -238,6 +238,14 @@ with a non-zero status code and further statements are not executed. The
 results of each SQL statement are printed on the standard output.`,
 	}
 
+	Watch = FlagInfo{
+		Name: "watch",
+		Description: `
+Repeat the SQL statement(s) specified with --execute
+with the specified period. The client will stop watching
+if an execution of the SQL statement(s) fail.`,
+	}
+
 	EchoSQL = FlagInfo{
 		Name: "echo-sql",
 		Description: `
