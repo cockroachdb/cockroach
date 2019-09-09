@@ -212,12 +212,12 @@ func (node *ShowJobs) Format(ctx *FmtCtx) {
 		ctx.WriteString("AUTOMATIC ")
 	}
 	ctx.WriteString("JOBS")
+	if node.Block {
+		ctx.WriteString(" WHEN COMPLETE")
+	}
 	if node.Jobs != nil {
 		ctx.WriteString(" ")
 		ctx.FormatNode(node.Jobs)
-	}
-	if node.Block {
-		ctx.WriteString(" WHEN COMPLETE")
 	}
 }
 
