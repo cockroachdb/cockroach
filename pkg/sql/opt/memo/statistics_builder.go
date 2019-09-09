@@ -216,6 +216,9 @@ func (sb *statisticsBuilder) availabilityFromInput(e RelExpr) bool {
 	case *ZigzagJoinExpr:
 		ensureZigzagJoinInputProps(t, sb)
 		return t.leftProps.Stats.Available
+
+	case *WithScanExpr:
+		return t.BindingProps.Stats.Available
 	}
 
 	available := true
@@ -366,6 +369,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.ProjectSetOp:
 		return sb.colStatProjectSet(colSet, e.(*ProjectSetExpr))
 
+	case opt.WithScanOp:
+		return sb.colStatWithScan(colSet, e.(*WithScanExpr))
+
 	case opt.InsertOp, opt.UpdateOp, opt.UpsertOp, opt.DeleteOp:
 		return sb.colStatMutation(colSet, e)
 
@@ -378,13 +384,6 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 
 	case opt.WithOp:
 		return sb.colStat(colSet, e.Child(1).(RelExpr))
-
-	case opt.WithScanOp:
-		// This is tricky, since if we deferred to the expression being referenced,
-		// the computation of stats for a WithScan would depend on something
-		// outside of the expression itself. Just call it unknown for now.
-		// TODO(justin): find a real solution for this.
-		return sb.colStatUnknown(colSet, e.Relational())
 
 	case opt.FakeRelOp:
 		panic(errors.AssertionFailedf("FakeRelOp does not contain col stat for %v", colSet))
@@ -2098,6 +2097,42 @@ func (sb *statisticsBuilder) colStatProjectSet(
 	if colSet.SubsetOf(projectSet.Relational().NotNullCols) {
 		colStat.NullCount = 0
 	}
+	sb.finalizeFromRowCount(colStat, s.RowCount)
+	return colStat
+}
+
+// +----------+
+// | WithScan |
+// +----------+
+
+func (sb *statisticsBuilder) buildWithScan(withScan *WithScanExpr, relProps *props.Relational) {
+	s := &relProps.Stats
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
+	s.Available = sb.availabilityFromInput(withScan)
+
+	inputStats := withScan.BindingProps.Stats
+
+	s.RowCount = inputStats.RowCount
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatWithScan(
+	colSet opt.ColSet, withScan *WithScanExpr,
+) *props.ColumnStatistic {
+	s := &withScan.Relational().Stats
+	withProps := withScan.BindingProps
+	inColSet := translateColSet(colSet, withScan.OutCols, withScan.InCols)
+
+	// TODO(rytaft): This would be more accurate if we could access the WithExpr
+	// itself.
+	inColStat := sb.colStatLeaf(inColSet, &withProps.Stats, &withProps.FuncDeps, withProps.NotNullCols)
+
+	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = inColStat.DistinctCount
+	colStat.NullCount = inColStat.NullCount
 	sb.finalizeFromRowCount(colStat, s.RowCount)
 	return colStat
 }
