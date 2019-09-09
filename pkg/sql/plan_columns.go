@@ -49,8 +49,6 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *groupNode:
 		return n.columns
-	case *hookFnNode:
-		return n.header
 	case *joinNode:
 		return n.columns
 	case *ordinalityNode:
@@ -119,6 +117,9 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.getColumns(mut, sqlbase.SequenceSelectColumns)
 	case *exportNode:
 		return n.getColumns(mut, sqlbase.ExportColumns)
+
+	case *hookFnNode:
+		return n.getColumns(mut, n.header)
 
 	// Nodes that have the same schema as their source or their
 	// valueNode helper.
