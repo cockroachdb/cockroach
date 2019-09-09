@@ -643,12 +643,21 @@ func TestOnChangeWithMaxSettings(t *testing.T) {
 }
 
 func TestMaxSettingsPanics(t *testing.T) {
+	var origRegistry = make(map[string]settings.Setting)
+	for k, v := range settings.Registry {
+		origRegistry[k] = v
+	}
+	defer func() {
+		settings.Registry = origRegistry
+	}()
+
 	// Register too many settings which will cause a panic which is caught and converted to an error.
 	_, err := batchRegisterSettings(t, t.Name(), maxSettings-len(settings.Keys()))
 	expectedErr := "too many settings; increase maxSettings"
 	if err == nil || err.Error() != expectedErr {
 		t.Errorf("expected error %v, but got %v", expectedErr, err)
 	}
+
 }
 
 func batchRegisterSettings(t *testing.T, keyPrefix string, count int) (name string, err error) {
