@@ -846,3 +846,19 @@ INSERT INTO tnull VALUES(NULL, 238)
 query I rowsort
 SELECT a FROM tnull WHERE (a<=b OR a>=b)
 ----
+
+# Test that AND'ing a true value with another true value while one of them is
+# actually NULL returns NULL.
+statement ok
+CREATE TABLE t1(a INTEGER, b INTEGER, c INTEGER)
+
+statement ok
+INSERT INTO t1 VALUES(NULL,2,1)
+
+# We need both parenthesis in WHERE clause so that the AND operation under test
+# is not optimized out.
+query I
+SELECT CASE WHEN a <= b THEN 1 ELSE 2 END
+  FROM t1
+ WHERE (a > b - 2 AND a < b + 2) OR (c > a AND c < b)
+----
