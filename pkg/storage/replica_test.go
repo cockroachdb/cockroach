@@ -11512,7 +11512,9 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			defer setTxnAutoGC(!c.disableTxnAutoGC)()
 
 			txn := newTransaction(c.name, roachpb.Key(c.name), 1, tc.Clock())
+			manual.Increment(99)
 			runTs := tc.Clock().Now()
+
 			if c.setup != nil {
 				if err := c.setup(txn, runTs); err != nil {
 					t.Fatalf("failed during test setup: %+v", err)
