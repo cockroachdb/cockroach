@@ -83,6 +83,7 @@ func initCLIDefaults() {
 
 	sqlCtx.setStmts = nil
 	sqlCtx.execStmts = nil
+	sqlCtx.repeatDelay = 0
 	sqlCtx.safeUpdates = false
 	sqlCtx.showTimes = false
 	sqlCtx.debugMode = false
@@ -216,6 +217,11 @@ var sqlCtx = struct {
 
 	// execStmts is a list of statements to execute.
 	execStmts statementsValue
+
+	// repeatDelay indicates that the execStmts should be "watched"
+	// at the specified time interval. Zero disables
+	// the watch.
+	repeatDelay time.Duration
 
 	// safeUpdates indicates whether to set sql_safe_updates in the CLI
 	// shell.

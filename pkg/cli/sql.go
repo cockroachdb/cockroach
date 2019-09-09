@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
@@ -1389,22 +1390,31 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 // runOneStatement executes one statement and terminates
 // on error.
 func (c *cliState) runStatements(stmts []string) error {
-	for i, stmt := range stmts {
-		// We do not use the logic from doRunStatement here
-		// because we need a different error handling mechanism:
-		// the error, if any, must not be printed to stderr if
-		// we are returning directly.
-		c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(stmt))
-		if c.exitErr != nil {
-			if !c.errExit && i < len(stmts)-1 {
-				// Print the error now because we don't get a chance later.
-				fmt.Fprintln(stderr, c.exitErr)
-				maybeShowErrorDetails(stderr, c.exitErr, false)
-			}
-			if c.errExit {
-				break
+	for {
+		for i, stmt := range stmts {
+			// We do not use the logic from doRunStatement here
+			// because we need a different error handling mechanism:
+			// the error, if any, must not be printed to stderr if
+			// we are returning directly.
+			c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(stmt))
+			if c.exitErr != nil {
+				if !c.errExit && i < len(stmts)-1 {
+					// Print the error now because we don't get a chance later.
+					fmt.Fprintln(stderr, c.exitErr)
+					maybeShowErrorDetails(stderr, c.exitErr, false)
+				}
+				if c.errExit {
+					break
+				}
 			}
 		}
+		// If --watch was specified and no error was encountered,
+		// repeat.
+		if sqlCtx.repeatDelay > 0 && c.exitErr == nil {
+			time.Sleep(sqlCtx.repeatDelay)
+			continue
+		}
+		break
 	}
 
 	if c.exitErr != nil {
