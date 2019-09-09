@@ -261,7 +261,12 @@ template <bool reverse> class mvccScanner {
     // values); this timestamp is prev_timestamp.
     const DBTimestamp prev_timestamp =
         timestamp_ < meta_timestamp ? timestamp_ : PrevTimestamp(meta_timestamp);
-    if (timestamp_ < meta_timestamp && !own_intent) {
+    // If we don't consider the txn's uncertainty interval then intents are only
+    // visible to it at or below the txn's read timestamp. However, if the txn's
+    // read timestamp is less than the max timestamp seen by the txn then intents
+    // are visible to the txn all the way up to its max timestamp.
+    const DBTimestamp max_visible_timestamp = check_uncertainty_ ? txn_max_timestamp_ : timestamp_;
+    if (max_visible_timestamp < meta_timestamp && !own_intent) {
       // 5. The key contains an intent, but we're reading before the
       // intent. Seek to the desired version. Note that if we own the
       // intent (i.e. we're reading transactionally) we want to read

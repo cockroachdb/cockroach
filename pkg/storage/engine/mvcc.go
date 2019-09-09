@@ -867,18 +867,34 @@ func mvccGetInternal(
 		timestamp = metaTimestamp.Prev()
 	}
 
-	ownIntent := IsIntentOf(meta, txn) // false if txn == nil
-	if !timestamp.Less(metaTimestamp) && meta.Txn != nil && !ownIntent {
+	checkUncertainty := txn != nil && timestamp.Less(txn.MaxTimestamp)
+	isIntent := meta.Txn != nil
+	ownIntent := IsIntentOf(meta, txn) // false if !isIntent
+	if isIntent && !ownIntent {
 		// Trying to read the last value, but it's another transaction's intent;
-		// the reader will have to act on this.
-		return nil, nil, safeValue, &roachpb.WriteIntentError{
-			Intents: []roachpb.Intent{{Span: roachpb.Span{Key: metaKey.Key}, Status: roachpb.PENDING, Txn: *meta.Txn}},
+		// the reader will have to act on this if the intent has a low enough
+		// timestamp.
+		//
+		// If we don't consider the reading transaction's uncertainty interval
+		// then intents are only visible to it at or below the read timestamp.
+		// However, if the reader transaction's read timestamp is less than the
+		// max timestamp seen by the transaction then intents are visible to the
+		// transaction all the way up to its max timestamp.
+		maxVisibleTimestamp := timestamp
+		if checkUncertainty {
+			maxVisibleTimestamp.Forward(txn.MaxTimestamp)
+		}
+		if !maxVisibleTimestamp.Less(metaTimestamp) {
+			return nil, nil, safeValue, &roachpb.WriteIntentError{
+				Intents: []roachpb.Intent{{
+					Span: roachpb.Span{Key: metaKey.Key}, Status: roachpb.PENDING, Txn: *meta.Txn,
+				}},
+			}
 		}
 	}
 
-	var checkValueTimestamp bool
 	seekKey := metaKey
-
+	checkValueTimestamp := false
 	if !timestamp.Less(metaTimestamp) || ownIntent {
 		// We are reading the latest value, which is either an intent written
 		// by this transaction or not an intent at all (so there's no
@@ -907,7 +923,7 @@ func mvccGetInternal(
 				seekKey.Timestamp = metaTimestamp.Prev()
 			}
 		}
-	} else if txn != nil && timestamp.Less(txn.MaxTimestamp) {
+	} else if checkUncertainty {
 		// In this branch, the latest timestamp is ahead, and so the read of an
 		// "old" value in a transactional context at time (timestamp, MaxTimestamp]
 		// occurs, leading to a clock uncertainty error if a version exists in

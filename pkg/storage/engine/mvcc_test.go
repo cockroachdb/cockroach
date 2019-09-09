@@ -802,89 +802,197 @@ func TestMVCCGetUncertainty(t *testing.T) {
 			engine := createTestEngine()
 			defer engine.Close()
 
+			// Txn with read timestamp 7 and MaxTimestamp 10.
 			txn := &roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
 					ID:        uuid.MakeV4(),
-					Timestamp: hlc.Timestamp{WallTime: 5},
+					Timestamp: hlc.Timestamp{WallTime: 7},
 				},
 				MaxTimestamp: hlc.Timestamp{WallTime: 10},
 			}
-			// Put a value from the past.
+			getOptsTxn := MVCCGetOptions{Txn: txn}
+			scanOptsTxn := MVCCScanOptions{Txn: txn}
+
+			// Same txn but with a lower MaxTimestamp at 7.
+			txnWithLowerMaxTS := txn.Clone()
+			txnWithLowerMaxTS.MaxTimestamp = hlc.Timestamp{WallTime: 7}
+			getOptsTxnWithLowerMaxTS := MVCCGetOptions{Txn: txnWithLowerMaxTS}
+			scanOptsTxnWithLowerMaxTS := MVCCScanOptions{Txn: txnWithLowerMaxTS}
+
+			// Case 1: One value in the past, one value in the future of read
+			// and ahead of MaxTimestamp of read. Neither should interfere.
+			//
+			// -----------------
+			// - 12: val2
+			// |
+			// - 10: max timestamp
+			// |
+			// -  7: read timestamp
+			// |
+			// -  1: val1
+			// -----------------
 			if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 				t.Fatal(err)
 			}
-			// Put a value that is ahead of MaxTimestamp, it should not interfere.
 			if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 12}, value2, nil); err != nil {
 				t.Fatal(err)
 			}
 			// Read with transaction, should get a value back.
-			val, _, err := mvccGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 7}, MVCCGetOptions{
-				Txn: txn,
-			})
-			if err != nil {
+			if val, _, err := mvccGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 7}, getOptsTxn); err != nil {
 				t.Fatal(err)
+			} else if val == nil || !bytes.Equal(val.RawBytes, value1.RawBytes) {
+				t.Fatalf("wanted %q, got %v", value1.RawBytes, val)
 			}
-			if val == nil || !bytes.Equal(val.RawBytes, value1.RawBytes) {
+			if kvs, _, _, err := MVCCScan(
+				ctx, engine, testKey1, testKey1.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, scanOptsTxn,
+			); err != nil {
+				t.Fatal(err)
+			} else if len(kvs) != 1 {
+				t.Fatalf("wanted 1 kv, got %d", len(kvs))
+			} else if val := kvs[0].Value; !bytes.Equal(val.RawBytes, value1.RawBytes) {
 				t.Fatalf("wanted %q, got %v", value1.RawBytes, val)
 			}
 
-			// Now using testKey2.
-			// Put a value that conflicts with MaxTimestamp.
+			// Case 2a: One value in the future of read but below MaxTimestamp
+			// of read. Should result in a ReadWithinUncertaintyIntervalError
+			// when reading.
+			//
+			// -----------------
+			// - 10: max timestamp
+			// -  9: val2
+			// |
+			// -  7: read timestamp
+			// -----------------
 			if err := MVCCPut(ctx, engine, nil, testKey2, hlc.Timestamp{WallTime: 9}, value2, nil); err != nil {
 				t.Fatal(err)
 			}
 			// Read with transaction, should get error back.
-			if _, _, err := mvccGet(ctx, engine, testKey2, hlc.Timestamp{WallTime: 7}, MVCCGetOptions{
-				Txn: txn,
-			}); err == nil {
+			if _, _, err := mvccGet(ctx, engine, testKey2, hlc.Timestamp{WallTime: 7}, getOptsTxn); err == nil {
 				t.Fatal("wanted an error")
 			} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
 				t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 			}
 			if _, _, _, err := MVCCScan(
-				ctx, engine, testKey2, testKey2.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, MVCCScanOptions{Txn: txn},
+				ctx, engine, testKey2, testKey2.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, scanOptsTxn,
 			); err == nil {
 				t.Fatal("wanted an error")
 			} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
 				t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 			}
-			// Adjust MaxTimestamp and retry.
-			txn.MaxTimestamp = hlc.Timestamp{WallTime: 7}
-			if _, _, err := mvccGet(ctx, engine, testKey2, hlc.Timestamp{WallTime: 7}, MVCCGetOptions{
-				Txn: txn,
-			}); err != nil {
+			// Case 2b: Reduce MaxTimestamp below value in future. Value should
+			// no longer interfere when reading.
+			//
+			// -----------------
+			// -  9: val2
+			// |
+			// -  7: read/max timestamp
+			// -----------------
+			if _, _, err := mvccGet(ctx, engine, testKey2, hlc.Timestamp{WallTime: 7}, getOptsTxnWithLowerMaxTS); err != nil {
 				t.Fatal(err)
 			}
 			if _, _, _, err := MVCCScan(
-				ctx, engine, testKey2, testKey2.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, MVCCScanOptions{Txn: txn},
+				ctx, engine, testKey2, testKey2.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, scanOptsTxnWithLowerMaxTS,
 			); err != nil {
 				t.Fatal(err)
 			}
 
-			txn.MaxTimestamp = hlc.Timestamp{WallTime: 10}
-			// Now using testKey3.
-			// Put a value that conflicts with MaxTimestamp and another write further
-			// ahead and not conflicting any longer. The first write should still ruin
-			// it.
-			if err := MVCCPut(ctx, engine, nil, testKey3, hlc.Timestamp{WallTime: 9}, value2, nil); err != nil {
+			// Case 3a: One intent in the future of read but below MaxTimestamp
+			// of read. Should result in a WriteIntentError when reading.
+			//
+			// -----------------
+			// - 10: max timestamp
+			// -  9: val2 (intent)
+			// |
+			// -  7: read timestamp
+			// -----------------
+			txn2 := &roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{
+					ID:        uuid.MakeV4(),
+					Timestamp: hlc.Timestamp{WallTime: 9},
+				},
+				OrigTimestamp: hlc.Timestamp{WallTime: 9},
+			}
+			if err := MVCCPut(ctx, engine, nil, testKey3, hlc.Timestamp{WallTime: 9}, value2, txn2); err != nil {
 				t.Fatal(err)
 			}
-			if err := MVCCPut(ctx, engine, nil, testKey3, hlc.Timestamp{WallTime: 99}, value2, nil); err != nil {
+			// Read with transaction, should get error back.
+			if _, _, err := mvccGet(ctx, engine, testKey3, hlc.Timestamp{WallTime: 7}, getOptsTxn); err == nil {
+				t.Fatal("wanted an error")
+			} else if _, ok := err.(*roachpb.WriteIntentError); !ok {
+				t.Fatalf("wanted a WriteIntentError, got %+v", err)
+			}
+			if _, _, _, err := MVCCScan(
+				ctx, engine, testKey3, testKey3.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, scanOptsTxn,
+			); err == nil {
+				t.Fatal("wanted an error")
+			} else if _, ok := err.(*roachpb.WriteIntentError); !ok {
+				t.Fatalf("wanted a WriteIntentError, got %+v", err)
+			}
+			// Case 3b: Reduce MaxTimestamp below intent in future. Intent should
+			// no longer interfere when reading.
+			//
+			// -----------------
+			// -  9: val2 (intent)
+			// |
+			// -  7: read/max timestamp
+			// -----------------
+			if _, _, err := mvccGet(ctx, engine, testKey3, hlc.Timestamp{WallTime: 7}, getOptsTxnWithLowerMaxTS); err != nil {
 				t.Fatal(err)
 			}
 			if _, _, _, err := MVCCScan(
-				ctx, engine, testKey3, testKey3.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, MVCCScanOptions{Txn: txn},
+				ctx, engine, testKey3, testKey3.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, scanOptsTxnWithLowerMaxTS,
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			// Case 4a: Two values in future of read. One is ahead of
+			// MaxTimestamp of read and one is below MaxTimestamp of read. The
+			// value within the read's uncertainty interval should result in a
+			// ReadWithinUncertaintyIntervalError when reading.
+			//
+			// -----------------
+			// - 99: val3
+			// |
+			// - 10: max timestamp
+			// -  9: val2
+			// |
+			// -  7: read timestamp
+			// -----------------
+			if err := MVCCPut(ctx, engine, nil, testKey4, hlc.Timestamp{WallTime: 9}, value2, nil); err != nil {
+				t.Fatal(err)
+			}
+			if err := MVCCPut(ctx, engine, nil, testKey4, hlc.Timestamp{WallTime: 99}, value3, nil); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := mvccGet(ctx, engine, testKey4, hlc.Timestamp{WallTime: 7}, getOptsTxn); err == nil {
+				t.Fatalf("wanted an error")
+			} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+				t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
+			}
+			if _, _, _, err := MVCCScan(
+				ctx, engine, testKey4, testKey4.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, scanOptsTxn,
 			); err == nil {
 				t.Fatal("wanted an error")
 			} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
 				t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 			}
-			if _, _, err := mvccGet(ctx, engine, testKey3, hlc.Timestamp{WallTime: 7}, MVCCGetOptions{
-				Txn: txn,
-			}); err == nil {
-				t.Fatalf("wanted an error")
-			} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
-				t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
+			// Case 4b: Reduce MaxTimestamp below second value in future. Value should
+			// no longer interfere when reading.
+			//
+			// -----------------
+			// - 99: val3
+			// |
+			// -  9: val2
+			// |
+			// -  7: read/max timestamp
+			// -----------------
+			if _, _, err := mvccGet(ctx, engine, testKey4, hlc.Timestamp{WallTime: 7}, getOptsTxnWithLowerMaxTS); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, _, err := MVCCScan(
+				ctx, engine, testKey4, testKey4.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, scanOptsTxnWithLowerMaxTS,
+			); err != nil {
+				t.Fatal(err)
 			}
 		})
 	}
