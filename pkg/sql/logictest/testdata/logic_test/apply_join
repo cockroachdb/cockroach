@@ -311,3 +311,49 @@ WHERE
             )
         )
     )
+
+# Regression test for #40589.
+statement ok
+CREATE TABLE IF NOT EXISTS t40589 AS
+	SELECT
+		'2001-01-01'::TIMESTAMPTZ + g * '1 day',
+		g * '1 day'::INTERVAL AS _interval,
+		g % 0 = 0 AS _bool,
+		g AS _decimal,
+		g,
+		g AS _bytes,
+		substring(NULL, NULL, NULL)::UUID AS _uuid,
+		'0.0.0.0'::INET + g AS _inet,
+		g AS _jsonb
+	FROM
+		generate_series(NULL, NULL) AS g;
+
+query T
+SELECT
+	(
+		SELECT
+			NULL
+		FROM
+			t40589,
+			t40589 AS t0,
+			t40589 AS t1
+			INNER JOIN t40589 AS t2 ON true
+			JOIN t40589 AS t3
+				RIGHT JOIN t40589 AS t4
+					LEFT JOIN t40589 AS t5 ON
+							t._bool ON false ON
+					t1._uuid = t3._uuid
+			JOIN t40589 AS t6
+				JOIN t40589 AS t7
+					LEFT JOIN t40589 AS t8 ON true
+					JOIN t40589 AS t9
+						JOIN t40589 AS t10 ON true ON
+							true ON true ON true
+		WHERE
+			7.835752314020045477E+27
+			NOT IN (SELECT t6._decimal::DECIMAL)
+			AND true
+	)
+FROM
+	t40589 AS t, t40589;
+----

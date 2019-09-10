@@ -420,7 +420,7 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 	switch e.Op() {
 	case opt.ScanOp, opt.ValuesOp:
 		// All columns can potentially be pruned from the Scan and Values operators.
-		relProps.Rule.PruneCols = relProps.OutputCols
+		relProps.Rule.PruneCols = relProps.OutputCols.Copy()
 
 	case opt.SelectOp:
 		// Any pruneable input columns can potentially be pruned, as long as they're
@@ -433,7 +433,7 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 	case opt.ProjectOp:
 		// All columns can potentially be pruned from the Project, if they're never
 		// used in a higher-level expression.
-		relProps.Rule.PruneCols = relProps.OutputCols
+		relProps.Rule.PruneCols = relProps.OutputCols.Copy()
 
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
@@ -462,7 +462,7 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		// However, aggregation columns can potentially be pruned.
 		groupingColSet := e.Private().(*memo.GroupingPrivate).GroupingCols
 		if groupingColSet.Empty() {
-			relProps.Rule.PruneCols = relProps.OutputCols
+			relProps.Rule.PruneCols = relProps.OutputCols.Copy()
 		} else {
 			relProps.Rule.PruneCols = relProps.OutputCols.Difference(groupingColSet)
 		}
