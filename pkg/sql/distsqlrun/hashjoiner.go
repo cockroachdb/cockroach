@@ -181,9 +181,7 @@ func newHashJoiner(
 		if limit <= 0 {
 			limit = settingWorkMemBytes.Get(&st.SV)
 		}
-		limitedMon := mon.MakeMonitorInheritWithLimit("hashjoiner-limited", limit, flowCtx.EvalCtx.Mon)
-		limitedMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
-		h.MemMonitor = &limitedMon
+		h.MemMonitor = NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "hashjoiner-limited")
 		h.diskMonitor = NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "hashjoiner-disk")
 		// Override initialBufferSize to be half of this processor's memory
 		// limit. We consume up to h.initialBufferSize bytes from each input
@@ -736,14 +734,14 @@ func (h *hashJoiner) shouldEmitUnmatched(
 // initStoredRows initializes a hashRowContainer and sets h.storedRows.
 func (h *hashJoiner) initStoredRows() error {
 	if h.useTempStorage {
-		hrc := rowcontainer.MakeHashDiskBackedRowContainer(
+		hrc := rowcontainer.NewHashDiskBackedRowContainer(
 			&h.rows[h.storedSide],
 			h.evalCtx,
 			h.MemMonitor,
 			h.diskMonitor,
 			h.flowCtx.Cfg.TempStorage,
 		)
-		h.storedRows = &hrc
+		h.storedRows = hrc
 	} else {
 		hrc := rowcontainer.MakeHashMemRowContainer(&h.rows[h.storedSide])
 		h.storedRows = &hrc

@@ -765,21 +765,21 @@ type HashDiskBackedRowContainer struct {
 
 var _ HashRowContainer = &HashDiskBackedRowContainer{}
 
-// MakeHashDiskBackedRowContainer makes a HashDiskBackedRowContainer.
+// NewHashDiskBackedRowContainer makes a HashDiskBackedRowContainer.
 // mrc (the first argument) can either be nil (in which case
 // HashMemRowContainer will be built upon an empty MemRowContainer) or non-nil
 // (in which case mrc is used as underlying MemRowContainer under
 // HashMemRowContainer). The latter case is used by the hashJoiner since when
 // initializing HashDiskBackedRowContainer it will have accumulated rows from
 // both sides of the join in MemRowContainers, and we can reuse one of them.
-func MakeHashDiskBackedRowContainer(
+func NewHashDiskBackedRowContainer(
 	mrc *MemRowContainer,
 	evalCtx *tree.EvalContext,
 	memoryMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
 	engine diskmap.Factory,
-) HashDiskBackedRowContainer {
-	return HashDiskBackedRowContainer{
+) *HashDiskBackedRowContainer {
+	return &HashDiskBackedRowContainer{
 		mrc:              mrc,
 		evalCtx:          evalCtx,
 		memoryMonitor:    memoryMonitor,
