@@ -12,6 +12,7 @@ package distsqlrun
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -115,6 +116,44 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	mat.Start(ctx)
 
 	require.Panics(t, func() { mat.Next() }, "NonVectorizedPanic was caught by the operators")
+}
+
+// TestNonVectorizedPanicDoesntHangServer verifies that propagating a non
+// vectorized panic doesn't result in a hang as described in:
+// https://github.com/cockroachdb/cockroach/issues/39779
+func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mat := &materializer{
+		input: &exec.CallbackOperator{
+			NextCb: func(ctx context.Context) coldata.Batch {
+				a := []int{0}
+				// Trigger an index out of bounds panic.
+				a[0] = a[100]
+				return nil
+			},
+		},
+	}
+	// Avoid uninitialized output panic.
+	mat.out.output = &RowBuffer{}
+	flow := &Flow{
+		processors: []Processor{mat},
+		// This test specifically verifies that a flow doesn't get stuck in Wait for
+		// asynchronous components that haven't been signaled to exit. To simulate
+		// this we just create a mock startable.
+		startables: []startable{
+			startableFn(func(ctx context.Context, wg *sync.WaitGroup, _ context.CancelFunc) {
+				wg.Add(1)
+				go func() {
+					// Ensure context is canceled.
+					<-ctx.Done()
+					wg.Done()
+				}()
+			}),
+		},
+	}
+
+	require.Panics(t, func() { require.NoError(t, flow.Run(context.Background(), nil)) })
 }
 
 // testVectorizedPanicEmitter is an exec.Operator that panics on every
