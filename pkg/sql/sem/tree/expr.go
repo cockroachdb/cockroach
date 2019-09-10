@@ -1326,7 +1326,8 @@ func (node *FuncExpr) IsDistSQLBlacklist() bool {
 	return node.fnProps != nil && node.fnProps.DistsqlBlacklist
 }
 
-// CanHandleNulls returns whether or not
+// CanHandleNulls returns whether or not the function can handle null
+// arguments.
 func (node *FuncExpr) CanHandleNulls() bool {
 	return node.fnProps != nil && node.fnProps.NullableArgs
 }
