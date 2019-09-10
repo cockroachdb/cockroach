@@ -40,6 +40,7 @@ import (
 	crdberrors "github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -71,7 +72,8 @@ func maybeDescriptorChangedError(desc *roachpb.RangeDescriptor, err error) (stri
 			return fmt.Sprintf("descriptor changed: expected %s != [actual] nil (range subsumed)", desc), true
 		} else if err := detail.ActualValue.GetProto(&actualDesc); err == nil &&
 			desc.RangeID == actualDesc.RangeID && !desc.Equal(actualDesc) {
-			return fmt.Sprintf("descriptor changed: [expected] %s != [actual] %s", desc, &actualDesc), true
+			return fmt.Sprintf("descriptor changed: [expected] %s != [actual] %s: %v",
+				desc, &actualDesc, pretty.Diff(desc, actualDesc)), true
 		}
 	}
 	return "", false
