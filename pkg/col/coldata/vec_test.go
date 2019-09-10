@@ -359,6 +359,54 @@ func TestCopyNulls(t *testing.T) {
 	}
 }
 
+func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
+	const typ = coltypes.Int64
+
+	// Set up the destination vector.
+	dst := NewMemColumn(typ, BatchSize)
+	dstInts := dst.Int64()
+	for i := range dstInts {
+		dstInts[i] = 1
+	}
+	dst.Nulls().SetNulls()
+	dst.Nulls().UnsetNull(0)
+
+	// Set up the source vector with one null.
+	src := NewMemColumn(typ, BatchSize)
+	srcInts := src.Int64()
+	for i := range srcInts {
+		srcInts[i] = 2
+	}
+	src.Nulls().SetNull(0)
+	src.Nulls().SetNull(3)
+
+	// Using a small selection vector and SelOnDest, perform a copy and verify
+	// that nulls in between the selected tuples weren't unset.
+	copyArgs := CopySliceArgs{
+		SelOnDest: true,
+		SliceArgs: SliceArgs{
+			ColType:     typ,
+			Src:         src,
+			SrcStartIdx: 1,
+			SrcEndIdx:   2,
+			Sel:         []uint16{0, 1, 3},
+		},
+	}
+
+	dst.Copy(copyArgs)
+
+	// 0 was not null in dest and null in source, but it wasn't selected. Not null.
+	require.False(t, dst.Nulls().NullAt(0))
+	// 1 was null in dest and not null in source: it becomes not null.
+	require.False(t, dst.Nulls().NullAt(1))
+	// 2 wasn't included in the selection vector: it stays null.
+	require.True(t, dst.Nulls().NullAt(2))
+	// 3 was null in dest and null in source: it stays null.
+	require.True(t, dst.Nulls().NullAt(3))
+	// 4 wasn't included: it stays null.
+	require.True(t, dst.Nulls().NullAt(4))
+}
+
 func BenchmarkAppend(b *testing.B) {
 	const typ = coltypes.Int64
 

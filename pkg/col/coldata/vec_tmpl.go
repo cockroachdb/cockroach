@@ -93,6 +93,7 @@ func _COPY_WITH_SEL(
 			} else {
 				v := execgen.UNSAFEGET(fromCol, int(selIdx))
 				// {{if .SelOnDest}}
+				m.nulls.UnsetNull64(uint64(selIdx))
 				execgen.SET(toCol, int(selIdx), v)
 				// {{else}}
 				execgen.SET(toCol, i+int(args.DestIdx), v)
@@ -118,7 +119,14 @@ func _COPY_WITH_SEL(
 // */}}
 
 func (m *memColumn) Copy(args CopySliceArgs) {
-	m.Nulls().UnsetNullRange(args.DestIdx, args.DestIdx+(args.SrcEndIdx-args.SrcStartIdx))
+	if !args.SelOnDest {
+		// We're about to overwrite this entire range, so unset all the nulls.
+		m.Nulls().UnsetNullRange(args.DestIdx, args.DestIdx+(args.SrcEndIdx-args.SrcStartIdx))
+	}
+	// } else {
+	// SelOnDest indicate that we're applying the input selection vector as a lens
+	// into the output vector as well. We'll set the non-nulls by hand below.
+	// }
 
 	switch args.ColType {
 	// {{range .}}
