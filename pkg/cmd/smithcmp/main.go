@@ -14,6 +14,10 @@
 // output is compared, exiting if there is a difference. If there is only
 // one database, mutating and non-mutating statements are generated. A
 // flag in the TOML controls whether Postgres-compatible output is generated.
+//
+// Explicit SQL statements can be specified (skipping sqlsmith generation)
+// using the top-level SQL array. Placeholders (`$1`, etc.) are
+// supported. Random datums of the correct type will be filled in.
 package main
 
 import (
@@ -31,12 +35,15 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/jackc/pgx/pgtype"
+	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -51,10 +58,12 @@ func usage() {
 }
 
 type options struct {
-	Postgres bool
-	InitSQL  string
-	Smither  string
-	Seed     int64
+	Postgres    bool
+	InitSQL     string
+	Smither     string
+	Seed        int64
+	TimeoutSecs int
+	SQL         []string
 
 	Databases map[string]struct {
 		Addr    string
@@ -77,6 +86,7 @@ func main() {
 	if err := toml.Unmarshal(tomlData, &opts); err != nil {
 		log.Fatal(err)
 	}
+	timeout := time.Duration(opts.TimeoutSecs) * time.Second
 
 	conns := map[string]*Conn{}
 	for name, db := range opts.Databases {
@@ -88,6 +98,10 @@ func main() {
 	}
 	compare := len(conns) > 1
 
+	if opts.Seed < 0 {
+		opts.Seed = timeutil.Now().UnixNano()
+		fmt.Println("seed:", opts.Seed)
+	}
 	rng := rand.New(rand.NewSource(opts.Seed))
 	smithOpts := []sqlsmith.SmitherOption{
 		sqlsmith.AvoidConsts(),
@@ -103,14 +117,49 @@ func main() {
 	if _, ok := conns[opts.Smither]; !ok {
 		log.Fatalf("Smither option not present in databases: %s", opts.Smither)
 	}
-	smither, err := sqlsmith.NewSmither(conns[opts.Smither].DB, rng, smithOpts...)
-	if err != nil {
-		log.Fatal(err)
+	var smither *sqlsmith.Smither
+	var stmts []statement
+	if len(opts.SQL) == 0 {
+		smither, err = sqlsmith.NewSmither(conns[opts.Smither].DB, rng, smithOpts...)
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		stmts = make([]statement, len(opts.SQL))
+		for i, stmt := range opts.SQL {
+			ps, err := conns[opts.Smither].PGX.Prepare("", stmt)
+			if err != nil {
+				log.Fatalf("bad SQL statement on %s: %v\nSQL:\n%s", opts.Smither, stmt, err)
+			}
+			var placeholders []*types.T
+			for _, param := range ps.ParameterOIDs {
+				typ, ok := types.OidToType[oid.Oid(param)]
+				if !ok {
+					log.Fatalf("unknown oid: %v", param)
+				}
+				placeholders = append(placeholders, typ)
+			}
+			stmts[i] = statement{
+				stmt:         stmt,
+				placeholders: placeholders,
+			}
+		}
 	}
 
+	var stmt string
+	var sqlargs []interface{}
 	for i := 0; true; i++ {
 		fmt.Printf("stmt: %d\n", i)
-		stmt := smither.Generate()
+		if smither != nil {
+			stmt = smither.Generate()
+		} else {
+			randStatement := stmts[rng.Intn(len(stmts))]
+			stmt = randStatement.stmt
+			sqlargs = make([]interface{}, len(randStatement.placeholders))
+			for i, typ := range randStatement.placeholders {
+				sqlargs[i] = sqlbase.RandDatum(rng, typ, true)
+			}
+		}
 		if opts.Postgres {
 			// TODO(mjibson): move these into sqlsmith.
 			stmt = strings.Replace(stmt, ":::", "::", -1)
@@ -121,13 +170,13 @@ func main() {
 			stmt = strings.Replace(stmt, "INT4", "INT8", -1)
 		}
 		if compare {
-			if err := compareConns(stmt, opts.Smither, conns); err != nil {
-				fmt.Printf("SQL:\n%s;\nERR: %s\n\n", stmt, err)
+			if err := compareConns(stmt, sqlargs, opts.Smither, conns, timeout); err != nil {
+				fmt.Printf("SQL:\n%s;\nARGS: %v\nERR: %s\n\n", stmt, sqlargs, err)
 				os.Exit(1)
 			}
 		} else {
 			for _, conn := range conns {
-				if err := conn.Exec(stmt); err != nil {
+				if err := conn.Exec(stmt, sqlargs); err != nil {
 					fmt.Println(err)
 				}
 			}
@@ -138,7 +187,7 @@ func main() {
 			start := timeutil.Now()
 			fmt.Printf("pinging %s...", name)
 			if err := conn.Ping(); err != nil {
-				fmt.Printf("\n%s: ping failure: %v\nprevious SQL:\n%s;\n", name, err, stmt)
+				fmt.Printf("\n%s: ping failure: %v\nprevious SQL:\n%s;\nprevious args: %v\n", name, err, stmt, sqlargs)
 				// Try to reconnect.
 				db := opts.Databases[name]
 				newConn, err := NewConn(db.Addr, db.InitSQL, opts.InitSQL)
@@ -152,8 +201,19 @@ func main() {
 	}
 }
 
-func compareConns(stmt string, smitherName string, conns map[string]*Conn) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+type statement struct {
+	stmt         string
+	placeholders []*types.T
+}
+
+func compareConns(
+	stmt string,
+	args []interface{},
+	smitherName string,
+	conns map[string]*Conn,
+	timeout time.Duration,
+) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	g, ctx := errgroup.WithContext(ctx)
 	vvs := map[string][][]interface{}{}
@@ -170,7 +230,7 @@ func compareConns(stmt string, smitherName string, conns map[string]*Conn) error
 			}()
 			conn := conns[name]
 			executeStart := timeutil.Now()
-			vals, err := conn.Values(ctx, stmt)
+			vals, err := conn.Values(ctx, stmt, args)
 			fmt.Printf("executed %s in %s\n", name, timeutil.Since(executeStart))
 			if err != nil {
 				return errors.Wrap(err, name)
@@ -195,14 +255,11 @@ func compareConns(stmt string, smitherName string, conns map[string]*Conn) error
 		}
 		compareStart := timeutil.Now()
 		fmt.Printf("comparing %s to %s...", smitherName, name)
-		if err := compareVals(first, vals); err != nil {
-			fmt.Printf("SQL:\n%s;\nerr:\n%s\n",
-				stmt,
-				err,
-			)
-			os.Exit(1)
-		}
+		err := compareVals(first, vals)
 		fmt.Printf(" %s\n", timeutil.Since(compareStart))
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
