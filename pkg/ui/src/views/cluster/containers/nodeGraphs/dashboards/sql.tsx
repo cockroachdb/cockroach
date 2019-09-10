@@ -195,7 +195,7 @@ export default function (props: GraphDashboardProps) {
       title="Transactions"
       sources={nodeSources}
       tooltip={
-        `The total number of transactions opened, committed, rolled back,
+        `The total number of transactions initiated, committed, rolled back,
            or aborted per second ${tooltipSelection}.`
       }
     >
