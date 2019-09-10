@@ -2408,7 +2408,7 @@ may increase either contention or retry errors, or both.`,
 				operand := args[0]
 				thresholds := tree.MustBeDArray(args[1])
 
-				if !operand.ResolvedType().Equivalent(thresholds.Array[0].ResolvedType()) {
+				if !operand.ResolvedType().Equivalent(thresholds.ParamTyp) {
 					return tree.NewDInt(0), errors.New("Operand and thresholds must be of the same type")
 				}
 
