@@ -588,6 +588,12 @@ func (f *Flow) Run(ctx context.Context, doneFn func()) error {
 // Wait waits for all the goroutines for this flow to exit. If the context gets
 // canceled before all goroutines exit, it calls f.cancel().
 func (f *Flow) Wait() {
+	if err := recover(); err != nil {
+		// Skip any waiting and propagate panic if Wait is executed after a panic.
+		// TODO(asubiotto): I wonder if we should just f.cancel() and wait anyway?
+		//  Maybe that's the friendlier thing to do.
+		panic(err)
+	}
 	if !f.startedGoroutines {
 		return
 	}
