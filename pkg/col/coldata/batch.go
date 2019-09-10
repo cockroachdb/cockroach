@@ -173,6 +173,7 @@ func (m *MemBatch) Reset(types []coltypes.T, length int) {
 func (m *MemBatch) ResetInternalBatch() {
 	m.SetSelection(false)
 	for _, v := range m.b {
+		v.Nulls().UnsetNulls()
 		if v.Type() == coltypes.Bytes {
 			v.Bytes().Reset()
 		}

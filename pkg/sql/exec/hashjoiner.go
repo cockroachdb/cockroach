@@ -249,16 +249,20 @@ func (hj *hashJoinEqOp) Init() {
 
 func (hj *hashJoinEqOp) Next(ctx context.Context) coldata.Batch {
 	hj.prober.batch.ResetInternalBatch()
+	return hj.nextInternal(ctx)
+}
+
+func (hj *hashJoinEqOp) nextInternal(ctx context.Context) coldata.Batch {
 	switch hj.runningState {
 	case hjBuilding:
 		hj.build(ctx)
-		return hj.Next(ctx)
+		return hj.nextInternal(ctx)
 	case hjProbing:
 		hj.prober.exec(ctx)
 
 		if hj.prober.batch.Length() == 0 && hj.builder.spec.outer {
 			hj.initEmitting()
-			return hj.Next(ctx)
+			return hj.nextInternal(ctx)
 		}
 		return hj.prober.batch
 	case hjEmittingUnmatched:
