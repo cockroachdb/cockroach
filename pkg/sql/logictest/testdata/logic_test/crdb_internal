@@ -208,10 +208,11 @@ SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
 
-query ITTTTTTTTT colnames
+query IITTTTTTTTT colnames
 SELECT * FROM crdb_internal.zones WHERE false
 ----
-zone_id  target  range_name  database_name  table_name  index_name  partition_name  config_yaml  config_sql  config_protobuf
+zone_id  subzone_id  target  range_name  database_name  table_name  index_name  partition_name
+config_yaml  config_sql  config_protobuf
 
 query ITTTTTTTTTTTTI colnames
 SELECT * FROM crdb_internal.ranges WHERE range_id < 0
@@ -239,6 +240,8 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 17  RANGE system
 18  RANGE timeseries
 22  RANGE liveness
+25  TABLE system.public.replication_constraint_stats
+27  TABLE system.public.replication_stats
 53  DATABASE testdb
 54  TABLE testdb.public.foo
 

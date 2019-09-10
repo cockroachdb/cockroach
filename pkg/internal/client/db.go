@@ -651,6 +651,13 @@ func (db *DB) Run(ctx context.Context, b *Batch) error {
 	return sendAndFill(ctx, db.send, b)
 }
 
+// NewTxn creates a new RootTxn.
+func (db *DB) NewTxn(ctx context.Context, debugName string) *Txn {
+	txn := NewTxn(ctx, db, db.ctx.NodeID.Get(), RootTxn)
+	txn.SetDebugName(debugName)
+	return txn
+}
+
 // Txn executes retryable in the context of a distributed transaction. The
 // transaction is automatically aborted if retryable returns any error aside
 // from recoverable internal errors, and is automatically committed

@@ -82,7 +82,7 @@ func waitForConfigChange(t testing.TB, s *server.TestServer) *config.SystemConfi
 
 // TODO(benesch,ridwansharif): modernize these tests to avoid hardcoding
 // expectations about descriptor IDs and zone config encoding.
-// TestGetZoneConfig exercises config.GetZoneConfig and the sql hook for it.
+// TestGetZoneConfig exercises config.getZoneConfig and the sql hook for it.
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()

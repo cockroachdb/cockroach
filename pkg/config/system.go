@@ -251,6 +251,11 @@ func (s *SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 // or database, specified by key.id). It is the caller's
 // responsibility to ensure that the range does not need to be split.
 func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error) {
+	return s.getZoneConfigForKey(DecodeKeyIntoZoneIDAndSuffix(key))
+}
+
+// DecodeKeyIntoZoneIDAndSuffix figures out the zone that the key belongs to.
+func DecodeKeyIntoZoneIDAndSuffix(key roachpb.RKey) (id uint32, keySuffix []byte) {
 	objectID, keySuffix, ok := DecodeObjectID(key)
 	if !ok {
 		// Not in the structured data namespace.
@@ -278,8 +283,7 @@ func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error
 			objectID = keys.SystemRangesID
 		}
 	}
-
-	return s.getZoneConfigForKey(objectID, keySuffix)
+	return objectID, keySuffix
 }
 
 // isPseudoTableID returns true if id is in keys.PseudoTableIDs.
@@ -350,14 +354,14 @@ func (s *SystemConfig) getZoneConfigForKey(id uint32, keySuffix []byte) (*ZoneCo
 	}
 	if entry.zone != nil {
 		if entry.placeholder != nil {
-			if subzone := entry.placeholder.GetSubzoneForKeySuffix(keySuffix); subzone != nil {
+			if subzone, _ := entry.placeholder.GetSubzoneForKeySuffix(keySuffix); subzone != nil {
 				if indexSubzone := entry.placeholder.GetSubzone(subzone.IndexID, ""); indexSubzone != nil {
 					subzone.Config.InheritFromParent(&indexSubzone.Config)
 				}
 				subzone.Config.InheritFromParent(entry.zone)
 				return &subzone.Config, nil
 			}
-		} else if subzone := entry.zone.GetSubzoneForKeySuffix(keySuffix); subzone != nil {
+		} else if subzone, _ := entry.zone.GetSubzoneForKeySuffix(keySuffix); subzone != nil {
 			if indexSubzone := entry.zone.GetSubzone(subzone.IndexID, ""); indexSubzone != nil {
 				subzone.Config.InheritFromParent(&indexSubzone.Config)
 			}
