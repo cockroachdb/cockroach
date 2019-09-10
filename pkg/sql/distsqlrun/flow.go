@@ -591,6 +591,14 @@ func (f *Flow) Wait() {
 	if !f.startedGoroutines {
 		return
 	}
+
+	var panicVal interface{}
+	if panicVal = recover(); panicVal != nil {
+		// If Wait is called as part of stack unwinding during a panic, the flow
+		// context must be canceled to ensure that all asynchronous goroutines get
+		// the message that they must exit (otherwise we will wait indefinitely).
+		f.ctxCancel()
+	}
 	waitChan := make(chan struct{})
 
 	go func() {
@@ -604,6 +612,9 @@ func (f *Flow) Wait() {
 		<-waitChan
 	case <-waitChan:
 		// Exit normally
+	}
+	if panicVal != nil {
+		panic(panicVal)
 	}
 }
 
