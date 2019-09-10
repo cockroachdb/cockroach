@@ -26,6 +26,8 @@ type mjTestInitializer interface {
 	initWithBatchSize(outBatchSize uint16)
 }
 
+// TODO(yuzefovich): add unit tests for cases with ON expression.
+
 type mjTestCase struct {
 	description     string
 	joinType        sqlbase.JoinType
