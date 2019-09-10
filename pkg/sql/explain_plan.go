@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -45,6 +46,8 @@ type explainPlanNode struct {
 	// postqueryPlans contains the postquery plans for the explained query.
 	postqueryPlans []postquery
 
+	stmtType tree.StatementType
+
 	run explainPlanRun
 }
 
@@ -56,6 +59,7 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 	plan planNode,
 	subqueryPlans []subquery,
 	postqueryPlans []postquery,
+	stmtType tree.StatementType,
 ) (planNode, error) {
 	flags := explainFlags{
 		symbolicVars: opts.Flags.Contains(tree.ExplainFlagSymVars),
@@ -104,6 +108,7 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 		plan:           plan,
 		subqueryPlans:  subqueryPlans,
 		postqueryPlans: postqueryPlans,
+		stmtType:       stmtType,
 		run: explainPlanRun{
 			results: p.newContainerValuesNode(columns, 0),
 		},
@@ -118,7 +123,8 @@ type explainPlanRun struct {
 }
 
 func (e *explainPlanNode) startExec(params runParams) error {
-	return params.p.populateExplain(params.ctx, &e.explainer, e.run.results, e.plan, e.subqueryPlans, e.postqueryPlans)
+	return params.p.populateExplain(params, &e.explainer, e.run.results, e.plan, e.subqueryPlans, e.postqueryPlans,
+		e.stmtType)
 }
 
 func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
@@ -189,14 +195,47 @@ var emptyString = tree.NewDString("")
 // The subquery plans, if any are known to the planner, are printed
 // at the bottom.
 func (p *planner) populateExplain(
-	ctx context.Context,
+	params runParams,
 	e *explainer,
 	v *valuesNode,
 	plan planNode,
 	subqueryPlans []subquery,
 	postqueryPlans []postquery,
+	stmtType tree.StatementType,
 ) error {
+	ctx := params.ctx
 	e.populateEntries(ctx, plan, subqueryPlans, postqueryPlans, explainSubqueryFmtFlags)
+
+	var isDistSQL, isVec bool
+	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
+	isDistSQL, _ = willDistributePlan(distSQLPlanner, plan, params)
+	outerSubqueries := params.p.curPlan.subqueryPlans
+	planCtx := makeExplainVecPlanningCtx(distSQLPlanner, params, stmtType, subqueryPlans, isDistSQL)
+	defer func() {
+		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
+	}()
+	physicalPlan, err := makePhysicalPlan(planCtx, distSQLPlanner, plan)
+	if err == nil {
+		// There might be an issue making the physical plan, but that should not
+		// cause an error or panic, so swallow the error. See #40677 for example.
+		distSQLPlanner.FinalizePlan(planCtx, &physicalPlan)
+		flows := physicalPlan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
+		flowCtx := makeFlowCtx(planCtx, physicalPlan, params)
+
+		isVec = true
+		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeOff {
+			isVec = false
+		} else {
+			for _, flow := range flows {
+				_, err := distsqlrun.SupportsVectorized(params.ctx, flowCtx, flow.Processors)
+				isVec = isVec && (err == nil)
+			}
+		}
+	}
+
+	if err := appendExecutionDetails(ctx, v, e.showMetadata, isDistSQL, isVec); err != nil {
+		return err
+	}
 
 	tp := treeprinter.New()
 	// n keeps track of the current node on each level.
@@ -243,6 +282,54 @@ func (p *planner) populateExplain(
 		}
 	}
 
+	return nil
+}
+
+func appendExecutionDetails(
+	ctx context.Context, v *valuesNode, showMetadata, isDistSQL, isVec bool,
+) error {
+	var distSQLRow, vecRow tree.Datums
+	distSQLFieldName := tree.NewDString("distributed")
+	distSQLValue := tree.NewDString(fmt.Sprintf("%t", isDistSQL))
+	vecFieldName := tree.NewDString("vectorized")
+	vecValue := tree.NewDString(fmt.Sprintf("%t", isVec))
+	if !showMetadata {
+		distSQLRow = tree.Datums{
+			emptyString,      // Tree
+			distSQLFieldName, // Field
+			distSQLValue,     // Description
+		}
+		vecRow = tree.Datums{
+			emptyString,  // Tree
+			vecFieldName, // Field
+			vecValue,     // Description
+		}
+	} else {
+		distSQLRow = tree.Datums{
+			emptyString,      // Tree
+			tree.NewDInt(0),  // Level
+			emptyString,      // Type
+			distSQLFieldName, // Field
+			distSQLValue,     // Description
+			emptyString,      // Columns
+			emptyString,      // Ordering
+		}
+		vecRow = tree.Datums{
+			emptyString,     // Tree
+			tree.NewDInt(0), // Level
+			emptyString,     // Type
+			vecFieldName,    // Field
+			vecValue,        // Description
+			emptyString,     // Columns
+			emptyString,     // Ordering
+		}
+	}
+	if _, err := v.rows.AddRow(ctx, distSQLRow); err != nil {
+		return err
+	}
+	if _, err := v.rows.AddRow(ctx, vecRow); err != nil {
+		return err
+	}
 	return nil
 }
 

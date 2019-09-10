@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: fakedist
 
 statement ok
 CREATE TABLE uniontest (
@@ -9,7 +9,7 @@ CREATE TABLE uniontest (
 query TTT
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
-·          distributed  false
+·          distributed  true
 ·          vectorized   false
 union      ·            ·
  ├── scan  ·            ·
@@ -22,7 +22,7 @@ union      ·            ·
 query TTT
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
-·          distributed  false
+·          distributed  true
 ·          vectorized   true
 append     ·            ·
  ├── scan  ·            ·
@@ -51,7 +51,7 @@ CREATE TABLE abc (a INT, b INT, c INT)
 query TTTTT
 EXPLAIN (VERBOSE) (SELECT a FROM abc ORDER BY b) INTERSECT (SELECT a FROM abc ORDER BY c) ORDER BY a
 ----
-·                    distributed  false        ·       ·
+·                    distributed  true         ·       ·
 ·                    vectorized   false        ·       ·
 sort                 ·            ·            (a)     +a
  │                   order        +a           ·       ·
@@ -71,7 +71,7 @@ sort                 ·            ·            (a)     +a
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM ((SELECT '' AS a , '') EXCEPT ALL (SELECT '', ''))
 ----
-·                      distributed    false            ·                         ·
+·                      distributed    true             ·                         ·
 ·                      vectorized     false            ·                         ·
 render                 ·              ·                (a)                       ·
  │                     render 0       a                ·                         ·
@@ -93,7 +93,7 @@ query TTTTT
 EXPLAIN (VERBOSE) ((SELECT '', '', 'x' WHERE false))
 UNION ALL ((SELECT '', '', 'x') EXCEPT (VALUES ('', '', 'x')))
 ----
-·                      distributed    false             ·                                     ·
+·                      distributed    true              ·                                     ·
 ·                      vectorized     false             ·                                     ·
 render                 ·              ·                 ("?column?", "?column?", "?column?")  ·
  │                     render 0       "?column?"        ·                                     ·
