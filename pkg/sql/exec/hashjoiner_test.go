@@ -38,6 +38,7 @@ func TestHashJoinerInt64(t *testing.T) {
 		}
 	}
 
+	// TODO(yuzefovich): add unit tests for cases with ON expression.
 	tcs := []struct {
 		leftTypes  []coltypes.T
 		rightTypes []coltypes.T

@@ -136,6 +136,10 @@ func (f *joinerFilter) setInputBatch(lBatch, rBatch coldata.Batch, lIdx, rIdx in
 		execerror.VectorizedInternalPanic("only one of lBatch and rBatch can be nil")
 	}
 	setOneSide := func(colOffset int, batch coldata.Batch, sourceTypes []coltypes.T, idx int) {
+		sel := batch.Selection()
+		if sel != nil {
+			idx = int(sel[idx])
+		}
 		for colIdx := 0; colIdx < batch.Width(); colIdx++ {
 			colType := sourceTypes[colIdx]
 			col := batch.ColVec(colIdx)
