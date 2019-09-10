@@ -178,7 +178,7 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 	}
 	inputs := make([]Operator, numInputs)
 	for i := range inputs {
-		inputs[i] = newOpTestInput(batchSize, sources[i])
+		inputs[i] = newOpTestInput(batchSize, sources[i], nil /* typs */)
 	}
 
 	op := OrderedSynchronizer{
