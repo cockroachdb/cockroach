@@ -153,14 +153,21 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 func verifyStoreList(
 	sp *StorePool,
 	constraints []config.Constraints,
+	storeIDs roachpb.StoreIDSlice, // optional
 	rangeID roachpb.RangeID,
-	expected []int,
 	filter storeFilter,
+	expected []int,
 	expectedAliveStoreCount int,
 	expectedThrottledStoreCount int,
 ) error {
-	var actual []int
-	sl, aliveStoreCount, throttled := sp.getStoreList(rangeID, filter)
+	var sl StoreList
+	var aliveStoreCount int
+	var throttled throttledStoreReasons
+	if storeIDs == nil {
+		sl, aliveStoreCount, throttled = sp.getStoreList(rangeID, filter)
+	} else {
+		sl, aliveStoreCount, throttled = sp.getStoreListFromIDs(storeIDs, rangeID, filter)
+	}
 	throttledStoreCount := len(throttled)
 	sl = sl.filter(constraints)
 	if aliveStoreCount != expectedAliveStoreCount {
@@ -171,6 +178,7 @@ func verifyStoreList(
 		return errors.Errorf("expected ThrottledStoreCount %d does not match actual %d",
 			expectedThrottledStoreCount, throttledStoreCount)
 	}
+	var actual []int
 	for _, store := range sl.stores {
 		actual = append(actual, int(store.StoreID))
 	}
@@ -239,6 +247,11 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		Node:    roachpb.NodeDescriptor{NodeID: 6},
 		Attrs:   roachpb.Attributes{Attrs: required},
 	}
+	absentStore := roachpb.StoreDescriptor{
+		StoreID: 7,
+		Node:    roachpb.NodeDescriptor{NodeID: 7},
+		Attrs:   roachpb.Attributes{Attrs: required},
+	}
 
 	const rangeID = roachpb.RangeID(1)
 
@@ -250,6 +263,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		&emptyStore,
 		&deadStore,
 		&declinedStore,
+		// absentStore is purposefully not gossiped.
 	}, t)
 	for i := 1; i <= 7; i++ {
 		mnl.setNodeStatus(roachpb.NodeID(i), storagepb.NodeLivenessStatus_LIVE)
@@ -262,32 +276,77 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	sp.detailsMu.storeDetails[declinedStore.StoreID].throttledUntil = sp.clock.Now().GoTime().Add(time.Hour)
 	sp.detailsMu.Unlock()
 
+	// No filter or limited set of store IDs.
 	if err := verifyStoreList(
 		sp,
 		constraints,
+		nil, /* storeIDs */
 		rangeID,
+		storeFilterNone,
 		[]int{
 			int(matchingStore.StoreID),
 			int(supersetStore.StoreID),
 			int(declinedStore.StoreID),
 		},
-		storeFilterNone,
 		/* expectedAliveStoreCount */ 5,
 		/* expectedThrottledStoreCount */ 1,
 	); err != nil {
 		t.Error(err)
 	}
 
+	// Filter out throttled stores but don't limit the set of store IDs.
 	if err := verifyStoreList(
 		sp,
 		constraints,
+		nil, /* storeIDs */
 		rangeID,
+		storeFilterThrottled,
 		[]int{
 			int(matchingStore.StoreID),
 			int(supersetStore.StoreID),
 		},
-		storeFilterThrottled,
 		/* expectedAliveStoreCount */ 5,
+		/* expectedThrottledStoreCount */ 1,
+	); err != nil {
+		t.Error(err)
+	}
+
+	limitToStoreIDs := roachpb.StoreIDSlice{
+		matchingStore.StoreID,
+		declinedStore.StoreID,
+		absentStore.StoreID,
+	}
+
+	// No filter but limited to limitToStoreIDs.
+	// Note that supersetStore is not included.
+	if err := verifyStoreList(
+		sp,
+		constraints,
+		limitToStoreIDs,
+		rangeID,
+		storeFilterNone,
+		[]int{
+			int(matchingStore.StoreID),
+			int(declinedStore.StoreID),
+		},
+		/* expectedAliveStoreCount */ 2,
+		/* expectedThrottledStoreCount */ 1,
+	); err != nil {
+		t.Error(err)
+	}
+
+	// Filter out throttled stores and limit to limitToStoreIDs.
+	// Note that supersetStore is not included.
+	if err := verifyStoreList(
+		sp,
+		constraints,
+		limitToStoreIDs,
+		rangeID,
+		storeFilterThrottled,
+		[]int{
+			int(matchingStore.StoreID),
+		},
+		/* expectedAliveStoreCount */ 2,
 		/* expectedThrottledStoreCount */ 1,
 	); err != nil {
 		t.Error(err)
