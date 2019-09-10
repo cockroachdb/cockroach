@@ -151,14 +151,20 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 func verifyStoreList(
 	sp *StorePool,
 	constraints []config.Constraints,
+	storeIDs roachpb.StoreIDSlice,
 	rangeID roachpb.RangeID,
-	expected []int,
 	filter storeFilter,
+	expected []int,
 	expectedAliveStoreCount int,
 	expectedThrottledStoreCount int,
 ) error {
-	var actual []int
-	sl, aliveStoreCount, throttledStoreCount := sp.getStoreList(rangeID, filter)
+	var sl StoreList
+	var aliveStoreCount, throttledStoreCount int
+	if storeIDs == nil {
+		sl, aliveStoreCount, throttledStoreCount = sp.getStoreList(rangeID, filter)
+	} else {
+		sl, aliveStoreCount, throttledStoreCount = sp.getStoreListFromIDs(storeIDs, rangeID, filter)
+	}
 	sl = sl.filter(constraints)
 	if aliveStoreCount != expectedAliveStoreCount {
 		return errors.Errorf("expected AliveStoreCount %d does not match actual %d",
@@ -168,6 +174,7 @@ func verifyStoreList(
 		return errors.Errorf("expected ThrottledStoreCount %d does not match actual %d",
 			expectedThrottledStoreCount, throttledStoreCount)
 	}
+	var actual []int
 	for _, store := range sl.stores {
 		actual = append(actual, int(store.StoreID))
 	}
@@ -241,6 +248,11 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		Node:    roachpb.NodeDescriptor{NodeID: 7},
 		Attrs:   roachpb.Attributes{Attrs: required},
 	}
+	absentStore := roachpb.StoreDescriptor{
+		StoreID: 8,
+		Node:    roachpb.NodeDescriptor{NodeID: 8},
+		Attrs:   roachpb.Attributes{Attrs: required},
+	}
 
 	corruptedRangeID := roachpb.RangeID(1)
 
@@ -253,6 +265,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		&deadStore,
 		&declinedStore,
 		&corruptReplicaStore,
+		// absentStore is purposefully not gossiped.
 	}, t)
 	for i := 1; i <= 7; i++ {
 		mnl.setNodeStatus(roachpb.NodeID(i), NodeLivenessStatus_LIVE)
@@ -280,7 +293,9 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	if err := verifyStoreList(
 		sp,
 		constraints,
+		nil, /* storeIDs */
 		corruptedRangeID,
+		storeFilterNone,
 		[]int{
 			int(matchingStore.StoreID),
 			int(supersetStore.StoreID),
@@ -288,7 +303,6 @@ func TestStorePoolGetStoreList(t *testing.T) {
 			int(declinedStore.StoreID),
 			int(corruptReplicaStore.StoreID),
 		},
-		storeFilterNone,
 		/* expectedAliveStoreCount */ 7,
 		/* expectedThrottledStoreCount */ 0,
 	); err != nil {
@@ -308,32 +322,77 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		}}
 	sp.detailsMu.Unlock()
 
+	// No filter or limited set of store IDs.
 	if err := verifyStoreList(
 		sp,
 		constraints,
+		nil, /* storeIDs */
 		corruptedRangeID,
+		storeFilterNone,
 		[]int{
 			int(matchingStore.StoreID),
 			int(supersetStore.StoreID),
 			int(declinedStore.StoreID),
 		},
-		storeFilterNone,
 		/* expectedAliveStoreCount */ 6,
 		/* expectedThrottledStoreCount */ 1,
 	); err != nil {
 		t.Error(err)
 	}
 
+	// Filter out throttled stores but don't limit the set of store IDs.
 	if err := verifyStoreList(
 		sp,
 		constraints,
+		nil, /* storeIDs */
 		corruptedRangeID,
+		storeFilterThrottled,
 		[]int{
 			int(matchingStore.StoreID),
 			int(supersetStore.StoreID),
 		},
-		storeFilterThrottled,
 		/* expectedAliveStoreCount */ 6,
+		/* expectedThrottledStoreCount */ 1,
+	); err != nil {
+		t.Error(err)
+	}
+
+	limitToStoreIDs := roachpb.StoreIDSlice{
+		matchingStore.StoreID,
+		declinedStore.StoreID,
+		absentStore.StoreID,
+	}
+
+	// No filter but limited to limitToStoreIDs.
+	// Note that supersetStore is not included.
+	if err := verifyStoreList(
+		sp,
+		constraints,
+		limitToStoreIDs,
+		corruptedRangeID,
+		storeFilterNone,
+		[]int{
+			int(matchingStore.StoreID),
+			int(declinedStore.StoreID),
+		},
+		/* expectedAliveStoreCount */ 2,
+		/* expectedThrottledStoreCount */ 1,
+	); err != nil {
+		t.Error(err)
+	}
+
+	// Filter out throttled stores and limit to limitToStoreIDs.
+	// Note that supersetStore is not included.
+	if err := verifyStoreList(
+		sp,
+		constraints,
+		limitToStoreIDs,
+		corruptedRangeID,
+		storeFilterThrottled,
+		[]int{
+			int(matchingStore.StoreID),
+		},
+		/* expectedAliveStoreCount */ 2,
 		/* expectedThrottledStoreCount */ 1,
 	); err != nil {
 		t.Error(err)

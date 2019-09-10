@@ -650,11 +650,16 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 	var aliveStoreCount int
 	var throttledStoreCount int
 	var storeDescriptors []roachpb.StoreDescriptor
+	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
 
 	now := sp.clock.PhysicalTime()
 	for _, storeID := range storeIDs {
-		detail := sp.detailsMu.storeDetails[storeID]
-		switch s := detail.status(now, TimeUntilStoreDead.Get(&sp.st.SV), rangeID, sp.nodeLivenessFn); s {
+		detail, ok := sp.detailsMu.storeDetails[storeID]
+		if !ok {
+			// Do nothing; this store is not in the StorePool.
+			continue
+		}
+		switch s := detail.status(now, timeUntilStoreDead, rangeID, sp.nodeLivenessFn); s {
 		case storeStatusThrottled:
 			aliveStoreCount++
 			throttledStoreCount++
@@ -667,7 +672,7 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 			aliveStoreCount++
 			storeDescriptors = append(storeDescriptors, *detail.desc)
 		case storeStatusDead, storeStatusUnknown, storeStatusDecommissioning:
-			// Do nothing; this node cannot be used.
+			// Do nothing; this store cannot be used.
 		default:
 			panic(fmt.Sprintf("unknown store status: %d", s))
 		}
