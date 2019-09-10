@@ -2265,6 +2265,12 @@ SELECT width_bucket(now(), array['yesterday', 'today', 'tomorrow']::timestamptz[
 query error pq: width_bucket\(\): Operand and thresholds must be of the same type
 SELECT width_bucket(1, array['a', 'h', 'l', 'z']);
 
+# Regression for #40623
+query I
+SELECT width_bucket(1, array[]::int[]);
+----
+0
+
 # Sanity check pg_type_is_visible.
 query BBB
 SELECT pg_type_is_visible('int'::regtype), pg_type_is_visible(NULL), pg_type_is_visible(99999)
