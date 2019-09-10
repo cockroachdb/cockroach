@@ -22,9 +22,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TODO (rohany): change this once another endpoint is setup for getting licenses.
-// This URL grants a license that is valid for 1 hour.
-const licenseURL = "https://register.cockroachdb.com/api/prodtest"
+// This URL grants a license that is valid for 24 hours.
+const licenseURL = "https://register.cockroachdb.com/api/license"
 
 func getLicense(clusterID uuid.UUID) (string, error) {
 	client := &http.Client{
@@ -36,7 +35,8 @@ func getLicense(clusterID uuid.UUID) (string, error) {
 	}
 	// Send some extra information to the endpoint.
 	q := req.URL.Query()
-	q.Add("type", "demo")
+	// Let the endpoint know we are requesting a demo license.
+	q.Add("kind", "demo")
 	q.Add("version", build.VersionPrefix())
 	q.Add("clusterid", clusterID.String())
 	req.URL.RawQuery = q.Encode()
