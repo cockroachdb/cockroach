@@ -263,7 +263,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			tupleSource := newOpTestInput(uint16(tc.batchSize), tc.input)
+			tupleSource := newOpTestInput(uint16(tc.batchSize), tc.input, nil /* typs */)
 			a, err := NewOrderedAggregator(
 				tupleSource,
 				tc.colTypes,
