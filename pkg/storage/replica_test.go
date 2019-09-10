@@ -10551,14 +10551,14 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				clone := txn.Clone()
-				clone.Timestamp.Forward(now)
+				clone.Timestamp = clone.Timestamp.Add(0, 1)
 				pt := pushTxnArgs(pusher, clone, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
 				record := txnWithStatus(roachpb.ABORTED)(txn, pushTs)
-				record.Timestamp.Forward(pushTs)
-				record.LastHeartbeat.Forward(pushTs)
+				record.Timestamp = record.Timestamp.Add(0, 1)
+				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
 				record.Priority = pusher.Priority - 1
 				return record
 			},
@@ -10608,7 +10608,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
 				record := txnWithStatus(roachpb.ABORTED)(txn, pushTs)
 				record.Epoch = txn.Epoch + 1
-				record.Timestamp.Forward(pushTs)
+				record.Timestamp = record.Timestamp.Add(0, 1)
 				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
 				record.Priority = pusher.Priority - 1
 				return record
@@ -10642,7 +10642,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 		},
 		{
 			name: "heartbeat transaction with epoch bump after end transaction (abort)",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, false /* commit */)
 				return sendWrappedWithErr(etH, &et)
 			},
@@ -10652,7 +10652,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				// threshold against this timestamp instead of its minimum
 				// timestamp.
 				clone := txn.Clone()
-				clone.Restart(-1, 0, now.Add(0, 1))
+				clone.Restart(-1, 0, now)
 				hb, hbH := heartbeatArgs(clone, now)
 				return sendWrappedWithErr(hbH, &hb)
 			},
@@ -11115,7 +11115,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 		},
 		{
 			name: "begin transaction after push transaction (abort)",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
@@ -11128,7 +11128,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 		},
 		{
 			name: "heartbeat transaction after push transaction (abort)",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
@@ -11141,7 +11141,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 		},
 		{
 			name: "heartbeat transaction with epoch bump after push transaction (abort)",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
@@ -11151,7 +11151,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				// threshold against this timestamp instead of its minimum
 				// timestamp.
 				clone := txn.Clone()
-				clone.Restart(-1, 0, now.Add(0, 1))
+				clone.Restart(-1, 0, now)
 				hb, hbH := heartbeatArgs(clone, now)
 				return sendWrappedWithErr(hbH, &hb)
 			},
@@ -11160,7 +11160,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 		},
 		{
 			name: "end transaction (stage) after push transaction (abort)",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
@@ -11174,7 +11174,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 		},
 		{
 			name: "end transaction (abort) after push transaction (abort)",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
@@ -11188,7 +11188,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 		},
 		{
 			name: "end transaction (commit) after push transaction (abort)",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
@@ -11512,7 +11512,9 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			defer setTxnAutoGC(!c.disableTxnAutoGC)()
 
 			txn := newTransaction(c.name, roachpb.Key(c.name), 1, tc.Clock())
+			manual.Increment(99)
 			runTs := tc.Clock().Now()
+
 			if c.setup != nil {
 				if err := c.setup(txn, runTs); err != nil {
 					t.Fatalf("failed during test setup: %+v", err)
