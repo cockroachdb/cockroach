@@ -23,10 +23,17 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-// PhysicalTypeColElemToDatum converts an element in a colvec to a datum of semtype ct.
+// PhysicalTypeColElemToDatum converts an element in a colvec to a datum of
+// semtype ct. Note that this function handles nulls as well, so there is no
+// need for a separate null check.
 func PhysicalTypeColElemToDatum(
 	col coldata.Vec, rowIdx uint16, da sqlbase.DatumAlloc, ct types.T,
 ) tree.Datum {
+	if col.MaybeHasNulls() {
+		if col.Nulls().NullAt(rowIdx) {
+			return tree.DNull
+		}
+	}
 	switch ct.Family() {
 	case types.BoolFamily:
 		if col.Bool()[rowIdx] {

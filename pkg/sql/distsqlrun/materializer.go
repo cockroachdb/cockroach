@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -139,7 +138,7 @@ func (m *materializer) nextAdapter() {
 // next is the logic of Next() extracted in a separate method to be used by an
 // adapter to be able to wrap the latter with a catcher.
 func (m *materializer) next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	for m.State == StateRunning {
+	if m.State == StateRunning {
 		if m.batch == nil || m.curIdx >= m.batch.Length() {
 			// Get a fresh batch.
 			m.batch = m.input.Next(m.Ctx)
@@ -161,14 +160,6 @@ func (m *materializer) next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 		typs := m.OutputTypes()
 		for colIdx := 0; colIdx < len(typs); colIdx++ {
 			col := m.batch.ColVec(colIdx)
-			// TODO(asubiotto): we shouldn't have to do this check. Figure out who's
-			// not setting nulls.
-			if col.MaybeHasNulls() {
-				if col.Nulls().NullAt(rowIdx) {
-					m.row[colIdx].Datum = tree.DNull
-					continue
-				}
-			}
 			m.row[colIdx].Datum = exec.PhysicalTypeColElemToDatum(col, rowIdx, m.da, typs[colIdx])
 		}
 		return m.ProcessRowHelper(m.row), nil
