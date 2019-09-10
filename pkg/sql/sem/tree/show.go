@@ -471,3 +471,11 @@ func (node *ShowPartitions) Format(ctx *FmtCtx) {
 		ctx.Printf("SHOW PARTITIONS FROM TABLE %s", node.Object)
 	}
 }
+
+// ShowNodes represents a SHOW NODES statement.
+type ShowNodes struct{}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowNodes) Format(ctx *FmtCtx) {
+	ctx.Printf("SHOW NODES")
+}

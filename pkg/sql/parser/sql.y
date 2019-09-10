@@ -536,7 +536,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
 
-%token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
+%token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NODES NORMAL
 %token <str> NOT NOTHING NOTNULL NULL NULLIF NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
@@ -743,8 +743,9 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_grants_stmt
 %type <tree.Statement> show_histogram_stmt
 %type <tree.Statement> show_indexes_stmt
-%type <tree.Statement> show_partitions_stmt
 %type <tree.Statement> show_jobs_stmt
+%type <tree.Statement> show_nodes_stmt
+%type <tree.Statement> show_partitions_stmt
 %type <tree.Statement> show_queries_stmt
 %type <tree.Statement> show_ranges_stmt
 %type <tree.Statement> show_roles_stmt
@@ -3270,7 +3271,7 @@ zone_value:
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
 // SHOW CREATE, SHOW DATABASES, SHOW HISTOGRAM, SHOW INDEXES, SHOW
-// PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW ROLES, SHOW SCHEMAS,
+// JOBS, SHOW NODES, SHOW PARTITIONS, SHOW QUERIES, SHOW ROLES, SHOW SCHEMAS,
 // SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS, SHOW STATISTICS,
 // SHOW SYNTAX, SHOW TABLES, SHOW TRACE SHOW TRANSACTION, SHOW USERS
 show_stmt:
@@ -3284,8 +3285,9 @@ show_stmt:
 | show_grants_stmt          // EXTEND WITH HELP: SHOW GRANTS
 | show_histogram_stmt       // EXTEND WITH HELP: SHOW HISTOGRAM
 | show_indexes_stmt         // EXTEND WITH HELP: SHOW INDEXES
-| show_partitions_stmt      // EXTEND WITH HELP: SHOW PARTITIONS
 | show_jobs_stmt            // EXTEND WITH HELP: SHOW JOBS
+| show_nodes_stmt           // EXTEND WITH HELP: SHOW NODES
+| show_partitions_stmt      // EXTEND WITH HELP: SHOW PARTITIONS
 | show_queries_stmt         // EXTEND WITH HELP: SHOW QUERIES
 | show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
 | show_roles_stmt           // EXTEND WITH HELP: SHOW ROLES
@@ -3606,6 +3608,16 @@ show_jobs_stmt:
     }
   }
 | SHOW JOB error // SHOW HELP: SHOW JOBS
+
+// %Help: SHOW NODES - list visible nodes and node properties
+// %Category: Misc
+// %Text:
+// SHOW NODES
+show_nodes_stmt:
+  SHOW NODES
+  {
+    $$.val = &tree.ShowNodes{}
+  }
 
 // %Help: SHOW TRACE - display an execution trace
 // %Category: Misc
@@ -9288,6 +9300,7 @@ unreserved_keyword:
 | NAME
 | NEXT
 | NO
+| NODES
 | NORMAL
 | NO_INDEX_JOIN
 | IGNORE_FOREIGN_KEYS

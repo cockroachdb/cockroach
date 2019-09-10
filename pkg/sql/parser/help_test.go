@@ -279,6 +279,8 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW INDEXES FROM ??`, `SHOW INDEXES`},
 		{`SHOW INDEXES FROM blah ??`, `SHOW INDEXES`},
 
+		{`SHOW NODES ??`, `SHOW NODES`},
+
 		{`SHOW PARTITIONS FROM ??`, `SHOW PARTITIONS`},
 
 		{`SHOW ROLES ??`, `SHOW ROLES`},

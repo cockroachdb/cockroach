@@ -145,6 +145,7 @@ func runStatusNodeInner(showDecommissioned bool, args []string) ([]string, [][]s
 		return query
 	}
 
+	// Note: Keep this query consistent with the one used in SHOW NODES (sql/delegate/show_nodes.go).
 	baseQuery := maybeAddActiveNodesFilter(
 		`SELECT node_id AS id,
             address,
