@@ -77,14 +77,21 @@ func (c *Conn) Ping() error {
 }
 
 // Exec executes s.
-func (c *Conn) Exec(s string) error {
-	_, err := c.PGX.Exec(s)
+func (c *Conn) Exec(ctx context.Context, s string) error {
+	_, err := c.PGX.ExecEx(ctx, s, simpleProtocol)
 	return errors.Wrap(err, "exec")
 }
 
-// Values executes s and returns the results.
-func (c *Conn) Values(ctx context.Context, s string) ([][]interface{}, error) {
-	rows, err := c.PGX.QueryEx(ctx, s, nil)
+// Values executes prep and exec and returns the results of exec.
+func (c *Conn) Values(ctx context.Context, prep, exec string) ([][]interface{}, error) {
+	if prep != "" {
+		rows, err := c.PGX.QueryEx(ctx, prep, simpleProtocol)
+		if err != nil {
+			return nil, err
+		}
+		rows.Close()
+	}
+	rows, err := c.PGX.QueryEx(ctx, exec, simpleProtocol)
 	if err != nil {
 		return nil, err
 	}
@@ -99,3 +106,5 @@ func (c *Conn) Values(ctx context.Context, s string) ([][]interface{}, error) {
 	}
 	return vals, rows.Err()
 }
+
+var simpleProtocol = &pgx.QueryExOptions{SimpleProtocol: true}
