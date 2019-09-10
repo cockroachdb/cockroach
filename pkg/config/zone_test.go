@@ -752,6 +752,9 @@ func TestConstraintsListYAML(t *testing.T) {
 		{input: "{+a: 1, '+a=1,+b,+c=d': b}", expectErr: true},
 		{input: "[+a: 1]", expectErr: true},
 		{input: "[+a: 1, '+a=1,+b,+c=d': 2]", expectErr: true},
+		{input: "{\"+a=1,+b=2\": 1}"},    // this will work in SQL: constraints='{"+a=1,+b=2": 1}'
+		{input: "{\"+a=1,+b=2,+c\": 1}"}, // won't work in SQL: constraints='{"+a=1,+b=2,+c": 1}'
+		{input: "{'+a=1,+b=2,+c': 1}"},   // this will work in SQL: constraints=e'{\'+a=1,+b=2,+c\': 1}'
 	}
 
 	for _, tc := range testCases {

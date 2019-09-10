@@ -35,7 +35,7 @@ var errNoZoneConfigApplies = errors.New("no zone config applies")
 
 // getZoneConfig recursively looks up entries in system.zones until an
 // entry that applies to the object with the specified id is
-// found. Returns the ID of the matching ID, its zone config, and an
+// found. Returns the ID of the matching zone, its zone config, and an
 // optional placeholder ID and config if the looked-for ID was a table
 // with a zone config specifying only indexes and/or partitions.
 //

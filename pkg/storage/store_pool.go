@@ -374,6 +374,21 @@ func newStoreDetail() *storeDetail {
 	return &storeDetail{}
 }
 
+// GetStores returns information on all the stores with descriptor in the pool.
+// Stores without descriptor (a node that didn't come up yet after a cluster
+// restart) will not be part of the returned set.
+func (sp *StorePool) GetStores() map[roachpb.StoreID]roachpb.StoreDescriptor {
+	sp.detailsMu.RLock()
+	defer sp.detailsMu.RUnlock()
+	stores := make(map[roachpb.StoreID]roachpb.StoreDescriptor, len(sp.detailsMu.storeDetails))
+	for _, s := range sp.detailsMu.storeDetails {
+		if s.desc != nil {
+			stores[s.desc.StoreID] = *s.desc
+		}
+	}
+	return stores
+}
+
 // getStoreDetailLocked returns the store detail for the given storeID.
 // The lock must be held *in write mode* even though this looks like a
 // read-only method.

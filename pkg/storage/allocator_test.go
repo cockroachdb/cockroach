@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/constraint"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -2557,7 +2558,7 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 			}
 		}
 		zone := &config.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: tc.constraints}
-		analyzed := analyzeConstraints(
+		analyzed := constraint.AnalyzeConstraints(
 			context.Background(), a.storePool.getStoreDescriptor, existingRepls, zone)
 		candidates := allocateCandidates(
 			sl,
@@ -2780,7 +2781,7 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 			}
 		}
 		zone := &config.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: tc.constraints}
-		analyzed := analyzeConstraints(
+		analyzed := constraint.AnalyzeConstraints(
 			context.Background(), a.storePool.getStoreDescriptor, existingRepls, zone)
 		candidates := removeCandidates(
 			sl,
@@ -3574,7 +3575,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			Constraints: tc.constraints,
 			NumReplicas: proto.Int32(tc.zoneNumReplicas),
 		}
-		analyzed := analyzeConstraints(
+		analyzed := constraint.AnalyzeConstraints(
 			context.Background(), a.storePool.getStoreDescriptor, existingRepls, zone)
 		results := rebalanceCandidates(
 			context.Background(),
