@@ -2097,6 +2097,18 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 	return nil
 }
 
+// FindIndexesWithPartition returns all IndexDescriptors (potentially including
+// the primary index) which have a partition with the given name.
+func (desc *TableDescriptor) FindIndexesWithPartition(name string) []*IndexDescriptor {
+	var indexes []*IndexDescriptor
+	for _, idx := range desc.AllNonDropIndexes() {
+		if idx.FindPartitionByName(name) != nil {
+			indexes = append(indexes, idx)
+		}
+	}
+	return indexes
+}
+
 // validatePartitioning validates that any PartitioningDescriptors contained in
 // table indexes are well-formed. See validatePartitioningDesc for details.
 func (desc *TableDescriptor) validatePartitioning() error {

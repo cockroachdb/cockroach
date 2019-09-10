@@ -243,6 +243,25 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		return err
 	}
 
+	if n.zoneSpecifier.TargetsPartition() && len(n.zoneSpecifier.TableOrIndex.Index) == 0 && !n.allIndexes {
+		// Backward compatibility for ALTER PARTITION ... OF TABLE. Determine which
+		// index has the specified partition.
+		partitionName := string(n.zoneSpecifier.Partition)
+		indexes := table.FindIndexesWithPartition(partitionName)
+		switch len(indexes) {
+		case 0:
+			return fmt.Errorf("partition %q does not exist on table %q", partitionName, table.Name)
+		case 1:
+			n.zoneSpecifier.TableOrIndex.Index = tree.UnrestrictedName(indexes[0].Name)
+		default:
+			err := fmt.Errorf(
+				"partition %q exists on multiple indexes of table %q", partitionName, table.Name)
+			err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+			err = errors.WithHint(err, "try ALTER PARTITION ... OF INDEX ...")
+			return err
+		}
+	}
+
 	// If this is an ALTER ALL PARTITIONS statement, we need to find all indexes
 	// with the specified partition name and apply the zone configuration to all
 	// of them.
