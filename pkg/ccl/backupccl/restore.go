@@ -114,7 +114,11 @@ func getBackupLocalityInfo(
 	// upgrade them.
 	mainBackupDesc, err := readBackupDescriptor(ctx, stores[0], BackupDescriptorName)
 	if err != nil {
-		return info, err
+		manifest, manifestErr := readBackupDescriptor(ctx, stores[0], BackupManifestName)
+		if manifestErr != nil {
+			return info, err
+		}
+		mainBackupDesc = manifest
 	}
 
 	// Now get the list of expected partial per-store backup manifest filenames
