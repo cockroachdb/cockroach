@@ -61,7 +61,7 @@ environment variable "COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING".
 	}),
 }
 
-const demoOrg = "Cockroach Labs - Production Testing"
+const demoOrg = "Cockroach Demo"
 
 const defaultGeneratorName = "movr"
 
