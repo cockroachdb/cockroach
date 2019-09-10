@@ -63,12 +63,8 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 
 		for j := range b.argumentCols {
 			col := batch.ColVec(b.argumentCols[j])
-			if col.MaybeHasNulls() && col.Nulls().NullAt(rowIdx) {
-				hasNulls = true
-				b.row[j] = tree.DNull
-			} else {
-				b.row[j] = PhysicalTypeColElemToDatum(col, rowIdx, b.da, b.columnTypes[b.argumentCols[j]])
-			}
+			b.row[j] = PhysicalTypeColElemToDatum(col, rowIdx, b.da, b.columnTypes[b.argumentCols[j]])
+			hasNulls = hasNulls || b.row[j] == tree.DNull
 		}
 
 		var (
