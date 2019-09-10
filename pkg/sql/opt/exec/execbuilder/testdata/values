@@ -4,6 +4,8 @@
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 a
 ----
+·       distributed    false            ·    ·
+·       vectorized     false            ·    ·
 values  ·              ·                (a)  ·
 ·       size           1 column, 1 row  ·    ·
 ·       row 0, expr 0  1                ·    ·
@@ -11,6 +13,8 @@ values  ·              ·                (a)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 + 2 a
 ----
+·       distributed    false            ·    ·
+·       vectorized     false            ·    ·
 values  ·              ·                (a)  ·
 ·       size           1 column, 1 row  ·    ·
 ·       row 0, expr 0  3                ·    ·
@@ -18,6 +22,8 @@ values  ·              ·                (a)  ·
 query TTTTT
 EXPLAIN (VERBOSE) VALUES (1, 2, 3), (4, 5, 6)
 ----
+·       distributed    false              ·                            ·
+·       vectorized     false              ·                            ·
 values  ·              ·                  (column1, column2, column3)  ·
 ·       size           3 columns, 2 rows  ·                            ·
 ·       row 0, expr 0  1                  ·                            ·
@@ -30,6 +36,8 @@ values  ·              ·                  (column1, column2, column3)  ·
 query TTTTT
 EXPLAIN (VERBOSE) VALUES (length('a')), (1 + length('a')), (length('abc')), (length('ab') * 2)
 ----
+·       distributed    false             ·          ·
+·       vectorized     false             ·          ·
 values  ·              ·                 (column1)  ·
 ·       size           1 column, 4 rows  ·          ·
 ·       row 0, expr 0  1                 ·          ·
@@ -40,6 +48,8 @@ values  ·              ·                 (column1)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a + b AS r FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 ----
+·            distributed    false              ·                   ·
+·            vectorized     false              ·                   ·
 render       ·              ·                  (r)                 ·
  │           render 0       column1 + column2  ·                   ·
  └── values  ·              ·                  (column1, column2)  ·

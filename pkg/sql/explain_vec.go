@@ -49,64 +49,23 @@ type flowWithNode struct {
 }
 
 func (n *explainVecNode) startExec(params runParams) error {
-	// Trigger limit propagation.
-	params.p.prepareForDistSQLSupportCheck()
 	n.run.values = make(tree.Datums, 1)
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-
-	var recommendation distRecommendation
-	if _, ok := n.plan.(distSQLExplainable); ok {
-		recommendation = shouldDistribute
-	} else {
-		recommendation, _ = distSQLPlanner.checkSupportForNode(n.plan)
-	}
-
-	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
-	planCtx.isLocal = !shouldDistributeGivenRecAndMode(recommendation, params.SessionData().DistSQLMode)
-	planCtx.ignoreClose = true
-	planCtx.planner = params.p
-	planCtx.stmtType = n.stmtType
-	outerSubqueries := planCtx.planner.curPlan.subqueryPlans
+	willDistributePlan, _ := willDistributePlan(distSQLPlanner, n.plan, params)
+	outerSubqueries := params.p.curPlan.subqueryPlans
+	planCtx := makeExplainVecPlanningCtx(distSQLPlanner, params, n.stmtType, n.subqueryPlans, willDistributePlan)
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
-	planCtx.planner.curPlan.subqueryPlans = n.subqueryPlans
-	for i := range planCtx.planner.curPlan.subqueryPlans {
-		p := &planCtx.planner.curPlan.subqueryPlans[i]
-		// Fake subquery results - they're not important for our explain output.
-		p.started = true
-		p.result = tree.DNull
-	}
-
-	var plan PhysicalPlan
-	var err error
-	if planNode, ok := n.plan.(distSQLExplainable); ok {
-		plan, err = planNode.makePlanForExplainDistSQL(planCtx, distSQLPlanner)
-	} else {
-		plan, err = distSQLPlanner.createPlanForNode(planCtx, n.plan)
-	}
+	plan, err := makePhysicalPlan(planCtx, distSQLPlanner, n.plan)
 	if err != nil {
 		return err
 	}
 
 	distSQLPlanner.FinalizePlan(planCtx, &plan)
-
 	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
+	flowCtx := makeFlowCtx(planCtx, plan, params)
 
-	var localState distsqlrun.LocalState
-	localState.EvalContext = planCtx.EvalContext()
-	if planCtx.isLocal {
-		localState.IsLocal = true
-		localState.LocalProcs = plan.LocalProcessors
-	}
-	flowCtx := &distsqlrun.FlowCtx{
-		NodeID:  planCtx.EvalContext().NodeID,
-		EvalCtx: planCtx.EvalContext(),
-		Cfg: &distsqlrun.ServerConfig{
-			Settings:    params.p.execCfg.Settings,
-			DiskMonitor: &mon.BytesMonitor{},
-		},
-	}
 	// Temporarily set vectorize to on so that we can get the whole plan back even
 	// if we wouldn't support it due to lack of streaming.
 	origMode := flowCtx.EvalCtx.SessionData.VectorizeMode
@@ -134,6 +93,46 @@ func (n *explainVecNode) startExec(params runParams) error {
 	}
 	n.run.lines = tp.FormattedRows()
 	return nil
+}
+
+func makeFlowCtx(planCtx *PlanningCtx, plan PhysicalPlan, params runParams) *distsqlrun.FlowCtx {
+	var localState distsqlrun.LocalState
+	localState.EvalContext = planCtx.EvalContext()
+	if planCtx.isLocal {
+		localState.IsLocal = true
+		localState.LocalProcs = plan.LocalProcessors
+	}
+	flowCtx := &distsqlrun.FlowCtx{
+		NodeID:  planCtx.EvalContext().NodeID,
+		EvalCtx: planCtx.EvalContext(),
+		Cfg: &distsqlrun.ServerConfig{
+			Settings:    params.p.execCfg.Settings,
+			DiskMonitor: &mon.BytesMonitor{},
+		},
+	}
+	return flowCtx
+}
+
+func makeExplainVecPlanningCtx(
+	distSQLPlanner *DistSQLPlanner,
+	params runParams,
+	stmtType tree.StatementType,
+	subqueryPlans []subquery,
+	willDistributePlan bool,
+) *PlanningCtx {
+	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
+	planCtx.isLocal = !willDistributePlan
+	planCtx.ignoreClose = true
+	planCtx.planner = params.p
+	planCtx.stmtType = stmtType
+	planCtx.planner.curPlan.subqueryPlans = subqueryPlans
+	for i := range planCtx.planner.curPlan.subqueryPlans {
+		p := &planCtx.planner.curPlan.subqueryPlans[i]
+		// Fake subquery results - they're not important for our explain output.
+		p.started = true
+		p.result = tree.DNull
+	}
+	return planCtx
 }
 
 func shouldOutput(operator exec.OpNode, verbose bool) bool {

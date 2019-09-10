@@ -33,10 +33,12 @@ NULL       /2       {1}       1
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY
 ----
-ordinality  ·      ·            (x, y, z, "ordinality")  ·
- └── scan   ·      ·            (x, y, z)                ·
-·           table  xyz@primary  ·                        ·
-·           spans  ALL          ·                        ·
+·           distributed  false        ·                        ·
+·           vectorized   true         ·                        ·
+ordinality  ·            ·            (x, y, z, "ordinality")  ·
+ └── scan   ·            ·            (x, y, z)                ·
+·           table        xyz@primary  ·                        ·
+·           spans        ALL          ·                        ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY]

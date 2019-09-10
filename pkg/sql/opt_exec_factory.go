@@ -1191,6 +1191,7 @@ func (ef *execFactory) ConstructExplain(
 			p.plan,
 			p.subqueryPlans,
 			p.postqueryPlans,
+			stmtType,
 		)
 
 	default:
