@@ -10,6 +10,8 @@ package changefeedccl
 
 import (
 	"context"
+	"encoding/hex"
+	"math/rand"
 	"net/url"
 	"sort"
 	"time"
@@ -78,6 +80,8 @@ const (
 	sinkParamSASLHandshake    = `sasl_handshake`
 	sinkParamSASLUser         = `sasl_user`
 	sinkParamSASLPassword     = `sasl_password`
+
+	uuidSizeBytes = 8
 )
 
 var changefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
@@ -210,11 +214,13 @@ func changefeedPlanHook(
 			}
 		}
 
+		sessionID := generateChangefeedSessionID(uuidSizeBytes)
 		details := jobspb.ChangefeedDetails{
 			Targets:       targets,
 			Opts:          opts,
 			SinkURI:       sinkURI,
 			StatementTime: statementTime,
+			SessionID:     sessionID,
 		}
 		progress := jobspb.Progress{
 			Progress: &jobspb.Progress_HighWater{HighWater: &initialHighWater},
@@ -291,7 +297,7 @@ func changefeedPlanHook(
 		// which will be immediately closed, only to check for errors.
 		{
 			nodeID := p.ExtendedEvalContext().NodeID
-			canarySink, err := getSink(details.SinkURI, nodeID, details.Opts, details.Targets, settings)
+			canarySink, err := getSink(details.SinkURI, nodeID, sessionID, details.Opts, details.Targets, settings, makeSpanFrontier(), initialHighWater)
 			if err != nil {
 				return MaybeStripRetryableErrorMarker(err)
 			}
@@ -452,6 +458,14 @@ type changefeedResumer struct {
 	job *jobs.Job
 }
 
+func generateChangefeedSessionID(size int) string {
+	p := make([]byte, size)
+	buf := make([]byte, hex.EncodedLen(size))
+	rand.Read(p)
+	hex.Encode(buf, p)
+	return string(buf)
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (b *changefeedResumer) Resume(
 	ctx context.Context, planHookState interface{}, startedCh chan<- tree.Datums,
@@ -461,6 +475,9 @@ func (b *changefeedResumer) Resume(
 	jobID := *b.job.ID()
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	progress := b.job.Progress()
+
+	// Update the job's session ID.
+	details.SessionID = generateChangefeedSessionID(uuidSizeBytes)
 
 	// TODO(dan): This is a workaround for not being able to set an initial
 	// progress high-water when creating a job (currently only the progress

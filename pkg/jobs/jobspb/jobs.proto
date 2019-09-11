@@ -203,6 +203,9 @@ message ChangefeedDetails {
   string sink_uri = 3 [(gogoproto.customname) = "SinkURI"];
   map<string, string> opts = 4;
   util.hlc.Timestamp statement_time = 7 [(gogoproto.nullable) = false];
+  // This is a UUID used to disambiguate and prevent overwriting of the
+  // cloudStorageSink output files by different sessions of the same changefeed job.
+  string session_id = 8 [(gogoproto.customname) = "SessionID"];
 
   reserved 1, 2, 5;
 }

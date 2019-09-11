@@ -154,7 +154,7 @@ func kvsToRows(
 func emitEntries(
 	settings *cluster.Settings,
 	details jobspb.ChangefeedDetails,
-	watchedSpans []roachpb.Span,
+	sf *spanFrontier,
 	encoder Encoder,
 	sink Sink,
 	inputFn func(context.Context) ([]emitEntry, error),
@@ -191,12 +191,8 @@ func emitEntries(
 		return nil
 	}
 
-	// This SpanFrontier only tracks the spans being watched on this node.
-	// (There is a different SpanFrontier elsewhere for the entire changefeed.)
-	watchedSF := makeSpanFrontier(watchedSpans...)
-
 	var lastFlush time.Time
-	// TODO(dan): We could keep these in `watchedSF` to eliminate dups.
+	// TODO(dan): We could keep these in `sf` to eliminate dups.
 	var resolvedSpans []jobspb.ResolvedSpan
 
 	return func(ctx context.Context) ([]jobspb.ResolvedSpan, error) {
@@ -222,7 +218,7 @@ func emitEntries(
 				}
 			}
 			if input.resolved != nil {
-				_ = watchedSF.Forward(input.resolved.Span, input.resolved.Timestamp)
+				_ = sf.Forward(input.resolved.Span, input.resolved.Timestamp)
 				resolvedSpans = append(resolvedSpans, *input.resolved)
 			}
 		}
