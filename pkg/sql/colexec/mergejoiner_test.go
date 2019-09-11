@@ -22,10 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-type mjTestInitializer interface {
-	initWithBatchSize(outBatchSize uint16)
-}
-
 // TODO(yuzefovich): add unit tests for cases with ON expression.
 
 type mjTestCase struct {
@@ -1528,8 +1524,8 @@ func TestMergeJoiner(t *testing.T) {
 		// We use a custom verifier function so that we can get the merge join op
 		// to use a custom output batch size per test, to exercise more cases.
 		var mergeJoinVerifier verifier = func(output *opTestOutput) error {
-			if mj, ok := output.input.(mjTestInitializer); ok {
-				mj.initWithBatchSize(tc.outputBatchSize)
+			if mj, ok := output.input.(variableOutputBatchSizeInitializer); ok {
+				mj.initWithOutputBatchSize(tc.outputBatchSize)
 			} else {
 				t.Fatalf("unexpectedly merge joiner doesn't implement mjTestInitializer")
 			}
@@ -1597,7 +1593,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 						t.Fatal("error in merge join op constructor", err)
 					}
 
-					a.(*mergeJoinInnerOp).initWithBatchSize(outBatchSize)
+					a.(*mergeJoinInnerOp).initWithOutputBatchSize(outBatchSize)
 
 					i := 0
 					count := 0
@@ -1729,7 +1725,7 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 							t.Fatal("error in merge join op constructor", err)
 						}
 
-						a.(*mergeJoinInnerOp).initWithBatchSize(outBatchSize)
+						a.(*mergeJoinInnerOp).initWithOutputBatchSize(outBatchSize)
 
 						count := 0
 						for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
