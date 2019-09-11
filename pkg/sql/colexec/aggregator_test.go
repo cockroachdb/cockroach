@@ -279,7 +279,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 			out := newOpTestOutput(a, []int{0}, tc.expected)
 			// Explicitly reinitialize the aggregator with the given output batch
 			// size.
-			a.(*orderedAggregator).initWithBatchSize(tc.batchSize, tc.outputBatchSize)
+			a.(*orderedAggregator).initWithInputAndOutputBatchSize(tc.batchSize, tc.outputBatchSize)
 			if err := out.VerifyAnyOrder(); err != nil {
 				t.Fatal(err)
 			}
