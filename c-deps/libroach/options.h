@@ -15,13 +15,11 @@
 
 namespace cockroach {
 
-static const int kDefaultVerbosityForInfoLogging = 3;
-
-// Make a new rocksdb::Logger that calls back into Go with a translation of
-// RocksDB's log level into a corresponding Go log level.
-// The message is logged if severity is higher than info, or if severity is
-// info and glog verbosity is at least `info_verbosity`.
-rocksdb::Logger* NewDBLogger(int info_verbosity);
+// Make a new rocksdb::Logger that calls back into Go with a
+// translation of RocksDB's log level into a corresponding Go log
+// level. If info_logger is not NULL, then info logs are output
+// there. Otherwise they are dispatched to the Go logger.
+rocksdb::Logger* NewDBLogger(rocksdb::Logger* info_logger);
 
 // DBMakeOptions constructs a rocksdb::Options given a DBOptions.
 rocksdb::Options DBMakeOptions(DBOptions db_opts);

@@ -148,7 +148,7 @@ rocksdb::Status DBOpenHookCCL(std::shared_ptr<rocksdb::Logger> info_log, const s
 
   // We use a logger at V(0) for encryption status instead of the existing info_log.
   // This should only be used to occasional logging (eg: key loading and rotation).
-  std::shared_ptr<rocksdb::Logger> logger(NewDBLogger(0));
+  std::shared_ptr<rocksdb::Logger> logger(NewDBLogger(nullptr));
 
   // We have encryption options. Check whether the AES instruction set is supported.
   if (!UsesAESNI()) {

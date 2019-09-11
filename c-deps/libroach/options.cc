@@ -13,6 +13,7 @@
 #include <rocksdb/filter_policy.h>
 #include <rocksdb/slice_transform.h>
 #include <rocksdb/table.h>
+#include "db.h"
 #include "cache.h"
 #include "comparator.h"
 #include "encoding.h"
@@ -44,7 +45,7 @@ class DBPrefixExtractor : public rocksdb::SliceTransform {
 // The DBLogger is a rocksdb::Logger that calls back into Go code for formatted logging.
 class DBLogger : public rocksdb::Logger {
  public:
-  DBLogger(int info_verbosity) : info_verbosity_(info_verbosity) {}
+  DBLogger(rocksdb::Logger* info_logger) : info_logger_(info_logger) {}
 
   virtual void Logv(const rocksdb::InfoLogLevel log_level, const char* format,
                     va_list ap) override {
@@ -55,6 +56,10 @@ class DBLogger : public rocksdb::Logger {
         go_log_level = util::log::Severity::INFO;
         break;
       case rocksdb::INFO_LEVEL:
+        if (info_logger_ != nullptr) {
+          info_logger_->Logv(log_level, format, ap);
+          return;
+        }
         go_log_level = util::log::Severity::INFO;
         break;
       case rocksdb::WARN_LEVEL:
@@ -74,7 +79,9 @@ class DBLogger : public rocksdb::Logger {
         assert(false);
         return;
     }
-    if (!rocksDBV(go_log_level, info_verbosity_)) {
+
+    static const int kDefaultVerbosityForInfoLogging = 3;
+    if (!rocksDBV(go_log_level, kDefaultVerbosityForInfoLogging)) {
       return;
     }
 
@@ -132,12 +139,14 @@ class DBLogger : public rocksdb::Logger {
   }
 
  private:
-  const int info_verbosity_;
+  rocksdb::Logger* const info_logger_;
 };
 
 }  // namespace
 
-rocksdb::Logger* NewDBLogger(int info_verbosity) { return new DBLogger(info_verbosity); }
+rocksdb::Logger* NewDBLogger(rocksdb::Logger* info_logger) {
+  return new DBLogger(info_logger);
+}
 
 rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // Use the rocksdb options builder to configure the base options
@@ -153,7 +162,7 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.max_subcompactions = 1;
   options.comparator = &kComparator;
   options.create_if_missing = !db_opts.must_exist;
-  options.info_log.reset(NewDBLogger(kDefaultVerbosityForInfoLogging));
+  options.info_log.reset(NewDBLogger(nullptr));
   options.merge_operator.reset(NewMergeOperator());
   options.prefix_extractor.reset(new DBPrefixExtractor);
   options.statistics = rocksdb::CreateDBStatistics();
@@ -344,6 +353,9 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // used to speed up Get operations which we don't use.
   table_options.whole_key_filtering = false;
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
+
+  options.max_log_file_size = 10 << 20; // 10 MB
+  options.keep_log_file_num = 10;       // 100 MB of total logs
   return options;
 }
 
