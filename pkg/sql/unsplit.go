@@ -17,10 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,63 +29,6 @@ type unsplitNode struct {
 	index     *sqlbase.IndexDescriptor
 	run       unsplitRun
 	rows      planNode
-}
-
-// Unsplit executes a KV unsplit.
-// Privileges: INSERT on table.
-func (p *planner) Unsplit(ctx context.Context, n *tree.Unsplit) (planNode, error) {
-	tableDesc, index, err := p.getTableAndIndex(ctx, &n.TableOrIndex, privilege.INSERT)
-	if err != nil {
-		return nil, err
-	}
-	if n.All {
-		return &unsplitAllNode{
-			tableDesc: tableDesc.TableDesc(),
-			index:     index,
-		}, nil
-	}
-	ret := &unsplitNode{
-		tableDesc: tableDesc.TableDesc(),
-		index:     index,
-	}
-	// Calculate the desired types for the select statement. It is OK if the
-	// select statement returns fewer columns (the relevant prefix is used).
-	desiredTypes := make([]*types.T, len(index.ColumnIDs))
-	columns := make(sqlbase.ResultColumns, len(index.ColumnIDs))
-	for i, colID := range index.ColumnIDs {
-		c, err := tableDesc.FindColumnByID(colID)
-		if err != nil {
-			return nil, err
-		}
-		desiredTypes[i] = &c.Type
-		columns[i].Typ = &c.Type
-		columns[i].Name = c.Name
-	}
-
-	// Create the plan for the unsplit rows source.
-	rows, err := p.newPlan(ctx, n.Rows, desiredTypes)
-	if err != nil {
-		return nil, err
-	}
-
-	cols := planColumns(rows)
-	if len(cols) == 0 {
-		return nil, errors.Errorf("no columns in UNSPLIT AT data")
-	}
-	if len(cols) > len(index.ColumnIDs) {
-		return nil, errors.Errorf("too many columns in UNSPLIT AT data")
-	}
-	for i := range cols {
-		if !cols[i].Typ.Equivalent(desiredTypes[i]) {
-			return nil, errors.Errorf(
-				"UNSPLIT AT data column %d (%s) must be of type %s, not type %s",
-				i+1, index.ColumnNames[i], desiredTypes[i], cols[i].Typ,
-			)
-		}
-	}
-	ret.rows = rows
-
-	return ret, nil
 }
 
 // unsplitRun contains the run-time state of unsplitNode during local execution.

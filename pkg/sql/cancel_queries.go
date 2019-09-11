@@ -18,34 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
 type cancelQueriesNode struct {
 	rows     planNode
 	ifExists bool
-}
-
-func (p *planner) CancelQueries(ctx context.Context, n *tree.CancelQueries) (planNode, error) {
-	rows, err := p.newPlan(ctx, n.Queries, []*types.T{types.String})
-	if err != nil {
-		return nil, err
-	}
-	cols := planColumns(rows)
-	if len(cols) != 1 {
-		return nil, pgerror.Newf(pgcode.Syntax,
-			"CANCEL QUERIES expects a single column source, got %d columns", len(cols))
-	}
-	if !cols[0].Typ.Equivalent(types.String) {
-		return nil, pgerror.Newf(pgcode.DatatypeMismatch,
-			"CANCEL QUERIES requires string values, not type %s", cols[0].Typ)
-	}
-
-	return &cancelQueriesNode{
-		rows:     rows,
-		ifExists: n.IfExists,
-	}, nil
 }
 
 func (n *cancelQueriesNode) startExec(runParams) error {

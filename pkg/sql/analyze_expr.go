@@ -35,19 +35,10 @@ func (p *planner) analyzeExpr(
 	requireType bool,
 	typingContext string,
 ) (tree.TypedExpr, error) {
-	// Replace the sub-queries.
-	// In all contexts that analyze a single expression, a single value
-	// is expected. Tell this to replaceSubqueries.  (See UPDATE for a
-	// counter-example; cases where a subquery is an operand of a
-	// comparison are handled specially in the subqueryVisitor already.)
-	err := p.analyzeSubqueries(ctx, raw, 1 /* one value expected */)
-	if err != nil {
-		return nil, err
-	}
-
 	// Perform optional name resolution.
 	resolved := raw
 	if sources != nil {
+		var err error
 		var hasStar bool
 		resolved, _, hasStar, err = p.resolveNames(raw, sources, iVarHelper)
 		if err != nil {
@@ -58,6 +49,7 @@ func (p *planner) analyzeExpr(
 
 	// Type check.
 	var typedExpr tree.TypedExpr
+	var err error
 	p.semaCtx.IVarContainer = iVarHelper.Container()
 	if requireType {
 		typedExpr, err = tree.TypeCheckAndRequire(resolved, &p.semaCtx,
