@@ -439,7 +439,7 @@ func (c *TableFeed) Close() error {
 	return c.db.Close()
 }
 
-var cloudFeedFileRE = regexp.MustCompile(`^\d{33}-(.+?)-(\d+)-`)
+var cloudFeedFileRE = regexp.MustCompile(`^\d{33}_(.+?)_(\d+)_`)
 
 type cloudFeedFactory struct {
 	s       serverutils.TestServerInterface
@@ -573,7 +573,6 @@ func (c *cloudFeed) Next() (*TestFeedMessage, error) {
 				Value:    e.value,
 				Resolved: e.payload,
 			}
-
 			// The other TestFeed impls check both key and value here, but cloudFeeds
 			// don't have keys.
 			if len(m.Value) > 0 {
