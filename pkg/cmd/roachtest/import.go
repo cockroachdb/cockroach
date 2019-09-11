@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -136,6 +137,11 @@ func registerImportTPCH(r *testRegistry) {
 				`); err != nil {
 					t.Fatal(err)
 				}
+				if _, err := conn.Exec(
+					`SET CLUSTER SETTING kv.bulk_ingest.max_index_buffer_size = '2gb'`,
+				); err != nil && !strings.Contains(err.Error(), "unknown cluster setting") {
+					t.Fatal(err)
+				}
 				// Wait for all nodes to be ready.
 				if err := retry.ForDuration(time.Second*30, func() error {
 					var nodes int
@@ -173,7 +179,6 @@ func registerImportTPCH(r *testRegistry) {
 					t.WorkerStatus(`running import`)
 					defer t.WorkerStatus()
 					_, err := conn.Exec(`
-					SET CLUSTER SETTING kv.bulk_ingest.max_index_buffer_size = '2gb';
 				IMPORT TABLE csv.lineitem
 				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/lineitem.sql'
 				CSV DATA (
