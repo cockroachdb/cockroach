@@ -132,6 +132,7 @@ DBIterState DBIterGetState(DBIterator* iter) {
 
   return state;
 }
+
 }  // namespace
 
 namespace cockroach {
@@ -170,6 +171,16 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   }
 
   const std::string db_dir = ToString(dir);
+
+  if (!db_dir.empty()) {
+    // Reset the RocksDB logger so that INFO logs go to a file, while
+    // other logging levels are directed to the Go logger.
+    options.info_log.reset();
+    auto status = rocksdb::CreateLoggerFromOptions(db_dir, options, &options.info_log);
+    if (!status.ok()) {
+      return ToDBStatus(status);
+    }
+  }
 
   // Make the default options.env the default. It points to Env::Default which does not
   // need to be deleted.
@@ -242,7 +253,6 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   options.env = env_mgr->db_env;
 
   rocksdb::DB* db_ptr;
-
   rocksdb::Status status;
   if (db_opts.read_only) {
     status = rocksdb::DB::OpenForReadOnly(options, db_dir, &db_ptr);
