@@ -3683,11 +3683,6 @@ func (desc *ImmutableTableDescriptor) DeletableIndexes() []IndexDescriptor {
 	return desc.publicAndNonPublicIndexes
 }
 
-// MutationIndexes returns a list of mutation indexes.
-func (desc *ImmutableTableDescriptor) MutationIndexes() []IndexDescriptor {
-	return desc.publicAndNonPublicIndexes[len(desc.Indexes):]
-}
-
 // DeleteOnlyIndexes returns a list of delete-only mutation indexes.
 func (desc *ImmutableTableDescriptor) DeleteOnlyIndexes() []IndexDescriptor {
 	return desc.publicAndNonPublicIndexes[len(desc.Indexes)+desc.writeOnlyIndexCount:]

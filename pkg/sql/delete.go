@@ -14,13 +14,10 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -44,161 +41,10 @@ type deleteNode struct {
 // deleteNode implements the autoCommitNode interface.
 var _ autoCommitNode = &deleteNode{}
 
-// Delete removes rows from a table.
-// Privileges: DELETE and SELECT on table. We currently always use a SELECT statement.
-//   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
-//          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
-func (p *planner) Delete(
-	ctx context.Context, n *tree.Delete, desiredTypes []*types.T,
-) (result planNode, resultErr error) {
-	// UX friendliness safeguard.
-	if n.Where == nil && p.SessionData().SafeUpdates {
-		return nil, pgerror.DangerousStatementf("DELETE without WHERE clause")
-	}
-
-	// CTE analysis.
-	resetter, err := p.initWith(ctx, n.With)
-	if err != nil {
-		return nil, err
-	}
-	if resetter != nil {
-		defer func() {
-			if cteErr := resetter(p); cteErr != nil && resultErr == nil {
-				// If no error was found in the inner planning but a CTE error
-				// is occurring during the final checks on the way back from
-				// the recursion, use that error as final error for this
-				// stage.
-				resultErr = cteErr
-				result = nil
-			}
-		}()
-	}
-
-	tracing.AnnotateTrace()
-
-	// DELETE FROM xx AS yy - we want to know about xx (tn) because
-	// that's what we get the descriptor with, and yy (alias) because
-	// that's what RETURNING will use.
-	tn, alias, err := p.getAliasedTableName(n.Table)
-	if err != nil {
-		return nil, err
-	}
-
-	// Find which table we're working on, check the permissions.
-	desc, err := ResolveExistingObject(ctx, p, tn, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
-	if err != nil {
-		return nil, err
-	}
-	if err := p.CheckPrivilege(ctx, desc, privilege.DELETE); err != nil {
-		return nil, err
-	}
-
-	// Determine what are the foreign key tables that are involved in the deletion.
-	fkTables, err := row.MakeFkMetadata(
-		ctx,
-		desc,
-		row.CheckDeletes,
-		p.LookupTableByID,
-		p.CheckPrivilege,
-		p.analyzeExpr,
-		nil, /* checkHelper */
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// rowsNeeded will help determine whether we can use the fast path
-	// in startExec.
-	rowsNeeded := resultsNeeded(n.Returning)
-
-	// Also, rowsNeeded determines which rows of the source we need
-	// in the table deleter.
-	var requestedCols []sqlbase.ColumnDescriptor
-	if rowsNeeded {
-		// Note: in contrast to INSERT and UPDATE which also require the
-		// data if there are CHECK expressions, DELETE does not care about
-		// constraint checking (because the rows are being deleted after
-		// all).
-
-		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
-		// exprs.
-		requestedCols = desc.Columns
-	}
-
-	// Since all columns are being returned, use the 1:1 mapping. See todo above.
-	rowIdxToRetIdx := mutationRowIdxToReturnIdx(requestedCols, requestedCols)
-
-	// Create the table deleter, which does the bulk of the work.
-	rd, err := row.MakeDeleter(
-		p.txn, desc, fkTables, requestedCols, row.CheckFKs, p.EvalContext(), &p.alloc,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	tracing.AnnotateTrace()
-
-	// Determine the source for the deletion: the rows that are read,
-	// filtered, limited, ordered, etc, prior to the deletion. One would
-	// think there is only so much one wants to do with rows prior to a
-	// deletion, but ORDER BY / LIMIT really determines which rows are
-	// being deleted. Also RETURNING will expose this.
-	rows, err := p.SelectClause(ctx, &tree.SelectClause{
-		Exprs: sqlbase.ColumnsSelectors(rd.FetchCols, true /* forUpdateOrDelete */),
-		From:  tree.From{Tables: []tree.TableExpr{n.Table}},
-		Where: n.Where,
-	}, n.OrderBy, n.Limit, nil /*with*/, nil /*desiredTypes*/, publicAndNonPublicColumns)
-	if err != nil {
-		return nil, err
-	}
-
-	var columns sqlbase.ResultColumns
-	if rowsNeeded {
-		columns = planColumns(rows)
-		// If rowsNeeded is set, we have requested from the source above
-		// all the columns from the descriptor. However, to ensure that
-		// modified rows include all columns, the construction of the
-		// source has used publicAndNonPublicColumns so the source may
-		// contain additional columns for every newly dropped column not
-		// visible.
-		// We do not want these to be available for RETURNING below.
-		//
-		// In the case where rowsNeeded is true, the requested columns are
-		// requestedCols. So we can truncate to the length of that to
-		// only see public columns.
-		columns = columns[:len(requestedCols)]
-	}
-
-	// Now make a delete node. We use a pool.
-	dn := deleteNodePool.Get().(*deleteNode)
-	*dn = deleteNode{
-		source:  rows,
-		columns: columns,
-		run: deleteRun{
-			td:                  tableDeleter{rd: rd, alloc: &p.alloc},
-			rowsNeeded:          rowsNeeded,
-			fastPathInterleaved: canDeleteFastInterleaved(desc, fkTables),
-			rowIdxToRetIdx:      rowIdxToRetIdx,
-		},
-	}
-
-	// Finally, handle RETURNING, if any.
-	r, err := p.Returning(ctx, dn, n.Returning, desiredTypes, alias)
-	if err != nil {
-		// We close explicitly here to release the node to the pool.
-		dn.Close(ctx)
-	}
-	return r, err
-}
-
 // deleteRun contains the run-time state of deleteNode during local execution.
 type deleteRun struct {
 	td         tableDeleter
 	rowsNeeded bool
-
-	// fastPathInterleaved indicates whether the delete operation can run
-	// the interleaved fast path (all interleaved tables have no indexes and ON DELETE CASCADE).
-	fastPathInterleaved bool
 
 	// rowCount is the number of rows in the current batch.
 	rowCount int
