@@ -643,96 +643,72 @@ sort            ·         ·            (d, e, f, a, b, c)  +f
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f)
 ----
-render            ·         ·            (a, b, c)  ·
- │                render 0  a            ·          ·
- │                render 1  b            ·          ·
- │                render 2  c            ·          ·
- └── lookup-join  ·         ·            (a, b, c)  ·
-      │           table     def@primary  ·          ·
-      │           type      semi         ·          ·
-      │           equality  (a) = (f)    ·          ·
-      └── scan    ·         ·            (a, b, c)  ·
-·                 table     abc@primary  ·          ·
-·                 spans     ALL          ·          ·
+lookup-join  ·         ·            (a, b, c)  ·
+ │           table     def@primary  ·          ·
+ │           type      semi         ·          ·
+ │           equality  (a) = (f)    ·          ·
+ └── scan    ·         ·            (a, b, c)  ·
+·            table     abc@primary  ·          ·
+·            spans     ALL          ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f)
 ----
-render            ·         ·            (a, b, c)  ·
- │                render 0  a            ·          ·
- │                render 1  b            ·          ·
- │                render 2  c            ·          ·
- └── lookup-join  ·         ·            (a, b, c)  ·
-      │           table     def@primary  ·          ·
-      │           type      anti         ·          ·
-      │           equality  (a) = (f)    ·          ·
-      └── scan    ·         ·            (a, b, c)  ·
-·                 table     abc@primary  ·          ·
-·                 spans     ALL          ·          ·
+lookup-join  ·         ·            (a, b, c)  ·
+ │           table     def@primary  ·          ·
+ │           type      anti         ·          ·
+ │           equality  (a) = (f)    ·          ·
+ └── scan    ·         ·            (a, b, c)  ·
+·            table     abc@primary  ·          ·
+·            spans     ALL          ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
-render            ·                      ·                (a, b, c)  ·
- │                render 0               a                ·          ·
- │                render 1               b                ·          ·
- │                render 2               c                ·          ·
- └── lookup-join  ·                      ·                (a, b, c)  ·
-      │           table                  def@primary      ·          ·
-      │           type                   semi             ·          ·
-      │           equality               (a, c) = (f, e)  ·          ·
-      │           equality cols are key  ·                ·          ·
-      └── scan    ·                      ·                (a, b, c)  ·
-·                 table                  abc@primary      ·          ·
-·                 spans                  ALL              ·          ·
+lookup-join  ·                      ·                (a, b, c)  ·
+ │           table                  def@primary      ·          ·
+ │           type                   semi             ·          ·
+ │           equality               (a, c) = (f, e)  ·          ·
+ │           equality cols are key  ·                ·          ·
+ └── scan    ·                      ·                (a, b, c)  ·
+·            table                  abc@primary      ·          ·
+·            spans                  ALL              ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
-render            ·                      ·                (a, b, c)  ·
- │                render 0               a                ·          ·
- │                render 1               b                ·          ·
- │                render 2               c                ·          ·
- └── lookup-join  ·                      ·                (a, b, c)  ·
-      │           table                  def@primary      ·          ·
-      │           type                   anti             ·          ·
-      │           equality               (a, c) = (f, e)  ·          ·
-      │           equality cols are key  ·                ·          ·
-      └── scan    ·                      ·                (a, b, c)  ·
-·                 table                  abc@primary      ·          ·
-·                 spans                  ALL              ·          ·
+lookup-join  ·                      ·                (a, b, c)  ·
+ │           table                  def@primary      ·          ·
+ │           type                   anti             ·          ·
+ │           equality               (a, c) = (f, e)  ·          ·
+ │           equality cols are key  ·                ·          ·
+ └── scan    ·                      ·                (a, b, c)  ·
+·            table                  abc@primary      ·          ·
+·            spans                  ALL              ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
-render            ·         ·              (a, b, c)  ·
- │                render 0  a              ·          ·
- │                render 1  b              ·          ·
- │                render 2  c              ·          ·
- └── lookup-join  ·         ·              (a, b, c)  ·
-      │           table     def@primary    ·          ·
-      │           type      semi           ·          ·
-      │           equality  (a) = (f)      ·          ·
-      │           pred      (@4 + @2) > 1  ·          ·
-      └── scan    ·         ·              (a, b, c)  ·
-·                 table     abc@primary    ·          ·
-·                 spans     ALL            ·          ·
+lookup-join  ·         ·              (a, b, c)  ·
+ │           table     def@primary    ·          ·
+ │           type      semi           ·          ·
+ │           equality  (a) = (f)      ·          ·
+ │           pred      (@4 + @2) > 1  ·          ·
+ └── scan    ·         ·              (a, b, c)  ·
+·            table     abc@primary    ·          ·
+·            spans     ALL            ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
-render            ·         ·              (a, b, c)  ·
- │                render 0  a              ·          ·
- │                render 1  b              ·          ·
- │                render 2  c              ·          ·
- └── lookup-join  ·         ·              (a, b, c)  ·
-      │           table     def@primary    ·          ·
-      │           type      anti           ·          ·
-      │           equality  (a) = (f)      ·          ·
-      │           pred      (@4 + @2) > 1  ·          ·
-      └── scan    ·         ·              (a, b, c)  ·
-·                 table     abc@primary    ·          ·
-·                 spans     ALL            ·          ·
+lookup-join  ·         ·              (a, b, c)  ·
+ │           table     def@primary    ·          ·
+ │           type      anti           ·          ·
+ │           equality  (a) = (f)      ·          ·
+ │           pred      (@4 + @2) > 1  ·          ·
+ └── scan    ·         ·              (a, b, c)  ·
+·            table     abc@primary    ·          ·
+·            spans     ALL            ·          ·
 
 query T
 SELECT url FROM [ EXPLAIN (DISTSQL)
@@ -801,3 +777,599 @@ SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'Scan /Table/$lo
 ----
 Scan /Table/63/1/{1-2}
 Scan /Table/63/1/{1/10001/0-2}
+
+
+# Regression test for #40562.
+
+statement ok
+CREATE TABLE public.region
+(
+    r_regionkey int PRIMARY KEY,
+    r_name char(25) NOT NULL,
+    r_comment varchar(152)
+)
+
+statement ok
+ALTER TABLE public.region INJECT STATISTICS '[
+  {
+    "columns": ["r_regionkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["r_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["r_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5,
+    "distinct_count": 5
+  }
+]'
+
+statement ok
+CREATE TABLE public.nation
+(
+    n_nationkey int PRIMARY KEY,
+    n_name char(25) NOT NULL,
+    n_regionkey int NOT NULL,
+    n_comment varchar(152),
+    INDEX n_rk (n_regionkey ASC),
+    CONSTRAINT nation_fkey_region FOREIGN KEY (n_regionkey) references public.region (r_regionkey)
+)
+
+statement ok
+ALTER TABLE public.nation INJECT STATISTICS '[
+  {
+    "columns": ["n_nationkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 25,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["n_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 25,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["n_regionkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 25,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["n_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 25,
+    "distinct_count": 25
+  }
+]'
+
+statement ok
+CREATE TABLE public.supplier
+(
+    s_suppkey int PRIMARY KEY,
+    s_name char(25) NOT NULL,
+    s_address varchar(40) NOT NULL,
+    s_nationkey int NOT NULL,
+    s_phone char(15) NOT NULL,
+    s_acctbal float NOT NULL,
+    s_comment varchar(101) NOT NULL,
+    INDEX s_nk (s_nationkey ASC),
+    CONSTRAINT supplier_fkey_nation FOREIGN KEY (s_nationkey) references public.nation (n_nationkey)
+)
+
+statement ok
+ALTER TABLE public.supplier INJECT STATISTICS '[
+  {
+    "columns": ["s_suppkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_address"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_nationkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["s_phone"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_acctbal"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+statement ok
+CREATE TABLE public.part
+(
+    p_partkey int PRIMARY KEY,
+    p_name varchar(55) NOT NULL,
+    p_mfgr char(25) NOT NULL,
+    p_brand char(10) NOT NULL,
+    p_type varchar(25) NOT NULL,
+    p_size int NOT NULL,
+    p_container char(10) NOT NULL,
+    p_retailprice float NOT NULL,
+    p_comment varchar(23) NOT NULL
+)
+
+statement ok
+ALTER TABLE public.part INJECT STATISTICS '[
+  {
+    "columns": ["p_partkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["p_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["p_mfgr"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["p_brand"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["p_type"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 150
+  },
+  {
+    "columns": ["p_size"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 50
+  },
+  {
+    "columns": ["p_container"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 40
+  },
+  {
+    "columns": ["p_retailprice"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 20000
+  },
+  {
+    "columns": ["p_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 130000
+  }
+]'
+
+statement ok
+CREATE TABLE public.partsupp
+(
+    ps_partkey int NOT NULL,
+    ps_suppkey int NOT NULL,
+    ps_availqty int NOT NULL,
+    ps_supplycost float NOT NULL,
+    ps_comment varchar(199) NOT NULL,
+    PRIMARY KEY (ps_partkey, ps_suppkey),
+    INDEX ps_sk (ps_suppkey ASC),
+    CONSTRAINT partsupp_fkey_part FOREIGN KEY (ps_partkey) references public.part (p_partkey),
+    CONSTRAINT partsupp_fkey_supplier FOREIGN KEY (ps_suppkey) references public.supplier (s_suppkey)
+)
+
+statement ok
+ALTER TABLE public.partsupp INJECT STATISTICS '[
+  {
+    "columns": ["ps_partkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["ps_suppkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["ps_availqty"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["ps_supplycost"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 100000
+  },
+  {
+    "columns": ["ps_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 800000
+  }
+]'
+
+statement ok
+CREATE TABLE public.customer
+(
+    c_custkey int PRIMARY KEY,
+    c_name varchar(25) NOT NULL,
+    c_address varchar(40) NOT NULL,
+    c_nationkey int NOT NULL NOT NULL,
+    c_phone char(15) NOT NULL,
+    c_acctbal float NOT NULL,
+    c_mktsegment char(10) NOT NULL,
+    c_comment varchar(117) NOT NULL,
+    INDEX c_nk (c_nationkey ASC),
+    CONSTRAINT customer_fkey_nation FOREIGN KEY (c_nationkey) references public.nation (n_nationkey)
+)
+
+statement ok
+ALTER TABLE public.customer INJECT STATISTICS '[
+  {
+    "columns": ["c_custkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_address"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_nationkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["c_phone"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_acctbal"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_mktsegment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["c_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  }
+]'
+
+statement ok
+CREATE TABLE public.orders
+(
+    o_orderkey int PRIMARY KEY,
+    o_custkey int NOT NULL,
+    o_orderstatus char(1) NOT NULL,
+    o_totalprice float NOT NULL,
+    o_orderdate date NOT NULL,
+    o_orderpriority char(15) NOT NULL,
+    o_clerk char(15) NOT NULL,
+    o_shippriority int NOT NULL,
+    o_comment varchar(79) NOT NULL,
+    INDEX o_ck (o_custkey ASC),
+    INDEX o_od (o_orderdate ASC),
+    CONSTRAINT orders_fkey_customer FOREIGN KEY (o_custkey) references public.customer (c_custkey)
+)
+
+statement ok
+ALTER TABLE public.orders INJECT STATISTICS '[
+  {
+    "columns": ["o_orderkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1500000
+  },
+  {
+    "columns": ["o_custkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 100000
+  },
+  {
+    "columns": ["o_orderstatus"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 3
+  },
+  {
+    "columns": ["o_totalprice"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1500000
+  },
+  {
+    "columns": ["o_orderdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["o_orderpriority"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["o_clerk"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1000
+  },
+  {
+    "columns": ["o_shippriority"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1
+  },
+  {
+    "columns": ["o_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1500000
+  }
+]'
+
+statement ok
+CREATE TABLE public.lineitem
+(
+    l_orderkey int NOT NULL,
+    l_partkey int NOT NULL,
+    l_suppkey int NOT NULL,
+    l_linenumber int NOT NULL,
+    l_quantity float NOT NULL,
+    l_extendedprice float NOT NULL,
+    l_discount float NOT NULL,
+    l_tax float NOT NULL,
+    l_returnflag char(1) NOT NULL,
+    l_linestatus char(1) NOT NULL,
+    l_shipdate date NOT NULL,
+    l_commitdate date NOT NULL,
+    l_receiptdate date NOT NULL,
+    l_shipinstruct char(25) NOT NULL,
+    l_shipmode char(10) NOT NULL,
+    l_comment varchar(44) NOT NULL,
+    PRIMARY KEY (l_orderkey, l_linenumber),
+    INDEX l_ok (l_orderkey ASC),
+    INDEX l_pk (l_partkey ASC),
+    INDEX l_sk (l_suppkey ASC),
+    INDEX l_sd (l_shipdate ASC),
+    INDEX l_cd (l_commitdate ASC),
+    INDEX l_rd (l_receiptdate ASC),
+    INDEX l_pk_sk (l_partkey ASC, l_suppkey ASC),
+    INDEX l_sk_pk (l_suppkey ASC, l_partkey ASC),
+    CONSTRAINT lineitem_fkey_orders FOREIGN KEY (l_orderkey) references public.orders (o_orderkey),
+    CONSTRAINT lineitem_fkey_part FOREIGN KEY (l_partkey) references public.part (p_partkey),
+    CONSTRAINT lineitem_fkey_supplier FOREIGN KEY (l_suppkey) references public.supplier (s_suppkey)
+)
+
+statement ok
+ALTER TABLE public.lineitem INJECT STATISTICS '[
+  {
+    "columns": ["l_orderkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 1500000
+  },
+  {
+    "columns": ["l_partkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["l_suppkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["l_linenumber"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 7
+  },
+  {
+    "columns": ["l_quantity"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 50
+  },
+  {
+    "columns": ["l_extendedprice"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 1000000
+  },
+  {
+    "columns": ["l_discount"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 11
+  },
+  {
+    "columns": ["l_tax"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 9
+  },
+  {
+    "columns": ["l_returnflag"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 3
+  },
+  {
+    "columns": ["l_linestatus"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2
+  },
+  {
+    "columns": ["l_shipdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["l_commitdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["l_receiptdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["l_shipinstruct"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 4
+  },
+  {
+    "columns": ["l_shipmode"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 7
+  },
+  {
+    "columns": ["l_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 4500000
+  }
+]'
+
+query TTT
+EXPLAIN SELECT s_name, count(*) AS numwait
+    FROM supplier, lineitem AS l1, orders, nation
+   WHERE s_suppkey = l1.l_suppkey
+     AND o_orderkey = l1.l_orderkey
+     AND o_orderstatus = 'F'
+     AND l1.l_receiptdate > l1.l_commitdate
+     AND EXISTS(
+            SELECT *
+              FROM lineitem AS l2
+             WHERE l2.l_orderkey = l1.l_orderkey
+               AND l2.l_suppkey != l1.l_suppkey
+         )
+     AND NOT EXISTS(
+                SELECT *
+                  FROM lineitem AS l3
+                 WHERE l3.l_orderkey = l1.l_orderkey
+                   AND l3.l_receiptdate > l3.l_commitdate
+             )
+     AND s_nationkey = n_nationkey
+     AND n_name = 'SAUDI ARABIA'
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+   LIMIT 100;
+----
+limit                                               ·                      ·
+ │                                                  count                  100
+ └── sort                                           ·                      ·
+      │                                             order                  -numwait,+s_name
+      └── group                                     ·                      ·
+           │                                        aggregate 0            s_name
+           │                                        aggregate 1            count_rows()
+           │                                        group by               s_name
+           └── render                               ·                      ·
+                └── lookup-join                     ·                      ·
+                     │                              table                  orders@primary
+                     │                              type                   inner
+                     │                              equality               (l_orderkey) = (o_orderkey)
+                     │                              equality cols are key  ·
+                     │                              pred                   @11 = 'F'
+                     └── lookup-join                ·                      ·
+                          │                         table                  nation@primary
+                          │                         type                   inner
+                          │                         equality               (s_nationkey) = (n_nationkey)
+                          │                         equality cols are key  ·
+                          │                         pred                   @9 = 'SAUDI ARABIA'
+                          └── lookup-join           ·                      ·
+                               │                    table                  supplier@primary
+                               │                    type                   inner
+                               │                    equality               (l_suppkey) = (s_suppkey)
+                               │                    equality cols are key  ·
+                               └── lookup-join      ·                      ·
+                                    │               table                  lineitem@primary
+                                    │               type                   semi
+                                    │               equality               (l_orderkey) = (l_orderkey)
+                                    │               pred                   @6 != @2
+                                    └── merge-join  ·                      ·
+                                         │          type                   anti
+                                         │          equality               (l_orderkey) = (l_orderkey)
+                                         │          mergeJoinOrder         +"(l_orderkey=l_orderkey)"
+                                         ├── scan   ·                      ·
+                                         │          table                  lineitem@primary
+                                         │          spans                  ALL
+                                         │          filter                 l_receiptdate > l_commitdate
+                                         └── scan   ·                      ·
+·                                                   table                  lineitem@primary
+·                                                   spans                  ALL
+·                                                   filter                 l_receiptdate > l_commitdate
