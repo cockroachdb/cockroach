@@ -22,15 +22,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // flowStreamServer is a utility interface used to mock out the RPC layer.
 type flowStreamServer interface {
-	Send(*distsqlpb.ConsumerSignal) error
-	Recv() (*distsqlpb.ProducerMessage, error)
+	Send(*execinfrapb.ConsumerSignal) error
+	Recv() (*execinfrapb.ProducerMessage, error)
 }
 
 // Inbox is used to expose data from remote flows through an exec.Operator
@@ -90,7 +90,7 @@ type Inbox struct {
 		nextShouldExit bool
 		// bufferedMeta buffers any metadata found in Next when reading from the
 		// stream and is returned by DrainMeta.
-		bufferedMeta []distsqlpb.ProducerMetadata
+		bufferedMeta []execinfrapb.ProducerMetadata
 	}
 
 	streamMu struct {
@@ -131,7 +131,7 @@ func NewInbox(typs []coltypes.T) (*Inbox, error) {
 	i.zeroBatch.SetLength(0)
 	i.scratch.data = make([]*array.Data, len(typs))
 	i.scratch.b = coldata.NewMemBatch(typs)
-	i.stateMu.bufferedMeta = make([]distsqlpb.ProducerMetadata, 0)
+	i.stateMu.bufferedMeta = make([]execinfrapb.ProducerMetadata, 0)
 	i.stateMu.nextExited = sync.NewCond(&i.stateMu)
 	return i, nil
 }
@@ -300,7 +300,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		}
 		if len(m.Data.Metadata) != 0 {
 			for _, rpm := range m.Data.Metadata {
-				meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(ctx, rpm)
+				meta, ok := execinfrapb.RemoteProducerMetaToLocalMeta(ctx, rpm)
 				if !ok {
 					continue
 				}
@@ -328,7 +328,7 @@ func (i *Inbox) sendDrainSignal(ctx context.Context) error {
 	log.VEvent(ctx, 2, "Inbox sending drain signal to Outbox")
 	// It is safe to Send without holding the mutex because it is legal to call
 	// Send and Recv from different goroutines.
-	if err := i.streamMu.stream.Send(&distsqlpb.ConsumerSignal{DrainRequest: &distsqlpb.DrainRequest{}}); err != nil {
+	if err := i.streamMu.stream.Send(&execinfrapb.ConsumerSignal{DrainRequest: &execinfrapb.DrainRequest{}}); err != nil {
 		log.Warningf(ctx, "Inbox unable to send drain signal to Outbox: %+v", err)
 		return err
 	}
@@ -338,7 +338,7 @@ func (i *Inbox) sendDrainSignal(ctx context.Context) error {
 // DrainMeta is part of the MetadataGenerator interface. DrainMeta may be
 // called concurrently with Next.
 // Note: DrainMeta will cause Next goroutine to finish.
-func (i *Inbox) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (i *Inbox) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	i.stateMu.Lock()
 	defer i.stateMu.Unlock()
 	allMeta := i.stateMu.bufferedMeta
@@ -400,7 +400,7 @@ func (i *Inbox) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 			return allMeta
 		}
 		for _, remoteMeta := range msg.Data.Metadata {
-			meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(ctx, remoteMeta)
+			meta, ok := execinfrapb.RemoteProducerMetaToLocalMeta(ctx, remoteMeta)
 			if !ok {
 				continue
 			}

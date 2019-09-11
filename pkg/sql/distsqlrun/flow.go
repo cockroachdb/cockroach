@@ -15,7 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -68,11 +68,11 @@ type Flow struct {
 	// goroutines.
 	startedGoroutines bool
 
-	localStreams map[distsqlpb.StreamID]distsql.RowReceiver
+	localStreams map[execinfrapb.StreamID]distsql.RowReceiver
 
 	// inboundStreams are streams that receive data from other hosts; this map
 	// is to be passed to flowRegistry.RegisterFlow.
-	inboundStreams map[distsqlpb.StreamID]*inboundStreamInfo
+	inboundStreams map[execinfrapb.StreamID]*inboundStreamInfo
 
 	// waitGroup is used to wait for async components of the flow:
 	//  - processors
@@ -90,7 +90,7 @@ type Flow struct {
 	ctxDone   <-chan struct{}
 
 	// spec is the request that produced this flow. Only used for debugging.
-	spec *distsqlpb.FlowSpec
+	spec *execinfrapb.FlowSpec
 }
 
 func newFlow(
@@ -114,12 +114,12 @@ func newFlow(
 // checkInboundStreamID takes a stream ID and returns an error if an inbound
 // stream already exists with that ID in the inbound streams map, creating the
 // inbound streams map if it is nil.
-func (f *Flow) checkInboundStreamID(sid distsqlpb.StreamID) error {
+func (f *Flow) checkInboundStreamID(sid execinfrapb.StreamID) error {
 	if _, found := f.inboundStreams[sid]; found {
 		return errors.Errorf("inbound stream %d already exists in map", sid)
 	}
 	if f.inboundStreams == nil {
-		f.inboundStreams = make(map[distsqlpb.StreamID]*inboundStreamInfo)
+		f.inboundStreams = make(map[execinfrapb.StreamID]*inboundStreamInfo)
 	}
 	return nil
 }
@@ -127,14 +127,14 @@ func (f *Flow) checkInboundStreamID(sid distsqlpb.StreamID) error {
 // setupInboundStream adds a stream to the stream map (inboundStreams or
 // localStreams).
 func (f *Flow) setupInboundStream(
-	ctx context.Context, spec distsqlpb.StreamEndpointSpec, receiver distsql.RowReceiver,
+	ctx context.Context, spec execinfrapb.StreamEndpointSpec, receiver distsql.RowReceiver,
 ) error {
 	sid := spec.StreamID
 	switch spec.Type {
-	case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
+	case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
 		return errors.Errorf("inbound stream of type SYNC_RESPONSE")
 
-	case distsqlpb.StreamEndpointSpec_REMOTE:
+	case execinfrapb.StreamEndpointSpec_REMOTE:
 		if err := f.checkInboundStreamID(sid); err != nil {
 			return err
 		}
@@ -143,12 +143,12 @@ func (f *Flow) setupInboundStream(
 		}
 		f.inboundStreams[sid] = &inboundStreamInfo{receiver: rowInboundStreamHandler{receiver}, waitGroup: &f.waitGroup}
 
-	case distsqlpb.StreamEndpointSpec_LOCAL:
+	case execinfrapb.StreamEndpointSpec_LOCAL:
 		if _, found := f.localStreams[sid]; found {
 			return errors.Errorf("local stream %d has multiple consumers", sid)
 		}
 		if f.localStreams == nil {
-			f.localStreams = make(map[distsqlpb.StreamID]distsql.RowReceiver)
+			f.localStreams = make(map[execinfrapb.StreamID]distsql.RowReceiver)
 		}
 		f.localStreams[sid] = receiver
 
@@ -162,18 +162,20 @@ func (f *Flow) setupInboundStream(
 // setupOutboundStream sets up an output stream; if the stream is local, the
 // RowChannel is looked up in the localStreams map; otherwise an outgoing
 // mailbox is created.
-func (f *Flow) setupOutboundStream(spec distsqlpb.StreamEndpointSpec) (distsql.RowReceiver, error) {
+func (f *Flow) setupOutboundStream(
+	spec execinfrapb.StreamEndpointSpec,
+) (distsql.RowReceiver, error) {
 	sid := spec.StreamID
 	switch spec.Type {
-	case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
+	case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
 		return f.syncFlowConsumer, nil
 
-	case distsqlpb.StreamEndpointSpec_REMOTE:
+	case execinfrapb.StreamEndpointSpec_REMOTE:
 		outbox := newOutbox(&f.FlowCtx, spec.TargetNodeID, f.ID, sid)
 		f.startables = append(f.startables, outbox)
 		return outbox, nil
 
-	case distsqlpb.StreamEndpointSpec_LOCAL:
+	case execinfrapb.StreamEndpointSpec_LOCAL:
 		rowChan, found := f.localStreams[sid]
 		if !found {
 			return nil, errors.Errorf("unconnected inbound stream %d", sid)
@@ -192,7 +194,7 @@ func (f *Flow) setupOutboundStream(spec distsqlpb.StreamEndpointSpec) (distsql.R
 // setupRouter initializes a router and the outbound streams.
 //
 // Pass-through routers are not supported; they should be handled separately.
-func (f *Flow) setupRouter(spec *distsqlpb.OutputRouterSpec) (router, error) {
+func (f *Flow) setupRouter(spec *execinfrapb.OutputRouterSpec) (router, error) {
 	streams := make([]distsql.RowReceiver, len(spec.Streams))
 	for i := range spec.Streams {
 		var err error
@@ -222,7 +224,7 @@ type copyingRowReceiver struct {
 }
 
 func (r *copyingRowReceiver) Push(
-	row sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata,
+	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) distsql.ConsumerStatus {
 	if row != nil {
 		row = r.alloc.CopyRow(row)
@@ -231,14 +233,14 @@ func (r *copyingRowReceiver) Push(
 }
 
 func (f *Flow) makeProcessor(
-	ctx context.Context, ps *distsqlpb.ProcessorSpec, inputs []distsql.RowSource,
+	ctx context.Context, ps *execinfrapb.ProcessorSpec, inputs []distsql.RowSource,
 ) (distsql.Processor, error) {
 	if len(ps.Output) != 1 {
 		return nil, errors.Errorf("only single-output processors supported")
 	}
 	var output distsql.RowReceiver
 	spec := &ps.Output[0]
-	if spec.Type == distsqlpb.OutputRouterSpec_PASS_THROUGH {
+	if spec.Type == execinfrapb.OutputRouterSpec_PASS_THROUGH {
 		// There is no entity that corresponds to a pass-through router - we just
 		// use its output stream directly.
 		if len(spec.Streams) != 1 {
@@ -296,7 +298,7 @@ func (f *Flow) setupInputSyncs(ctx context.Context) ([][]distsql.RowSource, erro
 			}
 			var sync distsql.RowSource
 			switch is.Type {
-			case distsqlpb.InputSyncSpec_UNORDERED:
+			case execinfrapb.InputSyncSpec_UNORDERED:
 				mrc := &distsql.RowChannel{}
 				mrc.InitWithNumSenders(is.ColumnTypes, len(is.Streams))
 				for _, s := range is.Streams {
@@ -305,7 +307,7 @@ func (f *Flow) setupInputSyncs(ctx context.Context) ([][]distsql.RowSource, erro
 					}
 				}
 				sync = mrc
-			case distsqlpb.InputSyncSpec_ORDERED:
+			case execinfrapb.InputSyncSpec_ORDERED:
 				// Ordered synchronizer: create a RowChannel for each input.
 				streams := make([]distsql.RowSource, len(is.Streams))
 				for i, s := range is.Streams {
@@ -317,7 +319,7 @@ func (f *Flow) setupInputSyncs(ctx context.Context) ([][]distsql.RowSource, erro
 					streams[i] = rowChan
 				}
 				var err error
-				sync, err = makeOrderedSync(distsqlpb.ConvertToColumnOrdering(is.Ordering), f.EvalCtx, streams)
+				sync, err = makeOrderedSync(execinfrapb.ConvertToColumnOrdering(is.Ordering), f.EvalCtx, streams)
 				if err != nil {
 					return nil, err
 				}
@@ -362,7 +364,7 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]distsql.RowSo
 				return false
 			}
 			ospec := &pspec.Output[0]
-			if ospec.Type != distsqlpb.OutputRouterSpec_PASS_THROUGH {
+			if ospec.Type != execinfrapb.OutputRouterSpec_PASS_THROUGH {
 				// The output is not pass-through and thus is being sent through a
 				// router.
 				return false
@@ -381,7 +383,7 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]distsql.RowSo
 					// Look for "simple" inputs: an unordered input (which, by definition,
 					// doesn't require an ordered synchronizer), with a single input stream
 					// (which doesn't require a multiplexed RowChannel).
-					if in.Type != distsqlpb.InputSyncSpec_UNORDERED {
+					if in.Type != execinfrapb.InputSyncSpec_UNORDERED {
 						continue
 					}
 					if len(in.Streams) != 1 {
@@ -404,7 +406,7 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]distsql.RowSo
 	return nil
 }
 
-func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
+func (f *Flow) setup(ctx context.Context, spec *execinfrapb.FlowSpec) error {
 	f.spec = spec
 	if f.isVectorized {
 		log.VEventf(ctx, 1, "setting up vectorize flow %s", f.ID.Short())
@@ -495,7 +497,7 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	if _, err := f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
-			f.syncFlowConsumer.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
+			f.syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
 			f.syncFlowConsumer.ProducerDone()
 			return nil
 		}
@@ -525,7 +527,7 @@ func (f *Flow) Run(ctx context.Context, doneFn func()) error {
 	if ctx, err = f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
-			f.syncFlowConsumer.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
+			f.syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
 			f.syncFlowConsumer.ProducerDone()
 			return nil
 		}

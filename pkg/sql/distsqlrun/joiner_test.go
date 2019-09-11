@@ -11,7 +11,7 @@
 package distsqlrun
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -22,7 +22,7 @@ type joinerTestCase struct {
 	leftEqCols  []uint32
 	rightEqCols []uint32
 	joinType    sqlbase.JoinType
-	onExpr      distsqlpb.Expression
+	onExpr      execinfrapb.Expression
 	outCols     []uint32
 	leftTypes   []types.T
 	leftInput   sqlbase.EncDatumRows
@@ -104,7 +104,7 @@ func joinerTestCases() []joinerTestCase {
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
 			joinType:    sqlbase.InnerJoin,
-			onExpr:      distsqlpb.Expression{Expr: "@4 >= 4"},
+			onExpr:      execinfrapb.Expression{Expr: "@4 >= 4"},
 			// Implicit AND @1 = @3 constraint.
 			outCols:   []uint32{0, 1, 3},
 			leftTypes: sqlbase.TwoIntCols,
@@ -262,7 +262,7 @@ func joinerTestCases() []joinerTestCase {
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
 			joinType:    sqlbase.LeftOuterJoin,
-			onExpr:      distsqlpb.Expression{Expr: "@3 = 9"},
+			onExpr:      execinfrapb.Expression{Expr: "@3 = 9"},
 			outCols:     []uint32{0, 1},
 			leftTypes:   sqlbase.OneIntCol,
 			leftInput: sqlbase.EncDatumRows{
@@ -306,7 +306,7 @@ func joinerTestCases() []joinerTestCase {
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
 			joinType:    sqlbase.RightOuterJoin,
-			onExpr:      distsqlpb.Expression{Expr: "@2 > 1"},
+			onExpr:      execinfrapb.Expression{Expr: "@2 > 1"},
 			outCols:     []uint32{0, 1},
 			leftTypes:   sqlbase.OneIntCol,
 			leftInput: sqlbase.EncDatumRows{
@@ -331,7 +331,7 @@ func joinerTestCases() []joinerTestCase {
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
 			joinType:    sqlbase.FullOuterJoin,
-			onExpr:      distsqlpb.Expression{Expr: "@2 > 1"},
+			onExpr:      execinfrapb.Expression{Expr: "@2 > 1"},
 			outCols:     []uint32{0, 1},
 			leftTypes:   sqlbase.OneIntCol,
 			leftInput: sqlbase.EncDatumRows{
@@ -588,7 +588,7 @@ func joinerTestCases() []joinerTestCase {
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
 			joinType:    sqlbase.LeftSemiJoin,
-			onExpr:      distsqlpb.Expression{Expr: "@1 > 1"},
+			onExpr:      execinfrapb.Expression{Expr: "@1 > 1"},
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
 			leftTypes: sqlbase.TwoIntCols,
@@ -616,7 +616,7 @@ func joinerTestCases() []joinerTestCase {
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
 			joinType:    sqlbase.LeftSemiJoin,
-			onExpr:      distsqlpb.Expression{Expr: "@4 > 4 and @2 + @4 = 8"},
+			onExpr:      execinfrapb.Expression{Expr: "@4 > 4 and @2 + @4 = 8"},
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
 			leftTypes: sqlbase.TwoIntCols,
@@ -754,7 +754,7 @@ func joinerTestCases() []joinerTestCase {
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
 			joinType:    sqlbase.LeftAntiJoin,
-			onExpr:      distsqlpb.Expression{Expr: "(@2 + @4) % 2 = 0"},
+			onExpr:      execinfrapb.Expression{Expr: "(@2 + @4) % 2 = 0"},
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
 			leftTypes: sqlbase.TwoIntCols,
@@ -783,7 +783,7 @@ func joinerTestCases() []joinerTestCase {
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
 			joinType:    sqlbase.LeftAntiJoin,
-			onExpr:      distsqlpb.Expression{Expr: "(@2 + @4) % 2 = 0"},
+			onExpr:      execinfrapb.Expression{Expr: "(@2 + @4) % 2 = 0"},
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
 			leftTypes: sqlbase.TwoIntCols,
@@ -821,7 +821,7 @@ type joinerErrorTestCase struct {
 	leftEqCols  []uint32
 	rightEqCols []uint32
 	joinType    sqlbase.JoinType
-	onExpr      distsqlpb.Expression
+	onExpr      execinfrapb.Expression
 	outCols     []uint32
 	leftTypes   []types.T
 	leftInput   sqlbase.EncDatumRows

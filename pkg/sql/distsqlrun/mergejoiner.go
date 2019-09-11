@@ -16,7 +16,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -51,10 +51,10 @@ const mergeJoinerProcName = "merge joiner"
 func newMergeJoiner(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.MergeJoinerSpec,
+	spec *execinfrapb.MergeJoinerSpec,
 	leftSource distsql.RowSource,
 	rightSource distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*mergeJoiner, error) {
 	leftEqCols := make([]uint32, 0, len(spec.LeftOrdering.Columns))
@@ -83,7 +83,7 @@ func newMergeJoiner(
 		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output,
 		distsql.ProcStateOpts{
 			InputsToDrain: []distsql.RowSource{leftSource, rightSource},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				m.close()
 				return nil
 			},
@@ -97,9 +97,9 @@ func newMergeJoiner(
 	var err error
 	m.streamMerger, err = makeStreamMerger(
 		m.leftSource,
-		distsqlpb.ConvertToColumnOrdering(spec.LeftOrdering),
+		execinfrapb.ConvertToColumnOrdering(spec.LeftOrdering),
 		m.rightSource,
-		distsqlpb.ConvertToColumnOrdering(spec.RightOrdering),
+		execinfrapb.ConvertToColumnOrdering(spec.RightOrdering),
 		spec.NullEquality,
 		m.MemMonitor,
 	)
@@ -119,7 +119,7 @@ func (m *mergeJoiner) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the Processor interface.
-func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for m.State == distsql.StateRunning {
 		row, meta := m.nextRow()
 		if meta != nil {
@@ -140,7 +140,7 @@ func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) 
 	return nil, m.DrainHelper()
 }
 
-func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// The loops below form a restartable state machine that iterates over a
 	// batch of rows from the left and right side of the join. The state machine
 	// returns a result for every row that should be output.
@@ -155,7 +155,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadat
 				m.rightIdx++
 				renderedRow, err := m.Render(lrow, m.rightRows[ridx])
 				if err != nil {
-					return nil, &distsqlpb.ProducerMetadata{Err: err}
+					return nil, &execinfrapb.ProducerMetadata{Err: err}
 				}
 				if renderedRow != nil {
 					m.matchedRightCount++
@@ -177,7 +177,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadat
 			// Perform the cancellation check. We don't perform this on every row,
 			// but once for every iteration through the right-side batch.
 			if err := m.cancelChecker.Check(); err != nil {
-				return nil, &distsqlpb.ProducerMetadata{Err: err}
+				return nil, &execinfrapb.ProducerMetadata{Err: err}
 			}
 
 			// We've exhausted the right-side batch. Adjust the indexes for the next
@@ -219,7 +219,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadat
 		}
 
 		// Retrieve the next batch of rows to process.
-		var meta *distsqlpb.ProducerMetadata
+		var meta *execinfrapb.ProducerMetadata
 		// TODO(paul): Investigate (with benchmarks) whether or not it's
 		// worthwhile to only buffer one row from the right stream per batch
 		// for semi-joins.
@@ -251,7 +251,7 @@ func (m *mergeJoiner) ConsumerClosed() {
 	m.close()
 }
 
-var _ distsqlpb.DistSQLSpanStats = &MergeJoinerStats{}
+var _ execinfrapb.DistSQLSpanStats = &MergeJoinerStats{}
 
 const mergeJoinerTagPrefix = "mergejoiner."
 

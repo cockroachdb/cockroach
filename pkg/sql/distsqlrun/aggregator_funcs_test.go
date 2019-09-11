@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -52,17 +52,17 @@ func runTestFlow(
 	t *testing.T,
 	srv serverutils.TestServerInterface,
 	txn *client.Txn,
-	procs ...distsqlpb.ProcessorSpec,
+	procs ...execinfrapb.ProcessorSpec,
 ) sqlbase.EncDatumRows {
 	distSQLSrv := srv.DistSQLServer().(*ServerImpl)
 
 	txnCoordMeta := txn.GetTxnCoordMeta(context.TODO())
 	txnCoordMeta.StripRootToLeaf()
-	req := distsqlpb.SetupFlowRequest{
+	req := execinfrapb.SetupFlowRequest{
 		Version:      Version,
 		TxnCoordMeta: &txnCoordMeta,
-		Flow: distsqlpb.FlowSpec{
-			FlowID:     distsqlpb.FlowID{UUID: uuid.MakeV4()},
+		Flow: execinfrapb.FlowSpec{
+			FlowID:     execinfrapb.FlowID{UUID: uuid.MakeV4()},
 			Processors: procs,
 		},
 	}
@@ -115,15 +115,15 @@ func checkDistAggregationInfo(
 	tableDesc *sqlbase.TableDescriptor,
 	colIdx int,
 	numRows int,
-	fn distsqlpb.AggregatorSpec_Func,
+	fn execinfrapb.AggregatorSpec_Func,
 	info distsqlplan.DistAggregationInfo,
 ) {
 	colType := tableDesc.Columns[colIdx].Type
 
-	makeTableReader := func(startPK, endPK int, streamID int) distsqlpb.ProcessorSpec {
-		tr := distsqlpb.TableReaderSpec{
+	makeTableReader := func(startPK, endPK int, streamID int) execinfrapb.ProcessorSpec {
+		tr := execinfrapb.TableReaderSpec{
 			Table: *tableDesc,
-			Spans: make([]distsqlpb.TableReaderSpan, 1),
+			Spans: make([]execinfrapb.TableReaderSpan, 1),
 		}
 
 		var err error
@@ -136,16 +136,16 @@ func checkDistAggregationInfo(
 			t.Fatal(err)
 		}
 
-		return distsqlpb.ProcessorSpec{
-			Core: distsqlpb.ProcessorCoreUnion{TableReader: &tr},
-			Post: distsqlpb.PostProcessSpec{
+		return execinfrapb.ProcessorSpec{
+			Core: execinfrapb.ProcessorCoreUnion{TableReader: &tr},
+			Post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{uint32(colIdx)},
 			},
-			Output: []distsqlpb.OutputRouterSpec{{
-				Type: distsqlpb.OutputRouterSpec_PASS_THROUGH,
-				Streams: []distsqlpb.StreamEndpointSpec{
-					{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: distsqlpb.StreamID(streamID)},
+			Output: []execinfrapb.OutputRouterSpec{{
+				Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
+				Streams: []execinfrapb.StreamEndpointSpec{
+					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: execinfrapb.StreamID(streamID)},
 				},
 			}},
 		}
@@ -158,21 +158,21 @@ func checkDistAggregationInfo(
 	rowsNonDist := runTestFlow(
 		t, srv, txn,
 		makeTableReader(1, numRows+1, 0),
-		distsqlpb.ProcessorSpec{
-			Input: []distsqlpb.InputSyncSpec{{
-				Type:        distsqlpb.InputSyncSpec_UNORDERED,
+		execinfrapb.ProcessorSpec{
+			Input: []execinfrapb.InputSyncSpec{{
+				Type:        execinfrapb.InputSyncSpec_UNORDERED,
 				ColumnTypes: []types.T{colType},
-				Streams: []distsqlpb.StreamEndpointSpec{
-					{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 0},
+				Streams: []execinfrapb.StreamEndpointSpec{
+					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 0},
 				},
 			}},
-			Core: distsqlpb.ProcessorCoreUnion{Aggregator: &distsqlpb.AggregatorSpec{
-				Aggregations: []distsqlpb.AggregatorSpec_Aggregation{{Func: fn, ColIdx: []uint32{0}}},
+			Core: execinfrapb.ProcessorCoreUnion{Aggregator: &execinfrapb.AggregatorSpec{
+				Aggregations: []execinfrapb.AggregatorSpec_Aggregation{{Func: fn, ColIdx: []uint32{0}}},
 			}},
-			Output: []distsqlpb.OutputRouterSpec{{
-				Type: distsqlpb.OutputRouterSpec_PASS_THROUGH,
-				Streams: []distsqlpb.StreamEndpointSpec{
-					{Type: distsqlpb.StreamEndpointSpec_SYNC_RESPONSE},
+			Output: []execinfrapb.OutputRouterSpec{{
+				Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
+				Streams: []execinfrapb.StreamEndpointSpec{
+					{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE},
 				},
 			}},
 		},
@@ -201,22 +201,22 @@ func checkDistAggregationInfo(
 	intermediaryTypes := make([]types.T, numIntermediary)
 	for i, fn := range info.LocalStage {
 		var err error
-		_, returnTyp, err := distsqlpb.GetAggregateInfo(fn, colType)
+		_, returnTyp, err := execinfrapb.GetAggregateInfo(fn, colType)
 		if err != nil {
 			t.Fatal(err)
 		}
 		intermediaryTypes[i] = *returnTyp
 	}
 
-	localAggregations := make([]distsqlpb.AggregatorSpec_Aggregation, numIntermediary)
+	localAggregations := make([]execinfrapb.AggregatorSpec_Aggregation, numIntermediary)
 	for i, fn := range info.LocalStage {
 		// Local aggregations have the same input.
-		localAggregations[i] = distsqlpb.AggregatorSpec_Aggregation{Func: fn, ColIdx: []uint32{0}}
+		localAggregations[i] = execinfrapb.AggregatorSpec_Aggregation{Func: fn, ColIdx: []uint32{0}}
 	}
-	finalAggregations := make([]distsqlpb.AggregatorSpec_Aggregation, numFinal)
+	finalAggregations := make([]execinfrapb.AggregatorSpec_Aggregation, numFinal)
 	for i, finalInfo := range info.FinalStage {
 		// Each local aggregation feeds into a final aggregation.
-		finalAggregations[i] = distsqlpb.AggregatorSpec_Aggregation{
+		finalAggregations[i] = execinfrapb.AggregatorSpec_Aggregation{
 			Func:   finalInfo.Fn,
 			ColIdx: finalInfo.LocalIdxs,
 		}
@@ -225,18 +225,18 @@ func checkDistAggregationInfo(
 	if numParallel < numRows {
 		numParallel = numRows
 	}
-	finalProc := distsqlpb.ProcessorSpec{
-		Input: []distsqlpb.InputSyncSpec{{
-			Type:        distsqlpb.InputSyncSpec_UNORDERED,
+	finalProc := execinfrapb.ProcessorSpec{
+		Input: []execinfrapb.InputSyncSpec{{
+			Type:        execinfrapb.InputSyncSpec_UNORDERED,
 			ColumnTypes: intermediaryTypes,
 		}},
-		Core: distsqlpb.ProcessorCoreUnion{Aggregator: &distsqlpb.AggregatorSpec{
+		Core: execinfrapb.ProcessorCoreUnion{Aggregator: &execinfrapb.AggregatorSpec{
 			Aggregations: finalAggregations,
 		}},
-		Output: []distsqlpb.OutputRouterSpec{{
-			Type: distsqlpb.OutputRouterSpec_PASS_THROUGH,
-			Streams: []distsqlpb.StreamEndpointSpec{
-				{Type: distsqlpb.StreamEndpointSpec_SYNC_RESPONSE},
+		Output: []execinfrapb.OutputRouterSpec{{
+			Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
+			Streams: []execinfrapb.StreamEndpointSpec{
+				{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE},
 			},
 		}},
 	}
@@ -253,38 +253,38 @@ func checkDistAggregationInfo(
 			inputTypes[i] = intermediaryTypes[localIdx]
 		}
 		var err error
-		_, finalOutputTypes[i], err = distsqlpb.GetAggregateInfo(finalInfo.Fn, inputTypes...)
+		_, finalOutputTypes[i], err = execinfrapb.GetAggregateInfo(finalInfo.Fn, inputTypes...)
 		if err != nil {
 			t.Fatal(err)
 		}
 		varIdxs[i] = i
 	}
 
-	var procs []distsqlpb.ProcessorSpec
+	var procs []execinfrapb.ProcessorSpec
 	for i := 0; i < numParallel; i++ {
 		tr := makeTableReader(1+i*numRows/numParallel, 1+(i+1)*numRows/numParallel, 2*i)
-		agg := distsqlpb.ProcessorSpec{
-			Input: []distsqlpb.InputSyncSpec{{
-				Type:        distsqlpb.InputSyncSpec_UNORDERED,
+		agg := execinfrapb.ProcessorSpec{
+			Input: []execinfrapb.InputSyncSpec{{
+				Type:        execinfrapb.InputSyncSpec_UNORDERED,
 				ColumnTypes: []types.T{colType},
-				Streams: []distsqlpb.StreamEndpointSpec{
-					{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: distsqlpb.StreamID(2 * i)},
+				Streams: []execinfrapb.StreamEndpointSpec{
+					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: execinfrapb.StreamID(2 * i)},
 				},
 			}},
-			Core: distsqlpb.ProcessorCoreUnion{Aggregator: &distsqlpb.AggregatorSpec{
+			Core: execinfrapb.ProcessorCoreUnion{Aggregator: &execinfrapb.AggregatorSpec{
 				Aggregations: localAggregations,
 			}},
-			Output: []distsqlpb.OutputRouterSpec{{
-				Type: distsqlpb.OutputRouterSpec_PASS_THROUGH,
-				Streams: []distsqlpb.StreamEndpointSpec{
-					{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: distsqlpb.StreamID(2*i + 1)},
+			Output: []execinfrapb.OutputRouterSpec{{
+				Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
+				Streams: []execinfrapb.StreamEndpointSpec{
+					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: execinfrapb.StreamID(2*i + 1)},
 				},
 			}},
 		}
 		procs = append(procs, tr, agg)
-		finalProc.Input[0].Streams = append(finalProc.Input[0].Streams, distsqlpb.StreamEndpointSpec{
-			Type:     distsqlpb.StreamEndpointSpec_LOCAL,
-			StreamID: distsqlpb.StreamID(2*i + 1),
+		finalProc.Input[0].Streams = append(finalProc.Input[0].Streams, execinfrapb.StreamEndpointSpec{
+			Type:     execinfrapb.StreamEndpointSpec_LOCAL,
+			StreamID: execinfrapb.StreamID(2*i + 1),
 		})
 	}
 
@@ -294,12 +294,12 @@ func checkDistAggregationInfo(
 		if err != nil {
 			t.Fatal(err)
 		}
-		var expr distsqlpb.Expression
+		var expr execinfrapb.Expression
 		expr, err = distsqlplan.MakeExpression(renderExpr, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		finalProc.Post.RenderExprs = []distsqlpb.Expression{expr}
+		finalProc.Post.RenderExprs = []execinfrapb.Expression{expr}
 
 	}
 
@@ -438,12 +438,12 @@ func TestDistAggregationTable(t *testing.T) {
 	desc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	for fn, info := range distsqlplan.DistAggregationTable {
-		if fn == distsqlpb.AggregatorSpec_ANY_NOT_NULL {
+		if fn == execinfrapb.AggregatorSpec_ANY_NOT_NULL {
 			// ANY_NOT_NULL only has a definite result if all rows have the same value
 			// on the relevant column; skip testing this trivial case.
 			continue
 		}
-		if fn == distsqlpb.AggregatorSpec_COUNT_ROWS {
+		if fn == execinfrapb.AggregatorSpec_COUNT_ROWS {
 			// COUNT_ROWS takes no arguments; skip it in this test.
 			continue
 		}
@@ -452,7 +452,7 @@ func TestDistAggregationTable(t *testing.T) {
 		foundCol := false
 		for colIdx := 1; colIdx < len(desc.Columns); colIdx++ {
 			// See if this column works with this function.
-			_, _, err := distsqlpb.GetAggregateInfo(fn, desc.Columns[colIdx].Type)
+			_, _, err := execinfrapb.GetAggregateInfo(fn, desc.Columns[colIdx].Type)
 			if err != nil {
 				continue
 			}

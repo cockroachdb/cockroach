@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -28,8 +28,8 @@ func initBackfillerSpec(
 	chunkSize int64,
 	otherTables []sqlbase.TableDescriptor,
 	readAsOf hlc.Timestamp,
-) (distsqlpb.BackfillerSpec, error) {
-	ret := distsqlpb.BackfillerSpec{
+) (execinfrapb.BackfillerSpec, error) {
+	ret := execinfrapb.BackfillerSpec{
 		Table:       desc,
 		Duration:    duration,
 		ChunkSize:   chunkSize,
@@ -38,11 +38,11 @@ func initBackfillerSpec(
 	}
 	switch backfillType {
 	case indexBackfill:
-		ret.Type = distsqlpb.BackfillerSpec_Index
+		ret.Type = execinfrapb.BackfillerSpec_Index
 	case columnBackfill:
-		ret.Type = distsqlpb.BackfillerSpec_Column
+		ret.Type = execinfrapb.BackfillerSpec_Column
 	default:
-		return distsqlpb.BackfillerSpec{}, errors.Errorf("bad backfill type %d", backfillType)
+		return execinfrapb.BackfillerSpec{}, errors.Errorf("bad backfill type %d", backfillType)
 	}
 	return ret, nil
 }
@@ -73,18 +73,18 @@ func (dsp *DistSQLPlanner) createBackfiller(
 	var p PhysicalPlan
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
-		ib := &distsqlpb.BackfillerSpec{}
+		ib := &execinfrapb.BackfillerSpec{}
 		*ib = spec
-		ib.Spans = make([]distsqlpb.TableReaderSpan, len(sp.Spans))
+		ib.Spans = make([]execinfrapb.TableReaderSpan, len(sp.Spans))
 		for j := range sp.Spans {
 			ib.Spans[j].Span = sp.Spans[j]
 		}
 
 		proc := distsqlplan.Processor{
 			Node: sp.Node,
-			Spec: distsqlpb.ProcessorSpec{
-				Core:   distsqlpb.ProcessorCoreUnion{Backfiller: ib},
-				Output: []distsqlpb.OutputRouterSpec{{Type: distsqlpb.OutputRouterSpec_PASS_THROUGH}},
+			Spec: execinfrapb.ProcessorSpec{
+				Core:   execinfrapb.ProcessorCoreUnion{Backfiller: ib},
+				Output: []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
 			},
 		}
 

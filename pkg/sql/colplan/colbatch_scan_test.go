@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -47,11 +47,11 @@ func BenchmarkColBatchScan(b *testing.B) {
 		)
 		tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			spec := distsqlpb.TableReaderSpec{
+			spec := execinfrapb.TableReaderSpec{
 				Table: *tableDesc,
-				Spans: []distsqlpb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+				Spans: []execinfrapb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
 			}
-			post := distsqlpb.PostProcessSpec{
+			post := execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1},
 			}

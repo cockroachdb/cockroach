@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -133,7 +133,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-	_, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(
+	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, staticNodeID,
 	)
 	require.NoError(t, err)
@@ -173,7 +173,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					inboxes                     = make([]*colrpc.Inbox, 0, numInboxes+1)
 					handleStreamErrCh           = make([]chan error, numInboxes+1)
 					synchronizerInputs          = make([]colexec.Operator, 0, numInboxes)
-					materializerMetadataSources = make([]distsqlpb.MetadataSource, 0, numInboxes+1)
+					materializerMetadataSources = make([]execinfrapb.MetadataSource, 0, numInboxes+1)
 					streamID                    = 0
 					addAnotherRemote            = rng.Float64() < 0.5
 				)
@@ -187,7 +187,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					synchronizerInputs = append(synchronizerInputs, colexec.Operator(inbox))
 				}
 				synchronizer := colexec.NewUnorderedSynchronizer(synchronizerInputs, typs, &wg)
-				flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
+				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
 				runOutboxInbox := func(
 					ctx context.Context,
@@ -195,15 +195,15 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					outboxInput colexec.Operator,
 					inbox *colrpc.Inbox,
 					id int,
-					outboxMetadataSources []distsqlpb.MetadataSource,
+					outboxMetadataSources []execinfrapb.MetadataSource,
 				) {
 					outbox, err := colrpc.NewOutbox(
 						outboxInput,
 						typs,
 						append(outboxMetadataSources,
-							distsqlpb.CallbackMetadataSource{
-								DrainMetaCb: func(ctx context.Context) []distsqlpb.ProducerMetadata {
-									return []distsqlpb.ProducerMetadata{{Err: errors.Errorf("%d", id)}}
+							execinfrapb.CallbackMetadataSource{
+								DrainMetaCb: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+									return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("%d", id)}}
 								},
 							},
 						),
@@ -211,7 +211,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					require.NoError(t, err)
 					wg.Add(1)
 					go func(id int) {
-						outbox.Run(ctx, dialer, staticNodeID, flowID, distsqlpb.StreamID(id), cancelFn)
+						outbox.Run(ctx, dialer, staticNodeID, flowID, execinfrapb.StreamID(id), cancelFn)
 						wg.Done()
 					}(id)
 
@@ -221,7 +221,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					handleStreamErrCh[id] = make(chan error, 1)
 					doneFn := func() { close(serverStreamNotification.Donec) }
 					wg.Add(1)
-					go func(id int, stream distsqlpb.DistSQL_FlowStreamServer, doneFn func()) {
+					go func(id int, stream execinfrapb.DistSQL_FlowStreamServer, doneFn func()) {
 						handleStreamErrCh[id] <- inbox.RunWithStream(stream.Context(), stream)
 						doneFn()
 						wg.Done()
@@ -241,7 +241,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					wg.Done()
 				}()
 				for i := 0; i < numInboxes; i++ {
-					var outboxMetadataSources []distsqlpb.MetadataSource
+					var outboxMetadataSources []execinfrapb.MetadataSource
 					if i < numHashRouterOutputs {
 						if i == 0 {
 							// Only one outbox should drain the hash router.
@@ -267,7 +267,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					streamID++
 					// There is now only a single Inbox on the "local" node which is the
 					// only metadata source.
-					materializerMetadataSources = []distsqlpb.MetadataSource{inbox}
+					materializerMetadataSources = []execinfrapb.MetadataSource{inbox}
 					materializerInput = inbox
 				} else {
 					materializerInput = synchronizer
@@ -279,7 +279,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					1, /* processorID */
 					materializerInput,
 					semtyps,
-					&distsqlpb.PostProcessSpec{},
+					&execinfrapb.PostProcessSpec{},
 					nil, /* output */
 					materializerMetadataSources,
 					nil, /* outputStatsToTrace */

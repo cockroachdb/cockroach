@@ -14,19 +14,19 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 )
 
 var flowSpecPool = sync.Pool{
 	New: func() interface{} {
-		return &distsqlpb.FlowSpec{}
+		return &execinfrapb.FlowSpec{}
 	},
 }
 
 // NewFlowSpec returns a new FlowSpec, which may have non-zero capacity in its
 // slice fields.
-func NewFlowSpec(flowID distsqlpb.FlowID, gateway roachpb.NodeID) *distsqlpb.FlowSpec {
-	spec := flowSpecPool.Get().(*distsqlpb.FlowSpec)
+func NewFlowSpec(flowID execinfrapb.FlowID, gateway roachpb.NodeID) *execinfrapb.FlowSpec {
+	spec := flowSpecPool.Get().(*execinfrapb.FlowSpec)
 	spec.FlowID = flowID
 	spec.Gateway = gateway
 	return spec
@@ -34,8 +34,8 @@ func NewFlowSpec(flowID distsqlpb.FlowID, gateway roachpb.NodeID) *distsqlpb.Flo
 
 // ReleaseFlowSpec returns this FlowSpec back to the pool of FlowSpecs. It may
 // not be used again after this call.
-func ReleaseFlowSpec(spec *distsqlpb.FlowSpec) {
-	*spec = distsqlpb.FlowSpec{
+func ReleaseFlowSpec(spec *execinfrapb.FlowSpec) {
+	*spec = execinfrapb.FlowSpec{
 		Processors: spec.Processors[:0],
 	}
 	flowSpecPool.Put(spec)
@@ -43,25 +43,25 @@ func ReleaseFlowSpec(spec *distsqlpb.FlowSpec) {
 
 var trSpecPool = sync.Pool{
 	New: func() interface{} {
-		return &distsqlpb.TableReaderSpec{}
+		return &execinfrapb.TableReaderSpec{}
 	},
 }
 
 // NewTableReaderSpec returns a new TableReaderSpec.
-func NewTableReaderSpec() *distsqlpb.TableReaderSpec {
-	return trSpecPool.Get().(*distsqlpb.TableReaderSpec)
+func NewTableReaderSpec() *execinfrapb.TableReaderSpec {
+	return trSpecPool.Get().(*execinfrapb.TableReaderSpec)
 }
 
 // ReleaseTableReaderSpec puts this TableReaderSpec back into its sync pool. It
 // may not be used again after Release returns.
-func ReleaseTableReaderSpec(s *distsqlpb.TableReaderSpec) {
+func ReleaseTableReaderSpec(s *execinfrapb.TableReaderSpec) {
 	s.Reset()
 	trSpecPool.Put(s)
 }
 
 // ReleaseSetupFlowRequest releases the resources of this SetupFlowRequest,
 // putting them back into their respective object pools.
-func ReleaseSetupFlowRequest(s *distsqlpb.SetupFlowRequest) {
+func ReleaseSetupFlowRequest(s *execinfrapb.SetupFlowRequest) {
 	if s == nil {
 		return
 	}

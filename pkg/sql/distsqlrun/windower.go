@@ -17,7 +17,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -37,9 +37,9 @@ import (
 // GetWindowFunctionInfo returns windowFunc constructor and the return type
 // when given fn is applied to given inputTypes.
 func GetWindowFunctionInfo(
-	fn distsqlpb.WindowerSpec_Func, inputTypes ...types.T,
+	fn execinfrapb.WindowerSpec_Func, inputTypes ...types.T,
 ) (windowConstructor func(*tree.EvalContext) tree.WindowFunc, returnType *types.T, err error) {
-	if fn.AggregateFunc != nil && *fn.AggregateFunc == distsqlpb.AggregatorSpec_ANY_NOT_NULL {
+	if fn.AggregateFunc != nil && *fn.AggregateFunc == execinfrapb.AggregatorSpec_ANY_NOT_NULL {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
 		if len(inputTypes) != 1 {
@@ -154,9 +154,9 @@ const windowerProcName = "windower"
 func newWindower(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.WindowerSpec,
+	spec *execinfrapb.WindowerSpec,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*windower, error) {
 	w := &windower{
@@ -231,7 +231,7 @@ func newWindower(
 		output,
 		&limitedMon,
 		distsql.ProcStateOpts{InputsToDrain: []distsql.RowSource{w.input},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				w.close()
 				return nil
 			}},
@@ -277,10 +277,10 @@ func (w *windower) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (w *windower) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (w *windower) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for w.State == distsql.StateRunning {
 		var row sqlbase.EncDatumRow
-		var meta *distsqlpb.ProducerMetadata
+		var meta *execinfrapb.ProducerMetadata
 		switch w.runningState {
 		case windowerAccumulating:
 			w.runningState, row, meta = w.accumulateRows()
@@ -328,7 +328,7 @@ func (w *windower) close() {
 func (w *windower) accumulateRows() (
 	windowerState,
 	sqlbase.EncDatumRow,
-	*distsqlpb.ProducerMetadata,
+	*execinfrapb.ProducerMetadata,
 ) {
 	for {
 		row, meta := w.input.Next()
@@ -367,7 +367,7 @@ func (w *windower) accumulateRows() (
 //
 // emitRow() might move to stateDraining. It might also not return a row if the
 // ProcOutputHelper filtered the current row out.
-func (w *windower) emitRow() (windowerState, sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (w *windower) emitRow() (windowerState, sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if w.inputDone {
 		for !w.populated {
 			if err := w.cancelChecker.Check(); err != nil {
@@ -508,12 +508,12 @@ func (w *windower) processPartition(
 				return err
 			}
 			startBound, endBound := windowFn.frame.Bounds.Start, windowFn.frame.Bounds.End
-			if startBound.BoundType == distsqlpb.WindowerSpec_Frame_OFFSET_PRECEDING ||
-				startBound.BoundType == distsqlpb.WindowerSpec_Frame_OFFSET_FOLLOWING {
+			if startBound.BoundType == execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING ||
+				startBound.BoundType == execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING {
 				switch windowFn.frame.Mode {
-				case distsqlpb.WindowerSpec_Frame_ROWS:
+				case execinfrapb.WindowerSpec_Frame_ROWS:
 					frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
-				case distsqlpb.WindowerSpec_Frame_RANGE:
+				case execinfrapb.WindowerSpec_Frame_RANGE:
 					datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, &startBound.OffsetType.Type, startBound.TypedOffset)
 					if err != nil {
 						return errors.NewAssertionErrorWithWrappedErrf(err,
@@ -524,7 +524,7 @@ func (w *windower) processPartition(
 							"%d trailing bytes in encoded value", errors.Safe(len(rem)))
 					}
 					frameRun.StartBoundOffset = datum
-				case distsqlpb.WindowerSpec_Frame_GROUPS:
+				case execinfrapb.WindowerSpec_Frame_GROUPS:
 					frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
 				default:
 					return errors.AssertionFailedf(
@@ -532,12 +532,12 @@ func (w *windower) processPartition(
 				}
 			}
 			if endBound != nil {
-				if endBound.BoundType == distsqlpb.WindowerSpec_Frame_OFFSET_PRECEDING ||
-					endBound.BoundType == distsqlpb.WindowerSpec_Frame_OFFSET_FOLLOWING {
+				if endBound.BoundType == execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING ||
+					endBound.BoundType == execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING {
 					switch windowFn.frame.Mode {
-					case distsqlpb.WindowerSpec_Frame_ROWS:
+					case execinfrapb.WindowerSpec_Frame_ROWS:
 						frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
-					case distsqlpb.WindowerSpec_Frame_RANGE:
+					case execinfrapb.WindowerSpec_Frame_RANGE:
 						datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, &endBound.OffsetType.Type, endBound.TypedOffset)
 						if err != nil {
 							return errors.NewAssertionErrorWithWrappedErrf(err,
@@ -548,7 +548,7 @@ func (w *windower) processPartition(
 								"%d trailing bytes in encoded value", errors.Safe(len(rem)))
 						}
 						frameRun.EndBoundOffset = datum
-					case distsqlpb.WindowerSpec_Frame_GROUPS:
+					case execinfrapb.WindowerSpec_Frame_GROUPS:
 						frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
 					default:
 						return errors.AssertionFailedf("unexpected WindowFrameMode: %d",
@@ -594,7 +594,7 @@ func (w *windower) processPartition(
 			// and if it is not, we change the ordering to the needed and resort the
 			// container.
 			if prevWindowFn != nil && !windowFn.ordering.Equal(prevWindowFn.ordering) {
-				if err := partition.Reorder(ctx, distsqlpb.ConvertToColumnOrdering(windowFn.ordering)); err != nil {
+				if err := partition.Reorder(ctx, execinfrapb.ConvertToColumnOrdering(windowFn.ordering)); err != nil {
 					return err
 				}
 				partition.Sort(ctx)
@@ -692,7 +692,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 
 	// w.partition will have ordering as needed by the first window function to
 	// be processed.
-	ordering := distsqlpb.ConvertToColumnOrdering(w.windowFns[w.orderOfWindowFnsProcessing[0]].ordering)
+	ordering := execinfrapb.ConvertToColumnOrdering(w.windowFns[w.orderOfWindowFnsProcessing[0]].ordering)
 	w.partition = rowcontainer.NewDiskBackedIndexedRowContainer(
 		ordering,
 		w.inputTypes,
@@ -812,9 +812,9 @@ func (w *windower) populateNextOutputRow() (bool, error) {
 }
 
 type windowFunc struct {
-	ordering     distsqlpb.Ordering
+	ordering     execinfrapb.Ordering
 	argsIdxs     []uint32
-	frame        *distsqlpb.WindowerSpec_Frame
+	frame        *execinfrapb.WindowerSpec_Frame
 	filterColIdx int
 	outputColIdx int
 }
@@ -823,7 +823,7 @@ type partitionPeerGrouper struct {
 	ctx       context.Context
 	evalCtx   *tree.EvalContext
 	partition *rowcontainer.DiskBackedIndexedRowContainer
-	ordering  distsqlpb.Ordering
+	ordering  execinfrapb.Ordering
 	rowCopy   sqlbase.EncDatumRow
 	err       error
 }
@@ -854,7 +854,7 @@ func (n *partitionPeerGrouper) InSameGroup(i, j int) (bool, error) {
 			return false, n.err
 		}
 		if c := da.Compare(n.evalCtx, db); c != 0 {
-			if o.Direction != distsqlpb.Ordering_Column_ASC {
+			if o.Direction != execinfrapb.Ordering_Column_ASC {
 				return false, nil
 			}
 			return false, nil
@@ -879,19 +879,19 @@ const datumSliceOverhead = int64(unsafe.Sizeof([]tree.Datum(nil)))
 
 // CreateWindowerSpecFunc creates a WindowerSpec_Func based on the function
 // name or returns an error if unknown function name is provided.
-func CreateWindowerSpecFunc(funcStr string) (distsqlpb.WindowerSpec_Func, error) {
-	if aggBuiltin, ok := distsqlpb.AggregatorSpec_Func_value[funcStr]; ok {
-		aggSpec := distsqlpb.AggregatorSpec_Func(aggBuiltin)
-		return distsqlpb.WindowerSpec_Func{AggregateFunc: &aggSpec}, nil
-	} else if winBuiltin, ok := distsqlpb.WindowerSpec_WindowFunc_value[funcStr]; ok {
-		winSpec := distsqlpb.WindowerSpec_WindowFunc(winBuiltin)
-		return distsqlpb.WindowerSpec_Func{WindowFunc: &winSpec}, nil
+func CreateWindowerSpecFunc(funcStr string) (execinfrapb.WindowerSpec_Func, error) {
+	if aggBuiltin, ok := execinfrapb.AggregatorSpec_Func_value[funcStr]; ok {
+		aggSpec := execinfrapb.AggregatorSpec_Func(aggBuiltin)
+		return execinfrapb.WindowerSpec_Func{AggregateFunc: &aggSpec}, nil
+	} else if winBuiltin, ok := execinfrapb.WindowerSpec_WindowFunc_value[funcStr]; ok {
+		winSpec := execinfrapb.WindowerSpec_WindowFunc(winBuiltin)
+		return execinfrapb.WindowerSpec_Func{WindowFunc: &winSpec}, nil
 	} else {
-		return distsqlpb.WindowerSpec_Func{}, errors.Errorf("unknown aggregate/window function %s", funcStr)
+		return execinfrapb.WindowerSpec_Func{}, errors.Errorf("unknown aggregate/window function %s", funcStr)
 	}
 }
 
-var _ distsqlpb.DistSQLSpanStats = &WindowerStats{}
+var _ execinfrapb.DistSQLSpanStats = &WindowerStats{}
 
 const windowerTagPrefix = "windower."
 

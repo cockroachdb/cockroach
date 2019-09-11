@@ -11,7 +11,7 @@
 package distsqlplan
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -20,7 +20,7 @@ import (
 // in the final stage of distributed aggregations that allows us to specify the
 // corresponding inputs from the local aggregations by their indices in the LocalStage.
 type FinalStageInfo struct {
-	Fn distsqlpb.AggregatorSpec_Func
+	Fn execinfrapb.AggregatorSpec_Func
 	// Specifies the ordered slice of outputs from local aggregations to propagate
 	// as inputs to Fn. This must be ordered according to the underlying aggregate builtin
 	// arguments signature found in aggregate_builtins.go.
@@ -47,7 +47,7 @@ type FinalStageInfo struct {
 type DistAggregationInfo struct {
 	// The local stage consists of one or more aggregations. All aggregations have
 	// the same input.
-	LocalStage []distsqlpb.AggregatorSpec_Func
+	LocalStage []execinfrapb.AggregatorSpec_Func
 
 	// The final stage consists of one or more aggregations that take in an
 	// arbitrary number of inputs from the local stages. The inputs are ordered and
@@ -82,92 +82,92 @@ var passThroughLocalIdxs = []uint32{0}
 
 // DistAggregationTable is DistAggregationInfo look-up table. Functions that
 // don't have an entry in the table are not optimized with a local stage.
-var DistAggregationTable = map[distsqlpb.AggregatorSpec_Func]DistAggregationInfo{
-	distsqlpb.AggregatorSpec_ANY_NOT_NULL: {
-		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_ANY_NOT_NULL},
+var DistAggregationTable = map[execinfrapb.AggregatorSpec_Func]DistAggregationInfo{
+	execinfrapb.AggregatorSpec_ANY_NOT_NULL: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_ANY_NOT_NULL},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlpb.AggregatorSpec_ANY_NOT_NULL,
+				Fn:        execinfrapb.AggregatorSpec_ANY_NOT_NULL,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
 	},
 
-	distsqlpb.AggregatorSpec_BOOL_AND: {
-		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_BOOL_AND},
+	execinfrapb.AggregatorSpec_BOOL_AND: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_BOOL_AND},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlpb.AggregatorSpec_BOOL_AND,
+				Fn:        execinfrapb.AggregatorSpec_BOOL_AND,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
 	},
 
-	distsqlpb.AggregatorSpec_BOOL_OR: {
-		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_BOOL_OR},
+	execinfrapb.AggregatorSpec_BOOL_OR: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_BOOL_OR},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlpb.AggregatorSpec_BOOL_OR,
+				Fn:        execinfrapb.AggregatorSpec_BOOL_OR,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
 	},
 
-	distsqlpb.AggregatorSpec_COUNT: {
-		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_COUNT},
+	execinfrapb.AggregatorSpec_COUNT: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_COUNT},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlpb.AggregatorSpec_SUM_INT,
+				Fn:        execinfrapb.AggregatorSpec_SUM_INT,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
 	},
 
-	distsqlpb.AggregatorSpec_COUNT_ROWS: {
-		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_COUNT_ROWS},
+	execinfrapb.AggregatorSpec_COUNT_ROWS: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_COUNT_ROWS},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlpb.AggregatorSpec_SUM_INT,
+				Fn:        execinfrapb.AggregatorSpec_SUM_INT,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
 	},
 
-	distsqlpb.AggregatorSpec_MAX: {
-		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_MAX},
+	execinfrapb.AggregatorSpec_MAX: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_MAX},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlpb.AggregatorSpec_MAX,
+				Fn:        execinfrapb.AggregatorSpec_MAX,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
 	},
 
-	distsqlpb.AggregatorSpec_MIN: {
-		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_MIN},
+	execinfrapb.AggregatorSpec_MIN: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_MIN},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlpb.AggregatorSpec_MIN,
+				Fn:        execinfrapb.AggregatorSpec_MIN,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
 	},
 
-	distsqlpb.AggregatorSpec_SUM: {
-		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_SUM},
+	execinfrapb.AggregatorSpec_SUM: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlpb.AggregatorSpec_SUM,
+				Fn:        execinfrapb.AggregatorSpec_SUM,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
 	},
 
-	distsqlpb.AggregatorSpec_XOR_AGG: {
-		LocalStage: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_XOR_AGG},
+	execinfrapb.AggregatorSpec_XOR_AGG: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_XOR_AGG},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlpb.AggregatorSpec_XOR_AGG,
+				Fn:        execinfrapb.AggregatorSpec_XOR_AGG,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},
@@ -180,18 +180,18 @@ var DistAggregationTable = map[distsqlpb.AggregatorSpec_Func]DistAggregationInfo
 	//  - a final rendering then divides the two results.
 	//
 	// At a high level, this is analogous to rewriting AVG(x) as SUM(x)/COUNT(x).
-	distsqlpb.AggregatorSpec_AVG: {
-		LocalStage: []distsqlpb.AggregatorSpec_Func{
-			distsqlpb.AggregatorSpec_SUM,
-			distsqlpb.AggregatorSpec_COUNT,
+	execinfrapb.AggregatorSpec_AVG: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AggregatorSpec_SUM,
+			execinfrapb.AggregatorSpec_COUNT,
 		},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlpb.AggregatorSpec_SUM,
+				Fn:        execinfrapb.AggregatorSpec_SUM,
 				LocalIdxs: []uint32{0},
 			},
 			{
-				Fn:        distsqlpb.AggregatorSpec_SUM_INT,
+				Fn:        execinfrapb.AggregatorSpec_SUM_INT,
 				LocalIdxs: []uint32{1},
 			},
 		},
@@ -230,11 +230,11 @@ var DistAggregationTable = map[distsqlpb.AggregatorSpec_Func]DistAggregationInfo
 	//
 	// At a high level, this is analogous to rewriting VARIANCE(x) as
 	// SQRDIFF(x)/(COUNT(x) - 1) (and STDDEV(x) as sqrt(VARIANCE(x))).
-	distsqlpb.AggregatorSpec_VARIANCE: {
-		LocalStage: []distsqlpb.AggregatorSpec_Func{
-			distsqlpb.AggregatorSpec_SQRDIFF,
-			distsqlpb.AggregatorSpec_SUM,
-			distsqlpb.AggregatorSpec_COUNT,
+	execinfrapb.AggregatorSpec_VARIANCE: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AggregatorSpec_SQRDIFF,
+			execinfrapb.AggregatorSpec_SUM,
+			execinfrapb.AggregatorSpec_COUNT,
 		},
 		// Instead of have a SUM_SQRDIFFS and SUM_INT (for COUNT) stage
 		// for VARIANCE (and STDDEV) then tailoring a FinalRendering
@@ -248,21 +248,21 @@ var DistAggregationTable = map[distsqlpb.AggregatorSpec_Func]DistAggregationInfo
 		// have one or the other
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlpb.AggregatorSpec_FINAL_VARIANCE,
+				Fn:        execinfrapb.AggregatorSpec_FINAL_VARIANCE,
 				LocalIdxs: []uint32{0, 1, 2},
 			},
 		},
 	},
 
-	distsqlpb.AggregatorSpec_STDDEV: {
-		LocalStage: []distsqlpb.AggregatorSpec_Func{
-			distsqlpb.AggregatorSpec_SQRDIFF,
-			distsqlpb.AggregatorSpec_SUM,
-			distsqlpb.AggregatorSpec_COUNT,
+	execinfrapb.AggregatorSpec_STDDEV: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AggregatorSpec_SQRDIFF,
+			execinfrapb.AggregatorSpec_SUM,
+			execinfrapb.AggregatorSpec_COUNT,
 		},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlpb.AggregatorSpec_FINAL_STDDEV,
+				Fn:        execinfrapb.AggregatorSpec_FINAL_STDDEV,
 				LocalIdxs: []uint32{0, 1, 2},
 			},
 		},

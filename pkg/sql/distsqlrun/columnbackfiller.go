@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -38,8 +38,8 @@ var _ chunkBackfiller = &columnBackfiller{}
 func newColumnBackfiller(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec distsqlpb.BackfillerSpec,
-	post *distsqlpb.PostProcessSpec,
+	spec execinfrapb.BackfillerSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*columnBackfiller, error) {
 	otherTables := make([]*sqlbase.ImmutableTableDescriptor, len(spec.OtherTables))

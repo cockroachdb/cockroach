@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -137,12 +137,12 @@ const (
 	publicAndNonPublicColumns scanVisibility = 1
 )
 
-func (s scanVisibility) toDistSQLScanVisibility() distsqlpb.ScanVisibility {
+func (s scanVisibility) toDistSQLScanVisibility() execinfrapb.ScanVisibility {
 	switch s {
 	case publicColumns:
-		return distsqlpb.ScanVisibility_PUBLIC
+		return execinfrapb.ScanVisibility_PUBLIC
 	case publicAndNonPublicColumns:
-		return distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+		return execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	default:
 		panic(fmt.Sprintf("Unknown visibility %+v", s))
 	}

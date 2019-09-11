@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
@@ -31,8 +31,8 @@ import (
 
 // flowStreamClient is a utility interface used to mock out the RPC layer.
 type flowStreamClient interface {
-	Send(*distsqlpb.ProducerMessage) error
-	Recv() (*distsqlpb.ConsumerSignal, error)
+	Send(*execinfrapb.ProducerMessage) error
+	Recv() (*execinfrapb.ConsumerSignal, error)
 	CloseSend() error
 }
 
@@ -58,17 +58,17 @@ type Outbox struct {
 
 	// draining is an atomic that represents whether the Outbox is draining.
 	draining        uint32
-	metadataSources []distsqlpb.MetadataSource
+	metadataSources []execinfrapb.MetadataSource
 
 	scratch struct {
 		buf *bytes.Buffer
-		msg *distsqlpb.ProducerMessage
+		msg *execinfrapb.ProducerMessage
 	}
 }
 
 // NewOutbox creates a new Outbox.
 func NewOutbox(
-	input colexec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource,
+	input colexec.Operator, typs []coltypes.T, metadataSources []execinfrapb.MetadataSource,
 ) (*Outbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
@@ -88,7 +88,7 @@ func NewOutbox(
 		metadataSources: metadataSources,
 	}
 	o.scratch.buf = &bytes.Buffer{}
-	o.scratch.msg = &distsqlpb.ProducerMessage{}
+	o.scratch.msg = &execinfrapb.ProducerMessage{}
 	return o, nil
 }
 
@@ -114,8 +114,8 @@ func (o *Outbox) Run(
 	ctx context.Context,
 	dialer Dialer,
 	nodeID roachpb.NodeID,
-	flowID distsqlpb.FlowID,
-	streamID distsqlpb.StreamID,
+	flowID execinfrapb.FlowID,
+	streamID execinfrapb.StreamID,
 	cancelFn context.CancelFunc,
 ) {
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
@@ -131,7 +131,7 @@ func (o *Outbox) Run(
 		return
 	}
 
-	client := distsqlpb.NewDistSQLClient(conn)
+	client := execinfrapb.NewDistSQLClient(conn)
 	stream, err := client.FlowStream(ctx)
 	if err != nil {
 		log.Warningf(
@@ -145,7 +145,7 @@ func (o *Outbox) Run(
 	log.VEvent(ctx, 2, "Outbox sending header")
 	// Send header message to establish the remote server (consumer).
 	if err := stream.Send(
-		&distsqlpb.ProducerMessage{Header: &distsqlpb.ProducerHeader{FlowID: flowID, StreamID: streamID}},
+		&execinfrapb.ProducerMessage{Header: &execinfrapb.ProducerHeader{FlowID: flowID, StreamID: streamID}},
 	); err != nil {
 		log.Warningf(
 			ctx,
@@ -243,15 +243,15 @@ func (o *Outbox) sendBatches(
 // the given stream, returning the Send error, if any. sendMetadata also sends
 // errToSend as metadata if non-nil.
 func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errToSend error) error {
-	msg := &distsqlpb.ProducerMessage{}
+	msg := &execinfrapb.ProducerMessage{}
 	if errToSend != nil {
 		msg.Data.Metadata = append(
-			msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, distsqlpb.ProducerMetadata{Err: errToSend}),
+			msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, execinfrapb.ProducerMetadata{Err: errToSend}),
 		)
 	}
 	for _, src := range o.metadataSources {
 		for _, meta := range src.DrainMeta(ctx) {
-			msg.Data.Metadata = append(msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, meta))
+			msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, meta))
 		}
 	}
 	if len(msg.Data.Metadata) == 0 {

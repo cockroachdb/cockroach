@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,76 +41,76 @@ func TestVectorizeSpaceError(t *testing.T) {
 
 	// Without a limit, the default sorter creates a vectorized operator
 	// that we don't know memory usage of statically.
-	sorterCore := &distsqlpb.SorterSpec{
-		OutputOrdering: distsqlpb.Ordering{
-			Columns: []distsqlpb.Ordering_Column{
+	sorterCore := &execinfrapb.SorterSpec{
+		OutputOrdering: execinfrapb.Ordering{
+			Columns: []execinfrapb.Ordering_Column{
 				{
 					ColIdx:    0,
-					Direction: distsqlpb.Ordering_Column_ASC,
+					Direction: execinfrapb.Ordering_Column_ASC,
 				},
 			},
 		},
 	}
 
-	aggregatorCore := &distsqlpb.AggregatorSpec{
-		Type: distsqlpb.AggregatorSpec_SCALAR,
-		Aggregations: []distsqlpb.AggregatorSpec_Aggregation{
+	aggregatorCore := &execinfrapb.AggregatorSpec{
+		Type: execinfrapb.AggregatorSpec_SCALAR,
+		Aggregations: []execinfrapb.AggregatorSpec_Aggregation{
 			{
-				Func:   distsqlpb.AggregatorSpec_MAX,
+				Func:   execinfrapb.AggregatorSpec_MAX,
 				ColIdx: []uint32{0},
 			},
 		},
 	}
 
-	input := []distsqlpb.InputSyncSpec{{
+	input := []execinfrapb.InputSyncSpec{{
 		ColumnTypes: []types.T{*types.Int},
 	}}
 
 	testCases := []struct {
 		desc string
-		spec *distsqlpb.ProcessorSpec
+		spec *execinfrapb.ProcessorSpec
 	}{
 		{
 			desc: "topk",
-			spec: &distsqlpb.ProcessorSpec{
+			spec: &execinfrapb.ProcessorSpec{
 				Input: input,
-				Core: distsqlpb.ProcessorCoreUnion{
+				Core: execinfrapb.ProcessorCoreUnion{
 					Sorter: sorterCore,
 				},
-				Post: distsqlpb.PostProcessSpec{
+				Post: execinfrapb.PostProcessSpec{
 					Limit: 5,
 				},
 			},
 		},
 		{
 			desc: "projection",
-			spec: &distsqlpb.ProcessorSpec{
+			spec: &execinfrapb.ProcessorSpec{
 				Input: input,
-				Core: distsqlpb.ProcessorCoreUnion{
+				Core: execinfrapb.ProcessorCoreUnion{
 					Sorter: sorterCore,
 				},
-				Post: distsqlpb.PostProcessSpec{
-					RenderExprs: []distsqlpb.Expression{{Expr: "@1 + 1"}},
+				Post: execinfrapb.PostProcessSpec{
+					RenderExprs: []execinfrapb.Expression{{Expr: "@1 + 1"}},
 				},
 			},
 		},
 		{
 			desc: "in_projection",
-			spec: &distsqlpb.ProcessorSpec{
+			spec: &execinfrapb.ProcessorSpec{
 				Input: input,
-				Core: distsqlpb.ProcessorCoreUnion{
+				Core: execinfrapb.ProcessorCoreUnion{
 					Sorter: sorterCore,
 				},
-				Post: distsqlpb.PostProcessSpec{
-					RenderExprs: []distsqlpb.Expression{{Expr: "@1 IN (1, 2)"}},
+				Post: execinfrapb.PostProcessSpec{
+					RenderExprs: []execinfrapb.Expression{{Expr: "@1 IN (1, 2)"}},
 				},
 			},
 		},
 		{
 			desc: "aggregation",
-			spec: &distsqlpb.ProcessorSpec{
+			spec: &execinfrapb.ProcessorSpec{
 				Input: input,
-				Core: distsqlpb.ProcessorCoreUnion{
+				Core: execinfrapb.ProcessorCoreUnion{
 					Aggregator: aggregatorCore,
 				},
 			},

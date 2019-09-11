@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -38,7 +38,7 @@ import (
 // corresponding to operators in inputs (the latter must have already been
 // wrapped).
 func wrapWithVectorizedStatsCollector(
-	op colexec.Operator, inputs []colexec.Operator, pspec *distsqlpb.ProcessorSpec,
+	op colexec.Operator, inputs []colexec.Operator, pspec *execinfrapb.ProcessorSpec,
 ) (*colexec.VectorizedStatsCollector, error) {
 	inputWatch := timeutil.NewStopWatch()
 	vsc := colexec.NewVectorizedStatsCollector(op, pspec.ProcessorID, len(inputs) == 0, inputWatch)
@@ -69,7 +69,7 @@ func finishVectorizedStatsCollectors(
 		// away which is not the way they are supposed to be used, so this
 		// should be fixed.
 		_, spansByProcID[pid] = tracing.ChildSpan(ctx, fmt.Sprintf("operator for processor %d", pid))
-		spansByProcID[pid].SetTag(distsqlpb.ProcessorIDTagKey, pid)
+		spansByProcID[pid].SetTag(execinfrapb.ProcessorIDTagKey, pid)
 	}
 	for _, vsc := range vectorizedStatsCollectors {
 		// TODO(yuzefovich): I'm not sure whether there are cases when
@@ -97,10 +97,10 @@ type runFn func(context.Context, context.CancelFunc)
 // checks.
 type flowCreatorHelper interface {
 	// addStreamEndpoint stores information about an inbound stream.
-	addStreamEndpoint(distsqlpb.StreamID, *colrpc.Inbox, *sync.WaitGroup)
+	addStreamEndpoint(execinfrapb.StreamID, *colrpc.Inbox, *sync.WaitGroup)
 	// checkInboundStreamID checks that the provided stream ID has not been seen
 	// yet.
-	checkInboundStreamID(distsqlpb.StreamID) error
+	checkInboundStreamID(execinfrapb.StreamID) error
 	// accumulateAsyncComponent stores a component (either a router or an outbox)
 	// to be run asynchronously.
 	accumulateAsyncComponent(runFn)
@@ -114,20 +114,20 @@ type flowCreatorHelper interface {
 // as the metadataSources in this DAG that need to be drained.
 type opDAGWithMetaSources struct {
 	rootOperator    colexec.Operator
-	metadataSources []distsqlpb.MetadataSource
+	metadataSources []execinfrapb.MetadataSource
 }
 
 // remoteComponentCreator is an interface that abstracts the constructors for
 // several components in a remote flow. Mostly for testing purposes.
 type remoteComponentCreator interface {
-	newOutbox(input colexec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource) (*colrpc.Outbox, error)
+	newOutbox(input colexec.Operator, typs []coltypes.T, metadataSources []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
 	newInbox(typs []coltypes.T) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
 
 func (vectorizedRemoteComponentCreator) newOutbox(
-	input colexec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource,
+	input colexec.Operator, typs []coltypes.T, metadataSources []execinfrapb.MetadataSource,
 ) (*colrpc.Outbox, error) {
 	return colrpc.NewOutbox(input, typs, metadataSources)
 }
@@ -144,14 +144,14 @@ type vectorizedFlowCreator struct {
 	flowCreatorHelper
 	remoteComponentCreator
 
-	streamIDToInputOp              map[distsqlpb.StreamID]opDAGWithMetaSources
+	streamIDToInputOp              map[execinfrapb.StreamID]opDAGWithMetaSources
 	recordingStats                 bool
 	vectorizedStatsCollectorsQueue []*colexec.VectorizedStatsCollector
 	procIDs                        []int32
 	waitGroup                      *sync.WaitGroup
 	syncFlowConsumer               distsql.RowReceiver
 	nodeDialer                     *nodedialer.Dialer
-	flowID                         distsqlpb.FlowID
+	flowID                         execinfrapb.FlowID
 
 	// numOutboxes counts how many exec.Outboxes have been set up on this node.
 	// It must be accessed atomically.
@@ -170,12 +170,12 @@ func newVectorizedFlowCreator(
 	waitGroup *sync.WaitGroup,
 	syncFlowConsumer distsql.RowReceiver,
 	nodeDialer *nodedialer.Dialer,
-	flowID distsqlpb.FlowID,
+	flowID execinfrapb.FlowID,
 ) *vectorizedFlowCreator {
 	return &vectorizedFlowCreator{
 		flowCreatorHelper:              helper,
 		remoteComponentCreator:         componentCreator,
-		streamIDToInputOp:              make(map[distsqlpb.StreamID]opDAGWithMetaSources),
+		streamIDToInputOp:              make(map[execinfrapb.StreamID]opDAGWithMetaSources),
 		recordingStats:                 recordingStats,
 		vectorizedStatsCollectorsQueue: make([]*colexec.VectorizedStatsCollector, 0, 2),
 		procIDs:                        make([]int32, 0, 2),
@@ -192,8 +192,8 @@ func newVectorizedFlowCreator(
 func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	op colexec.Operator,
 	outputTyps []coltypes.T,
-	stream *distsqlpb.StreamEndpointSpec,
-	metadataSourcesQueue []distsqlpb.MetadataSource,
+	stream *execinfrapb.StreamEndpointSpec,
+	metadataSourcesQueue []execinfrapb.MetadataSource,
 ) (colexec.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(op, outputTyps, metadataSourcesQueue)
 	if err != nil {
@@ -230,10 +230,10 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 func (s *vectorizedFlowCreator) setupRouter(
 	input colexec.Operator,
 	outputTyps []coltypes.T,
-	output *distsqlpb.OutputRouterSpec,
-	metadataSourcesQueue []distsqlpb.MetadataSource,
+	output *execinfrapb.OutputRouterSpec,
+	metadataSourcesQueue []execinfrapb.MetadataSource,
 ) error {
-	if output.Type != distsqlpb.OutputRouterSpec_BY_HASH {
+	if output.Type != execinfrapb.OutputRouterSpec_BY_HASH {
 		return errors.Errorf("vectorized output router type %s unsupported", output.Type)
 	}
 
@@ -255,13 +255,13 @@ func (s *vectorizedFlowCreator) setupRouter(
 	for i, op := range outputs {
 		stream := &output.Streams[i]
 		switch stream.Type {
-		case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
+		case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
 			return errors.Errorf("unexpected sync response output when setting up router")
-		case distsqlpb.StreamEndpointSpec_REMOTE:
+		case execinfrapb.StreamEndpointSpec_REMOTE:
 			if _, err := s.setupRemoteOutputStream(op, outputTyps, stream, metadataSourcesQueue); err != nil {
 				return err
 			}
-		case distsqlpb.StreamEndpointSpec_LOCAL:
+		case execinfrapb.StreamEndpointSpec_LOCAL:
 			foundLocalOutput = true
 			if s.recordingStats {
 				// Wrap local outputs with vectorized stats collectors when recording
@@ -269,7 +269,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 				// information (e.g. output stall time).
 				var err error
 				op, err = wrapWithVectorizedStatsCollector(
-					op, nil /* inputs */, &distsqlpb.ProcessorSpec{ProcessorID: -1},
+					op, nil /* inputs */, &execinfrapb.ProcessorSpec{ProcessorID: -1},
 				)
 				if err != nil {
 					return err
@@ -297,17 +297,17 @@ func (s *vectorizedFlowCreator) setupRouter(
 // []distqlpb.MetadataSource so that any remote metadata can be read through
 // calling DrainMeta.
 func (s *vectorizedFlowCreator) setupInput(
-	input distsqlpb.InputSyncSpec,
-) (op colexec.Operator, _ []distsqlpb.MetadataSource, memUsed int, _ error) {
+	input execinfrapb.InputSyncSpec,
+) (op colexec.Operator, _ []execinfrapb.MetadataSource, memUsed int, _ error) {
 	inputStreamOps := make([]colexec.Operator, 0, len(input.Streams))
-	metaSources := make([]distsqlpb.MetadataSource, 0, len(input.Streams))
+	metaSources := make([]execinfrapb.MetadataSource, 0, len(input.Streams))
 	for _, inputStream := range input.Streams {
 		switch inputStream.Type {
-		case distsqlpb.StreamEndpointSpec_LOCAL:
+		case execinfrapb.StreamEndpointSpec_LOCAL:
 			in := s.streamIDToInputOp[inputStream.StreamID]
 			inputStreamOps = append(inputStreamOps, in.rootOperator)
 			metaSources = append(metaSources, in.metadataSources...)
-		case distsqlpb.StreamEndpointSpec_REMOTE:
+		case execinfrapb.StreamEndpointSpec_REMOTE:
 			// If the input is remote, the input operator does not exist in
 			// streamIDToInputOp. Create an inbox.
 			if err := s.checkInboundStreamID(inputStream.StreamID); err != nil {
@@ -332,7 +332,7 @@ func (s *vectorizedFlowCreator) setupInput(
 					// TODO(asubiotto): Vectorized stats collectors currently expect a
 					// processor ID. These stats will not be shown until we extend stats
 					// collectors to take in a stream ID.
-					&distsqlpb.ProcessorSpec{
+					&execinfrapb.ProcessorSpec{
 						ProcessorID: -1,
 					},
 				)
@@ -352,9 +352,9 @@ func (s *vectorizedFlowCreator) setupInput(
 		if err != nil {
 			return nil, nil, memUsed, err
 		}
-		if input.Type == distsqlpb.InputSyncSpec_ORDERED {
+		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
 			op = colexec.NewOrderedSynchronizer(
-				inputStreamOps, typs, distsqlpb.ConvertToColumnOrdering(input.Ordering),
+				inputStreamOps, typs, execinfrapb.ConvertToColumnOrdering(input.Ordering),
 			)
 			memUsed += op.(colexec.StaticMemoryOperator).EstimateStaticMemoryUsage()
 		} else {
@@ -368,7 +368,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			// TODO(asubiotto): Once we have IDs for synchronizers, plumb them into
 			// this stats collector to display stats.
 			var err error
-			op, err = wrapWithVectorizedStatsCollector(op, statsInputs, &distsqlpb.ProcessorSpec{ProcessorID: -1})
+			op, err = wrapWithVectorizedStatsCollector(op, statsInputs, &execinfrapb.ProcessorSpec{ProcessorID: -1})
 			if err != nil {
 				return nil, nil, memUsed, err
 			}
@@ -386,13 +386,13 @@ func (s *vectorizedFlowCreator) setupInput(
 func (s *vectorizedFlowCreator) setupOutput(
 	ctx context.Context,
 	flowCtx *distsql.FlowCtx,
-	pspec *distsqlpb.ProcessorSpec,
+	pspec *execinfrapb.ProcessorSpec,
 	op colexec.Operator,
 	opOutputTypes []coltypes.T,
-	metadataSourcesQueue []distsqlpb.MetadataSource,
+	metadataSourcesQueue []execinfrapb.MetadataSource,
 ) error {
 	output := &pspec.Output[0]
-	if output.Type != distsqlpb.OutputRouterSpec_PASS_THROUGH {
+	if output.Type != execinfrapb.OutputRouterSpec_PASS_THROUGH {
 		return s.setupRouter(
 			op,
 			opOutputTypes,
@@ -408,9 +408,9 @@ func (s *vectorizedFlowCreator) setupOutput(
 	}
 	outputStream := &output.Streams[0]
 	switch outputStream.Type {
-	case distsqlpb.StreamEndpointSpec_LOCAL:
+	case execinfrapb.StreamEndpointSpec_LOCAL:
 		s.streamIDToInputOp[outputStream.StreamID] = opDAGWithMetaSources{rootOperator: op, metadataSources: metadataSourcesQueue}
-	case distsqlpb.StreamEndpointSpec_REMOTE:
+	case execinfrapb.StreamEndpointSpec_REMOTE:
 		// Set up an Outbox. Note that we pass in a copy of metadataSourcesQueue
 		// so that we can reset it below and keep on writing to it.
 		if s.recordingStats {
@@ -420,15 +420,15 @@ func (s *vectorizedFlowCreator) setupOutput(
 			s.vectorizedStatsCollectorsQueue = s.vectorizedStatsCollectorsQueue[:0]
 			metadataSourcesQueue = append(
 				metadataSourcesQueue,
-				distsqlpb.CallbackMetadataSource{
-					DrainMetaCb: func(ctx context.Context) []distsqlpb.ProducerMetadata {
+				execinfrapb.CallbackMetadataSource{
+					DrainMetaCb: func(ctx context.Context) []execinfrapb.ProducerMetadata {
 						// TODO(asubiotto): Who is responsible for the recording of the
 						// parent context?
 						// Start a separate recording so that GetRecording will return
 						// the recordings for only the child spans containing stats.
 						ctx, span := tracing.ChildSpanSeparateRecording(ctx, "")
 						finishVectorizedStatsCollectors(ctx, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscs, s.procIDs)
-						return []distsqlpb.ProducerMetadata{{TraceData: tracing.GetRecording(span)}}
+						return []execinfrapb.ProducerMetadata{{TraceData: tracing.GetRecording(span)}}
 					},
 				},
 			)
@@ -440,7 +440,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 		// An outbox is a leaf: there's nothing that sees it as an input on this
 		// node.
 		s.leaves = append(s.leaves, outbox)
-	case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
+	case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
 		if s.syncFlowConsumer == nil {
 			return errors.New("syncFlowConsumer unset, unable to create materializer")
 		}
@@ -462,7 +462,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			pspec.ProcessorID,
 			op,
 			columnTypes,
-			&distsqlpb.PostProcessSpec{},
+			&execinfrapb.PostProcessSpec{},
 			s.syncFlowConsumer,
 			metadataSourcesQueue,
 			outputStatsToTrace,
@@ -485,10 +485,10 @@ func (s *vectorizedFlowCreator) setupOutput(
 func (s *vectorizedFlowCreator) setupFlow(
 	ctx context.Context,
 	flowCtx *distsql.FlowCtx,
-	processorSpecs []distsqlpb.ProcessorSpec,
+	processorSpecs []execinfrapb.ProcessorSpec,
 	acc *mon.BoundAccount,
 ) (leaves []colexec.OpNode, err error) {
-	streamIDToSpecIdx := make(map[distsqlpb.StreamID]int)
+	streamIDToSpecIdx := make(map[execinfrapb.StreamID]int)
 	// queue is a queue of indices into processorSpecs, for topologically
 	// ordered processing.
 	queue := make([]int, 0, len(processorSpecs))
@@ -499,7 +499,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			for k := range input.Streams {
 				stream := &input.Streams[k]
 				streamIDToSpecIdx[stream.StreamID] = i
-				if stream.Type != distsqlpb.StreamEndpointSpec_REMOTE {
+				if stream.Type != execinfrapb.StreamEndpointSpec_REMOTE {
 					hasLocalInput = true
 				}
 			}
@@ -524,7 +524,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		// metadata from these sources is found, the metadataSourcesQueue should be
 		// added as part of one of the last unconnected inputDAGs in
 		// streamIDToInputOp. This is to avoid cycles.
-		metadataSourcesQueue := make([]distsqlpb.MetadataSource, 0, 1)
+		metadataSourcesQueue := make([]execinfrapb.MetadataSource, 0, 1)
 		inputs = inputs[:0]
 		for i := range pspec.Input {
 			input, metadataSources, memUsed, err := s.setupInput(pspec.Input[i])
@@ -563,7 +563,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		}
 
 		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto &&
-			pspec.Output[0].Type == distsqlpb.OutputRouterSpec_BY_HASH {
+			pspec.Output[0].Type == execinfrapb.OutputRouterSpec_BY_HASH {
 			// exec.HashRouter can do unlimited buffering, and it is present in the
 			// flow, so we don't want to run such a flow via the vectorized engine
 			// when vectorize=auto.
@@ -585,7 +585,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		for i := range pspec.Output {
 			for j := range pspec.Output[i].Streams {
 				stream := &pspec.Output[i].Streams[j]
-				if stream.Type != distsqlpb.StreamEndpointSpec_LOCAL {
+				if stream.Type != execinfrapb.StreamEndpointSpec_LOCAL {
 					continue
 				}
 				procIdx, ok := streamIDToSpecIdx[stream.StreamID]
@@ -596,7 +596,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				for k := range outputSpec.Input {
 					for l := range outputSpec.Input[k].Streams {
 						stream := outputSpec.Input[k].Streams[l]
-						if stream.Type == distsqlpb.StreamEndpointSpec_REMOTE {
+						if stream.Type == execinfrapb.StreamEndpointSpec_REMOTE {
 							// Remote streams are not present in streamIDToInputOp. The
 							// Inboxes that consume these streams are created at the same time
 							// as the operator that needs them, so skip the creation check for
@@ -630,7 +630,7 @@ type vectorizedFlowCreatorHelper struct {
 var _ flowCreatorHelper = &vectorizedFlowCreatorHelper{}
 
 func (r *vectorizedFlowCreatorHelper) addStreamEndpoint(
-	streamID distsqlpb.StreamID, inbox *colrpc.Inbox, wg *sync.WaitGroup,
+	streamID execinfrapb.StreamID, inbox *colrpc.Inbox, wg *sync.WaitGroup,
 ) {
 	r.f.inboundStreams[streamID] = &inboundStreamInfo{
 		receiver:  vectorizedInboundStreamHandler{inbox},
@@ -638,7 +638,7 @@ func (r *vectorizedFlowCreatorHelper) addStreamEndpoint(
 	}
 }
 
-func (r *vectorizedFlowCreatorHelper) checkInboundStreamID(sid distsqlpb.StreamID) error {
+func (r *vectorizedFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.StreamID) error {
 	return r.f.checkInboundStreamID(sid)
 }
 
@@ -690,24 +690,24 @@ func (f *Flow) setupVectorizedFlow(ctx context.Context, acc *mon.BoundAccount) e
 // noopFlowCreatorHelper is a flowCreatorHelper that only performs sanity
 // checks.
 type noopFlowCreatorHelper struct {
-	inboundStreams map[distsqlpb.StreamID]struct{}
+	inboundStreams map[execinfrapb.StreamID]struct{}
 }
 
 var _ flowCreatorHelper = &noopFlowCreatorHelper{}
 
 func newNoopFlowCreatorHelper() *noopFlowCreatorHelper {
 	return &noopFlowCreatorHelper{
-		inboundStreams: make(map[distsqlpb.StreamID]struct{}),
+		inboundStreams: make(map[execinfrapb.StreamID]struct{}),
 	}
 }
 
 func (r *noopFlowCreatorHelper) addStreamEndpoint(
-	streamID distsqlpb.StreamID, _ *colrpc.Inbox, _ *sync.WaitGroup,
+	streamID execinfrapb.StreamID, _ *colrpc.Inbox, _ *sync.WaitGroup,
 ) {
 	r.inboundStreams[streamID] = struct{}{}
 }
 
-func (r *noopFlowCreatorHelper) checkInboundStreamID(sid distsqlpb.StreamID) error {
+func (r *noopFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.StreamID) error {
 	if _, found := r.inboundStreams[sid]; found {
 		return errors.Errorf("inbound stream %d already exists in map", sid)
 	}
@@ -728,7 +728,7 @@ func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 // It returns a list of the leaf operators of all flows for the purposes of
 // EXPLAIN output.
 func SupportsVectorized(
-	ctx context.Context, flowCtx *distsql.FlowCtx, processorSpecs []distsqlpb.ProcessorSpec,
+	ctx context.Context, flowCtx *distsql.FlowCtx, processorSpecs []execinfrapb.ProcessorSpec,
 ) (leaves []colexec.OpNode, err error) {
 	creator := newVectorizedFlowCreator(
 		newNoopFlowCreatorHelper(),
@@ -737,7 +737,7 @@ func SupportsVectorized(
 		nil,                   /* waitGroup */
 		&distsql.RowChannel{}, /* syncFlowConsumer */
 		nil,                   /* nodeDialer */
-		distsqlpb.FlowID{},
+		execinfrapb.FlowID{},
 	)
 	// We create an unlimited memory account because we're interested whether the
 	// flow is supported via the vectorized engine in general (without paying

@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,10 +34,10 @@ type aggTestSpec struct {
 	filterColIdx *uint32
 }
 
-func aggregations(aggTestSpecs []aggTestSpec) []distsqlpb.AggregatorSpec_Aggregation {
-	agg := make([]distsqlpb.AggregatorSpec_Aggregation, len(aggTestSpecs))
+func aggregations(aggTestSpecs []aggTestSpec) []execinfrapb.AggregatorSpec_Aggregation {
+	agg := make([]execinfrapb.AggregatorSpec_Aggregation, len(aggTestSpecs))
 	for i, spec := range aggTestSpecs {
-		agg[i].Func = distsqlpb.AggregatorSpec_Func(distsqlpb.AggregatorSpec_Func_value[spec.fname])
+		agg[i].Func = execinfrapb.AggregatorSpec_Func(execinfrapb.AggregatorSpec_Func_value[spec.fname])
 		agg[i].Distinct = spec.distinct
 		agg[i].ColIdx = spec.colIdx
 		agg[i].FilterColIdx = spec.filterColIdx
@@ -80,8 +80,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: []types.T{*types.Int, *types.Int, *types.Int, *types.Decimal, *types.Decimal, *types.Decimal, *types.Decimal},
 			},
-			ProcessorCore: distsqlpb.ProcessorCoreUnion{
-				Aggregator: &distsqlpb.AggregatorSpec{
+			ProcessorCore: execinfrapb.ProcessorCoreUnion{
+				Aggregator: &execinfrapb.AggregatorSpec{
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "MIN", colIdx: col0},
 						{fname: "MAX", colIdx: col0},
@@ -115,8 +115,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: sqlbase.MakeIntCols(2),
 			},
-			ProcessorCore: distsqlpb.ProcessorCoreUnion{
-				Aggregator: &distsqlpb.AggregatorSpec{
+			ProcessorCore: execinfrapb.ProcessorCoreUnion{
+				Aggregator: &execinfrapb.AggregatorSpec{
 					GroupCols: col1,
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "ANY_NOT_NULL", colIdx: col1},
@@ -145,8 +145,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: sqlbase.MakeIntCols(2),
 			},
-			ProcessorCore: distsqlpb.ProcessorCoreUnion{
-				Aggregator: &distsqlpb.AggregatorSpec{
+			ProcessorCore: execinfrapb.ProcessorCoreUnion{
+				Aggregator: &execinfrapb.AggregatorSpec{
 					GroupCols: col1,
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "ANY_NOT_NULL", colIdx: col1},
@@ -176,8 +176,8 @@ func TestAggregator(t *testing.T) {
 				Types: sqlbase.MakeIntCols(2),
 			},
 			DisableSort: true,
-			ProcessorCore: distsqlpb.ProcessorCoreUnion{
-				Aggregator: &distsqlpb.AggregatorSpec{
+			ProcessorCore: execinfrapb.ProcessorCoreUnion{
+				Aggregator: &execinfrapb.AggregatorSpec{
 					OrderedGroupCols: col1,
 					GroupCols:        col1,
 					Aggregations: aggregations([]aggTestSpec{
@@ -207,8 +207,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: []types.T{*types.Int, *types.Decimal},
 			},
-			ProcessorCore: distsqlpb.ProcessorCoreUnion{
-				Aggregator: &distsqlpb.AggregatorSpec{
+			ProcessorCore: execinfrapb.ProcessorCoreUnion{
+				Aggregator: &execinfrapb.AggregatorSpec{
 					GroupCols: col1,
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "ANY_NOT_NULL", colIdx: col1},
@@ -238,8 +238,8 @@ func TestAggregator(t *testing.T) {
 				Types: []types.T{*types.Int, *types.Decimal},
 			},
 			DisableSort: true,
-			ProcessorCore: distsqlpb.ProcessorCoreUnion{
-				Aggregator: &distsqlpb.AggregatorSpec{
+			ProcessorCore: execinfrapb.ProcessorCoreUnion{
+				Aggregator: &execinfrapb.AggregatorSpec{
 					GroupCols:        col1,
 					OrderedGroupCols: col1,
 					Aggregations: aggregations([]aggTestSpec{
@@ -268,8 +268,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: []types.T{*types.Int, *types.Decimal},
 			},
-			ProcessorCore: distsqlpb.ProcessorCoreUnion{
-				Aggregator: &distsqlpb.AggregatorSpec{
+			ProcessorCore: execinfrapb.ProcessorCoreUnion{
+				Aggregator: &execinfrapb.AggregatorSpec{
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "COUNT", colIdx: col0},
 						{fname: "SUM", colIdx: col0},
@@ -296,8 +296,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: sqlbase.MakeIntCols(1),
 			},
-			ProcessorCore: distsqlpb.ProcessorCoreUnion{
-				Aggregator: &distsqlpb.AggregatorSpec{
+			ProcessorCore: execinfrapb.ProcessorCoreUnion{
+				Aggregator: &execinfrapb.AggregatorSpec{
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "SUM", distinct: true, colIdx: col0},
 					}),
@@ -321,8 +321,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: sqlbase.MakeIntCols(1),
 			},
-			ProcessorCore: distsqlpb.ProcessorCoreUnion{
-				Aggregator: &distsqlpb.AggregatorSpec{
+			ProcessorCore: execinfrapb.ProcessorCoreUnion{
+				Aggregator: &execinfrapb.AggregatorSpec{
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "ANY_NOT_NULL", colIdx: col0},
 					}),
@@ -347,8 +347,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: sqlbase.MakeIntCols(4),
 			},
-			ProcessorCore: distsqlpb.ProcessorCoreUnion{
-				Aggregator: &distsqlpb.AggregatorSpec{
+			ProcessorCore: execinfrapb.ProcessorCoreUnion{
+				Aggregator: &execinfrapb.AggregatorSpec{
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "MAX", colIdx: col0},
 						{fname: "MIN", colIdx: col1},
@@ -376,8 +376,8 @@ func TestAggregator(t *testing.T) {
 				},
 				Types: sqlbase.MakeIntCols(3),
 			},
-			ProcessorCore: distsqlpb.ProcessorCoreUnion{
-				Aggregator: &distsqlpb.AggregatorSpec{
+			ProcessorCore: execinfrapb.ProcessorCoreUnion{
+				Aggregator: &execinfrapb.AggregatorSpec{
 					Aggregations: aggregations([]aggTestSpec{
 						{fname: "MAX", colIdx: col0, filterColIdx: &filterCol1},
 						{fname: "COUNT", colIdx: col2, filterColIdx: &filterCol3},
@@ -398,17 +398,17 @@ func BenchmarkAggregation(b *testing.B) {
 	const numCols = 1
 	const numRows = 1000
 
-	aggFuncs := []distsqlpb.AggregatorSpec_Func{
-		distsqlpb.AggregatorSpec_ANY_NOT_NULL,
-		distsqlpb.AggregatorSpec_AVG,
-		distsqlpb.AggregatorSpec_COUNT,
-		distsqlpb.AggregatorSpec_MAX,
-		distsqlpb.AggregatorSpec_MIN,
-		distsqlpb.AggregatorSpec_STDDEV,
-		distsqlpb.AggregatorSpec_SUM,
-		distsqlpb.AggregatorSpec_SUM_INT,
-		distsqlpb.AggregatorSpec_VARIANCE,
-		distsqlpb.AggregatorSpec_XOR_AGG,
+	aggFuncs := []execinfrapb.AggregatorSpec_Func{
+		execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+		execinfrapb.AggregatorSpec_AVG,
+		execinfrapb.AggregatorSpec_COUNT,
+		execinfrapb.AggregatorSpec_MAX,
+		execinfrapb.AggregatorSpec_MIN,
+		execinfrapb.AggregatorSpec_STDDEV,
+		execinfrapb.AggregatorSpec_SUM,
+		execinfrapb.AggregatorSpec_SUM_INT,
+		execinfrapb.AggregatorSpec_VARIANCE,
+		execinfrapb.AggregatorSpec_XOR_AGG,
 	}
 
 	ctx := context.Background()
@@ -423,15 +423,15 @@ func BenchmarkAggregation(b *testing.B) {
 
 	for _, aggFunc := range aggFuncs {
 		b.Run(aggFunc.String(), func(b *testing.B) {
-			spec := &distsqlpb.AggregatorSpec{
-				Aggregations: []distsqlpb.AggregatorSpec_Aggregation{
+			spec := &execinfrapb.AggregatorSpec{
+				Aggregations: []execinfrapb.AggregatorSpec_Aggregation{
 					{
 						Func:   aggFunc,
 						ColIdx: []uint32{0},
 					},
 				},
 			}
-			post := &distsqlpb.PostProcessSpec{}
+			post := &execinfrapb.PostProcessSpec{}
 			disposer := &rowDisposer{}
 			input := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
 
@@ -451,14 +451,14 @@ func BenchmarkAggregation(b *testing.B) {
 }
 
 func BenchmarkCountRows(b *testing.B) {
-	spec := &distsqlpb.AggregatorSpec{
-		Aggregations: []distsqlpb.AggregatorSpec_Aggregation{
+	spec := &execinfrapb.AggregatorSpec{
+		Aggregations: []execinfrapb.AggregatorSpec_Aggregation{
 			{
-				Func: distsqlpb.AggregatorSpec_COUNT_ROWS,
+				Func: execinfrapb.AggregatorSpec_COUNT_ROWS,
 			},
 		},
 	}
-	post := &distsqlpb.PostProcessSpec{}
+	post := &execinfrapb.PostProcessSpec{}
 	disposer := &rowDisposer{}
 	const numCols = 1
 	const numRows = 100000
@@ -499,10 +499,10 @@ func BenchmarkGrouping(b *testing.B) {
 		Cfg:     &distsql.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
-	spec := &distsqlpb.AggregatorSpec{
+	spec := &execinfrapb.AggregatorSpec{
 		GroupCols: []uint32{0},
 	}
-	post := &distsqlpb.PostProcessSpec{}
+	post := &execinfrapb.PostProcessSpec{}
 	disposer := &rowDisposer{}
 	input := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
 
@@ -525,17 +525,17 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 	var groupedCols = [2]int{0, 1}
 	var allOrderedGroupCols = [2]uint32{0, 1}
 
-	aggFuncs := []distsqlpb.AggregatorSpec_Func{
-		distsqlpb.AggregatorSpec_ANY_NOT_NULL,
-		distsqlpb.AggregatorSpec_AVG,
-		distsqlpb.AggregatorSpec_COUNT,
-		distsqlpb.AggregatorSpec_MAX,
-		distsqlpb.AggregatorSpec_MIN,
-		distsqlpb.AggregatorSpec_STDDEV,
-		distsqlpb.AggregatorSpec_SUM,
-		distsqlpb.AggregatorSpec_SUM_INT,
-		distsqlpb.AggregatorSpec_VARIANCE,
-		distsqlpb.AggregatorSpec_XOR_AGG,
+	aggFuncs := []execinfrapb.AggregatorSpec_Func{
+		execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+		execinfrapb.AggregatorSpec_AVG,
+		execinfrapb.AggregatorSpec_COUNT,
+		execinfrapb.AggregatorSpec_MAX,
+		execinfrapb.AggregatorSpec_MIN,
+		execinfrapb.AggregatorSpec_STDDEV,
+		execinfrapb.AggregatorSpec_SUM,
+		execinfrapb.AggregatorSpec_SUM_INT,
+		execinfrapb.AggregatorSpec_VARIANCE,
+		execinfrapb.AggregatorSpec_XOR_AGG,
 	}
 
 	ctx := context.Background()
@@ -550,9 +550,9 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 
 	for _, aggFunc := range aggFuncs {
 		b.Run(aggFunc.String(), func(b *testing.B) {
-			spec := &distsqlpb.AggregatorSpec{
+			spec := &execinfrapb.AggregatorSpec{
 				GroupCols: []uint32{0, 1},
-				Aggregations: []distsqlpb.AggregatorSpec_Aggregation{
+				Aggregations: []execinfrapb.AggregatorSpec_Aggregation{
 					{
 						Func:   aggFunc,
 						ColIdx: []uint32{2},
@@ -560,7 +560,7 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 				},
 			}
 			spec.OrderedGroupCols = allOrderedGroupCols[:numOrderedCols]
-			post := &distsqlpb.PostProcessSpec{}
+			post := &execinfrapb.PostProcessSpec{}
 			disposer := &rowDisposer{}
 			input := distsql.NewRepeatableRowSource(sqlbase.ThreeIntCols, makeGroupedIntRows(groupSize, numCols, groupedCols[:]))
 

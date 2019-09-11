@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -67,12 +67,12 @@ func TestSorterAgainstProcessor(t *testing.T) {
 			// if there are columns not in the ordering, the results are not fully
 			// deterministic.
 			orderingCols := generateColumnOrdering(rng, nCols, nCols)
-			sorterSpec := &distsqlpb.SorterSpec{
-				OutputOrdering: distsqlpb.Ordering{Columns: orderingCols},
+			sorterSpec := &execinfrapb.SorterSpec{
+				OutputOrdering: execinfrapb.Ordering{Columns: orderingCols},
 			}
-			pspec := &distsqlpb.ProcessorSpec{
-				Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}},
-				Core:  distsqlpb.ProcessorCoreUnion{Sorter: sorterSpec},
+			pspec := &execinfrapb.ProcessorSpec{
+				Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+				Core:  execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
 			}
 			if err := verifyColOperator(false /* anyOrder */, [][]types.T{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
 				fmt.Printf("--- seed = %d nCols = %d types = %v ---\n", seed, nCols, inputTypes)
@@ -119,7 +119,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 				// if there are columns not in the ordering, the results are not fully
 				// deterministic.
 				orderingCols := generateColumnOrdering(rng, nCols, nCols)
-				matchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: orderingCols[:matchLen]})
+				matchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: orderingCols[:matchLen]})
 				// Presort the input on first matchLen columns.
 				sort.Slice(rows, func(i, j int) bool {
 					cmp, err := rows[i].Compare(inputTypes, &da, matchedCols, &evalCtx, rows[j])
@@ -129,13 +129,13 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 					return cmp < 0
 				})
 
-				sorterSpec := &distsqlpb.SorterSpec{
-					OutputOrdering:   distsqlpb.Ordering{Columns: orderingCols},
+				sorterSpec := &execinfrapb.SorterSpec{
+					OutputOrdering:   execinfrapb.Ordering{Columns: orderingCols},
 					OrderingMatchLen: uint32(matchLen),
 				}
-				pspec := &distsqlpb.ProcessorSpec{
-					Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}},
-					Core:  distsqlpb.ProcessorCoreUnion{Sorter: sorterSpec},
+				pspec := &execinfrapb.ProcessorSpec{
+					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+					Core:  execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
 				}
 				if err := verifyColOperator(false /* anyOrder */, [][]types.T{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
 					fmt.Printf("--- seed = %d nCols = %d types = %v ---\n", seed, nCols, inputTypes)
@@ -226,21 +226,21 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 							outputColumns[i] = uint32(i)
 						}
 
-						var onExpr distsqlpb.Expression
+						var onExpr execinfrapb.Expression
 						if triedWithoutOnExpr {
 							colTypes := append(inputTypes, inputTypes...)
 							onExpr = generateOnExpr(rng, nCols, nEqCols, colTypes, usingRandomTypes)
 						}
-						hjSpec := &distsqlpb.HashJoinerSpec{
+						hjSpec := &execinfrapb.HashJoinerSpec{
 							LeftEqColumns:  lEqCols,
 							RightEqColumns: rEqCols,
 							OnExpr:         onExpr,
 							Type:           testSpec.joinType,
 						}
-						pspec := &distsqlpb.ProcessorSpec{
-							Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
-							Core:  distsqlpb.ProcessorCoreUnion{HashJoiner: hjSpec},
-							Post:  distsqlpb.PostProcessSpec{Projection: true, OutputColumns: outputColumns},
+						pspec := &execinfrapb.ProcessorSpec{
+							Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
+							Core:  execinfrapb.ProcessorCoreUnion{HashJoiner: hjSpec},
+							Post:  execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outputColumns},
 						}
 						if err := verifyColOperator(
 							true, /* anyOrder */
@@ -342,7 +342,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 						var (
 							lRows, rRows                 sqlbase.EncDatumRows
 							inputTypes                   []types.T
-							lOrderingCols, rOrderingCols []distsqlpb.Ordering_Column
+							lOrderingCols, rOrderingCols []execinfrapb.Ordering_Column
 							usingRandomTypes             bool
 						)
 						if rng.Float64() < randTypesProbability {
@@ -366,8 +366,8 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 							rOrderingCols[i].Direction = lCol.Direction
 						}
 
-						lMatchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: lOrderingCols})
-						rMatchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: rOrderingCols})
+						lMatchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: lOrderingCols})
+						rMatchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: rOrderingCols})
 						sort.Slice(lRows, func(i, j int) bool {
 							cmp, err := lRows[i].Compare(inputTypes, &da, lMatchedCols, &evalCtx, lRows[j])
 							if err != nil {
@@ -392,21 +392,21 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 							outputColumns[i] = uint32(i)
 						}
 
-						var onExpr distsqlpb.Expression
+						var onExpr execinfrapb.Expression
 						if triedWithoutOnExpr {
 							colTypes := append(inputTypes, inputTypes...)
 							onExpr = generateOnExpr(rng, nCols, nOrderingCols, colTypes, usingRandomTypes)
 						}
-						mjSpec := &distsqlpb.MergeJoinerSpec{
+						mjSpec := &execinfrapb.MergeJoinerSpec{
 							OnExpr:        onExpr,
-							LeftOrdering:  distsqlpb.Ordering{Columns: lOrderingCols},
-							RightOrdering: distsqlpb.Ordering{Columns: rOrderingCols},
+							LeftOrdering:  execinfrapb.Ordering{Columns: lOrderingCols},
+							RightOrdering: execinfrapb.Ordering{Columns: rOrderingCols},
 							Type:          testSpec.joinType,
 						}
-						pspec := &distsqlpb.ProcessorSpec{
-							Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
-							Core:  distsqlpb.ProcessorCoreUnion{MergeJoiner: mjSpec},
-							Post:  distsqlpb.PostProcessSpec{Projection: true, OutputColumns: outputColumns},
+						pspec := &execinfrapb.ProcessorSpec{
+							Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
+							Core:  execinfrapb.ProcessorCoreUnion{MergeJoiner: mjSpec},
+							Post:  execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outputColumns},
 						}
 						if err := verifyColOperator(
 							testSpec.anyOrder,
@@ -436,16 +436,16 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 // nCols.
 func generateColumnOrdering(
 	rng *rand.Rand, nCols int, nOrderingCols int,
-) []distsqlpb.Ordering_Column {
+) []execinfrapb.Ordering_Column {
 	if nOrderingCols > nCols {
 		panic("nOrderingCols > nCols in generateColumnOrdering")
 	}
 
-	orderingCols := make([]distsqlpb.Ordering_Column, nOrderingCols)
+	orderingCols := make([]execinfrapb.Ordering_Column, nOrderingCols)
 	for i, col := range rng.Perm(nCols)[:nOrderingCols] {
-		orderingCols[i] = distsqlpb.Ordering_Column{
+		orderingCols[i] = execinfrapb.Ordering_Column{
 			ColIdx:    uint32(col),
-			Direction: distsqlpb.Ordering_Column_Direction(rng.Intn(2)),
+			Direction: execinfrapb.Ordering_Column_Direction(rng.Intn(2)),
 		}
 	}
 	return orderingCols
@@ -459,7 +459,7 @@ func generateColumnOrdering(
 // will be used.
 func generateOnExpr(
 	rng *rand.Rand, nCols int, nEqCols int, colTypes []types.T, forceConstComparison bool,
-) distsqlpb.Expression {
+) execinfrapb.Expression {
 	var comparison string
 	r := rng.Float64()
 	if r < 0.25 {
@@ -487,12 +487,12 @@ func generateOnExpr(
 			// We need to surround special values with quotes.
 			constDatumString = fmt.Sprintf("'%s'", constDatumString)
 		}
-		return distsqlpb.Expression{Expr: fmt.Sprintf("@%d %s %s", colIdx+1, comparison, constDatumString)}
+		return execinfrapb.Expression{Expr: fmt.Sprintf("@%d %s %s", colIdx+1, comparison, constDatumString)}
 	}
 	// We will compare a column from the left against a column from the right.
 	leftColIdx := rng.Intn(nCols) + 1
 	rightColIdx := rng.Intn(nCols) + nCols + 1
-	return distsqlpb.Expression{Expr: fmt.Sprintf("@%d %s @%d", leftColIdx, comparison, rightColIdx)}
+	return execinfrapb.Expression{Expr: fmt.Sprintf("@%d %s @%d", leftColIdx, comparison, rightColIdx)}
 }
 
 func TestWindowFunctionsAgainstProcessor(t *testing.T) {
@@ -508,10 +508,10 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 		// window functions that take in arguments.
 		typs[i] = *types.Int
 	}
-	for _, windowFn := range []distsqlpb.WindowerSpec_WindowFunc{
-		distsqlpb.WindowerSpec_ROW_NUMBER,
-		distsqlpb.WindowerSpec_RANK,
-		distsqlpb.WindowerSpec_DENSE_RANK,
+	for _, windowFn := range []execinfrapb.WindowerSpec_WindowFunc{
+		execinfrapb.WindowerSpec_ROW_NUMBER,
+		execinfrapb.WindowerSpec_RANK,
+		execinfrapb.WindowerSpec_DENSE_RANK,
 	} {
 		for _, partitionBy := range [][]uint32{
 			{},     // No PARTITION BY clause.
@@ -530,17 +530,17 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 					inputTypes := typs[:nCols]
 					rows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 
-					windowerSpec := &distsqlpb.WindowerSpec{
+					windowerSpec := &execinfrapb.WindowerSpec{
 						PartitionBy: partitionBy,
-						WindowFns: []distsqlpb.WindowerSpec_WindowFn{
+						WindowFns: []execinfrapb.WindowerSpec_WindowFn{
 							{
-								Func:         distsqlpb.WindowerSpec_Func{WindowFunc: &windowFn},
+								Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &windowFn},
 								Ordering:     generateOrderingGivenPartitionBy(rng, nCols, nOrderingCols, partitionBy),
 								OutputColIdx: uint32(nCols),
 							},
 						},
 					}
-					if windowFn == distsqlpb.WindowerSpec_ROW_NUMBER &&
+					if windowFn == execinfrapb.WindowerSpec_ROW_NUMBER &&
 						len(partitionBy)+len(windowerSpec.WindowFns[0].Ordering.Columns) < nCols {
 						// The output of row_number is not deterministic if there are
 						// columns that are not present in either PARTITION BY or ORDER BY
@@ -548,9 +548,9 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						continue
 					}
 
-					pspec := &distsqlpb.ProcessorSpec{
-						Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}},
-						Core:  distsqlpb.ProcessorCoreUnion{Windower: windowerSpec},
+					pspec := &execinfrapb.ProcessorSpec{
+						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+						Core:  execinfrapb.ProcessorCoreUnion{Windower: windowerSpec},
 					}
 					if err := verifyColOperator(true /* anyOrder */, [][]types.T{inputTypes}, []sqlbase.EncDatumRows{rows}, append(inputTypes, *types.Int), pspec); err != nil {
 						t.Fatal(err)
@@ -583,12 +583,12 @@ func generateRandomSupportedTypes(rng *rand.Rand, nCols int) []types.T {
 // clause entirely.
 func generateOrderingGivenPartitionBy(
 	rng *rand.Rand, nCols int, nOrderingCols int, partitionBy []uint32,
-) distsqlpb.Ordering {
-	var ordering distsqlpb.Ordering
+) execinfrapb.Ordering {
+	var ordering execinfrapb.Ordering
 	if nOrderingCols == 0 || len(partitionBy) == nCols {
 		return ordering
 	}
-	ordering = distsqlpb.Ordering{Columns: make([]distsqlpb.Ordering_Column, 0, nOrderingCols)}
+	ordering = execinfrapb.Ordering{Columns: make([]execinfrapb.Ordering_Column, 0, nOrderingCols)}
 	for len(ordering.Columns) == 0 {
 		for _, ordCol := range generateColumnOrdering(rng, nCols, nOrderingCols) {
 			usedInPartitionBy := false

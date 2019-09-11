@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -92,7 +92,7 @@ func TestJoinReader(t *testing.T) {
 	testCases := []struct {
 		description string
 		indexIdx    uint32
-		post        distsqlpb.PostProcessSpec
+		post        execinfrapb.PostProcessSpec
 		onExpr      string
 		input       [][]tree.Datum
 		lookupCols  []uint32
@@ -103,7 +103,7 @@ func TestJoinReader(t *testing.T) {
 	}{
 		{
 			description: "Test selecting columns from second table",
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 4},
 			},
@@ -120,7 +120,7 @@ func TestJoinReader(t *testing.T) {
 		},
 		{
 			description: "Test duplicates in the input of lookup joins",
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 3},
 			},
@@ -138,7 +138,7 @@ func TestJoinReader(t *testing.T) {
 		},
 		{
 			description: "Test lookup join queries with separate families",
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 3, 4},
 			},
@@ -155,7 +155,7 @@ func TestJoinReader(t *testing.T) {
 		},
 		{
 			description: "Test lookup joins preserve order of left input",
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 3},
 			},
@@ -173,7 +173,7 @@ func TestJoinReader(t *testing.T) {
 		},
 		{
 			description: "Test lookup join with onExpr",
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 4},
 			},
@@ -191,7 +191,7 @@ func TestJoinReader(t *testing.T) {
 		},
 		{
 			description: "Test left outer lookup join on primary index",
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 4},
 			},
@@ -208,7 +208,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test lookup join on secondary index with NULL lookup value",
 			indexIdx:    1,
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -223,7 +223,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test left outer lookup join on secondary index with NULL lookup value",
 			indexIdx:    1,
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
@@ -239,7 +239,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test lookup join on secondary index with an implicit key column",
 			indexIdx:    1,
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{2},
 			},
@@ -254,7 +254,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test left semi lookup join",
 			indexIdx:    1,
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1},
 			},
@@ -275,7 +275,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test left semi lookup join on secondary index with NULL lookup value",
 			indexIdx:    1,
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -291,7 +291,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test left semi lookup join with onExpr",
 			indexIdx:    1,
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1},
 			},
@@ -313,7 +313,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test left anti lookup join",
 			indexIdx:    1,
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1},
 			},
@@ -329,7 +329,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test left anti lookup join with onExpr",
 			indexIdx:    1,
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1},
 			},
@@ -350,7 +350,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test left anti lookup join with match",
 			indexIdx:    1,
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1},
 			},
@@ -366,7 +366,7 @@ func TestJoinReader(t *testing.T) {
 		{
 			description: "Test left anti lookup join on secondary index with NULL lookup value",
 			indexIdx:    1,
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1},
 			},
@@ -425,11 +425,11 @@ func TestJoinReader(t *testing.T) {
 				jr, err := distsql.NewJoinReader(
 					&flowCtx,
 					0, /* processorID */
-					&distsqlpb.JoinReaderSpec{
+					&execinfrapb.JoinReaderSpec{
 						Table:         *td,
 						IndexIdx:      c.indexIdx,
 						LookupColumns: c.lookupCols,
-						OnExpr:        distsqlpb.Expression{Expr: c.onExpr},
+						OnExpr:        execinfrapb.Expression{Expr: c.onExpr},
 						Type:          c.joinType,
 					},
 					in,
@@ -537,14 +537,14 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 	jr, err := distsql.NewJoinReader(
 		&flowCtx,
 		0, /* processorID */
-		&distsqlpb.JoinReaderSpec{
+		&execinfrapb.JoinReaderSpec{
 			Table:         *td,
 			IndexIdx:      1,
 			LookupColumns: []uint32{0},
 			Type:          sqlbase.InnerJoin,
 		},
 		newRowBuffer(sqlbase.OneIntCol, inputRows, rowBufferArgs{}),
-		&distsqlpb.PostProcessSpec{
+		&execinfrapb.PostProcessSpec{
 			Projection:    true,
 			OutputColumns: []uint32{2},
 		},
@@ -637,7 +637,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		out := &RowBuffer{}
 		out.ConsumerClosed()
 		jr, err := distsql.NewJoinReader(
-			&flowCtx, 0 /* processorID */, &distsqlpb.JoinReaderSpec{Table: *td}, in, &distsqlpb.PostProcessSpec{}, out,
+			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{}, out,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -651,14 +651,14 @@ func TestJoinReaderDrain(t *testing.T) {
 	t.Run("ConsumerDone", func(t *testing.T) {
 		expectedMetaErr := errors.New("dummy")
 		in := newRowBuffer(sqlbase.OneIntCol, nil /* rows */, rowBufferArgs{})
-		if status := in.Push(encRow, &distsqlpb.ProducerMetadata{Err: expectedMetaErr}); status != distsql.NeedMoreRows {
+		if status := in.Push(encRow, &execinfrapb.ProducerMetadata{Err: expectedMetaErr}); status != distsql.NeedMoreRows {
 			t.Fatalf("unexpected response: %d", status)
 		}
 
 		out := &RowBuffer{}
 		out.ConsumerDone()
 		jr, err := distsql.NewJoinReader(
-			&flowCtx, 0 /* processorID */, &distsqlpb.JoinReaderSpec{Table: *td}, in, &distsqlpb.PostProcessSpec{}, out,
+			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{}, out,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -733,9 +733,9 @@ func BenchmarkJoinReader(b *testing.B) {
 		)
 		tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
 
-		spec := distsqlpb.JoinReaderSpec{Table: *tableDesc}
+		spec := execinfrapb.JoinReaderSpec{Table: *tableDesc}
 		input := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numInputCols))
-		post := distsqlpb.PostProcessSpec{}
+		post := execinfrapb.PostProcessSpec{}
 		output := rowDisposer{}
 
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {

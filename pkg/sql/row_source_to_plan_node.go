@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -71,7 +71,7 @@ func (r *rowSourceToPlanNode) startExec(params runParams) error {
 
 func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
 	for {
-		var p *distsqlpb.ProducerMetadata
+		var p *execinfrapb.ProducerMetadata
 		r.row, p = r.source.Next()
 
 		if p != nil {

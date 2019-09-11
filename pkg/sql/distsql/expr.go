@@ -13,7 +13,7 @@ package distsql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -50,7 +50,7 @@ func (*ivarBinder) VisitPost(expr tree.Expr) tree.Expr { return expr }
 // processExpression parses the string expression inside an Expression,
 // and associates ordinal references (@1, @2, etc) with the given helper.
 func processExpression(
-	exprSpec distsqlpb.Expression,
+	exprSpec execinfrapb.Expression,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
 	h *tree.IndexedVarHelper,
@@ -141,7 +141,7 @@ func (eh *ExprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 
 // Init initializes the ExprHelper.
 func (eh *ExprHelper) Init(
-	expr distsqlpb.Expression, types []types.T, evalCtx *tree.EvalContext,
+	expr execinfrapb.Expression, types []types.T, evalCtx *tree.EvalContext,
 ) error {
 	if expr.Empty() {
 		return nil

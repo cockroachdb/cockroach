@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -65,7 +65,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	rpcSrv := rpc.NewServer(rpcContext)
 	defer rpcSrv.Stop()
 
-	distsqlpb.RegisterDistSQLServer(rpcSrv, srv)
+	execinfrapb.RegisterDistSQLServer(rpcSrv, srv)
 	ln, err := netutil.ListenAndServeGRPC(stopper, rpcSrv, util.IsolatedTestAddr)
 	if err != nil {
 		t.Fatal(err)
@@ -81,8 +81,8 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 		},
 	}
 
-	streamID := distsqlpb.StreamID(1)
-	outbox := newOutbox(&flowCtx, staticNodeID, distsqlpb.FlowID{}, streamID)
+	streamID := execinfrapb.StreamID(1)
+	outbox := newOutbox(&flowCtx, staticNodeID, execinfrapb.FlowID{}, streamID)
 	outbox.init(sqlbase.OneIntCol)
 
 	// WaitGroup for the outbox and inbound stream. If the WaitGroup is done, no
@@ -91,7 +91,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 
 	// Use RegisterFlow to register our consumer, which we will control.
 	consumer := newRowBuffer(sqlbase.OneIntCol, nil /* rows */, rowBufferArgs{})
-	connectionInfo := map[distsqlpb.StreamID]*inboundStreamInfo{
+	connectionInfo := map[execinfrapb.StreamID]*inboundStreamInfo{
 		streamID: {
 			receiver:  rowInboundStreamHandler{consumer},
 			waitGroup: &f.waitGroup,
@@ -101,7 +101,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	f.waitGroup.Add(1)
 	require.NoError(
 		t,
-		srv.flowRegistry.RegisterFlow(ctx, distsqlpb.FlowID{}, f, connectionInfo, time.Hour /* timeout */),
+		srv.flowRegistry.RegisterFlow(ctx, execinfrapb.FlowID{}, f, connectionInfo, time.Hour /* timeout */),
 	)
 
 	outbox.start(ctx, &f.waitGroup, func() {})

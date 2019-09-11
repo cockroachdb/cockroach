@@ -24,7 +24,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -47,7 +47,7 @@ type router interface {
 //
 // Pass-through routers are not supported; the higher layer is expected to elide
 // them.
-func makeRouter(spec *distsqlpb.OutputRouterSpec, streams []distsql.RowReceiver) (router, error) {
+func makeRouter(spec *execinfrapb.OutputRouterSpec, streams []distsql.RowReceiver) (router, error) {
 	if len(streams) == 0 {
 		return nil, errors.Errorf("no streams in router")
 	}
@@ -56,13 +56,13 @@ func makeRouter(spec *distsqlpb.OutputRouterSpec, streams []distsql.RowReceiver)
 	rb.setupStreams(spec, streams)
 
 	switch spec.Type {
-	case distsqlpb.OutputRouterSpec_BY_HASH:
+	case execinfrapb.OutputRouterSpec_BY_HASH:
 		return makeHashRouter(rb, spec.HashColumns)
 
-	case distsqlpb.OutputRouterSpec_MIRROR:
+	case execinfrapb.OutputRouterSpec_MIRROR:
 		return makeMirrorRouter(rb)
 
-	case distsqlpb.OutputRouterSpec_BY_RANGE:
+	case execinfrapb.OutputRouterSpec_BY_RANGE:
 		return makeRangeRouter(rb, spec.RangeRouterSpec)
 
 	default:
@@ -75,7 +75,7 @@ const routerRowBufSize = distsql.RowChannelBufSize
 // routerOutput is the data associated with one router consumer.
 type routerOutput struct {
 	stream   distsql.RowReceiver
-	streamID distsqlpb.StreamID
+	streamID execinfrapb.StreamID
 	mu       struct {
 		syncutil.Mutex
 		// cond is signaled whenever the main router routine adds a metadata item, a
@@ -83,7 +83,7 @@ type routerOutput struct {
 		cond         *sync.Cond
 		streamStatus distsql.ConsumerStatus
 
-		metadataBuf []*distsqlpb.ProducerMetadata
+		metadataBuf []*execinfrapb.ProducerMetadata
 		// The "level 1" row buffer is used first, to avoid going through the row
 		// container if we don't need to buffer many rows. The buffer is a circular
 		// FIFO queue, with rowBufLen elements and the left-most (oldest) element at
@@ -106,7 +106,7 @@ type routerOutput struct {
 	memoryMonitor, diskMonitor *mon.BytesMonitor
 }
 
-func (ro *routerOutput) addMetadataLocked(meta *distsqlpb.ProducerMetadata) {
+func (ro *routerOutput) addMetadataLocked(meta *execinfrapb.ProducerMetadata) {
 	// We don't need any fancy buffering because normally there is not a lot of
 	// metadata being passed around.
 	ro.mu.metadataBuf = append(ro.mu.metadataBuf, meta)
@@ -209,7 +209,7 @@ func (rb *routerBase) aggStatus() distsql.ConsumerStatus {
 }
 
 func (rb *routerBase) setupStreams(
-	spec *distsqlpb.OutputRouterSpec, streams []distsql.RowReceiver,
+	spec *execinfrapb.OutputRouterSpec, streams []distsql.RowReceiver,
 ) {
 	rb.numNonDrainingStreams = int32(len(streams))
 	n := len(streams)
@@ -277,7 +277,7 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 			var span opentracing.Span
 			if rb.statsCollectionEnabled {
 				ctx, span = distsql.ProcessorSpan(ctx, "router output")
-				span.SetTag(distsqlpb.StreamIDTagKey, ro.streamID)
+				span.SetTag(execinfrapb.StreamIDTagKey, ro.streamID)
 			}
 
 			drain := false
@@ -311,7 +311,7 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 					// Send any rows that have been buffered. We grab multiple rows at a
 					// time to reduce contention.
 					if rows, err := ro.popRowsLocked(ctx, rowBuf); err != nil {
-						rb.fwdMetadata(&distsqlpb.ProducerMetadata{Err: err})
+						rb.fwdMetadata(&execinfrapb.ProducerMetadata{Err: err})
 						atomic.StoreUint32(&rb.aggregatedStatus, uint32(distsql.DrainRequested))
 						drain = true
 						continue
@@ -341,7 +341,7 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 						tracing.FinishSpan(span)
 						if trace := distsql.GetTraceData(ctx); trace != nil {
 							rb.semaphore <- struct{}{}
-							status := ro.stream.Push(nil, &distsqlpb.ProducerMetadata{TraceData: trace})
+							status := ro.stream.Push(nil, &execinfrapb.ProducerMetadata{TraceData: trace})
 							rb.updateStreamState(&streamStatus, status)
 							<-rb.semaphore
 						}
@@ -403,7 +403,7 @@ func (rb *routerBase) updateStreamState(
 
 // fwdMetadata forwards a metadata record to the first stream that's still
 // accepting data.
-func (rb *routerBase) fwdMetadata(meta *distsqlpb.ProducerMetadata) {
+func (rb *routerBase) fwdMetadata(meta *execinfrapb.ProducerMetadata) {
 	if meta == nil {
 		log.Fatalf(context.TODO(), "asked to fwd empty metadata")
 	}
@@ -461,8 +461,8 @@ type rangeRouter struct {
 	alloc sqlbase.DatumAlloc
 	// b is a temp storage location used during encoding
 	b         []byte
-	encodings []distsqlpb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding
-	spans     []distsqlpb.OutputRouterSpec_RangeRouterSpec_Span
+	encodings []execinfrapb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding
+	spans     []execinfrapb.OutputRouterSpec_RangeRouterSpec_Span
 	// defaultDest, if set, sends any row not matching a span to this stream. If
 	// not set and a non-matching row is encountered, an error is returned and
 	// the router is shut down.
@@ -482,7 +482,7 @@ func makeMirrorRouter(rb routerBase) (router, error) {
 
 // Push is part of the RowReceiver interface.
 func (mr *mirrorRouter) Push(
-	row sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata,
+	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) distsql.ConsumerStatus {
 	aggStatus := mr.aggStatus()
 	if meta != nil {
@@ -507,7 +507,7 @@ func (mr *mirrorRouter) Push(
 			if useSema {
 				<-mr.semaphore
 			}
-			mr.fwdMetadata(&distsqlpb.ProducerMetadata{Err: err})
+			mr.fwdMetadata(&execinfrapb.ProducerMetadata{Err: err})
 			atomic.StoreUint32(&mr.aggregatedStatus, uint32(distsql.ConsumerClosed))
 			return distsql.ConsumerClosed
 		}
@@ -536,7 +536,7 @@ func makeHashRouter(rb routerBase, hashCols []uint32) (router, error) {
 // If, according to the hash, the row needs to go to a consumer that's draining
 // or closed, the row is silently dropped.
 func (hr *hashRouter) Push(
-	row sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata,
+	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) distsql.ConsumerStatus {
 	aggStatus := hr.aggStatus()
 	if meta != nil {
@@ -565,7 +565,7 @@ func (hr *hashRouter) Push(
 		<-hr.semaphore
 	}
 	if err != nil {
-		hr.fwdMetadata(&distsqlpb.ProducerMetadata{Err: err})
+		hr.fwdMetadata(&execinfrapb.ProducerMetadata{Err: err})
 		atomic.StoreUint32(&hr.aggregatedStatus, uint32(distsql.ConsumerClosed))
 		return distsql.ConsumerClosed
 	}
@@ -599,7 +599,7 @@ func (hr *hashRouter) computeDestination(row sqlbase.EncDatumRow) (int, error) {
 }
 
 func makeRangeRouter(
-	rb routerBase, spec distsqlpb.OutputRouterSpec_RangeRouterSpec,
+	rb routerBase, spec execinfrapb.OutputRouterSpec_RangeRouterSpec,
 ) (*rangeRouter, error) {
 	if len(spec.Encodings) == 0 {
 		return nil, errors.New("missing encodings")
@@ -626,7 +626,7 @@ func makeRangeRouter(
 }
 
 func (rr *rangeRouter) Push(
-	row sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata,
+	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) distsql.ConsumerStatus {
 	aggStatus := rr.aggStatus()
 	if meta != nil {
@@ -652,7 +652,7 @@ func (rr *rangeRouter) Push(
 		<-rr.semaphore
 	}
 	if err != nil {
-		rr.fwdMetadata(&distsqlpb.ProducerMetadata{Err: err})
+		rr.fwdMetadata(&execinfrapb.ProducerMetadata{Err: err})
 		atomic.StoreUint32(&rr.aggregatedStatus, uint32(distsql.ConsumerClosed))
 		return distsql.ConsumerClosed
 	}

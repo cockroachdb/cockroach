@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -59,7 +59,7 @@ func TestVectorizedInternalPanic(t *testing.T) {
 		1, /* processorID */
 		vee,
 		types,
-		&distsqlpb.PostProcessSpec{},
+		&execinfrapb.PostProcessSpec{},
 		nil, /* output */
 		nil, /* metadataSourceQueue */
 		nil, /* outputStatsToTrace */
@@ -70,7 +70,7 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	}
 	mat.Start(ctx)
 
-	var meta *distsqlpb.ProducerMetadata
+	var meta *execinfrapb.ProducerMetadata
 	require.NotPanics(t, func() { _, meta = mat.Next() }, "VectorizedInternalPanic was not caught")
 	require.NotNil(t, meta.Err, "VectorizedInternalPanic was not propagated as metadata")
 }
@@ -106,7 +106,7 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 		1, /* processorID */
 		nvee,
 		types,
-		&distsqlpb.PostProcessSpec{},
+		&execinfrapb.PostProcessSpec{},
 		nil, /* output */
 		nil, /* metadataSourceQueue */
 		nil, /* outputStatsToTrace */
@@ -147,7 +147,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 			},
 		},
 		nil, /* typs */
-		&distsqlpb.PostProcessSpec{},
+		&execinfrapb.PostProcessSpec{},
 		&RowBuffer{},
 		nil, /* metadataSourceQueue */
 		nil, /* outputStatsToTrace */

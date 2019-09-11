@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -61,8 +61,8 @@ var backillerSSTSize = settings.RegisterByteSizeSetting(
 func newIndexBackfiller(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec distsqlpb.BackfillerSpec,
-	post *distsqlpb.PostProcessSpec,
+	spec execinfrapb.BackfillerSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*indexBackfiller, error) {
 	ib := &indexBackfiller{

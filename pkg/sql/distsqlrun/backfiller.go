@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -66,7 +66,7 @@ type backfiller struct {
 	// chunkBackfiller.
 	filter backfill.MutationFilter
 
-	spec        distsqlpb.BackfillerSpec
+	spec        execinfrapb.BackfillerSpec
 	output      distsql.RowReceiver
 	out         distsql.ProcOutputHelper
 	flowCtx     *distsql.FlowCtx
@@ -124,17 +124,17 @@ func (b *backfiller) Run(ctx context.Context) {
 	}
 }
 
-func (b *backfiller) doRun(ctx context.Context) *distsqlpb.ProducerMetadata {
-	if err := b.out.Init(&distsqlpb.PostProcessSpec{}, nil, b.flowCtx.NewEvalCtx(), b.output); err != nil {
-		return &distsqlpb.ProducerMetadata{Err: err}
+func (b *backfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
+	if err := b.out.Init(&execinfrapb.PostProcessSpec{}, nil, b.flowCtx.NewEvalCtx(), b.output); err != nil {
+		return &execinfrapb.ProducerMetadata{Err: err}
 	}
 	mutations, err := b.getMutationsToProcess(ctx)
 	if err != nil {
-		return &distsqlpb.ProducerMetadata{Err: err}
+		return &execinfrapb.ProducerMetadata{Err: err}
 	}
 	finishedSpans, err := b.mainLoop(ctx, mutations)
 	if err != nil {
-		return &distsqlpb.ProducerMetadata{Err: err}
+		return &execinfrapb.ProducerMetadata{Err: err}
 	}
 	if !b.flowCtx.Cfg.Settings.Version.IsActive(cluster.VersionAtomicChangeReplicasTrigger) {
 		// There is a node of older version which could be the coordinator.
@@ -147,11 +147,11 @@ func (b *backfiller) doRun(ctx context.Context) *distsqlpb.ProducerMetadata {
 			finishedSpans,
 			b.flowCtx.Cfg.JobRegistry,
 		)
-		return &distsqlpb.ProducerMetadata{Err: err}
+		return &execinfrapb.ProducerMetadata{Err: err}
 	}
-	var prog distsqlpb.RemoteProducerMetadata_BulkProcessorProgress
+	var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 	prog.CompletedSpans = append(prog.CompletedSpans, finishedSpans...)
-	return &distsqlpb.ProducerMetadata{BulkProcessorProgress: &prog}
+	return &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog}
 }
 
 // mainLoop invokes runChunk on chunks of rows.

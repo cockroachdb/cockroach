@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -55,7 +55,7 @@ func TestOutbox(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	clusterID, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(clock, stopper, staticNodeID)
+	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, staticNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,8 +72,8 @@ func TestOutbox(t *testing.T) {
 			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 		},
 	}
-	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
-	streamID := distsqlpb.StreamID(42)
+	flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
+	streamID := execinfrapb.StreamID(42)
 	outbox := newOutbox(&flowCtx, staticNodeID, flowID, streamID)
 	outbox.init(sqlbase.OneIntCol)
 	var outboxWG sync.WaitGroup
@@ -116,8 +116,8 @@ func TestOutbox(t *testing.T) {
 			}
 
 			// Send some metadata.
-			outbox.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: errors.Errorf("meta 0")})
-			outbox.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: errors.Errorf("meta 1")})
+			outbox.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: errors.Errorf("meta 0")})
+			outbox.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: errors.Errorf("meta 1")})
 			// Send the termination signal.
 			outbox.ProducerDone()
 
@@ -132,7 +132,7 @@ func TestOutbox(t *testing.T) {
 	// Consume everything that the outbox sends on the stream.
 	var decoder StreamDecoder
 	var rows sqlbase.EncDatumRows
-	var metas []distsqlpb.ProducerMetadata
+	var metas []execinfrapb.ProducerMetadata
 	drainSignalSent := false
 	for {
 		msg, err := serverStream.Recv()
@@ -169,7 +169,7 @@ func TestOutbox(t *testing.T) {
 
 		// After we receive one row, we're going to ask the producer to drain.
 		if !drainSignalSent && len(rows) > 0 {
-			sig := distsqlpb.ConsumerSignal{DrainRequest: &distsqlpb.DrainRequest{}}
+			sig := execinfrapb.ConsumerSignal{DrainRequest: &execinfrapb.DrainRequest{}}
 			if err := serverStream.Send(&sig); err != nil {
 				t.Fatal(err)
 			}
@@ -210,7 +210,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	clusterID, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(clock, stopper, staticNodeID)
+	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, staticNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,8 +228,8 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 		},
 	}
-	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
-	streamID := distsqlpb.StreamID(42)
+	flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
+	streamID := execinfrapb.StreamID(42)
 	outbox := newOutbox(&flowCtx, staticNodeID, flowID, streamID)
 
 	var outboxWG sync.WaitGroup
@@ -284,7 +284,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.TODO())
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-			clusterID, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(clock, stopper, staticNodeID)
+			clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, staticNodeID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -302,8 +302,8 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 					NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 				},
 			}
-			flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
-			streamID := distsqlpb.StreamID(42)
+			flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
+			streamID := execinfrapb.StreamID(42)
 			var outbox *outbox
 			var wg sync.WaitGroup
 			var expectedErr error
@@ -340,8 +340,8 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				client := distsqlpb.NewDistSQLClient(conn)
-				var outStream distsqlpb.DistSQL_RunSyncFlowClient
+				client := execinfrapb.NewDistSQLClient(conn)
+				var outStream execinfrapb.DistSQL_RunSyncFlowClient
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 				expectedErr = errors.Errorf("context canceled")
@@ -420,7 +420,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	clusterID, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(clock, stopper, staticNodeID)
+	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, staticNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -438,8 +438,8 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 			NodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 		},
 	}
-	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
-	streamID := distsqlpb.StreamID(42)
+	flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
+	streamID := execinfrapb.StreamID(42)
 	var outbox *outbox
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.TODO())
@@ -491,8 +491,8 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 			NodeDialer: nil,
 		},
 	}
-	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
-	streamID := distsqlpb.StreamID(42)
+	flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
+	streamID := execinfrapb.StreamID(42)
 	var outbox *outbox
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(ctx)
@@ -503,7 +503,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 
 	// Fill up the outbox.
 	for i := 0; i < outboxBufRows; i++ {
-		outbox.Push(nil, &distsqlpb.ProducerMetadata{})
+		outbox.Push(nil, &execinfrapb.ProducerMetadata{})
 	}
 
 	var blockedPusherWg sync.WaitGroup
@@ -511,7 +511,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 	go func() {
 		// Push to the outbox one last time, which will block since the channel
 		// is full.
-		outbox.Push(nil, &distsqlpb.ProducerMetadata{})
+		outbox.Push(nil, &execinfrapb.ProducerMetadata{})
 		// We should become unblocked once outbox.start fails.
 		blockedPusherWg.Done()
 	}()
@@ -522,7 +522,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 	wg.Wait()
 	// Also, make sure that pushing to the outbox after its failed shows that
 	// it's been correctly ConsumerClosed.
-	status := outbox.RowChannel.Push(nil, &distsqlpb.ProducerMetadata{})
+	status := outbox.RowChannel.Push(nil, &execinfrapb.ProducerMetadata{})
 	if status != distsql.ConsumerClosed {
 		t.Fatalf("expected status=ConsumerClosed, got %s", status)
 	}
@@ -537,7 +537,7 @@ func BenchmarkOutbox(b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	clusterID, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(clock, stopper, staticNodeID)
+	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, staticNodeID)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -548,8 +548,8 @@ func BenchmarkOutbox(b *testing.B) {
 			row = append(row, sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(2))))
 		}
 		b.Run(fmt.Sprintf("numCols=%d", numCols), func(b *testing.B) {
-			flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
-			streamID := distsqlpb.StreamID(42)
+			flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
+			streamID := execinfrapb.StreamID(42)
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 

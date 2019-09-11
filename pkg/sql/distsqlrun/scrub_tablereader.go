@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -64,8 +64,8 @@ var scrubTableReaderProcName = "scrub"
 func newScrubTableReader(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.TableReaderSpec,
-	post *distsqlpb.PostProcessSpec,
+	spec *execinfrapb.TableReaderSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*scrubTableReader, error) {
 	if flowCtx.NodeID == 0 {
@@ -127,7 +127,7 @@ func newScrubTableReader(
 	if _, _, err := distsql.InitRowFetcher(
 		&fetcher, &tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(), spec.Reverse,
 		neededColumns, true /* isCheck */, &tr.alloc,
-		distsqlpb.ScanVisibility_PUBLIC,
+		execinfrapb.ScanVisibility_PUBLIC,
 	); err != nil {
 		return nil, err
 	}
@@ -229,7 +229,7 @@ func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (tr *scrubTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (tr *scrubTableReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for tr.State == distsql.StateRunning {
 		var row sqlbase.EncDatumRow
 		var err error

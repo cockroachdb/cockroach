@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -39,7 +39,7 @@ func newMetadataTestSender(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 	id string,
 ) (*metadataTestSender, error) {
@@ -54,17 +54,17 @@ func newMetadataTestSender(
 		nil, /* memMonitor */
 		distsql.ProcStateOpts{
 			InputsToDrain: []distsql.RowSource{mts.input},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				mts.InternalClose()
 				// Send a final record with LastMsg set.
-				meta := distsqlpb.ProducerMetadata{
-					RowNum: &distsqlpb.RemoteProducerMetadata_RowNum{
+				meta := execinfrapb.ProducerMetadata{
+					RowNum: &execinfrapb.RemoteProducerMetadata_RowNum{
 						RowNum:   mts.rowNumCnt,
 						SenderID: mts.id,
 						LastMsg:  true,
 					},
 				}
-				return []distsqlpb.ProducerMetadata{meta}
+				return []execinfrapb.ProducerMetadata{meta}
 			},
 		},
 	); err != nil {
@@ -80,13 +80,13 @@ func (mts *metadataTestSender) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// Every call after a row has been returned returns a metadata record.
 	if mts.sendRowNumMeta {
 		mts.sendRowNumMeta = false
 		mts.rowNumCnt++
-		return nil, &distsqlpb.ProducerMetadata{
-			RowNum: &distsqlpb.RemoteProducerMetadata_RowNum{
+		return nil, &execinfrapb.ProducerMetadata{
+			RowNum: &execinfrapb.RemoteProducerMetadata_RowNum{
 				RowNum:   mts.rowNumCnt,
 				SenderID: mts.id,
 				LastMsg:  false,

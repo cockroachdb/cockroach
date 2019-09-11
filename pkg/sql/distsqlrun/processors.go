@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -46,7 +46,7 @@ func EmitHelper(
 	ctx context.Context,
 	output *distsql.ProcOutputHelper,
 	row sqlbase.EncDatumRow,
-	meta *distsqlpb.ProducerMetadata,
+	meta *execinfrapb.ProducerMetadata,
 	pushTrailingMeta func(context.Context),
 	inputs ...distsql.RowSource,
 ) bool {
@@ -68,7 +68,7 @@ func EmitHelper(
 		var err error
 		consumerStatus, err = output.EmitRow(ctx, row)
 		if err != nil {
-			output.Output().Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
+			output.Output().Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
 			consumerStatus = distsql.ConsumerClosed
 		}
 	}
@@ -96,8 +96,8 @@ func newProcessor(
 	ctx context.Context,
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	core *distsqlpb.ProcessorCoreUnion,
-	post *distsqlpb.PostProcessSpec,
+	core *execinfrapb.ProcessorCoreUnion,
+	post *execinfrapb.PostProcessSpec,
 	inputs []distsql.RowSource,
 	outputs []distsql.RowReceiver,
 	localProcessors []distsql.LocalProcessor,
@@ -192,9 +192,9 @@ func newProcessor(
 			return nil, err
 		}
 		switch core.Backfiller.Type {
-		case distsqlpb.BackfillerSpec_Index:
+		case execinfrapb.BackfillerSpec_Index:
 			return newIndexBackfiller(flowCtx, processorID, *core.Backfiller, post, outputs[0])
-		case distsqlpb.BackfillerSpec_Column:
+		case execinfrapb.BackfillerSpec_Column:
 			return newColumnBackfiller(flowCtx, processorID, *core.Backfiller, post, outputs[0])
 		}
 	}
@@ -328,17 +328,17 @@ type VectorizeAlwaysException interface {
 
 // NewReadImportDataProcessor is externally implemented and registered by
 // ccl/sqlccl/csv.go.
-var NewReadImportDataProcessor func(*distsql.FlowCtx, int32, distsqlpb.ReadImportDataSpec, distsql.RowReceiver) (distsql.Processor, error)
+var NewReadImportDataProcessor func(*distsql.FlowCtx, int32, execinfrapb.ReadImportDataSpec, distsql.RowReceiver) (distsql.Processor, error)
 
 // NewSSTWriterProcessor is externally implemented and registered by
 // ccl/sqlccl/csv.go.
-var NewSSTWriterProcessor func(*distsql.FlowCtx, int32, distsqlpb.SSTWriterSpec, distsql.RowSource, distsql.RowReceiver) (distsql.Processor, error)
+var NewSSTWriterProcessor func(*distsql.FlowCtx, int32, execinfrapb.SSTWriterSpec, distsql.RowSource, distsql.RowReceiver) (distsql.Processor, error)
 
 // NewCSVWriterProcessor is externally implemented.
-var NewCSVWriterProcessor func(*distsql.FlowCtx, int32, distsqlpb.CSVWriterSpec, distsql.RowSource, distsql.RowReceiver) (distsql.Processor, error)
+var NewCSVWriterProcessor func(*distsql.FlowCtx, int32, execinfrapb.CSVWriterSpec, distsql.RowSource, distsql.RowReceiver) (distsql.Processor, error)
 
 // NewChangeAggregatorProcessor is externally implemented.
-var NewChangeAggregatorProcessor func(*distsql.FlowCtx, int32, distsqlpb.ChangeAggregatorSpec, distsql.RowReceiver) (distsql.Processor, error)
+var NewChangeAggregatorProcessor func(*distsql.FlowCtx, int32, execinfrapb.ChangeAggregatorSpec, distsql.RowReceiver) (distsql.Processor, error)
 
 // NewChangeFrontierProcessor is externally implemented.
-var NewChangeFrontierProcessor func(*distsql.FlowCtx, int32, distsqlpb.ChangeFrontierSpec, distsql.RowSource, distsql.RowReceiver) (distsql.Processor, error)
+var NewChangeFrontierProcessor func(*distsql.FlowCtx, int32, execinfrapb.ChangeFrontierSpec, distsql.RowSource, distsql.RowReceiver) (distsql.Processor, error)

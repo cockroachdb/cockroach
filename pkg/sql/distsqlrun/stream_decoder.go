@@ -13,7 +13,7 @@ package distsqlrun
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
@@ -43,10 +43,10 @@ import (
 // AddMessage can be called multiple times before getting the rows, but this
 // will cause data to accumulate internally.
 type StreamDecoder struct {
-	typing       []distsqlpb.DatumInfo
+	typing       []execinfrapb.DatumInfo
 	data         []byte
 	numEmptyRows int
-	metadata     []distsqlpb.ProducerMetadata
+	metadata     []execinfrapb.ProducerMetadata
 	rowAlloc     sqlbase.EncDatumRowAlloc
 
 	headerReceived bool
@@ -59,7 +59,7 @@ type StreamDecoder struct {
 // msg.Data.Metadata until all the rows in the message are retrieved with GetRow.
 //
 // If an error is returned, no records have been buffered in the StreamDecoder.
-func (sd *StreamDecoder) AddMessage(ctx context.Context, msg *distsqlpb.ProducerMessage) error {
+func (sd *StreamDecoder) AddMessage(ctx context.Context, msg *execinfrapb.ProducerMessage) error {
 	if msg.Header != nil {
 		if sd.headerReceived {
 			return errors.Errorf("received multiple headers")
@@ -100,7 +100,7 @@ func (sd *StreamDecoder) AddMessage(ctx context.Context, msg *distsqlpb.Producer
 	}
 	if len(msg.Data.Metadata) > 0 {
 		for _, md := range msg.Data.Metadata {
-			meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(ctx, md)
+			meta, ok := execinfrapb.RemoteProducerMetaToLocalMeta(ctx, md)
 			if !ok {
 				// Unknown metadata, ignore.
 				continue
@@ -120,7 +120,7 @@ func (sd *StreamDecoder) AddMessage(ctx context.Context, msg *distsqlpb.Producer
 // coming from the upstream (through ProducerMetadata.Err).
 func (sd *StreamDecoder) GetRow(
 	rowBuf sqlbase.EncDatumRow,
-) (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata, error) {
+) (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata, error) {
 	if len(sd.metadata) != 0 {
 		r := &sd.metadata[0]
 		sd.metadata = sd.metadata[1:]

@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -27,7 +27,7 @@ import (
 // inside a RowBuffer.
 type bufferedRecord struct {
 	row  sqlbase.EncDatumRow
-	meta *distsqlpb.ProducerMetadata
+	meta *execinfrapb.ProducerMetadata
 }
 
 // RowBuffer is an implementation of RowReceiver that buffers (accumulates)
@@ -77,9 +77,9 @@ type rowBufferArgs struct {
 	// OnNext, if specified, is called as the first thing in the Next() method.
 	// If it returns an empty row and metadata, then RowBuffer.Next() is allowed
 	// to run normally. Otherwise, the values are returned from RowBuffer.Next().
-	OnNext func(*RowBuffer) (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
+	OnNext func(*RowBuffer) (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata)
 	// OnPush, if specified, is called as the first thing in the Push() method.
-	OnPush func(sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
+	OnPush func(sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata)
 }
 
 // newRowBuffer creates a RowBuffer with the given schema and initial rows.
@@ -98,7 +98,7 @@ func newRowBuffer(types []types.T, rows sqlbase.EncDatumRows, hooks rowBufferArg
 
 // Push is part of the RowReceiver interface.
 func (rb *RowBuffer) Push(
-	row sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata,
+	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) distsql.ConsumerStatus {
 	if rb.args.OnPush != nil {
 		rb.args.OnPush(row, meta)
@@ -169,7 +169,7 @@ func (rb *RowBuffer) Start(ctx context.Context) context.Context { return ctx }
 //
 // There's no synchronization here with Push(). The assumption is that these
 // two methods are not called concurrently.
-func (rb *RowBuffer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (rb *RowBuffer) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if rb.args.OnNext != nil {
 		row, meta := rb.args.OnNext(rb)
 		if row != nil || meta != nil {

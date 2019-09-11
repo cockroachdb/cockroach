@@ -13,7 +13,7 @@ package distsql
 import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -31,7 +31,7 @@ type FlowCtx struct {
 	// registry (no inbound stream connections need to be performed), they are not
 	// assigned ids. This is done for performance reasons, as local flows are
 	// more likely to be dominated by setup time.
-	ID distsqlpb.FlowID
+	ID execinfrapb.FlowID
 
 	// EvalCtx is used by all the processors in the flow to evaluate expressions.
 	// Processors that intend to evaluate expressions with this EvalCtx should

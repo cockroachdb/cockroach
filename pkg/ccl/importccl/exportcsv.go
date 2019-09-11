@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -34,7 +34,7 @@ const exportFilePatternDefault = exportFilePatternPart + ".csv"
 func newCSVWriterProcessor(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec distsqlpb.CSVWriterSpec,
+	spec execinfrapb.CSVWriterSpec,
 	input distsql.RowSource,
 	output distsql.RowReceiver,
 ) (distsql.Processor, error) {
@@ -55,7 +55,7 @@ func newCSVWriterProcessor(
 		input:       input,
 		output:      output,
 	}
-	if err := c.out.Init(&distsqlpb.PostProcessSpec{}, c.OutputTypes(), flowCtx.NewEvalCtx(), output); err != nil {
+	if err := c.out.Init(&execinfrapb.PostProcessSpec{}, c.OutputTypes(), flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -64,7 +64,7 @@ func newCSVWriterProcessor(
 type csvWriter struct {
 	flowCtx     *distsql.FlowCtx
 	processorID int32
-	spec        distsqlpb.CSVWriterSpec
+	spec        execinfrapb.CSVWriterSpec
 	input       distsql.RowSource
 	out         distsql.ProcOutputHelper
 	output      distsql.RowReceiver

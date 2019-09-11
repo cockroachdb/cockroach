@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -30,8 +30,8 @@ func testGetDecodedRows(
 	tb testing.TB,
 	sd *StreamDecoder,
 	decodedRows sqlbase.EncDatumRows,
-	metas []distsqlpb.ProducerMetadata,
-) (sqlbase.EncDatumRows, []distsqlpb.ProducerMetadata) {
+	metas []execinfrapb.ProducerMetadata,
+) (sqlbase.EncDatumRows, []execinfrapb.ProducerMetadata) {
 	for {
 		row, meta, err := sd.GetRow(nil /* rowBuf */)
 		if err != nil {
@@ -54,7 +54,7 @@ func testRowStream(tb testing.TB, rng *rand.Rand, types []types.T, records []row
 	var sd StreamDecoder
 
 	var decodedRows sqlbase.EncDatumRows
-	var metas []distsqlpb.ProducerMetadata
+	var metas []execinfrapb.ProducerMetadata
 	numRows := 0
 	numMeta := 0
 
@@ -95,7 +95,7 @@ func testRowStream(tb testing.TB, rng *rand.Rand, types []types.T, records []row
 
 type rowOrMeta struct {
 	row  sqlbase.EncDatumRow
-	meta distsqlpb.ProducerMetadata
+	meta execinfrapb.ProducerMetadata
 }
 
 // TestStreamEncodeDecode generates random streams of EncDatums and passes them
@@ -106,7 +106,7 @@ func TestStreamEncodeDecode(t *testing.T) {
 	for test := 0; test < 100; test++ {
 		rowLen := rng.Intn(20)
 		types := sqlbase.RandEncodableColumnTypes(rng, rowLen)
-		info := make([]distsqlpb.DatumInfo, rowLen)
+		info := make([]execinfrapb.DatumInfo, rowLen)
 		for i := range info {
 			info[i].Type = types[i]
 			info[i].Encoding = sqlbase.RandDatumEncoding(rng)

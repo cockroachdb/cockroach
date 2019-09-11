@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -92,7 +92,7 @@ func (irj *interleavedReaderJoiner) Start(ctx context.Context) context.Context {
 	return ctx
 }
 
-func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// Next is implemented as a state machine. The states are represented by the
 	// irjState enum at the top of this file.
 	// Roughly, the state machine is either in an initialization phase, a steady
@@ -101,7 +101,7 @@ func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.Prod
 	// seen ancestor if the join type calls for it.
 	for irj.State == distsql.StateRunning {
 		var row sqlbase.EncDatumRow
-		var meta *distsqlpb.ProducerMetadata
+		var meta *execinfrapb.ProducerMetadata
 		switch irj.runningState {
 		case irjReading:
 			irj.runningState, row, meta = irj.nextRow()
@@ -148,7 +148,7 @@ func (irj *interleavedReaderJoiner) findTable(
 func (irj *interleavedReaderJoiner) nextRow() (
 	irjState,
 	sqlbase.EncDatumRow,
-	*distsqlpb.ProducerMetadata,
+	*execinfrapb.ProducerMetadata,
 ) {
 	row, desc, index, err := irj.fetcher.NextRow(irj.Ctx)
 	if err != nil {
@@ -267,14 +267,14 @@ func (irj *interleavedReaderJoiner) ConsumerClosed() {
 }
 
 var _ distsql.Processor = &interleavedReaderJoiner{}
-var _ distsqlpb.MetadataSource = &interleavedReaderJoiner{}
+var _ execinfrapb.MetadataSource = &interleavedReaderJoiner{}
 
 // newInterleavedReaderJoiner creates a interleavedReaderJoiner.
 func newInterleavedReaderJoiner(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.InterleavedReaderJoinerSpec,
-	post *distsqlpb.PostProcessSpec,
+	spec *execinfrapb.InterleavedReaderJoinerSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*interleavedReaderJoiner, error) {
 	if flowCtx.NodeID == 0 {
@@ -330,7 +330,7 @@ func newInterleavedReaderJoiner(
 
 		tables[i].tableID = table.Desc.ID
 		tables[i].indexID = index.ID
-		tables[i].ordering = distsqlpb.ConvertToColumnOrdering(table.Ordering)
+		tables[i].ordering = execinfrapb.ConvertToColumnOrdering(table.Ordering)
 		for _, trSpan := range table.Spans {
 			allSpans = append(allSpans, trSpan.Span)
 		}
@@ -392,7 +392,9 @@ func newInterleavedReaderJoiner(
 }
 
 func (irj *interleavedReaderJoiner) initRowFetcher(
-	tables []distsqlpb.InterleavedReaderJoinerSpec_Table, reverseScan bool, alloc *sqlbase.DatumAlloc,
+	tables []execinfrapb.InterleavedReaderJoinerSpec_Table,
+	reverseScan bool,
+	alloc *sqlbase.DatumAlloc,
 ) error {
 	args := make([]row.FetcherTableArgs, len(tables))
 
@@ -423,26 +425,28 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 
 func (irj *interleavedReaderJoiner) generateTrailingMeta(
 	ctx context.Context,
-) []distsqlpb.ProducerMetadata {
+) []execinfrapb.ProducerMetadata {
 	trailingMeta := irj.generateMeta(ctx)
 	irj.InternalClose()
 	return trailingMeta
 }
 
-func (irj *interleavedReaderJoiner) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
-	var trailingMeta []distsqlpb.ProducerMetadata
+func (irj *interleavedReaderJoiner) generateMeta(
+	ctx context.Context,
+) []execinfrapb.ProducerMetadata {
+	var trailingMeta []execinfrapb.ProducerMetadata
 	ranges := distsql.MisplannedRanges(ctx, irj.fetcher.GetRangesInfo(), irj.FlowCtx.NodeID)
 	if ranges != nil {
-		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: ranges})
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 	}
 	if meta := distsql.GetTxnCoordMeta(ctx, irj.FlowCtx.Txn); meta != nil {
-		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 	return trailingMeta
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (irj *interleavedReaderJoiner) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (irj *interleavedReaderJoiner) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	return irj.generateMeta(ctx)
 }
 

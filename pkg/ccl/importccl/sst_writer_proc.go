@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -50,7 +50,7 @@ var sstOutputTypes = []types.T{
 func newSSTWriterProcessor(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec distsqlpb.SSTWriterSpec,
+	spec execinfrapb.SSTWriterSpec,
 	input distsql.RowSource,
 	output distsql.RowReceiver,
 ) (distsql.Processor, error) {
@@ -66,7 +66,7 @@ func newSSTWriterProcessor(
 		progress:    spec.Progress,
 		db:          flowCtx.EvalCtx.Txn.DB(),
 	}
-	if err := sp.out.Init(&distsqlpb.PostProcessSpec{}, sstOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
+	if err := sp.out.Init(&execinfrapb.PostProcessSpec{}, sstOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}
 	if sp.spec.Destination != "" {
@@ -79,14 +79,14 @@ func newSSTWriterProcessor(
 type sstWriter struct {
 	flowCtx     *distsql.FlowCtx
 	processorID int32
-	spec        distsqlpb.SSTWriterSpec
+	spec        execinfrapb.SSTWriterSpec
 	input       distsql.RowSource
 	out         distsql.ProcOutputHelper
 	output      distsql.RowReceiver
 	tempStorage diskmap.Factory
 	settings    *cluster.Settings
 	registry    *jobs.Registry
-	progress    distsqlpb.JobProgress
+	progress    execinfrapb.JobProgress
 	db          *client.DB
 }
 

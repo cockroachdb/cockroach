@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/vecbuiltins"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -65,7 +65,7 @@ func wrapRowSource(
 			processorID,
 			input,
 			inputTypes,
-			&distsqlpb.PostProcessSpec{},
+			&execinfrapb.PostProcessSpec{},
 			nil, /* output */
 			nil, /* metadataSourcesQueue */
 			nil, /* outputStatsToTrace */
@@ -90,7 +90,7 @@ type NewColOperatorResult struct {
 	Op              colexec.Operator
 	ColumnTypes     []types.T
 	MemUsage        int
-	MetadataSources []distsqlpb.MetadataSource
+	MetadataSources []execinfrapb.MetadataSource
 	IsStreaming     bool
 }
 
@@ -98,7 +98,7 @@ type NewColOperatorResult struct {
 func NewColOperator(
 	ctx context.Context,
 	flowCtx *distsql.FlowCtx,
-	spec *distsqlpb.ProcessorSpec,
+	spec *execinfrapb.ProcessorSpec,
 	inputs []colexec.Operator,
 ) (result NewColOperatorResult, err error) {
 	log.VEventf(ctx, 2, "planning col operator for spec %q", spec)
@@ -146,7 +146,7 @@ func NewColOperator(
 		// still responsible for doing the cancellation check on their own while
 		// performing long operations.
 		result.Op = colexec.NewCancelChecker(result.Op)
-		returnMutations := core.TableReader.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+		returnMutations := core.TableReader.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 		result.ColumnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
 	case core.Aggregator != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
@@ -171,7 +171,7 @@ func NewColOperator(
 		if len(aggSpec.GroupCols) == 0 &&
 			len(aggSpec.Aggregations) == 1 &&
 			aggSpec.Aggregations[0].FilterColIdx == nil &&
-			aggSpec.Aggregations[0].Func == distsqlpb.AggregatorSpec_COUNT_ROWS &&
+			aggSpec.Aggregations[0].Func == execinfrapb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
 			result.Op, result.IsStreaming, err = colexec.NewCountOp(inputs[0]), true, nil
 			result.ColumnTypes = []types.T{*types.Int}
@@ -197,7 +197,7 @@ func NewColOperator(
 
 		aggTyps := make([][]types.T, len(aggSpec.Aggregations))
 		aggCols := make([][]uint32, len(aggSpec.Aggregations))
-		aggFns := make([]distsqlpb.AggregatorSpec_Func, len(aggSpec.Aggregations))
+		aggFns := make([]execinfrapb.AggregatorSpec_Func, len(aggSpec.Aggregations))
 		result.ColumnTypes = make([]types.T, len(aggSpec.Aggregations))
 		for i, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
@@ -216,7 +216,7 @@ func NewColOperator(
 			aggCols[i] = agg.ColIdx
 			aggFns[i] = agg.Func
 			switch agg.Func {
-			case distsqlpb.AggregatorSpec_SUM:
+			case execinfrapb.AggregatorSpec_SUM:
 				switch aggTyps[i][0].Family() {
 				case types.IntFamily:
 					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
@@ -224,13 +224,13 @@ func NewColOperator(
 					// issues, at first, we could plan SUM for all types besides Int64.
 					return result, errors.Newf("sum on int cols not supported (use sum_int)")
 				}
-			case distsqlpb.AggregatorSpec_SUM_INT:
+			case execinfrapb.AggregatorSpec_SUM_INT:
 				// TODO(yuzefovich): support this case through vectorize.
 				if aggTyps[i][0].Width() != 64 {
 					return result, errors.Newf("sum_int is only supported on Int64 through vectorized")
 				}
 			}
-			_, retType, err := distsqlpb.GetAggregateInfo(agg.Func, aggTyps[i]...)
+			_, retType, err := execinfrapb.GetAggregateInfo(agg.Func, aggTyps[i]...)
 			if err != nil {
 				return result, err
 			}
@@ -243,11 +243,11 @@ func NewColOperator(
 		}
 		if needHash {
 			result.Op, err = colexec.NewHashAggregator(
-				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, distsqlpb.IsScalarAggregate(aggSpec),
+				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
 			)
 		} else {
 			result.Op, err = colexec.NewOrderedAggregator(
-				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, distsqlpb.IsScalarAggregate(aggSpec),
+				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
 			)
 			result.IsStreaming = true
 		}
@@ -331,7 +331,7 @@ func NewColOperator(
 		}
 
 		var (
-			onExpr         *distsqlpb.Expression
+			onExpr         *execinfrapb.Expression
 			filterPlanning *filterPlanningState
 		)
 		if !core.HashJoiner.OnExpr.Empty() {
@@ -427,7 +427,7 @@ func NewColOperator(
 		}
 
 		var (
-			onExpr            *distsqlpb.Expression
+			onExpr            *execinfrapb.Expression
 			filterPlanning    *filterPlanningState
 			filterOnlyOnLeft  bool
 			filterConstructor func(colexec.Operator) (colexec.Operator, error)
@@ -527,7 +527,7 @@ func NewColOperator(
 						flowCtx, spec.ProcessorID, core.JoinReader, input, post, nil, /* output */
 					)
 				}
-				post = &distsqlpb.PostProcessSpec{}
+				post = &execinfrapb.PostProcessSpec{}
 				if err != nil {
 					return nil, err
 				}
@@ -575,9 +575,9 @@ func NewColOperator(
 		}
 		wf := core.Windower.WindowFns[0]
 		if wf.Frame != nil &&
-			(wf.Frame.Mode != distsqlpb.WindowerSpec_Frame_RANGE ||
-				wf.Frame.Bounds.Start.BoundType != distsqlpb.WindowerSpec_Frame_UNBOUNDED_PRECEDING ||
-				(wf.Frame.Bounds.End != nil && wf.Frame.Bounds.End.BoundType != distsqlpb.WindowerSpec_Frame_CURRENT_ROW)) {
+			(wf.Frame.Mode != execinfrapb.WindowerSpec_Frame_RANGE ||
+				wf.Frame.Bounds.Start.BoundType != execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING ||
+				(wf.Frame.Bounds.End != nil && wf.Frame.Bounds.End.BoundType != execinfrapb.WindowerSpec_Frame_CURRENT_ROW)) {
 			return result, errors.Newf("window functions with non-default window frames are not supported")
 		}
 		if wf.Func.AggregateFunc != nil {
@@ -613,11 +613,11 @@ func NewColOperator(
 			orderingCols[i] = col.ColIdx
 		}
 		switch *wf.Func.WindowFunc {
-		case distsqlpb.WindowerSpec_ROW_NUMBER:
+		case execinfrapb.WindowerSpec_ROW_NUMBER:
 			result.Op = vecbuiltins.NewRowNumberOperator(input, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
-		case distsqlpb.WindowerSpec_RANK:
+		case execinfrapb.WindowerSpec_RANK:
 			result.Op, err = vecbuiltins.NewRankOperator(input, typs, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
-		case distsqlpb.WindowerSpec_DENSE_RANK:
+		case execinfrapb.WindowerSpec_DENSE_RANK:
 			result.Op, err = vecbuiltins.NewRankOperator(input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		default:
 			return result, errors.Newf("window function %s is not supported", wf.String())
@@ -735,7 +735,7 @@ func newFilterPlanningState(numLeftInputCols, numRightInputCols int) *filterPlan
 // out after the filter has been run.
 // It returns updated leftOutCols and rightOutCols.
 func (p *filterPlanningState) renderAllNeededCols(
-	filter distsqlpb.Expression, leftOutCols []uint32, rightOutCols []uint32,
+	filter execinfrapb.Expression, leftOutCols []uint32, rightOutCols []uint32,
 ) ([]uint32, []uint32) {
 	neededColumnsForFilter := findIVarsInRange(
 		filter,
@@ -809,7 +809,7 @@ func (p *filterPlanningState) renderAllNeededCols(
 
 // isFilterOnlyOnLeft returns whether the filter expression doesn't use columns
 // from the right side.
-func (p *filterPlanningState) isFilterOnlyOnLeft(filter distsqlpb.Expression) bool {
+func (p *filterPlanningState) isFilterOnlyOnLeft(filter execinfrapb.Expression) bool {
 	// Find all needed columns for filter only from the right side.
 	neededColumnsForFilter := findIVarsInRange(
 		filter, p.numLeftInputCols, p.numLeftInputCols+p.numRightInputCols,
@@ -819,7 +819,7 @@ func (p *filterPlanningState) isFilterOnlyOnLeft(filter distsqlpb.Expression) bo
 
 // remapIVars remaps tree.IndexedVars in expr using p.indexVarMap. Note that
 // expr is modified in-place.
-func (p *filterPlanningState) remapIVars(expr *distsqlpb.Expression) {
+func (p *filterPlanningState) remapIVars(expr *execinfrapb.Expression) {
 	if p.indexVarMap == nil {
 		// If p.indexVarMap is nil, then there is no remapping to do.
 		return
@@ -860,7 +860,7 @@ func (p *filterPlanningState) projectOutExtraCols(
 }
 
 func (r *NewColOperatorResult) planFilterExpr(
-	evalCtx *tree.EvalContext, filter distsqlpb.Expression,
+	evalCtx *tree.EvalContext, filter execinfrapb.Expression,
 ) error {
 	var (
 		helper       distsql.ExprHelper

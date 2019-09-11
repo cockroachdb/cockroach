@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -271,7 +271,7 @@ func _PROBE_SWITCH(
 					var incrementLeft bool
 					_ASSIGN_LT("incrementLeft", "lVal", "rVal")
 					// Switch the direction of increment if we're sorted descendingly.
-					incrementLeft = incrementLeft == (o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC)
+					incrementLeft = incrementLeft == (o.left.directions[eqColIdx] == execinfrapb.Ordering_Column_ASC)
 					if incrementLeft {
 						curLIdx++
 						// {{ if _L_HAS_NULLS }}

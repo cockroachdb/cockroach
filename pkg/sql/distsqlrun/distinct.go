@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -64,9 +64,9 @@ const sortedDistinctProcName = "sorted distinct"
 func NewDistinct(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.DistinctSpec,
+	spec *execinfrapb.DistinctSpec,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (distsql.RowSourcedProcessor, error) {
 	if len(spec.DistinctColumns) == 0 {
@@ -116,7 +116,7 @@ func NewDistinct(
 		d, post, d.types, flowCtx, processorID, output, memMonitor, /* memMonitor */
 		distsql.ProcStateOpts{
 			InputsToDrain: []distsql.RowSource{d.input},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				d.close()
 				return nil
 			},
@@ -196,7 +196,7 @@ func (d *Distinct) close() {
 }
 
 // Next is part of the RowSource interface.
-func (d *Distinct) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (d *Distinct) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for d.State == distsql.StateRunning {
 		row, meta := d.input.Next()
 		if meta != nil {
@@ -264,7 +264,7 @@ func (d *Distinct) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 //
 // sortedDistinct is simpler than distinct. All it has to do is keep track
 // of the last row it saw, emitting if the new row is different.
-func (d *SortedDistinct) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (d *SortedDistinct) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for d.State == distsql.StateRunning {
 		row, meta := d.input.Next()
 		if meta != nil {
@@ -302,7 +302,7 @@ func (d *Distinct) ConsumerClosed() {
 	d.close()
 }
 
-var _ distsqlpb.DistSQLSpanStats = &DistinctStats{}
+var _ execinfrapb.DistSQLSpanStats = &DistinctStats{}
 
 const distinctTagPrefix = "distinct."
 

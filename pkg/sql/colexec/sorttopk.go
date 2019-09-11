@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 )
 
 const (
@@ -30,7 +30,7 @@ const (
 // columns given in orderingCols and returns the first K rows. The inputTypes
 // must correspond 1-1 with the columns in the input operator.
 func NewTopKSorter(
-	input Operator, inputTypes []coltypes.T, orderingCols []distsqlpb.Ordering_Column, k uint16,
+	input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, k uint16,
 ) Operator {
 	return &topKSorter{
 		OneInputNode: NewOneInputNode(input),
@@ -60,7 +60,7 @@ const (
 
 type topKSorter struct {
 	OneInputNode
-	orderingCols []distsqlpb.Ordering_Column
+	orderingCols []execinfrapb.Ordering_Column
 	inputTypes   []coltypes.T
 	k            uint16 // TODO(solon): support larger k values
 
@@ -223,9 +223,9 @@ func (t *topKSorter) compareRow(vecIdx1, vecIdx2 int, rowIdx1, rowIdx2 uint16) i
 		res := t.comparators[info.ColIdx].compare(vecIdx1, vecIdx2, rowIdx1, rowIdx2)
 		if res != 0 {
 			switch d := info.Direction; d {
-			case distsqlpb.Ordering_Column_ASC:
+			case execinfrapb.Ordering_Column_ASC:
 				return res
-			case distsqlpb.Ordering_Column_DESC:
+			case execinfrapb.Ordering_Column_DESC:
 				return -res
 			default:
 				execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected direction value %d", d))

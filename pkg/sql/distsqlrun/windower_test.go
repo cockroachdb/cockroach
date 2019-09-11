@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -64,22 +64,22 @@ func TestWindowerAccountingForResults(t *testing.T) {
 		},
 	}
 
-	post := &distsqlpb.PostProcessSpec{}
+	post := &execinfrapb.PostProcessSpec{}
 	input := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(1000, 1))
-	aggSpec := distsqlpb.AggregatorSpec_Func(distsqlpb.AggregatorSpec_ARRAY_AGG)
-	spec := distsqlpb.WindowerSpec{
+	aggSpec := execinfrapb.AggregatorSpec_Func(execinfrapb.AggregatorSpec_ARRAY_AGG)
+	spec := execinfrapb.WindowerSpec{
 		PartitionBy: []uint32{},
-		WindowFns: []distsqlpb.WindowerSpec_WindowFn{{
-			Func:         distsqlpb.WindowerSpec_Func{AggregateFunc: &aggSpec},
+		WindowFns: []execinfrapb.WindowerSpec_WindowFn{{
+			Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &aggSpec},
 			ArgsIdxs:     []uint32{0},
-			Ordering:     distsqlpb.Ordering{Columns: []distsqlpb.Ordering_Column{{ColIdx: 0}}},
+			Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0}}},
 			OutputColIdx: 0,
 			FilterColIdx: noFilterIdx,
-			Frame: &distsqlpb.WindowerSpec_Frame{
-				Mode: distsqlpb.WindowerSpec_Frame_ROWS,
-				Bounds: distsqlpb.WindowerSpec_Frame_Bounds{
-					Start: distsqlpb.WindowerSpec_Frame_Bound{
-						BoundType: distsqlpb.WindowerSpec_Frame_OFFSET_PRECEDING,
+			Frame: &execinfrapb.WindowerSpec_Frame{
+				Mode: execinfrapb.WindowerSpec_Frame_ROWS,
+				Bounds: execinfrapb.WindowerSpec_Frame_Bounds{
+					Start: execinfrapb.WindowerSpec_Frame_Bound{
+						BoundType: execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING,
 						IntOffset: 100,
 					},
 				},
@@ -125,12 +125,12 @@ type windowFnTestSpec struct {
 	columnOrdering sqlbase.ColumnOrdering
 }
 
-func windows(windowTestSpecs []windowTestSpec) ([]distsqlpb.WindowerSpec, error) {
-	windows := make([]distsqlpb.WindowerSpec, len(windowTestSpecs))
+func windows(windowTestSpecs []windowTestSpec) ([]execinfrapb.WindowerSpec, error) {
+	windows := make([]execinfrapb.WindowerSpec, len(windowTestSpecs))
 	for i, spec := range windowTestSpecs {
 		windows[i].PartitionBy = spec.partitionBy
-		windows[i].WindowFns = make([]distsqlpb.WindowerSpec_WindowFn, 1)
-		windowFnSpec := distsqlpb.WindowerSpec_WindowFn{}
+		windows[i].WindowFns = make([]execinfrapb.WindowerSpec_WindowFn, 1)
+		windowFnSpec := execinfrapb.WindowerSpec_WindowFn{}
 		fnSpec, err := CreateWindowerSpecFunc(spec.windowFn.funcName)
 		if err != nil {
 			return nil, err
@@ -138,16 +138,16 @@ func windows(windowTestSpecs []windowTestSpec) ([]distsqlpb.WindowerSpec, error)
 		windowFnSpec.Func = fnSpec
 		windowFnSpec.ArgsIdxs = spec.windowFn.argsIdxs
 		if spec.windowFn.columnOrdering != nil {
-			ordCols := make([]distsqlpb.Ordering_Column, 0, len(spec.windowFn.columnOrdering))
+			ordCols := make([]execinfrapb.Ordering_Column, 0, len(spec.windowFn.columnOrdering))
 			for _, column := range spec.windowFn.columnOrdering {
-				ordCols = append(ordCols, distsqlpb.Ordering_Column{
+				ordCols = append(ordCols, execinfrapb.Ordering_Column{
 					ColIdx: uint32(column.ColIdx),
 					// We need this -1 because encoding.Direction has extra value "_"
 					// as zeroth "entry" which its proto equivalent doesn't have.
-					Direction: distsqlpb.Ordering_Column_Direction(column.Direction - 1),
+					Direction: execinfrapb.Ordering_Column_Direction(column.Direction - 1),
 				})
 			}
-			windowFnSpec.Ordering = distsqlpb.Ordering{Columns: ordCols}
+			windowFnSpec.Ordering = execinfrapb.Ordering{Columns: ordCols}
 		}
 		windowFnSpec.FilterColIdx = noFilterIdx
 		windows[i].WindowFns[0] = windowFnSpec
@@ -240,7 +240,7 @@ func BenchmarkWindower(b *testing.B) {
 			runName = runName + ")"
 
 			b.Run(runName, func(b *testing.B) {
-				post := &distsqlpb.PostProcessSpec{}
+				post := &execinfrapb.PostProcessSpec{}
 				disposer := &rowDisposer{}
 				input := distsql.NewRepeatableRowSource(sqlbase.ThreeIntCols, rowsGenerator(numRows, numCols))
 

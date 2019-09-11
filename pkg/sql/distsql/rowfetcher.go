@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -59,7 +59,7 @@ func InitRowFetcher(
 	valNeededForCol util.FastIntSet,
 	isCheck bool,
 	alloc *sqlbase.DatumAlloc,
-	scanVisibility distsqlpb.ScanVisibility,
+	scanVisibility execinfrapb.ScanVisibility,
 ) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
 	immutDesc := sqlbase.NewImmutableTableDescriptor(*desc)
 	index, isSecondaryIndex, err = immutDesc.FindIndexByIndexIdx(indexIdx)
@@ -68,7 +68,7 @@ func InitRowFetcher(
 	}
 
 	cols := immutDesc.Columns
-	if scanVisibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
+	if scanVisibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
 		cols = immutDesc.ReadableColumns
 	}
 	tableArgs := row.FetcherTableArgs{

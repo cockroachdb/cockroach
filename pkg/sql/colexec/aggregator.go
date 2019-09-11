@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/pkg/errors"
 )
 
@@ -136,7 +136,7 @@ var _ StaticMemoryOperator = &orderedAggregator{}
 func NewOrderedAggregator(
 	input Operator,
 	colTypes []coltypes.T,
-	aggFns []distsqlpb.AggregatorSpec_Func,
+	aggFns []execinfrapb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
 	isScalar bool,
@@ -197,7 +197,7 @@ func NewOrderedAggregator(
 }
 
 func makeAggregateFuncs(
-	aggTyps [][]coltypes.T, aggFns []distsqlpb.AggregatorSpec_Func,
+	aggTyps [][]coltypes.T, aggFns []execinfrapb.AggregatorSpec_Func,
 ) ([]aggregateFunc, []coltypes.T, error) {
 	funcs := make([]aggregateFunc, len(aggFns))
 	outTyps := make([]coltypes.T, len(aggFns))
@@ -205,19 +205,19 @@ func makeAggregateFuncs(
 	for i := range aggFns {
 		var err error
 		switch aggFns[i] {
-		case distsqlpb.AggregatorSpec_ANY_NOT_NULL:
+		case execinfrapb.AggregatorSpec_ANY_NOT_NULL:
 			funcs[i], err = newAnyNotNullAgg(aggTyps[i][0])
-		case distsqlpb.AggregatorSpec_AVG:
+		case execinfrapb.AggregatorSpec_AVG:
 			funcs[i], err = newAvgAgg(aggTyps[i][0])
-		case distsqlpb.AggregatorSpec_SUM, distsqlpb.AggregatorSpec_SUM_INT:
+		case execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM_INT:
 			funcs[i], err = newSumAgg(aggTyps[i][0])
-		case distsqlpb.AggregatorSpec_COUNT_ROWS:
+		case execinfrapb.AggregatorSpec_COUNT_ROWS:
 			funcs[i] = newCountRowAgg()
-		case distsqlpb.AggregatorSpec_COUNT:
+		case execinfrapb.AggregatorSpec_COUNT:
 			funcs[i] = newCountAgg()
-		case distsqlpb.AggregatorSpec_MIN:
+		case execinfrapb.AggregatorSpec_MIN:
 			funcs[i], err = newMinAgg(aggTyps[i][0])
-		case distsqlpb.AggregatorSpec_MAX:
+		case execinfrapb.AggregatorSpec_MAX:
 			funcs[i], err = newMaxAgg(aggTyps[i][0])
 		default:
 			return nil, nil, errors.Errorf("unsupported columnar aggregate function %d", aggFns[i])
@@ -225,7 +225,7 @@ func makeAggregateFuncs(
 
 		// Set the output type of the aggregate.
 		switch aggFns[i] {
-		case distsqlpb.AggregatorSpec_COUNT_ROWS, distsqlpb.AggregatorSpec_COUNT:
+		case execinfrapb.AggregatorSpec_COUNT_ROWS, execinfrapb.AggregatorSpec_COUNT:
 			// TODO(jordan): this is a somewhat of a hack. The aggregate functions
 			// should come with their own output types, somehow.
 			outTyps[i] = coltypes.Int64

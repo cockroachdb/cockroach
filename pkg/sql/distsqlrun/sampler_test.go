@@ -18,7 +18,7 @@ import (
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -56,9 +56,9 @@ func runSampler(
 	// non-zero, the processor will hit this limit and disable sampling.
 	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memLimitBytes
 
-	spec := &distsqlpb.SamplerSpec{SampleSize: uint32(numSamples)}
+	spec := &execinfrapb.SamplerSpec{SampleSize: uint32(numSamples)}
 	p, err := newSamplerProcessor(
-		&flowCtx, 0 /* processorID */, spec, in, &distsqlpb.PostProcessSpec{}, out,
+		&flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{}, out,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -201,20 +201,20 @@ func TestSamplerSketch(t *testing.T) {
 		EvalCtx: &evalCtx,
 	}
 
-	spec := &distsqlpb.SamplerSpec{
+	spec := &execinfrapb.SamplerSpec{
 		SampleSize: uint32(1),
-		Sketches: []distsqlpb.SketchSpec{
+		Sketches: []execinfrapb.SketchSpec{
 			{
-				SketchType: distsqlpb.SketchType_HLL_PLUS_PLUS_V1,
+				SketchType: execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 				Columns:    []uint32{0},
 			},
 			{
-				SketchType: distsqlpb.SketchType_HLL_PLUS_PLUS_V1,
+				SketchType: execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 				Columns:    []uint32{1},
 			},
 		},
 	}
-	p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &distsqlpb.PostProcessSpec{}, out)
+	p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{}, out)
 	if err != nil {
 		t.Fatal(err)
 	}

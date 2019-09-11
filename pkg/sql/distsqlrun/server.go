@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -63,11 +63,11 @@ import (
 //
 // ATTENTION: When updating these fields, add to version_history.txt explaining
 // what changed.
-const Version distsqlpb.DistSQLVersion = 24
+const Version execinfrapb.DistSQLVersion = 24
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
-const MinAcceptedVersion distsqlpb.DistSQLVersion = 24
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 24
 
 // minFlowDrainWait is the minimum amount of time a draining server allows for
 // any incoming flows to be registered. It acts as a grace period in which the
@@ -92,7 +92,7 @@ type ServerImpl struct {
 	regexpCache   *tree.RegexpCache
 }
 
-var _ distsqlpb.DistSQLServer = &ServerImpl{}
+var _ execinfrapb.DistSQLServer = &ServerImpl{}
 
 // NewServer instantiates a DistSQLServer.
 func NewServer(ctx context.Context, cfg distsql.ServerConfig) *ServerImpl {
@@ -121,7 +121,7 @@ func (ds *ServerImpl) Start() {
 	// for us.
 	if err := ds.ServerConfig.Gossip.AddInfoProto(
 		gossip.MakeDistSQLNodeVersionKey(ds.ServerConfig.NodeID.Get()),
-		&distsqlpb.DistSQLVersionGossipInfo{
+		&execinfrapb.DistSQLVersionGossipInfo{
 			Version:            Version,
 			MinAcceptedVersion: MinAcceptedVersion,
 		},
@@ -171,7 +171,7 @@ func (ds *ServerImpl) Undrain(ctx context.Context) {
 func (ds *ServerImpl) setDraining(drain bool) error {
 	return ds.ServerConfig.Gossip.AddInfoProto(
 		gossip.MakeDistSQLDrainingKey(ds.ServerConfig.NodeID.Get()),
-		&distsqlpb.DistSQLDrainingInfo{
+		&execinfrapb.DistSQLDrainingInfo{
 			Draining: drain,
 		},
 		0, // ttl - no expiration
@@ -180,7 +180,9 @@ func (ds *ServerImpl) setDraining(drain bool) error {
 
 // FlowVerIsCompatible checks a flow's version is compatible with this node's
 // DistSQL version.
-func FlowVerIsCompatible(flowVer, minAcceptedVersion, serverVersion distsqlpb.DistSQLVersion) bool {
+func FlowVerIsCompatible(
+	flowVer, minAcceptedVersion, serverVersion execinfrapb.DistSQLVersion,
+) bool {
 	return flowVer >= minAcceptedVersion && flowVer <= serverVersion
 }
 
@@ -196,7 +198,7 @@ func (ds *ServerImpl) setupFlow(
 	ctx context.Context,
 	parentSpan opentracing.Span,
 	parentMonitor *mon.BytesMonitor,
-	req *distsqlpb.SetupFlowRequest,
+	req *execinfrapb.SetupFlowRequest,
 	syncFlowConsumer distsql.RowReceiver,
 	localState LocalState,
 ) (context.Context, *Flow, error) {
@@ -280,11 +282,11 @@ func (ds *ServerImpl) setupFlow(
 
 		var be sessiondata.BytesEncodeFormat
 		switch req.EvalContext.BytesEncodeFormat {
-		case distsqlpb.BytesEncodeFormat_HEX:
+		case execinfrapb.BytesEncodeFormat_HEX:
 			be = sessiondata.BytesEncodeHex
-		case distsqlpb.BytesEncodeFormat_ESCAPE:
+		case execinfrapb.BytesEncodeFormat_ESCAPE:
 			be = sessiondata.BytesEncodeEscape
-		case distsqlpb.BytesEncodeFormat_BASE64:
+		case execinfrapb.BytesEncodeFormat_BASE64:
 			be = sessiondata.BytesEncodeBase64
 		default:
 			return nil, nil, errors.AssertionFailedf("unknown byte encode format: %s",
@@ -381,7 +383,7 @@ func (ds *ServerImpl) setupFlow(
 func (ds *ServerImpl) SetupSyncFlow(
 	ctx context.Context,
 	parentMonitor *mon.BytesMonitor,
-	req *distsqlpb.SetupFlowRequest,
+	req *execinfrapb.SetupFlowRequest,
 	output distsql.RowReceiver,
 ) (context.Context, *Flow, error) {
 	return ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{})
@@ -411,7 +413,7 @@ type LocalState struct {
 func (ds *ServerImpl) SetupLocalSyncFlow(
 	ctx context.Context,
 	parentMonitor *mon.BytesMonitor,
-	req *distsqlpb.SetupFlowRequest,
+	req *execinfrapb.SetupFlowRequest,
 	output distsql.RowReceiver,
 	localState LocalState,
 ) (context.Context, *Flow, error) {
@@ -419,7 +421,7 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 }
 
 // RunSyncFlow is part of the DistSQLServer interface.
-func (ds *ServerImpl) RunSyncFlow(stream distsqlpb.DistSQL_RunSyncFlowServer) error {
+func (ds *ServerImpl) RunSyncFlow(stream execinfrapb.DistSQL_RunSyncFlowServer) error {
 	// Set up the outgoing mailbox for the stream.
 	mbox := newOutboxSyncFlowStream(stream)
 
@@ -456,8 +458,8 @@ func (ds *ServerImpl) RunSyncFlow(stream distsqlpb.DistSQL_RunSyncFlowServer) er
 
 // SetupFlow is part of the DistSQLServer interface.
 func (ds *ServerImpl) SetupFlow(
-	ctx context.Context, req *distsqlpb.SetupFlowRequest,
-) (*distsqlpb.SimpleResponse, error) {
+	ctx context.Context, req *execinfrapb.SetupFlowRequest,
+) (*execinfrapb.SimpleResponse, error) {
 	log.VEventf(ctx, 1, "received SetupFlow request from n%v for flow %v", req.Flow.Gateway, req.Flow.FlowID)
 	parentSpan := opentracing.SpanFromContext(ctx)
 
@@ -472,13 +474,13 @@ func (ds *ServerImpl) SetupFlow(
 		// We return flow deployment errors in the response so that they are
 		// packaged correctly over the wire. If we return them directly to this
 		// function, they become part of an rpc error.
-		return &distsqlpb.SimpleResponse{Error: distsqlpb.NewError(ctx, err)}, nil
+		return &execinfrapb.SimpleResponse{Error: execinfrapb.NewError(ctx, err)}, nil
 	}
-	return &distsqlpb.SimpleResponse{}, nil
+	return &execinfrapb.SimpleResponse{}, nil
 }
 
 func (ds *ServerImpl) flowStreamInt(
-	ctx context.Context, stream distsqlpb.DistSQL_FlowStreamServer,
+	ctx context.Context, stream execinfrapb.DistSQL_FlowStreamServer,
 ) error {
 	// Receive the first message.
 	msg, err := stream.Recv()
@@ -508,7 +510,7 @@ func (ds *ServerImpl) flowStreamInt(
 }
 
 // FlowStream is part of the DistSQLServer interface.
-func (ds *ServerImpl) FlowStream(stream distsqlpb.DistSQL_FlowStreamServer) error {
+func (ds *ServerImpl) FlowStream(stream execinfrapb.DistSQL_FlowStreamServer) error {
 	ctx := ds.AnnotateCtx(stream.Context())
 	err := ds.flowStreamInt(ctx, stream)
 	if err != nil {

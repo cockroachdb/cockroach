@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -842,7 +842,7 @@ func (sc *SchemaChanger) distBackfill(
 						otherTableDescs = append(otherTableDescs, *table.TableDesc())
 					}
 				}
-				metaFn := func(_ context.Context, meta *distsqlpb.ProducerMetadata) {
+				metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) {
 					if meta.BulkProcessorProgress != nil {
 						todoSpans = roachpb.SubtractSpans(todoSpans,
 							meta.BulkProcessorProgress.CompletedSpans)

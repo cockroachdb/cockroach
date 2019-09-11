@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/pkg/errors"
 )
 
@@ -25,13 +25,13 @@ import (
 // given in orderingCols. The inputTypes must correspond 1-1 with the columns
 // in the input operator.
 func NewSorter(
-	input Operator, inputTypes []coltypes.T, orderingCols []distsqlpb.Ordering_Column,
+	input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column,
 ) (Operator, error) {
 	return newSorter(newAllSpooler(input, inputTypes), inputTypes, orderingCols)
 }
 
 func newSorter(
-	input spooler, inputTypes []coltypes.T, orderingCols []distsqlpb.Ordering_Column,
+	input spooler, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column,
 ) (resettableOperator, error) {
 	partitioners := make([]partitioner, len(orderingCols)-1)
 
@@ -170,7 +170,7 @@ type sortOp struct {
 	inputTypes []coltypes.T
 	// orderingCols is the ordered list of column orderings that the sorter should
 	// sort on.
-	orderingCols []distsqlpb.Ordering_Column
+	orderingCols []execinfrapb.Ordering_Column
 	// sorters contains one colSorter per sort column. The instantiation of
 	// sorters occurs within the sort method rather than during construction
 	// of the sortOp so that we can correctly choose a sorter based on

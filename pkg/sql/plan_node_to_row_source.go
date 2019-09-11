@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -22,7 +22,7 @@ import (
 )
 
 type metadataForwarder interface {
-	forwardMetadata(metadata *distsqlpb.ProducerMetadata)
+	forwardMetadata(metadata *execinfrapb.ProducerMetadata)
 }
 
 type planNodeToRowSource struct {
@@ -66,7 +66,7 @@ var _ distsql.LocalProcessor = &planNodeToRowSource{}
 
 // InitWithOutput implements the LocalProcessor interface.
 func (p *planNodeToRowSource) InitWithOutput(
-	post *distsqlpb.PostProcessSpec, output distsql.RowReceiver,
+	post *execinfrapb.PostProcessSpec, output distsql.RowReceiver,
 ) error {
 	return p.InitWithEvalCtx(
 		p,
@@ -128,7 +128,7 @@ func (p *planNodeToRowSource) InternalClose() {
 	}
 }
 
-func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if p.State == distsql.StateRunning && p.fastPath {
 		var count int
 		// If our node is a "fast path node", it means that we're set up to just
@@ -207,6 +207,6 @@ func (p *planNodeToRowSource) IsException() bool {
 // that need to forward metadata to the end of the flow. They can't pass
 // metadata through local processors, so they instead add the metadata to our
 // trailing metadata and expect us to forward it further.
-func (p *planNodeToRowSource) forwardMetadata(metadata *distsqlpb.ProducerMetadata) {
+func (p *planNodeToRowSource) forwardMetadata(metadata *execinfrapb.ProducerMetadata) {
 	p.ProcessorBase.AppendTrailingMeta(*metadata)
 }

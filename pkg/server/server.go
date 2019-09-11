@@ -46,7 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -571,7 +571,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
-	distsqlpb.RegisterDistSQLServer(s.grpc.Server, s.distSQLServer)
+	execinfrapb.RegisterDistSQLServer(s.grpc.Server, s.distSQLServer)
 
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(

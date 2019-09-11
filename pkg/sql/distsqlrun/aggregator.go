@@ -16,7 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -68,7 +68,7 @@ type aggregatorBase struct {
 	isScalar         bool
 	groupCols        []uint32
 	orderedGroupCols []uint32
-	aggregations     []distsqlpb.AggregatorSpec_Aggregation
+	aggregations     []execinfrapb.AggregatorSpec_Aggregation
 
 	lastOrdGroupCols sqlbase.EncDatumRow
 	arena            stringarena.Arena
@@ -86,11 +86,11 @@ func (ag *aggregatorBase) init(
 	self distsql.RowSource,
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.AggregatorSpec,
+	spec *execinfrapb.AggregatorSpec,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
-	trailingMetaCallback func(context.Context) []distsqlpb.ProducerMetadata,
+	trailingMetaCallback func(context.Context) []execinfrapb.ProducerMetadata,
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := distsql.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
@@ -99,7 +99,7 @@ func (ag *aggregatorBase) init(
 		ag.FinishTrace = ag.outputStatsToTrace
 	}
 	ag.input = input
-	ag.isScalar = distsqlpb.IsScalarAggregate(spec)
+	ag.isScalar = execinfrapb.IsScalarAggregate(spec)
 	ag.groupCols = spec.GroupCols
 	ag.orderedGroupCols = spec.OrderedGroupCols
 	ag.aggregations = spec.Aggregations
@@ -154,7 +154,7 @@ func (ag *aggregatorBase) init(
 			arguments[j] = d
 		}
 
-		aggConstructor, retType, err := distsqlpb.GetAggregateInfo(aggInfo.Func, argTypes...)
+		aggConstructor, retType, err := execinfrapb.GetAggregateInfo(aggInfo.Func, argTypes...)
 		if err != nil {
 			return err
 		}
@@ -176,7 +176,7 @@ func (ag *aggregatorBase) init(
 	)
 }
 
-var _ distsqlpb.DistSQLSpanStats = &AggregatorStats{}
+var _ execinfrapb.DistSQLSpanStats = &AggregatorStats{}
 
 const aggregatorTagPrefix = "aggregator."
 
@@ -258,15 +258,15 @@ const (
 func newAggregator(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.AggregatorSpec,
+	spec *execinfrapb.AggregatorSpec,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (distsql.Processor, error) {
 	if len(spec.GroupCols) == 0 &&
 		len(spec.Aggregations) == 1 &&
 		spec.Aggregations[0].FilterColIdx == nil &&
-		spec.Aggregations[0].Func == distsqlpb.AggregatorSpec_COUNT_ROWS &&
+		spec.Aggregations[0].Func == execinfrapb.AggregatorSpec_COUNT_ROWS &&
 		!spec.Aggregations[0].Distinct {
 		return newCountAggregator(flowCtx, processorID, input, post, output)
 	}
@@ -284,7 +284,7 @@ func newAggregator(
 		input,
 		post,
 		output,
-		func(context.Context) []distsqlpb.ProducerMetadata {
+		func(context.Context) []execinfrapb.ProducerMetadata {
 			ag.close()
 			return nil
 		},
@@ -298,9 +298,9 @@ func newAggregator(
 func newOrderedAggregator(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.AggregatorSpec,
+	spec *execinfrapb.AggregatorSpec,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*orderedAggregator, error) {
 	ag := &orderedAggregator{}
@@ -313,7 +313,7 @@ func newOrderedAggregator(
 		input,
 		post,
 		output,
-		func(context.Context) []distsqlpb.ProducerMetadata {
+		func(context.Context) []execinfrapb.ProducerMetadata {
 			ag.close()
 			return nil
 		},
@@ -395,7 +395,7 @@ func (ag *aggregatorBase) matchLastOrdGroupCols(row sqlbase.EncDatumRow) (bool, 
 func (ag *hashAggregator) accumulateRows() (
 	aggregatorState,
 	sqlbase.EncDatumRow,
-	*distsqlpb.ProducerMetadata,
+	*execinfrapb.ProducerMetadata,
 ) {
 	for {
 		row, meta := ag.input.Next()
@@ -458,7 +458,7 @@ func (ag *hashAggregator) accumulateRows() (
 func (ag *orderedAggregator) accumulateRows() (
 	aggregatorState,
 	sqlbase.EncDatumRow,
-	*distsqlpb.ProducerMetadata,
+	*execinfrapb.ProducerMetadata,
 ) {
 	for {
 		row, meta := ag.input.Next()
@@ -511,7 +511,7 @@ func (ag *orderedAggregator) accumulateRows() (
 
 func (ag *aggregatorBase) getAggResults(
 	bucket aggregateFuncs,
-) (aggregatorState, sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+) (aggregatorState, sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for i, b := range bucket {
 		result, err := b.Result()
 		if err != nil {
@@ -542,7 +542,7 @@ func (ag *aggregatorBase) getAggResults(
 func (ag *hashAggregator) emitRow() (
 	aggregatorState,
 	sqlbase.EncDatumRow,
-	*distsqlpb.ProducerMetadata,
+	*execinfrapb.ProducerMetadata,
 ) {
 	if len(ag.bucketsIter) == 0 {
 		// We've exhausted all of the aggregation buckets.
@@ -590,7 +590,7 @@ func (ag *hashAggregator) emitRow() (
 func (ag *orderedAggregator) emitRow() (
 	aggregatorState,
 	sqlbase.EncDatumRow,
-	*distsqlpb.ProducerMetadata,
+	*execinfrapb.ProducerMetadata,
 ) {
 	if ag.bucket == nil {
 		// We've exhausted all of the aggregation buckets.
@@ -629,10 +629,10 @@ func (ag *orderedAggregator) emitRow() (
 }
 
 // Next is part of the RowSource interface.
-func (ag *hashAggregator) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (ag *hashAggregator) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for ag.State == distsql.StateRunning {
 		var row sqlbase.EncDatumRow
-		var meta *distsqlpb.ProducerMetadata
+		var meta *execinfrapb.ProducerMetadata
 		switch ag.runningState {
 		case aggAccumulating:
 			ag.runningState, row, meta = ag.accumulateRows()
@@ -651,10 +651,10 @@ func (ag *hashAggregator) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetada
 }
 
 // Next is part of the RowSource interface.
-func (ag *orderedAggregator) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (ag *orderedAggregator) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for ag.State == distsql.StateRunning {
 		var row sqlbase.EncDatumRow
-		var meta *distsqlpb.ProducerMetadata
+		var meta *execinfrapb.ProducerMetadata
 		switch ag.runningState {
 		case aggAccumulating:
 			ag.runningState, row, meta = ag.accumulateRows()

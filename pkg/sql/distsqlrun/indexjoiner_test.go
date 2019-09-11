@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -68,7 +68,7 @@ func TestIndexJoiner(t *testing.T) {
 	testCases := []struct {
 		description string
 		desc        *sqlbase.TableDescriptor
-		post        distsqlpb.PostProcessSpec
+		post        execinfrapb.PostProcessSpec
 		input       sqlbase.EncDatumRows
 		outputTypes []types.T
 		expected    sqlbase.EncDatumRows
@@ -76,7 +76,7 @@ func TestIndexJoiner(t *testing.T) {
 		{
 			description: "Test selecting rows using the primary index",
 			desc:        td,
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 2},
 			},
@@ -97,8 +97,8 @@ func TestIndexJoiner(t *testing.T) {
 		{
 			description: "Test a filter in the post process spec and using a secondary index",
 			desc:        td,
-			post: distsqlpb.PostProcessSpec{
-				Filter:        distsqlpb.Expression{Expr: "@3 <= 5"}, // sum <= 5
+			post: execinfrapb.PostProcessSpec{
+				Filter:        execinfrapb.Expression{Expr: "@3 <= 5"}, // sum <= 5
 				Projection:    true,
 				OutputColumns: []uint32{3},
 			},
@@ -124,7 +124,7 @@ func TestIndexJoiner(t *testing.T) {
 		{
 			description: "Test selecting rows using the primary index with multiple family spans",
 			desc:        tdf,
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 2},
 			},
@@ -146,14 +146,14 @@ func TestIndexJoiner(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.description, func(t *testing.T) {
-			spec := distsqlpb.JoinReaderSpec{
+			spec := execinfrapb.JoinReaderSpec{
 				Table:    *c.desc,
 				IndexIdx: 0,
 			}
 			txn := client.NewTxn(context.Background(), s.DB(), s.NodeID(), client.RootTxn)
 			runProcessorTest(
 				t,
-				distsqlpb.ProcessorCoreUnion{JoinReader: &spec},
+				execinfrapb.ProcessorCoreUnion{JoinReader: &spec},
 				c.post,
 				sqlbase.TwoIntCols,
 				c.input,

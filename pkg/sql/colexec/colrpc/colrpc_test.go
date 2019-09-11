@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -37,18 +37,18 @@ import (
 )
 
 type mockFlowStreamClient struct {
-	pmChan chan *distsqlpb.ProducerMessage
-	csChan chan *distsqlpb.ConsumerSignal
+	pmChan chan *execinfrapb.ProducerMessage
+	csChan chan *execinfrapb.ConsumerSignal
 }
 
 var _ flowStreamClient = mockFlowStreamClient{}
 
-func (c mockFlowStreamClient) Send(m *distsqlpb.ProducerMessage) error {
+func (c mockFlowStreamClient) Send(m *execinfrapb.ProducerMessage) error {
 	c.pmChan <- m
 	return nil
 }
 
-func (c mockFlowStreamClient) Recv() (*distsqlpb.ConsumerSignal, error) {
+func (c mockFlowStreamClient) Recv() (*execinfrapb.ConsumerSignal, error) {
 	s := <-c.csChan
 	if s == nil {
 		return nil, io.EOF
@@ -62,16 +62,16 @@ func (c mockFlowStreamClient) CloseSend() error {
 }
 
 type mockFlowStreamServer struct {
-	pmChan chan *distsqlpb.ProducerMessage
-	csChan chan *distsqlpb.ConsumerSignal
+	pmChan chan *execinfrapb.ProducerMessage
+	csChan chan *execinfrapb.ConsumerSignal
 }
 
-func (s mockFlowStreamServer) Send(cs *distsqlpb.ConsumerSignal) error {
+func (s mockFlowStreamServer) Send(cs *execinfrapb.ConsumerSignal) error {
 	s.csChan <- cs
 	return nil
 }
 
-func (s mockFlowStreamServer) Recv() (*distsqlpb.ProducerMessage, error) {
+func (s mockFlowStreamServer) Recv() (*execinfrapb.ProducerMessage, error) {
 	pm := <-s.pmChan
 	if pm == nil {
 		return nil, io.EOF
@@ -92,8 +92,8 @@ type mockFlowStreamRPCLayer struct {
 
 func makeMockFlowStreamRPCLayer() mockFlowStreamRPCLayer {
 	// Buffer channels to simulate non-blocking sends.
-	pmChan := make(chan *distsqlpb.ProducerMessage, 16)
-	csChan := make(chan *distsqlpb.ConsumerSignal, 16)
+	pmChan := make(chan *execinfrapb.ProducerMessage, 16)
+	csChan := make(chan *execinfrapb.ConsumerSignal, 16)
 	return mockFlowStreamRPCLayer{
 		client: mockFlowStreamClient{pmChan: pmChan, csChan: csChan},
 		server: mockFlowStreamServer{pmChan: pmChan, csChan: csChan},
@@ -127,7 +127,7 @@ func TestOutboxInbox(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	_, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(clock, stopper, staticNodeID)
+	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, staticNodeID)
 	require.NoError(t, err)
 
 	// Generate a random cancellation scenario.
@@ -174,7 +174,7 @@ func TestOutboxInbox(t *testing.T) {
 	}
 
 	streamCtx, streamCancelFn := context.WithCancel(ctx)
-	client := distsqlpb.NewDistSQLClient(conn)
+	client := execinfrapb.NewDistSQLClient(conn)
 	clientStream, err := client.FlowStream(streamCtx)
 	require.NoError(t, err)
 
@@ -356,7 +356,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	_, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(
+	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, staticNodeID,
 	)
 	require.NoError(t, err)
@@ -376,7 +376,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 		numBatches int
 		// test is the body of the test to be run. Metadata should be returned to
 		// be verified.
-		test func(context.Context, *Inbox) []distsqlpb.ProducerMetadata
+		test func(context.Context, *Inbox) []execinfrapb.ProducerMetadata
 	}{
 		{
 			// ExplicitDrainRequest verifies that an Outbox responds to an explicit drain
@@ -385,7 +385,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			// Set a high number of batches to ensure that the Outbox is very far
 			// from being finished when it receives a DrainRequest.
 			numBatches: math.MaxInt64,
-			test: func(ctx context.Context, inbox *Inbox) []distsqlpb.ProducerMetadata {
+			test: func(ctx context.Context, inbox *Inbox) []execinfrapb.ProducerMetadata {
 				// Simulate the inbox flow calling Next an arbitrary amount of times
 				// (including none).
 				for i := 0; i < numNextsBeforeDrain; i++ {
@@ -399,7 +399,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			// Next has returned a zero batch.
 			name:       "AfterSuccessfulCompletion",
 			numBatches: 4,
-			test: func(ctx context.Context, inbox *Inbox) []distsqlpb.ProducerMetadata {
+			test: func(ctx context.Context, inbox *Inbox) []execinfrapb.ProducerMetadata {
 				for {
 					b := inbox.Next(ctx)
 					if b.Length() == 0 {
@@ -413,7 +413,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			client := distsqlpb.NewDistSQLClient(conn)
+			client := execinfrapb.NewDistSQLClient(conn)
 			clientStream, err := client.FlowStream(ctx)
 			require.NoError(t, err)
 
@@ -436,10 +436,10 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			outbox, err := NewOutbox(
 				input,
 				typs,
-				[]distsqlpb.MetadataSource{
-					distsqlpb.CallbackMetadataSource{
-						DrainMetaCb: func(context.Context) []distsqlpb.ProducerMetadata {
-							return []distsqlpb.ProducerMetadata{{Err: errors.New(expectedMeta)}}
+				[]execinfrapb.MetadataSource{
+					execinfrapb.CallbackMetadataSource{
+						DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
+							return []execinfrapb.ProducerMetadata{{Err: errors.New(expectedMeta)}}
 						},
 					},
 				},
@@ -481,7 +481,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	_, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(
+	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, staticNodeID,
 	)
 	require.NoError(b, err)
@@ -490,7 +490,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	require.NoError(b, err)
 	defer func() { require.NoError(b, conn.Close()) }()
 
-	client := distsqlpb.NewDistSQLClient(conn)
+	client := execinfrapb.NewDistSQLClient(conn)
 	clientStream, err := client.FlowStream(ctx)
 	require.NoError(b, err)
 

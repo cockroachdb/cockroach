@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,12 +48,12 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 	types := sqlbase.OneIntCol
 
 	input := newRowBuffer(types, sqlbase.MakeIntRows(nRows, nCols), rowBufferArgs{})
-	mtsSpec := distsqlpb.ProcessorCoreUnion{
-		MetadataTestSender: &distsqlpb.MetadataTestSenderSpec{
+	mtsSpec := execinfrapb.ProcessorCoreUnion{
+		MetadataTestSender: &execinfrapb.MetadataTestSenderSpec{
 			ID: uuid.MakeV4().String(),
 		},
 	}
-	mts, err := newProcessor(ctx, &flowCtx, 0, &mtsSpec, &distsqlpb.PostProcessSpec{}, []distsql.RowSource{input}, []distsql.RowReceiver{nil}, nil)
+	mts, err := newProcessor(ctx, &flowCtx, 0, &mtsSpec, &execinfrapb.PostProcessSpec{}, []distsql.RowSource{input}, []distsql.RowReceiver{nil}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,9 +73,9 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		2, /* processorID */
 		noop,
 		types,
-		&distsqlpb.PostProcessSpec{},
+		&execinfrapb.PostProcessSpec{},
 		nil, /* output */
-		[]distsqlpb.MetadataSource{col},
+		[]execinfrapb.MetadataSource{col},
 		nil, /* outputStatsToTrace */
 		nil, /* cancelFlow */
 	)
@@ -83,12 +83,12 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mtrSpec := distsqlpb.ProcessorCoreUnion{
-		MetadataTestReceiver: &distsqlpb.MetadataTestReceiverSpec{
+	mtrSpec := execinfrapb.ProcessorCoreUnion{
+		MetadataTestReceiver: &execinfrapb.MetadataTestReceiverSpec{
 			SenderIDs: []string{mtsSpec.MetadataTestSender.ID},
 		},
 	}
-	mtr, err := newProcessor(ctx, &flowCtx, 3, &mtrSpec, &distsqlpb.PostProcessSpec{}, []distsql.RowSource{distsql.RowSource(mat)}, []distsql.RowReceiver{nil}, nil)
+	mtr, err := newProcessor(ctx, &flowCtx, 3, &mtrSpec, &execinfrapb.PostProcessSpec{}, []distsql.RowSource{distsql.RowSource(mat)}, []distsql.RowReceiver{nil}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -93,8 +93,8 @@ func TestHashJoiner(t *testing.T) {
 				if flowCtxSetup != nil {
 					flowCtxSetup(&flowCtx)
 				}
-				post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: c.outCols}
-				spec := &distsqlpb.HashJoinerSpec{
+				post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: c.outCols}
+				spec := &execinfrapb.HashJoinerSpec{
 					LeftEqColumns:  c.leftEqCols,
 					RightEqColumns: c.rightEqCols,
 					Type:           c.joinType,
@@ -198,8 +198,8 @@ func TestHashJoinerError(t *testing.T) {
 				},
 			}
 
-			post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: c.outCols}
-			spec := &distsqlpb.HashJoinerSpec{
+			post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: c.outCols}
+			spec := &execinfrapb.HashJoinerSpec{
 				LeftEqColumns:  c.leftEqCols,
 				RightEqColumns: c.rightEqCols,
 				Type:           c.joinType,
@@ -275,7 +275,7 @@ func TestHashJoinerDrain(t *testing.T) {
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
-	spec := distsqlpb.HashJoinerSpec{
+	spec := execinfrapb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
 		RightEqColumns: []uint32{0},
 		Type:           sqlbase.InnerJoin,
@@ -335,7 +335,7 @@ func TestHashJoinerDrain(t *testing.T) {
 		EvalCtx: &evalCtx,
 	}
 
-	post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: outCols}
+	post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
 	if err != nil {
 		t.Fatal(err)
@@ -378,7 +378,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
-	spec := distsqlpb.HashJoinerSpec{
+	spec := execinfrapb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
 		RightEqColumns: []uint32{0},
 		Type:           sqlbase.InnerJoin,
@@ -422,11 +422,11 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		rightInputDrainNotification <- nil
 	}
 	rightErrorReturned := false
-	rightInputNext := func(rb *RowBuffer) (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+	rightInputNext := func(rb *RowBuffer) (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 		if !rightErrorReturned {
 			rightErrorReturned = true
 			// The right input is going to return an error as the first thing.
-			return nil, &distsqlpb.ProducerMetadata{Err: errors.Errorf("Test error. Please drain.")}
+			return nil, &execinfrapb.ProducerMetadata{Err: errors.Errorf("Test error. Please drain.")}
 		}
 		// Let RowBuffer.Next() do its usual thing.
 		return nil, nil
@@ -461,7 +461,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	// infrastructure.
 	distsql.SettingUseTempStorageJoins.Override(&st.SV, false)
 
-	post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: outCols}
+	post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
 	if err != nil {
 		t.Fatal(err)
@@ -520,13 +520,13 @@ func BenchmarkHashJoiner(b *testing.B) {
 	defer tempEngine.Close()
 	flowCtx.Cfg.TempStorage = tempEngine
 
-	spec := &distsqlpb.HashJoinerSpec{
+	spec := &execinfrapb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
 		RightEqColumns: []uint32{0},
 		Type:           sqlbase.InnerJoin,
 		// Implicit @1 = @2 constraint.
 	}
-	post := &distsqlpb.PostProcessSpec{}
+	post := &execinfrapb.PostProcessSpec{}
 
 	const numCols = 1
 	for _, spill := range []bool{true, false} {

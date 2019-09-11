@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -39,14 +39,14 @@ type callbackFlowStreamServer struct {
 	recvCb func()
 }
 
-func (s callbackFlowStreamServer) Send(cs *distsqlpb.ConsumerSignal) error {
+func (s callbackFlowStreamServer) Send(cs *execinfrapb.ConsumerSignal) error {
 	if s.sendCb != nil {
 		s.sendCb()
 	}
 	return s.server.Send(cs)
 }
 
-func (s callbackFlowStreamServer) Recv() (*distsqlpb.ProducerMessage, error) {
+func (s callbackFlowStreamServer) Recv() (*execinfrapb.ProducerMessage, error) {
 	if s.recvCb != nil {
 		s.recvCb()
 	}
@@ -130,7 +130,7 @@ func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 	rpcLayer := makeMockFlowStreamRPCLayer()
 	streamHandlerErrCh := handleStream(context.Background(), inbox, rpcLayer.server, func() { close(rpcLayer.client.csChan) })
 
-	m := &distsqlpb.ProducerMessage{}
+	m := &execinfrapb.ProducerMessage{}
 	m.Data.RawBytes = []byte("garbage")
 
 	go func() {
@@ -285,7 +285,7 @@ func TestInboxShutdown(t *testing.T) {
 												}
 											}()
 										}
-										msg := &distsqlpb.ProducerMessage{Data: distsqlpb.ProducerData{RawBytes: buffer.Bytes()}}
+										msg := &execinfrapb.ProducerMessage{Data: execinfrapb.ProducerData{RawBytes: buffer.Bytes()}}
 										batchesToSend := rng.Intn(65536)
 										for i := 0; infiniteBatches || i < batchesToSend; i++ {
 											if atomic.LoadUint32(&draining) == 1 {

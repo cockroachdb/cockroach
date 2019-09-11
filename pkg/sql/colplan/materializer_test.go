@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -54,7 +54,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		1, /* processorID */
 		c,
 		typs,
-		&distsqlpb.PostProcessSpec{},
+		&execinfrapb.PostProcessSpec{},
 		nil, /* output */
 		nil, /* metadataSourcesQueue */
 		nil, /* outputStatsToTrace */
@@ -139,7 +139,7 @@ func TestMaterializeTypes(t *testing.T) {
 		1, /* processorID */
 		c,
 		types,
-		&distsqlpb.PostProcessSpec{},
+		&execinfrapb.PostProcessSpec{},
 		nil, /* output */
 		nil, /* metadataSourcesQueue */
 		nil, /* outputStatsToTrace */
@@ -193,7 +193,7 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 			1, /* processorID */
 			c,
 			types,
-			&distsqlpb.PostProcessSpec{},
+			&execinfrapb.PostProcessSpec{},
 			nil, /* output */
 			nil, /* metadataSourcesQueue */
 			nil, /* outputStatsToTrace */

@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -85,15 +85,15 @@ func TestSampleAggregator(t *testing.T) {
 			*types.Bytes, // sketch data
 		}
 
-		sketchSpecs := []distsqlpb.SketchSpec{
+		sketchSpecs := []execinfrapb.SketchSpec{
 			{
-				SketchType:        distsqlpb.SketchType_HLL_PLUS_PLUS_V1,
+				SketchType:        execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 				Columns:           []uint32{0},
 				GenerateHistogram: false,
 				StatName:          "a",
 			},
 			{
-				SketchType:          distsqlpb.SketchType_HLL_PLUS_PLUS_V1,
+				SketchType:          execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 				Columns:             []uint32{1},
 				GenerateHistogram:   true,
 				HistogramMaxBuckets: 4,
@@ -113,9 +113,9 @@ func TestSampleAggregator(t *testing.T) {
 			in := newRowBuffer(sqlbase.TwoIntCols, rows, rowBufferArgs{})
 			outputs[i] = newRowBuffer(samplerOutTypes, nil /* rows */, rowBufferArgs{})
 
-			spec := &distsqlpb.SamplerSpec{SampleSize: 100, Sketches: sketchSpecs}
+			spec := &execinfrapb.SamplerSpec{SampleSize: 100, Sketches: sketchSpecs}
 			p, err := newSamplerProcessor(
-				&flowCtx, 0 /* processorID */, spec, in, &distsqlpb.PostProcessSpec{}, outputs[i],
+				&flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{}, outputs[i],
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -140,7 +140,7 @@ func TestSampleAggregator(t *testing.T) {
 
 		// Now run the sample aggregator.
 		finalOut := newRowBuffer([]types.T{}, nil /* rows*/, rowBufferArgs{})
-		spec := &distsqlpb.SampleAggregatorSpec{
+		spec := &execinfrapb.SampleAggregatorSpec{
 			SampleSize:       100,
 			Sketches:         sketchSpecs,
 			SampledColumnIDs: []sqlbase.ColumnID{100, 101},
@@ -148,7 +148,7 @@ func TestSampleAggregator(t *testing.T) {
 		}
 
 		agg, err := newSampleAggregator(
-			&flowCtx, 0 /* processorID */, spec, samplerResults, &distsqlpb.PostProcessSpec{}, finalOut,
+			&flowCtx, 0 /* processorID */, spec, samplerResults, &execinfrapb.PostProcessSpec{}, finalOut,
 		)
 		if err != nil {
 			t.Fatal(err)

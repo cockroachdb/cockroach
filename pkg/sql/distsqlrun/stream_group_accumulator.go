@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -65,7 +65,7 @@ func (s *streamGroupAccumulator) start(ctx context.Context) {
 // to use after the next call to nextGroup.
 func (s *streamGroupAccumulator) nextGroup(
 	ctx context.Context, evalCtx *tree.EvalContext,
-) ([]sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+) ([]sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if s.srcConsumed {
 		// If src has been exhausted, then we also must have advanced away from the
 		// last group.
@@ -88,7 +88,7 @@ func (s *streamGroupAccumulator) nextGroup(
 		}
 
 		if err := s.memAcc.Grow(ctx, int64(row.Size())); err != nil {
-			return nil, &distsqlpb.ProducerMetadata{Err: err}
+			return nil, &execinfrapb.ProducerMetadata{Err: err}
 		}
 		row = s.rowAlloc.CopyRow(row)
 
@@ -102,12 +102,12 @@ func (s *streamGroupAccumulator) nextGroup(
 
 		cmp, err := s.curGroup[0].Compare(s.types, &s.datumAlloc, s.ordering, evalCtx, row)
 		if err != nil {
-			return nil, &distsqlpb.ProducerMetadata{Err: err}
+			return nil, &execinfrapb.ProducerMetadata{Err: err}
 		}
 		if cmp == 0 {
 			s.curGroup = append(s.curGroup, row)
 		} else if cmp == 1 {
-			return nil, &distsqlpb.ProducerMetadata{
+			return nil, &execinfrapb.ProducerMetadata{
 				Err: errors.Errorf(
 					"detected badly ordered input: %s > %s, but expected '<'",
 					s.curGroup[0].String(s.types), row.String(s.types)),

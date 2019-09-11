@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -58,7 +58,7 @@ type tableReader struct {
 
 var _ distsql.Processor = &tableReader{}
 var _ distsql.RowSource = &tableReader{}
-var _ distsqlpb.MetadataSource = &tableReader{}
+var _ execinfrapb.MetadataSource = &tableReader{}
 
 const tableReaderProcName = "table reader"
 
@@ -72,8 +72,8 @@ var trPool = sync.Pool{
 func newTableReader(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.TableReaderSpec,
-	post *distsqlpb.PostProcessSpec,
+	spec *execinfrapb.TableReaderSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*tableReader, error) {
 	if flowCtx.NodeID == 0 {
@@ -86,7 +86,7 @@ func newTableReader(
 	tr.maxResults = spec.MaxResults
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
-	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	returnMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
 	tr.ignoreMisplannedRanges = flowCtx.Local
 	if err := tr.Init(
@@ -140,7 +140,7 @@ func newTableReader(
 	return tr, nil
 }
 
-func (tr *tableReader) generateTrailingMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (tr *tableReader) generateTrailingMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	trailingMeta := tr.generateMeta(ctx)
 	tr.InternalClose()
 	return trailingMeta
@@ -200,7 +200,7 @@ func (tr *tableReader) Release() {
 }
 
 // Next is part of the RowSource interface.
-func (tr *tableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (tr *tableReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for tr.State == distsql.StateRunning {
 		row, meta := tr.fetcher.Next()
 
@@ -233,7 +233,7 @@ func (tr *tableReader) ConsumerClosed() {
 	tr.InternalClose()
 }
 
-var _ distsqlpb.DistSQLSpanStats = &TableReaderStats{}
+var _ execinfrapb.DistSQLSpanStats = &TableReaderStats{}
 
 const tableReaderTagPrefix = "tablereader."
 
@@ -267,26 +267,26 @@ func (tr *tableReader) outputStatsToTrace() {
 	}
 }
 
-func (tr *tableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
-	var trailingMeta []distsqlpb.ProducerMetadata
+func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+	var trailingMeta []execinfrapb.ProducerMetadata
 	if !tr.ignoreMisplannedRanges {
 		ranges := distsql.MisplannedRanges(ctx, tr.fetcher.GetRangesInfo(), tr.FlowCtx.NodeID)
 		if ranges != nil {
-			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: ranges})
+			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 		}
 	}
 	if meta := distsql.GetTxnCoordMeta(ctx, tr.FlowCtx.Txn); meta != nil {
-		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 
-	meta := distsqlpb.GetProducerMeta()
-	meta.Metrics = distsqlpb.GetMetricsMeta()
+	meta := execinfrapb.GetProducerMeta()
+	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead, meta.Metrics.RowsRead = tr.fetcher.GetBytesRead(), tr.rowsRead
 	trailingMeta = append(trailingMeta, *meta)
 	return trailingMeta
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (tr *tableReader) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (tr *tableReader) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	return tr.generateMeta(ctx)
 }

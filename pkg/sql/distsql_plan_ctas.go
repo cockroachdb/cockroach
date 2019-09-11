@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
@@ -28,7 +28,7 @@ func PlanAndRunCTAS(
 	txn *client.Txn,
 	isLocal bool,
 	in planNode,
-	out distsqlpb.ProcessorCoreUnion,
+	out execinfrapb.ProcessorCoreUnion,
 	recv *DistSQLReceiver,
 ) {
 	planCtx := dsp.NewPlanningCtx(ctx, planner.ExtendedEvalContext(), txn)
@@ -43,7 +43,7 @@ func PlanAndRunCTAS(
 	}
 
 	p.AddNoGroupingStage(
-		out, distsqlpb.PostProcessSpec{}, distsqlrun.CTASPlanResultTypes, distsqlpb.Ordering{},
+		out, execinfrapb.PostProcessSpec{}, distsqlrun.CTASPlanResultTypes, execinfrapb.Ordering{},
 	)
 
 	// The bulk row writers will emit a binary encoded BulkOpSummary.

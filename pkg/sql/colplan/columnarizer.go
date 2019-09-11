@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -38,7 +38,7 @@ type Columnarizer struct {
 
 	buffered        sqlbase.EncDatumRows
 	batch           coldata.Batch
-	accumulatedMeta []distsqlpb.ProducerMetadata
+	accumulatedMeta []execinfrapb.ProducerMetadata
 	ctx             context.Context
 	typs            []coltypes.T
 }
@@ -56,7 +56,7 @@ func NewColumnarizer(
 	}
 	if err = c.ProcessorBase.Init(
 		nil,
-		&distsqlpb.PostProcessSpec{},
+		&execinfrapb.PostProcessSpec{},
 		input.OutputTypes(),
 		flowCtx,
 		processorID,
@@ -84,7 +84,7 @@ func (c *Columnarizer) Init() {
 	for i := range c.buffered {
 		c.buffered[i] = make(sqlbase.EncDatumRow, len(c.typs))
 	}
-	c.accumulatedMeta = make([]distsqlpb.ProducerMetadata, 0, 1)
+	c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
 	c.input.Start(c.ctx)
 }
 
@@ -129,11 +129,11 @@ func (c *Columnarizer) Run(context.Context) {
 }
 
 var _ colexec.Operator = &Columnarizer{}
-var _ distsqlpb.MetadataSource = &Columnarizer{}
+var _ execinfrapb.MetadataSource = &Columnarizer{}
 
 // DrainMeta is part of the MetadataSource interface.
-func (c *Columnarizer) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
-	if src, ok := c.input.(distsqlpb.MetadataSource); ok {
+func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+	if src, ok := c.input.(execinfrapb.MetadataSource); ok {
 		c.accumulatedMeta = append(c.accumulatedMeta, src.DrainMeta(ctx)...)
 	}
 	return c.accumulatedMeta

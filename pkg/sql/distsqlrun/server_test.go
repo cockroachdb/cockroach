@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -48,14 +48,14 @@ func TestServer(t *testing.T) {
 
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
-	ts := distsqlpb.TableReaderSpec{
+	ts := execinfrapb.TableReaderSpec{
 		Table:    *td,
 		IndexIdx: 0,
 		Reverse:  false,
-		Spans:    []distsqlpb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+		Spans:    []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
 	}
-	post := distsqlpb.PostProcessSpec{
-		Filter:        distsqlpb.Expression{Expr: "@1 != 2"}, // a != 2
+	post := execinfrapb.PostProcessSpec{
+		Filter:        execinfrapb.Expression{Expr: "@1 != 2"}, // a != 2
 		Projection:    true,
 		OutputColumns: []uint32{0, 1}, // a
 	}
@@ -64,30 +64,30 @@ func TestServer(t *testing.T) {
 	txnCoordMeta := txn.GetTxnCoordMeta(ctx)
 	txnCoordMeta.StripRootToLeaf()
 
-	req := &distsqlpb.SetupFlowRequest{Version: Version, TxnCoordMeta: &txnCoordMeta}
-	req.Flow = distsqlpb.FlowSpec{
-		Processors: []distsqlpb.ProcessorSpec{{
-			Core: distsqlpb.ProcessorCoreUnion{TableReader: &ts},
+	req := &execinfrapb.SetupFlowRequest{Version: Version, TxnCoordMeta: &txnCoordMeta}
+	req.Flow = execinfrapb.FlowSpec{
+		Processors: []execinfrapb.ProcessorSpec{{
+			Core: execinfrapb.ProcessorCoreUnion{TableReader: &ts},
 			Post: post,
-			Output: []distsqlpb.OutputRouterSpec{{
-				Type:    distsqlpb.OutputRouterSpec_PASS_THROUGH,
-				Streams: []distsqlpb.StreamEndpointSpec{{Type: distsqlpb.StreamEndpointSpec_SYNC_RESPONSE}},
+			Output: []execinfrapb.OutputRouterSpec{{
+				Type:    execinfrapb.OutputRouterSpec_PASS_THROUGH,
+				Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE}},
 			}},
 		}},
 	}
 
-	distSQLClient := distsqlpb.NewDistSQLClient(conn)
+	distSQLClient := execinfrapb.NewDistSQLClient(conn)
 	stream, err := distSQLClient.RunSyncFlow(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := stream.Send(&distsqlpb.ConsumerSignal{SetupFlowRequest: req}); err != nil {
+	if err := stream.Send(&execinfrapb.ConsumerSignal{SetupFlowRequest: req}); err != nil {
 		t.Fatal(err)
 	}
 
 	var decoder StreamDecoder
 	var rows sqlbase.EncDatumRows
-	var metas []distsqlpb.ProducerMetadata
+	var metas []execinfrapb.ProducerMetadata
 	for {
 		msg, err := stream.Recv()
 		if err != nil {
@@ -116,7 +116,7 @@ func TestServer(t *testing.T) {
 	// Verify version handling.
 	t.Run("version", func(t *testing.T) {
 		testCases := []struct {
-			version     distsqlpb.DistSQLVersion
+			version     execinfrapb.DistSQLVersion
 			expectedErr string
 		}{
 			{
@@ -134,13 +134,13 @@ func TestServer(t *testing.T) {
 		}
 		for _, tc := range testCases {
 			t.Run(fmt.Sprintf("%d", tc.version), func(t *testing.T) {
-				distSQLClient := distsqlpb.NewDistSQLClient(conn)
+				distSQLClient := execinfrapb.NewDistSQLClient(conn)
 				stream, err := distSQLClient.RunSyncFlow(context.Background())
 				if err != nil {
 					t.Fatal(err)
 				}
 				req.Version = tc.version
-				if err := stream.Send(&distsqlpb.ConsumerSignal{SetupFlowRequest: req}); err != nil {
+				if err := stream.Send(&execinfrapb.ConsumerSignal{SetupFlowRequest: req}); err != nil {
 					t.Fatal(err)
 				}
 				_, err = stream.Recv()
@@ -161,7 +161,7 @@ func TestDistSQLServerGossipsVersion(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
-	var v distsqlpb.DistSQLVersionGossipInfo
+	var v execinfrapb.DistSQLVersionGossipInfo
 	if err := s.GossipI().(*gossip.Gossip).GetInfoProto(
 		gossip.MakeDistSQLNodeVersionKey(s.NodeID()), &v,
 	); err != nil {

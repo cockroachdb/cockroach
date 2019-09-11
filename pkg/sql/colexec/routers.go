@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -286,7 +286,7 @@ type HashRouter struct {
 
 	mu struct {
 		syncutil.Mutex
-		bufferedMeta []distsqlpb.ProducerMetadata
+		bufferedMeta []execinfrapb.ProducerMetadata
 	}
 
 	scratch struct {
@@ -356,7 +356,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 	cancelOutputs := func(err error) {
 		if err != nil {
 			r.mu.Lock()
-			r.mu.bufferedMeta = append(r.mu.bufferedMeta, distsqlpb.ProducerMetadata{Err: err})
+			r.mu.bufferedMeta = append(r.mu.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
 			r.mu.Unlock()
 		}
 		for _, o := range r.outputs {
@@ -480,7 +480,7 @@ func (r *HashRouter) reset() {
 }
 
 // DrainMeta is part of the MetadataGenerator interface.
-func (r *HashRouter) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (r *HashRouter) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	meta := r.mu.bufferedMeta

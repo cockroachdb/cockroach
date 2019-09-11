@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -38,14 +38,14 @@ import (
 // server stream. The server-side RPC call will be blocked until the caller
 // calls the returned cleanup function.
 func createDummyStream() (
-	serverStream distsqlpb.DistSQL_FlowStreamServer,
-	clientStream distsqlpb.DistSQL_FlowStreamClient,
+	serverStream execinfrapb.DistSQL_FlowStreamServer,
+	clientStream execinfrapb.DistSQL_FlowStreamClient,
 	cleanup func(),
 	err error,
 ) {
 	stopper := stop.NewStopper()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	clusterID, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(clock, stopper, staticNodeID)
+	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, staticNodeID)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -56,7 +56,7 @@ func createDummyStream() (
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	client := distsqlpb.NewDistSQLClient(conn)
+	client := execinfrapb.NewDistSQLClient(conn)
 	clientStream, err = client.FlowStream(context.TODO())
 	if err != nil {
 		return nil, nil, nil, err
@@ -74,8 +74,8 @@ func createDummyStream() (
 // with the given inputs, and asserts that the outputted rows are as expected.
 func runProcessorTest(
 	t *testing.T,
-	core distsqlpb.ProcessorCoreUnion,
-	post distsqlpb.PostProcessSpec,
+	core execinfrapb.ProcessorCoreUnion,
+	post execinfrapb.PostProcessSpec,
 	inputTypes []types.T,
 	inputRows sqlbase.EncDatumRows,
 	outputTypes []types.T,
@@ -144,7 +144,7 @@ var _ distsql.RowReceiver = &rowDisposer{}
 
 // Push is part of the distsql.RowReceiver interface.
 func (r *rowDisposer) Push(
-	row sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata,
+	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) distsql.ConsumerStatus {
 	return distsql.NeedMoreRows
 }

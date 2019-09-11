@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -246,7 +246,7 @@ type zigzagJoiner struct {
 	started bool
 
 	// returnedMeta contains all the metadata that zigzag joiner has emitted.
-	returnedMeta []distsqlpb.ProducerMetadata
+	returnedMeta []execinfrapb.ProducerMetadata
 }
 
 // Batch size is a parameter which determines how many rows should be fetched
@@ -257,7 +257,7 @@ const zigzagJoinerBatchSize = 5
 
 var _ distsql.Processor = &zigzagJoiner{}
 var _ distsql.RowSource = &zigzagJoiner{}
-var _ distsqlpb.MetadataSource = &zigzagJoiner{}
+var _ execinfrapb.MetadataSource = &zigzagJoiner{}
 
 const zigzagJoinerProcName = "zigzagJoiner"
 
@@ -266,9 +266,9 @@ const zigzagJoinerProcName = "zigzagJoiner"
 func newZigzagJoiner(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.ZigzagJoinerSpec,
+	spec *execinfrapb.ZigzagJoinerSpec,
 	fixedValues []sqlbase.EncDatumRow,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*zigzagJoiner, error) {
 	z := &zigzagJoiner{}
@@ -298,7 +298,7 @@ func newZigzagJoiner(
 
 	z.numTables = len(spec.Tables)
 	z.infos = make([]*zigzagJoinerInfo, z.numTables)
-	z.returnedMeta = make([]distsqlpb.ProducerMetadata, 0, 1)
+	z.returnedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
 
 	for i := range z.infos {
 		z.infos[i] = &zigzagJoinerInfo{}
@@ -330,7 +330,7 @@ func newZigzagJoiner(
 // each cell. Note that this function assumes that there is only one tuple in the
 // ValuesSpec (i.e. the way fixed values are encoded in the ZigzagJoinSpec).
 func valuesSpecToEncDatum(
-	valuesSpec *distsqlpb.ValuesCoreSpec,
+	valuesSpec *execinfrapb.ValuesCoreSpec,
 ) (res []sqlbase.EncDatum, err error) {
 	res = make([]sqlbase.EncDatum, len(valuesSpec.Columns))
 	rem := valuesSpec.RawBytes[0]
@@ -387,7 +387,9 @@ type zigzagJoinerInfo struct {
 // colOffset is specified to determine the appropriate range of output columns
 // to process. It is the number of columns in the tables of all previous sides
 // of the join.
-func (z *zigzagJoiner) setupInfo(spec *distsqlpb.ZigzagJoinerSpec, side int, colOffset int) error {
+func (z *zigzagJoiner) setupInfo(
+	spec *execinfrapb.ZigzagJoinerSpec, side int, colOffset int,
+) error {
 	z.side = side
 	info := z.infos[side]
 
@@ -441,7 +443,7 @@ func (z *zigzagJoiner) setupInfo(spec *distsqlpb.ZigzagJoinerSpec, side int, col
 		neededCols,
 		false, /* check */
 		info.alloc,
-		distsqlpb.ScanVisibility_PUBLIC,
+		execinfrapb.ScanVisibility_PUBLIC,
 	)
 	if err != nil {
 		return err
@@ -468,13 +470,13 @@ func (z *zigzagJoiner) close() {
 // terminated, either due to being indicated by the consumer, or because the
 // processor ran out of rows or encountered an error. It is ok for err to be
 // nil indicating that we're done producing rows even though no error occurred.
-func (z *zigzagJoiner) producerMeta(err error) *distsqlpb.ProducerMetadata {
-	var meta *distsqlpb.ProducerMetadata
+func (z *zigzagJoiner) producerMeta(err error) *execinfrapb.ProducerMetadata {
+	var meta *execinfrapb.ProducerMetadata
 	if !z.Closed {
 		if err != nil {
-			meta = &distsqlpb.ProducerMetadata{Err: err}
+			meta = &execinfrapb.ProducerMetadata{Err: err}
 		} else if trace := distsql.GetTraceData(z.Ctx); trace != nil {
-			meta = &distsqlpb.ProducerMetadata{TraceData: trace}
+			meta = &execinfrapb.ProducerMetadata{TraceData: trace}
 		}
 		// We need to close as soon as we send producer metadata as we're done
 		// sending rows. The consumer is allowed to not call ConsumerDone().
@@ -725,10 +727,10 @@ func (z *zigzagJoiner) emitFromContainers() (sqlbase.EncDatumRow, error) {
 // at a time.
 func (z *zigzagJoiner) nextRow(
 	ctx context.Context, txn *client.Txn,
-) (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+) (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for {
 		if err := z.cancelChecker.Check(); err != nil {
-			return nil, &distsqlpb.ProducerMetadata{Err: err}
+			return nil, &execinfrapb.ProducerMetadata{Err: err}
 		}
 
 		// Check if there are any rows built up in the containers that need to be
@@ -894,7 +896,7 @@ func (z *zigzagJoiner) collectAllMatches(
 }
 
 // Next is part of the RowSource interface.
-func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	txn := z.FlowCtx.Txn
 
 	if !z.started {
@@ -961,6 +963,6 @@ func (z *zigzagJoiner) ConsumerClosed() {
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (z *zigzagJoiner) DrainMeta(_ context.Context) []distsqlpb.ProducerMetadata {
+func (z *zigzagJoiner) DrainMeta(_ context.Context) []execinfrapb.ProducerMetadata {
 	return z.returnedMeta
 }

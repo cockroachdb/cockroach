@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,15 +34,15 @@ func TestProjectSet(t *testing.T) {
 
 	testCases := []struct {
 		description string
-		spec        distsqlpb.ProjectSetSpec
+		spec        execinfrapb.ProjectSetSpec
 		input       sqlbase.EncDatumRows
 		inputTypes  []types.T
 		expected    sqlbase.EncDatumRows
 	}{
 		{
 			description: "scalar function",
-			spec: distsqlpb.ProjectSetSpec{
-				Exprs: []distsqlpb.Expression{
+			spec: execinfrapb.ProjectSetSpec{
+				Exprs: []execinfrapb.Expression{
 					{Expr: "@1 + 1"},
 				},
 				GeneratedColumns: sqlbase.OneIntCol,
@@ -58,8 +58,8 @@ func TestProjectSet(t *testing.T) {
 		},
 		{
 			description: "set-returning function",
-			spec: distsqlpb.ProjectSetSpec{
-				Exprs: []distsqlpb.Expression{
+			spec: execinfrapb.ProjectSetSpec{
+				Exprs: []execinfrapb.Expression{
 					{Expr: "generate_series(@1, 2)"},
 				},
 				GeneratedColumns: sqlbase.OneIntCol,
@@ -80,8 +80,8 @@ func TestProjectSet(t *testing.T) {
 		},
 		{
 			description: "multiple exprs with different lengths",
-			spec: distsqlpb.ProjectSetSpec{
-				Exprs: []distsqlpb.Expression{
+			spec: execinfrapb.ProjectSetSpec{
+				Exprs: []execinfrapb.Expression{
 					{Expr: "0"},
 					{Expr: "generate_series(0, 0)"},
 					{Expr: "generate_series(0, 1)"},
@@ -106,8 +106,8 @@ func TestProjectSet(t *testing.T) {
 		t.Run(c.description, func(t *testing.T) {
 			runProcessorTest(
 				t,
-				distsqlpb.ProcessorCoreUnion{ProjectSet: &c.spec},
-				distsqlpb.PostProcessSpec{},
+				execinfrapb.ProcessorCoreUnion{ProjectSet: &c.spec},
+				execinfrapb.PostProcessSpec{},
 				c.inputTypes,
 				c.input,
 				append(c.inputTypes, c.spec.GeneratedColumns...), /* outputTypes */
@@ -132,14 +132,14 @@ func BenchmarkProjectSet(b *testing.B) {
 
 	benchCases := []struct {
 		description string
-		spec        distsqlpb.ProjectSetSpec
+		spec        execinfrapb.ProjectSetSpec
 		input       sqlbase.EncDatumRows
 		inputTypes  []types.T
 	}{
 		{
 			description: "generate_series",
-			spec: distsqlpb.ProjectSetSpec{
-				Exprs: []distsqlpb.Expression{
+			spec: execinfrapb.ProjectSetSpec{
+				Exprs: []execinfrapb.Expression{
 					{Expr: "generate_series(1, 100000)"},
 				},
 				GeneratedColumns: sqlbase.OneIntCol,
@@ -164,7 +164,7 @@ func BenchmarkProjectSet(b *testing.B) {
 				out := &RowBuffer{}
 				p, err := newProcessor(
 					context.Background(), &flowCtx, 0, /* processorID */
-					&distsqlpb.ProcessorCoreUnion{ProjectSet: &c.spec}, &distsqlpb.PostProcessSpec{},
+					&execinfrapb.ProcessorCoreUnion{ProjectSet: &c.spec}, &execinfrapb.PostProcessSpec{},
 					[]distsql.RowSource{in}, []distsql.RowReceiver{out}, []distsql.LocalProcessor{})
 				if err != nil {
 					b.Fatal(err)

@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -33,12 +33,12 @@ func TestDistinct(t *testing.T) {
 	}
 
 	testCases := []struct {
-		spec     distsqlpb.DistinctSpec
+		spec     execinfrapb.DistinctSpec
 		input    sqlbase.EncDatumRows
 		expected sqlbase.EncDatumRows
 	}{
 		{
-			spec: distsqlpb.DistinctSpec{
+			spec: execinfrapb.DistinctSpec{
 				DistinctColumns: []uint32{0, 1},
 			},
 			input: sqlbase.EncDatumRows{
@@ -59,7 +59,7 @@ func TestDistinct(t *testing.T) {
 			},
 		},
 		{
-			spec: distsqlpb.DistinctSpec{
+			spec: execinfrapb.DistinctSpec{
 				OrderedColumns:  []uint32{1},
 				DistinctColumns: []uint32{0, 1},
 			},
@@ -81,7 +81,7 @@ func TestDistinct(t *testing.T) {
 			},
 		},
 		{
-			spec: distsqlpb.DistinctSpec{
+			spec: execinfrapb.DistinctSpec{
 				OrderedColumns:  []uint32{1},
 				DistinctColumns: []uint32{1},
 			},
@@ -120,7 +120,7 @@ func TestDistinct(t *testing.T) {
 				EvalCtx: &evalCtx,
 			}
 
-			d, err := NewDistinct(&flowCtx, 0 /* processorID */, &ds, in, &distsqlpb.PostProcessSpec{}, out)
+			d, err := NewDistinct(&flowCtx, 0 /* processorID */, &ds, in, &execinfrapb.PostProcessSpec{}, out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -157,12 +157,12 @@ func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
 		Cfg:     &distsql.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
-	spec := &distsqlpb.DistinctSpec{
+	spec := &execinfrapb.DistinctSpec{
 		DistinctColumns: []uint32{0, 1},
 	}
 	spec.OrderedColumns = orderedColumns
 
-	post := &distsqlpb.PostProcessSpec{}
+	post := &execinfrapb.PostProcessSpec{}
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			input := distsql.NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeIntRows(numRows, numCols))

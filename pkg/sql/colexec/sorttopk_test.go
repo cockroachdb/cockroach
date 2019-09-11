@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -25,7 +25,7 @@ func TestTopKSorter(t *testing.T) {
 		name     string
 		tuples   tuples
 		expected tuples
-		ordCols  []distsqlpb.Ordering_Column
+		ordCols  []execinfrapb.Ordering_Column
 		typ      []coltypes.T
 		k        uint16
 	}{
@@ -34,7 +34,7 @@ func TestTopKSorter(t *testing.T) {
 			tuples:   tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			expected: tuples{{1}, {2}, {3}},
 			typ:      []coltypes.T{coltypes.Int64},
-			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 			k:        3,
 		},
 		{
@@ -42,7 +42,7 @@ func TestTopKSorter(t *testing.T) {
 			tuples:   tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			expected: tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			typ:      []coltypes.T{coltypes.Int64},
-			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 			k:        10,
 		},
 		{
@@ -50,7 +50,7 @@ func TestTopKSorter(t *testing.T) {
 			tuples:   tuples{{1}, {2}, {nil}, {3}, {4}, {5}, {6}, {7}, {nil}},
 			expected: tuples{{nil}, {nil}, {1}},
 			typ:      []coltypes.T{coltypes.Int64},
-			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 			k:        3,
 		},
 		{
@@ -58,9 +58,9 @@ func TestTopKSorter(t *testing.T) {
 			tuples:   tuples{{0, 1}, {0, 2}, {0, 3}, {0, 4}, {0, 5}, {1, 5}},
 			expected: tuples{{0, 5}, {1, 5}, {0, 4}},
 			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
-			ordCols: []distsqlpb.Ordering_Column{
-				{ColIdx: 1, Direction: distsqlpb.Ordering_Column_DESC},
-				{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC},
+			ordCols: []execinfrapb.Ordering_Column{
+				{ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC},
+				{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC},
 			},
 			k: 3,
 		},

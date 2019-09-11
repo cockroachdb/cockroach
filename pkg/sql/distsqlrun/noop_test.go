@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -35,7 +35,7 @@ func BenchmarkNoop(b *testing.B) {
 		Cfg:     &distsql.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
-	post := &distsqlpb.PostProcessSpec{}
+	post := &execinfrapb.PostProcessSpec{}
 	disposer := &rowDisposer{}
 	for _, numCols := range []int{1, 1 << 1, 1 << 2, 1 << 4, 1 << 8} {
 		b.Run(fmt.Sprintf("cols=%d", numCols), func(b *testing.B) {

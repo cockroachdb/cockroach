@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -702,11 +702,11 @@ func TestGRPCAuthentication(t *testing.T) {
 			return err
 		}},
 		{"distSQL", func(ctx context.Context, conn *grpc.ClientConn) error {
-			stream, err := distsqlpb.NewDistSQLClient(conn).RunSyncFlow(ctx)
+			stream, err := execinfrapb.NewDistSQLClient(conn).RunSyncFlow(ctx)
 			if err != nil {
 				return err
 			}
-			_ = stream.Send(&distsqlpb.ConsumerSignal{})
+			_ = stream.Send(&execinfrapb.ConsumerSignal{})
 			_, err = stream.Recv()
 			return err
 		}},

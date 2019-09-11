@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -36,7 +36,7 @@ import (
 // registered, waits until it gets registered - up to the given timeout. If the
 // timeout elapses and the flow is not registered, the bool return value will be
 // false.
-func lookupFlow(fr *flowRegistry, fid distsqlpb.FlowID, timeout time.Duration) *Flow {
+func lookupFlow(fr *flowRegistry, fid execinfrapb.FlowID, timeout time.Duration) *Flow {
 	fr.Lock()
 	defer fr.Unlock()
 	entry := fr.getEntryLocked(fid)
@@ -56,7 +56,7 @@ func lookupFlow(fr *flowRegistry, fid distsqlpb.FlowID, timeout time.Duration) *
 // A copy of the registry's inboundStreamInfo is returned so it can be accessed
 // without locking.
 func lookupStreamInfo(
-	fr *flowRegistry, fid distsqlpb.FlowID, sid distsqlpb.StreamID,
+	fr *flowRegistry, fid execinfrapb.FlowID, sid execinfrapb.StreamID,
 ) (inboundStreamInfo, error) {
 	fr.Lock()
 	defer fr.Unlock()
@@ -75,16 +75,16 @@ func TestFlowRegistry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	reg := makeFlowRegistry(roachpb.NodeID(0))
 
-	id1 := distsqlpb.FlowID{UUID: uuid.MakeV4()}
+	id1 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	f1 := &Flow{}
 
-	id2 := distsqlpb.FlowID{UUID: uuid.MakeV4()}
+	id2 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	f2 := &Flow{}
 
-	id3 := distsqlpb.FlowID{UUID: uuid.MakeV4()}
+	id3 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	f3 := &Flow{}
 
-	id4 := distsqlpb.FlowID{UUID: uuid.MakeV4()}
+	id4 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	f4 := &Flow{}
 
 	// A basic duration; needs to be significantly larger than possible delays
@@ -218,13 +218,13 @@ func TestStreamConnectionTimeout(t *testing.T) {
 
 	// Register a flow with a very low timeout. After it times out, we'll attempt
 	// to connect a stream, but it'll be too late.
-	id1 := distsqlpb.FlowID{UUID: uuid.MakeV4()}
+	id1 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	f1 := &Flow{}
-	streamID1 := distsqlpb.StreamID(1)
+	streamID1 := execinfrapb.StreamID(1)
 	consumer := &RowBuffer{}
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
-	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
+	inboundStreams := map[execinfrapb.StreamID]*inboundStreamInfo{
 		streamID1: {receiver: rowInboundStreamHandler{consumer}, waitGroup: wg},
 	}
 	if err := reg.RegisterFlow(
@@ -297,8 +297,8 @@ func TestHandshake(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
-			streamID := distsqlpb.StreamID(1)
+			flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
+			streamID := execinfrapb.StreamID(1)
 
 			serverStream, clientStream, cleanup, err := createDummyStream()
 			if err != nil {
@@ -321,7 +321,7 @@ func TestHandshake(t *testing.T) {
 				consumer := &RowBuffer{}
 				wg := &sync.WaitGroup{}
 				wg.Add(1)
-				inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
+				inboundStreams := map[execinfrapb.StreamID]*inboundStreamInfo{
 					streamID: {receiver: rowInboundStreamHandler{consumer}, waitGroup: wg},
 				}
 				if err := reg.RegisterFlow(
@@ -382,8 +382,8 @@ func TestFlowRegistryDrain(t *testing.T) {
 	reg := makeFlowRegistry(roachpb.NodeID(0))
 
 	flow := &Flow{}
-	id := distsqlpb.FlowID{UUID: uuid.MakeV4()}
-	registerFlow := func(t *testing.T, id distsqlpb.FlowID) {
+	id := execinfrapb.FlowID{UUID: uuid.MakeV4()}
+	registerFlow := func(t *testing.T, id execinfrapb.FlowID) {
 		t.Helper()
 		if err := reg.RegisterFlow(
 			ctx, id, flow, nil /* inboundStreams */, 0, /* timeout */
@@ -427,7 +427,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 		}()
 		// Be relatively sure that the flowRegistry is draining.
 		time.Sleep(time.Microsecond)
-		newFlowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
+		newFlowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 		registerFlow(t, newFlowID)
 		reg.UnregisterFlow(id)
 		select {
@@ -535,25 +535,25 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 	distSQLSrv.flowRegistry.Drain(time.Duration(0) /* flowDrainWait */, time.Duration(0) /* minFlowDrainWait */)
 
 	// We create some flow; it doesn't matter what.
-	req := distsqlpb.SetupFlowRequest{Version: Version}
-	req.Flow = distsqlpb.FlowSpec{
-		Processors: []distsqlpb.ProcessorSpec{
+	req := execinfrapb.SetupFlowRequest{Version: Version}
+	req.Flow = execinfrapb.FlowSpec{
+		Processors: []execinfrapb.ProcessorSpec{
 			{
-				Core: distsqlpb.ProcessorCoreUnion{Values: &distsqlpb.ValuesCoreSpec{}},
-				Output: []distsqlpb.OutputRouterSpec{{
-					Type:    distsqlpb.OutputRouterSpec_PASS_THROUGH,
-					Streams: []distsqlpb.StreamEndpointSpec{{StreamID: 1, Type: distsqlpb.StreamEndpointSpec_REMOTE}},
+				Core: execinfrapb.ProcessorCoreUnion{Values: &execinfrapb.ValuesCoreSpec{}},
+				Output: []execinfrapb.OutputRouterSpec{{
+					Type:    execinfrapb.OutputRouterSpec_PASS_THROUGH,
+					Streams: []execinfrapb.StreamEndpointSpec{{StreamID: 1, Type: execinfrapb.StreamEndpointSpec_REMOTE}},
 				}},
 			},
 			{
-				Input: []distsqlpb.InputSyncSpec{{
-					Type:    distsqlpb.InputSyncSpec_UNORDERED,
-					Streams: []distsqlpb.StreamEndpointSpec{{StreamID: 1, Type: distsqlpb.StreamEndpointSpec_REMOTE}},
+				Input: []execinfrapb.InputSyncSpec{{
+					Type:    execinfrapb.InputSyncSpec_UNORDERED,
+					Streams: []execinfrapb.StreamEndpointSpec{{StreamID: 1, Type: execinfrapb.StreamEndpointSpec_REMOTE}},
 				}},
-				Core: distsqlpb.ProcessorCoreUnion{Noop: &distsqlpb.NoopCoreSpec{}},
-				Output: []distsqlpb.OutputRouterSpec{{
-					Type:    distsqlpb.OutputRouterSpec_PASS_THROUGH,
-					Streams: []distsqlpb.StreamEndpointSpec{{Type: distsqlpb.StreamEndpointSpec_SYNC_RESPONSE}},
+				Core: execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
+				Output: []execinfrapb.OutputRouterSpec{{
+					Type:    execinfrapb.OutputRouterSpec_PASS_THROUGH,
+					Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE}},
 				}},
 			},
 		},
@@ -590,7 +590,7 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	wg := sync.WaitGroup{}
 	rc := &distsql.RowChannel{}
 	rc.InitWithBufSizeAndNumSenders(sqlbase.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
-	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
+	inboundStreams := map[execinfrapb.StreamID]*inboundStreamInfo{
 		0: {
 			receiver:  rowInboundStreamHandler{rc},
 			waitGroup: &wg,
@@ -598,7 +598,7 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	}
 	wg.Add(1)
 	if err := fr.RegisterFlow(
-		context.Background(), distsqlpb.FlowID{}, &Flow{}, inboundStreams, 0, /* timeout */
+		context.Background(), execinfrapb.FlowID{}, &Flow{}, inboundStreams, 0, /* timeout */
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -619,12 +619,12 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	fr := makeFlowRegistry(0)
 	// pushChan is used to be able to tell when a Push on the RowBuffer has
 	// occurred.
-	pushChan := make(chan *distsqlpb.ProducerMetadata)
+	pushChan := make(chan *execinfrapb.ProducerMetadata)
 	rc := newRowBuffer(
 		sqlbase.OneIntCol,
 		nil, /* rows */
 		rowBufferArgs{
-			OnPush: func(_ sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata) {
+			OnPush: func(_ sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata) {
 				pushChan <- meta
 				<-pushChan
 			},
@@ -633,7 +633,7 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
+	inboundStreams := map[execinfrapb.StreamID]*inboundStreamInfo{
 		0: {
 			receiver:  rowInboundStreamHandler{rc},
 			waitGroup: &wg,
@@ -642,7 +642,7 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 
 	// RegisterFlow with an immediate timeout.
 	if err := fr.RegisterFlow(
-		ctx, distsqlpb.FlowID{}, &Flow{}, inboundStreams, 0, /* timeout */
+		ctx, execinfrapb.FlowID{}, &Flow{}, inboundStreams, 0, /* timeout */
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -656,7 +656,7 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	// Attempt to register a flow. Note that this flow has no inbound streams, so
 	// Pushing to the RowBuffer is unexpected.
 	if err := fr.RegisterFlow(
-		ctx, distsqlpb.FlowID{UUID: uuid.MakeV4()}, &Flow{}, nil /* inboundStreams */, time.Hour, /* timeout */
+		ctx, execinfrapb.FlowID{UUID: uuid.MakeV4()}, &Flow{}, nil /* inboundStreams */, time.Hour, /* timeout */
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -681,7 +681,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	wgLeft.Add(1)
 	wgRight := sync.WaitGroup{}
 	wgRight.Add(1)
-	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
+	inboundStreams := map[execinfrapb.StreamID]*inboundStreamInfo{
 		0: {
 			receiver:  rowInboundStreamHandler{left},
 			waitGroup: &wgLeft,
@@ -693,12 +693,12 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	}
 
 	// Fill up the left, so pushes to it block.
-	left.Push(nil, &distsqlpb.ProducerMetadata{})
+	left.Push(nil, &execinfrapb.ProducerMetadata{})
 
 	// RegisterFlow with an immediate timeout.
 	flow := &Flow{
 		FlowCtx: distsql.FlowCtx{
-			ID: distsqlpb.FlowID{UUID: uuid.FastMakeV4()},
+			ID: execinfrapb.FlowID{UUID: uuid.FastMakeV4()},
 		},
 		inboundStreams: inboundStreams,
 		flowRegistry:   fr,

@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -62,13 +62,13 @@ var istrPool = sync.Pool{
 
 var _ distsql.Processor = &indexSkipTableReader{}
 var _ distsql.RowSource = &indexSkipTableReader{}
-var _ distsqlpb.MetadataSource = &indexSkipTableReader{}
+var _ execinfrapb.MetadataSource = &indexSkipTableReader{}
 
 func newIndexSkipTableReader(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.IndexSkipTableReaderSpec,
-	post *distsqlpb.PostProcessSpec,
+	spec *execinfrapb.IndexSkipTableReaderSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*indexSkipTableReader, error) {
 	if flowCtx.NodeID == 0 {
@@ -77,7 +77,7 @@ func newIndexSkipTableReader(
 
 	t := istrPool.Get().(*indexSkipTableReader)
 
-	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	returnMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
 	t.ignoreMisplannedRanges = flowCtx.Local
 	t.reverse = spec.Reverse
@@ -156,7 +156,7 @@ func (t *indexSkipTableReader) Start(ctx context.Context) context.Context {
 	return ctx
 }
 
-func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for t.State == distsql.StateRunning {
 		if t.currentSpan >= len(t.spans) {
 			t.MoveToDraining(nil)
@@ -170,7 +170,7 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		)
 		if err != nil {
 			t.MoveToDraining(err)
-			return nil, &distsqlpb.ProducerMetadata{Err: err}
+			return nil, &execinfrapb.ProducerMetadata{Err: err}
 		}
 
 		// Range info resets once a scan begins, so we need to maintain
@@ -188,13 +188,13 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		key, err := t.fetcher.PartialKey(t.keyPrefixLen)
 		if err != nil {
 			t.MoveToDraining(err)
-			return nil, &distsqlpb.ProducerMetadata{Err: err}
+			return nil, &execinfrapb.ProducerMetadata{Err: err}
 		}
 
 		row, _, _, err := t.fetcher.NextRow(t.Ctx)
 		if err != nil {
 			t.MoveToDraining(err)
-			return nil, &distsqlpb.ProducerMetadata{Err: err}
+			return nil, &execinfrapb.ProducerMetadata{Err: err}
 		}
 		if row == nil {
 			// No more rows in this span, so move to the next one.
@@ -247,25 +247,25 @@ func (t *indexSkipTableReader) ConsumerClosed() {
 
 func (t *indexSkipTableReader) generateTrailingMeta(
 	ctx context.Context,
-) []distsqlpb.ProducerMetadata {
+) []execinfrapb.ProducerMetadata {
 	trailingMeta := t.generateMeta(ctx)
 	t.InternalClose()
 	return trailingMeta
 }
 
-func (t *indexSkipTableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
-	var trailingMeta []distsqlpb.ProducerMetadata
+func (t *indexSkipTableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+	var trailingMeta []execinfrapb.ProducerMetadata
 	if !t.ignoreMisplannedRanges {
 		if len(t.misplannedRanges) != 0 {
-			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: t.misplannedRanges})
+			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: t.misplannedRanges})
 		}
 	}
 	if meta := distsql.GetTxnCoordMeta(ctx, t.FlowCtx.Txn); meta != nil {
-		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 	return trailingMeta
 }
 
-func (t *indexSkipTableReader) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (t *indexSkipTableReader) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	return t.generateMeta(ctx)
 }

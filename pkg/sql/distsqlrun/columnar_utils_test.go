@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -36,7 +36,7 @@ func verifyColOperator(
 	inputTypes [][]types.T,
 	inputs []sqlbase.EncDatumRows,
 	outputTypes []types.T,
-	pspec *distsqlpb.ProcessorSpec,
+	pspec *execinfrapb.ProcessorSpec,
 ) error {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -94,7 +94,7 @@ func verifyColOperator(
 		int32(len(inputs))+2,
 		result.Op,
 		outputTypes,
-		&distsqlpb.PostProcessSpec{},
+		&execinfrapb.PostProcessSpec{},
 		nil, /* output */
 		nil, /* metadataSourcesQueue */
 		nil, /* outputStatsToTrace */

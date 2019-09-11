@@ -19,14 +19,14 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 var (
 	defaultGroupCols = []uint32{0}
 	defaultAggCols   = [][]uint32{{1}}
-	defaultAggFns    = []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_SUM}
+	defaultAggFns    = []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM}
 	defaultColTyps   = []coltypes.T{coltypes.Int64, coltypes.Int64}
 )
 
@@ -34,7 +34,7 @@ type aggregatorTestCase struct {
 	// colTypes, aggFns, groupCols, and aggCols will be set to their default
 	// values before running a test if nil.
 	colTypes  []coltypes.T
-	aggFns    []distsqlpb.AggregatorSpec_Func
+	aggFns    []execinfrapb.AggregatorSpec_Func
 	groupCols []uint32
 	aggCols   [][]uint32
 	input     tuples
@@ -56,7 +56,7 @@ type aggregatorTestCase struct {
 type aggType struct {
 	new func(input Operator,
 		colTypes []coltypes.T,
-		aggFns []distsqlpb.AggregatorSpec_Func,
+		aggFns []execinfrapb.AggregatorSpec_Func,
 		groupCols []uint32,
 		aggCols [][]uint32,
 		isScalar bool,
@@ -309,7 +309,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 func TestAggregatorMultiFunc(t *testing.T) {
 	testCases := []aggregatorTestCase{
 		{
-			aggFns: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_SUM, distsqlpb.AggregatorSpec_SUM},
+			aggFns: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM},
 			aggCols: [][]uint32{
 				{2}, {1},
 			},
@@ -324,7 +324,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 			name: "OutputOrder",
 		},
 		{
-			aggFns: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_SUM, distsqlpb.AggregatorSpec_SUM},
+			aggFns: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM},
 			aggCols: [][]uint32{
 				{2}, {1},
 			},
@@ -343,7 +343,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 			convToDecimal: true,
 		},
 		{
-			aggFns: []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_AVG, distsqlpb.AggregatorSpec_SUM},
+			aggFns: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_AVG, execinfrapb.AggregatorSpec_SUM},
 			aggCols: [][]uint32{
 				{1}, {1},
 			},
@@ -382,14 +382,14 @@ func TestAggregatorMultiFunc(t *testing.T) {
 func TestAggregatorAllFunctions(t *testing.T) {
 	testCases := []aggregatorTestCase{
 		{
-			aggFns: []distsqlpb.AggregatorSpec_Func{
-				distsqlpb.AggregatorSpec_ANY_NOT_NULL,
-				distsqlpb.AggregatorSpec_AVG,
-				distsqlpb.AggregatorSpec_COUNT_ROWS,
-				distsqlpb.AggregatorSpec_COUNT,
-				distsqlpb.AggregatorSpec_SUM,
-				distsqlpb.AggregatorSpec_MIN,
-				distsqlpb.AggregatorSpec_MAX,
+			aggFns: []execinfrapb.AggregatorSpec_Func{
+				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+				execinfrapb.AggregatorSpec_AVG,
+				execinfrapb.AggregatorSpec_COUNT_ROWS,
+				execinfrapb.AggregatorSpec_COUNT,
+				execinfrapb.AggregatorSpec_SUM,
+				execinfrapb.AggregatorSpec_MIN,
+				execinfrapb.AggregatorSpec_MAX,
 			},
 			aggCols:  [][]uint32{{0}, {1}, {}, {1}, {2}, {2}, {2}},
 			colTypes: []coltypes.T{coltypes.Int64, coltypes.Decimal, coltypes.Int64},
@@ -413,16 +413,16 @@ func TestAggregatorAllFunctions(t *testing.T) {
 
 		// Test case for null handling.
 		{
-			aggFns: []distsqlpb.AggregatorSpec_Func{
-				distsqlpb.AggregatorSpec_ANY_NOT_NULL,
-				distsqlpb.AggregatorSpec_ANY_NOT_NULL,
-				distsqlpb.AggregatorSpec_COUNT_ROWS,
-				distsqlpb.AggregatorSpec_COUNT,
-				distsqlpb.AggregatorSpec_SUM,
-				distsqlpb.AggregatorSpec_SUM_INT,
-				distsqlpb.AggregatorSpec_MIN,
-				distsqlpb.AggregatorSpec_MAX,
-				distsqlpb.AggregatorSpec_AVG,
+			aggFns: []execinfrapb.AggregatorSpec_Func{
+				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+				execinfrapb.AggregatorSpec_COUNT_ROWS,
+				execinfrapb.AggregatorSpec_COUNT,
+				execinfrapb.AggregatorSpec_SUM,
+				execinfrapb.AggregatorSpec_SUM_INT,
+				execinfrapb.AggregatorSpec_MIN,
+				execinfrapb.AggregatorSpec_MAX,
+				execinfrapb.AggregatorSpec_AVG,
 			},
 			aggCols:  [][]uint32{{0}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {1}},
 			colTypes: []coltypes.T{coltypes.Int64, coltypes.Decimal, coltypes.Int64},
@@ -515,13 +515,13 @@ func TestAggregatorRandom(t *testing.T) {
 							a, err := agg.new(
 								source,
 								typs,
-								[]distsqlpb.AggregatorSpec_Func{
-									distsqlpb.AggregatorSpec_COUNT_ROWS,
-									distsqlpb.AggregatorSpec_COUNT,
-									distsqlpb.AggregatorSpec_SUM_INT,
-									distsqlpb.AggregatorSpec_MIN,
-									distsqlpb.AggregatorSpec_MAX,
-									distsqlpb.AggregatorSpec_AVG},
+								[]execinfrapb.AggregatorSpec_Func{
+									execinfrapb.AggregatorSpec_COUNT_ROWS,
+									execinfrapb.AggregatorSpec_COUNT,
+									execinfrapb.AggregatorSpec_SUM_INT,
+									execinfrapb.AggregatorSpec_MIN,
+									execinfrapb.AggregatorSpec_MAX,
+									execinfrapb.AggregatorSpec_AVG},
 								[]uint32{0},
 								[][]uint32{{}, {1}, {1}, {1}, {1}, {1}},
 								false, /* isScalar */
@@ -613,16 +613,16 @@ func BenchmarkAggregator(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	for _, aggFn := range []distsqlpb.AggregatorSpec_Func{
-		distsqlpb.AggregatorSpec_ANY_NOT_NULL,
-		distsqlpb.AggregatorSpec_AVG,
-		distsqlpb.AggregatorSpec_COUNT_ROWS,
-		distsqlpb.AggregatorSpec_COUNT,
-		distsqlpb.AggregatorSpec_SUM,
-		distsqlpb.AggregatorSpec_MIN,
-		distsqlpb.AggregatorSpec_MAX,
+	for _, aggFn := range []execinfrapb.AggregatorSpec_Func{
+		execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+		execinfrapb.AggregatorSpec_AVG,
+		execinfrapb.AggregatorSpec_COUNT_ROWS,
+		execinfrapb.AggregatorSpec_COUNT,
+		execinfrapb.AggregatorSpec_SUM,
+		execinfrapb.AggregatorSpec_MIN,
+		execinfrapb.AggregatorSpec_MAX,
 	} {
-		fName := distsqlpb.AggregatorSpec_Func_name[int32(aggFn)]
+		fName := execinfrapb.AggregatorSpec_Func_name[int32(aggFn)]
 		b.Run(fName, func(b *testing.B) {
 			for _, agg := range aggTypes {
 				for _, typ := range []coltypes.T{coltypes.Int64, coltypes.Decimal} {
@@ -666,13 +666,13 @@ func BenchmarkAggregator(b *testing.B) {
 										source := newChunkingBatchSource(colTypes, cols, uint64(nTuples))
 
 										nCols := 1
-										if aggFn == distsqlpb.AggregatorSpec_COUNT_ROWS {
+										if aggFn == execinfrapb.AggregatorSpec_COUNT_ROWS {
 											nCols = 0
 										}
 										a, err := agg.new(
 											source,
 											colTypes,
-											[]distsqlpb.AggregatorSpec_Func{aggFn},
+											[]execinfrapb.AggregatorSpec_Func{aggFn},
 											[]uint32{0},
 											[][]uint32{[]uint32{1}[:nCols]},
 											false, /* isScalar */
@@ -779,7 +779,7 @@ func TestHashAggregator(t *testing.T) {
 			colTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Decimal},
 			convToDecimal: true,
 
-			aggFns:    []distsqlpb.AggregatorSpec_Func{distsqlpb.AggregatorSpec_SUM, distsqlpb.AggregatorSpec_SUM},
+			aggFns:    []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM},
 			groupCols: []uint32{0, 1},
 			aggCols: [][]uint32{
 				{2}, {1},

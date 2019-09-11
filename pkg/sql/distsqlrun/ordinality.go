@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -39,9 +39,9 @@ const ordinalityProcName = "ordinality"
 func newOrdinalityProcessor(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.OrdinalitySpec,
+	spec *execinfrapb.OrdinalitySpec,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (distsql.RowSourcedProcessor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
@@ -60,7 +60,7 @@ func newOrdinalityProcessor(
 		nil, /* memMonitor */
 		distsql.ProcStateOpts{
 			InputsToDrain: []distsql.RowSource{o.input},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				o.ConsumerClosed()
 				return nil
 			}},
@@ -83,7 +83,7 @@ func (o *ordinalityProcessor) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (o *ordinalityProcessor) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (o *ordinalityProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for o.State == distsql.StateRunning {
 		row, meta := o.input.Next()
 

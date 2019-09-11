@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -24,7 +24,7 @@ import (
 type valuesProcessor struct {
 	distsql.ProcessorBase
 
-	columns []distsqlpb.DatumInfo
+	columns []execinfrapb.DatumInfo
 	data    [][]byte
 	// numRows is only guaranteed to be set if there are zero columns (because of
 	// backward compatibility). If it set and there are columns, it matches the
@@ -43,8 +43,8 @@ const valuesProcName = "values"
 func newValuesProcessor(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.ValuesCoreSpec,
-	post *distsqlpb.PostProcessSpec,
+	spec *execinfrapb.ValuesCoreSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*valuesProcessor, error) {
 	v := &valuesProcessor{
@@ -70,9 +70,9 @@ func (v *valuesProcessor) Start(ctx context.Context) context.Context {
 
 	// Add a bogus header to appease the StreamDecoder, which wants to receive a
 	// header before any data.
-	m := &distsqlpb.ProducerMessage{
+	m := &execinfrapb.ProducerMessage{
 		Typing: v.columns,
-		Header: &distsqlpb.ProducerHeader{},
+		Header: &execinfrapb.ProducerHeader{},
 	}
 	if err := v.sd.AddMessage(ctx, m); err != nil {
 		v.MoveToDraining(err)
@@ -84,7 +84,7 @@ func (v *valuesProcessor) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for v.State == distsql.StateRunning {
 		row, meta, err := v.sd.GetRow(v.rowBuf)
 		if err != nil {
@@ -98,7 +98,7 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetada
 
 		if row == nil {
 			// Push a chunk of data to the stream decoder.
-			m := &distsqlpb.ProducerMessage{}
+			m := &execinfrapb.ProducerMessage{}
 			if len(v.columns) == 0 {
 				if v.numRows == 0 {
 					v.MoveToDraining(nil /* err */)

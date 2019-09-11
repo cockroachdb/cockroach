@@ -17,7 +17,7 @@ import (
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -34,7 +34,7 @@ import (
 
 // sketchInfo contains the specification and run-time state for each sketch.
 type sketchInfo struct {
-	spec     distsqlpb.SketchSpec
+	spec     execinfrapb.SketchSpec
 	sketch   *hyperloglog.Sketch
 	numNulls int64
 	numRows  int64
@@ -71,10 +71,10 @@ const samplerProcName = "sampler"
 // for testing.
 var SamplerProgressInterval = 10000
 
-var supportedSketchTypes = map[distsqlpb.SketchType]struct{}{
+var supportedSketchTypes = map[execinfrapb.SketchType]struct{}{
 	// The code currently hardcodes the use of this single type of sketch
 	// (which avoids the extra complexity until we actually have multiple types).
-	distsqlpb.SketchType_HLL_PLUS_PLUS_V1: {},
+	execinfrapb.SketchType_HLL_PLUS_PLUS_V1: {},
 }
 
 // maxIdleSleepTime is the maximum amount of time we sleep for throttling
@@ -90,9 +90,9 @@ const cpuUsageMaxThrottle = 0.75
 func newSamplerProcessor(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.SamplerSpec,
+	spec *execinfrapb.SamplerSpec,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*samplerProcessor, error) {
 	for _, s := range spec.Sketches {
@@ -158,7 +158,7 @@ func newSamplerProcessor(
 	if err := s.Init(
 		nil, post, outTypes, flowCtx, processorID, output, memMonitor,
 		distsql.ProcStateOpts{
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				s.close()
 				return nil
 			},
@@ -217,7 +217,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 		if rowCount%SamplerProgressInterval == 0 {
 			// Send a metadata record to check that the consumer is still alive and
 			// report number of rows processed since the last update.
-			meta := &distsqlpb.ProducerMetadata{SamplerProgress: &distsqlpb.RemoteProducerMetadata_SamplerProgress{
+			meta := &execinfrapb.ProducerMetadata{SamplerProgress: &execinfrapb.RemoteProducerMetadata_SamplerProgress{
 				RowsProcessed: uint64(SamplerProgressInterval),
 			}}
 			if !EmitHelper(ctx, &s.Out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
@@ -325,7 +325,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 			// Send a metadata record so the sample aggregator will also disable
 			// histogram collection.
-			meta := &distsqlpb.ProducerMetadata{SamplerProgress: &distsqlpb.RemoteProducerMetadata_SamplerProgress{
+			meta := &execinfrapb.ProducerMetadata{SamplerProgress: &execinfrapb.RemoteProducerMetadata_SamplerProgress{
 				HistogramDisabled: true,
 			}}
 			if !EmitHelper(ctx, &s.Out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
@@ -369,7 +369,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	}
 
 	// Send one last progress update to the consumer.
-	meta := &distsqlpb.ProducerMetadata{SamplerProgress: &distsqlpb.RemoteProducerMetadata_SamplerProgress{
+	meta := &execinfrapb.ProducerMetadata{SamplerProgress: &execinfrapb.RemoteProducerMetadata_SamplerProgress{
 		RowsProcessed: uint64(rowCount % SamplerProgressInterval),
 	}}
 	if !EmitHelper(ctx, &s.Out, nil /* row */, meta, s.pushTrailingMeta, s.input) {

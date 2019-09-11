@@ -14,13 +14,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // findIVarsInRange searches Expr for presence of tree.IndexedVars with indices
 // in range [start, end). It returns a slice containing all such indices.
-func findIVarsInRange(expr distsqlpb.Expression, start int, end int) []uint32 {
+func findIVarsInRange(expr execinfrapb.Expression, start int, end int) []uint32 {
 	res := make([]uint32, 0)
 	if start >= end {
 		return res

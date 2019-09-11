@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -100,11 +100,11 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		}
 	}
 
-	sketchSpecs := make([]distsqlpb.SketchSpec, len(reqStats))
+	sketchSpecs := make([]execinfrapb.SketchSpec, len(reqStats))
 	sampledColumnIDs := make([]sqlbase.ColumnID, scan.valNeededForCol.Len())
 	for i, s := range reqStats {
-		spec := distsqlpb.SketchSpec{
-			SketchType:          distsqlpb.SketchType_HLL_PLUS_PLUS_V1,
+		spec := execinfrapb.SketchSpec{
+			SketchType:          execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 			GenerateHistogram:   s.histogram,
 			HistogramMaxBuckets: uint32(s.histogramMaxBuckets),
 			Columns:             make([]uint32, len(s.columns)),
@@ -124,7 +124,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 
 	// Set up the samplers.
-	sampler := &distsqlpb.SamplerSpec{Sketches: sketchSpecs}
+	sampler := &execinfrapb.SamplerSpec{Sketches: sketchSpecs}
 	for _, s := range reqStats {
 		sampler.MaxFractionIdle = details.MaxFractionIdle
 		if s.histogram {
@@ -148,10 +148,10 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	outTypes = append(outTypes, *types.Bytes)
 
 	p.AddNoGroupingStage(
-		distsqlpb.ProcessorCoreUnion{Sampler: sampler},
-		distsqlpb.PostProcessSpec{},
+		execinfrapb.ProcessorCoreUnion{Sampler: sampler},
+		execinfrapb.PostProcessSpec{},
 		outTypes,
-		distsqlpb.Ordering{},
+		execinfrapb.Ordering{},
 	)
 
 	// Estimate the expected number of rows based on existing stats in the cache.
@@ -177,7 +177,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 
 	// Set up the final SampleAggregator stage.
-	agg := &distsqlpb.SampleAggregatorSpec{
+	agg := &execinfrapb.SampleAggregatorSpec{
 		Sketches:         sketchSpecs,
 		SampleSize:       sampler.SampleSize,
 		SampledColumnIDs: sampledColumnIDs,
@@ -192,8 +192,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 	p.AddSingleGroupStage(
 		node,
-		distsqlpb.ProcessorCoreUnion{SampleAggregator: agg},
-		distsqlpb.PostProcessSpec{},
+		execinfrapb.ProcessorCoreUnion{SampleAggregator: agg},
+		execinfrapb.PostProcessSpec{},
 		[]types.T{},
 	)
 

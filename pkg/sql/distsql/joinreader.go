@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -130,7 +130,7 @@ type JoinReader struct {
 
 var _ Processor = &JoinReader{}
 var _ RowSource = &JoinReader{}
-var _ distsqlpb.MetadataSource = &JoinReader{}
+var _ execinfrapb.MetadataSource = &JoinReader{}
 var _ colexec.OpNode = &JoinReader{}
 
 const joinReaderProcName = "join reader"
@@ -139,9 +139,9 @@ const joinReaderProcName = "join reader"
 func NewJoinReader(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *distsqlpb.JoinReaderSpec,
+	spec *execinfrapb.JoinReaderSpec,
 	input RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output RowReceiver,
 ) (RowSourcedProcessor, error) {
 	jr := &JoinReader{
@@ -159,7 +159,7 @@ func NewJoinReader(
 	if err != nil {
 		return nil, err
 	}
-	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	returnMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	jr.colIdxMap = jr.desc.ColumnIdxMapWithMutations(returnMutations)
 
 	var columnIDs []sqlbase.ColumnID
@@ -187,7 +187,7 @@ func NewJoinReader(
 		output,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{jr.input},
-			TrailingMetaCallback: func(ctx context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
 				jr.close()
 				return jr.generateMeta(ctx)
 			},
@@ -361,7 +361,7 @@ func (jr *JoinReader) maybeSplitSpanIntoSeparateFamilies(span roachpb.Span) roac
 }
 
 // Next is part of the RowSource interface.
-func (jr *JoinReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (jr *JoinReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// The lookup join is implemented as follows:
 	// - Read the input rows in batches.
 	// - For each batch, map the rows onto index keys and perform an index
@@ -372,7 +372,7 @@ func (jr *JoinReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) 
 	//   results in jr.toEmit.
 	for jr.State == StateRunning {
 		var row sqlbase.EncDatumRow
-		var meta *distsqlpb.ProducerMetadata
+		var meta *execinfrapb.ProducerMetadata
 		switch jr.runningState {
 		case jrReadingInput:
 			jr.runningState, meta = jr.readInput()
@@ -397,7 +397,7 @@ func (jr *JoinReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) 
 }
 
 // readInput reads the next batch of input rows and starts an index scan.
-func (jr *JoinReader) readInput() (joinReaderState, *distsqlpb.ProducerMetadata) {
+func (jr *JoinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadata) {
 	// Read the next batch of input rows.
 	for len(jr.inputRows) < jr.batchSize {
 		row, meta := jr.input.Next()
@@ -478,7 +478,7 @@ func (jr *JoinReader) readInput() (joinReaderState, *distsqlpb.ProducerMetadata)
 // performLookup reads the next batch of index rows, joins them to the
 // corresponding input rows, and adds the results to
 // jr.inputRowIdxToLookedUpRowIdx.
-func (jr *JoinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetadata) {
+func (jr *JoinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMetadata) {
 	nCols := len(jr.lookupCols)
 
 	isJoinTypePartialJoin := jr.JoinType == sqlbase.LeftSemiJoin || jr.JoinType == sqlbase.LeftAntiJoin
@@ -553,7 +553,7 @@ func (jr *JoinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetad
 func (jr *JoinReader) emitRow() (
 	joinReaderState,
 	sqlbase.EncDatumRow,
-	*distsqlpb.ProducerMetadata,
+	*execinfrapb.ProducerMetadata,
 ) {
 	// Loop until we find a valid row to emit, or the cursor runs off the end.
 	if jr.emitCursor.inputRowIdx >= len(jr.inputRowIdxToLookedUpRowIdx) {
@@ -660,7 +660,7 @@ func (jr *JoinReader) close() {
 	}
 }
 
-var _ distsqlpb.DistSQLSpanStats = &JoinReaderStats{}
+var _ execinfrapb.DistSQLSpanStats = &JoinReaderStats{}
 
 const joinReaderTagPrefix = "joinreader."
 
@@ -704,15 +704,15 @@ func (jr *JoinReader) outputStatsToTrace() {
 	}
 }
 
-func (jr *JoinReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (jr *JoinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	if meta := GetTxnCoordMeta(ctx, jr.FlowCtx.Txn); meta != nil {
-		return []distsqlpb.ProducerMetadata{{TxnCoordMeta: meta}}
+		return []execinfrapb.ProducerMetadata{{TxnCoordMeta: meta}}
 	}
 	return nil
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (jr *JoinReader) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (jr *JoinReader) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	return jr.generateMeta(ctx)
 }
 

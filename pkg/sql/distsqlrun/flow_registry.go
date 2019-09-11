@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -79,7 +79,7 @@ type flowEntry struct {
 	// FlowStream API. All fields in the inboundStreamInfos are protected by the
 	// flowRegistry mutex (except the receiver, whose methods can be called
 	// freely).
-	inboundStreams map[distsqlpb.StreamID]*inboundStreamInfo
+	inboundStreams map[execinfrapb.StreamID]*inboundStreamInfo
 
 	// streamTimer is a timer that fires after a timeout and verifies that all
 	// inbound streams have been connected.
@@ -96,7 +96,7 @@ type flowRegistry struct {
 
 	// All fields in the flowEntry's are protected by the flowRegistry mutex,
 	// except flow, whose methods can be called freely.
-	flows map[distsqlpb.FlowID]*flowEntry
+	flows map[execinfrapb.FlowID]*flowEntry
 
 	// draining specifies whether the flowRegistry is in drain mode. If it is,
 	// the flowRegistry will not accept new flows.
@@ -118,7 +118,7 @@ type flowRegistry struct {
 func makeFlowRegistry(nodeID roachpb.NodeID) *flowRegistry {
 	fr := &flowRegistry{
 		nodeID: nodeID,
-		flows:  make(map[distsqlpb.FlowID]*flowEntry),
+		flows:  make(map[execinfrapb.FlowID]*flowEntry),
 	}
 	fr.flowDone = sync.NewCond(fr)
 	return fr
@@ -127,7 +127,7 @@ func makeFlowRegistry(nodeID roachpb.NodeID) *flowRegistry {
 // getEntryLocked returns the flowEntry associated with the id. If the entry
 // doesn't exist, one is created and inserted into the map.
 // It should only be called while holding the mutex.
-func (fr *flowRegistry) getEntryLocked(id distsqlpb.FlowID) *flowEntry {
+func (fr *flowRegistry) getEntryLocked(id execinfrapb.FlowID) *flowEntry {
 	entry, ok := fr.flows[id]
 	if !ok {
 		entry = &flowEntry{}
@@ -139,7 +139,7 @@ func (fr *flowRegistry) getEntryLocked(id distsqlpb.FlowID) *flowEntry {
 // releaseEntryLocked decreases the refCount in the entry for the given id, and
 // cleans up the entry if the refCount reaches 0.
 // It should only be called while holding the mutex.
-func (fr *flowRegistry) releaseEntryLocked(id distsqlpb.FlowID) {
+func (fr *flowRegistry) releaseEntryLocked(id execinfrapb.FlowID) {
 	entry := fr.flows[id]
 	if entry.refCount > 1 {
 		entry.refCount--
@@ -167,9 +167,9 @@ func (fr *flowRegistry) releaseEntryLocked(id distsqlpb.FlowID) {
 // error, the WaitGroup will be decremented.
 func (fr *flowRegistry) RegisterFlow(
 	ctx context.Context,
-	id distsqlpb.FlowID,
+	id execinfrapb.FlowID,
 	f *Flow,
-	inboundStreams map[distsqlpb.StreamID]*inboundStreamInfo,
+	inboundStreams map[execinfrapb.StreamID]*inboundStreamInfo,
 	timeout time.Duration,
 ) (retErr error) {
 	fr.Lock()
@@ -242,7 +242,7 @@ func (fr *flowRegistry) RegisterFlow(
 // streams that were canceled. The caller is expected to send those
 // RowReceivers a cancellation message - this method can't do it because sending
 // those messages shouldn't happen under the flow registry's lock.
-func (fr *flowRegistry) cancelPendingStreamsLocked(id distsqlpb.FlowID) []inboundStreamHandler {
+func (fr *flowRegistry) cancelPendingStreamsLocked(id execinfrapb.FlowID) []inboundStreamHandler {
 	entry := fr.flows[id]
 	if entry == nil || entry.flow == nil {
 		return nil
@@ -263,7 +263,7 @@ func (fr *flowRegistry) cancelPendingStreamsLocked(id distsqlpb.FlowID) []inboun
 
 // UnregisterFlow removes a flow from the registry. Any subsequent
 // ConnectInboundStream calls for the flow will fail to find it and time out.
-func (fr *flowRegistry) UnregisterFlow(id distsqlpb.FlowID) {
+func (fr *flowRegistry) UnregisterFlow(id execinfrapb.FlowID) {
 	fr.Lock()
 	entry := fr.flows[id]
 	if entry.streamTimer != nil {
@@ -280,7 +280,7 @@ func (fr *flowRegistry) UnregisterFlow(id distsqlpb.FlowID) {
 // temporarily unlocked if we need to wait.
 // It is illegal to call this if the flow is already connected.
 func (fr *flowRegistry) waitForFlowLocked(
-	ctx context.Context, id distsqlpb.FlowID, timeout time.Duration,
+	ctx context.Context, id execinfrapb.FlowID, timeout time.Duration,
 ) *flowEntry {
 	entry := fr.getEntryLocked(id)
 	if entry.flow != nil {
@@ -427,9 +427,9 @@ func (fr *flowRegistry) Undrain() {
 // considered connected and is not cleaned up.
 func (fr *flowRegistry) ConnectInboundStream(
 	ctx context.Context,
-	flowID distsqlpb.FlowID,
-	streamID distsqlpb.StreamID,
-	stream distsqlpb.DistSQL_FlowStreamServer,
+	flowID execinfrapb.FlowID,
+	streamID execinfrapb.StreamID,
+	stream execinfrapb.DistSQL_FlowStreamServer,
 	timeout time.Duration,
 ) (_ *Flow, _ inboundStreamHandler, _ func(), retErr error) {
 	fr.Lock()
@@ -441,8 +441,8 @@ func (fr *flowRegistry) ConnectInboundStream(
 		// not been scheduled yet. Another handshake will be sent below once the
 		// consumer has been connected.
 		deadline := timeutil.Now().Add(timeout)
-		if err := stream.Send(&distsqlpb.ConsumerSignal{
-			Handshake: &distsqlpb.ConsumerHandshake{
+		if err := stream.Send(&execinfrapb.ConsumerSignal{
+			Handshake: &execinfrapb.ConsumerHandshake{
 				ConsumerScheduled:        false,
 				ConsumerScheduleDeadline: &deadline,
 				Version:                  Version,
@@ -486,8 +486,8 @@ func (fr *flowRegistry) ConnectInboundStream(
 		}
 	}()
 
-	if err := stream.Send(&distsqlpb.ConsumerSignal{
-		Handshake: &distsqlpb.ConsumerHandshake{
+	if err := stream.Send(&execinfrapb.ConsumerSignal{
+		Handshake: &execinfrapb.ConsumerHandshake{
 			ConsumerScheduled:  true,
 			Version:            Version,
 			MinAcceptedVersion: MinAcceptedVersion,
@@ -504,7 +504,9 @@ func (fr *flowRegistry) ConnectInboundStream(
 	return entry.flow, s.receiver, cleanup, nil
 }
 
-func (fr *flowRegistry) finishInboundStreamLocked(fid distsqlpb.FlowID, sid distsqlpb.StreamID) {
+func (fr *flowRegistry) finishInboundStreamLocked(
+	fid execinfrapb.FlowID, sid execinfrapb.StreamID,
+) {
 	flowEntry := fr.getEntryLocked(fid)
 	streamEntry := flowEntry.inboundStreams[sid]
 

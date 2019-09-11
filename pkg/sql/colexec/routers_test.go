@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -570,7 +570,7 @@ func TestHashRouterCancellation(t *testing.T) {
 				}()
 			}
 
-			routerMeta := make(chan []distsqlpb.ProducerMetadata)
+			routerMeta := make(chan []execinfrapb.ProducerMetadata)
 			go func() {
 				r.Run(ctx)
 				routerMeta <- r.DrainMeta(ctx)

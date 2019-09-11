@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -41,7 +41,7 @@ func NewInputStatCollector(input RowSource) *InputStatCollector {
 
 // Next implements the RowSource interface. It calls Next on the embedded
 // RowSource and collects stats.
-func (isc *InputStatCollector) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (isc *InputStatCollector) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	start := timeutil.Now()
 	row, meta := isc.RowSource.Next()
 	if row != nil {
@@ -103,10 +103,10 @@ func (w *RowFetcherWrapper) Start(ctx context.Context) context.Context {
 
 // Next calls NextRow() on the underlying Fetcher. If an error is encountered,
 // it is returned via a ProducerMetadata.
-func (w *RowFetcherWrapper) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (w *RowFetcherWrapper) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	row, _, _, err := w.NextRow(w.ctx)
 	if err != nil {
-		return row, &distsqlpb.ProducerMetadata{Err: err}
+		return row, &execinfrapb.ProducerMetadata{Err: err}
 	}
 	return row, nil
 }
@@ -139,7 +139,7 @@ func NewRowFetcherStatCollector(f *row.Fetcher) *RowFetcherStatCollector {
 }
 
 // Next is part of the RowSource interface.
-func (c *RowFetcherStatCollector) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (c *RowFetcherStatCollector) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	return c.inputStatCollector.Next()
 }
 

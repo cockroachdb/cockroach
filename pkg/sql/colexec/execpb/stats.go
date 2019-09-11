@@ -15,12 +15,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 var _ tracing.SpanStats = &VectorizedStats{}
-var _ distsqlpb.DistSQLSpanStats = &VectorizedStats{}
+var _ execinfrapb.DistSQLSpanStats = &VectorizedStats{}
 
 const (
 	batchesOutputTagSuffix = "output.batches"

@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -396,7 +396,7 @@ func getTableName2(u *tree.UnresolvedObjectName) (string, error) {
 
 type pgDumpReader struct {
 	tables map[string]*row.DatumRowConverter
-	descs  map[string]*distsqlpb.ReadImportDataSpec_ImportTable
+	descs  map[string]*execinfrapb.ReadImportDataSpec_ImportTable
 	kvCh   chan row.KVBatch
 	opts   roachpb.PgDumpOptions
 }
@@ -407,7 +407,7 @@ var _ inputConverter = &pgDumpReader{}
 func newPgDumpReader(
 	kvCh chan row.KVBatch,
 	opts roachpb.PgDumpOptions,
-	descs map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
+	descs map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
 ) (*pgDumpReader, error) {
 	converters := make(map[string]*row.DatumRowConverter, len(descs))

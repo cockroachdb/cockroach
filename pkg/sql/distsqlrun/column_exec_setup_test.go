@@ -21,19 +21,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 type callbackRemoteComponentCreator struct {
-	newOutboxFn func(colexec.Operator, []coltypes.T, []distsqlpb.MetadataSource) (*colrpc.Outbox, error)
+	newOutboxFn func(colexec.Operator, []coltypes.T, []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
 	newInboxFn  func(typs []coltypes.T) (*colrpc.Inbox, error)
 }
 
 func (c callbackRemoteComponentCreator) newOutbox(
-	input colexec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource,
+	input colexec.Operator, typs []coltypes.T, metadataSources []execinfrapb.MetadataSource,
 ) (*colrpc.Outbox, error) {
 	return c.newOutboxFn(input, typs, metadataSources)
 }
@@ -96,24 +96,24 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	// procs are the ProcessorSpecs that we pass in to create the flow. Note that
 	// we order the inbox first so that the flow creator instantiates it before
 	// anything else.
-	procs := []distsqlpb.ProcessorSpec{
+	procs := []execinfrapb.ProcessorSpec{
 		{
 			// This is i1, the inbox which should be drained by the materializer, not
 			// o1.
 			// Spec A in the diagram.
-			Input: []distsqlpb.InputSyncSpec{
+			Input: []execinfrapb.InputSyncSpec{
 				{
-					Streams:     []distsqlpb.StreamEndpointSpec{{Type: distsqlpb.StreamEndpointSpec_REMOTE, StreamID: 1}},
+					Streams:     []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_REMOTE, StreamID: 1}},
 					ColumnTypes: intCols(numInputTypesToMaterializer),
 				},
 			},
-			Core: distsqlpb.ProcessorCoreUnion{Noop: &distsqlpb.NoopCoreSpec{}},
-			Output: []distsqlpb.OutputRouterSpec{
+			Core: execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
+			Output: []execinfrapb.OutputRouterSpec{
 				{
-					Type: distsqlpb.OutputRouterSpec_PASS_THROUGH,
+					Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 					// We set up a local output so that the inbox is created independently.
-					Streams: []distsqlpb.StreamEndpointSpec{
-						{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 2},
+					Streams: []execinfrapb.StreamEndpointSpec{
+						{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 2},
 					},
 				},
 			},
@@ -122,17 +122,17 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 		// and the materializer.
 		// Spec B in the diagram.
 		{
-			Input: []distsqlpb.InputSyncSpec{
+			Input: []execinfrapb.InputSyncSpec{
 				{
-					Streams:     []distsqlpb.StreamEndpointSpec{{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 2}},
+					Streams:     []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 2}},
 					ColumnTypes: intCols(numInputTypesToMaterializer),
 				},
 			},
-			Core: distsqlpb.ProcessorCoreUnion{Noop: &distsqlpb.NoopCoreSpec{}},
-			Output: []distsqlpb.OutputRouterSpec{
+			Core: execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
+			Output: []execinfrapb.OutputRouterSpec{
 				{
-					Type:    distsqlpb.OutputRouterSpec_PASS_THROUGH,
-					Streams: []distsqlpb.StreamEndpointSpec{{Type: distsqlpb.StreamEndpointSpec_SYNC_RESPONSE}},
+					Type:    execinfrapb.OutputRouterSpec_PASS_THROUGH,
+					Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE}},
 				},
 			},
 		},
@@ -142,20 +142,20 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			// a remote input, which is treated as having no local edges during
 			// topological processing.
 			// Spec C in the diagram.
-			Input: []distsqlpb.InputSyncSpec{
+			Input: []execinfrapb.InputSyncSpec{
 				{
-					Streams: []distsqlpb.StreamEndpointSpec{{Type: distsqlpb.StreamEndpointSpec_REMOTE}},
+					Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_REMOTE}},
 					// Use three Int columns as the types to be able to distinguish
 					// between input DAGs when creating the inbox.
 					ColumnTypes: intCols(numInputTypesToOutbox),
 				},
 			},
-			Core: distsqlpb.ProcessorCoreUnion{Noop: &distsqlpb.NoopCoreSpec{}},
+			Core: execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 			// This is o1, the outbox that will drain metadata.
-			Output: []distsqlpb.OutputRouterSpec{
+			Output: []execinfrapb.OutputRouterSpec{
 				{
-					Type:    distsqlpb.OutputRouterSpec_PASS_THROUGH,
-					Streams: []distsqlpb.StreamEndpointSpec{{Type: distsqlpb.StreamEndpointSpec_REMOTE}},
+					Type:    execinfrapb.OutputRouterSpec_PASS_THROUGH,
+					Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_REMOTE}},
 				},
 			},
 		},
@@ -164,7 +164,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	inboxToNumInputTypes := make(map[*colrpc.Inbox][]coltypes.T)
 	outboxCreated := false
 	componentCreator := callbackRemoteComponentCreator{
-		newOutboxFn: func(op colexec.Operator, typs []coltypes.T, sources []distsqlpb.MetadataSource) (*colrpc.Outbox, error) {
+		newOutboxFn: func(op colexec.Operator, typs []coltypes.T, sources []execinfrapb.MetadataSource) (*colrpc.Outbox, error) {
 			require.False(t, outboxCreated)
 			outboxCreated = true
 			// Verify that there is only one metadata source: the inbox that is the
@@ -195,7 +195,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 		&wg,
 		newRowBuffer(intCols(1 /* numCols */), nil /* rows */, rowBufferArgs{}),
 		nil, /* nodeDialer */
-		distsqlpb.FlowID{},
+		execinfrapb.FlowID{},
 	)
 
 	acc := evalCtx.Mon.MakeBoundAccount()

@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -39,8 +39,8 @@ const outboxFlushPeriod = 100 * time.Microsecond
 const preferredEncoding = sqlbase.DatumEncoding_ASCENDING_KEY
 
 type flowStream interface {
-	Send(*distsqlpb.ProducerMessage) error
-	Recv() (*distsqlpb.ConsumerSignal, error)
+	Send(*execinfrapb.ProducerMessage) error
+	Recv() (*execinfrapb.ConsumerSignal, error)
 }
 
 // outbox implements an outgoing mailbox as a RowReceiver that receives rows and
@@ -52,7 +52,7 @@ type outbox struct {
 	distsql.RowChannel
 
 	flowCtx  *distsql.FlowCtx
-	streamID distsqlpb.StreamID
+	streamID execinfrapb.StreamID
 	nodeID   roachpb.NodeID
 	// The rows received from the RowChannel will be forwarded on this stream once
 	// it is established.
@@ -80,8 +80,8 @@ var _ startable = &outbox{}
 func newOutbox(
 	flowCtx *distsql.FlowCtx,
 	nodeID roachpb.NodeID,
-	flowID distsqlpb.FlowID,
-	streamID distsqlpb.StreamID,
+	flowID execinfrapb.FlowID,
+	streamID execinfrapb.StreamID,
 ) *outbox {
 	m := &outbox{flowCtx: flowCtx, nodeID: nodeID}
 	m.encoder.setHeaderFields(flowID, streamID)
@@ -92,7 +92,7 @@ func newOutbox(
 // newOutboxSyncFlowStream sets up an outbox for the special "sync flow"
 // stream. The flow context should be provided via setFlowCtx when it is
 // available.
-func newOutboxSyncFlowStream(stream distsqlpb.DistSQL_RunSyncFlowServer) *outbox {
+func newOutboxSyncFlowStream(stream execinfrapb.DistSQL_RunSyncFlowServer) *outbox {
 	return &outbox{stream: stream}
 }
 
@@ -119,7 +119,7 @@ func (m *outbox) init(typs []types.T) {
 // too, or it might be an encoding error, in which case we've forwarded it on
 // the stream.
 func (m *outbox) addRow(
-	ctx context.Context, row sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata,
+	ctx context.Context, row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) error {
 	mustFlush := false
 	var encodingErr error
@@ -131,7 +131,7 @@ func (m *outbox) addRow(
 	} else {
 		encodingErr = m.encoder.AddRow(row)
 		if encodingErr != nil {
-			m.encoder.AddMetadata(ctx, distsqlpb.ProducerMetadata{Err: encodingErr})
+			m.encoder.AddMetadata(ctx, execinfrapb.ProducerMetadata{Err: encodingErr})
 			mustFlush = true
 		}
 	}
@@ -164,7 +164,7 @@ func (m *outbox) flush(ctx context.Context) error {
 	}
 	sendErr := m.stream.Send(msg)
 	for _, rpm := range msg.Data.Metadata {
-		if metricsMeta, ok := rpm.Value.(*distsqlpb.RemoteProducerMetadata_Metrics_); ok {
+		if metricsMeta, ok := rpm.Value.(*execinfrapb.RemoteProducerMetadata_Metrics_); ok {
 			metricsMeta.Metrics.Release()
 		}
 	}
@@ -207,7 +207,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 	ctx, span = distsql.ProcessorSpan(ctx, "outbox")
 	if span != nil && tracing.IsRecording(span) {
 		m.statsCollectionEnabled = true
-		span.SetTag(distsqlpb.StreamIDTagKey, m.streamID)
+		span.SetTag(execinfrapb.StreamIDTagKey, m.streamID)
 	}
 	// spanFinished specifies whether we called tracing.FinishSpan on the span.
 	// Some code paths (e.g. stats collection) need to prematurely call
@@ -235,7 +235,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 			log.Infof(ctx, "outbox: connection dial error: %+v", err)
 			return err
 		}
-		client := distsqlpb.NewDistSQLClient(conn)
+		client := execinfrapb.NewDistSQLClient(conn)
 		if log.V(2) {
 			log.Infof(ctx, "outbox: calling FlowStream")
 		}
@@ -296,7 +296,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 					tracing.FinishSpan(span)
 					spanFinished = true
 					if trace := distsql.GetTraceData(ctx); trace != nil {
-						err := m.addRow(ctx, nil, &distsqlpb.ProducerMetadata{TraceData: trace})
+						err := m.addRow(ctx, nil, &execinfrapb.ProducerMetadata{TraceData: trace})
 						if err != nil {
 							return err
 						}
@@ -432,7 +432,7 @@ func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 
 func (m *outbox) run(ctx context.Context, wg *sync.WaitGroup) {
 	err := m.mainLoop(ctx)
-	if stream, ok := m.stream.(distsqlpb.DistSQL_FlowStreamClient); ok {
+	if stream, ok := m.stream.(execinfrapb.DistSQL_FlowStreamClient); ok {
 		closeErr := stream.CloseSend()
 		if err == nil {
 			err = closeErr

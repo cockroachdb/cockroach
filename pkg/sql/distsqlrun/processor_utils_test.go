@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -104,10 +104,10 @@ type ProcessorTestCase struct {
 
 	// ProcessorCoreUnion is the spec to be passed in to newProcessor when
 	// creating the processor to run this test case.
-	ProcessorCore distsqlpb.ProcessorCoreUnion
+	ProcessorCore execinfrapb.ProcessorCoreUnion
 
 	// Post is the PostProcessSpec to be used when creating the processor.
-	Post distsqlpb.PostProcessSpec
+	Post execinfrapb.PostProcessSpec
 }
 
 // ProcessorTest runs one or more ProcessorTestCases.

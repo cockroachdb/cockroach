@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -32,87 +32,87 @@ func TestSort(t *testing.T) {
 	tcs := []struct {
 		tuples   tuples
 		expected tuples
-		ordCols  []distsqlpb.Ordering_Column
+		ordCols  []execinfrapb.Ordering_Column
 		typ      []coltypes.T
 	}{
 		{
 			tuples:   tuples{{1}, {2}, {nil}, {4}, {5}, {nil}},
 			expected: tuples{{nil}, {nil}, {1}, {2}, {4}, {5}},
 			typ:      []coltypes.T{coltypes.Int64},
-			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1, 2}, {1, 1}, {1, nil}, {2, nil}, {2, 3}, {2, nil}, {5, 1}},
 			expected: tuples{{1, nil}, {1, 1}, {1, 2}, {2, nil}, {2, nil}, {2, 3}, {5, 1}},
 			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
-			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 		},
 		{
 			tuples:   tuples{{1, 2}, {1, 1}, {1, nil}, {2, nil}, {2, 3}, {2, nil}, {5, 1}},
 			expected: tuples{{5, 1}, {2, 3}, {2, nil}, {2, nil}, {1, 2}, {1, 1}, {1, nil}},
 			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
-			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_DESC}, {ColIdx: 1, Direction: distsqlpb.Ordering_Column_DESC}},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_DESC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC}},
 		},
 		{
 			tuples:   tuples{{nil, nil}, {nil, 3}, {1, nil}, {nil, 1}, {1, 2}, {nil, nil}, {5, nil}},
 			expected: tuples{{nil, nil}, {nil, nil}, {nil, 1}, {nil, 3}, {1, nil}, {1, 2}, {5, nil}},
 			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
-			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 		},
 		{
 			tuples:   tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			expected: tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			typ:      []coltypes.T{coltypes.Int64},
-			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			expected: tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			typ:      []coltypes.T{coltypes.Int64},
-			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1, 1}, {3, 2}, {2, 3}, {4, 4}, {5, 5}, {6, 6}, {7, 7}},
 			expected: tuples{{1, 1}, {2, 3}, {3, 2}, {4, 4}, {5, 5}, {6, 6}, {7, 7}},
 			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
-			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1, 1}, {5, 2}, {3, 3}, {7, 4}, {2, 5}, {6, 6}, {4, 7}},
 			expected: tuples{{1, 1}, {2, 5}, {3, 3}, {4, 7}, {5, 2}, {6, 6}, {7, 4}},
 			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
-			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1}, {5}, {3}, {3}, {2}, {6}, {4}},
 			expected: tuples{{1}, {2}, {3}, {3}, {4}, {5}, {6}},
 			typ:      []coltypes.T{coltypes.Int64},
-			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{false}, {true}},
 			expected: tuples{{false}, {true}},
 			typ:      []coltypes.T{coltypes.Bool},
-			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{true}, {false}},
 			expected: tuples{{false}, {true}},
 			typ:      []coltypes.T{coltypes.Bool},
-			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{3.2}, {2.0}, {2.4}, {math.NaN()}, {math.Inf(-1)}, {math.Inf(1)}},
 			expected: tuples{{math.NaN()}, {math.Inf(-1)}, {2.0}, {2.4}, {3.2}, {math.Inf(1)}},
 			typ:      []coltypes.T{coltypes.Float64},
-			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 
 		{
 			tuples:   tuples{{0, 1, 0}, {1, 2, 0}, {2, 3, 2}, {3, 7, 1}, {4, 2, 2}},
 			expected: tuples{{0, 1, 0}, {1, 2, 0}, {3, 7, 1}, {4, 2, 2}, {2, 3, 2}},
 			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 2}, {ColIdx: 1}},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 2}, {ColIdx: 1}},
 		},
 
 		{
@@ -134,7 +134,7 @@ func TestSort(t *testing.T) {
 				{0, 1, 1},
 			},
 			typ:     []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			ordCols: []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
+			ordCols: []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 		},
 	}
 	for _, tc := range tcs {
@@ -289,10 +289,10 @@ func BenchmarkSort(b *testing.B) {
 					}
 					batch := coldata.NewMemBatch(typs)
 					batch.SetLength(coldata.BatchSize)
-					ordCols := make([]distsqlpb.Ordering_Column, nCols)
+					ordCols := make([]execinfrapb.Ordering_Column, nCols)
 					for i := range ordCols {
 						ordCols[i].ColIdx = uint32(i)
-						ordCols[i].Direction = distsqlpb.Ordering_Column_Direction(rng.Int() % 2)
+						ordCols[i].Direction = execinfrapb.Ordering_Column_Direction(rng.Int() % 2)
 
 						col := batch.ColVec(i).Int64()
 						for j := 0; j < coldata.BatchSize; j++ {
@@ -363,12 +363,12 @@ func BenchmarkAllSpooler(b *testing.B) {
 	}
 }
 
-func less(tuples tuples, ordCols []distsqlpb.Ordering_Column) func(i, j int) bool {
+func less(tuples tuples, ordCols []execinfrapb.Ordering_Column) func(i, j int) bool {
 	return func(i, j int) bool {
 		for _, col := range ordCols {
 			n1 := tuples[i][col.ColIdx] == nil
 			n2 := tuples[j][col.ColIdx] == nil
-			if col.Direction == distsqlpb.Ordering_Column_ASC {
+			if col.Direction == execinfrapb.Ordering_Column_ASC {
 				if n1 && n2 {
 					continue
 				} else if n1 {
@@ -386,9 +386,9 @@ func less(tuples tuples, ordCols []distsqlpb.Ordering_Column) func(i, j int) boo
 				}
 			}
 			if tuples[i][col.ColIdx].(int64) < tuples[j][col.ColIdx].(int64) {
-				return col.Direction == distsqlpb.Ordering_Column_ASC
+				return col.Direction == execinfrapb.Ordering_Column_ASC
 			} else if tuples[i][col.ColIdx].(int64) > tuples[j][col.ColIdx].(int64) {
-				return col.Direction == distsqlpb.Ordering_Column_DESC
+				return col.Direction == execinfrapb.Ordering_Column_DESC
 			}
 		}
 		return false
@@ -400,13 +400,13 @@ func less(tuples tuples, ordCols []distsqlpb.Ordering_Column) func(i, j int) boo
 // nCols.
 func generateColumnOrdering(
 	rng *rand.Rand, nCols int, nOrderingCols int,
-) []distsqlpb.Ordering_Column {
+) []execinfrapb.Ordering_Column {
 	if nOrderingCols > nCols {
 		execerror.VectorizedInternalPanic("nOrderingCols > nCols in generateColumnOrdering")
 	}
-	orderingCols := make([]distsqlpb.Ordering_Column, nOrderingCols)
+	orderingCols := make([]execinfrapb.Ordering_Column, nOrderingCols)
 	for i, col := range rng.Perm(nCols)[:nOrderingCols] {
-		orderingCols[i] = distsqlpb.Ordering_Column{ColIdx: uint32(col), Direction: distsqlpb.Ordering_Column_Direction(rng.Intn(2))}
+		orderingCols[i] = execinfrapb.Ordering_Column{ColIdx: uint32(col), Direction: execinfrapb.Ordering_Column_Direction(rng.Intn(2))}
 	}
 	return orderingCols
 }

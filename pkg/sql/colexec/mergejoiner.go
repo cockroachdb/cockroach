@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -136,7 +136,7 @@ type mergeJoinInput struct {
 	// direction corresponds to an equality column at the same location, i.e. the
 	// direction of eqCols[x] is encoded at directions[x], or
 	// len(eqCols) == len(directions).
-	directions []distsqlpb.Ordering_Column_Direction
+	directions []execinfrapb.Ordering_Column_Direction
 
 	// sourceTypes specify the types of the input columns of the source table for
 	// the merge joiner.
@@ -196,8 +196,8 @@ func NewMergeJoinOp(
 	rightOutCols []uint32,
 	leftTypes []coltypes.T,
 	rightTypes []coltypes.T,
-	leftOrdering []distsqlpb.Ordering_Column,
-	rightOrdering []distsqlpb.Ordering_Column,
+	leftOrdering []execinfrapb.Ordering_Column,
+	rightOrdering []execinfrapb.Ordering_Column,
 	filterConstructor func(Operator) (Operator, error),
 	filterOnlyOnLeft bool,
 ) (Operator, error) {
@@ -284,20 +284,20 @@ func newMergeJoinBase(
 	rightOutCols []uint32,
 	leftTypes []coltypes.T,
 	rightTypes []coltypes.T,
-	leftOrdering []distsqlpb.Ordering_Column,
-	rightOrdering []distsqlpb.Ordering_Column,
+	leftOrdering []execinfrapb.Ordering_Column,
+	rightOrdering []execinfrapb.Ordering_Column,
 	filterConstructor func(Operator) (Operator, error),
 	filterOnlyOnLeft bool,
 ) (mergeJoinBase, error) {
 	lEqCols := make([]uint32, len(leftOrdering))
-	lDirections := make([]distsqlpb.Ordering_Column_Direction, len(leftOrdering))
+	lDirections := make([]execinfrapb.Ordering_Column_Direction, len(leftOrdering))
 	for i, c := range leftOrdering {
 		lEqCols[i] = c.ColIdx
 		lDirections[i] = c.Direction
 	}
 
 	rEqCols := make([]uint32, len(rightOrdering))
-	rDirections := make([]distsqlpb.Ordering_Column_Direction, len(rightOrdering))
+	rDirections := make([]execinfrapb.Ordering_Column_Direction, len(rightOrdering))
 	for i, c := range rightOrdering {
 		rEqCols[i] = c.ColIdx
 		rDirections[i] = c.Direction

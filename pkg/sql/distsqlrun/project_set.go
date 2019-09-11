@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -26,7 +26,7 @@ type projectSetProcessor struct {
 	distsql.ProcessorBase
 
 	input distsql.RowSource
-	spec  *distsqlpb.ProjectSetSpec
+	spec  *execinfrapb.ProjectSetSpec
 
 	// exprHelpers are the constant-folded, type checked expressions specified
 	// in the ROWS FROM syntax. This can contain many kinds of expressions
@@ -68,9 +68,9 @@ const projectSetProcName = "projectSet"
 func newProjectSetProcessor(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.ProjectSetSpec,
+	spec *execinfrapb.ProjectSetSpec,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*projectSetProcessor, error) {
 	outputTypes := append(input.OutputTypes(), spec.GeneratedColumns...)
@@ -124,7 +124,7 @@ func (ps *projectSetProcessor) Start(ctx context.Context) context.Context {
 // initializes the value generators for that row.
 func (ps *projectSetProcessor) nextInputRow() (
 	sqlbase.EncDatumRow,
-	*distsqlpb.ProducerMetadata,
+	*execinfrapb.ProducerMetadata,
 	error,
 ) {
 	row, meta := ps.input.Next()
@@ -217,7 +217,7 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 }
 
 // Next is part of the RowSource interface.
-func (ps *projectSetProcessor) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (ps *projectSetProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	const cancelCheckCount = 10000
 
 	for ps.State == distsql.StateRunning {

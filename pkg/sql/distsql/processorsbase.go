@@ -15,7 +15,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -44,7 +44,7 @@ type Processor interface {
 type LocalProcessor interface {
 	RowSourcedProcessor
 	// InitWithOutput initializes this processor.
-	InitWithOutput(post *distsqlpb.PostProcessSpec, output RowReceiver) error
+	InitWithOutput(post *execinfrapb.PostProcessSpec, output RowReceiver) error
 	// SetInput initializes this LocalProcessor with an input RowSource. Not all
 	// LocalProcessors need inputs, but this needs to be called if a
 	// LocalProcessor expects to get its data from another RowSource.
@@ -106,7 +106,7 @@ func (h *ProcOutputHelper) Reset() {
 // Note that the types slice may be stored directly; the caller should not
 // modify it.
 func (h *ProcOutputHelper) Init(
-	post *distsqlpb.PostProcessSpec, typs []types.T, evalCtx *tree.EvalContext, output RowReceiver,
+	post *execinfrapb.PostProcessSpec, typs []types.T, evalCtx *tree.EvalContext, output RowReceiver,
 ) error {
 	if !post.Projection && len(post.OutputColumns) > 0 {
 		return errors.Errorf("post-processing has projection unset but output columns set: %s", post)
@@ -116,7 +116,7 @@ func (h *ProcOutputHelper) Init(
 	}
 	h.output = output
 	h.numInternalCols = len(typs)
-	if post.Filter != (distsqlpb.Expression{}) {
+	if post.Filter != (execinfrapb.Expression{}) {
 		h.filter = &ExprHelper{}
 		if err := h.filter.Init(post.Filter, typs, evalCtx); err != nil {
 			return err
@@ -484,10 +484,10 @@ type ProcessorBase struct {
 	// other than what has otherwise been manually put in TrailingMeta) and no
 	// closing other than InternalClose is needed, then no callback needs to be
 	// specified.
-	trailingMetaCallback func(context.Context) []distsqlpb.ProducerMetadata
+	trailingMetaCallback func(context.Context) []execinfrapb.ProducerMetadata
 	// TrailingMeta is scratch space where metadata is stored to be returned
 	// later.
-	TrailingMeta []distsqlpb.ProducerMetadata
+	TrailingMeta []execinfrapb.ProducerMetadata
 
 	// inputsToDrain, if not empty, contains inputs to be drained by
 	// DrainHelper(). MoveToDraining() calls ConsumerDone() on them,
@@ -588,7 +588,7 @@ func (pb *ProcessorBase) MoveToDraining(err error) {
 	}
 
 	if err != nil {
-		pb.TrailingMeta = append(pb.TrailingMeta, distsqlpb.ProducerMetadata{Err: err})
+		pb.TrailingMeta = append(pb.TrailingMeta, execinfrapb.ProducerMetadata{Err: err})
 	}
 	if len(pb.inputsToDrain) > 0 {
 		// We go to StateDraining here. DrainHelper() will transition to
@@ -606,7 +606,7 @@ func (pb *ProcessorBase) MoveToDraining(err error) {
 // DrainHelper is supposed to be used in states draining and trailingMetadata.
 // It deals with optionally draining an input and returning trailing meta. It
 // also moves from StateDraining to StateTrailingMeta when appropriate.
-func (pb *ProcessorBase) DrainHelper() *distsqlpb.ProducerMetadata {
+func (pb *ProcessorBase) DrainHelper() *execinfrapb.ProducerMetadata {
 	if pb.State == StateRunning {
 		log.Fatal(pb.Ctx, "drain helper called in StateRunning")
 	}
@@ -657,7 +657,7 @@ func (pb *ProcessorBase) DrainHelper() *distsqlpb.ProducerMetadata {
 
 // PopTrailingMeta peels off one piece of trailing metadata or advances to
 // StateExhausted if there's no more trailing metadata.
-func (pb *ProcessorBase) PopTrailingMeta() *distsqlpb.ProducerMetadata {
+func (pb *ProcessorBase) PopTrailingMeta() *execinfrapb.ProducerMetadata {
 	if len(pb.TrailingMeta) > 0 {
 		meta := &pb.TrailingMeta[0]
 		pb.TrailingMeta = pb.TrailingMeta[1:]
@@ -690,7 +690,7 @@ func (pb *ProcessorBase) MoveToTrailingMeta() {
 	pb.State = StateTrailingMeta
 	if pb.span != nil {
 		if trace := GetTraceData(pb.Ctx); trace != nil {
-			pb.TrailingMeta = append(pb.TrailingMeta, distsqlpb.ProducerMetadata{TraceData: trace})
+			pb.TrailingMeta = append(pb.TrailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
 		}
 	}
 	// trailingMetaCallback is called after reading the tracing data because it
@@ -744,7 +744,7 @@ func (pb *ProcessorBase) Run(ctx context.Context) {
 type ProcStateOpts struct {
 	// TrailingMetaCallback, if specified, is a callback to be called by
 	// MoveToTrailingMeta(). See ProcessorBase.TrailingMetaCallback.
-	TrailingMetaCallback func(context.Context) []distsqlpb.ProducerMetadata
+	TrailingMetaCallback func(context.Context) []execinfrapb.ProducerMetadata
 	// InputsToDrain, if specified, will be drained by DrainHelper().
 	// MoveToDraining() calls ConsumerDone() on them, InternalClose() calls
 	// ConsumerClosed() on them.
@@ -754,7 +754,7 @@ type ProcStateOpts struct {
 // Init initializes the ProcessorBase.
 func (pb *ProcessorBase) Init(
 	self RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	types []types.T,
 	flowCtx *FlowCtx,
 	processorID int32,
@@ -770,7 +770,7 @@ func (pb *ProcessorBase) Init(
 // InitWithEvalCtx initializes the ProcessorBase with a given EvalContext.
 func (pb *ProcessorBase) InitWithEvalCtx(
 	self RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	types []types.T,
 	flowCtx *FlowCtx,
 	evalCtx *tree.EvalContext,
@@ -797,7 +797,7 @@ func (pb *ProcessorBase) AddInputToDrain(input RowSource) {
 
 // AppendTrailingMeta appends metadata to the trailing metadata without changing
 // the state to draining (as opposed to MoveToDraining).
-func (pb *ProcessorBase) AppendTrailingMeta(meta distsqlpb.ProducerMetadata) {
+func (pb *ProcessorBase) AppendTrailingMeta(meta execinfrapb.ProducerMetadata) {
 	pb.TrailingMeta = append(pb.TrailingMeta, meta)
 }
 

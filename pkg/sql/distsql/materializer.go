@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -45,7 +45,7 @@ type Materializer struct {
 	// Fields to store the returned results of next() to be passed through an
 	// adapter.
 	outputRow      sqlbase.EncDatumRow
-	outputMetadata *distsqlpb.ProducerMetadata
+	outputMetadata *execinfrapb.ProducerMetadata
 
 	// cancelFlow will return a function to cancel the context of the flow. It is
 	// a function in order to be lazily evaluated, since the context cancellation
@@ -73,9 +73,9 @@ func NewMaterializer(
 	processorID int32,
 	input colexec.Operator,
 	typs []types.T,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output RowReceiver,
-	metadataSourcesQueue []distsqlpb.MetadataSource,
+	metadataSourcesQueue []execinfrapb.MetadataSource,
 	outputStatsToTrace func(),
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
@@ -93,8 +93,8 @@ func NewMaterializer(
 		output,
 		nil, /* memMonitor */
 		ProcStateOpts{
-			TrailingMetaCallback: func(ctx context.Context) []distsqlpb.ProducerMetadata {
-				var trailingMeta []distsqlpb.ProducerMetadata
+			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+				var trailingMeta []execinfrapb.ProducerMetadata
 				for _, src := range metadataSourcesQueue {
 					trailingMeta = append(trailingMeta, src.DrainMeta(ctx)...)
 				}
@@ -140,7 +140,7 @@ func (m *Materializer) nextAdapter() {
 
 // next is the logic of Next() extracted in a separate method to be used by an
 // adapter to be able to wrap the latter with a catcher.
-func (m *Materializer) next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (m *Materializer) next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if m.State == StateRunning {
 		if m.batch == nil || m.curIdx >= m.batch.Length() {
 			// Get a fresh batch.
@@ -171,7 +171,7 @@ func (m *Materializer) next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 }
 
 // Next is part of the RowSource interface.
-func (m *Materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (m *Materializer) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if err := execerror.CatchVectorizedRuntimeError(m.nextAdapter); err != nil {
 		m.MoveToDraining(err)
 		return nil, m.DrainHelper()

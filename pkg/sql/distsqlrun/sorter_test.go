@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -45,8 +45,8 @@ func TestSorter(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		spec     distsqlpb.SorterSpec
-		post     distsqlpb.PostProcessSpec
+		spec     execinfrapb.SorterSpec
+		post     execinfrapb.PostProcessSpec
 		types    []types.T
 		input    sqlbase.EncDatumRows
 		expected sqlbase.EncDatumRows
@@ -54,8 +54,8 @@ func TestSorter(t *testing.T) {
 		{
 			name: "SortAll",
 			// No specified input ordering and unspecified limit.
-			spec: distsqlpb.SorterSpec{
-				OutputOrdering: distsqlpb.ConvertToSpecOrdering(
+			spec: execinfrapb.SorterSpec{
+				OutputOrdering: execinfrapb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: asc},
 						{ColIdx: 1, Direction: desc},
@@ -84,15 +84,15 @@ func TestSorter(t *testing.T) {
 		}, {
 			name: "SortLimit",
 			// No specified input ordering but specified limit.
-			spec: distsqlpb.SorterSpec{
-				OutputOrdering: distsqlpb.ConvertToSpecOrdering(
+			spec: execinfrapb.SorterSpec{
+				OutputOrdering: execinfrapb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: asc},
 						{ColIdx: 1, Direction: asc},
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
-			post:  distsqlpb.PostProcessSpec{Limit: 4},
+			post:  execinfrapb.PostProcessSpec{Limit: 4},
 			types: sqlbase.ThreeIntCols,
 			input: sqlbase.EncDatumRows{
 				{v[3], v[3], v[0]},
@@ -112,15 +112,15 @@ func TestSorter(t *testing.T) {
 		}, {
 			name: "SortOffset",
 			// No specified input ordering but specified offset and limit.
-			spec: distsqlpb.SorterSpec{
-				OutputOrdering: distsqlpb.ConvertToSpecOrdering(
+			spec: execinfrapb.SorterSpec{
+				OutputOrdering: execinfrapb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: asc},
 						{ColIdx: 1, Direction: asc},
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
-			post:  distsqlpb.PostProcessSpec{Offset: 2, Limit: 2},
+			post:  execinfrapb.PostProcessSpec{Offset: 2, Limit: 2},
 			types: sqlbase.ThreeIntCols,
 			input: sqlbase.EncDatumRows{
 				{v[3], v[3], v[0]},
@@ -138,15 +138,15 @@ func TestSorter(t *testing.T) {
 		}, {
 			name: "SortFilterExpr",
 			// No specified input ordering but specified postprocess filter expression.
-			spec: distsqlpb.SorterSpec{
-				OutputOrdering: distsqlpb.ConvertToSpecOrdering(
+			spec: execinfrapb.SorterSpec{
+				OutputOrdering: execinfrapb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: asc},
 						{ColIdx: 1, Direction: asc},
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
-			post:  distsqlpb.PostProcessSpec{Filter: distsqlpb.Expression{Expr: "@1 + @2 < 7"}},
+			post:  execinfrapb.PostProcessSpec{Filter: execinfrapb.Expression{Expr: "@1 + @2 < 7"}},
 			types: sqlbase.ThreeIntCols,
 			input: sqlbase.EncDatumRows{
 				{v[3], v[3], v[0]},
@@ -166,9 +166,9 @@ func TestSorter(t *testing.T) {
 		}, {
 			name: "SortMatchOrderingNoLimit",
 			// Specified match ordering length but no specified limit.
-			spec: distsqlpb.SorterSpec{
+			spec: execinfrapb.SorterSpec{
 				OrderingMatchLen: 2,
-				OutputOrdering: distsqlpb.ConvertToSpecOrdering(
+				OutputOrdering: execinfrapb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: asc},
 						{ColIdx: 1, Direction: asc},
@@ -203,9 +203,9 @@ func TestSorter(t *testing.T) {
 		}, {
 			name: "SortInputOrderingNoLimit",
 			// Specified input ordering but no specified limit.
-			spec: distsqlpb.SorterSpec{
+			spec: execinfrapb.SorterSpec{
 				OrderingMatchLen: 2,
-				OutputOrdering: distsqlpb.ConvertToSpecOrdering(
+				OutputOrdering: execinfrapb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 1, Direction: asc},
 						{ColIdx: 2, Direction: asc},
@@ -235,9 +235,9 @@ func TestSorter(t *testing.T) {
 			},
 		}, {
 			name: "SortInputOrderingAlreadySorted",
-			spec: distsqlpb.SorterSpec{
+			spec: execinfrapb.SorterSpec{
 				OrderingMatchLen: 2,
-				OutputOrdering: distsqlpb.ConvertToSpecOrdering(
+				OutputOrdering: execinfrapb.ConvertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 1, Direction: asc},
 						{ColIdx: 2, Direction: asc},
@@ -377,10 +377,10 @@ func TestSorter(t *testing.T) {
 func TestSortInvalidLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	spec := distsqlpb.SorterSpec{}
+	spec := execinfrapb.SorterSpec{}
 
 	t.Run("KTooLarge", func(t *testing.T) {
-		post := distsqlpb.PostProcessSpec{}
+		post := execinfrapb.PostProcessSpec{}
 		post.Limit = math.MaxInt64
 		post.Offset = math.MaxInt64 + 1
 		// All arguments apart from spec and post are not necessary.
@@ -402,7 +402,7 @@ func TestSortInvalidLimit(t *testing.T) {
 	})
 }
 
-var twoColOrdering = distsqlpb.ConvertToSpecOrdering(sqlbase.ColumnOrdering{
+var twoColOrdering = execinfrapb.ConvertToSpecOrdering(sqlbase.ColumnOrdering{
 	{ColIdx: 0, Direction: encoding.Ascending},
 	{ColIdx: 1, Direction: encoding.Ascending},
 })
@@ -426,8 +426,8 @@ func BenchmarkSortAll(b *testing.B) {
 	}
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	spec := distsqlpb.SorterSpec{OutputOrdering: twoColOrdering}
-	post := distsqlpb.PostProcessSpec{}
+	spec := execinfrapb.SorterSpec{OutputOrdering: twoColOrdering}
+	post := execinfrapb.PostProcessSpec{}
 
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
@@ -468,13 +468,13 @@ func BenchmarkSortLimit(b *testing.B) {
 	}
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	spec := distsqlpb.SorterSpec{OutputOrdering: twoColOrdering}
+	spec := execinfrapb.SorterSpec{OutputOrdering: twoColOrdering}
 
 	const numRows = 1 << 16
 	b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 		input := distsql.NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeRandIntRows(rng, numRows, numCols))
 		for _, limit := range []uint64{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-			post := distsqlpb.PostProcessSpec{Limit: limit}
+			post := execinfrapb.PostProcessSpec{Limit: limit}
 			b.Run(fmt.Sprintf("Limit=%d", limit), func(b *testing.B) {
 				b.SetBytes(int64(numRows * numCols * 8))
 				b.ResetTimer()
@@ -514,11 +514,11 @@ func BenchmarkSortChunks(b *testing.B) {
 	}
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	spec := distsqlpb.SorterSpec{
+	spec := execinfrapb.SorterSpec{
 		OutputOrdering:   twoColOrdering,
 		OrderingMatchLen: 1,
 	}
-	post := distsqlpb.PostProcessSpec{}
+	post := execinfrapb.PostProcessSpec{}
 
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		for chunkSize := 1; chunkSize <= numRows; chunkSize *= 4 {

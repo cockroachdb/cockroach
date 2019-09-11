@@ -11,7 +11,7 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -44,18 +44,18 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 	stageID := p.NewStageID()
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
-		tr := &distsqlpb.TableReaderSpec{}
+		tr := &execinfrapb.TableReaderSpec{}
 		*tr = *spec
-		tr.Spans = make([]distsqlpb.TableReaderSpan, len(sp.Spans))
+		tr.Spans = make([]execinfrapb.TableReaderSpan, len(sp.Spans))
 		for j := range sp.Spans {
 			tr.Spans[j].Span = sp.Spans[j]
 		}
 
 		proc := distsqlplan.Processor{
 			Node: sp.Node,
-			Spec: distsqlpb.ProcessorSpec{
-				Core:    distsqlpb.ProcessorCoreUnion{TableReader: tr},
-				Output:  []distsqlpb.OutputRouterSpec{{Type: distsqlpb.OutputRouterSpec_PASS_THROUGH}},
+			Spec: execinfrapb.ProcessorSpec{
+				Core:    execinfrapb.ProcessorCoreUnion{TableReader: tr},
+				Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
 				StageID: stageID,
 			},
 		}

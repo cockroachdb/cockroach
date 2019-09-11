@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 )
 
 // NewWindowSortingPartitioner creates a new exec.Operator that orders input
@@ -28,12 +28,12 @@ func NewWindowSortingPartitioner(
 	input Operator,
 	inputTyps []coltypes.T,
 	partitionIdxs []uint32,
-	ordCols []distsqlpb.Ordering_Column,
+	ordCols []execinfrapb.Ordering_Column,
 	partitionColIdx int,
 ) (op Operator, err error) {
-	partitionAndOrderingCols := make([]distsqlpb.Ordering_Column, len(partitionIdxs)+len(ordCols))
+	partitionAndOrderingCols := make([]execinfrapb.Ordering_Column, len(partitionIdxs)+len(ordCols))
 	for i, idx := range partitionIdxs {
-		partitionAndOrderingCols[i] = distsqlpb.Ordering_Column{ColIdx: idx}
+		partitionAndOrderingCols[i] = execinfrapb.Ordering_Column{ColIdx: idx}
 	}
 	copy(partitionAndOrderingCols[len(partitionIdxs):], ordCols)
 	input, err = NewSorter(input, inputTyps, partitionAndOrderingCols)

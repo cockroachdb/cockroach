@@ -16,7 +16,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -46,7 +46,7 @@ func (s *sorterBase) init(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 	ordering sqlbase.ColumnOrdering,
 	matchLen uint32,
@@ -104,7 +104,7 @@ func (s *sorterBase) init(
 // Next is part of the RowSource interface. It is extracted into sorterBase
 // because this implementation of next is shared between the sortAllProcessor
 // and the sortTopKProcessor.
-func (s *sorterBase) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (s *sorterBase) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for s.State == distsql.StateRunning {
 		if ok, err := s.i.Valid(); err != nil || !ok {
 			s.MoveToDraining(err)
@@ -140,7 +140,7 @@ func (s *sorterBase) close() {
 	}
 }
 
-var _ distsqlpb.DistSQLSpanStats = &SorterStats{}
+var _ execinfrapb.DistSQLSpanStats = &SorterStats{}
 
 const sorterTagPrefix = "sorter."
 
@@ -184,9 +184,9 @@ func newSorter(
 	ctx context.Context,
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.SorterSpec,
+	spec *execinfrapb.SorterSpec,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (distsql.Processor, error) {
 	count := uint64(0)
@@ -246,19 +246,19 @@ func newSortAllProcessor(
 	ctx context.Context,
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.SorterSpec,
+	spec *execinfrapb.SorterSpec,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	out distsql.RowReceiver,
 ) (distsql.Processor, error) {
 	proc := &sortAllProcessor{}
 	if err := proc.sorterBase.init(
 		proc, flowCtx, processorID, input, post, out,
-		distsqlpb.ConvertToColumnOrdering(spec.OutputOrdering),
+		execinfrapb.ConvertToColumnOrdering(spec.OutputOrdering),
 		spec.OrderingMatchLen,
 		distsql.ProcStateOpts{
 			InputsToDrain: []distsql.RowSource{input},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				proc.close()
 				return nil
 			},
@@ -359,9 +359,9 @@ var errSortTopKZeroK = errors.New("invalid value 0 for k")
 func newSortTopKProcessor(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.SorterSpec,
+	spec *execinfrapb.SorterSpec,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	out distsql.RowReceiver,
 	k uint64,
 ) (distsql.Processor, error) {
@@ -369,14 +369,14 @@ func newSortTopKProcessor(
 		return nil, errors.NewAssertionErrorWithWrappedErrf(errSortTopKZeroK,
 			"error creating top k sorter")
 	}
-	ordering := distsqlpb.ConvertToColumnOrdering(spec.OutputOrdering)
+	ordering := execinfrapb.ConvertToColumnOrdering(spec.OutputOrdering)
 	proc := &sortTopKProcessor{k: k}
 	if err := proc.sorterBase.init(
 		proc, flowCtx, processorID, input, post, out,
 		ordering, spec.OrderingMatchLen,
 		distsql.ProcStateOpts{
 			InputsToDrain: []distsql.RowSource{input},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				proc.close()
 				return nil
 			},
@@ -467,19 +467,19 @@ const sortChunksProcName = "sortChunks"
 func newSortChunksProcessor(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.SorterSpec,
+	spec *execinfrapb.SorterSpec,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	out distsql.RowReceiver,
 ) (distsql.Processor, error) {
-	ordering := distsqlpb.ConvertToColumnOrdering(spec.OutputOrdering)
+	ordering := execinfrapb.ConvertToColumnOrdering(spec.OutputOrdering)
 
 	proc := &sortChunksProcessor{}
 	if err := proc.sorterBase.init(
 		proc, flowCtx, processorID, input, post, out, ordering, spec.OrderingMatchLen,
 		distsql.ProcStateOpts{
 			InputsToDrain: []distsql.RowSource{input},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				proc.close()
 				return nil
 			},
@@ -516,7 +516,7 @@ func (s *sortChunksProcessor) chunkCompleted(
 func (s *sortChunksProcessor) fill() (bool, error) {
 	ctx := s.Ctx
 
-	var meta *distsqlpb.ProducerMetadata
+	var meta *execinfrapb.ProducerMetadata
 
 	nextChunkRow := s.nextChunkRow
 	s.nextChunkRow = nil
@@ -583,7 +583,7 @@ func (s *sortChunksProcessor) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	ctx := s.Ctx
 	for s.State == distsql.StateRunning {
 		ok, err := s.i.Valid()

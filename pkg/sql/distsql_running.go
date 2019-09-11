@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -52,7 +52,7 @@ const clientRejectedMsg string = "client rejected when attempting to run DistSQL
 type runnerRequest struct {
 	ctx        context.Context
 	nodeDialer *nodedialer.Dialer
-	flowReq    *distsqlpb.SetupFlowRequest
+	flowReq    *execinfrapb.SetupFlowRequest
 	nodeID     roachpb.NodeID
 	resultChan chan<- runnerResult
 }
@@ -71,7 +71,7 @@ func (req runnerRequest) run() {
 	if err != nil {
 		res.err = err
 	} else {
-		client := distsqlpb.NewDistSQLClient(conn)
+		client := execinfrapb.NewDistSQLClient(conn)
 		// TODO(radu): do we want a timeout here?
 		resp, err := client.SetupFlow(req.ctx, req.flowReq)
 		if err != nil {
@@ -113,15 +113,15 @@ func (dsp *DistSQLPlanner) setupFlows(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
 	txnCoordMeta *roachpb.TxnCoordMeta,
-	flows map[roachpb.NodeID]*distsqlpb.FlowSpec,
+	flows map[roachpb.NodeID]*execinfrapb.FlowSpec,
 	recv *DistSQLReceiver,
 	localState distsqlrun.LocalState,
 	vectorizeThresholdMet bool,
 ) (context.Context, *distsqlrun.Flow, error) {
 	thisNodeID := dsp.nodeDesc.NodeID
 
-	evalCtxProto := distsqlpb.MakeEvalContext(&evalCtx.EvalContext)
-	setupReq := distsqlpb.SetupFlowRequest{
+	evalCtxProto := execinfrapb.MakeEvalContext(&evalCtx.EvalContext)
+	setupReq := execinfrapb.SetupFlowRequest{
 		TxnCoordMeta: txnCoordMeta,
 		Version:      distsqlrun.Version,
 		EvalContext:  evalCtxProto,
@@ -306,7 +306,7 @@ func (dsp *DistSQLPlanner) Run(
 
 	if logPlanDiagram {
 		log.VEvent(ctx, 1, "creating plan diagram")
-		json, url, err := distsqlpb.GeneratePlanDiagramURL(flows)
+		json, url, err := execinfrapb.GeneratePlanDiagramURL(flows)
 		if err != nil {
 			log.Infof(ctx, "Error generating diagram: %s", err)
 		} else {
@@ -454,15 +454,15 @@ type rowResultWriter interface {
 }
 
 type metadataResultWriter interface {
-	AddMeta(ctx context.Context, meta *distsqlpb.ProducerMetadata)
+	AddMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata)
 }
 
 type metadataCallbackWriter struct {
 	rowResultWriter
-	fn func(ctx context.Context, meta *distsqlpb.ProducerMetadata)
+	fn func(ctx context.Context, meta *execinfrapb.ProducerMetadata)
 }
 
-func (w *metadataCallbackWriter) AddMeta(ctx context.Context, meta *distsqlpb.ProducerMetadata) {
+func (w *metadataCallbackWriter) AddMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata) {
 	w.fn(ctx, meta)
 }
 
@@ -577,7 +577,7 @@ func (r *DistSQLReceiver) SetError(err error) {
 
 // Push is part of the RowReceiver interface.
 func (r *DistSQLReceiver) Push(
-	row sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata,
+	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) distsql.ConsumerStatus {
 	if meta != nil {
 		if meta.TxnCoordMeta != nil {

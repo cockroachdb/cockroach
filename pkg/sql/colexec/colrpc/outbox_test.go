@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -86,9 +86,9 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		outbox, err := NewOutbox(
 			input,
 			typs,
-			[]distsqlpb.MetadataSource{
-				distsqlpb.CallbackMetadataSource{
-					DrainMetaCb: func(context.Context) []distsqlpb.ProducerMetadata {
+			[]execinfrapb.MetadataSource{
+				execinfrapb.CallbackMetadataSource{
+					DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
 						atomic.StoreUint32(&sourceDrained, 1)
 						return nil
 					},

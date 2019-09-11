@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -42,7 +42,7 @@ func newCountAggregator(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*countAggregator, error) {
 	ag := &countAggregator{}
@@ -76,7 +76,7 @@ func (ag *countAggregator) Start(ctx context.Context) context.Context {
 	return ag.StartInternal(ctx, countRowsProcName)
 }
 
-func (ag *countAggregator) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (ag *countAggregator) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for ag.State == distsql.StateRunning {
 		row, meta := ag.input.Next()
 		if meta != nil {

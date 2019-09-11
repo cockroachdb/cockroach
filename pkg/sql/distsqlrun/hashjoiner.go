@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -130,10 +130,10 @@ const hashJoinerProcName = "hash joiner"
 func newHashJoiner(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.HashJoinerSpec,
+	spec *execinfrapb.HashJoinerSpec,
 	leftSource distsql.RowSource,
 	rightSource distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*hashJoiner, error) {
 	h := &hashJoiner{
@@ -161,7 +161,7 @@ func newHashJoiner(
 		output,
 		distsql.ProcStateOpts{
 			InputsToDrain: []distsql.RowSource{h.leftSource, h.rightSource},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				h.close()
 				return nil
 			},
@@ -224,10 +224,10 @@ func (h *hashJoiner) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (h *hashJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (h *hashJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for h.State == distsql.StateRunning {
 		var row sqlbase.EncDatumRow
-		var meta *distsqlpb.ProducerMetadata
+		var meta *execinfrapb.ProducerMetadata
 		switch h.runningState {
 		case hjBuilding:
 			h.runningState, row, meta = h.build()
@@ -261,13 +261,13 @@ func (h *hashJoiner) ConsumerClosed() {
 	h.close()
 }
 
-func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// setStoredSideTransition is a helper function that sets storedSide on the
 	// hashJoiner and performs initialization before a transition to
 	// hjConsumingStoredSide.
 	setStoredSideTransition := func(
 		side distsql.JoinSide,
-	) (hashJoinerState, sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+	) (hashJoinerState, sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 		h.storedSide = side
 		if err := h.initStoredRows(); err != nil {
 			h.MoveToDraining(err)
@@ -359,7 +359,7 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *distsqlpb.P
 func (h *hashJoiner) consumeStoredSide() (
 	hashJoinerState,
 	sqlbase.EncDatumRow,
-	*distsqlpb.ProducerMetadata,
+	*execinfrapb.ProducerMetadata,
 ) {
 	side := h.storedSide
 	for {
@@ -410,7 +410,7 @@ func (h *hashJoiner) consumeStoredSide() (
 func (h *hashJoiner) readProbeSide() (
 	hashJoinerState,
 	sqlbase.EncDatumRow,
-	*distsqlpb.ProducerMetadata,
+	*execinfrapb.ProducerMetadata,
 ) {
 	side := distsql.OtherSide(h.storedSide)
 
@@ -420,7 +420,7 @@ func (h *hashJoiner) readProbeSide() (
 		row = h.rows[side].EncRow(0)
 		h.rows[side].PopFirst()
 	} else {
-		var meta *distsqlpb.ProducerMetadata
+		var meta *execinfrapb.ProducerMetadata
 		var emitDirectly bool
 		var err error
 		row, meta, emitDirectly, err = h.receiveNext(side)
@@ -476,7 +476,7 @@ func (h *hashJoiner) readProbeSide() (
 func (h *hashJoiner) probeRow() (
 	hashJoinerState,
 	sqlbase.EncDatumRow,
-	*distsqlpb.ProducerMetadata,
+	*execinfrapb.ProducerMetadata,
 ) {
 	i := h.probingRowState.iter
 	if ok, err := i.Valid(); err != nil {
@@ -576,7 +576,7 @@ func (h *hashJoiner) probeRow() (
 func (h *hashJoiner) emitUnmatched() (
 	hashJoinerState,
 	sqlbase.EncDatumRow,
-	*distsqlpb.ProducerMetadata,
+	*execinfrapb.ProducerMetadata,
 ) {
 	i := h.emittingUnmatchedState.iter
 	if ok, err := i.Valid(); err != nil {
@@ -640,7 +640,7 @@ func (h *hashJoiner) close() {
 // returned row may be emitted directly.
 func (h *hashJoiner) receiveNext(
 	side distsql.JoinSide,
-) (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata, bool, error) {
+) (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata, bool, error) {
 	source := h.leftSource
 	if side == distsql.RightSide {
 		source = h.rightSource
@@ -756,7 +756,7 @@ func (h *hashJoiner) initStoredRows() error {
 	)
 }
 
-var _ distsqlpb.DistSQLSpanStats = &HashJoinerStats{}
+var _ execinfrapb.DistSQLSpanStats = &HashJoinerStats{}
 
 const hashJoinerTagPrefix = "hashjoiner."
 

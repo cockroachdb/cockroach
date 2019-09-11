@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -141,7 +141,7 @@ func TestOrderedSync(t *testing.T) {
 func TestOrderedSyncDrainBeforeNext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	expectedMeta := &distsqlpb.ProducerMetadata{Err: errors.New("expected metadata")}
+	expectedMeta := &execinfrapb.ProducerMetadata{Err: errors.New("expected metadata")}
 
 	var sources []distsql.RowSource
 	for i := 0; i < 4; i++ {
@@ -246,7 +246,7 @@ func TestUnorderedSync(t *testing.T) {
 			}
 			if i == 3 {
 				err := fmt.Errorf("Test error")
-				mrc.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
+				mrc.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
 			}
 			mrc.ProducerDone()
 		}(i)

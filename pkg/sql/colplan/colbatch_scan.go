@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -81,29 +81,29 @@ func (s *colBatchScan) Next(ctx context.Context) coldata.Batch {
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (s *colBatchScan) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (s *colBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	if !s.init {
 		// In some pathological queries like `SELECT 1 FROM t HAVING true`, Init()
 		// and Next() may never get called. Return early to avoid using an
 		// uninitialized fetcher.
 		return nil
 	}
-	var trailingMeta []distsqlpb.ProducerMetadata
+	var trailingMeta []execinfrapb.ProducerMetadata
 	if !s.flowCtx.Local {
 		ranges := distsql.MisplannedRanges(ctx, s.rf.GetRangesInfo(), s.flowCtx.NodeID)
 		if ranges != nil {
-			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: ranges})
+			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 		}
 	}
 	if meta := distsql.GetTxnCoordMeta(ctx, s.flowCtx.Txn); meta != nil {
-		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 	return trailingMeta
 }
 
 // newColBatchScan creates a new colBatchScan operator.
 func newColBatchScan(
-	flowCtx *distsql.FlowCtx, spec *distsqlpb.TableReaderSpec, post *distsqlpb.PostProcessSpec,
+	flowCtx *distsql.FlowCtx, spec *execinfrapb.TableReaderSpec, post *execinfrapb.PostProcessSpec,
 ) (*colBatchScan, error) {
 	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a colBatchScan with uninitialized NodeID")
@@ -111,7 +111,7 @@ func newColBatchScan(
 
 	limitHint := distsql.LimitHint(spec.LimitHint, post)
 
-	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	returnMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	typs := spec.Table.ColumnTypesWithMutations(returnMutations)
 	helper := distsql.ProcOutputHelper{}
 	if err := helper.Init(
@@ -157,7 +157,7 @@ func initCRowFetcher(
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
 	isCheck bool,
-	scanVisibility distsqlpb.ScanVisibility,
+	scanVisibility execinfrapb.ScanVisibility,
 ) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
 	immutDesc := sqlbase.NewImmutableTableDescriptor(*desc)
 	index, isSecondaryIndex, err = immutDesc.FindIndexByIndexIdx(indexIdx)
@@ -166,7 +166,7 @@ func initCRowFetcher(
 	}
 
 	cols := immutDesc.Columns
-	if scanVisibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
+	if scanVisibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
 		cols = immutDesc.ReadableColumns
 	}
 	tableArgs := row.FetcherTableArgs{

@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -33,7 +33,7 @@ func TestOrdinality(t *testing.T) {
 	}
 
 	testCases := []struct {
-		spec     distsqlpb.OrdinalitySpec
+		spec     execinfrapb.OrdinalitySpec
 		input    sqlbase.EncDatumRows
 		expected sqlbase.EncDatumRows
 	}{
@@ -114,7 +114,7 @@ func TestOrdinality(t *testing.T) {
 				EvalCtx: &evalCtx,
 			}
 
-			d, err := newOrdinalityProcessor(&flowCtx, 0 /* processorID */, &os, in, &distsqlpb.PostProcessSpec{}, out)
+			d, err := newOrdinalityProcessor(&flowCtx, 0 /* processorID */, &os, in, &execinfrapb.PostProcessSpec{}, out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -160,9 +160,9 @@ func BenchmarkOrdinality(b *testing.B) {
 		Cfg:     &distsql.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
-	spec := &distsqlpb.OrdinalitySpec{}
+	spec := &execinfrapb.OrdinalitySpec{}
 
-	post := &distsqlpb.PostProcessSpec{}
+	post := &execinfrapb.PostProcessSpec{}
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		input := distsql.NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeIntRows(numRows, numCols))
 		b.SetBytes(int64(8 * numRows * numCols))

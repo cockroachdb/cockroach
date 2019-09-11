@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -166,30 +166,30 @@ func TestIndexSkipTableReader(t *testing.T) {
 	td6 := sqlbase.GetTableDescriptor(kvDB, "test", "t6")
 	td7 := sqlbase.GetTableDescriptor(kvDB, "test", "t7")
 
-	makeIndexSpan := func(td *sqlbase.TableDescriptor, start, end int) distsqlpb.TableReaderSpan {
+	makeIndexSpan := func(td *sqlbase.TableDescriptor, start, end int) execinfrapb.TableReaderSpan {
 		var span roachpb.Span
 		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(td, td.PrimaryIndex.ID))
 		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
 		span.EndKey = append(span.EndKey, prefix...)
 		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
-		return distsqlpb.TableReaderSpan{Span: span}
+		return execinfrapb.TableReaderSpan{Span: span}
 	}
 
 	testCases := []struct {
 		desc      string
 		tableDesc *sqlbase.TableDescriptor
-		spec      distsqlpb.IndexSkipTableReaderSpec
-		post      distsqlpb.PostProcessSpec
+		spec      execinfrapb.IndexSkipTableReaderSpec
+		post      execinfrapb.PostProcessSpec
 		expected  string
 	}{
 		{
 			// Distinct scan simple.
 			desc:      "SimpleForward",
 			tableDesc: td1,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans: []execinfrapb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
 			},
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -199,10 +199,10 @@ func TestIndexSkipTableReader(t *testing.T) {
 			// Distinct scan on interleaved table parent.
 			desc:      "InterleavedParent",
 			tableDesc: td5,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{{Span: td5.PrimaryIndexSpan()}},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans: []execinfrapb.TableReaderSpan{{Span: td5.PrimaryIndexSpan()}},
 			},
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -212,10 +212,10 @@ func TestIndexSkipTableReader(t *testing.T) {
 			// Distinct scan on interleaved table child.
 			desc:      "InterleavedChild",
 			tableDesc: td6,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{{Span: td6.PrimaryIndexSpan()}},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans: []execinfrapb.TableReaderSpan{{Span: td6.PrimaryIndexSpan()}},
 			},
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -225,10 +225,10 @@ func TestIndexSkipTableReader(t *testing.T) {
 			// Distinct scan with multiple spans.
 			desc:      "MultipleSpans",
 			tableDesc: td1,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans: []execinfrapb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
 			},
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -238,11 +238,11 @@ func TestIndexSkipTableReader(t *testing.T) {
 			// Distinct scan with multiple spans and filter,
 			desc:      "MultipleSpansWithFilter",
 			tableDesc: td1,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans: []execinfrapb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
 			},
-			post: distsqlpb.PostProcessSpec{
-				Filter:        distsqlpb.Expression{Expr: "@1 > 3 AND @1 < 7"},
+			post: execinfrapb.PostProcessSpec{
+				Filter:        execinfrapb.Expression{Expr: "@1 > 3 AND @1 < 7"},
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -252,11 +252,11 @@ func TestIndexSkipTableReader(t *testing.T) {
 			// Distinct scan with filter.
 			desc:      "Filter",
 			tableDesc: td1,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans: []execinfrapb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
 			},
-			post: distsqlpb.PostProcessSpec{
-				Filter:        distsqlpb.Expression{Expr: "@1 > 3 AND @1 < 7"},
+			post: execinfrapb.PostProcessSpec{
+				Filter:        execinfrapb.Expression{Expr: "@1 > 3 AND @1 < 7"},
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -266,10 +266,10 @@ func TestIndexSkipTableReader(t *testing.T) {
 			// Distinct scan with multiple requested columns.
 			desc:      "MultipleOutputCols",
 			tableDesc: td2,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{{Span: td2.PrimaryIndexSpan()}},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans: []execinfrapb.TableReaderSpan{{Span: td2.PrimaryIndexSpan()}},
 			},
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1},
 			},
@@ -279,10 +279,10 @@ func TestIndexSkipTableReader(t *testing.T) {
 			// Distinct scan on table with NULLs.
 			desc:      "Nulls",
 			tableDesc: td3,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{{Span: td3.PrimaryIndexSpan()}},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans: []execinfrapb.TableReaderSpan{{Span: td3.PrimaryIndexSpan()}},
 			},
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -292,11 +292,11 @@ func TestIndexSkipTableReader(t *testing.T) {
 			// Distinct scan on secondary index",
 			desc:      "SecondaryIdx",
 			tableDesc: td4,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:    []distsqlpb.TableReaderSpan{{Span: td4.IndexSpan(2)}},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans:    []execinfrapb.TableReaderSpan{{Span: td4.IndexSpan(2)}},
 				IndexIdx: 1,
 			},
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{1},
 			},
@@ -306,11 +306,11 @@ func TestIndexSkipTableReader(t *testing.T) {
 			// Distinct reverse scan simple.
 			desc:      "SimpleReverse",
 			tableDesc: td1,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:   []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans:   []execinfrapb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
 				Reverse: true,
 			},
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -320,11 +320,11 @@ func TestIndexSkipTableReader(t *testing.T) {
 			// Distinct reverse scan with multiple spans.
 			desc:      "MultipleSpansReverse",
 			tableDesc: td1,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:   []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans:   []execinfrapb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
 				Reverse: true,
 			},
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -334,12 +334,12 @@ func TestIndexSkipTableReader(t *testing.T) {
 			// Distinct reverse scan with multiple spans and filter.
 			desc:      "MultipleSpansWithFilterReverse",
 			tableDesc: td1,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:   []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans:   []execinfrapb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
 				Reverse: true,
 			},
-			post: distsqlpb.PostProcessSpec{
-				Filter:        distsqlpb.Expression{Expr: "@1 > 3 AND @1 < 7"},
+			post: execinfrapb.PostProcessSpec{
+				Filter:        execinfrapb.Expression{Expr: "@1 > 3 AND @1 < 7"},
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -349,11 +349,11 @@ func TestIndexSkipTableReader(t *testing.T) {
 			// Distinct reverse scan on interleaved parent.
 			desc:      "InterleavedParentReverse",
 			tableDesc: td5,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:   []distsqlpb.TableReaderSpan{{Span: td5.PrimaryIndexSpan()}},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans:   []execinfrapb.TableReaderSpan{{Span: td5.PrimaryIndexSpan()}},
 				Reverse: true,
 			},
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -363,11 +363,11 @@ func TestIndexSkipTableReader(t *testing.T) {
 			// Distinct reverse scan with multiple spans on interleaved parent.
 			desc:      "InterleavedParentMultipleSpansReverse",
 			tableDesc: td5,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:   []distsqlpb.TableReaderSpan{makeIndexSpan(td5, 0, 3), makeIndexSpan(td5, 5, 8)},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans:   []execinfrapb.TableReaderSpan{makeIndexSpan(td5, 0, 3), makeIndexSpan(td5, 5, 8)},
 				Reverse: true,
 			},
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -377,11 +377,11 @@ func TestIndexSkipTableReader(t *testing.T) {
 			// Distinct reverse scan on interleaved child.
 			desc:      "InterleavedChildReverse",
 			tableDesc: td6,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:   []distsqlpb.TableReaderSpan{{Span: td6.PrimaryIndexSpan()}},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans:   []execinfrapb.TableReaderSpan{{Span: td6.PrimaryIndexSpan()}},
 				Reverse: true,
 			},
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -391,11 +391,11 @@ func TestIndexSkipTableReader(t *testing.T) {
 			// Distinct scan on index with multiple null values
 			desc:      "IndexMultipleNulls",
 			tableDesc: td7,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:    []distsqlpb.TableReaderSpan{{Span: td7.IndexSpan(2)}},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans:    []execinfrapb.TableReaderSpan{{Span: td7.IndexSpan(2)}},
 				IndexIdx: 1,
 			},
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
@@ -405,11 +405,11 @@ func TestIndexSkipTableReader(t *testing.T) {
 			// Distinct scan on index with only null values
 			desc:      "IndexAllNulls",
 			tableDesc: td7,
-			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans:    []distsqlpb.TableReaderSpan{{Span: td7.IndexSpan(3)}},
+			spec: execinfrapb.IndexSkipTableReaderSpec{
+				Spans:    []execinfrapb.TableReaderSpan{{Span: td7.IndexSpan(3)}},
 				IndexIdx: 2,
 			},
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{1},
 			},
@@ -501,11 +501,11 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 		Txn:     client.NewTxn(ctx, tc.Server(0).DB(), nodeID, client.RootTxn),
 		NodeID:  nodeID,
 	}
-	spec := distsqlpb.IndexSkipTableReaderSpec{
-		Spans: []distsqlpb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+	spec := execinfrapb.IndexSkipTableReaderSpec{
+		Spans: []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
 		Table: *td,
 	}
-	post := distsqlpb.PostProcessSpec{
+	post := execinfrapb.PostProcessSpec{
 		Projection:    true,
 		OutputColumns: []uint32{0},
 	}
@@ -517,7 +517,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 		}
 		tr.Start(ctx)
 		var res sqlbase.EncDatumRows
-		var metas []*distsqlpb.ProducerMetadata
+		var metas []*execinfrapb.ProducerMetadata
 		for {
 			row, meta := tr.Next()
 			if meta != nil {
@@ -627,20 +627,20 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 			}
 
 			b.Run(fmt.Sprintf("TableReader+Distinct-rows=%d-ratio=%d", numRows, valueRatio), func(b *testing.B) {
-				spec := distsqlpb.TableReaderSpec{
+				spec := execinfrapb.TableReaderSpec{
 					Table: *tableDesc,
-					Spans: []distsqlpb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+					Spans: []execinfrapb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
 				}
-				post := distsqlpb.PostProcessSpec{
+				post := execinfrapb.PostProcessSpec{
 					Projection:    true,
 					OutputColumns: []uint32{0},
 				}
 
-				specDistinct := distsqlpb.DistinctSpec{
+				specDistinct := execinfrapb.DistinctSpec{
 					OrderedColumns:  []uint32{0},
 					DistinctColumns: []uint32{0},
 				}
-				postDistinct := distsqlpb.PostProcessSpec{}
+				postDistinct := execinfrapb.PostProcessSpec{}
 
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
@@ -665,11 +665,11 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 
 			// run the index skip table reader
 			b.Run(fmt.Sprintf("IndexSkipTableReader-rows=%d-ratio=%d", numRows, valueRatio), func(b *testing.B) {
-				spec := distsqlpb.IndexSkipTableReaderSpec{
+				spec := execinfrapb.IndexSkipTableReaderSpec{
 					Table: *tableDesc,
-					Spans: []distsqlpb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+					Spans: []execinfrapb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
 				}
-				post := distsqlpb.PostProcessSpec{
+				post := execinfrapb.PostProcessSpec{
 					OutputColumns: []uint32{0},
 					Projection:    true,
 				}

@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -29,7 +29,7 @@ type inboundStreamHandler interface {
 	// run is called once a FlowStream RPC is handled and a stream is obtained to
 	// make this stream accessible to the rest of the flow.
 	run(
-		ctx context.Context, stream distsqlpb.DistSQL_FlowStreamServer, firstMsg *distsqlpb.ProducerMessage, f *Flow,
+		ctx context.Context, stream execinfrapb.DistSQL_FlowStreamServer, firstMsg *execinfrapb.ProducerMessage, f *Flow,
 	) error
 	// timeout is called with an error, which results in the teardown of the
 	// stream strategy with the given error.
@@ -45,8 +45,8 @@ var _ inboundStreamHandler = vectorizedInboundStreamHandler{}
 
 func (s vectorizedInboundStreamHandler) run(
 	ctx context.Context,
-	stream distsqlpb.DistSQL_FlowStreamServer,
-	_ *distsqlpb.ProducerMessage,
+	stream execinfrapb.DistSQL_FlowStreamServer,
+	_ *execinfrapb.ProducerMessage,
 	_ *Flow,
 ) error {
 	return s.RunWithStream(ctx, stream)
@@ -64,8 +64,8 @@ var _ inboundStreamHandler = rowInboundStreamHandler{}
 
 func (s rowInboundStreamHandler) run(
 	ctx context.Context,
-	stream distsqlpb.DistSQL_FlowStreamServer,
-	firstMsg *distsqlpb.ProducerMessage,
+	stream execinfrapb.DistSQL_FlowStreamServer,
+	firstMsg *execinfrapb.ProducerMessage,
 	f *Flow,
 ) error {
 	return ProcessInboundStream(ctx, stream, firstMsg, s.RowReceiver, f)
@@ -74,7 +74,7 @@ func (s rowInboundStreamHandler) run(
 func (s rowInboundStreamHandler) timeout(err error) {
 	s.Push(
 		nil, /* row */
-		&distsqlpb.ProducerMetadata{Err: err},
+		&execinfrapb.ProducerMetadata{Err: err},
 	)
 	s.ProducerDone()
 }
@@ -85,8 +85,8 @@ func (s rowInboundStreamHandler) timeout(err error) {
 // it needs to be received before we can get here).
 func ProcessInboundStream(
 	ctx context.Context,
-	stream distsqlpb.DistSQL_FlowStreamServer,
-	firstMsg *distsqlpb.ProducerMessage,
+	stream execinfrapb.DistSQL_FlowStreamServer,
+	firstMsg *execinfrapb.ProducerMessage,
 	dst distsql.RowReceiver,
 	f *Flow,
 ) error {
@@ -107,8 +107,8 @@ func ProcessInboundStream(
 
 func processInboundStreamHelper(
 	ctx context.Context,
-	stream distsqlpb.DistSQL_FlowStreamServer,
-	firstMsg *distsqlpb.ProducerMessage,
+	stream execinfrapb.DistSQL_FlowStreamServer,
+	firstMsg *execinfrapb.ProducerMessage,
 	dst distsql.RowReceiver,
 	f *Flow,
 ) error {
@@ -117,7 +117,7 @@ func processInboundStreamHelper(
 
 	sendErrToConsumer := func(err error) {
 		if err != nil {
-			dst.Push(nil, &distsqlpb.ProducerMetadata{Err: err})
+			dst.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 		}
 		dst.ProducerDone()
 	}
@@ -186,10 +186,10 @@ func processInboundStreamHelper(
 // producer that it doesn't need any more rows and the producer should drain. A
 // signal is sent on stream to the producer to ask it to send metadata.
 func sendDrainSignalToStreamProducer(
-	ctx context.Context, stream distsqlpb.DistSQL_FlowStreamServer,
+	ctx context.Context, stream execinfrapb.DistSQL_FlowStreamServer,
 ) error {
 	log.VEvent(ctx, 1, "sending drain signal to producer")
-	sig := distsqlpb.ConsumerSignal{DrainRequest: &distsqlpb.DrainRequest{}}
+	sig := execinfrapb.ConsumerSignal{DrainRequest: &execinfrapb.DrainRequest{}}
 	return stream.Send(&sig)
 }
 
@@ -199,11 +199,11 @@ func sendDrainSignalToStreamProducer(
 // closed), the caller must return the error to the producer.
 func processProducerMessage(
 	ctx context.Context,
-	stream distsqlpb.DistSQL_FlowStreamServer,
+	stream execinfrapb.DistSQL_FlowStreamServer,
 	dst distsql.RowReceiver,
 	sd *StreamDecoder,
 	draining *bool,
-	msg *distsqlpb.ProducerMessage,
+	msg *execinfrapb.ProducerMessage,
 ) processMessageResult {
 	err := sd.AddMessage(ctx, msg)
 	if err != nil {

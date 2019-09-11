@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -35,12 +35,12 @@ type mjTestCase struct {
 	leftTypes             []coltypes.T
 	leftOutCols           []uint32
 	leftEqCols            []uint32
-	leftDirections        []distsqlpb.Ordering_Column_Direction
+	leftDirections        []execinfrapb.Ordering_Column_Direction
 	rightTuples           []tuple
 	rightTypes            []coltypes.T
 	rightOutCols          []uint32
 	rightEqCols           []uint32
-	rightDirections       []distsqlpb.Ordering_Column_Direction
+	rightDirections       []execinfrapb.Ordering_Column_Direction
 	expected              []tuple
 	expectedOutCols       []int
 	outputBatchSize       uint16
@@ -53,16 +53,16 @@ func (tc *mjTestCase) Init() {
 	}
 
 	if len(tc.leftDirections) == 0 {
-		tc.leftDirections = make([]distsqlpb.Ordering_Column_Direction, len(tc.leftTypes))
+		tc.leftDirections = make([]execinfrapb.Ordering_Column_Direction, len(tc.leftTypes))
 		for i := range tc.leftDirections {
-			tc.leftDirections[i] = distsqlpb.Ordering_Column_ASC
+			tc.leftDirections[i] = execinfrapb.Ordering_Column_ASC
 		}
 	}
 
 	if len(tc.rightDirections) == 0 {
-		tc.rightDirections = make([]distsqlpb.Ordering_Column_Direction, len(tc.rightTypes))
+		tc.rightDirections = make([]execinfrapb.Ordering_Column_Direction, len(tc.rightTypes))
 		for i := range tc.rightDirections {
-			tc.rightDirections[i] = distsqlpb.Ordering_Column_ASC
+			tc.rightDirections[i] = execinfrapb.Ordering_Column_ASC
 		}
 	}
 }
@@ -723,8 +723,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightEqCols:     []uint32{0},
 			expected:        tuples{{4, 4}, {2, 2}, {1, 1}},
 			expectedOutCols: []int{0, 1},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
 		},
 		{
 			description:     "desc nulls test",
@@ -738,8 +738,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightEqCols:     []uint32{0},
 			expected:        tuples{{4, 4}, {1, 1}},
 			expectedOutCols: []int{0, 1},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
 		},
 		{
 			description:     "desc nulls test end on 0",
@@ -753,8 +753,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightEqCols:     []uint32{0},
 			expected:        tuples{{9, 9}, {9, 9}, {9, 9}, {9, 9}, {8, 8}, {0, 0}},
 			expectedOutCols: []int{0, 1},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
 		},
 		{
 			description:     "non-equality columns with nulls",
@@ -872,8 +872,8 @@ func TestMergeJoiner(t *testing.T) {
 			joinType:        sqlbase.JoinType_LEFT_OUTER,
 			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
 			leftTuples:      tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
 			rightTuples:     tuples{{4, 3, 3}, {nil, 2, nil}, {nil, 1, 3}},
 			leftOutCols:     []uint32{0, 1, 2},
@@ -888,8 +888,8 @@ func TestMergeJoiner(t *testing.T) {
 			joinType:        sqlbase.JoinType_LEFT_OUTER,
 			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_ASC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_ASC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
 			leftTuples:      tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
 			rightTuples:     tuples{{4, 3, 3}, {nil, 2, nil}, {nil, 1, 3}},
 			leftOutCols:     []uint32{0, 1, 2},
@@ -904,8 +904,8 @@ func TestMergeJoiner(t *testing.T) {
 			joinType:        sqlbase.JoinType_LEFT_OUTER,
 			leftTypes:       []coltypes.T{coltypes.Int64},
 			rightTypes:      []coltypes.T{coltypes.Int64},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
 			leftTuples:      tuples{{1}, {1}, {1}, {nil}, {nil}, {nil}},
 			rightTuples:     tuples{{1}},
 			leftOutCols:     []uint32{0},
@@ -1018,8 +1018,8 @@ func TestMergeJoiner(t *testing.T) {
 			joinType:        sqlbase.JoinType_RIGHT_OUTER,
 			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
 			leftTuples:      tuples{{4, 3, 3}, {nil, 2, nil}, {nil, 1, 3}},
 			rightTuples:     tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
 			leftOutCols:     []uint32{0, 1, 2},
@@ -1034,8 +1034,8 @@ func TestMergeJoiner(t *testing.T) {
 			joinType:        sqlbase.JoinType_RIGHT_OUTER,
 			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_ASC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_ASC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
 			leftTuples:      tuples{{4, 3, 3}, {nil, 2, nil}, {nil, 1, 3}},
 			rightTuples:     tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
 			leftOutCols:     []uint32{0, 1, 2},
@@ -1050,8 +1050,8 @@ func TestMergeJoiner(t *testing.T) {
 			joinType:        sqlbase.JoinType_RIGHT_OUTER,
 			leftTypes:       []coltypes.T{coltypes.Int64},
 			rightTypes:      []coltypes.T{coltypes.Int64},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
 			leftTuples:      tuples{{1}},
 			rightTuples:     tuples{{1}, {1}, {1}, {nil}, {nil}, {nil}},
 			leftOutCols:     []uint32{0},
@@ -1164,8 +1164,8 @@ func TestMergeJoiner(t *testing.T) {
 			joinType:        sqlbase.JoinType_FULL_OUTER,
 			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
 			leftTuples:      tuples{{4, 3, 3}, {nil, 2, nil}, {nil, 1, 3}},
 			rightTuples:     tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
 			leftOutCols:     []uint32{0, 1, 2},
@@ -1180,8 +1180,8 @@ func TestMergeJoiner(t *testing.T) {
 			joinType:        sqlbase.JoinType_FULL_OUTER,
 			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_ASC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_ASC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
 			leftTuples:      tuples{{4, 3, 3}, {nil, 2, nil}, {nil, 1, 3}},
 			rightTuples:     tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
 			leftOutCols:     []uint32{0, 1, 2},
@@ -1196,8 +1196,8 @@ func TestMergeJoiner(t *testing.T) {
 			joinType:        sqlbase.JoinType_FULL_OUTER,
 			leftTypes:       []coltypes.T{coltypes.Int64},
 			rightTypes:      []coltypes.T{coltypes.Int64},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
 			leftTuples:      tuples{{1}},
 			rightTuples:     tuples{{1}, {1}, {1}, {nil}, {nil}, {nil}},
 			leftOutCols:     []uint32{0},
@@ -1310,8 +1310,8 @@ func TestMergeJoiner(t *testing.T) {
 			joinType:        sqlbase.JoinType_LEFT_SEMI,
 			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
 			leftTuples:      tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
 			rightTuples:     tuples{{4, 3, 3}, {nil, 2, nil}, {nil, 1, 3}},
 			leftOutCols:     []uint32{0, 1, 2},
@@ -1329,8 +1329,8 @@ func TestMergeJoiner(t *testing.T) {
 			joinType:        sqlbase.JoinType_LEFT_SEMI,
 			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_ASC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_ASC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
 			leftTuples:      tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
 			rightTuples:     tuples{{4, 3, 3}, {nil, 2, nil}, {nil, 1, 3}},
 			leftOutCols:     []uint32{0, 1, 2},
@@ -1348,8 +1348,8 @@ func TestMergeJoiner(t *testing.T) {
 			joinType:        sqlbase.JoinType_LEFT_SEMI,
 			leftTypes:       []coltypes.T{coltypes.Int64},
 			rightTypes:      []coltypes.T{coltypes.Int64},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
 			leftTuples:      tuples{{1}, {1}, {1}, {nil}, {nil}, {nil}},
 			rightTuples:     tuples{{1}},
 			leftOutCols:     []uint32{0},
@@ -1462,8 +1462,8 @@ func TestMergeJoiner(t *testing.T) {
 			joinType:        sqlbase.JoinType_LEFT_ANTI,
 			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
 			leftTuples:      tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
 			rightTuples:     tuples{{4, 3, 3}, {nil, 2, nil}, {nil, 1, 3}},
 			leftOutCols:     []uint32{0, 1, 2},
@@ -1478,8 +1478,8 @@ func TestMergeJoiner(t *testing.T) {
 			joinType:        sqlbase.JoinType_LEFT_ANTI,
 			leftTypes:       []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
 			rightTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_ASC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_ASC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
 			leftTuples:      tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
 			rightTuples:     tuples{{4, 3, 3}, {nil, 2, nil}, {nil, 1, 3}},
 			leftOutCols:     []uint32{0, 1, 2},
@@ -1494,8 +1494,8 @@ func TestMergeJoiner(t *testing.T) {
 			joinType:        sqlbase.JoinType_LEFT_ANTI,
 			leftTypes:       []coltypes.T{coltypes.Int64},
 			rightTypes:      []coltypes.T{coltypes.Int64},
-			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
-			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
 			leftTuples:      tuples{{1}, {1}, {1}, {nil}, {nil}, {nil}},
 			rightTuples:     tuples{{1}, {nil}},
 			leftOutCols:     []uint32{0},
@@ -1509,17 +1509,17 @@ func TestMergeJoiner(t *testing.T) {
 
 	for _, tc := range tcs {
 		tc.Init()
-		lOrderings := make([]distsqlpb.Ordering_Column, len(tc.leftEqCols))
+		lOrderings := make([]execinfrapb.Ordering_Column, len(tc.leftEqCols))
 		for i := range tc.leftEqCols {
-			lOrderings[i] = distsqlpb.Ordering_Column{
+			lOrderings[i] = execinfrapb.Ordering_Column{
 				ColIdx:    tc.leftEqCols[i],
 				Direction: tc.leftDirections[i],
 			}
 		}
 
-		rOrderings := make([]distsqlpb.Ordering_Column, len(tc.rightEqCols))
+		rOrderings := make([]execinfrapb.Ordering_Column, len(tc.rightEqCols))
 		for i := range tc.rightEqCols {
-			rOrderings[i] = distsqlpb.Ordering_Column{
+			rOrderings[i] = execinfrapb.Ordering_Column{
 				ColIdx:    tc.rightEqCols[i],
 				Direction: tc.rightDirections[i],
 			}
@@ -1588,8 +1588,8 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 						[]uint32{0},
 						typs,
 						typs,
-						[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
-						[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
+						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 						nil,   /* filterConstructor */
 						false, /* filterOnlyOnLeft */
 					)
@@ -1652,8 +1652,8 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						[]uint32{0},
 						typs,
 						typs,
-						[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}, {ColIdx: 1, Direction: distsqlpb.Ordering_Column_ASC}},
-						[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}, {ColIdx: 1, Direction: distsqlpb.Ordering_Column_ASC}},
+						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
+						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
 						nil,   /* filterConstructor */
 						false, /* filterOnlyOnLeft */
 					)
@@ -1720,8 +1720,8 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 							[]uint32{},
 							typs,
 							typs,
-							[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
-							[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
+							[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+							[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 							nil,   /* filterConstructor */
 							false, /* filterOnlyOnLeft */
 						)
@@ -1773,8 +1773,8 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 						[]uint32{},
 						typs,
 						typs,
-						[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
-						[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
+						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 						nil,   /* filterConstructor */
 						false, /* filterOnlyOnLeft */
 					)
@@ -1890,8 +1890,8 @@ func TestMergeJoinerRandomized(t *testing.T) {
 								[]uint32{0},
 								typs,
 								typs,
-								[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
-								[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
+								[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+								[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 								nil,   /* filterConstructor */
 								false, /* filterOnlyOnLeft */
 							)
@@ -1993,7 +1993,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 							outCols:     []uint32{0, 1},
 							sourceTypes: sourceTypes,
 							source:      leftSource,
-							directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+							directions:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC},
 						},
 
 						right: mergeJoinInput{
@@ -2001,7 +2001,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 							outCols:     []uint32{2, 3},
 							sourceTypes: sourceTypes,
 							source:      rightSource,
-							directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+							directions:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC},
 						},
 					},
 				}
@@ -2034,7 +2034,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 							outCols:     []uint32{0, 1},
 							sourceTypes: sourceTypes,
 							source:      leftSource,
-							directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+							directions:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC},
 						},
 
 						right: mergeJoinInput{
@@ -2042,7 +2042,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 							outCols:     []uint32{2, 3},
 							sourceTypes: sourceTypes,
 							source:      rightSource,
-							directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+							directions:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC},
 						},
 					},
 				}
@@ -2076,7 +2076,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 							outCols:     []uint32{0, 1},
 							sourceTypes: sourceTypes,
 							source:      leftSource,
-							directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+							directions:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC},
 						},
 
 						right: mergeJoinInput{
@@ -2084,7 +2084,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 							outCols:     []uint32{2, 3},
 							sourceTypes: sourceTypes,
 							source:      rightSource,
-							directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+							directions:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC},
 						},
 					},
 				}

@@ -13,7 +13,7 @@ package distsqlrun
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
@@ -35,12 +35,12 @@ import (
 //   }
 type StreamEncoder struct {
 	// infos is fully initialized when the first row is received.
-	infos            []distsqlpb.DatumInfo
+	infos            []execinfrapb.DatumInfo
 	infosInitialized bool
 
 	rowBuf       []byte
 	numEmptyRows int
-	metadata     []distsqlpb.RemoteProducerMetadata
+	metadata     []execinfrapb.RemoteProducerMetadata
 
 	// headerSent is set after the first message (which contains the header) has
 	// been sent.
@@ -51,17 +51,17 @@ type StreamEncoder struct {
 	alloc      sqlbase.DatumAlloc
 
 	// Preallocated structures to avoid allocations.
-	msg    distsqlpb.ProducerMessage
-	msgHdr distsqlpb.ProducerHeader
+	msg    execinfrapb.ProducerMessage
+	msgHdr execinfrapb.ProducerHeader
 }
 
-func (se *StreamEncoder) setHeaderFields(flowID distsqlpb.FlowID, streamID distsqlpb.StreamID) {
+func (se *StreamEncoder) setHeaderFields(flowID execinfrapb.FlowID, streamID execinfrapb.StreamID) {
 	se.msgHdr.FlowID = flowID
 	se.msgHdr.StreamID = streamID
 }
 
 func (se *StreamEncoder) init(types []types.T) {
-	se.infos = make([]distsqlpb.DatumInfo, len(types))
+	se.infos = make([]execinfrapb.DatumInfo, len(types))
 	for i := range types {
 		se.infos[i].Type = types[i]
 	}
@@ -75,8 +75,8 @@ func (se *StreamEncoder) init(types []types.T) {
 // that the StreamDecoder will return them first, before the data rows, thus
 // ensuring that rows produced _after_ an error are not received _before_ the
 // error.
-func (se *StreamEncoder) AddMetadata(ctx context.Context, meta distsqlpb.ProducerMetadata) {
-	se.metadata = append(se.metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, meta))
+func (se *StreamEncoder) AddMetadata(ctx context.Context, meta execinfrapb.ProducerMetadata) {
+	se.metadata = append(se.metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, meta))
 }
 
 // AddRow encodes a message.
@@ -120,12 +120,12 @@ func (se *StreamEncoder) AddRow(row sqlbase.EncDatumRow) error {
 
 // FormMessage populates a message containing the rows added since the last call
 // to FormMessage. The returned ProducerMessage should be treated as immutable.
-func (se *StreamEncoder) FormMessage(ctx context.Context) *distsqlpb.ProducerMessage {
+func (se *StreamEncoder) FormMessage(ctx context.Context) *execinfrapb.ProducerMessage {
 	msg := &se.msg
 	msg.Header = nil
 	msg.Data.RawBytes = se.rowBuf
 	msg.Data.NumEmptyRows = int32(se.numEmptyRows)
-	msg.Data.Metadata = make([]distsqlpb.RemoteProducerMetadata, len(se.metadata))
+	msg.Data.Metadata = make([]execinfrapb.RemoteProducerMetadata, len(se.metadata))
 	copy(msg.Data.Metadata, se.metadata)
 	se.metadata = se.metadata[:0]
 

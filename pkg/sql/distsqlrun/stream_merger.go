@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -49,16 +49,16 @@ func (sm *streamMerger) start(ctx context.Context) {
 // be empty.
 func (sm *streamMerger) NextBatch(
 	ctx context.Context, evalCtx *tree.EvalContext,
-) ([]sqlbase.EncDatumRow, []sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+) ([]sqlbase.EncDatumRow, []sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if sm.leftGroup == nil {
-		var meta *distsqlpb.ProducerMetadata
+		var meta *execinfrapb.ProducerMetadata
 		sm.leftGroup, meta = sm.left.nextGroup(ctx, evalCtx)
 		if meta != nil {
 			return nil, nil, meta
 		}
 	}
 	if sm.rightGroup == nil {
-		var meta *distsqlpb.ProducerMetadata
+		var meta *execinfrapb.ProducerMetadata
 		sm.rightGroup, meta = sm.right.nextGroup(ctx, evalCtx)
 		if meta != nil {
 			return nil, nil, meta
@@ -81,7 +81,7 @@ func (sm *streamMerger) NextBatch(
 		sm.nullEquality, &sm.datumAlloc, evalCtx,
 	)
 	if err != nil {
-		return nil, nil, &distsqlpb.ProducerMetadata{Err: err}
+		return nil, nil, &execinfrapb.ProducerMetadata{Err: err}
 	}
 	var leftGroup, rightGroup []sqlbase.EncDatumRow
 	if cmp <= 0 {

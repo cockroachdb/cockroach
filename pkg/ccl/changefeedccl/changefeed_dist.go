@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -109,9 +109,9 @@ func distChangefeedFlow(
 	for _, sp := range spanPartitions {
 		// TODO(dan): Merge these watches with the span-level resolved
 		// timestamps from the job progress.
-		watches := make([]distsqlpb.ChangeAggregatorSpec_Watch, len(sp.Spans))
+		watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
 		for i, nodeSpan := range sp.Spans {
-			watches[i] = distsqlpb.ChangeAggregatorSpec_Watch{
+			watches[i] = execinfrapb.ChangeAggregatorSpec_Watch{
 				Span:            nodeSpan,
 				InitialResolved: initialHighWater,
 			}
@@ -119,14 +119,14 @@ func distChangefeedFlow(
 
 		changeAggregatorProcs = append(changeAggregatorProcs, distsqlplan.Processor{
 			Node: sp.Node,
-			Spec: distsqlpb.ProcessorSpec{
-				Core: distsqlpb.ProcessorCoreUnion{
-					ChangeAggregator: &distsqlpb.ChangeAggregatorSpec{
+			Spec: execinfrapb.ProcessorSpec{
+				Core: execinfrapb.ProcessorCoreUnion{
+					ChangeAggregator: &execinfrapb.ChangeAggregatorSpec{
 						Watches: watches,
 						Feed:    details,
 					},
 				},
-				Output: []distsqlpb.OutputRouterSpec{{Type: distsqlpb.OutputRouterSpec_PASS_THROUGH}},
+				Output: []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
 			},
 		})
 	}
@@ -134,7 +134,7 @@ func distChangefeedFlow(
 	// static. Currently there is no way for them to change after the changefeed
 	// is created, even if it is paused and unpaused, but #28982 describes some
 	// ways that this might happen in the future.
-	changeFrontierSpec := distsqlpb.ChangeFrontierSpec{
+	changeFrontierSpec := execinfrapb.ChangeFrontierSpec{
 		TrackedSpans: trackedSpans,
 		Feed:         details,
 		JobID:        jobID,
@@ -152,8 +152,8 @@ func distChangefeedFlow(
 
 	p.AddSingleGroupStage(
 		gatewayNodeID,
-		distsqlpb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
-		distsqlpb.PostProcessSpec{},
+		execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
+		execinfrapb.PostProcessSpec{},
 		changefeedResultTypes,
 	)
 

@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -36,7 +36,7 @@ func newNoopProcessor(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*noopProcessor, error) {
 	n := &noopProcessor{input: input}
@@ -62,7 +62,7 @@ func (n *noopProcessor) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for n.State == distsql.StateRunning {
 		row, meta := n.input.Next()
 

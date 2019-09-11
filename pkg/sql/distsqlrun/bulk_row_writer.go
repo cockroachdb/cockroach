@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -37,7 +37,7 @@ type bulkRowWriter struct {
 	flowCtx        *distsql.FlowCtx
 	processorID    int32
 	batchIdxAtomic int64
-	spec           distsqlpb.BulkRowWriterSpec
+	spec           execinfrapb.BulkRowWriterSpec
 	input          distsql.RowSource
 	out            distsql.ProcOutputHelper
 	output         distsql.RowReceiver
@@ -49,7 +49,7 @@ var _ distsql.Processor = &bulkRowWriter{}
 func newBulkRowWriterProcessor(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec distsqlpb.BulkRowWriterSpec,
+	spec execinfrapb.BulkRowWriterSpec,
 	input distsql.RowSource,
 	output distsql.RowReceiver,
 ) (distsql.Processor, error) {
@@ -61,7 +61,7 @@ func newBulkRowWriterProcessor(
 		input:          input,
 		output:         output,
 	}
-	if err := c.out.Init(&distsqlpb.PostProcessSpec{}, CTASPlanResultTypes,
+	if err := c.out.Init(&execinfrapb.PostProcessSpec{}, CTASPlanResultTypes,
 		flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}

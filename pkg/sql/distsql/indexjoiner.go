@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -59,7 +59,7 @@ type IndexJoiner struct {
 
 var _ Processor = &IndexJoiner{}
 var _ RowSource = &IndexJoiner{}
-var _ distsqlpb.MetadataSource = &IndexJoiner{}
+var _ execinfrapb.MetadataSource = &IndexJoiner{}
 var _ colexec.OpNode = &IndexJoiner{}
 
 const indexJoinerProcName = "index joiner"
@@ -68,9 +68,9 @@ const indexJoinerProcName = "index joiner"
 func NewIndexJoiner(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *distsqlpb.JoinReaderSpec,
+	spec *execinfrapb.JoinReaderSpec,
 	input RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output RowReceiver,
 ) (RowSourcedProcessor, error) {
 	if spec.IndexIdx != 0 {
@@ -82,7 +82,7 @@ func NewIndexJoiner(
 		keyPrefix: sqlbase.MakeIndexKeyPrefix(&spec.Table, spec.Table.PrimaryIndex.ID),
 		batchSize: indexJoinerBatchSize,
 	}
-	needMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	needMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	if err := ij.Init(
 		ij,
 		post,
@@ -93,7 +93,7 @@ func NewIndexJoiner(
 		nil, /* memMonitor */
 		ProcStateOpts{
 			InputsToDrain: []RowSource{ij.input},
-			TrailingMetaCallback: func(ctx context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
 				ij.InternalClose()
 				return ij.generateMeta(ctx)
 			},
@@ -147,7 +147,7 @@ func (ij *IndexJoiner) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (ij *IndexJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+func (ij *IndexJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for ij.State == StateRunning {
 		if !ij.fetcherReady {
 			// Retrieve a batch of rows from the input.
@@ -252,15 +252,15 @@ func (ij *IndexJoiner) outputStatsToTrace() {
 	}
 }
 
-func (ij *IndexJoiner) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (ij *IndexJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	if meta := GetTxnCoordMeta(ctx, ij.FlowCtx.Txn); meta != nil {
-		return []distsqlpb.ProducerMetadata{{TxnCoordMeta: meta}}
+		return []execinfrapb.ProducerMetadata{{TxnCoordMeta: meta}}
 	}
 	return nil
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (ij *IndexJoiner) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (ij *IndexJoiner) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	return ij.generateMeta(ctx)
 }
 

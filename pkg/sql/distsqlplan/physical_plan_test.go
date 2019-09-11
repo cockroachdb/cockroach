@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,7 +40,7 @@ func TestProjectionAndRendering(t *testing.T) {
 	// post-process spec (as well as ResultTypes, Ordering).
 	testCases := []struct {
 		// post-process spec of the last stage in the plan.
-		post distsqlpb.PostProcessSpec
+		post execinfrapb.PostProcessSpec
 		// Comma-separated list of result "types".
 		resultTypes string
 		// ordering in a string like "0,1,-2" (negative values = descending). Can't
@@ -51,7 +51,7 @@ func TestProjectionAndRendering(t *testing.T) {
 		action func(p *PhysicalPlan)
 
 		// expected post-process spec of the last stage in the resulting plan.
-		expPost distsqlpb.PostProcessSpec
+		expPost execinfrapb.PostProcessSpec
 		// expected result types, same format and strings as resultTypes.
 		expResultTypes string
 		// expected ordeering, same format as ordering.
@@ -59,14 +59,14 @@ func TestProjectionAndRendering(t *testing.T) {
 	}{
 		{
 			// Simple projection.
-			post:        distsqlpb.PostProcessSpec{},
+			post:        execinfrapb.PostProcessSpec{},
 			resultTypes: "A,B,C,D",
 
 			action: func(p *PhysicalPlan) {
 				p.AddProjection([]uint32{1, 3, 2})
 			},
 
-			expPost: distsqlpb.PostProcessSpec{
+			expPost: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{1, 3, 2},
 			},
@@ -75,7 +75,7 @@ func TestProjectionAndRendering(t *testing.T) {
 
 		{
 			// Projection with ordering.
-			post:        distsqlpb.PostProcessSpec{},
+			post:        execinfrapb.PostProcessSpec{},
 			resultTypes: "A,B,C,D",
 			ordering:    "2",
 
@@ -83,7 +83,7 @@ func TestProjectionAndRendering(t *testing.T) {
 				p.AddProjection([]uint32{2})
 			},
 
-			expPost: distsqlpb.PostProcessSpec{
+			expPost: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{2},
 			},
@@ -93,7 +93,7 @@ func TestProjectionAndRendering(t *testing.T) {
 
 		{
 			// Projection with ordering that refers to non-projected column.
-			post:        distsqlpb.PostProcessSpec{},
+			post:        execinfrapb.PostProcessSpec{},
 			resultTypes: "A,B,C,D",
 			ordering:    "2,-1,3",
 
@@ -101,7 +101,7 @@ func TestProjectionAndRendering(t *testing.T) {
 				p.AddProjection([]uint32{2, 3})
 			},
 
-			expPost: distsqlpb.PostProcessSpec{
+			expPost: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{2, 3, 1},
 			},
@@ -111,7 +111,7 @@ func TestProjectionAndRendering(t *testing.T) {
 
 		{
 			// Projection after projection.
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{5, 6, 7, 8},
 			},
@@ -122,7 +122,7 @@ func TestProjectionAndRendering(t *testing.T) {
 				p.AddProjection([]uint32{3, 1})
 			},
 
-			expPost: distsqlpb.PostProcessSpec{
+			expPost: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{8, 6},
 			},
@@ -132,7 +132,7 @@ func TestProjectionAndRendering(t *testing.T) {
 
 		{
 			// Projection after projection; ordering refers to non-projected column.
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{5, 6, 7, 8},
 			},
@@ -143,7 +143,7 @@ func TestProjectionAndRendering(t *testing.T) {
 				p.AddProjection([]uint32{3, 1})
 			},
 
-			expPost: distsqlpb.PostProcessSpec{
+			expPost: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{8, 6, 5},
 			},
@@ -153,8 +153,8 @@ func TestProjectionAndRendering(t *testing.T) {
 
 		{
 			// Projection after rendering.
-			post: distsqlpb.PostProcessSpec{
-				RenderExprs: []distsqlpb.Expression{{Expr: "@5"}, {Expr: "@1 + @2"}, {Expr: "@6"}},
+			post: execinfrapb.PostProcessSpec{
+				RenderExprs: []execinfrapb.Expression{{Expr: "@5"}, {Expr: "@1 + @2"}, {Expr: "@6"}},
 			},
 			resultTypes: "A,B,C",
 			ordering:    "2",
@@ -163,8 +163,8 @@ func TestProjectionAndRendering(t *testing.T) {
 				p.AddProjection([]uint32{2, 0})
 			},
 
-			expPost: distsqlpb.PostProcessSpec{
-				RenderExprs: []distsqlpb.Expression{{Expr: "@6"}, {Expr: "@5"}},
+			expPost: execinfrapb.PostProcessSpec{
+				RenderExprs: []execinfrapb.Expression{{Expr: "@6"}, {Expr: "@5"}},
 			},
 			expResultTypes: "C,A",
 			expOrdering:    "0",
@@ -172,8 +172,8 @@ func TestProjectionAndRendering(t *testing.T) {
 
 		{
 			// Projection after rendering; ordering refers to non-projected column.
-			post: distsqlpb.PostProcessSpec{
-				RenderExprs: []distsqlpb.Expression{{Expr: "@5"}, {Expr: "@1 + @2"}, {Expr: "@6"}},
+			post: execinfrapb.PostProcessSpec{
+				RenderExprs: []execinfrapb.Expression{{Expr: "@5"}, {Expr: "@1 + @2"}, {Expr: "@6"}},
 			},
 			resultTypes: "A,B,C",
 			ordering:    "2,-1",
@@ -182,8 +182,8 @@ func TestProjectionAndRendering(t *testing.T) {
 				p.AddProjection([]uint32{2})
 			},
 
-			expPost: distsqlpb.PostProcessSpec{
-				RenderExprs: []distsqlpb.Expression{{Expr: "@6"}, {Expr: "@1 + @2"}},
+			expPost: execinfrapb.PostProcessSpec{
+				RenderExprs: []execinfrapb.Expression{{Expr: "@6"}, {Expr: "@1 + @2"}},
 			},
 			expResultTypes: "C,B",
 			expOrdering:    "0,-1",
@@ -191,7 +191,7 @@ func TestProjectionAndRendering(t *testing.T) {
 
 		{
 			// Identity rendering.
-			post:        distsqlpb.PostProcessSpec{},
+			post:        execinfrapb.PostProcessSpec{},
 			resultTypes: "A,B,C,D",
 
 			action: func(p *PhysicalPlan) {
@@ -210,13 +210,13 @@ func TestProjectionAndRendering(t *testing.T) {
 				}
 			},
 
-			expPost:        distsqlpb.PostProcessSpec{},
+			expPost:        execinfrapb.PostProcessSpec{},
 			expResultTypes: "A,B,C,D",
 		},
 
 		{
 			// Rendering that becomes projection.
-			post:        distsqlpb.PostProcessSpec{},
+			post:        execinfrapb.PostProcessSpec{},
 			resultTypes: "A,B,C,D",
 
 			action: func(p *PhysicalPlan) {
@@ -235,7 +235,7 @@ func TestProjectionAndRendering(t *testing.T) {
 
 			},
 
-			expPost: distsqlpb.PostProcessSpec{
+			expPost: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{1, 3, 2},
 			},
@@ -244,7 +244,7 @@ func TestProjectionAndRendering(t *testing.T) {
 
 		{
 			// Rendering with ordering that refers to non-projected column.
-			post:        distsqlpb.PostProcessSpec{},
+			post:        execinfrapb.PostProcessSpec{},
 			resultTypes: "A,B,C,D",
 			ordering:    "3",
 
@@ -265,8 +265,8 @@ func TestProjectionAndRendering(t *testing.T) {
 				}
 			},
 
-			expPost: distsqlpb.PostProcessSpec{
-				RenderExprs: []distsqlpb.Expression{{Expr: "@2 + @3"}, {Expr: "@4"}},
+			expPost: execinfrapb.PostProcessSpec{
+				RenderExprs: []execinfrapb.Expression{{Expr: "@2 + @3"}, {Expr: "@4"}},
 			},
 			expResultTypes: "X,D",
 			expOrdering:    "1",
@@ -274,7 +274,7 @@ func TestProjectionAndRendering(t *testing.T) {
 		{
 			// Rendering with ordering that refers to non-projected column after
 			// projection.
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{5, 6, 7, 8},
 			},
@@ -299,8 +299,8 @@ func TestProjectionAndRendering(t *testing.T) {
 				}
 			},
 
-			expPost: distsqlpb.PostProcessSpec{
-				RenderExprs: []distsqlpb.Expression{{Expr: "@7 + @8"}, {Expr: "@6"}, {Expr: "@9"}},
+			expPost: execinfrapb.PostProcessSpec{
+				RenderExprs: []execinfrapb.Expression{{Expr: "@7 + @8"}, {Expr: "@6"}, {Expr: "@9"}},
 			},
 			expResultTypes: "X,A,D",
 			expOrdering:    "1,-2",
@@ -310,22 +310,22 @@ func TestProjectionAndRendering(t *testing.T) {
 	for testIdx, tc := range testCases {
 		p := PhysicalPlan{
 			Processors: []Processor{
-				{Spec: distsqlpb.ProcessorSpec{Post: tc.post}},
-				{Spec: distsqlpb.ProcessorSpec{Post: tc.post}},
+				{Spec: execinfrapb.ProcessorSpec{Post: tc.post}},
+				{Spec: execinfrapb.ProcessorSpec{Post: tc.post}},
 			},
 			ResultRouters: []ProcessorIdx{0, 1},
 		}
 
 		if tc.ordering != "" {
 			for _, s := range strings.Split(tc.ordering, ",") {
-				var o distsqlpb.Ordering_Column
+				var o execinfrapb.Ordering_Column
 				col, _ := strconv.Atoi(s)
 				if col >= 0 {
 					o.ColIdx = uint32(col)
-					o.Direction = distsqlpb.Ordering_Column_ASC
+					o.Direction = execinfrapb.Ordering_Column_ASC
 				} else {
 					o.ColIdx = uint32(-col)
-					o.Direction = distsqlpb.Ordering_Column_DESC
+					o.Direction = execinfrapb.Ordering_Column_DESC
 				}
 				p.MergeOrdering.Columns = append(p.MergeOrdering.Columns, o)
 			}
@@ -351,7 +351,7 @@ func TestProjectionAndRendering(t *testing.T) {
 		var ord []string
 		for _, c := range p.MergeOrdering.Columns {
 			i := int(c.ColIdx)
-			if c.Direction == distsqlpb.Ordering_Column_DESC {
+			if c.Direction == execinfrapb.Ordering_Column_DESC {
 				i = -i
 			}
 			ord = append(ord, strconv.Itoa(i))

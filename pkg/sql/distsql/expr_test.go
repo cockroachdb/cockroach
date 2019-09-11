@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,7 +40,7 @@ func (d testVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 func TestProcessExpression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	e := distsqlpb.Expression{Expr: "@1 * (@2 + @3) + @1"}
+	e := execinfrapb.Expression{Expr: "@1 * (@2 + @3) + @1"}
 
 	h := tree.MakeIndexedVarHelper(testVarContainer{}, 4)
 	st := cluster.MakeTestingClusterSettings()
@@ -67,7 +67,7 @@ func TestProcessExpression(t *testing.T) {
 func TestProcessExpressionConstantEval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	e := distsqlpb.Expression{Expr: "ARRAY[1:::INT,2:::INT]"}
+	e := execinfrapb.Expression{Expr: "ARRAY[1:::INT,2:::INT]"}
 
 	h := tree.MakeIndexedVarHelper(nil, 0)
 	st := cluster.MakeTestingClusterSettings()

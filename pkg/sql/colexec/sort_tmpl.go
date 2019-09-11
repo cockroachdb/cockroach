@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -74,7 +74,7 @@ func _ASSIGN_LT(_, _, _ string) bool {
 // Use execgen package to remove unused import warning.
 var _ interface{} = execgen.UNSAFEGET
 
-func isSorterSupported(t coltypes.T, dir distsqlpb.Ordering_Column_Direction) bool {
+func isSorterSupported(t coltypes.T, dir execinfrapb.Ordering_Column_Direction) bool {
 	switch t {
 	// {{range $typ, $ := . }} {{/* for each type */}}
 	case _TYPES_T:
@@ -93,7 +93,7 @@ func isSorterSupported(t coltypes.T, dir distsqlpb.Ordering_Column_Direction) bo
 }
 
 func newSingleSorter(
-	t coltypes.T, dir distsqlpb.Ordering_Column_Direction, hasNulls bool,
+	t coltypes.T, dir execinfrapb.Ordering_Column_Direction, hasNulls bool,
 ) colSorter {
 	switch t {
 	// {{range $typ, $ := . }} {{/* for each type */}}

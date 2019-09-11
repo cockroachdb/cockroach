@@ -101,7 +101,7 @@ func init() {
 			typesToSortOverloads[o.LTyp][b] = sortOverloads{
 				LTyp: o.LTyp,
 				Overloads: []sortOverload{
-					{overload: o, Dir: "distsqlpb.Ordering_Column_ASC", DirString: "Asc", Nulls: b},
+					{overload: o, Dir: "execinfrapb.Ordering_Column_ASC", DirString: "Asc", Nulls: b},
 					{}},
 			}
 		}
@@ -109,7 +109,7 @@ func init() {
 	for _, o := range sameTypeComparisonOpToOverloads[tree.GT] {
 		for _, b := range []bool{true, false} {
 			typesToSortOverloads[o.LTyp][b].Overloads[1] = sortOverload{
-				overload: o, Dir: "distsqlpb.Ordering_Column_DESC", DirString: "Desc", Nulls: b}
+				overload: o, Dir: "execinfrapb.Ordering_Column_DESC", DirString: "Desc", Nulls: b}
 		}
 	}
 }

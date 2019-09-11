@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,7 +39,7 @@ import (
 type sampleAggregator struct {
 	distsql.ProcessorBase
 
-	spec    *distsqlpb.SampleAggregatorSpec
+	spec    *execinfrapb.SampleAggregatorSpec
 	input   distsql.RowSource
 	memAcc  mon.BoundAccount
 	inTypes []types.T
@@ -68,9 +68,9 @@ var SampleAggregatorProgressInterval = 5 * time.Second
 func newSampleAggregator(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec *distsqlpb.SampleAggregatorSpec,
+	spec *execinfrapb.SampleAggregatorSpec,
 	input distsql.RowSource,
-	post *distsqlpb.PostProcessSpec,
+	post *execinfrapb.PostProcessSpec,
 	output distsql.RowReceiver,
 ) (*sampleAggregator, error) {
 	for _, s := range spec.Sketches {
@@ -123,7 +123,7 @@ func newSampleAggregator(
 	if err := s.Init(
 		nil, post, []types.T{}, flowCtx, processorID, output, memMonitor,
 		distsql.ProcStateOpts{
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				s.close()
 				return nil
 			},

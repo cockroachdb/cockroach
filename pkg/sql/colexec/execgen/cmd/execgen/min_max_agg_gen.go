@@ -17,12 +17,12 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 type aggOverloads struct {
-	Agg       distsqlpb.AggregatorSpec_Func
+	Agg       execinfrapb.AggregatorSpec_Func
 	Overloads []*overload
 }
 
@@ -69,11 +69,11 @@ func genMinMaxAgg(wr io.Writer) error {
 	}
 	data := []aggOverloads{
 		{
-			Agg:       distsqlpb.AggregatorSpec_MIN,
+			Agg:       execinfrapb.AggregatorSpec_MIN,
 			Overloads: sameTypeComparisonOpToOverloads[tree.LT],
 		},
 		{
-			Agg:       distsqlpb.AggregatorSpec_MAX,
+			Agg:       execinfrapb.AggregatorSpec_MAX,
 			Overloads: sameTypeComparisonOpToOverloads[tree.GT],
 		},
 	}

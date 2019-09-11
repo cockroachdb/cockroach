@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -61,13 +61,13 @@ func TestPostProcess(t *testing.T) {
 	}
 
 	testCases := []struct {
-		post          distsqlpb.PostProcessSpec
+		post          execinfrapb.PostProcessSpec
 		outputTypes   []types.T
 		expNeededCols []int
 		expected      string
 	}{
 		{
-			post:          distsqlpb.PostProcessSpec{},
+			post:          execinfrapb.PostProcessSpec{},
 			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
@@ -75,8 +75,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Filter.
 		{
-			post: distsqlpb.PostProcessSpec{
-				Filter: distsqlpb.Expression{Expr: "@1 = 1"},
+			post: execinfrapb.PostProcessSpec{
+				Filter: execinfrapb.Expression{Expr: "@1 = 1"},
 			},
 			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
@@ -85,7 +85,7 @@ func TestPostProcess(t *testing.T) {
 
 		// Projection.
 		{
-			post: distsqlpb.PostProcessSpec{
+			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
@@ -96,8 +96,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Filter and projection; filter only refers to projected column.
 		{
-			post: distsqlpb.PostProcessSpec{
-				Filter:        distsqlpb.Expression{Expr: "@1 = 1"},
+			post: execinfrapb.PostProcessSpec{
+				Filter:        execinfrapb.Expression{Expr: "@1 = 1"},
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
@@ -108,8 +108,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Filter and projection; filter refers to non-projected column.
 		{
-			post: distsqlpb.PostProcessSpec{
-				Filter:        distsqlpb.Expression{Expr: "@2 = 2"},
+			post: execinfrapb.PostProcessSpec{
+				Filter:        execinfrapb.Expression{Expr: "@2 = 2"},
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
@@ -120,8 +120,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Rendering.
 		{
-			post: distsqlpb.PostProcessSpec{
-				RenderExprs: []distsqlpb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
+			post: execinfrapb.PostProcessSpec{
+				RenderExprs: []execinfrapb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
 			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1},
@@ -130,9 +130,9 @@ func TestPostProcess(t *testing.T) {
 
 		// Rendering and filtering; filter refers to column used in rendering.
 		{
-			post: distsqlpb.PostProcessSpec{
-				Filter:      distsqlpb.Expression{Expr: "@2 = 2"},
-				RenderExprs: []distsqlpb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
+			post: execinfrapb.PostProcessSpec{
+				Filter:      execinfrapb.Expression{Expr: "@2 = 2"},
+				RenderExprs: []execinfrapb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
 			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1},
@@ -141,9 +141,9 @@ func TestPostProcess(t *testing.T) {
 
 		// Rendering and filtering; filter refers to column not used in rendering.
 		{
-			post: distsqlpb.PostProcessSpec{
-				Filter:      distsqlpb.Expression{Expr: "@3 = 4"},
-				RenderExprs: []distsqlpb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
+			post: execinfrapb.PostProcessSpec{
+				Filter:      execinfrapb.Expression{Expr: "@3 = 4"},
+				RenderExprs: []execinfrapb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
 			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
@@ -152,8 +152,8 @@ func TestPostProcess(t *testing.T) {
 
 		// More complex rendering expressions.
 		{
-			post: distsqlpb.PostProcessSpec{
-				RenderExprs: []distsqlpb.Expression{
+			post: execinfrapb.PostProcessSpec{
+				RenderExprs: []execinfrapb.Expression{
 					{Expr: "@1 - @2"},
 					{Expr: "@1 + @2 * @3"},
 					{Expr: "@1 >= 2"},
@@ -180,7 +180,7 @@ func TestPostProcess(t *testing.T) {
 
 		// Offset.
 		{
-			post:          distsqlpb.PostProcessSpec{Offset: 3},
+			post:          execinfrapb.PostProcessSpec{Offset: 3},
 			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
@@ -188,25 +188,25 @@ func TestPostProcess(t *testing.T) {
 
 		// Limit.
 		{
-			post:          distsqlpb.PostProcessSpec{Limit: 3},
+			post:          execinfrapb.PostProcessSpec{Limit: 3},
 			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4]]",
 		},
 		{
-			post:          distsqlpb.PostProcessSpec{Limit: 9},
+			post:          execinfrapb.PostProcessSpec{Limit: 9},
 			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
 		},
 		{
-			post:          distsqlpb.PostProcessSpec{Limit: 10},
+			post:          execinfrapb.PostProcessSpec{Limit: 10},
 			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 		{
-			post:          distsqlpb.PostProcessSpec{Limit: 11},
+			post:          execinfrapb.PostProcessSpec{Limit: 11},
 			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
@@ -214,25 +214,25 @@ func TestPostProcess(t *testing.T) {
 
 		// Offset + limit.
 		{
-			post:          distsqlpb.PostProcessSpec{Offset: 3, Limit: 2},
+			post:          execinfrapb.PostProcessSpec{Offset: 3, Limit: 2},
 			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4]]",
 		},
 		{
-			post:          distsqlpb.PostProcessSpec{Offset: 3, Limit: 6},
+			post:          execinfrapb.PostProcessSpec{Offset: 3, Limit: 6},
 			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
 		},
 		{
-			post:          distsqlpb.PostProcessSpec{Offset: 3, Limit: 7},
+			post:          execinfrapb.PostProcessSpec{Offset: 3, Limit: 7},
 			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 		{
-			post:          distsqlpb.PostProcessSpec{Offset: 3, Limit: 8},
+			post:          execinfrapb.PostProcessSpec{Offset: 3, Limit: 8},
 			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
@@ -240,8 +240,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Filter + offset.
 		{
-			post: distsqlpb.PostProcessSpec{
-				Filter: distsqlpb.Expression{Expr: "@1 = 1"},
+			post: execinfrapb.PostProcessSpec{
+				Filter: execinfrapb.Expression{Expr: "@1 = 1"},
 				Offset: 1,
 			},
 			outputTypes:   sqlbase.ThreeIntCols,
@@ -251,8 +251,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Filter + limit.
 		{
-			post: distsqlpb.PostProcessSpec{
-				Filter: distsqlpb.Expression{Expr: "@1 = 1"},
+			post: execinfrapb.PostProcessSpec{
+				Filter: execinfrapb.Expression{Expr: "@1 = 1"},
 				Limit:  2,
 			},
 			outputTypes:   sqlbase.ThreeIntCols,
@@ -322,74 +322,74 @@ func TestAggregatorSpecAggregationEquals(t *testing.T) {
 	colIdx2 := uint32(1)
 
 	for i, tc := range []struct {
-		a, b     distsqlpb.AggregatorSpec_Aggregation
+		a, b     execinfrapb.AggregatorSpec_Aggregation
 		expected bool
 	}{
 		// Func tests.
 		{
-			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
-			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL},
 			expected: true,
 		},
 		{
-			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
-			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_AVG},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_AVG},
 			expected: false,
 		},
 
 		// ColIdx tests.
 		{
-			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
-			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
 			expected: true,
 		},
 		{
-			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1}},
-			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 3}},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1}},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 3}},
 			expected: false,
 		},
 		{
-			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
-			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 3}},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 3}},
 			expected: false,
 		},
 
 		// FilterColIdx tests.
 		{
-			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
-			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
 			expected: true,
 		},
 		{
-			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
-			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL},
 			expected: false,
 		},
 		{
-			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
-			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx2},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx2},
 			expected: false,
 		},
 
 		// Distinct tests.
 		{
-			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: true},
-			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: true},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, Distinct: true},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, Distinct: true},
 			expected: true,
 		},
 		{
-			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: false},
-			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: false},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, Distinct: false},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, Distinct: false},
 			expected: true,
 		},
 		{
-			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: false},
-			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, Distinct: false},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL},
 			expected: true,
 		},
 		{
-			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: true},
-			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, Distinct: true},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL},
 			expected: false,
 		},
 	} {
@@ -419,7 +419,7 @@ func TestProcessorBaseContext(t *testing.T) {
 		defer flowCtx.EvalCtx.Stop(ctx)
 
 		input := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(10, 1))
-		noop, err := newNoopProcessor(flowCtx, 0 /* processorID */, input, &distsqlpb.PostProcessSpec{}, &rowDisposer{})
+		noop, err := newNoopProcessor(flowCtx, 0 /* processorID */, input, &execinfrapb.PostProcessSpec{}, &rowDisposer{})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -44,7 +44,7 @@ var csvOutputTypes = []types.T{
 
 type readImportDataProcessor struct {
 	flowCtx *distsql.FlowCtx
-	spec    distsqlpb.ReadImportDataSpec
+	spec    execinfrapb.ReadImportDataSpec
 	output  distsql.RowReceiver
 }
 
@@ -57,7 +57,7 @@ func (cp *readImportDataProcessor) OutputTypes() []types.T {
 func newReadImportDataProcessor(
 	flowCtx *distsql.FlowCtx,
 	processorID int32,
-	spec distsqlpb.ReadImportDataSpec,
+	spec execinfrapb.ReadImportDataSpec,
 	output distsql.RowReceiver,
 ) (distsql.Processor, error) {
 	cp := &readImportDataProcessor{
@@ -79,7 +79,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 
 	conv, err := makeInputConverter(&cp.spec, cp.flowCtx.NewEvalCtx(), kvCh)
 	if err != nil {
-		cp.output.Push(nil, &distsqlpb.ProducerMetadata{Err: err})
+		cp.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 		return
 	}
 
@@ -130,12 +130,12 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 	}
 
 	if err := group.Wait(); err != nil {
-		cp.output.Push(nil, &distsqlpb.ProducerMetadata{Err: err})
+		cp.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 	}
 }
 
 func makeInputConverter(
-	spec *distsqlpb.ReadImportDataSpec, evalCtx *tree.EvalContext, kvCh chan row.KVBatch,
+	spec *execinfrapb.ReadImportDataSpec, evalCtx *tree.EvalContext, kvCh chan row.KVBatch,
 ) (inputConverter, error) {
 
 	var singleTable *sqlbase.TableDescriptor
@@ -392,7 +392,7 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 			case <-stopProgress:
 				return nil
 			case <-tick.C:
-				var prog distsqlpb.RemoteProducerMetadata_BulkProcessorProgress
+				var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 				prog.CompletedRow = make(map[int32]uint64)
 				prog.CompletedFraction = make(map[int32]float32)
 				for file, offset := range offsets {
@@ -407,7 +407,7 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 					}
 					prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
 				}
-				cp.output.Push(nil, &distsqlpb.ProducerMetadata{BulkProcessorProgress: &prog})
+				cp.output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog})
 			}
 		}
 	})
@@ -488,14 +488,14 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 		return err
 	}
 
-	var prog distsqlpb.RemoteProducerMetadata_BulkProcessorProgress
+	var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 	prog.CompletedRow = make(map[int32]uint64)
 	prog.CompletedFraction = make(map[int32]float32)
 	for i := range cp.spec.Uri {
 		prog.CompletedFraction[i] = 1.0
 		prog.CompletedRow[i] = math.MaxUint64
 	}
-	cp.output.Push(nil, &distsqlpb.ProducerMetadata{BulkProcessorProgress: &prog})
+	cp.output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog})
 
 	addedSummary := pkIndexAdder.GetSummary()
 	addedSummary.Add(indexAdder.GetSummary())
