@@ -439,7 +439,7 @@ func (c *TableFeed) Close() error {
 	return c.db.Close()
 }
 
-var cloudFeedFileRE = regexp.MustCompile(`^\d{33}-(.+?)-(\d+)-`)
+var cloudFeedFileRE = regexp.MustCompile(`^\d{33}_(.+?)_(\d+)_`)
 
 type cloudFeedFactory struct {
 	s       serverutils.TestServerInterface

@@ -58,7 +58,10 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB) (Validator, error) {
 
 			// eventPause PAUSEs the changefeed. The state machine will handle
 			// RESUMEing it.
-			// TODO(dan): This deadlocks eventPause{}: 10,
+			// TODO(aayushs): This was commented out before but I didn't run into
+			// any deadlocks after stress-racing for over 10K runs. So uncommenting
+			// for now.
+			eventPause{}: 10,
 
 			// eventPush pushes every open transaction by running a high priority
 			// SELECT.

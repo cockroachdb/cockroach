@@ -52,8 +52,8 @@ type cloudStorageSinkKey struct {
 }
 
 type cloudStorageSinkFile struct {
-	earliestTs hlc.Timestamp
-	buf        bytes.Buffer
+	leastResolvedTs hlc.Timestamp
+	buf             bytes.Buffer
 }
 
 // cloudStorageSink emits to files on cloud storage.
@@ -106,9 +106,12 @@ type cloudStorageSink struct {
 	ext           string
 	recordDelimFn func(io.Writer) error
 
-	es     storageccl.ExportStorage
-	fileID int64
-	files  map[cloudStorageSinkKey]*cloudStorageSinkFile
+	es               storageccl.ExportStorage
+	fileID           int64
+	files            map[cloudStorageSinkKey]*cloudStorageSinkFile
+	sf               *spanFrontier
+	initialHighWater hlc.Timestamp
+	jobSessionID     string
 }
 
 var cloudStorageSinkIDAtomic int64
@@ -116,9 +119,12 @@ var cloudStorageSinkIDAtomic int64
 func makeCloudStorageSink(
 	baseURI string,
 	nodeID roachpb.NodeID,
+	sessionID string,
 	targetMaxFileSize int64,
 	settings *cluster.Settings,
 	opts map[string]string,
+	watchedSF *spanFrontier,
+	initialHighWater hlc.Timestamp,
 ) (Sink, error) {
 	// Date partitioning is pretty standard, so no override for now, but we could
 	// plumb one down if someone needs it.
@@ -132,6 +138,9 @@ func makeCloudStorageSink(
 		targetMaxFileSize: targetMaxFileSize,
 		files:             make(map[cloudStorageSinkKey]*cloudStorageSinkFile),
 		partitionFormat:   defaultPartitionFormat,
+		sf:                watchedSF,
+		initialHighWater:  initialHighWater,
+		jobSessionID:      sessionID,
 	}
 
 	switch formatType(opts[optFormat]) {
@@ -184,11 +193,19 @@ func (s *cloudStorageSink) EmitRow(
 	if file == nil {
 		// We could pool the bytes.Buffers if necessary, but we'd need to be
 		// careful to bound the size of the memory held by the pool.
-		file = &cloudStorageSinkFile{}
+		leastResolvedTs := s.sf.Frontier()
+		if leastResolvedTs.Less(s.initialHighWater) {
+			// This condition being true indicates that this is a new job that
+			// hasn't yet seen any resolved timestamps. So we start with the
+			// initialHighWater.
+			leastResolvedTs = s.initialHighWater
+		}
+		file = &cloudStorageSinkFile{leastResolvedTs: leastResolvedTs}
 		s.files[key] = file
 	}
-	if file.earliestTs.IsEmpty() || updated.Less(file.earliestTs) {
-		file.earliestTs = updated
+	if updated.Less(file.leastResolvedTs) {
+		// Avoid leakage of old previously seen data into new file.
+		return nil
 	}
 
 	// TODO(dan): Memory monitoring for this
@@ -225,9 +242,7 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 
 	part := resolved.GoTime().Format(s.partitionFormat)
 	filename := fmt.Sprintf(`%s.RESOLVED`, cloudStorageFormatTime(resolved))
-	if log.V(1) {
-		log.Info(ctx, "writing ", filename)
-	}
+	log.Info(ctx, "writing ", filename)
 	return s.es.WriteFile(ctx, filepath.Join(part, filename), bytes.NewReader(payload))
 }
 
@@ -257,12 +272,15 @@ func (s *cloudStorageSink) flushFile(
 		return nil
 	}
 
-	part := file.earliestTs.GoTime().Format(s.partitionFormat)
-	ts := cloudStorageFormatTime(file.earliestTs)
+	part := file.leastResolvedTs.GoTime().Format(s.partitionFormat)
+	ts := cloudStorageFormatTime(file.leastResolvedTs)
 	fileID := s.fileID
 	s.fileID++
-	filename := fmt.Sprintf(`%s-%s-%d-%d-%d-%d%s`,
-		ts, key.Topic, key.SchemaID, s.nodeID, s.sinkID, fileID, s.ext)
+	// Pad file ID to maintain lexical ordering among files from the same sink.
+	// Note that we use underscores because we want these files to lexicographically
+	// succeed `%d.RESOLVED` files with the same timestamp.
+	filename := fmt.Sprintf(`%s_%s_%d_%d_%d_%012d_%s%s`,
+		ts, key.Topic, key.SchemaID, s.nodeID, s.sinkID, fileID, s.jobSessionID, s.ext)
 	if log.V(1) {
 		log.Info(ctx, "writing ", filename)
 	}
