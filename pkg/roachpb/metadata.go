@@ -547,6 +547,17 @@ func (l *Locality) Set(value string) error {
 	return nil
 }
 
+// Find searches the locality's tiers for the input key, returning its value if
+// present.
+func (l *Locality) Find(key string) (value string, ok bool) {
+	for i := range l.Tiers {
+		if l.Tiers[i].Key == key {
+			return l.Tiers[i].Value, true
+		}
+	}
+	return "", false
+}
+
 // DefaultLocationInformation is used to populate the system.locations
 // table. The region values here are specific to GCP.
 var DefaultLocationInformation = []struct {

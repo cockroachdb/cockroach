@@ -15,11 +15,13 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -82,6 +84,38 @@ var defaultLocalities = demoLocalityList{
 	{Tiers: []roachpb.Tier{{Key: "region", Value: "europe-west1"}, {Key: "az", Value: "d"}}},
 }
 
+type regionPair struct {
+	regionA string
+	regionB string
+}
+
+var regionToRegionToLatency map[string]map[string]int
+
+func insertPair(pair regionPair, latency int) {
+	regionToLatency, ok := regionToRegionToLatency[pair.regionA]
+	if !ok {
+		regionToLatency = make(map[string]int)
+		regionToRegionToLatency[pair.regionA] = regionToLatency
+	}
+	regionToLatency[pair.regionB] = latency
+}
+
+func init() {
+	regionToRegionToLatency = make(map[string]map[string]int)
+	// Latencies collected from http://cloudping.co on 2019-09-11.
+	for pair, latency := range map[regionPair]int{
+		{regionA: "us-east1", regionB: "us-west1"}:     66,
+		{regionA: "us-east1", regionB: "europe-west1"}: 64,
+		{regionA: "us-west1", regionB: "europe-west1"}: 146,
+	} {
+		insertPair(pair, latency)
+		insertPair(regionPair{
+			regionA: pair.regionB,
+			regionB: pair.regionA,
+		}, latency)
+	}
+}
+
 func init() {
 	for _, meta := range workload.Registered() {
 		gen := meta.New()
@@ -118,6 +152,7 @@ type transientCluster struct {
 	connURL string
 	stopper *stop.Stopper
 	s       *server.TestServer
+	servers []*server.TestServer
 	cleanup func()
 }
 
@@ -160,15 +195,36 @@ func setupTransientCluster(
 	}
 	c.cleanup = func() { c.stopper.Stop(ctx) }
 
-	// Create the first transient server. The others will join this one.
-	args := base.TestServerArgs{
-		PartOfCluster: true,
-		Insecure:      true,
-		Stopper:       c.stopper,
-	}
-
 	serverFactory := server.TestServerFactory
+	var servers []*server.TestServer
+	wg := new(sync.WaitGroup)
+	// waitCh is used to block test servers after RPC address computation until the artificial
+	// latency map has been constructed.
+	waitCh := make(chan struct{})
+	errChs := make([]chan error, demoCtx.nodes)
 	for i := 0; i < demoCtx.nodes; i++ {
+		// readyCh is used if latency simulation is requested to notify that a test server has
+		// successfully computed its RPC address.
+		readyCh := make(chan struct{})
+		errChs[i] = make(chan error, 1)
+		args := base.TestServerArgs{
+			PartOfCluster: true,
+			Insecure:      true,
+			Stopper:       c.stopper,
+		}
+
+		if demoCtx.simulateLatency {
+			args.Knobs = base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					PauseAfterGettingRPCAddress:  waitCh,
+					SignalAfterGettingRPCAddress: readyCh,
+					ContextTestingKnobs: rpc.ContextTestingKnobs{
+						ArtificialLatencyMap: make(map[string]int),
+					},
+				},
+			}
+		}
+
 		// All the nodes connect to the address of the first server created.
 		if c.s != nil {
 			args.JoinAddr = c.s.ServingRPCAddr()
@@ -177,12 +233,76 @@ func setupTransientCluster(
 			args.Locality = demoCtx.localities[i]
 		}
 		serv := serverFactory.New(args).(*server.TestServer)
-		if err := serv.Start(args); err != nil {
-			return c, err
-		}
-		// Remember the first server created.
+
 		if i == 0 {
 			c.s = serv
+		}
+		servers = append(servers, serv)
+
+		// If latency simulation is requested, start the servers in a background thread. We do this because
+		// the start routine needs to wait for the latency map construction after their RPC address has been computed.
+		if demoCtx.simulateLatency {
+			wg.Add(1)
+			go func(i int) {
+				if err := serv.Start(args); err != nil {
+					errChs[i] <- err
+				}
+				wg.Done()
+			}(i)
+			<-readyCh
+		} else {
+			if err := serv.Start(args); err != nil {
+				return c, err
+			}
+		}
+	}
+
+	c.servers = servers
+
+	if demoCtx.simulateLatency {
+		// Now, all servers have been started enough to know their own RPC serving
+		// addresses, but nothing else. Assemble the artificial latency map.
+		for i, src := range servers {
+			latencyMap := src.Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
+			srcLocality, ok := src.Cfg.Locality.Find("region")
+			if !ok {
+				continue
+			}
+			srcLocalityMap, ok := regionToRegionToLatency[srcLocality]
+			if !ok {
+				continue
+			}
+			for j, dst := range servers {
+				if i == j {
+					continue
+				}
+				dstLocality, ok := dst.Cfg.Locality.Find("region")
+				if !ok {
+					continue
+				}
+				latency := srcLocalityMap[dstLocality]
+				latencyMap[dst.ServingRPCAddr()] = latency
+			}
+		}
+	}
+
+	// We've assembled our latency maps and are ready for all servers to proceed
+	// through bootstrapping.
+	close(waitCh)
+	wg.Wait()
+
+	// Finally, check for errors.
+	{
+		var err error
+		for i := 0; i < len(errChs); i++ {
+			select {
+			case e := <-errChs[i]:
+				err = errors.CombineErrors(err, e)
+			default:
+			}
+		}
+		if err != nil {
+			return c, err
 		}
 	}
 
@@ -195,19 +315,22 @@ func setupTransientCluster(
 	}
 
 	// Prepare the URL for use by the SQL shell.
+	// TODO (rohany): there should be a way that the user can request a specific node
+	//  to connect to to see the effects of the artificial latency.
 	options := url.Values{}
 	options.Add("sslmode", "disable")
 	options.Add("application_name", sqlbase.ReportableAppNamePrefix+"cockroach demo")
-	url := url.URL{
+	sqlURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(security.RootUser),
 		Host:     c.s.ServingSQLAddr(),
 		RawQuery: options.Encode(),
 	}
 	if gen != nil {
-		url.Path = gen.Meta().Name
+		sqlURL.Path = gen.Meta().Name
 	}
-	c.connURL = url.String()
+
+	c.connURL = sqlURL.String()
 
 	// Start up the update check loop.
 	// We don't do this in (*server.Server).Start() because we don't want it
@@ -292,7 +415,7 @@ func (c *transientCluster) setupWorkload(ctx context.Context, gen workload.Gener
 
 		// Run the workload. This must occur after partitioning the database.
 		if demoCtx.runWorkload {
-			if err := c.runWorkload(ctx, gen); err != nil {
+			if err := c.runWorkload(ctx, gen, []string{c.connURL}); err != nil {
 				return errors.Wrapf(err, "starting background workload")
 			}
 		}
@@ -301,7 +424,9 @@ func (c *transientCluster) setupWorkload(ctx context.Context, gen workload.Gener
 	return nil
 }
 
-func (c *transientCluster) runWorkload(ctx context.Context, gen workload.Generator) error {
+func (c *transientCluster) runWorkload(
+	ctx context.Context, gen workload.Generator, sqlUrls []string,
+) error {
 	opser, ok := gen.(workload.Opser)
 	if !ok {
 		return errors.Errorf("default dataset %s does not have a workload defined", gen.Meta().Name)
@@ -309,7 +434,7 @@ func (c *transientCluster) runWorkload(ctx context.Context, gen workload.Generat
 
 	// Dummy registry to prove to the Opser.
 	reg := histogram.NewRegistry(time.Duration(100) * time.Millisecond)
-	ops, err := opser.Ops([]string{c.connURL}, reg)
+	ops, err := opser.Ops(sqlUrls, reg)
 	if err != nil {
 		return errors.Wrap(err, "unable to create workload")
 	}
@@ -375,6 +500,11 @@ func checkDemoConfiguration(
 	// Make sure the number of nodes is valid.
 	if demoCtx.nodes <= 0 {
 		return nil, errors.Newf("--nodes has invalid value (expected positive, got %d)", demoCtx.nodes)
+	}
+
+	// If artificial latencies were requested, then the user cannot supply their own localities.
+	if demoCtx.simulateLatency && demoCtx.localities != nil {
+		return nil, errors.New("--global cannot be used with --demo-locality")
 	}
 
 	demoCtx.disableTelemetry = cluster.TelemetryOptOut()
