@@ -15,11 +15,13 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -80,6 +82,40 @@ var defaultLocalities = demoLocalityList{
 	{Tiers: []roachpb.Tier{{Key: "region", Value: "europe-west1"}, {Key: "az", Value: "b"}}},
 	{Tiers: []roachpb.Tier{{Key: "region", Value: "europe-west1"}, {Key: "az", Value: "c"}}},
 	{Tiers: []roachpb.Tier{{Key: "region", Value: "europe-west1"}, {Key: "az", Value: "d"}}},
+}
+
+type regionPair struct {
+	regionA string
+	regionB string
+}
+
+// Latencies collected from http://cloudping.co on 9/11/2019.
+var regionLatencies = map[regionPair]int{
+	regionPair{regionA: "us-east1", regionB: "us-west1"}:     66,
+	regionPair{regionA: "us-east1", regionB: "europe-west1"}: 64,
+	regionPair{regionA: "us-west1", regionB: "europe-west1"}: 146,
+}
+
+var regionToRegionToLatency map[string]map[string]int
+
+func insertPair(pair regionPair, latency int) {
+	regionToLatency, ok := regionToRegionToLatency[pair.regionA]
+	if !ok {
+		regionToLatency = make(map[string]int)
+		regionToRegionToLatency[pair.regionA] = regionToLatency
+	}
+	regionToLatency[pair.regionB] = latency
+}
+
+func init() {
+	regionToRegionToLatency = make(map[string]map[string]int)
+	for pair, latency := range regionLatencies {
+		insertPair(pair, latency)
+		insertPair(regionPair{
+			regionA: pair.regionB,
+			regionB: pair.regionA,
+		}, latency)
+	}
 }
 
 func init() {
@@ -157,16 +193,29 @@ func setupTransientServers(
 	}
 	cleanup = func() { stopper.Stop(ctx) }
 
-	// Create the first transient server. The others will join this one.
-	args := base.TestServerArgs{
-		PartOfCluster: true,
-		Insecure:      true,
-		Stopper:       stopper,
-	}
-
 	serverFactory := server.TestServerFactory
 	var s *server.TestServer
+	var servers []*server.TestServer
+	wg := new(sync.WaitGroup)
+	waitCh := make(chan struct{})
+	errCh := make(chan error)
 	for i := 0; i < demoCtx.nodes; i++ {
+		readyCh := make(chan struct{})
+		args := base.TestServerArgs{
+			PartOfCluster: true,
+			Insecure:      true,
+			Stopper:       stopper,
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					PauseAfterGettingRPCAddress:  waitCh,
+					SignalAfterGettingRPCAddress: readyCh,
+					ContextTestingKnobs: rpc.ContextTestingKnobs{
+						ArtificialLatencyMap: make(map[string]int),
+					},
+				},
+			},
+		}
+
 		// All the nodes connect to the address of the first server created.
 		if s != nil {
 			args.JoinAddr = s.ServingRPCAddr()
@@ -175,13 +224,56 @@ func setupTransientServers(
 			args.Locality = demoCtx.localities[i]
 		}
 		serv := serverFactory.New(args).(*server.TestServer)
-		if err := serv.Start(args); err != nil {
-			return connURL, adminURL, cleanup, err
-		}
 		// Remember the first server created.
 		if i == 0 {
 			s = serv
 		}
+		servers = append(servers, serv)
+		wg.Add(1)
+		go func() {
+			if err := serv.Start(args); err != nil {
+				errCh <- err
+			}
+			wg.Done()
+		}()
+		<-readyCh
+	}
+	// Now, all servers have been started enough to know their own RPC serving
+	// addresses, but nothing else. Assemble the artificial latency map.
+
+	for i, src := range servers {
+		latencyMap := src.Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
+		srcLocality, ok := src.Cfg.Locality.Find("region")
+		if !ok {
+			continue
+		}
+		srcLocalityMap, ok := regionToRegionToLatency[srcLocality]
+		if !ok {
+			continue
+		}
+		for j, dst := range servers {
+			if i == j {
+				continue
+			}
+			dstLocality, ok := dst.Cfg.Locality.Find("region")
+			if !ok {
+				continue
+			}
+			latency := srcLocalityMap[dstLocality]
+			latencyMap[dst.ServingRPCAddr()] = latency
+		}
+	}
+
+	// We've assembled our latency maps and are ready for all servers to proceed
+	// through bootstrapping.
+	close(waitCh)
+	wg.Wait()
+
+	// Finally, check for errors.
+	select {
+	case err := <-errCh:
+		return connURL, adminURL, cleanup, err
+	default:
 	}
 
 	if demoCtx.nodes < 3 {
@@ -196,16 +288,16 @@ func setupTransientServers(
 	options := url.Values{}
 	options.Add("sslmode", "disable")
 	options.Add("application_name", sqlbase.ReportableAppNamePrefix+"cockroach demo")
-	url := url.URL{
+	sqlURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(security.RootUser),
 		Host:     s.ServingSQLAddr(),
 		RawQuery: options.Encode(),
 	}
 	if gen != nil {
-		url.Path = gen.Meta().Name
+		sqlURL.Path = gen.Meta().Name
 	}
-	urlStr := url.String()
+	urlStr := sqlURL.String()
 
 	// Start up the update check loop.
 	// We don't do this in (*server.Server).Start() because we don't want it
