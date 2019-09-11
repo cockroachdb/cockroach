@@ -75,6 +75,13 @@ func maybeHasNulls(b coldata.Batch) bool {
 	return false
 }
 
+// variableBatchSizeInitializer is implemented by operators that can be
+// initialized with variable output size batches. This allows runTests to
+// increase test coverage of these operators.
+type variableBatchSizeInitializer interface {
+	initWithBatchSize(outputSize uint16)
+}
+
 // runTests is a helper that automatically runs your tests with varied batch
 // sizes and with and without a random selection vector.
 // tups is the set of input tuples.
@@ -118,7 +125,13 @@ func runTests(
 			if err != nil {
 				t.Fatal(err)
 			}
-			op.Init()
+			if vbsiOp, ok := op.(variableBatchSizeInitializer); ok {
+				// initialize the operator with a very small output batch size to
+				// increase the likelihood that multiple batches will be output.
+				vbsiOp.initWithBatchSize(1 /* outputSize */)
+			} else {
+				op.Init()
+			}
 			ctx := context.Background()
 			b := op.Next(ctx)
 			if round == 1 {

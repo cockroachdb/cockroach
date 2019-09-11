@@ -246,7 +246,11 @@ func (a *orderedAggregator) EstimateStaticMemoryUsage() int {
 	return EstimateBatchSizeBytes(a.outputTypes, coldata.BatchSize*2)
 }
 
-func (a *orderedAggregator) initWithBatchSize(inputSize, outputSize int) {
+func (a *orderedAggregator) initWithBatchSize(outputSize uint16) {
+	a.initWithInputAndOutputBatchSize(coldata.BatchSize, int(outputSize))
+}
+
+func (a *orderedAggregator) initWithInputAndOutputBatchSize(inputSize, outputSize int) {
 	a.input.Init()
 
 	// Twice the input batchSize is allocated to avoid having to check for
@@ -261,10 +265,11 @@ func (a *orderedAggregator) initWithBatchSize(inputSize, outputSize int) {
 }
 
 func (a *orderedAggregator) Init() {
-	a.initWithBatchSize(coldata.BatchSize, coldata.BatchSize)
+	a.initWithInputAndOutputBatchSize(coldata.BatchSize, coldata.BatchSize)
 }
 
 func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
+	a.unsafeBatch.ResetInternalBatch()
 	if a.scratch.shouldResetInternalBatch {
 		a.scratch.ResetInternalBatch()
 		a.scratch.shouldResetInternalBatch = false
