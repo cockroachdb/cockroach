@@ -69,6 +69,9 @@ type copyMachine struct {
 	// data.
 	resetPlanner func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time)
 
+	// execInsertPlan is a function that can be used to execute an insert plan.
+	execInsertPlan func(ctx context.Context, p *planner, res RestrictedCommandResult) error
+
 	txnOpt copyTxnOpt
 
 	// p is the planner used to plan inserts. preparePlanner() needs to be called
@@ -89,6 +92,7 @@ func newCopyMachine(
 	txnOpt copyTxnOpt,
 	execCfg *ExecutorConfig,
 	resetPlanner func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time),
+	execInsertPlan func(ctx context.Context, p *planner, res RestrictedCommandResult) error,
 ) (_ *copyMachine, retErr error) {
 	c := &copyMachine{
 		conn:    conn,
@@ -96,8 +100,9 @@ func newCopyMachine(
 		columns: n.Columns,
 		txnOpt:  txnOpt,
 		// The planner will be prepared before use.
-		p:            planner{execCfg: execCfg},
-		resetPlanner: resetPlanner,
+		p:              planner{execCfg: execCfg},
+		resetPlanner:   resetPlanner,
+		execInsertPlan: execInsertPlan,
 	}
 	c.resetPlanner(&c.p, nil /* txn */, time.Time{} /* txnTS */, time.Time{} /* stmtTS */)
 	c.parsingEvalCtx = c.p.EvalContext()
@@ -313,7 +318,8 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 	c.rows = c.rows[:0]
 	c.rowsMemAcc.Clear(ctx)
 
-	in := tree.Insert{
+	c.p.stmt = &Statement{}
+	c.p.stmt.AST = &tree.Insert{
 		Table:   c.table,
 		Columns: c.columns,
 		Rows: &tree.Select{
@@ -321,29 +327,24 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 		},
 		Returning: tree.AbsentReturningClause,
 	}
-	insertNode, err := c.p.Insert(ctx, &in, nil /* desiredTypes */)
-	if err != nil {
+	if err := c.p.makeOptimizerPlan(ctx); err != nil {
 		return err
 	}
-	defer insertNode.Close(ctx)
 
-	params := runParams{
-		ctx:             ctx,
-		extendedEvalCtx: &c.p.extendedEvalCtx,
-		p:               &c.p,
-	}
-	if err := startExec(params, insertNode); err != nil {
-		return err
-	}
-	rows, err := countRowsAffected(params, insertNode)
+	res := insertResult{}
+	err := c.execInsertPlan(ctx, &c.p, &res)
 	if err != nil {
 		return err
 	}
-	if rows != numRows {
-		log.Fatalf(params.ctx, "didn't insert all buffered rows and yet no error was reported. "+
+	if err := res.Err(); err != nil {
+		return err
+	}
+
+	if rows := res.RowsAffected(); rows != numRows {
+		log.Fatalf(ctx, "didn't insert all buffered rows and yet no error was reported. "+
 			"Inserted %d out of %d rows.", rows, numRows)
 	}
-	c.insertedRows += rows
+	c.insertedRows += numRows
 
 	return nil
 }
@@ -492,3 +493,30 @@ var decodeMap = map[byte]byte{
 	'v':  '\v',
 	'\\': '\\',
 }
+
+// insertResult is a simple implementation of RestrictedCommandResult which
+// can be used to execute an INSERT.
+type insertResult struct {
+	err          error
+	rowsAffected int
+}
+
+var _ RestrictedCommandResult = &insertResult{}
+
+func (r *insertResult) SetError(err error) {
+	r.err = err
+}
+func (r *insertResult) Err() error {
+	return r.err
+}
+
+func (r *insertResult) SetColumns(context.Context, sqlbase.ResultColumns) {}
+func (r *insertResult) ResetStmtType(stmt tree.Statement)                 {}
+func (r *insertResult) AddRow(ctx context.Context, row tree.Datums) error { return nil }
+func (r *insertResult) IncrementRowsAffected(n int) {
+	r.rowsAffected += n
+}
+func (r *insertResult) RowsAffected() int {
+	return r.rowsAffected
+}
+func (r *insertResult) DisableBuffering() {}

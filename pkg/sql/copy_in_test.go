@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/lib/pq"
@@ -429,5 +431,48 @@ func TestCopyTransaction(t *testing.T) {
 	}
 	if err := txn.Commit(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestCopyFKCheck verifies that foreign keys are checked during COPY.
+func TestCopyFKCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	db.SetMaxOpenConns(1)
+	r := sqlutils.MakeSQLRunner(db)
+	r.Exec(t, `
+		CREATE DATABASE d;
+		SET DATABASE = d;
+		CREATE TABLE p (p INT PRIMARY KEY);
+		CREATE TABLE t (
+		  a INT PRIMARY KEY,
+			p INT REFERENCES p(p)
+		);
+		SET experimental_optimizer_foreign_keys = true;
+	`)
+
+	txn, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer txn.Rollback()
+
+	stmt, err := txn.Prepare(pq.CopyIn("t", "a", "p"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = stmt.Exec(1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = stmt.Close()
+	if !testutils.IsError(err, "foreign key violation|violates foreign key constraint") {
+		t.Fatalf("expected FK error, got: %v", err)
 	}
 }
