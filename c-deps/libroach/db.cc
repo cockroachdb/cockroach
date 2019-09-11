@@ -242,7 +242,6 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   options.env = env_mgr->db_env;
 
   rocksdb::DB* db_ptr;
-
   rocksdb::Status status;
   if (db_opts.read_only) {
     status = rocksdb::DB::OpenForReadOnly(options, db_dir, &db_ptr);

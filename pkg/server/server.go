@@ -671,11 +671,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		),
 
 		ExecLogger: log.NewSecondaryLogger(
-			loggerCtx, nil /* dirName */, "sql-exec", true /* enableGc */, false, /*forceSyncWrites*/
+			loggerCtx, nil /* dirName */, "sql-exec",
+			true /* enableGc */, false /*forceSyncWrites*/, true, /* enableMsgCount */
 		),
 
 		AuditLogger: log.NewSecondaryLogger(
-			loggerCtx, s.cfg.SQLAuditLogDirName, "sql-audit", true /*enableGc*/, true, /*forceSyncWrites*/
+			loggerCtx, s.cfg.SQLAuditLogDirName, "sql-audit",
+			true /*enableGc*/, true /*forceSyncWrites*/, true, /* enableMsgCount */
 		),
 
 		QueryCache: querycache.New(s.cfg.SQLQueryCacheSize),
