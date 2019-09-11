@@ -150,11 +150,12 @@ func kvsToRows(
 // emitEntries connects to a sink, receives rows from a closure, and repeatedly
 // emits them to the sink. It returns a closure that may be repeatedly called to
 // advance the changefeed and which returns span-level resolved timestamp
-// updates. The returned closure is not threadsafe.
+// updates. The returned closure is not threadsafe. Note that rows read from
+// `inputFn` which precede the Frontier of `sf` will not be emitted.
 func emitEntries(
 	settings *cluster.Settings,
 	details jobspb.ChangefeedDetails,
-	watchedSpans []roachpb.Span,
+	sf *spanFrontier,
 	encoder Encoder,
 	sink Sink,
 	inputFn func(context.Context) ([]emitEntry, error),
@@ -163,6 +164,12 @@ func emitEntries(
 ) func(context.Context) ([]jobspb.ResolvedSpan, error) {
 	var scratch bufalloc.ByteAllocator
 	emitRowFn := func(ctx context.Context, row encodeRow) error {
+		// If timestamp of the row is older than the least resolved timestamp
+		// tracked in the spanFrontier, ignore the row as we must have already
+		// emitted it before.
+		if row.updated.Less(sf.Frontier()) {
+			return nil
+		}
 		var keyCopy, valueCopy []byte
 		encodedKey, err := encoder.EncodeKey(row)
 		if err != nil {
@@ -191,12 +198,8 @@ func emitEntries(
 		return nil
 	}
 
-	// This SpanFrontier only tracks the spans being watched on this node.
-	// (There is a different SpanFrontier elsewhere for the entire changefeed.)
-	watchedSF := makeSpanFrontier(watchedSpans...)
-
 	var lastFlush time.Time
-	// TODO(dan): We could keep these in `watchedSF` to eliminate dups.
+	// TODO(dan): We could keep these in `sf` to eliminate dups.
 	var resolvedSpans []jobspb.ResolvedSpan
 
 	return func(ctx context.Context) ([]jobspb.ResolvedSpan, error) {
@@ -222,7 +225,7 @@ func emitEntries(
 				}
 			}
 			if input.resolved != nil {
-				_ = watchedSF.Forward(input.resolved.Span, input.resolved.Timestamp)
+				_ = sf.Forward(input.resolved.Span, input.resolved.Timestamp)
 				resolvedSpans = append(resolvedSpans, *input.resolved)
 			}
 		}
