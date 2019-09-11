@@ -1367,7 +1367,7 @@ ALTER TABLE t38344 INJECT STATISTICS '[
 ]'
 ----
 
-norm
+norm disable=InlineWith
 WITH t(x) AS (
   SELECT (t1.x::int << 5533)::bool OR t2.x  AS x
   FROM t38344 AS t1 LEFT JOIN t38344 AS t2 ON true

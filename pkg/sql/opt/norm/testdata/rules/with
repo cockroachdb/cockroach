@@ -1,0 +1,490 @@
+build format=show-all
+WITH foo AS (SELECT 1) (SELECT * FROM foo) UNION ALL (SELECT * FROM foo)
+----
+with &1 (foo)
+ ├── columns: "?column?":4(int!null)
+ ├── cardinality: [2 - 2]
+ ├── stats: [rows=2]
+ ├── cost: 0.11
+ ├── cte-uses: map[1:2]
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── cost: 0.05
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── prune: (1)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── cost: 0.02
+ │    │    ├── key: ()
+ │    │    └── tuple [type=tuple]
+ │    └── projections
+ │         └── const: 1 [type=int]
+ └── union-all
+      ├── columns: "?column?":4(int!null)
+      ├── left columns: "?column?":2(int)
+      ├── right columns: "?column?":3(int)
+      ├── cardinality: [2 - 2]
+      ├── stats: [rows=2]
+      ├── cost: 0.05
+      ├── cte-uses: map[1:2]
+      ├── with-scan &1 (foo)
+      │    ├── columns: "?column?":2(int!null)
+      │    ├── mapping:
+      │    │    └──  "?column?":1(int) => "?column?":2(int)
+      │    ├── cardinality: [1 - 1]
+      │    ├── stats: [rows=1]
+      │    ├── cost: 0.01
+      │    ├── key: ()
+      │    ├── fd: ()-->(2)
+      │    └── cte-uses: map[1:1]
+      └── with-scan &1 (foo)
+           ├── columns: "?column?":3(int!null)
+           ├── mapping:
+           │    └──  "?column?":1(int) => "?column?":3(int)
+           ├── cardinality: [1 - 1]
+           ├── stats: [rows=1]
+           ├── cost: 0.01
+           ├── key: ()
+           ├── fd: ()-->(3)
+           └── cte-uses: map[1:1]
+
+norm format=show-all expect=InlineWith
+WITH foo AS (SELECT 1) SELECT * FROM foo
+----
+values
+ ├── columns: "?column?":2(int!null)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 0.02
+ ├── key: ()
+ ├── fd: ()-->(2)
+ ├── prune: (2)
+ └── tuple [type=tuple{int}]
+      └── const: 1 [type=int]
+
+norm format=show-all expect=InlineWith
+WITH foo AS (SELECT 1) SELECT * FROM foo CROSS JOIN (VALUES (2))
+----
+inner-join (hash)
+ ├── columns: "?column?":2(int!null) column1:3(int!null)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 0.09
+ ├── key: ()
+ ├── fd: ()-->(2,3)
+ ├── prune: (2,3)
+ ├── values
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── cost: 0.02
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    ├── prune: (2)
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 1 [type=int]
+ ├── values
+ │    ├── columns: column1:3(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── cost: 0.02
+ │    ├── key: ()
+ │    ├── fd: ()-->(3)
+ │    ├── prune: (3)
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 2 [type=int]
+ └── filters (true)
+
+norm expect=InlineWith
+WITH foo AS (SELECT 1), bar AS (SELECT 2) SELECT * FROM foo CROSS JOIN bar
+----
+inner-join (hash)
+ ├── columns: "?column?":3(int!null) "?column?":4(int!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3,4)
+ ├── values
+ │    ├── columns: "?column?":3(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(3)
+ │    └── (1,) [type=tuple{int}]
+ ├── values
+ │    ├── columns: "?column?":4(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(4)
+ │    └── (2,) [type=tuple{int}]
+ └── filters (true)
+
+# Descend into scalar expressions.
+
+norm expect=InlineWith
+WITH foo AS (SELECT 1), bar AS (SELECT 2) SELECT (SELECT * FROM foo) + (SELECT * FROM bar)
+----
+values
+ ├── columns: "?column?":5(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5)
+ └── tuple [type=tuple{int}]
+      └── plus [type=int]
+           ├── subquery [type=int]
+           │    └── values
+           │         ├── columns: "?column?":3(int!null)
+           │         ├── cardinality: [1 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(3)
+           │         └── (1,) [type=tuple{int}]
+           └── subquery [type=int]
+                └── values
+                     ├── columns: "?column?":4(int!null)
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(4)
+                     └── (2,) [type=tuple{int}]
+
+norm expect=InlineWith
+WITH foo AS (SELECT 1), bar AS (SELECT 2) SELECT (SELECT * FROM foo) + (SELECT * FROM bar) + (SELECT * FROM bar)
+----
+with &2 (bar)
+ ├── columns: "?column?":6(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── values
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    └── (2,) [type=tuple{int}]
+ └── values
+      ├── columns: "?column?":6(int)
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6)
+      └── tuple [type=tuple{int}]
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── subquery [type=int]
+                │    │    └── values
+                │    │         ├── columns: "?column?":3(int!null)
+                │    │         ├── cardinality: [1 - 1]
+                │    │         ├── key: ()
+                │    │         ├── fd: ()-->(3)
+                │    │         └── (1,) [type=tuple{int}]
+                │    └── subquery [type=int]
+                │         └── with-scan &2 (bar)
+                │              ├── columns: "?column?":4(int!null)
+                │              ├── mapping:
+                │              │    └──  "?column?":2(int) => "?column?":4(int)
+                │              ├── cardinality: [1 - 1]
+                │              ├── key: ()
+                │              └── fd: ()-->(4)
+                └── subquery [type=int]
+                     └── with-scan &2 (bar)
+                          ├── columns: "?column?":5(int!null)
+                          ├── mapping:
+                          │    └──  "?column?":2(int) => "?column?":5(int)
+                          ├── cardinality: [1 - 1]
+                          ├── key: ()
+                          └── fd: ()-->(5)
+
+# We should inline foo, but not bar.
+norm expect=InlineWith
+WITH foo AS (SELECT 1), bar AS (SELECT 2) SELECT * FROM foo CROSS JOIN bar CROSS JOIN bar AS bar2
+----
+with &2 (bar)
+ ├── columns: "?column?":3(int!null) "?column?":4(int!null) "?column?":5(int!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3-5)
+ ├── values
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    └── (2,) [type=tuple{int}]
+ └── inner-join (hash)
+      ├── columns: "?column?":3(int!null) "?column?":4(int!null) "?column?":5(int!null)
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(3-5)
+      ├── inner-join (hash)
+      │    ├── columns: "?column?":3(int!null) "?column?":4(int!null)
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(3,4)
+      │    ├── values
+      │    │    ├── columns: "?column?":3(int!null)
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(3)
+      │    │    └── (1,) [type=tuple{int}]
+      │    ├── with-scan &2 (bar)
+      │    │    ├── columns: "?column?":4(int!null)
+      │    │    ├── mapping:
+      │    │    │    └──  "?column?":2(int) => "?column?":4(int)
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    └── fd: ()-->(4)
+      │    └── filters (true)
+      ├── with-scan &2 (bar)
+      │    ├── columns: "?column?":5(int!null)
+      │    ├── mapping:
+      │    │    └──  "?column?":2(int) => "?column?":5(int)
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(5)
+      └── filters (true)
+
+norm format=show-all
+WITH
+    foo AS (SELECT 1), bar AS (SELECT 2)
+SELECT
+    *
+FROM
+    foo CROSS JOIN bar CROSS JOIN bar AS bar2 CROSS JOIN foo AS foo2
+----
+with &1 (foo)
+ ├── columns: "?column?":3(int!null) "?column?":4(int!null) "?column?":5(int!null) "?column?":6(int!null)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 0.25
+ ├── key: ()
+ ├── fd: ()-->(3-6)
+ ├── cte-uses: map[1:2 2:2]
+ ├── values
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── cost: 0.02
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── prune: (1)
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 1 [type=int]
+ └── with &2 (bar)
+      ├── columns: "?column?":3(int!null) "?column?":4(int!null) "?column?":5(int!null) "?column?":6(int!null)
+      ├── cardinality: [1 - 1]
+      ├── stats: [rows=1]
+      ├── cost: 0.22
+      ├── key: ()
+      ├── fd: ()-->(3-6)
+      ├── cte-uses: map[1:2 2:2]
+      ├── values
+      │    ├── columns: "?column?":2(int!null)
+      │    ├── cardinality: [1 - 1]
+      │    ├── stats: [rows=1]
+      │    ├── cost: 0.02
+      │    ├── key: ()
+      │    ├── fd: ()-->(2)
+      │    ├── prune: (2)
+      │    └── tuple [type=tuple{int}]
+      │         └── const: 2 [type=int]
+      └── inner-join (hash)
+           ├── columns: "?column?":3(int!null) "?column?":4(int!null) "?column?":5(int!null) "?column?":6(int!null)
+           ├── cardinality: [1 - 1]
+           ├── stats: [rows=1]
+           ├── cost: 0.19
+           ├── key: ()
+           ├── fd: ()-->(3-6)
+           ├── cte-uses: map[1:2 2:2]
+           ├── inner-join (hash)
+           │    ├── columns: "?column?":3(int!null) "?column?":4(int!null) "?column?":5(int!null)
+           │    ├── cardinality: [1 - 1]
+           │    ├── stats: [rows=1]
+           │    ├── cost: 0.13
+           │    ├── key: ()
+           │    ├── fd: ()-->(3-5)
+           │    ├── join-size: 3
+           │    ├── cte-uses: map[1:1 2:2]
+           │    ├── inner-join (hash)
+           │    │    ├── columns: "?column?":3(int!null) "?column?":4(int!null)
+           │    │    ├── cardinality: [1 - 1]
+           │    │    ├── stats: [rows=1]
+           │    │    ├── cost: 0.07
+           │    │    ├── key: ()
+           │    │    ├── fd: ()-->(3,4)
+           │    │    ├── join-size: 2
+           │    │    ├── cte-uses: map[1:1 2:1]
+           │    │    ├── with-scan &1 (foo)
+           │    │    │    ├── columns: "?column?":3(int!null)
+           │    │    │    ├── mapping:
+           │    │    │    │    └──  "?column?":1(int) => "?column?":3(int)
+           │    │    │    ├── cardinality: [1 - 1]
+           │    │    │    ├── stats: [rows=1]
+           │    │    │    ├── cost: 0.01
+           │    │    │    ├── key: ()
+           │    │    │    ├── fd: ()-->(3)
+           │    │    │    └── cte-uses: map[1:1]
+           │    │    ├── with-scan &2 (bar)
+           │    │    │    ├── columns: "?column?":4(int!null)
+           │    │    │    ├── mapping:
+           │    │    │    │    └──  "?column?":2(int) => "?column?":4(int)
+           │    │    │    ├── cardinality: [1 - 1]
+           │    │    │    ├── stats: [rows=1]
+           │    │    │    ├── cost: 0.01
+           │    │    │    ├── key: ()
+           │    │    │    ├── fd: ()-->(4)
+           │    │    │    └── cte-uses: map[2:1]
+           │    │    └── filters (true)
+           │    ├── with-scan &2 (bar)
+           │    │    ├── columns: "?column?":5(int!null)
+           │    │    ├── mapping:
+           │    │    │    └──  "?column?":2(int) => "?column?":5(int)
+           │    │    ├── cardinality: [1 - 1]
+           │    │    ├── stats: [rows=1]
+           │    │    ├── cost: 0.01
+           │    │    ├── key: ()
+           │    │    ├── fd: ()-->(5)
+           │    │    └── cte-uses: map[2:1]
+           │    └── filters (true)
+           ├── with-scan &1 (foo)
+           │    ├── columns: "?column?":6(int!null)
+           │    ├── mapping:
+           │    │    └──  "?column?":1(int) => "?column?":6(int)
+           │    ├── cardinality: [1 - 1]
+           │    ├── stats: [rows=1]
+           │    ├── cost: 0.01
+           │    ├── key: ()
+           │    ├── fd: ()-->(6)
+           │    └── cte-uses: map[1:1]
+           └── filters (true)
+
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
+----
+
+norm
+WITH foo AS (VALUES (1))
+SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM (VALUES (k), ((SELECT * FROM foo))) WHERE column1=k)
+----
+anti-join-apply
+ ├── columns: k:2(int!null) i:3(int) f:4(float) s:5(string) j:6(jsonb)
+ ├── key: (2)
+ ├── fd: (2)-->(3-6)
+ ├── scan a
+ │    ├── columns: k:2(int!null) i:3(int) f:4(float) s:5(string) j:6(jsonb)
+ │    ├── key: (2)
+ │    └── fd: (2)-->(3-6)
+ ├── values
+ │    ├── columns: column1:8(int)
+ │    ├── outer: (2)
+ │    ├── cardinality: [2 - 2]
+ │    ├── (k,) [type=tuple{int}]
+ │    └── tuple [type=tuple{int}]
+ │         └── subquery [type=int]
+ │              └── values
+ │                   ├── columns: column1:7(int!null)
+ │                   ├── cardinality: [1 - 1]
+ │                   ├── key: ()
+ │                   ├── fd: ()-->(7)
+ │                   └── (1,) [type=tuple{int}]
+ └── filters
+      └── column1 = k [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+
+# Don't inline side-effecting expressions.
+norm
+WITH foo AS (INSERT INTO a VALUES (1) RETURNING *) SELECT * FROM foo
+----
+with &1 (foo)
+ ├── columns: k:11(int!null) i:12(int) f:13(float) s:14(string) j:15(jsonb)
+ ├── cardinality: [1 - 1]
+ ├── side-effects, mutations
+ ├── key: ()
+ ├── fd: ()-->(11-15)
+ ├── insert a
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── insert-mapping:
+ │    │    ├──  column1:6 => a.k:1
+ │    │    ├──  column7:7 => a.i:2
+ │    │    ├──  column8:8 => a.f:3
+ │    │    ├──  column9:9 => a.s:4
+ │    │    └──  column10:10 => a.j:5
+ │    ├── cardinality: [1 - 1]
+ │    ├── side-effects, mutations
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-5)
+ │    └── values
+ │         ├── columns: column1:6(int!null) column7:7(int) column8:8(float) column9:9(string) column10:10(jsonb)
+ │         ├── cardinality: [1 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(6-10)
+ │         └── (1, NULL, NULL, NULL, NULL) [type=tuple{int, int, float, string, jsonb}]
+ └── with-scan &1 (foo)
+      ├── columns: k:11(int!null) i:12(int) f:13(float) s:14(string) j:15(jsonb)
+      ├── mapping:
+      │    ├──  a.k:1(int) => k:11(int)
+      │    ├──  a.i:2(int) => i:12(int)
+      │    ├──  a.f:3(float) => f:13(float)
+      │    ├──  a.s:4(string) => s:14(string)
+      │    └──  a.j:5(jsonb) => j:15(jsonb)
+      ├── cardinality: [1 - 1]
+      ├── mutations
+      ├── key: ()
+      └── fd: ()-->(11-15)
+
+norm expect-not=InlineWith
+WITH foo AS (SELECT 1/0) SELECT * FROM foo
+----
+with &1 (foo)
+ ├── columns: "?column?":2(decimal)
+ ├── cardinality: [1 - 1]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(2)
+ ├── values
+ │    ├── columns: "?column?":1(decimal)
+ │    ├── cardinality: [1 - 1]
+ │    ├── side-effects
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (1 / 0,) [type=tuple{decimal}]
+ └── with-scan &1 (foo)
+      ├── columns: "?column?":2(decimal)
+      ├── mapping:
+      │    └──  "?column?":1(decimal) => "?column?":2(decimal)
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      └── fd: ()-->(2)
+
+norm expect=InlineWith
+WITH foo AS (SELECT 1), bar AS (SELECT * FROM foo) SELECT * FROM foo
+----
+values
+ ├── columns: "?column?":3(int!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── (1,) [type=tuple{int}]
+
+norm expect=InlineWith
+WITH foo AS (SELECT 1), bar AS (SELECT * FROM foo) SELECT * FROM foo
+----
+values
+ ├── columns: "?column?":3(int!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── (1,) [type=tuple{int}]
+
+# Inline nested Withs.
+norm expect=InlineWith
+WITH
+    t (x) AS (WITH t (x) AS (SELECT 1) SELECT x * 10 FROM t)
+SELECT
+    x + 2
+FROM
+    t
+----
+values
+ ├── columns: "?column?":5(int!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5)
+ └── (12,) [type=tuple{int}]

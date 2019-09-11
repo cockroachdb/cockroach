@@ -29,6 +29,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // tuple represents a row with any-type columns.
@@ -51,7 +52,7 @@ func (t tuple) String() string {
 	return sb.String()
 }
 
-// tuples represents a table of a single type.
+// tuples represents a table with any-type columns.
 type tuples []tuple
 
 type verifier func(output *opTestOutput) error
@@ -75,9 +76,11 @@ func maybeHasNulls(b coldata.Batch) bool {
 	return false
 }
 
+type testRunner func(*testing.T, []tuples, []coltypes.T, tuples, verifier, []int, func([]Operator) (Operator, error))
+
 // runTests is a helper that automatically runs your tests with varied batch
 // sizes and with and without a random selection vector.
-// tups is the set of input tuples.
+// tups is the sets of input tuples.
 // expected is the set of output tuples.
 // constructor is a function that takes a list of input Operators and returns
 // the operator to test, or an error.
@@ -95,6 +98,90 @@ func runTests(
 // runTestsWithTyps is the same as runTests with an ability to specify the
 // types of the input tuples.
 func runTestsWithTyps(
+	t *testing.T,
+	tups []tuples,
+	typs []coltypes.T,
+	expected tuples,
+	verifier verifier,
+	cols []int,
+	constructor func(inputs []Operator) (Operator, error),
+) {
+	runTestsWithoutAllNullsInjection(t, tups, typs, expected, verifier, cols, constructor)
+
+	t.Run("allNullsInjection", func(t *testing.T) {
+		// This test replaces all values in the input tuples with nulls and ensures
+		// that the output is different from the "original" output (i.e. from the
+		// one that is returned without nulls injection).
+		onlyNullsInTheInput := true
+	OUTER:
+		for _, tup := range tups {
+			for i := 0; i < len(tup); i++ {
+				for j := 0; j < len(tup[i]); j++ {
+					if tup[i][j] != nil {
+						onlyNullsInTheInput = false
+						break OUTER
+					}
+				}
+			}
+		}
+		opConstructor := func(injectAllNulls bool) Operator {
+			inputSources := make([]Operator, len(tups))
+			for i, tup := range tups {
+				input := newOpTestInput(1 /* batchSize */, tup, typs)
+				input.injectAllNulls = injectAllNulls
+				inputSources[i] = input
+			}
+			op, err := constructor(inputSources)
+			if err != nil {
+				t.Fatal(err)
+			}
+			op.Init()
+			return op
+		}
+		ctx := context.Background()
+		originalOp := opConstructor(false /* injectAllNulls */)
+		opWithNulls := opConstructor(true /* injectAllNulls */)
+		foundDifference := false
+		for {
+			originalBatch := originalOp.Next(ctx)
+			batchWithNulls := opWithNulls.Next(ctx)
+			if originalBatch.Length() != batchWithNulls.Length() {
+				foundDifference = true
+				break
+			}
+			if originalBatch.Length() == 0 {
+				break
+			}
+			var originalTuples, tuplesWithNulls tuples
+			for i := uint16(0); i < originalBatch.Length(); i++ {
+				// We checked that the batches have the same length.
+				originalTuples = append(originalTuples, getTupleFromBatch(originalBatch, cols, i))
+				tuplesWithNulls = append(tuplesWithNulls, getTupleFromBatch(batchWithNulls, cols, i))
+			}
+			if err := assertTuplesSetsEqual(originalTuples, tuplesWithNulls); err != nil {
+				// err is non-nil which means that the batches are different.
+				foundDifference = true
+				break
+			}
+		}
+		if onlyNullsInTheInput {
+			require.False(t, foundDifference, "since there were only "+
+				"nulls in the input tuples, we expect for all nulls injection to not "+
+				"change the output")
+		} else {
+			require.True(t, foundDifference, "since there were "+
+				"non-nulls in the input tuples, we expect for all nulls injection to "+
+				"change the output")
+		}
+	})
+}
+
+// runTestsWithoutAllNullsInjection is the same as runTests, but it skips the
+// all nulls injection test. Use this only when the all nulls injection should
+// not change the output of the operator under testing.
+// NOTE: please leave a justification why you're using this variant of
+// runTests.
+func runTestsWithoutAllNullsInjection(
 	t *testing.T,
 	tups []tuples,
 	typs []coltypes.T,
@@ -167,6 +254,25 @@ func runTestsWithTyps(
 					assert.False(t, maybeHasNulls(b))
 				}
 			}
+		}
+	})
+
+	t.Run("randomNullsInjection", func(t *testing.T) {
+		// This test randomly injects nulls in the input tuples and ensures that
+		// the operator doesn't panic.
+		inputSources := make([]Operator, len(tups))
+		for i, tup := range tups {
+			input := newOpTestInput(1 /* batchSize */, tup, typs)
+			input.injectRandomNulls = true
+			inputSources[i] = input
+		}
+		op, err := constructor(inputSources)
+		if err != nil {
+			t.Fatal(err)
+		}
+		op.Init()
+		ctx := context.Background()
+		for b := op.Next(ctx); b.Length() > 0; b = op.Next(ctx) {
 		}
 	})
 }
@@ -269,6 +375,14 @@ type opTestInput struct {
 	useSel    bool
 	rng       *rand.Rand
 	selection []uint16
+
+	// injectAllNulls determines whether opTestInput will replace all values in
+	// the input tuples with nulls.
+	injectAllNulls bool
+
+	// injectRandomNulls determines whether opTestInput will randomly replace
+	// each value in the input tuples with a null.
+	injectRandomNulls bool
 }
 
 var _ Operator = &opTestInput{}
@@ -399,7 +513,8 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 			// If useSel is false, then the selection vector will contain
 			// [0, ..., batchSize] in ascending order.
 			outputIdx := s.selection[j]
-			if tups[j][i] == nil {
+			injectRandomNull := s.injectRandomNulls && rng.Float64() < 0.5
+			if tups[j][i] == nil || s.injectAllNulls || injectRandomNull {
 				// Set garbage data in the value to make sure NULL gets handled
 				// correctly.
 				vec.Nulls().SetNull(outputIdx)
@@ -576,6 +691,36 @@ func newOpTestOutput(input Operator, cols []int, expected tuples) *opTestOutput 
 	}
 }
 
+// getTupleFromBatch is a helper function that extracts a tuple at index
+// tupleIdx from batch using only columns in cols.
+func getTupleFromBatch(batch coldata.Batch, cols []int, tupleIdx uint16) tuple {
+	ret := make(tuple, len(cols))
+	out := reflect.ValueOf(ret)
+	if sel := batch.Selection(); sel != nil {
+		tupleIdx = sel[tupleIdx]
+	}
+	for outIdx, colIdx := range cols {
+		vec := batch.ColVec(colIdx)
+		if vec.Nulls().NullAt(tupleIdx) {
+			ret[outIdx] = nil
+		} else {
+			var val reflect.Value
+			if colBytes, ok := vec.Col().(*coldata.Bytes); ok {
+				val = reflect.ValueOf(append([]byte(nil), colBytes.Get(int(tupleIdx))...))
+			} else if vec.Type() == coltypes.Decimal {
+				colDec := vec.Decimal()
+				var newDec apd.Decimal
+				newDec.Set(&colDec[tupleIdx])
+				val = reflect.ValueOf(newDec)
+			} else {
+				val = reflect.ValueOf(vec.Col()).Index(int(tupleIdx))
+			}
+			out.Index(outIdx).Set(val)
+		}
+	}
+	return ret
+}
+
 func (r *opTestOutput) next(ctx context.Context) tuple {
 	if r.batch == nil || r.curIdx >= r.batch.Length() {
 		// Get a fresh batch.
@@ -585,31 +730,7 @@ func (r *opTestOutput) next(ctx context.Context) tuple {
 		}
 		r.curIdx = 0
 	}
-	ret := make(tuple, len(r.cols))
-	out := reflect.ValueOf(ret)
-	curIdx := r.curIdx
-	if sel := r.batch.Selection(); sel != nil {
-		curIdx = sel[curIdx]
-	}
-	for outIdx, colIdx := range r.cols {
-		vec := r.batch.ColVec(colIdx)
-		if vec.Nulls().NullAt(curIdx) {
-			ret[outIdx] = nil
-		} else {
-			var val reflect.Value
-			if colBytes, ok := vec.Col().(*coldata.Bytes); ok {
-				val = reflect.ValueOf(append([]byte(nil), colBytes.Get(int(curIdx))...))
-			} else if vec.Type() == coltypes.Decimal {
-				colDec := vec.Decimal()
-				var newDec apd.Decimal
-				newDec.Set(&colDec[curIdx])
-				val = reflect.ValueOf(newDec)
-			} else {
-				val = reflect.ValueOf(vec.Col()).Index(int(curIdx))
-			}
-			out.Index(outIdx).Set(val)
-		}
-	}
+	ret := getTupleFromBatch(r.batch, r.cols, r.curIdx)
 	r.curIdx++
 	return ret
 }

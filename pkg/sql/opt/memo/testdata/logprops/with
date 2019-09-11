@@ -9,6 +9,7 @@ with &1 (foo)
  ├── columns: x:3(int!null) y:4(int)
  ├── key: (3)
  ├── fd: (3)-->(4)
+ ├── cte-uses: map[1:1]
  ├── scan xy
  │    ├── columns: xy.x:1(int!null) xy.y:2(int)
  │    ├── key: (1)
@@ -21,7 +22,8 @@ with &1 (foo)
       │    ├──  xy.x:1(int) => x:3(int)
       │    └──  xy.y:2(int) => y:4(int)
       ├── key: (3)
-      └── fd: (3)-->(4)
+      ├── fd: (3)-->(4)
+      └── cte-uses: map[1:1]
 
 # Side effects should be propagated up to the top-level from the Binding side
 # of a WITH.
@@ -68,6 +70,7 @@ with &1 (foo)
  ├── side-effects
  ├── key: ()
  ├── fd: ()-->(3)
+ ├── cte-uses: map[1:1]
  ├── project
  │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [1 - 1]
@@ -87,13 +90,15 @@ with &1 (foo)
       ├── key: ()
       ├── fd: ()-->(3)
       ├── prune: (3)
+      ├── cte-uses: map[1:1]
       ├── with-scan &1 (foo)
       │    ├── columns: "?column?":2(int!null)
       │    ├── mapping:
       │    │    └──  "?column?":1(int) => "?column?":2(int)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
-      │    └── fd: ()-->(2)
+      │    ├── fd: ()-->(2)
+      │    └── cte-uses: map[1:1]
       └── projections
            └── div [type=decimal, side-effects]
                 ├── const: 1 [type=int]
@@ -108,6 +113,7 @@ with &1 (foo)
  ├── has-placeholder
  ├── key: ()
  ├── fd: ()-->(3)
+ ├── cte-uses: map[1:1]
  ├── project
  │    ├── columns: int8:1(int)
  │    ├── cardinality: [1 - 1]
@@ -128,13 +134,15 @@ with &1 (foo)
       ├── key: ()
       ├── fd: ()-->(3)
       ├── prune: (3)
+      ├── cte-uses: map[1:1]
       ├── with-scan &1 (foo)
       │    ├── columns: int8:2(int)
       │    ├── mapping:
       │    │    └──  int8:1(int) => int8:2(int)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
-      │    └── fd: ()-->(2)
+      │    ├── fd: ()-->(2)
+      │    └── cte-uses: map[1:1]
       └── projections
            └── const: 1 [type=int]
 
@@ -163,6 +171,7 @@ inner-join-apply
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3)
+ │    ├── cte-uses: map[1:1]
  │    ├── project
  │    │    ├── columns: "?column?":2(int)
  │    │    ├── outer: (1)
@@ -184,5 +193,6 @@ inner-join-apply
  │         │    └──  "?column?":2(int) => "?column?":3(int)
  │         ├── cardinality: [1 - 1]
  │         ├── key: ()
- │         └── fd: ()-->(3)
+ │         ├── fd: ()-->(3)
+ │         └── cte-uses: map[1:1]
  └── filters (true)
