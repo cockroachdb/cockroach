@@ -203,6 +203,7 @@ message ChangefeedDetails {
   string sink_uri = 3 [(gogoproto.customname) = "SinkURI"];
   map<string, string> opts = 4;
   util.hlc.Timestamp statement_time = 7 [(gogoproto.nullable) = false];
+  string session_id = 8 [(gogoproto.customname) = "SessionID"];
 
   reserved 1, 2, 5;
 }

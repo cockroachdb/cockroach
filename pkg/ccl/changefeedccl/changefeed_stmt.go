@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -210,11 +211,13 @@ func changefeedPlanHook(
 			}
 		}
 
+		sessionID := uuid.FastMakeV4()
 		details := jobspb.ChangefeedDetails{
 			Targets:       targets,
 			Opts:          opts,
 			SinkURI:       sinkURI,
 			StatementTime: statementTime,
+			SessionID:     sessionID.String(),
 		}
 		progress := jobspb.Progress{
 			Progress: &jobspb.Progress_HighWater{HighWater: &initialHighWater},
@@ -291,7 +294,7 @@ func changefeedPlanHook(
 		// which will be immediately closed, only to check for errors.
 		{
 			nodeID := p.ExtendedEvalContext().NodeID
-			canarySink, err := getSink(details.SinkURI, nodeID, details.Opts, details.Targets, settings)
+			canarySink, err := getSink(details.SinkURI, nodeID, sessionID.String(), details.Opts, details.Targets, settings, makeSpanFrontier(), initialHighWater)
 			if err != nil {
 				return MaybeStripRetryableErrorMarker(err)
 			}
@@ -461,6 +464,10 @@ func (b *changefeedResumer) Resume(
 	jobID := *b.job.ID()
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	progress := b.job.Progress()
+
+	// Update the job's session ID.
+	sessionID := uuid.FastMakeV4()
+	details.SessionID = sessionID.String()
 
 	// TODO(dan): This is a workaround for not being able to set an initial
 	// progress high-water when creating a job (currently only the progress
