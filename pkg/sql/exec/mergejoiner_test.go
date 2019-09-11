@@ -29,21 +29,22 @@ type mjTestInitializer interface {
 // TODO(yuzefovich): add unit tests for cases with ON expression.
 
 type mjTestCase struct {
-	description     string
-	joinType        sqlbase.JoinType
-	leftTuples      []tuple
-	leftTypes       []coltypes.T
-	leftOutCols     []uint32
-	leftEqCols      []uint32
-	leftDirections  []distsqlpb.Ordering_Column_Direction
-	rightTuples     []tuple
-	rightTypes      []coltypes.T
-	rightOutCols    []uint32
-	rightEqCols     []uint32
-	rightDirections []distsqlpb.Ordering_Column_Direction
-	expected        []tuple
-	expectedOutCols []int
-	outputBatchSize uint16
+	description        string
+	joinType           sqlbase.JoinType
+	leftTuples         []tuple
+	leftTypes          []coltypes.T
+	leftOutCols        []uint32
+	leftEqCols         []uint32
+	leftDirections     []distsqlpb.Ordering_Column_Direction
+	rightTuples        []tuple
+	rightTypes         []coltypes.T
+	rightOutCols       []uint32
+	rightEqCols        []uint32
+	rightDirections    []distsqlpb.Ordering_Column_Direction
+	expected           []tuple
+	expectedOutCols    []int
+	outputBatchSize    uint16
+	skipNullsInjection bool
 }
 
 func (tc *mjTestCase) Init() {
@@ -1319,6 +1320,9 @@ func TestMergeJoiner(t *testing.T) {
 			rightEqCols:     []uint32{0, 1, 2},
 			expected:        tuples{},
 			expectedOutCols: []int{0, 1, 2},
+			// The expected output here is empty, so will it be during the nulls
+			// injections, so we want to skip that.
+			skipNullsInjection: true,
 		},
 		{
 			description:     "3 equality column LEFT SEMI JOIN test with nulls mixed ordering",
@@ -1335,6 +1339,9 @@ func TestMergeJoiner(t *testing.T) {
 			rightEqCols:     []uint32{1, 2, 0},
 			expected:        tuples{},
 			expectedOutCols: []int{0, 1, 2},
+			// The expected output here is empty, so will it be during the nulls
+			// injections, so we want to skip that.
+			skipNullsInjection: true,
 		},
 		{
 			description:     "single column DESC with nulls on the left LEFT SEMI JOIN",
@@ -1536,7 +1543,15 @@ func TestMergeJoiner(t *testing.T) {
 			return verify()
 		}
 
-		runTests(t, []tuples{tc.leftTuples, tc.rightTuples}, tc.expected, mergeJoinVerifier,
+		var testRunner func(*testing.T, []tuples, tuples, verifier, []int, func([]Operator) (Operator, error))
+		if tc.skipNullsInjection {
+			// We're omitting nulls injection test. See comments for each such test
+			// case.
+			testRunner = runTestsWithoutNullsInjection
+		} else {
+			testRunner = runTests
+		}
+		testRunner(t, []tuples{tc.leftTuples, tc.rightTuples}, tc.expected, mergeJoinVerifier,
 			tc.expectedOutCols, func(input []Operator) (Operator, error) {
 				return NewMergeJoinOp(tc.joinType, input[0], input[1], tc.leftOutCols,
 					tc.rightOutCols, tc.leftTypes, tc.rightTypes, lOrderings, rOrderings,

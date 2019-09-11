@@ -64,8 +64,8 @@ func TestSimpleProjectOp(t *testing.T) {
 		})
 	}
 
-	// Empty projection.
-	runTests(t, []tuples{{{1, 2, 3}, {1, 2, 3}}}, tuples{{}, {}}, orderedVerifier, []int{},
+	// Empty projection. The nulls injection test case will also return nothing.
+	runTestsWithoutNullsInjection(t, []tuples{{{1, 2, 3}, {1, 2, 3}}}, tuples{{}, {}}, orderedVerifier, []int{},
 		func(input []Operator) (Operator, error) {
 			return NewSimpleProjectOp(input[0], 3 /* numInputCols */, nil), nil
 		})
