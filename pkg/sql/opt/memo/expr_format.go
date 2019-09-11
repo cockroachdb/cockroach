@@ -566,6 +566,10 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if r.JoinSize > 1 {
 			tp.Childf("join-size: %d", r.JoinSize)
 		}
+		if len(relational.Shared.Rule.WithUses) > 0 {
+			// Go map
+			tp.Childf("cte-uses: %v", relational.Shared.Rule.WithUses)
+		}
 	}
 
 	switch t := e.(type) {
