@@ -862,3 +862,37 @@ SELECT CASE WHEN a <= b THEN 1 ELSE 2 END
   FROM t1
  WHERE (a > b - 2 AND a < b + 2) OR (c > a AND c < b)
 ----
+
+# Regression tests for NULL expression handling.
+statement ok
+CREATE TABLE t_case_null (x INT)
+
+statement ok
+INSERT INTO t_case_null VALUES (0)
+
+query I
+SELECT CASE WHEN x = 0 THEN 0 ELSE NULL END FROM t_case_null
+----
+0
+
+query I
+SELECT CASE WHEN x = 0 THEN NULL ELSE 0 END FROM t_case_null
+----
+NULL
+
+query I
+SELECT CASE WHEN x = 1 THEN 1 ELSE NULL END FROM t_case_null
+----
+NULL
+
+query I
+SELECT * FROM t_case_null WHERE NULL AND NULL
+----
+
+query I
+SELECT * FROM t_case_null WHERE NULL AND x = 0
+----
+
+query I
+SELECT * FROM t_case_null WHERE x = 0 AND NULL
+----
