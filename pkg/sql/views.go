@@ -12,13 +12,10 @@ package sql
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 // planDependencyInfo collects the dependencies related to a single
@@ -58,36 +55,4 @@ func (d planDependencies) String() string {
 		buf.WriteByte('\n')
 	}
 	return buf.String()
-}
-
-// analyzeViewQuery extracts the set of dependencies (tables and views
-// that this view's query depends on), together with the more detailed
-// information about which indexes and columns are needed from each
-// dependency. The set of columns from the view query's results is
-// also returned.
-func (p *planner) analyzeViewQuery(
-	ctx context.Context, viewSelect *tree.Select,
-) (planDependencies, sqlbase.ResultColumns, error) {
-	// Request dependency tracking.
-	defer func(prev planDependencies) { p.curPlan.deps = prev }(p.curPlan.deps)
-	p.curPlan.deps = make(planDependencies)
-
-	// Request star detection
-	defer func(prev bool) { p.curPlan.hasStar = prev }(p.curPlan.hasStar)
-	p.curPlan.hasStar = false
-
-	// Now generate the source plan.
-	sourcePlan, err := p.Select(ctx, viewSelect, []*types.T{})
-	if err != nil {
-		return nil, nil, err
-	}
-	// The plan will not be needed further.
-	defer sourcePlan.Close(ctx)
-
-	// TODO(a-robinson): Support star expressions as soon as we can (#10028).
-	if p.curPlan.hasStar {
-		return nil, nil, unimplemented.NewWithIssue(10028, "views do not currently support * expressions")
-	}
-
-	return p.curPlan.deps, planColumns(sourcePlan), nil
 }

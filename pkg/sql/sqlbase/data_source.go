@@ -179,19 +179,6 @@ func (src *DataSourceInfo) String() string {
 // SourceAliases is an array of one or more SourceAlias.
 type SourceAliases []SourceAlias
 
-// SrcIdx looks up a source by qualified name and returns the index of the
-// source (and whether we found one).
-func (s SourceAliases) SrcIdx(name tree.TableName) (srcIdx int, found bool) {
-	for i := range s {
-		if s[i].Name.CatalogName == name.CatalogName &&
-			s[i].Name.SchemaName == name.SchemaName &&
-			s[i].Name.TableName == name.TableName {
-			return i, true
-		}
-	}
-	return -1, false
-}
-
 // AnonymousTable is the empty table name, used when a data source
 // has no own name, e.g. VALUES, subqueries or the empty source.
 var AnonymousTable = tree.TableName{}

@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,75 +33,6 @@ type relocateNode struct {
 	rows          planNode
 
 	run relocateRun
-}
-
-// Relocate moves ranges and/or leases to specific stores.
-// (`ALTER TABLE/INDEX ... EXPERIMENTAL_RELOCATE [LEASE] ...` statement)
-// Privileges: INSERT on table.
-func (p *planner) Relocate(ctx context.Context, n *tree.Relocate) (planNode, error) {
-	tableDesc, index, err := p.getTableAndIndex(ctx, &n.TableOrIndex, privilege.INSERT)
-	if err != nil {
-		return nil, err
-	}
-
-	// Calculate the desired types for the select statement:
-	//  - int array (list of stores) if relocating a range, or just int (target
-	//    storeID) if relocating a lease
-	//  - column values; it is OK if the select statement returns fewer columns
-	//    (the relevant prefix is used).
-	desiredTypes := make([]*types.T, len(index.ColumnIDs)+1)
-	if n.RelocateLease {
-		desiredTypes[0] = types.Int
-	} else {
-		desiredTypes[0] = types.IntArray
-	}
-	for i, colID := range index.ColumnIDs {
-		c, err := tableDesc.FindColumnByID(colID)
-		if err != nil {
-			return nil, err
-		}
-		desiredTypes[i+1] = &c.Type
-	}
-
-	// Create the plan for the split rows source.
-	rows, err := p.newPlan(ctx, n.Rows, desiredTypes)
-	if err != nil {
-		return nil, err
-	}
-
-	cmdName := "EXPERIMENTAL_RELOCATE"
-	if n.RelocateLease {
-		cmdName += " LEASE"
-	}
-	cols := planColumns(rows)
-	if len(cols) < 2 {
-		return nil, errors.Errorf("less than 2 columns in %s data", cmdName)
-	}
-	if len(cols) > len(index.ColumnIDs)+1 {
-		return nil, errors.Errorf("too many columns in %s data", cmdName)
-	}
-	for i := range cols {
-		if !cols[i].Typ.Equivalent(desiredTypes[i]) {
-			colName := "relocation array"
-			if n.RelocateLease {
-				colName = "target leaseholder"
-			}
-			if i > 0 {
-				colName = index.ColumnNames[i-1]
-			}
-			return nil, errors.Errorf(
-				"%s data column %d (%s) must be of type %s, not type %s",
-				cmdName, i+1, colName, desiredTypes[i], cols[i].Typ,
-			)
-		}
-	}
-
-	return &relocateNode{
-		relocateLease: n.RelocateLease,
-		tableDesc:     tableDesc.TableDesc(),
-		index:         index,
-		rows:          rows,
-	}, nil
 }
 
 // relocateRun contains the run-time state of

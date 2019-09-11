@@ -111,18 +111,6 @@ func NewTypedOrdinalReference(r int, typ *types.T) *IndexedVar {
 	return &IndexedVar{Idx: r, typeAnnotation: typeAnnotation{typ: typ}}
 }
 
-// NewIndexedVar is a helper routine to create a standalone Indexedvar
-// with the given index value. This needs to undergo BindIfUnbound()
-// below before it can be fully used. The difference with ordinal
-// references is that vars returned by this constructor are modified
-// in-place by BindIfUnbound.
-//
-// Do not use NewIndexedVar for AST nodes that can undergo binding two
-// or more times.
-func NewIndexedVar(r int) *IndexedVar {
-	return &IndexedVar{Idx: r, bindInPlace: true}
-}
-
 // IndexedVarHelper wraps an IndexedVarContainer (an interface) and creates
 // IndexedVars bound to that container.
 //
