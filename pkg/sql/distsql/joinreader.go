@@ -16,8 +16,8 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -131,7 +131,7 @@ type JoinReader struct {
 var _ Processor = &JoinReader{}
 var _ RowSource = &JoinReader{}
 var _ distsqlpb.MetadataSource = &JoinReader{}
-var _ exec.OpNode = &JoinReader{}
+var _ colexec.OpNode = &JoinReader{}
 
 const joinReaderProcName = "join reader"
 
@@ -722,9 +722,9 @@ func (jr *JoinReader) ChildCount() int {
 }
 
 // Child is part of the exec.OpNode interface.
-func (jr *JoinReader) Child(nth int) exec.OpNode {
+func (jr *JoinReader) Child(nth int) colexec.OpNode {
 	if nth == 0 {
-		if n, ok := jr.input.(exec.OpNode); ok {
+		if n, ok := jr.input.(colexec.OpNode); ok {
 			return n
 		}
 		panic("input to JoinReader is not an exec.OpNode")

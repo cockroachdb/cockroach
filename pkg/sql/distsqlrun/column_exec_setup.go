@@ -19,11 +19,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colrpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/colrpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -38,12 +38,12 @@ import (
 // corresponding to operators in inputs (the latter must have already been
 // wrapped).
 func wrapWithVectorizedStatsCollector(
-	op exec.Operator, inputs []exec.Operator, pspec *distsqlpb.ProcessorSpec,
-) (*exec.VectorizedStatsCollector, error) {
+	op colexec.Operator, inputs []colexec.Operator, pspec *distsqlpb.ProcessorSpec,
+) (*colexec.VectorizedStatsCollector, error) {
 	inputWatch := timeutil.NewStopWatch()
-	vsc := exec.NewVectorizedStatsCollector(op, pspec.ProcessorID, len(inputs) == 0, inputWatch)
+	vsc := colexec.NewVectorizedStatsCollector(op, pspec.ProcessorID, len(inputs) == 0, inputWatch)
 	for _, input := range inputs {
-		sc, ok := input.(*exec.VectorizedStatsCollector)
+		sc, ok := input.(*colexec.VectorizedStatsCollector)
 		if !ok {
 			return nil, errors.New("unexpectedly an input is not collecting stats")
 		}
@@ -57,7 +57,7 @@ func wrapWithVectorizedStatsCollector(
 func finishVectorizedStatsCollectors(
 	ctx context.Context,
 	deterministicStats bool,
-	vectorizedStatsCollectors []*exec.VectorizedStatsCollector,
+	vectorizedStatsCollectors []*colexec.VectorizedStatsCollector,
 	procIDs []int32,
 ) {
 	spansByProcID := make(map[int32]opentracing.Span)
@@ -113,21 +113,21 @@ type flowCreatorHelper interface {
 // opDAGWithMetaSources is a helper struct that stores an operator DAG as well
 // as the metadataSources in this DAG that need to be drained.
 type opDAGWithMetaSources struct {
-	rootOperator    exec.Operator
+	rootOperator    colexec.Operator
 	metadataSources []distsqlpb.MetadataSource
 }
 
 // remoteComponentCreator is an interface that abstracts the constructors for
 // several components in a remote flow. Mostly for testing purposes.
 type remoteComponentCreator interface {
-	newOutbox(input exec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource) (*colrpc.Outbox, error)
+	newOutbox(input colexec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource) (*colrpc.Outbox, error)
 	newInbox(typs []coltypes.T) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
 
 func (vectorizedRemoteComponentCreator) newOutbox(
-	input exec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource,
+	input colexec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource,
 ) (*colrpc.Outbox, error) {
 	return colrpc.NewOutbox(input, typs, metadataSources)
 }
@@ -146,7 +146,7 @@ type vectorizedFlowCreator struct {
 
 	streamIDToInputOp              map[distsqlpb.StreamID]opDAGWithMetaSources
 	recordingStats                 bool
-	vectorizedStatsCollectorsQueue []*exec.VectorizedStatsCollector
+	vectorizedStatsCollectorsQueue []*colexec.VectorizedStatsCollector
 	procIDs                        []int32
 	waitGroup                      *sync.WaitGroup
 	syncFlowConsumer               distsql.RowReceiver
@@ -160,7 +160,7 @@ type vectorizedFlowCreator struct {
 
 	// leaves accumulates all operators that have no further outputs on the
 	// current node, for the purposes of EXPLAIN output.
-	leaves []exec.OpNode
+	leaves []colexec.OpNode
 }
 
 func newVectorizedFlowCreator(
@@ -177,7 +177,7 @@ func newVectorizedFlowCreator(
 		remoteComponentCreator:         componentCreator,
 		streamIDToInputOp:              make(map[distsqlpb.StreamID]opDAGWithMetaSources),
 		recordingStats:                 recordingStats,
-		vectorizedStatsCollectorsQueue: make([]*exec.VectorizedStatsCollector, 0, 2),
+		vectorizedStatsCollectorsQueue: make([]*colexec.VectorizedStatsCollector, 0, 2),
 		procIDs:                        make([]int32, 0, 2),
 		waitGroup:                      waitGroup,
 		syncFlowConsumer:               syncFlowConsumer,
@@ -190,11 +190,11 @@ func newVectorizedFlowCreator(
 // the given StreamEndpointSpec. It will also drain all MetadataSources in the
 // metadataSourcesQueue.
 func (s *vectorizedFlowCreator) setupRemoteOutputStream(
-	op exec.Operator,
+	op colexec.Operator,
 	outputTyps []coltypes.T,
 	stream *distsqlpb.StreamEndpointSpec,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
-) (exec.OpNode, error) {
+) (colexec.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(op, outputTyps, metadataSourcesQueue)
 	if err != nil {
 		return nil, err
@@ -228,7 +228,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 // NOTE: This method supports only BY_HASH routers. Callers should handle
 // PASS_THROUGH routers separately.
 func (s *vectorizedFlowCreator) setupRouter(
-	input exec.Operator,
+	input colexec.Operator,
 	outputTyps []coltypes.T,
 	output *distsqlpb.OutputRouterSpec,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
@@ -242,7 +242,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	for i := range hashCols {
 		hashCols[i] = int(output.HashColumns[i])
 	}
-	router, outputs := exec.NewHashRouter(input, outputTyps, hashCols, len(output.Streams))
+	router, outputs := colexec.NewHashRouter(input, outputTyps, hashCols, len(output.Streams))
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		router.Run(ctx)
 	}
@@ -298,8 +298,8 @@ func (s *vectorizedFlowCreator) setupRouter(
 // calling DrainMeta.
 func (s *vectorizedFlowCreator) setupInput(
 	input distsqlpb.InputSyncSpec,
-) (op exec.Operator, _ []distsqlpb.MetadataSource, memUsed int, _ error) {
-	inputStreamOps := make([]exec.Operator, 0, len(input.Streams))
+) (op colexec.Operator, _ []distsqlpb.MetadataSource, memUsed int, _ error) {
+	inputStreamOps := make([]colexec.Operator, 0, len(input.Streams))
 	metaSources := make([]distsqlpb.MetadataSource, 0, len(input.Streams))
 	for _, inputStream := range input.Streams {
 		switch inputStream.Type {
@@ -324,7 +324,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			s.addStreamEndpoint(inputStream.StreamID, inbox, s.waitGroup)
 			metaSources = append(metaSources, inbox)
 			op = inbox
-			memUsed += op.(exec.StaticMemoryOperator).EstimateStaticMemoryUsage()
+			memUsed += op.(colexec.StaticMemoryOperator).EstimateStaticMemoryUsage()
 			if s.recordingStats {
 				op, err = wrapWithVectorizedStatsCollector(
 					inbox,
@@ -353,12 +353,12 @@ func (s *vectorizedFlowCreator) setupInput(
 			return nil, nil, memUsed, err
 		}
 		if input.Type == distsqlpb.InputSyncSpec_ORDERED {
-			op = exec.NewOrderedSynchronizer(
+			op = colexec.NewOrderedSynchronizer(
 				inputStreamOps, typs, distsqlpb.ConvertToColumnOrdering(input.Ordering),
 			)
-			memUsed += op.(exec.StaticMemoryOperator).EstimateStaticMemoryUsage()
+			memUsed += op.(colexec.StaticMemoryOperator).EstimateStaticMemoryUsage()
 		} else {
-			op = exec.NewUnorderedSynchronizer(inputStreamOps, typs, s.waitGroup)
+			op = colexec.NewUnorderedSynchronizer(inputStreamOps, typs, s.waitGroup)
 			// Don't use the unordered synchronizer's inputs for stats collection
 			// given that they run concurrently. The stall time will be collected
 			// instead.
@@ -387,7 +387,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 	ctx context.Context,
 	flowCtx *distsql.FlowCtx,
 	pspec *distsqlpb.ProcessorSpec,
-	op exec.Operator,
+	op colexec.Operator,
 	opOutputTypes []coltypes.T,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
 ) error {
@@ -416,7 +416,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 		if s.recordingStats {
 			// If recording stats, we add a metadata source that will generate all
 			// stats data as metadata for the stats collectors created so far.
-			vscs := append([]*exec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
+			vscs := append([]*colexec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
 			s.vectorizedStatsCollectorsQueue = s.vectorizedStatsCollectorsQueue[:0]
 			metadataSourcesQueue = append(
 				metadataSourcesQueue,
@@ -450,7 +450,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 		if s.recordingStats {
 			// Make a copy given that vectorizedStatsCollectorsQueue is reset and
 			// appended to.
-			vscq := append([]*exec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
+			vscq := append([]*colexec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
 			outputStatsToTrace = func() {
 				finishVectorizedStatsCollectors(
 					ctx, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscq, s.procIDs,
@@ -487,7 +487,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	flowCtx *distsql.FlowCtx,
 	processorSpecs []distsqlpb.ProcessorSpec,
 	acc *mon.BoundAccount,
-) (leaves []exec.OpNode, err error) {
+) (leaves []colexec.OpNode, err error) {
 	streamIDToSpecIdx := make(map[distsqlpb.StreamID]int)
 	// queue is a queue of indices into processorSpecs, for topologically
 	// ordered processing.
@@ -511,7 +511,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		queue = append(queue, i)
 	}
 
-	inputs := make([]exec.Operator, 0, 2)
+	inputs := make([]colexec.Operator, 0, 2)
 	for len(queue) > 0 {
 		pspec := &processorSpecs[queue[0]]
 		queue = queue[1:]
@@ -729,7 +729,7 @@ func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 // EXPLAIN output.
 func SupportsVectorized(
 	ctx context.Context, flowCtx *distsql.FlowCtx, processorSpecs []distsqlpb.ProcessorSpec,
-) (leaves []exec.OpNode, err error) {
+) (leaves []colexec.OpNode, err error) {
 	creator := newVectorizedFlowCreator(
 		newNoopFlowCreatorHelper(),
 		vectorizedRemoteComponentCreator{},

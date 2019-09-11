@@ -17,9 +17,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -120,7 +120,7 @@ func TestVectorizeSpaceError(t *testing.T) {
 	for _, tc := range testCases {
 		for _, succ := range []bool{true, false} {
 			t.Run(fmt.Sprintf("%s-success-expected-%t", tc.desc, succ), func(t *testing.T) {
-				inputs := []exec.Operator{exec.NewZeroOp(nil)}
+				inputs := []colexec.Operator{colexec.NewZeroOp(nil)}
 				memMon := mon.MakeMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
 				if succ {
 					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))

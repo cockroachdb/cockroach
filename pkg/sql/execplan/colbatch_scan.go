@@ -15,9 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -35,7 +35,7 @@ import (
 // colBatchScan is the exec.Operator implementation of TableReader. It reads a table
 // from kv, presenting it as coldata.Batches via the exec.Operator interface.
 type colBatchScan struct {
-	exec.ZeroInputNode
+	colexec.ZeroInputNode
 	spans     roachpb.Spans
 	flowCtx   *distsql.FlowCtx
 	rf        *row.CFetcher
@@ -48,7 +48,7 @@ type colBatchScan struct {
 	init bool
 }
 
-var _ exec.StaticMemoryOperator = &colBatchScan{}
+var _ colexec.StaticMemoryOperator = &colBatchScan{}
 
 func (s *colBatchScan) EstimateStaticMemoryUsage() int {
 	return s.rf.EstimateStaticMemoryUsage()

@@ -37,9 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -160,7 +160,7 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 var VectorizeRowCountThresholdClusterValue = settings.RegisterValidatedIntSetting(
 	"sql.defaults.vectorize_row_count_threshold",
 	"default vectorize row count threshold",
-	exec.DefaultVectorizeRowCountThreshold,
+	colexec.DefaultVectorizeRowCountThreshold,
 	func(v int64) error {
 		if v < 0 {
 			return pgerror.Newf(pgcode.InvalidParameterValue,

@@ -16,10 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -28,7 +28,7 @@ import (
 // chunk into a coldata.Batch column by column.
 type Columnarizer struct {
 	distsql.ProcessorBase
-	exec.NonExplainable
+	colexec.NonExplainable
 
 	input distsql.RowSource
 	da    sqlbase.DatumAlloc
@@ -40,7 +40,7 @@ type Columnarizer struct {
 	typs            []coltypes.T
 }
 
-var _ exec.StaticMemoryOperator = &Columnarizer{}
+var _ colexec.StaticMemoryOperator = &Columnarizer{}
 
 // NewColumnarizer returns a new Columnarizer.
 func NewColumnarizer(
@@ -71,7 +71,7 @@ func NewColumnarizer(
 // EstimateStaticMemoryUsage is part of the exec.StaticMemoryOperator
 // interface.
 func (c *Columnarizer) EstimateStaticMemoryUsage() int {
-	return exec.EstimateBatchSizeBytes(c.typs, coldata.BatchSize)
+	return colexec.EstimateBatchSizeBytes(c.typs, coldata.BatchSize)
 }
 
 // Init is part of the exec.Operator interface.
@@ -109,7 +109,7 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 
 	// Write each column into the output batch.
 	for idx, ct := range columnTypes {
-		err := exec.EncDatumRowsToColVec(c.buffered[:nRows], c.batch.ColVec(idx), idx, &ct, &c.da)
+		err := colexec.EncDatumRowsToColVec(c.buffered[:nRows], c.batch.ColVec(idx), idx, &ct, &c.da)
 		if err != nil {
 			panic(err)
 		}
@@ -125,7 +125,7 @@ func (c *Columnarizer) Run(context.Context) {
 	panic("Columnarizer should not be Run")
 }
 
-var _ exec.Operator = &Columnarizer{}
+var _ colexec.Operator = &Columnarizer{}
 var _ distsqlpb.MetadataSource = &Columnarizer{}
 
 // DrainMeta is part of the MetadataSource interface.
@@ -138,16 +138,16 @@ func (c *Columnarizer) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetada
 
 // ChildCount is part of the exec.Operator interface.
 func (c *Columnarizer) ChildCount() int {
-	if _, ok := c.input.(exec.OpNode); ok {
+	if _, ok := c.input.(colexec.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
 // Child is part of the exec.Operator interface.
-func (c *Columnarizer) Child(nth int) exec.OpNode {
+func (c *Columnarizer) Child(nth int) colexec.OpNode {
 	if nth == 0 {
-		if n, ok := c.input.(exec.OpNode); ok {
+		if n, ok := c.input.(colexec.OpNode); ok {
 			return n
 		}
 		panic("input to Columnarizer is not an exec.OpNode")

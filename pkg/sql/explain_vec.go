@@ -16,10 +16,10 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -137,19 +137,19 @@ func (n *explainVecNode) startExec(params runParams) error {
 	return nil
 }
 
-func shouldOutput(operator exec.OpNode, verbose bool) bool {
-	_, nonExplainable := operator.(exec.NonExplainable)
+func shouldOutput(operator colexec.OpNode, verbose bool) bool {
+	_, nonExplainable := operator.(colexec.NonExplainable)
 	return !nonExplainable || verbose
 }
 
-func formatOpChain(operator exec.OpNode, node treeprinter.Node, verbose bool) {
+func formatOpChain(operator colexec.OpNode, node treeprinter.Node, verbose bool) {
 	if shouldOutput(operator, verbose) {
 		doFormatOpChain(operator, node.Child(reflect.TypeOf(operator).String()), verbose)
 	} else {
 		doFormatOpChain(operator, node, verbose)
 	}
 }
-func doFormatOpChain(operator exec.OpNode, node treeprinter.Node, verbose bool) {
+func doFormatOpChain(operator colexec.OpNode, node treeprinter.Node, verbose bool) {
 	for i := 0; i < operator.ChildCount(); i++ {
 		child := operator.Child(i)
 		if shouldOutput(child, verbose) {

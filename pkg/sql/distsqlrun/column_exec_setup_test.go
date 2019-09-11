@@ -18,22 +18,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 type callbackRemoteComponentCreator struct {
-	newOutboxFn func(exec.Operator, []coltypes.T, []distsqlpb.MetadataSource) (*colrpc.Outbox, error)
+	newOutboxFn func(colexec.Operator, []coltypes.T, []distsqlpb.MetadataSource) (*colrpc.Outbox, error)
 	newInboxFn  func(typs []coltypes.T) (*colrpc.Inbox, error)
 }
 
 func (c callbackRemoteComponentCreator) newOutbox(
-	input exec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource,
+	input colexec.Operator, typs []coltypes.T, metadataSources []distsqlpb.MetadataSource,
 ) (*colrpc.Outbox, error) {
 	return c.newOutboxFn(input, typs, metadataSources)
 }
@@ -164,7 +164,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	inboxToNumInputTypes := make(map[*colrpc.Inbox][]coltypes.T)
 	outboxCreated := false
 	componentCreator := callbackRemoteComponentCreator{
-		newOutboxFn: func(op exec.Operator, typs []coltypes.T, sources []distsqlpb.MetadataSource) (*colrpc.Outbox, error) {
+		newOutboxFn: func(op colexec.Operator, typs []coltypes.T, sources []distsqlpb.MetadataSource) (*colrpc.Outbox, error) {
 			require.False(t, outboxCreated)
 			outboxCreated = true
 			// Verify that there is only one metadata source: the inbox that is the

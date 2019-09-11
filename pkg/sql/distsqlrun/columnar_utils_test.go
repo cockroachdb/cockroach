@@ -15,9 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -75,7 +75,7 @@ func verifyColOperator(
 		return errors.New("processor is unexpectedly not a RowSource")
 	}
 
-	columnarizers := make([]exec.Operator, len(inputs))
+	columnarizers := make([]colexec.Operator, len(inputs))
 	for i, input := range inputsColOp {
 		c, err := execplan.NewColumnarizer(ctx, flowCtx, int32(i)+1, input)
 		if err != nil {

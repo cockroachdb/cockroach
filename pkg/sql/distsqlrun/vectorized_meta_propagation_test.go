@@ -15,9 +15,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -67,7 +67,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	noop := exec.NewNoop(col)
+	noop := colexec.NewNoop(col)
 	mat, err := distsql.NewMaterializer(
 		&flowCtx,
 		2, /* processorID */

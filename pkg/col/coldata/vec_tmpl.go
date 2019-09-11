@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	// {{/*
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
 	// HACK: crlfmt removes the "*/}}" comment if it's the last line in the import
 	// block. This was picked because it sorts after "pkg/sql/exec/execgen" and

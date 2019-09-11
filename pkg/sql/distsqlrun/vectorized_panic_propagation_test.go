@@ -17,10 +17,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -125,9 +125,20 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 // https://github.com/cockroachdb/cockroach/issues/39779
 func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
 
-	mat := &materializer{
-		input: &exec.CallbackOperator{
+	flowCtx := distsql.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg:     &distsql.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
+	}
+
+	mat, err := distsql.NewMaterializer(
+		&flowCtx,
+		0, /* processorID */
+		&colexec.CallbackOperator{
 			NextCb: func(ctx context.Context) coldata.Batch {
 				a := []int{0}
 				// Trigger an index out of bounds panic.
@@ -135,11 +146,19 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 				return nil
 			},
 		},
+		nil, /* typs */
+		&distsqlpb.PostProcessSpec{},
+		&RowBuffer{},
+		nil, /* metadataSourceQueue */
+		nil, /* outputStatsToTrace */
+		nil, /* cancelFlow */
+	)
+	if err != nil {
+		t.Fatal(err)
 	}
-	// Avoid uninitialized output panic.
-	mat.out.output = &RowBuffer{}
+
 	flow := &Flow{
-		processors: []Processor{mat},
+		processors: []distsql.Processor{mat},
 		// This test specifically verifies that a flow doesn't get stuck in Wait for
 		// asynchronous components that haven't been signaled to exit. To simulate
 		// this we just create a mock startable.
@@ -155,7 +174,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		},
 	}
 
-	require.Panics(t, func() { require.NoError(t, flow.Run(context.Background(), nil)) })
+	require.Panics(t, func() { require.NoError(t, flow.Run(ctx, nil)) })
 }
 
 // testVectorizedPanicEmitter is an exec.Operator that panics on every
@@ -164,17 +183,19 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 // for tests only. If panicFn is non-nil, it is used; otherwise, the builtin
 // panic function is called.
 type testVectorizedPanicEmitter struct {
-	exec.OneInputNode
+	colexec.OneInputNode
 	emitBatch bool
 
 	panicFn func(interface{})
 }
 
-var _ exec.Operator = &testVectorizedPanicEmitter{}
+var _ colexec.Operator = &testVectorizedPanicEmitter{}
 
-func newTestVectorizedPanicEmitter(input exec.Operator, panicFn func(interface{})) exec.Operator {
+func newTestVectorizedPanicEmitter(
+	input colexec.Operator, panicFn func(interface{}),
+) colexec.Operator {
 	return &testVectorizedPanicEmitter{
-		OneInputNode: exec.NewOneInputNode(input),
+		OneInputNode: colexec.NewOneInputNode(input),
 		panicFn:      panicFn,
 	}
 }

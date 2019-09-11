@@ -25,10 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -158,9 +158,9 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					wg              sync.WaitGroup
 					typs            = []coltypes.T{coltypes.Int64}
 					semtyps         = []types.T{*types.Int}
-					hashRouterInput = exec.NewRandomDataOp(
+					hashRouterInput = colexec.NewRandomDataOp(
 						rng,
-						exec.RandomDataOpArgs{
+						colexec.RandomDataOpArgs{
 							DeterministicTyps: typs,
 							// Set a high number of batches to ensure that the HashRouter is
 							// very far from being finished when the flow is shut down.
@@ -172,27 +172,27 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					numInboxes                  = numHashRouterOutputs + 3
 					inboxes                     = make([]*colrpc.Inbox, 0, numInboxes+1)
 					handleStreamErrCh           = make([]chan error, numInboxes+1)
-					synchronizerInputs          = make([]exec.Operator, 0, numInboxes)
+					synchronizerInputs          = make([]colexec.Operator, 0, numInboxes)
 					materializerMetadataSources = make([]distsqlpb.MetadataSource, 0, numInboxes+1)
 					streamID                    = 0
 					addAnotherRemote            = rng.Float64() < 0.5
 				)
 
-				hashRouter, hashRouterOutputs := exec.NewHashRouter(hashRouterInput, typs, []int{0}, numHashRouterOutputs)
+				hashRouter, hashRouterOutputs := colexec.NewHashRouter(hashRouterInput, typs, []int{0}, numHashRouterOutputs)
 				for i := 0; i < numInboxes; i++ {
 					inbox, err := colrpc.NewInbox(typs)
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					materializerMetadataSources = append(materializerMetadataSources, inbox)
-					synchronizerInputs = append(synchronizerInputs, exec.Operator(inbox))
+					synchronizerInputs = append(synchronizerInputs, colexec.Operator(inbox))
 				}
-				synchronizer := exec.NewUnorderedSynchronizer(synchronizerInputs, typs, &wg)
+				synchronizer := colexec.NewUnorderedSynchronizer(synchronizerInputs, typs, &wg)
 				flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 
 				runOutboxInbox := func(
 					ctx context.Context,
 					cancelFn context.CancelFunc,
-					outboxInput exec.Operator,
+					outboxInput colexec.Operator,
 					inbox *colrpc.Inbox,
 					id int,
 					outboxMetadataSources []distsqlpb.MetadataSource,
@@ -251,12 +251,12 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					} else {
 						batch := coldata.NewMemBatch(typs)
 						batch.SetLength(coldata.BatchSize)
-						runOutboxInbox(ctxRemote, cancelRemote, exec.NewRepeatableBatchSource(batch), inboxes[i], streamID, outboxMetadataSources)
+						runOutboxInbox(ctxRemote, cancelRemote, colexec.NewRepeatableBatchSource(batch), inboxes[i], streamID, outboxMetadataSources)
 					}
 					streamID++
 				}
 
-				var materializerInput exec.Operator
+				var materializerInput colexec.Operator
 				ctxAnotherRemote, cancelAnotherRemote := context.WithCancel(context.Background())
 				if addAnotherRemote {
 					// Add another "remote" node to the flow.

@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -288,7 +288,7 @@ func (rf *CFetcher) Init(
 	}
 	rf.machine.batch = coldata.NewMemBatch(typs)
 	rf.machine.colvecs = rf.machine.batch.ColVecs()
-	rf.estimatedStaticMemoryUsage = exec.EstimateBatchSizeBytes(typs, coldata.BatchSize)
+	rf.estimatedStaticMemoryUsage = colexec.EstimateBatchSizeBytes(typs, coldata.BatchSize)
 
 	var err error
 
@@ -786,7 +786,7 @@ func (rf *CFetcher) pushState(state fetcherState) {
 // getDatumAt returns the converted datum object at the given (colIdx, rowIdx).
 // This function is meant for tracing and should not be used in hot paths.
 func (rf *CFetcher) getDatumAt(colIdx int, rowIdx uint16, typ types.T) tree.Datum {
-	return exec.PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, rf.table.da, typ)
+	return colexec.PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, rf.table.da, typ)
 }
 
 // processValue processes the state machine's current value component, setting

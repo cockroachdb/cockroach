@@ -15,9 +15,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -25,9 +25,9 @@ import (
 // Materializer converts an exec.Operator input into a RowSource.
 type Materializer struct {
 	ProcessorBase
-	exec.NonExplainable
+	colexec.NonExplainable
 
-	input exec.Operator
+	input colexec.Operator
 
 	da sqlbase.DatumAlloc
 
@@ -71,7 +71,7 @@ const materializerProcName = "materializer"
 func NewMaterializer(
 	flowCtx *FlowCtx,
 	processorID int32,
-	input exec.Operator,
+	input colexec.Operator,
 	typs []types.T,
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
@@ -110,7 +110,7 @@ func NewMaterializer(
 	return m, nil
 }
 
-var _ exec.OpNode = &Materializer{}
+var _ colexec.OpNode = &Materializer{}
 
 // ChildCount is part of the exec.OpNode interface.
 func (m *Materializer) ChildCount() int {
@@ -118,7 +118,7 @@ func (m *Materializer) ChildCount() int {
 }
 
 // Child is part of the exec.OpNode interface.
-func (m *Materializer) Child(nth int) exec.OpNode {
+func (m *Materializer) Child(nth int) colexec.OpNode {
 	if nth == 0 {
 		return m.input
 	}
@@ -163,7 +163,7 @@ func (m *Materializer) next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 		typs := m.OutputTypes()
 		for colIdx := 0; colIdx < len(typs); colIdx++ {
 			col := m.batch.ColVec(colIdx)
-			m.row[colIdx].Datum = exec.PhysicalTypeColElemToDatum(col, rowIdx, m.da, typs[colIdx])
+			m.row[colIdx].Datum = colexec.PhysicalTypeColElemToDatum(col, rowIdx, m.da, typs[colIdx])
 		}
 		return m.ProcessRowHelper(m.row), nil
 	}
