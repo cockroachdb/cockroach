@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package replicaoracle provides functionality for distsqlplan to choose a
+// Package replicaoracle provides functionality for rowplan to choose a
 // replica for a range.
 package replicaoracle
 

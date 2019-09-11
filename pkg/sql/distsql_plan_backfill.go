@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
@@ -71,7 +71,7 @@ func (dsp *DistSQLPlanner) createBackfiller(
 	}
 
 	var p PhysicalPlan
-	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
+	p.ResultRouters = make([]rowplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		ib := &execinfrapb.BackfillerSpec{}
 		*ib = spec
@@ -80,7 +80,7 @@ func (dsp *DistSQLPlanner) createBackfiller(
 			ib.Spans[j].Span = sp.Spans[j]
 		}
 
-		proc := distsqlplan.Processor{
+		proc := rowplan.Processor{
 			Node: sp.Node,
 			Spec: execinfrapb.ProcessorSpec{
 				Core:   execinfrapb.ProcessorCoreUnion{Backfiller: ib},

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlplan
+package rowplan
 
 import (
 	"testing"
@@ -21,7 +21,7 @@ func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan", true,
+		"github.com/cockroachdb/cockroach/pkg/sql/rowplan", true,
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun",
 		}, nil,

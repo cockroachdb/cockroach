@@ -11,7 +11,7 @@
 // This file contains helper code to populate distsqlrun.Expressions during
 // planning.
 
-package distsqlplan
+package rowplan
 
 import (
 	"fmt"

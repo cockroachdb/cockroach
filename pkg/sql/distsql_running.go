@@ -23,11 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -205,7 +205,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			nodeID:     nodeID,
 			resultChan: resultChan,
 		}
-		defer distsqlplan.ReleaseSetupFlowRequest(&req)
+		defer rowplan.ReleaseSetupFlowRequest(&req)
 
 		// Send out a request to the workers; if no worker is available, run
 		// directly.
@@ -234,7 +234,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// Set up the flow on this node.
 	localReq := setupReq
 	localReq.Flow = *flows[thisNodeID]
-	defer distsqlplan.ReleaseSetupFlowRequest(&localReq)
+	defer rowplan.ReleaseSetupFlowRequest(&localReq)
 	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 	if err != nil {
 		return nil, nil, err

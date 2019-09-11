@@ -12,14 +12,14 @@ package distsqlutils
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // FakeResolverForTestCluster creates a fake span resolver for the nodes in a
 // test cluster.
-func FakeResolverForTestCluster(tc serverutils.TestClusterInterface) distsqlplan.SpanResolver {
+func FakeResolverForTestCluster(tc serverutils.TestClusterInterface) rowplan.SpanResolver {
 	nodeDescs := make([]*roachpb.NodeDescriptor, tc.NumServers())
 	for i := range nodeDescs {
 		s := tc.Server(i)
@@ -29,5 +29,5 @@ func FakeResolverForTestCluster(tc serverutils.TestClusterInterface) distsqlplan
 		}
 	}
 
-	return distsqlplan.NewFakeSpanResolver(nodeDescs)
+	return rowplan.NewFakeSpanResolver(nodeDescs)
 }

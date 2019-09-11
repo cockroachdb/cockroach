@@ -15,8 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -105,7 +105,7 @@ func distChangefeedFlow(
 		}
 	}
 
-	changeAggregatorProcs := make([]distsqlplan.Processor, 0, len(spanPartitions))
+	changeAggregatorProcs := make([]rowplan.Processor, 0, len(spanPartitions))
 	for _, sp := range spanPartitions {
 		// TODO(dan): Merge these watches with the span-level resolved
 		// timestamps from the job progress.
@@ -117,7 +117,7 @@ func distChangefeedFlow(
 			}
 		}
 
-		changeAggregatorProcs = append(changeAggregatorProcs, distsqlplan.Processor{
+		changeAggregatorProcs = append(changeAggregatorProcs, rowplan.Processor{
 			Node: sp.Node,
 			Spec: execinfrapb.ProcessorSpec{
 				Core: execinfrapb.ProcessorCoreUnion{
@@ -143,7 +143,7 @@ func distChangefeedFlow(
 	var p sql.PhysicalPlan
 
 	stageID := p.NewStageID()
-	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(changeAggregatorProcs))
+	p.ResultRouters = make([]rowplan.ProcessorIdx, len(changeAggregatorProcs))
 	for i, proc := range changeAggregatorProcs {
 		proc.Spec.StageID = stageID
 		pIdx := p.AddProcessor(proc)

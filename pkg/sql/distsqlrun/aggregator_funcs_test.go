@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -116,7 +116,7 @@ func checkDistAggregationInfo(
 	colIdx int,
 	numRows int,
 	fn execinfrapb.AggregatorSpec_Func,
-	info distsqlplan.DistAggregationInfo,
+	info rowplan.DistAggregationInfo,
 ) {
 	colType := tableDesc.Columns[colIdx].Type
 
@@ -295,7 +295,7 @@ func checkDistAggregationInfo(
 			t.Fatal(err)
 		}
 		var expr execinfrapb.Expression
-		expr, err = distsqlplan.MakeExpression(renderExpr, nil, nil)
+		expr, err = rowplan.MakeExpression(renderExpr, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -437,7 +437,7 @@ func TestDistAggregationTable(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 	desc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
-	for fn, info := range distsqlplan.DistAggregationTable {
+	for fn, info := range rowplan.DistAggregationTable {
 		if fn == execinfrapb.AggregatorSpec_ANY_NOT_NULL {
 			// ANY_NOT_NULL only has a definite result if all rows have the same value
 			// on the relevant column; skip testing this trivial case.

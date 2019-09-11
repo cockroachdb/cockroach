@@ -12,7 +12,7 @@
 // building distsql plans. It does not contain the actual physical planning
 // code.
 
-package distsqlplan
+package rowplan
 
 import (
 	"reflect"

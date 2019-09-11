@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -258,7 +258,7 @@ func LoadCSV(
 	// This is a hardcoded two stage plan. The first stage is the mappers,
 	// the second stage is the reducers. We have to keep track of all the mappers
 	// we create because the reducers need to hook up a stream for each mapper.
-	firstStageRouters := make([]distsqlplan.ProcessorIdx, len(inputSpecs))
+	firstStageRouters := make([]rowplan.ProcessorIdx, len(inputSpecs))
 	firstStageTypes := []types.T{*types.Bytes, *types.Bytes}
 
 	routerSpec := execinfrapb.OutputRouterSpec_RangeRouterSpec{
@@ -275,7 +275,7 @@ func LoadCSV(
 	// We can reuse the phase 1 ReadCSV specs, just have to clear sampling.
 	for i, rcs := range inputSpecs {
 		rcs.SampleSize = 0
-		proc := distsqlplan.Processor{
+		proc := rowplan.Processor{
 			Node: nodes[i],
 			Spec: execinfrapb.ProcessorSpec{
 				Core: execinfrapb.ProcessorCoreUnion{ReadImport: rcs},
@@ -303,7 +303,7 @@ func LoadCSV(
 	}
 
 	stageID = p.NewStageID()
-	p.ResultRouters = make([]distsqlplan.ProcessorIdx, 0, len(nodes))
+	p.ResultRouters = make([]rowplan.ProcessorIdx, 0, len(nodes))
 	for i, node := range nodes {
 		swSpec := sstSpecs[i]
 		if len(swSpec.Spans) == 0 {
@@ -314,7 +314,7 @@ func LoadCSV(
 			Slot:         int32(len(p.ResultRouters)),
 			Contribution: float32(len(swSpec.Spans)) / float32(len(spans)),
 		}
-		proc := distsqlplan.Processor{
+		proc := rowplan.Processor{
 			Node: node,
 			Spec: execinfrapb.ProcessorSpec{
 				Input: []execinfrapb.InputSyncSpec{{
@@ -328,7 +328,7 @@ func LoadCSV(
 
 		pIdx := p.AddProcessor(proc)
 		for _, router := range firstStageRouters {
-			p.Streams = append(p.Streams, distsqlplan.Stream{
+			p.Streams = append(p.Streams, rowplan.Stream{
 				SourceProcessor:  router,
 				SourceRouterSlot: i,
 				DestProcessor:    pIdx,
@@ -494,9 +494,9 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		cs.SampleSize = int32(sampleSize)
 	}
 
-	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(csvSpecs))
+	p.ResultRouters = make([]rowplan.ProcessorIdx, len(csvSpecs))
 	for i, rcs := range csvSpecs {
-		proc := distsqlplan.Processor{
+		proc := rowplan.Processor{
 			Node: nodes[i],
 			Spec: execinfrapb.ProcessorSpec{
 				Core:    execinfrapb.ProcessorCoreUnion{ReadImport: rcs},
@@ -634,9 +634,9 @@ func DistIngest(
 
 	// Setup a one-stage plan with one proc per input spec.
 	stageID := p.NewStageID()
-	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(inputSpecs))
+	p.ResultRouters = make([]rowplan.ProcessorIdx, len(inputSpecs))
 	for i, rcs := range inputSpecs {
-		proc := distsqlplan.Processor{
+		proc := rowplan.Processor{
 			Node: nodes[i],
 			Spec: execinfrapb.ProcessorSpec{
 				Core:    execinfrapb.ProcessorCoreUnion{ReadImport: rcs},

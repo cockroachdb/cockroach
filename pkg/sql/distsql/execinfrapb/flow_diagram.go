@@ -729,7 +729,7 @@ func encodeJSONToURL(json bytes.Buffer) (string, url.URL, error) {
 	url := url.URL{
 		Scheme:   "https",
 		Host:     "cockroachdb.github.io",
-		Path:     "distsqlplan/decode.html",
+		Path:     "rowplan/decode.html",
 		Fragment: compressed.String(),
 	}
 	return jsonStr, url, nil

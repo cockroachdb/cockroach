@@ -78,7 +78,7 @@ var ignored = []string{
 	"http://maven.apache.org/POM/4.0.0",
 	// These report 404 for non-API GETs.
 	"http://ignored:ignored@errors.cockroachdb.com/",
-	"https://cockroachdb.github.io/distsqlplan/",
+	"https://cockroachdb.github.io/rowplan/",
 	"https://ignored:ignored@errors.cockroachdb.com/",
 	"https://register.cockroachdb.com",
 	"https://www.googleapis.com/auth",
