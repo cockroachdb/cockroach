@@ -937,6 +937,13 @@ Start with an empty database: avoid pre-loading a default dataset in
 the demo shell.`,
 	}
 
+	Global = FlagInfo{
+		Name: "global",
+		Description: `
+Simulate a global cluster. This adds artificial latencies to nodes in different
+regions.`,
+	}
+
 	LogDir = FlagInfo{
 		Name: "log-dir",
 		Description: `

@@ -766,6 +766,34 @@ func (ood *onlyOnceDialer) dial(ctx context.Context, addr string) (net.Conn, err
 	return nil, grpcutil.ErrCannotReuseClientConn
 }
 
+type dialerFunc func(context.Context, string) (net.Conn, error)
+
+type artificialLatencyDialer struct {
+	dialerFunc dialerFunc
+	latencyMS  int
+}
+
+func (ald *artificialLatencyDialer) dial(ctx context.Context, addr string) (net.Conn, error) {
+	conn, err := ald.dialerFunc(ctx, addr)
+	if err != nil {
+		return conn, err
+	}
+	return delayingConn{
+		Conn:      conn,
+		latencyMS: ald.latencyMS,
+	}, nil
+}
+
+type delayingConn struct {
+	net.Conn
+	latencyMS int
+}
+
+func (d delayingConn) Write(b []byte) (n int, err error) {
+	time.Sleep(time.Duration(d.latencyMS) * time.Millisecond)
+	return d.Conn.Write(b)
+}
+
 // GRPCDialRaw calls grpc.Dial with options appropriate for the context.
 // Unlike GRPCDialNode, it does not start an RPC heartbeat to validate the
 // connection. This connection will not be reconnected automatically;
@@ -773,11 +801,11 @@ func (ood *onlyOnceDialer) dial(ctx context.Context, addr string) (net.Conn, err
 // This method implies a DefaultClass ConnectionClass for the returned
 // ClientConn.
 func (ctx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, <-chan struct{}, error) {
-	return ctx.grpcDialRaw(target, DefaultClass)
+	return ctx.grpcDialRaw(target, 0, DefaultClass)
 }
 
 func (ctx *Context) grpcDialRaw(
-	target string, class ConnectionClass,
+	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) (*grpc.ClientConn, <-chan struct{}, error) {
 	dialOpts, err := ctx.grpcDialOptions(target, class)
 	if err != nil {
@@ -796,7 +824,18 @@ func (ctx *Context) grpcDialRaw(
 	dialer := onlyOnceDialer{
 		redialChan: make(chan struct{}),
 	}
-	dialOpts = append(dialOpts, grpc.WithContextDialer(dialer.dial))
+	dialerFunc := dialer.dial
+	if ctx.testingKnobs.ArtificialLatencyMap != nil {
+		latency := ctx.testingKnobs.ArtificialLatencyMap[target]
+		log.VEventf(ctx.masterCtx, 1, "Connecting to node %s (%d) with simulated latency %dms", target, remoteNodeID,
+			latency)
+		dialer := artificialLatencyDialer{
+			dialerFunc: dialerFunc,
+			latencyMS:  latency,
+		}
+		dialerFunc = dialer.dial
+	}
+	dialOpts = append(dialOpts, grpc.WithContextDialer(dialerFunc))
 
 	// add testingDialOpts after our dialer because one of our tests
 	// uses a custom dialer (this disables the only-one-connection
@@ -870,7 +909,7 @@ func (ctx *Context) grpcDialNodeInternal(
 		// Either we kick off the heartbeat loop (and clean up when it's done),
 		// or we clean up the connKey entries immediately.
 		var redialChan <-chan struct{}
-		conn.grpcConn, redialChan, conn.dialErr = ctx.grpcDialRaw(target, class)
+		conn.grpcConn, redialChan, conn.dialErr = ctx.grpcDialRaw(target, remoteNodeID, class)
 		if conn.dialErr == nil {
 			if err := ctx.Stopper.RunTask(
 				ctx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
