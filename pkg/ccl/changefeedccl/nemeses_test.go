@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	gosql "database/sql"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,7 +25,10 @@ func TestChangefeedNemeses(t *testing.T) {
 	jobs.DefaultAdoptInterval = 10 * time.Millisecond
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		v, err := cdctest.RunNemesis(f, db)
+		// TODO(aayush,dan): Ugly hack to disable `eventPause` in sinkless
+		// feeds. See comment in `RunNemesis` for details.
+		isSinkless := strings.Contains(t.Name(), "sinkless")
+		v, err := cdctest.RunNemesis(f, db, isSinkless)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}

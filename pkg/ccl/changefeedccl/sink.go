@@ -69,6 +69,7 @@ func getSink(
 	opts map[string]string,
 	targets jobspb.ChangefeedTargets,
 	settings *cluster.Settings,
+	timestampOracle timestampLowerBoundOracle,
 ) (Sink, error) {
 	u, err := url.Parse(sinkURI)
 	if err != nil {
@@ -170,7 +171,7 @@ func getSink(
 		u.RawQuery = q.Encode()
 		q = url.Values{}
 		makeSink = func() (Sink, error) {
-			return makeCloudStorageSink(u.String(), nodeID, fileSize, settings, opts)
+			return makeCloudStorageSink(u.String(), nodeID, fileSize, settings, opts, timestampOracle)
 		}
 	case u.Scheme == sinkSchemeExperimentalSQL:
 		// Swap the changefeed prefix for the sql connection one that sqlSink

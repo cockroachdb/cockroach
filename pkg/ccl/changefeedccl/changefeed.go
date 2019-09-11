@@ -166,11 +166,13 @@ func kvsToRows(
 // emitEntries connects to a sink, receives rows from a closure, and repeatedly
 // emits them to the sink. It returns a closure that may be repeatedly called to
 // advance the changefeed and which returns span-level resolved timestamp
-// updates. The returned closure is not threadsafe.
+// updates. The returned closure is not threadsafe. Note that rows read from
+// `inputFn` which precede or equal the Frontier of `sf` will not be emitted
+// because they're provably duplicates.
 func emitEntries(
 	settings *cluster.Settings,
 	details jobspb.ChangefeedDetails,
-	watchedSpans []roachpb.Span,
+	sf *spanFrontier,
 	encoder Encoder,
 	sink Sink,
 	inputFn func(context.Context) ([]emitEntry, error),
@@ -179,6 +181,16 @@ func emitEntries(
 ) func(context.Context) ([]jobspb.ResolvedSpan, error) {
 	var scratch bufalloc.ByteAllocator
 	emitRowFn := func(ctx context.Context, row encodeRow) error {
+		// Skip rows with a timestamp less than the local span frontier because they must
+		// have been emitted before. TODO(aayush): Note that this should technically also
+		// filter out rows with timestamps equal to the local frontier but there is
+		// currently a bug in the poller which can cause it to emit row updates at a
+		// timestamp that is equal to a previously resolved timestamp in case of a schema
+		// change with backfill. See issue #41415 for more details. This if-condition
+		// should be updated and turned into an assertion once this is fixed. Fixme.
+		if row.updated.Less(sf.Frontier()) {
+			return nil
+		}
 		var keyCopy, valueCopy []byte
 		encodedKey, err := encoder.EncodeKey(row)
 		if err != nil {
@@ -207,12 +219,8 @@ func emitEntries(
 		return nil
 	}
 
-	// This SpanFrontier only tracks the spans being watched on this node.
-	// (There is a different SpanFrontier elsewhere for the entire changefeed.)
-	watchedSF := makeSpanFrontier(watchedSpans...)
-
 	var lastFlush time.Time
-	// TODO(dan): We could keep these in `watchedSF` to eliminate dups.
+	// TODO(dan): We could keep these in `sf` to eliminate dups.
 	var resolvedSpans []jobspb.ResolvedSpan
 
 	return func(ctx context.Context) ([]jobspb.ResolvedSpan, error) {
@@ -238,7 +246,7 @@ func emitEntries(
 				}
 			}
 			if input.resolved != nil {
-				_ = watchedSF.Forward(input.resolved.Span, input.resolved.Timestamp)
+				_ = sf.Forward(input.resolved.Span, input.resolved.Timestamp)
 				resolvedSpans = append(resolvedSpans, *input.resolved)
 			}
 		}

@@ -67,6 +67,36 @@ type changeAggregator struct {
 	resolvedSpanBuf encDatumRowBuffer
 }
 
+type timestampLowerBoundOracle interface {
+	inclusiveLowerBoundTS() hlc.Timestamp
+}
+
+type changeAggregatorLowerBoundOracle struct {
+	sf                         *spanFrontier
+	initialInclusiveLowerBound hlc.Timestamp
+}
+
+// inclusiveLowerBoundTs is used to generate a representative timestamp to name
+// cloudStorageSink files. This timestamp is either the statement time (in case this
+// changefeed job hasn't yet seen any resolved timestamps) or the successor timestamp to
+// the local span frontier. This convention is chosen to preserve CDC's ordering
+// guarantees. See comment on cloudStorageSink for more details.
+func (o *changeAggregatorLowerBoundOracle) inclusiveLowerBoundTS() hlc.Timestamp {
+	if frontier := o.sf.Frontier(); !frontier.IsEmpty() {
+		// We call `Next()` here on the frontier because this allows us
+		// to name files using a timestamp that is an inclusive lower bound
+		// on the timestamps of the updates contained within the file.
+		// Files being created at the point this method is called are guaranteed
+		// to contain row updates with timestamps strictly greater than the local
+		// span frontier timestamp (not in all cases, there's a known bug with
+		// the poller that can violate this. See: #41415. A fix is in progress).
+		return frontier.Next()
+	}
+	// This should only be returned in the case where the changefeed job hasn't yet
+	// seen a resolved timestamp.
+	return o.initialInclusiveLowerBound
+}
+
 var _ distsqlrun.Processor = &changeAggregator{}
 var _ distsqlrun.RowSource = &changeAggregator{}
 
@@ -120,10 +150,29 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	// early returns if errors are detected.
 	ctx = ca.StartInternal(ctx, changeAggregatorProcName)
 
+	var initialHighWater hlc.Timestamp
+	spans := make([]roachpb.Span, 0, len(ca.spec.Watches))
+	for _, watch := range ca.spec.Watches {
+		spans = append(spans, watch.Span)
+		if initialHighWater.IsEmpty() || watch.InitialResolved.Less(initialHighWater) {
+			initialHighWater = watch.InitialResolved
+		}
+	}
+
+	// This SpanFrontier only tracks the spans being watched on this node.
+	// There is a different SpanFrontier elsewhere for the entire changefeed.
+	// This object is used to filter out some previously emitted rows, and
+	// by the cloudStorageSink to name its output files in lexicographically
+	// monotonic fashion.
+	sf := makeSpanFrontier(spans...)
+	for _, watch := range ca.spec.Watches {
+		sf.Forward(watch.Span, watch.InitialResolved)
+	}
+	timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf, initialInclusiveLowerBound: ca.spec.Feed.StatementTime}
 	nodeID := ca.flowCtx.EvalCtx.NodeID
 	var err error
 	if ca.sink, err = getSink(
-		ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.Opts, ca.spec.Feed.Targets, ca.flowCtx.Settings,
+		ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.Opts, ca.spec.Feed.Targets, ca.flowCtx.Settings, timestampOracle,
 	); err != nil {
 		err = MarkRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
@@ -136,15 +185,6 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	// type.
 	if b, ok := ca.sink.(*bufferSink); ok {
 		ca.changedRowBuf = &b.buf
-	}
-
-	initialHighWater := hlc.Timestamp{WallTime: -1}
-	var spans []roachpb.Span
-	for _, watch := range ca.spec.Watches {
-		spans = append(spans, watch.Span)
-		if initialHighWater.WallTime == -1 || watch.InitialResolved.Less(initialHighWater) {
-			initialHighWater = watch.InitialResolved
-		}
 	}
 
 	// The job registry has a set of metrics used to monitor the various jobs it
@@ -180,7 +220,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	rowsFn := kvsToRows(leaseMgr, ca.spec.Feed, buf.Get)
 
 	ca.tickFn = emitEntries(
-		ca.flowCtx.Settings, ca.spec.Feed, spans, ca.encoder, ca.sink, rowsFn, knobs, metrics)
+		ca.flowCtx.Settings, ca.spec.Feed, sf, ca.encoder, ca.sink, rowsFn, knobs, metrics)
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
@@ -425,8 +465,11 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 
 	nodeID := cf.flowCtx.EvalCtx.NodeID
 	var err error
+	// Pass a nil oracle because this sink is only used to emit resolved timestamps
+	// but the oracle is only used when emitting row updates.
+	var nilOracle timestampLowerBoundOracle
 	if cf.sink, err = getSink(
-		cf.spec.Feed.SinkURI, nodeID, cf.spec.Feed.Opts, cf.spec.Feed.Targets, cf.flowCtx.Settings,
+		cf.spec.Feed.SinkURI, nodeID, cf.spec.Feed.Opts, cf.spec.Feed.Targets, cf.flowCtx.Settings, nilOracle,
 	); err != nil {
 		err = MarkRetryableError(err)
 		cf.MoveToDraining(err)
