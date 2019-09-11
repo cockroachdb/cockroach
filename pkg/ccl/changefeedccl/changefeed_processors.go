@@ -121,10 +121,37 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	// early returns if errors are detected.
 	ctx = ca.StartInternal(ctx, changeAggregatorProcName)
 
+	var initialHighWater hlc.Timestamp
+	spans := make([]roachpb.Span, 0, len(ca.spec.Watches))
+	for _, watch := range ca.spec.Watches {
+		spans = append(spans, watch.Span)
+		if initialHighWater.IsEmpty() || watch.InitialResolved.Less(initialHighWater) {
+			initialHighWater = watch.InitialResolved
+		}
+	}
+
+	// This SpanFrontier only tracks the spans being watched on this node.
+	// There is a different SpanFrontier elsewhere for the entire changefeed.
+	// This object is used to filter out some previously emitted rows, and
+	// by the cloudStorageSink to name its output files in lexicographically
+	// monotonic fashion.
+	sf := makeSpanFrontier(spans...)
+	for _, watch := range ca.spec.Watches {
+		if watch.InitialResolved.IsEmpty() {
+			// This case means this is the first session of this changefeed job,
+			// and not a restart. We forward `sf` to StatementTime because we want
+			// to avoid naming the first cloudStorageSink file to the zero epoch timestamp.
+			// We call Prev() on it because `sf` is Next()ed in the cloudStorageSink
+			// when it's used to name a file.
+			sf.Forward(watch.Span, ca.spec.Feed.StatementTime.Prev())
+		} else {
+			sf.Forward(watch.Span, watch.InitialResolved)
+		}
+	}
 	nodeID := ca.flowCtx.EvalCtx.NodeID
 	var err error
 	if ca.sink, err = getSink(
-		ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.Opts, ca.spec.Feed.Targets, ca.flowCtx.Cfg.Settings,
+		ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.SessionID, ca.spec.Feed.Opts, ca.spec.Feed.Targets, ca.flowCtx.Cfg.Settings, sf,
 	); err != nil {
 		err = MarkRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
@@ -137,15 +164,6 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	// type.
 	if b, ok := ca.sink.(*bufferSink); ok {
 		ca.changedRowBuf = &b.buf
-	}
-
-	initialHighWater := hlc.Timestamp{WallTime: -1}
-	var spans []roachpb.Span
-	for _, watch := range ca.spec.Watches {
-		spans = append(spans, watch.Span)
-		if initialHighWater.WallTime == -1 || watch.InitialResolved.Less(initialHighWater) {
-			initialHighWater = watch.InitialResolved
-		}
 	}
 
 	// The job registry has a set of metrics used to monitor the various jobs it
@@ -181,7 +199,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	rowsFn := kvsToRows(leaseMgr, ca.spec.Feed, buf.Get)
 
 	ca.tickFn = emitEntries(
-		ca.flowCtx.Cfg.Settings, ca.spec.Feed, spans, ca.encoder, ca.sink, rowsFn, knobs, metrics)
+		ca.flowCtx.Cfg.Settings, ca.spec.Feed, sf, ca.encoder, ca.sink, rowsFn, knobs, metrics)
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
@@ -422,7 +440,7 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	nodeID := cf.flowCtx.EvalCtx.NodeID
 	var err error
 	if cf.sink, err = getSink(
-		cf.spec.Feed.SinkURI, nodeID, cf.spec.Feed.Opts, cf.spec.Feed.Targets, cf.flowCtx.Cfg.Settings,
+		cf.spec.Feed.SinkURI, nodeID, cf.spec.Feed.SessionID, cf.spec.Feed.Opts, cf.spec.Feed.Targets, cf.flowCtx.Cfg.Settings, makeSpanFrontier(),
 	); err != nil {
 		err = MarkRetryableError(err)
 		cf.MoveToDraining(err)

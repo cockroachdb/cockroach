@@ -107,7 +107,9 @@ func makePoller(
 		p.mu.highWater = details.StatementTime
 		p.mu.scanBoundaries = append(p.mu.scanBoundaries, details.StatementTime)
 	} else {
-		p.mu.highWater = highWater
+		// Otherwise, Next() the highWater value since a resolved timestamp closes
+		// out everything less than or equal.
+		p.mu.highWater = highWater.Next()
 	}
 	p.tableHist = makeTableHistory(p.validateTable, highWater)
 	return p
@@ -146,9 +148,19 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 		var scanTime hlc.Timestamp
 		p.mu.Lock()
 		if len(p.mu.scanBoundaries) > 0 && p.mu.scanBoundaries[0].Equal(p.mu.highWater) {
-			// Perform a full scan of the latest value of all keys as of the
-			// boundary timestamp and consume the boundary.
-			scanTime = p.mu.scanBoundaries[0]
+			// Perform a full scan of the latest value of all keys
+			if p.details.StatementTime.Equal(p.mu.highWater) {
+				// If this is an initial scan, do it as of the statement time.
+				scanTime = p.mu.scanBoundaries[0]
+			} else {
+				// If this is a backfill, do it as of one logical time unit after
+				// the scan boundary since the table descriptor modification times
+				// are resolved timestamps which will have already been forwarded
+				// to the changeAggregator.
+				// We do this because resolved timestamps are supposed close out all
+				// timestamps less than or equal.
+				scanTime = p.mu.scanBoundaries[0].Next()
+			}
 			p.mu.scanBoundaries = p.mu.scanBoundaries[1:]
 		}
 		p.mu.Unlock()
