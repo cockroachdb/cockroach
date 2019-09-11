@@ -52,8 +52,8 @@ type cloudStorageSinkKey struct {
 }
 
 type cloudStorageSinkFile struct {
-	earliestTs hlc.Timestamp
-	buf        bytes.Buffer
+	lastUpdatedTs hlc.Timestamp
+	buf           bytes.Buffer
 }
 
 // cloudStorageSink emits to files on cloud storage.
@@ -109,6 +109,7 @@ type cloudStorageSink struct {
 	es     storageccl.ExportStorage
 	fileID int64
 	files  map[cloudStorageSinkKey]*cloudStorageSinkFile
+	clock  *hlc.Clock
 }
 
 var cloudStorageSinkIDAtomic int64
@@ -119,6 +120,7 @@ func makeCloudStorageSink(
 	targetMaxFileSize int64,
 	settings *cluster.Settings,
 	opts map[string]string,
+	clock *hlc.Clock,
 ) (Sink, error) {
 	// Date partitioning is pretty standard, so no override for now, but we could
 	// plumb one down if someone needs it.
@@ -132,6 +134,7 @@ func makeCloudStorageSink(
 		targetMaxFileSize: targetMaxFileSize,
 		files:             make(map[cloudStorageSinkKey]*cloudStorageSinkFile),
 		partitionFormat:   defaultPartitionFormat,
+		clock:             clock,
 	}
 
 	switch formatType(opts[optFormat]) {
@@ -187,10 +190,12 @@ func (s *cloudStorageSink) EmitRow(
 		file = &cloudStorageSinkFile{}
 		s.files[key] = file
 	}
-	if file.earliestTs.IsEmpty() || updated.Less(file.earliestTs) {
-		file.earliestTs = updated
-	}
 
+	// Keep track of the time of the last call to this method before a Flush.
+	// Using this timestamp in the output file names allows us to ensure that,
+	// during consumption, timestamps are consumed in the same order that they're
+	// emitted in.
+	file.lastUpdatedTs = s.clock.Now()
 	// TODO(dan): Memory monitoring for this
 	if _, err := file.buf.Write(value); err != nil {
 		return err
@@ -223,8 +228,11 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	}
 	// Don't need to copy payload because we never buffer it anywhere.
 
-	part := resolved.GoTime().Format(s.partitionFormat)
-	filename := fmt.Sprintf(`%s.RESOLVED`, cloudStorageFormatTime(resolved))
+	// Use the time of the call to name `.RESOLVED` files in order to ensure
+	// total ordering among all files. See EmitRow.
+	emitTimestamp := s.clock.Now()
+	part := emitTimestamp.GoTime().Format(s.partitionFormat)
+	filename := fmt.Sprintf(`%s.RESOLVED`, cloudStorageFormatTime(emitTimestamp))
 	if log.V(1) {
 		log.Info(ctx, "writing ", filename)
 	}
@@ -257,8 +265,8 @@ func (s *cloudStorageSink) flushFile(
 		return nil
 	}
 
-	part := file.earliestTs.GoTime().Format(s.partitionFormat)
-	ts := cloudStorageFormatTime(file.earliestTs)
+	part := file.lastUpdatedTs.GoTime().Format(s.partitionFormat)
+	ts := cloudStorageFormatTime(file.lastUpdatedTs)
 	fileID := s.fileID
 	s.fileID++
 	filename := fmt.Sprintf(`%s-%s-%d-%d-%d-%d%s`,

@@ -124,7 +124,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	nodeID := ca.flowCtx.EvalCtx.NodeID
 	var err error
 	if ca.sink, err = getSink(
-		ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.Opts, ca.spec.Feed.Targets, ca.flowCtx.Cfg.Settings,
+		ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.Opts, ca.spec.Feed.Targets, ca.flowCtx.Cfg.Settings, ca.flowCtx.Cfg.DB.Clock(),
 	); err != nil {
 		err = MarkRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
@@ -422,7 +422,7 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	nodeID := cf.flowCtx.EvalCtx.NodeID
 	var err error
 	if cf.sink, err = getSink(
-		cf.spec.Feed.SinkURI, nodeID, cf.spec.Feed.Opts, cf.spec.Feed.Targets, cf.flowCtx.Cfg.Settings,
+		cf.spec.Feed.SinkURI, nodeID, cf.spec.Feed.Opts, cf.spec.Feed.Targets, cf.flowCtx.Cfg.Settings, cf.flowCtx.Cfg.DB.Clock(),
 	); err != nil {
 		err = MarkRetryableError(err)
 		cf.MoveToDraining(err)

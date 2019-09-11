@@ -291,7 +291,7 @@ func changefeedPlanHook(
 		// which will be immediately closed, only to check for errors.
 		{
 			nodeID := p.ExtendedEvalContext().NodeID
-			canarySink, err := getSink(details.SinkURI, nodeID, details.Opts, details.Targets, settings)
+			canarySink, err := getSink(details.SinkURI, nodeID, details.Opts, details.Targets, settings, p.ExecCfg().DB.Clock())
 			if err != nil {
 				return MaybeStripRetryableErrorMarker(err)
 			}
