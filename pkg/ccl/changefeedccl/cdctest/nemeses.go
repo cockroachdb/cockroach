@@ -58,7 +58,11 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB) (Validator, error) {
 
 			// eventPause PAUSEs the changefeed. The state machine will handle
 			// RESUMEing it.
-			// TODO(dan): This deadlocks eventPause{}: 10,
+			// TODO(aayushs): This doesn't work because `sinkless`
+			// changefeeds don't support pause & resume the way job-based changefeeds
+			// do. Enabling this might require support for "AS OF SYSTEM TIME" for
+			// changefeeds. See #41006.
+			// eventPause{}: 10,
 
 			// eventPush pushes every open transaction by running a high priority
 			// SELECT.
