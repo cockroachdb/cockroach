@@ -324,6 +324,9 @@ func (r *RangeDescriptor) String() string {
 	if !r.GetGenerationComparable() {
 		buf.WriteString("?")
 	}
+	if s := r.GetStickyBit(); !s.IsEmpty() {
+		fmt.Fprintf(&buf, ", sticky=%s", s)
+	}
 	buf.WriteString("]")
 
 	return buf.String()
