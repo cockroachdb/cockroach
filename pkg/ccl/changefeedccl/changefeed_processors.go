@@ -121,6 +121,15 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	// early returns if errors are detected.
 	ctx = ca.StartInternal(ctx, changeAggregatorProcName)
 
+	initialHighWater := hlc.Timestamp{WallTime: -1}
+	var spans []roachpb.Span
+	for _, watch := range ca.spec.Watches {
+		spans = append(spans, watch.Span)
+		if initialHighWater.WallTime == -1 || watch.InitialResolved.Less(initialHighWater) {
+			initialHighWater = watch.InitialResolved
+		}
+	}
+
 	nodeID := ca.flowCtx.EvalCtx.NodeID
 	var err error
 	if ca.sink, err = getSink(
@@ -137,15 +146,6 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	// type.
 	if b, ok := ca.sink.(*bufferSink); ok {
 		ca.changedRowBuf = &b.buf
-	}
-
-	initialHighWater := hlc.Timestamp{WallTime: -1}
-	var spans []roachpb.Span
-	for _, watch := range ca.spec.Watches {
-		spans = append(spans, watch.Span)
-		if initialHighWater.WallTime == -1 || watch.InitialResolved.Less(initialHighWater) {
-			initialHighWater = watch.InitialResolved
-		}
 	}
 
 	// The job registry has a set of metrics used to monitor the various jobs it
@@ -181,7 +181,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	rowsFn := kvsToRows(leaseMgr, ca.spec.Feed, buf.Get)
 
 	ca.tickFn = emitEntries(
-		ca.flowCtx.Cfg.Settings, ca.spec.Feed, spans, ca.encoder, ca.sink, rowsFn, knobs, metrics)
+		ca.flowCtx.Cfg.Settings, ca.spec.Feed, spans, ca.encoder, ca.sink, rowsFn, knobs, metrics, initialHighWater)
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
@@ -419,6 +419,21 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	// early returns if errors are detected.
 	ctx = cf.StartInternal(ctx, changeFrontierProcName)
 
+	cf.highWaterAtStart = cf.spec.Feed.StatementTime
+	if cf.spec.JobID != 0 {
+		job, err := cf.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cf.spec.JobID)
+		if err != nil {
+			cf.MoveToDraining(err)
+			return ctx
+		}
+		cf.jobProgressedFn = job.HighWaterProgressed
+
+		p := job.Progress()
+		if ts := p.GetHighWater(); ts != nil {
+			cf.highWaterAtStart.Forward(*ts)
+		}
+	}
+
 	nodeID := cf.flowCtx.EvalCtx.NodeID
 	var err error
 	if cf.sink, err = getSink(
@@ -439,21 +454,6 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	cf.metrics = cf.flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 	cf.sink = makeMetricsSink(cf.metrics, cf.sink)
 	cf.sink = &errorWrapperSink{wrapped: cf.sink}
-
-	cf.highWaterAtStart = cf.spec.Feed.StatementTime
-	if cf.spec.JobID != 0 {
-		job, err := cf.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cf.spec.JobID)
-		if err != nil {
-			cf.MoveToDraining(err)
-			return ctx
-		}
-		cf.jobProgressedFn = job.HighWaterProgressed
-
-		p := job.Progress()
-		if ts := p.GetHighWater(); ts != nil {
-			cf.highWaterAtStart.Forward(*ts)
-		}
-	}
 
 	cf.metrics.mu.Lock()
 	cf.metricsID = cf.metrics.mu.id
