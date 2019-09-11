@@ -14,10 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,32 +28,6 @@ var jobCommandToDesiredStatus = map[tree.JobCommand]jobs.Status{
 	tree.CancelJob: jobs.StatusCanceled,
 	tree.ResumeJob: jobs.StatusRunning,
 	tree.PauseJob:  jobs.StatusPaused,
-}
-
-func (p *planner) ControlJobs(ctx context.Context, n *tree.ControlJobs) (planNode, error) {
-	if err := p.RequireAdminRole(ctx, n.StatementTag()); err != nil {
-		return nil, err
-	}
-	rows, err := p.newPlan(ctx, n.Jobs, []*types.T{types.Int})
-	if err != nil {
-		return nil, err
-	}
-	cols := planColumns(rows)
-	if len(cols) != 1 {
-		return nil, pgerror.Newf(pgcode.Syntax,
-			"%s JOBS expects a single column source, got %d columns",
-			tree.JobCommandToStatement[n.Command], len(cols))
-	}
-	if cols[0].Typ.Family() != types.IntFamily {
-		return nil, pgerror.Newf(pgcode.DatatypeMismatch,
-			"%s JOBS requires int values, not type %s",
-			tree.JobCommandToStatement[n.Command], cols[0].Typ)
-	}
-
-	return &controlJobsNode{
-		rows:          rows,
-		desiredStatus: jobCommandToDesiredStatus[n.Command],
-	}, nil
 }
 
 // FastPathResults implements the planNodeFastPath inteface.

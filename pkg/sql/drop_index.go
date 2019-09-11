@@ -69,7 +69,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		tableDesc, err := params.p.ResolveMutableTableDescriptor(
 			ctx, index.tn, true /*required*/, ResolveRequireTableDesc)
 		if err != nil {
-			// Somehow the descriptor we had during newPlan() is not there
+			// Somehow the descriptor we had during planning is not there
 			// any more.
 			return errors.NewAssertionErrorWithWrappedErrf(err,
 				"table descriptor for %q became unavailable within same txn",

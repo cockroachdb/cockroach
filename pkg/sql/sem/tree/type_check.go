@@ -87,11 +87,6 @@ type semaRequirements struct {
 	rejectFlags SemaRejectFlags
 }
 
-// Clear resets the property requirements and derived properties.
-func (s *SemaProperties) Clear() {
-	s.Require("", AllowAll)
-}
-
 // Require resets the derived properties and sets required constraints.
 func (s *SemaProperties) Require(context string, rejectFlags SemaRejectFlags) {
 	s.required.context = context
@@ -116,8 +111,6 @@ type SemaRejectFlags int
 
 // Valid values for SemaRejectFlags.
 const (
-	AllowAll SemaRejectFlags = 0
-
 	// RejectAggregates rejects min(), max(), etc.
 	RejectAggregates SemaRejectFlags = 1 << iota
 
