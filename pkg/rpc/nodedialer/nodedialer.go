@@ -90,6 +90,21 @@ func (n *Dialer) Dial(
 	return n.dial(ctx, nodeID, addr, breaker, class)
 }
 
+// DialNoBreaker ignores the breaker if there is an error dialing. This function
+// should only be used when there is good reason to believe that the node is reachable.
+func (n *Dialer) DialNoBreaker(
+	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
+) (_ *grpc.ClientConn, err error) {
+	if n == nil || n.resolver == nil {
+		return nil, errors.New("no node dialer configured")
+	}
+	addr, err := n.resolver(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	return n.dial(ctx, nodeID, addr, nil /* breaker */, class)
+}
+
 // DialInternalClient is a specialization of DialClass for callers that
 // want a roachpb.InternalClient. This supports an optimization to bypass the
 // network for the local node. Returns a context.Context which should be used
@@ -122,7 +137,8 @@ func (n *Dialer) DialInternalClient(
 	return ctx, roachpb.NewInternalClient(conn), err
 }
 
-// dial performs the dialing of the remote connection.
+// dial performs the dialing of the remote connection. If breaker is nil,
+// then perform this logic without using any breaker functionality.
 func (n *Dialer) dial(
 	ctx context.Context,
 	nodeID roachpb.NodeID,
@@ -134,13 +150,13 @@ func (n *Dialer) dial(
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, ctxErr
 	}
-	if !breaker.Ready() {
+	if breaker != nil && !breaker.Ready() {
 		err = errors.Wrapf(circuit.ErrBreakerOpen, "unable to dial n%d", nodeID)
 		return nil, err
 	}
 	defer func() {
 		// Enforce a minimum interval between warnings for failed connections.
-		if err != nil && ctx.Err() == nil && breaker.ShouldLog() {
+		if err != nil && ctx.Err() == nil && breaker != nil && breaker.ShouldLog() {
 			log.Infof(ctx, "unable to connect to n%d: %s", nodeID, err)
 		}
 	}()
@@ -151,15 +167,20 @@ func (n *Dialer) dial(
 			return nil, ctxErr
 		}
 		err = errors.Wrapf(err, "failed to connect to n%d at %v", nodeID, addr)
-		breaker.Fail(err)
+		if breaker != nil {
+			breaker.Fail(err)
+		}
 		return nil, err
 	}
 	// Check to see if the connection is in the transient failure state. This can
 	// happen if the connection already existed, but a recent heartbeat has
 	// failed and we haven't yet torn down the connection.
+	err = grpcutil.ConnectionReady(conn)
 	if err := grpcutil.ConnectionReady(conn); err != nil {
 		err = errors.Wrapf(err, "failed to check for ready connection to n%d at %v", nodeID, addr)
-		breaker.Fail(err)
+		if breaker != nil {
+			breaker.Fail(err)
+		}
 		return nil, err
 	}
 
@@ -169,7 +190,9 @@ func (n *Dialer) dial(
 	// ConnHealth when scheduling processors, but can then see attempts to send
 	// RPCs fail when dial fails due to an open breaker. Reset the breaker here
 	// as a stop-gap before the reconciliation occurs.
-	breaker.Success()
+	if breaker != nil {
+		breaker.Success()
+	}
 	return conn, nil
 }
 
