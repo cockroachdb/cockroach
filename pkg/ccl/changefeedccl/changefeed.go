@@ -160,9 +160,16 @@ func emitEntries(
 	inputFn func(context.Context) ([]emitEntry, error),
 	knobs TestingKnobs,
 	metrics *Metrics,
+	initialHighWater hlc.Timestamp,
 ) func(context.Context) ([]jobspb.ResolvedSpan, error) {
 	var scratch bufalloc.ByteAllocator
 	emitRowFn := func(ctx context.Context, row encodeRow) error {
+		// If timestamp of the row is older than the latest resolved timestamp
+		// from when the changeAggregator was created, ignore the row as we must
+		// have already emitted it before.
+		if row.updated.Less(initialHighWater) {
+			return nil
+		}
 		var keyCopy, valueCopy []byte
 		encodedKey, err := encoder.EncodeKey(row)
 		if err != nil {
