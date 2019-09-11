@@ -511,7 +511,7 @@ CREATE INDEX "my index" ON "my table" (x) PARTITION BY LIST (x) (
 ALTER DATABASE "my database" CONFIGURE ZONE USING num_replicas = 1;
 ALTER TABLE "my table" CONFIGURE ZONE USING num_replicas = 1;
 ALTER INDEX "my table"@"my index" CONFIGURE ZONE USING num_replicas = 1;
-ALTER PARTITION "my partition" OF TABLE "my table" CONFIGURE ZONE USING num_replicas = 1;
+ALTER PARTITION "my partition" OF INDEX "my table"@primary CONFIGURE ZONE USING num_replicas = 1;
 ALTER PARTITION "my partition" OF INDEX "my table"@"my index" CONFIGURE ZONE USING num_replicas = 1
 
 query TTTTTT
@@ -601,8 +601,11 @@ CREATE INDEX x1 ON t2 (x) PARTITION BY LIST (x) (
 );
 CREATE INDEX x2 ON t2 (x) PARTITION BY LIST (x) (
   PARTITION p1 VALUES IN (1),
-  PARTITION p2 VALUES IN (2)
-);
+  PARTITION p2 VALUES IN (2),
+  PARTITION p3 VALUES IN (3)
+)
+
+statement ok
 ALTER PARTITION p1 OF INDEX t2@* CONFIGURE ZONE USING num_replicas = 1
 
 query TT
@@ -614,6 +617,25 @@ PARTITION p1 OF INDEX "my database".public.t2@x1       ALTER PARTITION p1 OF IND
                                                        num_replicas = 1
 PARTITION p1 OF INDEX "my database".public.t2@x2       ALTER PARTITION p1 OF INDEX "my database".public.t2@x2 CONFIGURE ZONE USING
                                                        num_replicas = 1
+
+# ALTER PARTITION ... OF TABLE should only succeed if the partition name is
+# unique across all indexes.
+statement error pq: partition "p1" exists on multiple indexes of table "t2"
+ALTER PARTITION p1 OF TABLE t2 CONFIGURE ZONE USING num_replicas = 1
+
+statement ok
+ALTER PARTITION p3 OF TABLE t2 CONFIGURE ZONE USING num_replicas = 1
+
+query TT
+SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE target LIKE '%t2@x2%'
+----
+PARTITION p1 OF INDEX "my database".public.t2@x2  ALTER PARTITION p1 OF INDEX "my database".public.t2@x2 CONFIGURE ZONE USING
+                                                  num_replicas = 1
+PARTITION p3 OF INDEX "my database".public.t2@x2  ALTER PARTITION p3 OF INDEX "my database".public.t2@x2 CONFIGURE ZONE USING
+                                                  num_replicas = 1
+
+statement error pq: partition "p4" does not exist on table "t2"
+ALTER PARTITION p4 OF TABLE t2 CONFIGURE ZONE USING num_replicas = 1
 
 # regression for #40417
 statement ok
