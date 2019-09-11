@@ -914,6 +914,10 @@ func planSelectionOperators(
 		op, resultIdx, ct, memUsed, err = planProjectionOperators(ctx, expr, columnTypes, input)
 		op = exec.NewBoolVecToSelOp(op, resultIdx)
 		return op, resultIdx, ct, memUsed, err
+	case *tree.CaseExpr:
+		op, resultIdx, ct, memUsed, err = planProjectionOperators(ctx, expr, columnTypes, input)
+		op = exec.NewBoolVecToSelOp(op, resultIdx)
+		return op, resultIdx, ct, memUsed, err
 	case *tree.ComparisonExpr:
 		cmpOp := t.Operator
 		leftOp, leftIdx, ct, memUsageLeft, err := planProjectionOperators(ctx, t.TypedLeft(), columnTypes, input)
@@ -952,6 +956,26 @@ func planSelectionOperators(
 	}
 }
 
+// planTypedMaybeNullProjectionOperators is used to plan projection operators, but is able to
+// plan constNullOperators in the case that we know the "type" of the null. It is currently
+// unsafe to plan a constNullOperator when we don't know the type of the null.
+func planTypedMaybeNullProjectionOperators(
+	ctx *tree.EvalContext,
+	expr tree.TypedExpr,
+	exprTyp *types.T,
+	columnTypes []types.T,
+	input exec.Operator,
+) (op exec.Operator, resultIdx int, ct []types.T, memUsed int, err error) {
+	if expr == tree.DNull {
+		resultIdx = len(columnTypes)
+		op = exec.NewConstNullOp(input, resultIdx, typeconv.FromColumnType(exprTyp))
+		ct = append(columnTypes, *exprTyp)
+		memUsed = op.(exec.StaticMemoryOperator).EstimateStaticMemoryUsage()
+		return op, resultIdx, ct, memUsed, nil
+	}
+	return planProjectionOperators(ctx, expr, columnTypes, input)
+}
+
 // planProjectionOperators plans a chain of operators to execute the provided
 // expression. It returns the tail of the chain, as well as the column index
 // of the expression's result (if any, otherwise -1) and the column types of the
@@ -969,7 +993,15 @@ func planProjectionOperators(
 		return planProjectionExpr(ctx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(), columnTypes, input)
 	case *tree.CastExpr:
 		expr := t.Expr.(tree.TypedExpr)
-		op, resultIdx, ct, memUsed, err = planProjectionOperators(ctx, expr, columnTypes, input)
+		// If the expression is NULL, we use planTypedMaybeNullProjectionOperators instead of planProjectionOperators
+		// because we can say that the type of the NULL is the type that we are casting to, rather than unknown.
+		// We can't use planProjectionOperators because it will reject planning a constNullOp without knowing
+		// the post typechecking "type" of the NULL.
+		if expr.ResolvedType() == types.Unknown {
+			op, resultIdx, ct, memUsed, err = planTypedMaybeNullProjectionOperators(ctx, expr, t.Type, columnTypes, input)
+		} else {
+			op, resultIdx, ct, memUsed, err = planProjectionOperators(ctx, expr, columnTypes, input)
+		}
 		if err != nil {
 			return nil, 0, nil, 0, err
 		}
@@ -1010,7 +1042,7 @@ func planProjectionOperators(
 		resultIdx = len(ct)
 		ct = append(ct, *datumType)
 		if datumType.Family() == types.UnknownFamily {
-			return exec.NewConstNullOp(input, resultIdx), resultIdx, ct, memUsed, nil
+			return nil, resultIdx, ct, memUsed, errors.New("cannot plan null type unknown")
 		}
 		typ := typeconv.FromColumnType(datumType)
 		constVal, err := typeconv.GetDatumToPhysicalFn(datumType)(t)
@@ -1048,8 +1080,8 @@ func planProjectionOperators(
 			// results of the WHEN into a single output vector, assembling the final
 			// result of the case projection.
 			var whenMemUsed, thenMemUsed int
-			caseOps[i], resultIdx, ct, whenMemUsed, err = planProjectionOperators(
-				ctx, when.Cond.(tree.TypedExpr), ct, buffer)
+			caseOps[i], resultIdx, ct, whenMemUsed, err = planTypedMaybeNullProjectionOperators(
+				ctx, when.Cond.(tree.TypedExpr), t.ResolvedType(), ct, buffer)
 			if err != nil {
 				return nil, resultIdx, ct, 0, err
 			}
@@ -1057,7 +1089,7 @@ func planProjectionOperators(
 			caseOps[i] = exec.NewBoolVecToSelOp(caseOps[i], resultIdx)
 
 			// Run the "then" clause on those tuples that were selected.
-			caseOps[i], thenIdxs[i], ct, thenMemUsed, err = planProjectionOperators(ctx, when.Val.(tree.TypedExpr), ct,
+			caseOps[i], thenIdxs[i], ct, thenMemUsed, err = planTypedMaybeNullProjectionOperators(ctx, when.Val.(tree.TypedExpr), t.ResolvedType(), ct,
 				caseOps[i])
 			if err != nil {
 				return nil, resultIdx, ct, 0, err
@@ -1072,8 +1104,8 @@ func planProjectionOperators(
 			// If there's no ELSE arm, we write NULLs.
 			elseExpr = tree.DNull
 		}
-		elseOp, thenIdxs[len(t.Whens)], ct, elseMem, err = planProjectionOperators(
-			ctx, elseExpr.(tree.TypedExpr), ct, buffer)
+		elseOp, thenIdxs[len(t.Whens)], ct, elseMem, err = planTypedMaybeNullProjectionOperators(
+			ctx, elseExpr.(tree.TypedExpr), t.ResolvedType(), ct, buffer)
 		if err != nil {
 			return nil, resultIdx, ct, 0, err
 		}
@@ -1085,11 +1117,11 @@ func planProjectionOperators(
 	case *tree.AndExpr:
 		var leftOp, rightOp exec.Operator
 		var leftIdx, rightIdx, lMemUsed, rMemUsed int
-		leftOp, leftIdx, ct, lMemUsed, err = planProjectionOperators(ctx, t.TypedLeft(), columnTypes, input)
+		leftOp, leftIdx, ct, lMemUsed, err = planTypedMaybeNullProjectionOperators(ctx, t.TypedLeft(), types.Bool, columnTypes, input)
 		if err != nil {
 			return nil, resultIdx, ct, 0, err
 		}
-		rightOp, rightIdx, ct, rMemUsed, err = planProjectionOperators(ctx, t.TypedRight(), ct, leftOp)
+		rightOp, rightIdx, ct, rMemUsed, err = planTypedMaybeNullProjectionOperators(ctx, t.TypedRight(), types.Bool, ct, leftOp)
 		if err != nil {
 			return nil, resultIdx, ct, 0, err
 		}
