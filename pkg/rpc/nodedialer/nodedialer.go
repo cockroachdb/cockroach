@@ -90,6 +90,31 @@ func (n *Dialer) Dial(
 	return n.dial(ctx, nodeID, addr, breaker, class)
 }
 
+// DialNoBreaker ignores the breaker if there is an error dialing. This function
+// should only be used when there is good reason to believe that the node is reachable.
+func (n *Dialer) DialNoBreaker(
+	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
+) (_ *grpc.ClientConn, err error) {
+	if n == nil || n.resolver == nil {
+		return nil, errors.New("no node dialer configured")
+	}
+	addr, err := n.resolver(nodeID)
+	if err != nil {
+		return nil, err
+	}
+
+	// perform dialing without involving the breaker
+	conn, err := n.rpcContext.GRPCDialNode(addr.String(), nodeID, class).Connect(ctx)
+	// Check to see if the connection is in the transient failure state. This can
+	// happen if the connection already existed, but a recent heartbeat has
+	// failed and we haven't yet torn down the connection.
+	if err := grpcutil.ConnectionReady(conn); err != nil {
+		err = errors.Wrapf(err, "failed to check for ready connection to n%d at %v", nodeID, addr)
+		return nil, err
+	}
+	return conn, nil
+}
+
 // DialInternalClient is a specialization of DialClass for callers that
 // want a roachpb.InternalClient. This supports an optimization to bypass the
 // network for the local node. Returns a context.Context which should be used
