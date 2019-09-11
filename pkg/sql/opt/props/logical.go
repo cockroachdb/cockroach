@@ -13,6 +13,7 @@ package props
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -41,8 +42,11 @@ const (
 	// is populated.
 	HasHoistableSubquery
 
-	// JoinSize is set when the Scalar.Rule.JoinSize field is populated.
+	// JoinSize is set when the Relational.Rule.JoinSize field is populated.
 	JoinSize
+
+	// WithUses is set when the Shared.Rule.WithUses field is populated.
+	WithUses
 )
 
 // Shared are properties that are shared by both relational and scalar
@@ -161,6 +165,14 @@ type Shared struct {
 	// HasPlaceholder is true if the subtree rooted at this expression contains
 	// at least one Placeholder operator.
 	HasPlaceholder bool
+
+	// Rule props are lazily calculated and typically only apply to a single
+	// rule. See the comment above Relational.Rule for more details.
+	Rule struct {
+		// WithUses tracks the number of times each With expression has been
+		// referenced in the given expression.
+		WithUses util.FastIntMap
+	}
 }
 
 // Relational properties describe the content and characteristics of relational

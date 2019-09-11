@@ -489,7 +489,7 @@ memo (optimized, ~5KB, required=[presentation: min:5])
 memo
 SELECT min(b) FROM abc
 ----
-memo (optimized, ~5KB, required=[presentation: min:5])
+memo (optimized, ~6KB, required=[presentation: min:5])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: min:5]
  │         ├── best: (scalar-group-by G2 G3 cols=())
@@ -551,7 +551,7 @@ memo (optimized, ~5KB, required=[presentation: max:5])
 memo
 SELECT max(b) FROM abc
 ----
-memo (optimized, ~5KB, required=[presentation: max:5])
+memo (optimized, ~6KB, required=[presentation: max:5])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: max:5]
  │         ├── best: (scalar-group-by G2 G3 cols=())
@@ -640,7 +640,7 @@ scalar-group-by
 memo
 SELECT max(b) FROM abc
 ----
-memo (optimized, ~5KB, required=[presentation: max:5])
+memo (optimized, ~6KB, required=[presentation: max:5])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: max:5]
  │         ├── best: (scalar-group-by G2 G3 cols=())
@@ -681,7 +681,7 @@ memo (optimized, ~5KB, required=[presentation: max:5])
 memo
 SELECT array_agg(w) FROM (SELECT * FROM kuvw ORDER BY w) GROUP BY u,v
 ----
-memo (optimized, ~5KB, required=[presentation: array_agg:5])
+memo (optimized, ~6KB, required=[presentation: array_agg:5])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:5]
  │         ├── best: (project G2 G3 array_agg)
@@ -715,7 +715,7 @@ memo (optimized, ~5KB, required=[presentation: array_agg:5])
 memo
 SELECT sum(w) FROM kuvw GROUP BY u,v,w
 ----
-memo (optimized, ~5KB, required=[presentation: sum:5])
+memo (optimized, ~6KB, required=[presentation: sum:5])
  ├── G1: (project G2 G3 sum)
  │    └── [presentation: sum:5]
  │         ├── best: (project G2 G3 sum)

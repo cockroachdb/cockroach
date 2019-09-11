@@ -1739,3 +1739,111 @@ func (c *CustomFuncs) CanAddConstInts(first tree.Datum, second tree.Datum) bool 
 	_, ok := arith.AddWithOverflow(firstVal, secondVal)
 	return ok
 }
+
+// ----------------------------------------------------------------------
+//
+// With Rules
+//   Custom match and replace functions used with with.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// CanInlineWith returns whether or not it's valid to inline binding in expr.
+// This is the case when:
+// 1. binding has no side-effects (because once it's inlined, there's no
+//    guarantee it will be executed fully), and
+// 2. binding is referenced at most once in expr.
+func (c *CustomFuncs) CanInlineWith(binding, expr memo.RelExpr, private *memo.WithPrivate) bool {
+	if binding.Relational().CanHaveSideEffects {
+		return false
+	}
+	uses, ok := c.WithUses(expr).Get(int(private.ID))
+	if !ok {
+		uses = 0
+	}
+	return uses <= 1
+}
+
+// InlineWith replaces all references to the With expression in expr (via
+// WithScans) with its definition.
+func (c *CustomFuncs) InlineWith(binding, input memo.RelExpr, priv *memo.WithPrivate) memo.RelExpr {
+	var replace ReplaceFunc
+	replace = func(nd opt.Expr) opt.Expr {
+		switch t := nd.(type) {
+		case *memo.WithScanExpr:
+			if t.ID == priv.ID {
+				// TODO(justin): it might be worth carefully walking the tree and
+				// renaming variables as we do this replacement so that this projection
+				// is unnecessary (assuming there's at most one reference to the
+				// WithScan, which might be false if we heuristically inline multiple
+				// times in the future).
+				projections := make(memo.ProjectionsExpr, len(t.InCols))
+				for i := range t.InCols {
+					projections[i] = memo.ProjectionsItem{
+						Element:    c.f.ConstructVariable(t.InCols[i]),
+						ColPrivate: memo.ColPrivate{Col: t.OutCols[i]},
+					}
+				}
+				return c.f.ConstructProject(binding, projections, opt.ColSet{})
+			}
+			// TODO(justin): should apply joins block inlining because they can lead
+			// to expressions being executed multiple times?
+		}
+		return c.f.Replace(nd, replace)
+	}
+
+	return replace(input).(memo.RelExpr)
+}
+
+// WithUses returns a map mapping WithIDs to the number of times a given With
+// expression is referenced in the given expression.
+func (c *CustomFuncs) WithUses(r opt.Expr) util.FastIntMap {
+	switch e := r.(type) {
+	case memo.RelExpr:
+		relProps := e.Relational()
+		if relProps.IsAvailable(props.WithUses) {
+			return relProps.Shared.Rule.WithUses
+		}
+		relProps.SetAvailable(props.WithUses)
+
+		relProps.Shared.Rule.WithUses = c.deriveWithUses(r)
+		return relProps.Shared.Rule.WithUses
+	case memo.ScalarPropsExpr:
+		scalarProps := e.ScalarProps(c.mem)
+
+		// Lazily calculate and store the WithUses value.
+		if !scalarProps.IsAvailable(props.WithUses) {
+			scalarProps.Shared.Rule.WithUses = c.deriveWithUses(r)
+			scalarProps.SetAvailable(props.WithUses)
+		}
+		return scalarProps.Shared.Rule.WithUses
+	default:
+		return c.deriveWithUses(r)
+	}
+}
+
+// sumEntriesWith adds to each value in a the corresponding value in b.
+func (c *CustomFuncs) sumEntriesWith(a *util.FastIntMap, b util.FastIntMap) {
+	b.ForEach(func(id, useCount int) {
+		curVal, ok := a.Get(id)
+		if !ok {
+			curVal = 0
+		}
+		a.Set(id, curVal+useCount)
+	})
+}
+
+// deriveWithUses computes WithUses in the case where we can't reuse an
+// already-computed value.
+func (c *CustomFuncs) deriveWithUses(r opt.Expr) util.FastIntMap {
+	var result util.FastIntMap
+	switch e := r.(type) {
+	case *memo.WithScanExpr:
+		result.Set(int(e.ID), 1)
+	default:
+		for i, n := 0, r.ChildCount(); i < n; i++ {
+			c.sumEntriesWith(&result, c.WithUses(r.Child(i)))
+		}
+	}
+
+	return result
+}
