@@ -11,7 +11,9 @@
 package rpc
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -766,6 +768,103 @@ func (ood *onlyOnceDialer) dial(ctx context.Context, addr string) (net.Conn, err
 	return nil, grpcutil.ErrCannotReuseClientConn
 }
 
+type dialerFunc func(context.Context, string) (net.Conn, error)
+
+type artificialLatencyDialer struct {
+	dialerFunc dialerFunc
+	latencyMS  int
+}
+
+func (ald *artificialLatencyDialer) dial(ctx context.Context, addr string) (net.Conn, error) {
+	conn, err := ald.dialerFunc(ctx, addr)
+	if err != nil {
+		return conn, err
+	}
+	return delayingConn{
+		Conn:      conn,
+		latencyMS: time.Duration(ald.latencyMS) * time.Millisecond,
+		readBuf:   new(bytes.Buffer),
+	}, nil
+}
+
+type delayingListener struct {
+	net.Listener
+}
+
+func NewDelayingListener(l net.Listener) net.Listener {
+	return delayingListener{Listener: l}
+}
+
+func (d delayingListener) Accept() (net.Conn, error) {
+	c, err := d.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return delayingConn{
+		Conn: c,
+		// Put a default latency as the server's conn. This value will get populated
+		// as packets are exchanged across the delayingConnections.
+		latencyMS: time.Duration(0) * time.Millisecond,
+		readBuf:   new(bytes.Buffer),
+	}, nil
+}
+
+type delayingConn struct {
+	net.Conn
+	latencyMS   time.Duration
+	lastSendEnd time.Time
+	readBuf     *bytes.Buffer
+}
+
+func (d delayingConn) Write(b []byte) (n int, err error) {
+	tNow := time.Now()
+	if d.lastSendEnd.Before(tNow) {
+		d.lastSendEnd = tNow
+	}
+	hdr := delayingHeader{Magic: magic, ReadTime: d.lastSendEnd.Add(d.latencyMS).UnixNano(), Sz: int32(len(b)), DelayMS: int32(d.latencyMS / time.Millisecond)}
+	if err := binary.Write(d.Conn, binary.BigEndian, hdr); err != nil {
+		return n, err
+	}
+	x, err := d.Conn.Write(b)
+	n += x
+	return n, err
+}
+
+func (d delayingConn) Read(b []byte) (n int, err error) {
+	if d.readBuf.Len() == 0 {
+		var hdr delayingHeader
+		if err := binary.Read(d.Conn, binary.BigEndian, &hdr); err != nil {
+			return 0, err
+		}
+		// If we somehow don't get our expected magic, throw an error.
+		if hdr.Magic != magic {
+			panic(errors.New("didn't get expected magic bytes header"))
+			// TODO (rohany): I can't get this to work. I suspect that the problem
+			//  is with that maybe the improperly parsed struct is not written back
+			//  into the same binary format that it was read as. I tried this with sending
+			//  the magic integer over first and saw the same thing.
+		} else {
+			d.latencyMS = time.Duration(hdr.DelayMS) * time.Millisecond
+			defer func() {
+				time.Sleep(time.Unix(0, hdr.ReadTime).Sub(time.Now()))
+			}()
+			if _, err := io.CopyN(d.readBuf, d.Conn, int64(hdr.Sz)); err != nil {
+				return 0, err
+			}
+		}
+	}
+	return d.readBuf.Read(b)
+}
+
+const magic = 0xfeedfeed
+
+type delayingHeader struct {
+	Magic    int64
+	ReadTime int64
+	Sz       int32
+	DelayMS  int32
+}
+
 // GRPCDialRaw calls grpc.Dial with options appropriate for the context.
 // Unlike GRPCDialNode, it does not start an RPC heartbeat to validate the
 // connection. This connection will not be reconnected automatically;
@@ -773,11 +872,11 @@ func (ood *onlyOnceDialer) dial(ctx context.Context, addr string) (net.Conn, err
 // This method implies a DefaultClass ConnectionClass for the returned
 // ClientConn.
 func (ctx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, <-chan struct{}, error) {
-	return ctx.grpcDialRaw(target, DefaultClass)
+	return ctx.grpcDialRaw(target, 0, DefaultClass)
 }
 
 func (ctx *Context) grpcDialRaw(
-	target string, class ConnectionClass,
+	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) (*grpc.ClientConn, <-chan struct{}, error) {
 	dialOpts, err := ctx.grpcDialOptions(target, class)
 	if err != nil {
@@ -796,7 +895,18 @@ func (ctx *Context) grpcDialRaw(
 	dialer := onlyOnceDialer{
 		redialChan: make(chan struct{}),
 	}
-	dialOpts = append(dialOpts, grpc.WithContextDialer(dialer.dial))
+	dialerFunc := dialer.dial
+	if ctx.testingKnobs.ArtificialLatencyMap != nil {
+		latency := ctx.testingKnobs.ArtificialLatencyMap[target]
+		log.VEventf(ctx.masterCtx, 1, "Connecting to node %s (%d) with simulated latency %dms", target, remoteNodeID,
+			latency)
+		dialer := artificialLatencyDialer{
+			dialerFunc: dialerFunc,
+			latencyMS:  latency,
+		}
+		dialerFunc = dialer.dial
+	}
+	dialOpts = append(dialOpts, grpc.WithContextDialer(dialerFunc))
 
 	// add testingDialOpts after our dialer because one of our tests
 	// uses a custom dialer (this disables the only-one-connection
@@ -870,7 +980,7 @@ func (ctx *Context) grpcDialNodeInternal(
 		// Either we kick off the heartbeat loop (and clean up when it's done),
 		// or we clean up the connKey entries immediately.
 		var redialChan <-chan struct{}
-		conn.grpcConn, redialChan, conn.dialErr = ctx.grpcDialRaw(target, class)
+		conn.grpcConn, redialChan, conn.dialErr = ctx.grpcDialRaw(target, remoteNodeID, class)
 		if conn.dialErr == nil {
 			if err := ctx.Stopper.RunTask(
 				ctx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
