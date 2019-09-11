@@ -89,7 +89,21 @@ func runTests(
 	cols []int,
 	constructor func(inputs []Operator) (Operator, error),
 ) {
-	runTestsWithFn(t, tups, func(t *testing.T, inputs []Operator) {
+	runTestsWithTyps(t, tups, nil /* typs */, expected, verifier, cols, constructor)
+}
+
+// runTestsWithTyps is the same as runTests with an ability to specify the
+// types of the input tuples.
+func runTestsWithTyps(
+	t *testing.T,
+	tups []tuples,
+	typs []coltypes.T,
+	expected tuples,
+	verifier verifier,
+	cols []int,
+	constructor func(inputs []Operator) (Operator, error),
+) {
+	runTestsWithFn(t, tups, typs, func(t *testing.T, inputs []Operator) {
 		op, err := constructor(inputs)
 		if err != nil {
 			t.Fatal(err)
@@ -112,7 +126,7 @@ func runTests(
 		for round := 0; round < 2; round++ {
 			inputSources := make([]Operator, len(tups))
 			for i, tup := range tups {
-				inputSources[i] = newOpTestInput(1 /* batchSize */, tup)
+				inputSources[i] = newOpTestInput(1 /* batchSize */, tup, typs)
 			}
 			op, err := constructor(inputSources)
 			if err != nil {
@@ -162,10 +176,17 @@ func runTests(
 // testing facility than runTests, because it can't get a handle on the operator
 // under test and therefore can't perform as many extra checks. You should
 // always prefer using runTests over runTestsWithFn.
-// tups is the set of input tuples.
-// test is a function that takes a list of input Operators and performs testing
+// - tups is the set of input tuples.
+// - typs is the type schema of the input tuples. This can be left nil in which
+//   case the types will be determined at the runtime looking at the first
+//   input tuple, and if the determination doesn't succeed for a value of the
+//   tuple (likely because it's a nil), then that column will be assumed by
+//   default of type Int64.
+// - test is a function that takes a list of input Operators and performs testing
 // with t.
-func runTestsWithFn(t *testing.T, tups []tuples, test func(t *testing.T, inputs []Operator)) {
+func runTestsWithFn(
+	t *testing.T, tups []tuples, typs []coltypes.T, test func(t *testing.T, inputs []Operator),
+) {
 	rng, _ := randutil.NewPseudoRand()
 
 	for _, batchSize := range []uint16{1, 2, 3, 16, 1024} {
@@ -174,11 +195,11 @@ func runTestsWithFn(t *testing.T, tups []tuples, test func(t *testing.T, inputs 
 				inputSources := make([]Operator, len(tups))
 				if useSel {
 					for i, tup := range tups {
-						inputSources[i] = newOpTestSelInput(rng, batchSize, tup)
+						inputSources[i] = newOpTestSelInput(rng, batchSize, tup, typs)
 					}
 				} else {
 					for i, tup := range tups {
-						inputSources[i] = newOpTestInput(batchSize, tup)
+						inputSources[i] = newOpTestInput(batchSize, tup, typs)
 					}
 				}
 				test(t, inputSources)
@@ -252,23 +273,27 @@ type opTestInput struct {
 
 var _ Operator = &opTestInput{}
 
-// newOpTestInput returns a new opTestInput with the given input tuples. The
-// input tuples are translated into types automatically, using simple rules
-// (e.g. integers always become Int64).
-func newOpTestInput(batchSize uint16, tuples tuples) *opTestInput {
+// newOpTestInput returns a new opTestInput with the given input tuples and the
+// given type schema. If typs is nil, the input tuples are translated into
+// types automatically, using simple rules (e.g. integers always become Int64).
+func newOpTestInput(batchSize uint16, tuples tuples, typs []coltypes.T) *opTestInput {
 	ret := &opTestInput{
 		batchSize: batchSize,
 		tuples:    tuples,
+		typs:      typs,
 	}
 	return ret
 }
 
-func newOpTestSelInput(rng *rand.Rand, batchSize uint16, tuples tuples) *opTestInput {
+func newOpTestSelInput(
+	rng *rand.Rand, batchSize uint16, tuples tuples, typs []coltypes.T,
+) *opTestInput {
 	ret := &opTestInput{
 		useSel:    true,
 		rng:       rng,
 		batchSize: batchSize,
 		tuples:    tuples,
+		typs:      typs,
 	}
 	return ret
 }
@@ -278,21 +303,23 @@ func (s *opTestInput) Init() {
 		execerror.VectorizedInternalPanic("empty tuple source")
 	}
 
-	typs := make([]coltypes.T, len(s.tuples[0]))
-	for i := range typs {
-		// Default type for test cases is Int64 in case the entire column is null
-		// and the type is indeterminate.
-		typs[i] = coltypes.Int64
-		for _, tup := range s.tuples {
-			if tup[i] != nil {
-				typs[i] = coltypes.FromGoType(tup[i])
-				break
+	if s.typs == nil {
+		// The type schema was not provided, so we need to determine it based on
+		// the input tuple.
+		s.typs = make([]coltypes.T, len(s.tuples[0]))
+		for i := range s.typs {
+			// Default type for test cases is Int64 in case the entire column is null
+			// and the type is indeterminate.
+			s.typs[i] = coltypes.Int64
+			for _, tup := range s.tuples {
+				if tup[i] != nil {
+					s.typs[i] = coltypes.FromGoType(tup[i])
+					break
+				}
 			}
 		}
 	}
-
-	s.typs = typs
-	s.batch = coldata.NewMemBatch(typs)
+	s.batch = coldata.NewMemBatch(s.typs)
 
 	s.selection = make([]uint16, coldata.BatchSize)
 	for i := range s.selection {
@@ -836,7 +863,7 @@ func TestOpTestInputOutput(t *testing.T) {
 			{1, 5, 0},
 		},
 	}
-	runTestsWithFn(t, inputs, func(t *testing.T, sources []Operator) {
+	runTestsWithFn(t, inputs, nil /* typs */, func(t *testing.T, sources []Operator) {
 		out := newOpTestOutput(sources[0], []int{0, 1, 2}, inputs[0])
 
 		if err := out.Verify(); err != nil {

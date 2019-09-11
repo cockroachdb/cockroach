@@ -247,7 +247,7 @@ func TestAllSpooler(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTestsWithFn(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
+		runTestsWithFn(t, []tuples{tc.tuples}, nil /* typs */, func(t *testing.T, input []Operator) {
 			allSpooler := newAllSpooler(input[0], tc.typ)
 			allSpooler.init()
 			allSpooler.spool(context.Background())
