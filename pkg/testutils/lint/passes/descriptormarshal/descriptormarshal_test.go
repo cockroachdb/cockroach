@@ -8,21 +8,20 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package main
+package descriptormarshal_test
 
 import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/descriptormarshal"
-	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/hash"
-	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/timer"
-	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/unconvert"
-	"golang.org/x/tools/go/analysis/multichecker"
+	"golang.org/x/tools/go/analysis/analysistest"
 )
 
-func main() {
-	multichecker.Main(
-		hash.Analyzer,
-		timer.Analyzer,
-		unconvert.Analyzer,
-		descriptormarshal.Analyzer,
-	)
+func Test(t *testing.T) {
+	if testutils.NightlyStress() {
+		t.Skip("Go cache files don't work under stress")
+	}
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, descriptormarshal.Analyzer, "a")
 }
