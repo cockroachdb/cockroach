@@ -307,7 +307,9 @@ WHERE
           SELECT
             COALESCE(
               tab_9962._string,
-              tab_9963._string
+              tab_9963._string,
+              (SELECT * FROM with_2063),
+              (SELECT * FROM with_2063)
             )
         )
     )

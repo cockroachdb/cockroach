@@ -206,7 +206,7 @@ CREATE TABLE ab (a INT PRIMARY KEY, b INT)
 statement ok
 INSERT INTO ab VALUES (1, 2), (3, 4), (5, 6)
 
-query I
+query I rowsort
 WITH a AS (SELECT a FROM ab ORDER BY b) SELECT * FROM a
 ----
 1
