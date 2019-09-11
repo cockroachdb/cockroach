@@ -15,8 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // ordinalityNode represents a node that adds an "ordinality" column
@@ -40,46 +38,6 @@ type ordinalityNode struct {
 	columns sqlbase.ResultColumns
 
 	run ordinalityRun
-}
-
-func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
-	src := ds.plan
-	srcColumns := planColumns(src)
-
-	res := &ordinalityNode{
-		source: src,
-		props:  planPhysicalProps(src),
-		run: ordinalityRun{
-			row:    make(tree.Datums, len(srcColumns)+1),
-			curCnt: 1,
-		},
-	}
-
-	// Allocate an extra column for the ordinality values.
-	res.columns = make(sqlbase.ResultColumns, len(srcColumns)+1)
-	copy(res.columns, srcColumns)
-	newColIdx := len(res.columns) - 1
-	res.columns[newColIdx] = sqlbase.ResultColumn{
-		Name: "ordinality",
-		Typ:  types.Int,
-	}
-
-	// Extend the dataSourceInfo with information about the
-	// new column.
-	ds.info.SourceColumns = res.columns
-	if srcIdx, ok := ds.info.SourceAliases.SrcIdx(sqlbase.AnonymousTable); !ok {
-		ds.info.SourceAliases = append(ds.info.SourceAliases, sqlbase.SourceAlias{
-			Name:      sqlbase.AnonymousTable,
-			ColumnSet: util.MakeFastIntSet(newColIdx),
-		})
-	} else {
-		srcAlias := &ds.info.SourceAliases[srcIdx]
-		srcAlias.ColumnSet.Add(newColIdx)
-	}
-
-	ds.plan = res
-
-	return ds
 }
 
 // ordinalityRun contains the run-time state of ordinalityNode during local execution.

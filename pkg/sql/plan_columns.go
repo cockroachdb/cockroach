@@ -26,8 +26,6 @@ var noColumns = make(sqlbase.ResultColumns, 0)
 // The returned slice is *not* mutable. To modify the result column
 // set, implement a separate recursion (e.g. needed_columns.go) or use
 // planMutableColumns defined below.
-//
-// Available after newPlan().
 func planColumns(plan planNode) sqlbase.ResultColumns {
 	return getPlanColumns(plan, false)
 }

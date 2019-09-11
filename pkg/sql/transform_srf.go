@@ -11,7 +11,6 @@
 package sql
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -27,8 +26,6 @@ import (
 // don't support lateral correlated subqueries.
 type srfExtractionVisitor struct {
 	err        error
-	ctx        context.Context
-	p          *planner
 	searchPath sessiondata.SearchPath
 
 	// srfs contains the SRFs collected so far. This list is processed
@@ -112,90 +109,6 @@ func (v *srfExtractionVisitor) lookupSRF(t *tree.FuncExpr) (*tree.FunctionDefini
 		fd = nil
 	}
 	return fd, nil
-}
-
-// rewriteSRFs creates data sources for any set-returning functions in the
-// provided render expression, cross-joins these data sources with the
-// renderNode's existing data sources, and returns a new render expression with
-// the set-returning function replaced by an IndexedVar that points at the new
-// data source.
-//
-// TODO(knz): this transform should really be done at the end of
-// logical planning, and not at the beginning. Also the implementation
-// is simple and does not support nested SRFs (the algorithm for that
-// is much more complicated, see issue #26234).
-func (p *planner) rewriteSRFs(
-	ctx context.Context, r *renderNode, targets tree.SelectExprs,
-) (tree.SelectExprs, error) {
-	// Walk the render expression looking for SRFs.
-	v := &p.srfExtractionVisitor
-
-	// Ensure that the previous visitor state is preserved during the
-	// analysis below. This is especially important when recursing into
-	// scalar subqueries, which may run this analysis too.
-	defer func(p *planner, prevV srfExtractionVisitor) { p.srfExtractionVisitor = prevV }(p, *v)
-	*v = srfExtractionVisitor{
-		ctx:        ctx,
-		p:          p,
-		searchPath: p.SessionData().SearchPath,
-		numColumns: len(r.source.info.SourceColumns),
-	}
-
-	// Rewrite the SRFs, if any. We want to avoid re-allocating a targets
-	// array unless necessary.
-	var newTargets tree.SelectExprs
-	for i, target := range targets {
-		curSrfs := len(v.srfs)
-		newExpr, changed := tree.WalkExpr(v, target.Expr)
-		if v.err != nil {
-			return targets, v.err
-		}
-		if !changed {
-			if newTargets != nil {
-				newTargets[i] = target
-			}
-			continue
-		}
-
-		if newTargets == nil {
-			newTargets = make(tree.SelectExprs, len(targets))
-			copy(newTargets, targets[:i])
-		}
-		newTargets[i].Expr = newExpr
-		newTargets[i].As = target.As
-
-		if len(v.srfs) != curSrfs && target.As == "" {
-			// If the transform is adding a SRF, the expression will have
-			// changed structure. To help the user (and for compatibility
-			// with pg) we need to ensure the column label is based off the
-			// original expression.
-			_, newLabel, err := tree.ComputeColNameInternal(v.searchPath, target.Expr)
-			if err != nil {
-				return nil, err
-			}
-			newTargets[i].As = tree.UnrestrictedName(newLabel)
-		}
-	}
-
-	if len(v.srfs) > 0 {
-		// Some SRFs were found. Create a projectSetNode to represent the
-		// relational operator.
-		projectDS, err := p.ProjectSet(ctx,
-			r.source.plan, r.source.info, "SELECT",
-			v.sourceNames, v.srfs...)
-		if err != nil {
-			return nil, err
-		}
-
-		r.source.plan = projectDS.plan
-		r.source.info = projectDS.info
-		r.sourceInfo[0] = r.source.info
-	}
-
-	if newTargets != nil {
-		return newTargets, nil
-	}
-	return targets, nil
 }
 
 func (v *srfExtractionVisitor) transformSRF(

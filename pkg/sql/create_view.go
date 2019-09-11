@@ -12,12 +12,9 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -35,77 +32,6 @@ type createViewNode struct {
 	// depends on. This is collected during the construction of
 	// the view query's logical plan.
 	planDeps planDependencies
-}
-
-// CreateView creates a view.
-// Privileges: CREATE on database plus SELECT on all the selected columns.
-//   notes: postgres requires CREATE on database plus SELECT on all the
-//						selected columns.
-//          mysql requires CREATE VIEW plus SELECT on all the selected columns.
-func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode, error) {
-	dbDesc, err := p.ResolveUncachedDatabase(ctx, &n.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
-		return nil, err
-	}
-
-	var planDeps planDependencies
-	var sourceColumns sqlbase.ResultColumns
-	// To avoid races with ongoing schema changes to tables that the view
-	// depends on, make sure we use the most recent versions of table
-	// descriptors rather than the copies in the lease cache.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		planDeps, sourceColumns, err = p.analyzeViewQuery(ctx, n.AsSource)
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Ensure that all the table names pretty-print as fully qualified,
-	// so we store that in the view descriptor.
-	//
-	// The traversal will update the TableNames in-place, so the changes are
-	// persisted in n.AsSource. We exploit the fact that semantic analysis above
-	// has populated any missing db/schema details in the table names in-place.
-	// We use tree.FormatNode merely as a traversal method; its output buffer is
-	// discarded immediately after the traversal because it is not needed further.
-	{
-		f := tree.NewFmtCtx(tree.FmtParsable)
-		f.SetReformatTableNames(
-			func(_ *tree.FmtCtx, tn *tree.TableName) {
-				// Persist the database prefix expansion.
-				if tn.SchemaName != "" {
-					// All CTE or table aliases have no schema
-					// information. Those do not turn into explicit.
-					tn.ExplicitSchema = true
-					tn.ExplicitCatalog = true
-				}
-			},
-		)
-		f.FormatNode(n.AsSource)
-		f.Close() // We don't need the string.
-	}
-
-	if numColNames := len(n.ColumnNames); numColNames != 0 {
-		if numColumns := len(sourceColumns); numColNames != numColumns {
-			return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
-				"CREATE VIEW specifies %d column name%s, but data source has %d column%s",
-				numColNames, util.Pluralize(int64(numColNames)),
-				numColumns, util.Pluralize(int64(numColumns))))
-		}
-		sourceColumns = overrideColumnNames(sourceColumns, n.ColumnNames)
-	}
-
-	return &createViewNode{
-		viewName:  n.Name.TableName,
-		viewQuery: tree.AsStringWithFlags(n.AsSource, tree.FmtParsable),
-		dbDesc:    dbDesc,
-		columns:   sourceColumns,
-		planDeps:  planDeps,
-	}, nil
 }
 
 func (n *createViewNode) startExec(params runParams) error {
