@@ -31,18 +31,11 @@ query TTTTT
 EXPLAIN (VERBOSE)
   WITH t AS (SELECT a FROM y) SELECT * FROM t
 ----
-root                   ·             ·                (a)  ·
- ├── scan buffer node  ·             ·                (a)  ·
- │                     label         buffer 1 (t)     ·    ·
- └── subquery          ·             ·                (a)  ·
-      │                id            @S1              ·    ·
-      │                original sql  SELECT a FROM y  ·    ·
-      │                exec mode     all rows         ·    ·
-      └── buffer node  ·             ·                (a)  ·
-           │           label         buffer 1 (t)     ·    ·
-           └── scan    ·             ·                (a)  ·
-·                      table         y@primary        ·    ·
-·                      spans         ALL              ·    ·
+render     ·         ·          (a)  ·
+ │         render 0  a          ·    ·
+ └── scan  ·         ·          (a)  ·
+·          table     y@primary  ·    ·
+·          spans     ALL        ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -83,27 +76,11 @@ EXPLAIN (VERBOSE)
   FROM
     w, table39010
 ----
-root                                  ·             ·                                  (col)                          ·
- ├── render                           ·             ·                                  (col)                          ·
- │    │                               render 0      col                                ·                              ·
- │    └── hash-join                   ·             ·                                  ("?column?", "?column?", col)  ·
- │         │                          type          cross                              ·                              ·
- │         ├── render                 ·             ·                                  ("?column?", "?column?")       ·
- │         │    │                     render 0      "?column?"                         ·                              ·
- │         │    │                     render 1      "?column?"                         ·                              ·
- │         │    └── scan buffer node  ·             ·                                  ("?column?")                   ·
- │         │                          label         buffer 1 (w)                       ·                              ·
- │         └── scan                   ·             ·                                  (col)                          ·
- │                                    table         table39010@primary                 ·                              ·
- │                                    spans         ALL                                ·                              ·
- └── subquery                         ·             ·                                  (col)                          ·
-      │                               id            @S1                                ·                              ·
-      │                               original sql  SELECT NULL, NULL FROM table39010  ·                              ·
-      │                               exec mode     all rows                           ·                              ·
-      └── buffer node                 ·             ·                                  ("?column?")                   ·
-           │                          label         buffer 1 (w)                       ·                              ·
-           └── render                 ·             ·                                  ("?column?")                   ·
-                │                     render 0      NULL                               ·                              ·
-                └── scan              ·             ·                                  ()                             ·
-·                                     table         table39010@primary                 ·                              ·
-·                                     spans         ALL                                ·                              ·
+hash-join  ·      ·                   (col)  ·
+ │         type   cross               ·      ·
+ ├── scan  ·      ·                   ()     ·
+ │         table  table39010@primary  ·      ·
+ │         spans  ALL                 ·      ·
+ └── scan  ·      ·                   (col)  ·
+·          table  table39010@primary  ·      ·
+·          spans  ALL                 ·      ·

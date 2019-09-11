@@ -31,7 +31,7 @@ ALTER TABLE a INJECT STATISTICS '[
 ]'
 ----
 
-build colstat=4 colstat=5 colstat=6
+build colstat=4 colstat=5 colstat=6 disable=InlineWith
 WITH foo AS (SELECT * FROM a) SELECT * FROM foo
 ----
 with &1 (foo)
@@ -55,7 +55,7 @@ with &1 (foo)
       └── fd: (4)-->(5,6)
 
 # Regression test for #40296.
-opt
+opt disable=InlineWith
 WITH
 	t0 AS ((VALUES (0, 0:::OID, NULL, '')) UNION (VALUES (NULL, 0:::OID,'1970-09-08'::DATE, NULL)))
 SELECT

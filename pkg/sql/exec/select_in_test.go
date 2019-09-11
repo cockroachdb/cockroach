@@ -65,17 +65,27 @@ func TestSelectInInt64(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.desc, func(t *testing.T) {
-			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, []int{0},
-				func(input []Operator) (Operator, error) {
-					op := selectInOpInt64{
-						OneInputNode: NewOneInputNode(input[0]),
-						colIdx:       0,
-						filterRow:    c.filterRow,
-						negate:       c.negate,
-						hasNulls:     c.hasNulls,
-					}
-					return &op, nil
-				})
+			opConstructor := func(input []Operator) (Operator, error) {
+				op := selectInOpInt64{
+					OneInputNode: NewOneInputNode(input[0]),
+					colIdx:       0,
+					filterRow:    c.filterRow,
+					negate:       c.negate,
+					hasNulls:     c.hasNulls,
+				}
+				return &op, nil
+			}
+			if !c.hasNulls || !c.negate {
+				runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, []int{0}, opConstructor)
+			} else {
+				// When the input tuples already have nulls and we have NOT IN
+				// operator, then the nulls injection might not change the output. For
+				// example, we have this test case "1 NOT IN (NULL, 1, 2)" with the
+				// output of length 0; similarly, we will get the same zero-length
+				// output for the corresponding nulls injection test case
+				// "1 NOT IN (NULL, NULL, NULL)".
+				runTestsWithoutAllNullsInjection(t, []tuples{c.inputTuples}, nil /* typs */, c.outputTuples, orderedVerifier, []int{0}, opConstructor)
+			}
 		})
 	}
 }

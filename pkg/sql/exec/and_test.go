@@ -18,8 +18,9 @@ import (
 
 func TestAndOp(t *testing.T) {
 	tcs := []struct {
-		tuples   []tuple
-		expected []tuple
+		tuples                []tuple
+		expected              []tuple
+		skipAllNullsInjection bool
 	}{
 		// All variations of pairs separately first.
 		{
@@ -45,10 +46,14 @@ func TestAndOp(t *testing.T) {
 		{
 			tuples:   tuples{{true, nil}},
 			expected: tuples{{nil}},
+			// The case of {nil, nil} is explicitly tested below.
+			skipAllNullsInjection: true,
 		},
 		{
 			tuples:   tuples{{nil, true}},
 			expected: tuples{{nil}},
+			// The case of {nil, nil} is explicitly tested below.
+			skipAllNullsInjection: true,
 		},
 		{
 			tuples:   tuples{{nil, false}},
@@ -75,7 +80,15 @@ func TestAndOp(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		runTestsWithTyps(
+		var runner testRunner
+		if tc.skipAllNullsInjection {
+			// We're omitting all nulls injection test. See comments for each such
+			// test case.
+			runner = runTestsWithoutAllNullsInjection
+		} else {
+			runner = runTestsWithTyps
+		}
+		runner(
 			t,
 			[]tuples{tc.tuples},
 			[]coltypes.T{coltypes.Bool, coltypes.Bool},
