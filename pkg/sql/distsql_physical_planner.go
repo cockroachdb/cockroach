@@ -1989,6 +1989,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		// For anti/semi join, we only produce the input columns.
 		planToStreamColMap = planToStreamColMap[:numInputNodeCols]
 		post.OutputColumns = post.OutputColumns[:numInputNodeCols]
+		types = types[:numInputNodeCols]
 	}
 
 	// Instantiate one join reader for every stream.
