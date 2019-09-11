@@ -97,7 +97,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
 				[]coltypes.T{coltypes.Int64}, unblockEventsChan, tc.blockedThreshold, tc.outputBatchSize,
 			)
-			in := newOpTestInput(tc.inputBatchSize, data)
+			in := newOpTestInput(tc.inputBatchSize, data, nil /* typs */)
 			out := newOpTestOutput(o, []int{0}, data[:len(tc.selection)])
 			in.Init()
 			for {
@@ -177,7 +177,7 @@ func TestRouterOutputNext(t *testing.T) {
 			var wg sync.WaitGroup
 			batchChan := make(chan coldata.Batch)
 			o := newRouterOutputOp([]coltypes.T{coltypes.Int64}, unblockedEventsChan)
-			in := newOpTestInput(coldata.BatchSize, data)
+			in := newOpTestInput(coldata.BatchSize, data, nil /* typs */)
 			in.Init()
 			wg.Add(1)
 			go func() {
@@ -257,7 +257,7 @@ func TestRouterOutputNext(t *testing.T) {
 		o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
 			[]coltypes.T{coltypes.Int64}, ch, blockThreshold, coldata.BatchSize,
 		)
-		in := newOpTestInput(smallBatchSize, data)
+		in := newOpTestInput(smallBatchSize, data, nil /* typs */)
 		out := newOpTestOutput(o, []int{0}, expected)
 		in.Init()
 
@@ -322,7 +322,7 @@ func TestRouterOutputRandom(t *testing.T) {
 		"blockedThreshold=%d/outputSize=%d/totalInputSize=%d", blockedThreshold, outputSize, len(data),
 	)
 	t.Run(testName, func(t *testing.T) {
-		runTestsWithFn(t, []tuples{data}, func(t *testing.T, inputs []Operator) {
+		runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []Operator) {
 			var wg sync.WaitGroup
 			unblockedEventsChans := make(chan struct{}, 2)
 			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
@@ -448,7 +448,7 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		valsYetToSee[int64(i)] = struct{}{}
 	}
 
-	in := newOpTestInput(coldata.BatchSize, data)
+	in := newOpTestInput(coldata.BatchSize, data, nil /* typs */)
 	in.Init()
 
 	var (
@@ -696,7 +696,7 @@ func TestHashRouterRandom(t *testing.T) {
 	// same data to the same number of outputs.
 	var expectedDistribution []int
 	t.Run(testName, func(t *testing.T) {
-		runTestsWithFn(t, []tuples{data}, func(t *testing.T, inputs []Operator) {
+		runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []Operator) {
 			unblockEventsChan := make(chan struct{}, 2*numOutputs)
 			outputs := make([]routerOutput, numOutputs)
 			outputsAsOps := make([]Operator, numOutputs)
